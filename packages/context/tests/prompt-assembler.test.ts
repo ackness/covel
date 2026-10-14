@@ -85,6 +85,41 @@ const mockEstimator: TokenEstimator = (text) => Math.ceil(text.length / 4);
 // ── Tests ───────────────────────────────────────────────────────
 
 describe("prompt-assembler", () => {
+  it.each(["event", "manual"] as const)(
+    "projects %s activation payloads without changing the handler's data",
+    (source) => {
+      const rowId = "0b6f6a2e-3c1d-4f5a-9b7e-1a2b3c4d5e6f";
+      const timestamp = "2026-10-14T08:00:00.000Z";
+      const payload = {
+        sessionId: "private-session",
+        resultId: rowId,
+        createdAt: timestamp,
+        items: [{ id: rowId, updatedAt: timestamp, value: "gate opened" }],
+        characterId: "gate-keeper",
+        turn: 3,
+        date: "1943-06-01T08:00:00Z",
+      };
+      const original = structuredClone(payload);
+      const context = buildSegmentedContext(
+        baselineParams({
+          activation: { source, detached: true, payload },
+        }),
+      );
+      const visible = JSON.stringify([
+        context.systemPrompt,
+        context.turnContext,
+        context.messages,
+      ]);
+      for (const hidden of [rowId, timestamp, "private-session"])
+        expect(visible).not.toContain(hidden);
+      expect(context.turnContext).toContain("gate opened");
+      expect(context.turnContext).toContain("gate-keeper");
+      expect(context.turnContext).toContain('"turn":3');
+      expect(context.turnContext).toContain(payload.date);
+      expect(payload).toEqual(original);
+    },
+  );
+
   it("matches the public buildContext entrypoint for a locale-less, inject-less baseline", async () => {
     const params = baselineParams({
       promptTemplate: "You are a narrator. Respond to {{ player.message }}.",

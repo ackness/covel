@@ -534,7 +534,7 @@ describe("LLM settings regressions", () => {
     expect(parseNumericParameterOverride("invalid", -2, 2)).toBeUndefined();
   });
 
-  it("resets generation and token overrides without clearing other model capabilities", () => {
+  it("resets generation and token overrides without clearing other model capabilities", async () => {
     apiMocks.getParamOverrides.mockReturnValue({
       story: { maxOutputTokens: 32768 },
     });
@@ -548,12 +548,14 @@ describe("LLM settings regressions", () => {
     });
     render(<LlmAdvancedPane />);
     fireEvent.click(screen.getByRole("button", { name: "Reset to defaults" }));
-    expect(apiMocks.setMany).toHaveBeenCalledWith({
-      "llm.paramOverrides": {},
-      "llm.capabilityOverrides": {
-        story: { features: ["vision"], pricing: { inputPerMToken: 1 } },
-      },
-    });
+    await waitFor(() =>
+      expect(apiMocks.setMany).toHaveBeenCalledWith({
+        "llm.paramOverrides": {},
+        "llm.capabilityOverrides": {
+          story: { features: ["vision"], pricing: { inputPerMToken: 1 } },
+        },
+      }),
+    );
   });
 
   it("waits for the selected target profile before pruning its override", async () => {

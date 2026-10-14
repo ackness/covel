@@ -224,25 +224,30 @@ export interface TurnInput {
 }
 
 /**
- * Business-input subset a plugin may override on `ctx.recursiveCall()`.
- * Execution identity (`sessionId`, `turnId`, `origin`, `parentTurnId`) is
- * framework-generated and immutable: a nested call must stay inside the parent
- * session — otherwise an approved handler could read another session's context
- * and persist under it, bypassing the hosted session-owner boundary — and
- * reuses the parent `turnId` so its execution artifact settles together with
- * the parent turn. `locale` and `logicalTurnId` are inherited from the parent
- * as well: the content locale is fixed when the session is created, and the
- * logical turn is minted only at the player action entry.
+ * What a plugin may ask of `ctx.recursiveCall()`: an allow-list, not a subset
+ * of `TurnInput`. Everything else comes from the parent execution:
+ *
+ * - its identity (`sessionId`, `turnId`, `origin`, `locale`,
+ *   `logicalTurnId`) — a nested call stays inside the parent session and
+ *   settles with the parent turn;
+ * - the player's settings and model overrides (`userSettings`,
+ *   `modelOverride`, `runtimeModelOverrides`);
+ * - kernel-only inputs (retry seeds, `sourceTurnId`, `runtimeIds` batches,
+ *   `triggerEvent`, `detachedStage`), which only the host mints.
+ *
+ * Plugin code is untyped JS at runtime, so the executor copies these fields
+ * one by one and ignores every other key. A field added to `TurnInput` later
+ * stays out of reach unless it is listed here.
  */
-export type RecursiveCallDelta = Omit<
-  Partial<TurnInput>,
-  | "sessionId"
-  | "turnId"
-  | "origin"
-  | "parentTurnId"
-  | "locale"
-  | "logicalTurnId"
->;
+export interface RecursiveCallDelta {
+  /** Player message the nested execution sees. Defaults to the parent's. */
+  readonly playerMessage?: string;
+  /** Run one manual runtime of the session, with an optional payload. */
+  readonly manualTrigger?: {
+    readonly runtimeId: string;
+    readonly payload?: Readonly<Record<string, unknown>>;
+  };
+}
 
 /** Pure execution data returned to a nested caller; commit stays with the host. */
 export type NestedTurnResult = TurnResult;

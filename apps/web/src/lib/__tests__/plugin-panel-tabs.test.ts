@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest";
 import {
   aggregateSpecsIntoGroups,
   compactTabLabel,
-  panelProviderLabel,
   planPluginPanelProviders,
   pluginShortLabel,
   resolvePluginPanelTarget,
@@ -191,33 +190,12 @@ describe("plugin-panel tab helpers", () => {
     ]);
   });
 
-  it("resolves provider labels from chat sub-panel labels or plugin manifests", () => {
-    expect(
-      panelProviderLabel(
-        "branch-reply",
-        "chat-mode",
-        [
-          {
-            id: "reply",
-            pluginId: "branch-reply",
-            label: "Branch Reply",
-            shortLabel: "BR",
-            icon: "message-square",
-            spec: {},
-          },
-        ],
-        [],
-        "en-US",
-      ),
-    ).toBe("BR");
-
+  it("resolves provider labels from plugin manifests or falls back to the ID", () => {
     const plugins = [
       { id: "image-a", displayName: { "zh-CN": "图像甲", en: "Image A" } },
     ];
     expect(pluginShortLabel("image-a", plugins, "zh-CN")).toBe("图像甲");
-    expect(panelProviderLabel("missing", "image", [], plugins, "zh-CN")).toBe(
-      "missing",
-    );
+    expect(pluginShortLabel("missing", plugins, "zh-CN")).toBe("missing");
   });
 
   it("targets the command owner's exact sub-panel inside a shared group", () => {

@@ -7,6 +7,7 @@ import {
 import fs from "node:fs/promises";
 import path from "node:path";
 import { loadPluginDefinition } from "../src/load.js";
+import { discoverPluginAt } from "../src/discover.js";
 import { validatePluginLabels } from "../src/locale-labels.js";
 import { describePluginLanguages } from "../src/plugin-languages.js";
 
@@ -41,35 +42,14 @@ export async function runValidateManifest(
       rootPath = await fs.realpath(rootPath);
       if (visited.has(rootPath)) continue;
       visited.add(rootPath);
-      const runtimeDir = path.join(rootPath, "runtimes");
-      const entries = await fs
-        .readdir(runtimeDir, { withFileTypes: true })
-        .catch((error: NodeJS.ErrnoException) => {
-          if (error.code === "ENOENT") return [];
-          throw error;
-        });
-      const pluginMdPaths: string[] = [];
-      for (const entry of entries) {
-        if (!entry.isDirectory()) continue;
-        const dir = path.join(runtimeDir, entry.name);
-        if (
-          await fs.stat(path.join(dir, "PLUGIN.md")).then(
-            () => true,
-            () => false,
-          )
-        )
-          throw new Error(`${dir}: rename child PLUGIN.md to RUNTIME.md`);
-        pluginMdPaths.push(path.join(dir, "RUNTIME.md"));
-      }
-      const definition = await loadPluginDefinition({
-        id: path.basename(rootPath),
-        rootPath,
-        isMultiRuntime: await fs.stat(runtimeDir).then(
-          () => true,
-          () => false,
-        ),
-        pluginMdPaths,
-      });
+      const discovery = await discoverPluginAt(rootPath);
+      if (!discovery)
+        throw new Error(
+          `${rootPath}: no enabled plugin with a root PLUGIN.md found`,
+        );
+      if (discovery.layoutWarnings?.length)
+        throw new Error(discovery.layoutWarnings.join("\n"));
+      const definition = await loadPluginDefinition(discovery);
       validatePluginFiles(
         definition.packageManifest,
         definition.manifests,
@@ -104,6 +84,17 @@ export async function runValidateManifest(
       output.stdout.write(
         `  languages: ${describePluginLanguages(definition.languages)}\n`,
       );
+      // A plugin names the role (slot) it wants; the player's settings pick
+      // the model and the endpoint. Nothing reads a plugin's own llm.toml.
+      if (
+        await fs.stat(path.join(rootPath, "llm.toml")).then(
+          () => true,
+          () => false,
+        )
+      )
+        output.stdout.write(
+          "  warning: llm.toml is ignored: a plugin cannot choose a model or an endpoint. Name the role with agent.model / function.model; the player's model settings bind it.\n",
+        );
     } catch (error) {
       output.stderr.write(
         `✗ ${error instanceof Error ? error.message : String(error)}\n`,

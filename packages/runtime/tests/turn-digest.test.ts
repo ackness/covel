@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import type { RuntimeManifest, RuntimeResult } from "@covel/shared";
+import type {
+  RuntimeManifest,
+  RuntimeResult,
+  ToolCallRecord,
+} from "@covel/shared";
 import { buildTurnDigest } from "../src/turn-executor/turn-digest.js";
 
 const story = { name: "story", outputKind: "story" } as RuntimeManifest;
@@ -17,6 +21,63 @@ const result = (overrides: Partial<RuntimeResult> = {}): RuntimeResult => ({
 });
 
 describe("kernel turn digest", () => {
+  it("excludes concealed runtime tool arguments while retaining public calls and terminal statuses", () => {
+    const call = (
+      toolName: string,
+      input: ToolCallRecord["input"],
+    ): ToolCallRecord => ({
+      toolCallId: toolName,
+      toolName,
+      pluginId: "planner",
+      runtimeId: `planner/${toolName === "plan" ? "private" : "public"}`,
+      turnId: "current",
+      input,
+      output: { success: true },
+      approvalStatus: "auto-allowed" as const,
+      durationMs: 0,
+      timestamp: "now",
+    });
+    const digest = buildTurnDigest(
+      {
+        origin: "player",
+        sessionId: "s",
+        turnId: "current",
+        playerMessage: "Go",
+      },
+      [
+        result({
+          runtimeId: "planner/private",
+          toolCalls: [call("plan", { secret: "hidden betrayal" })],
+        }),
+        result({
+          runtimeId: "planner/public",
+          toolCalls: [call("record", { fact: "gate opened" })],
+        }),
+      ],
+      [
+        {
+          name: "planner/private",
+          pluginId: "planner",
+          description: "Private planning",
+          concealed: true,
+        },
+        {
+          name: "planner/public",
+          pluginId: "planner",
+          description: "Public record",
+        },
+      ],
+    );
+    expect(digest.toolCallSummaries).toEqual([
+      '[record] {"fact":"gate opened"}',
+    ]);
+    expect(JSON.stringify(digest)).not.toContain("hidden betrayal");
+    expect(digest.runtimeResults).toEqual([
+      { runtimeId: "planner/private", status: "success" },
+      { runtimeId: "planner/public", status: "success" },
+    ]);
+  });
+
   it("freezes only successful source-turn story and accepted tool summaries", () => {
     const live = result();
     const digest = buildTurnDigest(

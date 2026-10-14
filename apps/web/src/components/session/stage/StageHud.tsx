@@ -1,6 +1,6 @@
 /**
  * HUD overlay for stage mode (spec §2 `StageHud`). Stateless: everything
- * it shows comes from `sceneCurrent` (scene-stage `stage/current`) and
+ * it shows comes from `sceneCurrent` (the `stage.backdrop@1` projection) and
  * every button forwards straight to a prop callback.
  */
 import {

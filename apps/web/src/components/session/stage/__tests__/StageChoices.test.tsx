@@ -148,11 +148,10 @@ describe("StageChoices", () => {
     expect(onSendMessage).toHaveBeenCalledWith("我先 chakan");
   });
 
-  it("uses the current story and scene to contextualize legacy prompt data", () => {
+  it("shows only supplied context when recap is omitted", () => {
     render(
       <StageChoices
         {...baseProps}
-        fallbackRecap="纸还在你手里。被划掉的那半句，你其实认得字。"
         suggestions={{
           scene: "开学第一天：先回应谁",
           choices: [{ id: "prompt:1", text: "先问凛刚才记下了什么" }],
@@ -160,10 +159,7 @@ describe("StageChoices", () => {
       />,
     );
 
-    expect(screen.getByText("当前信息")).toBeDefined();
-    expect(
-      screen.getByText("纸还在你手里。被划掉的那半句，你其实认得字。"),
-    ).toBeDefined();
+    expect(screen.queryByText("当前信息")).toBeNull();
     expect(screen.getByText("现在需要决定")).toBeDefined();
     expect(
       screen.getByText("围绕「开学第一天：先回应谁」，你准备怎么回应？"),

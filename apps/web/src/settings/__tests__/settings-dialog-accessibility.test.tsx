@@ -18,6 +18,9 @@ const settingsMocks = vi.hoisted(() => ({
     subscribePersistenceErrors: () => () => undefined,
     listEntries: () => [],
     subscribeAll: () => () => undefined,
+    listBackups: async () => ["original.json"],
+    readBackup: vi.fn(async () => '{"saved": true}'),
+    export: vi.fn(async () => ({ schemaVersion: 1, entries: {} })),
   } as unknown as SettingsStoreApi,
 }));
 
@@ -29,7 +32,6 @@ vi.mock("@/lib/desktop-bridge.js", () => ({
   isDesktopApp: () => false,
 }));
 
-vi.mock("../DataPane.js", () => ({ DataPane: () => <div>Data pane</div> }));
 vi.mock("../DesktopPane.js", () => ({
   DesktopPane: () => <div>Desktop pane</div>,
 }));
@@ -60,14 +62,39 @@ describe("SettingsDialog navigation", () => {
 
   afterEach(() => cleanup());
 
-  it("shows a read-only load failure and disables settings controls", () => {
+  it("F-199 keeps export and backup tools available in read-only mode", async () => {
     settingsMocks.store.isHydrated = () => false;
-    render(<SettingsDialog open onOpenChange={vi.fn()} />);
+    render(<SettingsDialog open initialKey="data" onOpenChange={vi.fn()} />);
     expect(screen.getByRole("alert").textContent).toBe(
       i18n.t("settings.loadFailedReadOnly"),
     );
-    const pane = screen.getByText("Appearance pane");
-    expect(pane.closest("fieldset")?.disabled).toBe(true);
+    const exportButton = screen.getByRole("button", {
+      name: i18n.t("settings.exportDownload"),
+    });
+    expect(exportButton.matches(":disabled")).toBe(false);
+    expect(
+      screen
+        .getByRole("button", { name: i18n.t("settings.resetAll") })
+        .matches(":disabled"),
+    ).toBe(true);
+    expect(
+      (
+        screen.getByRole("checkbox", {
+          name: i18n.t("settings.exportIncludeKeys"),
+        }) as HTMLInputElement
+      ).checked,
+    ).toBe(false);
+    const view = await screen.findByRole("button", {
+      name: i18n.t("settings.backupView"),
+    });
+    expect(view.matches(":disabled")).toBe(false);
+    expect(
+      screen
+        .getByRole("button", { name: i18n.t("settings.backupDownload") })
+        .matches(":disabled"),
+    ).toBe(false);
+    fireEvent.click(view);
+    expect(await screen.findByText(/"saved": true/)).toBeTruthy();
   });
 
   it("uses a compact mobile section picker and full-width content", async () => {

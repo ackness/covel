@@ -75,8 +75,11 @@ Write one observation grounded in runtime-inputs.narrative.value.
 三条最容易出错的规则：
 
 - `id` 必须和文件夹的名字一样。
+- `runtimes/` 下每个目录都要有 `RUNTIME.md`，共享代码放在根目录的 `lib/`。缺清单的路径会报给作者，其他 runtime 仍可加载；详见[插件规范](../reference/plugins.md)。
 - 只有一个 runtime 时，把它写在 `PLUGIN.md` 的 `runtime:` 里。有多个时，每个放在 `runtimes/<名字>/RUNTIME.md`。两种写法不能同时用，否则校验报 `inline runtime and runtimes/ cannot coexist`。
 - `PLUGIN.md` 写了 `version` 时，它必须和 `package.json` 里的 `version` 相同。 `package.json` 还必须写 `"type": "module"`：插件包只支持 ESM，缺了这一行校验和安装都会拒绝。
+
+`pnpm create-plugin` 的每种模式都会把 `PLUGIN.md` 和 `package.json` 的版本设为 `0.1.0`。发布新版本时同时更新两处，再用 `pnpm validate:plugin <插件目录>` 检查。
 
 校验通过后，在游戏的准备页选中插件并授权，它才会运行，见[第一个插件](./first-plugin.md)的最后一步。打包和安装见[打包并试装](../ship/package.md)。
 
@@ -175,6 +178,8 @@ runtime:
 同一项能力可以有几个提供者。用 `cardinality: one` 表示“只要一个”，`cardinality: all` 表示“全都要”。想和提供某项能力的其他插件互斥，在 `PLUGIN.md` 写 `conflicts`。
 
 由事件触发的 runtime 也可以排先后：同一个事件触发的几个 runtime 之间，`needs` 和 `after` 照常生效，没有依赖的仍然同时运行。依赖不会替你触发一个没有被事件匹配到的 runtime。后台运行的 runtime 之间不能这样排序，要接力就发一个后续事件，或者读对方已经保存的输出。
+
+发布输出时，在根 `contracts` 声明公共 schema，并让 guard 跳过时的输出也符合它。已有资料可能比模型生成的资料少，不要把生成工具的数量要求放进公共输出；见[发布输出契约](../reference/plugins.md#发布输出契约)。
 
 各种通信方式（同一回合的结果、已保存的结果、事件、服务、扩展点）见[插件扩展与通信](../reference/plugin-extensions.md)。
 

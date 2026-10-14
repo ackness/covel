@@ -43,11 +43,11 @@ import { StageBackdrop } from "./StageBackdrop.js";
 import { StageSprites } from "./StageSprites.js";
 import { StageHud } from "./StageHud.js";
 import { StageDialog } from "./StageDialog.js";
+import type { RightPanelState } from "../right-panel-state.js";
 import { StagePluginPanels } from "./StagePluginPanels.js";
 import { StageChoices } from "./StageChoices.js";
 import { StageExecutionStatus } from "./StageExecutionStatus.js";
 import {
-  deriveDecisionRecapFallback,
   extractInteractionChoices,
   extractPendingFormMessages,
   filterStalePrompts,
@@ -58,6 +58,10 @@ import {
 } from "./stage-selectors.js";
 
 export interface StageViewProps {
+  readonly panelState: Pick<
+    RightPanelState,
+    "rightSpecs" | "specsStatus" | "retrySpecs"
+  >;
   readonly session: SessionRecord;
   readonly world: WorldRecord | null;
   readonly messages: StreamMessage[];
@@ -214,8 +218,7 @@ export function StageView(props: StageViewProps): ReactElement {
     () => extractPendingFormMessages(messages, submittedBlockIds),
     [messages, submittedBlockIds],
   );
-  // Drop guide prompts left over from a previous turn (StageChoices merges them
-  // in via mergeChoices, which doesn't itself check freshness).
+  // Only current turn-scoped suggestions reach the decision panel.
   const freshPrompts = useMemo(
     () =>
       filterStalePrompts(
@@ -243,10 +246,6 @@ export function StageView(props: StageViewProps): ReactElement {
     ];
   }, [storyTurnId, props.executionSteps, messages]);
   const activeForm = pendingForms.find((m) => !dismissedFormIds.has(m.id));
-  const fallbackRecap = useMemo(
-    () => deriveDecisionRecapFallback(storyText),
-    [storyText],
-  );
   const allRead = Boolean(storyKey && readStoryKey === storyKey);
   // Hide the previous decision, including plugin surfaces, as soon as a turn
   // starts. Keep already-read narration hidden while waiting for the new story.
@@ -292,9 +291,9 @@ export function StageView(props: StageViewProps): ReactElement {
         />
       )}
       <StageChoices
-        extensions={(choices) => (
+        extensions={(choices, onDraftMessage) => (
           <StagePluginPanels
-            sessionId={session.id}
+            panelState={props.panelState}
             activePluginIds={sessionPlugins
               .filter((plugin) => plugin.active)
               .map((plugin) => plugin.id)}
@@ -302,14 +301,13 @@ export function StageView(props: StageViewProps): ReactElement {
             turnIds={stageTurnIds}
             turnId={storyTurnId}
             executing={executing}
-            onSendMessage={onSendMessage}
+            onDraftMessage={onDraftMessage}
           />
         )}
         visible={choicesVisible}
         executing={executing}
         interactionChoices={interactionChoices}
         suggestions={freshPrompts}
-        fallbackRecap={fallbackRecap}
         locale={locale}
         onSubmitInteraction={onSubmitInteraction}
         onSendMessage={onSendMessage}

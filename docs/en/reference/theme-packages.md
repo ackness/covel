@@ -101,9 +101,9 @@ JSON structure:
 A CSS file has no place to declare a `layout`, so a theme imported as CSS uses the `classic` layout. When you need another layout, use the JSON format.
 
 > [!WARNING]
-> **Import only theme packages from sources you trust.** The imported theme CSS is applied as it is. The import check rejects `@import`, but it does not filter `url(...)` (background images, `@font-face` fonts, and so on). So a theme can make the client send requests to any external address.
+> **Theme CSS is untrusted content.** It shares a document with settings and can still change or obscure the interface; import only themes you want to use. `@import` is rejected, and the page CSP blocks styles, fonts and images from external hosts, including CSS `url()`, `image-set()` and `@font-face`. Same-origin resources, embedded images and local fonts remain available.
 >
-> This is the theme author's choice. Built-in fonts are not loaded from the network, but the remote CSS and fonts that an imported theme brings along are still loaded. The main page's Content-Security-Policy allows `https:` style and font sources for this reason.
+> When importing a theme file or committing a backdrop in the appearance studio, ordinary `url(https://…)` images are downloaded and embedded before saving. PNG, JPEG, WebP, GIF and AVIF are accepted, with a 5 MiB limit per image and a 15-second timeout. The image host must allow CORS reads; requests carry no credentials or referrer. A failed download leaves the change unsaved. Remote fonts and escaped remote URLs are unsupported; reimport existing remote backgrounds or replace them with local resources. Backups and raw JSON do not download images automatically; CSP still applies.
 
 ## 3. JSON field contract
 
@@ -235,7 +235,7 @@ The structure of `manifest.json`:
 {
   "id": "paper",
   "label": {
-    "zh-CN": "Paper",
+    "zh-CN": "纸本",
     "en-US": "Paper"
   },
   "source": "builtin",
@@ -243,6 +243,11 @@ The structure of `manifest.json`:
   "description": {
     "zh-CN": "温暖、偏叙事阅读器的纸本风格。",
     "en-US": "A warm editorial reading style."
+  },
+  "group": "classic",
+  "groupLabel": {
+    "zh-CN": "经典",
+    "en-US": "Classic"
   }
 }
 ```
@@ -607,7 +612,9 @@ To keep a theme package stable and usable over the long term, we recommend this:
 - Narrative themes should explicitly override the `--story-*` tokens
 - Tool themes should explicitly override the `--surface-*`, `--radius-*`, and `--title-*` tokens
 
-## 10. Reference examples
+<a id="10-reference-examples"></a>
+
+## 11. Reference examples
 
 You can use the built-in themes as real references:
 

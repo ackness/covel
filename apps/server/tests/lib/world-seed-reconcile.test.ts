@@ -49,21 +49,18 @@ it.each(["id: [unterminated\n", "id: broken\n"])(
   },
 );
 
-it("keeps worlds when one source cannot be scanned, then reconciles a complete scan", async () => {
+it("keeps worlds when a root is unreadable, then reconciles a complete scan", async () => {
   const store = createMemoryStore();
   const sessionLock = createInProcessSessionLock();
   await seedAndReconcileWorlds(store, [root], sessionLock);
   await rm(path.join(root, "removed"), { recursive: true });
+  await writeFile(path.join(root, "unreadable-root"), "not a directory");
   await seedAndReconcileWorlds(
     store,
-    [root, path.join(root, "missing-root")],
+    [root, path.join(root, "unreadable-root")],
     sessionLock,
   );
   expect(await store.getWorld("removed")).not.toBeNull();
-  // A missing source is expected on a fresh install: one line, no stack.
-  expect(console.warn).toHaveBeenCalledWith(
-    `[world-seed] Worlds directory does not exist: ${path.join(root, "missing-root")}`,
-  );
   await seedAndReconcileWorlds(store, [root], sessionLock);
   expect(await store.getWorld("removed")).toBeNull();
   expect(await store.getWorld("healthy")).not.toBeNull();
@@ -136,3 +133,65 @@ it("does not choose an arbitrary duplicate id or follow a linked manifest", asyn
     await store.close();
   }
 });
+
+it("refreshes bundled worlds when the user directory does not exist", async () => {
+  const store = createMemoryStore();
+  const lock = createInProcessSessionLock();
+  await seedAndReconcileWorlds(store, [root], lock);
+  await writeFile(path.join(root, "healthy/WORLD.md"), "Updated lore");
+  await seedAndReconcileWorlds(
+    store,
+    [root, path.join(root, "missing-root")],
+    lock,
+  );
+  expect((await store.getWorld("healthy"))?.lore).toBe("Updated lore");
+  expect(await store.listWorlds()).toHaveLength(3);
+  expect(console.warn).not.toHaveBeenCalled();
+  await store.close();
+});
+
+it.each(["missing", "yaml", "schema"])(
+  "keeps the whole previous world when a dimension source has a %s error",
+  async (failure) => {
+    const store = createMemoryStore();
+    const lock = createInProcessSessionLock();
+    const dir = path.join(root, "healthy");
+    await mkdir(path.join(dir, "data"));
+    await writeFile(
+      path.join(dir, "world.data.yaml"),
+      "schemaVersion: 1\nsources:\n  dimensions:\n    kind: yaml\n    path: data/dimensions.yaml\n    to: world:metadata.dimensions\n",
+    );
+    // Explicit descriptors keep a missing source declared.
+    const manifest = path.join(dir, "world.yaml");
+    await writeFile(
+      manifest,
+      'schemaVersion: "1.0"\nid: healthy\nname: Healthy\nsummary: Fixture\ndefaultLocale: en-US\nworldData: world.data.yaml\n',
+    );
+    const file = path.join(dir, "data/dimensions.yaml");
+    await writeFile(
+      file,
+      "alarm:\n  name: Alarm\n  schema: { type: number }\n  initialValue: 0\n",
+    );
+    await seedAndReconcileWorlds(store, [root], lock);
+    const before = await store.getWorld("healthy");
+    expect(before?.metadata?.dimensions).toHaveProperty("alarm");
+    await writeFile(
+      path.join(dir, "WORLD.md"),
+      "Should not replace prior lore",
+    );
+    if (failure === "missing") await rm(file);
+    else
+      await writeFile(
+        file,
+        failure === "yaml" ? "[unterminated" : "alarm: invalid",
+      );
+    await rm(path.join(root, "removed"), { recursive: true });
+    await seedAndReconcileWorlds(store, [root], lock);
+    expect(await store.getWorld("healthy")).toEqual(before);
+    expect(await store.getWorld("removed")).not.toBeNull();
+    expect(JSON.stringify(vi.mocked(console.warn).mock.calls)).not.toContain(
+      "MVP only projects",
+    );
+    await store.close();
+  },
+);
