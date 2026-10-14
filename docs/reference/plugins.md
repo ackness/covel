@@ -35,11 +35,13 @@ example/
 
 布局规则：
 
-- 根 `PLUGIN.md` 必须有，它的 `id` 必须和包目录同名。
+- 根 `PLUGIN.md` 必须有，它的 `id` 必须和包目录同名。`framework` 留给框架自己，不能用作 `id`。
 - 只有一个 runtime 时，写在根文件的 `runtime` 里，根文件的正文就是它的提示词。
 - 有多个 runtime 时，每个放在 `runtimes/<id>/RUNTIME.md`，逻辑 ID 是 `<pluginId>/<id>`，各自文件的正文是各自的提示词。
 - 两种布局不能混用。子 runtime 不能声明包级贡献。
 - 只有 entry、UI 或扩展的包可以一个 runtime 都没有。
+
+`runtimes/` 的每个实际子目录都必须有大小写准确的 `RUNTIME.md`；共享代码放在插件根目录的 `lib/`。缺少清单时，加载器报告路径并继续加载包内其他 runtime；静态校验和安装拒绝该布局。runtime 子目录的符号链接不参与发现或本地化扫描。
 
 所有 `PLUGIN.md`、`RUNTIME.md` 和它们的语言变体，开头必须是用单独一行 `---` 包起来的普通 YAML。`---javascript`、`---js` 这类会执行代码的写法在解析前就被拒绝，所以安装、手动放入目录和重载都不能借元数据运行代码。
 
@@ -196,11 +198,21 @@ homepage: https://example.com/tidefall
 | `effects`     | 读写资源与 `parallelSafe`                                                  |
 | `permissions` | 执行权限声明                                                               |
 
+根 `PLUGIN.md` 也可以写 `permissions.http`。它管 `entry` 模块的代码：社区包的 `covel.http`（工具、钩子、RPC、服务、扩展、wire 里都用它）只能访问根文件和各 runtime 的 `permissions.http` 里列出的源和方法。wire 还能访问它正在服务的那个用途的端点。没有声明的请求在发出之前就失败：`http permission denied: …`。
+
+```yaml
+permissions:
+  http:
+    - origin: https://api.example.com
+      methods: [POST]
+```
+
 ### 两种 runtime
 
 - **Function runtime** 必须声明 `function.handler`，这个模块必须默认导出一个函数，不能同时配置 `agent`。
 - **Agent runtime** 不能配置 `function`。
 - `function.model` 说明 handler 里的 `ctx.gateway` 调用使用哪个模型 slot（如 `memory`）。后台（detached）任务在领取前用它判断凭证是否就绪。不声明时按系统默认 preset 判断，可能漏掉请求级的 slot 绑定，任务就会一直排队，直到 `maxQueueMs` 超时。
+- `agent.model` 和 `function.model` 只写用途（slot）的名字。插件不能指定服务商、模型、地址或协议：这些由玩家的模型设置决定（见[实际选择优先级](./slots.md#实际选择优先级)）。插件目录里的 `llm.toml` 不会被读取。
 
 ### Agent 能用哪些工具
 
@@ -231,7 +243,7 @@ Agent 的 guard 在调用模型之前执行。
 
 ### 依赖和引用的范围
 
-`schedule.needs`、`schedule.after` 和 `io.inputs.*.from.runtime` 里写的 runtime ID 只能属于本包：写完整的 `<pluginId>/<runtimeId>`，单 runtime 的包写包 ID。不带前缀的字符串依赖同样受这条限制。
+`schedule.needs`、`schedule.after` 和 `io.inputs.*.from.runtime` 里写的 runtime ID 只能属于本包：写完整的 `<pluginId>/<runtimeId>`，单 runtime 的包写包 ID。不带前缀的字符串依赖会被拒绝，诊断会建议补全为 `<pluginId>/<runtimeId>`；只有其他包的完整 runtime ID 才建议改用契约。
 
 **跨包 runtime 引用边界**：
 
@@ -347,7 +359,7 @@ Agent 的超时、重试和步数都在 `agent.loop` 里。
 **完成条件。**
 
 - `completion.afterTools`：指定的工具成功后就结束。
-- `completion.require: tool-use`：要求有效的工具调用，也就是至少一次执行成功的业务工具调用。失败的调用不算。
+- `completion.require: tool-use`：声明了非空的 `afterTools` 时，至少一个列出的完成工具必须成功。没有列表时，任意成功的业务工具调用都算。失败的调用和 `runtime-done` 不算。
 - 模型只回了纯文本，或者调用了 `runtime-done`，而这时还没有这样的调用：框架先注入一次纠正提示，仍未完成才判为失败。所以“无变化”也要通过业务工具提交一个空结果。
 - 纠正之后的那次请求要求模型必须调用工具（`toolChoice: "required"`，清单指名的工具保持不变）。模型调用工具后恢复自选。模型处于思考模式时服务商不接受强制选择，这时仍由模型自选。
 - 这个判定在循环返回处统一进行，普通执行和 resume 的所有结束方式都适用：文本回答、`runtime-done`、`afterTools` 自动完成、`PostToolUse` Hook 终止，以及步数用尽。
@@ -419,6 +431,7 @@ CLI 和安装器的静态校验对 `scope: turn` 和 `scope: committed` 的输�
 发布 runtime 的输出契约时，在根 `contracts.<contractId>.schema` 声明完整输出的公共 schema。
 
 - 同一个契约 ID 的所有提供者必须发布一致的 schema。
+- 公共 schema 同时覆盖模型输出和 guard 跳过输出。例如 `world-init` 的 `world-data-provider@1` 允许作者提供少于 15 项的属性结构；生成至少 15 项的要求留在 `initialize-world` 的工具参数中。
 - 替代插件的 `provides` 必须和它自己 runtime 的 `io.output.contract` 对齐。其他已安装插件的产出不能替它满足声明。
 - 被消费的契约缺少 schema，或者提供者只有声明而没有产出，都会产生加载诊断。
 
@@ -505,7 +518,7 @@ Agent 的副作用只来自工具：模型能写什么，以 `agent.tools` 白�
 内核把记录写进提示词时会去掉它们：
 
 - `io.selfData` 的每一行是 `- <key> | <值的 JSON>`（`summary` 格式截断到 200 字符）。不带行的 `updatedAt`，值里和 key 相同的 `id` 也不重复。
-- 下面这些内容在交给模型之前经过同一个投影：`<runtime-inputs>` / `<runtime-exports>` 的值、`{{ world.schema }}`、`{{ characters.npcs }}` 的 fields、SDK `characterSheetSegments()` 的玩家表和 NPC fields，以及没有 `_text` 的工具结果。
+- 下面这些内容在交给模型之前经过同一个投影：`<runtime-inputs>` / `<runtime-exports>` 的值、`<runtime-activation>` 的载荷、`{{ world.schema }}`、`{{ characters.npcs }}` 的 fields、SDK `characterSheetSegments()` 的玩家表和 NPC fields，以及没有 `_text` 的工具结果。
 
 属性名和取值都符合才会被去掉：
 
@@ -520,7 +533,7 @@ Agent 的副作用只来自工具：模型能写什么，以 `agent.tools` 白�
 > [!WARNING]
 > 这个判断只看名字和取值的形状，分不出剧情里的时间。故事内的时刻如果存成 `diedAt: "1943-06-01T08:00:00Z"`（名字以 `At` 结尾或叫 `timestamp`，取值是 ISO 时间），模型同样看不到它，运行时也没有任何报错。要给模型看的剧情时间请换一个名字（`date`、`diedOn`），或者不写成 ISO 时间（`"1943 年 6 月 1 日清晨"`）。世界包里的数据和插件自己存的数据都适用。世界包里的这类字段，`pnpm validate:world` 会给出 `model-hidden-field` 提醒；插件运行时自己存的数据不在检查范围内。
 
-代码读到的记录不变：`ctx.inputs`、`ctx.pluginData`、`ctx.tools.call` 的返回值都是完整的。
+代码读到的记录不变：`ctx.inputs`、`ctx.activation`、`ctx.pluginData`、`ctx.tools.call` 的返回值都是完整的。
 
 - 插件自己拼提示词（例如直接调用 `ctx.gateway`）时，用 `@covel/plugin-handlers-utils` 导出的 `modelFacingJson(value)` 做同样的事。
 - 工具要把一个不透明的句柄交给模型时，写在 `_text` 里。
@@ -560,7 +573,7 @@ Agent 的副作用只来自工具：模型能写什么，以 `agent.tools` 白�
 
 **插件自己的数据。**
 
-- 插件自有的持久数据经绑定的 `ctx.store.getPluginData(namespace, key)` 和 `listPluginData(namespace?)` 访问。
+- 插件自有的持久数据经绑定的 `ctx.store.getPluginData(namespace, key)` 和 `listPluginData(namespace)` 访问。
 - 插件不能指定任意的 sessionId 或 pluginId 去读其他插件的私有数据。
 - 要跨插件公开数据，用契约、服务或扩展，不要扫描对方的 namespace。
 
@@ -626,6 +639,8 @@ namespace 接收某个契约，就说明了这个契约的记录长什么样。�
 - 两个 namespace 用不同的 schema 接收同一个契约。这时必须说明哪一份是公共的。
 
 接收世界数据的 namespace 还可以声明 `authoring`（`title`、`summary`、`hint`、`example`、`source`、`references`、`generate`）。它告诉世界作者怎样提供这份内容，以及应用内的生成器能不能生成它。
+
+请求期读取示例或准备可生成契约的 schema 失败时，只略过该契约并报告插件、namespace 和原因，不会停用整个插件或阻止其他内容生成。`pnpm describe:authoring --check` 仍把损坏的示例报给作者。
 
 - 只有列出了 `accepts` 的 namespace 才能声明它。
 - `pnpm describe:authoring` 汇总所有已扫描插件的声明；加 `--check` 会按 namespace 的 schema 校验每份 `example`。
@@ -731,6 +746,8 @@ namespace 声明 `search` 之后，它的记录进入框架的记忆检索（[`m
 - 每份 JSON UI spec 声明 `view` 或 `webview` 中的一个；`view` 里的组件名必须在[组件目录](./ui-components.md)里；`repeat.statePath` 和 `$item` 的写法必须合法（见 [UI 面板](./ui-panels.md#json-render-绑定速查)）。报错给出 spec 文件和节点的路径。
 - 自动和定时的 runtime 必须有 stage。
 - 内置工具名和插件工具声明、包内的 runtime 引用，以及根契约依赖必须一致。
+
+目录级检查还会在插件根目录有 `llm.toml` 时给出提醒：这个文件不会被读取，不影响通过。
 
 这些检查不执行插件代码，不能代替启动时的注册一致性检查。
 

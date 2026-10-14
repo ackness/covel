@@ -101,10 +101,11 @@ export async function waiveSetupRuntime(sessionId: string, runtimeId: string) {
 
 export async function getSessionExecution(
   sessionId: string,
+  options?: { retry?: boolean },
 ): Promise<import("@covel/shared").SessionExecutionStatus> {
   return request<import("@covel/shared").SessionExecutionStatus>(
     `/api/sessions/${encodeURIComponent(sessionId)}/execution`,
-    { silentErrors: true },
+    { silentErrors: true, ...options },
   );
 }
 

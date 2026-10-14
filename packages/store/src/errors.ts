@@ -34,6 +34,46 @@ export class SessionRecordScopeConflictError extends Error {
   }
 }
 
+/**
+ * Raised at startup when an SQL database was written by a Covel build with
+ * another data schema. Covel does not migrate stored data, so it refuses to
+ * open the database instead of failing later on a missing column. `found` is
+ * null for a database written before the version was recorded.
+ */
+export class StoreSchemaVersionError extends Error {
+  readonly code = "store_schema_incompatible";
+
+  constructor(
+    readonly backend: "sqlite" | "pg",
+    readonly found: number | null,
+    readonly expected: number,
+    readonly missingColumns: readonly string[] = [],
+  ) {
+    super(describeSchemaMismatch(backend, found, expected, missingColumns));
+    this.name = "StoreSchemaVersionError";
+  }
+}
+
+function describeSchemaMismatch(
+  backend: "sqlite" | "pg",
+  found: number | null,
+  expected: number,
+  missingColumns: readonly string[],
+): string {
+  const label = backend === "sqlite" ? "SQLite" : "PostgreSQL";
+  const cause =
+    found === null
+      ? `was written by an older Covel and lacks columns this version needs (${missingColumns.slice(0, 5).join(", ")}${missingColumns.length > 5 ? ", ..." : ""})`
+      : found > expected
+        ? `was written by a newer Covel (data schema ${found}; this version uses ${expected})`
+        : `was written by an older Covel (data schema ${found}; this version uses ${expected})`;
+  const remedy =
+    backend === "sqlite"
+      ? "Back up the database file (with its -wal and -shm files), then start this version with a new data directory or SQLITE_PATH."
+      : "Back up the database, then point DATABASE_URL at a new, empty database.";
+  return `The ${label} database ${cause}. Covel does not migrate stored data and will not open it. ${remedy}`;
+}
+
 /** SQLite extended result codes for a primary-key and a unique violation. */
 const SQLITE_UNIQUE_VIOLATIONS = new Set([1555, 2067]);
 

@@ -80,6 +80,7 @@ A provider's handler receives two arguments: the input the extension point defin
 - `ctx.pluginData` is read-only, and it can read only the provider's own data. It cannot read `_hidden.*` hidden world data, because the output of an extension point goes into the prompt or to the client.
 - `ctx.world` is the session's World Model view.
 - It cannot read other plugins' private namespaces from here.
+- A community provider's `ctx.utils`, like its `covel.http`, reaches only the origins listed in the `permissions.http` of its own package (see [the plugin reference](./plugins.md#runtime-field-groups)).
 
 The read methods of `ctx.pluginData` have the same shape in three places: a function runtime's handler, a runtime's guard, and an extension point's handler. Code can be moved directly between them.
 

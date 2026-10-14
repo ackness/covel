@@ -23,14 +23,14 @@ describe("envOverriddenProviders", () => {
   it("flags a saved key that the environment replaces", () => {
     saved("DEEPSEEK_API_KEY=saved\n");
     vi.stubEnv("DEEPSEEK_API_KEY", "from-shell");
-    captureBootKeySources(home);
+    captureBootKeySources();
     expect(envOverriddenProviders(home)).toEqual(["deepseek"]);
   });
 
   it("does not flag a value that was merged in from keys.env", () => {
     saved("DEEPSEEK_API_KEY=saved\n");
     vi.stubEnv("DEEPSEEK_API_KEY", "saved");
-    captureBootKeySources(home);
+    captureBootKeySources({});
     expect(envOverriddenProviders(home)).toEqual([]);
     // Saving a new key later is not an override: the next start merges it.
     saved("DEEPSEEK_API_KEY=newer\n");
@@ -40,7 +40,7 @@ describe("envOverriddenProviders", () => {
   it("keeps flagging after a save, and stops once the saved key matches", () => {
     saved("DEEPSEEK_API_KEY=saved\n");
     vi.stubEnv("DEEPSEEK_API_KEY", "from-shell");
-    captureBootKeySources(home);
+    captureBootKeySources();
     saved("DEEPSEEK_API_KEY=other\n");
     expect(envOverriddenProviders(home)).toEqual(["deepseek"]);
     saved("DEEPSEEK_API_KEY=from-shell\n");
@@ -49,8 +49,16 @@ describe("envOverriddenProviders", () => {
 
   it("reports nothing without a saved key or outside desktop", () => {
     vi.stubEnv("DEEPSEEK_API_KEY", "from-shell");
-    captureBootKeySources(home);
+    captureBootKeySources();
     expect(envOverriddenProviders(home)).toEqual([]);
     expect(envOverriddenProviders(null)).toEqual([]);
   });
+});
+
+it("retains external ownership when the boot saved value is identical", () => {
+  saved("DEEPSEEK_API_KEY=same\n");
+  captureBootKeySources({ deepseek: "same" });
+  expect(envOverriddenProviders(home)).toEqual([]);
+  saved("DEEPSEEK_API_KEY=replacement\n");
+  expect(envOverriddenProviders(home)).toEqual(["deepseek"]);
 });

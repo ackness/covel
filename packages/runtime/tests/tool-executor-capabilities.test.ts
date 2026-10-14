@@ -11,7 +11,6 @@ import {
 import { createToolExecutor } from "../src/agent-loop/tool-executor.js";
 import type { TurnEmitter } from "../src/trace/turn-emitter.js";
 import upsertQuests from "../../../plugins/core-quest/lib/upsert-quests.js";
-import listNpcGraph from "../../../plugins/npc-graph/tools/list-npc-graph.js";
 import syncCodexEntries from "../../../plugins/codex/tools/sync-codex-entries.js";
 
 const identity = {
@@ -197,9 +196,14 @@ describe("tool invocation capabilities", () => {
     ).toEqual([]);
   });
 
-  it("lists newly proposed graph nodes before commit", async () => {
+  it("lists newly proposed plugin rows before commit", async () => {
     const store = await fixture();
-    const module = listNpcGraph({ tool, z });
+    const module = makeTool(async (ctx) => {
+      const nodes = (await ctx.store!.listPluginData("nodes")).map(
+        (row) => row.value,
+      );
+      return { nodeCount: nodes.length, nodes };
+    });
     const executor = createToolExecutor({ store, findTool: () => module });
     const pending = write(null, {
       payload: {

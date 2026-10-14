@@ -1,6 +1,6 @@
 /**
- * Session character ids are UUIDs or session-prefixed slugs, and the model
- * would repeat them in every reference it writes; output tokens set this
+ * The model would repeat character ids in every reference it writes;
+ * short handles reduce output tokens, which set this
  * runtime's latency. The extraction input therefore names each character by
  * a short word handle (its name, lowercased and hyphenated), and
  * `submit-world-facts` maps handles back to the real ids. Both sides derive

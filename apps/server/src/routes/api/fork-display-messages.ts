@@ -25,20 +25,10 @@ async function readForkDisplayMessages(
   );
   if (boundary.ids.some((id) => !present.has(id)))
     throw new ForkCursorMissingError();
-  const visible = messages.filter(
+  // listMessages already orders timestamp ties by write position. Keep that
+  // order when assigning new IDs and writing the child history.
+  return messages.filter(
     (message) => message.createdAt < boundary.createdAt || ids.has(message.id),
-  );
-  // Match the UI's keyset ordering, including on MemoryStore.
-  return visible.sort((a, b) =>
-    a.createdAt < b.createdAt
-      ? -1
-      : a.createdAt > b.createdAt
-        ? 1
-        : a.id < b.id
-          ? -1
-          : a.id > b.id
-            ? 1
-            : 0,
   );
 }
 
@@ -56,8 +46,8 @@ export async function copyForkDisplayMessages(
     parentSessionId,
     snapshot,
   );
-  // One random prefix and ordered suffixes preserve same-time UI ordering
-  // while keeping ids distinct from both parent and siblings.
+  // Keep IDs distinct from both parent and siblings. The insertion sequence
+  // below, rather than the IDs themselves, preserves same-time display order.
   const prefix = randomUUID();
   const ids = new Map<string, string>();
   for (const [index, message] of messages.entries()) {

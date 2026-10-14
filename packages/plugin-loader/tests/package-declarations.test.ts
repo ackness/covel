@@ -48,16 +48,6 @@ function entry(overrides: Partial<PluginRegistryEntry>): PluginRegistryEntry {
 const setting = { key: "limit", type: "number", label: "Limit", default: 3 };
 
 describe("package declarations", () => {
-  it("rejects duplicate identities before deduplicating source declarations", () => {
-    const root = declaration();
-    expect(() =>
-      validatePluginDeclarations([
-        root,
-        { ...root, sourcePath: "other/PLUGIN.md" },
-      ]),
-    ).toThrow("Duplicate manifest name");
-    expect(() => validatePluginDeclarations([root, root])).not.toThrow();
-  });
   it("keeps zero-runtime packages discoverable without scheduling their declarations", async () => {
     const root = declaration({
       entry: "./server.js",
@@ -168,7 +158,7 @@ describe("package declarations", () => {
         commands: [{ name: "probe", description: "Probe", action: "inspect" }],
       },
     });
-    expect(() => validatePluginDeclarations([invalid])).toThrow(
+    expect(() => validatePluginDeclarations(invalid)).toThrow(
       "contributes.actions",
     );
   });

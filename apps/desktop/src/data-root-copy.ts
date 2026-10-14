@@ -25,7 +25,8 @@ export const DATABASE_FILES = [
   "covel.db-shm",
 ] as const;
 
-const WORLDS_DIR = "worlds";
+/** Directories that travel with the database. */
+export const DATA_DIRECTORIES = ["worlds", "media"] as const;
 
 /**
  * The copy is written here first and renamed into place at the end, so a
@@ -68,14 +69,16 @@ export function sameDataRoot(a: string, b: string): boolean {
   return canonical(a) === canonical(b);
 }
 
-/** True when the directory holds a database file or a user world. */
+/** True when the directory holds a database file, world, or media. */
 export function hasCovelData(root: string): boolean {
   if (DATABASE_FILES.some((name) => exists(path.join(root, name)))) return true;
-  try {
-    return fs.readdirSync(path.join(root, WORLDS_DIR)).length > 0;
-  } catch {
-    return false;
-  }
+  return DATA_DIRECTORIES.some((name) => {
+    try {
+      return fs.readdirSync(path.join(root, name)).length > 0;
+    } catch {
+      return false;
+    }
+  });
 }
 
 /**
@@ -122,7 +125,7 @@ async function removeQuietly(target: string): Promise<void> {
 }
 
 /**
- * Copy the database files and `worlds/` from `from` to `to`. `logs/` and
+ * Copy the database files, `worlds/` and `media/` from `from` to `to`. `logs/` and
  * `server.port` belong to one location and are not copied.
  *
  * The caller guarantees that no process has the database open. Resolves to a
@@ -173,36 +176,41 @@ export async function copyDataRoot(
       }
     }
 
-    const sourceWorlds = path.join(from, WORLDS_DIR);
-    const worlds = isDirectory(sourceWorlds)
-      ? await fs.promises.readdir(sourceWorlds)
-      : [];
-    if (worlds.length > 0) {
-      await fs.promises.cp(sourceWorlds, path.join(staging, WORLDS_DIR), {
+    const directories = [];
+    for (const name of DATA_DIRECTORIES) {
+      const source = path.join(from, name);
+      const entries = isDirectory(source)
+        ? await fs.promises.readdir(source)
+        : [];
+      if (entries.length === 0) continue;
+      await fs.promises.cp(source, path.join(staging, name), {
         recursive: true,
         force: false,
         errorOnExist: true,
         verbatimSymlinks: true,
       });
+      directories.push({ name, entries });
     }
 
-    // Everything is on the destination's disk. Put it in place: worlds first
+    // Everything is on the destination's disk. Put it in place: directories first
     // and `covel.db` last, so the database appears only when the rest is there.
     const place = async (staged: string, target: string): Promise<void> => {
       if (exists(target)) throw new Error(`${target} already exists`);
       await fs.promises.rename(staged, target);
       created.unshift(target);
     };
-    const targetWorlds = path.join(to, WORLDS_DIR);
-    if (worlds.length > 0 && !exists(targetWorlds)) {
-      await place(path.join(staging, WORLDS_DIR), targetWorlds);
-    } else {
-      // An empty `worlds/` is already there: fill it, one world at a time.
-      for (const name of worlds) {
-        await place(
-          path.join(staging, WORLDS_DIR, name),
-          path.join(targetWorlds, name),
-        );
+    for (const { name, entries } of directories) {
+      const target = path.join(to, name);
+      if (!exists(target)) {
+        await place(path.join(staging, name), target);
+      } else {
+        // Fill an existing empty directory without replacing it.
+        for (const entry of entries) {
+          await place(
+            path.join(staging, name, entry),
+            path.join(target, entry),
+          );
+        }
       }
     }
     for (const name of [...databaseFiles].reverse()) {

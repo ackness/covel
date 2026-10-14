@@ -64,10 +64,15 @@ export function validateRuntimeDeclarations(
     // Within-package references (pluginId/runtimeName) are permitted for internal coordination.
     // Cross-package dependencies must use the contract system for stable, versioned coupling.
     for (const { runtimeId, field } of runtimeReferences) {
-      if (runtimeId !== plugin.id && !runtimeId.startsWith(`${plugin.id}/`))
+      if (runtimeId !== plugin.id && !runtimeId.startsWith(`${plugin.id}/`)) {
+        if (!runtimeId.includes("/"))
+          throw new Error(
+            `${parsed.sourcePath}: ${field} references unprefixed runtime ${runtimeId}; use the complete runtime ID ${plugin.id}/${runtimeId} for a runtime in this package`,
+          );
         throw new Error(
           `${parsed.sourcePath}: ${field} references runtime ${runtimeId} outside package ${plugin.id}; use a contract for cross-package dependencies`,
         );
+      }
     }
     const references = [
       ...(parsed.runtime?.schedule?.needs ?? []).flatMap((need) =>

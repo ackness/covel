@@ -1,0 +1,216 @@
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import i18n from "@/i18n/index.js";
+import type { WorldRecord } from "@/services/api.js";
+import { WorldEditor } from "../world-editor.js";
+
+const mocks = vi.hoisted(() => ({
+  updateWorld: vi.fn(),
+  requestConfirm: vi.fn(),
+}));
+vi.mock("@/services/data-service.js", () => ({ getDataService: () => mocks }));
+vi.mock("@/lib/confirm-channel.js", () => ({
+  requestConfirm: mocks.requestConfirm,
+}));
+
+const world: WorldRecord = {
+  id: "draft-world",
+  name: "Draft world",
+  description: "An editor test",
+  createdAt: "2026-10-14",
+  dimensions: {
+    startingConditions: {
+      name: "Starting conditions",
+      schema: {},
+      initialValue: {
+        openingScenario: "At the gate",
+        startingResources: { Coin: 2 },
+      },
+    },
+  },
+};
+
+function openEditor() {
+  const onSave = vi.fn();
+  const onCancel = vi.fn();
+  const view = render(
+    <WorldEditor world={world} onSave={onSave} onCancel={onCancel} />,
+  );
+  return { ...view, onSave, onCancel };
+}
+function selectStartingConditions() {
+  fireEvent.mouseDown(
+    screen.getByRole("tab", { name: i18n.t("world.startingConditions") }),
+    { button: 0, ctrlKey: false },
+  );
+}
+function changeOpening(value: string) {
+  selectStartingConditions();
+  fireEvent.change(screen.getByLabelText(i18n.t("world.openingScenario")), {
+    target: { value },
+  });
+}
+function cancel() {
+  fireEvent.click(
+    screen.getByRole("button", { name: i18n.t("common.cancel") }),
+  );
+}
+function unload() {
+  const event = new Event("beforeunload", { cancelable: true });
+  window.dispatchEvent(event);
+  return event.defaultPrevented;
+}
+
+beforeEach(async () => {
+  vi.resetAllMocks();
+  await i18n.changeLanguage("en-US");
+  mocks.requestConfirm.mockResolvedValue(false);
+  mocks.updateWorld.mockResolvedValue(world);
+});
+afterEach(cleanup);
+
+describe("WorldEditor unsaved changes", () => {
+  it("cancels immediately and permits reload when untouched", () => {
+    const { onCancel } = openEditor();
+    expect(unload()).toBe(false);
+    cancel();
+    expect(onCancel).toHaveBeenCalledOnce();
+    expect(mocks.requestConfirm).not.toHaveBeenCalled();
+  });
+
+  it("keeps edits when discard is declined, and exits when confirmed", async () => {
+    const { onCancel } = openEditor();
+    changeOpening("At the harbor");
+    cancel();
+    await waitFor(() => expect(mocks.requestConfirm).toHaveBeenCalledOnce());
+    expect(mocks.requestConfirm).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: i18n.t("world.discardChangesTitle"),
+        message: i18n.t("world.discardChangesMessage"),
+        destructive: true,
+      }),
+    );
+    expect(onCancel).not.toHaveBeenCalled();
+    expect(
+      (
+        screen.getByLabelText(
+          i18n.t("world.openingScenario"),
+        ) as HTMLTextAreaElement
+      ).value,
+    ).toBe("At the harbor");
+    mocks.requestConfirm.mockResolvedValue(true);
+    await waitFor(() =>
+      expect(
+        (
+          screen.getByRole("button", {
+            name: i18n.t("common.cancel"),
+          }) as HTMLButtonElement
+        ).disabled,
+      ).toBe(false),
+    );
+    cancel();
+    await waitFor(() => expect(onCancel).toHaveBeenCalledOnce());
+  });
+
+  it("protects invalid resource rows even when they cannot be merged", async () => {
+    const { onCancel } = openEditor();
+    selectStartingConditions();
+    fireEvent.click(
+      screen.getByRole("button", { name: i18n.t("world.addResource_kv") }),
+    );
+    expect(
+      (screen.getByLabelText(`${i18n.t("world.key")} 2`) as HTMLInputElement)
+        .value,
+    ).toBe("");
+    expect(unload()).toBe(true);
+    cancel();
+    await waitFor(() => expect(mocks.requestConfirm).toHaveBeenCalledOnce());
+    expect(onCancel).not.toHaveBeenCalled();
+    expect(mocks.updateWorld).not.toHaveBeenCalled();
+  });
+
+  it("protects unapplied invalid JSON, and permits reload after reverting it", async () => {
+    const { onCancel } = openEditor();
+    const input = screen.getByLabelText(i18n.t("world.dimensionDefinitions"), {
+      selector: "textarea",
+    }) as HTMLTextAreaElement;
+    const original = input.value;
+    fireEvent.change(input, { target: { value: "{" } });
+    expect(unload()).toBe(true);
+    cancel();
+    await waitFor(() => expect(mocks.requestConfirm).toHaveBeenCalledOnce());
+    expect(onCancel).not.toHaveBeenCalled();
+    fireEvent.change(input, { target: { value: original } });
+    expect(unload()).toBe(false);
+  });
+
+  it("removes the reload guard after reverting form edits or unmounting", () => {
+    const { unmount } = openEditor();
+    changeOpening("At the harbor");
+    expect(unload()).toBe(true);
+    changeOpening("At the gate");
+    expect(unload()).toBe(false);
+    changeOpening("At the harbor");
+    unmount();
+    expect(unload()).toBe(false);
+  });
+
+  it.each([true, false])(
+    "clears unsaved state only if saving succeeds (%s)",
+    async (success) => {
+      const { onSave, onCancel } = openEditor();
+      changeOpening("At the harbor");
+      if (!success)
+        mocks.updateWorld.mockRejectedValue(new Error("Save failed"));
+      fireEvent.click(
+        screen.getByRole("button", { name: i18n.t("common.save") }),
+      );
+      await waitFor(() =>
+        expect(
+          (
+            screen.getByRole("button", {
+              name: i18n.t("common.save"),
+            }) as HTMLButtonElement
+          ).disabled,
+        ).toBe(false),
+      );
+      expect(unload()).toBe(!success);
+      cancel();
+      if (success) {
+        expect(onSave).toHaveBeenCalledWith(world);
+        expect(onCancel).toHaveBeenCalledOnce();
+        expect(mocks.requestConfirm).not.toHaveBeenCalled();
+        changeOpening("A later edit");
+        expect(unload()).toBe(true);
+      } else {
+        await waitFor(() =>
+          expect(mocks.requestConfirm).toHaveBeenCalledOnce(),
+        );
+        expect(onSave).not.toHaveBeenCalled();
+        expect(onCancel).not.toHaveBeenCalled();
+      }
+    },
+  );
+
+  it("ignores a pending discard answer after this editor unmounts", async () => {
+    let answer!: (value: boolean) => void;
+    mocks.requestConfirm.mockReturnValue(
+      new Promise<boolean>((resolve) => {
+        answer = resolve;
+      }),
+    );
+    const { onCancel, unmount } = openEditor();
+    changeOpening("At the harbor");
+    cancel();
+    unmount();
+    await act(async () => answer(true));
+    expect(onCancel).not.toHaveBeenCalled();
+  });
+});

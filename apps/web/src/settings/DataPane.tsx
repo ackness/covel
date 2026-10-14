@@ -1,3 +1,5 @@
+import { useSettingsWritable } from "./use-settings-save.js";
+import { requestConfirm } from "@/lib/confirm-channel.js";
 import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Download, RotateCw, Upload } from "lucide-react";
@@ -21,6 +23,7 @@ const importBundleSchema = z.object({
 export function DataPane() {
   const { t } = useTranslation();
   const store = useSettingsStore();
+  const writable = useSettingsWritable();
   const fileRef = useRef<HTMLInputElement>(null);
   const [includeSecrets, setIncludeSecrets] = useState(false);
   const [pending, setPending] = useState<{
@@ -91,7 +94,7 @@ export function DataPane() {
   }
 
   async function handleApplyImport() {
-    if (!pending || busy) return;
+    if (!pending || busy || !writable) return;
     setBusy(true);
     setError(null);
     try {
@@ -109,7 +112,18 @@ export function DataPane() {
   }
 
   async function handleResetAll() {
-    if (busy || !confirm(t("settings.resetAllConfirm"))) return;
+    if (
+      busy ||
+      !writable ||
+      !(await requestConfirm({
+        title: t("settings.resetAll"),
+        message: t("settings.resetAllConfirm"),
+        confirmLabel: t("settings.resetAll"),
+        cancelLabel: t("common.cancel"),
+        destructive: true,
+      }))
+    )
+      return;
     setBusy(true);
     setError(null);
     try {
@@ -147,6 +161,11 @@ export function DataPane() {
         <p className="text-xs leading-relaxed text-muted-foreground">
           {t("settings.exportDescription")}
         </p>
+        {!writable && (
+          <p role="status" className="text-xs text-muted-foreground">
+            {t("settings.exportReadOnlyHint")}
+          </p>
+        )}
         <label className="flex items-center gap-2 text-xs">
           <input
             type="checkbox"
@@ -243,6 +262,7 @@ export function DataPane() {
                 onClick={handleApplyImport}
                 disabled={
                   busy ||
+                  !writable ||
                   (pending.keys.size === 0 &&
                     !(
                       pending.includeSecrets &&
@@ -279,7 +299,7 @@ export function DataPane() {
           variant="outline"
           className="border-destructive/50 text-destructive hover:bg-destructive/10 hover:text-destructive"
           onClick={handleResetAll}
-          disabled={busy}
+          disabled={busy || !writable}
         >
           <RotateCw className="w-3 h-3 mr-1" />
           {t("settings.resetAll")}

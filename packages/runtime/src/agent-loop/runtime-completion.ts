@@ -35,8 +35,11 @@ export function captureCompletionCalls(
  * call that succeeded counts: a failed call also leaves a name in the
  * transcript, and `runtime-done` records nothing.
  */
-export function hasCompletedBusinessWork(prior: CompletionCalls = []): boolean {
-  return prior.some((call) => call.success && !call.done);
+export function hasCompletedBusinessWork(
+  manifest: RuntimeManifest,
+  prior: CompletionCalls = [],
+): boolean {
+  return prior.some((call) => countsAsBusinessWork(manifest, call));
 }
 
 /**
@@ -47,12 +50,25 @@ export function hasCompletedBusinessWork(prior: CompletionCalls = []): boolean {
  * is the same however the loop ended.
  */
 export function hasBusinessWork(
+  manifest: RuntimeManifest,
   calls: readonly ExecutedToolCallState[],
   seededBusinessWork: boolean,
 ): boolean {
   return (
     seededBusinessWork ||
-    calls.some((call) => call.success && !isRuntimeDoneSentinel(call.result))
+    calls.some((call) => countsAsBusinessWork(manifest, call))
+  );
+}
+
+function countsAsBusinessWork(
+  manifest: RuntimeManifest,
+  call: { name: string; success: boolean },
+): boolean {
+  return (
+    call.success &&
+    call.name !== "runtime-done" &&
+    (!manifest.completeAfterTools?.length ||
+      manifest.completeAfterTools.includes(call.name))
   );
 }
 
@@ -97,7 +113,7 @@ export function completionContractError(
   state: { requiredToolUseUnmet: boolean; requiredCompletionUnmet: boolean },
 ): string | undefined {
   if (state.requiredToolUseUnmet) {
-    return `${manifest.name} declares requireToolUse but finished without a business tool call that succeeded (a failed call and a bare \`runtime-done\` do not count).`;
+    return `${manifest.name} declares requireToolUse but finished without a successful completing tool call (when afterTools is absent, any business tool counts; a failed call and a bare \`runtime-done\` do not count).`;
   }
   if (state.requiredCompletionUnmet) {
     return `${manifest.name} declares requireExplicitCompletion but did not successfully complete a declared finishing tool or call runtime-done without unresolved tool failures.`;
@@ -133,6 +149,12 @@ function completionCorrection(
       ? `你尚未提交结果。有明确变化时调用完成工具（${tools}）；确实无变化时调用 runtime-done。纯文本、JSON 声明和查询工具不能代替提交；不要编造变化。`
       : `You have not submitted a result. For confirmed changes call a completing tool (${tools}); if nothing changed call runtime-done. Prose, JSON claims, and read tools do not complete the task. Do not invent changes.`;
   }
+  if (manifest.requireToolUse && manifest.completeAfterTools?.length) {
+    const tools = manifest.completeAfterTools.join(", ");
+    return instructionLocaleFor(locale) === "zh"
+      ? `尚未成功调用完成工具（${tools}）。请用其中一个工具提交结果；无变化时也要按工具说明提交空结果。查询工具不能代替提交。`
+      : `No completing tool (${tools}) has succeeded. Submit the result through one of these tools, including an empty result when its description allows no change. Read tools do not complete the task.`;
+  }
   return instructionLocaleFor(locale) === "zh"
     ? "你没有调用任何工具就结束了。必须先调用声明的工具完成任务，再收尾。"
     : "You finished without calling any tool. Call the declared tools to complete the task first, then wrap up.";
@@ -165,7 +187,7 @@ export function checkTextCompletion(args: {
   const { manifest, calls } = args;
   const requiredToolUseUnmet =
     manifest.requireToolUse === true &&
-    !hasBusinessWork(calls, args.seededBusinessWork);
+    !hasBusinessWork(manifest, calls, args.seededBusinessWork);
   const explicitUnmet =
     manifest.requireExplicitCompletion &&
     !hasExplicitCompletion(manifest, calls, args.prior);

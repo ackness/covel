@@ -18,6 +18,7 @@
   },
   "session": {
     "cached": "Cached",
+    "historyLoadFailed": "Could not load previous sessions. Retry to see your saves.",
     "reasoningContent": "Thinking",
     "reasoningContentHint": "Reasoning text or summaries returned by the model, in call order.",
     "config": "Studio Config",
@@ -269,6 +270,10 @@
     "suspensionAgoMinutes": "{{count}}m ago",
     "suspensionAgoHours": "{{count}}h ago",
     "suspensionAgoDays": "{{count}}d ago",
+    "suspensionOutdated": "This request is out of date and has been withdrawn",
+    "suspensionOutdatedMovedOn": "The story has moved on since it was asked.",
+    "suspensionOutdatedPlugin": "The plugin that asked it has been updated since.",
+    "suspensionOutdatedSuperseded": "The same plugin has asked a newer one.",
     "memoryUpdateFailed": "Story memory update failed",
     "memoryUpdateFailedHint": "This turn was saved. Check the memory model assignment and provider settings; memory will be attempted again after the next turn.",
     "memoryUpdateErrorDetails": "Error details",
@@ -607,7 +612,11 @@
     "listNeedsEntry": "Add at least one entry.",
     "numberTooSmall": "Enter {{minimum}} or more.",
     "wholeNumberNeeded": "Enter a whole number.",
-    "fixMarkedFields": "Fix the marked fields before saving."
+    "fixMarkedFields": "Fix the marked fields before saving.",
+    "discardChangesTitle": "Discard unsaved changes?",
+    "discardChangesMessage": "Your world edits have not been saved. Discard them and leave the editor?",
+    "discardChanges": "Discard changes",
+    "keepEditing": "Keep editing"
   },
   "settings": {
     "loadFailedReadOnly": "Settings could not be loaded. Changes are disabled to protect existing data. Fix the storage error and reload the app.",
@@ -867,7 +876,8 @@
       "uninstallFailed": "Uninstall failed",
       "restartHint": "Package files changed. Restart the backend to apply installation or removal; execution still requires session authorization.",
       "restartNow": "Restart now",
-      "reloadFailed": "Reload failed"
+      "reloadFailed": "Reload failed",
+      "uninstallConfirm": "Uninstall this plugin? Restart to apply the removal. You will need to install it again to use it later."
     },
     "desktopDataLocations": "Data Locations",
     "desktopProxy": "Network Proxy",
@@ -1213,7 +1223,14 @@
       "risk": "Worlds contain third-party prompts, settings and media. Review their content and plugin requirements before playing. World installation does not install or authorize plugins, or run repository scripts.",
       "updateRisk": "Updates are staged until backend restart. Locally edited worlds cannot be overwritten. Existing saves are not automatically synchronized; use world-data sync separately.",
       "installed": "Installed world packages"
-    }
+    },
+    "deleteProviderTitle": "Delete provider?",
+    "deleteProviderConfirm": "This also removes its model configurations, saved API key and role bindings to those models.",
+    "deleteModelTitle": "Delete model configuration?",
+    "deleteModelConfirm": "This also removes role bindings to this configuration. The provider API key is kept.",
+    "deleteThemeTitle": "Delete theme?",
+    "deleteThemeConfirm": "This custom theme will be deleted. Import it again to use it later.",
+    "exportReadOnlyHint": "Settings have not loaded successfully. The export contains only currently readable values and may be incomplete. View or download original backups below."
   },
   "appearance": {
     "styleTitle": "Style",
@@ -1760,8 +1777,20 @@
       "enemy": "Enemy"
     }
   },
+  "catalog": {
+    "mediaGallery": {
+      "empty": "No media yet.",
+      "open": "Open",
+      "download": "Download"
+    },
+    "jobList": {
+      "empty": "No jobs yet.",
+      "copy": "Copy",
+      "rerun": "Re-run"
+    }
+  },
   "graph": {
-    "empty": "Graph is currently empty — waiting for NPCs to appear.",
+    "empty": "No graph data yet.",
     "clearSelection": "Clear selection",
     "loading": "Loading graph…",
     "stats": "{{nodes}} nodes · {{links}} relations",

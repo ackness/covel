@@ -78,16 +78,10 @@ export function createSuspensionMethods(
       state.suspensions.delete(id);
     },
 
-    async deleteExpiredSuspensions(olderThanIso) {
-      let deleted = 0;
-      // Deleting the current entry while iterating a Map is safe.
-      for (const [id, record] of state.suspensions.entries()) {
-        if (!record.resolvedAt && record.createdAt < olderThanIso) {
-          state.suspensions.delete(id);
-          deleted += 1;
-        }
-      }
-      return deleted;
+    async listExpiredSuspensions(olderThanIso) {
+      return [...state.suspensions.values()]
+        .filter((r) => !r.resolvedAt && r.createdAt < olderThanIso)
+        .sort((a, b) => compareText(a.createdAt, b.createdAt));
     },
 
     async releaseStaleSuspensionClaims(olderThanIso) {

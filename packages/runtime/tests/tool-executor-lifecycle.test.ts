@@ -4,9 +4,12 @@ import {
   tool,
   z,
   withPendingProposals,
+  withEmittedEvents,
   type ToolExecutionContext,
 } from "@covel/tools";
 import { createToolExecutor } from "../src/agent-loop/tool-executor.js";
+
+import type { TurnEmitter } from "../src/trace/turn-emitter.js";
 
 const identity = {
   sessionId: "session",
@@ -182,4 +185,119 @@ describe("tool executor ownership", () => {
       await running;
     }
   });
+});
+
+describe("tool result acceptance", () => {
+  it.each(["record", "tool.completed"])(
+    "does not revoke accepted work when cancellation arrives during %s",
+    async (stage) => {
+      const controller = new AbortController();
+      const store = createMemoryStore();
+      const save = vi
+        .spyOn(store, "saveToolCall")
+        .mockImplementation(async () => {
+          if (stage === "record") controller.abort();
+        });
+      const events: string[] = [];
+      const emitter = {
+        emit: async (type: string) => {
+          events.push(type);
+          if (stage === type) controller.abort();
+        },
+      } as unknown as TurnEmitter;
+      const module = tool({
+        name: "probe",
+        description: "fixture",
+        parameters: z.object({}),
+        execute: async () => ({ ok: true }),
+      });
+      const executor = createToolExecutor({ store, findTool: () => module });
+      const result = await executor.execute(call, {
+        ...identity,
+        signal: controller.signal,
+        emitter,
+      });
+      expect(result.success).toBe(true);
+      expect(save).toHaveBeenCalledOnce();
+      expect(events).toEqual(["tool.calling", "tool.completed"]);
+    },
+  );
+
+  it("records only cancellation when the tool aborts before acceptance", async () => {
+    const controller = new AbortController();
+    const store = createMemoryStore();
+    const save = vi.spyOn(store, "saveToolCall");
+    const events: string[] = [];
+    const emitter = {
+      emit: async (type: string) => {
+        events.push(type);
+      },
+    } as unknown as TurnEmitter;
+    const module = tool({
+      name: "probe",
+      description: "fixture",
+      parameters: z.object({}),
+      execute: async () => {
+        controller.abort();
+        return { ok: true };
+      },
+    });
+    const result = await createToolExecutor({
+      store,
+      findTool: () => module,
+    }).execute(call, { ...identity, signal: controller.signal, emitter });
+    expect(result.success).toBe(false);
+    expect(JSON.parse(result.result).code).toBe("CANCELLED");
+    expect(save).toHaveBeenCalledOnce();
+    expect(events).toEqual(["tool.calling", "tool.failed"]);
+  });
+
+  it.each(["tool.calling", "tool.completed", "domain-event.previewed"])(
+    "keeps proposals when %s telemetry throws",
+    async (failedEvent) => {
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const store = createMemoryStore();
+      const save = vi.spyOn(store, "saveToolCall");
+      const events: string[] = [];
+      const emitter = {
+        emit: async (type: string) => {
+          events.push(type);
+          if (type === failedEvent) throw new Error("trace unavailable");
+        },
+      } as unknown as TurnEmitter;
+      const module = tool({
+        name: "probe",
+        description: "fixture",
+        parameters: z.object({}),
+        execute: async () =>
+          withEmittedEvents(
+            withPendingProposals({ ok: true }, [
+              {
+                type: "plugin.data",
+                payload: { namespace: "test", key: "result", value: true },
+              },
+            ] as never),
+            [{ topic: "test.done", data: {} }],
+          ),
+      });
+      try {
+        const result = await createToolExecutor({
+          store,
+          findTool: () => module,
+        }).execute(call, { ...identity, emitter });
+        expect(result.success).toBe(true);
+        expect(result.pendingProposals).toHaveLength(1);
+        expect(result.emittedEvents).toHaveLength(1);
+        expect(save).toHaveBeenCalledOnce();
+        expect(events).toEqual([
+          "tool.calling",
+          "tool.completed",
+          "domain-event.previewed",
+        ]);
+        expect(warn).toHaveBeenCalled();
+      } finally {
+        warn.mockRestore();
+      }
+    },
+  );
 });

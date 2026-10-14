@@ -250,6 +250,35 @@ describe("plugin scaffolding", () => {
           path.join(pluginRoot, "PLUGIN.md"),
           "utf8",
         );
+        const packageJson = JSON.parse(
+          await readFile(path.join(pluginRoot, "package.json"), "utf8"),
+        );
+        expect(packageJson.version).toBe("0.1.0");
+        expect(rootManifest).toContain(`version: "${packageJson.version}"`);
+        const validation = await runNode(
+          [
+            "--import",
+            "tsx",
+            path.join(
+              repoRoot,
+              "packages/plugin-loader/scripts/validate-manifest.ts",
+            ),
+            pluginRoot,
+          ],
+          { signal, cwd: repoRoot },
+        );
+        expect(validation.status, validation.stdout + validation.stderr).toBe(
+          0,
+        );
+        const caseFile = JSON.parse(
+          await readFile(
+            path.join(pluginRoot, "tests/runtime-cases.json"),
+            "utf8",
+          ),
+        );
+        expect(caseFile.$schema).toBe(
+          "https://raw.githubusercontent.com/AcKnEsS/covel/main/packages/shared/schemas/runtime-cases.schema.json",
+        );
         const { version: hostVersion } = JSON.parse(
           await readFile(path.join(repoRoot, "package.json"), "utf8"),
         ) as { version: string };

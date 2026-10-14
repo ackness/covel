@@ -47,6 +47,9 @@ describe("OperatorAccessPane", () => {
     const input = screen.getByLabelText("Operator token");
     expect(input.getAttribute("type")).toBe("password");
     fireEvent.change(input, { target: { value: "  operator-secret  " } });
+    expect(input.getAttribute("value")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Show" }));
+    expect(input.getAttribute("value")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Save and reload" }));
 
     expect(getOperatorToken()).toBe("operator-secret");
@@ -58,7 +61,9 @@ describe("OperatorAccessPane", () => {
     const reload = vi.fn();
     render(<OperatorAccessPane onCredentialChange={reload} />);
 
-    expect(screen.getByDisplayValue("existing-secret")).toBeTruthy();
+    const input = screen.getByLabelText("Operator token") as HTMLInputElement;
+    expect(input.value).toBe("");
+    expect(document.body.innerHTML).not.toContain("existing-secret");
     fireEvent.click(screen.getByRole("button", { name: "Clear and reload" }));
 
     expect(getOperatorToken()).toBeUndefined();

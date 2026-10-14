@@ -78,6 +78,7 @@ export async function preparePluginReload(
   const entryDefinition = await loadPluginEntryDefinition(
     discovery,
     pluginDeclarations(definition),
+    definition.manifests,
   );
   return { discovery, definition, entry, entryDefinition };
 }

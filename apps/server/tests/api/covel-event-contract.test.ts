@@ -112,7 +112,7 @@ describe("CovelEvent contract", () => {
     // that drifted from the union (missing tool.*/llm.*/hook.* etc.). It now
     // derives `protocol.events` from COVEL_EVENT_META; this locks the equality
     // so the discovery advertisement can never lie to clients again.
-    const framework = buildFrameworkCapabilities().framework as {
+    const framework = buildFrameworkCapabilities([]).framework as {
       protocol: { events: readonly string[] };
     };
     const advertised = [...framework.protocol.events].sort();

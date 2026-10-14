@@ -44,7 +44,28 @@ export function continuationItems(
   )
     return undefined;
   const parsed = itemsSchema.safeParse(state.items);
-  return parsed.success && parsed.data.length ? parsed.data : undefined;
+  if (!parsed.success || !parsed.data.length) return undefined;
+  // Native state carries a second copy of each tool call. The loop's canonical
+  // calls include argument repairs and PreToolUse rewrites; retain opaque
+  // reasoning/signatures, but replay the effective calls on this wire too.
+  return parsed.data.map((item) => {
+    const callId = item.type === "function_call" ? item.call_id : item.id;
+    const call = message.toolCalls?.find(
+      (candidate) => candidate.id === callId,
+    );
+    if (!call) return item;
+    if (protocol === "openai-responses-v1" && item.type === "function_call") {
+      return { ...item, name: call.name, arguments: call.arguments };
+    }
+    if (protocol === "anthropic-messages-v1" && item.type === "tool_use") {
+      return {
+        ...item,
+        name: call.name,
+        input: JSON.parse(call.arguments) as unknown,
+      };
+    }
+    return item;
+  });
 }
 
 /** Build native Anthropic blocks without exposing signatures as display text. */

@@ -137,7 +137,8 @@ declare module "hono" {
      * `/api/sessions/:id/media-token`, and runtime `ctx.media`.
      */
     mediaStore?: MediaStore;
-    builtinToolNames?: readonly string[];
+    /** The registry's builtin tool names, set by bootstrap on every request. */
+    builtinToolNames: readonly string[];
     worldsDirs?: readonly string[];
     covelHome?: string;
     ensureEmbeddingLock?: EnsureEmbeddingLockFn;
@@ -157,6 +158,8 @@ declare module "hono" {
      * test DI need not wire it.
      */
     clearSessionToolOverrides?: (sessionId: string) => void;
+    /** Forget a session's consecutive history-compaction failure count. */
+    clearCompactionFailures?: (sessionId: string) => void;
     /** Release revision and full-commit replay state after session deletion. */
     clearBrowserWorkspace?: (sessionId: string) => void;
     getPluginSource?: GetPluginSourceFn;

@@ -208,6 +208,37 @@ describe("createRpcExecutor", () => {
     expect(result.result).toBe("plugin-version");
   });
 
+  it("refuses a plugin handler under the reserved framework ID", () => {
+    const { registry } = makeExecutor();
+    expect(() =>
+      registry.registerPluginHandler(
+        "framework",
+        "slash-debug",
+        async () => "impostor",
+        {},
+        "community",
+      ),
+    ).toThrow(/reserved/);
+  });
+
+  it("resolves the framework ID to framework defaults and a plugin ID to its own actions only", async () => {
+    const { registry, executor } = makeExecutor();
+    registry.registerFrameworkDefault("slash-debug", async () => "framework");
+    await expect(
+      executor.dispatch(
+        { pluginId: "framework", action: "slash-debug", payload: null },
+        { sessionId: "sess-1", store: {} as never },
+      ),
+    ).resolves.toMatchObject({ result: "framework" });
+    // A plugin that did not register the action does not reach the default.
+    await expect(
+      executor.dispatch(
+        { pluginId: "codex", action: "slash-debug", payload: null },
+        { sessionId: "sess-1", store: {} as never },
+      ),
+    ).rejects.toMatchObject({ code: "unknown-action" });
+  });
+
   it('throws RpcDispatchError with code "unknown-action" when nothing is registered', async () => {
     const { executor } = makeExecutor();
     await expect(

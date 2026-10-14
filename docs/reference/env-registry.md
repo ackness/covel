@@ -149,11 +149,18 @@
 
 ### Docker Compose
 
+自托管有两套 Compose 文件，都是绑定回环地址的个人实例：
+
+| 后端           | 文件                               | 命令                                                                                                 |
+| -------------- | ---------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| SQLite（默认） | `docker/docker-compose.sqlite.yml` | `pnpm docker:build` / `docker:up` / `docker:down` / `docker:down-all` / `docker:logs`                |
+| PostgreSQL     | `docker/docker-compose.yml`        | `pnpm docker:pg:build` / `docker:pg:up` / `docker:pg:down` / `docker:pg:down-all` / `docker:pg:logs` |
+
 准备：
 
 1. 复制 `.env.example` 为 `.env`，复制 `llm.toml.example` 为 `llm.toml`。
-2. 只运行 `pnpm db:up` 时，只需要 PostgreSQL 的配置（`POSTGRES_USER`、`POSTGRES_PASSWORD`、`POSTGRES_DB`、`POSTGRES_PORT`）。
-3. 运行整套应用时，还要填 `POSTGRES_PASSWORD` 和 `COVEL_MEDIA_TOKEN_SECRET`。
+2. 在 `.env` 里设置 `COVEL_MEDIA_TOKEN_SECRET`（`openssl rand -hex 32` 生成）。生产模式下缺少它，应用签发第一个媒体地址时会报错，SQLite 那套在缺少它时拒绝启动；PostgreSQL 那套为了让 `pnpm db:up` 只起数据库而不检查它，所以要自己记得设置。
+3. 用 PostgreSQL 时，取消 `.env.example` 里 PostgreSQL 一段的注释，并设置 `POSTGRES_PASSWORD`。只运行 `pnpm db:up` 时，只需要 PostgreSQL 的配置（`POSTGRES_USER`、`POSTGRES_PASSWORD`、`POSTGRES_DB`、`POSTGRES_PORT`）。
 4. 服务端的服务商密钥可以放在可选的 `.env.llm` 里。
 
 然后：
@@ -163,17 +170,35 @@ pnpm docker:build
 pnpm docker:logs
 ```
 
-Compose 的固定行为：
+用 PostgreSQL 时：
+
+```bash
+pnpm docker:pg:build
+pnpm docker:pg:logs
+```
+
+两套 Compose 相同的行为：
 
 - 使用 `DEPLOYMENT_TIER=self`。宿主机默认只绑定回环地址，同源的界面不需要 operator token 或 CORS 配置。
-- 应用容器内 `SERVER_PORT` 固定为 `3001`。宿主机入口由 `APP_BIND_IP`（默认 `127.0.0.1`）和 `APP_PORT`（默认 `3001`）决定。
+- 应用容器内 `SERVER_PORT` 固定为 `3001`。宿主机入口由 `APP_BIND_IP`（默认 `127.0.0.1`）和 `APP_PORT`（默认 `3001`）决定。两套用同一个默认端口，不要同时启动。
+- 浏览器用 `localhost` 或 `127.0.0.1` 打开就能用。改了 `APP_BIND_IP`、要从别的机器打开时，把打开它用的名字写进 `COVEL_ALLOWED_HOSTS`。
 - 内置健康检查访问容器内的 `http://127.0.0.1:3001/api/health`。
-- 容器内的数据库地址固定为 `postgres:5432`，和宿主机的 `POSTGRES_PORT` 无关。
 - 根 `llm.toml` 只读挂载到 `/app/llm.toml`。文件缺失时 Compose 会报错。
-- `appdata` 卷挂载到 `/home/node/.covel`，保存用户世界和插件；`pgdata18` 卷保存数据库。
+- `appdata` 卷挂载到 `/home/node/.covel`，保存用户世界和插件。
+
+SQLite 那套：
+
+- 只有一个应用容器，没有数据库服务。`STORE_BACKEND=sqlite`，`SQLITE_PATH=/home/node/.covel/data/covel.db`，`MEDIA_ROOT=/home/node/.covel/data/media`，都写在 Compose 文件里，会盖过 `.env` 里为源码运行写的同名变量。数据库和媒体因此都在 `appdata` 卷里。
+- 容器镜像里没有挂卷的目录（例如 `/app/apps/server/data`）在容器重建时会丢，所以数据库不能放在那里。
+- 项目名是 `covel-sqlite`，容器名是 `covel-sqlite-app`。
+
+PostgreSQL 那套：
+
+- 容器内的数据库地址固定为 `postgres:5432`，和宿主机的 `POSTGRES_PORT` 无关。
+- `pgdata18` 卷保存数据库。
 
 > [!CAUTION]
-> `pnpm docker:down` 保留这两个卷。**`pnpm docker:down-all` 会删除两个卷和其中的数据。**
+> `docker:down` / `docker:pg:down` 保留卷。**`docker:down-all` 会删除 SQLite 那套的 `appdata` 卷，也就是数据库和其中的所有数据；`docker:pg:down-all` 会删除 PostgreSQL 那套的两个卷和其中的数据。**
 
 升级前，如果旧容器里已经装过世界或插件，先导出 `/home/node/.covel`，再导入新卷。新增的卷不会自动搬运旧容器可写层里的文件。
 
@@ -254,11 +279,12 @@ v0.0.42 调整了插件扩展契约，旧的开发数据不会自动升级。桌
 | `SERVER_PORT`                   | `3001`                    | HTTP 服务监听的端口                                                                                                                                                                     |
 | `APP_PORT`                      | `3001`                    | Docker Compose 的应用在宿主机上的端口                                                                                                                                                   |
 | `COVEL_BIND_HOST`               | `127.0.0.1`               | HTTP 服务监听的地址                                                                                                                                                                     |
+| `COVEL_ALLOWED_HOSTS`           | —                         | 除 `localhost`、`127.0.0.1`、`[::1]` 外，`self` 档位还回答哪些主机名，逗号分隔                                                                                                          |
 | `DEPLOYMENT_TIER`               | `self`                    | 部署层级（`self` / `demo` / `commercial`），决定鉴权的严格程度                                                                                                                          |
 | `SERVE_STATIC` / `STATIC_DIR`   | `false` / `./web-dist`    | 让 server 托管指定目录里的网页前端                                                                                                                                                      |
 | `CORS_ORIGIN`                   | —                         | 允许的 HTTP origin 列表，逗号分隔                                                                                                                                                       |
 | `ENABLE_DEBUG_PAGE`             | `false`                   | 在生产环境开启调试和内部路由                                                                                                                                                            |
-| `RATE_LIMIT_RPM`                | `60`                      | 每个 IP 每分钟的默认请求额度                                                                                                                                                            |
+| `RATE_LIMIT_RPM`                | `60`                      | 每个 IP 每分钟的请求额度，只用于 `GET /api/events/stream`；其余路由的额度写在各自的路由里                                                                                               |
 | `TRUSTED_PROXY_IPS`             | —                         | 可信代理的地址列表。只有来自这些地址的请求，才信任它带的转发 IP 头                                                                                                                      |
 | `COVEL_MEDIA_TOKEN_SECRET`      | 生产环境必填              | 给媒体短期访问链接签名的密钥。开发环境没设置时，每次启动随机生成一个                                                                                                                    |
 | `COVEL_MEDIA_CLEANUP_ENABLED`   | `false`                   | 开启 `POST /api/media/cleanup`                                                                                                                                                          |
@@ -347,7 +373,7 @@ v0.0.42 调整了插件扩展契约，旧的开发数据不会自动升级。桌
 
 - `*_API_KEY` 由代码动态枚举，registry 只登记常用的例子。
 - `*_BASE_URL` 只有在生效的 `llm.toml` 用 `${VAR}` 引用它时才起作用。
-- `APP_BIND_IP` 只由 `docker/docker-compose.yml` 读取。
+- `APP_BIND_IP` 只由 `docker/docker-compose.yml` 和 `docker/docker-compose.sqlite.yml` 读取。
 - `COVEL_MEMORY_V1`、`COVEL_STORY_BASE_URL`、`COVEL_PLUGIN_BASE_URL`、`VITE_API_URL`、`LIVE_IMAGE_ENABLED` 没有任何代码读取，可以从本地配置里删掉。
 
 ## 迁移规则
@@ -393,7 +419,14 @@ v0.0.42 调整了插件扩展契约，旧的开发数据不会自动升级。桌
 **`COVEL_BIND_HOST`**
 
 - 默认 `127.0.0.1`：本地和桌面部署只监听回环接口，网络上访问不到。
-- 容器或多 pod 部署要显式设置 `COVEL_BIND_HOST=0.0.0.0`（`docker/docker-compose.yml` 已经设置）。公开监听前先确认 `DEPLOYMENT_TIER` 和鉴权配置。
+- 容器或多 pod 部署要显式设置 `COVEL_BIND_HOST=0.0.0.0`（两个 Docker Compose 文件都已经设置）。公开监听前先确认 `DEPLOYMENT_TIER` 和鉴权配置。
+
+**`COVEL_ALLOWED_HOSTS`**
+
+- `self` 档位只回答用 `localhost`、`127.0.0.1` 或 `[::1]` 打开的请求（端口不限），其他主机名一律 `403 host_not_allowed`。这挡住 DNS 重绑定：恶意网页把自己的域名指向本机，也没法驱动不要令牌的接口。
+- 自部署的网页版要从别的机器打开时，把打开它用的名字写进来，例如 `COVEL_ALLOWED_HOSTS=covel.example.com,192.168.1.20`。写了端口也只比较主机名。
+- 放在反向代理后面时，写代理转发过来的 `Host`。代理把 `Host` 改成上游名字（比如 nginx 默认的 `app:3001`）时，写那个名字。
+- `demo` / `commercial` 档位使用各自的鉴权规则，不做这个检查。
 
 **`TRUSTED_PROXY_IPS`**
 

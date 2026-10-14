@@ -6,7 +6,6 @@ import {
   getRequestLlmOptions,
   withRequestLlmOptions,
 } from "../../request-llm-context.js";
-import type { PluginLlmModelTarget } from "@covel/runtime";
 import { memoryIngestLockId } from "../../lib/memory-ingest-lock.js";
 import type { EmbedFn, MemorySystem } from "@covel/memory";
 import { createPluginReloadRoutes } from "./plugin-reload.js";
@@ -32,13 +31,11 @@ import { Hono, type MiddlewareHandler } from "hono";
 import { readRuntimeEnv } from "@covel/shared";
 import type { RuntimeManifest } from "@covel/shared";
 import {
-  loadPluginLlmConfig,
   pluginRuntimeManifests,
   pluginDeclarations,
   resolvePluginRuntimeManifest,
   deriveBuiltinPluginIds,
   type PluginRegistry,
-  type PluginLlmConfig,
   type PluginRuntimeGateway,
   type PluginRuntimeUtils,
 } from "@covel/plugin-loader";
@@ -53,7 +50,6 @@ import {
   PluginServiceRegistry,
   PluginExtensionHost,
   createHookPipeline,
-  createModelResolver,
   maybeSweepOldTraces,
 } from "@covel/runtime";
 import { estimateTokens } from "@covel/context";
@@ -95,7 +91,10 @@ import { mediaRoutes } from "./media.js";
 import type { MediaStore } from "@covel/store";
 import type { MediaStoreBackend, VectorBackend } from "@covel/store";
 import { resumeRoutes } from "./resume.js";
-import { maybeSweepExpiredSuspensions } from "./suspension-sweep.js";
+import {
+  maybeSweepExpiredSuspensions,
+  suspensionExpirer,
+} from "./suspension-sweep.js";
 import { installTraceRetentionSource } from "../../lib/trace-retention-source.js";
 import { createServerSettings } from "../../lib/server-settings.js";
 import { createServerSettingsRoutes } from "./server-settings.js";
@@ -119,6 +118,7 @@ import {
 } from "./browser-workspace.js";
 export { wrapStoreWithPluginDataEvents } from "./bootstrap/plugin-data-store-events.js";
 import {
+  CompactionFailureTracker,
   createBootstrapCompactorRunner,
   createTurnContextBudget,
 } from "./bootstrap/compactor.js";
@@ -158,7 +158,6 @@ export interface ApiBootstrapConfig {
   readonly covelHome?: string;
   /** LLM adapter (real or mock). */
   readonly llmAdapter: LLMAdapter;
-  readonly pluginModelTargets?: Map<string, PluginLlmModelTarget>;
   /** Explicit server credential readiness; absent means request services are required. */
   readonly canRunRuntimeJobWithServerServices?: (input: {
     readonly job: RuntimeJobRecord;
@@ -395,27 +394,19 @@ async function assembleApi(
     [...registry.getAll().values()].map(prepareEventDeclarations),
   );
 
-  // 3. Load plugin-level llm.toml configs for model resolution
-  const pluginLlmConfigs = new Map<string, PluginLlmConfig>();
-  for (const [pluginId, discovery] of discoveryMap) {
-    const llmConfig = await loadPluginLlmConfig(discovery.rootPath);
-    if (llmConfig) {
-      // Map each runtime name to its plugin's LLM config
-      const manifests = manifestCache.get(pluginId);
-      if (manifests) {
-        for (const parsed of manifests) {
-          pluginLlmConfigs.set(parsed.manifest.name, llmConfig);
-        }
-      }
-    }
-  }
-
-  const resolveModel = createModelResolver({
-    pluginLlmConfigs,
-    modelTargets: config.pluginModelTargets ?? new Map(),
-    isRoleSelected: (role) =>
-      getRequestLlmOptions()?.slotOverrides?.slotBindings?.[role] !== undefined,
-  });
+  // A runtime names only the role (slot) it wants; which model serves that
+  // role, and where the request goes, is the player's configuration. An
+  // explicit runtime/API selection wins; a runtime that names no role uses
+  // the request's `default` binding when there is one, else the default slot.
+  const resolveModel = (
+    manifest: RuntimeManifest,
+    apiOverride?: string,
+  ): string | undefined =>
+    apiOverride ??
+    manifest.model ??
+    (getRequestLlmOptions()?.slotOverrides?.slotBindings?.default !== undefined
+      ? "default"
+      : undefined);
 
   // Runtime loader + community dual-authorization gate, extracted to
   // bootstrap/runtime-loader.ts. It forward-references two things built
@@ -597,10 +588,13 @@ async function assembleApi(
     runtimeEnv.compactorContextWindow !== undefined
       ? { contextWindowOverride: runtimeEnv.compactorContextWindow }
       : {};
+  // Shared by every request's runner so a run of failures counts across turns.
+  const compactionFailures = new CompactionFailureTracker();
   const compactorRunner = createBootstrapCompactorRunner({
     extensions,
     store,
     llmAdapter: config.llmAdapter,
+    failures: compactionFailures,
     ...budgetSource,
   });
   const turnContextBudget = createTurnContextBudget(budgetSource);
@@ -824,6 +818,9 @@ async function assembleApi(
     c.set("settledSessionLock", settledSessionLock);
     c.set("prepareToolsForSession", prepareToolsForSession);
     c.set("clearSessionToolOverrides", clearSessionToolOverrides);
+    c.set("clearCompactionFailures", (id: string) =>
+      compactionFailures.reset(id),
+    );
     c.set("clearBrowserWorkspace", browserWorkspaceCache.clearSession);
     c.set("getPluginSource", getPluginSource);
     c.set("activatePluginServerCode", activatePluginServerCode);
@@ -852,7 +849,15 @@ async function assembleApi(
 
   // Apply request overrides after base dependency injection, then rebind services.
   for (const mw of config.perRequestMiddleware ?? []) app.use("*", mw);
-  app.use("*", requestLlmServices({ extensions, store, ...budgetSource }));
+  app.use(
+    "*",
+    requestLlmServices({
+      extensions,
+      store,
+      failures: compactionFailures,
+      ...budgetSource,
+    }),
+  );
 
   // 10. Mount routes — all under /api/ prefix
   // Session routes: frontend uses /api/sessions (plural) for all session operations
@@ -911,7 +916,17 @@ async function assembleApi(
 
   // Start maintenance only after assembly succeeds. These scans remain
   // non-blocking for readiness, but belong to the host's drain boundary.
-  const startupMaintenance = maybeSweepExpiredSuspensions(store, {
+  const suspensionSweep = {
+    store,
+    expire: suspensionExpirer({
+      store,
+      pluginRegistry: registry,
+      sessionLock,
+      eventBus,
+      worker: runtimeJobWorker,
+    }),
+  };
+  const startupMaintenance = maybeSweepExpiredSuspensions(suspensionSweep, {
     force: true,
     // Only PostgreSQL can have another server process with a live claim.
     ...(config.storeBackend === "pg" ? {} : { claimMaxAgeMs: 0 }),

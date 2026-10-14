@@ -74,6 +74,7 @@ export {
 export type { TurnControl } from "./turn-executor/turn-control.js";
 export { pendingDimensionSettlements } from "./turn-executor/dimension-barrier.js";
 export { createRuntimeMediaContext } from "./function-runtime/runtime-media-context.js";
+export { enforceHttpPermissions } from "./function-runtime/http-permissions.js";
 export type { MediaStoreLike } from "./function-runtime/runtime-media-context.js";
 
 // ── MediaRef canonicalization (shared boundary scanner) ─────────
@@ -90,7 +91,19 @@ export type {
 export {
   createProgressReporter,
   finalizeJobStatuses,
+  finalizeSuspendedJobStatuses,
 } from "./job-status/job-status.js";
+export {
+  applySuspensionAbandonTx,
+  isPendingSuspension,
+  planSuspensionAbandon,
+  settleAbandonedSuspensionJobs,
+  suspensionOutdatedReason,
+} from "./resume/suspension-settlement.js";
+export type {
+  SuspensionAbandonPlan,
+  SuspensionOutdatedReason,
+} from "./resume/suspension-settlement.js";
 export type {
   ProgressReporterDeps,
   ExecutionJobOutcome,
@@ -119,10 +132,6 @@ export type {
   ToolCallResult,
   ToolExecutorConfig,
 } from "./agent-loop/tool-executor.js";
-
-// ── Model Resolver ──────────────────────────────────────────────
-export type { PluginLlmModelTarget } from "./llm/model-resolver.js";
-export { createModelResolver } from "./llm/model-resolver.js";
 
 // ── Per-Session Runtime Slot Resolver ───────────────────
 
@@ -162,10 +171,7 @@ export {
 export type { PreparedInteractionSubmission } from "./interaction/interaction-submission.js";
 
 // ── Gateway Bridge ──────────────────────────────────────────────
-export {
-  createGatewayAdapter,
-  resolveGatewayModelSelection,
-} from "./llm/gateway-llm-adapter.js";
+export { createGatewayAdapter } from "./llm/gateway-llm-adapter.js";
 export type {
   GatewayLike,
   GatewayAdapterConfig,
