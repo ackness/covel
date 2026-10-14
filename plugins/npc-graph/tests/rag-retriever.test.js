@@ -13,7 +13,7 @@
  *   6. Aliases are matched case-insensitively
  */
 
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import handler from "../runtimes/rag-retriever/handler.js";
 import { loadPluginMessages } from "@covel/plugin-test-utils";
 
@@ -388,5 +388,16 @@ describe("rag-retriever handler", () => {
     await seedSmallChain(store);
     const result = await handler(makeCtx(store, "Alice…"));
     expect(result.value.npcContext).toMatch(/^## 已知 NPC 关系/);
+  });
+
+  it("writes the header in English when COVEL_INSTRUCTION_LOCALE=en", async () => {
+    vi.stubEnv("COVEL_INSTRUCTION_LOCALE", "en");
+    try {
+      await seedSmallChain(store);
+      const result = await handler(makeCtx(store, "Alice…"));
+      expect(result.value.npcContext).toMatch(/^## Known NPC relationships/);
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 });

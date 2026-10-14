@@ -490,10 +490,10 @@ Putting stable content first keeps the same prefix. `volatility` decides three t
 ## 6. External templates and localization
 
 - The shared `prompts/server` holds the templates for world generation and lore repair.
-- The templates for history summaries are kept by `plugins/history-compaction/prompts/server`. The plugin loads them through its own `createPromptLoader(root)`.
+- The templates for history summaries are kept by `plugins/history-compaction/prompts/server`. The plugin loads them through `createPromptLoader(root)` from the SDK. Like a plugin body, they exist only in English and Simplified Chinese; see [i18n](./i18n.md).
 - Changing `COVEL_PROMPTS_DIR` replaces only the default shared prompt root. It does not take over a plugin's own directory.
 
-The shared loader tries these in order: an exact locale match, the main language that the writing system is compatible with, English, and the default file with no language suffix.
+The shared framework loader tries these in order: an exact locale match, the main language that the writing system is compatible with, English, and the default file with no language suffix.
 
 - An invalid locale does not enter the path lookup.
 - `zh-Hant` does not match the simplified `zh`.

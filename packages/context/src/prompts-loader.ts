@@ -31,16 +31,83 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { readRuntimeEnv } from "@covel/shared";
+import {
+  canonicalizeLocale,
+  localeLookupCandidates,
+  localeRegistry,
+  readRuntimeEnv,
+} from "@covel/shared";
 
 export { interpolate } from "@covel/plugin-handlers-utils";
 
 /** Locale-aware template source, injectable into prompt consumers. */
-import { createPromptLoader } from "@covel/plugin-handlers-utils/prompts";
-export {
-  createPromptLoader,
-  type PromptLoader,
-} from "@covel/plugin-handlers-utils/prompts";
+export type PromptLoader = (
+  dir: string,
+  name: string,
+  locale?: string,
+) => Promise<string>;
+
+/**
+ * Framework templates (`prompts/`) are looked up for any locale: the exact
+ * locale, its language, the registry fallback (English), then the
+ * locale-less file. Plugin templates follow the stricter instruction rule of
+ * `createPromptLoader` in `@covel/plugin-handlers-utils/prompts`.
+ */
+function localeCandidates(name: string, locale?: string): string[] {
+  if (!locale) return [`${name}.md`];
+
+  const canonicalLocale = canonicalizeLocale(locale);
+  if (!canonicalLocale) {
+    throw new Error(`[loadPrompt] Invalid locale: ${JSON.stringify(locale)}`);
+  }
+
+  const locales = [
+    canonicalLocale,
+    ...localeRegistry.fallbackLocalesFor(canonicalLocale),
+  ];
+  const candidates = locales.flatMap((candidateLocale) =>
+    localeLookupCandidates(candidateLocale).map(
+      (candidate) => `${name}.${candidate}.md`,
+    ),
+  );
+  candidates.push(`${name}.md`);
+  return [...new Set(candidates)];
+}
+
+/** A loader for the framework templates under `root`. */
+export function createPromptLoader(root: string): PromptLoader {
+  const resolvedRoot = path.resolve(root);
+  return (dir, name, locale) =>
+    loadPromptFromRoot(resolvedRoot, dir, name, locale);
+}
+
+async function loadPromptFromRoot(
+  root: string,
+  dir: string,
+  name: string,
+  locale?: string,
+): Promise<string> {
+  const subDir = path.join(root, dir);
+  const tried: string[] = [];
+  for (const filename of localeCandidates(name, locale)) {
+    const full = path.join(subDir, filename);
+    tried.push(full);
+    try {
+      return await fs.readFile(full, "utf8");
+    } catch (err: unknown) {
+      // ENOENT — keep trying. Anything else (permissions, etc.) bubbles up.
+      const code = (err as NodeJS.ErrnoException)?.code;
+      if (code !== "ENOENT") {
+        throw err;
+      }
+    }
+  }
+
+  throw new Error(
+    `[loadPrompt] No prompt file found for dir="${dir}" name="${name}" locale="${locale ?? "(none)"}". ` +
+      `Tried:\n  ${tried.join("\n  ")}`,
+  );
+}
 
 // ── Path resolution ─────────────────────────────────────────────
 

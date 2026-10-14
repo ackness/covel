@@ -356,6 +356,47 @@ describe("memory facts", () => {
       "- 第5回合：你答应守门人在黎明前带回银钥匙。",
     ]);
   });
+
+  it.each([
+    [undefined, "# 与玩家本次输入有关的旧事"],
+    ["en", "# Earlier facts related to the player's message"],
+  ])(
+    "titles the recalled facts in the instruction language (override %s)",
+    async (override, heading) => {
+      if (override) vi.stubEnv("COVEL_INSTRUCTION_LOCALE", override);
+      try {
+        let handler;
+        register({
+          toolkit: { z },
+          registerService: vi.fn(),
+          provideExtension: (_point, _id, definition) => {
+            handler = definition.handler;
+          },
+        });
+        const segments = await handler(
+          { turnId: "turn", playerMessage: "我去钟楼找林遥藏的银钥匙" },
+          {
+            locale: "zh-CN",
+            pluginData: {
+              list: async (namespace: string) =>
+                namespace === "facts"
+                  ? [2, 8, 20].map((turn) => ({
+                      key: `t${turn}`,
+                      value: {
+                        turn,
+                        text: `第${turn}回合：林遥把银钥匙藏在钟楼的第三级台阶下。`,
+                      },
+                    }))
+                  : [],
+            },
+          },
+        );
+        expect(segments[0].content.split("\n")[1]).toContain(heading);
+      } finally {
+        vi.unstubAllEnvs();
+      }
+    },
+  );
 });
 
 describe("memory fact recall and repeats", () => {
