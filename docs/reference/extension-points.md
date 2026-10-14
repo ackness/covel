@@ -80,6 +80,7 @@ export default function (covel) {
 - `ctx.pluginData` 只读，只能读提供者自己的数据。它读不到 `_hidden.*` 隐藏世界数据，因为扩展点的输出会进入提示词或客户端。
 - `ctx.world` 是会话的 World Model 视图。
 - 不能通过这里读其他插件的私有 namespace。
+- 社区提供者的 `ctx.utils` 和它的 `covel.http` 一样，只能访问它自己包的 `permissions.http` 列出的源（见[插件参考](./plugins.md#runtime-分组字段)）。
 
 `ctx.pluginData` 的读取方法在三个地方形状相同：函数 runtime 的 handler、runtime 的 guard、扩展点的 handler。代码可以在它们之间直接搬用。
 

@@ -75,9 +75,9 @@ export const graphCanvasPropsSchema = z.strictObject({
   node: z.strictObject({
     idField: z.string().min(1),
     labelField: z.string().min(1),
-    typeField: z.string().min(1),
-    summaryField: z.string().min(1),
-    labelsField: z.string().min(1),
+    typeField: z.string().min(1).optional(),
+    summaryField: z.string().min(1).optional(),
+    labelsField: z.string().min(1).optional(),
     colors: z.record(z.string(), z.string().min(1)),
     defaultColor: z.string().min(1),
   }),
@@ -85,16 +85,20 @@ export const graphCanvasPropsSchema = z.strictObject({
     idField: z.string().min(1),
     sourceField: z.string().min(1),
     targetField: z.string().min(1),
-    relationField: z.string().min(1),
-    strengthField: z.string().min(1),
-    factField: z.string().min(1),
-    inactiveField: z.string().min(1),
-    colors: z.strictObject({
-      positive: z.string().min(1),
-      negative: z.string().min(1),
-      neutral: z.string().min(1),
-    }),
+    relationField: z.string().min(1).optional(),
+    strengthField: z.string().min(1).optional(),
+    factField: z.string().min(1).optional(),
+    inactiveField: z.string().min(1).optional(),
+    defaultColor: z.string().min(1).optional(),
+    colors: z
+      .strictObject({
+        positive: z.string().min(1),
+        negative: z.string().min(1),
+        neutral: z.string().min(1),
+      })
+      .optional(),
   }),
+  emptyText: i18nTextSchema.optional(),
   height: z.number().int().min(80).max(800).default(480),
 });
 export type GraphCanvasProps = z.infer<typeof graphCanvasPropsSchema>;

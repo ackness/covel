@@ -1,7 +1,6 @@
 import {
   makeProposal,
   withPendingProposals,
-  translate,
 } from "@covel/plugin-handlers-utils";
 import { worldDimensionsSchema } from "@covel/plugin-handlers-utils/dimensions";
 
@@ -20,20 +19,28 @@ export default async function guard(ctx) {
     attributes,
   };
   const now = new Date().toISOString();
-  const proposals = [
-    makeProposal(ctx, now, "dimension.initialize", { definitions }),
-  ];
+  const missingDefinitions = Object.fromEntries(
+    Object.entries(definitions).filter(
+      ([id]) => !Object.hasOwn(ctx.world.dimensions, id),
+    ),
+  );
+  const proposals = [];
+  if (Object.keys(missingDefinitions).length > 0)
+    proposals.push(
+      makeProposal(ctx, now, "dimension.initialize", {
+        definitions: missingDefinitions,
+      }),
+    );
   if (!existing)
     proposals.unshift(makeProposal(ctx, now, "character.schema.set", schema));
   return withPendingProposals(
     {
       skip: true,
-      initialized: true,
+      success: true,
       preGameDone: true,
-      schemaCount: attributes.length,
+      attributeCount: attributes.length,
       dimensionCount: Object.keys(definitions).length,
       worldSchema: schema,
-      narrativeOutput: translate(ctx, "[System] World data loaded"),
     },
     proposals,
   );

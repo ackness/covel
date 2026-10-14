@@ -31,6 +31,10 @@ import type { FinalizeExecutionArgs } from "./commit/finalize-execution.js";
 import { getTurnExecutionSignal } from "./turn-executor/turn-control.js";
 import { SetupCompletionTracker } from "./turn-executor/setup-completion-tracker.js";
 import { collectSetupRan } from "./turn-executor/setup-run.js";
+import {
+  countPlayerTurns,
+  hasPendingSibling,
+} from "./resume/suspension-settlement.js";
 
 type Schema = Readonly<Record<string, unknown>>;
 
@@ -59,6 +63,15 @@ export interface ExecutionCommitPlan extends Pick<
    * completes it. The host queues them inside the same commit.
    */
   readonly releasedRuntimeJobs?: readonly DeferredRuntimeJob[];
+  /**
+   * The suspended execution a resume continues. Its progress jobs, left
+   * waiting for input, end with the resume's commit.
+   */
+  readonly resumedExecution?: {
+    readonly executionId: string;
+    readonly pluginId: string;
+    readonly runtimeId: string;
+  };
 }
 
 /** Only `result` is a transport payload. The commit plan stays with the host. */
@@ -174,6 +187,17 @@ export async function executeTurn(
         : "Execution was cancelled"
       : undefined);
   const suspended = results.some((result) => result.status === "suspended");
+  const journalMessages = collectExecutionJournal(turn);
+  const executionSuspensions = collectExecutionSuspensions(turn);
+  // A suspension records what it was taken under: the player turns in the
+  // history once this execution commits, and its plugin's version. A resume
+  // that finds either changed is voided.
+  const playerTurns =
+    executionSuspensions.length > 0
+      ? (await countPlayerTurns(deps.store, turn.sessionId)) +
+        journalMessages.filter((message) => message.sourceType === "player")
+          .length
+      : 0;
   // Every sibling suspension carries the held-back jobs; whichever resume
   // completes the turn queues them.
   const withheldRuntimeJobs = turn.withheldRuntimeJobs?.length
@@ -213,18 +237,21 @@ export async function executeTurn(
         runtimes,
         results,
         ...(abortReason !== undefined ? { abortReason } : {}),
-        journalMessages: collectExecutionJournal(turn),
+        journalMessages,
         runtimeTriggers: collectExecutionTriggers(turn),
-        suspensions: collectExecutionSuspensions(turn).map((record) => {
+        suspensions: executionSuspensions.map((record) => {
           const counted =
             turn.executionContext.countPolicy === "complete-player-turn" &&
             turn.executionContext.logicalTurnId ===
               record.pendingContinuation.executionContext.logicalTurnId;
-          if (!counted && !withheldRuntimeJobs) return record;
           return {
             ...record,
             pendingContinuation: {
               ...record.pendingContinuation,
+              takenUnder: {
+                ...record.pendingContinuation.takenUnder,
+                playerTurns,
+              },
               ...(counted
                 ? {
                     executionContext: {
@@ -287,15 +314,10 @@ export async function resumeSuspendedRuntime(
     ),
   );
   const inherited = suspension.pendingContinuation.executionContext;
-  const hasUnresolvedSibling = inherited.logicalTurnId
-    ? (await deps.store.listSuspensions(suspension.sessionId)).some(
-        (candidate) =>
-          candidate.id !== suspension.id &&
-          candidate.resolvedAt === undefined &&
-          candidate.pendingContinuation.executionContext.logicalTurnId ===
-            inherited.logicalTurnId,
-      )
-    : false;
+  const hasUnresolvedSibling = hasPendingSibling(
+    suspension,
+    await deps.store.listSuspensions(suspension.sessionId),
+  );
   const releasedRuntimeJobs =
     !hasUnresolvedSibling && result.status === "success"
       ? (suspension.pendingContinuation.withheldRuntimeJobs as
@@ -355,6 +377,11 @@ export async function resumeSuspendedRuntime(
         ...(setup.setupRan ? { setupRan: setup.setupRan } : {}),
         outputSchemas: captured.outputSchemas,
         resolvedSuspensionId: suspension.id,
+        resumedExecution: {
+          executionId: inherited.executionId,
+          pluginId: suspension.pluginId,
+          runtimeId: suspension.runtimeId,
+        },
         ...(releasedRuntimeJobs?.length ? { releasedRuntimeJobs } : {}),
       }),
       hookSettings: hookScope.settings,

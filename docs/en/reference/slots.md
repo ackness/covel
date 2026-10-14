@@ -72,7 +72,7 @@ Schema: `packages/ai-provider/src/config/llm-schema.ts`.
 | `providerRequestMetadata`           | —        | Free-form key-value pairs sent with generation requests. A value given for a single call takes priority. Evaluation requests do not use it. The keys that choose the image and speech protocols also go here. See the section "Media wire routing keys" below                   |
 | `providerOptions`                   | —        | Native parameters grouped by provider or protocol. They are used only for text, object, and streaming calls. See [Provider parameters](#provider-parameters)                                                                                                                    |
 
-Values such as `baseUrl` can read an environment variable, for example `baseUrl = "${MY_API_BASE}"`. The old fields `reasoning_effort` and `thinking` are no longer accepted. If you write them, loading fails with an error. Use `reasoningEffort` or `providerOptions` instead.
+Values such as `baseUrl` can read an environment variable, for example `baseUrl = "${MY_API_BASE}"`. When the file cannot be read, the error gives the line, the column and the key, never the value of an environment variable. The old fields `reasoning_effort` and `thinking` are no longer accepted. If you write them, loading fails with an error. Use `reasoningEffort` or `providerOptions` instead.
 
 ## Built-in providers and protocols
 
@@ -229,20 +229,16 @@ The generation parameters page shows parameters that match the model's actual ca
 For one call, the role is chosen in this order:
 
 1. An explicit choice made by the runtime, including the session's `runtimeModelOverrides`. It decides which role or preset to use.
-2. If there is no explicit choice, the UI role binding in the current request.
-3. The preference in the plugin's own `llm.toml`.
-4. The system `llm.toml` default, and the fallback of an available text role.
+2. If there is no explicit choice, the role the runtime names itself (`agent.model` / `function.model`). If it names none, the `default` binding of the current request is used when there is one, otherwise the system's default role.
+3. That role is resolved first with the UI role binding in the current request. Without a binding, it is resolved with the system `llm.toml`, and the fallback of an available text role.
 
 Extra rules:
 
-- A plugin preference keeps the full provider, model, baseUrl, and protocol. It does not treat a bare model ID as a system role. Reloading the file does not lose the plugin's target.
+- A plugin only says which role it wants. It cannot choose a provider, model, address, or protocol. Which model is used, and where the request goes, is decided by the model settings of the player (or the operator), so the player's keys only go to addresses in those settings. An `llm.toml` in a plugin's directory is not read, and `pnpm validate:plugin` warns when it finds one.
 - If a text role such as `fast` or `memory` is not defined, it falls back to an existing role. That role also reads the UI binding, parameters, and capabilities of the current request.
 - The task mapping on the session-prep screen must be saved successfully first. It must also be synced to the server's temporary copy before a runnable session is published. If saving fails, the choice is kept and the start is rolled back. The session does not start with defaults.
 
 Price overrides and provider multipliers are used only to estimate cost while debugging. They are not sent with a model request, and they do not change what the provider actually charges. A manual price applies only when the actual provider and model in the trace match the current config uniquely. If they do not match, the estimate from the model data is used.
-
-> [!NOTE]
-> For developers who build on the framework: `createModelResolver` and `createGatewayAdapter` must share the same `Map<string, PluginLlmModelTarget>`. At server start, the map is passed in through `pluginModelTargets`, and the request adapter uses this same map. The internal reference only keeps the full plugin target. It is not used as a client model ID. `isRoleSelected` is used to detect an explicit role binding in the current request.
 
 ### Fallback belongs to the role
 
@@ -650,6 +646,7 @@ providerRequestMetadata = { musicWire = "<pluginId>/<wireId>" }
 
 - The routing key is removed before the wire is used. It does not appear in the request body sent to the vendor.
 - If a wire ID is not registered, generation throws `CONFIG_ERROR`. The error message includes a fix. The system does not quietly switch to another wire.
+- A wire a plugin registers serves only sessions that enable that plugin, by the same rule as a text protocol. Another session that uses it gets `CONFIG_ERROR`, and the message names the plugin to enable.
 - A plugin registers a custom wire in its `entry` module with `covel.registerWires({ image?, speech?, transcription?, music?, text? })`. The frontmatter `wires` field is still accepted, but it is deprecated. See [plugin-extensions.md § Models and new protocols](./plugin-extensions.md#models-and-new-protocols).
 - For how wires relate to MediaStore, see [media-store.md](./media-store.md#media-wire-registries-image--speech--transcription--music).
 

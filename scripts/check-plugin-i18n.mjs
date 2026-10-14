@@ -13,11 +13,11 @@
  *     file this check does. A label translation must also be recorded in
  *     locales/lock.json against the English text it was made from.
  *
- * PLUGIN.md frontmatter:
+ * PLUGIN.md / RUNTIME.md frontmatter (active packages only):
  *   - Scans user-visible fields such as description, displayName, label,
  *     title, placeholder, and options[].label/description.
  *   - Bare CJK strings in those fields are rejected.
- *   - I18nText objects may use any locale and must include an English fallback.
+ *   - Inline locale maps are rejected; translations belong in locales/<locale>.yaml.
  *
  * Text that reaches a model:
  *   - Tool and parameter descriptions in plugin and template handlers are
@@ -30,6 +30,7 @@ import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { basename, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import YAML from "yaml";
+import { readPlainYamlFrontmatter } from "../packages/plugin-loader/src/plain-yaml-frontmatter.ts";
 import {
   checkFrameworkChinese,
   findChineseToolText,
@@ -42,6 +43,7 @@ import {
 } from "@covel/shared";
 // By path: a package-name import can resolve to a stale copy in a worktree.
 import { pluginTranslationStatus } from "../packages/plugin-loader/src/locale-tooling.ts";
+import { inlineManifestLabelProblems } from "../packages/plugin-loader/src/locale-labels.ts";
 
 const CJK_REGEX = /[\u3400-\u4dbf\u4e00-\u9fff]/;
 const HERE = fileURLToPath(new URL(".", import.meta.url));
@@ -142,7 +144,8 @@ function isPluginMarkdownFile(rel) {
   const parts = rel.split(sep);
   return (
     (parts[0] === "plugins" || parts[0] === "templates") &&
-    basename(rel) === "PLUGIN.md"
+    !parts[1]?.startsWith("_") &&
+    ["PLUGIN.md", "RUNTIME.md"].includes(basename(rel))
   );
 }
 
@@ -163,7 +166,7 @@ function isPluginHandlerJsFile(rel) {
  */
 const FRAMEWORK_CHINESE_LINES = {
   // Player-facing label and notice pairs.
-  "apps/desktop/src/main-i18n.ts": 78,
+  "apps/desktop/src/main-i18n.ts": 80,
   "apps/server/src/routes/api/bootstrap/compactor.ts": 1,
   "apps/server/src/routes/api/bootstrap/plugin-rpc-wiring.ts": 2,
   "apps/server/src/routes/api/plugin-diagnostics.ts": 1,
@@ -183,7 +186,7 @@ const FRAMEWORK_CHINESE_LINES = {
   "packages/plugin-handlers-utils/src/narrative-review.ts": 13,
   "packages/runtime/src/agent-loop/request-context-budget.ts": 2,
   "packages/runtime/src/agent-loop/response-review.ts": 1,
-  "packages/runtime/src/agent-loop/runtime-completion.ts": 3,
+  "packages/runtime/src/agent-loop/runtime-completion.ts": 4,
   "packages/runtime/src/agent-loop/turn-agent-tool-loop.ts": 1,
   "packages/runtime/src/commit/commit-ui.ts": 2,
   "packages/runtime/src/llm/gateway-llm-adapter.ts": 1,
@@ -358,7 +361,10 @@ function walkPluginField(
   }
   if (typeof value === "object") {
     if (visible && isI18nTextObject(value)) {
-      reportIncompleteLocale(violations, pathStack, value, context);
+      // Plugin maps are diagnosed by the shared manifest-label check below.
+      // Compiled world overlays still need their English fallback checked.
+      if (context === "world.yaml")
+        reportIncompleteLocale(violations, pathStack, value, context);
       return;
     }
     for (const [key, child] of Object.entries(value)) {
@@ -367,13 +373,6 @@ function walkPluginField(
       pathStack.pop();
     }
   }
-}
-
-function extractFrontmatter(text) {
-  if (!text.startsWith("---")) return null;
-  const end = text.indexOf("\n---", 3);
-  if (end === -1) return null;
-  return text.slice(3, end).trim();
 }
 
 function normalizeTemplatePlaceholders(frontmatter) {
@@ -432,16 +431,21 @@ function checkPluginMarkdownFiles() {
 
   for (const rel of files) {
     const text = readFileSync(resolve(REPO_ROOT, rel), "utf8");
-    const frontmatter = extractFrontmatter(text);
-    if (frontmatter == null) continue;
-
     let parsed;
     try {
-      parsed = YAML.parse(normalizeTemplatePlaceholders(frontmatter));
+      parsed = readPlainYamlFrontmatter(
+        normalizeTemplatePlaceholders(text),
+      ).data;
     } catch (err) {
       console.error(`${rel}: failed to parse frontmatter - ${err.message}`);
       totalViolations += 1;
       continue;
+    }
+
+    const manifestFile = rel.split(sep).slice(2).join("/");
+    for (const problem of inlineManifestLabelProblems(parsed, manifestFile)) {
+      console.error(`${rel}: ${problem}`);
+      totalViolations += 1;
     }
 
     const violations = [];

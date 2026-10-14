@@ -34,7 +34,7 @@ import type { ServerStoreBackend } from "@/services/data-service.js";
 import {
   compactTabLabel,
   groupShortLabel,
-  panelProviderLabel,
+  pluginShortLabel,
   planPluginPanelProviders,
   pluginPanelKey,
   selectedPluginPanelIndex,
@@ -460,10 +460,8 @@ function SessionRightPanel({
                             }`}
                             title={p.pluginId}
                           >
-                            {panelProviderLabel(
+                            {pluginShortLabel(
                               p.pluginId,
-                              group.id,
-                              p.subs.map((item) => item.sub),
                               sessionState.sessionPlugins,
                               i18n.language,
                             )}

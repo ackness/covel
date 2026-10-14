@@ -19,7 +19,7 @@ The last two are heavy tasks that read a lot of code. Their instructions say tha
 
 Entry: [`.claude/skills/create-plugin/SKILL.md`](../../../.claude/skills/create-plugin/SKILL.md)
 
-It guides the assistant from a gameplay idea to a plugin that passes validation. The details of how to write fields, how to register tools, and how to test are in `references/` in the same folder. The assistant reads them only when it needs them.
+It guides the assistant from a gameplay idea to a plugin that passes validation. The details of how to write fields, how to register tools, and how to test are in `references/` in the same folder. The assistant reads them only when it needs them. The public SDK types `HandlerResult` and `FunctionStoreView` define results and reads; references inside a package use the complete `<pluginId>/<runtimeId>`.
 
 The official community plugin repository has a separate version that suits developing plugins on their own: [`.agents/skills/create-plugin`](https://github.com/covel-ai/covel-plugins/tree/main/.agents/skills/create-plugin). Its examples and validation commands follow the directory structure of the community repository.
 

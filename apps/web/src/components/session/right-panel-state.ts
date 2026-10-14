@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { fetchServerHealth, fetchUiSpecs } from "@/services/api.js";
+import type { UISlotEntry } from "@/services/api.js";
 import type { ServerStoreBackend } from "@/services/data-service.js";
 import {
   aggregateSpecsIntoGroups,
@@ -32,6 +33,7 @@ export interface RightPanelState {
   /** Group id → key of the sub-panel shown in that group. */
   readonly activePluginSubTab: Readonly<Record<string, string>>;
   readonly selectPluginSubTab: (groupId: string, panelKey: string) => void;
+  readonly rightSpecs: readonly UISlotEntry[];
   readonly pluginTabGroups: PluginPanelTabGroup[];
   readonly specsStatus: PanelSpecsStatus;
   readonly specsError: string | null;
@@ -63,6 +65,7 @@ export function useRightPanelState(
   const [pluginTabGroups, setPluginTabGroups] = useState<PluginPanelTabGroup[]>(
     [],
   );
+  const [rightSpecs, setRightSpecs] = useState<readonly UISlotEntry[]>([]);
   const [specsStatus, setSpecsStatus] = useState<PanelSpecsStatus>("loading");
   const [specsError, setSpecsError] = useState<string | null>(null);
   const [specsAttempt, setSpecsAttempt] = useState(0);
@@ -161,6 +164,7 @@ export function useRightPanelState(
           }
         }
 
+        setRightSpecs(specs.right);
         setPluginTabGroups(
           aggregateSpecsIntoGroups(specs.right, i18n.language, {
             warn: (message) => {
@@ -207,6 +211,7 @@ export function useRightPanelState(
       setActiveTab,
       activePluginSubTab,
       selectPluginSubTab,
+      rightSpecs,
       pluginTabGroups,
       specsStatus,
       specsError,
@@ -218,6 +223,7 @@ export function useRightPanelState(
       activeTab,
       activePluginSubTab,
       selectPluginSubTab,
+      rightSpecs,
       pluginTabGroups,
       specsStatus,
       specsError,

@@ -1,3 +1,4 @@
+import { useInputDraft } from "../use-input-draft.js";
 import { useTranslation } from "react-i18next";
 import { projectModelCapabilityForBuiltinAdapter } from "@covel/shared";
 import { ModelTokenLimits } from "./llm-token-limits.js";
@@ -185,11 +186,13 @@ export function CapabilityEditor({
   override,
   onUpdate,
   context,
+  busy = false,
 }: {
   serverCap: ModelCapabilityInfo | undefined;
   override: Partial<ModelCapabilityInfo> | undefined;
   onUpdate: (patch: Partial<ModelCapabilityInfo>) => Promise<boolean> | void;
   context?: { protocol: string; role: string };
+  busy?: boolean;
 }) {
   const { t } = useTranslation();
   const merged = mergeCapability(serverCap, override);
@@ -237,7 +240,9 @@ export function CapabilityEditor({
             return (
               <button
                 key={id}
-                disabled={available ? !available.input.includes(id) : false}
+                disabled={
+                  busy || (available ? !available.input.includes(id) : false)
+                }
                 onClick={() =>
                   toggle(currentInput as InputModality[], id, "input")
                 }
@@ -265,7 +270,9 @@ export function CapabilityEditor({
             return (
               <button
                 key={id}
-                disabled={available ? !available.output.includes(id) : false}
+                disabled={
+                  busy || (available ? !available.output.includes(id) : false)
+                }
                 onClick={() =>
                   toggle(currentOutput as OutputModality[], id, "output")
                 }
@@ -293,7 +300,10 @@ export function CapabilityEditor({
             return (
               <button
                 key={id}
-                disabled={available ? !available.features?.includes(id) : false}
+                disabled={
+                  busy ||
+                  (available ? !available.features?.includes(id) : false)
+                }
                 onClick={() =>
                   toggle(currentFeatures as ModelFeature[], id, "features")
                 }
@@ -323,52 +333,69 @@ export function CapabilityEditor({
             <span className="text-[10px] text-muted-foreground w-8 shrink-0">
               {t("settings.pricingInput")}:
             </span>
-            <input
-              type="number"
-              step="0.01"
+            <PriceInput
+              label={t("settings.pricingInput")}
               placeholder={
                 effective?.pricing?.inputPerMToken?.toString() ?? "$/M"
               }
-              value={override?.pricing?.inputPerMToken ?? ""}
-              onChange={(e) =>
-                onUpdate({
-                  pricing: {
-                    ...override?.pricing,
-                    inputPerMToken: e.target.value
-                      ? parseFloat(e.target.value)
-                      : undefined,
-                  },
-                })
+              value={override?.pricing?.inputPerMToken}
+              onChange={(value) =>
+                onUpdate({ pricing: { inputPerMToken: value } })
               }
-              className="w-full bg-background border border-border px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-primary font-mono"
             />
           </div>
           <div className="flex items-center gap-1">
             <span className="text-[10px] text-muted-foreground w-8 shrink-0">
               {t("settings.pricingOutput")}:
             </span>
-            <input
-              type="number"
-              step="0.01"
+            <PriceInput
+              label={t("settings.pricingOutput")}
               placeholder={
                 effective?.pricing?.outputPerMToken?.toString() ?? "$/M"
               }
-              value={override?.pricing?.outputPerMToken ?? ""}
-              onChange={(e) =>
-                onUpdate({
-                  pricing: {
-                    ...override?.pricing,
-                    outputPerMToken: e.target.value
-                      ? parseFloat(e.target.value)
-                      : undefined,
-                  },
-                })
+              value={override?.pricing?.outputPerMToken}
+              onChange={(value) =>
+                onUpdate({ pricing: { outputPerMToken: value } })
               }
-              className="w-full bg-background border border-border px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-primary font-mono"
             />
           </div>
         </div>
       </div>
     </div>
+  );
+}
+
+function PriceInput({
+  label,
+  placeholder,
+  value,
+  onChange,
+}: {
+  label: string;
+  placeholder: string;
+  value?: number;
+  onChange: (value: number | undefined) => Promise<boolean> | void;
+}) {
+  const draft = useInputDraft(String(value ?? ""), (text) => {
+    const parsed = text.trim() ? Number(text) : undefined;
+    if (parsed !== undefined && (!Number.isFinite(parsed) || parsed < 0))
+      return;
+    return onChange(parsed);
+  });
+  return (
+    <input
+      type="number"
+      min={0}
+      step="0.01"
+      aria-label={label}
+      placeholder={placeholder}
+      value={draft.value}
+      onChange={(event) => draft.set(event.target.value)}
+      onBlur={() => void draft.flush()}
+      onKeyDown={(event) => {
+        if (event.key === "Enter") event.currentTarget.blur();
+      }}
+      className="w-full bg-background border border-border px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-primary font-mono"
+    />
   );
 }

@@ -17,11 +17,6 @@ import {
   clearStreamingTextsForTurn,
 } from "@/stores/streaming-text-store.js";
 import {
-  applyDomainEventPreview,
-  clearDomainEventPreviews,
-  clearDomainEventPreviewsForTurn,
-} from "@/stores/domain-event-preview-store.js";
-import {
   reducePluginDataChanged,
   reduceTurnResumed,
   reduceTurnSuspended,
@@ -440,7 +435,6 @@ export function createSseEventHandler(
         break;
       }
       case "execution.started": {
-        if (currentSessionId) clearDomainEventPreviews(currentSessionId);
         for (const step of buildRetryAttemptSteps(
           payload,
           turnId,
@@ -523,9 +517,6 @@ export function createSseEventHandler(
               ? { abortReason: payload.abortReason }
               : {}),
           });
-        if (currentSessionId) {
-          clearDomainEventPreviewsForTurn(currentSessionId, turnId);
-        }
         if (!committed && turnId) {
           deps.dispatch({ type: "REMOVE_MESSAGES_FROM_TURN", turnId });
         }
@@ -590,33 +581,9 @@ export function createSseEventHandler(
       case "ui.slot.preview":
       case "ui.slot.cleared":
         break;
-      case "domain-event.previewed": {
-        const topic = payload.topic;
-        const data = payload.data;
-        if (
-          currentSessionId &&
-          typeof topic === "string" &&
-          data &&
-          typeof data === "object" &&
-          !Array.isArray(data)
-        ) {
-          applyDomainEventPreview(currentSessionId, {
-            ...(turnId ? { turnId } : {}),
-            ...(typeof payload.runtimeId === "string"
-              ? { runtimeId: payload.runtimeId }
-              : {}),
-            ...(typeof payload.pluginId === "string"
-              ? { pluginId: payload.pluginId }
-              : {}),
-            ...(typeof payload.toolCallId === "string"
-              ? { toolCallId: payload.toolCallId }
-              : {}),
-            topic,
-            data: data as Readonly<Record<string, unknown>>,
-          });
-        }
+      // Projected server-side into ui.slot.preview; no direct client state.
+      case "domain-event.previewed":
         break;
-      }
       case "plugin-data.changed": {
         reducePluginDataChanged(deps.dispatch, payload, envelope.sessionId);
         break;
@@ -689,9 +656,6 @@ export function createSseEventHandler(
             turnId,
             status: "failed",
           });
-        if (currentSessionId) {
-          clearDomainEventPreviewsForTurn(currentSessionId, turnId);
-        }
         deps.dispatch({
           type: "SET_EXECUTION_ERROR",
           error:
@@ -712,9 +676,6 @@ export function createSseEventHandler(
       // visible failure instead of a silently incomplete turn (the server
       // also withholds turn.completed / auto-snapshot in this case).
       case "proposal.failed": {
-        if (currentSessionId) {
-          clearDomainEventPreviewsForTurn(currentSessionId, turnId);
-        }
         const proposalType = (payload.proposalType as string) ?? "proposal";
         const error = (payload.error as string) ?? "commit failed";
         deps.dispatch({

@@ -64,6 +64,7 @@ import {
   withDefaultUtilsSignal,
 } from "./runtime-abort-boundaries.js";
 import { attachSuspensionArtifact } from "../suspension-artifact.js";
+import { suspensionBasis } from "../resume/suspension-settlement.js";
 import { freezeInputSlots } from "../agent-loop/runtime-input-slots.js";
 import { deepFreeze } from "../hooks/hook-settings.js";
 
@@ -633,6 +634,8 @@ export async function executeFunctionRuntime({
         ...(activation ? { activation: structuredClone(activation) } : {}),
         emittedEvents: [],
         executionContext,
+        // `executeTurn` sets the player turns once it knows the whole execution.
+        takenUnder: suspensionBasis(manifest, 0),
         ...(input.locale !== undefined ? { locale: input.locale } : {}),
         ...(logicalTurn !== undefined ? { logicalTurn } : {}),
       },
@@ -761,8 +764,12 @@ export async function executeFunctionRuntime({
   );
 
   // Keep commands separate from business output; copying the result preserves them.
+  // The buffer belongs to the handler's own success: a failed handler that a
+  // PostRuntime hook turned into success commits none of its buffered writes.
   const completedResult: RuntimeResult =
-    result.status === "success" && writeBuffer.length > 0
+    rawResult.status === "success" &&
+    result.status === "success" &&
+    writeBuffer.length > 0
       ? {
           ...result,
           pendingProposals: [

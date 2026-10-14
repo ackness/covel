@@ -8,6 +8,8 @@ There are three key points:
 - All writes of one execution (a turn, a manual run, or a background job) are put into one transaction and committed together.
 - The three backends (Memory, SQLite, PostgreSQL) behave the same from the outside. They handle concurrency differently.
 
+World package files are outside the database transaction. Generation, revision, and translation coordinate files and world records through staging, package preflight, directory replacement, and failure recovery; the [API write-back rules](./api.md#post-apiworldsidtranslate) describe what survives a failure.
+
 ## Contract
 
 ```ts
@@ -319,7 +321,7 @@ Browser-private persistence is kept deliberately outside `DataStore`. Dexie mana
 
 - Uploads and downloads of browser checkpoints are serialized by `LocalDataService`. Before hydration or staging another action, it restores the persisted pending commits.
 - When the temporary session does not exist, it clears the pending mark and allows a rebuild from the browser checkpoint. Other errors keep the mark and block newer commits.
-- Checkpoint export calls `listRuntimeResults(sessionId)` once per session to read runtime results. Omitting `turnId` returns all rows of the session, including executions that were interrupted and have no turn-result row. When `turnId` is passed, the existing per-turn filter is kept on every backend.
+- Checkpoint export reads `listTurnResults(sessionId)` and `listRuntimeOutputs(sessionId)`, and keeps only the rows of the latest 40 executions (`JOURNAL_EXECUTION_WINDOW`). Executions that were interrupted and have no turn-result row are not saved in the checkpoint.
 - Before it uses a revision or an idempotency cache, the upload and commit routes check the owner, the incarnation, and the deletion state again inside the session lock. A cache entry belongs to one incarnation. After the same ID is created again, the old entries are discarded.
 
 **Import and replacement.**
@@ -417,7 +419,8 @@ The second argument of `extraInTx` gives the dropped runtimes. The main turn use
 **Resume.**
 
 - Resume puts the assistant's turn message and the suspension's resolved mark into the same transaction through `extraInTx`. If anything fails, they are rolled back together with the proposals. After the claim is released, it can be retried.
-- The resolved mark also clears what this resume has already used from the suspension (messages, buffered tool calls and proposals, input), and keeps only the execution identifier, the language, and the turn number. On rollback, this content is restored with the transaction.
+- The resolved mark also clears what this resume has already used from the suspension (messages, buffered tool calls and proposals, input), and keeps only the execution identifier, the player turns and plugin version recorded at suspension, the language, and the turn number. On rollback, this content is restored with the transaction.
+- Abandoning, expiring and voiding go through one exit: deleting the suspension, counting the turn (when it was the last suspension of its logical turn still waiting) and queuing the detached jobs the turn held back happen in one transaction.
 
 **The session clock is written in the same transaction.**
 
@@ -428,7 +431,7 @@ The second argument of `extraInTx` gives the dropped runtimes. The main turn use
 - When a whole turn is rolled back (a story or setup failure, or any proposal failing in an execution with no story), the count, the phase, and the setup mirror do not advance, and the ledger is not written.
 - A commit that only drops optional runtimes advances the clock as usual.
 - Manual and background finalization do not pass `sessionClock`, so the clock does not move.
-- Resume does pass it. The count is advanced once, when the last suspension of the same logical turn is resumed. When the resumed runtime is a setup runtime and it reports completion, the `done` mirror and the phase flip (when all setup runtimes are complete) are written with this commit. The attempt ledger keeps the attempt that was in place at suspension.
+- Resume does pass it. The count is advanced once, when the last suspension of the same logical turn is resumed, abandoned, expires or is voided. When the resumed runtime is a setup runtime and it reports completion, the `done` mirror and the phase flip (when all setup runtimes are complete) are written with this commit. The attempt ledger keeps the attempt that was in place at suspension.
 
 **Lock boundary of action-level plugin-rpc.** An action handler does its reads, validation, and writes inside the session lock. So it does not interleave with a turn of the same session. PG multi-process deployments are also serialized by the same distributed lock key.
 

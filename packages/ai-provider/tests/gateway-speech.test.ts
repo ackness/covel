@@ -7,6 +7,7 @@ import {
   registerTranscriptionWire,
 } from "../src/speech/wire-registry.js";
 import type { SpeechWire, TranscriptionWire } from "../src/speech/types.js";
+import { withWireRegistrySnapshot } from "../src/wire-lifecycle.js";
 import type { ModelProfile, PresetConfig } from "../src/types.js";
 import type { ModelProviderAdapter } from "../src/adapters/adapter.js";
 
@@ -160,6 +161,34 @@ describe("gateway.synthesizeSpeech", () => {
     await expect(
       gateway.synthesizeSpeech({ presetId: "tts-primary", text: "hi" }),
     ).rejects.toThrow(/unknown speech wire "ghost"/);
+  });
+
+  it("names the plugin to enable when its speech wire is not active in the session", async () => {
+    const dispose = registerSpeechWire(
+      {
+        id: "voice-pack/tts",
+        synthesize: async () => {
+          throw new Error("must not run outside its sessions");
+        },
+      },
+      { pluginId: "voice-pack", builtin: false },
+    );
+    try {
+      const { gateway } = setup({
+        providerRequestMetadata: { speechWire: "voice-pack/tts" },
+      });
+      await expect(
+        withWireRegistrySnapshot(
+          () =>
+            gateway.synthesizeSpeech({ presetId: "tts-primary", text: "hi" }),
+          ["other-plugin"],
+        ),
+      ).rejects.toThrow(
+        /provided by the plugin "voice-pack", which is not enabled for this session/,
+      );
+    } finally {
+      dispose();
+    }
   });
 
   it("does not silently route to the default text slot when presetId is omitted", async () => {

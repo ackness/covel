@@ -28,6 +28,12 @@ import {
  *     so sequential resumes for the same session do not interleave with turn
  *     execution.
  *
+ * Out of date: a suspension records the player turns in the history and its
+ * plugin's version when it was taken. A resume that finds the history moved
+ * on, the plugin updated, or a later suspension of the same runtime voids it
+ * (settled like an abandon) and answers 409 `suspension_outdated` instead of
+ * running the continuation on stale state.
+ *
  * Expiry: the suspension-touching routes opportunistically fire a
  * time-gated, best-effort global sweep of stale (unresolved, older-than-TTL)
  * suspensions via `maybeSweepExpiredSuspensions`; a one-time forced sweep also
@@ -51,6 +57,8 @@ import {
   snapshotUserSettings,
   createTurnEmitter,
   runWithHookScope,
+  suspensionOutdatedReason,
+  type SuspensionOutdatedReason,
 } from "@covel/runtime";
 import {
   CONCEALED_FAILURE_MESSAGE,
@@ -72,7 +80,14 @@ import {
   readLockedSession,
   withLockedSessionMutation,
 } from "./session/locked-mutation.js";
-import { maybeSweepExpiredSuspensions } from "./suspension-sweep.js";
+import {
+  maybeSweepExpiredSuspensions,
+  requestSuspensionSweepDeps,
+} from "./suspension-sweep.js";
+import {
+  abandonSuspension,
+  requestSuspensionAbandonDeps,
+} from "./suspension-abandon.js";
 import {
   decodePluginUserSettingsHeader,
   loadSessionPluginUserSettings,
@@ -101,6 +116,16 @@ type Env = {
 
 export const resumeRoutes = new Hono<Env>();
 
+/** What the player is told when a resume finds its suspension out of date. */
+const OUTDATED_MESSAGES: Readonly<Record<SuspensionOutdatedReason, string>> = {
+  "session-moved-on":
+    "This request is out of date: the story has moved on since it was asked. It has been withdrawn.",
+  "plugin-updated":
+    "This request is out of date: its plugin was updated since it was asked. It has been withdrawn.",
+  superseded:
+    "This request is out of date: the same plugin has asked a newer one. It has been withdrawn.",
+};
+
 // ── Route ────────────────────────────────────────────────────────
 
 resumeRoutes.post("/:id/suspensions/:suspensionId/resume", async (c) => {
@@ -117,7 +142,9 @@ resumeRoutes.post("/:id/suspensions/:suspensionId/resume", async (c) => {
     );
   }
   // Opportunistic, time-gated, best-effort: never blocks the resume.
-  void trackRequestWork(c, () => maybeSweepExpiredSuspensions(store));
+  void trackRequestWork(c, () =>
+    maybeSweepExpiredSuspensions(requestSuspensionSweepDeps(c)),
+  );
   const pluginRegistry = c.get("pluginRegistry");
 
   const parsedBody = await parseJsonBody(
@@ -228,6 +255,28 @@ resumeRoutes.post("/:id/suspensions/:suspensionId/resume", async (c) => {
             `Runtime "${liveSuspension.runtimeId}" not found in registry`,
           ),
           404,
+        );
+      }
+
+      // A continuation taken before the session moved on, or under another
+      // plugin version, would commit stale writes: void it, settle what it
+      // held back like an abandon, and tell the player.
+      const outdated = await suspensionOutdatedReason(
+        store,
+        liveSuspension,
+        effectiveManifest,
+      );
+      if (outdated) {
+        await abandonSuspension(
+          requestSuspensionAbandonDeps(c, decodedUserSettings.settings),
+          liveSuspension,
+        );
+        return c.json(
+          errorBody(OUTDATED_MESSAGES[outdated], {
+            code: "suspension_outdated",
+            details: { reason: outdated },
+          }),
+          409,
         );
       }
 
@@ -389,6 +438,15 @@ resumeRoutes.post("/:id/suspensions/:suspensionId/resume", async (c) => {
 // ── DELETE (abandon) ─────────────────────────────────────────────
 
 resumeRoutes.delete("/:id/suspensions/:suspensionId", async (c) => {
+  const decodedUserSettings = decodePluginUserSettingsHeader(
+    c.req.header("X-Plugin-User-Settings"),
+  );
+  if (!decodedUserSettings.ok) {
+    return c.json(
+      errorBody(decodedUserSettings.error, { code: decodedUserSettings.code }),
+      decodedUserSettings.status,
+    );
+  }
   const guard = await resolveSessionParam(c);
   if (!guard.ok) return guard.response;
 
@@ -409,7 +467,12 @@ resumeRoutes.delete("/:id/suspensions/:suspensionId", async (c) => {
         return c.json(errorBody("Suspension not found"), 404);
       }
 
-      await store.deleteSuspension(suspensionId);
+      // Abandoning the last pending suspension of a turn ends that turn:
+      // it counts, and the detached jobs it held back are queued.
+      await abandonSuspension(
+        requestSuspensionAbandonDeps(c, decodedUserSettings.settings),
+        suspension,
+      );
       return c.json(okBody({ suspensionId }));
     },
   });
@@ -421,7 +484,9 @@ resumeRoutes.get("/:id/suspensions", async (c) => {
   const sessionId = c.req.param("id");
   const store = c.get("store");
   // Opportunistic, time-gated, best-effort: never blocks the listing.
-  void trackRequestWork(c, () => maybeSweepExpiredSuspensions(store));
+  void trackRequestWork(c, () =>
+    maybeSweepExpiredSuspensions(requestSuspensionSweepDeps(c)),
+  );
 
   const guard = await resolveSessionParam(c);
   if (!guard.ok) return guard.response;

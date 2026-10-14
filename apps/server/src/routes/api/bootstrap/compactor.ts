@@ -23,10 +23,31 @@ interface BudgetSourceParams {
   readonly contextWindowOverride?: number;
 }
 
+/**
+ * Consecutive failed compactions per session. It lives at bootstrap level, not
+ * inside a runner: requests that carry their own model configuration build a
+ * runner each, and a count kept there would restart at 0 every turn.
+ */
+export class CompactionFailureTracker {
+  readonly #counts = new Map<string, number>();
+
+  /** Counts one more failure and returns the consecutive total. */
+  record(sessionId: string): number {
+    const count = (this.#counts.get(sessionId) ?? 0) + 1;
+    this.#counts.set(sessionId, count);
+    return count;
+  }
+
+  reset(sessionId: string): void {
+    this.#counts.delete(sessionId);
+  }
+}
+
 export interface CreateBootstrapCompactorRunnerParams extends BudgetSourceParams {
   readonly extensions: PluginExtensionHost;
   readonly store: DataStore;
   readonly llmAdapter: LLMAdapter;
+  readonly failures: CompactionFailureTracker;
 }
 
 /** Failed attempts in a row before the player is told; repeated every time it recurs. */
@@ -34,18 +55,15 @@ export const COMPACTION_NOTICE_EVERY = 3;
 
 const COMPACTION_NOTICE: I18nText = {
   "en-US":
-    "The story's memory could not be condensed for several turns, so the prompt keeps growing and may eventually fill the model's context. Check that the model for the fast slot works in Settings, or turn History Compaction off for this session.",
+    "The story's memory could not be condensed for several turns, so the prompt keeps growing and may eventually fill the model's context. Check that the model for the fast slot works in Settings, or disable the plugin that condenses old turns in this session.",
   "zh-CN":
-    "故事的记忆已连续多个回合无法压缩，提示词会越来越长，最终可能占满模型的上下文。请在设置里检查“快速”槽位的模型是否可用，或在本会话中关闭历史压缩插件。",
+    "故事的记忆已连续多个回合无法压缩，提示词会越来越长，最终可能占满模型的上下文。请在设置里检查“快速”槽位的模型是否可用，或在本会话中停用负责压缩历史的插件。",
 };
 
 export function createBootstrapCompactorRunner(
   params: CreateBootstrapCompactorRunnerParams,
 ): CompactorRunner {
-  const { extensions, store, llmAdapter } = params;
-  // Consecutive failed attempts per session. A restart forgets them, which only
-  // delays the next notice.
-  const failures = new Map<string, number>();
+  const { extensions, store, llmAdapter, failures } = params;
 
   return {
     async run(
@@ -135,8 +153,7 @@ export function createBootstrapCompactorRunner(
       const reportFailure = async (
         found: NonNullable<typeof failure>,
       ): Promise<void> => {
-        const count = (failures.get(sessionId) ?? 0) + 1;
-        failures.set(sessionId, count);
+        const count = failures.record(sessionId);
         console.warn(
           `[compactor] history compaction failed for session ${sessionId} (${count} in a row): ${found.reason}`,
         );
@@ -205,7 +222,7 @@ export function createBootstrapCompactorRunner(
           providerId: "",
           reason: result.deferredReason,
         });
-      else failures.delete(sessionId);
+      else failures.reset(sessionId);
       return result;
     },
   };

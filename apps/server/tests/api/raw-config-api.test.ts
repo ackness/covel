@@ -100,6 +100,22 @@ describe("raw configuration files", () => {
     expect(existsSync(`${tomlPath}.bak`)).toBe(false);
   });
 
+  it("does not echo an environment value in the refusal", async () => {
+    const secret = "sk-should-not-leak-0123456789";
+    process.env.RAW_CONFIG_SECRET_X = secret;
+    try {
+      const { get, put } = await setup(ALPHA);
+      const res = await put(
+        `${ALPHA}\napiKey = \${RAW_CONFIG_SECRET_X}\n`,
+        (await get()).digest,
+      );
+      expect(res.status).toBe(400);
+      expect(JSON.stringify(await res.json())).not.toContain(secret);
+    } finally {
+      delete process.env.RAW_CONFIG_SECRET_X;
+    }
+  });
+
   it("refuses to save over a file that changed after it was loaded", async () => {
     const { get, put } = await setup(ALPHA);
     const { digest } = await get();

@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { readdirSync } from "node:fs";
 import handler from "../handler.js";
 import { loadPluginMessages } from "@covel/plugin-test-utils";
 
@@ -104,4 +105,10 @@ describe("pregame handler", () => {
     expect(result.completion).toBe("done");
     expect(result.effects.notifications[0].title).toContain("Unknown World");
   });
+});
+
+it("keeps the function runtime documentation in the main file only", () => {
+  expect(readdirSync(new URL("../", import.meta.url))).not.toContain(
+    "PLUGIN.zh.md",
+  );
 });

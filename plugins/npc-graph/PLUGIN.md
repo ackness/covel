@@ -32,7 +32,6 @@ contributes:
       - ./runtimes/extractor/ui/npc-graph-panel.json
   tools:
     - upsert-npc-graph
-    - list-npc-graph
 ---
 
 # Relationship Tracker

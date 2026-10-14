@@ -1,10 +1,26 @@
-import { mkdtemp, mkdir, rm, access } from "node:fs/promises";
+import {
+  mkdtemp,
+  mkdir,
+  rm,
+  access,
+  readFile,
+  readdir,
+  rename,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { Hono } from "hono";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PluginRegistry } from "@covel/plugin-loader";
 import { pluginRoutes } from "../../src/routes/api/plugins.js";
+import { cleanupPackageStaging } from "../../src/routes/api/install/package-staging.js";
+import { discoverPluginsMulti } from "@covel/plugin-loader";
+
+vi.mock("node:fs/promises", async (importOriginal) => {
+  const fs = await importOriginal<typeof import("node:fs/promises")>();
+  return { ...fs, rm: vi.fn(fs.rm), rename: vi.fn(fs.rename) };
+});
 
 let pluginsDir: string;
 let prevUserPluginsDir: string | undefined;
@@ -44,6 +60,13 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  vi.restoreAllMocks();
+  const fs =
+    await vi.importActual<typeof import("node:fs/promises")>(
+      "node:fs/promises",
+    );
+  vi.mocked(rm).mockImplementation(fs.rm);
+  vi.mocked(rename).mockImplementation(fs.rename);
   if (prevUserPluginsDir === undefined) {
     delete process.env.COVEL_USER_PLUGINS_DIR;
   } else {
@@ -68,6 +91,63 @@ afterEach(async () => {
 });
 
 describe("DELETE /api/plugins/:id (uninstall)", () => {
+  it("keeps a complete package when the initial rename fails", async () => {
+    const dir = path.join(pluginsDir, "my-plugin");
+    await mkdir(dir);
+    await writeFile(path.join(dir, "PLUGIN.md"), "manifest");
+    await writeFile(path.join(dir, "handler.js"), "handler");
+    vi.mocked(rename).mockRejectedValueOnce(
+      new Error("Synthetic rename failure"),
+    );
+    const app = createTestApp();
+    app.onError(() => new Response("Rename failed", { status: 500 }));
+    expect(
+      (await app.request("/api/plugins/my-plugin", { method: "DELETE" }))
+        .status,
+    ).toBe(500);
+    expect(await readFile(path.join(dir, "PLUGIN.md"), "utf8")).toBe(
+      "manifest",
+    );
+    expect(await readFile(path.join(dir, "handler.js"), "utf8")).toBe(
+      "handler",
+    );
+    expect(await readdir(pluginsDir)).toEqual(["my-plugin"]);
+  });
+
+  it("does not rediscover a partially deleted package and retries cleanup at startup", async () => {
+    const dir = path.join(pluginsDir, "my-plugin");
+    await mkdir(dir);
+    await writeFile(
+      path.join(dir, "PLUGIN.md"),
+      "---\nid: my-plugin\nkind: plugin\n---\n",
+    );
+    await writeFile(path.join(dir, "handler.js"), "handler");
+    const fs =
+      await vi.importActual<typeof import("node:fs/promises")>(
+        "node:fs/promises",
+      );
+    vi.mocked(rm).mockImplementationOnce(async (target) => {
+      // Simulate a real recursive deletion that removed code before a locked file failed.
+      const packageDir =
+        String(target) === dir ? dir : path.join(String(target), "package");
+      await fs.rm(path.join(packageDir, "handler.js"));
+      throw new Error("Synthetic locked manifest");
+    });
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const response = await createTestApp().request("/api/plugins/my-plugin", {
+      method: "DELETE",
+    });
+    expect(response.status).toBe(200);
+    await expect(access(dir)).rejects.toMatchObject({ code: "ENOENT" });
+    expect(await discoverPluginsMulti([pluginsDir])).toEqual([]);
+    expect(await readdir(pluginsDir)).toEqual([
+      expect.stringMatching(/^\.covel-uninstall-/),
+    ]);
+    expect(warn).toHaveBeenCalled();
+    await cleanupPackageStaging(pluginsDir);
+    expect(await readdir(pluginsDir)).toEqual([]);
+  });
+
   it("removes an installed third-party plugin dir and reports restartRequired", async () => {
     const dir = path.join(pluginsDir, "my-plugin");
     await mkdir(dir, { recursive: true });

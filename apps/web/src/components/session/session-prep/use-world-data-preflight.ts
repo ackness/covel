@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import * as api from "@/services/api.js";
 import type { PrepSectionStatus } from "./types.js";
 
@@ -22,17 +22,24 @@ export function useWorldDataPreflight(
     string | null
   >(null);
 
+  const sequence = useRef(0);
+
   const runWorldDataPreflight = useCallback(async () => {
+    const run = ++sequence.current;
+    setWorldDataPreflight(null);
     setWorldDataPreflightStatus("loading");
     setWorldDataPreflightError(null);
     try {
       await prepareWorldForServer();
+      if (run !== sequence.current) return;
       const result = await api.preflightWorldData(worldId, {
         plugins: selectedPluginIds,
       });
+      if (run !== sequence.current) return;
       setWorldDataPreflight(result);
       setWorldDataPreflightStatus("success");
     } catch (err) {
+      if (run !== sequence.current) return;
       setWorldDataPreflight(null);
       setWorldDataPreflightError(
         err instanceof Error ? err.message : String(err),
@@ -42,10 +49,16 @@ export function useWorldDataPreflight(
   }, [worldId, selectedPluginIds, prepareWorldForServer]);
 
   useEffect(() => {
+    setWorldDataPreflight(null);
+    setWorldDataPreflightError(null);
+    setWorldDataPreflightStatus("loading");
     const timer = window.setTimeout(() => {
       void runWorldDataPreflight();
     }, 250);
-    return () => window.clearTimeout(timer);
+    return () => {
+      ++sequence.current;
+      window.clearTimeout(timer);
+    };
   }, [runWorldDataPreflight]);
 
   return {
