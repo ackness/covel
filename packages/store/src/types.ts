@@ -927,7 +927,8 @@ export interface SnapshotStore {
   /**
    * Delete a session's `auto` snapshots older than its newest `keep`, never
    * one that a fork still names as `parentId`. Manual and fork snapshots are
-   * kept. Returns how many snapshots were deleted.
+   * kept. Returns how many snapshots were deleted. The SQL backends do it in
+   * one DELETE statement.
    */
   pruneAutoSnapshots(sessionId: string, keep: number): Promise<number>;
 }
