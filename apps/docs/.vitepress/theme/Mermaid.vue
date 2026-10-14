@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref, watch } from "vue";
+import { onMounted, ref, useId, watch } from "vue";
 import { useData } from "vitepress";
 
 // A ```mermaid block of a page (see `markdown.config` in ../config.ts). The
@@ -10,6 +10,8 @@ const props = defineProps<{ code: string }>();
 const source = decodeURIComponent(props.code).replaceAll("\\n", "<br/>");
 const svg = ref("");
 const { isDark } = useData();
+// Mermaid's render queue shares the document; timestamps can collide across blocks.
+const diagramId = useId();
 let serial = 0;
 
 async function draw() {
@@ -19,8 +21,13 @@ async function draw() {
       startOnLoad: false,
       securityLevel: "strict",
       theme: isDark.value ? "dark" : "neutral",
+      // Preserve the authored diagrams' spacing and flat shapes across major upgrades.
+      layout: "dagre",
+      look: "classic",
+      flowchart: { wrappingWidth: 200, minNodeWidth: 0 },
+      state: { wrappingWidth: 200, minNodeWidth: 0 },
     });
-    const id = `mermaid-${Date.now()}-${serial++}`;
+    const id = `mermaid-${diagramId}-${serial++}`;
     svg.value = (await mermaid.render(id, source)).svg;
   } catch {
     svg.value = "";
@@ -41,6 +48,10 @@ watch(isDark, draw);
   margin: 16px 0;
   overflow-x: auto;
   text-align: center;
+}
+/* Keep labels at the line height Mermaid measured outside VitePress's prose. */
+.mermaid-diagram :deep(p) {
+  line-height: inherit;
 }
 .mermaid-source {
   margin: 16px 0;

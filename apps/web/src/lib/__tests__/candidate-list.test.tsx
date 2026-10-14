@@ -1,3 +1,4 @@
+import i18n from "@/i18n";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   cleanup,
@@ -90,7 +91,7 @@ function renderBranchReply(value: Record<string, unknown>) {
                   },
                 }
               : undefined,
-            title: "Reply candidates",
+            title: value.title,
             draftLabel: "Draft",
             sendLabel: "Send",
             acceptLabel: "Accept",
@@ -220,4 +221,14 @@ describe("CandidateList", () => {
       "Wait and watch the guard.",
     );
   });
+});
+
+it.each([
+  ["en-US", "Candidates"],
+  ["zh-CN", "候选"],
+  ["ru-RU", "Варианты"],
+])("uses a neutral localized default title in %s", async (locale, title) => {
+  await i18n.changeLanguage(locale);
+  renderBranchReply({ candidates: [{ id: "a", text: "Option A" }] });
+  expect(screen.getByText(title)).toBeTruthy();
 });

@@ -40,14 +40,6 @@ export function upgradeBrowserIdbSchema(
   _oldVersion?: number,
   _transaction?: unknown,
 ): Promise<void> {
-  const mediaAssets = ensureStore(db, "media_assets", { keyPath: "id" });
-  mediaAssets?.createIndex("owner", ["ownerSessionId", "ownerPluginId"]);
-
-  const mediaRefs = ensureStore(db, "media_refs", { keyPath: "key" });
-  mediaRefs?.createIndex("sessionId", "sessionId");
-  mediaRefs?.createIndex("mediaId", "mediaId");
-  mediaRefs?.createIndex("session_media", ["sessionId", "mediaId"]);
-
   ensureStore(db, APP_KV_STORE_WORLD_OVERLAYS);
   ensureStore(db, APP_KV_STORE_STATE_PATCHES);
   ensureStore(db, APP_KV_STORE_SUBMITTED_BLOCKS);

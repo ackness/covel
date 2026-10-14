@@ -649,6 +649,7 @@ Gemini 原生的思考强度、`providerOptions.google.thinkingConfig`、`cached
 
 - 网页端收到 reset 或重连之后，带着 revision 检查重新拉取：会话快照、插件列表、所有启用插件的数据、没解决的 suspension 和世界。这期间到达的实时事件先缓冲，之后再重放。
 - 只有访问代次和执行所有权仍然对得上时，才用同一个 `turnId/runtimeId` 的已保存终态叙事替换流式占位，并移除这个占位的外部文本和待刷新的片段。一条新的、健康的 POST 流仍然拥有自己现场的输出。
+- 出错或断流后，只有恢复确认回合失败或中断、且没有对应的已保存故事时，才把已显示的文字移到“未保存”区域，清除占位和流式缓存。文字只保留到离开会话，不进入故事历史、舞台或插件数据；有可恢复动作时，旁边提供重试。未知网络状态不开放重试，已保存故事仍按上面的规则替换。玩家主动中止和正常 `committed: false` 的撤回规则不变。
 - 恢复快照的最近窗口如果和已加载的历史接不上，客户端先通过现有的消息分页接口只读地补到旧的锚点，再合并发布。它不删除旧窗口，也不重新发送动作。
 
 **给嵌入 `@covel/events` 的宿主**
@@ -983,6 +984,8 @@ data: {
 `submit_interaction` 的一批回答可以涉及多个来源插件，不限制阶段的数量。所有来源的 server-code 授权都齐了，才校验并原子保存。
 
 **框架默认 action：** 见 [api.md](./api.md#post-apisessionsidplugin-rpc) 的“框架默认 action”小节。
+
+恢复挂起的 runtime 也逐项请求缺少的授权。审批期间释放客户端的会话队列；切换会话或拒绝审批会停止重试并保留挂起项。见 [恢复接口](./api.md#post-apisessionsidsuspensionssuspensionidresume)。
 
 ### RPC Approval
 

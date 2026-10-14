@@ -24,7 +24,6 @@ rg -n "ponytail:" apps packages plugins
 | `packages/runtime/tests/scheduling-acceptance-contract.test.ts`  | 恢复（resume）数据进入工具循环前不检查其中的 MediaRef；提交时才把要保存的内容规范化  | 一个恢复的 runtime 在任何 proposal 带上某个媒体引用之前就对它做了操作 |
 | `packages/runtime/tests/scheduling-acceptance-contract.test.ts`  | 验收场景 12 和 19-25（plan/confirm 启用流程、持久化的审批授权）是 `it.todo`          | 启用解析器或持久化的审批授权排进了实现计划                            |
 | `packages/events/src/event-bus.ts`                               | 接收顺序的状态按最近使用淘汰；被淘汰的流必须从序号 1 重新开始，它的会话会 reset 一次 | 多 pod 部署同时活跃的流多于上限，值得加每条状态的 TTL 或更大的上限    |
-| `packages/store/src/media-store/filter.ts`                       | 按元数据过滤时扫描整个 `listAssets()`                                                | 单个会话的媒体数量多到值得把过滤条件下推到 SQL                        |
 
 ## Server
 
