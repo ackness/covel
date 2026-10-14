@@ -107,6 +107,16 @@ function deepFreezeJson<T>(value: T): T {
 export interface PluginRegistryOptions {
   /** Optional EventBus for emitting plugin lifecycle subscription events. */
   readonly eventBus?: EventBus;
+  /**
+   * The session plugin set: given a session's confirmed plugin IDs and the
+   * entries a read sees, the IDs that run. Every active-set read goes through
+   * it, so a reload or upgrade is applied at once and nothing is written back.
+   * Without it a session runs exactly its confirmed IDs.
+   */
+  readonly resolveSessionSet?: (
+    confirmed: readonly string[],
+    entries: ReadonlyMap<string, PluginRegistryEntry>,
+  ) => readonly string[];
 }
 
 /**
@@ -116,7 +126,8 @@ export interface PluginRegistryOptions {
  * mirror must be ordered *after* the durable write — see
  * `applyPersistedActivations` (the single sanctioned mutation path) and
  * `syncSessionActivations` (read-repair from a snapshot taken under the
- * session lock).
+ * session lock). The record is the set the player confirmed; reads of the
+ * active set pass it through `resolveSessionSet` against the entries they see.
  */
 export interface PluginRegistry {
   withSnapshot<T>(fn: () => T): T;
@@ -134,7 +145,7 @@ export interface PluginRegistry {
   /** Active package declarations, sorted by name, including zero-runtime packages. */
   getActivePluginDeclarations(sessionId: string): readonly PackageManifest[];
 
-  /** Read-only view of a session's in-memory activation set. */
+  /** The session's plugin set: its confirmed IDs through `resolveSessionSet`. */
   getActivePlugins(sessionId: string): readonly string[];
 
   /**
@@ -194,6 +205,30 @@ export function createPluginRegistry(
   const sessionActivations = new Map<string, Set<string>>();
   const listeners = new Set<(event: RegistryChangeEvent) => void>();
   const eventBus = options?.eventBus;
+  // Bumped on every registration, so a cached set never outlives the entries
+  // it was resolved against.
+  let generation = 0;
+  const resolvedSets = new WeakMap<
+    ReadonlySet<string>,
+    {
+      readonly entries: ReadonlyMap<string, PluginRegistryEntry>;
+      readonly generation: number;
+      readonly ids: readonly string[];
+    }
+  >();
+  const activeIds = (sessionId: string): readonly string[] => {
+    const confirmed = readableActivations().get(sessionId);
+    if (!confirmed || confirmed.size === 0) return [];
+    const resolve = options?.resolveSessionSet;
+    if (!resolve) return [...confirmed];
+    const current = readableEntries();
+    const cached = resolvedSets.get(confirmed);
+    if (cached?.entries === current && cached.generation === generation)
+      return cached.ids;
+    const ids = resolve([...confirmed], current);
+    resolvedSets.set(confirmed, { entries: current, generation, ids });
+    return ids;
+  };
 
   function emit(event: RegistryChangeEvent): void {
     for (const handler of listeners) {
@@ -242,6 +277,7 @@ export function createPluginRegistry(
             );
         }
       }
+      generation += 1;
       entries.set(entry.id, {
         ...entry,
         ...(dataSchemas ? { dataSchemas: deepFreezeJson(dataSchemas) } : {}),
@@ -261,7 +297,7 @@ export function createPluginRegistry(
     },
 
     getActivePlugins(sessionId: string): readonly string[] {
-      return [...(readableActivations().get(sessionId) ?? [])];
+      return [...activeIds(sessionId)];
     },
 
     async applyPersistedActivations(
@@ -317,7 +353,7 @@ export function createPluginRegistry(
     },
 
     getActivePluginDeclarations(sessionId: string): readonly PackageManifest[] {
-      return [...(readableActivations().get(sessionId) ?? [])]
+      return activeIds(sessionId)
         .flatMap((id) => {
           const entry = readableEntries().get(id);
           return entry
@@ -328,10 +364,8 @@ export function createPluginRegistry(
     },
 
     getActiveRuntimes(sessionId: string): readonly RuntimeManifest[] {
-      const sessionSet = readableActivations().get(sessionId);
-      if (sessionSet === undefined || sessionSet.size === 0) {
-        return [];
-      }
+      const sessionSet = activeIds(sessionId);
+      if (sessionSet.length === 0) return [];
 
       const manifests: RuntimeManifest[] = [];
 

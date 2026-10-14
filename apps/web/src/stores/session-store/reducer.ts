@@ -165,6 +165,7 @@ export const initialState: SessionState = {
   sessionPlugins: [],
   sessionCommands: [],
   sessionCommandsLoaded: false,
+  unavailableSessionPlugins: [],
   messageUiSpecs: [],
   pendingInteractionDrafts: [],
   suspensions: [],
@@ -197,6 +198,7 @@ const SESSION_RESET: Partial<SessionState> = {
   sessionPlugins: [],
   sessionCommands: [],
   sessionCommandsLoaded: false,
+  unavailableSessionPlugins: [],
   messageUiSpecs: [],
   pendingInteractionDrafts: [],
   suspensions: [],
@@ -642,6 +644,8 @@ export function reducer(
         sessionCommands: action.commands ?? state.sessionCommands,
         sessionCommandsLoaded:
           state.sessionCommandsLoaded || action.commands !== undefined,
+        unavailableSessionPlugins:
+          action.unavailable ?? state.unavailableSessionPlugins,
       };
     case "TOGGLE_SESSION_PLUGIN": {
       const plugin = state.sessionPlugins.find(

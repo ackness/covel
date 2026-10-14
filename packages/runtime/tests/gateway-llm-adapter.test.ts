@@ -27,11 +27,13 @@ describe("createGatewayAdapter target resolution", () => {
     };
     const budgets: unknown[] = [];
     const formats: unknown[] = [];
+    const locales: unknown[] = [];
     const gateway: GatewayLike = {
       resolveSlot: () => null,
       async generateText(input, options) {
         budgets.push(options?.requestBudget);
         formats.push(input.responseFormat);
+        locales.push(input.instructionLocale);
         return {
           text: "{}",
           usage: { inputTokens: 1, outputTokens: 1 },
@@ -42,6 +44,7 @@ describe("createGatewayAdapter target resolution", () => {
       async *streamText(input, options) {
         budgets.push(options?.requestBudget);
         formats.push(input.responseFormat);
+        locales.push(input.instructionLocale);
         yield { type: "done", finishReason: "stop", diagnostics };
       },
     };
@@ -49,16 +52,23 @@ describe("createGatewayAdapter target resolution", () => {
     const result = await adapter.generate({
       messages: [],
       requestBudget,
+      locale: "zh-CN",
       responseFormat,
     });
     const events = await Array.fromAsync(
-      adapter.stream!({ messages: [], requestBudget, responseFormat }),
+      adapter.stream!({
+        messages: [],
+        requestBudget,
+        responseFormat,
+        locale: "zh-CN",
+      }),
     );
     expect(result.diagnostics).toEqual(diagnostics);
     expect(events[0]).toMatchObject({ type: "done", diagnostics });
     expect(budgets).toHaveLength(2);
     for (const budget of budgets) expect(budget).toBe(requestBudget);
     expect(formats).toEqual([responseFormat, responseFormat]);
+    expect(locales).toEqual(["zh", "zh"]);
   });
   it("resolves the trace identity with the same request-scoped slot config", () => {
     const calls: Array<{
@@ -340,6 +350,48 @@ describe("createGatewayAdapter target resolution", () => {
       cachedInputTokens: 80,
       cacheWriteInputTokens: 20,
     });
+  });
+
+  it("does not read a reason it does not know as a normal end", async () => {
+    const gateway: GatewayLike = {
+      resolveSlot() {
+        return { provider: "deepseek", model: "deepseek-chat" };
+      },
+      async generateText() {
+        return {
+          text: "The gate",
+          finishReason: "other",
+          rawFinishReason: "insufficient_system_resource",
+          usage: { inputTokens: 1, outputTokens: 1 },
+        };
+      },
+    };
+    const result = await createGatewayAdapter(gateway).generate({
+      messages: [{ role: "user", content: "hi" }],
+    });
+    expect(result).toMatchObject({
+      finishReason: "other",
+      rawFinishReason: "insufficient_system_resource",
+    });
+
+    // A gateway of another origin may answer in the provider's own word.
+    const raw: GatewayLike = {
+      ...gateway,
+      async generateText() {
+        return {
+          text: "The gate",
+          finishReason: "pause_turn",
+          usage: { inputTokens: 1, outputTokens: 1 },
+        };
+      },
+    };
+    expect(
+      (
+        await createGatewayAdapter(raw).generate({
+          messages: [{ role: "user", content: "hi" }],
+        })
+      ).finishReason,
+    ).toBe("other");
   });
 
   it("preserves prompt cache usage from a streamed gateway done event", async () => {

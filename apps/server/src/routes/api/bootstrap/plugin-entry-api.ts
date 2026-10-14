@@ -23,6 +23,7 @@ import type { BootstrapPluginEntriesParams } from "./plugin-entry.js";
 import { createEntryHttp, withCallSignal } from "./entry-http.js";
 import { registerNamespaced } from "./plugin-wires.js";
 import { PluginRegistrationError } from "./plugin-registration-error.js";
+import { runnablePluginIds } from "../session/plugins.js";
 
 const rpcOptionsSchema = z
   .object({
@@ -222,7 +223,11 @@ export function buildEntryApi(
         batch.track(
           rpcRegistry.registerFormValidator(pluginId, name, async (request) => {
             const session = await store.getSession(request.sessionId);
-            if (!session?.activePlugins.includes(pluginId))
+            if (!session) throw new Error("Form provider is not active");
+            const runnable = params.pluginRegistry
+              ? runnablePluginIds(session.activePlugins, params.pluginRegistry)
+              : session.activePlugins;
+            if (!runnable.includes(pluginId))
               throw new Error("Form provider is not active");
             if (
               pluginTrust === "community" &&

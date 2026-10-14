@@ -97,6 +97,63 @@ describe.each(protocols)(
   },
 );
 
+describe("a failed stream keeps the usage the provider reported", () => {
+  async function failure(adapter: () => { streamText: Function }) {
+    try {
+      for await (const _event of adapter().streamText(
+        { baseUrl: "https://provider.example", apiKey: "test" },
+        { model: "test", messages: [{ role: "user", content: "hi" }] },
+      ));
+    } catch (error) {
+      return error;
+    }
+    return undefined;
+  }
+
+  it("chat stream that ends before its terminal", async () => {
+    stub([
+      { choices: [{ delta: { content: "partial" }, finish_reason: null }] },
+      { choices: [], usage: { prompt_tokens: 12, completion_tokens: 5 } },
+    ]);
+    expect(await failure(createOpenAiChatAdapter)).toMatchObject({
+      code: "PROVIDER_ERROR",
+      details: { usage: { inputTokens: 12, outputTokens: 5 } },
+    });
+  });
+
+  it("anthropic stream that fails after message_start", async () => {
+    stub([
+      {
+        type: "message_start",
+        message: { usage: { input_tokens: 12, output_tokens: 1 } },
+      },
+      protocols[2]!.text,
+      { type: "error", error: { type: "overloaded_error" } },
+    ]);
+    expect(await failure(createAnthropicMessagesAdapter)).toMatchObject({
+      code: "PROVIDER_ERROR",
+      details: { usage: { inputTokens: 12 } },
+    });
+  });
+
+  it("Responses stream that fails", async () => {
+    stub([
+      protocols[1]!.text,
+      {
+        type: "response.failed",
+        response: {
+          status: "failed",
+          usage: { input_tokens: 12, output_tokens: 5 },
+        },
+      },
+    ]);
+    expect(await failure(createOpenAiResponsesAdapter)).toMatchObject({
+      code: "PROVIDER_ERROR",
+      details: { usage: { inputTokens: 12, outputTokens: 5 } },
+    });
+  });
+});
+
 it("does not release chat tool arguments from a truncated generation", async () => {
   stub([
     {

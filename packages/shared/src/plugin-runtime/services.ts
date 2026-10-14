@@ -38,6 +38,8 @@ export interface PluginRuntimeGateway {
 
   generateText(input: {
     readonly presetId?: string;
+    /** Host-selected instruction language, replaced for each runtime call. */
+    readonly instructionLocale?: "en" | "zh";
     readonly prompt?: string;
     readonly system?: string;
     readonly messages?: readonly {
@@ -77,6 +79,8 @@ export interface PluginRuntimeGateway {
 
   generateObject<T = unknown>(input: {
     readonly presetId?: string;
+    /** Host-selected instruction language, replaced for each runtime call. */
+    readonly instructionLocale?: "en" | "zh";
     readonly schema: Readonly<Record<string, unknown>>;
     readonly prompt?: string;
     readonly system?: string;

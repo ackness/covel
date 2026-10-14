@@ -10,8 +10,12 @@
  * sites stay unchanged.
  */
 
-import { AiProviderError } from "@covel/ai-provider";
-import { instructionLocaleFor, LLMRequestBudgetError } from "@covel/shared";
+import { AiProviderError, classifyProviderFailure } from "@covel/ai-provider";
+import {
+  instructionLocaleFor,
+  isAccountFailure,
+  LLMRequestBudgetError,
+} from "@covel/shared";
 import type { LLMMessage } from "../llm/llm-adapter.js";
 
 // ── Config ──────────────────────────────────────────────────────────
@@ -238,6 +242,10 @@ export function isTransientError(err: unknown): boolean {
     ) {
       return false;
     }
+    // An empty account or a refused key fails the same way at this
+    // provider until the player fixes it; the gateway already tried the
+    // backups the player configured.
+    if (isAccountFailure(classifyProviderFailure(err).kind)) return false;
     if (err.statusCode === 429) return true;
     if (err.statusCode && err.statusCode >= 400 && err.statusCode < 500) {
       return false;

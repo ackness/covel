@@ -5,6 +5,7 @@ import { getPluginTrustInfo } from "@covel/plugin-loader";
 import { findCommittedInteraction } from "@covel/runtime";
 import type { SessionRecord } from "@covel/store";
 import { errorBody } from "../../../api-error.js";
+import { runnablePluginIds } from "../session/plugins.js";
 import {
   checkHostedOperator,
   sessionApprovalScope,
@@ -41,7 +42,7 @@ export async function preflightFormApprovals(
     if (!located || located.interaction.validation === undefined) continue;
     const pluginId = located.message.sourcePluginId;
     if (!pluginId) continue;
-    if (!session.activePlugins.includes(pluginId))
+    if (!runnablePluginIds(session.activePlugins, registry).includes(pluginId))
       return c.json(
         errorBody("Form provider is not active", {
           code: "form_provider_inactive",

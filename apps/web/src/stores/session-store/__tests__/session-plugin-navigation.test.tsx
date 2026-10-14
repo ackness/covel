@@ -491,6 +491,7 @@ describe("authorizing several paused plugins on entry", () => {
 const catalog = (name: string) => ({
   items: [{ ...plugin, displayName: name }],
   commands: [{ id: name, label: name, pluginId: plugin.id }],
+  unavailable: [],
 });
 
 it("ignores a plugin GET from an earlier visit to the same session", async () => {
