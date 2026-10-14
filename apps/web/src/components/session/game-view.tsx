@@ -12,6 +12,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog.js";
 import { SuspensionsPanel } from "./suspensions-panel.js";
+import { UnsavedNarratives } from "./unsaved-narratives.js";
 import { ExecutionRecoveryNotice } from "./execution-recovery-notice.js";
 import { SetupProgressNotice, setupProgress } from "./setup-progress-notice.js";
 import {
@@ -536,6 +537,12 @@ export function GameView({
 
           {/* Messages */}
           {stageActive && <SessionDimensionsPanel recoveryOnly />}
+          <UnsavedNarratives
+            messages={state.unsavedNarratives ?? []}
+            recovery={state.executionRecovery}
+            executing={state.executing}
+            onRetry={retryInterruptedTurn}
+          />
           <ExecutionRecoveryNotice
             recovery={state.executionRecovery}
             onRetry={retryInterruptedTurn}

@@ -335,6 +335,8 @@
     "recoveryUnknownDetail": "We cannot confirm the result yet. Reconnecting will check the original task without starting another turn.",
     "recoveryRunningDetail": "The server is continuing the original task. Its result will appear here automatically; you can wait or stop it.",
     "recoveryInterruptedDetail": "The unfinished task is no longer running. Your saved progress is preserved. Retry starts a new attempt only when you choose it.",
+    "unsavedNarrative": "Unsaved",
+    "unsavedNarrativeDetail": "This text was not saved. It stays here until you leave the session.",
     "recoveryHydratingDetail": "Recovering the latest saved result before you continue.",
     "recoveryRetry": "Retry unfinished turn",
     "recoveryRefresh": "Check status",
@@ -370,7 +372,6 @@
     },
     "stoppedDetail": "Generated content was not saved. Retry with the original input.",
     "submittedInteraction": "Completed interaction · expand to review",
-    "previousSuggestions": "Earlier suggestions · expand to review",
     "advancedPluginSettings": "Customize plugins and advanced settings",
     "configureModelBeforeRetry": "Change model / parameters",
     "retryModelSettingsHint": "Change the model or lower its output limit, then retry this task. The retry uses your current settings.",
@@ -433,7 +434,9 @@
     "retryBatchLimit_one": "Each batch handles up to {{count}} task. Retry the remaining tasks afterward.",
     "retryBatchLimit_other": "Each batch handles up to {{count}} tasks. Retry the remaining tasks afterward.",
     "retryScopeLimited_one": "Only the selected failed tasks will run again. The story and other completed results are preserved. Each batch handles up to {{count}} task. Retry the remaining tasks afterward.",
-    "retryScopeLimited_other": "Only the selected failed tasks will run again. The story and other completed results are preserved. Each batch handles up to {{count}} tasks. Retry the remaining tasks afterward."
+    "retryScopeLimited_other": "Only the selected failed tasks will run again. The story and other completed results are preserved. Each batch handles up to {{count}} tasks. Retry the remaining tasks afterward.",
+    "previousPluginContent": "{{title}} · expand to review",
+    "pluginContent": "Plugin content"
   },
   "blocks": {
     "actionPlaceholder": "Or type your own action...",
@@ -1900,6 +1903,14 @@
       "empty": "No jobs yet.",
       "copy": "Copy",
       "rerun": "Re-run"
+    },
+    "candidateList": {
+      "draft": "Draft",
+      "send": "Send",
+      "accept": "Accept",
+      "regenerate": "Regenerate",
+      "title": "Candidates",
+      "regenerateHint": "Generate another set of candidates."
     }
   },
   "graph": {
@@ -2360,17 +2371,6 @@
     "confirmDelete": "Delete",
     "deleted": "Deleted items: {{count}} · {{size}} freed",
     "skipped": "Kept because a session uses them now: {{count}}"
-  },
-  "branchReply": {
-    "replyCandidates": "Reply candidates",
-    "draft": "Draft",
-    "send": "Send",
-    "accept": "Accept",
-    "regenerate": "Regenerate",
-    "regenerateHint": "Tap Regenerate for alternative phrasings of this reply.",
-    "jobSubmitted": "Submitted branch-reply job: {{jobId}}",
-    "approvalRequired": "Branch reply action requires approval.",
-    "actionFailed": "Branch reply action failed"
   },
   "characterBlueprint": {
     "empty": "No character blueprints yet",
