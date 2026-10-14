@@ -55,7 +55,7 @@ The small packages `approval`, `context`, `events`, `create`, and `settings` eac
 - Do not merge a package into `runtime` just because it is small or only used during development.
 - Also do not add a package that only forwards calls just to look generic.
 
-**Dependency direction.** `plugin-handlers-utils` is the root of the dependency graph, and it does not depend on any workspace package. `shared` sits directly above it. `@covel/server` composes all feature packages. The exact dependency edges are written in each package's `package.json`. `pnpm check:boundaries` checks the public entry points and the dependency direction.
+**Dependency direction.** `plugin-handlers-utils` is the root of the dependency graph, and it does not depend on any workspace package. `shared` sits directly above it. `@covel/server` composes all feature packages. The exact dependency edges are written in each package's `package.json`. `pnpm check:boundaries` checks the public entry points and the dependency direction. The `store` package declares the SQLite vector extension `sqlite-vec` directly; the root package does not duplicate it.
 
 ## Key boundaries when the host combines packages
 
