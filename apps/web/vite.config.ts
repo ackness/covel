@@ -99,8 +99,8 @@ export default defineConfig(({ mode }) => ({
     react(),
     {
       name: "covel-page-csp",
-      apply: "build",
-      transformIndexHtml: injectPageCsp,
+      transformIndexHtml: (html, context) =>
+        injectPageCsp(html, Boolean(context.server)),
     },
   ],
   server: {

@@ -101,9 +101,9 @@ JSON structure:
 A CSS file has no place to declare a `layout`, so a theme imported as CSS uses the `classic` layout. When you need another layout, use the JSON format.
 
 > [!WARNING]
-> **Import only theme packages from sources you trust.** The imported theme CSS is applied as it is. The import check rejects `@import`, but it does not filter `url(...)` (background images, `@font-face` fonts, and so on). So a theme can make the client send requests to any external address.
+> **Theme CSS is untrusted content.** It shares a document with settings and can still change or obscure the interface; import only themes you want to use. `@import` is rejected, and the page CSP blocks styles, fonts and images from external hosts, including CSS `url()`, `image-set()` and `@font-face`. Same-origin resources, embedded images and local fonts remain available.
 >
-> This is the theme author's choice. Built-in fonts are not loaded from the network, but the remote CSS and fonts that an imported theme brings along are still loaded. The main page's Content-Security-Policy allows `https:` style and font sources for this reason.
+> When importing a theme file or committing a backdrop in the appearance studio, ordinary `url(https://…)` images are downloaded and embedded before saving. PNG, JPEG, WebP, GIF and AVIF are accepted, with a 5 MiB limit per image and a 15-second timeout. The image host must allow CORS reads; requests carry no credentials or referrer. A failed download leaves the change unsaved. Remote fonts and escaped remote URLs are unsupported; reimport existing remote backgrounds or replace them with local resources. Backups and raw JSON do not download images automatically; CSP still applies.
 
 ## 3. JSON field contract
 

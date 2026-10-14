@@ -223,22 +223,23 @@ A plugin, world, or collection can state its author, license, and homepage. The 
 
 ## Page policy and external images
 
-The built main page has a `Content-Security-Policy` meta tag (`apps/web/src/lib/page-csp.ts`, injected by the Vite build; the dev server does not have it, because Vite needs inline scripts and a socket for hot reload):
+The built main page has a `Content-Security-Policy` meta tag (`apps/web/src/lib/page-csp.ts`, injected by the Vite build; development relaxes script and connection sources for Vite while retaining the same CSS resource restrictions):
 
 ```
-script-src 'self'; style-src 'self' 'unsafe-inline' https:; font-src 'self' data: https:; connect-src 'self' blob: data:; frame-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'
+default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob:; media-src 'self' data: blob:; connect-src 'self' blob: data: https:; frame-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'
 ```
 
 What each part means:
 
 - **Scripts** can only be the application's own files. There are no inline scripts, no inline event handlers, no `eval`, and no remote scripts. The built page has only one external module script and no inline content. (Zod is configured not to probe `eval`; see `apps/web/src/lib/zod-config.ts`.)
 - **Frames** are limited to the same origin. The only frame the application creates is the plugin frame host described below.
-- `connect-src` is the same origin (plus `blob:` / `data:`).
+- `connect-src` allows the same origin, `blob:`, `data:` and `https:`. Application JavaScript downloads player-imported images over HTTPS; CSS image and font requests do not use this directive.
 - There are no browser plugins (`object-src 'none'`).
 - `base-uri` and `form-action` are fixed to the same origin.
 - `style-src` keeps `'unsafe-inline'`: React's `style` attributes, rules that the theme system injects, and imported theme CSS all need it. Removing it is a separate piece of work.
-- `style-src` / `font-src` allow `https:`, because an imported theme's own CSS may load remote stylesheets and fonts.
-- This policy does not set `img-src`.
+- Styles and fonts cannot request external hosts; images are limited to the same origin, `data:` and `blob:`. `default-src` also limits unspecified resource types to the same origin.
+
+Theme CSS is untrusted content. Themes share the settings document, and CSP does not prevent them from changing or obscuring the interface. Saved API keys and operator tokens never populate inputs. New drafts use only the DOM `value` JavaScript property, never the HTML attribute that CSS selectors can read. Show reveals only the new draft, which clears after replacement; Clear removes the saved value. See [theme packages](../reference/theme-packages.md) for background downloads and format limits.
 
 `tests/e2e/page-policy.spec.ts` loads the main screens of the built application and a session with a plugin panel, and fails if any `securitypolicyviolation` event appears.
 
@@ -287,7 +288,7 @@ The application ships its own fonts (`@fontsource-variable/*`, SIL OFL 1.1), and
 - Images that the application provides itself (same origin, the media library, `data:`, and `blob:`) load immediately.
 - Images on other origins are not requested. The player sees a placeholder with the host name, and two options: "Load this image" and "Always load images from {host} in this world". The second choice is saved per world, in the `media.allowedImageHosts` setting.
 - This has two purposes: a model cannot push text from the conversation out in an image URL, and a host the player has not seen does not get the player's address.
-- Loaded images do not send a referrer.
+- Once allowed, external images are downloaded by JavaScript and displayed as embedded data; external URLs never reach `<img>`. Only HTTPS raster images with CORS support are accepted, with the same limits as theme images; failures show a placeholder. Requests send no credentials or referrer.
 - Plugin webviews and json-render panels are not Markdown, and they have their own rules.
 
 ## Other server guards

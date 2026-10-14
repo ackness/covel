@@ -223,22 +223,23 @@ Web 客户端只发送它的请求用得到的供应商的密钥：
 
 ## Page policy and external images
 
-构建出的主页面带有一个 `Content-Security-Policy` meta 标签（`apps/web/src/lib/page-csp.ts`，由 Vite 构建注入；开发服务器没有它，因为 Vite 需要内联脚本和热更新用的套接字）：
+构建出的主页面带有一个 `Content-Security-Policy` meta 标签（`apps/web/src/lib/page-csp.ts`，由 Vite 构建注入；开发服务器只为 Vite 放宽脚本和连接来源，保留相同的 CSS 资源限制）：
 
 ```
-script-src 'self'; style-src 'self' 'unsafe-inline' https:; font-src 'self' data: https:; connect-src 'self' blob: data:; frame-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'
+default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob:; media-src 'self' data: blob:; connect-src 'self' blob: data: https:; frame-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'
 ```
 
 每一项的含义：
 
 - **脚本**只能是应用自己的文件：没有内联脚本，没有内联事件处理器，没有 `eval`，没有远程脚本。构建出的页面只有一个外部模块脚本，没有任何内联内容（Zod 被配置成不去探测 `eval`，见 `apps/web/src/lib/zod-config.ts`）。
 - **框架**（frame）只限本源。应用创建的唯一一个 frame 是下面说的插件 frame 宿主。
-- `connect-src` 是本源（加上 `blob:` / `data:`）。
+- `connect-src` 允许本源、`blob:`、`data:` 和 `https:`。应用 JavaScript 用 HTTPS 下载玩家导入的图片；CSS 的图片和字体请求不使用这条规则。
 - 没有浏览器插件（`object-src 'none'`）。
 - `base-uri` 和 `form-action` 固定为本源。
 - `style-src` 保留了 `'unsafe-inline'`：React 的 `style` 属性、主题系统注入的规则和导入的主题 CSS 都需要它。去掉它是另外一步工作。
-- `style-src` / `font-src` 允许 `https:`，因为导入的主题自己的 CSS 可能加载远程样式表和字体。
-- 这份策略没有设 `img-src`。
+- 样式和字体不能请求外部主机；图片限本源、`data:` 和 `blob:`。`default-src` 也限本源，覆盖未单列的资源类型。
+
+主题 CSS 是不可信内容。主题和设置页共用一个文档，CSP 不阻止主题改变或遮挡界面。已保存的 API 密钥和运维令牌不回填输入框；新输入的草稿只写入 DOM 的 `value` 属性值（JavaScript property），不写入 CSS 属性选择器能读取的 HTML attribute。显示按钮只显示新草稿，替换保存后清空；清除按钮删除已保存的值。主题背景的下载及格式限制见[主题包](../reference/theme-packages.md)。
 
 `tests/e2e/page-policy.spec.ts` 会加载构建后应用的主要界面和一个带插件面板的会话，只要出现 `securitypolicyviolation` 事件就失败。
 
@@ -287,7 +288,7 @@ script-src 'self'; style-src 'self' 'unsafe-inline' https:; font-src 'self' data
 - 应用自己提供的图片（同源、媒体库、`data:` 和 `blob:`）立即加载。
 - 其他源上的图片不会被请求。玩家看到一个写着主机名的占位，带两个选项：“加载此图片”和“在此世界中始终加载 {host} 的图片”。第二个选择按世界保存在 `media.allowedImageHosts` 设置里。
 - 这样做有两个目的：模型不能把对话里的文字塞进图片 URL 带出去；玩家没见过的主机也得不到玩家的地址。
-- 加载的图片不发送 referrer。
+- 允许后的外部图片由 JavaScript 下载成内嵌数据，再显示；不把外部 URL 交给 `<img>`。只接受 HTTPS 和支持 CORS 的位图，限制与主题图片相同；失败时显示占位。不发送凭据或 referrer。
 - 插件 webview 和 json-render 面板不是 Markdown，各有各的规则。
 
 ## Other server guards

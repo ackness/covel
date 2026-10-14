@@ -1,3 +1,4 @@
+import { importCssImages } from "@/lib/import-image.js";
 import { useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { resolveI18nText } from "@covel/shared";
@@ -64,7 +65,14 @@ export function ThemeManagerWidget() {
     try {
       const text = await file.text();
       const payload = parseImportedThemeFile(text, file.name);
-      await saveCustomTheme(store, payload.theme, payload.fileName);
+      await saveCustomTheme(
+        store,
+        {
+          ...payload.theme,
+          cssText: await importCssImages(payload.theme.cssText),
+        },
+        payload.fileName,
+      );
       await store.set("ui.appearance", payload.theme.id);
       flash(
         t("settings.themeImported", {

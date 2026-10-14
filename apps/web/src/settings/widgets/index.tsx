@@ -1,11 +1,8 @@
+import { SecretInput } from "@/components/ui/secret-input.js";
 import { createContext, useContext, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Eye, EyeOff } from "lucide-react";
-import {
-  isServerManagedSecret,
-  type SettingEntry,
-  type WidgetKind,
-} from "@covel/settings";
+import type { SettingEntry, WidgetKind } from "@covel/settings";
 import { Button } from "@/components/ui/button.js";
 import { Label } from "@/components/ui/label.js";
 import {
@@ -456,16 +453,14 @@ function SecretWidget({ entry }: { entry: SettingEntry }) {
   const { t } = useTranslation();
   const [value, setValue] = useSetting<string>(entry.key);
   const [visible, setVisible] = useState(false);
-  const serverManaged = isServerManagedSecret(value);
   const controlId = settingControlId(entry.key);
-  const stored = serverManaged ? "" : (value ?? "");
-  const draft = useDraft(stored, (text) => {
-    if (text !== stored) void setValue(text);
+  const draft = useDraft("", (text) => {
+    if (text) void setValue(text);
   });
   return (
     <FieldShell entry={entry} controlId={controlId}>
       <div className="flex gap-1">
-        <input
+        <SecretInput
           id={controlId}
           type={visible ? "text" : "password"}
           value={draft.text}
@@ -473,7 +468,7 @@ function SecretWidget({ entry }: { entry: SettingEntry }) {
           onBlur={draft.flush}
           onKeyDown={blurOnEnter}
           placeholder={
-            serverManaged
+            value
               ? t(
                   "settings.serverManagedKeyPlaceholder",
                   "Configured on this device; enter a value to replace",
@@ -482,7 +477,7 @@ function SecretWidget({ entry }: { entry: SettingEntry }) {
           }
           className={`min-w-0 flex-1 px-3 py-2 font-mono ${CONTROL_CLASS}`}
         />
-        {serverManaged && (
+        {Boolean(value) && (
           <Button
             variant="outline"
             onClick={() => void setValue("")}
@@ -494,6 +489,7 @@ function SecretWidget({ entry }: { entry: SettingEntry }) {
         <Button
           variant="outline"
           size="icon"
+          onMouseDown={(event) => event.preventDefault()}
           onClick={() => setVisible((v) => !v)}
           className="shrink-0"
           aria-label={
