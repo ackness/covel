@@ -43,6 +43,7 @@ import { StageBackdrop } from "./StageBackdrop.js";
 import { StageSprites } from "./StageSprites.js";
 import { StageHud } from "./StageHud.js";
 import { StageDialog } from "./StageDialog.js";
+import type { RightPanelState } from "../right-panel-state.js";
 import { StagePluginPanels } from "./StagePluginPanels.js";
 import { StageChoices } from "./StageChoices.js";
 import { StageExecutionStatus } from "./StageExecutionStatus.js";
@@ -58,6 +59,10 @@ import {
 } from "./stage-selectors.js";
 
 export interface StageViewProps {
+  readonly panelState: Pick<
+    RightPanelState,
+    "rightSpecs" | "specsStatus" | "retrySpecs"
+  >;
   readonly session: SessionRecord;
   readonly world: WorldRecord | null;
   readonly messages: StreamMessage[];
@@ -292,9 +297,9 @@ export function StageView(props: StageViewProps): ReactElement {
         />
       )}
       <StageChoices
-        extensions={(choices) => (
+        extensions={(choices, onDraftMessage) => (
           <StagePluginPanels
-            sessionId={session.id}
+            panelState={props.panelState}
             activePluginIds={sessionPlugins
               .filter((plugin) => plugin.active)
               .map((plugin) => plugin.id)}
@@ -302,7 +307,7 @@ export function StageView(props: StageViewProps): ReactElement {
             turnIds={stageTurnIds}
             turnId={storyTurnId}
             executing={executing}
-            onSendMessage={onSendMessage}
+            onDraftMessage={onDraftMessage}
           />
         )}
         visible={choicesVisible}

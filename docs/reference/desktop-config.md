@@ -210,6 +210,8 @@ ANTHROPIC_API_KEY=sk-ant-xxxxxxxxxxxx
 
 ## 启动与恢复
 
+启动失败时，主进程等启动页加载完成后才发送错误，页面显示重试和日志入口。
+
 - 应用启动时先取得单实例锁。重复打开只会聚焦已有的窗口。
 - 后端开始监听后，通过私有 IPC 通知主进程，窗口立即加载。桌面主进程断开时，后端会收尾并退出。
 - `server.port` 保存上次成功使用的端口，下次在它空闲时复用；被占用时换另一个空闲端口。
@@ -235,13 +237,9 @@ ANTHROPIC_API_KEY=sk-ant-xxxxxxxxxxxx
 - Electron 的页面通过 `covel:get-info` IPC 拿到 `restToken`，自动加到所有写请求上。
 - 开发模式下没设置这个变量时，token 门不启用。纯网页部署和 `pnpm dev:web` 的流程不受影响。
 
-**密钥在界面里怎样表示。** 界面从 `GET /api/config/keys` 拿到服务商列表后，只在内存里把这些服务商标记为“服务端已有密钥”。这个标记不是密钥明文，也不会进入 `X-Provider-Keys` 请求头。保存时：
+**密钥在界面里怎样表示。** Electron 界面通过 `covel:keys:load` IPC 读取 `keys.env` 的明文密钥，保存在 SettingsStore 内存中，用于构造 `X-Provider-Keys` 请求头，不写入桌面页面的 `localStorage`。保存通过 `covel:keys:save` 传递补丁：未修改的密钥保留，新值写入，`null` 删除。主进程优先通过 sidecar 的 `PUT /api/config/keys` 写入；开发模式没有 sidecar 或 sidecar 不可用时，直接写文件。
 
-- 没编辑过的服务端密钥保持不变。
-- 新输入的密钥变成一次 PUT 里的增量修改。
-- 从界面里移除的服务商变成显式删除。
-
-所以服务商列表不会被误当成密钥表，编辑一个密钥也不会覆盖其他密钥。
+`GET /api/config/keys` 只返回服务商名，不返回密钥。当前 Electron 界面不调用它：`json-file` 后端使用 IPC；普通浏览器使用 `localStorage`。显式选择 `json-file` 的 REST 传输的集成方才会把这个列表表示为“服务端已有密钥”的内存标记，标记不会进入 `X-Provider-Keys`。详见 [设置存储](./settings-store.md)。
 
 **`keys.env` 读不了时。** GET 返回 `500 keys_file_unreadable`，PUT 返回 `409 keys_file_unreadable`，原文件保留。写入同样是同目录临时文件加改名替换。
 

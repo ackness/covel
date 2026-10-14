@@ -292,8 +292,8 @@ async function runAgentToolLoopWithinBudget(
     eventBus: deps.eventBus,
     emitter: deps.emitter,
   };
-  // Set by a PostToolUse hook returning `terminate` — ends the loop after the
-  // current response's tool calls are recorded.
+  // Set by a PostToolUse hook returning `terminate` — ends the loop. The calls
+  // after the terminating one in the same response are not executed.
   let terminatedByHook = false;
   const reviewResponse = createResponseReviewer(
     hookOpts,

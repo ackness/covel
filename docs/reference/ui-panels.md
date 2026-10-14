@@ -539,6 +539,8 @@ directive 可以写在组件 props 的任何动态值位置，也可以写在 `o
 
 **命名约定**：跨插件的 group 名字和 CSS 类名是一个道理，作者自己加命名空间前缀来避免冲突，例如 `core.character`、`myorg.combat`。框架不会自动加前缀。
 
+多个插件共用一个组时，提供者切换按钮显示插件的本地化 `displayName`；没有名字时显示插件 ID。所有组名都遵循这条规则，面板的 `label` / `shortLabel` 不改变提供者名字。
+
 **实现位置**：`apps/web/src/lib/plugin-panel-tabs.ts` 的 `aggregateSpecsIntoGroups()`。它是纯函数，可以单独测试（见 Playwright smoke test）。
 
 ### 排序
@@ -802,6 +804,7 @@ catalog 里的组件不够用时，插件可以带一份自己的 HTML。JSON sp
 - **组件能做什么。** 它通过消息桥拿到当前的风格方案（`theme` 和 `--covel-*` CSS 变量），并且可以调用 `emitEvent`、`draftMessage` 等动作。
 - **放大。** 右侧面板里的每个插件面板都可以“放大”到一个大对话框里显示。
 - **显示在舞台上。** `ui.right` 的 spec 可以声明 `surfaces: ["panel", "stage"]`。不写时只显示在右侧面板。
+- **玩家确认与加载失败。** 舞台插件面板的 `sendMessage` 只把文字填进输入框，由玩家编辑后发送。舞台复用会话已加载的面板定义；加载失败时显示提示和“重试”，不阻止玩家继续输入。
 - **隔离方式。** HTML 放在两层 opaque-origin 的 sandbox iframe 里：
   - 外层是 Web 构建里的静态文档 `/plugin-frame.html`。它按 URL 加载，所以带自己的 CSP，不继承主页面的策略（主页面不允许内联脚本）。它的 CSP 禁止插件文档自己导航到网络地址，端口只转交一次。
   - 内层是插件的 HTML。它保留内联脚本和 `window.covel` 数据 / 动作桥。组件代码和业务状态的结构归插件自己。

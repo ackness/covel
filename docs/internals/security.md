@@ -147,7 +147,17 @@ Web 客户端只发送它的请求用得到的供应商的密钥：
 - Web 端存在 `localStorage`（`covel:keys`）。
 - 两处都不加密。渲染进程需要明文才能拼出 `X-Provider-Keys`，所以即使落盘加密，`covel:keys:load` 这条 IPC 通道（只接受受信任的发送方）也还是原样；而在未签名的构建上，Electron `safeStorage` 只会多出一个 macOS 钥匙串弹窗。
 
-文件权限和浏览器的同源策略能挡住其他系统用户和其他网站。它们挡不住以该用户身份运行的代码，其中就包括已批准的社区插件（见下一节）。
+文件权限和浏览器的同源策略能挡住其他系统用户和其他网站。它们挡不住以该用户身份运行的代码，其中就包括已批准的社区插件（见 [Community plugin code](#community-plugin-code)）。
+
+## 桌面窗口
+
+桌面窗口启用 `contextIsolation` 和 `sandbox`，关闭 `nodeIntegration`，不启用子 frame 的 Node 集成。`preload.ts` 通过 `contextBridge` 暴露 `window.covelIpc`：应用元信息、只允许白名单通道的 `invoke` 和 `on`；订阅回调拿不到 Electron 事件对象。
+
+敏感 IPC（包括明文密钥、REST token 和设置读写）要求发送方是其 `webContents.mainFrame`，且 URL 与主窗口已提交的回环 HTTP 源相同。同源子 frame 也被拒绝。恢复通道（重试启动、打开日志、配置或数据目录）同样要求主 frame，但也接受主进程生成的当前启动页。启动页不能读取密钥或 REST token。
+
+`windows.ts` 阻止主 frame 导航或重定向到其他源；主进程主动加载启动页或应用地址不受此事件守卫限制。`window.open` 不创建新窗口：HTTPS 和回环 HTTP 链接交给系统浏览器，其他 HTTP 链接先确认，其他协议拒绝。这些限制不能防住受信任主页面内的恶意脚本，也不能隔离已批准的插件服务端代码。
+
+发送方校验和启动错误投递的回归测试在 `apps/desktop/scripts/restart-server.test.mjs`；源和启动页 URL 匹配测试在 `apps/desktop/src/trusted-origin.selfcheck.ts`。
 
 ## Community plugin code
 
@@ -322,7 +332,7 @@ script-src 'self'; style-src 'self' 'unsafe-inline' https:; font-src 'self' data
 | World reads        | `GET /api/worlds` 和 `GET /api/worlds/:id` 在所有档位上都不需要身份：能访问到服务端的人就能读每一条世界记录，包括已存储（生成的）世界里内嵌的角色、设定集、契约数据，以及作者标记为隐藏的内容。写入有把守，读取没有。托管部署如果不能把这些内容给每个访客看，就必须把服务端放在自己的访问控制后面                                                                                                                                                                                                              | `apps/server/src/routes/api/worlds/crud.ts`   |
 | World gallery      | `GET /api/worlds/:id/gallery*` 不需要会话就提供世界包里的图片，能列出世界的人都能访问。请求给出文件地址的两个部分；只有当图库列表本身包含这个文件时才会应答：一张位图（PNG、JPEG、WebP，绝不是 SVG），由包的 `media/gallery.json` 列出且不晚于开场；没有那个文件时，则是直接位于某个公开的 `kind: media` 来源里的文件。路径在包内解析，拒绝符号链接；`enabled: false` 或 `visibility: hidden` 的来源不提供。它提供的唯一一个音频文件是 `world.yaml` 里 `themeMusic` 指定的 `.mp3` / `.wav`，遵守同样的路径规则 | `apps/server/src/world-data/gallery.ts`       |
 | Write origin       | CORS 只能阻止页面读取响应；“简单”的跨站请求（表单提交、`text/plain` 的 `fetch`）仍然会执行处理函数。带 `Origin` 的 `POST` / `PUT` / `PATCH` / `DELETE`，除非这个源在 CORS 白名单上，或者它的主机就是请求发往的主机（`Host`，在代理后面是 `X-Forwarded-Host`），否则在进入任何路由之前就以 `403 origin_not_allowed` 拒绝。不带 `Origin` 的请求是非浏览器客户端，放行。这不是身份验证，也不防 DNS 重绑定                                                                                                         | `apps/server/src/middleware/origin-guard.ts`  |
-| Rate limiting      | `rateLimiter()` 和 `singleFlight()`；`RATE_LIMIT_RPM` 设置额度。每个客户端地址对每条具体路径有一份额度，对每个路由模板（`/api/sessions/:id/state`）还有第二份，是前者的八倍。这样每个会话有自己的额度，而轮换路径参数会停在较大的那一份上。计数表最多保存 10,000 条，先淘汰时间窗最早的                                                                                                                                                                                                                        | `apps/server/src/middleware/rate-limit.ts`    |
+| Rate limiting      | `rateLimiter()` 和 `singleFlight()`；`RATE_LIMIT_RPM` 只设置 `GET /api/events/stream` 的额度（每个 IP 每分钟，默认 60）；其余路由的额度写死在各路由里，例如媒体上传 10、`POST /api/actions` 30、读取会话状态 120（每分钟）。每个客户端地址对每条具体路径有一份额度，对每个路由模板（`/api/sessions/:id/state`）还有第二份，是前者的八倍。这样每个会话有自己的额度，而轮换路径参数会停在较大的那一份上。计数表最多保存 10,000 条，先淘汰时间窗最早的                                                            | `apps/server/src/middleware/rate-limit.ts`    |
 | Raw config files   | `GET` / `PUT /api/config/raw*` 以文本形式读写 `llm.toml`（桌面模式下还有 `config.toml`）。它们共用安装守卫：托管档位要 operator token，桌面壳下要桌面令牌，生产环境要 `COVEL_INSTALL_API_ENABLED=1`。文件名是一份固定名单，从不取自请求里的路径；`keys.env` 不在名单上。文本只有被服务端自己的解析器接受之后才会写入                                                                                                                                                                                           | `apps/server/src/routes/raw-config-api.ts`    |
 | Error sanitization | 生产环境下 `app.onError` 返回 `"Internal server error"`；堆栈和路径只进 `console.error`。开发环境返回 `err.message`                                                                                                                                                                                                                                                                                                                                                                                            | `routes/api/bootstrap.ts`, `app.ts`           |
 
