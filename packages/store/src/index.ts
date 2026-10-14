@@ -86,6 +86,7 @@ export type {
   DeleteVectorsInput,
   VectorIndexProgressScope,
   CommitVectorIndexBatchInput,
+  ResetSessionVectorIndexInput,
 } from "./vector-store.js";
 export type {
   DataStore,

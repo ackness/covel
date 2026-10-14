@@ -27,6 +27,7 @@ export const VECTOR_WRITE_METHODS: ReadonlySet<string> = new Set([
   "deleteVectors",
   "ensureVectorModel",
   "lockSessionEmbeddingModel",
+  "resetSessionVectorIndex",
 ]);
 
 /**

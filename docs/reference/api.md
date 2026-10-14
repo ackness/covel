@@ -593,13 +593,15 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 
 ### 会话管理
 
-| 方法   | 路径                | 描述                                               |
-| ------ | ------------------- | -------------------------------------------------- |
-| GET    | `/api/sessions`     | 列出所有会话（可选 `?worldId=` 过滤）              |
-| POST   | `/api/sessions`     | 创建新会话                                         |
-| GET    | `/api/sessions/:id` | 获取会话信息                                       |
-| PATCH  | `/api/sessions/:id` | 更新会话字段（`status` / `runtimeModelOverrides`） |
-| DELETE | `/api/sessions/:id` | 删除会话                                           |
+| 方法   | 路径                                     | 描述                                               |
+| ------ | ---------------------------------------- | -------------------------------------------------- |
+| GET    | `/api/sessions`                          | 列出所有会话（可选 `?worldId=` 过滤）              |
+| POST   | `/api/sessions`                          | 创建新会话                                         |
+| GET    | `/api/sessions/:id`                      | 获取会话信息                                       |
+| PATCH  | `/api/sessions/:id`                      | 更新会话字段（`status` / `runtimeModelOverrides`） |
+| DELETE | `/api/sessions/:id`                      | 删除会话                                           |
+| GET    | `/api/sessions/:id/memory-index`         | 记忆索引用的向量模型，以及它是否还是当前配置的模型 |
+| POST   | `/api/sessions/:id/memory-index/rebuild` | 用当前配置的向量模型重建记忆索引                   |
 
 #### 会话身份 `incarnation`
 
@@ -2496,6 +2498,57 @@ Web 设置页根据 `operatorTokenRequired` 决定是否显示“运维访问”
 **复用同一个 ID:** 只有旧会话完全删除之后，用同一个 ID 创建才会成功。删除还在 hook 或排空阶段时，创建返回 ID 重复的 `409`；等 `DELETE` 成功后再重试。
 
 **较早创建的会话:** 没有私有身份标记的会话仍然可以删除。服务端只在请求隔离检查里，用它已有的 owner 哈希或持久化的 `(id, createdAt)` 作为它的身份。新建的会话总是带随机的身份标记，用同一个 ID 重建不会继承旧身份。
+
+#### `GET /api/sessions/:id/memory-index`
+
+会话的记忆第一次建索引时，锁定当时配置的向量（embedding）模型。这个端点返回锁定的模型和当前配置选中的模型。请求带上和回合相同的 `X-Slot-Config`，判断才按玩家这次会用的模型设置来做。
+
+**响应 200:**
+
+```json
+{
+  "available": true,
+  "locked": {
+    "provider": "openai",
+    "modelName": "text-embedding-3-small",
+    "dim": 1536,
+    "lockedAt": "2025-01-15T10:00:00.000Z"
+  },
+  "configured": { "provider": "ollama", "modelName": "nomic-embed-text" },
+  "stale": true
+}
+```
+
+| 字段         | 说明                                                                                                                     |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------ |
+| `available`  | 服务端有没有向量索引。没有向量能力或 `VECTOR_BACKEND=none` 时为 `false`，其余字段为空                                    |
+| `locked`     | 索引用的模型。会话还没建过索引时为 `null`；没有记录锁定时间时 `lockedAt` 为 `null`                                       |
+| `configured` | 当前配置选中的向量模型。没有配置时为 `null`                                                                              |
+| `stale`      | `configured` 不是 `locked` 的模型时为 `true`。这时记忆检索只按关键词匹配，新内容也不进索引，直到重建索引或换回原来的模型 |
+
+`stale` 为 `true` 时，Web 客户端在会话里显示提示和“重建索引”按钮；没有配置向量模型时，按钮是“清除索引”。
+
+#### `POST /api/sessions/:id/memory-index/rebuild`
+
+用当前配置的向量模型重建会话的记忆索引。请求带上和回合相同的 `X-Provider-Keys` 与 `X-Slot-Config`。
+
+1. 先向当前配置的模型发一次向量请求，测出维度。请求失败时返回 `502`，原来的索引不动。
+2. 等这个会话正在进行的索引写入结束。
+3. 在一个事务里删掉会话在旧模型下的全部向量和索引进度，把会话锁到新模型。没有配置向量模型时，会话改为未锁定；以后配置了模型，下一个回合会重新锁定。
+4. 在后台从第一条消息开始重新建索引。建好之前，记忆检索用关键词补足。
+
+旧向量随重建删除，不再占空间。用同一个旧模型的其他会话不受影响。
+
+**响应 200:** 与 `GET /api/sessions/:id/memory-index` 相同，是重建之后的状态。
+
+**错误:**
+
+| 状态码 | `code`                        | 什么时候                                                                |
+| ------ | ----------------------------- | ----------------------------------------------------------------------- |
+| 409    | `memory_index_unavailable`    | 服务端没有向量索引                                                      |
+| 502    | `embedding_unavailable`       | 当前配置的向量模型没有回答。`details.reason` 是原因，原来的索引保持不变 |
+| 409    | `memory_index_changed`        | 重建期间，会话锁定的模型被另一个请求改了。重新读取状态后再试            |
+| 409    | `session_incarnation_changed` | 请求等待期间，会话被删除后用同一个 ID 重建了                            |
 
 ### Turn 执行
 

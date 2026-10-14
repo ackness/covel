@@ -81,6 +81,8 @@ When you add a table or a query, put it in the module for its feature area, add 
 - When progress is written, the previously serialized value is compared. The session's "incarnation" is also checked inside the backend's write boundary. (If the same ID is deleted and then recreated, it counts as a different incarnation.)
 - Deleting or replacing a session clears both the progress and the vectors. A transaction rollback restores the progress. See [session deletion](#server-world-and-session-deletion) for the exception when SQLite's vector extension is unavailable.
 - Business snapshots, forks and browser checkpoints do not copy it, so each of them rebuilds its own index.
+- When the vector model changes (the player rebuilds the index in the session), `resetSessionVectorIndex` deletes, in one transaction, every vector the session has in the old model's table and all of its progress, then locks the session to the new model or leaves it unlocked. It first compares the model the session is locked to with the one the caller saw, and changes nothing when they differ. The same contract tests hold all three backends to it.
+- A progress write also names the model the batch was embedded with (`expectedModelRegistryId`). When the session has moved to another model, the whole batch is refused, so vectors computed with the old model never land in the new index.
 
 > [!IMPORTANT]
 > This changes the development-time storage contract. Development databases and browser checkpoints that contain the old layout, where the index was written into `plugin_data`, must be rebuilt. There is no compatibility for reading, migrating or filtering old data.

@@ -593,13 +593,15 @@ Cascade delete is not one database transaction that covers all sessions:
 
 ### Session management
 
-| Method | Path                | Description                                                |
-| ------ | ------------------- | ---------------------------------------------------------- |
-| GET    | `/api/sessions`     | List all sessions (optional `?worldId=` filter)            |
-| POST   | `/api/sessions`     | Create a new session                                       |
-| GET    | `/api/sessions/:id` | Get session information                                    |
-| PATCH  | `/api/sessions/:id` | Update session fields (`status` / `runtimeModelOverrides`) |
-| DELETE | `/api/sessions/:id` | Delete a session                                           |
+| Method | Path                                     | Description                                                              |
+| ------ | ---------------------------------------- | ------------------------------------------------------------------------ |
+| GET    | `/api/sessions`                          | List all sessions (optional `?worldId=` filter)                          |
+| POST   | `/api/sessions`                          | Create a new session                                                     |
+| GET    | `/api/sessions/:id`                      | Get session information                                                  |
+| PATCH  | `/api/sessions/:id`                      | Update session fields (`status` / `runtimeModelOverrides`)               |
+| DELETE | `/api/sessions/:id`                      | Delete a session                                                         |
+| GET    | `/api/sessions/:id/memory-index`         | The vector model of the memory index, and whether it is still configured |
+| POST   | `/api/sessions/:id/memory-index/rebuild` | Rebuild the memory index with the configured vector model                |
 
 #### Session identity `incarnation`
 
@@ -2496,6 +2498,57 @@ An old background job fails when it checks the session scope and state at the en
 **Reusing the same ID:** You can create a session with the same ID only after the old session is fully deleted. If the deletion is still in the hook or drain step, creating returns a `409` for a duplicate ID. Retry after `DELETE` succeeds.
 
 **Sessions created earlier:** A session without a private identity marker can still be deleted. In the request isolation check, the server uses its existing owner hash or the saved `(id, createdAt)` as its identity. A newly created session always has a random identity marker, so recreating it with the same ID does not inherit the old identity.
+
+#### `GET /api/sessions/:id/memory-index`
+
+The first time a session's memory is indexed, it is locked to the vector (embedding) model configured at that time. This endpoint returns the locked model and the model the configuration selects now. Send the same `X-Slot-Config` as a turn, so the check uses the model settings the player would use this time.
+
+**Response 200:**
+
+```json
+{
+  "available": true,
+  "locked": {
+    "provider": "openai",
+    "modelName": "text-embedding-3-small",
+    "dim": 1536,
+    "lockedAt": "2025-01-15T10:00:00.000Z"
+  },
+  "configured": { "provider": "ollama", "modelName": "nomic-embed-text" },
+  "stale": true
+}
+```
+
+| Field        | Description                                                                                                                                                                      |
+| ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `available`  | Whether the server keeps a vector index. `false` without vector support or with `VECTOR_BACKEND=none`; the other fields are then empty                                           |
+| `locked`     | The model the index was built with. `null` before the session is first indexed; `lockedAt` is `null` when no lock time was recorded                                              |
+| `configured` | The vector model the configuration selects now. `null` when none is configured                                                                                                   |
+| `stale`      | `true` when `configured` is not the model in `locked`. Memory search then matches keywords only, and nothing new is indexed, until the index is rebuilt or the old model is back |
+
+When `stale` is `true`, the web client shows a notice in the session with a "Rebuild index" button; with no vector model configured, the button is "Clear index".
+
+#### `POST /api/sessions/:id/memory-index/rebuild`
+
+Rebuilds the session's memory index with the vector model configured now. Send the same `X-Provider-Keys` and `X-Slot-Config` as a turn.
+
+1. One vector request goes to the configured model to measure its dimension. When it fails, the response is `502` and the old index is left as it was.
+2. Index writes in progress for this session finish first.
+3. One transaction deletes every vector and all index progress the session has under the old model, and locks the session to the new model. With no vector model configured, the session is left unlocked; once a model is configured, the next turn locks it again.
+4. The index is built again in the background, from the first message on. Until it is complete, keyword matches fill in memory search.
+
+The old vectors are deleted by the rebuild and take no more space. Other sessions on the same old model are not affected.
+
+**Response 200:** the same as `GET /api/sessions/:id/memory-index`, after the rebuild.
+
+**Errors:**
+
+| Status | `code`                        | When                                                                                         |
+| ------ | ----------------------------- | -------------------------------------------------------------------------------------------- |
+| 409    | `memory_index_unavailable`    | The server keeps no vector index                                                             |
+| 502    | `embedding_unavailable`       | The configured vector model did not answer. `details.reason` says why; the old index stays   |
+| 409    | `memory_index_changed`        | Another request changed the session's locked model during the rebuild. Read the status again |
+| 409    | `session_incarnation_changed` | While the request waited, the session was deleted and recreated with the same ID             |
 
 ### Turn execution
 

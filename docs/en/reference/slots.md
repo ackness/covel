@@ -909,10 +909,12 @@ An embedding call can pass `expectedModelId` (`provider/model`) and `expectedCon
 - The identity the server locks to a session is `provider/model#hash`. The hash covers the effective address, the protocol, and the embedding format. It does not include the key. The dimension cache is also isolated by this identity.
 - The request-level model and key apply to embedding too, including the asynchronous ingestion that the request starts. They are not written to the session or to the shared credential config.
 - Memory's `EmbedFn(texts, { sessionId, modelId })` must use the model identity locked to the session.
-- Changing the current config cannot write another model of the same dimension into an old index. When the identity does not match, a query falls back to keyword search, and ingestion does not advance. After the original model config is restored, backfilling can continue.
+- Changing the current config cannot write another model of the same dimension into an old index. When the identity does not match, a query falls back to keyword search, ingestion does not advance, and the server log notes it once per session. After the original model config is restored, backfilling can continue.
+- After the vector model changes, the session shows "Memory search is matching keywords only" with a "Rebuild index" button ("Clear index" when no vector model is configured). A rebuild first sends one request to the new model to measure its dimension and changes nothing when that fails. When it succeeds, one transaction deletes the old model's vectors and progress and locks the session to the new model, and the index is then built again in the background. See [`POST /api/sessions/:id/memory-index/rebuild`](./api.md#post-apisessionsidmemory-indexrebuild).
+- When the index is written, the store checks the model the session is locked to now. Vectors computed with the old model before a rebuild are never written into the new index.
 
-> [!WARNING]
-> When you switch the vector model, you must rebuild the development sessions and indexes. The system does not migrate them automatically. Data that already has wrong vectors mixed in must also be rebuilt.
+> [!NOTE]
+> Changing the model does not migrate the old index by itself: a rebuild sends the session's history to the vector model again, so the player decides when to do it. An index that already has wrong vectors mixed in is repaired by a rebuild too.
 
 ## Audio requests
 

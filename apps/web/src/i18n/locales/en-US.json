@@ -353,6 +353,15 @@
     "setupUnfinishedDetail": "The story is still being prepared. Continue to run the remaining steps with what you have already entered.",
     "setupContinue": "Continue setup",
     "setupRetryFailed": "Could not restart setup. Check the connection and try again.",
+    "memoryIndex": {
+      "staleTitle": "Memory search is matching keywords only",
+      "staleDetail": "This session's memory was indexed with {{locked}}, and the embedding model is now {{configured}}. Rebuild the index to search with the new model; this sends the session's history to the embedding model again.",
+      "noModelDetail": "This session's memory was indexed with {{locked}}, and no embedding model is configured now. Clearing the index frees its space; once an embedding model is configured, the session is indexed with it.",
+      "rebuild": "Rebuild index",
+      "clear": "Clear index",
+      "rebuilding": "Rebuilding…",
+      "failed": "The index was not rebuilt and is unchanged: {{reason}}"
+    },
     "reasonInterrupted": "This task stopped before completion and did not commit a result. This is its recorded execution history.",
     "retryTask": "Retry this task",
     "executionHistory": "History",

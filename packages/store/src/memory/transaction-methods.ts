@@ -131,6 +131,11 @@ export const WRITE_METHOD_TOUCHES: Readonly<Record<string, Touched>> = {
   upsertVector: ["vectorRows"],
   deleteVectors: ["vectorRows"],
   lockSessionEmbeddingModel: ["sessionVectorTargets"],
+  resetSessionVectorIndex: [
+    "vectorRows",
+    "vectorIndexProgress",
+    "sessionVectorTargets",
+  ],
   // The shared model registry is independent of session lifecycle; resolving
   // an existing target does not mutate state.
   ensureVectorModel: [],
