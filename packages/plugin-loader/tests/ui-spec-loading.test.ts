@@ -6,8 +6,18 @@ import {
   discoverPlugins,
   loadPluginDefinition,
   loadRuntime,
-  loadPluginUi,
+  loadPluginUiSpecs,
+  type PluginDiscoveryResult,
 } from "../src/index.js";
+
+async function loadUi(discovery: PluginDiscoveryResult) {
+  const { packageManifest } = await loadPluginDefinition(discovery);
+  return loadPluginUiSpecs(
+    discovery.rootPath,
+    discovery.id,
+    packageManifest.manifest.ui,
+  );
+}
 
 describe("UI spec loading", () => {
   let tmpDir: string;
@@ -73,7 +83,7 @@ Prompt.
     );
 
     // Plugin with UI specs AND a function handler whose module import has a
-    // visible side effect — used to pin that loadPluginUi never runs plugin JS.
+    // visible side effect — used to pin that loadPluginUiSpecs never runs plugin JS.
     const handlerDir = path.join(tmpDir, "ui-handler-plugin");
     await fs.mkdir(path.join(handlerDir, "ui"), { recursive: true });
     await fs.writeFile(
@@ -96,7 +106,7 @@ Prompt.
     );
     await fs.writeFile(
       path.join(handlerDir, "ui", "panel.json"),
-      JSON.stringify({ id: "handler-panel" }),
+      JSON.stringify({ id: "handler-panel", view: { component: "Text" } }),
     );
     await fs.writeFile(
       path.join(handlerDir, "handler.mjs"),
@@ -117,11 +127,15 @@ description: Evil
 runtime: {type: agent, schedule: {stage: narrative}}
 contributes:
   ui:
-    right: [../../etc/passwd]
+    right: [../outside.json]
 ---
 
 Prompt.
 `,
+    );
+    await fs.writeFile(
+      path.join(tmpDir, "outside.json"),
+      JSON.stringify({ view: { component: "Text" } }),
     );
   });
 
@@ -144,39 +158,47 @@ Prompt.
   it("should load package UI specs independently of execution", async () => {
     const discoveries = await discoverPlugins(tmpDir);
     const discovery = discoveries.find((d) => d.id === "test-ui-plugin")!;
-    const loaded = await loadPluginUi(discovery);
+    const loaded = await loadUi(discovery);
 
-    expect(loaded.uiSpecs).toBeDefined();
-    expect(loaded.uiSpecs?.right).toHaveLength(1);
-    expect(loaded.uiSpecs?.right?.[0]!.id).toBe("test-panel");
-    expect(loaded.uiSpecs?.right?.[0]!.icon).toBe("layout");
-    expect(loaded.uiSpecs?.message).toHaveLength(1);
-    expect(loaded.uiSpecs?.message?.[0]!.id).toBe("test-block");
+    expect(loaded.diagnostics).toEqual([]);
+    expect(loaded.slots.right).toHaveLength(1);
+    expect(loaded.slots.right?.[0]!.id).toBe("test-panel");
+    expect(loaded.slots.right?.[0]!.icon).toBe("layout");
+    expect(loaded.slots.message).toHaveLength(1);
+    expect(loaded.slots.message?.[0]!.id).toBe("test-block");
   });
 
   it("should handle plugin with no ui field", async () => {
     const discoveries = await discoverPlugins(tmpDir);
     const discovery = discoveries.find((d) => d.id === "no-ui-plugin")!;
-    const loaded = await loadRuntime(discovery, "no-ui-plugin");
 
-    expect(loaded.uiSpecs).toBeUndefined();
+    expect(await loadUi(discovery)).toEqual({ slots: {}, diagnostics: [] });
   });
 
-  it("should reject path traversal in ui file paths", async () => {
+  it("does not read a spec outside the plugin root", async () => {
     const discoveries = await discoverPlugins(tmpDir);
     const discovery = discoveries.find((d) => d.id === "evil-plugin")!;
 
-    await expect(loadPluginUi(discovery)).rejects.toThrow(/path traversal/i);
+    const loaded = await loadUi(discovery);
+    expect(loaded.slots).toEqual({});
+    expect(loaded.diagnostics).toEqual([
+      expect.objectContaining({
+        slot: "right",
+        specIndex: 0,
+        issues: [
+          expect.objectContaining({ message: "UI asset escapes plugin root" }),
+        ],
+      }),
+    ]);
   });
 
-  it("loadPluginUi returns UI specs without importing handler JS", async () => {
+  it("loadPluginUiSpecs returns UI specs without importing handler JS", async () => {
     const discoveries = await discoverPlugins(tmpDir);
     const discovery = discoveries.find((d) => d.id === "ui-handler-plugin")!;
 
-    const loaded = await loadPluginUi(discovery);
+    const loaded = await loadUi(discovery);
 
-    expect(loaded.uiSpecs?.right?.[0]!.id).toBe("handler-panel");
-    expect(loaded.manifest.name).toBe("ui-handler-plugin");
+    expect(loaded.slots.right?.[0]!.id).toBe("handler-panel");
     // The handler module's import side effect must NOT have run.
     expect(
       (globalThis as Record<string, unknown>).__covelUiHandlerImported,

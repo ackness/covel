@@ -47,6 +47,12 @@ import { HOOK_EVENTS } from "../types/hooks.js";
 import { STAGE_ORDER } from "../types/runtime-scheduling.js";
 import type { EffectResource } from "../types/runtime-scheduling.js";
 import { slashCommandSpecSchema } from "./slash-command-schema.js";
+import {
+  IR_RULE_FIELD_PATHS,
+  RUNTIME_DISABLING_ISSUE_PARAMS,
+  runtimeRuleIssues,
+  type RuntimeRuleView,
+} from "./runtime-rules.js";
 
 // ── Shared path & scheduling primitives ──────────────────────────
 // Hoisted so the Input section (runtime-export inject, data bindings) and the
@@ -831,12 +837,7 @@ export const permissionsDeclSchema = z
 
 // ── Cross-field constraints ──────────────────────────────────────
 
-/**
- * Structural view of the manifest fields the cross-field checks read. Kept
- * loose so both the compat and authoring parsed shapes are
- * accepted; the checks work off plain data and return issues, so neither
- * superRefine has to name Zod's refinement-ctx type.
- */
+/** Fields of the flat IR shape that the shared runtime rules read. */
 interface ManifestCrossFieldView {
   readonly outputContract?: string;
   readonly defaultProvider?: boolean;
@@ -845,194 +846,30 @@ interface ManifestCrossFieldView {
   readonly stage?: string;
   readonly outputKind?: string;
   readonly requireExplicitCompletion?: boolean;
-  readonly turnCompletion?: {
-    readonly mode?: string;
-    readonly settle?: string;
-    readonly maxSettleWaitMs?: number;
-    readonly maxQueueMs?: number;
-    readonly maxExecutionMs?: number;
-    readonly overlap?: string;
-    readonly stalePolicy?: string;
-  };
-  readonly trigger?: {
-    readonly type?: string;
-    readonly topic?: string;
-    readonly interval?: number;
-    readonly startTurn?: number;
-    readonly cooldownTurns?: number;
-  };
-  readonly needs?: readonly (string | { readonly scope?: string })[];
-  readonly output?: { readonly schema?: string; readonly recordAs?: string };
+  readonly turnCompletion?: RuntimeRuleView["completion"];
+  readonly trigger?: RuntimeRuleView["trigger"];
+  readonly needs?: RuntimeRuleView["needs"];
+  readonly output?: RuntimeRuleView["output"];
 }
 
-interface CrossFieldIssue {
-  readonly path: readonly (string | number)[];
-  readonly message: string;
-}
-
-/**
- * Cross-field constraints applied by BOTH manifest schemas. Every constraint
- * here was grepped against the bundled plugins and has zero current violations,
- * so it is safe on the compat superset. JSON Schema cannot express these, so
- * the generated schemas record them in their `description`.
- */
-function sharedManifestCrossFieldIssues(
+/** Report the shared runtime rules on the flat IR shape, under IR paths. */
+function addIrRuleIssues(
   m: ManifestCrossFieldView,
-): CrossFieldIssue[] {
-  const issues: CrossFieldIssue[] = [];
-  if (m.defaultProvider && !m.outputContract) {
-    issues.push({
-      path: ["defaultProvider"],
-      message: "defaultProvider requires an outputContract",
+  ctx: z.RefinementCtx,
+  authoring = false,
+): void {
+  const { outputKind, turnCompletion, ...rest } = m;
+  for (const issue of runtimeRuleIssues(
+    { ...rest, visibility: outputKind, completion: turnCompletion },
+    IR_RULE_FIELD_PATHS,
+    { authoring },
+  ))
+    ctx.addIssue({
+      code: "custom",
+      path: [...issue.path],
+      message: issue.message,
+      ...(issue.disables ? { params: RUNTIME_DISABLING_ISSUE_PARAMS } : {}),
     });
-  }
-
-  if (
-    m.requireExplicitCompletion &&
-    (m.runtimeType === "function" ||
-      m.outputKind === "story" ||
-      m.output?.schema)
-  ) {
-    issues.push({
-      path: ["requireExplicitCompletion"],
-      message:
-        "requireExplicitCompletion is for non-story agent runtimes without output.schema; completion uses tools or runtime-done",
-    });
-  }
-
-  if (m.runtimeType === "function" && !m.handler?.trim()) {
-    issues.push({
-      path: ["handler"],
-      message: "handler is required for runtimeType 'function'",
-    });
-  }
-
-  // recordAs is only meaningful with a schema validating the recorded value.
-  if (m.output?.recordAs !== undefined && m.output.schema === undefined) {
-    issues.push({
-      path: ["output", "schema"],
-      message: "output.schema is required when output.recordAs is declared",
-    });
-  }
-
-  // An event trigger without a topic never subscribes to anything.
-  if (m.trigger?.type === "event" && !m.trigger.topic) {
-    issues.push({
-      path: ["trigger", "topic"],
-      message: "trigger.topic is required for trigger.type 'event'",
-    });
-  }
-
-  // A stage places a runtime in the per-turn DAG; event/manual are detached.
-  if (
-    m.stage !== undefined &&
-    (m.trigger?.type === "event" || m.trigger?.type === "manual")
-  ) {
-    issues.push({
-      path: ["stage"],
-      message: "a staged runtime cannot use trigger.type 'event' or 'manual'",
-    });
-  }
-
-  if (
-    m.turnCompletion?.maxSettleWaitMs !== undefined &&
-    m.turnCompletion.settle === undefined
-  ) {
-    issues.push({
-      path: ["turnCompletion", "maxSettleWaitMs"],
-      message: "maxSettleWaitMs requires settle",
-    });
-  }
-  const turnCompletionMode = m.turnCompletion?.mode ?? "await";
-  if (turnCompletionMode === "detached") {
-    if (m.stage !== "post-turn" && m.stage !== "audit") {
-      issues.push({
-        path: ["stage"],
-        message:
-          "turnCompletion.mode 'detached' is only valid on stage 'post-turn' or 'audit' runtimes",
-      });
-    }
-    if (m.outputKind === "story") {
-      issues.push({
-        path: ["outputKind"],
-        message:
-          "turnCompletion.mode 'detached' cannot be used with outputKind 'story'",
-      });
-    }
-    if (m.trigger?.type === "event" || m.trigger?.type === "manual") {
-      issues.push({
-        path: ["trigger", "type"],
-        message:
-          "event/manual runtimes must use execution; turnCompletion.mode 'detached' is scheduler-only",
-      });
-    }
-  } else if (
-    m.turnCompletion?.settle !== undefined ||
-    m.turnCompletion?.maxSettleWaitMs !== undefined ||
-    m.turnCompletion?.maxQueueMs !== undefined ||
-    m.turnCompletion?.maxExecutionMs !== undefined ||
-    m.turnCompletion?.overlap !== undefined ||
-    m.turnCompletion?.stalePolicy !== undefined
-  ) {
-    issues.push({
-      path: ["turnCompletion", "mode"],
-      message: "turnCompletion detached options require mode 'detached'",
-    });
-  }
-
-  // `needs(scope: session)` gates on the persistent setup snapshot — the
-  // positive gate lives in the setup selection path only, so on any other
-  // stage the declaration would be accepted-but-inert. Reject it instead of
-  // letting a dead gate ship (a runtime that wants this gate must declare
-  // `stage: setup` explicitly).
-  if (m.stage !== "setup") {
-    for (const [i, need] of (m.needs ?? []).entries()) {
-      if (typeof need !== "string" && need.scope === "session") {
-        issues.push({
-          path: ["needs", i, "scope"],
-          message:
-            "needs scope 'session' is only valid on stage 'setup' runtimes (it gates on the persistent setup snapshot)",
-        });
-      }
-    }
-  }
-
-  // Setup runs before the turn loop: fixed auto trigger, no cadence fields.
-  if (m.stage === "setup" && m.trigger) {
-    if (m.trigger.type !== "auto") {
-      issues.push({
-        path: ["trigger", "type"],
-        message: "stage 'setup' runtimes must use trigger.type 'auto'",
-      });
-    }
-    for (const field of ["interval", "startTurn", "cooldownTurns"] as const) {
-      if (m.trigger[field] !== undefined) {
-        issues.push({
-          path: ["trigger", field],
-          message: `stage 'setup' runtimes cannot set trigger.${field}`,
-        });
-      }
-    }
-  }
-
-  return issues;
-}
-
-/** Authoring-only additions: every scheduler-driven runtime declares a stage. */
-function authoringManifestCrossFieldIssues(
-  m: ManifestCrossFieldView,
-): CrossFieldIssue[] {
-  const issues = sharedManifestCrossFieldIssues(m);
-  if (
-    (m.trigger?.type === "auto" || m.trigger?.type === "scheduled") &&
-    m.stage === undefined
-  ) {
-    issues.push({
-      path: ["stage"],
-      message: "stage is required for auto / scheduled runtimes",
-    });
-  }
-  return issues;
 }
 
 // ── Runtime manifest ─────────────────────────────────────────────
@@ -1225,15 +1062,7 @@ export const runtimeManifestInputSchema = z
     trigger: triggerConfigSchema.optional(),
   })
   .strict()
-  .superRefine((m, ctx) => {
-    for (const issue of sharedManifestCrossFieldIssues(m)) {
-      ctx.addIssue({
-        code: "custom",
-        path: [...issue.path],
-        message: issue.message,
-      });
-    }
-  });
+  .superRefine((m, ctx) => addIrRuleIssues(m, ctx));
 
 /**
  * Strict authoring target — the shape new plugins should be written against.
@@ -1247,12 +1076,4 @@ export const runtimeManifestAuthoringSchema = z
     trigger: authoringTriggerConfigSchema.optional(),
   })
   .strict()
-  .superRefine((m, ctx) => {
-    for (const issue of authoringManifestCrossFieldIssues(m)) {
-      ctx.addIssue({
-        code: "custom",
-        path: [...issue.path],
-        message: issue.message,
-      });
-    }
-  });
+  .superRefine((m, ctx) => addIrRuleIssues(m, ctx, true));

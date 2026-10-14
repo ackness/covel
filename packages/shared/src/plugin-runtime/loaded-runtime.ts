@@ -56,10 +56,4 @@ export interface LoadedRuntime {
    * The host turns them into `ctx.messages` for the session's language.
    */
   readonly messages?: readonly PluginMessageCatalog[];
-  /** Loaded UI specs from ui/ directory, grouped by slot. */
-  readonly uiSpecs?: {
-    readonly right?: readonly Readonly<Record<string, unknown>>[];
-    readonly message?: readonly Readonly<Record<string, unknown>>[];
-    readonly left?: readonly Readonly<Record<string, unknown>>[];
-  };
 }
