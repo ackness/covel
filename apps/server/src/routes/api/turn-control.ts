@@ -1,8 +1,9 @@
 /**
- * In-flight turn control registry — one entry per session with
- * an active player-initiated turn. The actions route registers on turn
- * start and releases on stream end; the steer/abort routes look entries up
- * to inject player interjections or fire the abort signal.
+ * In-flight turn control registry — one entry per player action request.
+ * The actions route registers a request when it is admitted, makes it the
+ * session's active turn under the lock, and releases it on stream end; the
+ * steer/abort routes look entries up to inject player interjections or fire
+ * the request's abort signal.
  *
  * ponytail: in-process map — on multi-pod PG deployments steer/abort only
  * reach turns running on the same pod; move to a shared bus if that tier
@@ -11,61 +12,77 @@
 
 import type { TurnControl } from "@covel/runtime";
 
-interface ActiveTurnEntry {
-  readonly turnId: string;
+interface ActionEntry {
   readonly requestId?: string;
   readonly startedAt: string;
+  /** One per action request: a stop applies to the request, not one turn. */
   readonly controller: AbortController;
-  /** Accepted interjections no model call has read yet, oldest first. */
+  /** The turn the request runs now, or will run next. */
+  turnId: string;
   readonly steering: string[];
-  /** Every interjection accepted for the turn, in arrival order. */
+  /** Every interjection accepted since the last turn commit. */
   readonly accepted: TurnInterjection[];
   /** How many of `accepted` a model call has read. */
   read: number;
   /** False once no runtime of the execution reads the queue any more. */
   steeringOpen: boolean;
+  /** No further turn of the request will start: a stop has nothing to stop. */
+  finished: boolean;
 }
 
-/**
- * `turn_messages.sourceType` of a saved interjection: a user row of its turn
- * that the prompt history shows, but not a player turn of its own (the turn
- * count reads only `player` rows).
- */
+/** Saved user rows of a turn, excluded from the player-turn count. */
 export const PLAYER_INTERJECTION_SOURCE = "player-interjection";
 
-/** A player interjection accepted for a turn; saved only if the turn commits. */
+/** A player interjection saved only if its turn commits. */
 export interface TurnInterjection {
   readonly content: string;
-  /** When a model call of the turn read it; absent when none did. */
+  /** When a model call read it; absent when none did. */
   readonly readAt?: string;
 }
 
-const activeTurns = new Map<string, ActiveTurnEntry>();
+/** The request holding (or last holding) each session's execution lock. */
+const activeTurns = new Map<string, ActionEntry>();
+/** Admitted requests that have not taken the execution lock yet. */
+const waitingRequests = new Map<string, Set<ActionEntry>>();
 
 /** Why an interjection was not queued; also the code of the 409 response. */
 export type SteerRefusal = "no_active_turn" | "steering_closed";
 
 export interface RegisteredTurn {
   readonly turnControl: TurnControl;
-  /**
-   * In the turn's commit: stop accepting interjections and hand over every
-   * one accepted, so they are saved with the turn or not at all.
-   */
   readonly closeInterjections: () => readonly TurnInterjection[];
   readonly release: () => void;
 }
 
+export interface ActionRequestControl {
+  /** Aborted when the player stops this request, before or during a turn. */
+  readonly signal: AbortSignal;
+  /**
+   * Under the session lock: make this request the session's active turn.
+   * Interjections not committed yet carry over from the previous turn.
+   */
+  beginTurn(turnId: string): TurnControl;
+  /** Stop accepting interjections and hand them to the current turn's commit. */
+  closeInterjections(): readonly TurnInterjection[];
+  /** No further turn of this request will start. */
+  finish(): void;
+  /** Idempotent; removes only this request's own entries. */
+  release(): void;
+}
+
 /**
- * Register the in-flight turn for a session. A newer registration replaces
- * a stale one (a crashed stream that never released); release is idempotent
- * and only removes its own entry.
+ * Register an admitted action request, before it waits for anything. A stop
+ * reaches it while it waits for the lock or for earlier work to settle, and
+ * between the turns it chains (setup, then the opening continuation). It
+ * becomes the session's active turn only under the lock, so a request queued
+ * behind a running turn never takes that turn's steer/abort target.
  */
-export function registerActiveTurn(
+export function registerActionRequest(
   sessionId: string,
   turnId: string,
   requestId?: string,
-): RegisteredTurn {
-  const entry: ActiveTurnEntry = {
+): ActionRequestControl {
+  const entry: ActionEntry = {
     turnId,
     requestId,
     startedAt: new Date().toISOString(),
@@ -74,32 +91,73 @@ export function registerActiveTurn(
     accepted: [],
     read: 0,
     steeringOpen: true,
+    finished: false,
   };
-  activeTurns.set(sessionId, entry);
+  const waiting = waitingRequests.get(sessionId) ?? new Set<ActionEntry>();
+  waiting.add(entry);
+  waitingRequests.set(sessionId, waiting);
+  const leaveWaiting = () => {
+    const set = waitingRequests.get(sessionId);
+    if (!set?.delete(entry)) return;
+    if (set.size === 0) waitingRequests.delete(sessionId);
+  };
   return {
-    turnControl: {
-      signal: entry.controller.signal,
-      drainSteering: () => {
-        const drained = entry.steering.splice(0);
-        const readAt = new Date().toISOString();
-        for (let i = 0; i < drained.length; i += 1) {
-          const index = entry.read + i;
-          entry.accepted[index] = { ...entry.accepted[index]!, readAt };
-        }
-        entry.read += drained.length;
-        return drained;
-      },
-      closeSteering: () => {
-        entry.steeringOpen = false;
-      },
+    signal: entry.controller.signal,
+    beginTurn: (nextTurnId) => {
+      leaveWaiting();
+      entry.turnId = nextTurnId;
+      entry.steeringOpen = true;
+      // A newer registration replaces a stale one (a crashed stream that
+      // never released).
+      activeTurns.set(sessionId, entry);
+      return {
+        signal: entry.controller.signal,
+        drainSteering: () => {
+          const drained = entry.steering.splice(0);
+          const readAt = new Date().toISOString();
+          for (let i = 0; i < drained.length; i += 1) {
+            const index = entry.read + i;
+            entry.accepted[index] = { ...entry.accepted[index]!, readAt };
+          }
+          entry.read += drained.length;
+          return drained;
+        },
+        closeSteering: () => {
+          entry.steeringOpen = false;
+        },
+      };
     },
     closeInterjections: () => {
       entry.steeringOpen = false;
-      return [...entry.accepted];
+      // The next turn reads these from committed history, not this queue.
+      entry.steering.length = 0;
+      entry.read = 0;
+      return entry.accepted.splice(0);
+    },
+    finish: () => {
+      entry.finished = true;
+      leaveWaiting();
     },
     release: () => {
-      if (activeTurns.get(sessionId) === entry) activeTurns.delete(sessionId);
+      leaveWaiting();
+      if (activeTurns.get(sessionId) === entry) {
+        activeTurns.delete(sessionId);
+      }
     },
+  };
+}
+
+/** A request whose turn starts at once; for callers outside the actions route. */
+export function registerActiveTurn(
+  sessionId: string,
+  turnId: string,
+  requestId?: string,
+): RegisteredTurn {
+  const request = registerActionRequest(sessionId, turnId, requestId);
+  return {
+    turnControl: request.beginTurn(turnId),
+    closeInterjections: request.closeInterjections,
+    release: request.release,
   };
 }
 
@@ -113,7 +171,7 @@ export function steerActiveTurn(
   message: string,
 ): { turnId: string } | { refused: SteerRefusal } {
   const entry = activeTurns.get(sessionId);
-  if (!entry) return { refused: "no_active_turn" };
+  if (!entry || entry.finished) return { refused: "no_active_turn" };
   if (!entry.steeringOpen || entry.controller.signal.aborted) {
     return { refused: "steering_closed" };
   }
@@ -122,12 +180,21 @@ export function steerActiveTurn(
   return { turnId: entry.turnId };
 }
 
-/** Abort the session's active turn. Idempotent. */
+/**
+ * Stop the session's action: the request running a turn, or, when none runs,
+ * the requests still waiting to start one. Null once every request's last
+ * turn has ended. Idempotent.
+ */
 export function abortActiveTurn(sessionId: string): { turnId: string } | null {
-  const entry = activeTurns.get(sessionId);
-  if (!entry) return null;
-  entry.controller.abort();
-  return { turnId: entry.turnId };
+  const active = activeTurns.get(sessionId);
+  if (active && !active.finished) {
+    active.controller.abort();
+    return { turnId: active.turnId };
+  }
+  const waiting = [...(waitingRequests.get(sessionId) ?? [])];
+  for (const entry of waiting) entry.controller.abort();
+  const first = waiting[0];
+  return first ? { turnId: first.turnId } : null;
 }
 
 /** Introspection for tests. */

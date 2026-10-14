@@ -391,14 +391,14 @@ dimensionSources:
 
 `pluginPolicy` 说的是“这个世界希望用哪些插件”。它不会锁死任何插件：最终启用哪些，由 Covel 根据每个插件声明的能力和依赖、玩家的授权以及玩家自己的勾选算出来。
 
-| 字段                            | 说明                                                                                    |
-| ------------------------------- | --------------------------------------------------------------------------------------- |
-| `presetId`                      | 默认组合包 ID，可引用 `packs[].id` 或内置组合包                                         |
-| `preferredTags` / `avoidedTags` | 插件标签偏好                                                                            |
-| `requires`                      | 世界必需的契约 ID（如 `action-check@1`），任何提供该契约的已安装插件都能满足            |
-| `requested`                     | 世界建议作为初始选择的插件 ID                                                           |
-| `recommended`                   | 额外推荐插件 ID                                                                         |
-| `packs`                         | 自定义组合包，每项包含 `id/label`，可选 `description/requested/recommended/tags/reason` |
+| 字段                            | 说明                                                                                                                                                                   |
+| ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `presetId`                      | 默认组合包 ID，可引用 `packs[].id` 或内置组合包                                                                                                                        |
+| `preferredTags` / `avoidedTags` | 插件标签偏好                                                                                                                                                           |
+| `requires`                      | 世界必需的契约 ID（如 `action-check@1`），任何提供该契约的已安装插件都能满足                                                                                           |
+| `requested`                     | 世界建议作为初始选择的插件 ID                                                                                                                                          |
+| `recommended`                   | 额外推荐插件 ID                                                                                                                                                        |
+| `packs`                         | 自定义组合包，每项包含 `id/label`，可选 `description/requested/recommended/excluded/tags/reason`。`excluded` 是选中这个包时关掉的插件 ID，可以包括 `kind: core` 的插件 |
 
 `presetId` 必须是内置组合包或这个世界 `packs` 里的 ID，否则 `pnpm validate:world` 报 `unknown-preset`。
 
@@ -677,7 +677,7 @@ sources:
 
 - 缺 `key` 是 error。
 - 缺 `indexTo` 时没有地方记录“有哪些图”，这些文件不会被导入。
-- 接收图片索引的插件没有启用时，这个 source 的文件同样不导入。这时是 warning，不影响其他数据。已有会话后来启用接收插件，不会自动补导入；作者和工具可调用[同步接口](#preflight-与-sync)。玩家要使用这些开局数据，请在新开会话时启用接收插件。
+- 接收图片索引的插件没有启用时，这个 source 的文件同样不导入。这时是 warning，不影响其他数据。之后在游戏里启用接收插件，它的数据会自动导入一次（见[开局后加入的接收插件](#开局后加入的接收插件)）。
 
 ### 会话之外可见的图片
 
@@ -833,6 +833,16 @@ characterSchema:
 - 媒体 source 用 `to: media` 加契约形式的 `indexTo`。结构化 source 不能把 `to` 写成 `media`。这类组合错误在校验时被拒绝。
 - `world:metadata.<path>` 的路径里不能有 `__proto__` 这类危险的段。`dimensions` 以外的路径目前只被记录下来，不产生效果。
 - 世界数据在创建会话时导入。作者和工具可通过 [`sync-data`](#preflight-与-sync) 更新已有会话；先调用 `preflight` 可以在写入之前看到诊断。应用没有供玩家操作的同步入口。
+- 创建会话的响应在 `worldDataNotices` 里列出没有导入的数据（warning 和 error，例如没有启用的接收插件），游戏界面把它们显示给玩家。
+
+### 开局后加入的接收插件
+
+创建会话时没有启用的插件收不到世界数据，例如开局后才批准的社区插件。在游戏里启用插件（`PUT /api/sessions/:id/plugins/:pluginId`）时，Covel 为这次新加入的插件补跑一次导入：
+
+- 只写新加入、并且导入账本里还没有这个世界记录的插件的数据。其他插件的数据和账本不动；同一个插件关掉再打开，不会覆盖游戏改过的数据。
+- 社区插件的投影代码只在它获得这局游戏的授权后运行。
+- 响应的 `worldData` 写明哪些插件收到了数据、写了多少条，以及按现在的插件还缺哪些数据（`notices`）。游戏界面用它替换之前的提示。
+- 导入失败时插件仍然启用，`notices` 里给出 error。
 
 ### Lorebook 按玩家消息选择性注入
 
@@ -995,7 +1005,7 @@ handler 的返回值：
 - `preflight` 只校验 source、声明、目标和 schema，**不加载也不执行 handler**。投影实际产生哪些 key，只有导入或同步之后才知道。
 - 导入和同步只运行这局游戏已启用插件的匹配声明。单个投影失败只产生 warning，不阻止原始 source 的写入，也不影响其他插件的投影。
 - 每个声明的 output 要么整组成功，要么整组不写。任何一条的 key 或 schema 无效时，这一组保持上一次成功的内容和账本，不会出现新旧混杂。只有 handler 成功返回 `[]` 才表示“确实没有记录”，这时才删除旧记录。
-- 内置插件的 handler 可以直接运行。社区插件的 handler 需要这局游戏明确授权运行服务端代码。会话创建之前没法授权，所以作者和工具要通过 HTTP 接口补跑社区投影：建好会话后调用插件 enable（已经启用也可以再调一次）触发 `covel:plugin-server-code` 的会话级授权，再调用 `sync-data`。启用或授权本身不会补跑。没有授权时导入只发 warning，不会偷偷执行代码。
+- 内置插件的 handler 可以直接运行。社区插件的 handler 需要这局游戏明确授权运行服务端代码。会话创建之前没法授权，所以创建时社区投影不运行，只发 warning，不会偷偷执行代码。玩家批准并启用这个插件时，投影随[开局后加入的接收插件](#开局后加入的接收插件)的导入运行一次。之后要按新的世界包重跑，作者和工具调用 `sync-data`；应用没有供玩家操作的同步入口。
 - 每次调用在独立的 Worker 里运行，输入是一份结构化克隆：
 
   | 限制                  | 值               |
@@ -1206,7 +1216,7 @@ sources:
 - 媒体单个文件最大 20 MB，一个 source 的目录合计最大 100 MB。
 - 可以导入的扩展名：`.png`、`.jpg`、`.jpeg`、`.webp`、`.mp3`、`.wav`、`.mp4`。
 - 预检要求对应契约的 schema 和接收声明已经注册。`character-blueprint` 的 `assets` 和 `presence` 分别接收 `character.portrait-assets@1` 与 `character.portraits@1`。
-- 把接收插件放进 `pluginPolicy.recommended`，玩家就可以选择它。没有启用时，跳过它的数据和媒体索引，并给出 warning。
+- 把接收插件放进 `pluginPolicy.recommended`，玩家就可以选择它。没有启用时，跳过它的数据和媒体索引，并给出 warning；之后在游戏里启用它，数据补导入一次。
 
 实际例子见 `worlds/mistport` 与 `worlds/haruka-academy`（`data/world.data.yaml` + `media/`）。
 
@@ -1483,7 +1493,7 @@ POST /api/worlds/<world-id>/world-data/preflight
 
 **同步（sync）**：作者和工具用的 HTTP 接口，把世界包后来的数据改动应用到一个指定的已有会话。应用目前没有供玩家操作的同步入口。
 
-更新世界包、文件热更新、启用插件或批准插件运行服务端代码，都不会自动调用同步。玩家要使用新的开局数据，请新开会话；已有会话保留自己的数据和进度。正文仍按本页“改文件后自动重载”的规则更新。
+更新世界包、文件热更新和批准插件运行服务端代码，都不会自动调用同步。启用插件只为新加入、还没收到过这个世界数据的插件导入一次（见[开局后加入的接收插件](#开局后加入的接收插件)），不更新其他数据。玩家要使用新的开局数据，请新开会话；已有会话保留自己的数据和进度。正文仍按本页“改文件后自动重载”的规则更新。
 
 ```http
 POST /api/worlds/<world-id>/sync-data
@@ -1518,11 +1528,12 @@ POST /api/worlds/<world-id>/sync-data
 **媒体文件的保护。** 图片和音乐的字节按内容存放，由多局游戏共享，所以删除和失败时的处理比较保守：
 
 - 同步删除一条媒体索引时，只在事务提交之后移除当前会话对那个文件的引用。会话的其他索引行（内容相同的文件共用一个 ID）、消息或快照里还出现这个文件时，引用保留，历史里的图仍然能读，从旧快照分叉也不受影响。文件本身由媒体清理（GC）在没人用时回收。
-- 导入准备阶段，文件和一条本次导入专属的临时引用（`world-data-import:<uuid>`）一起写入，防止导入完成之前被清理掉。
+- 导入准备阶段，文件和一条本次导入专属的临时引用（`media-pin:<uuid>`）一起写入，防止导入完成之前被清理掉。
 - 导入完成时，先建立真实会话对文件的归属和引用，再释放临时引用。
 - 准备、事务或会话准入失败时，只释放本次导入的临时引用。不强制删除共享的文件，也不动已有会话的引用。
 - 新建会话的收尾失败时，在同一把会话锁内删除这个会话，并释放它的媒体归属和引用。
-- 数据已经提交、但收尾失败时，保留临时引用，避免已提交的索引失去保护。会话创建回滚时删除失败，同样保留。
+- 同步的数据已经提交、但收尾失败时，保留临时引用，避免已提交的索引失去保护。
+- 会话创建的收尾失败时总是释放临时引用，删除会话失败也一样：留下的会话数据仍然引用这些文件，清理前的扫描会保护它们。
 - 释放临时引用失败只记日志。进程崩溃或释放失败可能留下临时引用：它在创建满 24 小时后过期，由 `POST /api/media/cleanup` 释放，在那之前清理会保留那些文件（见 [媒体存储](./media-store.md#世界数据导入时的临时引用)）。
 
 ### World 包与插件包的边界
@@ -1605,6 +1616,7 @@ pnpm validate:world --strict --plugins ~/.covel/plugins ~/.covel/worlds/my-world
 - 错误信息包含文件、记录序号和 key。导入之前发现错误就拒绝整个计划，其余合法的记录也不写。
 - 空的 source 给出 warning。
 - 接收插件用 [`authoring.references`](./plugins.md) 声明了“这个值是角色属性的 `id`”时，按世界的 `characterSchema` 检查这个值。属性不存在、类型不对或数值超出属性范围，报 `attribute-reference` 错误。世界没有写 `characterSchema` 时不检查。
+- 声明了“这个值是维度的 ID”时，按世界声明的维度（`world.yaml` 的 `dimensions`、`dimensionSources` 和 `data/dimensions.yaml` 合在一起）检查。维度不存在，或者旁边的路径走不到维度 `schema` 允许的位置，报 `dimension-reference` 错误。例如事件条件里把 `barrowAlarm` 写成 `barowAlarm`，这个事件永远不会触发。世界没有声明任何维度时不检查。
 - 记录或角色字段里，名字以 `At` 结尾或叫 `timestamp`、取值是 ISO 时间的字段，会被当成记账信息，模型读不到。每个这样的字段给出一条 `model-hidden-field` 提醒。要让模型看到剧情里的时间，请换一个名字（`date`、`diedOn`），或者不写成 ISO 时间。
 - 记录里名字是 `id` 或以 `Id` / `Ids` 结尾、取值是 UUID 的字段，也会被当成记账信息，模型读不到，同样给出一条 `model-hidden-field` 提醒。请换成人能读懂的 ID，用小写单词加连字符，例如 `npc-lin-yao`。
 - 即使没有任何约定的数据文件，`dimensionSources` 也会被检查。
@@ -1633,6 +1645,7 @@ pnpm validate:world --strict --plugins ~/.covel/plugins ~/.covel/worlds/my-world
 | `inline-locale-map`     | error            | 主文件里把文本写成了多语言对照；主文件只写一种语言，译文放进语言文件                                                            |
 | `data-file-unused`      | warning          | `data/`、`characters/` 或 `media/` 中的文件未被 source 或框架功能使用                                                           |
 | `attribute-reference`   | error            | 记录里指向角色属性的值（由接收插件的 `authoring.references` 声明）在世界的 `characterSchema` 里不存在、类型不对或超出范围       |
+| `dimension-reference`   | error            | 记录里指向维度的值（由接收插件的 `authoring.references` 声明）不是世界声明的维度，或旁边的路径不是维度 `schema` 允许的位置      |
 | `model-hidden-field`    | warning          | 记录里有模型读不到的字段：名字以 `At` 结尾或叫 `timestamp`、取值是 ISO 时间；或者名字是 `id` / 以 `Id`、`Ids` 结尾、取值是 UUID |
 | `cover`                 | error            | `cover` 指向的文件应用无法显示                                                                                                  |
 | `theme-music`           | error            | `themeMusic` 指向的文件世界列表无法播放                                                                                         |

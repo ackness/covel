@@ -944,7 +944,7 @@ Gemini 上的默认形状只在一个模拟 Gemini 接口的本机中转上验�
 
 **请求预算**
 
-文本、对象、流式、评估和 embedding 的 gateway 调用，默认共用一份预算：最多 8 次实际 HTTP 请求，120 秒总时限。
+每次文本、对象、流式、评估或 embedding 的 gateway 逻辑调用默认有一份预算：最多 8 次实际 HTTP 请求，首次输出最多等 120 秒。
 
 - runtime 的一次逻辑调用只创建一份预算。HTTP 重试、备用目标和 runtime 重试传递同一个 `requestBudget`。
 - runtime 的执行预算继续按原来的策略计算，并发排队保留原有的额度补偿。
@@ -970,6 +970,12 @@ Agent runtime 的一次模型调用以 `max(120 秒, runtime 剩余时间)` 为�
 - 流式调用在第一次输出之前，受 `firstTokenTimeoutMs` 和 runtime 时限约束。
 - 之后只受 `idleTimeoutMs` 约束。输出花的时间不计入 runtime 的 `timeoutMs`。
 - `callTimeoutMs` 只约束非流式调用。
+
+函数 runtime 的每次 `generateText`、`generateObject`、`evaluate` 调用，由宿主按当时剩余的 `function.timeoutMs` 建立固定预算，截止时间不会超过 runtime 的截止时间。一次调用的 HTTP 重试、后备目标和停滞重发共用这份预算及 8 次传输额度；下一次调用重新计算剩余时间。排队也消耗函数的剩余时间，玩家取消会立即中止等待。
+
+**文本调用并发**
+
+`COVEL_LLM_MAX_CONCURRENT` 在 gateway 的每个文本目标尝试前取槽，覆盖文本、对象、流式和评估，包括 agent、函数、后台任务及直接调用。不同 gateway 实例共用一个进程级队列。流持续持槽直到结束、取消或调用方停止消费；失败和后备切换释放槽。agent 的排队通知暂停单次调用/首字计时，并给 runtime 截止时间补偿等候时间；逻辑请求预算仍计入排队。embedding 和媒体不占这个文本槽。
 
 **媒体和 embedding**
 

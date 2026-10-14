@@ -278,6 +278,53 @@ describe("workspace durable pending-commit recovery", () => {
     );
   });
 
+  it("recovers a commit applied before its pending action was cleared, after a world edit", async () => {
+    const service = new LocalDataService(vault);
+    await service.createSession("world", "session", [], "en-US");
+    // The server answers an actionId with the commit it cached for it.
+    const answered = new Map<string, unknown>();
+    const exportCommit = api.fetchBrowserCommit.getMockImplementation()!;
+    api.fetchBrowserCommit.mockImplementation(
+      async (id: string, actionId: string, baseRevision: number) => {
+        if (!answered.has(actionId))
+          answered.set(
+            actionId,
+            await exportCommit(id, actionId, baseRevision),
+          );
+        return answered.get(actionId);
+      },
+    );
+    const base = (await vault.getLatestCheckpoint("session"))!;
+    await vault.stagePendingCommit("session", "interrupted-action");
+    // The page closed after the commit was written, before the pending
+    // record was cleared.
+    await vault.applySessionCommit(
+      await api.fetchBrowserCommit(
+        "session",
+        "interrupted-action",
+        base.revision,
+      ),
+    );
+    await vault.upsertWorld({
+      ...(await vault.getWorld("world"))!,
+      description: "Edited after the interruption",
+    });
+
+    const mutate = vi.fn(async () => "done");
+    await expect(
+      createSessionWorkspace(service, "local").run(
+        "session",
+        "next-action",
+        mutate,
+      ),
+    ).resolves.toBe("done");
+    expect(mutate).toHaveBeenCalledOnce();
+    expect(await vault.getPendingCommit("session")).toBeNull();
+    const latest = (await vault.getLatestCheckpoint("session"))!;
+    expect(latest.actionId).toBe("next-action");
+    expect(latest.world?.description).toBe("Edited after the interruption");
+  });
+
   it.each([401, 409, 503])(
     "preserves the pending action on HTTP %i",
     async (status) => {

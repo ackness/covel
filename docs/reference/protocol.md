@@ -172,7 +172,7 @@ return { result: execution.result, committed: outcome.status === "committed" };
 | `resync`      | 只在 `committed: true`、并且这一回合提交之后有一部分事件没发出去时为 `true`。数据已经保存，客户端应该去读已保存的状态，不要等那些事件。订阅流同时会收到 `system.reset`，`reason: "publish-failed"` |
 
 > [!NOTE]
-> **开场接力。** 一次玩家动作完成了最后一个 setup runtime 时，`POST /api/actions` 的同一条 SSE 流会自动接着跑一个主循环回合（见 [api.md § POST /api/actions](./api.md)）。这时流里会出现**两轮** `execution.started` 和 runtime 生命周期事件，它们外层的 `turnId` 不同（setup 回合和接力回合）。但只有**一个** `execution.completed` 收尾。前端靠它结束“执行中”的状态，并按 `committed` 处理先行显示的内容。setup 提交失败时不会启动接力，直接以 `committed: false` 结束。
+> **开场接力。** 一次玩家动作完成了最后一个 setup runtime 时，`POST /api/actions` 的同一条 SSE 流会自动接着跑一个主循环回合（见 [api.md § POST /api/actions](./api.md)）。这时流里会出现**两轮** `execution.started` 和 runtime 生命周期事件，它们外层的 `turnId` 不同（setup 回合和接力回合）。但只有**一个** `execution.completed` 收尾。前端靠它结束“执行中”的状态，并按 `committed` 处理先行显示的内容。setup 提交失败时不会启动接力，直接以 `committed: false` 结束。玩家在接力开始前停止时，接力不再开始，`execution.completed` 带接力回合的 `turnId` 和 `abortReason: "aborted-by-player"`。
 
 **`runtime.deferred` 是“移交公告”**
 
@@ -193,6 +193,7 @@ return { result: execution.result, committed: outcome.status === "committed" };
 
 **abort：玩家停止这一回合**（`POST /api/sessions/:id/abort`）
 
+- 停止作用于玩家的这次动作请求，不只是当前的一个回合。请求还在等会话锁或等记忆更新时停止，回合不再开始，流里只有一个带 `abortReason` 的 `execution.completed`。
 - 它触发回合级的取消信号。重试层立刻切断正在进行的模型调用和流。玩家停止不会自动重试，也不会把半截叙事当成结果提交。
 - executor 停止调度后面的 runtime 组，并跳过事件链。
 - 被中止的 runtime 以失败上报（`runtime.failed`），它的提案不产出。最终提交时会检查玩家的取消信号：提交之前收到取消，整个回合都不提交。
@@ -216,7 +217,7 @@ return { result: execution.result, committed: outcome.status === "committed" };
 | ---------------- | ---- | -------- | ------------------------------ |
 | `error.occurred` | S→C  | 执行错误 | `{ message, code?, details? }` |
 
-- `code` 是可选的、稳定的错误码（如 `"session_busy"`）。客户端可以据此做翻译和重试。没有 `code` 时按 `message` 显示。
+- `code` 是可选的、稳定的错误码（如 `"session_busy"`）。客户端可以据此做翻译和重试。没有 `code` 时按 `message` 显示。动作开始前被拒绝的 code 见 [api.md § 流里的拒绝](./api.md#流里的拒绝)。
 - `details` 只随 `code: "form_rejected"` 出现，见[交互响应](#交互响应)。
 
 世界翻译接口使用另一种独立的 SSE 事件 `{ type: "error", message }`，没有 `code` 字段：
@@ -649,6 +650,7 @@ Gemini 原生的思考强度、`providerOptions.google.thinkingConfig`、`cached
 
 - 网页端收到 reset 或重连之后，带着 revision 检查重新拉取：会话快照、插件列表、所有启用插件的数据、没解决的 suspension 和世界。这期间到达的实时事件先缓冲，之后再重放。
 - 只有访问代次和执行所有权仍然对得上时，才用同一个 `turnId/runtimeId` 的已保存终态叙事替换流式占位，并移除这个占位的外部文本和待刷新的片段。一条新的、健康的 POST 流仍然拥有自己现场的输出。
+- 出错或断流后，只有恢复确认回合失败或中断、且没有对应的已保存故事时，才把已显示的文字移到“未保存”区域，清除占位和流式缓存。文字只保留到离开会话，不进入故事历史、舞台或插件数据；有可恢复动作时，旁边提供重试。未知网络状态不开放重试，已保存故事仍按上面的规则替换。玩家主动中止和正常 `committed: false` 的撤回规则不变。
 - 恢复快照的最近窗口如果和已加载的历史接不上，客户端先通过现有的消息分页接口只读地补到旧的锚点，再合并发布。它不删除旧窗口，也不重新发送动作。
 
 **给嵌入 `@covel/events` 的宿主**

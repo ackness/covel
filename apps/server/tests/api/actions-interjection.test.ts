@@ -207,6 +207,51 @@ describe("POST /api/actions — a mid-turn interjection follows the turn", () =>
     ).toBe(true);
   });
 
+  it("saves setup interjections once and reads them from history in the opening", async () => {
+    await store.updateSession(SESSION_ID, { phase: "setup" });
+    const addTraceEvent = store.addTraceEvent.bind(store);
+    let injected = false;
+    store.addTraceEvent = async (event) => {
+      if (event.type === "turn.started" && !injected) {
+        injected = true;
+        expect((await control("steer", { message: INTERJECTION })).status).toBe(
+          200,
+        );
+      }
+      await addTraceEvent(event);
+    };
+    const response = await app.request("/api/actions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        requestId: crypto.randomUUID(),
+        sessionId: SESSION_ID,
+        type: "start_session",
+        payload: {},
+      }),
+    });
+    const events = parseJsonFrames<Envelope>(await response.text());
+    expect(events.at(-1)).toMatchObject({
+      type: "execution.completed",
+      payload: { committed: true },
+    });
+    expect(injected).toBe(true);
+    expect(await store.listTurnResults(SESSION_ID)).toHaveLength(2);
+    expect(
+      interjectionsIn(await store.listTurnMessages(SESSION_ID)),
+    ).toHaveLength(1);
+    expect(interjectionsIn(await store.listMessages(SESSION_ID))).toHaveLength(
+      1,
+    );
+    expect(prompts).toHaveLength(1);
+    expect(
+      prompts[0]?.filter(
+        (message) =>
+          message.role === "user" && message.content === INTERJECTION,
+      ),
+    ).toHaveLength(1);
+  });
+
   it("a stopped turn keeps the interjection in neither table", async () => {
     duringFirstCall = async () => {
       expect((await control("steer", { message: INTERJECTION })).status).toBe(

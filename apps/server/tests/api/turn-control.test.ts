@@ -9,6 +9,7 @@ import type { DataStore } from "@covel/store";
 import {
   abortActiveTurn,
   hasActiveTurn,
+  registerActionRequest,
   registerActiveTurn,
   steerActiveTurn,
 } from "../../src/routes/api/turn-control.js";
@@ -93,6 +94,66 @@ describe("turn-control registry", () => {
     expect(hasActiveTurn("sess-2")).toBe(true);
     second.release();
     expect(hasActiveTurn("sess-2")).toBe(false);
+  });
+});
+
+describe("turn-control action requests", () => {
+  it("a stop reaches a request still waiting to start its turn", () => {
+    const request = registerActionRequest("sess-w", "turn-w", "req-w");
+    try {
+      // Waiting is not running: the execution status stays idle.
+      expect(hasActiveTurn("sess-w")).toBe(false);
+      expect(abortActiveTurn("sess-w")).toEqual({ turnId: "turn-w" });
+      expect(request.signal.aborted).toBe(true);
+    } finally {
+      request.release();
+    }
+    expect(abortActiveTurn("sess-w")).toBeNull();
+  });
+
+  it("a stop targets the running turn, not a request queued behind it", () => {
+    const running = registerActionRequest("sess-q", "turn-1");
+    const queued = registerActionRequest("sess-q", "turn-2");
+    try {
+      running.beginTurn("turn-1");
+      expect(abortActiveTurn("sess-q")).toEqual({ turnId: "turn-1" });
+      expect(running.signal.aborted).toBe(true);
+      expect(queued.signal.aborted).toBe(false);
+    } finally {
+      running.release();
+      queued.release();
+    }
+  });
+
+  it("one stop covers every turn the request chains", () => {
+    const request = registerActionRequest("sess-c2", "setup-turn");
+    try {
+      const setup = request.beginTurn("setup-turn");
+      // Between the setup turn and the opening, the request is still the target.
+      expect(abortActiveTurn("sess-c2")).toEqual({ turnId: "setup-turn" });
+      const opening = request.beginTurn("opening-turn");
+      expect(setup.signal?.aborted).toBe(true);
+      expect(opening.signal?.aborted).toBe(true);
+    } finally {
+      request.release();
+    }
+  });
+
+  it("a finished request has nothing to stop or steer", () => {
+    const request = registerActionRequest("sess-f", "turn-f");
+    try {
+      request.beginTurn("turn-f");
+      request.finish();
+      // Still running for the execution status until the stream ends.
+      expect(hasActiveTurn("sess-f")).toBe(true);
+      expect(abortActiveTurn("sess-f")).toBeNull();
+      expect(request.signal.aborted).toBe(false);
+      expect(steerActiveTurn("sess-f", "late")).toEqual({
+        refused: "no_active_turn",
+      });
+    } finally {
+      request.release();
+    }
   });
 });
 

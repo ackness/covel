@@ -78,7 +78,10 @@ export {
   WireAlreadyRegisteredError,
   type AiProviderErrorCode,
 } from "./errors.js";
-export { MALFORMED_TOOL_ARGUMENTS } from "./adapters/http/response.js";
+export {
+  MALFORMED_TOOL_ARGUMENTS,
+  readResponseJson,
+} from "./adapters/http/response.js";
 export {
   classifyProviderFailure,
   type ProviderFailure,

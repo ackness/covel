@@ -1,0 +1,3 @@
+### Added
+
+- **`pnpm validate:world` checks the dimensions that plugin data names.** `contributes.data.<ns>.authoring.references` accepts `to: world-dimension`, and a reference `path` can write `**.` before a field to find it at any depth (`when.**.dimension`). A value that is not a dimension the world declares, or a path beside it (`within`) that the dimension's schema does not allow, is a `dimension-reference` error. story-events declares the dimensions in its event conditions, so a misspelled dimension ID or path, which made an event never fire, is reported before a session starts. Documented in `docs/reference/plugins.md` and `docs/reference/world-data.md`.

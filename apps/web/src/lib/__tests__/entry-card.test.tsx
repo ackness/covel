@@ -133,3 +133,64 @@ describe("EntryCard", () => {
     });
   });
 });
+
+describe("provider-owned entry presentation", () => {
+  it.each(["en-US", "zh-CN"])(
+    "resolves category labels for %s and uses declared rarity style",
+    async (locale) => {
+      await i18n.changeLanguage(locale);
+      const { container } = renderEntryCard({
+        title: "Dispatch",
+        category: "urgent",
+        rarity: "priority-1",
+        categoryOptions: [
+          {
+            value: "urgent",
+            label: { en: "Urgent", zh: "紧急" },
+            icon: "compass",
+            color: "blue",
+          },
+        ],
+        rarityOptions: [{ value: "priority-1", tone: "danger", color: "red" }],
+      });
+      const badge = screen.getByText(locale === "zh-CN" ? "紧急" : "Urgent");
+      expect(badge.className).toContain("text-red-600");
+      expect(
+        container.querySelector(".ui-band")?.getAttribute("data-tone"),
+      ).toBe("danger");
+      expect(container.querySelector("svg.lucide-compass")).toBeTruthy();
+    },
+  );
+  it.each([
+    { category: "monster", rarity: "legendary" },
+    { category: "unfamiliar", rarity: "unfamiliar" },
+    {
+      category: "constructor",
+      rarity: "constructor",
+      categoryOptions: {},
+      rarityOptions: [null],
+    },
+  ])("uses neutral defaults without inferring gameplay enums: %j", (props) => {
+    const { container } = renderEntryCard({ title: "An entry", ...props });
+    expect(screen.getByText(props.category)).toBeTruthy();
+    expect(container.querySelector(".ui-band")?.getAttribute("data-tone")).toBe(
+      "muted",
+    );
+    expect(container.querySelector("svg.lucide-book-open")).toBeTruthy();
+    expect(container.querySelector("svg.lucide-skull")).toBeNull();
+  });
+  it("keeps explicit per-entry icon/color overrides", () => {
+    const { container } = renderEntryCard({
+      title: "Override",
+      category: "place",
+      icon: "gem",
+      color: "red",
+      categoryOptions: [
+        { value: "place", label: "Place", icon: "compass", color: "blue" },
+      ],
+    });
+    expect(
+      container.querySelector("svg.lucide-gem")?.getAttribute("class"),
+    ).toContain("text-red-500");
+  });
+});

@@ -150,6 +150,7 @@ export function ChatMessages({
             msg={msg}
             index={index}
             viewMode={renderViewMode}
+            plugins={plugins}
             lastUserMsgIndex={lastUserMsgIndex}
             sessionId={sessionId}
             executing={executing}
@@ -178,6 +179,7 @@ export function ChatMessages({
     },
     [
       renderViewMode,
+      plugins,
       lastUserMsgIndex,
       sessionId,
       executing,

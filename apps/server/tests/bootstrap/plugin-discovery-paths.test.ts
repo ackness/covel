@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -115,6 +115,75 @@ describe("registry runtime discovery paths", () => {
       },
     ]);
     expect(response.diagnostics).toEqual([]);
+  });
+});
+
+describe("a runtime that can never run", () => {
+  let dir: string;
+
+  beforeEach(async () => {
+    dir = await mkdtemp(path.join(tmpdir(), "covel-unrunnable-"));
+  });
+
+  afterEach(async () => {
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  it("is left out while the package and its other runtimes register", async () => {
+    const rootPath = path.join(dir, "mixed");
+    await mkdir(rootPath, { recursive: true });
+    await writeFile(
+      path.join(rootPath, "PLUGIN.md"),
+      `---\n${stringify({
+        id: "mixed",
+        kind: "plugin",
+        description: "One good runtime, one without a stage",
+        provides: ["mixed-notes@1"],
+      })}---\n`,
+    );
+    await writeFile(
+      path.join(rootPath, "handler.js"),
+      "export default () => ({});",
+    );
+    // `a-broken` sorts before `b-good`: pairing by index would give the good
+    // runtime the broken one's path.
+    for (const [name, schedule, output] of [
+      ["a-broken", undefined, { contract: "mixed-notes@1" }],
+      ["b-good", { stage: "post-turn" }, undefined],
+    ] as const) {
+      await mkdir(path.join(rootPath, "runtimes", name), { recursive: true });
+      await writeFile(
+        path.join(rootPath, "runtimes", name, "RUNTIME.md"),
+        `---\n${stringify({
+          type: "function",
+          function: { handler: "../../handler.js" },
+          ...(schedule ? { schedule } : {}),
+          ...(output ? { io: { output } } : {}),
+        })}---\n`,
+      );
+    }
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    const store = createMemoryStore();
+    const { registry } = await discoverAndRegisterPlugins({
+      pluginsDir: dir,
+      eventBus: createEventBus(store),
+    });
+    const entry = registry.get("mixed")!;
+    expect(entry.status).toBe("registered");
+    expect(entry.manifests?.map(({ manifest }) => manifest.name)).toEqual([
+      "mixed/b-good",
+    ]);
+    expect(entry.runtimeManifestPaths).toEqual({
+      "mixed/b-good": path.join(rootPath, "runtimes/b-good/RUNTIME.md"),
+    });
+    expect(entry.packageManifest?.plugin.provides).toEqual([]);
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining(
+        `${path.join(rootPath, "runtimes/a-broken/RUNTIME.md")}: schedule.stage:`,
+      ),
+    );
+    warn.mockRestore();
   });
 });
 

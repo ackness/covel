@@ -212,6 +212,8 @@
     "dimensionsImported": "Imported successfully",
     "reasonConnectionClosed": "Connection closed but backend did not report completion",
     "reasonSessionBusy": "Session is busy, please retry",
+    "reasonInputAlreadyCommitted": "This message was already sent and its turn is saved. Refresh to see it.",
+    "reasonRetryStale": "The task statuses have changed. Refresh them before retrying.",
     "reasonExecutionCommitFailed": "The turn could not be saved. Please try again.",
     "reasonExecutionFailed": "The turn failed. Please try again.",
     "reasonHistoryRestoreFailed": "The message history could not be restored. Reload the page if it stays out of date.",
@@ -271,6 +273,11 @@
     "memoryUpdateFailedHint": "This turn was saved. Check the memory model assignment and provider settings; memory will be attempted again after the next turn.",
     "memoryUpdateErrorDetails": "Error details",
     "memoryStoreWarning": "Data lost on restart",
+    "worldDataNotices": {
+      "title": "Some of this world's data is not in this game:",
+      "hint": "Data for a plugin that is off, or waiting for your approval, arrives when you turn that plugin on.",
+      "hide": "Hide"
+    },
     "worldDataPreflight": {
       "title": "World Data",
       "loading": "Checking",
@@ -329,6 +336,8 @@
     "recoveryUnknownDetail": "We cannot confirm the result yet. Reconnecting will check the original task without starting another turn.",
     "recoveryRunningDetail": "The server is continuing the original task. Its result will appear here automatically; you can wait or stop it.",
     "recoveryInterruptedDetail": "The unfinished task is no longer running. Your saved progress is preserved. Retry starts a new attempt only when you choose it.",
+    "unsavedNarrative": "Unsaved",
+    "unsavedNarrativeDetail": "This text was not saved. It stays here until you leave the session.",
     "recoveryHydratingDetail": "Recovering the latest saved result before you continue.",
     "recoveryRetry": "Retry unfinished turn",
     "recoveryRefresh": "Check status",
@@ -364,8 +373,9 @@
     },
     "stoppedDetail": "Generated content was not saved. Retry with the original input.",
     "submittedInteraction": "Completed interaction · expand to review",
-    "previousSuggestions": "Earlier suggestions · expand to review",
     "advancedPluginSettings": "Customize plugins and advanced settings",
+    "minimalPluginSet": "Back to the minimal set",
+    "minimalPluginSetHint": "The narrative plugins, the plugin that holds the world's dimensions, and what they and the world need; everything else is turned off.",
     "configureModelBeforeRetry": "Change model / parameters",
     "retryModelSettingsHint": "Change the model or lower its output limit, then retry this task. The retry uses your current settings.",
     "allWorlds": "All worlds ({{total}})",
@@ -399,7 +409,9 @@
     },
     "retryScopeLimited": "Only the selected failed tasks will run again. The story and other completed results are preserved. Each batch handles up to {{count}} tasks. Retry the remaining tasks afterward.",
     "activeTask": "{{label}}…",
-    "panelUnavailable": "This panel is not available in this session."
+    "panelUnavailable": "This panel is not available in this session.",
+    "previousPluginContent": "{{title}} · expand to review",
+    "pluginContent": "Plugin content"
   },
   "blocks": {
     "actionPlaceholder": "Or type your own action...",
@@ -1664,7 +1676,7 @@
       "allowSelected": "Authorize selected",
       "notNow": "Not now"
     },
-    "unavailable": "Some plugins of this session cannot run now: {{plugins}}. The game goes on without them; open the plugin list to see why.",
+    "unavailable": "Some plugins of this session are off. The game goes on without them:",
     "invokeRuntime": {
       "setupPending": "This plugin needs setup first. Continue the story for one turn and complete any setup form, then try again.",
       "submitted": "Submitted {{count}} background job(s): {{ids}}. Waiting for completion…",
@@ -1690,7 +1702,22 @@
     "invalidPanelSpecDetail": "Invalid panel spec: {{label}} — {{reason}}",
     "rpc": {
       "failed": "The plugin task failed. Try again."
-    }
+    },
+    "off": {
+      "needsProvider": "{{plugin}} is off: it needs {{contract}}. Turn on {{providers}} to use it.",
+      "noProvider": "{{plugin}} is off: it needs {{contract}}, and no installed plugin provides it. Install one under Settings → Install & manage, then restart the backend.",
+      "notInstalled": "{{plugin}} is not installed, or it failed to load.",
+      "conflict": "{{plugin}} conflicts with another plugin of this session.",
+      "other": "{{plugin}} cannot run now. Open the plugin list to see why.",
+      "turnOn": "Turn on {{plugin}}"
+    },
+    "noStory": {
+      "title": "No narrative plugin is on",
+      "detail": "Turns will not tell a story: none of the enabled plugins writes narration.",
+      "enable": "Turn on {{plugins}} to get a story.",
+      "install": "Install a narrative plugin under Settings → Install & manage, then restart the backend."
+    },
+    "dependentsOff": "These plugins will be off, because something they need is off:"
   },
   "pluginJob": {
     "runtimesNotLoaded": "{{plugin}} was approved, but {{count}} of its tasks cannot be loaded and will not run.",
@@ -1818,6 +1845,14 @@
       "empty": "No jobs yet.",
       "copy": "Copy",
       "rerun": "Re-run"
+    },
+    "candidateList": {
+      "draft": "Draft",
+      "send": "Send",
+      "accept": "Accept",
+      "regenerate": "Regenerate",
+      "title": "Candidates",
+      "regenerateHint": "Generate another set of candidates."
     }
   },
   "graph": {
@@ -2238,17 +2273,6 @@
     "confirmDelete": "Delete",
     "deleted": "Deleted items: {{count}} · {{size}} freed",
     "skipped": "Kept because a session uses them now: {{count}}"
-  },
-  "branchReply": {
-    "replyCandidates": "Reply candidates",
-    "draft": "Draft",
-    "send": "Send",
-    "accept": "Accept",
-    "regenerate": "Regenerate",
-    "regenerateHint": "Tap Regenerate for alternative phrasings of this reply.",
-    "jobSubmitted": "Submitted branch-reply job: {{jobId}}",
-    "approvalRequired": "Branch reply action requires approval.",
-    "actionFailed": "Branch reply action failed"
   },
   "characterBlueprint": {
     "empty": "No character blueprints yet",

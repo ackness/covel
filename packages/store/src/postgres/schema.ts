@@ -28,6 +28,7 @@ import {
   uniqueIndex,
   customType,
 } from "drizzle-orm/pg-core";
+import { isNotNull, isNull } from "drizzle-orm";
 
 const bytea = customType<{ data: Buffer | null }>({
   dataType() {
@@ -118,6 +119,13 @@ export const turnResults = pgTable(
   (table) => [
     index("pg_turn_results_session_id_idx").on(table.sessionId),
     index("pg_turn_results_turn_id_idx").on(table.turnId),
+    // The write order `queryTurnResults` and `listTurnResults` read in, as on
+    // SQLite (where the same index also locates the next `seq`).
+    index("pg_turn_results_session_created_seq_idx").on(
+      table.sessionId,
+      table.createdAt,
+      table.seq,
+    ),
   ],
 );
 
@@ -462,6 +470,26 @@ export const turnMessages = pgTable(
     index("pg_turn_messages_session_id_idx").on(table.sessionId),
     index("pg_turn_messages_turn_id_idx").on(table.sessionId, table.turnId),
     index("pg_turn_messages_write_seq_idx").on(table.sessionId, table.writeSeq),
+    // The history order (`turnMessageOrder`): the full list, its tail
+    // (`listRecentTurnMessages`) and the compacted tags walk the session's
+    // rows in index order instead of sorting all of them.
+    index("pg_turn_messages_session_order_idx").on(
+      table.sessionId,
+      table.createdAt,
+      table.order,
+      table.id,
+    ),
+    // The same order over the rows not compacted yet: the prompt history every
+    // turn reads (`listUncompactedTurnMessages`). It stays the size of the
+    // uncompacted tail however long the session grows.
+    index("pg_turn_messages_uncompacted_idx")
+      .on(table.sessionId, table.createdAt, table.order, table.id)
+      .where(isNull(table.compactedAtTurnId)),
+    // The player-message count of `getTurnMessageStats`, answered from the index.
+    index("pg_turn_messages_source_type_idx").on(
+      table.sessionId,
+      table.sourceType,
+    ),
   ],
 );
 
@@ -534,7 +562,19 @@ export const stateSnapshots = pgTable(
     payload: jsonb("payload").notNull(), // SnapshotPayload
     createdAt: text("created_at").notNull(),
   },
-  (table) => [index("pg_state_snapshots_session_id_idx").on(table.sessionId)],
+  (table) => [
+    index("pg_state_snapshots_session_id_idx").on(table.sessionId),
+    // The keyset page and the auto-snapshot prune: `(created_at, id)`.
+    index("pg_state_snapshots_session_created_idx").on(
+      table.sessionId,
+      table.createdAt,
+      table.id,
+    ),
+    // The prune keeps any snapshot a fork names as its parent, in any session.
+    index("pg_state_snapshots_parent_id_idx")
+      .on(table.parentId)
+      .where(isNotNull(table.parentId)),
+  ],
 );
 
 // ── Media Assets ───────────────────────────────────────────────

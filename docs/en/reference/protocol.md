@@ -172,7 +172,7 @@ Fields of `execution.completed`:
 | `resync`      | `true` only when `committed: true` and some events from this turn were not sent after the commit. The data is saved, so the client should read the saved state and not wait for those events. The subscription stream also gets `system.reset`, with `reason: "publish-failed"` |
 
 > [!NOTE]
-> **Opening handoff.** When a player action completes the last setup runtime, the same SSE stream of `POST /api/actions` automatically goes on to run one main-loop turn (see [api.md § POST /api/actions](./api.md)). In this case the stream shows **two** rounds of `execution.started` and runtime lifecycle events, and their outer `turnId` values differ (the setup turn and the handoff turn). But only **one** `execution.completed` closes the stream. The frontend uses it to end the "running" state, and it handles the early content according to `committed`. If the setup commit fails, no handoff starts, and the stream ends directly with `committed: false`.
+> **Opening handoff.** When a player action completes the last setup runtime, the same SSE stream of `POST /api/actions` automatically goes on to run one main-loop turn (see [api.md § POST /api/actions](./api.md)). In this case the stream shows **two** rounds of `execution.started` and runtime lifecycle events, and their outer `turnId` values differ (the setup turn and the handoff turn). But only **one** `execution.completed` closes the stream. The frontend uses it to end the "running" state, and it handles the early content according to `committed`. If the setup commit fails, no handoff starts, and the stream ends directly with `committed: false`. If the player stops before the handoff starts, it does not start, and `execution.completed` carries the handoff turn's `turnId` and `abortReason: "aborted-by-player"`.
 
 **`runtime.deferred` is a "handoff notice"**
 
@@ -193,6 +193,7 @@ Control during a turn uses HTTP endpoints, not SSE events (see [api.md § Contro
 
 **abort: the player stops this turn** (`POST /api/sessions/:id/abort`)
 
+- The stop applies to the player's action request, not only to the current turn. A stop while the request still waits for the session lock or the memory update means the turn does not start, and the stream holds only one `execution.completed` with `abortReason`.
 - It fires the turn-level cancel signal. The retry layer immediately cuts off the model call and stream in progress. A player stop is not retried automatically, and a half-finished narrative is not committed as a result.
 - The executor stops scheduling the remaining runtime groups, and skips the event chain.
 - An aborted runtime is reported as a failure (`runtime.failed`), and its proposals are not produced. At the final commit the player's cancel signal is checked. If the cancel arrived before the commit, the whole turn is not committed.
@@ -216,7 +217,7 @@ The real session progress values are `SessionRecord.phase` (`'setup' | 'playing'
 | ---------------- | ---- | ------------------ | ------------------------------ |
 | `error.occurred` | S→C  | An execution error | `{ message, code?, details? }` |
 
-- `code` is an optional, stable error code (such as `"session_busy"`). The client can use it to translate the message and to retry. Without `code`, the client shows `message`.
+- `code` is an optional, stable error code (such as `"session_busy"`). The client can use it to translate the message and to retry. Without `code`, the client shows `message`. For the codes of an action refused before it starts, see [api.md § Rejections in the stream](./api.md#rejections-in-the-stream).
 - `details` appears only with `code: "form_rejected"`. See [Interaction responses](#interaction-responses).
 
 The world translation endpoint uses a different SSE event, `{ type: "error", message }`, with no `code` field:
@@ -649,6 +650,7 @@ Each connection on `/api/actions` and `/api/events/stream` has a bounded queue t
 
 - After the web app gets a reset or reconnects, it refetches, checking revisions: the session snapshot, the plugin list, the data for every enabled plugin, unresolved suspensions, and the world. Live events that arrive during this are buffered first, and replayed afterwards.
 - The streamed placeholder is replaced with the saved final narrative for the same `turnId/runtimeId` only when the access generation and execution ownership still match. The external text of that placeholder and its pending fragments are removed. A new, healthy POST stream still owns its own live output.
+- After an error or stream loss, only authoritative recovery confirming a failed or interrupted turn without matching saved prose moves the displayed text to an “Unsaved” area and clears its placeholder and streaming buffers. This local copy lasts until leaving the session and never enters story history, stage content or plugin data. A retry appears beside it when recovery supplies an action. Unknown network state does not enable retry; saved prose still replaces placeholders as above. Player aborts and normal `committed: false` keep their existing removal behavior.
 - If the most recent window of the recovered snapshot does not join up with the history already loaded, the client first fills in older messages through the existing message pagination endpoint, read-only, up to the old anchor, and then merges and publishes. It does not delete the old window, and it does not resend the action.
 
 **For hosts that embed `@covel/events`**

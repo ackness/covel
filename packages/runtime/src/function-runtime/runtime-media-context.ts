@@ -1,4 +1,5 @@
-import type { MediaRef } from "@covel/shared";
+import { randomUUID } from "node:crypto";
+import { MEDIA_PIN_REF_PREFIX, type MediaRef } from "@covel/shared";
 import type { MediaStore } from "@covel/store";
 import type {
   MediaContext,
@@ -13,10 +14,12 @@ import type {
  * context can enforce per-session ownership before returning bytes — the
  * same gate `/api/media/:id` runs at the HTTP layer.
  *
- * `put`/`ingestUrl` perform put-time `addRef` (alongside `recordOwnership`)
- * so the owner row is always present and the second-writer in a content-
- * addressed dedup keeps a ref of its own atomically — no commit-time
- * follow-up is required to make the owner discoverable in `media_refs`.
+ * `put`/`ingestUrl` publish the bytes together with a temporary pin
+ * reference, record ownership plus the session's own ref, then drop the pin
+ * (see {@link PinnedMediaBatch}). The owner row is therefore always present
+ * and the second writer in a content-addressed dedup keeps a ref of its own —
+ * no commit-time follow-up is required to make the owner discoverable in
+ * `media_refs`.
  *
  * `get`/`resolveUrl` reject when the calling session neither owns the asset
  * nor has an explicit ref. `resolveUrl` further refuses to expose the
@@ -33,6 +36,8 @@ export type MediaStoreLike = Pick<
   | "lookup"
   | "isReferencedBy"
   | "addRef"
+  | "claimAssets"
+  | "removeRef"
   | "listByMetadata"
 >;
 
@@ -60,10 +65,113 @@ interface CreateRuntimeMediaContextOptions {
   readonly defaultTimeoutMs?: number;
 }
 
+/**
+ * A group of writes whose bytes stay pinned by one temporary reference
+ * (`media-pin:<uuid>`) from the moment they are published until the session's
+ * claims are recorded, so a concurrent media cleanup cannot delete them in
+ * between. Nothing is claimed for the session until `claim()`; call
+ * `release()` in a `finally` whatever happened.
+ */
+export interface PinnedMediaBatch {
+  put(blob: Uint8Array | Blob, mime: string, meta?: object): Promise<MediaRef>;
+  ingestUrl(url: string, opts?: IngestUrlOptions): Promise<MediaRef>;
+  /**
+   * Record ownership and the session's own ref for every asset stored so
+   * far, in one `claimAssets` transaction: all of them or none. Rejects
+   * without claiming anything once the invocation was aborted.
+   */
+  claim(): Promise<void>;
+  /**
+   * Drop the pin. Bytes nobody claimed are left to media cleanup. Best
+   * effort: a pin that fails to go expires through media cleanup.
+   */
+  release(): Promise<void>;
+}
+
+/** Kernel-side writer behind `ctx.media` and `ctx.images`; not plugin-facing. */
+export interface RuntimeMediaWriter {
+  beginBatch(): PinnedMediaBatch;
+}
+
 const DEFAULT_MAX_BYTES = 50 * 1024 * 1024;
 const DEFAULT_TIMEOUT_MS = 30_000;
 const DEFAULT_MAX_REDIRECTS = 5;
 const REDIRECT_STATUS = new Set([301, 302, 303, 307, 308]);
+
+export function createRuntimeMediaWriter(
+  mediaStore: MediaStoreLike,
+  /** Outbound HTTP surface for `ingestUrl`; see {@link createRuntimeMediaContext}. */
+  utils: PluginRuntimeUtils | undefined,
+  options: CreateRuntimeMediaContextOptions,
+): RuntimeMediaWriter {
+  const { sessionId, pluginId, signal } = options;
+  return {
+    beginBatch() {
+      const pin = {
+        sessionId: `${MEDIA_PIN_REF_PREFIX}${randomUUID()}`,
+        ...(pluginId === undefined ? {} : { pluginId }),
+      };
+      // Content addressing may hand two writes the same id.
+      const stored = new Set<string>();
+      const keep = (ref: MediaRef): MediaRef => {
+        stored.add(ref.id);
+        return ref;
+      };
+      return {
+        async put(blob, mime, meta) {
+          return keep(await mediaStore.put(blob, mime, meta, pin));
+        },
+        async ingestUrl(url, opts) {
+          if (!utils) {
+            throw new Error("ctx.media.ingestUrl requires runtime utils");
+          }
+          return keep(
+            await ingestUrlIntoStore(
+              mediaStore,
+              utils,
+              url,
+              opts,
+              options,
+              pin,
+            ),
+          );
+        },
+        async claim() {
+          signal?.throwIfAborted();
+          // First-writer-wins inside MediaStore.recordOwnership: a duplicate
+          // (same SHA-256) put from a second session reuses the existing row
+          // without overwriting the original owner. We always pair it with
+          // an addRef so (a) the owner session itself has a ref row
+          // (uniform authorisation lookups, simpler fork/cleanup), and
+          // (b) the second writer of a deduped asset still gains the
+          // explicit reference required by `isReferencedBy()` — without
+          // having to wait for an asset.generate proposal to be committed.
+          // One transaction: a failure part-way claims none of the batch.
+          await mediaStore.claimAssets(
+            [...stored].map((id) => ({
+              id,
+              sessionId,
+              ...(pluginId === undefined ? {} : { pluginId }),
+            })),
+          );
+        },
+        async release() {
+          for (const id of stored) {
+            try {
+              await mediaStore.removeRef(id, pin.sessionId);
+            } catch (error) {
+              console.warn(
+                "[media] failed to release a temporary media reference:",
+                error instanceof Error ? error.message : String(error),
+              );
+            }
+          }
+          stored.clear();
+        },
+      };
+    },
+  };
+}
 
 export function createRuntimeMediaContext(
   mediaStore: MediaStoreLike,
@@ -77,22 +185,23 @@ export function createRuntimeMediaContext(
   utils: PluginRuntimeUtils | undefined,
   options: CreateRuntimeMediaContextOptions,
 ): MediaContext {
-  const { sessionId, pluginId, signal } = options;
+  const { sessionId } = options;
+  const writer = createRuntimeMediaWriter(mediaStore, utils, options);
+  const writeOne = async (
+    write: (batch: PinnedMediaBatch) => Promise<MediaRef>,
+  ): Promise<MediaRef> => {
+    const batch = writer.beginBatch();
+    try {
+      const ref = await write(batch);
+      await batch.claim();
+      return ref;
+    } finally {
+      await batch.release();
+    }
+  };
   return {
     async put(blob, mime, meta) {
-      const ref = await mediaStore.put(blob, mime, meta);
-      signal?.throwIfAborted();
-      // First-writer-wins inside MediaStore.recordOwnership: a duplicate
-      // (same SHA-256) put from a second session reuses the existing row
-      // without overwriting the original owner. We always pair it with a
-      // put-time addRef so (a) the owner session itself has a ref row
-      // (uniform authorisation lookups, simpler fork/cleanup), and
-      // (b) the second writer of a deduped asset still gains the
-      // explicit reference required by `isReferencedBy()` — without
-      // having to wait for an asset.generate proposal to be committed.
-      await mediaStore.recordOwnership(ref.id, sessionId, pluginId);
-      await mediaStore.addRef(ref.id, sessionId, pluginId);
-      return ref;
+      return writeOne((batch) => batch.put(blob, mime, meta));
     },
     async get(ref) {
       await assertReadable(mediaStore, ref.id, sessionId);
@@ -110,20 +219,7 @@ export function createRuntimeMediaContext(
       return `media:${ref.id}`;
     },
     async ingestUrl(url, opts) {
-      if (!utils) {
-        throw new Error("ctx.media.ingestUrl requires runtime utils");
-      }
-      const ref = await ingestUrlIntoStore(
-        mediaStore,
-        utils,
-        url,
-        opts,
-        options,
-      );
-      signal?.throwIfAborted();
-      await mediaStore.recordOwnership(ref.id, sessionId, pluginId);
-      await mediaStore.addRef(ref.id, sessionId, pluginId);
-      return ref;
+      return writeOne((batch) => batch.ingestUrl(url, opts));
     },
   };
 }
@@ -153,6 +249,7 @@ async function ingestUrlIntoStore(
   url: string,
   opts: IngestUrlOptions | undefined,
   contextOptions: CreateRuntimeMediaContextOptions,
+  pin: Parameters<MediaStore["put"]>[3],
 ): Promise<MediaRef> {
   const originalUrl = normalizeAndValidateUrl(url, utils);
   const maxBytes = positiveInteger(
@@ -202,11 +299,16 @@ async function ingestUrlIntoStore(
       throw new Error(`media ingest MIME ${mime} is outside allowedMimes`);
     }
 
-    return mediaStore.put(bytes, mime, {
-      ...opts?.meta,
-      originalUrl: originalUrl.toString(),
-      finalUrl: finalUrl.toString(),
-    });
+    return mediaStore.put(
+      bytes,
+      mime,
+      {
+        ...opts?.meta,
+        originalUrl: originalUrl.toString(),
+        finalUrl: finalUrl.toString(),
+      },
+      pin,
+    );
   } finally {
     clearTimeout(timeout);
   }

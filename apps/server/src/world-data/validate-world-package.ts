@@ -26,6 +26,7 @@ import {
   narratorOnlyLoreIssues,
   validateWorldManifest,
   type NarratorOnlyLoreIssue,
+  type WorldDimensions,
 } from "@covel/shared";
 import { discoverAndRegisterPlugins } from "../routes/api/bootstrap/plugin-discovery.js";
 import { resolveLocaleFilePath } from "../world-seed-loader.js";
@@ -83,6 +84,7 @@ export interface WorldPackageDiagnostic {
     | "edition-incomplete"
     | "data-file-unused"
     | "attribute-reference"
+    | "dimension-reference"
     | "model-hidden-field"
     | "inline-locale-map"
     | "prompt-size"
@@ -141,6 +143,7 @@ interface WorldManifestView {
       readonly id?: string;
       readonly requested?: readonly string[];
       readonly recommended?: readonly string[];
+      readonly excluded?: readonly string[];
     }[];
   };
   readonly pluginSettings?: Readonly<Record<string, Record<string, unknown>>>;
@@ -409,6 +412,7 @@ function checkPluginReferences(
   manifest.pluginPolicy?.packs?.forEach((pack, index) => {
     collect(pack.requested, `pluginPolicy.packs[${index}].requested`);
     collect(pack.recommended, `pluginPolicy.packs[${index}].recommended`);
+    collect(pack.excluded, `pluginPolicy.packs[${index}].excluded`);
   });
   for (const id of Object.keys(manifest.pluginSettings ?? {}))
     references.push({ id, pointer: `pluginSettings.${id}` });
@@ -788,6 +792,8 @@ function defaultSessionPlugins(
     entries.map((entry) => buildPluginSummary(entry)),
   );
   return resolveSessionPluginPlan(plan.defaultPluginIds, catalogue, {
+    excluded: plan.packs.find((pack) => pack.id === plan.selectedPackId)
+      ?.excluded,
     authorized: entries.map((entry) => entry.id),
     requiredContracts: manifest.pluginPolicy?.requires ?? [],
   }).active;
@@ -852,12 +858,16 @@ async function checkWorldData(
     worldId: manifest.id,
     worldDataPath: manifest.worldData,
   });
+  // The dimensions a session of the world starts with, which references in
+  // its records are checked against. None when they fail to read.
+  let declaredDimensions: WorldDimensions | undefined;
   try {
     const dimensions = await readEffectiveDimensions({
       worldRoot: worldDir,
       manifest,
       sources: descriptor.sources,
     });
+    declaredDimensions = dimensions;
     const size = Object.values(dimensions).reduce(
       (total, dimension) =>
         total + estimateTokens(JSON.stringify(dimension.initialValue)),
@@ -1048,6 +1058,12 @@ async function checkWorldData(
       sources: descriptor.sources,
       catalogue,
       attributes: manifest.characterSchema?.attributes,
+      // A world that declares no dimensions may have them generated when a
+      // session starts, so nothing is known to check against.
+      dimensions:
+        declaredDimensions && Object.keys(declaredDimensions).length > 0
+          ? declaredDimensions
+          : undefined,
     })),
   );
   return diagnostics;
