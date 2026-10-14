@@ -243,6 +243,7 @@ describe.each([
         "pluginRegistry" as never,
         {
           get: () => undefined,
+          getAll: () => new Map(),
           applyPersistedActivations: async (
             _id: string,
             _plugins: string[],

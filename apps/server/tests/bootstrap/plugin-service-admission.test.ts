@@ -87,6 +87,35 @@ async function fixture() {
 }
 
 describe("production plugin service admission", () => {
+  it("does not admit a confirmed plugin whose requirement is missing", async () => {
+    const f = await fixture();
+    f.registry.register({
+      id: "dependent",
+      source: "builtin",
+      packageManifest: parsePluginMd(
+        "---\nid: dependent\nkind: plugin\ndescription: Dependent\nrequires: [missing@1]\n---\n",
+        "dependent/PLUGIN.md",
+      ),
+      manifests: [],
+      summary: {
+        id: "dependent",
+        name: "dependent",
+        description: "Dependent",
+        pluginType: "plugin",
+        runtimeCount: 0,
+      },
+      loadedRuntimes: new Map(),
+      status: "registered",
+    });
+    await f.store.updateSession("session", {
+      activePlugins: ["provider", "dependent"],
+    });
+    expect(await f.host.admission.list("session")).toEqual(["provider"]);
+    await expect(
+      f.host.admission.ensure("session", "dependent"),
+    ).rejects.toThrow("Plugin is not active: dependent");
+  });
+
   it("lists with one session read and skips deferred failed entries", async () => {
     const f = await fixture();
     f.getSession.mockClear();

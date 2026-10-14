@@ -191,3 +191,32 @@ describe("role routing policy", () => {
     expect(result).toMatchObject({ model: "jev-latest", tag: "evaluation" });
   });
 });
+
+describe("explicit media target capabilities", () => {
+  it.each(["story", "slot-story"])(
+    "rejects text target %s for every audio operation before I/O",
+    async (presetId) => {
+      const { gateway, calls } = setup();
+      const fetcher = vi.fn();
+      vi.stubGlobal("fetch", fetcher);
+      try {
+        await expect(
+          gateway.synthesizeSpeech({ presetId, text: "hi" }),
+        ).rejects.toMatchObject({ code: "CONFIG_ERROR", retriable: false });
+        await expect(
+          gateway.transcribeAudio({
+            presetId,
+            audio: { data: new Uint8Array([1]), mimeType: "audio/wav" },
+          }),
+        ).rejects.toMatchObject({ code: "CONFIG_ERROR", retriable: false });
+        await expect(
+          gateway.composeMusic({ presetId, prompt: "quiet music" }),
+        ).rejects.toMatchObject({ code: "CONFIG_ERROR", retriable: false });
+        expect(fetcher).not.toHaveBeenCalled();
+        expect(calls).toEqual([]);
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    },
+  );
+});

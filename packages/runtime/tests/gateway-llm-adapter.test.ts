@@ -27,11 +27,13 @@ describe("createGatewayAdapter target resolution", () => {
     };
     const budgets: unknown[] = [];
     const formats: unknown[] = [];
+    const locales: unknown[] = [];
     const gateway: GatewayLike = {
       resolveSlot: () => null,
       async generateText(input, options) {
         budgets.push(options?.requestBudget);
         formats.push(input.responseFormat);
+        locales.push(input.instructionLocale);
         return {
           text: "{}",
           usage: { inputTokens: 1, outputTokens: 1 },
@@ -42,6 +44,7 @@ describe("createGatewayAdapter target resolution", () => {
       async *streamText(input, options) {
         budgets.push(options?.requestBudget);
         formats.push(input.responseFormat);
+        locales.push(input.instructionLocale);
         yield { type: "done", finishReason: "stop", diagnostics };
       },
     };
@@ -49,16 +52,23 @@ describe("createGatewayAdapter target resolution", () => {
     const result = await adapter.generate({
       messages: [],
       requestBudget,
+      locale: "zh-CN",
       responseFormat,
     });
     const events = await Array.fromAsync(
-      adapter.stream!({ messages: [], requestBudget, responseFormat }),
+      adapter.stream!({
+        messages: [],
+        requestBudget,
+        responseFormat,
+        locale: "zh-CN",
+      }),
     );
     expect(result.diagnostics).toEqual(diagnostics);
     expect(events[0]).toMatchObject({ type: "done", diagnostics });
     expect(budgets).toHaveLength(2);
     for (const budget of budgets) expect(budget).toBe(requestBudget);
     expect(formats).toEqual([responseFormat, responseFormat]);
+    expect(locales).toEqual(["zh", "zh"]);
   });
   it("resolves the trace identity with the same request-scoped slot config", () => {
     const calls: Array<{

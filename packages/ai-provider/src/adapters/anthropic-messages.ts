@@ -372,12 +372,17 @@ export function createAnthropicMessagesAdapter(): ModelProviderAdapter {
       const { system, messages } = toAnthropicMessages(
         applyCapabilityFallback(params.messages, context),
         { model: params.model, config },
+        params.instructionLocale,
       );
       const anthropicTools = toAnthropicTools(params.tools);
       const systemField = buildAnthropicSystemField(
         system,
         config,
-        responseFormatInstruction(params.messages, params.responseFormat),
+        responseFormatInstruction(
+          params.messages,
+          params.responseFormat,
+          params.instructionLocale,
+        ),
       );
       const headers = anthropicHeaders(config.apiKey);
       const configNoKey = { ...config, apiKey: undefined };
@@ -435,6 +440,7 @@ export function createAnthropicMessagesAdapter(): ModelProviderAdapter {
       const { system, messages } = toAnthropicMessages(
         applyCapabilityFallback(params.messages, context),
         { model: params.model, config },
+        params.instructionLocale,
       );
       const systemField = buildAnthropicSystemField(
         system,
@@ -442,6 +448,7 @@ export function createAnthropicMessagesAdapter(): ModelProviderAdapter {
         responseFormatInstruction(
           params.messages,
           objectResponseFormat(params.schema, "anthropic"),
+          params.instructionLocale,
         ),
       );
       const headers = anthropicHeaders(config.apiKey);
@@ -514,12 +521,17 @@ export function createAnthropicMessagesAdapter(): ModelProviderAdapter {
       const { system, messages } = toAnthropicMessages(
         applyCapabilityFallback(params.messages, context),
         { model: params.model, config },
+        params.instructionLocale,
       );
       const anthropicTools = toAnthropicTools(params.tools);
       const systemField = buildAnthropicSystemField(
         system,
         config,
-        responseFormatInstruction(params.messages, params.responseFormat),
+        responseFormatInstruction(
+          params.messages,
+          params.responseFormat,
+          params.instructionLocale,
+        ),
       );
       const headers = anthropicHeaders(config.apiKey);
       const configNoKey = { ...config, apiKey: undefined };
