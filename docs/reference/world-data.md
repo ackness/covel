@@ -1605,6 +1605,7 @@ pnpm validate:world --strict --plugins ~/.covel/plugins ~/.covel/worlds/my-world
 - 错误信息包含文件、记录序号和 key。导入之前发现错误就拒绝整个计划，其余合法的记录也不写。
 - 空的 source 给出 warning。
 - 接收插件用 [`authoring.references`](./plugins.md) 声明了“这个值是角色属性的 `id`”时，按世界的 `characterSchema` 检查这个值。属性不存在、类型不对或数值超出属性范围，报 `attribute-reference` 错误。世界没有写 `characterSchema` 时不检查。
+- 声明了“这个值是维度的 ID”时，按世界声明的维度（`world.yaml` 的 `dimensions`、`dimensionSources` 和 `data/dimensions.yaml` 合在一起）检查。维度不存在，或者旁边的路径走不到维度 `schema` 允许的位置，报 `dimension-reference` 错误。例如事件条件里把 `barrowAlarm` 写成 `barowAlarm`，这个事件永远不会触发。世界没有声明任何维度时不检查。
 - 记录或角色字段里，名字以 `At` 结尾或叫 `timestamp`、取值是 ISO 时间的字段，会被当成记账信息，模型读不到。每个这样的字段给出一条 `model-hidden-field` 提醒。要让模型看到剧情里的时间，请换一个名字（`date`、`diedOn`），或者不写成 ISO 时间。
 - 记录里名字是 `id` 或以 `Id` / `Ids` 结尾、取值是 UUID 的字段，也会被当成记账信息，模型读不到，同样给出一条 `model-hidden-field` 提醒。请换成人能读懂的 ID，用小写单词加连字符，例如 `npc-lin-yao`。
 - 即使没有任何约定的数据文件，`dimensionSources` 也会被检查。
@@ -1633,6 +1634,7 @@ pnpm validate:world --strict --plugins ~/.covel/plugins ~/.covel/worlds/my-world
 | `inline-locale-map`     | error            | 主文件里把文本写成了多语言对照；主文件只写一种语言，译文放进语言文件                                                            |
 | `data-file-unused`      | warning          | `data/`、`characters/` 或 `media/` 中的文件未被 source 或框架功能使用                                                           |
 | `attribute-reference`   | error            | 记录里指向角色属性的值（由接收插件的 `authoring.references` 声明）在世界的 `characterSchema` 里不存在、类型不对或超出范围       |
+| `dimension-reference`   | error            | 记录里指向维度的值（由接收插件的 `authoring.references` 声明）不是世界声明的维度，或旁边的路径不是维度 `schema` 允许的位置      |
 | `model-hidden-field`    | warning          | 记录里有模型读不到的字段：名字以 `At` 结尾或叫 `timestamp`、取值是 ISO 时间；或者名字是 `id` / 以 `Id`、`Ids` 结尾、取值是 UUID |
 | `cover`                 | error            | `cover` 指向的文件应用无法显示                                                                                                  |
 | `theme-music`           | error            | `themeMusic` 指向的文件世界列表无法播放                                                                                         |

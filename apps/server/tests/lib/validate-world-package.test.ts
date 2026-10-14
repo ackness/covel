@@ -710,6 +710,105 @@ sources:
     ).toEqual([]);
   });
 
+  it("checks the dimensions a plugin's data names against the world's dimensions", async () => {
+    const withDimensions = `${MANIFEST}dimensions:
+  alarm:
+    name: Alarm
+    schema:
+      type: object
+      properties:
+        level: { type: integer, minimum: 0 }
+      required: [level]
+      additionalProperties: false
+    initialValue: { level: 0 }
+  rooms:
+    name: Rooms
+    schema:
+      type: object
+      additionalProperties:
+        type: object
+        properties:
+          status: { type: string }
+        additionalProperties: false
+    initialValue: {}
+`;
+    const events = (when: unknown[]) =>
+      when.map((condition, index) => ({
+        id: `event-${index}`,
+        when: condition,
+        payload: "Something happens.",
+      }));
+    const references = async (when: unknown[], manifest = withDimensions) =>
+      (
+        await validate(
+          await makeWorld(
+            {
+              "data/hidden/story-events.yaml": JSON.stringify(events(when)),
+            },
+            manifest,
+          ),
+        )
+      ).filter((item) => item.code === "dimension-reference");
+
+    expect(
+      await references([
+        { dimension: "alarm", path: "level", gte: 3 },
+        { all: [{ dimension: "rooms", path: "vault.status", equals: "open" }] },
+        { dimension: "rooms", path: ["vault"], exists: true },
+        { turnGte: 2 },
+      ]),
+    ).toEqual([]);
+
+    expect(
+      await references([
+        // A misspelled ID however deep the condition nests it.
+        {
+          all: [
+            { any: [{ not: { dimension: "alrm", path: "level", gte: 1 } }] },
+          ],
+        },
+        { dimension: "alarm", path: "levl", gte: 1 },
+        { dimension: "rooms", path: "vault.statsu", equals: "open" },
+        { dimension: "alarm", path: "level.value", gte: 1 },
+      ]),
+    ).toEqual([
+      expect.objectContaining({
+        level: "error",
+        file: "data/hidden/story-events.yaml",
+        pointer: "[0].when.all[0].any[0].not.dimension",
+        message: expect.stringContaining(
+          '"alrm" is not a dimension this world declares',
+        ),
+        hint: expect.stringContaining("alarm, rooms."),
+      }),
+      expect.objectContaining({
+        pointer: "[1].when.path",
+        message: expect.stringContaining(
+          "the value has no `levl`; it has level",
+        ),
+      }),
+      expect.objectContaining({
+        pointer: "[2].when.path",
+        message: expect.stringContaining("vault has no `statsu`"),
+      }),
+      expect.objectContaining({
+        pointer: "[3].when.path",
+        message: expect.stringContaining(
+          "level is of type integer and has no fields",
+        ),
+      }),
+    ]);
+
+    // A world that declares no dimensions may have them generated when a
+    // session starts: nothing to check against.
+    expect(
+      await references(
+        [{ dimension: "anything", path: "x", gte: 1 }],
+        MANIFEST,
+      ),
+    ).toEqual([]);
+  });
+
   it("warns about a record field that no model reads because it looks like a write time", async () => {
     const schema = `${MANIFEST}characterSchema:
   attributes:

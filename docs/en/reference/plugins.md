@@ -102,7 +102,7 @@ Extract facts supported by runtime-inputs.narrative.value, then call save-facts.
 | Root field                                      | Meaning                                                                                                                                                          |
 | ----------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `id`, `kind`                                    | Package identity. `kind` is `core` or `plugin`.                                                                                                                  |
-| `version`, `displayName`, `description`, `tags` | Metadata. Tags group and filter plugins in session prep; they do not determine runtime scheduling.                                                                                                         |
+| `version`, `displayName`, `description`, `tags` | Metadata. Tags group and filter plugins in session prep; they do not determine runtime scheduling.                                                               |
 | `covel`                                         | The range of host versions the package works with, such as `">=0.0.45"`. A host outside that range does not install or load the package.                         |
 | `author`, `license`, `homepage`                 | Author information, shown only for display. See [Author information](#author-information).                                                                       |
 | `provides`                                      | Versioned contract strings, or `{contract, default: true}`.                                                                                                      |
@@ -650,7 +650,7 @@ If reading an example or preparing a generatable contract schema fails during a 
 - `pnpm describe:authoring` summarizes the declarations of all scanned plugins. Adding `--check` validates each `example` against its namespace's schema.
 - For the fields, see the [Plugin manifest field table](./schema/plugin-manifest.md).
 
-Some values in a record are the `id` of a character attribute of the world. Declare them with `references`, and `pnpm validate:world` checks those values before a session starts:
+Some values in a record name something else in the world: the `id` of a character attribute, or the ID of a dimension. Declare them with `references`, and `pnpm validate:world` checks those values before a session starts:
 
 ```yaml
 authoring:
@@ -661,12 +661,21 @@ authoring:
       within: [base, max]
 ```
 
-- `path`: where the value is in each record. Field names are joined by `.`, with `[]` after a field that holds a list.
-- `to`: what the value names. For now only `character-attribute`, the `id` of a top-level attribute of the world's `characterSchema`.
-- `type` (optional): the named attribute must have this type.
-- `within` (optional): number fields beside the value. Each must lie inside the `min` and `max` of that attribute.
+- `path`: where the value is in each record. Field names are joined by `.`, with `[]` after a field that holds a list. `**.` before a field name finds that field at any depth below.
+- `to`: what the value names. `character-attribute` is the `id` of a top-level attribute of the world's `characterSchema`; `world-dimension` is the ID of a dimension the world declares.
+- `type` (optional, only for `character-attribute`): the named attribute must have this type.
+- `within` (optional): fields beside the value that must lie inside what it names. For `character-attribute`, number fields that must lie inside the `min` and `max` of that attribute. For `world-dimension`, a path into the dimension's value (`a.b`, or a list of keys); the dimension's `schema` must allow that place.
 
-A value that does not fit is reported as an `attribute-reference` error. A world without a `characterSchema` is not checked, because its attributes are only generated when a session starts. Declare only rules that the plugin really refuses at run time. Otherwise a valid world is reported by mistake.
+The bundled story-events declares the dimensions in its event conditions like this. A condition can nest `all` / `any` / `not` to any depth, so the path uses `**`:
+
+```yaml
+references:
+  - path: when.**.dimension
+    to: world-dimension
+    within: [path]
+```
+
+A value that does not fit is reported as an `attribute-reference` or `dimension-reference` error. Attributes are not checked in a world without a `characterSchema`, and dimensions are not checked in a world that declares none, because they are only generated when a session starts. Declare only what the plugin really cannot find or refuses at run time. Otherwise a valid world is reported by mistake.
 
 A world data source writes `to: contract:example.facts@1`. If you leave out `schema`, the schema of the target contract is used. The framework finds the active namespaces that declare that they accept this contract, validates the schema, and then delivers the data to them. The framework does not recognize any specific plugin ID. The `contracts` and the schema of the receiving namespace must match. For the full structure, see [World Data](./world-data.md).
 
