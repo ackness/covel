@@ -71,8 +71,9 @@ export function StageDialog({
           type="button"
           onClick={handleFrameClick}
           aria-label={t("stage.advanceLabel")}
-          className="flex w-full cursor-pointer flex-col gap-1.5 rounded-(--radius-card) p-4 text-left transition-colors hover:bg-[color-mix(in_oklab,var(--color-foreground)_5%,transparent)]"
-        >
+          className="absolute inset-0 cursor-pointer rounded-(--radius-card) transition-colors hover:bg-[color-mix(in_oklab,var(--color-foreground)_5%,transparent)] focus-visible:outline-2 focus-visible:outline-(--accent-primary)"
+        />
+        <div className="pointer-events-none relative flex flex-col gap-1.5 p-4">
           {speakerName && (
             <span
               data-testid="stage-dialog-speaker"
@@ -81,7 +82,12 @@ export function StageDialog({
               {speakerName}
             </span>
           )}
-          <p className="min-h-[3.6em] whitespace-pre-line text-sm leading-relaxed">
+          <p
+            aria-live="polite"
+            aria-atomic="true"
+            aria-busy={status === "typing"}
+            className="min-h-[3.6em] whitespace-pre-line text-sm leading-relaxed"
+          >
             {visible}
             {status === "pause" && (
               <span
@@ -92,7 +98,7 @@ export function StageDialog({
               </span>
             )}
           </p>
-        </button>
+        </div>
       </div>
     </div>
   );

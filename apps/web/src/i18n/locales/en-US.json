@@ -17,6 +17,7 @@
     "primary": "Primary"
   },
   "session": {
+    "cached": "Cached",
     "reasoningContent": "Thinking",
     "reasoningContentHint": "Reasoning text or summaries returned by the model, in call order.",
     "config": "Studio Config",
@@ -1835,7 +1836,7 @@
     }
   },
   "characterPresence": {
-    "hint": "Click a portrait to enlarge, or hover and pick an image to replace it.",
+    "hint": "Click a portrait to enlarge it, or choose Replace to upload an image.",
     "empty": "This world ships no character portraits yet.",
     "replace": "Replace",
     "uploading": "Uploading…",
