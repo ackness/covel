@@ -1987,7 +1987,8 @@ Web 设置页根据 `operatorTokenRequired` 决定是否显示“运维访问”
 **写入的时机:**
 
 - 模型生成期间，服务端不持有世界操作锁，也不写语言文件。
-- 发布时才取锁。锁内核对世界的创建时间、包的实际路径与目录身份，然后写语言文件并合并语言元数据。模型等待期间你保存的编辑会保留。
+- 发布时才取锁。锁内核对世界的创建时间、包的实际路径与目录身份，在暂存副本里写语言文件和 `supportedLocales`，读回预检通过后替换目录并保存记录。模型等待期间你保存的编辑会保留。
+- 写文件或读回失败时丢弃暂存副本；保存记录失败时恢复原包。媒体、作者文件和生成标记都随副本保留。
 - 世界正在删除、已经删除，或用同一个 ID 重建过时，请求收到 SSE `error`。旧请求不会往新包里写文件，也不会清理新包的文件。
 
 **响应:** SSE 事件流。
@@ -3399,6 +3400,7 @@ runtime 报告失败时，它的原始错误保留在 `result.runtimeResults` �
 
 - 内容全部来自插件清单的 `contributes.data.*.authoring` 声明，没有写死的插件列表。
 - `pnpm describe:authoring` 输出的是同一份数据。
+- 示例无法读取、不是 JSON，或可生成契约的 schema 缺失、无效或冲突时，只略过对应契约。可选的 `diagnostics` 数组逐项返回 `{ pluginId, namespace, message }`，服务端也记录警告；其他契约和插件仍可用。
 - 查询参数 `locale` 决定 `title` 等展示文本的语言，省略时用服务端默认语言。
 
 **响应节选:**
@@ -4900,7 +4902,7 @@ interface SseEnvelope {
 | `contracts`              | string[] | 插件内容，写数据契约 ID                                                       |
 | `additionalInstructions` | string   | 对世界包的补充要求（最多 2000 字符），如角色关系、禁忌、节奏或要避开的内容    |
 
-`contracts` 的可选值来自 `GET /api/framework/authoring` 里带 `generate` 的契约，传其他值返回 `400`。
+`contracts` 的可选值来自 `GET /api/framework/authoring` 里带 `generate` 的契约，传其他值返回 `400`。准备失败的契约不会出现在可选列表里；生成和修订继续处理其余内容，`done.warnings` 说明略过了哪个插件、namespace 和契约。
 
 `saveTarget` 的取值：
 
@@ -4911,7 +4913,7 @@ interface SseEnvelope {
 | `return-only`  | SSE 响应体                            | 调用方自行保存                 | 浏览器本地 IndexedDB、预览生成结果、公开服务避免写服务端持久层 |
 
 - `server-file` 的目录依次取 `COVEL_USER_WORLDS_DIR`、`$COVEL_HOME/worlds`、`~/.covel/worlds`，与世界包安装入口一致。`COVEL_WORLDS_DIR` 只用于内置世界包。
-- `server-store` 和 `return-only` 先把世界包写进临时目录做校验，然后删除临时目录。
+- `server-store` 和 `return-only` 用生成器校验后的结构化结果组装记录，不写世界包文件。
 - 这两个模式保存的 `WorldRecord.metadata`：
   - 去掉文件路径类的 `worldDataPath`、`worldData` 和 `dimensionSources`；
   - 保留已归一化的 `metadata.dimensions`；
@@ -5910,7 +5912,8 @@ STORE_BACKEND=pg DATABASE_URL=postgresql://covel:pass@localhost:5432/covel pnpm 
 
 **生成的世界文件**
 
-- 生成的世界先写进一个隐藏的暂存目录，写完整之后才发布。
+- 生成、修订和翻译的世界文件先写进隐藏的暂存目录。完整副本通过与 ZIP 安装相同的包预检后才发布：清单和世界数据读回不得有错误，且不读取本地覆盖。
+- 这项包预检不要求玩家启用接收插件；会话数据的契约检查仍由会话预检负责。
 - 已有的包和数据库里的身份都保留。ID 冲突或激活失败通过一条 SSE error 事件报告。
 - 激活失败时，只删除这次请求创建的包。
 
@@ -6084,7 +6087,8 @@ STORE_BACKEND=pg DATABASE_URL=postgresql://covel:pass@localhost:5432/covel pnpm 
 - 局部校验失败时，修正请求带上一份答案和校验错误。
 - 输出被截断，或者模型流缺少完成事件时，立即报告错误。残缺的内容不会被当成完整的包继续重写。
 - 最终保存时仍有原子的冲突检查，防止生成期间新出现的同名世界被覆盖。
-- 生成、修订和翻译相互排斥，互斥覆盖整个 SSE 生命周期。
+- 同一服务端的生成、修订和翻译共用一个互斥标记，覆盖整个 SSE 生命周期和清理阶段。忙时新请求立即返回 `429 operation_in_progress`，不调用模型；结束或失败后释放。
+- 这个标记不阻止编辑和删除。保存仍须取得世界操作锁并重新核对：生成不能覆盖已有 ID，修订不能覆盖模型等待期间的修改，翻译不能写进已删除或替换的包。
 
 **世界数据的语言覆盖**
 

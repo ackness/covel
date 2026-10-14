@@ -627,6 +627,8 @@ namespace 接收某个契约，就说明了这个契约的记录长什么样。�
 
 接收世界数据的 namespace 还可以声明 `authoring`（`title`、`summary`、`hint`、`example`、`source`、`references`、`generate`）。它告诉世界作者怎样提供这份内容，以及应用内的生成器能不能生成它。
 
+请求期读取示例或准备可生成契约的 schema 失败时，只略过该契约并报告插件、namespace 和原因，不会停用整个插件或阻止其他内容生成。`pnpm describe:authoring --check` 仍把损坏的示例报给作者。
+
 - 只有列出了 `accepts` 的 namespace 才能声明它。
 - `pnpm describe:authoring` 汇总所有已扫描插件的声明；加 `--check` 会按 namespace 的 schema 校验每份 `example`。
 - 字段见 [Plugin manifest 字段表](./schema/plugin-manifest.md)。

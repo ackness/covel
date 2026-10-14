@@ -627,6 +627,8 @@ When a namespace accepts a contract, that shows what the contract's records look
 
 A namespace that receives world data can also declare `authoring` (`title`, `summary`, `hint`, `example`, `source`, `references`, `generate`). It tells world authors how to provide this content, and whether the in-app generator can generate it.
 
+If reading an example or preparing a generatable contract schema fails during a request, only that contract is skipped, with its plugin, namespace, and reason reported. The plugin remains enabled and other content can still be generated. `pnpm describe:authoring --check` continues to report broken examples to authors.
+
 - Only a namespace that lists `accepts` can declare it.
 - `pnpm describe:authoring` summarizes the declarations of all scanned plugins. Adding `--check` validates each `example` against its namespace's schema.
 - For the fields, see the [Plugin manifest field table](./schema/plugin-manifest.md).
