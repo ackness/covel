@@ -5928,7 +5928,7 @@ STORE_BACKEND=memory pnpm dev:server  # 临时 Memory 后端（重启即丢失�
 
 - **服务器存储**: `DEPLOYMENT_TIER=demo`、`STORE_BACKEND=memory`（见仓库里的 `render.yaml`）。
 - **存档**: 以玩家浏览器 IndexedDB 里的为准。服务器把会话放在内存里执行回合，不写进数据库；会话删除或服务器重启后，内存里的这份就没有了。
-- **API 密钥**: 存在浏览器里，每次请求通过 `X-Provider-Keys` 带来。服务器不把它写进存储；后台作业要用时，在内存里最多留 5 分钟。
+- **API 密钥**: 存在浏览器里，每次请求通过 `X-Provider-Keys` 带来。服务器不把它写进存储；后台作业要用时，它在内存里等作业开始，默认最多等 5 分钟；声明了排队期限（`maxQueueMs`）的作业按那个期限等，作业运行期间也一直持有。
 - **认证**: **必需**。
   - 启动时必须设置运维 token（`COVEL_DESKTOP_REST_TOKEN`）和媒体密钥（`COVEL_MEDIA_TOKEN_SECRET`），缺了服务器拒绝启动。
   - 会话作用域的端点强制 session owner token；全局端点和管理端点强制运维 token。

@@ -5930,7 +5930,7 @@ STORE_BACKEND=memory pnpm dev:server  # Temporary Memory backend (data is lost o
 
 - **Server storage**: `DEPLOYMENT_TIER=demo`, `STORE_BACKEND=memory` (see `render.yaml` in the repository).
 - **Saves**: the copy in the player's browser IndexedDB is the save. The server keeps the session in memory to run turns and writes nothing to a database. The in-memory copy is gone when the session is deleted or the server restarts.
-- **API keys**: they are stored in the browser and travel with each request in the `X-Provider-Keys` header. The server never writes them to storage; when a background job needs one, it stays in memory for at most 5 minutes.
+- **API keys**: they are stored in the browser and travel with each request in the `X-Provider-Keys` header. The server never writes them to storage; when a background job needs one, it waits in memory for the job to start: 5 minutes by default, or the job's queue deadline (`maxQueueMs`) when it declares one, and the running job holds it until it ends.
 - **Authentication**: **required**.
   - At startup you must set the operator token (`COVEL_DESKTOP_REST_TOKEN`) and the media secret (`COVEL_MEDIA_TOKEN_SECRET`). Without them the server refuses to start.
   - Session-scoped endpoints enforce the session owner token. Global endpoints and admin endpoints enforce the operator token.
