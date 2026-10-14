@@ -8,7 +8,6 @@
 
 import { compareText } from "@covel/shared";
 import { readFile } from "node:fs/promises";
-import path from "node:path";
 import type { PluginRegistry } from "@covel/plugin-loader";
 import { resolveI18nText } from "@covel/shared";
 import {
@@ -19,6 +18,7 @@ import { resolveContainedPath } from "../world-data/safe-path.js";
 import {
   pluginSchemaUriForTarget,
   resolvePluginSchema,
+  resolveWorldContractSchema,
 } from "../world-data/schema-registry.js";
 import { sourceItems } from "../world-data/session-import/utils.js";
 
@@ -85,6 +85,7 @@ export interface AuthoringDestination {
 }
 
 export interface AuthoringSurface {
+  readonly diagnostics?: readonly AuthoringExampleIssue[];
   readonly files: readonly {
     readonly path: string;
     readonly purpose: string;
@@ -164,11 +165,13 @@ async function readExample(
   rootPath: string | undefined,
   example: string | undefined,
 ): Promise<unknown> {
-  if (!rootPath || !example) return undefined;
+  if (!example) return undefined;
+  if (!rootPath) throw new Error("Plugin root is unavailable");
   const examplePath = await resolveContainedPath(rootPath, example, {
     rejectSymlinks: true,
   });
-  if (!examplePath) return undefined;
+  if (!examplePath)
+    throw new Error(`Example path is missing or invalid: ${example}`);
   return JSON.parse(await readFile(examplePath, "utf-8")) as unknown;
 }
 
@@ -178,12 +181,13 @@ export async function describeAuthoringSurface(
 ): Promise<AuthoringSurface> {
   const locale = options.locale ?? "en-US";
   const contracts: AuthoringContract[] = [];
+  const diagnostics: AuthoringExampleIssue[] = [];
   const plugins: AuthoringPlugin[] = [];
   const entries = [...catalogue.getAll()].sort(([a], [b]) => compareText(a, b));
 
   for (const [pluginId, entry] of entries) {
     const plugin = entry.packageManifest?.plugin;
-    if (!plugin) continue;
+    if (!plugin || entry.status === "error") continue;
     plugins.push({
       id: pluginId,
       displayName: text(plugin.displayName, locale) || pluginId,
@@ -206,38 +210,59 @@ export async function describeAuthoringSurface(
     )) {
       for (const contract of declaration.accepts ?? []) {
         const authoring = declaration.authoring;
-        contracts.push({
-          contract,
-          pluginId,
-          namespace,
-          title: text(authoring?.title, locale) || contract,
-          ...(authoring?.summary
-            ? { summary: text(authoring.summary, locale) }
-            : {}),
-          ...(declaration.description
-            ? { description: declaration.description }
-            : {}),
-          ...(authoring?.hint ? { hint: authoring.hint } : {}),
-          schema: declaration.schema,
-          ...(authoring?.source
-            ? {
-                source: {
-                  id: namespace,
-                  entry: pluginSourceEntry(
-                    contract,
-                    authoring.source,
-                  ) as AuthoringSourceEntry,
-                },
-              }
-            : {}),
-          example: await readExample(entry.rootPath, authoring?.example),
-          ...(authoring?.generate ? { generate: authoring.generate } : {}),
-        });
+        try {
+          const example = await readExample(entry.rootPath, authoring?.example);
+          if (authoring?.generate) {
+            const schema = await resolveWorldContractSchema(contract, {
+              registry: catalogue,
+            });
+            if (!schema || "level" in schema)
+              throw new Error(
+                schema && "level" in schema
+                  ? schema.message
+                  : `No schema for ${contract}`,
+              );
+          }
+          contracts.push({
+            contract,
+            pluginId,
+            namespace,
+            title: text(authoring?.title, locale) || contract,
+            ...(authoring?.summary
+              ? { summary: text(authoring.summary, locale) }
+              : {}),
+            ...(declaration.description
+              ? { description: declaration.description }
+              : {}),
+            ...(authoring?.hint ? { hint: authoring.hint } : {}),
+            schema: declaration.schema,
+            ...(authoring?.source
+              ? {
+                  source: {
+                    id: namespace,
+                    entry: pluginSourceEntry(
+                      contract,
+                      authoring.source,
+                    ) as AuthoringSourceEntry,
+                  },
+                }
+              : {}),
+            example,
+            ...(authoring?.generate ? { generate: authoring.generate } : {}),
+          });
+        } catch (error) {
+          const message = `${contract}: ${error instanceof Error ? error.message : String(error)}`;
+          diagnostics.push({ pluginId, namespace, message });
+          console.warn(
+            `[authoring] Skipping ${pluginId}/${namespace}: ${message}`,
+          );
+        }
       }
     }
   }
 
   return {
+    ...(diagnostics.length ? { diagnostics } : {}),
     files: WORLD_FILES,
     destinations: KERNEL_DESTINATIONS,
     contracts,
@@ -267,53 +292,38 @@ export async function validateAuthoringExamples(
       if (!authoring?.example) continue;
       const report = (message: string) =>
         issues.push({ pluginId, namespace, message });
-      const examplePath = entry.rootPath
-        ? await resolveContainedPath(entry.rootPath, authoring.example, {
-            rejectSymlinks: true,
-          })
-        : null;
-      if (!examplePath) {
-        report(
-          `example path is invalid or leaves the package: ${authoring.example}`,
-        );
-        continue;
-      }
-      let value: unknown;
       try {
-        value = JSON.parse(await readFile(examplePath, "utf-8"));
+        const value = await readExample(entry.rootPath, authoring.example);
+        const schema = await resolvePluginSchema(
+          pluginSchemaUriForTarget({ pluginId, namespace }),
+          pluginId,
+          namespace,
+          { registry: catalogue },
+        );
+        if ("level" in schema) {
+          report(schema.message);
+          continue;
+        }
+        if (schema.kind !== "plugin" || !schema.validate) continue;
+        // A keyed list is imported record by record; anything else is one value.
+        const records =
+          authoring.source?.key && Array.isArray(value)
+            ? sourceItems(value)
+            : [value];
+        records.forEach((record, index) => {
+          if (schema.validate!(record)) return;
+          const where = records.length > 1 ? `record ${index}: ` : "";
+          report(
+            `${authoring.example} ${where}${(schema.validate!.errors ?? [])
+              .map(
+                (error) => `${error.instancePath || "(root)"} ${error.message}`,
+              )
+              .join("; ")}`,
+          );
+        });
       } catch (error) {
-        report(
-          `cannot read example ${path.basename(examplePath)}: ${error instanceof Error ? error.message : String(error)}`,
-        );
-        continue;
+        report(error instanceof Error ? error.message : String(error));
       }
-      const schema = await resolvePluginSchema(
-        pluginSchemaUriForTarget({ pluginId, namespace }),
-        pluginId,
-        namespace,
-        { registry: catalogue },
-      );
-      if ("level" in schema) {
-        report(schema.message);
-        continue;
-      }
-      if (schema.kind !== "plugin" || !schema.validate) continue;
-      // A keyed list is imported record by record; anything else is one value.
-      const records =
-        authoring.source?.key && Array.isArray(value)
-          ? sourceItems(value)
-          : [value];
-      records.forEach((record, index) => {
-        if (schema.validate!(record)) return;
-        const where = records.length > 1 ? `record ${index}: ` : "";
-        report(
-          `${authoring.example} ${where}${(schema.validate!.errors ?? [])
-            .map(
-              (error) => `${error.instancePath || "(root)"} ${error.message}`,
-            )
-            .join("; ")}`,
-        );
-      });
     }
   }
   return issues;

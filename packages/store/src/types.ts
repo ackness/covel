@@ -62,6 +62,7 @@ export type {
   SnapshotRecord,
   SnapshotMetadata,
   SuspensionRecord,
+  SuspensionBasis,
 } from "./records/snapshot-records.js";
 
 // Session-lifecycle records live in @covel/shared (the cross-layer contract);
@@ -759,21 +760,19 @@ export interface SuspensionStore {
    */
   releaseSuspensionClaim(id: string, claim: string): Promise<boolean>;
   /**
-   * Global maintenance sweep of stale suspensions.
+   * Stale suspensions for the global expiry sweep: records still unresolved
+   * (`resolvedAt` unset) whose `createdAt` is strictly older than
+   * `olderThanIso`, oldest first. Claimed (in-flight, `"claimed:<iso>"`) and
+   * resolved records are never listed.
    *
-   * Deletes ONLY records that are still unresolved (`resolvedAt` unset) AND
-   * whose `createdAt` is strictly older than `olderThanIso`. Claimed
-   * (in-flight, `"claimed:<iso>"`) and successfully-resolved records are never
-   * touched — an in-progress or completed resume must survive the sweep.
-   *
-   * Not session-scoped: a single call sweeps every session. `olderThanIso` is
-   * an ISO-8601 UTC timestamp compared lexicographically (chronologically
-   * correct for normalized ISO strings). Returns the number of records deleted.
-   *
-   * Best-effort: callers (startup + opportunistic route sweep) treat any error
-   * as non-fatal. See `apps/server/src/routes/api/suspension-sweep.ts`.
+   * Not session-scoped: one call covers every session. `olderThanIso` is an
+   * ISO-8601 UTC timestamp compared lexicographically. The sweep abandons each
+   * record under its session lock, the way `DELETE /suspensions/:id` does, so
+   * the turn it held back is settled (`apps/server/src/routes/api/suspension-sweep.ts`).
    */
-  deleteExpiredSuspensions(olderThanIso: string): Promise<number>;
+  listExpiredSuspensions(
+    olderThanIso: string,
+  ): Promise<readonly SuspensionRecord[]>;
   /**
    * Make suspensions claimable again when their claim (`"claimed:<iso>"`) is
    * strictly older than `olderThanIso`: the process that claimed them ended

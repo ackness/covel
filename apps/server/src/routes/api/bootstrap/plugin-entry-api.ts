@@ -1,5 +1,7 @@
-import { fetchWithRetry, validateBaseUrlForPlugin } from "@covel/ai-provider";
-import { getPluginTrustInfo } from "@covel/plugin-loader";
+import {
+  getPluginTrustInfo,
+  type PluginEntryDefinition,
+} from "@covel/plugin-loader";
 import type {
   PluginAPI,
   PluginToolkit,
@@ -18,6 +20,7 @@ import {
 } from "@covel/tools";
 import { z } from "zod";
 import type { BootstrapPluginEntriesParams } from "./plugin-entry.js";
+import { createEntryHttp, withCallSignal } from "./entry-http.js";
 import { registerNamespaced } from "./plugin-wires.js";
 import { PluginRegistrationError } from "./plugin-registration-error.js";
 
@@ -50,6 +53,7 @@ export function buildEntryApi(
   pluginId: string,
   batch: PluginEntryScope,
   provideExtension: PluginAPI["provideExtension"],
+  httpPermissions: PluginEntryDefinition["httpPermissions"],
 ): PluginAPI {
   const {
     discoveryMap,
@@ -59,13 +63,22 @@ export function buildEntryApi(
     rpcRegistry,
     isCommunityHookApproved,
   } = params;
-  const http = { fetchWithRetry, validateBaseUrl: validateBaseUrlForPlugin };
   let hookSeq = 0;
   const trustInfo = getPluginTrustInfo(
     pluginId,
     discoveryMap.get(pluginId)?.source,
   );
   const pluginTrust: RpcTrustLevel = trustInfo.source;
+  const isCommunity = pluginTrust === "community";
+  const http = createEntryHttp(pluginId, isCommunity, httpPermissions);
+  // A service or extension provider's code sends its own requests, so a
+  // community provider reaches what its package declares, whoever calls it.
+  const ownUtils = <C extends { utils?: unknown; signal: AbortSignal }>(
+    context: C,
+  ): C =>
+    isCommunity && context.utils
+      ? { ...context, utils: withCallSignal(http, context.signal) }
+      : context;
 
   // Registration has no session authority. Reads are injected per tool call.
   const toolkit: PluginToolkit = {
@@ -78,7 +91,13 @@ export function buildEntryApi(
 
   return {
     pluginId,
-    provideExtension,
+    provideExtension(point, id, definition) {
+      provideExtension(point, id, {
+        ...definition,
+        handler: (input, context) =>
+          definition.handler(input, ownUtils(context)),
+      });
+    },
     signal: batch.signal,
     onDispose(cleanup) {
       batch.onDispose(cleanup);
@@ -94,7 +113,9 @@ export function buildEntryApi(
             params.services!.register(pluginId, {
               ...definition,
               handler: (input, context) =>
-                batch.invoke(() => definition.handler(input, context)),
+                batch.invoke(() =>
+                  definition.handler(input, ownUtils(context)),
+                ),
             }),
           );
         } catch (error) {

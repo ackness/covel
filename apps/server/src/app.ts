@@ -38,6 +38,8 @@ import {
 } from "./lib/session-lock.js";
 import { createPgAdvisorySessionLock } from "./lib/pg-session-lock.js";
 import { applyPendingPackageUpdates } from "./routes/api/install/package-updates.js";
+import { cleanupPackageStaging } from "./routes/api/install/package-staging.js";
+import { recoverWorldPackageDeletions } from "./routes/api/worlds/file-package.js";
 import { isWorldDeleting } from "./world-lifecycle.js";
 import { seedAndReconcileWorlds } from "./world-seed-reconcile.js";
 import { createWorldFileWatcher } from "./world-file-watcher.js";
@@ -49,6 +51,7 @@ import { createAppUpdateRoutes } from "./routes/app-update.js";
 import { createPerRequestLlmMiddleware } from "./middleware/per-request-llm.js";
 import { createRequestBodyLimitMiddleware } from "./middleware/request-body-limit.js";
 import { createOriginGuardMiddleware } from "./middleware/origin-guard.js";
+import { createHostGuardMiddleware } from "./middleware/host-guard.js";
 import { pluginFrameHeaders } from "./middleware/plugin-frame-headers.js";
 import {
   errorBody,
@@ -141,6 +144,10 @@ app.use("*", async (c, next) => {
   return honoLogger(c, next);
 });
 app.use("*", secureHeaders());
+// Before any route or static file: on the token-less self tier, a request
+// must name this server by a loopback name or a COVEL_ALLOWED_HOSTS entry,
+// which refuses DNS-rebound pages (see middleware/host-guard.ts).
+app.use("*", createHostGuardMiddleware(env));
 app.use("*", createRequestBodyLimitMiddleware());
 
 // Guard any /api/debug/* or /api/internal/* route in production so that an
@@ -189,9 +196,9 @@ app.use("*", createOriginGuardMiddleware(isAllowedOrigin));
 // createAiStack(). ai-setup reads llm.toml which does `${ENV}`
 // interpolation — if keys.env loaded after, a slot spec like
 // `apiKey = "${DEEPSEEK_API_KEY}"` sees `undefined` and silently falls
-// back to the built-in default. Desktop shells already pre-merge this
-// into the child env; this keeps parity for `pnpm dev:server` / CI /
-// docker where the server is spawned directly.
+// back to the built-in default. Capture external keys first so saved-key
+// edits cannot remove or replace shell/.env credentials, even if equal.
+const externalApiKeys = providerApiKeysFromEnv(process.env);
 loadKeysEnvInto(process.env);
 
 const resources: ServerResources = { applicationWork, worldWatchers: [] };
@@ -289,6 +296,10 @@ async function initializeServer(): Promise<void> {
     const bundledPluginsDir =
       env.pluginsDir ?? resolve(import.meta.dirname, "../../../plugins");
     const userDirs = resolveUserResourceDirs(env);
+    // Before update recovery, discovery, watchers, or routes can touch these files.
+    await cleanupPackageStaging(userDirs.plugins);
+    await cleanupPackageStaging(userDirs.worlds);
+    await recoverWorldPackageDeletions(store, userDirs.worlds);
     const pluginsDirs = mergeDirs(bundledPluginsDir, userDirs.plugins);
     // Before any plugin loads: its labels and messages are read once.
     setTranslationsDirectory(userDirs.translations);
@@ -361,7 +372,7 @@ async function initializeServer(): Promise<void> {
     app.route("/", api.app);
     app.route("/", createModelDbRoutes(ai));
     app.route("/", createMiscApiRoutes(ai, api.registry, store, apiKeys));
-    app.route("/", createConfigApiRoutes({ apiKeys }));
+    app.route("/", createConfigApiRoutes({ apiKeys, externalApiKeys }));
     app.route("/", createRawConfigApiRoutes({ ai }));
     app.route("/", createAppUpdateRoutes());
 

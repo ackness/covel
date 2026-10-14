@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createMemoryStore } from "@covel/store/memory";
+import type { SuspensionRecord } from "@covel/store";
 import { createPluginRegistry } from "@covel/plugin-loader";
 import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
 import { bootstrapApi } from "../../src/routes/api/bootstrap.js";
@@ -109,7 +110,7 @@ describe("API bootstrap resource ownership", () => {
     });
     const store = createMemoryStore();
     const closeStore = vi.spyOn(store, "close");
-    const sweep = vi.spyOn(store, "deleteExpiredSuspensions");
+    const sweep = vi.spyOn(store, "listExpiredSuspensions");
     await expect(
       bootstrapApi({
         pluginsDir: "unused",
@@ -172,8 +173,8 @@ describe("API bootstrap resource ownership", () => {
       manifestCache: new Map(),
     });
     const store = createMemoryStore();
-    const release = Promise.withResolvers<number>();
-    vi.spyOn(store, "deleteExpiredSuspensions").mockImplementation(
+    const release = Promise.withResolvers<readonly SuspensionRecord[]>();
+    vi.spyOn(store, "listExpiredSuspensions").mockImplementation(
       () => release.promise,
     );
     const api = await bootstrapApi({
@@ -194,7 +195,7 @@ describe("API bootstrap resource ownership", () => {
       expect(closeStore).not.toHaveBeenCalled();
       expect(closeBus).not.toHaveBeenCalled();
     } finally {
-      release.resolve(0);
+      release.resolve([]);
       await closing;
     }
     expect(closeBus).toHaveBeenCalledOnce();

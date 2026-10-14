@@ -110,7 +110,6 @@ export const WRITE_METHOD_TOUCHES: Readonly<Record<string, Touched>> = {
   releaseSuspensionClaim: ["suspensions"],
   markSuspensionResolved: ["suspensions"],
   deleteSuspension: ["suspensions"],
-  deleteExpiredSuspensions: ["suspensions"],
   releaseStaleSuspensionClaims: ["suspensions"],
   saveSnapshot: ["snapshots"],
   pruneAutoSnapshots: ["snapshots"],

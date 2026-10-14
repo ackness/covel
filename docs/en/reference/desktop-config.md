@@ -117,6 +117,8 @@ A packaged desktop app queries the latest stable GitHub Release through `GET /ap
 
 ## `~/.covel/keys.env`
 
+External environment keys take precedence over saved copies, even when their values match. Deleting a local copy does not delete an external key. At startup, the sidecar records external keys before loading `keys.env`, so saves keep the two sources separate.
+
 ```env
 # One KEY=VALUE per line; # starts a comment.
 DEEPSEEK_API_KEY=sk-xxxxxxxxxxxx
@@ -226,12 +228,12 @@ On startup failure, the main process waits for the splash page to finish loading
 
 The desktop shell generates a one-time bearer token at every launch and passes it to the backend as `COVEL_DESKTOP_REST_TOKEN`.
 
-| Endpoint                                                                                                                                                   | Token                                            |
-| ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
-| `PUT /api/config/keys`, `PUT /api/config/settings`, `PUT /api/config/proxy`, `PUT /api/config/data-root`, `POST /api/config/open-folder` (write endpoints) | Required                                         |
-| `GET /api/config/settings`, `GET /api/config/proxy`, `GET /api/app-update/latest` (return local config, or send an outbound request for you)               | Required                                         |
-| `GET /api/config/info`                                                                                                                                     | Not required                                     |
-| `GET /api/config/keys`                                                                                                                                     | Not required. Returns provider names, never keys |
+| Endpoint                                                                                                                                                   | Token                                        |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------- |
+| `PUT /api/config/keys`, `PUT /api/config/settings`, `PUT /api/config/proxy`, `PUT /api/config/data-root`, `POST /api/config/open-folder` (write endpoints) | Required                                     |
+| `GET /api/config/settings`, `GET /api/config/proxy`, `GET /api/app-update/latest` (return local config, or send an outbound request for you)               | Required                                     |
+| `GET /api/config/info`                                                                                                                                     | Not required                                 |
+| `GET /api/config/keys`                                                                                                                                     | Required. Returns provider names, never keys |
 
 An endpoint that requires the token checks the `Authorization: Bearer <token>` header and returns `401` when it is missing or wrong.
 

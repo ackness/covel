@@ -78,9 +78,12 @@ export function portableContractSources(
  */
 export async function worldGenerationDataContracts(
   registry: Pick<PluginRegistry, "get" | "getAll"> | undefined,
+  onWarning?: (message: string) => void,
 ): Promise<readonly WorldGenerationDataContract[]> {
   if (!registry) return [];
   const surface = await describeAuthoringSurface(registry);
+  for (const issue of surface.diagnostics ?? [])
+    onWarning?.(`${issue.pluginId}/${issue.namespace}: ${issue.message}`);
   // A file the generator writes without a descriptor entry is read back by
   // these conventions, so a path that is not one of them is not passed on.
   const conventions = conventionsOfPlugins(registry);
@@ -100,40 +103,46 @@ export async function worldGenerationDataContracts(
       conventions.some(
         ({ entry }) => entry.path === declared.path && entry.to === declared.to,
       );
-    const schema = await resolveWorldDataSchema({
-      source: source(item.contract, result.length),
-      deps: { registry },
-    });
-    if (!schema || "level" in schema || schema.kind !== "local")
-      throw new Error(
-        `Cannot load world generation schema for ${item.contract}`,
-      );
-    result.push({
-      contract: item.contract,
-      schema: JSON.parse(await readFile(schema.path, "utf8")) as Record<
-        string,
-        unknown
-      >,
-      validate: (value) => Boolean(schema.validate(value)),
-      title: item.title,
-      ...(item.hint ? { hint: item.hint } : {}),
-      ...(item.example !== undefined ? { example: item.example } : {}),
-      pluginId: item.pluginId,
-      lorebook: declared?.to.endsWith("+lorebook") === true,
-      ...(declared &&
-      conventional &&
-      (declared.kind === "yaml" || declared.kind === "json")
-        ? {
-            source: {
-              kind: declared.kind,
-              path: declared.path,
-              ...(declared.localeArrayKeys
-                ? { localeArrayKeys: declared.localeArrayKeys }
-                : {}),
-            },
-          }
-        : {}),
-    });
+    try {
+      const schema = await resolveWorldDataSchema({
+        source: source(item.contract, result.length),
+        deps: { registry },
+      });
+      if (!schema || "level" in schema || schema.kind !== "local")
+        throw new Error(
+          `Cannot load world generation schema for ${item.contract}`,
+        );
+      result.push({
+        contract: item.contract,
+        schema: JSON.parse(await readFile(schema.path, "utf8")) as Record<
+          string,
+          unknown
+        >,
+        validate: (value) => Boolean(schema.validate(value)),
+        title: item.title,
+        ...(item.hint ? { hint: item.hint } : {}),
+        ...(item.example !== undefined ? { example: item.example } : {}),
+        pluginId: item.pluginId,
+        lorebook: declared?.to.endsWith("+lorebook") === true,
+        ...(declared &&
+        conventional &&
+        (declared.kind === "yaml" || declared.kind === "json")
+          ? {
+              source: {
+                kind: declared.kind,
+                path: declared.path,
+                ...(declared.localeArrayKeys
+                  ? { localeArrayKeys: declared.localeArrayKeys }
+                  : {}),
+              },
+            }
+          : {}),
+      });
+    } catch (error) {
+      const message = `${item.pluginId}/${item.namespace} (${item.contract}): ${error instanceof Error ? error.message : String(error)}`;
+      console.warn(`[authoring] Skipping ${message}`);
+      onWarning?.(message);
+    }
   }
   return result;
 }

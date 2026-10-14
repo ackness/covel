@@ -8,10 +8,11 @@
  *   - `world-manifest.schema.json`             (world.yaml)
  *   - `world-data.schema.json`                 (world data descriptor)
  *   - `world-dimensions.schema.json`           (external dimension files)
+ *   - `runtime-cases.schema.json`              (offline/live runtime test cases)
  *   - `runtime-manifest.input.schema.json`     (compiled loader input)
  *   - `runtime-manifest.authoring.schema.json` (compiled strict target)
  *
- * The first five are what authors write. Their field descriptions come from
+ * The first six are what authors write. Their field descriptions come from
  * `.describe()` / `.meta()` on the Zod schemas, which makes those schemas the
  * single source for editor hints and for the generated reference pages under
  * `docs/reference/schema/`.
@@ -42,6 +43,10 @@ import { pluginManifestSchema } from "../src/schemas/plugin-manifest.js";
 import { runtimeAuthoringManifestSchema } from "../src/schemas/runtime-manifest.js";
 import { worldDataDescriptorSchema } from "../src/schemas/world-data.js";
 import { worldManifestSchema } from "../src/schemas/world.js";
+import {
+  runtimeCaseFileSchema,
+  runtimeCasesSchema,
+} from "../src/schemas/runtime-cases.js";
 
 const TO_JSON_SCHEMA_OPTIONS = {
   target: "draft-7",
@@ -138,6 +143,13 @@ function restoreRepresentableConstraints(
  * description; the drift test enforces it.
  */
 const AUTHOR_SCHEMAS = {
+  runtimeCases: {
+    schema: z.union([runtimeCasesSchema, runtimeCaseFileSchema]),
+    file: "runtime-cases.schema.json",
+    title: "Runtime cases",
+    summary:
+      "Strict runtime-cases.json or covel.test.json test cases, as an array or a cases object.",
+  },
   plugin: {
     schema: pluginManifestSchema,
     file: "plugin-manifest.schema.json",
@@ -208,6 +220,7 @@ export function buildManifestJsonSchemas(): Record<
   Record<string, unknown>
 > {
   return {
+    runtimeCases: toAuthorJsonSchema("runtimeCases"),
     plugin: toAuthorJsonSchema("plugin"),
     runtime: toAuthorJsonSchema("runtime"),
     world: toAuthorJsonSchema("world"),

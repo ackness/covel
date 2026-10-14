@@ -5,15 +5,23 @@ import { openAiTranscriptionWire } from "./openai-transcription-wire.js";
 export const DEFAULT_SPEECH_WIRE = "openai-speech";
 export const DEFAULT_TRANSCRIPTION_WIRE = "openai-transcription";
 
-import { registerWire, getWire } from "../wire-lifecycle.js";
-export function registerSpeechWire(wire: SpeechWire): () => void {
-  return registerWire("speech", wire);
+import { registerWire, getWire, type WireOwner } from "../wire-lifecycle.js";
+/** With `owner`, the wire serves only sessions in which that plugin is active. */
+export function registerSpeechWire(
+  wire: SpeechWire,
+  owner?: WireOwner,
+): () => void {
+  return registerWire("speech", wire, owner);
 }
 export function getSpeechWire(id: string): SpeechWire | null {
   return getWire("speech", id);
 }
-export function registerTranscriptionWire(wire: TranscriptionWire): () => void {
-  return registerWire("transcription", wire);
+/** With `owner`, the wire serves only sessions in which that plugin is active. */
+export function registerTranscriptionWire(
+  wire: TranscriptionWire,
+  owner?: WireOwner,
+): () => void {
+  return registerWire("transcription", wire, owner);
 }
 export function getTranscriptionWire(id: string): TranscriptionWire | null {
   return getWire("transcription", id);

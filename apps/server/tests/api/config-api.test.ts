@@ -704,7 +704,7 @@ describe("config API env and file contracts", () => {
       expect(fs.existsSync(path.join(tmpHome, "keys.env"))).toBe(false);
     });
 
-    it("keeps the non-secret provider list readable without Authorization", async () => {
+    it("returns only provider names with valid Authorization", async () => {
       process.env.COVEL_HOME = tmpHome;
       process.env.COVEL_DESKTOP_REST = "1";
       process.env.COVEL_DESKTOP_REST_TOKEN = TOKEN;
@@ -714,7 +714,9 @@ describe("config API env and file contracts", () => {
       );
       const app = buildApp(apiKeys);
 
-      const response = await app.request("/api/config/keys");
+      const response = await app.request("/api/config/keys", {
+        headers: { Authorization: `Bearer ${TOKEN}` },
+      });
       expect(response.status).toBe(200);
       await expect(response.json()).resolves.toEqual({
         items: ["deepseek"],
@@ -830,7 +832,19 @@ describe("config API env and file contracts", () => {
       const app = buildApp(apiKeys);
 
       expect((await app.request("/api/config/info")).status).toBe(200);
-      expect((await app.request("/api/config/keys")).status).toBe(200);
+      expect((await app.request("/api/config/keys")).status).toBe(401);
+      expect(
+        (
+          await app.request("/api/config/keys", {
+            headers: { Authorization: "Bearer wrong-token" },
+          })
+        ).status,
+      ).toBe(401);
+      const keys = await app.request("/api/config/keys", {
+        headers: { Authorization: `Bearer ${TOKEN}` },
+      });
+      expect(keys.status).toBe(200);
+      expect(await keys.json()).toEqual({ items: [] });
     });
   });
 });

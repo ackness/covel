@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { SuspensionRecord } from "@covel/store";
 import {
   __resetSweepClockForTests,
   maybeSweepExpiredSuspensions,
@@ -8,10 +9,20 @@ import {
 const TTL_ENV = "COVEL_SUSPENSION_TTL_MS";
 const DEFAULT_TTL = 604_800_000;
 
-function makeStore(deleted = 0) {
+function makeStore(expired = 0) {
+  const records = Array.from(
+    { length: expired },
+    (_, i) => ({ id: `susp-${i}`, sessionId: "sess" }) as SuspensionRecord,
+  );
+  const listExpiredSuspensions = vi.fn(async (_cutoff: string) => records);
+  const releaseStaleSuspensionClaims = vi.fn(async (_cutoff: string) => 0);
   return {
-    deleteExpiredSuspensions: vi.fn(async () => deleted),
-    releaseStaleSuspensionClaims: vi.fn(async () => 0),
+    store: { listExpiredSuspensions, releaseStaleSuspensionClaims },
+    expire: vi.fn(
+      async (_suspension: SuspensionRecord, _cutoff: string) => true,
+    ),
+    listExpiredSuspensions,
+    releaseStaleSuspensionClaims,
   };
 }
 
@@ -35,15 +46,15 @@ describe("suspension-sweep helper", () => {
     expect(resolveSuspensionTtlMs()).toBe(1000);
   });
 
-  it("computes cutoff = now - TTL and calls deleteExpiredSuspensions once", async () => {
+  it("computes cutoff = now - TTL and lists the expired suspensions once", async () => {
     process.env[TTL_ENV] = "1000";
     const store = makeStore();
     const now = 10_000;
 
     await maybeSweepExpiredSuspensions(store, { now, force: true });
 
-    expect(store.deleteExpiredSuspensions).toHaveBeenCalledTimes(1);
-    expect(store.deleteExpiredSuspensions).toHaveBeenCalledWith(
+    expect(store.listExpiredSuspensions).toHaveBeenCalledTimes(1);
+    expect(store.listExpiredSuspensions).toHaveBeenCalledWith(
       new Date(now - 1000).toISOString(),
     );
   });
@@ -76,7 +87,7 @@ describe("suspension-sweep helper", () => {
     });
 
     expect(n).toBe(0);
-    expect(store.deleteExpiredSuspensions).not.toHaveBeenCalled();
+    expect(store.listExpiredSuspensions).not.toHaveBeenCalled();
   });
 
   it("runs at most once per SWEEP_INTERVAL_MS unless forced", async () => {
@@ -88,7 +99,7 @@ describe("suspension-sweep helper", () => {
     // A later non-forced call 1 minute on is still inside the 1h gate.
     await maybeSweepExpiredSuspensions(store, { now: 1_060_000 });
 
-    expect(store.deleteExpiredSuspensions).toHaveBeenCalledTimes(1);
+    expect(store.listExpiredSuspensions).toHaveBeenCalledTimes(1);
   });
 
   it("force=true always sweeps regardless of the interval clock (startup path)", async () => {
@@ -98,17 +109,20 @@ describe("suspension-sweep helper", () => {
     await maybeSweepExpiredSuspensions(store, { now: 0, force: true });
     await maybeSweepExpiredSuspensions(store, { now: 1, force: true });
 
-    expect(store.deleteExpiredSuspensions).toHaveBeenCalledTimes(2);
+    expect(store.listExpiredSuspensions).toHaveBeenCalledTimes(2);
   });
 
   it("swallows store errors and never throws into the caller", async () => {
     process.env[TTL_ENV] = "1000";
     vi.spyOn(console, "warn").mockImplementation(() => {});
     const store = {
-      deleteExpiredSuspensions: vi.fn(async () => {
-        throw new Error("boom");
-      }),
-      releaseStaleSuspensionClaims: vi.fn(async () => 0),
+      store: {
+        listExpiredSuspensions: vi.fn(async () => {
+          throw new Error("boom");
+        }),
+        releaseStaleSuspensionClaims: vi.fn(async () => 0),
+      },
+      expire: vi.fn(async () => true),
     };
 
     const n = await maybeSweepExpiredSuspensions(store, {
@@ -119,7 +133,29 @@ describe("suspension-sweep helper", () => {
     expect(n).toBe(0);
   });
 
-  it("returns the store's deleted count", async () => {
+  it("abandons each expired suspension through expire, and one failure keeps the rest", async () => {
+    process.env[TTL_ENV] = "1000";
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const store = makeStore(3);
+    store.expire
+      .mockRejectedValueOnce(new Error("lock lost"))
+      .mockResolvedValueOnce(false)
+      .mockResolvedValueOnce(true);
+    const now = 10_000;
+
+    const n = await maybeSweepExpiredSuspensions(store, { now, force: true });
+
+    expect(n).toBe(1);
+    expect(
+      store.expire.mock.calls.map(([record, cutoff]) => [record.id, cutoff]),
+    ).toEqual([
+      ["susp-0", new Date(now - 1000).toISOString()],
+      ["susp-1", new Date(now - 1000).toISOString()],
+      ["susp-2", new Date(now - 1000).toISOString()],
+    ]);
+  });
+
+  it("returns the number of suspensions it abandoned", async () => {
     process.env[TTL_ENV] = "1000";
     vi.spyOn(console, "warn").mockImplementation(() => {});
     const store = makeStore(3);

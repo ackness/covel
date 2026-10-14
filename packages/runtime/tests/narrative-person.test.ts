@@ -31,6 +31,7 @@ describe.each(["narrator", "chat-mode-narrator"])(
         const { staticPromptSegments } = await loadPluginEntryDefinition(
           discovery,
           pluginDeclarations(definition),
+          definition.manifests,
         );
         for (const [supplied, expected] of [
           ["first", "first"],

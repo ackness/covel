@@ -62,17 +62,17 @@ A handler receives two arguments: the context `ctx` and the payload `payload`. I
 
 Every handler for every event receives a context with the same shape.
 
-| Field             | Value                                                                                                                                                                                                                        |
-| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `event`           | The event name.                                                                                                                                                                                                              |
-| `sessionId`       | The session.                                                                                                                                                                                                                 |
-| `turnId`          | The execution this event belongs to. It is an empty string for `SessionStart` and `SessionEnd`.                                                                                                                              |
-| `locale`          | The session's content language, set when the session is created. A hook uses it when it adds text itself: `instructionLocaleFor(ctx.locale)` gives the language of the prompt body (`en` or `zh`).                           |
-| `pluginId`        | The plugin of the runtime the event is about. It is not the plugin that registered the handler. Only events whose scope is `runtime` (see the table below) have this field. The others do not.                               |
-| `runtimeId`       | The runtime the event is about, for example `world-init/dimension-tracker`. It appears together with `pluginId`, and it is absent together with it. For the two commit events, it is the runtime that produced the proposal. |
-| `activePluginIds` | The plugins enabled in the session.                                                                                                                                                                                          |
-| `getOwnSettings`  | Returns the resolved settings of the plugin that owns the handler (the manifest defaults, the world presets, and the values the player filled in). Read-only. Usage: `ctx.getOwnSettings?.() ?? {}`.                         |
-| `signal`          | An `AbortSignal`. It fires when this execution is cancelled, or when the handler goes over its time limit. Pass it to any call that might wait.                                                                              |
+| Field             | Value                                                                                                                                                                                                                                                                                             |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `event`           | The event name.                                                                                                                                                                                                                                                                                   |
+| `sessionId`       | The session.                                                                                                                                                                                                                                                                                      |
+| `turnId`          | The execution this event belongs to. It is an empty string for `SessionStart` and `SessionEnd`.                                                                                                                                                                                                   |
+| `locale`          | The session's content language, set when the session is created. A hook uses it when it adds text itself: `instructionLocaleFor(ctx.locale)` gives the language of the prompt body (`en` or `zh`).                                                                                                |
+| `pluginId`        | The plugin of the runtime the event is about. It is not the plugin that registered the handler. Only events whose scope is `runtime` (see the table below) have this field. The others do not.                                                                                                    |
+| `runtimeId`       | The runtime the event is about, for example `world-init/dimension-tracker`. It appears together with `pluginId`, and it is absent together with it. For the two commit events, it is the runtime that produced the proposal.                                                                      |
+| `activePluginIds` | The plugins enabled in the session.                                                                                                                                                                                                                                                               |
+| `getOwnSettings`  | Returns the resolved settings of the plugin that owns the handler (the manifest defaults, the world presets, and the values the player filled in). Read-only. Usage: `ctx.getOwnSettings?.() ?? {}`.                                                                                              |
+| `signal`          | An `AbortSignal`. It fires when this execution is cancelled, or when the handler goes over its time limit. Pass it to any call that might wait. `SessionStart`, `SessionEnd`, `PostStateCommit` and `TurnStop` are not cancelled with the execution: their `signal` fires only on the time limit. |
 
 A runtime's identity is only in the context. The payload does not repeat `pluginId` or `runtimeId`, so a line such as `ctx.runtimeId === "..."` applies to every event.
 
@@ -224,12 +224,14 @@ Payload: `{ result }`, the `RuntimeResult`.
 `replace.result` replaces the result. The kernel does these things with the replaced result:
 
 - It keeps the original result's `pluginId`, `runtimeId`, `runId`, and `turnId`, and the suspension fields of a suspended result.
+- Writes come only from the runtime itself: `pendingProposals`, `effects` and `completion` always take the original result's values, and whatever a hook adds is dropped. To stop a write, use `PreStateCommit`.
+- When a hook changes `status` (for example from failed to success), the result carries no writes. A failed function handler's writes buffered before it failed are not committed either.
 - If the handler changed `output` but did not change `canonicalValue`, the kernel discards the old `canonicalValue`. This way, the values other runtimes read do not disagree with the rewritten output.
-- It then checks again against the runtime's `output.schema`. A function runtime checks `canonicalValue`. An agent checks `output` when a hook changed `output`. If the check fails, the runtime fails with `output-schema-invalid`, and nothing is committed.
+- It then checks again against the runtime's `output.schema`. A function runtime checks `canonicalValue`. An agent checks `output` when a hook changed `output`. A result changed from failed or skipped to success has no `canonicalValue`, so its `output` is checked, the same check a normal success passes. If the check fails, the runtime fails with `output-schema-invalid`, and nothing is committed.
 
 ### `PreToolUse`
 
-Fires before each tool call of an agent runtime.
+Fires before each tool call of an agent runtime, and before each call a function runtime makes through `ctx.tools.call`.
 
 Payload: `{ toolCall: { id, name, arguments } }`, where `arguments` is a JSON string.
 
@@ -242,7 +244,7 @@ Fires after each tool call that was actually executed.
 
 Payload: `{ toolCall, result }`.
 
-- `replace.result` replaces the result the model reads.
+- `replace.result` replaces the result the model reads (in a function runtime, the value `ctx.tools.call` returns). The writes and events the tool produced, whether it succeeded, and its approval status stay as they were.
 - `replace.terminate: true` ends the tool loop after this result is recorded.
 
 ### `PreStateCommit`
@@ -274,6 +276,6 @@ Payload: `{ sessionId, reason }`, where `reason` is `ended` or `deleted`.
 
 ## Limits
 
-- A hook has no write path of its own. It can change state only through its return value. A plugin's data is written by its runtimes and tools.
+- A hook has no write path of its own. A plugin's data is written by its runtimes and tools. A hook's return value can rewrite a result and a proposal's payload, but it cannot add a write.
 - A handler cannot depend on the order of other plugins' handlers. Its own `enforce` group is the exception.
 - For a runtime that declares `io.concealed`, the prompt and the reply do not appear in the trace or the live stream. However, the hooks of enabled plugins still receive them in the payload. A community plugin's hooks run only after the player has approved its server code.

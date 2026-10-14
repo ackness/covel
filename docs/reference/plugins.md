@@ -35,7 +35,7 @@ example/
 
 布局规则：
 
-- 根 `PLUGIN.md` 必须有，它的 `id` 必须和包目录同名。
+- 根 `PLUGIN.md` 必须有，它的 `id` 必须和包目录同名。`framework` 留给框架自己，不能用作 `id`。
 - 只有一个 runtime 时，写在根文件的 `runtime` 里，根文件的正文就是它的提示词。
 - 有多个 runtime 时，每个放在 `runtimes/<id>/RUNTIME.md`，逻辑 ID 是 `<pluginId>/<id>`，各自文件的正文是各自的提示词。
 - 两种布局不能混用。子 runtime 不能声明包级贡献。
@@ -197,6 +197,15 @@ homepage: https://example.com/tidefall
 | `guard`       | runtime 相对的 guard 模块                                                  |
 | `effects`     | 读写资源与 `parallelSafe`                                                  |
 | `permissions` | 执行权限声明                                                               |
+
+根 `PLUGIN.md` 也可以写 `permissions.http`。它管 `entry` 模块的代码：社区包的 `covel.http`（工具、钩子、RPC、服务、扩展、wire 里都用它）只能访问根文件和各 runtime 的 `permissions.http` 里列出的源和方法。wire 还能访问它正在服务的那个用途的端点。没有声明的请求在发出之前就失败：`http permission denied: …`。
+
+```yaml
+permissions:
+  http:
+    - origin: https://api.example.com
+      methods: [POST]
+```
 
 ### 两种 runtime
 
@@ -422,6 +431,7 @@ CLI 和安装器的静态校验对 `scope: turn` 和 `scope: committed` 的输�
 发布 runtime 的输出契约时，在根 `contracts.<contractId>.schema` 声明完整输出的公共 schema。
 
 - 同一个契约 ID 的所有提供者必须发布一致的 schema。
+- 公共 schema 同时覆盖模型输出和 guard 跳过输出。例如 `world-init` 的 `world-data-provider@1` 允许作者提供少于 15 项的属性结构；生成至少 15 项的要求留在 `initialize-world` 的工具参数中。
 - 替代插件的 `provides` 必须和它自己 runtime 的 `io.output.contract` 对齐。其他已安装插件的产出不能替它满足声明。
 - 被消费的契约缺少 schema，或者提供者只有声明而没有产出，都会产生加载诊断。
 
@@ -629,6 +639,8 @@ namespace 接收某个契约，就说明了这个契约的记录长什么样。�
 - 两个 namespace 用不同的 schema 接收同一个契约。这时必须说明哪一份是公共的。
 
 接收世界数据的 namespace 还可以声明 `authoring`（`title`、`summary`、`hint`、`example`、`source`、`references`、`generate`）。它告诉世界作者怎样提供这份内容，以及应用内的生成器能不能生成它。
+
+请求期读取示例或准备可生成契约的 schema 失败时，只略过该契约并报告插件、namespace 和原因，不会停用整个插件或阻止其他内容生成。`pnpm describe:authoring --check` 仍把损坏的示例报给作者。
 
 - 只有列出了 `accepts` 的 namespace 才能声明它。
 - `pnpm describe:authoring` 汇总所有已扫描插件的声明；加 `--check` 会按 namespace 的 schema 校验每份 `example`。

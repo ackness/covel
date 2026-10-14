@@ -195,25 +195,15 @@ export async function executeOneRuntime(
           ? opts.reason
           : undefined;
 
-      // Execution identity is framework-owned. The public delta type already
-      // omits these, but plugin code is untyped JS at runtime — strip them so
-      // a handler cannot hop sessions or forge a child turnId that the parent
-      // turn can never settle. The content locale is fixed for the session and
-      // the logical turn belongs to the player action, so a nested execution
-      // keeps the parent's values of both.
-      const {
-        sessionId: _s,
-        turnId: _t,
-        origin: _o,
-        parentTurnId: _p,
-        locale: _l,
-        logicalTurnId: _lt,
-        ...delta
-      } = rawDelta as Partial<TurnInput>;
+      // Only the allow-listed fields cross into the nested execution. Plugin
+      // code is untyped JS at runtime, so identity, settings, model overrides
+      // and kernel-only inputs (retry seeds, detached-stage context) are
+      // never read from the delta — the nested execution inherits them.
+      const delta = readRecursiveCallDelta(rawDelta);
 
       const nestedInput: RecursiveTurnInput = {
         ...input,
-        ...delta,
+        ...(delta.manualTrigger ? { manualTrigger: delta.manualTrigger } : {}),
         sessionId: input.sessionId,
         turnId: input.turnId,
         playerMessage: delta.playerMessage ?? input.playerMessage,
@@ -739,6 +729,49 @@ export async function executeOneRuntime(
       { cause: error },
     );
   }
+}
+
+/**
+ * Copy the allow-listed fields of a plugin's `recursiveCall` delta. Unknown
+ * keys are ignored; an allowed field of the wrong type is an author error.
+ */
+export function readRecursiveCallDelta(raw: unknown): RecursiveCallDelta {
+  if (raw === undefined || raw === null) return {};
+  if (typeof raw !== "object" || Array.isArray(raw))
+    throw new TypeError("recursiveCall delta must be an object");
+  const { playerMessage, manualTrigger } = raw as Record<string, unknown>;
+  if (playerMessage !== undefined && typeof playerMessage !== "string")
+    throw new TypeError("recursiveCall playerMessage must be a string");
+  let trigger: RecursiveCallDelta["manualTrigger"];
+  if (manualTrigger !== undefined) {
+    const { runtimeId, payload } = (manualTrigger ?? {}) as Record<
+      string,
+      unknown
+    >;
+    if (typeof runtimeId !== "string" || runtimeId.length === 0)
+      throw new TypeError(
+        "recursiveCall manualTrigger.runtimeId must be a non-empty string",
+      );
+    if (
+      payload !== undefined &&
+      (payload === null ||
+        typeof payload !== "object" ||
+        Array.isArray(payload))
+    )
+      throw new TypeError(
+        "recursiveCall manualTrigger.payload must be an object",
+      );
+    trigger = {
+      runtimeId,
+      ...(payload !== undefined
+        ? { payload: structuredClone(payload as Record<string, unknown>) }
+        : {}),
+    };
+  }
+  return {
+    ...(playerMessage !== undefined ? { playerMessage } : {}),
+    ...(trigger ? { manualTrigger: trigger } : {}),
+  };
 }
 
 function abortReason(signal: AbortSignal, fallback: string): Error {

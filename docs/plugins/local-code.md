@@ -382,19 +382,20 @@ export default async function handler(ctx) {
 
 函数里常用的东西：
 
-| 写法                          | 作用                               |
-| ----------------------------- | ---------------------------------- |
-| `ctx.inputs.<名字>.value`     | 你声明的输入                       |
-| `ctx.playerMessage`           | 玩家这一回合的输入                 |
-| `ctx.manualPayload`           | 手动触发时界面传来的数据           |
-| `ctx.pluginData.get/list/set` | 读写自己的数据                     |
-| `ctx.world`                   | 角色、角色的字段定义、资料库。只读 |
-| `ctx.userSettings`            | 玩家的设置项                       |
-| `ctx.random`                  | 随机数。掷骰只用它                 |
-| `ctx.locale`                  | 这一局游戏的语言                   |
-| `ctx.tools.call(name, args)`  | 调用 `function.tools` 里列出的工具 |
-| `ctx.logger`                  | 写插件日志                         |
-| `ctx.signal`                  | 运行被取消时得到通知               |
+| 写法                                                                          | 作用                                                                                     |
+| ----------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| `ctx.inputs.<名字>.value`                                                     | 你声明的输入                                                                             |
+| `ctx.playerMessage`                                                           | 玩家这一回合的输入                                                                       |
+| `ctx.manualPayload`                                                           | 手动触发时界面传来的数据                                                                 |
+| `ctx.pluginData.get/list/set`                                                 | 读写自己的数据                                                                           |
+| `ctx.world`                                                                   | 角色、角色的字段定义、资料库。只读                                                       |
+| `ctx.userSettings`                                                            | 玩家的设置项                                                                             |
+| `ctx.random`                                                                  | 随机数。掷骰只用它                                                                       |
+| `ctx.locale`                                                                  | 这一局游戏的语言                                                                         |
+| `ctx.tools.call(name, args)`                                                  | 调用 `function.tools` 里列出的工具                                                       |
+| `ctx.logger`                                                                  | 写插件日志                                                                               |
+| `ctx.signal`                                                                  | 运行被取消时得到通知                                                                     |
+| `ctx.recursiveCall({ playerMessage, manualTrigger: { runtimeId, payload } })` | 在这一回合里再运行一个手动 runtime。只认这两个字段，会话、语言、设置和模型都沿用本次运行 |
 
 - 函数能调用的工具写在 `function.tools` 里。函数的时限是 `function.timeoutMs`。这两项不要写进 `agent` 里：函数 runtime 不能有 `agent` 配置。
 - 想让下一回合或别的运行读到这次的结果，在这边声明 `io.output.recordAs`，在读的那边声明 `scope: committed` 和同一个 `recordAs`。

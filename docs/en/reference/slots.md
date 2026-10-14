@@ -646,6 +646,7 @@ providerRequestMetadata = { musicWire = "<pluginId>/<wireId>" }
 
 - The routing key is removed before the wire is used. It does not appear in the request body sent to the vendor.
 - If a wire ID is not registered, generation throws `CONFIG_ERROR`. The error message includes a fix. The system does not quietly switch to another wire.
+- A wire a plugin registers serves only sessions that enable that plugin, by the same rule as a text protocol. Another session that uses it gets `CONFIG_ERROR`, and the message names the plugin to enable.
 - A plugin registers a custom wire in its `entry` module with `covel.registerWires({ image?, speech?, transcription?, music?, text? })`. The frontmatter `wires` field is still accepted, but it is deprecated. See [plugin-extensions.md § Models and new protocols](./plugin-extensions.md#models-and-new-protocols).
 - For how wires relate to MediaStore, see [media-store.md](./media-store.md#media-wire-registries-image--speech--transcription--music).
 
