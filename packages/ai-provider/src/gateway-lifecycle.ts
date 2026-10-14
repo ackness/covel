@@ -1,3 +1,4 @@
+import { accountFailureKind } from "./adapters/provider-error-kind.js";
 import { AiProviderError, OutboundFetchError } from "./errors.js";
 import {
   awaitLlmRequest,
@@ -40,8 +41,10 @@ export function shouldFallback(error: AiProviderError): boolean {
   if (error.code === "REFUSAL" || error.code === "REQUEST_BUDGET_EXCEEDED") {
     return false;
   }
-  // Rate limits belong to the attempted provider, so a backup can still work.
+  // Rate limits, an empty account and a refused key belong to the attempted
+  // provider, so a backup the player configured can still work.
   if (error.statusCode === 429) return true;
+  if (accountFailureKind(error.statusCode, error.details)) return true;
   // Other client errors retain their explicit failure path.
   if (error.statusCode && error.statusCode >= 400 && error.statusCode < 500) {
     return false;

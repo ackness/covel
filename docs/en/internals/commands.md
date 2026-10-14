@@ -197,6 +197,6 @@ Points to keep in mind:
 To check Tailwind class names, run them through `apps/web/scripts/check-tailwind-canonical.mjs`.
 
 > [!WARNING]
-> Do not add `--fix` to `tailwind-lint`. v0.12.1 treats ordinary TypeScript identifiers as class names and rewrites them, which breaks the code. Use it only to read the results.
+> Do not add `--fix` to `tailwind-lint`. Earlier versions rewrote ordinary TypeScript identifiers as class names and broke the code. The script stays read-only and filters `cssConflict` diagnostics.
 
 Standard Tailwind utility classes that have numbers depend on the default `--spacing` scale. Before you override this variable globally, check whether any layouts with hard-coded sizes will change with it.

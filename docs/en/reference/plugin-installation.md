@@ -117,7 +117,8 @@ In development mode, after adding a missing root `PLUGIN.md`, or changing a sub-
 - It uses a canonical plugin ID, and it cannot overwrite the ID of a built-in plugin.
 - A manifest and its language variants accept only plain YAML frontmatter, and they reject executable language markers.
 - The installer does not run scripts, package managers, compilers, or plugin modules.
-- A GitHub installation requires the runtime files to be self-contained: `package.json` must not declare `dependencies`, `optionalDependencies`, or `peerDependencies`. Development dependencies are not subject to this rule.
+- Every plugin installation path (GitHub, ZIP, offline collection) and update requires self-contained runtime files: `dependencies`, `optionalDependencies`, and `peerDependencies` in `package.json` must be absent or empty. `devDependencies` are allowed.
+- Declared runtime dependencies return 400, naming the nonempty fields, before any package is written. Authors must bundle dependencies into the release files, then remove these declarations or leave them empty.
 - A plugin that needs a build step should have its author provide built, self-contained files in a separate release directory.
 
 Checks before installing: both kinds of input scope, inline runtimes and sub-runtimes, are checked for the local `accepts` files, and for whether the package's producer exists.
@@ -177,7 +178,8 @@ The preview includes the ID, package version, description, author name (`author`
 
 - The source is `{ repository, commit, path, digest, tracking }`.
 - `tracking` is `{ kind: "default-branch" }`, `{ kind: "branch", ref }`, or `{ kind: "pinned", ref }`. A repository root link tracks the default branch. A tree link first tries to resolve to an explicit branch. Anything else, such as a tag or a commit, stays locked.
-- `hasServerCode` is a conservative hint from scanning files and the manifest. It is not a full code audit. Test or build sources can also trigger this hint.
+- `description` is `I18nText`, retaining description translations for `PLUGIN.md` from `locales/<locale>.yaml` (`.yml` also works). Clients call `resolveI18nText` with the UI language.
+- `hasServerCode` uses the loader’s module-path enumeration: entry, function handler, guard, and world projection handler. It also scans code files, including `.mts` and `.cts`. ZIP installation returns the same field. This is a conservative hint, not a complete code audit; test or build sources can also trigger it.
 - The compatible host version is declared by the author in the manifest's `covel` field, in the directory, and in the README. The installer checks only the manifest format and this range. It does not judge whether the runtime is really compatible.
 
 ### Signing and download

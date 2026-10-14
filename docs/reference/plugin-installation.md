@@ -117,7 +117,8 @@
 - 使用规范的插件 ID，不能覆盖内置插件的 ID。
 - 清单和语言变体只接受普通的 YAML frontmatter，拒绝可执行的语言标记。
 - 安装器不执行脚本、包管理器、编译器或插件模块。
-- GitHub 安装要求运行文件自包含：`package.json` 不声明 `dependencies`、`optionalDependencies`、`peerDependencies`。开发依赖不受这条限制。
+- 所有插件安装入口（GitHub、ZIP、离线合集）和更新都要求运行文件自包含：`package.json` 的 `dependencies`、`optionalDependencies`、`peerDependencies` 必须省略或为空。`devDependencies` 不受这条限制。
+- 声明了运行时依赖时，安装器返回 400，指出非空的字段，不写入包。作者应把依赖打进发布文件，再删除这些声明或留空。
 - 需要构建的插件，作者应该在独立的发布目录里提供已构建、自包含的文件。
 
 安装前的输入检查：内联 runtime 和子 runtime 的两种输入 scope 都检查本地 `accepts` 文件，以及包内 producer 是否存在。
@@ -177,7 +178,8 @@ GitHub 源码归档带的一层外目录会被去掉，再提取指定的插件�
 
 - 来源为 `{ repository, commit, path, digest, tracking }`。
 - `tracking` 为 `{ kind: "default-branch" }`、`{ kind: "branch", ref }` 或 `{ kind: "pinned", ref }`。仓库根链接跟踪默认分支；tree 链接先尝试解析为明确的分支；其余的 tag 和 commit 保持锁定。
-- `hasServerCode` 是保守的文件和清单扫描提示，不是完整的代码审计。测试或构建源码也可能触发这个提示。
+- `description` 返回 `I18nText`，保留 `locales/<locale>.yaml`（也支持 `.yml`）为 `PLUGIN.md` 提供的描述翻译。客户端按界面语言调用 `resolveI18nText`。
+- `hasServerCode` 使用加载器的模块路径枚举：entry、function handler、guard、世界投影 handler；也扫描代码文件（包括 `.mts`、`.cts`）。ZIP 安装响应返回同一字段。这是保守提示，不是完整的代码审计；测试或构建源码也可能触发它。
 - 适配的宿主版本由作者在清单的 `covel`、目录和 README 里声明。安装器只验证清单格式和这个范围，不判断 runtime 是否真的兼容。
 
 ### 签名和下载

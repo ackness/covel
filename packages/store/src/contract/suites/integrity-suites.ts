@@ -234,6 +234,24 @@ const CASCADE_PROBES: Readonly<Record<SessionScopedMemoryKey, CascadeProbe>> = {
     count: async (store, sessionId) =>
       (await store.listRuntimeExports(sessionId)).length,
   },
+  // Deleting the session's plugin data rows writes changes again; the cascade
+  // must still leave none behind.
+  recordChanges: {
+    seed: (store, sessionId) =>
+      store.upsertCharacter(makeCharacter({ sessionId })),
+    count: async (store, sessionId) =>
+      (await store.listRecordChanges(sessionId, { after: null, limit: 10 }))
+        .length,
+  },
+  // The seed is the session's first write, so a kept counter reads 1 and a
+  // counter left behind would number the next session's first message 2.
+  sessionWriteCounters: {
+    seed: (store, sessionId) =>
+      store.appendTurnMessage(makeTurnMessage({ sessionId })),
+    count: async (store, sessionId) =>
+      (await store.listTurnMessagesAfter(sessionId, null, 10)).at(-1)
+        ?.writeSeq ?? 0,
+  },
 };
 
 export function registerIntegrityStoreSuites(getStore: () => DataStore): void {

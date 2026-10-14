@@ -1,7 +1,12 @@
 import { z } from "zod";
 import type { LLMDiagnostics } from "@covel/shared";
 import { AiProviderError } from "../errors.js";
-import type { ProviderConfig, TextGenerationResult } from "../types.js";
+import type {
+  ProviderConfig,
+  TextGenerationResult,
+  UsageSummary,
+} from "../types.js";
+import { withFailureUsage } from "./generation-completion.js";
 import { normalizeTokenUsage, sumTokenCounts } from "./usage.js";
 
 export const GOOGLE_PROTOCOL = "google-generative-ai-v1";
@@ -126,7 +131,22 @@ export class GoogleResponse {
     z.infer<typeof citationSchema>
   >();
 
+  /** A failed response keeps the usage Gemini had reported up to it. */
   push(raw: unknown): GooglePart[] {
+    try {
+      return this.read(raw);
+    } catch (error) {
+      const reported = payloadSchema.shape.usageMetadata.safeParse(
+        (raw as { usageMetadata?: unknown } | null)?.usageMetadata,
+      );
+      throw withFailureUsage(
+        error,
+        this.usageSummary({ ...this.usage, ...reported.data }),
+      );
+    }
+  }
+
+  private read(raw: unknown): GooglePart[] {
     // An authoritative refusal wins over unrelated malformed content. Otherwise
     // a mixed safety response could be misclassified as a retriable parse error.
     const envelope = z
@@ -228,7 +248,10 @@ export class GoogleResponse {
     fallbackId: (index: number) => string,
   ): TextGenerationResult {
     if (!this.finish)
-      throw googleError("Gemini response ended without a finish reason");
+      throw withFailureUsage(
+        googleError("Gemini response ended without a finish reason"),
+        this.usageSummary(this.usage),
+      );
     const toolParts = this.parts.filter(
       (part) => part.functionCall !== undefined,
     );
@@ -263,14 +286,7 @@ export class GoogleResponse {
         : this.finish === "MAX_TOKENS"
           ? "length"
           : "stop",
-      usage: normalizeTokenUsage({
-        inputTokens: this.usage?.promptTokenCount ?? 0,
-        outputTokens: sumTokenCounts(
-          this.usage?.candidatesTokenCount ?? 0,
-          this.usage?.thoughtsTokenCount ?? 0,
-        ),
-        cachedInputTokens: this.usage?.cachedContentTokenCount,
-      }),
+      usage: this.usageSummary(this.usage),
       ...(toolCalls.length ? { toolCalls } : {}),
       ...(reasoningContent ? { reasoningContent } : {}),
       ...(diagnostics ? { diagnostics } : {}),
@@ -285,6 +301,19 @@ export class GoogleResponse {
           }
         : {}),
     };
+  }
+
+  private usageSummary(
+    usage: z.infer<typeof payloadSchema>["usageMetadata"],
+  ): UsageSummary {
+    return normalizeTokenUsage({
+      inputTokens: usage?.promptTokenCount ?? 0,
+      outputTokens: sumTokenCounts(
+        usage?.candidatesTokenCount ?? 0,
+        usage?.thoughtsTokenCount ?? 0,
+      ),
+      cachedInputTokens: usage?.cachedContentTokenCount,
+    });
   }
 
   private diagnostics(): LLMDiagnostics | undefined {

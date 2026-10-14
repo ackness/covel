@@ -25,6 +25,7 @@ import {
   asc,
   desc,
   eq,
+  gt,
   inArray,
   isNotNull,
   isNull,
@@ -35,8 +36,6 @@ import {
 import type { Column, Table } from "drizzle-orm";
 
 import {
-  cursorAfterOrder,
-  cursorAfterWhere,
   writeOrderAsc,
   writeOrderPageOrder,
   writeOrderPageWhere,
@@ -66,6 +65,7 @@ import type {
   TraceEventRecord,
   TurnMessageRecord,
   TurnMessageStats,
+  WriteOrderedTurnMessage,
 } from "../types.js";
 
 type TraceEventsTable = Table & {
@@ -85,6 +85,7 @@ type TurnMessagesTable = Table & {
   sourceType: Column;
   sourceRuntimeId: Column;
   compactedAtTurnId: Column;
+  writeSeq: Column;
 };
 type PlayerInputsTable = Table & {
   id: Column;
@@ -283,16 +284,23 @@ export function createSqlSessionJournalRecords(
 
     async listTurnMessagesAfter(
       sessionId: string,
-      after: { readonly createdAt: string; readonly id: string } | null,
+      after: number | null,
       limit: number,
-    ): Promise<TurnMessageRecord[]> {
+    ): Promise<WriteOrderedTurnMessage[]> {
       if (limit <= 0) return [];
+      // `write_seq` comes from the session's write counter (write-order-ddl.ts).
       const rows = await runner.select<TurnMessageRow>(turnMessages, {
-        where: cursorAfterWhere(turnMessages, sessionId, after, byteOrder),
-        orderBy: cursorAfterOrder(turnMessages, byteOrder),
+        where: and(
+          eq(turnMessages.sessionId, sessionId),
+          after === null ? undefined : gt(turnMessages.writeSeq, after),
+        ),
+        orderBy: [asc(turnMessages.writeSeq)],
         limit,
       });
-      return rows.map((row) => toTurnMessageRecord(row, json));
+      return rows.map((row) => ({
+        ...toTurnMessageRecord(row, json),
+        writeSeq: Number(row.writeSeq),
+      }));
     },
 
     async getTurnMessageStats(sessionId: string): Promise<TurnMessageStats> {

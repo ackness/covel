@@ -12,6 +12,7 @@ import {
   checkHostedOperator,
   sessionApprovalScope,
 } from "../session/session-guard.js";
+import { runnablePluginIds } from "../session/plugins.js";
 
 /** Ask before opening the stream or making any turn/domain writes. */
 export function preflightActionApprovals(
@@ -22,7 +23,7 @@ export function preflightActionApprovals(
   const registry = c.get("pluginRegistry");
   const gate = c.get("rpcApprovalGate");
   const manifests = resolveRuntimeProviders(
-    session.activePlugins.flatMap((id) => {
+    runnablePluginIds(session.activePlugins, registry).flatMap((id) => {
       const entry = registry.get(id);
       return entry
         ? pluginManifestRecords(entry).map((record) => record.manifest)

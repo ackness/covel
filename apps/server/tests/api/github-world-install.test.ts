@@ -120,6 +120,22 @@ it.each([".covel-install.json", ".COVEL-INSTALL.JSON"])(
   },
 );
 
+it("returns the loaded world description with its package translations", async () => {
+  archive = await zip({
+    ...files(),
+    "worlds/test-world/world.zh-CN.yaml": "summary: 中文世界简介\n",
+  });
+  const [item] = await preview();
+  expect(item?.description).toEqual({
+    "en-US": "A world",
+    "zh-CN": "中文世界简介",
+  });
+  expect(
+    (await request("world/github", { token: item!.token, acceptRisk: true }))
+      .status,
+  ).toBe(201);
+});
+
 it("discovers multiple worlds and installs only the selected directory without running scripts", async () => {
   archive = await zip({
     ...files(),

@@ -594,7 +594,7 @@ function SessionRightPanel({
                   ? "PostgreSQL"
                   : storageStatus.backend === "sqlite"
                     ? "SQLite"
-                    : "Memory"}
+                    : t("session.storage.memory")}
             </Badge>
             {storageStatus.browserAuthority && (
               <span className="text-muted-foreground">

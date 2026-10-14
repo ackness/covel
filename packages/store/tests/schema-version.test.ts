@@ -67,9 +67,9 @@ runSchemaVersionTests("SqliteStore", () => {
  * DDL adds to an existing table) recorded for {@link DATA_SCHEMA_VERSION}.
  */
 const PINNED_SHAPES = {
-  version: 4,
-  sqlite: "ae068eed28c61ef0c950e37fcd6cdce12c6793b6db4eba9badb5e174d8b92364",
-  pg: "5894dc6c99427cde7b2747c06b0834e9b93b57f6ea057cda1f21bf6f939aee56",
+  version: 5,
+  sqlite: "67cb24f15770de80d85b10f94e85a0dc4dea91f7420cc664137eb8997911ce93",
+  pg: "e49558cd5dee1ebaec9355e9cf74f1a2ad6605e406a3ad58625e99fffca08f8c",
 };
 
 function shapeDigest(tables: readonly unknown[], dialect: "sqlite" | "pg") {

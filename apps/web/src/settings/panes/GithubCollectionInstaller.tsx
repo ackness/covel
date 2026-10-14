@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { resolveI18nText } from "@covel/shared";
 import type {
   GithubBatchInstallResult,
   GithubCollectionPreview,
@@ -264,7 +265,9 @@ export function GithubCollectionInstaller({
                       </span>
                     )}
                     {item.description && (
-                      <span className="block">{item.description}</span>
+                      <span className="block">
+                        {resolveI18nText(item.description, i18n.language)}
+                      </span>
                     )}
                     <a
                       href={`${item.source.repository}/tree/${item.source.commit}/${item.source.path}`}

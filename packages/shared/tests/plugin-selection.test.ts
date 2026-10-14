@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  resolveConfirmedSessionPlugins,
   resolveSessionPlugins,
   type SessionPluginCandidate,
 } from "../src/plugin-selection.js";
@@ -340,5 +341,71 @@ describe("world-required contracts", () => {
     expect(plan.unmet).toEqual([
       { contract: "check@1", code: "missing-provider", candidates: ["dice"] },
     ]);
+  });
+});
+
+describe("confirmed session plugin set", () => {
+  it("keeps the confirmed set and adds no newly installed core package", () => {
+    const plan = resolveConfirmedSessionPlugins({
+      confirmed: ["narrator", "dice"],
+      plugins: [
+        p("narrator", { kind: "core", provides: ["narrative-engine@1"] }),
+        p("dice"),
+        p("new-core", { kind: "core" }),
+      ],
+    });
+    expect(plan.active).toEqual(["narrator", "dice"]);
+    expect(plan.autoAdded).toEqual([]);
+    expect(plan.rejected).toEqual([]);
+  });
+
+  it("reports a member that is no longer installed and keeps the rest", () => {
+    const plan = resolveConfirmedSessionPlugins({
+      confirmed: ["narrator", "gone"],
+      plugins: [p("narrator")],
+    });
+    expect(plan.active).toEqual(["narrator"]);
+    expect(plan.rejected).toEqual([
+      expect.objectContaining({ pluginId: "gone", code: "unknown-plugin" }),
+    ]);
+  });
+
+  it("drops a member whose installed version needs a provider outside the set, without adding one", () => {
+    const plan = resolveConfirmedSessionPlugins({
+      confirmed: ["consumer"],
+      plugins: [
+        p("consumer", { requires: ["clock@1"] }),
+        p("clock", { provides: ["clock@1"] }),
+      ],
+    });
+    expect(plan.active).toEqual([]);
+    expect(plan.rejected).toEqual([
+      expect.objectContaining({
+        pluginId: "consumer",
+        code: "missing-provider",
+      }),
+    ]);
+  });
+
+  it("applies the installed versions' conflicts to the confirmed set", () => {
+    const plan = resolveConfirmedSessionPlugins({
+      confirmed: ["first", "second"],
+      plugins: [
+        p("first", { provides: ["engine@1"] }),
+        p("second", { conflicts: ["engine@1"] }),
+      ],
+    });
+    expect(plan.active).toEqual(["first"]);
+    expect(plan.rejected).toEqual([
+      expect.objectContaining({ pluginId: "second", code: "conflict" }),
+    ]);
+  });
+
+  it("leaves approval to the trust gate", () => {
+    const plan = resolveConfirmedSessionPlugins({
+      confirmed: ["community"],
+      plugins: [p("community", { source: "community" })],
+    });
+    expect(plan.active).toEqual(["community"]);
   });
 });
