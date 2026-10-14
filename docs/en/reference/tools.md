@@ -751,7 +751,7 @@ When one of the model's replies has several tool calls, the `suspend` call first
 **Things to note:**
 
 - `resumeSchema` must be serializable with `JSON.stringify`, because the state is written to storage.
-- A runtime can have only one unresolved suspension at a time. The resume endpoint looks it up by `runtimeId + sessionId`.
+- Only a runtime's newest suspension can resume. When the same runtime suspended again later, the player played another turn, or the plugin changed version, the old suspended item is voided on resume; see [Out-of-date suspended items](./api.md#out-of-date-suspended-items). The resume endpoint looks it up by the suspended item's ID.
 - `createDefaultToolRegistry` in `@covel/tools` registers it as a builtin tool. An agent still has to list `suspend` in `agent.tools.builtin` before it can call it.
 - Resuming continues the execution that was suspended:
   - `ctx.locale`, `ctx.logicalTurn`, and `ctx.turnNumber` keep the values from the time of suspension. They do not change with the turn count of the session afterwards.

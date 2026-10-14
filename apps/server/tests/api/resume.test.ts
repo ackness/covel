@@ -118,6 +118,7 @@ async function createSuspension(
     resumeSchema: unknown;
     createdAt: string;
     executionContext: ExecutionContext;
+    takenUnder: { playerTurns: number; pluginVersion: string };
   }>,
 ) {
   const suspension = {
@@ -133,6 +134,10 @@ async function createSuspension(
       required: ["name"],
     },
     pendingContinuation: {
+      takenUnder: overrides?.takenUnder ?? {
+        playerTurns: 0,
+        pluginVersion: "0.0.0",
+      },
       executionContext: {
         executionId: crypto.randomUUID(),
         origin: "player" as const,
@@ -1162,6 +1167,94 @@ describe("Resume Routes", () => {
       expect(retrieved).toBeNull();
     });
 
+    it("ends the turn when the abandoned suspension was its last pending one (F-015)", async () => {
+      const logicalTurnId = "logical-abandoned";
+      const executionContext = {
+        executionId: "execution-abandoned",
+        origin: "player" as const,
+        countPolicy: "complete-player-turn" as const,
+        logicalTurnId,
+      };
+      await createSuspension(store, { id: "susp-a", executionContext });
+      await createSuspension(store, { id: "susp-b", executionContext });
+      const app = createTestApp(makeDefaultDeps(store));
+
+      // A sibling still waits: the turn is not over yet.
+      await app.request("/api/sessions/sess-1/suspensions/susp-a", {
+        method: "DELETE",
+      });
+      expect((await store.getSession("sess-1"))?.completedPlayerTurns).toBe(1);
+
+      await app.request("/api/sessions/sess-1/suspensions/susp-b", {
+        method: "DELETE",
+      });
+      expect((await store.getSession("sess-1"))?.completedPlayerTurns).toBe(2);
+      expect(
+        await store.getLogicalTurnCompletion("sess-1", logicalTurnId),
+      ).not.toBeNull();
+    });
+  });
+
+  describe("resuming an out-of-date suspension (F-016, F-188)", () => {
+    async function resumeOutdated(app: ReturnType<typeof createTestApp>) {
+      const res = await app.request(
+        "/api/sessions/sess-1/suspensions/susp-1/resume",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ data: { name: "Ada" } }),
+        },
+      );
+      return {
+        status: res.status,
+        body: (await res.json()) as {
+          code?: string;
+          details?: { reason?: string };
+        },
+      };
+    }
+
+    it("voids a suspension taken under another plugin version and tells the player", async () => {
+      await createSuspension(store, {
+        takenUnder: { playerTurns: 0, pluginVersion: "0.9.0" },
+      });
+      const generate = vi.fn();
+      const app = createTestApp(
+        makeDefaultDeps(store, { llmAdapter: { generate } as never }),
+      );
+
+      const { status, body } = await resumeOutdated(app);
+
+      expect(status).toBe(409);
+      expect(body.code).toBe("suspension_outdated");
+      expect(body.details?.reason).toBe("plugin-updated");
+      expect(generate).not.toHaveBeenCalled();
+      // Voided like an abandon: the record is gone and the turn is over.
+      expect(await store.getSuspension("susp-1")).toBeNull();
+      expect((await store.getSession("sess-1"))?.completedPlayerTurns).toBe(2);
+    });
+
+    it("voids a suspension once the player has played another turn", async () => {
+      await createSuspension(store);
+      await store.appendTurnMessage({
+        id: "later-player-message",
+        sessionId: "sess-1",
+        turnId: "turn-2",
+        sourceType: "player",
+        role: "user",
+        content: "I keep walking.",
+        order: 0,
+        createdAt: new Date().toISOString(),
+      });
+      const app = createTestApp(makeDefaultDeps(store));
+
+      const { status, body } = await resumeOutdated(app);
+
+      expect(status).toBe(409);
+      expect(body.details?.reason).toBe("session-moved-on");
+      expect(await store.getSuspension("susp-1")).toBeNull();
+    });
+
     it("returns 404 when suspension belongs to a different session", async () => {
       await createSession(store, "sess-other");
       await createSuspension(store, {
@@ -1335,6 +1428,8 @@ describe("Resume Routes", () => {
 
       expect(await store.getSuspension("susp-old")).toBeNull();
       expect(await store.getSuspension("susp-fresh")).not.toBeNull();
+      // Expiry ends the turn the old suspension held back, like an abandon.
+      expect((await store.getSession("sess-1"))?.completedPlayerTurns).toBe(2);
     });
 
     it("GET /:id/suspensions never sweeps a claimed (in-flight) suspension even if old", async () => {

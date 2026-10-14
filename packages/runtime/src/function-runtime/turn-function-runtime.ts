@@ -63,6 +63,7 @@ import {
   withDefaultUtilsSignal,
 } from "./runtime-abort-boundaries.js";
 import { attachSuspensionArtifact } from "../suspension-artifact.js";
+import { suspensionBasis } from "../resume/suspension-settlement.js";
 import { freezeInputSlots } from "../agent-loop/runtime-input-slots.js";
 import { deepFreeze } from "../hooks/hook-settings.js";
 
@@ -629,6 +630,8 @@ export async function executeFunctionRuntime({
         ...(activation ? { activation: structuredClone(activation) } : {}),
         emittedEvents: [],
         executionContext,
+        // `executeTurn` sets the player turns once it knows the whole execution.
+        takenUnder: suspensionBasis(manifest, 0),
         ...(input.locale !== undefined ? { locale: input.locale } : {}),
         ...(logicalTurn !== undefined ? { logicalTurn } : {}),
       },

@@ -120,6 +120,7 @@ export type {
   SessionSummaryRecord,
   PaginationOpts,
   SuspensionRecord,
+  SuspensionBasis,
   SnapshotRecord,
   SnapshotPayload,
   SnapshotSessionState,

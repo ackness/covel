@@ -751,7 +751,7 @@ JSON Schema 只能检查字段的形状，检查不了“这个结果和骰子�
 **注意事项**：
 
 - `resumeSchema` 必须能被 `JSON.stringify`，因为现场要写进存储。
-- 同一个 runtime 同一时刻只能有一个没解决的挂起。恢复接口按 `runtimeId + sessionId` 查找。
+- 一个 runtime 只有最新的那次挂起能恢复。同一个 runtime 之后又挂起过、玩家之后又玩了回合，或者插件换了版本，旧的挂起项在恢复时被作废，见[过时的挂起项](./api.md#过时的挂起项)。恢复接口按挂起项的 ID 查找。
 - `@covel/tools` 的 `createDefaultToolRegistry` 把它注册为内置工具。agent 仍要在 `agent.tools.builtin` 里列出 `suspend` 才能调用。
 - 恢复是接着被挂起的那次执行继续：
   - `ctx.locale`、`ctx.logicalTurn`、`ctx.turnNumber` 取挂起时的值，不随会话之后的回合计数变化。

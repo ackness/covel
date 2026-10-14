@@ -3968,7 +3968,7 @@ Deletes one piece of plugin data.
 A runtime can pause partway through and wait for the player to provide data. This is called suspending. The endpoints in this section let you list the suspended items, submit data so that a runtime continues, or discard an item.
 
 > [!NOTE]
-> **Expiry cleanup**: Before it handles a resume request or a `GET /api/sessions/:id/suspensions` request, the server also runs a global expiry cleanup. The cleanup runs at most once per time interval. If it fails, the current request still goes ahead.
+> **Expiry cleanup**: Before it handles a resume request or a `GET /api/sessions/:id/suspensions` request, the server also runs a global expiry cleanup. The cleanup runs at most once per time interval. If it fails, the current request still goes ahead. An expired suspended item is handled the way [abandoning](#delete-apisessionsidsuspensionssuspensionid) one is; see [Suspensions and turn counting](#suspensions-and-turn-counting).
 >
 > If the process exits while a resume is in progress, it leaves a "resuming" lock behind. Both this cleanup and server startup release that lock, so the suspended item can be resumed or discarded again later. External calls that were already sent are not undone. This is the same as retrying after a failed resume. For the related environment variables, see [`env-registry.md`](./env-registry.md).
 
@@ -4002,13 +4002,14 @@ Resume a suspended runtime with the data the player submitted.
 
 **Errors**
 
-| Status | `code`         | When                                                                                                                                     |
-| ------ | -------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| 400    | —              | The request body is not valid JSON or has the wrong structure, or `data` fails `resumeSchema` validation                                 |
-| 404    | —              | The session or the suspended item does not exist, or the matching runtime cannot be found                                                |
-| 409    | —              | The suspended item has already been handled. If two resume requests arrive at the same time, the later one gets this result              |
-| 500    | —              | The runtime failed or the commit failed (`error` gives the reason). In production, an unknown exception shows as `Internal server error` |
-| 503    | `session_busy` | Waiting for the session lock timed out. The fixed message is `Session is busy, please retry`                                             |
+| Status | `code`                | When                                                                                                                                     |
+| ------ | --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| 400    | —                     | The request body is not valid JSON or has the wrong structure, or `data` fails `resumeSchema` validation                                 |
+| 404    | —                     | The session or the suspended item does not exist, or the matching runtime cannot be found                                                |
+| 409    | —                     | The suspended item has already been handled. If two resume requests arrive at the same time, the later one gets this result              |
+| 409    | `suspension_outdated` | The suspended item is out of date and the server voided it; see "Out-of-date suspended items" below                                      |
+| 500    | —                     | The runtime failed or the commit failed (`error` gives the reason). In production, an unknown exception shows as `Internal server error` |
+| 503    | `session_busy`        | Waiting for the session lock timed out. The fixed message is `Session is busy, please retry`                                             |
 
 Rules for failed responses:
 
@@ -4017,12 +4018,28 @@ Rules for failed responses:
 - If the commit fails, `error` is `Resume commit failed: <reason>. The suspension remains unresolved and can be retried.`
 - After a failure, this request releases its hold on the suspended item (unless the session was deleted and recreated), so you can retry. The internal cause is written only to the server log.
 
+##### Out-of-date suspended items
+
+A suspension records two things: how many player turns the history holds at that moment, and the version of the plugin that asked. Before a resume, the server checks whether the suspended item is out of date. An out-of-date item does not run again, because the writes it saved could overwrite newer state.
+
+| `details.reason`   | When                                                                                      |
+| ------------------ | ----------------------------------------------------------------------------------------- |
+| `session-moved-on` | The number of player turns in the history changed (the player played on, or rewound)      |
+| `plugin-updated`   | The plugin that asked changed version                                                     |
+| `superseded`       | The same runtime suspended again later; only a runtime's newest suspended item can resume |
+
+The server voids it the way [abandoning](#delete-apisessionsidsuspensionssuspensionid) does, then answers `409` with `code` `suspension_outdated` and an `error` written for the player. The web client removes it from the waiting list and tells the player the request is out of date.
+
+Writes that a background job or a manual run made after the suspension do not count as the session moving on, so they do not make the item out of date.
+
 ##### Suspensions and turn counting
 
 - A suspension does not by itself count as a completed player turn.
 - When a runtime suspends, the record of "where to continue from" is saved in the same transaction as this request's proposals, log, and session clock. The `turn.suspended` event is sent only after the commit succeeds. So if the commit is rolled back, no suspended item is left behind that can be resumed but has no origin, and no extra events are sent.
 - The original execution's `logicalTurnId` and `countPolicy` are saved with the suspended item. When a resume succeeds, the player's turn count goes up by one, in the same transaction that commits the proposals.
 - If one logical turn has several parallel suspended items, the count happens only after the last one is resumed. Retries do not count twice.
+- When a suspended item is abandoned, expires or is voided, the turn ends the way a normal end does: if it was the last item of the logical turn still waiting, the player's turn count goes up by one and the background jobs the turn held back (`schedule.completion.mode: detached`) are queued as usual. Both happen in the transaction that deletes the record. An item that another request is resuming still counts as waiting.
+- Progress jobs (`ctx.progress`) that the suspended execution reported stay in `waiting-input`. When a resume commits, they end as `succeeded`; when the item is abandoned, expires or is voided, they end as `cancelled`. While a failed resume can be retried, they keep waiting.
 
 ##### Resuming setup runtimes
 
@@ -4064,6 +4081,8 @@ Each item is a `SuspensionSummary`. It contains only the public information the 
 #### `DELETE /api/sessions/:id/suspensions/:suspensionId`
 
 Discards a suspended item by deleting it. This is used when the player gives up the current choice, or when an admin screen cleans up. If the suspended item does not exist, it returns `404`.
+
+If it was the last item of its turn still waiting, the turn counts as complete and the background jobs the turn held back are queued as usual; see [Suspensions and turn counting](#suspensions-and-turn-counting). The request may carry `X-Plugin-User-Settings`, which works as it does for a resume.
 
 **Response**
 
