@@ -283,12 +283,14 @@ Key fields:
 
 ### Spec Validation and Versions
 
-A UI spec is **untrusted plugin input**. When `/api/ui-specs` assembles the response, it validates each spec with Zod (the outer structure and `specVersion`).
+A UI spec is **untrusted plugin input**. Its rules exist once: `pluginUiSpecIssues` in `@covel/shared` (`packages/shared/src/schemas/ui-spec.ts`). `pnpm validate:plugin`, the ZIP install and `/api/ui-specs` all use it when they load a panel, so a spec that passes the check is not dropped in the game for its format.
 
-- **Versions.** `specVersion` can be left out, and then it is treated as v1. A version higher than the server supports (currently `CURRENT_UI_SPEC_VERSION = 1`, in `apps/server/src/routes/misc-api/ui-spec-schema.ts`) is rejected. This way, an old server that meets a new plugin package reports a clear error instead of drawing a broken panel.
+- **Versions.** `specVersion` can be left out, and then it is treated as v1. A version higher than the host supports (currently `CURRENT_UI_SPEC_VERSION = 1`) is rejected. This way, an old host that meets a new plugin package reports a clear error instead of drawing a broken panel.
+- **`webview`.** `entry` points to an `.html` file in the package of at most 512 KiB; `height` is an integer from 80 to 800. `surfaces` can only be `panel` and `stage`.
+- **Data ownership.** `pluginId`, `sourcePlugin` and `sourcePluginId` can only name this plugin's ID; `dataSource.bindings` can only be fixed namespaces of this plugin, at most 8.
 - **Either `view` or `webview`, not both.** Each spec must declare `view` (an object) or `webview` (an HTML document). If both are present or both are missing, validation fails.
 - **Recursive validation of `view`.** The checks cover `component` / `type`, `children`, named `slots`, `repeat`, and the structure of the action bindings in `on` / `watch`. Component names must be in the shared `PLUGIN_UI_COMPONENT_NAMES`. An unknown component produces a diagnostic with its path on the server. `props` and directive expressions are not restricted. They are parsed at runtime by the components and json-render, so plugins can extend the shape of their data.
-- **Declarations that are not JSON.** The loader records where such a declaration is with `_componentPath`, so the API can give a specific diagnostic. It is not a valid UI spec, and it is not a way to let the web app run plugin code. A spec with this field is removed, even if it also has `view`. Other valid JSON specs from the same plugin are still shown.
+- **Declarations that are not JSON.** `contributes.ui` accepts only `.json` files. `pnpm validate:plugin` and installation reject any other file; at load such an entry gets a diagnostic, and the other valid JSON specs from the same plugin are still shown. The browser never runs a plugin's component file.
 - **When a custom component is needed.** Declare `webview.entry` and provide a separate HTML file. Or compose catalog components and bind the framework's actions. The browser does not import a plugin's `.tsx` / `.js` modules directly.
 - **One bad spec does not break the whole response.** A spec that fails validation is removed from where it sits, and the top-level `diagnostics[]` of the response gives the specific diagnostic:
 
@@ -302,7 +304,7 @@ A UI spec is **untrusted plugin input**. When `/api/ui-specs` assembles the resp
 
 UI declarations come from the registry snapshot taken at startup. Static assets are loaded on demand and cached by snapshot. A GET request only reads and filters by the session's active set. It does not scan the plugin directory, and it does not write UI definitions into `plugin_data` (see [api.md](./api.md#get-apiui-specs) for details).
 
-When static assets are read, the real path is checked after symbolic links are resolved. A link that points inside the plugin root is allowed. A link that points to a file or directory outside the root is rejected. When one asset fails to load, only the interface of that runtime is skipped. The panels of other runtimes are not affected.
+When static assets are read, the real path is checked after symbolic links are resolved. A link that points inside the plugin root is allowed. A link that points to a file or directory outside the root is rejected. When a spec cannot be read or breaks a rule, only that spec is removed, with an explanation in `diagnostics[]` and in the server log; the plugin's other panels are still shown.
 
 ### Activity-Bar Short Labels
 

@@ -1478,10 +1478,10 @@ fork 和社区插件的授权：
 
 **校验与 `specVersion`**：
 
-- 聚合时，每个 spec 都做 Zod 校验（结构和 `specVersion`）。
+- 聚合时，每个 spec 都用 `pnpm validate:plugin` 的同一套规则校验（结构、`specVersion`、数据归属、`webview`）。
 - `specVersion` 可以省略，按 v1 处理。声明的版本高于服务端支持的版本（当前 `CURRENT_UI_SPEC_VERSION = 1`）会被拒绝。
 - 一个 spec 校验失败，**不会影响整个响应**：只把它从所在的 slot 里去掉。
-- 失败原因写在顶层的 `diagnostics[]` 里，每项是 `{ pluginId, runtimeId, slot, specIndex, specId?, issues[{ path, message, code }] }`，说明是哪个插件、哪个字段、什么问题。
+- 失败原因写在顶层的 `diagnostics[]` 里，每项是 `{ pluginId, runtimeId, slot, specIndex, specId?, issues[{ path, message, code }] }`，说明是哪个插件、哪个字段、什么问题。文件读不出来（不存在、不是 JSON、指向插件目录以外）也写在这里；`code` 都是 `invalid`。
 - 带 `sessionId` 时，`diagnostics` 只包含该会话已激活的插件。
 
 **开发热重载**：`POST /api/plugins/:id/reload` 重新加载一个社区插件。
