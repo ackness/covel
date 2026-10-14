@@ -163,4 +163,4 @@ Covel is still in early development, and it targets only the current contracts. 
 
 `pnpm check:boundaries` checks three things in the production source: the public entry points of the workspace, the dependency declarations, and the direction of the packages. When a new cross-package dependency is needed, review it together with the responsibility split on this page.
 
-The web app applies theme and color scheme from SettingsStore through its appearance helpers; it has no `next-themes` dependency.
+The web app reads theme and color scheme preferences from SettingsStore, resolves the displayed selection, and applies it through its appearance helpers. Display fallbacks leave saved preferences unchanged.

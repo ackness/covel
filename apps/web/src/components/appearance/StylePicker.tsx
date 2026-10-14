@@ -1,3 +1,4 @@
+import { resolveThemeSelection } from "@/theme-system/selection.js";
 import { useTranslation } from "react-i18next";
 import { resolveI18nText } from "@covel/shared";
 import { Check } from "lucide-react";
@@ -195,12 +196,19 @@ function LayoutThumbnail({
  */
 export function StylePicker() {
   const { t, i18n } = useTranslation();
-  const [appearance, setAppearance] = useSetting<string>("ui.appearance");
-  const [scheme, setScheme] = useSetting<ThemeScheme>(THEME_SCHEME_KEY);
+  const [preferredAppearance, setAppearance] =
+    useSetting<string>("ui.appearance");
+  const [preferredScheme, setScheme] =
+    useSetting<ThemeScheme>(THEME_SCHEME_KEY);
   // Subscribing keeps the cards in step with imports and removals.
   useSetting<unknown>(CUSTOM_THEMES_KEY);
-  const groups = groupThemes(getRegisteredThemes());
-  const activeScheme: ThemeScheme = scheme === "light" ? "light" : "dark";
+  const themes = getRegisteredThemes();
+  const { id: appearance, scheme: activeScheme } = resolveThemeSelection(
+    themes,
+    preferredAppearance,
+    preferredScheme,
+  );
+  const groups = groupThemes(themes);
   // Show each package in the scheme it would actually open in.
   const previewScheme = (theme: ThemeDefinition): ThemeScheme =>
     theme.schemes.includes(activeScheme)

@@ -1300,7 +1300,8 @@
       "invalid-json": "此主题文件不是有效的 JSON。",
       "invalid-manifest": "主题字段不符合主题包格式。",
       "theme-changed": "保存期间主题 {{id}} 已发生变化，请检查后重试。"
-    }
+    },
+    "themeSelectionAdjusted": "当前显示 {{name}}（{{scheme}}）。已保存的偏好保持不变，重新选择主题可更新偏好。"
   },
   "appearance": {
     "styleTitle": "风格方案",
@@ -1604,7 +1605,52 @@
     },
     "replaceThemeTitle": "替换已有主题？",
     "replaceThemeConfirm": "此名称生成的主题 ID 已存在。替换会覆盖该自定义主题。",
-    "replaceTheme": "替换主题"
+    "replaceTheme": "替换主题",
+    "builtinThemes": {
+      "paper": {
+        "label": "纸本",
+        "description": "温暖、偏叙事阅读器的纸本风格。",
+        "groupLabel": "经典"
+      },
+      "panel": {
+        "label": "面板",
+        "description": "现代应用风格：左侧图标导航、对话流正文、卡片式信息栏。",
+        "groupLabel": "面板"
+      },
+      "aurora": {
+        "label": "极光",
+        "description": "玻璃拟态 + 流动极光 — 演示动画、模糊、发光与状态驱动特效，可直接当模板抄。",
+        "groupLabel": "经典"
+      },
+      "book": {
+        "label": "书卷",
+        "description": "阅读优先：纸面底色、宋体正文、首行缩进，像一本会回应你的小说。",
+        "groupLabel": "书卷"
+      },
+      "stage": {
+        "label": "舞台",
+        "description": "场景沉浸：世界美术铺满全屏，故事在半透明侧栏里展开。",
+        "groupLabel": "舞台"
+      },
+      "modern": {
+        "label": "现代",
+        "description": "利落、偏工具化的工作台风格。",
+        "groupLabel": "经典"
+      },
+      "abyss": {
+        "label": "深渊",
+        "description": "深色 codex 风格 — 深紫蓝 + 衬线 italic，专为沉浸阅读而设。",
+        "groupLabel": "经典"
+      }
+    },
+    "contrast": {
+      "advisory": "以下是对比度建议，你仍可继续使用此主题。检查仅覆盖纯色 token，不评估图片或视觉效果。",
+      "body": "正文",
+      "muted": "次要文字",
+      "button": "按钮文字",
+      "low": "{{scheme}} · {{pair}}：{{ratio}}:1（建议至少 {{minimum}}:1）。",
+      "unknown": "{{scheme}} · {{pair}}：无法测量对比度。"
+    }
   },
   "plugin": {
     "runtimes": "运行任务",

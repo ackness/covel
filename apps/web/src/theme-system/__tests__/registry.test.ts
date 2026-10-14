@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { SettingsStore, type SettingsBackendAdapter } from "@covel/settings";
 import { applyAppearance } from "@/lib/appearance.js";
 import {
@@ -194,8 +194,41 @@ describe("theme registry", () => {
 
     syncThemeRegistry(store);
 
-    expect(store.get(THEME_SCHEME_KEY)).toBe("dark");
+    expect(store.get(THEME_SCHEME_KEY)).toBe("light");
     expect(document.documentElement.classList.contains("dark")).toBe(true);
     expect(document.documentElement.getAttribute("data-theme")).toBe("abyss");
   });
+});
+
+it("F-036 never writes corrections, even when persistence cannot save", async () => {
+  const save = vi.fn().mockRejectedValue(new Error("read only"));
+  const store = new SettingsStore({
+    load: async () => ({
+      "ui.appearance": "missing-theme",
+      "ui.scheme": "light",
+      "ui.appearanceTokens": {
+        shared: {},
+        light: { "--story-color": "#aaaaaa" },
+        dark: { "--story-color": "#bbbbbb" },
+      },
+    }),
+    save,
+    loadSecrets: async () => ({}),
+    saveSecrets: async () => undefined,
+  });
+  await store.init();
+  primeThemeRegistry(store);
+  const unsubscribe = store.subscribeAll(() => syncThemeRegistry(store));
+  syncThemeRegistry(store);
+  await Promise.resolve();
+  await Promise.resolve();
+  expect(save).not.toHaveBeenCalled();
+  expect(store.get("ui.appearance")).toBe("missing-theme");
+  expect(store.get(THEME_SCHEME_KEY)).toBe("light");
+  expect(document.documentElement.dataset.theme).toBe("stage");
+  expect(document.documentElement.dataset.scheme).toBe("dark");
+  expect(document.documentElement.style.getPropertyValue("--story-color")).toBe(
+    "#bbbbbb",
+  );
+  unsubscribe();
 });

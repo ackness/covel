@@ -25,6 +25,7 @@ import path from "node:path";
 import { parse as parseYaml } from "yaml";
 import {
   validateWorldManifest,
+  worldAccentColorSchema,
   validateDimensionData,
   formatValidationErrors,
   dimensionIdSchema,
@@ -215,7 +216,21 @@ export async function loadSingleWorld(
     console.warn(
       `[world-seed] ${path.basename(worldDir)}: ${issue.file}: ${issue.path} ${issue.message}`,
     );
-  const raw = source.raw as Record<string, unknown>;
+  let raw = source.raw as Record<string, unknown>;
+  // Optional presentation metadata must not prevent the world from loading.
+  // Keep authoring validation strict; only the loader discards a bad accent.
+  if (raw?.accentColor !== undefined) {
+    const accent = worldAccentColorSchema.safeParse(raw.accentColor);
+    if (!accent.success) {
+      const world =
+        typeof raw.id === "string" ? raw.id : path.basename(worldDir);
+      console.warn(
+        `[world-seed] ${world}: world.yaml: accentColor ignored: ${accent.error.issues.map((issue) => issue.message).join("; ")} Using the default accent colour.`,
+      );
+      raw = { ...raw };
+      delete raw.accentColor;
+    }
+  }
 
   const validation = validateWorldManifest(raw);
   if (!validation.valid) {

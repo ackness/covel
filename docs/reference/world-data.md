@@ -1367,7 +1367,8 @@ sources:
 
 - 封面不必列在 `media/gallery.json` 里。列了的话，世界详情的图集不会把它再展示一遍。
 - `themeMusic` 通常和曲目表里 `theme: true` 的那首是同一个文件。
-- `pnpm validate:world` 会检查封面能否显示（`cover`）、音乐能否播放（`theme-music`）；颜色写法不对则按 schema 报错。
+- `accentColor` 接受六位十六进制色（`#rrggbb`）或 `oklch(L C H)`，Oklab 亮度须在 55%–90% 之间；十六进制色先从 sRGB 换算。加载时，写法不对或亮度越界的颜色会被丢弃，世界照常加载，界面按世界 ID 生成默认强调色。服务器日志会警告并写明世界、字段和原因。
+- `pnpm validate:world` 会检查封面能否显示（`cover`）、音乐能否播放（`theme-music`）；无效的 `accentColor` 仍报错误，消息说明允许的格式和亮度范围。
 - AI 生成的世界没有图片，所以不带 `cover` 和 `accentColor`。
 
 ## Third-Party Extension

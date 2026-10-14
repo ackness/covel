@@ -1,6 +1,10 @@
 import { act, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { expect, it, vi } from "vitest";
+import { SettingsStore } from "@covel/settings";
+import * as appearance from "@/lib/appearance.js";
+import { CUSTOM_THEMES_KEY } from "@/theme-system/storage.js";
+import { APPEARANCE_TOKENS_KEY } from "@/theme-system/overrides.js";
 
 const mocks = vi.hoisted(() => ({
   probeDesktopMode: vi.fn(),
@@ -34,15 +38,6 @@ vi.mock("@/settings/store", () => ({
 vi.mock("@/stores/session-store/reducer", () => ({
   configureMessagesWindowCap: vi.fn(),
 }));
-vi.mock("@/theme-system/storage.js", () => ({ CUSTOM_THEMES_KEY: "themes" }));
-vi.mock("@/theme-system/overrides.js", () => ({
-  APPEARANCE_TOKENS_KEY: "tokens",
-  applyTokenOverrides: vi.fn(),
-}));
-vi.mock("@/theme-system/registry.js", () => ({
-  THEME_SCHEME_KEY: "ui.scheme",
-  syncThemeRegistry: vi.fn(),
-}));
 vi.mock("@/i18n", () => ({
   default: {
     language: "en-US",
@@ -60,33 +55,88 @@ vi.mock("@/i18n", () => ({
 it("initializes browser settings when server management discovery is unavailable", async () => {
   document.body.innerHTML = '<div id="root"></div>';
   mocks.probeDesktopMode.mockResolvedValueOnce("unknown");
-  const subscriptions = new Map<string, (value: string) => void>();
-  localStorage.setItem("covel:scheme", "dark");
-  mocks.getSettings.mockReturnValue({
-    get: (key: string) =>
-      key === "ui.locale"
-        ? "en-US"
-        : key === "ui.chatMessageWindow"
-          ? 40
-          : "light",
-    subscribe: (key: string, listener: (value: string) => void) =>
-      subscriptions.set(key, listener),
+  const save = vi.fn().mockRejectedValue(new Error("read only"));
+  const store = new SettingsStore({
+    load: async () => ({
+      "ui.locale": "en-US",
+      "ui.chatMessageWindow": 40,
+      "ui.appearance": "missing-theme",
+      "ui.scheme": "light",
+      [APPEARANCE_TOKENS_KEY]: {
+        shared: {},
+        light: { "--story-color": "#aaaaaa" },
+        dark: { "--story-color": "#bbbbbb" },
+      },
+    }),
+    save,
+    loadSecrets: async () => ({}),
+    saveSecrets: async () => undefined,
   });
+  await store.init();
+  mocks.getSettings.mockReturnValue(store);
+  const applyAppearance = vi.spyOn(appearance, "applyAppearance");
+  const applyColorScheme = vi.spyOn(appearance, "applyColorScheme");
+  const root = document.documentElement;
+  function expectDisplayed(id: string, scheme: appearance.ColorScheme) {
+    expect(applyAppearance).toHaveBeenLastCalledWith(id);
+    expect(applyColorScheme).toHaveBeenLastCalledWith(scheme);
+    expect(root.dataset.theme).toBe(id);
+    expect(root.dataset.scheme).toBe(scheme);
+    expect(root.style.colorScheme).toBe(scheme);
+    expect(root.classList.contains("dark")).toBe(scheme === "dark");
+    expect(root.style.getPropertyValue("--story-color")).toBe(
+      scheme === "dark" ? "#bbbbbb" : "#aaaaaa",
+    );
+  }
 
   await import("../main.js");
   expect(await screen.findByText("App ready")).toBeTruthy();
   expect(screen.queryByRole("button", { name: "Retry" })).toBeNull();
-  expect(document.documentElement.dataset.scheme).toBe("light");
-  expect(document.documentElement.classList.contains("dark")).toBe(false);
-  act(() => subscriptions.get("ui.scheme")?.("dark"));
-  expect(document.documentElement.dataset.scheme).toBe("dark");
-  expect(document.documentElement.style.colorScheme).toBe("dark");
-  expect(document.documentElement.classList.contains("dark")).toBe(true);
-  // Changing the scheme neither consults nor rewrites the old next-themes key.
-  localStorage.setItem("covel:scheme", "unchanged");
-  act(() => subscriptions.get("ui.scheme")?.("light"));
-  expect(localStorage.getItem("covel:scheme")).toBe("unchanged");
-  expect(document.documentElement.classList.contains("dark")).toBe(false);
+  // Boot must keep the resolved fallback instead of reapplying raw preferences.
+  expectDisplayed("stage", "dark");
+  expect(store.get("ui.appearance")).toBe("missing-theme");
+  expect(store.get("ui.scheme")).toBe("light");
+  expect(save).not.toHaveBeenCalled();
+  expect(applyAppearance.mock.calls).toEqual([["stage"]]);
+  expect(applyColorScheme.mock.calls).toEqual([["dark"]]);
+
+  save.mockResolvedValue(undefined);
+  await act(() => store.set("ui.appearance", "paper"));
+  expectDisplayed("paper", "light");
+  await act(() => store.set("ui.scheme", "dark"));
+  expectDisplayed("paper", "dark");
+  await act(() => store.set("ui.appearance", "abyss"));
+  applyColorScheme.mockClear();
+  await act(() => store.set("ui.scheme", "light"));
+  expectDisplayed("abyss", "dark");
+  expect(store.get("ui.scheme")).toBe("light");
+  expect(applyColorScheme.mock.calls).toEqual([["dark"]]);
+
+  await act(() =>
+    store.set(CUSTOM_THEMES_KEY, [
+      {
+        id: "daylight",
+        label: "Daylight",
+        schemes: ["light"],
+        cssText: 'html[data-theme="daylight"] { --color-background: #ffffff; }',
+      },
+    ]),
+  );
+  await act(() => store.set("ui.appearance", "daylight"));
+  expectDisplayed("daylight", "light");
+  await act(() => store.set(CUSTOM_THEMES_KEY, []));
+  expectDisplayed("stage", "dark");
+  expect(store.get("ui.appearance")).toBe("daylight");
+  expect(store.get("ui.scheme")).toBe("light");
+
+  await act(() =>
+    store.set(APPEARANCE_TOKENS_KEY, {
+      shared: {},
+      light: { "--story-color": "#cccccc" },
+      dark: { "--story-color": "#dddddd" },
+    }),
+  );
+  expect(root.style.getPropertyValue("--story-color")).toBe("#dddddd");
   expect(mocks.probeDesktopMode).toHaveBeenCalledOnce();
   expect(mocks.initSettings).toHaveBeenCalledOnce();
   expect(mocks.getSettings).toHaveBeenCalled();

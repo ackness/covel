@@ -163,4 +163,4 @@ Covel 还在早期开发，只针对当前的契约。改一个契约时，生�
 
 `pnpm check:boundaries` 检查生产源码的三件事：工作区的公开入口、依赖声明、包的方向。需要新的跨包依赖时，连同这一页的责任划分一起评审。
 
-网页端通过 appearance 辅助函数应用 SettingsStore 中的主题和明暗设置，不依赖 `next-themes`。
+网页端从 SettingsStore 读取主题和明暗偏好，经主题解析后，通过 appearance 辅助函数应用实际显示值。回退显示不改写已保存的偏好。

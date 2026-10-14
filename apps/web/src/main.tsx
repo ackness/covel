@@ -10,12 +10,7 @@ import {
 } from "@/services/data-service";
 import { fetchServerHealth } from "@/services/api";
 import { probeDesktopMode } from "@/lib/desktop-bridge";
-import {
-  applyAppearance,
-  applyColorScheme,
-  type Appearance,
-  type ColorScheme,
-} from "@/lib/appearance";
+import { type Appearance, type ColorScheme } from "@/lib/appearance";
 import { getSettings, initSettings } from "@/settings/store";
 import { configureMessagesWindowCap } from "@/stores/session-store/reducer";
 import { CUSTOM_THEMES_KEY } from "@/theme-system/storage.js";
@@ -112,11 +107,9 @@ async function boot(): Promise<void> {
     try {
       await initSettings();
       const store = getSettings();
+      // The registry applies resolved theme/scheme values through the appearance
+      // helpers, including overrides, without changing the saved preferences.
       syncThemeRegistry(store);
-      // Apply initial appearance / locale ASAP so the first paint matches.
-      applyAppearance(store.get<Appearance>("ui.appearance"));
-      const initialScheme = store.get<ColorScheme>(THEME_SCHEME_KEY);
-      applyColorScheme(initialScheme);
       const initialLocale = store.get<SupportedLocale>("ui.locale");
       if (i18n.language !== initialLocale) {
         await i18n.changeLanguage(initialLocale);
@@ -126,12 +119,10 @@ async function boot(): Promise<void> {
       }
       // Global subscribers so changes from the Settings UI propagate even when
       // no component is currently mounted that reads the underlying setting.
-      store.subscribe<Appearance>("ui.appearance", (next) => {
-        applyAppearance(next);
+      store.subscribe<Appearance>("ui.appearance", () => {
         syncThemeRegistry(store);
       });
-      store.subscribe<ColorScheme>(THEME_SCHEME_KEY, (next) => {
-        applyColorScheme(next);
+      store.subscribe<ColorScheme>(THEME_SCHEME_KEY, () => {
         syncThemeRegistry(store);
       });
       store.subscribe(CUSTOM_THEMES_KEY, () => {
