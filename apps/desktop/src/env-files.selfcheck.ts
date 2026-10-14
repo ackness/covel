@@ -76,6 +76,17 @@ try {
   const unreadable = path.join(root, "unreadable");
   fs.mkdirSync(unreadable);
   assert.throws(() => patchKeysEnv(unreadable, {}));
+  fs.writeFileSync(
+    file,
+    "deepseek=synthetic-bare\nOTHER_SETTING=synthetic-setting\nOPENAI_API_KEY=synthetic-current\n",
+  );
+  assert.deepEqual(loadKeysEnv(file), { openai: "synthetic-current" });
+  patchKeysEnv(file, { openai: "synthetic-next" });
+  const saved = fs.readFileSync(file, "utf8");
+  assert.ok(saved.includes("deepseek=synthetic-bare\n"));
+  assert.ok(saved.includes("OTHER_SETTING=synthetic-setting\n"));
+  assert.ok(!saved.includes("DEEPSEEK_API_KEY=synthetic-bare"));
+  assert.deepEqual(loadKeysEnv(file), { openai: "synthetic-next" });
   console.log("env-files selfcheck: OK");
 } finally {
   fs.rmSync(root, { recursive: true, force: true });

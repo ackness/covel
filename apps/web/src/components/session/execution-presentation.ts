@@ -1,4 +1,5 @@
 import {
+  executionMayBeRunning,
   PLAYER_ABORT_REASON,
   type SessionExecutionStatus,
 } from "@covel/shared";
@@ -28,7 +29,7 @@ export function executionPresentation({
   recovery?: SessionExecutionStatus | null;
 }): ExecutionPresentation {
   const foreground = steps.filter((step) => !step.detached);
-  if (executing || recovery?.state === "running") {
+  if (executing || executionMayBeRunning(recovery)) {
     const storyReady = messages.some(
       (message) =>
         message.role === "assistant" &&

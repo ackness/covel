@@ -1,5 +1,10 @@
 import { z } from "zod";
 import {
+  AUTHORING_RULE_FIELD_PATHS,
+  RUNTIME_DISABLING_ISSUE_PARAMS,
+  runtimeRuleIssues,
+} from "./runtime-rules.js";
+import {
   triggerConfigSchema,
   stageSchema,
   turnCompletionConfigSchema,
@@ -41,6 +46,17 @@ const runtimeSourceSchema = z.union([
     cardinality: cardinalitySchema.optional(),
   }),
 ]);
+// `after` only orders: a contract named there never activates a provider, so
+// it does not have to be a dependency of the package.
+const afterSourceSchema = z.union([
+  z.strictObject({ runtime: runtimeRefSchema }),
+  z.strictObject({
+    contract: contractIdSchema.describe(
+      "Contract ID. This runtime runs after the contract's active providers; the contract does not have to be listed in `requires` or `optional`.",
+    ),
+    cardinality: cardinalitySchema.optional(),
+  }),
+]);
 const sourceSchema = z.union([
   runtimeSourceSchema,
   z.strictObject({
@@ -51,7 +67,7 @@ const sourceSchema = z.union([
       ),
   }),
 ]);
-const afterSchema = z.union([z.string().min(1), runtimeSourceSchema]);
+const afterSchema = z.union([z.string().min(1), afterSourceSchema]);
 const needsSchema = z.union([
   z.string().min(1),
   z.strictObject({
@@ -121,7 +137,7 @@ export const runtimeAuthoringManifestSchema = z
             z.string().min(1),
             z.strictObject({
               from: sourceSchema.describe(
-                "Producer of the value: a runtime in this package, a contract, or a kernel input.",
+                "Producer of the value: a runtime in this package, a contract, or a kernel input. A kernel input takes no other field.",
               ),
               scope: z
                 .enum(["turn", "committed"])
@@ -364,12 +380,11 @@ export const runtimeAuthoringManifestSchema = z
       .optional(),
   })
   .superRefine((value, ctx) => {
-    if (value.type === "function" && (!value.function || value.agent))
+    if (value.type === "function" && value.agent)
       ctx.addIssue({
         code: "custom",
-        path: ["function"],
-        message:
-          "Function runtime requires function.handler and cannot declare agent",
+        path: ["agent"],
+        message: "Function runtime cannot declare agent",
       });
     if (value.type === "agent" && value.function)
       ctx.addIssue({
@@ -384,7 +399,64 @@ export const runtimeAuthoringManifestSchema = z
         message:
           "A runtime with io.visibility: story writes the text the player reads and cannot be io.concealed; conceal a plugin or system runtime instead",
       });
-    for (const [name, binding] of Object.entries(value.io?.inputs ?? {})) {
+    const inputs = Object.entries(value.io?.inputs ?? {});
+    for (const issue of runtimeRuleIssues(
+      {
+        runtimeType: value.type,
+        handler: value.function?.handler,
+        stage: value.schedule?.stage,
+        trigger: value.schedule?.trigger,
+        needs: value.schedule?.needs,
+        completion: value.schedule?.completion,
+        execution: value.schedule?.manual?.execution,
+        builtinTools: (value.type === "function" ? value.function : value.agent)
+          ?.tools?.builtin,
+        visibility: value.io?.visibility,
+        output: value.io?.output,
+        requireExplicitCompletion:
+          value.agent?.loop?.completion?.require === "explicit",
+        turnInputs: inputs
+          .filter(
+            ([, binding]) =>
+              !("kernel" in binding.from) && binding.scope !== "committed",
+          )
+          .map(([name]) => name),
+      },
+      {
+        ...AUTHORING_RULE_FIELD_PATHS,
+        builtinTools: [
+          value.type === "function" ? "function" : "agent",
+          "tools",
+          "builtin",
+        ],
+      },
+      { authoring: true },
+    ))
+      ctx.addIssue({
+        code: "custom",
+        path: [...issue.path],
+        message: issue.message,
+        ...(issue.disables ? { params: RUNTIME_DISABLING_ISSUE_PARAMS } : {}),
+      });
+    for (const [name, binding] of inputs) {
+      // The kernel delivers its own inputs: a kernel input is always present
+      // and never checked, so the binding options would do nothing.
+      if ("kernel" in binding.from) {
+        for (const field of [
+          "scope",
+          "select",
+          "required",
+          "accepts",
+          "recordAs",
+        ] as const)
+          if (binding[field] !== undefined)
+            ctx.addIssue({
+              code: "custom",
+              path: ["io", "inputs", name, field],
+              message: `A kernel input takes only from; remove ${field}`,
+            });
+        continue;
+      }
       if (binding.scope === "committed" && binding.select !== undefined)
         ctx.addIssue({
           code: "custom",
@@ -392,14 +464,11 @@ export const runtimeAuthoringManifestSchema = z
           message:
             "Committed input cannot declare select; scope: committed reads the complete export",
         });
-      if (
-        binding.scope === "committed" &&
-        (!binding.recordAs || "kernel" in binding.from)
-      )
+      if (binding.scope === "committed" && !binding.recordAs)
         ctx.addIssue({
           code: "custom",
-          path: ["io", "inputs", name],
-          message: "Committed input requires a runtime source and recordAs",
+          path: ["io", "inputs", name, "recordAs"],
+          message: "Committed input requires recordAs",
         });
     }
   });

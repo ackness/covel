@@ -488,24 +488,21 @@ export function createSqlDataCrud(deps: SqlDataCrudDeps): SqlDataCrud {
     async upsertLorebookEntries(
       records: readonly LorebookEntryRecord[],
     ): Promise<void> {
-      // Per-entry upsert without a wrapping transaction — matching the legacy
-      // backends, which both looped one row at a time (PG without an explicit
-      // tx, SQLite relying on per-statement commits). Volumes are tiny (a
-      // handful of entries per world).
-      for (const record of records) {
-        await runner.insert(
-          lorebookEntries,
-          values.lorebookEntryInsert(record),
-          {
-            target: [
-              lorebookEntries.sessionId,
-              lorebookEntries.owner,
-              lorebookEntries.id,
-            ],
-            set: values.lorebookEntryUpdate(record),
-          },
-        );
-      }
+      // The whole batch or nothing: every row's values are built (and its
+      // identifiers checked) before the first write, and the writes share one
+      // transaction (a savepoint inside an open one).
+      const target = [
+        lorebookEntries.sessionId,
+        lorebookEntries.owner,
+        lorebookEntries.id,
+      ];
+      await runner.insertManyAtomic(
+        lorebookEntries,
+        records.map((record) => ({
+          values: values.lorebookEntryInsert(record),
+          conflict: { target, set: values.lorebookEntryUpdate(record) },
+        })),
+      );
     },
 
     async listSessionLorebookEntries(

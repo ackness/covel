@@ -8,6 +8,7 @@ import {
 } from "../../request-llm-context.js";
 import { memoryIngestLockId } from "../../lib/memory-ingest-lock.js";
 import type { EmbedFn, MemorySystem } from "@covel/memory";
+import type { MemoryIndexControl } from "../../embedding-lock.js";
 import { createPluginReloadRoutes } from "./plugin-reload.js";
 import { createPluginServiceAdmission } from "./bootstrap/plugin-service-admission.js";
 import {
@@ -195,6 +196,11 @@ export interface ApiBootstrapConfig {
    * no embed slot is configured.
    */
   readonly ensureEmbeddingLock?: (sessionId: string) => Promise<void>;
+  /**
+   * Optional embedding configuration reader for the memory index routes
+   * (`/api/sessions/:id/memory-index`). Ignored when `vectorBackend` is "none".
+   */
+  readonly memoryIndex?: MemoryIndexControl;
   /**
    * Optional embedding function for the semantic (vector) memory tier. When
    * provided AND the store supports vectors, the memory system upgrades
@@ -849,6 +855,9 @@ async function assembleApi(
     }
     if (config.vectorBackend !== "none" && config.ensureEmbeddingLock) {
       c.set("ensureEmbeddingLock", config.ensureEmbeddingLock);
+    }
+    if (config.vectorBackend !== "none" && config.memoryIndex) {
+      c.set("memoryIndex", config.memoryIndex);
     }
     if (config.mediaStore) {
       c.set("mediaStore", config.mediaStore);

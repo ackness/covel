@@ -7,6 +7,7 @@ import {
 } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import i18n from "@/i18n";
+import { getDesktopInfo } from "@/lib/desktop-bridge.js";
 import { DesktopPane } from "../DesktopPane.js";
 
 const bridgeMocks = vi.hoisted(() => ({
@@ -67,14 +68,16 @@ describe("DesktopPane proxy loading", () => {
       screen.queryByText(i18n.t("settings.desktopOnboardingResetToast")),
     ).toBeNull();
     await act(async () => rejectReset(new Error("storage unavailable")));
-    expect(screen.getByText(i18n.t("settings.saveFailed"))).toBeTruthy();
+    expect(screen.getByRole("alert").textContent).toBe(
+      i18n.t("settings.saveFailed"),
+    );
     expect(
       screen.queryByText(i18n.t("settings.desktopOnboardingResetToast")),
     ).toBeNull();
     await act(async () => fireEvent.click(button));
-    expect(
-      screen.getByText(i18n.t("settings.desktopOnboardingResetToast")),
-    ).toBeTruthy();
+    expect(screen.getByRole("status").textContent).toBe(
+      i18n.t("settings.desktopOnboardingResetToast"),
+    );
     expect(bridgeMocks.resetOnboarding).toHaveBeenCalledTimes(2);
   });
 
@@ -110,9 +113,13 @@ describe("DesktopPane proxy loading", () => {
     await waitFor(() =>
       expect((save as HTMLButtonElement).disabled).toBe(false),
     );
-    expect((screen.getByRole("combobox") as HTMLSelectElement).value).toBe(
-      "http",
-    );
+    expect(
+      (
+        screen.getByRole("combobox", {
+          name: "Proxy mode",
+        }) as HTMLSelectElement
+      ).value,
+    ).toBe("http");
   });
 
   it("keeps save disabled after load failure and allows an explicit retry", async () => {
@@ -133,8 +140,27 @@ describe("DesktopPane proxy loading", () => {
     await waitFor(() =>
       expect((save as HTMLButtonElement).disabled).toBe(false),
     );
-    expect((screen.getByRole("combobox") as HTMLSelectElement).value).toBe(
-      "system",
-    );
+    expect(
+      (
+        screen.getByRole("combobox", {
+          name: "Proxy mode",
+        }) as HTMLSelectElement
+      ).value,
+    ).toBe("system");
   });
+});
+
+it("F-090 reports refresh failures and re-enables the action", async () => {
+  vi.mocked(getDesktopInfo)
+    .mockResolvedValueOnce(null)
+    .mockRejectedValueOnce(new Error("offline"));
+  render(<DesktopPane />);
+  const button = screen.getByRole("button", {
+    name: i18n.t("settings.desktopRefresh"),
+  });
+  await act(async () => fireEvent.click(button));
+  expect(screen.getByRole("alert").textContent).toBe(
+    i18n.t("settings.desktopRefreshFailed"),
+  );
+  expect((button as HTMLButtonElement).disabled).toBe(false);
 });

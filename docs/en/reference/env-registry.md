@@ -321,7 +321,7 @@ The variables below are also in `registry.ts`. For variables whose use is alread
 | `DEFAULT_BASE_URL` / `DEFAULT_MODEL` | — / `deepseek-v4-flash` | When there is no `llm.toml`, the built-in `story` role uses this OpenAI-compatible endpoint and model instead (provider `default`). `e2e:replay --record` also records to it |
 | `DEFAULT_API_KEY`                    | —                       | Key for the `default` provider. The built-in role above and the sessions in `tests/llm-replay/` both use it                                                                  |
 | `COVEL_LLM_RETRY_DISABLED`           | `false`                 | Set to `1` to turn off provider HTTP retries                                                                                                                                 |
-| `COVEL_LLM_MAX_CONCURRENT`           | `4`                     | Limit on model calls running at the same time across the whole process                                                                                                       |
+| `COVEL_LLM_MAX_CONCURRENT`           | `4`                     | Limit on text model calls running at the same time across the whole process                                                                                                  |
 | `COVEL_MODEL_DB_PATH`                | —                       | Overrides the path of the model database JSON                                                                                                                                |
 | `COVEL_PROMPTS_DIR`                  | —                       | Overrides the root folder of prompt templates                                                                                                                                |
 | `COVEL_IMG_KEY`                      | —                       | Key for the offline portrait and scene generation scripts. It takes priority over the provider's own key                                                                     |
@@ -464,8 +464,9 @@ This section explains, one by one, the variables whose behavior is more detailed
 
 **`COVEL_LLM_MAX_CONCURRENT`**
 
-- The limit on model calls running at the same time across the whole process. The default is `4`. `0` or a negative number turns this limit off. It is read by `packages/runtime/src/retry/llm-slots.ts`.
-- Time spent waiting in the queue does not count toward the runtime's timeout. The deadline is pushed back by however long the call queued.
+- The limit on text model calls running at the same time across the whole process. The default is `4`. `0` or a negative number turns this limit off. It is read by `packages/shared/src/llm-slots.ts`.
+- Text, object, streaming, and evaluation calls from agents, functions, background jobs, and direct callers share the gateway queue. Embedding and media do not occupy text slots.
+- Queue time credits an agent runtime deadline; functions keep their fixed execution deadline. Logical request budgets include queuing.
 - A hosted deployment with many sessions can adjust it to the provider's throughput.
 
 **`COVEL_COMPACTOR_CONTEXT_WINDOW`**

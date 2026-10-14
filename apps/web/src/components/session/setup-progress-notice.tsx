@@ -35,6 +35,7 @@ function recoveryActive(recovery: ExecutionRecovery | null | undefined) {
     !!recovery.error ||
     !recovery.status ||
     state === "running" ||
+    state === "unknown" ||
     state === "interrupted" ||
     state === "failed"
   );

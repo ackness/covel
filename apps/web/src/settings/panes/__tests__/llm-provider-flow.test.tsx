@@ -124,14 +124,20 @@ describe("provider configuration flow", () => {
           },
     }));
     render(<LlmPresetsPane />);
+    expect(
+      screen.getByRole("textbox", { name: i18n.t("settings.searchProviders") }),
+    ).toBeTruthy();
     fireEvent.click(
       screen.getAllByRole("button", { name: "Add provider" })[0]!,
     );
     const dialog = within(screen.getByRole("dialog"));
-    fireEvent.change(
-      dialog.getByPlaceholderText(i18n.t("settings.providerIdExample")),
-      { target: { value: "fixture" } },
-    );
+    expect(
+      dialog.getByRole("textbox", { name: i18n.t("settings.baseUrl") }),
+    ).toBeTruthy();
+    expect(screen.queryByRole("main")).toBeNull();
+    fireEvent.change(dialog.getByRole("textbox", { name: "Provider ID" }), {
+      target: { value: "fixture" },
+    });
     fireEvent.change(dialog.getByRole("textbox", { name: /Model IDs/ }), {
       target: { value: "qwen3.8-flash\ndeepseek-v4-flash" },
     });
@@ -201,10 +207,12 @@ describe("provider configuration flow", () => {
   it("switches between a full-width provider list and details on narrow screens", () => {
     const { container } = render(<LlmPresetsPane />);
     const aside = container.querySelector("aside")!;
-    const main = container.querySelector("main")!;
+    const main = screen.getByRole("region", {
+      name: i18n.t("settings.providerConnections"),
+    });
     expect(aside.parentElement?.className).toContain("grid-cols-1");
     expect(main.className).toContain("hidden lg:block");
-    fireEvent.click(screen.getByRole("button", { name: /example.*1 models/ }));
+    fireEvent.click(screen.getByRole("button", { name: /example.*1 model/ }));
     expect(aside.className).toContain("hidden lg:flex");
     expect(main.className).not.toContain("hidden");
     fireEvent.click(screen.getByRole("button", { name: "All providers" }));
@@ -238,10 +246,9 @@ it("keeps the provider draft open after failed persistence and saves it on retry
   render(<LlmPresetsPane />);
   fireEvent.click(screen.getAllByRole("button", { name: "Add provider" })[0]!);
   const dialog = within(screen.getByRole("dialog"));
-  fireEvent.change(
-    dialog.getByPlaceholderText(i18n.t("settings.providerIdExample")),
-    { target: { value: "fixture" } },
-  );
+  fireEvent.change(dialog.getByRole("textbox", { name: "Provider ID" }), {
+    target: { value: "fixture" },
+  });
   const input = dialog.getByRole("textbox", { name: /Model IDs/ });
   fireEvent.change(input, { target: { value: "opaque-model" } });
   const gate = deferred<void>();
@@ -285,6 +292,9 @@ it("discards a superseded import when an older read completes last", async () =>
     oldRead.resolve(exportProfiles([{ ...importedProfile, name: "Stale" }])),
   );
   expect(persistedEntries["llm.providers"]).toEqual([importedProfile]);
+  expect(screen.getByRole("status").textContent).toBe(
+    i18n.t("settings.providerImportSucceeded"),
+  );
 });
 
 it.each([
@@ -299,7 +309,7 @@ it.each([
     };
     await mocks.store.set("llm.providers", [profile]);
     render(<LlmPresetsPane />);
-    fireEvent.click(screen.getByRole("button", { name: /fixture.*1 models/ }));
+    fireEvent.click(screen.getByRole("button", { name: /fixture.*1 model/ }));
     if (field === "model name") {
       fireEvent.click(
         screen.getByText(/Model reasoning default/, { selector: "summary" }),
@@ -358,7 +368,7 @@ it.each([
     };
     await mocks.store.set("llm.providers", [profile]);
     render(<LlmPresetsPane />);
-    fireEvent.click(screen.getByRole("button", { name: /fixture.*1 models/ }));
+    fireEvent.click(screen.getByRole("button", { name: /fixture.*1 model/ }));
     if (field === "model name") {
       fireEvent.click(
         screen.getByText(/Model reasoning default/, { selector: "summary" }),
@@ -478,7 +488,7 @@ it.each(["provider", "model"])(
     });
     await mocks.store.set("keys.fixture", "saved-secret");
     render(<LlmPresetsPane />);
-    fireEvent.click(screen.getByRole("button", { name: /fixture.*1 models/ }));
+    fireEvent.click(screen.getByRole("button", { name: /fixture.*1 model/ }));
     const profileBefore = mocks.store.get("llm.providers");
     const slotsBefore = mocks.store.get("llm.slotConfig");
     vi.mocked(adapter.save).mockClear();
@@ -511,7 +521,7 @@ it.each(["provider", "model"])(
 it("F-037 queues connection edits and keeps the next field focused", async () => {
   await mocks.store.set("llm.providers", [importedProfile]);
   render(<LlmPresetsPane />);
-  fireEvent.click(screen.getByRole("button", { name: /fixture.*1 models/ }));
+  fireEvent.click(screen.getByRole("button", { name: /fixture.*1 model/ }));
   const endpoint = screen.getByRole("textbox", { name: "API endpoint" });
   const protocol = screen.getAllByRole("combobox", {
     name: /^API protocol$/,

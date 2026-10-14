@@ -162,3 +162,5 @@ Covel is still in early development, and it targets only the current contracts. 
 > These libraries currently make no promise of a persistence migration across versions. When the store schema or the vector progress table changes, the affected development data must be created again. Do not treat "old data can still be read" or "old entry points still work" as a guarantee.
 
 `pnpm check:boundaries` checks three things in the production source: the public entry points of the workspace, the dependency declarations, and the direction of the packages. When a new cross-package dependency is needed, review it together with the responsibility split on this page.
+
+The web app applies theme and color scheme from SettingsStore through its appearance helpers; it has no `next-themes` dependency.

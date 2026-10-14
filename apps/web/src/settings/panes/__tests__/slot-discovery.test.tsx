@@ -103,7 +103,6 @@ beforeEach(async () => {
           turnCompletion: { mode: "await" },
           outputKind: "plugin",
           outputContract: undefined,
-          tags: [],
         },
       ],
       languages: { text: ["en"], instructions: ["en"] },

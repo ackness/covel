@@ -61,18 +61,33 @@ describe("handler store ownership", () => {
         expect(Reflect.get(handle, name)).toBeUndefined();
       }
     }
+    const readSession = (value: unknown) =>
+      value as { phase: string; setupRuntimes: Record<string, unknown> };
     for (const session of [await scoped.getSession(), await rpc.getSession()]) {
-      (session as { phase: string }).phase = "setup";
-      (session as { setupRuntimes: Record<string, unknown> }).setupRuntimes.x =
-        { state: "pending" };
+      expect(session).not.toHaveProperty("status");
+      expect(session).not.toHaveProperty("activePlugins");
+      expect(session).not.toHaveProperty("id");
+      readSession(session).phase = "setup";
+      readSession(session).setupRuntimes["plugin/setup"] = { state: "pending" };
     }
     expect(await store.getSession(ctx.sessionId)).toMatchObject({
       status: "active",
+      activePlugins: [ctx.pluginId],
       phase: "playing",
       setupRuntimes: {},
-      activePlugins: [ctx.pluginId],
     });
     expect(buffer).toHaveLength(0);
+  });
+
+  it("rejects session reads after the session is deleted", async () => {
+    const { store, scoped } = await fixture();
+    const rpc = createRpcHandlerStoreView(store, ctx);
+    await store.deleteSession(ctx.sessionId);
+    for (const view of [scoped, rpc]) {
+      await expect(view.getSession()).rejects.toThrow(
+        "The session no longer exists",
+      );
+    }
   });
 
   it("owns buffered inputs and every returned domain value", async () => {

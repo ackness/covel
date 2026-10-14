@@ -325,7 +325,7 @@ describe("finalizeExecution", () => {
     expect(outcome.events).toHaveLength(0);
     expect(outcome.failedProposals).toHaveLength(1);
     expect(outcome.failedProposals[0]!.error).toMatch(
-      /table must be a non-empty string/,
+      /state\.patch: invalid payload \(table:/,
     );
 
     // The committed sibling's write is rolled back — DB has no trace of it.

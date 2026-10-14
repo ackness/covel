@@ -676,7 +676,7 @@ describe("upsert-npc-graph", () => {
     );
   });
 
-  it("self-heals a relation that already has two open versions", async () => {
+  it("refuses to supersede a relation with duplicate open versions", async () => {
     // Corrupted state a pre-fix same-turn double revision could leave: two open
     // rows for one relation (writes don't commit between tool calls in a turn,
     // so each call opened its own version). The next write must close all but
@@ -719,32 +719,26 @@ describe("upsert-npc-graph", () => {
     await seedOpen("edge-old-3", 3, 0.3);
     await seedOpen("edge-old-5", 5, 0.5);
 
-    await executeAndCommit(
-      upsertTool,
-      {
-        edges: [
-          {
-            sourceName: "A",
-            targetName: "B",
-            relation: "TRUSTS",
-            strength: -0.2,
-            fact: "A grows wary of B.",
-          },
-        ],
-      },
-      { ...ctx, logicalTurn: 9 },
-      store,
-    );
-
-    const edges = await storedEdges();
-    const trust = edges.filter((e) => e.relation === "TRUSTS");
-    const open = trust.filter((e) => e.invalidAt === undefined);
-    // Exactly one open version survives — the brand-new revision.
-    expect(open).toHaveLength(1);
-    expect(open[0].strength).toBe(-0.2);
-    // Both pre-existing open rows were closed at the current turn.
-    expect(trust.find((e) => e.id === "edge-old-3").invalidAt).toBe(9);
-    expect(trust.find((e) => e.id === "edge-old-5").invalidAt).toBe(9);
+    const before = await storedEdges();
+    await expect(
+      executeAndCommit(
+        upsertTool,
+        {
+          edges: [
+            {
+              sourceName: "A",
+              targetName: "B",
+              relation: "TRUSTS",
+              strength: -0.2,
+              fact: "A grows wary of B.",
+            },
+          ],
+        },
+        { ...ctx, logicalTurn: 9 },
+        store,
+      ),
+    ).rejects.toThrow("duplicate open edge versions");
+    expect(await storedEdges()).toEqual(before);
   });
 
   it("gives superseding versions distinct ids even when endpoint names are long", async () => {
@@ -812,9 +806,8 @@ describe("upsert-npc-graph", () => {
     expect(current.strength).toBe(-0.6);
   });
 
-  it("treats an edge stored before versioning as the open version", async () => {
-    // Legacy row: no `invalidAt`, and a `validAt` that came from the old
-    // row-count clock. It must still be found and superseded, not duplicated.
+  it("supersedes the current open version without invalidAt", async () => {
+    // Missing invalidAt is the current representation of an open edge.
     await store.setPluginData({
       sessionId: ctx.sessionId,
       pluginId: ctx.pluginId,
@@ -875,6 +868,48 @@ describe("upsert-npc-graph", () => {
       "edge-legacy",
     );
     expect(legacy.value.invalidAt).toBe(12);
+  });
+
+  it("rejects duplicate open edge data without repairing or writing it", async () => {
+    const rows = ["first", "second"].map((id, index) => ({
+      sessionId: ctx.sessionId,
+      pluginId: ctx.pluginId,
+      namespace: "edges",
+      key: id,
+      value: {
+        id,
+        source: "a",
+        target: "b",
+        relation: "TRUSTS",
+        validAt: index,
+        strength: 0.5,
+        fact: "Known relation",
+      },
+      updatedAt: "2026-01-01T00:00:00Z",
+    }));
+    await store.setPluginDataBatch(rows);
+    await expect(
+      executeAndCommit(
+        upsertTool,
+        {
+          nodes: [
+            {
+              name: "New node",
+              type: "individual",
+              summary: "A new participant.",
+            },
+          ],
+        },
+        ctx,
+        store,
+      ),
+    ).rejects.toThrow("duplicate open edge versions");
+    expect(
+      await store.listPluginData(ctx.sessionId, ctx.pluginId, "edges"),
+    ).toEqual(rows);
+    expect(
+      await store.listPluginData(ctx.sessionId, ctx.pluginId, "nodes"),
+    ).toHaveLength(0);
   });
 
   it("flags edges whose endpoint node cannot be resolved", async () => {

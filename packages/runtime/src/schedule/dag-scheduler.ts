@@ -8,8 +8,7 @@
  * depend on `narrator`).
  *
  * The DAG scheduler derives ordering edges from the normalized IR — turn-scoped
- * `deps.needs`, `deps.after`, typed `inputs` bindings — plus the legacy
- * `input.inject[].from` (kind `runtime`) injects. It performs a Kahn-style
+ * `deps.needs`, `deps.after` and typed `inputs` bindings. It performs a Kahn-style
  * topological sort and returns "levels": each level is a set of runtimes whose
  * dependencies have all completed and may therefore run concurrently. Within a
  * level, runtimes are ordered by name so traces stay readable and ties break
@@ -65,7 +64,7 @@ function refToNames(
 
 /**
  * All ordering-dependency names a runtime declares, from the IR (`deps.needs`
- * turn-scoped + `deps.after` + `inputs` bindings) plus legacy runtime injects.
+ * turn-scoped + `deps.after` + `inputs` bindings).
  * Not yet filtered to the in-scope set.
  */
 function collectDependencies(
@@ -80,9 +79,6 @@ function collectDependencies(
   };
   const spec = getRuntimeSpec(manifest);
 
-  for (const decl of manifest.input?.inject ?? []) {
-    if (decl.kind === "runtime" && decl.from.length > 0) addHard(decl.from);
-  }
   for (const need of spec.deps.needs) {
     for (const name of refToNames(need, "needs", capabilityProviders)) {
       deps.add(name);

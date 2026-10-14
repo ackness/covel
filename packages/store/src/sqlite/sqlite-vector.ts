@@ -54,6 +54,7 @@ import type {
   GetVectorPayloadsInput,
   VectorIndexProgressScope,
   CommitVectorIndexBatchInput,
+  ResetSessionVectorIndexInput,
 } from "../vector-store.js";
 import { normalizeVectorTopK } from "../vector-store.js";
 import { assertStoreIdentifiers, withoutNul } from "../common/without-nul.js";
@@ -270,6 +271,54 @@ export function createSqliteVectorCapability(
           WHERE id = ?`,
       )
       .run(target.modelRegistryId, now, sessionId);
+  }
+
+  async function resetSessionVectorIndex(
+    input: ResetSessionVectorIndexInput,
+  ): Promise<boolean> {
+    return runSqliteTransaction(
+      sqlite,
+      () => {
+        const session = sqlite
+          .prepare(
+            "SELECT created_at, embedding_model_id FROM sessions WHERE id = ?",
+          )
+          .get(input.sessionId) as
+          { created_at: string; embedding_model_id: number | null } | undefined;
+        if (!session || session.created_at !== input.expectedSessionCreatedAt) {
+          throw new Error("Vector index reset: session incarnation changed");
+        }
+        const current = session.embedding_model_id ?? null;
+        if (current !== input.expectedModelRegistryId) return false;
+        if (current !== null) {
+          // Validates the registry row and its table name before the DELETE.
+          const target = resolveVectorTarget(input.sessionId);
+          if (target) {
+            sqlite
+              .prepare(
+                `DELETE FROM ${physicalTableName(target.modelRegistryId)} WHERE session_id = ?`,
+              )
+              .run(input.sessionId);
+          }
+        }
+        sqlite
+          .prepare("DELETE FROM vector_index_progress WHERE session_id = ?")
+          .run(input.sessionId);
+        sqlite
+          .prepare(
+            `UPDATE sessions
+                SET embedding_model_id = ?, embedding_locked_at = ?
+              WHERE id = ?`,
+          )
+          .run(
+            input.target?.modelRegistryId ?? null,
+            input.target ? new Date().toISOString() : null,
+            input.sessionId,
+          );
+        return true;
+      },
+      "immediate",
+    );
   }
 
   async function resolveSessionVectorTarget(
@@ -518,10 +567,19 @@ export function createSqliteVectorCapability(
       sqlite,
       () => {
         const session = sqlite
-          .prepare("SELECT created_at FROM sessions WHERE id = ?")
-          .get(input.sessionId) as { created_at: string } | undefined;
+          .prepare(
+            "SELECT created_at, embedding_model_id FROM sessions WHERE id = ?",
+          )
+          .get(input.sessionId) as
+          { created_at: string; embedding_model_id: number | null } | undefined;
         if (!session || session.created_at !== input.expectedSessionCreatedAt) {
           throw new Error("Vector index progress: session incarnation changed");
+        }
+        if (
+          input.expectedModelRegistryId !== undefined &&
+          session.embedding_model_id !== input.expectedModelRegistryId
+        ) {
+          throw new Error("Vector index progress: embedding model changed");
         }
         const changed =
           input.expectedValue === null
@@ -631,6 +689,7 @@ export function createSqliteVectorCapability(
     deleteVectors,
     ensureVectorModel,
     lockSessionEmbeddingModel,
+    resetSessionVectorIndex,
     resolveSessionVectorTarget,
     listVectorModels,
   };

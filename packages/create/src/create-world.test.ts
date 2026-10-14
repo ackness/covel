@@ -14,6 +14,8 @@ import { parse as parseYaml } from "yaml";
 import type {
   LLMAdapter,
   LLMResponse,
+  PluginPack,
+  WorldCreationBrief,
   WorldGenerationPart,
 } from "@covel/shared";
 import { createWorld } from "./create-world.js";
@@ -22,6 +24,31 @@ import {
   writeWorldPackage,
 } from "./world-writer.js";
 import { buildWorldPrompt } from "./prompts.js";
+
+/** A pack catalogue as the server reads it from `packs/builtin.yaml`. */
+const PACKS: PluginPack[] = [
+  {
+    id: "dialogue-mode",
+    label: { "en-US": "Dialogue Mode", "zh-CN": "对话模式" },
+    description: {
+      "en-US": "Dialogue-first narration.",
+      "zh-CN": "对话优先叙事。",
+    },
+    requested: [],
+    recommended: [],
+    tags: [],
+    source: "builtin",
+    defaultViewMode: "stage",
+  },
+  {
+    id: "tea-house",
+    label: "Tea House",
+    requested: [],
+    recommended: [],
+    tags: [],
+    source: "builtin",
+  },
+];
 
 const WORLD_YAML = `schemaVersion: "1.0"
 id: test-world
@@ -931,7 +958,7 @@ contractData:
       concept: "雨中的倒转钟城",
       idleTimeoutMs: 5_000,
       brief: {
-        experienceMode: "dialogue-mode",
+        pack: "dialogue-mode",
         content: ["characters", "lorebook", "rules", "opening-kit"],
         contracts: ["memory.blocks@1"],
         additionalInstructions: "让角色彼此隐瞒一段共同历史。",
@@ -945,6 +972,7 @@ contractData:
           pluginId: "memory",
         },
       ],
+      packs: PACKS,
     });
 
     expect(result.success, JSON.stringify(result.errors)).toBe(true);
@@ -1002,6 +1030,56 @@ contractData:
   });
 });
 
+describe("createWorld plugin pack", () => {
+  const generate = (brief: WorldCreationBrief | undefined) =>
+    createWorld({
+      // The model writes a preset and a view of its own; the brief decides.
+      llm: new FixedLlm(
+        `===WORLD_YAML===\n${WORLD_YAML.replace(
+          "pluginPolicy:\n",
+          "pluginPolicy:\n  presetId: traditional-story\n",
+        )}defaultViewMode: stage\n===WORLD_MD===\n${WORLD_LORE}\n===END===`,
+      ),
+      concept: "Clockwork city",
+      idleTimeoutMs: 5_000,
+      brief,
+      packs: PACKS,
+    });
+
+  it("takes the preset and the view from the pack the brief names", async () => {
+    const stage = await generate({ pack: "dialogue-mode" });
+    if (!stage.success) throw new Error(stage.errors.join("; "));
+    expect(stage.manifest).toMatchObject({
+      pluginPolicy: { presetId: "dialogue-mode" },
+      defaultViewMode: "stage",
+    });
+
+    // Any pack of the catalogue can be chosen. One that names no view
+    // leaves the world without one.
+    const plain = await generate({ pack: "tea-house" });
+    if (!plain.success) throw new Error(plain.errors.join("; "));
+    expect(plain.manifest.pluginPolicy).toMatchObject({
+      presetId: "tea-house",
+    });
+    expect(plain.manifest).not.toHaveProperty("defaultViewMode");
+
+    // Without a pack the world names none.
+    const none = await generate({ content: [] });
+    if (!none.success) throw new Error(none.errors.join("; "));
+    expect(none.manifest.pluginPolicy).not.toHaveProperty("presetId");
+    expect(none.manifest).not.toHaveProperty("defaultViewMode");
+  });
+
+  it("refuses a pack the catalogue does not have", async () => {
+    const result = await generate({ pack: "traditional-story" });
+    expect(result.success).toBe(false);
+    if (result.success) return;
+    expect(result.errors.join("; ")).toContain(
+      "unknown plugin pack: traditional-story",
+    );
+  });
+});
+
 describe("buildWorldPrompt", () => {
   it("documents lore quality constraints for generated worlds", async () => {
     const prompt = await buildWorldPrompt("低成本快速验证世界", "zh-CN");
@@ -1035,12 +1113,22 @@ describe("buildWorldPrompt", () => {
   });
 
   it("turns the structured brief into binding package instructions", async () => {
-    const prompt = await buildWorldPrompt("雨中的倒转钟城", "zh-CN", {
-      experienceMode: "dialogue-mode",
-      content: ["characters", "rules"],
-      additionalInstructions: "不要使用救世主预言。",
-    });
-    expect(prompt).toContain("Experience preset: dialogue-mode");
+    const prompt = await buildWorldPrompt(
+      "雨中的倒转钟城",
+      "zh-CN",
+      {
+        pack: "dialogue-mode",
+        content: ["characters", "rules"],
+        additionalInstructions: "不要使用救世主预言。",
+      },
+      undefined,
+      [],
+      PACKS,
+    );
+    // The pack as the catalogue describes it, in the world's language.
+    expect(prompt).toContain(
+      "Plugin pack: 对话模式 (presetId dialogue-mode). 对话优先叙事。",
+    );
     expect(prompt).toContain("CREATE: 3-5 interconnected main character");
     expect(prompt).toContain("OMIT: 4-8 focused setting entries");
     expect(prompt).toContain("不要使用救世主预言。");

@@ -284,7 +284,7 @@ export function AppearancePane() {
           onChange={(event) => void handleImport(event)}
         />
         {error && (
-          <div className="ui-band text-xs" data-tone="danger">
+          <div role="alert" className="ui-band text-xs" data-tone="danger">
             <span className="text-(--accent-danger)">{error}</span>
           </div>
         )}

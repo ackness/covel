@@ -1,5 +1,8 @@
 import { useEffect } from "react";
-import type { SessionExecutionStatus } from "@covel/shared";
+import {
+  executionMayBeRunning,
+  type SessionExecutionStatus,
+} from "@covel/shared";
 import * as api from "@/services/api.js";
 import type { SessionWorkspace } from "@/services/data-service.js";
 import {
@@ -18,6 +21,8 @@ import type { SessionDispatch, SessionState } from "./types.js";
 
 const POLL_INTERVAL_MS = 3000;
 const MAX_FAILURE_BACKOFF_MS = 30_000;
+/** `unknown` answers in a row before automatic checks stop (about 45s). */
+export const MAX_UNKNOWN_CHECKS = 5;
 
 interface RecoveryOptions {
   state: SessionState;
@@ -40,7 +45,8 @@ async function refreshRecoveredExecution(
   >,
   isCurrent: () => boolean,
 ): Promise<SessionExecutionStatus> {
-  if (status.state !== "running") await options.workspace.hydrate(sessionId);
+  if (!executionMayBeRunning(status))
+    await options.workspace.hydrate(sessionId);
   if (!isCurrent()) return status;
   let authoritative = status;
   await refreshSessionResource(
@@ -106,7 +112,8 @@ export function useExecutionRecovery(options: RecoveryOptions): void {
   const hydrating = recovery?.hydrating ?? false;
   const watching =
     !!recovery &&
-    (hydrating || recovery.checking || recovery.status?.state === "running");
+    !recovery.stalled &&
+    (hydrating || recovery.checking || executionMayBeRunning(recovery.status));
 
   useEffect(() => {
     if (!sessionId || !watching) return;
@@ -114,6 +121,7 @@ export function useExecutionRecovery(options: RecoveryOptions): void {
     let polling = true;
     let inFlight = false;
     let failureBackoffMs = POLL_INTERVAL_MS;
+    let unknownChecks = 0;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const isCurrent = () =>
       !cancelled &&
@@ -151,10 +159,28 @@ export function useExecutionRecovery(options: RecoveryOptions): void {
           );
         }
         if (!isCurrent()) return;
-        failureBackoffMs = POLL_INTERVAL_MS;
-        dispatch({ type: "OBSERVE_EXECUTION_STATUS", sessionId, status });
-        polling = hydrating || status.state === "running";
-        if (polling) schedule(POLL_INTERVAL_MS);
+        unknownChecks = status.state === "unknown" ? unknownChecks + 1 : 0;
+        // The server could not check: ask again, less often each time, and
+        // stop after a few answers so the notice asks the player instead.
+        const stalled = unknownChecks >= MAX_UNKNOWN_CHECKS;
+        dispatch({
+          type: "OBSERVE_EXECUTION_STATUS",
+          sessionId,
+          status,
+          ...(stalled ? { stalled } : {}),
+        });
+        polling = !stalled && (hydrating || executionMayBeRunning(status));
+        if (!polling) return;
+        if (unknownChecks > 0) {
+          schedule(failureBackoffMs);
+          failureBackoffMs = Math.min(
+            failureBackoffMs * 2,
+            MAX_FAILURE_BACKOFF_MS,
+          );
+        } else {
+          failureBackoffMs = POLL_INTERVAL_MS;
+          schedule(POLL_INTERVAL_MS);
+        }
       } catch (error) {
         if (!isCurrent()) return;
         dispatch({

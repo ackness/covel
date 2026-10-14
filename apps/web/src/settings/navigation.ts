@@ -201,7 +201,10 @@ export function buildNavTree(
       });
     } else if (group === "general") {
       const generalEntries = entries.filter(
-        (e) => !APPEARANCE_KEYS.has(e.key) && e.key !== "ui.onboardedVersion",
+        (e) =>
+          e.widget !== "custom" &&
+          !APPEARANCE_KEYS.has(e.key) &&
+          e.key !== "ui.onboardedVersion",
       );
       if (generalEntries.length > 0) {
         nodes.push({

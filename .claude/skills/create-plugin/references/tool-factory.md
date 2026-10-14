@@ -97,7 +97,7 @@ runtime:
       plugin: [my-tool]
 ```
 
-> 旧写法 `tools: { local: [./tools/my-tool.js] }` **已被移除**，schema strict 会直接判加载失败。工具名对不上 `runtime.agent.tools.plugin` 的话，工具注册了但那个 runtime 的 LLM 看不到它。
+> 旧写法 `tools: { local: [./tools/my-tool.js] }` **已被移除**：`pnpm validate:plugin` 报错，加载时这个字段被去掉，工具不会出现。工具名对不上 `runtime.agent.tools.plugin` 的话，工具注册了但那个 runtime 的 LLM 看不到它。
 
 工具作用域是 fail-closed 的：`runtime.agent.tools.plugin` 里的工具只有声明它的插件能调，内置工具所有插件都能调。
 

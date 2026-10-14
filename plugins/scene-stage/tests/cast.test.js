@@ -7,7 +7,8 @@ import path from "node:path";
 import {
   discoverPlugins,
   loadPluginManifest,
-  loadPluginUi,
+  loadPluginDefinition,
+  loadPluginUiSpecs,
   loadRuntime,
 } from "@covel/plugin-loader";
 import { scheduleByDag } from "@covel/runtime";
@@ -40,7 +41,12 @@ describe("scene cast manifests", () => {
     chatNarrator = (await loadPluginManifest(chatNarratorDiscovery))[0]
       .manifest;
     loadedSceneCast = await loadRuntime(sceneStageDiscovery, sceneCast.name);
-    sceneStageUi = await loadPluginUi(sceneStageDiscovery);
+    sceneStageUi = await loadPluginUiSpecs(
+      sceneStageDiscovery.rootPath,
+      sceneStageDiscovery.id,
+      (await loadPluginDefinition(sceneStageDiscovery)).packageManifest.manifest
+        .ui,
+    );
     loadedChatNarrator = await loadRuntime(
       chatNarratorDiscovery,
       chatNarrator.name,
@@ -60,7 +66,7 @@ describe("scene cast manifests", () => {
     expect(sceneCast.outputContract).toBe("scene-cast@1");
     expect(sceneCast.trigger).toMatchObject({ type: "scheduled", interval: 1 });
     expect(loadedSceneCast.handler).toBeTypeOf("function");
-    expect(sceneStageUi.uiSpecs.right.map((spec) => spec.id)).toEqual([
+    expect(sceneStageUi.slots.right.map((spec) => spec.id)).toEqual([
       "scene-stage",
       "scene-cast",
     ]);
@@ -98,16 +104,11 @@ describe("scene cast manifests", () => {
       {
         name: "guide",
         pluginId: "guide",
-        priority: 600,
-        input: {
-          inject: [
-            {
-              kind: "runtime",
-              from: "chat-mode-narrator",
-              field: "narrativeOutput",
-              as: "<narrator-output>",
-            },
-          ],
+        stage: "post-turn",
+        inputs: {
+          narrative: {
+            from: { runtime: "chat-mode-narrator" },
+          },
         },
       },
     ]);

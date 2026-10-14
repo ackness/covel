@@ -1,3 +1,5 @@
+import i18n from "@/i18n";
+import { Check } from "lucide-react";
 import { useInputDraft } from "../use-input-draft.js";
 import { useTranslation } from "react-i18next";
 import { projectModelCapabilityForBuiltinAdapter } from "@covel/shared";
@@ -69,17 +71,36 @@ const FEATURE_LABEL_KEYS: Record<string, string> = {
   computer_use: "settings.featComputerUse",
 };
 
-export function formatTokenCount(n: number): string {
-  if (n >= 1_000_000)
-    return `${(n / 1_000_000).toFixed(n % 1_000_000 === 0 ? 0 : 1)}M`;
-  if (n >= 1_000) return `${(n / 1_000).toFixed(n % 1_000 === 0 ? 0 : 1)}K`;
-  return String(n);
+export function formatTokenCount(n: number, locale = i18n.language): string {
+  return new Intl.NumberFormat(locale, {
+    notation: "compact",
+    maximumFractionDigits: 1,
+  }).format(n);
 }
 
-export function formatPrice(perMToken: number): string {
-  if (perMToken < 0.01) return `$${perMToken.toFixed(3)}/M`;
-  if (perMToken < 1) return `$${perMToken.toFixed(2)}/M`;
-  return `$${perMToken.toFixed(1)}/M`;
+export function formatPrice(perMToken: number, locale = i18n.language): string {
+  const digits = perMToken < 0.01 ? 3 : perMToken < 1 ? 2 : 1;
+  return i18n.getFixedT(locale)("settings.pricePerMillionValue", {
+    price: new Intl.NumberFormat(locale, {
+      style: "currency",
+      currency: "USD",
+      minimumFractionDigits: digits,
+      maximumFractionDigits: digits,
+    }).format(perMToken),
+  });
+}
+
+export function formatImagePrice(
+  value: number,
+  locale = i18n.language,
+): string {
+  return i18n.getFixedT(locale)("settings.pricePerImageValue", {
+    price: new Intl.NumberFormat(locale, {
+      style: "currency",
+      currency: "USD",
+      maximumFractionDigits: 4,
+    }).format(value),
+  });
 }
 
 export function CapabilityTags({
@@ -172,7 +193,7 @@ export function CapabilityTags({
             </span>
           ) : cap.pricing?.perImage != null ? (
             <span title={t("settings.pricePerImage", "Price per image")}>
-              ${cap.pricing.perImage}/img
+              {formatImagePrice(cap.pricing.perImage)}
             </span>
           ) : null}
         </div>
@@ -230,7 +251,11 @@ export function CapabilityEditor({
   };
   return (
     <div className="space-y-3 pt-1 border-t border-dashed border-border mt-2">
-      <div className="space-y-1">
+      <div
+        role="group"
+        aria-label={t("settings.inputModalities")}
+        className="space-y-1"
+      >
         <Label className="text-[10px] uppercase tracking-widest text-muted-foreground">
           {t("settings.inputModalities")}
         </Label>
@@ -240,6 +265,8 @@ export function CapabilityEditor({
             return (
               <button
                 key={id}
+                type="button"
+                aria-pressed={active}
                 disabled={
                   busy || (available ? !available.input.includes(id) : false)
                 }
@@ -252,6 +279,9 @@ export function CapabilityEditor({
                     : "bg-muted/30 text-muted-foreground border-transparent hover:border-border"
                 }`}
               >
+                {active && (
+                  <Check aria-hidden="true" className="mr-1 inline h-3 w-3" />
+                )}
                 {t(MODALITY_LABEL_KEYS[`in:${id}`] ?? `in:${id}`, {
                   defaultValue: id,
                 })}
@@ -260,7 +290,11 @@ export function CapabilityEditor({
           })}
         </div>
       </div>
-      <div className="space-y-1">
+      <div
+        role="group"
+        aria-label={t("settings.outputModalities")}
+        className="space-y-1"
+      >
         <Label className="text-[10px] uppercase tracking-widest text-muted-foreground">
           {t("settings.outputModalities")}
         </Label>
@@ -270,6 +304,8 @@ export function CapabilityEditor({
             return (
               <button
                 key={id}
+                type="button"
+                aria-pressed={active}
                 disabled={
                   busy || (available ? !available.output.includes(id) : false)
                 }
@@ -282,6 +318,9 @@ export function CapabilityEditor({
                     : "bg-muted/30 text-muted-foreground border-transparent hover:border-border"
                 }`}
               >
+                {active && (
+                  <Check aria-hidden="true" className="mr-1 inline h-3 w-3" />
+                )}
                 {t(MODALITY_LABEL_KEYS[`out:${id}`] ?? `out:${id}`, {
                   defaultValue: id,
                 })}
@@ -290,7 +329,11 @@ export function CapabilityEditor({
           })}
         </div>
       </div>
-      <div className="space-y-1">
+      <div
+        role="group"
+        aria-label={t("settings.featureTags")}
+        className="space-y-1"
+      >
         <Label className="text-[10px] uppercase tracking-widest text-muted-foreground">
           {t("settings.featureTags")}
         </Label>
@@ -300,6 +343,8 @@ export function CapabilityEditor({
             return (
               <button
                 key={id}
+                type="button"
+                aria-pressed={active}
                 disabled={
                   busy ||
                   (available ? !available.features?.includes(id) : false)
@@ -313,6 +358,9 @@ export function CapabilityEditor({
                     : "bg-muted/30 text-muted-foreground border-transparent hover:border-border"
                 }`}
               >
+                {active && (
+                  <Check aria-hidden="true" className="mr-1 inline h-3 w-3" />
+                )}
                 {t(FEATURE_LABEL_KEYS[id] ?? id, { defaultValue: id })}
               </button>
             );

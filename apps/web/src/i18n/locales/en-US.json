@@ -85,13 +85,13 @@
       "detail": "You can start without them, but what they add to this world will be missing. Install them under Settings → Install & manage, then restart the backend."
     },
     "worldRequirements": {
-      "blockedTitle": "This world cannot start yet",
       "degradedTitle": "This world will run without something it relies on",
       "missing-provider": "No installed plugin provides {{contract}}. Install one under Settings → Install & manage, then restart the backend.",
       "unavailable": "{{plugins}} provides {{contract}} but cannot be enabled with the current selection.",
       "ambiguous-provider": "Several plugins provide {{contract}}: {{plugins}}. Enable one of them in the plugin list below.",
       "excluded": "You turned off {{plugins}}, which provides {{contract}}. The game can start, but that part of the world will not work.",
-      "approval-required": "{{plugins}} provides {{contract}} and will ask for your approval after the game starts."
+      "approval-required": "{{plugins}} provides {{contract}} and will ask for your approval after the game starts.",
+      "dimensions": "No plugin you turned on keeps this world's dimensions ({{contract}}), so the game starts without them. Turn on a plugin that provides it to use them."
     },
     "history": "Previous Sessions",
     "worldLore": "World Document",
@@ -212,6 +212,8 @@
     "dimensionsImported": "Imported successfully",
     "reasonConnectionClosed": "Connection closed but backend did not report completion",
     "reasonSessionBusy": "Session is busy, please retry",
+    "reasonInputAlreadyCommitted": "This message was already sent and its turn is saved. Refresh to see it.",
+    "reasonRetryStale": "The task statuses have changed. Refresh them before retrying.",
     "reasonExecutionCommitFailed": "The turn could not be saved. Please try again.",
     "reasonExecutionFailed": "The turn failed. Please try again.",
     "reasonHistoryRestoreFailed": "The message history could not be restored. Reload the page if it stays out of date.",
@@ -271,6 +273,11 @@
     "memoryUpdateFailedHint": "This turn was saved. Check the memory model assignment and provider settings; memory will be attempted again after the next turn.",
     "memoryUpdateErrorDetails": "Error details",
     "memoryStoreWarning": "Data lost on restart",
+    "worldDataNotices": {
+      "title": "Some of this world's data is not in this game:",
+      "hint": "Data for a plugin that is off, or waiting for your approval, arrives when you turn that plugin on.",
+      "hide": "Hide"
+    },
     "worldDataPreflight": {
       "title": "World Data",
       "loading": "Checking",
@@ -281,7 +288,13 @@
       "errors": "{{count}} error(s)",
       "failed": "Check failed",
       "retry": "Retry",
-      "moreTargets": "{{count}} more"
+      "moreTargets": "{{count}} more",
+      "ready_one": "{{count}} item will be imported",
+      "ready_other": "{{count}} items will be imported",
+      "warnings_one": "{{count}} warning",
+      "warnings_other": "{{count}} warnings",
+      "errors_one": "{{count}} error",
+      "errors_other": "{{count}} errors"
     },
     "dbSchema": "Schema",
     "dbValues": "Values",
@@ -327,6 +340,9 @@
     "recoveryFailed": "This turn did not complete",
     "recoveryHydrating": "Restoring your session",
     "recoveryUnknownDetail": "We cannot confirm the result yet. Reconnecting will check the original task without starting another turn.",
+    "recoveryUnavailableDetail": "The server cannot tell right now whether a turn is running. It will check again shortly. Nothing is retried or started until it knows.",
+    "recoveryUnconfirmed": "Could not confirm the turn",
+    "recoveryUnconfirmedDetail": "After several checks the server still cannot tell, so automatic checks have stopped. Choose Check status to ask again.",
     "recoveryRunningDetail": "The server is continuing the original task. Its result will appear here automatically; you can wait or stop it.",
     "recoveryInterruptedDetail": "The unfinished task is no longer running. Your saved progress is preserved. Retry starts a new attempt only when you choose it.",
     "unsavedNarrative": "Unsaved",
@@ -343,6 +359,15 @@
     "setupUnfinishedDetail": "The story is still being prepared. Continue to run the remaining steps with what you have already entered.",
     "setupContinue": "Continue setup",
     "setupRetryFailed": "Could not restart setup. Check the connection and try again.",
+    "memoryIndex": {
+      "staleTitle": "Memory search is matching keywords only",
+      "staleDetail": "This session's memory was indexed with {{locked}}, and the embedding model is now {{configured}}. Rebuild the index to search with the new model; this sends the session's history to the embedding model again.",
+      "noModelDetail": "This session's memory was indexed with {{locked}}, and no embedding model is configured now. Clearing the index frees its space; once an embedding model is configured, the session is indexed with it.",
+      "rebuild": "Rebuild index",
+      "clear": "Clear index",
+      "rebuilding": "Rebuilding…",
+      "failed": "The index was not rebuilt and is unchanged: {{reason}}"
+    },
     "reasonInterrupted": "This task stopped before completion and did not commit a result. This is its recorded execution history.",
     "retryTask": "Retry this task",
     "executionHistory": "History",
@@ -367,6 +392,8 @@
     "stoppedDetail": "Generated content was not saved. Retry with the original input.",
     "submittedInteraction": "Completed interaction · expand to review",
     "advancedPluginSettings": "Customize plugins and advanced settings",
+    "minimalPluginSet": "Back to the minimal set",
+    "minimalPluginSetHint": "The narrative plugins, the plugin that holds the world's dimensions, and what they and the world need; everything else is turned off.",
     "configureModelBeforeRetry": "Change model / parameters",
     "retryModelSettingsHint": "Change the model or lower its output limit, then retry this task. The retry uses your current settings.",
     "allWorlds": "All worlds ({{total}})",
@@ -401,6 +428,34 @@
     "retryScopeLimited": "Only the selected failed tasks will run again. The story and other completed results are preserved. Each batch handles up to {{count}} tasks. Retry the remaining tasks afterward.",
     "activeTask": "{{label}}…",
     "panelUnavailable": "This panel is not available in this session.",
+    "dbVolumes_one": "{{count}} volume",
+    "dbVolumes_other": "{{count}} volumes",
+    "pluginsLoaded_one": "{{count}} plugin loaded",
+    "pluginsLoaded_other": "{{count}} plugins loaded",
+    "loreModified_one": "Modified ({{count}} char)",
+    "loreModified_other": "Modified ({{count}} chars)",
+    "loreOriginal_one": "Original ({{count}} char)",
+    "loreOriginal_other": "Original ({{count}} chars)",
+    "executionSummary_one": "Execution · {{count}} runtime",
+    "executionSummary_other": "Execution · {{count}} runtimes",
+    "slotsConfigured_one": "{{count}} slot configured",
+    "slotsConfigured_other": "{{count}} slots configured",
+    "historySummary_one": "{{count}} session",
+    "historySummary_other": "{{count}} sessions",
+    "loreSummary_one": "{{count}} char",
+    "loreSummary_other": "{{count}} chars",
+    "loreSummaryHint_one": "{{count}} character · click to edit world lore",
+    "loreSummaryHint_other": "{{count}} characters · click to edit world lore",
+    "tagsCount_one": "{{count}} tag",
+    "tagsCount_other": "{{count}} tags",
+    "selectionsReady_one": "{{count}} selection ready",
+    "selectionsReady_other": "{{count}} selections ready",
+    "retryFailedBatch_one": "Retry the first {{count}} failed task",
+    "retryFailedBatch_other": "Retry the first {{count}} failed tasks",
+    "retryBatchLimit_one": "Each batch handles up to {{count}} task. Retry the remaining tasks afterward.",
+    "retryBatchLimit_other": "Each batch handles up to {{count}} tasks. Retry the remaining tasks afterward.",
+    "retryScopeLimited_one": "Only the selected failed tasks will run again. The story and other completed results are preserved. Each batch handles up to {{count}} task. Retry the remaining tasks afterward.",
+    "retryScopeLimited_other": "Only the selected failed tasks will run again. The story and other completed results are preserved. Each batch handles up to {{count}} tasks. Retry the remaining tasks afterward.",
     "previousPluginContent": "{{title}} · expand to review",
     "pluginContent": "Plugin content"
   },
@@ -552,10 +607,6 @@
     "aiPackageDesc": "Choose what the agent should author and keep consistent.",
     "aiPackageCount": "{{count}} selected",
     "aiExperienceLabel": "Player Experience",
-    "aiExperienceStory": "Story Adventure",
-    "aiExperienceStoryDesc": "Focus on action, exploration, and a continuous plot.",
-    "aiExperienceDialogue": "Character Dialogue",
-    "aiExperienceDialogueDesc": "Focus on character interaction and stage presentation.",
     "aiContentLabel": "Package Supplements",
     "aiContentCharacters": "Main Cast",
     "aiContentCharactersDesc": "Create 3–5 connected characters with motives and secrets.",
@@ -604,6 +655,11 @@
     "revising": "Revising…",
     "reviseAction": "Apply the change",
     "translateTitle": "Translate this world",
+    "packageEditedHint": "You edited this world in Covel. Your version is the one you play: changes to its package files, including updates, no longer replace it.",
+    "restorePackageAction": "Restore the package version",
+    "restorePackageTitle": "Restore the package version?",
+    "restorePackageConfirm": "Your edits to this world are replaced with the current package files. Saved session data is kept; sessions without their own lore read the restored world lore on the next turn.",
+    "restorePackageFailed": "The package version could not be restored.",
     "translateHint": "This world is written in {{worldLanguage}}, and a session plays in a language the world has. You can add a {{language}} edition.",
     "translateConfirm": "Your model translates every text of the world: names, lore, rules and characters. This uses model calls, and a machine translation of names and tone needs a look afterwards.",
     "translating": "Translating…",
@@ -902,7 +958,8 @@
       "restartHint": "Package files changed. Restart the backend to apply installation or removal; execution still requires session authorization.",
       "restartNow": "Restart now",
       "reloadFailed": "Reload failed",
-      "uninstallConfirm": "Uninstall this plugin? Restart to apply the removal. You will need to install it again to use it later."
+      "uninstallConfirm": "Uninstall this plugin? Restart to apply the removal. You will need to install it again to use it later.",
+      "nothingInstalled": "No packages were installed from this collection."
     },
     "desktopDataLocations": "Data Locations",
     "desktopProxy": "Network Proxy",
@@ -933,7 +990,7 @@
     "desktopEditLlm": "Edit llm.toml",
     "desktopEditKeys": "Edit keys.env",
     "desktopServer": "Backend Server",
-    "desktopServerPort": "Local API server running on port ",
+    "desktopServerPort": "Local API server running on port {{port}}.",
     "desktopRestart": "Restart server",
     "desktopApplyConfigChanges": "Apply config changes",
     "desktopRestartElectronOnly": "This action is only available in the Electron desktop app.",
@@ -964,7 +1021,9 @@
       "reloadFailed": "llm.toml could not be parsed",
       "activeFile": "Active configuration: {{path}}",
       "activeBuiltin": "Active configuration: built-in default",
-      "parseError": "llm.toml could not be loaded. The currently active configuration has been kept. Fix it and reload: {{error}}"
+      "parseError": "llm.toml could not be loaded. The currently active configuration has been kept. Fix it and reload: {{error}}",
+      "reloadOkDetail_one": "{{count}} slot active: {{slots}}",
+      "reloadOkDetail_other": "{{count}} slots active: {{slots}}"
     },
     "runtimeSlotsDiscovered": "Plugin-declared model roles",
     "temperature": "Temperature",
@@ -1070,7 +1129,9 @@
       "days30": "30 days",
       "days90": "90 days",
       "keep": "Keep everything",
-      "otherDays": "{{count}} days"
+      "otherDays": "{{count}} days",
+      "otherDays_one": "{{count}} day",
+      "otherDays_other": "{{count}} days"
     },
     "serverSetting": {
       "pending": "Asking the server for its value…",
@@ -1255,7 +1316,31 @@
     "deleteModelConfirm": "This also removes role bindings to this configuration. The provider API key is kept.",
     "deleteThemeTitle": "Delete theme?",
     "deleteThemeConfirm": "This custom theme will be deleted. Import it again to use it later.",
-    "exportReadOnlyHint": "Settings have not loaded successfully. The export contains only currently readable values and may be incomplete. View or download original backups below."
+    "exportReadOnlyHint": "Settings have not loaded successfully. The export contains only currently readable values and may be incomplete. View or download original backups below.",
+    "desktopProxyMode": "Proxy mode",
+    "desktopProxyUrl": "Proxy address",
+    "providerIdLabel": "Provider ID",
+    "themeSchemeLocked": "This theme supports only one color mode.",
+    "description": "Adjust appearance, models, packages, and local data.",
+    "desktopRefreshFailed": "Could not refresh desktop information. Try again.",
+    "providerImportSucceeded": "Providers and models imported.",
+    "numberExample": "e.g. {{value}}",
+    "pricePerImageValue": "{{price}}/img",
+    "pricePerMillionValue": "{{price}}/M",
+    "modelDbRefreshSucceeded_one": "Model database updated: {{count}} model",
+    "modelDbRefreshSucceeded_other": "Model database updated: {{count}} models",
+    "modelCount_one": "{{count}} model (LiteLLM)",
+    "modelCount_other": "{{count}} models (LiteLLM)",
+    "importKeysCount_one": "Include {{count}} API key from the bundle",
+    "importKeysCount_other": "Include {{count}} API keys from the bundle",
+    "overrideCount_one": "{{count}} override",
+    "overrideCount_other": "{{count}} overrides",
+    "modelCountShort_one": "{{count}} model",
+    "modelCountShort_other": "{{count}} models",
+    "addModelsCount_one": "Add {{count}} model",
+    "addModelsCount_other": "Add {{count}} models",
+    "importInvalidEntries_one": "{{count}} entry does not match the current settings schema and will be skipped.",
+    "importInvalidEntries_other": "{{count}} entries do not match the current settings schema and will be skipped."
   },
   "appearance": {
     "styleTitle": "Style",
@@ -1667,11 +1752,13 @@
       "allowSelected": "Authorize selected",
       "notNow": "Not now"
     },
-    "unavailable": "Some plugins of this session cannot run now: {{plugins}}. The game goes on without them; open the plugin list to see why.",
+    "unavailable": "Some plugins of this session are off. The game goes on without them:",
     "invokeRuntime": {
       "setupPending": "This plugin needs setup first. Continue the story for one turn and complete any setup form, then try again.",
       "submitted": "Submitted {{count}} background job(s): {{ids}}. Waiting for completion…",
-      "noFollowerEvents": "{{runtimeId}} finished but emitted no background follower (missing matching events[]). Check that the model output a valid JSON envelope."
+      "noFollowerEvents": "{{runtimeId}} finished but emitted no background follower (missing matching events[]). Check that the model output a valid JSON envelope.",
+      "submitted_one": "Submitted {{count}} background job: {{ids}}. Waiting for completion…",
+      "submitted_other": "Submitted {{count}} background jobs: {{ids}}. Waiting for completion…"
     },
     "jobs": {
       "imagePromptGenerating": "Generating image prompt...",
@@ -1693,7 +1780,22 @@
     "invalidPanelSpecDetail": "Invalid panel spec: {{label}} — {{reason}}",
     "rpc": {
       "failed": "The plugin task failed. Try again."
-    }
+    },
+    "off": {
+      "needsProvider": "{{plugin}} is off: it needs {{contract}}. Turn on {{providers}} to use it.",
+      "noProvider": "{{plugin}} is off: it needs {{contract}}, and no installed plugin provides it. Install one under Settings → Install & manage, then restart the backend.",
+      "notInstalled": "{{plugin}} is not installed, or it failed to load.",
+      "conflict": "{{plugin}} conflicts with another plugin of this session.",
+      "other": "{{plugin}} cannot run now. Open the plugin list to see why.",
+      "turnOn": "Turn on {{plugin}}"
+    },
+    "noStory": {
+      "title": "No narrative plugin is on",
+      "detail": "Turns will not tell a story: none of the enabled plugins writes narration.",
+      "enable": "Turn on {{plugins}} to get a story.",
+      "install": "Install a narrative plugin under Settings → Install & manage, then restart the backend."
+    },
+    "dependentsOff": "These plugins will be off, because something they need is off:"
   },
   "pluginJob": {
     "runtimesNotLoaded": "{{plugin}} was approved, but {{count}} of its tasks cannot be loaded and will not run.",
@@ -1789,7 +1891,9 @@
     "testBindings": "Review and test existing models ({{count}} roles)",
     "languageExperimental": "experimental",
     "credentialsMissing": "Add credentials for the configured models",
-    "credentialsMissingHint": "Your model bindings are saved. Configure a provider API key before starting, or explicitly test a local service that requires no key."
+    "credentialsMissingHint": "Your model bindings are saved. Configure a provider API key before starting, or explicitly test a local service that requires no key.",
+    "testBindings_one": "Review and test existing models ({{count}} role)",
+    "testBindings_other": "Review and test existing models ({{count}} roles)"
   },
   "character": {
     "noCharacters": "Characters will appear here once created.",
@@ -1982,7 +2086,8 @@
     "active": "Active",
     "retry": "Retry",
     "add": "Add",
-    "remove": "Remove"
+    "remove": "Remove",
+    "darkMode": "Dark mode"
   },
   "debugger": {
     "title": "Trace Inspector",
@@ -2034,7 +2139,11 @@
       "dependencies": "Dependencies",
       "autoAdded": "Added by dependency resolution",
       "rejection": "Resolution rejection",
-      "failure": "Load / activation error"
+      "failure": "Load / activation error",
+      "installedCount_one": "{{count}} installed plugin",
+      "installedCount_other": "{{count}} installed plugins",
+      "historyLimit_one": "Last {{count}} completed service call (process memory)",
+      "historyLimit_other": "Last {{count}} completed service calls (process memory)"
     },
     "cost": {
       "tab": "Cost",
@@ -2158,7 +2267,27 @@
       "schemas": "{{count}} schemas",
       "namespaces": "{{count}} namespaces",
       "keys": "{{count}} keys",
-      "empty": "empty"
+      "empty": "empty",
+      "triggers_one": "{{count}} trigger",
+      "triggers_other": "{{count}} triggers",
+      "outputs_one": "{{count}} output",
+      "outputs_other": "{{count}} outputs",
+      "writes_one": "{{count}} write",
+      "writes_other": "{{count}} writes",
+      "reads_one": "{{count}} read",
+      "reads_other": "{{count}} reads",
+      "sources_one": "{{count}} source",
+      "sources_other": "{{count}} sources",
+      "mergeModes_one": "{{count}} merge mode",
+      "mergeModes_other": "{{count}} merge modes",
+      "targets_one": "{{count}} target",
+      "targets_other": "{{count}} targets",
+      "schemas_one": "{{count}} schema",
+      "schemas_other": "{{count}} schemas",
+      "namespaces_one": "{{count}} namespace",
+      "namespaces_other": "{{count}} namespaces",
+      "keys_one": "{{count}} key",
+      "keys_other": "{{count}} keys"
     },
     "snapshotRefreshFailed": "Could not refresh session data. Displayed data may be outdated; use Refresh to retry.",
     "snapshotUpdatedAt": "Data updated at {{time}}",
@@ -2184,7 +2313,22 @@
       "failed": "Failed",
       "recovered": "Recovered by retry"
     },
-    "attemptTimingHint": "“—” means not recorded. Model time includes reading the response stream and excludes queue wait. Tool durations appear in tool details."
+    "attemptTimingHint": "“—” means not recorded. Model time includes reading the response stream and excludes queue wait. Tool durations appear in tool details.",
+    "nRuntimes_other": "{{count}} runtimes",
+    "promptCount_one": "{{count}} prompt",
+    "promptCount_other": "{{count}} prompts",
+    "characterCount_one": "{{count}} char",
+    "characterCount_other": "{{count}} chars",
+    "promptTools_one": "{{count}} available tool",
+    "promptTools_other": "{{count}} available tools",
+    "promptContentUnavailable_one": "This function-runtime call recorded {{count}} message and {{chars}} characters. Prompt content was not persisted to avoid exposing sensitive data.",
+    "promptContentUnavailable_other": "This function-runtime call recorded {{count}} messages and {{chars}} characters. Prompt content was not persisted to avoid exposing sensitive data.",
+    "slowCalls_one": "{{count}} slow call",
+    "slowCalls_other": "{{count}} slow calls",
+    "tokenCount_one": "{{count}} token",
+    "tokenCount_other": "{{count}} tokens",
+    "requestOmitted_one": "The captured body omits {{count}} field.",
+    "requestOmitted_other": "The captured body omits {{count}} fields."
   },
   "reload": {
     "reloading": "Restarting server…",
@@ -2265,7 +2409,8 @@
       "message": "This link was provided by the author of “{{package}}”, not by Covel. Covel has not checked this site and is not responsible for what it contains. Do not enter passwords or payment details there unless you trust it.",
       "site": "Site: {{host}}",
       "confirm": "Open link"
-    }
+    },
+    "authorLine": "Author: {{author}}"
   },
   "serverStatus": {
     "restarting": "The local server stopped. Restarting…",

@@ -515,21 +515,12 @@ function narrativeFromInputSlot(slot) {
 }
 
 /**
- * Normalize a bound narrative value to trimmed text. The contract projects a
- * string via `select: /narrativeOutput`; tolerate a `{ narrativeOutput }`
- * object too so a producer that binds the whole result still resolves.
- *
+ * Read the string projected by `select: /narrativeOutput`.
  * @param {unknown} value
  * @returns {string}
  */
 function normalizeNarrativeValue(value) {
-  if (typeof value === "string") return value.trim();
-  if (value && typeof value === "object" && !Array.isArray(value)) {
-    const inner = /** @type {Record<string, unknown>} */ (value)
-      .narrativeOutput;
-    if (typeof inner === "string") return inner.trim();
-  }
-  return "";
+  return typeof value === "string" ? value.trim() : "";
 }
 
 async function readTurnRecord(ctx, turnId) {

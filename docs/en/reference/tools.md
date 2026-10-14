@@ -755,6 +755,7 @@ When one of the model's replies has several tool calls, the `suspend` call first
 - `resumeSchema` must be serializable with `JSON.stringify`, because the state is written to storage.
 - Only a runtime's newest suspension can resume. When the same runtime suspended again later, the player played another turn, or the plugin changed version, the old suspended item is voided on resume; see [Out-of-date suspended items](./api.md#out-of-date-suspended-items). The resume endpoint looks it up by the suspended item's ID.
 - `createDefaultToolRegistry` in `@covel/tools` registers it as a builtin tool. An agent still has to list `suspend` in `agent.tools.builtin` before it can call it.
+- A runtime that runs in the background cannot suspend, because no player is waiting on it. A runtime that declares `schedule.manual.execution: background` or `schedule.completion.mode: detached` and lists `suspend` in `agent.tools.builtin` is rejected at load. If a runtime in a background job suspends anyway (a function handler returns a suspension, or an event runtime triggered by the background run calls `suspend`), the job is recorded as `failed` and nothing is committed.
 - Resuming continues the execution that was suspended:
   - `ctx.locale`, `ctx.logicalTurn`, and `ctx.turnNumber` keep the values from the time of suspension. They do not change with the turn count of the session afterwards.
   - `ctx.world` is the World Model committed at resume time, with the writes buffered in the state added on top.
@@ -1728,7 +1729,15 @@ Types registered so far:
 - `dimension.initialize`, `dimension.update`
 - `lorebook.upsert`
 
-Each type is defined in one place: `ProposalPayloadMap`. `ProposalType`, the registry of commit handlers (`satisfies CommitHandlerMap`), and the public list (`PROPOSAL_TYPES`) are all aligned with it at compile time. To add a proposal type, change only `ProposalPayloadMap`. If a handler is left unregistered, compilation fails.
+Each type is defined in one place: `ProposalPayloadMap`. `ProposalType`, the registry of commit handlers (`satisfies CommitHandlerMap`), the payload schema of each type (`proposalPayloadSchemas`, in `@covel/shared`), and the public list (`PROPOSAL_TYPES`) are all aligned with it at compile time. To add a proposal type, change `ProposalPayloadMap`, then add its handler and its schema. If either is missing, compilation fails.
+
+**The check before commit.** Every proposal passes the same check before its handler runs, whether it comes from a tool, a handler or a runtime's output:
+
+- The payload must match the schema of its type and be writable as JSON. What is committed afterwards is its JSON copy: fields whose value is `undefined` are dropped, and a `Date` becomes an ISO string, so every store backend keeps the same value. A value JSON cannot hold, such as a BigInt or a circular reference, is rejected here.
+- Every `MediaRef` in the payload is checked against this session (see [Media store](./media-store.md#checking-references-at-commit)).
+- The handler then applies its own rules (reserved namespaces, size limits, character names, dimension providers, and so on).
+
+A proposal that fails is not committed. Its error code is `proposal-invalid` or the rejection reason of the media check. It takes the commit-failure path: an optional runtime next to a committed story loses only its own writes, and an execution with no story (manual, background, setup) commits nothing. Never only part of the proposals lands.
 
 **The difference between `state.patch` and `plugin.data`.** The state table that `state.patch` writes to is shared by the whole session:
 

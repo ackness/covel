@@ -11,7 +11,11 @@ import { stringify as stringifyYaml } from "yaml";
 import { validateDimensions } from "@covel/shared";
 import type { WorldRecord } from "@covel/store";
 import { errorBody, readJsonBody } from "../../../api-error.js";
-import { type WorldEnv, editedWorldMetadata } from "./shared.js";
+import {
+  type WorldEnv,
+  editedWorldMetadata,
+  notifyWorldDimensionsChanged,
+} from "./shared.js";
 import { checkWorldWriteAccess } from "./world-write-guard.js";
 
 export const worldDimensionRoutes = new Hono<WorldEnv>();
@@ -87,26 +91,13 @@ worldDimensionRoutes.post("/:id/dimensions/import", async (c) => {
     };
 
     await store.upsertWorld(updated);
-
-    // Notify active sessions
-    const sessions = await store.listSessions();
-    const affected = sessions.filter((s) => s.worldId === id);
-    for (const session of affected) {
-      eventBus.emit({
-        id: crypto.randomUUID(),
-        type: "event",
-        topic: "system",
-        payload: {
-          _subTopic: "system",
-          _subType: "world.dimensions.changed",
-          worldId: id,
-          changedKeys: Object.keys(dimensions),
-        },
-        sessionId: session.id,
-        timestamp: now,
-      });
-    }
-
+    await notifyWorldDimensionsChanged(
+      store,
+      eventBus,
+      id,
+      Object.keys(dimensions),
+      now,
+    );
     return c.json(updated);
   });
 });

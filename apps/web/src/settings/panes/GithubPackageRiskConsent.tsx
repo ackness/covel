@@ -18,7 +18,7 @@ export function GithubPackageRiskConsent({
 }) {
   const { t } = useTranslation();
   return (
-    <div className="space-y-2 rounded border border-amber-500/40 bg-amber-500/10 p-3">
+    <div className="space-y-2 rounded border border-(--accent-warning)/40 bg-(--accent-warning)/10 p-3">
       <p className="font-semibold">{t("settings.github.riskTitle")}</p>
       <p>
         {t(

@@ -162,16 +162,13 @@ export function SettingsDialog({
       <DialogContent className="flex h-[min(90dvh,56rem)] w-[calc(100%-1rem)] max-w-5xl flex-col gap-0 p-0">
         <DialogHeader className="px-4 sm:px-6 pt-5 pb-4 border-b border-(--rule-color)">
           <DialogTitle className="flex items-baseline gap-3">
-            <span className="ui-meta text-[10px] text-muted-foreground">
-              § SETTINGS
-            </span>
             <span className="ui-title text-base font-semibold tracking-tight">
               {t("settings.title")}
             </span>
             <Settings2 className="w-3.5 h-3.5 ml-auto opacity-50" />
           </DialogTitle>
           <DialogDescription className="sr-only">
-            {t("settings.title")}
+            {t("settings.description")}
           </DialogDescription>
         </DialogHeader>
         <div className="flex-1 flex flex-col sm:flex-row overflow-hidden">
@@ -179,7 +176,7 @@ export function SettingsDialog({
             className="w-full sm:w-56 shrink-0 border-b sm:border-b-0 sm:border-r border-(--rule-color) flex flex-col"
             style={{ background: "var(--surface-rail)" }}
           >
-            <div className="p-3 border-b border-(--rule-color) flex items-center gap-2">
+            <div className="p-3 border-b border-(--rule-color) flex items-center gap-2 focus-within:ring-1 focus-within:ring-(--accent-primary)">
               <Search className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
               <label htmlFor="settings-search" className="sr-only">
                 {t("settings.searchPlaceholder")}

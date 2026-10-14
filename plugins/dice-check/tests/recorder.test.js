@@ -329,20 +329,30 @@ describe("dice-check recorder handler", () => {
     expect(result.effects?.pluginData).toBeUndefined();
   });
 
-  it("tolerates a bare single-check payload without the checks wrapper", async () => {
-    // Arrange — schema forbids this shape, but a hand-made event should
-    // degrade to "one check" instead of a skip
-    const ctx = makeCtx({ data: VALID_CHECK });
+  it("skips a bare check outside the current checks-array contract", async () => {
+    const result = await handler(makeCtx({ data: VALID_CHECK }));
+    expect(result.outcome).toBe("skipped");
+    expect(result.effects?.pluginData).toBeUndefined();
+  });
 
-    // Act
-    const result = await handler(ctx);
-
-    // Assert
-    const checksRow = result.effects.pluginData.find(
-      (r) => r.namespace === "checks",
+  it("ignores wrapped plugin-data reads while accepting the stored value directly", async () => {
+    const wrapped = makeCtx({ data: { checks: [VALID_CHECK] }, dice: null });
+    wrapped.pluginData.get.mockImplementation(async () => ({
+      value: { dice: [14] },
+    }));
+    expect((await handler(wrapped)).outcome).toBe("failed");
+    const direct = makeCtx({ data: { checks: [VALID_CHECK] }, dice: null });
+    direct.pluginData.get.mockImplementation(async (namespace) =>
+      namespace === "rolls"
+        ? { dice: [14] }
+        : { value: { checks: [VALID_CHECK] } },
     );
-    expect(checksRow.key).toBe("turn-7-1");
-    expect(checksRow.value.outcome).toBe("success");
+    const result = await handler(direct);
+    expect(result.outcome).toBe("success");
+    expect(
+      result.effects.pluginData.find((row) => row.namespace === "message").value
+        .checks,
+    ).toHaveLength(1);
   });
 
   it("rejects malformed consistency fields instead of storing an unverifiable receipt", async () => {

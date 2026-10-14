@@ -753,6 +753,7 @@ JSON Schema 只能检查字段的形状，检查不了“这个结果和骰子�
 - `resumeSchema` 必须能被 `JSON.stringify`，因为现场要写进存储。
 - 一个 runtime 只有最新的那次挂起能恢复。同一个 runtime 之后又挂起过、玩家之后又玩了回合，或者插件换了版本，旧的挂起项在恢复时被作废，见[过时的挂起项](./api.md#过时的挂起项)。恢复接口按挂起项的 ID 查找。
 - `@covel/tools` 的 `createDefaultToolRegistry` 把它注册为内置工具。agent 仍要在 `agent.tools.builtin` 里列出 `suspend` 才能调用。
+- 后台运行的 runtime 不能挂起，因为没有玩家在等它。声明了 `schedule.manual.execution: background` 或 `schedule.completion.mode: detached` 的 runtime 在 `agent.tools.builtin` 里列出 `suspend`，加载时被拒绝。后台作业里的 runtime 真的挂起了（function handler 返回挂起，或者后台运行触发的事件 runtime 调用了 `suspend`），作业记为 `failed`，什么也不提交。
 - 恢复是接着被挂起的那次执行继续：
   - `ctx.locale`、`ctx.logicalTurn`、`ctx.turnNumber` 取挂起时的值，不随会话之后的回合计数变化。
   - `ctx.world` 是恢复时已提交的 World Model，再叠加现场里缓冲的写入。
@@ -1726,7 +1727,15 @@ agent:
 - `dimension.initialize`、`dimension.update`
 - `lorebook.upsert`
 
-类型只在一处定义：`ProposalPayloadMap`。`ProposalType`、提交处理器的注册表（`satisfies CommitHandlerMap`）和对外公布的列表（`PROPOSAL_TYPES`）都在编译期和它对齐。新增一种 proposal 只改 `ProposalPayloadMap` 一处；漏注册处理器时编译失败。
+类型只在一处定义：`ProposalPayloadMap`。`ProposalType`、提交处理器的注册表（`satisfies CommitHandlerMap`）、每种类型的 payload schema（`proposalPayloadSchemas`，在 `@covel/shared`）和对外公布的列表（`PROPOSAL_TYPES`）都在编译期和它对齐。新增一种 proposal 时改 `ProposalPayloadMap`，再补上它的处理器和 schema；漏了哪一个都编译失败。
+
+**提交前的检查。** 每条 proposal 在它的处理器运行之前都要通过同一道检查，不论它来自工具、handler 还是 runtime 的输出：
+
+- payload 必须符合它那种类型的 schema，并且能写成 JSON。之后提交的是它的 JSON 副本：值为 `undefined` 的字段被去掉，`Date` 变成 ISO 字符串，每个存储后端存下的都一样。BigInt、循环引用这类 JSON 存不下的值在这里被拒绝。
+- payload 里的每个 `MediaRef` 都对照本会话检查（见[媒体存储](./media-store.md#提交时检查引用)）。
+- 处理器之后还按自己的规则检查（保留命名空间、大小上限、角色名字、维度的提供者等）。
+
+没通过的 proposal 不提交，错误码是 `proposal-invalid` 或媒体检查的拒绝原因。它走的是提交失败的路径：跟在一段已提交故事旁边的可选 runtime，只丢掉它自己的写入；没有故事的执行（手动、后台、setup）整次不提交。不会只落下一部分 proposal。
 
 **`state.patch` 和 `plugin.data` 的区别。** `state.patch` 写入的状态表是全会话共享的：
 

@@ -61,3 +61,35 @@ export function toApiKeyEnvMap(
   }
   return out;
 }
+
+/** Read only API-key environment names; provider-id dictionaries are a separate API. */
+export function parseProviderKeysEnv(contents: string): {
+  keys: Record<string, string>;
+  unrecognizedLines: string[];
+} {
+  const keys: Record<string, string> = {};
+  const unrecognizedLines: string[] = [];
+  for (const line of contents.split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    const equals = trimmed.indexOf("=");
+    const provider =
+      equals < 0 ? null : apiKeyEnvNameToProviderId(trimmed.slice(0, equals));
+    if (!provider) {
+      unrecognizedLines.push(line);
+      continue;
+    }
+    let value = trimmed.slice(equals + 1).trim();
+    if (
+      (value.startsWith('"') && value.endsWith('"')) ||
+      (value.startsWith("'") && value.endsWith("'"))
+    )
+      value = value.slice(1, -1);
+    if (value) keys[provider] = value;
+  }
+  if (unrecognizedLines.length)
+    console.warn(
+      "[keys.env] Ignoring entries without an _API_KEY name; update them to the current format. Unrecognized lines are preserved when saving.",
+    );
+  return { keys, unrecognizedLines };
+}

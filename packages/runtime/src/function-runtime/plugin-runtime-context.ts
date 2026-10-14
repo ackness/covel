@@ -33,7 +33,10 @@ import {
   type HandlerHelperContext,
 } from "./plugin-handler-helpers.js";
 import type { ExecutionWriteBuffer } from "./execution-write-buffer.js";
-import { createRuntimeMediaContext } from "./runtime-media-context.js";
+import {
+  createRuntimeMediaContext,
+  createRuntimeMediaWriter,
+} from "./runtime-media-context.js";
 import { createRuntimeImagesContext } from "./runtime-images-context.js";
 import { createRuntimeMusicContext } from "./runtime-music-context.js";
 import { createRuntimeSpeechContext } from "./runtime-speech-context.js";
@@ -213,12 +216,17 @@ export async function createPluginRuntimeContext({
         runtimeId: manifest.name,
       })
     : undefined;
+  const mediaOptions = {
+    sessionId: input.sessionId,
+    pluginId: manifest.pluginId,
+    signal: handlerAbort.signal,
+  };
   const mediaHandle = deps.mediaStore
-    ? createRuntimeMediaContext(deps.mediaStore, permissionedUtils, {
-        sessionId: input.sessionId,
-        pluginId: manifest.pluginId,
-        signal: handlerAbort.signal,
-      })
+    ? createRuntimeMediaContext(
+        deps.mediaStore,
+        permissionedUtils,
+        mediaOptions,
+      )
     : undefined;
   // Trace function-runtime provider calls when a turn emitter is present. The
   // wrapper persists gateway.calling/responded/failed to trace_events; without
@@ -250,7 +258,11 @@ export async function createPluginRuntimeContext({
             resolveSlot: tracedGateway.resolveSlot.bind(tracedGateway),
           },
           deps.mediaStore,
-          mediaHandle,
+          createRuntimeMediaWriter(
+            deps.mediaStore,
+            permissionedUtils,
+            mediaOptions,
+          ),
           { sessionId: input.sessionId, pluginId: manifest.pluginId },
         )
       : undefined;
@@ -415,59 +427,57 @@ export async function createPluginRuntimeContext({
   // upgrade path if late in-flight writes show up in practice.
 
   const context: FunctionHandlerContext = {
-      sessionId: input.sessionId,
-      turnId: input.turnId,
-      pluginId: manifest.pluginId,
-      runtimeId: manifest.name,
-      playerMessage: input.playerMessage,
-      ...(logicalTurn !== undefined ? { logicalTurn } : {}),
-      session: {
-        lastPlayerInput: snapshotPlayerInput(lastPlayerInput),
-      },
-      locale: input.locale,
-      ...(messages ? { messages } : {}),
-      store: revocable.store,
-      world,
-      tools: runtimeTools.tools,
-      ...(services ? { services } : {}),
-      ...(inputs && Object.keys(inputs).length > 0 ? { inputs } : {}),
-      ...(exportSlots && Object.keys(exportSlots).length > 0
-        ? { exports: exportSlots }
+    sessionId: input.sessionId,
+    turnId: input.turnId,
+    pluginId: manifest.pluginId,
+    runtimeId: manifest.name,
+    playerMessage: input.playerMessage,
+    ...(logicalTurn !== undefined ? { logicalTurn } : {}),
+    session: {
+      lastPlayerInput: snapshotPlayerInput(lastPlayerInput),
+    },
+    locale: input.locale,
+    ...(messages ? { messages } : {}),
+    store: revocable.store,
+    world,
+    tools: runtimeTools.tools,
+    ...(services ? { services } : {}),
+    ...(inputs && Object.keys(inputs).length > 0 ? { inputs } : {}),
+    ...(exportSlots && Object.keys(exportSlots).length > 0
+      ? { exports: exportSlots }
+      : {}),
+    ...(activation ? { activation } : {}),
+    // The public identity only; counting and ledger keys stay in the kernel.
+    execution: {
+      origin: executionContext.origin,
+      ...(executionContext.sourceTurnId !== undefined
+        ? { sourceTurnId: executionContext.sourceTurnId }
         : {}),
-      ...(activation ? { activation } : {}),
-      // The public identity only; counting and ledger keys stay in the kernel.
-      execution: {
-        origin: executionContext.origin,
-        ...(executionContext.sourceTurnId !== undefined
-          ? { sourceTurnId: executionContext.sourceTurnId }
-          : {}),
-      },
-      ...(resumedFromSuspensionId !== undefined
-        ? { resumeData, resumedFromSuspensionId }
-        : {}),
-      recursiveCall: revocable.recursiveCall,
-      recursionDepth,
-      ...(revocable.gateway ? { gateway: revocable.gateway } : {}),
-      ...(revocable.utils ? { utils: revocable.utils } : {}),
-      ...(revocable.media ? { media: revocable.media } : {}),
-      ...(revocable.images ? { images: revocable.images } : {}),
-      ...(revocable.speech ? { speech: revocable.speech } : {}),
-      ...(revocable.music ? { music: revocable.music } : {}),
-      ...(revocable.assetProgress
-        ? { assetProgress: revocable.assetProgress }
-        : {}),
-      ...(manualPayloadForRuntime
-        ? { manualPayload: manualPayloadForRuntime }
-        : {}),
-      ...(triggerEvent ? { triggerEvent } : {}),
-      ...(userSettingsForRuntime
-        ? { userSettings: userSettingsForRuntime }
-        : {}),
-      ...(revocable.pluginData ? { pluginData: revocable.pluginData } : {}),
-      ...(revocable.logger ? { logger: revocable.logger } : {}),
-      ...(revocable.progress ? { progress: revocable.progress } : {}),
-      random: createPluginRandom({ ...helperCtx, stream: manifest.name }),
-      signal: handlerAbort.signal,
+    },
+    ...(resumedFromSuspensionId !== undefined
+      ? { resumeData, resumedFromSuspensionId }
+      : {}),
+    recursiveCall: revocable.recursiveCall,
+    recursionDepth,
+    ...(revocable.gateway ? { gateway: revocable.gateway } : {}),
+    ...(revocable.utils ? { utils: revocable.utils } : {}),
+    ...(revocable.media ? { media: revocable.media } : {}),
+    ...(revocable.images ? { images: revocable.images } : {}),
+    ...(revocable.speech ? { speech: revocable.speech } : {}),
+    ...(revocable.music ? { music: revocable.music } : {}),
+    ...(revocable.assetProgress
+      ? { assetProgress: revocable.assetProgress }
+      : {}),
+    ...(manualPayloadForRuntime
+      ? { manualPayload: manualPayloadForRuntime }
+      : {}),
+    ...(triggerEvent ? { triggerEvent } : {}),
+    ...(userSettingsForRuntime ? { userSettings: userSettingsForRuntime } : {}),
+    ...(revocable.pluginData ? { pluginData: revocable.pluginData } : {}),
+    ...(revocable.logger ? { logger: revocable.logger } : {}),
+    ...(revocable.progress ? { progress: revocable.progress } : {}),
+    random: createPluginRandom({ ...helperCtx, stream: manifest.name }),
+    signal: handlerAbort.signal,
   };
   return {
     context,

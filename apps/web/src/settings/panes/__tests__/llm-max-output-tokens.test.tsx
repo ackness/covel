@@ -95,3 +95,24 @@ describe("max output token draft", () => {
     expect((input as HTMLInputElement).value).toBe("4096");
   });
 });
+
+it("F-096 formats token budgets with the UI language", async () => {
+  await i18n.changeLanguage("ru-RU");
+  render(
+    <MaxOutputTokensCard
+      override={undefined}
+      defaultValue={8192}
+      contextWindow={65536}
+      onChange={vi.fn()}
+    />,
+  );
+  const cell = within(
+    screen.getByText(i18n.t("settings.effectiveOutputBudget")).parentElement!,
+  );
+  expect(
+    cell.getByText(
+      (_, element) =>
+        element?.textContent === new Intl.NumberFormat("ru-RU").format(8192),
+    ),
+  ).toBeTruthy();
+});

@@ -87,6 +87,16 @@ export interface EventBus {
   /** Get subscription events after a given sequence number for replay. */
   getEventsAfter(sessionId: string, afterSeq: number): EventReplay;
   /**
+   * The cursor of a session's newest event, `${epoch}:${seq}` (`seq` 0 when
+   * none was emitted this epoch). A session that is not tracked starts being
+   * tracked, so the cursor names an epoch that a later subscription can replay
+   * from. Read it before reading the state it goes with: a subscription that
+   * passes it as `lastEventId` then receives every event after that read. If
+   * eviction drops the state first, the epoch no longer matches and the
+   * subscription gets a reset instead.
+   */
+  headCursor(sessionId: string): string;
+  /**
    * Pin a session's replay state while it has an active subscriber: pinned
    * sessions are excluded from LRU/TTL eviction. A transport gap can
    * still invalidate replay explicitly and is announced through `onReset`.
@@ -186,8 +196,8 @@ interface SessionState {
  */
 interface TransportFrame {
   readonly origin: string;
-  /** Sender session-state generation; absent on legacy frames. */
-  readonly stream?: string;
+  /** Sender session-state generation. */
+  readonly stream: string;
   readonly seq: number;
   readonly event?: SubscriptionEvent;
   readonly ref?: {
@@ -247,10 +257,7 @@ function parseTransportFrame(payload: string): TransportFrame | undefined {
   if (typeof raw !== "object" || raw === null) return undefined;
   const frame = raw as Record<string, unknown>;
   if (typeof frame.origin !== "string") return undefined;
-  if (
-    frame.stream !== undefined &&
-    (typeof frame.stream !== "string" || frame.stream.length === 0)
-  ) {
+  if (typeof frame.stream !== "string" || frame.stream.length === 0) {
     return undefined;
   }
   if (typeof frame.seq !== "number" || !Number.isSafeInteger(frame.seq)) {
@@ -685,7 +692,7 @@ export function createEventBus(
     }
     if (frame.origin === originId) return; // self-echo
     const sessionId = frame.event?.sessionId ?? frame.ref!.sessionId;
-    const stream = frame.stream ?? "legacy";
+    const stream = frame.stream;
     const rs = getReceiveState(frame.origin, sessionId, stream);
     if (frame.seq < rs.expected) return; // duplicate/late
     if (frame.seq === rs.expected) {
@@ -803,6 +810,11 @@ export function createEventBus(
           settle: persistSettle,
         });
       }
+    },
+
+    headCursor(sessionId: string): string {
+      const state = touchSession(sessionId);
+      return `${state.epoch}:${state.seq}`;
     },
 
     getEventsAfter(sessionId: string, afterSeq: number): EventReplay {

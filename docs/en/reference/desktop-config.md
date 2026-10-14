@@ -117,6 +117,8 @@ A packaged desktop app queries the latest stable GitHub Release through `GET /ap
 
 ## `~/.covel/keys.env`
 
+Only names ending in `_API_KEY` are read as provider keys. Bare names such as `deepseek=...` and unrelated entries are ignored with a warning; saves preserve those lines verbatim. Rename a saved key to its current environment name, or enter it again in Settings. Desktop locale settings read only the flat `entries["ui.locale"]` key; recreate a nested `entries.ui.locale` setting through the language selector.
+
 External environment keys take precedence over saved copies, even when their values match. Deleting a local copy does not delete an external key. At startup, the sidecar records external keys before loading `keys.env`, so saves keep the two sources separate.
 
 ```env

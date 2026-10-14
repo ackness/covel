@@ -84,16 +84,7 @@ describe("executeTurn player abort", () => {
         // Depends on plug-a so the DAG scheduler puts it in a later group —
         // the abort fired during plug-a must prevent it from running.
         manifest("plug-b", 600, {
-          input: {
-            inject: [
-              {
-                kind: "runtime",
-                from: "plug-a",
-                field: "narrativeOutput",
-                as: "upstream",
-              },
-            ],
-          },
+          inputs: { upstream: { from: { runtime: "plug-a" } } },
         } as Partial<RuntimeManifest>),
       ],
       deps,

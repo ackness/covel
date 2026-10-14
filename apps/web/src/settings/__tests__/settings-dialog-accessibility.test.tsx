@@ -100,6 +100,11 @@ describe("SettingsDialog navigation", () => {
   it("uses a compact mobile section picker and full-width content", async () => {
     render(<SettingsDialog open onOpenChange={vi.fn()} />);
 
+    expect(
+      screen.getByRole("dialog", {
+        name: i18n.t("settings.title"),
+      }),
+    ).toBeTruthy();
     const sidebar = screen.getByRole("complementary");
     const sectionPicker = screen.getByRole("combobox", { name: "Settings" });
     const desktopNav = screen.getByRole("navigation", { name: "Settings" });
@@ -182,4 +187,12 @@ describe("SettingsDialog navigation", () => {
       expect((localizedSearch as HTMLInputElement).value).toBe(""),
     );
   });
+});
+
+it("keeps a visible focus ring around the settings search", () => {
+  render(<SettingsDialog open onOpenChange={vi.fn()} />);
+  const search = screen.getByRole("textbox", {
+    name: i18n.t("settings.searchPlaceholder"),
+  });
+  expect(search.parentElement?.className).toContain("focus-within:ring-1");
 });

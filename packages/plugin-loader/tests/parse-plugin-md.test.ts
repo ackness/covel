@@ -283,6 +283,7 @@ describe("current authoring manifests", () => {
         runtime: {
           type: "function",
           function: { handler: "./handler.js" },
+          schedule: { stage: "post-turn" },
           io: {
             inputs: {
               digest: { from: { kernel: "turn-digest@1" } },
@@ -320,10 +321,19 @@ describe("current authoring manifests", () => {
     "postHistory",
     "dataSchemas",
     "memoryBlocks",
-  ])("rejects removed root field %s", (key) => {
-    expect(() =>
-      parsePluginMd(md({ ...root, [key]: "legacy" }), "probe/PLUGIN.md"),
-    ).toThrow("invalid manifest");
+  ])("leaves out and reports removed root field %s", (key) => {
+    const parsed = parsePluginMd(
+      md({ ...root, [key]: "legacy" }),
+      "probe/PLUGIN.md",
+    );
+    expect(parsed.plugin).not.toHaveProperty(key);
+    expect(parsed.ignoredFields).toEqual([
+      {
+        sourcePath: "probe/PLUGIN.md",
+        field: key,
+        message: `probe/PLUGIN.md: ${key}: unknown field`,
+      },
+    ]);
   });
   it.each([
     { id: "child" },

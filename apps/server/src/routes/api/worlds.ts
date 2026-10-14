@@ -8,6 +8,7 @@
  *   - `worlds/data-sync.ts` — world-data preflight / sync-data / sync-dimensions.
  *   - `worlds/translate.ts` — add an edition of a world in another language.
  *   - `worlds/gallery.ts`   — the images a world package ships.
+ *   - `worlds/restore-package.ts` — bring an edited package world back to its files.
  *   - `worlds/shared.ts`    — shared Env type + metadata/entry helpers.
  *
  * Mount order: the data-sync and dimensions sub-paths are registered before the
@@ -22,6 +23,7 @@ import { worldPluginPlanRoutes } from "./worlds/plugin-plan.js";
 import { worldCrudRoutes } from "./worlds/crud.js";
 import { worldTranslateRoutes } from "./worlds/translate.js";
 import { worldGalleryRoutes } from "./worlds/gallery.js";
+import { worldRestorePackageRoutes } from "./worlds/restore-package.js";
 
 export const worldRoutes = new Hono<WorldEnv>();
 
@@ -30,4 +32,5 @@ worldRoutes.route("/", worldDimensionRoutes);
 worldRoutes.route("/", worldPluginPlanRoutes);
 worldRoutes.route("/", worldTranslateRoutes);
 worldRoutes.route("/", worldGalleryRoutes);
+worldRoutes.route("/", worldRestorePackageRoutes);
 worldRoutes.route("/", worldCrudRoutes);

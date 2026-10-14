@@ -1,4 +1,8 @@
-import type { SessionExecutionStatus, SnapshotTraceEvent } from "@covel/shared";
+import {
+  executionMayBeRunning,
+  type SessionExecutionStatus,
+  type SnapshotTraceEvent,
+} from "@covel/shared";
 import { getSourceTurnId, retryStepMetadata } from "./execution-projection.js";
 import type { ExecutionStep } from "./types.js";
 
@@ -151,14 +155,14 @@ export function reconcileExecutionAttempts(
         if (execution.state === "failed") attemptStatus = "failed";
         else if (execution.state === "interrupted")
           attemptStatus = "interrupted";
-        else if (execution.state === "running") attemptStatus = "pending";
+        else if (executionMayBeRunning(execution)) attemptStatus = "pending";
       }
     }
     if (
       attemptStatus === "pending" &&
       execution &&
       !(
-        execution.state === "running" &&
+        executionMayBeRunning(execution) &&
         (!execution.turnId || step.turnId === execution.turnId)
       )
     )

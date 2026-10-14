@@ -9,6 +9,7 @@ import {
   planMediaCleanup,
 } from "./cleanup-result.js";
 import {
+  assertMediaClaims,
   bytesToReadableStream,
   filterAssetsByMetadata,
   sha256,
@@ -157,6 +158,19 @@ export function createMemoryMediaStore(): MediaStore {
     async addRef(id, sessionId, pluginId) {
       if (!assets.has(id)) return;
       recordRef(id, sessionId, pluginId);
+    },
+
+    // Synchronous between the first and the last write, so no other call
+    // sees a part of the batch.
+    async claimAssets(claims) {
+      assertMediaClaims(claims);
+      for (const { id, sessionId, pluginId } of claims) {
+        if (!assets.has(id)) continue;
+        const existing = owners.get(id);
+        if (!existing || existing.sessionId === sessionId)
+          owners.set(id, { sessionId, pluginId: pluginId ?? null });
+        recordRef(id, sessionId, pluginId);
+      }
     },
 
     async removeRef(id, sessionId) {

@@ -45,10 +45,13 @@ it("previews old-schema entries without silently reporting them as imported", as
   });
   expect((invalid as HTMLInputElement).disabled).toBe(true);
   expect((invalid as HTMLInputElement).checked).toBe(false);
-  expect(screen.getByRole("status").textContent).toContain("1 entries");
+  expect(screen.getByRole("status").textContent).toBe(
+    "1 entry does not match the current settings schema and will be skipped.",
+  );
   fireEvent.click(screen.getByRole("button", { name: /Apply.*1/ }));
   await waitFor(() => expect(mocks.store.get("fixture.extra")).toBe(true));
   expect(mocks.store.get("fixture.count")).toBe(1);
+  expect(screen.getByRole("status")).toBeTruthy();
 });
 it("keeps the import preview and reports a persistence failure", async () => {
   render(<DataPane />);

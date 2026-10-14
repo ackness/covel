@@ -43,9 +43,6 @@ html[data-theme="abyss"] {
   --surface-dialog: oklch(17% 0.028 270);
   --surface-player: color-mix(in oklab, var(--color-primary) 14%, transparent);
 
-  --surface-app: var(--surface-page);
-  --surface-panel: var(--surface-rail);
-  --surface-panel-strong: var(--surface-elevated);
   --surface-empty: color-mix(in oklab, var(--color-muted) 70%, transparent);
   --border-subtle: color-mix(in oklab, var(--color-border) 70%, transparent);
 

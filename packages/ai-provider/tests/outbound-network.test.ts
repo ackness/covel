@@ -2,6 +2,7 @@ import { createServer } from "node:http";
 import { connect, type AddressInfo } from "node:net";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { getJson } from "../src/adapters/http.js";
+import { fetchLiteLlmModels } from "../src/capability/model-db.js";
 import {
   configureOutboundProxy,
   normalizeOutboundProxyConfig,
@@ -53,6 +54,44 @@ describe("outbound network transport", () => {
       expect(incompatibleGlobalFetch).not.toHaveBeenCalled();
     } finally {
       await new Promise<void>((resolve) => target.close(() => resolve()));
+    }
+  });
+
+  it("does not follow a redirect that nothing has checked", async () => {
+    useProductionTransport();
+    let hops = 0;
+    const internal = createServer((_req, res) => {
+      hops += 1;
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end("{}");
+    });
+    await new Promise<void>((resolve) =>
+      internal.listen(0, "127.0.0.1", resolve),
+    );
+    const location = `http://127.0.0.1:${(internal.address() as AddressInfo).port}/latest/meta-data/`;
+    const redirecting = createServer((_req, res) => {
+      res.writeHead(302, { location });
+      res.end();
+    });
+    await new Promise<void>((resolve) =>
+      redirecting.listen(0, "127.0.0.1", resolve),
+    );
+    const url = `http://127.0.0.1:${(redirecting.address() as AddressInfo).port}/models.json`;
+
+    try {
+      await expect(outboundFetch(url)).rejects.toThrow(/redirect \(HTTP 302\)/);
+      await expect(outboundFetch(url, { redirect: "follow" })).rejects.toThrow(
+        /redirect \(HTTP 302\)/,
+      );
+      await expect(fetchLiteLlmModels(url)).rejects.toThrow(/redirect/);
+      // A caller that checks each hop itself receives the 3xx.
+      const manual = await outboundFetch(url, { redirect: "manual" });
+      expect(manual.status).toBe(302);
+      expect(manual.headers.get("location")).toBe(location);
+      expect(hops).toBe(0);
+    } finally {
+      await new Promise<void>((resolve) => redirecting.close(() => resolve()));
+      await new Promise<void>((resolve) => internal.close(() => resolve()));
     }
   });
 

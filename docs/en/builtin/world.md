@@ -77,7 +77,7 @@ At the start, it prepares the character attributes and the "dimensions" of this 
 
 **What you will see**
 
-- "Overview" and "Character Traits" in the "World Details" tab on the right.
+- "Overview" and "Character Traits" in the "World Details" tab on the right. Character Traits reads the current session character schema, so a save with an existing schema shows it immediately.
 - The current value of each dimension is shown in the panel, and you can change it by hand. If a turn's settlement fails, the panel tells you. You can retry, mark it as handled manually, or skip it explicitly. Before your next action, the system automatically retries once.
 
 **When it is on**: a basic feature, on by default. All three built-in packs include it.
@@ -136,6 +136,8 @@ When a named place, person, item, skill, legend or monster first appears in the 
 - Each time it sorts entries, it makes one more model call.
 
 ## Relationship Graph (`npc-graph`)
+
+A development save with duplicate open versions of one relation is refused instead of repaired during play. Recreate the affected graph data or start a new session. Current relations without `invalidAt` remain valid open versions.
 
 Records relationships between people, groups and factions. It checks existing nodes and relationships when recording new ones. When the story mentions them again, the narrative recalls these relationships, so it is less likely to contradict itself.
 

@@ -1,4 +1,3 @@
-import { compareText } from "@covel/shared";
 import { applyCursorPage, sortByCursorAsc } from "../common/pagination.js";
 import { settledSuspensionContinuation } from "../records/snapshot-records.js";
 import type { SnapshotMetadata } from "../types.js";
@@ -67,11 +66,12 @@ export function createSuspensionMethods(
     },
 
     async listSuspensions(sessionId) {
-      // Sort by createdAt to match SQL (asc(suspensions.createdAt)) and IDB;
-      // Map insertion order would otherwise diverge on out-of-order inserts.
-      return [...state.suspensions.values()]
-        .filter((r) => r.sessionId === sessionId)
-        .sort((a, b) => compareText(a.createdAt, b.createdAt));
+      // `(createdAt, id)`, as the SQL backends order them.
+      return sortByCursorAsc(
+        [...state.suspensions.values()].filter(
+          (r) => r.sessionId === sessionId,
+        ),
+      );
     },
 
     async deleteSuspension(id) {
@@ -79,9 +79,11 @@ export function createSuspensionMethods(
     },
 
     async listExpiredSuspensions(olderThanIso) {
-      return [...state.suspensions.values()]
-        .filter((r) => !r.resolvedAt && r.createdAt < olderThanIso)
-        .sort((a, b) => compareText(a.createdAt, b.createdAt));
+      return sortByCursorAsc(
+        [...state.suspensions.values()].filter(
+          (r) => !r.resolvedAt && r.createdAt < olderThanIso,
+        ),
+      );
     },
 
     async releaseStaleSuspensionClaims(olderThanIso) {
@@ -120,10 +122,9 @@ export function createSnapshotMethods(state: MemoryState): MemoryStoreMethods {
     },
 
     async listSnapshots(sessionId) {
-      return [...state.snapshots.values()]
-        .filter((r) => r.sessionId === sessionId)
-        .sort((a, b) => compareText(a.createdAt, b.createdAt))
-        .map((r) => structuredClone(r));
+      return sortByCursorAsc(
+        [...state.snapshots.values()].filter((r) => r.sessionId === sessionId),
+      ).map((r) => structuredClone(r));
     },
 
     async listSnapshotsPage(sessionId, opts) {
