@@ -41,6 +41,10 @@ describe("settling detachment admission", () => {
     { runtimeType: "agent" },
     { effects: { reads: ["state:*"], writes: ["plugin-data:self:blocks"] } },
     { effects: { writes: ["state:*"] } },
+    // The runtime's own declaration decides: a runtime that can emit events
+    // stays in the foreground.
+    { tools: { builtin: ["emit-event"] } },
+    { advertiseEvents: true },
   ] as Partial<RuntimeManifest>[])(
     "preserves the detached boundary for %j",
     (override) => {

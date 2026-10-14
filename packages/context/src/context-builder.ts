@@ -15,7 +15,6 @@ import {
   buildSegmentedContextAsync,
 } from "./prompt-assembler.js";
 import {
-  buildInjectBlocks as _buildInjectBlocks,
   interpolateTemplate as _interpolateTemplate,
   resolveFrameworkCompletion as _resolveFrameworkCompletion,
 } from "./prompt-internals.js";
@@ -48,13 +47,6 @@ import type { AssembledContext, ContextBuildParams } from "./types.js";
  */
 export const interpolateTemplate = _interpolateTemplate;
 
-/**
- * Build the inject XML blocks from `input.inject` declarations.
- *
- * For each inject declaration, finds the corresponding runtime result and
- * wraps the specified field value in the declared XML tag.
- */
-export const buildInjectBlocks = _buildInjectBlocks;
 
 /**
  * How a runtime finishes: with `runtime-done`, with a completing tool, with

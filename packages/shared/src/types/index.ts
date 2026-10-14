@@ -102,7 +102,6 @@ export type {
   TurnCompletionMode,
   TurnCompletionConfig,
   InputInjectDecl,
-  RuntimeInjectDecl,
   PluginDataInjectDecl,
   InputConfig,
   OutputConfig,
@@ -125,7 +124,6 @@ export type {
   HookEnforce,
   HookDeclaration,
   RuntimeManifest,
-  PluginScopedManifestFields,
 } from "./plugin.js";
 
 export { SLASH_COMMAND_CONTEXT_SCOPES } from "./plugin.js";

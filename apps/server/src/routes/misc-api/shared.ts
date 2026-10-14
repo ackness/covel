@@ -34,20 +34,6 @@ export function docPathFromAbsolute(
   return `plugins/${relative(pluginsDir, absolutePath).replace(/\\/g, "/")}`;
 }
 
-export function uiSlotsOf(manifest: {
-  ui?: {
-    right?: readonly string[];
-    message?: readonly string[];
-    left?: readonly string[];
-  };
-}): string[] {
-  const slots: string[] = [];
-  if (manifest.ui?.right?.length) slots.push("right");
-  if (manifest.ui?.message?.length) slots.push("message");
-  if (manifest.ui?.left?.length) slots.push("left");
-  return slots;
-}
-
 export function isStoryRuntime(manifest: {
   outputKind?: string;
   capabilities?: readonly string[];

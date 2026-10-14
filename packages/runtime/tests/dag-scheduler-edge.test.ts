@@ -38,15 +38,10 @@ function rt(
 
 function injectRuntime(...names: readonly string[]): Partial<RuntimeManifest> {
   return {
-    input: {
-      inject: names.map((n) => ({
-        kind: "runtime",
-        from: n,
-        field: "narrativeOutput",
-        as: "<x>",
-      })),
-    },
-  } as Partial<RuntimeManifest>;
+    inputs: Object.fromEntries(
+      names.map((n, i) => [`in${i}`, { from: { runtime: n } }]),
+    ),
+  };
 }
 
 describe("scheduleByDag — self-dependency", () => {
@@ -90,14 +85,10 @@ describe("scheduleByDag — same-priority tiebreaker", () => {
   });
 });
 
-describe("scheduleByDag — malformed inject declarations", () => {
-  it('silently drops empty-string `from` instead of treating it as a runtime named ""', () => {
+describe("scheduleByDag — malformed input declarations", () => {
+  it('silently drops an empty-string runtime instead of treating it as a runtime named ""', () => {
     const a = rt("a", 100);
-    const b = rt("b", 200, {
-      input: {
-        inject: [{ kind: "runtime", from: "", field: "x", as: "<x>" } as never],
-      },
-    } as Partial<RuntimeManifest>);
+    const b = rt("b", 200, { inputs: { x: { from: { runtime: "" } } } });
     const { groups, error } = scheduleByDag([a, b]);
     expect(error).toBeUndefined();
     // Both runtimes can run on level 0 — `b` has no real dependency.

@@ -3683,7 +3683,7 @@ Field notes:
 - `eventTopics`: when a session resolves its plugin set, it uses this to make sure a topic has only one declaring plugin.
 - `languages.text`: the languages the plugin has text in. This covers labels, interface text, text in code, and translations in the translation catalog. `languages.instructions`: the languages it has instructions (prompt body) in. Both always include at least `en`.
 - `author.about` and the `label` of links can be maps split by language.
-- Each runtime summary includes `id`, `runtimeType`, `trigger`, `execution`, the effective `turnCompletion`, `outputKind`, and optionally `outputContract`.
+- Each runtime summary includes `id`, `runtimeType`, `trigger`, `execution`, the effective `turnCompletion`, `outputKind`, and optionally `outputContract`. `tags` belongs to the package summary; runtime summaries do not repeat it.
 
 `hostState` says whether the server has loaded this plugin. It does not say whether a session has enabled it. These are two different states, and the list does not show the first as a session's active state.
 
@@ -3711,6 +3711,7 @@ Returns the full description of one plugin, `PluginDetail`. If the plugin does n
 Notes:
 
 - `runtimes[].after` / `needs` / `inputs` / `effects` / `turnCompletion` are compiled execution descriptions. They explain execution order, input conditions, and detached behavior. Authors write something different: they declare package-level `contributes` in `PLUGIN.md`, and they declare execution settings in the `schedule` / `io` / `agent` / `function` groups of `RUNTIME.md`. Do not submit this internal structure as a manifest.
+- UI declarations belong to the package-level `ui` field, not to `runtimes[]`. Runtime entries in `GET /api/plugin-flows` also omit `uiSlots`; read plugin details or `/api/ui-specs` for UI declarations.
 - Dynamic keys are not listed in the manifest. Read them with a plugin-data query for the current session or with the `_index` endpoint.
 - Services, tools, actions, slash commands, and extensions are different kinds of registration, and each must be declared separately.
 

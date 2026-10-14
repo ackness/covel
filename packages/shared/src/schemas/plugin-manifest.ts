@@ -17,14 +17,19 @@ import {
   runtimeAuthoringManifestSchema,
 } from "./runtime-manifest.js";
 import {
-  runtimeManifestInputSchema,
   extensionDeclarationSchema,
   hookDeclarationSchema,
   permissionsDeclSchema,
+  pluginCommandsSchema,
   pluginDataSchemaDeclSchema,
+  pluginDescriptionSchema,
+  pluginDisplayNameSchema,
+  pluginEntryPathSchema,
+  pluginEventsSchema,
+  pluginUiPathsSchema,
+  pluginUserSettingsSchema,
   worldProjectionMapSchema,
 } from "./plugin-schemas.js";
-const shape = runtimeManifestInputSchema.shape;
 
 /**
  * `attributes[].id`: field names, `[]` after one that holds a list. `**`
@@ -226,8 +231,8 @@ export const pluginManifestSchema = z.strictObject({
       examples: [">=0.0.45"],
     })
     .optional(),
-  displayName: shape.displayName,
-  description: shape.description,
+  displayName: pluginDisplayNameSchema.optional(),
+  description: pluginDescriptionSchema,
   tags: z
     .array(
       z
@@ -304,7 +309,7 @@ export const pluginManifestSchema = z.strictObject({
       "Public schema of each contract this package publishes or accepts, keyed by contract ID. A contract that a `contributes.data` namespace accepts needs no entry here: its schema is the one of that namespace.",
     )
     .optional(),
-  entry: shape.entry,
+  entry: pluginEntryPathSchema.optional(),
   permissions: permissionsDeclSchema
     .describe(
       "Upper bounds of the package's own code. `http` lists the origins and methods the entry module of a community package may reach through `covel.http`, in addition to those its runtimes declare.",
@@ -322,7 +327,7 @@ export const pluginManifestSchema = z.strictObject({
           "Names of RPC actions the entry registers with `registerRpc`.",
         )
         .optional(),
-      commands: shape.commands,
+      commands: pluginCommandsSchema.optional(),
       services: z
         .array(contractIdSchema)
         .describe(
@@ -345,8 +350,8 @@ export const pluginManifestSchema = z.strictObject({
         .array(z.string().min(1))
         .describe("IDs of forms the entry registers.")
         .optional(),
-      events: shape.events,
-      settings: shape.userSettings,
+      events: pluginEventsSchema.optional(),
+      settings: pluginUserSettingsSchema.optional(),
       data: z
         .record(
           z.string(),
@@ -395,7 +400,11 @@ export const pluginManifestSchema = z.strictObject({
         )
         .describe("Own plugin data namespaces, keyed by namespace.")
         .optional(),
-      ui: shape.ui,
+      ui: pluginUiPathsSchema
+        .describe(
+          "Package-relative paths of declarative UI specs, by placement.",
+        )
+        .optional(),
       worldProjections: worldProjectionMapSchema
         .describe(
           "Pure projections from world data into own namespaces, keyed by projection ID.",

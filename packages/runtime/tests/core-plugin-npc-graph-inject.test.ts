@@ -281,15 +281,11 @@ describe("npc-graph core plugin write-read-inject path", () => {
       stage: "narrative",
       runtimeType: "agent",
       outputKind: "story",
-      input: {
-        inject: [
-          {
-            kind: "runtime",
-            from: "npc-graph/rag-retriever",
-            field: "npcContext",
-            as: "npc-relationships",
-          },
-        ],
+      inputs: {
+        npcRelationships: {
+          from: { runtime: "npc-graph/rag-retriever" },
+          select: "/npcContext",
+        },
       },
     });
     const llm = new CapturingLLM();
@@ -333,7 +329,7 @@ describe("npc-graph core plugin write-read-inject path", () => {
     expect(retrieverOutput.npcContext).toContain("COMPETES_WITH");
 
     expect(llm.systemPrompts).toHaveLength(1);
-    expect(llm.systemPrompts[0]).toContain("<npc-relationships>");
+    expect(llm.systemPrompts[0]).toContain('"npcRelationships"');
     expect(llm.systemPrompts[0]).toContain("暗中阻挠青萍宗调查灵脉异常");
   });
 });

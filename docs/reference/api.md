@@ -3683,7 +3683,7 @@ runtime 报告失败时，它的原始错误保留在 `result.runtimeResults` �
 - `eventTopics`：会话解析插件集合时用它保证一个 topic 只有一个声明者。
 - `languages.text`：插件有文字的语言，包括标签、界面文字、代码里的文字，以及翻译目录里的译文。`languages.instructions`：有指令（prompt 正文）的语言。两者都至少包含 `en`。
 - `author.about` 和链接的 `label` 可能是按语言分的 map。
-- 每个 runtime 摘要包含 `id`、`runtimeType`、`trigger`、`execution`、生效的 `turnCompletion`、`outputKind`、可选的 `outputContract` 等字段。
+- 每个 runtime 摘要包含 `id`、`runtimeType`、`trigger`、`execution`、生效的 `turnCompletion`、`outputKind`、可选的 `outputContract` 等字段。 `tags` 属于包摘要，runtime 摘要不重复提供。
 
 `hostState` 说的是服务端有没有加载这个插件，不是某个会话有没有启用它。这是两种状态，列表不会把前者写成某个会话的 active。
 
@@ -3711,6 +3711,7 @@ runtime 报告失败时，它的原始错误保留在 `result.runtimeResults` �
 注意：
 
 - `runtimes[].after` / `needs` / `inputs` / `effects` / `turnCompletion` 是编译后的执行描述，用来解释执行顺序、输入条件和 detached 行为。作者写的是另一种格式：在 `PLUGIN.md` 里声明包级 `contributes`，在 `RUNTIME.md` 的 `schedule` / `io` / `agent` / `function` 分组里声明执行配置。不要把这里的内部结构当作清单提交。
+- UI 声明在包级 `ui` 字段中，`runtimes[]` 不提供 UI。`GET /api/plugin-flows` 的 runtime 项也不提供 `uiSlots`；UI 声明从插件详情或 `/api/ui-specs` 读取。
 - 动态 key 不在清单里列举。用当前会话的 plugin-data 查询或 `_index` 端点读取。
 - 服务、工具、action、slash command 和 extension 是不同的注册种类，必须分别声明。
 

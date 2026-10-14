@@ -325,6 +325,18 @@ describe("POST /api/sessions/:id/plugin-rpc", () => {
   });
 
   it("resolves a command server-side and returns refreshed scoped context", async () => {
+    const commands = [
+      {
+        name: "inspect",
+        aliases: ["i"],
+        description: "Inspect the session",
+        arguments: [
+          { name: "depth", type: "integer" as const, required: true },
+        ],
+        action: "inspect-state",
+        context: ["models" as const],
+      },
+    ];
     const runtime: RuntimeManifest = {
       name: "inspector/story",
       pluginId: "inspector",
@@ -333,16 +345,6 @@ describe("POST /api/sessions/:id/plugin-rpc", () => {
       outputKind: "story",
       model: "story",
       outputContract: "narrative@1",
-      commands: [
-        {
-          name: "inspect",
-          aliases: ["i"],
-          description: "Inspect the session",
-          arguments: [{ name: "depth", type: "integer", required: true }],
-          action: "inspect-state",
-          context: ["models"],
-        },
-      ],
     };
     const parsed = {
       runtime: { type: runtime.runtimeType ?? ("agent" as const) },
@@ -354,11 +356,18 @@ describe("POST /api/sessions/:id/plugin-rpc", () => {
       id: "inspector",
       packageManifest: {
         ...parsed,
+        manifest: {
+          name: "inspector",
+          pluginId: "inspector",
+          description: "Inspector",
+          pluginType: "plugin",
+          commands,
+        },
         plugin: {
           id: "inspector",
           kind: "plugin",
           description: "Inspector",
-          contributes: { commands: runtime.commands },
+          contributes: { commands },
         },
       },
       summary: {
