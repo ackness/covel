@@ -93,7 +93,7 @@ Details for the PostgreSQL column:
 
 - **Event delivery**: if `LISTEN/NOTIFY` fails to start, the server refuses to start. It does not quietly fall back to broadcasting inside the process.
 - **`steer` / `abort`**: the request must reach the instance that is running that turn. If it reaches another instance, it returns `409`, even when the database shows the turn as running.
-- **Background jobs**: this includes detached stages, and runtimes that run in the background when triggered manually or by an event. Tasks in `claimed` / `running` / `committing` whose lease has expired are marked `orphaned`. Their effects, which already went out, are not replayed automatically.
+- **Background jobs**: this includes detached stages, and runtimes that run in the background when triggered manually or by an event. When an instance shuts down normally, tasks it has not committed go back to the queue and the next worker runs them again. When an instance crashes, tasks in `claimed` / `running` / `committing` whose lease has expired are marked `orphaned`. Their effects, which already went out, are not replayed automatically.
 
 So a deployment that must control the current turn reliably should use a single instance. Or it must make sure that an action and its `steer` / `abort` requests are routed to the same instance. When an instance exits, its execution handle in memory cannot move elsewhere. The database is shared, but that does not mean another instance can take over a turn that is running.
 
@@ -880,9 +880,9 @@ Some runtimes do not need the turn to wait for them to finish. A safe leaf runti
 | Method | Path                      | Description                                                   |
 | ------ | ------------------------- | ------------------------------------------------------------- |
 | POST   | `/api/sessions/:id/steer` | Interject into a turn in progress. Body `{ message: string }` |
-| POST   | `/api/sessions/:id/abort` | Stop a turn in progress. Idempotent                           |
+| POST   | `/api/sessions/:id/abort` | Stop the player's action in progress. Idempotent              |
 
-Both endpoints return `409` when no turn is in progress.
+Both endpoints return `409` when no turn is in progress. `abort` stops the player's action request: once the request's last turn has ended, it also returns `409`.
 
 `steer` (interject):
 
@@ -897,11 +897,14 @@ Both endpoints return `409` when no turn is in progress.
 - The `execution.completed` payload of that action's SSE carries `abortReason: "aborted-by-player"`.
 - If the stop signal arrives before the commit, this run does not commit its messages, domain state, or turn count. A turn that was already committed is not rolled back.
 - Before a turn starts, and before it commits, if it is waiting for the previous turn's memory update, it also responds to the stop. It cancels the current wait and releases the session execution lock. The memory update for a previous committed turn finishes on its own.
+- A stop before the turn starts (still waiting for the session lock or the memory update, or retrying a dimension settlement the previous turn left pending) means this action does not start: nothing is saved, and the stream holds only one `execution.completed`, with `committed: false` and `abortReason: "aborted-by-player"`.
+- A stop after the setup turn was committed and before the opening continuation started means the opening does not start; see [Opening continuation](#opening-continuation).
 
 Limits that apply to both:
 
 - The control registry for a turn lives inside the process. In a multi-pod (PG) deployment, steer and abort can reach only the turn on the same pod. Checking execution status across processes does not change this.
-- Registration happens after the session lock is obtained. It covers preparation, model execution, commit, and cleanup, and is released only when the action completes. So a refresh does not wrongly report idle while the commit is still unfinished. A queued request also does not overwrite the control registration of the current turn.
+- An action request is registered as soon as it arrives, so it can be stopped while it waits. It becomes the session's current turn only after it obtains the session lock. From then on it covers preparation, model execution, commit, and cleanup, and is released only when the action completes. So a refresh does not wrongly report idle while the commit is still unfinished.
+- While a turn is running, a stop applies only to it, never to a request queued behind it for the lock. A queued request also does not overwrite the control registration of the current turn.
 - A stop signal cannot undo a transaction that has already finished.
 
 ### Setup runtime control (retry / skip)
@@ -2565,13 +2568,14 @@ Retries a job that has already failed and ended.
 - On success, it returns the new job object directly with `202`.
 - If the job cannot be retried, it returns `409` with `code: "runtime_job_not_retryable"`.
 
-The framework does not automatically re-run jobs that failed. This avoids calling a paid provider again when its result was not saved. A normal `queued` job that no one has claimed keeps running after a restart.
+The framework does not automatically re-run jobs that failed. This avoids calling a paid provider again when its result was not saved. A `queued` job keeps running after a restart, including one that a normal shutdown put back in the queue.
 
 **How a job runs:**
 
 - The worker claims the job first and holds a lease that can be renewed. The default concurrency is 4. Jobs for the same `(session, plugin, runtime)` run one after another.
 - `maxQueueMs` limits how long a job can wait in the queue.
 - `maxExecutionMs` limits the time from `running` until the runtime execution returns. The time spent afterward waiting for the session lock to commit is not counted.
+- At a normal shutdown, a job that has not reached `committing` goes back to `queued` once that execution returns, with the same jobId. A job already in `committing` finishes its commit.
 - After a restart, valid `queued` jobs are claimed again. A job that has waited past its queue time is marked `timed_out`. An in-flight job whose lease has expired is marked `orphaned`.
 - The check runs once more before commit: whether the session is still `active`, whether its identity is unchanged, the plugin's approval scope and version, and the actual proposal effects.
 
@@ -3187,7 +3191,8 @@ When a runtime reports failure, its original error is kept in `result.runtimeRes
 **Restarts and credentials:**
 
 - Job rows are persisted. A job that is still `queued` after a server restart keeps running when credentials are available. The next request that carries provider keys hands the credentials over again, or the server's own credentials satisfy the readiness check.
-- A job that was interrupted halfway is marked `orphaned` after its lease expires. The framework does not re-run it automatically, to avoid charging again for an image or speech generation.
+- When the server shuts down normally, a job that is halfway through goes back to the queue and runs again after the restart. A provider it called before it stopped is called again, so a job must be safe to run again.
+- When the process crashes, a job that was halfway through is marked `orphaned` after its lease expires. The framework does not re-run it automatically, to avoid charging again for an image or speech generation.
 - A failed or cancelled job can be retried with `POST /api/sessions/:id/runtime-jobs/:jobId/retry`. The retry uses a new `turnId`.
 
 ##### Errors
@@ -4755,6 +4760,25 @@ After the player submits the opening form, the opening narrative appears on its 
   - The execution was aborted (`abortReason`);
   - The commit failed;
   - Setup still has unfinished items (an opening interaction comes next).
+- **The player stopped before the continuation started**: The setup turn is saved as usual, and the opening does not start. `execution.completed` carries the continuation turn's `turnId`, `committed: false`, and `abortReason: "aborted-by-player"`. The continuation turn that never started is recorded: the execution status (`GET /api/sessions/:id/execution`) shows `state: "failed"`, `origin: "continuation"`, and `retry` is `retry_turn`. Recovering with it (with `recoverFromTurnId`) runs the opening as a continuation turn, without adding a player turn.
+- **Wrapping up after the turn is saved**: When steps such as announcing background jobs or writing the `turn.completed` debug record fail, they are only logged. The stream still ends with `execution.completed`, and the opening continuation still runs.
+
+##### Rejections in the stream
+
+After the SSE stream opens, an action can still be refused before it starts. The stream then holds only one `error.occurred`, with `message` and `code`. Nothing is saved, and the message is the original text in production too. Refusals from the session guards (such as `session_not_active` and `approval_required`) keep the code they have in the JSON endpoints. The others:
+
+| `code`                       | Meaning                                                                       |
+| ---------------------------- | ----------------------------------------------------------------------------- |
+| `input_already_committed`    | This input (`inputMessageId`) was already saved with a turn; do not resend it |
+| `retry_source_not_found`     | The turn named by `retryFromTurnId` is not in this session                    |
+| `retry_source_not_committed` | The source turn was not committed; recover the original action first          |
+| `retry_source_not_original`  | It names a retry, not the original turn                                       |
+| `retry_source_stale`         | The story has moved on past the source turn                                   |
+| `retry_target_not_active`    | A retry target is no longer active in the session                             |
+| `retry_target_not_failed`    | A retry target is no longer failed                                            |
+| `recovery_unavailable`       | The turn named by `recoverFromTurnId` can no longer be recovered              |
+
+`retry_*` and `recovery_unavailable` all mean the task statuses the client sees are out of date: refresh first, then decide whether to retry.
 
 ##### Request headers (optional)
 
@@ -5374,7 +5398,7 @@ Deletes media that is no longer referenced. This is a destructive maintenance en
 
 It first scans `messages`, `plugin_data`, `runtime_outputs`, `trace_events`, `snapshots`, and `turn_results`. It collects the mediaIds that are still referenced. Then it calls `MediaStore.cleanup()` to delete the rest.
 
-Every cleanup also releases the temporary references (`world-data-import:<uuid>`) that a world-data import left behind and that were created 24 hours ago or earlier. A dry run only lists them in `expiredRefs`, and a real run removes them. A younger temporary reference keeps protecting its file. The limit is fixed. The rule is in [Media store](./media-store.md#temporary-references-during-world-data-import).
+Every cleanup also releases the temporary references (`media-pin:<uuid>`) that a world-data import, upload or runtime write left behind and that were created 24 hours ago or earlier. A dry run only lists them in `expiredRefs`, and a real run removes them. A younger temporary reference keeps protecting its file. The limit is fixed. The rule is in [Media store](./media-store.md#temporary-references-during-world-data-import).
 
 > [!WARNING]
 > This endpoint is disabled by default. You must set `COVEL_MEDIA_CLEANUP_ENABLED` to use it. Actual deletion also requires a confirmation header.
@@ -5407,7 +5431,7 @@ Every cleanup also releases the temporary references (`world-data-import:<uuid>`
   "policy": {
     "dryRun": true,
     "expireRefs": {
-      "sessionIdPrefix": "world-data-import:",
+      "sessionIdPrefix": "media-pin:",
       "maxAgeMs": 86400000
     },
     "maxBytes": 0
@@ -5425,7 +5449,7 @@ Every cleanup also releases the temporary references (`world-data-import:<uuid>`
     "expiredRefs": [
       {
         "mediaId": "...",
-        "sessionId": "world-data-import:...",
+        "sessionId": "media-pin:...",
         "pluginId": null,
         "createdAt": "2026-10-01T08:00:00.000Z"
       }

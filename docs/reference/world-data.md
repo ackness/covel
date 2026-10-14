@@ -1528,11 +1528,12 @@ POST /api/worlds/<world-id>/sync-data
 **媒体文件的保护。** 图片和音乐的字节按内容存放，由多局游戏共享，所以删除和失败时的处理比较保守：
 
 - 同步删除一条媒体索引时，只在事务提交之后移除当前会话对那个文件的引用。会话的其他索引行（内容相同的文件共用一个 ID）、消息或快照里还出现这个文件时，引用保留，历史里的图仍然能读，从旧快照分叉也不受影响。文件本身由媒体清理（GC）在没人用时回收。
-- 导入准备阶段，文件和一条本次导入专属的临时引用（`world-data-import:<uuid>`）一起写入，防止导入完成之前被清理掉。
+- 导入准备阶段，文件和一条本次导入专属的临时引用（`media-pin:<uuid>`）一起写入，防止导入完成之前被清理掉。
 - 导入完成时，先建立真实会话对文件的归属和引用，再释放临时引用。
 - 准备、事务或会话准入失败时，只释放本次导入的临时引用。不强制删除共享的文件，也不动已有会话的引用。
 - 新建会话的收尾失败时，在同一把会话锁内删除这个会话，并释放它的媒体归属和引用。
-- 数据已经提交、但收尾失败时，保留临时引用，避免已提交的索引失去保护。会话创建回滚时删除失败，同样保留。
+- 同步的数据已经提交、但收尾失败时，保留临时引用，避免已提交的索引失去保护。
+- 会话创建的收尾失败时总是释放临时引用，删除会话失败也一样：留下的会话数据仍然引用这些文件，清理前的扫描会保护它们。
 - 释放临时引用失败只记日志。进程崩溃或释放失败可能留下临时引用：它在创建满 24 小时后过期，由 `POST /api/media/cleanup` 释放，在那之前清理会保留那些文件（见 [媒体存储](./media-store.md#世界数据导入时的临时引用)）。
 
 ### World 包与插件包的边界
@@ -1615,6 +1616,7 @@ pnpm validate:world --strict --plugins ~/.covel/plugins ~/.covel/worlds/my-world
 - 错误信息包含文件、记录序号和 key。导入之前发现错误就拒绝整个计划，其余合法的记录也不写。
 - 空的 source 给出 warning。
 - 接收插件用 [`authoring.references`](./plugins.md) 声明了“这个值是角色属性的 `id`”时，按世界的 `characterSchema` 检查这个值。属性不存在、类型不对或数值超出属性范围，报 `attribute-reference` 错误。世界没有写 `characterSchema` 时不检查。
+- 声明了“这个值是维度的 ID”时，按世界声明的维度（`world.yaml` 的 `dimensions`、`dimensionSources` 和 `data/dimensions.yaml` 合在一起）检查。维度不存在，或者旁边的路径走不到维度 `schema` 允许的位置，报 `dimension-reference` 错误。例如事件条件里把 `barrowAlarm` 写成 `barowAlarm`，这个事件永远不会触发。世界没有声明任何维度时不检查。
 - 记录或角色字段里，名字以 `At` 结尾或叫 `timestamp`、取值是 ISO 时间的字段，会被当成记账信息，模型读不到。每个这样的字段给出一条 `model-hidden-field` 提醒。要让模型看到剧情里的时间，请换一个名字（`date`、`diedOn`），或者不写成 ISO 时间。
 - 记录里名字是 `id` 或以 `Id` / `Ids` 结尾、取值是 UUID 的字段，也会被当成记账信息，模型读不到，同样给出一条 `model-hidden-field` 提醒。请换成人能读懂的 ID，用小写单词加连字符，例如 `npc-lin-yao`。
 - 即使没有任何约定的数据文件，`dimensionSources` 也会被检查。
@@ -1643,6 +1645,7 @@ pnpm validate:world --strict --plugins ~/.covel/plugins ~/.covel/worlds/my-world
 | `inline-locale-map`     | error            | 主文件里把文本写成了多语言对照；主文件只写一种语言，译文放进语言文件                                                            |
 | `data-file-unused`      | warning          | `data/`、`characters/` 或 `media/` 中的文件未被 source 或框架功能使用                                                           |
 | `attribute-reference`   | error            | 记录里指向角色属性的值（由接收插件的 `authoring.references` 声明）在世界的 `characterSchema` 里不存在、类型不对或超出范围       |
+| `dimension-reference`   | error            | 记录里指向维度的值（由接收插件的 `authoring.references` 声明）不是世界声明的维度，或旁边的路径不是维度 `schema` 允许的位置      |
 | `model-hidden-field`    | warning          | 记录里有模型读不到的字段：名字以 `At` 结尾或叫 `timestamp`、取值是 ISO 时间；或者名字是 `id` / 以 `Id`、`Ids` 结尾、取值是 UUID |
 | `cover`                 | error            | `cover` 指向的文件应用无法显示                                                                                                  |
 | `theme-music`           | error            | `themeMusic` 指向的文件世界列表无法播放                                                                                         |

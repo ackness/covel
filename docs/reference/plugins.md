@@ -378,6 +378,7 @@ Agent 的超时、重试和步数都在 `agent.loop` 里。
 - 剩余时间不够放第二次（不超过 60 秒）时只发一次，由 `function.timeoutMs` 结束。
 - 被服务商拒绝的请求仍由网关的传输层重试和后备模型处理，不在这里重发。
 - 单次调用确实需要更久的 handler 应该调大 `function.timeoutMs`。
+- 宿主在每次逻辑调用开始时按剩余时间建立请求预算，HTTP 重试、备用模型和停滞重发共用 8 次传输额度。该预算不再额外受网关默认 120 秒限制，也不能延长 runtime 的截止时间。
 
 ### 输入和输出
 
@@ -652,7 +653,7 @@ namespace 接收某个契约，就说明了这个契约的记录长什么样。�
 - `pnpm describe:authoring` 汇总所有已扫描插件的声明；加 `--check` 会按 namespace 的 schema 校验每份 `example`。
 - 字段见 [Plugin manifest 字段表](./schema/plugin-manifest.md)。
 
-记录里有些值写的是世界角色属性的 `id`。用 `references` 把它们声明出来，`pnpm validate:world` 就会在开局之前检查这些值：
+记录里有些值写的是世界里别的东西的名字：角色属性的 `id`，或者维度的 ID。用 `references` 把它们声明出来，`pnpm validate:world` 就会在开局之前检查这些值：
 
 ```yaml
 authoring:
@@ -663,12 +664,21 @@ authoring:
       within: [base, max]
 ```
 
-- `path`：值在每条记录里的位置。字段名用 `.` 连接，字段是列表时在后面加 `[]`。
-- `to`：值指向什么。目前只有 `character-attribute`，即世界 `characterSchema` 顶层属性的 `id`。
-- `type`（可选）：被指向的属性必须是这个类型。
-- `within`（可选）：和这个值同级的数字字段，必须落在该属性的 `min` 和 `max` 之内。
+- `path`：值在每条记录里的位置。字段名用 `.` 连接，字段是列表时在后面加 `[]`。字段名前面写 `**.`，表示在下面任意深度找这个字段。
+- `to`：值指向什么。`character-attribute` 是世界 `characterSchema` 顶层属性的 `id`；`world-dimension` 是世界声明的一个维度的 ID。
+- `type`（可选，只用于 `character-attribute`）：被指向的属性必须是这个类型。
+- `within`（可选）：和这个值同级、必须落在它所指的东西之内的字段。对 `character-attribute`，是必须落在该属性 `min` 和 `max` 之内的数字字段；对 `world-dimension`，是指向维度值内部某个位置的路径（`a.b`，或者一个键的列表），这个位置必须是维度的 `schema` 允许的。
 
-不符合的值报为 `attribute-reference` 错误。世界没有写 `characterSchema` 时不检查，因为属性要到开局时才生成。只声明插件运行时确实会拒绝的规则，否则合法的世界会被误报。
+内置的 story-events 这样声明事件条件里的维度。条件可以用 `all` / `any` / `not` 嵌套任意多层，所以路径里用了 `**`：
+
+```yaml
+references:
+  - path: when.**.dimension
+    to: world-dimension
+    within: [path]
+```
+
+不符合的值报为 `attribute-reference` 或 `dimension-reference` 错误。世界没有写 `characterSchema` 时不检查属性，没有声明任何维度时不检查维度，因为它们要到开局时才生成。只声明插件运行时确实找不到或会拒绝的东西，否则合法的世界会被误报。
 
 世界数据的 source 写 `to: contract:example.facts@1`（省略 `schema` 时就是目标契约的 schema）。框架找到已激活、并声明接受这个契约的 namespace，验证 schema 后把数据分发过去。框架里不识别具体的插件 ID。`contracts` 和接收 namespace 的 schema 必须一致。完整结构见 [World Data](./world-data.md)。
 

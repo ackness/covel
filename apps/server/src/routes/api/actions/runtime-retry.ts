@@ -5,6 +5,7 @@ import type {
   RuntimeRetryScope,
 } from "@covel/shared";
 import type { DataStore } from "@covel/store";
+import { ActionRejectedError } from "./action-rejection.js";
 
 type RuntimeRetryAction = Extract<
   ActionRequest,
@@ -46,11 +47,15 @@ export async function prepareRuntimeRetry(
     // Preserve unseeded manual calls only when no explicit source was supplied.
     if (action.type === "retry_runtime" && !requestedSource)
       return { seedResults: [], sourceRuntimeIds: [] };
-    throw new Error("The retry source turn was not found in this session.");
+    throw new ActionRejectedError(
+      "The retry source turn was not found in this session.",
+      "retry_source_not_found",
+    );
   }
   if (source.commitStatus !== "committed") {
-    throw new Error(
+    throw new ActionRejectedError(
       "The retry source turn has not committed. Recover the original action first.",
+      "retry_source_not_committed",
     );
   }
   if (
@@ -58,7 +63,10 @@ export async function prepareRuntimeRetry(
       (id) => !activeRuntimes.some((runtime) => runtime.name === id),
     )
   ) {
-    throw new Error("A retry target is no longer active in this session.");
+    throw new ActionRejectedError(
+      "A retry target is no longer active in this session.",
+      "retry_target_not_active",
+    );
   }
   const rows = await store.queryTurnResults(sessionId, {
     since: source.createdAt,
@@ -74,8 +82,9 @@ export async function prepareRuntimeRetry(
           (row.origin === "player" || row.origin === "continuation"),
       )
   ) {
-    throw new Error(
+    throw new ActionRejectedError(
       "The story has advanced beyond this retry source. Refresh the task statuses before retrying.",
+      "retry_source_stale",
     );
   }
   const sourceResults = Array.isArray(source.runtimeResults)
@@ -87,8 +96,9 @@ export async function prepareRuntimeRetry(
   // The public source is always the original committed turn, never an attempt
   // whose partial products could omit successful siblings and the story.
   if (requestedSource && source.retryScope) {
-    throw new Error(
+    throw new ActionRejectedError(
       "Use the original source turn when retrying failed runtimes.",
+      "retry_source_not_original",
     );
   }
   // Attempts are oldest-first. Only a committed attempt can supersede
@@ -116,8 +126,9 @@ export async function prepareRuntimeRetry(
     requestedSource &&
     runtimeIds.some((id) => results.get(id)?.status !== "failed")
   ) {
-    throw new Error(
+    throw new ActionRejectedError(
       "A retry target is no longer failed. Refresh the task statuses before retrying.",
+      "retry_target_not_failed",
     );
   }
   return {

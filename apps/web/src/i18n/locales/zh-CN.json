@@ -212,6 +212,8 @@
     "dimensionsImported": "导入成功",
     "reasonConnectionClosed": "连接结束但后端未上报结束",
     "reasonSessionBusy": "会话繁忙，请稍后重试",
+    "reasonInputAlreadyCommitted": "这条消息已经发送过，它的回合已经保存。刷新即可看到。",
+    "reasonRetryStale": "任务状态已经变了，请先刷新再重试。",
     "reasonExecutionCommitFailed": "本回合未能保存，请重试。",
     "reasonExecutionFailed": "本回合执行失败，请重试。",
     "reasonHistoryRestoreFailed": "消息历史恢复失败。如果内容一直没有更新，请刷新页面。",

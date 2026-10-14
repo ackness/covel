@@ -93,7 +93,7 @@ PostgreSQL 一列的细节：
 
 - **事件投递**：`LISTEN/NOTIFY` 初始化失败时，服务器拒绝启动，不会悄悄退回进程内广播。
 - **`steer` / `abort`**：请求必须到达正在执行那个回合的实例。到了别的实例，就算数据库显示回合在执行，也返回 `409`。
-- **后台任务**：包括 detached 的 stage，以及在后台运行的手动或事件触发的 runtime。租约过期的 `claimed` / `running` / `committing` 任务会标成 `orphaned`，不会自动重放已经对外产生的效果。
+- **后台任务**：包括 detached 的 stage，以及在后台运行的手动或事件触发的 runtime。实例正常关闭时，还没提交的任务放回队列，由下一个 worker 重跑。实例崩溃时，租约过期的 `claimed` / `running` / `committing` 任务会标成 `orphaned`，不会自动重放已经对外产生的效果。
 
 所以，需要可靠地控制当前回合的部署，应当用单实例，或者保证一个动作和它的 `steer` / `abort` 请求被路由到同一个实例。实例退出后，内存里的执行句柄不能搬到别处；数据库共享，不代表另一个实例能接手正在跑的回合。
 
@@ -880,9 +880,9 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 | 方法 | 路径                      | 描述                                           |
 | ---- | ------------------------- | ---------------------------------------------- |
 | POST | `/api/sessions/:id/steer` | 向进行中的回合插话。body `{ message: string }` |
-| POST | `/api/sessions/:id/abort` | 中止进行中的回合。幂等                         |
+| POST | `/api/sessions/:id/abort` | 停止玩家进行中的动作。幂等                     |
 
-两个端点在没有进行中的回合时都返回 `409`。
+两个端点在没有进行中的回合时都返回 `409`。`abort` 停止的是玩家的这次动作请求：请求的最后一个回合结束以后，它也返回 `409`。
 
 `steer`（插话）：
 
@@ -897,11 +897,14 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 - 当次 action SSE 的 `execution.completed` 载荷带 `abortReason: "aborted-by-player"`。
 - 提交前收到停止信号时，本次执行不提交消息、领域状态和回合计数。已经提交的回合不回滚。
 - 回合开始前和提交前，如果正在等上一轮的记忆更新，也会响应停止：取消当前的等待并释放会话执行锁。上一轮已提交回合的记忆更新会独立完成。
+- 回合还没开始就停止（还在等会话锁、等记忆更新，或者在自动重试上一轮没结算的维度），这次动作不再开始：什么都不保存，流里只有一个 `execution.completed`，带 `committed: false` 和 `abortReason: "aborted-by-player"`。
+- setup 回合已经提交、开场接力还没开始时停止，开场不再开始，见[开场接力](#开场接力opening-continuation)。
 
 两者共同的限制：
 
 - 回合的控制注册表在进程内。多 pod（PG）部署下，steer / abort 只能到达同一个 pod 上的回合。跨进程的执行状态探测不改变这一点。
-- 注册发生在拿到会话锁之后，覆盖准备、模型执行、提交和收尾，直到 action 完成才释放。所以刷新时不会在提交还没完成时误判为空闲；排队的请求也不会覆盖当前回合的控制注册。
+- 动作请求一进来就登记，所以等待中也能被停止。拿到会话锁之后，它才成为会话当前的回合：覆盖准备、模型执行、提交和收尾，直到 action 完成才释放。所以刷新时不会在提交还没完成时误判为空闲。
+- 有回合正在执行时，停止只作用于它，不会落到排在后面等锁的请求上；排队的请求也不会覆盖当前回合的控制注册。
 - 停止信号不能撤回已经完成的事务。
 
 ### Setup runtime 控制（重试 / 跳过）
@@ -2565,13 +2568,14 @@ Web 设置页根据 `operatorTokenRequired` 决定是否显示“运维访问”
 - 成功时以 `202` 直接返回新作业对象。
 - 不可重试时返回 `409`，`code: "runtime_job_not_retryable"`。
 
-框架不会自动重跑失败类的作业，以免重复调用已经计费、但结果没有存下来的 provider。没被认领的普通 `queued` 作业在重启后会继续执行。
+框架不会自动重跑失败类的作业，以免重复调用已经计费、但结果没有存下来的 provider。`queued` 作业在重启后会继续执行，包括正常关闭时放回队列的作业。
 
 **作业是怎么执行的:**
 
 - worker 先认领作业并持有一个可续期的租约。默认并发为 4；同一个 `(session, plugin, runtime)` 的作业串行执行。
 - `maxQueueMs` 限制排队时间。
 - `maxExecutionMs` 限制从 `running` 到 runtime 执行返回的时间。之后等会话锁来提交的时间不计入。
+- 正常关闭时，还没进入 `committing` 的作业等这次执行返回后放回 `queued`，jobId 不变。已经进入 `committing` 的作业照常提交完。
 - 重启后继续认领合法的 `queued` 作业。排队超时的作业标为 `timed_out`，租约过期的在途作业标为 `orphaned`。
 - 提交之前再检查一次：会话是否仍 `active`、身份是否没变，插件的审批范围和版本，以及实际的 proposal effects。
 
@@ -3187,7 +3191,8 @@ runtime 报告失败时，它的原始错误保留在 `result.runtimeResults` �
 **重启与凭证**：
 
 - 任务行是持久化的。服务重启后仍为 `queued` 的任务，会在凭证可用时继续执行：下一次带 provider key 的请求会重新交出凭证，或者服务端自己的凭证满足就绪检查。
-- 执行到一半被打断的任务，在租约过期后标为 `orphaned`。框架不会自动重跑，避免图像或语音被二次计费。
+- 服务正常关闭时，执行到一半的任务放回队列，重启后重跑。它停下前调用过的服务商会再被调用一次，所以作业要能安全地重跑。
+- 进程崩溃时执行到一半的任务，在租约过期后标为 `orphaned`。框架不会自动重跑，避免图像或语音被二次计费。
 - 失败或取消的任务可以用 `POST /api/sessions/:id/runtime-jobs/:jobId/retry` 重试，重试使用新的 `turnId`。
 
 ##### 错误
@@ -4753,6 +4758,25 @@ id: example-epoch:2
   - 执行被中止（`abortReason`）；
   - 提交失败；
   - setup 还有没完成的项（后面还有开局交互）。
+- **接力开始前玩家点了停止**：setup 回合照常保存，开场不再开始。`execution.completed` 带接力回合的 `turnId`、`committed: false` 和 `abortReason: "aborted-by-player"`。这个没开始的接力回合会记下来：执行状态（`GET /api/sessions/:id/execution`）显示 `state: "failed"`、`origin: "continuation"`，`retry` 是 `retry_turn`。用它恢复（带 `recoverFromTurnId`）时，开场照常以接力回合运行，不增加玩家回合数。
+- **回合保存之后的收尾**：宣布后台作业、写 `turn.completed` 调试记录这些步骤失败时只记日志。流仍然以 `execution.completed` 结束，开场接力照常进行。
+
+##### 流里的拒绝
+
+SSE 流已经打开之后，动作仍可能在开始前被拒绝。这时流里只有一个 `error.occurred`，带 `message` 和 `code`，什么都没有保存，生产环境也给出原文。会话守卫的拒绝（比如 `session_not_active`、`approval_required`）保留它们在 JSON 接口里的 code。另外几种：
+
+| `code`                       | 含义                                                       |
+| ---------------------------- | ---------------------------------------------------------- |
+| `input_already_committed`    | 这条输入（`inputMessageId`）已经随一个回合保存过，不要重发 |
+| `retry_source_not_found`     | `retryFromTurnId` 指的回合不在这个会话里                   |
+| `retry_source_not_committed` | 来源回合没有提交，先恢复原来的动作                         |
+| `retry_source_not_original`  | 指的是一次重试，不是原回合                                 |
+| `retry_source_stale`         | 来源回合之后故事已经往前走了                               |
+| `retry_target_not_active`    | 重试目标在会话里已经停用                                   |
+| `retry_target_not_failed`    | 重试目标已经不再是失败状态                                 |
+| `recovery_unavailable`       | `recoverFromTurnId` 指的回合已经不能恢复                   |
+
+`retry_*` 和 `recovery_unavailable` 都说明客户端看到的任务状态过时了：先刷新，再决定是否重试。
 
 ##### 请求头（可选）
 
@@ -5372,7 +5396,7 @@ Trace 是服务器为每个回合记下的调试事件：哪个 runtime 开始�
 
 它先扫描 `messages`、`plugin_data`、`runtime_outputs`、`trace_events`、`snapshots`、`turn_results`，收集仍被引用的 mediaId，再调用 `MediaStore.cleanup()` 删掉其余的。
 
-每次清理还会释放世界数据导入留下的、创建已满 24 小时的临时引用（`world-data-import:<uuid>`）。演练只在 `expiredRefs` 里列出它们，真正的清理移除它们。更新的临时引用继续保护它的文件。这个时限是固定的，规则见 [媒体存储](./media-store.md#世界数据导入时的临时引用)。
+每次清理还会释放世界数据导入、上传或 runtime 写入留下的、创建已满 24 小时的临时引用（`media-pin:<uuid>`）。演练只在 `expiredRefs` 里列出它们，真正的清理移除它们。更新的临时引用继续保护它的文件。这个时限是固定的，规则见 [媒体存储](./media-store.md#世界数据导入时的临时引用)。
 
 > [!WARNING]
 > 这个端点默认禁用，必须设置 `COVEL_MEDIA_CLEANUP_ENABLED` 才能用。真正删除还要带确认头。
@@ -5405,7 +5429,7 @@ Trace 是服务器为每个回合记下的调试事件：哪个 runtime 开始�
   "policy": {
     "dryRun": true,
     "expireRefs": {
-      "sessionIdPrefix": "world-data-import:",
+      "sessionIdPrefix": "media-pin:",
       "maxAgeMs": 86400000
     },
     "maxBytes": 0
@@ -5423,7 +5447,7 @@ Trace 是服务器为每个回合记下的调试事件：哪个 runtime 开始�
     "expiredRefs": [
       {
         "mediaId": "...",
-        "sessionId": "world-data-import:...",
+        "sessionId": "media-pin:...",
         "pluginId": null,
         "createdAt": "2026-10-01T08:00:00.000Z"
       }
