@@ -421,6 +421,13 @@ Dexie BrowserVault 的 schema 归 `apps/web` 所有，不作为服务端 `DataSt
 
 内存、SQLite 和 PostgreSQL 在这一点上一致，共享的契约测试会检查。
 
+**会话 metadata 的合并。** `updateSession` 把补丁里的 `metadata` 浅合并进已存的对象：每个键替换自己的值，值为 `undefined` 的键被删掉（`null` 保留），合并后为空就存成没有 metadata。会话不存在时什么也不做。
+
+- 合并在每个后端都是原子的。PostgreSQL 在一条 UPDATE 里合并；SQLite 和内存在串行的写入边界里先读后写。所以两个并发更新改的是不同的键时，两边都会保留。
+- 两个并发更新改同一个键，仍然只有一个生效。先读 metadata 再决定写什么的调用方，要持有会话锁。
+
+共享的契约测试会检查这些。
+
 **挂起。** 一个待处理的挂起保存着它要继续的整个请求：到挂起点为止的消息、已缓冲的工具调用和提案、冻结的输入。恢复时把这份记录原样发出去，所以其中任何一部分都不能用会话后来的状态重建。
 
 - 恢复提交后，`markSuspensionResolved` 保留这一行（重复的恢复请求和会话的挂起列表还要找到它），并丢掉恢复已经用掉的内容。已解决的行只保留执行身份、语言和回合号（`settledSuspensionContinuation`）。

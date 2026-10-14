@@ -820,17 +820,22 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 
 `GET /api/sessions/:id/execution` 返回 `SessionExecutionStatus`，说明这个会话现在有没有回合在跑。它使用和其他会话端点相同的归属校验。`GET /api/sessions/:id/view` 的可选字段 `execution` 给出同一份状态。
 
-| 字段          | 说明                                                      |
-| ------------- | --------------------------------------------------------- |
-| `state`       | `idle`、`running`、`completed`、`failed` 或 `interrupted` |
-| `turnId`      | 可选                                                      |
-| `requestId`   | 可选                                                      |
-| `startedAt`   | 可选                                                      |
-| `origin`      | 可选                                                      |
-| `abortReason` | 可选                                                      |
-| `retry`       | 可选，`{ type, payload }`，玩家显式重试时使用             |
+| 字段          | 说明                                                                 |
+| ------------- | -------------------------------------------------------------------- |
+| `state`       | `idle`、`running`、`completed`、`failed`、`interrupted` 或 `unknown` |
+| `turnId`      | 可选                                                                 |
+| `requestId`   | 可选                                                                 |
+| `startedAt`   | 可选                                                                 |
+| `origin`      | 可选                                                                 |
+| `abortReason` | 可选                                                                 |
+| `retry`       | 可选，`{ type, payload }`，玩家显式重试时使用                        |
 
-这个接口不会去等长回合的锁。PostgreSQL 下用非阻塞的 advisory lock 探测；另一个进程还持有锁，或暂时拿不到连接时，保守地返回 `running`，这时可能没有回合标识。
+这个接口不会去等长回合的锁。PostgreSQL 下用非阻塞的 advisory lock 探测：
+
+- 另一个进程还持有锁时，返回 `running`，这时可能没有回合标识。
+- 锁连接池在很短的等待（200 毫秒）里给不出连接时，返回 `unknown`。这表示服务端没能检查，不知道有没有回合在跑；它不会因为没查到记录就报 `idle`。
+
+客户端把 `unknown` 当成回合可能还在跑：不提供重试，不移走未保存的文字，也不把步骤标成结束。它隔一段时间再查，间隔逐次加长；连续五次都是 `unknown`，就停止自动检查，提示玩家点“检查状态”再查。
 
 #### 会话在查询期间被替换
 
@@ -1029,6 +1034,7 @@ setup runtime 反复失败、用完重试预算（`maxTriggerCount`）后进入 
 - `POST /api/install/collection`：响应和 batch 相同。
 
 批量安装失败的撤回结果见[插件安装](./plugin-installation.md#多包预览和批量安装)：`details.rolledBack` 和 `details.retained` 分别列出已撤回和保留的包。
+
 - `GET /api/install/plugins`：列表里包含还没有重启加载的插件。
 
 `/api/install/world` 在写入世界记录之前检查 worldData 的 diagnostics：

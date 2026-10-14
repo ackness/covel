@@ -421,6 +421,13 @@ When a column of an existing table changes in a way an old database cannot follo
 
 Memory, SQLite and PostgreSQL agree on this, and the shared contract tests check it.
 
+**Merging session metadata.** `updateSession` merges the patch's `metadata` shallowly into the stored object: each key replaces its value, a key set to `undefined` is removed (`null` is kept), and an empty result is stored as no metadata. A session that does not exist is left alone.
+
+- The merge is atomic on every backend. PostgreSQL merges inside one UPDATE; SQLite and memory read and then write inside their serialized write boundary. So when two concurrent updates change different keys, both survive.
+- Two concurrent updates of the same key still have one winner. A caller that reads metadata to decide what to write must hold the session lock.
+
+The shared contract tests check this.
+
 **Suspensions.** A pending suspension stores the whole request it will continue: the messages up to the suspension point, the buffered tool calls and proposals, and the frozen input. On resume this record is sent out as it is, so none of it can be rebuilt from the session's later state.
 
 - After the resume is committed, `markSuspensionResolved` keeps the row (duplicate resume requests and the session's suspension list still need to find it), and it discards what the resume has already consumed. A resolved row keeps only the execution identity, the language and the turn number (`settledSuspensionContinuation`).

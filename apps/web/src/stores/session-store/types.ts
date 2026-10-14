@@ -271,6 +271,11 @@ export interface ExecutionRecovery {
   hydrating: boolean;
   checking: boolean;
   error?: string;
+  /**
+   * The server kept answering `unknown` and automatic checks have stopped;
+   * the player checks again from the notice.
+   */
+  stalled?: boolean;
 }
 
 export type SessionAction =
@@ -313,6 +318,7 @@ export type SessionAction =
       sessionId: string;
       status?: SessionExecutionStatus;
       error?: string;
+      stalled?: boolean;
     }
   // Player abort terminal state: drop the uncommitted streaming placeholder
   // message(s) — the server never commits partial narrative on abort, so

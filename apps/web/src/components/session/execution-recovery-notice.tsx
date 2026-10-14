@@ -23,14 +23,17 @@ export function ExecutionRecoveryNotice({
   }, [recovery?.status?.turnId, recovery?.status?.state, recovery?.hydrating]);
   if (!recovery) return null;
   const status = recovery.status;
-  const unknown = !!recovery.error || !status;
+  // The server could not tell whether a turn runs; `stalled` once it gave up.
+  const unavailable = !recovery.error && status?.state === "unknown";
+  const stalled = unavailable && !!recovery.stalled;
+  const unknown = !!recovery.error || !status || unavailable;
   const running = status?.state === "running";
   const interrupted = status?.state === "interrupted";
   const failed = status?.state === "failed";
   const stopped = failed && status?.abortReason === PLAYER_ABORT_REASON;
   if (!unknown && !running && !interrupted && !failed && !recovery.hydrating)
     return null;
-  const waiting = recovery.hydrating || running || unknown;
+  const waiting = recovery.hydrating || running || (unknown && !stalled);
   const retry = status?.retry;
   const retryLabel =
     retry?.type === "retry_runtime"
@@ -42,26 +45,32 @@ export function ExecutionRecoveryNotice({
               : 0,
           })
         : t("session.recoveryRetry");
-  const title = unknown
-    ? "session.recoveryChecking"
-    : running
-      ? "session.recoveryRunning"
-      : interrupted
-        ? "session.recoveryInterrupted"
-        : stopped
-          ? "session.executionState.stopped"
-          : failed
-            ? "session.recoveryFailed"
-            : "session.recoveryHydrating";
-  const detail = unknown
-    ? "session.recoveryUnknownDetail"
-    : running
-      ? "session.recoveryRunningDetail"
-      : stopped
-        ? "session.stoppedDetail"
-        : interrupted || failed
-          ? "session.recoveryInterruptedDetail"
-          : "session.recoveryHydratingDetail";
+  const title = stalled
+    ? "session.recoveryUnconfirmed"
+    : unknown
+      ? "session.recoveryChecking"
+      : running
+        ? "session.recoveryRunning"
+        : interrupted
+          ? "session.recoveryInterrupted"
+          : stopped
+            ? "session.executionState.stopped"
+            : failed
+              ? "session.recoveryFailed"
+              : "session.recoveryHydrating";
+  const detail = stalled
+    ? "session.recoveryUnconfirmedDetail"
+    : unavailable
+      ? "session.recoveryUnavailableDetail"
+      : unknown
+        ? "session.recoveryUnknownDetail"
+        : running
+          ? "session.recoveryRunningDetail"
+          : stopped
+            ? "session.stoppedDetail"
+            : interrupted || failed
+              ? "session.recoveryInterruptedDetail"
+              : "session.recoveryHydratingDetail";
   return (
     <div
       role={waiting ? "status" : "alert"}

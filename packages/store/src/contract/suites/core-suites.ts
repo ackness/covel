@@ -332,6 +332,56 @@ export function registerCoreStoreSuites(getStore: () => DataStore): void {
       });
     });
 
+    it("merges concurrent metadata updates of different keys without losing one (F-206)", async () => {
+      const session = makeSession({ metadata: { kept: "yes" } });
+      await store.createSession(session);
+
+      const keys = Array.from({ length: 12 }, (_, index) => `key${index}`);
+      // Each update also writes one shared key: exactly one of them wins.
+      await Promise.all(
+        keys.map((key, index) =>
+          store.updateSession(session.id, {
+            metadata: { [key]: index, shared: key },
+          }),
+        ),
+      );
+
+      const { shared, ...rest } =
+        (await store.getSession(session.id))?.metadata ?? {};
+      expect(rest).toEqual({
+        kept: "yes",
+        ...Object.fromEntries(keys.map((key, index) => [key, index])),
+      });
+      expect(keys).toContain(shared);
+    });
+
+    it("removes metadata keys set to undefined, keeps null, and stores an emptied object as none", async () => {
+      const session = makeSession({
+        metadata: { gone: "x", nulled: "y", kept: { nested: 1 } },
+      });
+      await store.createSession(session);
+
+      await store.updateSession(session.id, {
+        metadata: { gone: undefined, nulled: null, added: [1, "two"] },
+        status: "paused",
+      });
+      const updated = await store.getSession(session.id);
+      expect(updated?.status).toBe("paused");
+      expect(updated?.metadata).toEqual({
+        nulled: null,
+        kept: { nested: 1 },
+        added: [1, "two"],
+      });
+
+      await store.updateSession(session.id, {
+        metadata: { nulled: undefined, kept: undefined, added: undefined },
+      });
+      expect((await store.getSession(session.id))?.metadata).toBeUndefined();
+      // An update of a session that does not exist creates nothing.
+      await store.updateSession("missing-session", { metadata: { a: 1 } });
+      expect(await store.getSession("missing-session")).toBeNull();
+    });
+
     it("persists session embedding model and lock on creation", async () => {
       const session = makeSession({
         embeddingModelId: 12,

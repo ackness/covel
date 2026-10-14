@@ -70,7 +70,10 @@ export async function getSessionExecutionStatus(
     const result = await lock.tryWithLock(sessionId, () =>
       readExecutionStatus(store, sessionId),
     );
-    return result.acquired ? result.value : { state: "running" };
+    if (result.acquired) return result.value;
+    // A held lock is a live owner. No lock connection says nothing about
+    // one: the client checks again instead of treating it as a running turn.
+    return { state: result.reason === "busy" ? "running" : "unknown" };
   }
   const result = await readExecutionStatus(store, sessionId);
   const newlyActive = getActiveTurn(sessionId);

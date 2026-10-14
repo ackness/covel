@@ -269,6 +269,7 @@ export {
   COVEL_EVENT_META,
   FORWARDED_EVENT_TYPES,
   PLAYER_ABORT_REASON,
+  executionMayBeRunning,
 } from "./protocol.js";
 
 export type {

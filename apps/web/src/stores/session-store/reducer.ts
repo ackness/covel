@@ -4,7 +4,12 @@ import {
 } from "@/services/state-patch-cache.js";
 import { appendReasoningStep } from "./reasoning.js";
 import type { AssetGenerateView } from "@covel/shared";
-import { deepMerge, encodePageCursor, summarizeWorld } from "@covel/shared";
+import {
+  deepMerge,
+  encodePageCursor,
+  executionMayBeRunning,
+  summarizeWorld,
+} from "@covel/shared";
 import {
   mergeGameStateForReplacement,
   rebuildGameStateFromPatches,
@@ -233,14 +238,14 @@ export function reducer(
               executing:
                 action.recovery.hydrating ||
                 action.recovery.checking ||
-                action.recovery.status?.state === "running",
+                executionMayBeRunning(action.recovery.status),
             }
           : {}),
       };
     case "OBSERVE_EXECUTION_STATUS": {
       const current = state.executionRecovery;
       if (current?.sessionId !== action.sessionId) return state;
-      const { error: previousError, ...rest } = current;
+      const { error: previousError, stalled: _stalled, ...rest } = current;
       const error =
         action.error ?? (current.hydrating ? previousError : undefined);
       const recovery = {
@@ -248,6 +253,7 @@ export function reducer(
         status: action.status ?? current.status,
         checking: !action.status,
         ...(error ? { error } : {}),
+        ...(action.stalled ? { stalled: true } : {}),
       };
       return {
         ...state,
@@ -255,7 +261,7 @@ export function reducer(
         executing:
           recovery.hydrating ||
           recovery.checking ||
-          recovery.status?.state === "running",
+          executionMayBeRunning(recovery.status),
       };
     }
     case "BOOT_SUCCESS":
@@ -412,7 +418,7 @@ export function reducer(
             state.executionRecovery &&
             (state.executionRecovery.hydrating ||
               state.executionRecovery.checking ||
-              state.executionRecovery.status?.state === "running")
+              executionMayBeRunning(state.executionRecovery.status))
           ),
       };
     case "DISCARD_TURN_STREAMS": {

@@ -45,7 +45,16 @@ import { AsyncLocalStorage } from "node:async_hooks";
 export class SessionLockTimeoutError extends Error {}
 
 export type TrySessionLockResult<T> =
-  { readonly acquired: true; readonly value: T } | { readonly acquired: false };
+  | { readonly acquired: true; readonly value: T }
+  | {
+      readonly acquired: false;
+      /**
+       * `busy`: another owner holds the lock. `unavailable`: no lock
+       * connection could be had in time (a database lock pool), so nothing
+       * is known about an owner.
+       */
+      readonly reason: "busy" | "unavailable";
+    };
 
 export interface SessionLock {
   /**
@@ -57,7 +66,7 @@ export interface SessionLock {
   /**
    * Run only if ownership is immediately available, without waiting for
    * another owner. Reentrant callers reuse their live lease. A false result
-   * also covers an unavailable connection from a database lock pool.
+   * says whether another owner holds it or no lock connection was available.
    */
   tryWithLock?<T>(
     sessionId: string,
@@ -133,7 +142,7 @@ export function createInProcessSessionLock(
       if (lockContext.getStore()?.get(sessionId)?.active) {
         return { acquired: true, value: await fn() };
       }
-      if (locks.has(sessionId)) return { acquired: false };
+      if (locks.has(sessionId)) return { acquired: false, reason: "busy" };
       // withLock publishes the lease synchronously before its first await,
       // so a competing probe cannot pass between this check and ownership.
       return { acquired: true, value: await api.withLock(sessionId, fn) };
