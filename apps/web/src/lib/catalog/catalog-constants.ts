@@ -50,50 +50,6 @@ export const badgeColorMap: Record<string, string> = {
 };
 
 /**
- * Maps rarity names to band tone values used on EntryCard's data-tone
- * attribute.
- */
-export const rarityTone: Record<string, string> = {
-  legendary: "warning",
-  rare: "info",
-  uncommon: "info",
-  common: "muted",
-};
-
-/**
- * Maps rarity names to CSS custom property values used as the band
- * marker color on EntryCard.
- */
-export const rarityMarkerColor: Record<string, string> = {
-  legendary: "var(--accent-warning)",
-  rare: "var(--accent-secondary)",
-  uncommon: "var(--accent-secondary)",
-  common: "var(--color-border)",
-};
-
-/**
- * Maps rarity names to badge Tailwind classes used inside EntryCard.
- */
-export const rarityBadgeColors: Record<string, string> = {
-  legendary: "bg-amber-500/10 text-amber-600 border-amber-500/30",
-  rare: "bg-purple-500/10 text-purple-600 border-purple-500/30",
-  uncommon: "bg-blue-500/10 text-blue-600 border-blue-500/30",
-  common: "bg-muted text-muted-foreground border-border",
-};
-
-/**
- * Default fallback icon names for each entry category in EntryCard.
- */
-export const categoryIcons: Record<string, string> = {
-  monster: "skull",
-  item: "gem",
-  location: "map-pin",
-  lore: "scroll-text",
-  character: "users",
-  skill: "sparkles",
-};
-
-/**
  * Maps color names to Tailwind text color classes for category icons
  * in EntryCard.
  */

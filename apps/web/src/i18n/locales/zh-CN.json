@@ -329,6 +329,8 @@
     "recoveryUnknownDetail": "暂时无法确认执行结果，正在重新连接。这里只检查原任务，不会重复发起回合。",
     "recoveryRunningDetail": "服务端仍在继续原任务，完成后会自动恢复结果。你可以等待，也可以停止任务。",
     "recoveryInterruptedDetail": "未完成的任务已停止运行，已保存的进度会保留。只有点击重试，才会发起新的尝试。",
+    "unsavedNarrative": "未保存",
+    "unsavedNarrativeDetail": "这段文字没有保存，离开会话后会消失。",
     "recoveryHydratingDetail": "正在取回最新保存的结果，随后即可继续游玩。",
     "recoveryRetry": "重试未完成回合",
     "recoveryRefresh": "检查状态",
@@ -364,7 +366,6 @@
     },
     "stoppedDetail": "本轮生成内容未写入存档，可使用原输入重新尝试。",
     "submittedInteraction": "已完成的交互 · 展开查看",
-    "previousSuggestions": "历史建议 · 展开查看",
     "advancedPluginSettings": "自定义插件与高级设置",
     "configureModelBeforeRetry": "更换模型 / 调整参数",
     "retryModelSettingsHint": "可先更换模型或调低输出限制，再重试此任务；重试使用当前设置。",
@@ -399,7 +400,9 @@
     },
     "retryScopeLimited": "只重试选中的失败任务，正文和其他已完成结果会保留。每批最多 {{count}} 个任务，完成后可继续重试其余任务。",
     "activeTask": "{{label}}…",
-    "panelUnavailable": "当前会话没有这个面板。"
+    "panelUnavailable": "当前会话没有这个面板。",
+    "previousPluginContent": "{{title}} · 展开查看",
+    "pluginContent": "插件内容"
   },
   "blocks": {
     "actionPlaceholder": "或输入自定义行动...",
@@ -1833,6 +1836,14 @@
       "empty": "暂无任务。",
       "copy": "复制",
       "rerun": "重新运行"
+    },
+    "candidateList": {
+      "draft": "草稿",
+      "send": "发送",
+      "accept": "采纳",
+      "regenerate": "重新生成",
+      "title": "候选",
+      "regenerateHint": "重新生成一组候选。"
     }
   },
   "graph": {
@@ -2253,17 +2264,6 @@
     "confirmDelete": "删除",
     "deleted": "已删除 {{count}} 项 · 释放 {{size}}",
     "skipped": "有 {{count}} 项现在正被会话使用，已保留"
-  },
-  "branchReply": {
-    "replyCandidates": "回复候选",
-    "draft": "草稿",
-    "send": "发送",
-    "accept": "采纳",
-    "regenerate": "重新生成",
-    "regenerateHint": "点「重新生成」获取这条回复的其他说法。",
-    "jobSubmitted": "已提交 branch-reply 任务: {{jobId}}",
-    "approvalRequired": "Branch reply 操作需要授权。",
-    "actionFailed": "Branch reply 操作失败"
   },
   "characterBlueprint": {
     "empty": "暂无角色蓝图",
