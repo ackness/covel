@@ -1,3 +1,4 @@
+import { provideHostModules } from "./host-modules.js";
 import {
   pluginImportReferences,
   validateRuntimeDeclarations,
@@ -752,6 +753,7 @@ export async function loadRuntime(
   if (parsed.manifest.runtimeType === "function" && parsed.manifest.handler) {
     const handlerPath = path.resolve(runtimeDir, parsed.manifest.handler);
     await assertInsideRoot(discovery.rootPath, handlerPath, "Handler");
+    provideHostModules(discovery.rootPath);
     const url = pathToFileURL(handlerPath);
     if (generation) url.searchParams.set("generation", generation);
     const mod = await import(url.href);
@@ -768,6 +770,7 @@ export async function loadRuntime(
   if (parsed.manifest.guard) {
     const guardPath = path.resolve(runtimeDir, parsed.manifest.guard);
     await assertInsideRoot(discovery.rootPath, guardPath, "Guard");
+    provideHostModules(discovery.rootPath);
     const url = pathToFileURL(guardPath);
     if (generation) url.searchParams.set("generation", generation);
     const mod = await import(url.href);

@@ -669,6 +669,9 @@ export async function executeOneRuntime(
 
     const guardResult = await executeAgentGuard({
       lastPlayerInput: sessionMeta?.lastPlayerInput ?? null,
+      ...(sessionMeta?.logicalTurn !== undefined
+        ? { logicalTurn: sessionMeta.logicalTurn }
+        : {}),
       upstreamProposals,
       manifest,
       input,
@@ -676,6 +679,11 @@ export async function executeOneRuntime(
       deps,
       hookPipeline,
       triggerEvent,
+      activation,
+      inputs: inputSlots,
+      exports: exportSlots,
+      executionContext,
+      executionId,
       createRecursiveCall,
       recursionDepth,
       startTime,

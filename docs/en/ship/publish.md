@@ -20,7 +20,7 @@ A few limits:
 
 - The repository must be public. A private repository cannot be installed.
 - The code in the package must run as soon as it is installed. Covel does not install dependencies or run a build during installation.
-- The plugin's `package.json` cannot have `dependencies`. Put any code you use directly in the package.
+- The plugin's `package.json` cannot have `dependencies`. Put any code you use directly in the package. Covel provides the plugin SDK and `zod`; if you need them while developing, list them under `devDependencies`.
 
 ## 2. How others install it
 

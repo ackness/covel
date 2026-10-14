@@ -457,9 +457,8 @@ This rule is enforced in one place, by `reservedPluginDataNamespaceError()` (`pa
 
 - REST `PUT /api/sessions/:id/plugin-data/...`
 - Commit of `plugin.data` / `plugin.data.batch`, including proposals normalized from a function runtime's output
-- `ctx.pluginData` in a function runtime
+- `ctx.pluginData` in a function runtime or an agent guard
 - The store view of an RPC handler. Every plugin's RPC action, including those of bundled plugins, gets an immediate write capability bound to the session and the plugin through `createRpcHandlerStoreView()`
-- The explicit proposal write capability that bundled function runtimes and agent guards get through `createTrustedHandlerStore()`
 
 Neither kind of plugin handle exposes the host's transaction, session lifecycle, or store-closing methods. The framework's own privileged writers (the background job runner and the runtime log) call the store directly and do not use these entry points.
 
@@ -1464,7 +1463,7 @@ What this means in practice:
 What tools and guards can get:
 
 - The toolkit for every entry factory provides only pure helper functions, and it does not inject a store. A tool reads the state of the current session and plugin through `context.store` in `execute(params, context)`. RPC and function runtimes each use their own scoped store.
-- A community plugin's agent guard gets only a read-only store and pure inputs. Capabilities with side effects, such as `pluginData`, logger, gateway, utils, media, and assetProgress, are not injected, and `recursiveCall` is refused. Writes go into the proposals or `pluginData[]` that the runtime handler returns.
+- An agent guard gets the same context as a function handler: the read-only store, `ctx.world`, `ctx.inputs`, `pluginData`, logger, gateway, utils, media, and `recursiveCall`. Bundled and community plugins get the same, except that a community plugin's `utils` reaches only the addresses its `permissions.http` declares. Once the guard returns or times out, all of these stop working.
 
 **Which language the text in a tool uses.** `context.locale` is the session's content language, and `context.messages` holds the translations in this plugin's `locales/` directory.
 

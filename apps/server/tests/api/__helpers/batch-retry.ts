@@ -1,5 +1,4 @@
 import { Hono } from "hono";
-import { type DataStore } from "@covel/store";
 import { createMemoryStore } from "@covel/store/memory";
 import { createEventBus } from "@covel/events";
 import {
@@ -67,23 +66,10 @@ export async function batchRetryFixture() {
         calls.push(name);
         await beforeRun?.(name);
         if (failures.has(name)) throw new Error(`Synthetic ${name} failure`);
-        // The kernel hands the handler a buffering store with a write surface.
+        // A buffered write: it commits with the execution.
         const storySlot = ctx.inputs?.story;
-        const handlerStore = ctx.store as unknown as Pick<
-          DataStore,
-          "setPluginData"
-        >;
-        await handlerStore.setPluginData({
-          id: `data-${name}`,
-          sessionId,
-          pluginId: name,
-          namespace: "test",
-          key: "result",
-          value: {
-            input: storySlot?.cardinality === "one" ? storySlot.value : null,
-          },
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
+        await ctx.pluginData!.set("test", "result", {
+          input: storySlot?.cardinality === "one" ? storySlot.value : null,
         });
         return { outcome: "success", value: { ok: true } };
       },

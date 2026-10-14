@@ -1,12 +1,11 @@
 /**
- * Trusted (builtin) function-runtime handlers receive the full
- * DataStore because their logic implements framework primitives — but they
- * are still plugin code. `_`-prefixed plugin-data namespaces (`_jobs`,
- * `_logs`) are framework bookkeeping, and a stray trusted-handler write into
- * them would corrupt background-job or log-ring state. These tests pin that
- * the trusted store handle blocks reserved-namespace writes while leaving
- * reads and normal-namespace writes untouched. Framework writers (the job
- * runner, the runtime logger) call the raw store directly and are unaffected.
+ * `_`-prefixed plugin-data namespaces (`_jobs`, `_logs`) are framework
+ * bookkeeping, and a stray handler write into them would corrupt
+ * background-job or log-ring state. These tests pin that `ctx.pluginData`
+ * blocks reserved-namespace writes while leaving reads and normal-namespace
+ * writes untouched, for a bundled plugin as for any other. Framework writers
+ * (the job runner, the runtime logger) call the raw store directly and are
+ * unaffected.
  */
 
 import { describe, it, expect } from "vitest";
@@ -17,22 +16,21 @@ import type { FunctionHandler } from "@covel/plugin-loader";
 import { executeFunctionRuntime } from "../src/function-runtime/turn-function-runtime.js";
 import { processRuntimeResult } from "../src/session/session-runtime-result.js";
 import type { TurnExecutorDeps } from "../src/turn-executor/turn-executor.js";
-import type { TrustedHandlerStore } from "../src/index.js";
 
-const SESSION_ID = "sess-trusted-ns";
+const SESSION_ID = "sess-reserved-ns";
 
 function makeManifest(): RuntimeManifest {
   return {
     name: "builtin-plugin/worker",
     pluginId: "builtin-plugin",
-    description: "trusted function runtime",
+    description: "bundled function runtime",
     stage: "narrative",
     trigger: { type: "auto" },
     runtimeType: "function",
   } as RuntimeManifest;
 }
 
-async function runTrustedHandler(
+async function runBundledHandler(
   store: DataStore,
   handler: FunctionHandler,
 ): Promise<RuntimeResult> {
@@ -67,19 +65,14 @@ async function runTrustedHandler(
   });
 }
 
-describe("trusted function-runtime store handle", () => {
+describe("plugin-data handle of a bundled function runtime", () => {
   it("rejects writes into framework-reserved `_` namespaces", async () => {
     const store = createMemoryStore();
     let writeError: unknown;
 
-    await runTrustedHandler(store, async (ctx) => {
-      const handlerStore = ctx.store as TrustedHandlerStore;
+    await runBundledHandler(store, async (ctx) => {
       try {
-        await handlerStore.setPluginData({
-          namespace: "_jobs",
-          key: "forged",
-          value: { status: "done" },
-        });
+        await ctx.pluginData!.set("_jobs", "forged", { status: "done" });
       } catch (err) {
         writeError = err;
       }
@@ -111,15 +104,10 @@ describe("trusted function-runtime store handle", () => {
     });
 
     let observedJob: unknown;
-    const result = await runTrustedHandler(store, async (ctx) => {
-      const handlerStore = ctx.store as TrustedHandlerStore;
-      const row = await handlerStore.getPluginData("_jobs", "job-1");
+    const result = await runBundledHandler(store, async (ctx) => {
+      const row = await ctx.store.getPluginData("_jobs", "job-1");
       observedJob = row?.value;
-      await handlerStore.setPluginData({
-        namespace: "state",
-        key: "progress",
-        value: { step: 1 },
-      });
+      await ctx.pluginData!.set("state", "progress", { step: 1 });
       return { outcome: "success", value: { proposals: [] } };
     });
 

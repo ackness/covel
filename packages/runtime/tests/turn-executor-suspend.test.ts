@@ -857,7 +857,7 @@ describe("TurnExecutor — function runtime suspend", () => {
     expect(capturedStore).toHaveProperty("listTurnMessages");
   });
 
-  it("community agent guard gets scoped store helpers", async () => {
+  it("community agent guard gets the scoped helpers a function handler gets", async () => {
     const manifest = makeManifest({ pluginType: "core-plugin" });
     let capturedStore: unknown;
     let capturedPluginData: unknown;
@@ -898,7 +898,7 @@ describe("TurnExecutor — function runtime suspend", () => {
         .canWriteDirectly,
     ).toBe(false);
     expect(capturedStore).toHaveProperty("getPluginData");
-    expect(capturedPluginData).toBeUndefined();
+    expect(capturedPluginData).toHaveProperty("set");
   });
 });
 

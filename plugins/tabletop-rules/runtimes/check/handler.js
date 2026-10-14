@@ -1,4 +1,5 @@
-import { checkModifier, pickLocaleText, translate } from "../../lib/rules.js";
+import { pickLocaleText, translate } from "@covel/plugin-handlers-utils";
+import { checkModifier } from "../../lib/rules.js";
 
 export default async function (ctx) {
   const rules =

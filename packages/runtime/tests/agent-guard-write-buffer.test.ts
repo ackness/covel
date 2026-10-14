@@ -11,12 +11,15 @@
  */
 
 import { describe, it, expect } from "vitest";
+import {
+  makeProposal,
+  withPendingProposals,
+} from "@covel/plugin-handlers-utils";
 import type { RuntimeManifest, TurnInput } from "@covel/shared";
 import { type DataStore } from "@covel/store";
 import { createMemoryStore } from "@covel/store/memory";
 import { executeTurn } from "../src/turn-executor/turn-executor.js";
 import type { TurnExecutorDeps } from "../src/turn-executor/turn-executor.js";
-import type { TrustedHandlerStore } from "../src/index.js";
 import { finalizeExecution } from "../src/commit/finalize-execution.js";
 import type { LLMAdapter, LLMResponse } from "../src/llm/llm-adapter.js";
 
@@ -87,17 +90,20 @@ async function runGuardTurn(): Promise<{
       manifest: m,
       promptTemplate: "",
       guard: async (ctx) => {
-        const now = new Date().toISOString();
-        // Buffered domain write — collected as a character.upsert proposal.
-        await (ctx.store as TrustedHandlerStore).upsertCharacter({
-          id: "player-x",
-          name: "Rin",
-          type: "player",
-          version: 1,
-          createdAt: now,
-          updatedAt: now,
-        });
-        return { skip: true, preGameDone: true, playerName: "Rin" };
+        // A domain write any guard can make: a character.upsert proposal on
+        // the skipped result.
+        return withPendingProposals(
+          { skip: true, preGameDone: true, playerName: "Rin" },
+          [
+            makeProposal(ctx, new Date().toISOString(), "character.upsert", {
+              id: "player-x",
+              name: "Rin",
+              type: "player",
+              version: 1,
+              createdAt: new Date().toISOString(),
+            }),
+          ],
+        );
       },
     }),
     llm: new NoopLLM(),

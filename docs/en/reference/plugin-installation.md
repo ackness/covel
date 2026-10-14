@@ -117,7 +117,7 @@ In development mode, after adding a missing root `PLUGIN.md`, or changing a sub-
 - It uses a canonical plugin ID, and it cannot overwrite the ID of a built-in plugin.
 - A manifest and its language variants accept only plain YAML frontmatter, and they reject executable language markers.
 - The installer does not run scripts, package managers, compilers, or plugin modules.
-- Every plugin installation path (GitHub, ZIP, offline collection) and update requires self-contained runtime files: `dependencies`, `optionalDependencies`, and `peerDependencies` in `package.json` must be absent or empty. `devDependencies` are allowed.
+- Every plugin installation path (GitHub, ZIP, offline collection) and update requires self-contained runtime files: `dependencies`, `optionalDependencies`, and `peerDependencies` in `package.json` must be absent or empty. `devDependencies` are allowed. The host provides `@covel/plugin-handlers-utils` and `zod` to every plugin, so a plugin does not declare them as runtime dependencies; bundled plugins list them only under `devDependencies` too.
 - Declared runtime dependencies return 400, naming the nonempty fields, before any package is written. Authors must bundle dependencies into the release files, then remove these declarations or leave them empty.
 - A plugin that needs a build step should have its author provide built, self-contained files in a separate release directory.
 

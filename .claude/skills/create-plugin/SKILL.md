@@ -99,9 +99,11 @@ proposals or handler effects.
 
 Standalone packages need `package.json` (`type: module`), the root manifest,
 executable ESM JavaScript, a README, and an authorized license. The installer does
-not install npm dependencies or run build scripts, so bundle helper libraries such
-as `@covel/plugin-handlers-utils` into the release and preserve their licenses. Do
-not ship workspace dependencies or sibling-plugin imports.
+not install npm dependencies or run build scripts, and it rejects nonempty
+`dependencies`. The host provides `@covel/plugin-handlers-utils` and `zod` to
+every plugin: import them directly and list them only under `devDependencies`.
+Bundle any other library into the release and preserve its license. Do not ship
+workspace dependencies or sibling-plugin imports.
 
 ### 6. Validate
 

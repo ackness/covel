@@ -233,6 +233,12 @@ Agent 的 guard 在调用模型之前执行。
 
 需要在本轮放弃工作时，返回契约允许的最小输出。例如 `story-events/plot` 关闭时返回空计划 `{ skip: true, events: [] }`。
 
+guard 拿到的 `ctx` 和函数 handler 的一样，内置插件和社区插件也一样：
+
+- 有 `ctx.inputs`（本次执行的输入绑定）、`ctx.world`、`ctx.store`、`ctx.pluginData`、`ctx.recursiveCall` 和其他帮手。
+- 写入用 `ctx.pluginData`，或者用 `withPendingProposals` 把 proposal 挂在跳过的结果上。这些写入只在 guard 跳过时提交；不跳过就丢弃，由模型这次运行决定写什么。
+- guard 返回或超时之后，`ctx.signal` 被中止，这些能力全部失效。
+
 ### 隐藏内容的 runtime（`io.concealed`）
 
 `io.concealed: true` 用于处理隐藏内容的 runtime，例如在剧情中策划隐藏事件的 agent。
@@ -506,7 +512,7 @@ Agent 的副作用只来自工具：模型能写什么，以 `agent.tools` 白�
 | `ctx.logicalTurn`             | 调度器的逻辑回合：已提交的主循环玩家回合数加一。函数 handler 和插件工具的上下文里都有。setup、开场续写和第一条玩家消息同为第 1 回合，`startTurn` / `interval` 也按它计数 |
 | 工具上下文的 `turnNumber`     | 会话里已记录的玩家消息数，包括 setup 的表单提交                                                                                                                          |
 | `ctx.session.lastPlayerInput` | 源执行开始时最近的一条 `PlayerInputSubmission \| null`，包含 `id/sessionId/turnId/formId/values/createdAt`                                                               |
-| `ctx.execution.origin`        | 这次执行因何而起：`player`、`continuation`、`manual`、`background`、`recursive` 或 `resume`。agent guard 没有 `ctx.execution`                                            |
+| `ctx.execution.origin`        | 这次执行因何而起：`player`、`continuation`、`manual`、`background`、`recursive` 或 `resume`                                                                                    |
 | `ctx.execution.sourceTurnId`  | 重试一个已提交的回合时，是那个回合的 ID。用它做键，重试时复用上次的掷骰和揭示，不重新抽                                                                                  |
 | `ctx.recursionDepth`          | 顶层执行是 `0`，`ctx.recursiveCall` 每嵌套一层加一                                                                                                                       |
 
