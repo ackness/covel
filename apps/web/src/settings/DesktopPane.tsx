@@ -64,6 +64,7 @@ export function DesktopPane() {
   const [info, setInfo] = useState<DesktopInfo | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [toastError, setToastError] = useState(false);
   const [proxy, setProxy] = useState<DesktopProxyConfig | null>(null);
   const [proxyMode, setProxyMode] = useState<DesktopProxyMode>("direct");
   const [proxyUrl, setProxyUrl] = useState("");
@@ -123,8 +124,10 @@ export function DesktopPane() {
       setProxy(config);
       setProxyMode(config.mode);
       setProxyUrl(config.url ?? "");
+      setToastError(false);
       setToast(t("settings.desktopProxySaved"));
     } catch (error) {
+      setToastError(true);
       setToast(error instanceof Error ? error.message : String(error));
     } finally {
       setBusy(null);
@@ -144,6 +147,7 @@ export function DesktopPane() {
 
   async function handleRestart() {
     if (!hasElectronIpc()) {
+      setToastError(true);
       setToast(t("settings.desktopRestartElectronOnly"));
       setTimeout(() => setToast(null), 3000);
       return;
@@ -154,6 +158,7 @@ export function DesktopPane() {
         message: t("reload.reloadingServer", "Restarting backend…"),
       });
     } catch (err) {
+      setToastError(true);
       setToast(
         err instanceof Error
           ? err.message
@@ -186,6 +191,7 @@ export function DesktopPane() {
         // One message per outcome: what the restart does with the data, and
         // where the current data stays.
         const values = { path: picked.path, old: info?.dataRoot ?? "" };
+        setToastError(false);
         setToast(
           picked.mode === "copy"
             ? t("settings.desktopDataRootCopyPending", values)
@@ -200,6 +206,7 @@ export function DesktopPane() {
         await refreshInfo();
       }
     } catch (err) {
+      setToastError(true);
       setToast(
         err instanceof Error
           ? err.message
@@ -218,6 +225,7 @@ export function DesktopPane() {
     if (busy !== null) return;
     setBusy("onboarding");
     setToast(null);
+    setToastError(false);
     try {
       await resetOnboarding();
       setToast(
@@ -227,6 +235,7 @@ export function DesktopPane() {
         ),
       );
     } catch {
+      setToastError(true);
       setToast(t("settings.saveFailed"));
     } finally {
       setBusy(null);
@@ -237,7 +246,10 @@ export function DesktopPane() {
   return (
     <div className="space-y-5">
       {toast && (
-        <div className="text-xs px-3 py-2 rounded bg-primary/10 border border-primary/20 text-primary">
+        <div
+          role={toastError ? "alert" : "status"}
+          className="text-xs px-3 py-2 rounded bg-primary/10 border border-primary/20 text-primary"
+        >
           {toast}
         </div>
       )}
@@ -343,7 +355,12 @@ export function DesktopPane() {
           <Button
             size="sm"
             variant="outline"
-            onClick={() => openKeysEnv().catch((err) => setToast(String(err)))}
+            onClick={() =>
+              openKeysEnv().catch((err) => {
+                setToastError(true);
+                setToast(String(err));
+              })
+            }
           >
             <KeyRound className="w-3 h-3 mr-1.5" />
             {t("settings.desktopEditKeys")}
@@ -361,6 +378,7 @@ export function DesktopPane() {
         </div>
         <div className="grid grid-cols-[9rem_minmax(0,1fr)] gap-2">
           <select
+            aria-label={t("settings.desktopProxyMode")}
             value={proxyMode}
             disabled={proxyLoadState !== "ready" || busy !== null}
             onChange={(event) =>
@@ -375,6 +393,7 @@ export function DesktopPane() {
           </select>
           {(proxyMode === "http" || proxyMode === "socks") && (
             <input
+              aria-label={t("settings.desktopProxyUrl")}
               value={proxyUrl}
               disabled={proxyLoadState !== "ready" || busy !== null}
               onChange={(event) => setProxyUrl(event.target.value)}

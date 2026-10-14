@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import i18n from "@/i18n";
 import type { ModelCapabilityInfo } from "@/services/api.js";
@@ -84,6 +84,27 @@ describe("llm capability controls", () => {
       />,
     );
 
+    expect(
+      screen.getByRole("group", { name: i18n.t("settings.inputModalities") }),
+    ).toBeTruthy();
+    expect(
+      screen
+        .getByRole("button", { name: "Image Input", pressed: true })
+        .querySelector("svg"),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Audio Input", pressed: false }),
+    ).toBeTruthy();
+    expect(
+      within(
+        screen.getByRole("group", {
+          name: i18n.t("settings.outputModalities"),
+        }),
+      ).getByRole("button", { name: "text", pressed: true }),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Streaming", pressed: true }),
+    ).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Image Input" }));
     expect(onUpdate).toHaveBeenLastCalledWith({ input: ["text"] });
 

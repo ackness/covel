@@ -210,6 +210,7 @@ export function PackagesPane() {
 
       {toast && (
         <div
+          role={toast.tone === "error" ? "alert" : "status"}
           className={
             "text-xs px-3 py-2 rounded border " +
             (toast.tone === "success"
