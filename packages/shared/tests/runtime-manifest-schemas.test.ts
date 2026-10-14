@@ -395,6 +395,27 @@ const authoringCrossFieldRejections: readonly Fixture[] = [
       turnCompletion: { mode: "await", maxQueueMs: 30_000 },
     },
   },
+  {
+    name: "background manual runtime with the suspend tool",
+    zodOnly: true,
+    manifest: {
+      ...base,
+      trigger: { type: "manual" },
+      execution: "background",
+      tools: { builtin: ["suspend"] },
+    },
+  },
+  {
+    name: "detached runtime with the suspend tool",
+    zodOnly: true,
+    manifest: {
+      ...base,
+      stage: "post-turn",
+      trigger: { type: "auto" },
+      turnCompletion: { mode: "detached" },
+      tools: { builtin: ["suspend"] },
+    },
+  },
 ];
 
 // ── Compat (input) malformed rejections ─────────────────────────────
@@ -550,6 +571,18 @@ describe("runtimeManifestAuthoringSchema (strict authoring)", () => {
 
   it(`accepts ${authoringI18nDescriptionPositive.name}`, () => {
     assertAccepted("authoring", authoringI18nDescriptionPositive);
+  });
+
+  it("accepts the suspend tool on a manual runtime that runs in the foreground", () => {
+    assertAccepted("authoring", {
+      name: "sync manual runtime with the suspend tool",
+      manifest: {
+        ...base,
+        trigger: { type: "manual" },
+        execution: "sync",
+        tools: { builtin: ["suspend"] },
+      },
+    });
   });
 
   it(`accepts ${caseInsensitiveProjectionPositive.name}`, () => {

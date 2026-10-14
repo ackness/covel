@@ -93,7 +93,7 @@ Details for the PostgreSQL column:
 
 - **Event delivery**: if `LISTEN/NOTIFY` fails to start, the server refuses to start. It does not quietly fall back to broadcasting inside the process.
 - **`steer` / `abort`**: the request must reach the instance that is running that turn. If it reaches another instance, it returns `409`, even when the database shows the turn as running.
-- **Background jobs**: this includes detached stages, and runtimes that run in the background when triggered manually or by an event. Tasks in `claimed` / `running` / `committing` whose lease has expired are marked `orphaned`. Their effects, which already went out, are not replayed automatically.
+- **Background jobs**: this includes detached stages, and runtimes that run in the background when triggered manually or by an event. When an instance shuts down normally, tasks it has not committed go back to the queue and the next worker runs them again. When an instance crashes, tasks in `claimed` / `running` / `committing` whose lease has expired are marked `orphaned`. Their effects, which already went out, are not replayed automatically.
 
 So a deployment that must control the current turn reliably should use a single instance. Or it must make sure that an action and its `steer` / `abort` requests are routed to the same instance. When an instance exits, its execution handle in memory cannot move elsewhere. The database is shared, but that does not mean another instance can take over a turn that is running.
 
@@ -2568,13 +2568,14 @@ Retries a job that has already failed and ended.
 - On success, it returns the new job object directly with `202`.
 - If the job cannot be retried, it returns `409` with `code: "runtime_job_not_retryable"`.
 
-The framework does not automatically re-run jobs that failed. This avoids calling a paid provider again when its result was not saved. A normal `queued` job that no one has claimed keeps running after a restart.
+The framework does not automatically re-run jobs that failed. This avoids calling a paid provider again when its result was not saved. A `queued` job keeps running after a restart, including one that a normal shutdown put back in the queue.
 
 **How a job runs:**
 
 - The worker claims the job first and holds a lease that can be renewed. The default concurrency is 4. Jobs for the same `(session, plugin, runtime)` run one after another.
 - `maxQueueMs` limits how long a job can wait in the queue.
 - `maxExecutionMs` limits the time from `running` until the runtime execution returns. The time spent afterward waiting for the session lock to commit is not counted.
+- At a normal shutdown, a job that has not reached `committing` goes back to `queued` once that execution returns, with the same jobId. A job already in `committing` finishes its commit.
 - After a restart, valid `queued` jobs are claimed again. A job that has waited past its queue time is marked `timed_out`. An in-flight job whose lease has expired is marked `orphaned`.
 - The check runs once more before commit: whether the session is still `active`, whether its identity is unchanged, the plugin's approval scope and version, and the actual proposal effects.
 
@@ -3190,7 +3191,8 @@ When a runtime reports failure, its original error is kept in `result.runtimeRes
 **Restarts and credentials:**
 
 - Job rows are persisted. A job that is still `queued` after a server restart keeps running when credentials are available. The next request that carries provider keys hands the credentials over again, or the server's own credentials satisfy the readiness check.
-- A job that was interrupted halfway is marked `orphaned` after its lease expires. The framework does not re-run it automatically, to avoid charging again for an image or speech generation.
+- When the server shuts down normally, a job that is halfway through goes back to the queue and runs again after the restart. A provider it called before it stopped is called again, so a job must be safe to run again.
+- When the process crashes, a job that was halfway through is marked `orphaned` after its lease expires. The framework does not re-run it automatically, to avoid charging again for an image or speech generation.
 - A failed or cancelled job can be retried with `POST /api/sessions/:id/runtime-jobs/:jobId/retry`. The retry uses a new `turnId`.
 
 ##### Errors
