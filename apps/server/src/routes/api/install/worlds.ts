@@ -21,6 +21,7 @@ import {
   SAFE_WORLD_ID_DESC,
 } from "../../../lib/validators.js";
 import {
+  assertNoReservedInstallFiles,
   collectUpload,
   errorResponse,
   httpError,
@@ -46,6 +47,7 @@ function findWorldYaml(
 export function validateWorldBundle(
   entries: readonly ExtractedEntry[],
 ): WorldManifestSummary {
+  assertNoReservedInstallFiles(entries);
   const yamlEntry = findWorldYaml(entries);
   if (!yamlEntry) {
     throw httpError(400, "world.yaml not found at zip root");

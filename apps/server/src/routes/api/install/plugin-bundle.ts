@@ -12,7 +12,11 @@ import {
 } from "@covel/plugin-loader";
 import { z } from "zod";
 import { assertHostVersionInRange } from "../../../lib/app-version.js";
-import { httpError, type ExtractedEntry } from "./shared.js";
+import {
+  assertNoReservedInstallFiles,
+  httpError,
+  type ExtractedEntry,
+} from "./shared.js";
 
 /** Installation parses data only; gray-matter also supports executable JS engines. */
 export function readPluginFrontmatter(
@@ -63,13 +67,7 @@ export function validatePluginBundle(
   entries: readonly ExtractedEntry[],
   reservedPluginIds: ReadonlySet<string>,
 ): PluginManifestSummary {
-  if (
-    entries.some(
-      (entry) => entry.relativePath.toLowerCase() === ".covel-install.json",
-    )
-  ) {
-    throw httpError(400, "Plugin contains reserved installation metadata");
-  }
+  assertNoReservedInstallFiles(entries);
   // Validate translations too: discovery can select a localized manifest
   // before session execution approval. Do not let one smuggle a JS engine.
   for (const entry of entries) {

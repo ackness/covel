@@ -565,6 +565,8 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 2. 逐个走完整的会话删除流程：等待执行中的写入、运行生命周期钩子、清理媒体引用和进程内状态。
 3. 删除世界记录和对应的文件包。
 
+文件包先移出加载目录，再删除记录和文件。中断后的启动恢复规则见[世界安装](./world-installation.md#更新与数据保护)。
+
 > [!NOTE]
 > 底层 `DataStore.deleteWorld` 只删除世界记录。需要连带清理会话的调用必须走这个 API。
 
@@ -973,6 +975,7 @@ setup runtime 反复失败、用完重试预算（`maxTriggerCount`）后进入 
 
 - 鉴权：桌面端要求 bearer token；没有 token 的生产部署要求 `COVEL_INSTALL_API_ENABLED=1`。
 - 成功返回 `{ ok, id, restartRequired: true }`。
+- 先改名移出加载目录，再清理文件。改名失败返回 500，原包保持完整；清理失败仍返回成功并记日志，下次启动重试清理。
 
 | 状态码      | 什么时候      |
 | ----------- | ------------- |

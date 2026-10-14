@@ -565,6 +565,8 @@ The delete runs in several steps:
 2. It runs the full session delete flow for each session one by one. That means waiting for writes in progress, running lifecycle hooks, and clearing media references and in-process state.
 3. It deletes the world record and the matching package files.
 
+The package is moved out of discovery before its record and files are deleted. See [world installation](./world-installation.md#updates-and-data-protection) for startup recovery after an interruption.
+
 > [!NOTE]
 > The low-level `DataStore.deleteWorld` deletes only the world record. Any call that also needs to clean up sessions must go through this API.
 
@@ -973,6 +975,7 @@ Both endpoints return `{ ok, runtimeId, state }`.
 
 - Authentication: the desktop app requires a bearer token. A production deployment with no token requires `COVEL_INSTALL_API_ENABLED=1`.
 - On success it returns `{ ok, id, restartRequired: true }`.
+- The directory is renamed out of discovery before its files are removed. If the rename fails, the response is 500 and the original package remains complete. Cleanup failure still returns success and logs a warning; the next startup retries cleanup.
 
 | Status code | When                        |
 | ----------- | --------------------------- |
