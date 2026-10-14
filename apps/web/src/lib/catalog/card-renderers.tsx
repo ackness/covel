@@ -9,15 +9,14 @@ import {
   CircleCheck,
   Sparkles,
 } from "lucide-react";
-import { resolveIcon, toTextArray, useI18nResolver } from "./helpers.js";
-import { useCollapsible } from "./use-collapsible.js";
 import {
-  categoryIconColors,
-  categoryIcons,
-  rarityBadgeColors,
-  rarityMarkerColor,
-  rarityTone,
-} from "./catalog-constants.js";
+  asOptionArray,
+  resolveIcon,
+  toTextArray,
+  useI18nResolver,
+} from "./helpers.js";
+import { useCollapsible } from "./use-collapsible.js";
+import { categoryIconColors, badgeColorMap } from "./catalog-constants.js";
 
 export const Card: ComponentRenderer = ({ element, children }) => {
   const variant = element.props?.variant as string;
@@ -95,11 +94,19 @@ export const EntryCard: ComponentRenderer = ({ element }) => {
   const category = (element.props?.category as string) ?? "";
   const content = resolve(element.props?.content);
   const tags = toTextArray(element.props?.tags);
-  const rarity = (element.props?.rarity as string) ?? "common";
-  // Optional plugin-supplied per-category icon + color (e.g. from a
-  // plugin's categoryMeta payload). When provided they override the
-  // built-in fallback map below; when missing the card still renders
-  // sensibly via the fallback so pre-enrichment entries keep working.
+  const rarity = (element.props?.rarity as string) ?? "";
+  // Values belong to the provider. Labels and appearance come from its spec.
+  const categoryOption = asOptionArray(element.props?.categoryOptions).find(
+    (option) => option.value === category,
+  );
+  const rarityOption = asOptionArray(element.props?.rarityOptions).find(
+    (option) => option.value === rarity,
+  );
+  const categoryLabel = resolve(categoryOption?.label) || category;
+  const tone =
+    typeof rarityOption?.tone === "string" ? rarityOption.tone : "muted";
+  const badgeColor =
+    typeof rarityOption?.color === "string" ? rarityOption.color : "";
   const externalIcon = element.props?.icon as string | undefined;
   const externalColor = element.props?.color as string | undefined;
   // Generic feature flags — any plugin can set these via itemLiteralProps
@@ -115,11 +122,16 @@ export const EntryCard: ComponentRenderer = ({ element }) => {
   const { expanded, toggle } = useCollapsible(defaultExpanded);
 
   const CategoryIcon = resolveIcon(
-    externalIcon ?? categoryIcons[category] ?? "book-open",
+    externalIcon ??
+      (typeof categoryOption?.icon === "string"
+        ? categoryOption.icon
+        : "book-open"),
   );
-  const iconColorClass = externalColor
-    ? `${categoryIconColors[externalColor] ?? "text-primary"}`
-    : "text-primary";
+  const iconColor =
+    externalColor ??
+    (typeof categoryOption?.color === "string" ? categoryOption.color : "");
+  const iconColorClass =
+    categoryIconColors[iconColor] ?? "text-muted-foreground";
   const Chevron = expanded ? ChevronDown : ChevronRight;
   const SparkleIcon = Sparkles;
   const ActiveIcon = CircleCheck ?? Check;
@@ -131,11 +143,7 @@ export const EntryCard: ComponentRenderer = ({ element }) => {
   );
 
   return (
-    <div
-      className="ui-band space-y-2"
-      data-tone={rarityTone[rarity] ?? "muted"}
-      style={{ ["--tw-band-marker" as string]: rarityMarkerColor[rarity] }}
-    >
+    <div className="ui-band space-y-2" data-tone={tone}>
       <div
         className={titleRowClass}
         onClick={collapsible ? toggle : undefined}
@@ -186,10 +194,11 @@ export const EntryCard: ComponentRenderer = ({ element }) => {
           <span
             className={clsx(
               "ui-chip inline-flex items-center px-1.5 py-0.5 text-[10px] border",
-              rarityBadgeColors[rarity],
+              badgeColorMap[badgeColor] ??
+                "bg-muted text-muted-foreground border-border",
             )}
           >
-            {category}
+            {categoryLabel}
           </span>
         )}
       </div>

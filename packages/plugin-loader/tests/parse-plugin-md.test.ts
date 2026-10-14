@@ -283,6 +283,7 @@ describe("current authoring manifests", () => {
         runtime: {
           type: "function",
           function: { handler: "./handler.js" },
+          schedule: { stage: "post-turn" },
           io: {
             inputs: {
               digest: { from: { kernel: "turn-digest@1" } },

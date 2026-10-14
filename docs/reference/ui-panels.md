@@ -287,12 +287,14 @@ contributes:
 
 ### Spec 校验与版本
 
-UI spec 是**不可信的插件输入**。`/api/ui-specs` 汇总时，对每份 spec 做 Zod 校验（外层结构和 `specVersion`）。
+UI spec 是**不可信的插件输入**。它的规则只有一份：`@covel/shared` 的 `pluginUiSpecIssues`（`packages/shared/src/schemas/ui-spec.ts`）。`pnpm validate:plugin`、ZIP 安装和 `/api/ui-specs` 加载面板时都用它，所以校验通过的 spec 在游戏里不会因为格式被去掉。
 
-- **版本。** `specVersion` 可以省略，按 v1 处理。写得比服务端支持的版本高（当前 `CURRENT_UI_SPEC_VERSION = 1`，在 `apps/server/src/routes/misc-api/ui-spec-schema.ts`）会被拒绝。这样旧服务端遇到新插件包时会明确报错，而不是画出一个坏面板。
+- **版本。** `specVersion` 可以省略，按 v1 处理。写得比宿主支持的版本高（当前 `CURRENT_UI_SPEC_VERSION = 1`）会被拒绝。这样旧宿主遇到新插件包时会明确报错，而不是画出一个坏面板。
+- **`webview`。** `entry` 指向包里的一份 `.html`，不超过 512 KiB；`height` 是 80 到 800 之间的整数。`surfaces` 只能是 `panel` 和 `stage`。
+- **数据归属。** `pluginId`、`sourcePlugin`、`sourcePluginId` 只能写本插件的 ID；`dataSource.bindings` 只能是写死的本插件 namespace，最多 8 个。
 - **`view` 或 `webview`，二选一。** 每份 spec 必须声明 `view`（对象）或 `webview`（HTML 文档）。两个都写或都不写，校验失败。
 - **`view` 递归校验。** 检查的内容有 `component` / `type`、`children`、命名的 `slots`、`repeat`，以及 `on` / `watch` 的 action 绑定结构。组件名必须在共享的 `PLUGIN_UI_COMPONENT_NAMES` 里；不认识的组件在服务端就产生带路径的诊断。`props` 和 directive 表达式不做限制，由组件和 json-render 在运行时解析，这样插件可以扩展数据的形状。
-- **不是 JSON 的声明。** 加载器用 `_componentPath` 记下这类声明的位置，好让 API 给出具体的诊断。它不是有效的 UI spec，也不是让 Web 执行插件代码的入口。带这个字段的 spec 会被去掉，即使同时写了 `view`。同一个插件的其他合法 JSON spec 照常显示。
+- **不是 JSON 的声明。** `contributes.ui` 只接受 `.json` 文件。`pnpm validate:plugin` 和安装拒绝别的文件；加载时这一项给出诊断，同一个插件的其他合法 JSON spec 照常显示。浏览器不会执行插件的组件文件。
 - **需要自定义组件时。** 声明 `webview.entry` 并提供一份独立的 HTML；或者组合 catalog 组件，绑定框架的 action。浏览器不会直接导入插件的 `.tsx` / `.js` 模块。
 - **一份坏 spec 不拖累整个响应。** 校验失败的 spec 从它所在的位置去掉，响应顶层的 `diagnostics[]` 给出具体诊断：
 
@@ -306,7 +308,7 @@ UI spec 是**不可信的插件输入**。`/api/ui-specs` 汇总时，对每份 
 
 UI 声明来自启动时的注册表快照。静态资源按需加载，并按快照缓存。GET 请求只做读取和按会话激活集过滤，不扫描插件目录，也不把 UI 定义写进 `plugin_data`（详见 [api.md](./api.md#get-apiui-specs)）。
 
-读取静态资源时，会检查符号链接解析之后的真实路径：指向插件根目录以内的链接可以，指向根目录以外的文件或目录会被拒绝。某个资源加载失败时，只跳过对应 runtime 的界面，不影响其他 runtime 的面板。
+读取静态资源时，会检查符号链接解析之后的真实路径：指向插件根目录以内的链接可以，指向根目录以外的文件或目录会被拒绝。某份 spec 读不出来或不合规则时，只去掉这一份，并在 `diagnostics[]` 和服务端日志里说明；同一个插件的其他面板照常显示。
 
 ### activity-bar 短标签
 
@@ -574,7 +576,7 @@ directive 可以写在组件 props 的任何动态值位置，也可以写在 `o
 
 - 会被折叠的：`ui.render`、`ui-spec`，以及 level 为 info / success 的通知，例如图鉴发现、成就和状态变更。
 - 不折叠的：表单、选项、确认、图片，以及警告和错误通知。
-- 建议块（`plugin_message`）在当前回合保持展开。出现更新的玩家消息后，它折叠成“历史建议”。
+- 插件消息面（`plugin_message`）在当前回合保持展开。出现更新的玩家消息后，折叠标题显示提供者的本地化名称和“展开查看”；提供者没有名称时显示“插件内容”。判定、任务变更和建议都遵循同一规则。
 - 玩家可以在设置的“通用”里打开“展开本回合更新”（`ui.expandTurnUpdates`），改成默认展开。
 - `detailed` / `raw` 视图不折叠。
 - 主题包的 `layout.turnNotes` 决定这条更新放在哪：`fold` 是上面说的默认行为；`inline` 让最新一回合默认展开；`margin` 在会话区够宽时把它放到正文旁的页边栏。
