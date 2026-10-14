@@ -9,6 +9,7 @@ import {
 } from "@covel/approval";
 import type { SessionRecord } from "@covel/store";
 import {
+  disabledDependents,
   resolveConfirmedSessionPlugins,
   resolveSessionPlugins,
   type PluginResolutionRejection,
@@ -103,6 +104,24 @@ export function resolveSessionPluginPlan(
       authorized: authorized.has(facts.id),
     })),
   });
+}
+
+/**
+ * The set a session confirms from a plan: the plugins that run, plus the
+ * requested and `core` ones turned off for a missing dependency
+ * (`disabledDependents`). The session's set resolution keeps those off and
+ * lists them in `unavailable` until the dependency is back.
+ */
+export function confirmedPluginIds(
+  plan: SessionPluginResolution,
+  requested: readonly string[],
+  registry: Pick<PluginRegistry, "getAll">,
+): string[] {
+  const dependents = disabledDependents(plan, {
+    requested,
+    plugins: resolvablePlugins(registry.getAll().values()),
+  }).map((item) => item.pluginId);
+  return [...new Set([...plan.active, ...dependents])];
 }
 
 /** Installed entries that can join a session; a package that failed to load cannot. */
