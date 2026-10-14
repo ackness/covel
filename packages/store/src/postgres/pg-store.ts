@@ -27,7 +27,8 @@ import { createPgLifecycleRecords } from "./pg-lifecycle-records.js";
 import { createPgExportRecords } from "./pg-export-records.js";
 import { createPgSessionRecords } from "./pg-session-records.js";
 import { createPgSnapshotRecords } from "./pg-snapshot-records.js";
-import { CREATE_TABLES_SQL, DROP_ALL_SQL } from "./pg-store-mappers.js";
+import { DROP_ALL_SQL } from "./pg-store-mappers.js";
+import { bootPgSchema, SCHEMA_META_TABLE } from "./pg-schema-boot.js";
 import { createPgStateRecords } from "./pg-state-records.js";
 import { createPgVectorCapability } from "./pg-vector.js";
 import { createPgWorldRecords } from "./pg-world-records.js";
@@ -129,12 +130,15 @@ export async function createPgStore(
         await ddl.unsafe(`DROP TABLE IF EXISTS ${tablename} CASCADE`);
       }
       await ddl.unsafe(DROP_ALL_SQL);
-      await ddl.unsafe(CREATE_TABLES_SQL);
+      await ddl.unsafe(`DROP TABLE IF EXISTS ${SCHEMA_META_TABLE}`);
+      await bootPgSchema(ddl);
     } finally {
       await ddl.end();
     }
   } else {
-    await client.unsafe(CREATE_TABLES_SQL);
+    // Checks the recorded schema version before any DDL and serialises the
+    // DDL of servers that start together (see pg-schema-boot.ts).
+    await bootPgSchema(client);
   }
 
   // Root data methods always run on the pool. `withTransaction` never touches

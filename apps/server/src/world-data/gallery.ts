@@ -130,6 +130,7 @@ async function describeFile(
 async function listManifestFiles(
   options: GalleryOptions,
   defaultLocale: string | undefined,
+  declared: readonly string[],
 ): Promise<WorldGalleryFile[] | null> {
   const manifestPath = await resolveContainedPath(
     options.worldRoot,
@@ -151,6 +152,7 @@ async function listManifestFiles(
       base,
       baseLocale: typeof baseLocale === "string" ? baseLocale : undefined,
       arrayKey: "id",
+      declared,
     });
     manifest = galleryManifestSchema.parse(compiled.value);
   } catch (error) {
@@ -254,8 +256,10 @@ export async function listWorldGalleryFiles(
 ): Promise<WorldGalleryFile[]> {
   const manifest = await readWorldManifest(options.worldRoot);
   return (
-    (await listManifestFiles(options, manifest.defaultLocale)) ??
-    (await listSourceFiles(options, manifest.worldData))
+    (await listManifestFiles(options, manifest.defaultLocale, [
+      ...(manifest.defaultLocale ? [manifest.defaultLocale] : []),
+      ...(manifest.supportedLocales ?? []),
+    ])) ?? (await listSourceFiles(options, manifest.worldData))
   );
 }
 

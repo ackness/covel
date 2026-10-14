@@ -151,9 +151,10 @@ function buildAvailableEventsBlock(params: ContextBuildParams): string {
 
 /**
  * Reserved `<runtime-activation>` block (docs 02 §3.3): the canonical
- * `{ source, detached, payload }` JSON, identical to what a function handler
- * reads from `ctx.activation`. Framework-built inside segment 5, so a plugin
- * template can neither override nor omit it. Absent when no activation was
+ * `{ source, detached, payload }` JSON, with bookkeeping removed from the
+ * payload only for the model. Function handlers keep the full `ctx.activation`.
+ * Framework-built, so a plugin template can neither override nor omit it.
+ * Absent when no activation was
  * threaded (legacy callers) — keeps existing prompts byte-identical.
  */
 function buildRuntimeActivationBlock(params: ContextBuildParams): string {
@@ -162,7 +163,7 @@ function buildRuntimeActivationBlock(params: ContextBuildParams): string {
   const json = JSON.stringify({
     source: activation.source,
     detached: activation.detached,
-    payload: activation.payload,
+    payload: modelFacingJson(activation.payload),
   });
   return `<runtime-activation>\n${escapeXmlContent(json)}\n</runtime-activation>`;
 }

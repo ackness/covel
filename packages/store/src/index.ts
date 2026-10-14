@@ -3,7 +3,11 @@ export {
   createStoreFromEnv,
   resolveBackendFromEnv,
 } from "./factory.js";
-export { BROWSER_IDB_DATABASE_NAME, STORAGE_MIGRATIONS } from "./migrations.js";
+export {
+  BROWSER_IDB_DATABASE_NAME,
+  DATA_SCHEMA_VERSION,
+  STORAGE_MIGRATIONS,
+} from "./migrations.js";
 export { describeStorageCapabilities } from "./storage-capabilities.js";
 export {
   createMediaStore,
@@ -15,6 +19,7 @@ export {
   SessionAlreadyExistsError,
   SessionNotFoundError,
   SessionRecordScopeConflictError,
+  StoreSchemaVersionError,
 } from "./errors.js";
 export {
   BROWSER_CHECKPOINT_SCHEMA_VERSION,
@@ -115,6 +120,7 @@ export type {
   SessionSummaryRecord,
   PaginationOpts,
   SuspensionRecord,
+  SuspensionBasis,
   SnapshotRecord,
   SnapshotPayload,
   SnapshotSessionState,

@@ -58,6 +58,7 @@ function createTestApp(store: DataStore, registry: PluginRegistry): Hono {
     c.set("pluginRegistry", registry);
     c.set("eventBus", eventBus);
     c.set("sessionLock", sessionLock);
+    c.set("builtinToolNames", []);
     await next();
     const staleRead = await verifyResolvedSessionRead(c);
     if (staleRead) c.res = staleRead;

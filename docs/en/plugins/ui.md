@@ -208,7 +208,7 @@ Inside a component's `on.click`, write an action name and its parameters. The pr
 | Action               | Effect                                                                                                                     | Story-text block | Side panel    | Stage decision area |
 | -------------------- | -------------------------------------------------------------------------------------------------------------------------- | ---------------- | ------------- | ------------------- |
 | `draftMessage`       | Puts a sentence into the draft area. The player can add more and send everything together.                                 | Available        | Available     | Not available       |
-| `sendMessage`        | Sends it at once as the player's words, starting a new turn.                                                               | Available        | Not available | Available           |
+| `sendMessage`        | In story blocks, sends immediately; on stage, fills the input for the player to send.                                      | Available        | Not available | Available           |
 | `invokeRuntime`      | Runs a manually triggered runtime. Several pieces of data it writes either all take effect or none do.                     | Available        | Available     | Available           |
 | `invokePluginAction` | Calls an instant action the plugin registered: it runs and writes at once, without starting a new turn or calling a model. | Available        | Available     | Available           |
 | `invokeCommand`      | Runs a player command declared in the manifest (a command such as `/bag`).                                                 | Available        | Available     | Available           |

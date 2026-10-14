@@ -471,11 +471,12 @@ export function createToolExecutor(
         // (instead of JSON-stringifying the whole object). This keeps LLM
         // prompts human-readable while framework tracing still gets the full
         // structured object via `parsedResult`. Falls back to JSON.stringify
-        // for tools that don't opt in, without the bookkeeping a record carries
-        // (`updatedAt` of a plugin-data row, the time of a recalled message): a
-        // tool that hands the model an opaque handle writes it in `_text`.
-        // The `ui` blocks of a result are for the player's screen, and they
-        // repeat what the model has just written.
+        // for tools that don't opt in. That JSON goes through `modelFacingJson`
+        // (no bookkeeping such as `updatedAt` of a plugin-data row or the time
+        // of a recalled message) and without the `ui` blocks, which are for
+        // the player's screen and repeat what the model has just written.
+        // `_text` is sent as it is, so it is not projected: a tool that hands
+        // the model an opaque handle must write only the text it means to show.
         const resultStr =
           parsedResult &&
           typeof parsedResult === "object" &&

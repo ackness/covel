@@ -1,9 +1,15 @@
 /**
  * Static tool policy — checks resolved tool calls against permission rules.
  *
- * The host allows framework tools (`builtin`) and registered plugin tools
- * (`local`). Community server-code and runtime authorization happens before
- * plugin tools become callable; it is separate from this source policy.
+ * The host's rules are built by `createDefaultToolApprovalPipeline` below and
+ * used by apps/server/src/routes/api/bootstrap/tools.ts:
+ *   - builtin:* → allow (framework-owned tools)
+ *   - local:*   → allow (registered plugin tools)
+ *
+ * Community server-code and runtime authorization happens before plugin tools
+ * become callable, through the plugin-RPC approval gate (rpc-approval.ts) and
+ * approvals route. Approved tools are local; this source policy is separate
+ * from plugin trust.
  */
 
 import type { ApprovalRequest } from "@covel/shared";

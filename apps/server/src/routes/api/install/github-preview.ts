@@ -5,7 +5,11 @@ import {
   packageAuthorSchema,
   type GithubPluginPreview,
 } from "@covel/shared";
-import { httpError, type ExtractedEntry } from "./shared.js";
+import {
+  httpError,
+  INSTALL_RECEIPT_FILE,
+  type ExtractedEntry,
+} from "./shared.js";
 import {
   readPluginFrontmatter,
   validatePluginBundle,
@@ -54,7 +58,7 @@ export function receiptEntry(
   preview: Omit<GithubPluginPreview, "token">,
 ): ExtractedEntry {
   return {
-    relativePath: ".covel-install.json",
+    relativePath: INSTALL_RECEIPT_FILE,
     content: Buffer.from(
       JSON.stringify(
         {

@@ -7,6 +7,9 @@ import {
   findLocaleOverlays,
   readWorldManifestSource,
 } from "../../src/world-data/locale-overlays.js";
+import { readEffectiveDimensions } from "../../src/world-data/session-import/dimensions.js";
+import { readWorldManifest } from "../../src/world-data/session-import/utils.js";
+import { listWorldGalleryFiles } from "../../src/world-data/gallery.js";
 import { loadSingleWorld } from "../../src/world-seed-loader.js";
 import type { OrderedWorldDataSource } from "../../src/world-data/types.js";
 
@@ -263,6 +266,85 @@ supportedLocales: [zh-CN, en-US]
       expect(
         await findLocaleOverlays(root, "data/items.yaml", ["zh-CN", "en-US"]),
       ).toEqual([]);
+    });
+
+    it.each(["external", "worldData"])(
+      "ignores bare-language dimension overlays for %s in catalog and session reads",
+      async (kind) => {
+        const definition =
+          "name: 警戒\nschema: { type: number }\ninitialValue: 0\n";
+        const root = await world({
+          "world.yaml":
+            manifest +
+            (kind === "external"
+              ? "dimensionSources:\n  alarm: alarm.yaml\n"
+              : ""),
+          ...(kind === "external"
+            ? {
+                "alarm.yaml": definition,
+                "alarm.en.yaml": "name: Wrong\n",
+              }
+            : {
+                "data/dimensions.yaml":
+                  "alarm:\n  " + definition.replaceAll("\n", "\n  "),
+                "data/dimensions.en.yaml": "alarm:\n  name: Wrong\n",
+              }),
+        });
+        let diagnostics: readonly { message: string }[] = [];
+        const record = await loadSingleWorld(root, {
+          onWorldDataDiagnostics: (items) => {
+            diagnostics = items;
+          },
+        });
+        expect(JSON.stringify(record?.metadata?.dimensions)).not.toContain(
+          "Wrong",
+        );
+        expect(
+          diagnostics.some((item) =>
+            item.message.includes("the file is ignored"),
+          ),
+        ).toBe(true);
+        const input = source(root, "data/dimensions.yaml");
+        const dimensions = await readEffectiveDimensions({
+          worldRoot: root,
+          manifest: await readWorldManifest(root),
+          sources:
+            kind === "external"
+              ? []
+              : [
+                  {
+                    ...input,
+                    descriptor: {
+                      ...input.descriptor,
+                      to: "world:metadata.dimensions",
+                    },
+                  },
+                ],
+          locale: "en-US",
+        });
+        expect(dimensions.alarm?.name).toBe("警戒");
+      },
+    );
+
+    it("ignores bare-language gallery overlays", async () => {
+      const root = await world({
+        "world.yaml": manifest,
+        "media/gallery.json": JSON.stringify({
+          images: [
+            { id: "cover", filename: "gallery/cover.png", name: "原图" },
+          ],
+        }),
+        "media/gallery.en.json": JSON.stringify({
+          images: [{ id: "cover", name: "Wrong" }],
+        }),
+        "media/gallery/cover.png": "image bytes",
+      });
+      const files = await listWorldGalleryFiles({
+        worldRoot: root,
+        worldId: "lamp",
+      });
+      expect(files).toHaveLength(1);
+      expect(files[0]?.name).toBe("原图");
     });
 
     it("leaves the lore and the manifest in the main language", async () => {

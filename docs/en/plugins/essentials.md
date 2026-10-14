@@ -75,6 +75,7 @@ Write one observation grounded in runtime-inputs.narrative.value.
 Three rules that are easiest to get wrong:
 
 - `id` must be the same as the folder name.
+- Each directory under `runtimes/` needs `RUNTIME.md`; put shared code in `lib/` at the package root. Missing manifests are reported to the author while the other runtimes remain loadable; see the [plugin reference](../reference/plugins.md).
 - With only one runtime, put it in the `runtime:` section of `PLUGIN.md`. With several, put each one in `runtimes/<name>/RUNTIME.md`. You cannot use both styles at once. If you do, validation reports `inline runtime and runtimes/ cannot coexist`.
 - When `PLUGIN.md` has a `version`, it must be the same as the `version` in `package.json`. `package.json` must also say `"type": "module"`: a plugin package is ESM only, and validation and installation both refuse a package without that line.
 

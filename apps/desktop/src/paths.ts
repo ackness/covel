@@ -11,6 +11,7 @@
  *
  *   <data_root>/                  ← default ~/.covel/data; user can redirect via config.toml
  *     covel.db                    ← SQLite
+ *     media/                      ← stored images, audio and other media
  *     worlds/                     ← user-created worlds
  *     logs/
  *       server-*.log              ← pino-roll output (10MB × 10 by default)
