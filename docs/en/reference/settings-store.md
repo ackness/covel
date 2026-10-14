@@ -124,6 +124,10 @@ A registered setting without a purpose-built pane renders through the generic wi
 - **Descriptions.** The description of a framework key comes from the Web catalogue (`settings.frameworkEntries.*`), and that of a plugin key from the manifest. Whether the registry entry repeats the description does not change what is shown.
 - **The value a world gives.** A plugin settings page shows the value from the current world's `pluginSettings`: a key the player has not set takes it, and the page names the world. A value the registered schema refuses is not used, and the server does not use it either.
 
+- **Model pane input.** Generation parameters and model prices also keep drafts. Number fields commit on blur or Enter; sliders commit on pointer release, key release or blur. Inputs remain available during saving, and consecutive commits merge into the latest saved settings in order.
+- **Destructive actions.** Deleting a provider or model configuration, uninstalling a plugin, deleting a theme and resetting all settings require `requestConfirm`. Provider deletion clears its key and model role bindings; model configuration deletion clears only its bindings, keeping the key.
+- **Read-only mode.** When settings have not loaded successfully, only controls that write settings are disabled. Viewing, exporting and downloading backups remain available; other maintenance operations keep their own permission checks. Exports contain currently readable settings and may be incomplete; they are not the original backups. Including keys still requires explicit opt-in.
+
 **Toasts.** Toasts render under `document.body`, above every dialog. A click on a toast does not close the dialog under it.
 
 **The Configuration files page.** It edits the raw configuration as text: the settings of this device (JSON, without secrets), and the files the server offers — `llm.toml`, and `config.toml` in desktop mode (see `/api/config/raw` in the [API reference](./api.md)). When the settings JSON is saved:

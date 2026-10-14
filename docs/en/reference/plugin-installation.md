@@ -56,6 +56,7 @@ The preview also shows the result of the integrity checks. The checks only read 
 - Importing a local ZIP is always available, and the interface requires the code risk to be confirmed first.
 - GitHub install records and the directory on disk are independent of the registry loaded at startup. So a newly installed plugin, a plugin that failed to load, and a plugin waiting to be uninstalled can still be managed before a restart.
 - Both installing and uninstalling need a restart.
+- Uninstall first moves the whole plugin directory into `.covel-uninstall-*`, then deletes its files. If the rename fails, the complete original directory is retained and an error is returned. If cleanup after the rename fails, a warning is logged and the next startup retries it. A partial package cannot be loaded.
 - A loaded community plugin supports [single-plugin hot reload](./plugin-extensions.md#single-plugin-hot-reload-during-development) in development mode.
 - There is no background automatic update.
 - A normal install does not overwrite a directory with the same ID. Updates go through a separate confirmation flow, see [Check and update](#check-and-update).
@@ -97,6 +98,8 @@ The settings page shows each plugin's ID and its path in the repository. Tick, r
 - Release attachments are not downloaded automatically, and arbitrary URLs, private repositories, and GitHub Enterprise are not accepted. A built Release ZIP can be downloaded by hand and then imported.
 
 ### Package layout requirements
+
+Installation uses the loader’s [manifest and runtime directory rules](./plugins.md#package-and-runtime-files). A runtime directory missing `RUNTIME.md` is reported with its path.
 
 - A plugin package directory must have both `package.json` and a root `PLUGIN.md`. `package.json` must declare `"type": "module"`; otherwise the install returns 400.
 - The root declaration uses `{ id, kind, contributes, runtime? }`.
@@ -188,9 +191,11 @@ The preview includes the ID, package version, description, author name (`author`
 ### Writing to disk and install records
 
 - Only after the installation is confirmed is the package written to disk, through a temporary directory followed by a rename. A `.covel-install.json` is attached, recording the source, version, and installation time.
-- This file is only for display and tracing. It grants no trust. A plugin package cannot bring this file with it.
+- This file is only for display and tracing. It grants no trust. A plugin package cannot bring this file with it, including variations in filename case.
 - A plugin installed from a ZIP or by hand has no source record, and the interface returns `source: null`.
 - Cancelling a preview does not write to the plugin directory. After an installation is confirmed, there is no "cancel submission" action.
+
+At startup, before applying updates or discovering plugins, `.covel-install-*` and `.covel-uninstall-*` directories in the user plugins directory are removed, along with unfinished `.covel-install-*` directories under `.covel-updates/`. Updates queued by plugin ID and transaction backups are retained for update recovery. Cleanup does not follow symbolic links. If files remain locked, it logs a warning and retries at the next startup.
 
 ### Error codes
 

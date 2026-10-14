@@ -1,3 +1,4 @@
+import { requestConfirm } from "@/lib/confirm-channel.js";
 import {
   act,
   fireEvent,
@@ -35,6 +36,7 @@ const mocks = vi.hoisted(() => ({
     },
   ] as PresetSummary[],
 }));
+vi.mock("@/lib/confirm-channel.js", () => ({ requestConfirm: vi.fn() }));
 vi.mock("@/settings/store", () => ({
   getSettings: () => mocks.store,
   registerKnownProviders: vi.fn(),
@@ -60,6 +62,7 @@ let persistedEntries: Record<string, unknown>;
 let adapter: SettingsBackendAdapter;
 
 beforeEach(async () => {
+  vi.mocked(requestConfirm).mockReset().mockResolvedValue(true);
   await i18n.changeLanguage("en-US");
   persistedEntries = {};
   adapter = {
@@ -312,7 +315,8 @@ it.each([
     const gate = deferred<void>();
     vi.mocked(adapter.save).mockImplementationOnce(() => gate.promise);
     fireEvent.blur(input);
-    await waitFor(() => expect(input.matches(":disabled")).toBe(true));
+    await waitFor(() => expect(adapter.save).toHaveBeenCalled());
+    expect(input.matches(":disabled")).toBe(false);
     await act(async () => gate.reject(new Error("synthetic delayed failure")));
     await waitFor(() =>
       expect(screen.getByRole("alert").textContent).toContain(
@@ -456,3 +460,81 @@ function deferred<T>() {
   });
   return { promise, resolve, reject };
 }
+
+it.each(["provider", "model"])(
+  "F-191 cancels %s deletion without changing profiles, bindings or keys",
+  async (kind) => {
+    await mocks.store.set("llm.providers", [importedProfile]);
+    await mocks.store.set("llm.slotConfig", {
+      story: { modelRef: importedProfile.models[0]!.ref },
+    });
+    mocks.store.register({
+      key: "keys.fixture",
+      schema: z.string(),
+      default: "",
+      group: "llm",
+      label: "Fixture key",
+      backend: "keys",
+    });
+    await mocks.store.set("keys.fixture", "saved-secret");
+    render(<LlmPresetsPane />);
+    fireEvent.click(screen.getByRole("button", { name: /fixture.*1 models/ }));
+    const profileBefore = mocks.store.get("llm.providers");
+    const slotsBefore = mocks.store.get("llm.slotConfig");
+    vi.mocked(adapter.save).mockClear();
+    vi.mocked(requestConfirm).mockResolvedValueOnce(false);
+    const buttons = screen.getAllByRole("button", { name: "Delete" });
+    fireEvent.click(buttons[kind === "provider" ? 0 : 1]!);
+    await waitFor(() => expect(requestConfirm).toHaveBeenCalledTimes(1));
+    expect(requestConfirm).toHaveBeenCalledWith(
+      expect.objectContaining({
+        destructive: true,
+        message: i18n.t(
+          kind === "provider"
+            ? "settings.deleteProviderConfirm"
+            : "settings.deleteModelConfirm",
+        ),
+      }),
+    );
+    expect(adapter.save).not.toHaveBeenCalled();
+    expect(mocks.store.get("llm.providers")).toEqual(profileBefore);
+    expect(mocks.store.get("llm.slotConfig")).toEqual(slotsBefore);
+    expect(mocks.store.get("keys.fixture")).toBe("saved-secret");
+    fireEvent.click(buttons[kind === "provider" ? 0 : 1]!);
+    await waitFor(() => expect(mocks.store.get("llm.slotConfig")).toEqual({}));
+    expect(mocks.store.get("keys.fixture")).toBe(
+      kind === "provider" ? "" : "saved-secret",
+    );
+  },
+);
+
+it("F-037 queues connection edits and keeps the next field focused", async () => {
+  await mocks.store.set("llm.providers", [importedProfile]);
+  render(<LlmPresetsPane />);
+  fireEvent.click(screen.getByRole("button", { name: /fixture.*1 models/ }));
+  const endpoint = screen.getByRole("textbox", { name: "API endpoint" });
+  const protocol = screen.getAllByRole("combobox", {
+    name: /^API protocol$/,
+  })[0]!;
+  const gate = deferred<void>();
+  vi.mocked(adapter.save).mockImplementationOnce(() => gate.promise);
+  fireEvent.change(endpoint, {
+    target: { value: "https://edited.example/v1" },
+  });
+  fireEvent.blur(endpoint);
+  protocol.focus();
+  await act(async () => undefined);
+  expect(protocol.matches(":disabled")).toBe(false);
+  expect(document.activeElement).toBe(protocol);
+  fireEvent.change(protocol, { target: { value: "anthropic-messages-v1" } });
+  await act(async () => gate.resolve());
+  await waitFor(() =>
+    expect(mocks.store.get("llm.providers")).toEqual([
+      {
+        ...importedProfile,
+        baseUrl: "https://edited.example/v1",
+        protocol: "anthropic-messages-v1",
+      },
+    ]),
+  );
+});

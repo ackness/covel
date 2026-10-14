@@ -6,6 +6,7 @@ import {
   render,
   screen,
   within,
+  waitFor,
 } from "@testing-library/react";
 import { buildLinks, buildNodes } from "../graph-canvas-model.js";
 import { createGraphDataPools, syncGraphData } from "../graph-canvas-sync.js";
@@ -133,9 +134,11 @@ describe("relationship graph", () => {
       />,
     );
     await screen.findAllByRole("button", { name: "Mira" });
-    expect(canvas.graphData).toMatchObject({
-      links: [{ edgeId: "route", color: "blue", strength: 0, width: 1 }],
-    });
+    await waitFor(() =>
+      expect(canvas.graphData).toMatchObject({
+        links: [{ edgeId: "route", color: "blue", strength: 0, width: 1 }],
+      }),
+    );
     view.rerender(
       <GraphCanvas
         emit={() => {}}

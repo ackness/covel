@@ -1,3 +1,4 @@
+import { requestConfirm } from "@/lib/confirm-channel.js";
 import {
   act,
   cleanup,
@@ -15,6 +16,7 @@ import { TokenControl } from "@/components/appearance/TokenControl.js";
 import {
   primeThemeRegistry,
   syncThemeRegistry,
+  saveCustomTheme,
 } from "@/theme-system/registry.js";
 import { CUSTOM_THEMES_KEY } from "@/theme-system/storage.js";
 import {
@@ -23,6 +25,8 @@ import {
   loadOverrides,
   setTokenOverride,
 } from "@/theme-system/overrides.js";
+
+vi.mock("@/lib/confirm-channel.js", () => ({ requestConfirm: vi.fn() }));
 
 const context = vi.hoisted(() => ({ store: null as SettingsStore | null }));
 vi.mock("@/settings/store.js", () => ({ getSettings: () => context.store }));
@@ -156,6 +160,7 @@ function edit(input: HTMLElement, value: string) {
 }
 
 beforeEach(async () => {
+  vi.mocked(requestConfirm).mockReset().mockResolvedValue(true);
   await i18n.changeLanguage("en-US");
 });
 afterEach(() => {
@@ -568,4 +573,55 @@ describe("AppearancePane failed previews", () => {
     ).toBe("#eeeeee");
     expect(document.documentElement.style.getPropertyValue(token)).toBe("");
   });
+});
+
+it("F-191 cancels theme deletion without changing saved themes", async () => {
+  const { store, adapter } = await setup();
+  await saveCustomTheme(store, {
+    id: "test-delete",
+    label: "Test delete",
+    source: "custom",
+    schemes: ["dark"],
+    cssText: 'html[data-theme="test-delete"] { --color-background: #101010; }',
+  });
+  const original = store.get(CUSTOM_THEMES_KEY);
+  const attempts = adapter.attempts.length;
+  const view = render(<ThemeManagerWidget />);
+  vi.mocked(requestConfirm).mockResolvedValueOnce(false);
+  fireEvent.click(view.getByRole("button", { name: "Delete" }));
+  await settle();
+  expect(requestConfirm).toHaveBeenCalledWith(
+    expect.objectContaining({ destructive: true, subject: "test-delete" }),
+  );
+  expect(store.get(CUSTOM_THEMES_KEY)).toEqual(original);
+  expect(adapter.attempts).toHaveLength(attempts);
+  fireEvent.click(view.getByRole("button", { name: "Delete" }));
+  await settle();
+  expect(store.get(CUSTOM_THEMES_KEY)).toEqual([]);
+});
+
+it("F-199 keeps theme export available while disabling writes", async () => {
+  const { store } = await setup();
+  await saveCustomTheme(store, {
+    id: "test-export",
+    label: "Test export",
+    source: "custom",
+    schemes: ["dark"],
+    cssText: 'html[data-theme="test-export"] { --color-background: #101010; }',
+  });
+  vi.spyOn(store, "isHydrated").mockReturnValue(false);
+  const view = render(<ThemeManagerWidget />);
+  expect(
+    view
+      .getByRole("button", { name: i18n.t("settings.export") })
+      .matches(":disabled"),
+  ).toBe(false);
+  expect(
+    view.getByRole("button", { name: "Delete" }).matches(":disabled"),
+  ).toBe(true);
+  expect(
+    view
+      .getAllByRole("button", { name: i18n.t("settings.themeApply") })
+      .every((button) => button.matches(":disabled")),
+  ).toBe(true);
 });

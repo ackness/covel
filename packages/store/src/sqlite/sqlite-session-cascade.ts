@@ -13,11 +13,16 @@ import { SESSION_SCOPED_TABLES, SESSIONS_TABLE } from "../table-registry.js";
 export function deleteSqliteSessionCascade(
   sqlite: SqliteConnection,
   sessionId: string,
+  vectorAvailable: boolean,
 ): void {
   runSqliteTransaction(sqlite, () => {
-    const vectorModels = sqlite
-      .prepare("SELECT id, table_name FROM vector_models")
-      .all() as Array<{ id: number; table_name: string }>;
+    // Existing vec0 tables cannot even be prepared without the extension.
+    // Their orphan rows are reclaimed when vector support next initializes.
+    const vectorModels = vectorAvailable
+      ? (sqlite
+          .prepare("SELECT id, table_name FROM vector_models")
+          .all() as Array<{ id: number; table_name: string }>)
+      : [];
     for (const model of vectorModels) {
       const expectedTable = `vec_mem_m${model.id}`;
       if (model.table_name !== expectedTable) {

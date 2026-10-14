@@ -4,10 +4,10 @@
  * Each world package has:
  *   world.yaml  — manifest (id, name, summary, dimensions, tags, …)
  *   WORLD.md    — default lore (fallback)
- *   WORLD.zh.md — Chinese lore (optional, locale-specific)
- *   WORLD.en-US.md — English lore (optional, locale-specific)
+ *   WORLD.en-US.md — English lore (optional, locale-specific; the locale is
+ *                    written exactly as the world's supportedLocales writes it)
  *
- * Lore resolution: WORLD.<locale-prefix>.md → WORLD.md → empty string
+ * Lore resolution: WORLD.<defaultLocale>.md → WORLD.md → empty string
  *
  * External dimension files:
  *   world.yaml `dimensionSources` maps dimension keys to relative file paths.
@@ -113,6 +113,7 @@ export async function loadExternalDimensions(
   sources: Record<string, string>,
   worldId: string,
   defaultLocale?: string,
+  declared: readonly string[] = defaultLocale ? [defaultLocale] : [],
   /**
    * Optional sink for the specific failure reason. Session import surfaces
    * these to the author instead of a bare "sources failed validation".
@@ -156,6 +157,9 @@ export async function loadExternalDimensions(
         relativePath,
         base: parseYaml(content),
         baseLocale: defaultLocale,
+        declared: [
+          ...new Set([...(defaultLocale ? [defaultLocale] : []), ...declared]),
+        ],
       });
       for (const issue of compiled.issues)
         console.warn(
@@ -237,6 +241,7 @@ export async function loadSingleWorld(
         dimensionSources,
         worldId,
         defaultLocale,
+        (manifest.supportedLocales as string[] | undefined) ?? [],
       )
     : {};
   // A declared source is required. Partial reads must not erase the last
@@ -337,6 +342,14 @@ export async function loadSingleWorld(
     ...worldData.diagnostics,
     ...misnamedDiagnostics,
   ]);
+  if (
+    worldData.summary?.sources.some(
+      (source) =>
+        source.target === "world:metadata.dimensions" &&
+        source.diagnostics.error > 0,
+    )
+  )
+    return null;
   return { ...baseRecord, metadata: worldData.metadata };
 }
 
@@ -350,7 +363,13 @@ async function loadWorldPackages(worldsDir: string): Promise<{
   worldIds: string[];
   complete: boolean;
 }> {
-  const entries = await readdir(worldsDir, { withFileTypes: true });
+  const entries = await readdir(worldsDir, { withFileTypes: true }).catch(
+    (error: NodeJS.ErrnoException) => {
+      // A fresh installation need not have a user worlds directory yet.
+      if (error.code === "ENOENT") return [];
+      throw error;
+    },
+  );
   const packages: { id: string; directory: string }[] = [];
   const identityCounts = new Map<string, number>();
   let complete = true;

@@ -21,10 +21,10 @@ The linked reference pages define the exact fields.
    - SQLite or the local file system: `MEDIA_ROOT` may set the media directory.
    - PostgreSQL: media may be inside the database. Use a consistent backup that your database administrator approves, and include application volumes and external media storage.
    - Browser local mode: media is in IndexedDB.
-   - Docker Compose: consider both the `appdata` and the `pgdata18` volume.
+   - Docker Compose: in the SQLite stack the database and the media are both in the `appdata` volume; in the PostgreSQL stack consider both the `appdata` and the `pgdata18` volume.
 
 > [!CAUTION]
-> `pnpm docker:down-all` deletes the data in the volumes.
+> `pnpm docker:down-all` and `pnpm docker:pg:down-all` delete the data in the volumes.
 
 After the backup, confirm that the files are readable and that the database backup can be restored, and keep the original backup.
 

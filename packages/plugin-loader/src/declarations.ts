@@ -37,31 +37,15 @@ export function resolvePluginDeclarations(records: readonly ParsedPluginMd[]) {
   };
 }
 
-export function validatePluginDeclarations(
-  records: readonly ParsedPluginMd[],
-): void {
-  const names = new Map<string, ParsedPluginMd>();
-  for (const record of records) {
-    const previous = names.get(record.manifest.name);
-    if (
-      previous &&
-      previous !== record &&
-      previous.sourcePath !== record.sourcePath
-    ) {
-      throw new Error(
-        `Duplicate manifest name "${record.manifest.name}": ${previous.sourcePath ?? previous.manifest.name} and ${record.sourcePath ?? record.manifest.name}`,
-      );
-    }
-    names.set(record.manifest.name, record);
-  }
-  const plugin = records[0]?.plugin;
+export function validatePluginDeclarations(root: ParsedPluginMd): void {
+  const plugin = root.plugin;
   for (const command of plugin?.contributes?.commands ?? []) {
     if (!plugin?.contributes?.actions?.includes(command.action))
       throw new Error(
         `Command ${command.name} action ${command.action} must be declared in contributes.actions`,
       );
   }
-  const declarations = resolvePluginDeclarations(records);
+  const declarations = resolvePluginDeclarations([root]);
   for (const [id, projection] of Object.entries(
     declarations.worldProjections,
   )) {

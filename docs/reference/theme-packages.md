@@ -235,7 +235,7 @@ apps/web/src/themes/builtins/
 {
   "id": "paper",
   "label": {
-    "zh-CN": "Paper",
+    "zh-CN": "纸本",
     "en-US": "Paper"
   },
   "source": "builtin",
@@ -243,6 +243,11 @@ apps/web/src/themes/builtins/
   "description": {
     "zh-CN": "温暖、偏叙事阅读器的纸本风格。",
     "en-US": "A warm editorial reading style."
+  },
+  "group": "classic",
+  "groupLabel": {
+    "zh-CN": "经典",
+    "en-US": "Classic"
   }
 }
 ```
@@ -607,7 +612,9 @@ html[data-theme="my-theme"][data-turn="executing"] .ui-composer-input {
 - 叙事主题显式覆盖 `--story-*` token
 - 工具主题显式覆盖 `--surface-*`、`--radius-*`、`--title-*` token
 
-## 10. 参考示例
+<a id="10-参考示例"></a>
+
+## 11. 参考示例
 
 内置主题可以当作实际的参考：
 

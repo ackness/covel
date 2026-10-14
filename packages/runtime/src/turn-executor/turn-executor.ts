@@ -1041,6 +1041,9 @@ async function executeTurnImpl(
   attachExecutionJournal(turnResult, journalMessages);
 
   // ── TurnStop hook — Post* hooks cannot abort ────────
+  // No execution signal: TurnStop also reports a cancelled execution, and an
+  // already-aborted signal would skip every handler. `ctx.signal` here fires
+  // only on the handler's own time limit (docs/reference/hooks.md).
   await runTurnStopHook(
     {
       pipeline: deps.hookPipeline,

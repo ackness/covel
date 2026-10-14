@@ -11,10 +11,11 @@ import {
 /**
  * LLM request machinery for the agent tool-call loop.
  *
- * One agent step issues exactly one LLM response. Depending on the runtime it
- * goes through one of three paths:
- *   - streaming (story runtimes) — with a non-stream fallback when the stream
- *     exhausts retries or finishes empty with tool_calls but no parsed calls;
+ * One agent step issues exactly one LLM response. It goes through one of two
+ * paths, chosen by `useStreaming` (see agent-loop-policy.ts):
+ *   - streaming — with a non-stream fallback when the stream exhausts retries
+ *     or finishes empty with tool_calls but no parsed calls. Only story
+ *     runtimes forward the text deltas to the player;
  *   - non-streaming — with a narrow secondary retry for DeepSeek's malformed
  *     tool-arguments error.
  *

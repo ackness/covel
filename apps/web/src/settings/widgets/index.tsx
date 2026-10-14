@@ -1,3 +1,4 @@
+import { useSettingsWritable } from "../use-settings-save.js";
 import { createContext, useContext, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Eye, EyeOff } from "lucide-react";
@@ -59,7 +60,9 @@ function useSettingLock(entry: SettingEntry): {
   note: string | null;
 } {
   const { t } = useTranslation();
+  const writable = useSettingsWritable();
   const state = useServerSettingState(entry.key);
+  if (!writable) return { locked: true, note: null };
   if (!state) return { locked: false, note: null };
   if (state.status === "pending") {
     return {
@@ -215,10 +218,12 @@ function FieldShell({
 function UseDefaultButton({ entry }: { entry: SettingEntry }) {
   const { t } = useTranslation();
   const [overridden, restoreDefault] = useSettingOverride(entry.key);
+  const { locked } = useSettingLock(entry);
   if (!overridden || entry.secret || entry.backend === "keys") return null;
   return (
     <button
       type="button"
+      disabled={locked}
       onClick={() => void restoreDefault()}
       className="text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
     >
@@ -457,6 +462,7 @@ function SecretWidget({ entry }: { entry: SettingEntry }) {
   const [value, setValue] = useSetting<string>(entry.key);
   const [visible, setVisible] = useState(false);
   const serverManaged = isServerManagedSecret(value);
+  const { locked } = useSettingLock(entry);
   const controlId = settingControlId(entry.key);
   const stored = serverManaged ? "" : (value ?? "");
   const draft = useDraft(stored, (text) => {
@@ -468,6 +474,7 @@ function SecretWidget({ entry }: { entry: SettingEntry }) {
         <input
           id={controlId}
           type={visible ? "text" : "password"}
+          disabled={locked}
           value={draft.text}
           onChange={(e) => draft.setDraft(e.target.value)}
           onBlur={draft.flush}
@@ -485,6 +492,7 @@ function SecretWidget({ entry }: { entry: SettingEntry }) {
         {serverManaged && (
           <Button
             variant="outline"
+            disabled={locked}
             onClick={() => void setValue("")}
             className="shrink-0"
           >
