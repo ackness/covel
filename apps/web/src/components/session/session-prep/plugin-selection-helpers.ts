@@ -1,6 +1,6 @@
 import type * as api from "@/services/api.js";
 
-export function isLockedCorePackage(
+export function isBuiltinDefaultPackage(
   pkg: Pick<api.PluginSummary, "kind" | "source">,
 ): boolean {
   return pkg.kind === "core" && pkg.source === "builtin";

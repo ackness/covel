@@ -100,7 +100,7 @@ Extract facts supported by runtime-inputs.narrative.value, then call save-facts.
 | Root field                                      | Meaning                                                                                                                                                          |
 | ----------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `id`, `kind`                                    | Package identity. `kind` is `core` or `plugin`.                                                                                                                  |
-| `version`, `displayName`, `description`, `tags` | Metadata. `role:*` tags do not drive any business logic.                                                                                                         |
+| `version`, `displayName`, `description`, `tags` | Metadata. Tags group and filter plugins in session prep; they do not determine runtime scheduling.                                                                                                         |
 | `covel`                                         | The range of host versions the package works with, such as `">=0.0.45"`. A host outside that range does not install or load the package.                         |
 | `author`, `license`, `homepage`                 | Author information, shown only for display. See [Author information](#author-information).                                                                       |
 | `provides`                                      | Versioned contract strings, or `{contract, default: true}`.                                                                                                      |
@@ -119,6 +119,8 @@ A contract is a versioned name, such as `narrative-engine@1`. Plugins find each 
 - Different packages can provide the same contract. A consumer says whether it wants one provider or all of them, using `cardinality: one` or `all`.
 - Only an extension point that allows one provider, and an explicit `conflicts` entry, get a separate mutual-exclusion check.
 - `conflicts` can name only plugin contracts. If you write a kernel extension point or a UI slot, you get `invalid-conflict`, and the error points to the position of the `conflicts` field. How kernel extension points combine is decided by their mode.
+
+Session prep groups each plugin by its first declared tag, using the tag text as the heading. Plugins with no tags appear under “Untagged”. Each plugin appears once; all tags remain available for filtering. The `kind: core` badge says “Enabled by default” and does not indicate a lock. “Builtin” in the session list describes the source only.
 
 ### contributes fields
 

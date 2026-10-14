@@ -199,14 +199,7 @@
     "pluginsSelected": "выбраны плагины",
     "searchPlugins": "Поиск по плагинам, тегам и возможностям",
     "pluginGroups": {
-      "core": "Основной",
-      "setup": "Настройка",
-      "traditional": "Традиционная история",
-      "dialogue": "Диалоговый режим",
-      "characters": "Персонажи",
-      "memory": "Память и извлечение",
-      "guidance": "Руководство",
-      "utility": "Утилита"
+      "untagged": "Без тегов"
     },
     "recommendationReasons": {
       "requiredByWorld": "Требуется миру",
@@ -1525,8 +1518,9 @@
     "triggerInterval": "Интервал",
     "triggerManual": "Вручную",
     "triggerEvent": "Событие",
-    "locked": "Плагин ядра — нельзя отключить",
-    "core": "основной",
+    "locked": "Этот плагин заблокирован",
+    "defaultEnabled": "Включён по умолчанию",
+    "defaultEnabledHint": "Включён по умолчанию; можно отключить",
     "enable": "Включить плагин",
     "disable": "Отключить плагин",
     "emptyPlaceholder": "Для {{label}} пока нет данных. Ждем развития истории…",
@@ -1596,8 +1590,8 @@
     },
     "source": {
       "builtin": {
-        "label": "Основной",
-        "tooltip": "Встроенный плагин ядра поставляется с Covel."
+        "label": "Встроенный",
+        "tooltip": "Плагин, поставляемый с Covel"
       },
       "official": {
         "label": "Официальный",
