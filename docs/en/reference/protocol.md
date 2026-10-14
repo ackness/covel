@@ -709,6 +709,9 @@ Details of `transport-gap`:
 
 - Each `(origin, session, stream)` is checked starting from `seq=1`. If the first frame of a new stream is greater than `1`, or the first frame after the receiving state was evicted is greater than `1`, it is handled as a gap.
 - After the events before the faulty frame are delivered, and before the events after it are delivered, the local replay buffer is cleared and gets a new epoch. Every connected client receives the reset and reconnects.
+- The receiver keeps state only for the current stream of each `(origin, session)`. When the sender starts a new stream, the old stream's state is reclaimed; if events of the old stream are still waiting for an earlier frame, they are delivered first, with a reset.
+- There are at most 1024 receiving states. When full, the state that has gone longest without a frame and has no waiting events is evicted first. If every state has waiting events, the one that has gone longest without a frame is evicted after its waiting events are delivered, with a reset.
+- The sender holds at most 256 frames per session waiting to be sent. When the transport stops returning and that number is reached, new frames are dropped with a warning. When the receiver gets a later frame, it sees the missing range and resets as for a gap.
 
 Details of `publish-failed`:
 
