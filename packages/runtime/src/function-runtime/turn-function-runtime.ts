@@ -1,3 +1,4 @@
+import { withInstructionLocale } from "./plugin-runtime-gateway.js";
 import { snapshotPlayerInput } from "../turn-executor/turn-digest.js";
 import { pluginMessagesFor, toJsonValueOrDiagnostic } from "@covel/shared";
 import { createWorldModelView } from "./world-model-view.js";
@@ -212,7 +213,10 @@ export async function executeFunctionRuntime({
   }
   const runtimeGateway = deps.gateway
     ? withPromptCacheKey(
-        withDefaultGatewaySignal(deps.gateway, handlerAbort.signal),
+        withDefaultGatewaySignal(
+          withInstructionLocale(deps.gateway, input.locale),
+          handlerAbort.signal,
+        ),
         promptCacheKeyFor(input.sessionId, manifest.name),
       )
     : undefined;

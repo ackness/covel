@@ -24,6 +24,7 @@ import type {
   EvaluationResult,
 } from "@covel/shared/plugin-runtime";
 import {
+  instructionLocaleFor,
   resolveLlmTokenLimits,
   type LLMDiagnostics,
   type LLMUsageSummary,
@@ -65,6 +66,7 @@ export interface FullGatewayLike {
   generateText(
     input: {
       presetId?: string;
+      instructionLocale?: "en" | "zh";
       messages: Array<{ role: string; content: string | null }>;
       defaults?: import("@covel/shared").LLMRequestDefaults;
       responseFormat?: import("@covel/shared").LLMResponseFormat;
@@ -88,6 +90,7 @@ export interface FullGatewayLike {
   generateObject<T>(
     input: {
       presetId?: string;
+      instructionLocale?: "en" | "zh";
       schema: ZodType<T>;
       messages: Array<{ role: string; content: string | null }>;
       defaults?: import("@covel/shared").LLMRequestDefaults;
@@ -268,6 +271,7 @@ export function createPluginRuntimeGateway(
         {
           ...(input.presetId ? { presetId: input.presetId } : {}),
           messages,
+          instructionLocale: input.instructionLocale,
           ...(input.defaults ? { defaults: input.defaults } : {}),
           ...(input.responseFormat
             ? { responseFormat: input.responseFormat }
@@ -300,6 +304,7 @@ export function createPluginRuntimeGateway(
     async generateObject<T>(input: {
       readonly defaults?: import("@covel/shared").LLMRequestDefaults;
       readonly presetId?: string;
+      readonly instructionLocale?: "en" | "zh";
       readonly schema: Readonly<Record<string, unknown>>;
       readonly prompt?: string;
       readonly system?: string;
@@ -343,6 +348,7 @@ export function createPluginRuntimeGateway(
           ...(input.presetId ? { presetId: input.presetId } : {}),
           schema: zodSchema as ZodType<T>,
           messages,
+          instructionLocale: input.instructionLocale,
           ...(input.defaults ? { defaults: input.defaults } : {}),
           ...(input.providerOptions
             ? { providerOptions: input.providerOptions }
@@ -564,4 +570,19 @@ function toMessages(opts: { system?: string; prompt?: string }): Array<{
     );
   }
   return messages;
+}
+
+/** Bind both text operations to this execution's session instruction language. */
+export function withInstructionLocale(
+  gateway: PluginRuntimeGateway,
+  locale: string | undefined,
+): PluginRuntimeGateway {
+  const instructionLocale = instructionLocaleFor(locale);
+  return {
+    ...gateway,
+    generateText: (input) =>
+      gateway.generateText({ ...input, instructionLocale }),
+    generateObject: (input) =>
+      gateway.generateObject({ ...input, instructionLocale }),
+  };
 }

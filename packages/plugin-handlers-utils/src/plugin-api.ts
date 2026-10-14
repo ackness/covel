@@ -848,6 +848,9 @@ export interface PluginTextMessage {
 }
 export interface PluginTextParams {
   model: string;
+  /** Host-selected language for adapter instructions. */
+  instructionLocale?: "en" | "zh";
+  /** Text and text blocks contain no internal prompt-cache markers. */
   messages: PluginTextMessage[];
   tools?: {
     type: "function";

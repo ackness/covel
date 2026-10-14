@@ -119,6 +119,7 @@ export interface GatewayLike {
   generateText(
     input: {
       presetId?: string;
+      instructionLocale?: "en" | "zh";
       messages: Array<{
         role: string;
         content: string | readonly (LLMTextPart | LLMImagePart)[] | null;
@@ -166,6 +167,7 @@ export interface GatewayLike {
   streamText?(
     input: {
       presetId?: string;
+      instructionLocale?: "en" | "zh";
       messages: Array<{
         role: string;
         content: string | readonly (LLMTextPart | LLMImagePart)[] | null;
@@ -312,6 +314,7 @@ export function createGatewayAdapter(
       const result = await gateway.generateText(
         {
           presetId: selection.presetId,
+          instructionLocale: instructionLocaleFor(params.locale),
           ...(params.defaults ? { defaults: params.defaults } : {}),
           messages,
           tools: tools && tools.length > 0 ? tools : undefined,
@@ -390,6 +393,7 @@ export function createGatewayAdapter(
       for await (const event of gateway.streamText(
         {
           presetId: selection.presetId,
+          instructionLocale: instructionLocaleFor(params.locale),
           ...(params.defaults ? { defaults: params.defaults } : {}),
           messages,
           tools: tools && tools.length > 0 ? tools : undefined,

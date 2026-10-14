@@ -423,6 +423,7 @@ What you must implement:
 
 - You must implement `generateText` and `streamText`. For the types, see `PluginTextWire` in `@covel/plugin-handlers-utils`.
 - `params` includes `model`, `messages` (with tool calls and tool results), `tools`, `responseFormat`, and `providerRequestMetadata`.
+- Message text and text blocks contain no internal prompt-cache markers. `instructionLocale` is the host-selected instruction language (`en` or `zh`). The fallback for structured output uses it too.
 - The last event in a stream must be `done`.
 - `finishReason` can return the provider's own word directly. The gateway converts it to a common value such as `stop`, `length`, or `tool_calls` (see the notes on finish reasons in [slots.md](./slots.md#connection-tests-and-failure-reasons)).
 - You do not need to implement structured output on its own. The gateway puts the JSON Schema into `responseFormat`, adds it to the messages as an instruction, calls `generateText`, and then parses and validates the result.

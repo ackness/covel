@@ -423,6 +423,7 @@ export default function register(covel) {
 
 - 必须实现 `generateText` 和 `streamText`。类型见 `@covel/plugin-handlers-utils` 的 `PluginTextWire`。
 - `params` 带 `model`、`messages`（含工具调用与工具结果）、`tools`、`responseFormat` 和 `providerRequestMetadata`。
+- 消息文字和 text 块不含内部缓存断点标记。`instructionLocale` 是宿主按会话选出的指令语言（`en` 或 `zh`），结构化输出的补充指令也使用它。
 - 流的最后一个事件必须是 `done`。
 - `finishReason` 可以直接返回服务商自己的词，网关会统一成 `stop` / `length` / `tool_calls` 等（见 [slots.md](./slots.md#连接测试与失败原因) 的结束原因说明）。
 - 结构化输出不用单独实现：网关把 JSON Schema 放进 `responseFormat` 并作为指令加入消息，调用 `generateText`，再解析和校验结果。
