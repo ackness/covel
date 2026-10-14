@@ -25,27 +25,28 @@ Covel 的服务器对外只有一套 HTTP JSON 接口。网页和桌面应用用
 
 **按任务找端点**
 
-| 我想……                       | 端点                                                     | 在哪一节                                     |
-| ---------------------------- | -------------------------------------------------------- | -------------------------------------------- |
-| 确认服务器活着               | `GET /api/health`                                        | [健康检查](#健康检查)                        |
-| 列出、创建、修改世界         | `GET` / `POST /api/worlds`，`PATCH /api/worlds/:id`      | [世界管理](#世界管理)                        |
-| 建一局、列出、删除会话       | `POST` / `GET /api/sessions`，`DELETE /api/sessions/:id` | [会话管理](#会话管理)                        |
-| 开局、发消息、提交选择       | `POST /api/actions`                                      | [Turn 执行](#turn-执行)                      |
-| 打断或引导正在跑的回合       | `POST /api/sessions/:id/abort`、`/steer`                 | 端点列表的“回合中控制（W4）”                 |
-| 回答回合里弹出的表单或选项   | `POST /api/actions`（`submit_interaction`）              | [玩家交互](#玩家交互)                        |
-| 读聊天记录                   | `GET /api/sessions/:id/messages`                         | [消息历史](#消息历史)                        |
-| 读状态表、角色               | `GET /api/sessions/:id/state`、`/characters`             | [状态查询](#状态查询)、[角色数据](#角色数据) |
-| 给一局开关插件               | `PUT` / `DELETE /api/sessions/:id/plugins/:pluginId`     | [会话插件管理](#会话插件管理)                |
-| 调用插件的手动功能           | `POST /api/sessions/:id/plugin-rpc`                      | [插件 RPC 通道](#插件-rpc-通道)              |
-| 批准或拒绝插件的请求         | `POST /api/approvals/:approvalId/decision`               | [RPC Approval 流程](#rpc-approval-流程)      |
-| 读写插件自己的数据           | `/api/sessions/:id/plugin-data/...`                      | 端点列表的“插件数据（Plugin Data）”          |
-| 存档、分支                   | `POST /api/sessions/:id/snapshots`、`/fork`              | 端点列表的“Snapshot / Fork”                  |
-| 订阅一局的实时事件           | `GET /api/events/stream?sessionId=...`                   | [事件系统](#事件系统)                        |
-| 测试模型连接、让 AI 生成世界 | `POST /api/ai/ping`、`/api/ai/generate-world`            | [AI 生成](#ai-生成)                          |
-| 看一个回合里发生了什么       | `GET /api/traces/:sessionId`                             | [Trace 调试](#trace-调试)                    |
-| 管理图片等媒体               | `/api/media/...`                                         | [媒体管理](#媒体管理)                        |
-| 安装插件或世界               | `/api/install/...`                                       | 端点列表的“插件与世界安装（Install）”        |
-| 看或改配置                   | `/api/config/...`、`/api/llm-config`                     | [配置信息](#配置信息)                        |
+<!-- prettier-ignore -->
+| 我想…… | 端点 | 在哪一节 |
+| --- | --- | --- |
+| 确认服务器活着 | `GET /api/health` | [健康检查](#健康检查) |
+| 列出、创建、修改世界 | `GET` / `POST /api/worlds`，`PATCH /api/worlds/:id` | [世界管理](#世界管理) |
+| 建一局、列出、删除会话 | `POST` / `GET /api/sessions`，`DELETE /api/sessions/:id` | [会话管理](#会话管理) |
+| 开局、发消息、提交选择 | `POST /api/actions` | [Turn 执行](#turn-执行) |
+| 打断或引导正在跑的回合 | `POST /api/sessions/:id/abort`、`/steer` | 端点列表的“回合中控制（W4）” |
+| 回答回合里弹出的表单或选项 | `POST /api/actions`（`submit_interaction`） | [玩家交互](#玩家交互) |
+| 读聊天记录 | `GET /api/sessions/:id/messages` | [消息历史](#消息历史) |
+| 读状态表、角色 | `GET /api/sessions/:id/state`、`/characters` | [状态查询](#状态查询)、[角色数据](#角色数据) |
+| 给一局开关插件 | `PUT` / `DELETE /api/sessions/:id/plugins/:pluginId` | [会话插件管理](#会话插件管理) |
+| 调用插件的手动功能 | `POST /api/sessions/:id/plugin-rpc` | [插件 RPC 通道](#插件-rpc-通道) |
+| 批准或拒绝插件的请求 | `POST /api/approvals/:approvalId/decision` | [RPC Approval 流程](#rpc-approval-流程) |
+| 读写插件自己的数据 | `/api/sessions/:id/plugin-data/...` | 端点列表的“插件数据（Plugin Data）” |
+| 存档、分支 | `POST /api/sessions/:id/snapshots`、`/fork` | 端点列表的“Snapshot / Fork” |
+| 订阅一局的实时事件 | `GET /api/events/stream?sessionId=...` | [事件系统](#事件系统) |
+| 测试模型连接、让 AI 生成世界 | `POST /api/ai/ping`、`/api/ai/generate-world` | [AI 生成](#ai-生成) |
+| 看一个回合里发生了什么 | `GET /api/traces/:sessionId` | [Trace 调试](#trace-调试) |
+| 管理图片等媒体 | `/api/media/...` | [媒体管理](#媒体管理) |
+| 安装插件或世界 | `/api/install/...` | 端点列表的“插件与世界安装（Install）” |
+| 看或改配置 | `/api/config/...`、`/api/llm-config` | [配置信息](#配置信息) |
 
 **请求体的基本检查**
 
@@ -525,24 +526,25 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 
 ### 世界管理
 
-| 方法   | 路径                                    | 描述                                                           |
-| ------ | --------------------------------------- | -------------------------------------------------------------- |
-| GET    | `/api/worlds`                           | 列出所有世界的摘要（不含 `lore` / `dimensions`）               |
-| GET    | `/api/worlds/:id`                       | 获取世界完整记录                                               |
-| POST   | `/api/worlds`                           | 创建世界；ID 已存在返回 `409 world_already_exists`             |
-| PATCH  | `/api/worlds/:id`                       | 部分更新世界（支持顶层 `dimensions`，`metadata` 与现有值合并） |
-| DELETE | `/api/worlds/:id`                       | 删除世界及其全部会话，规则见下文                               |
-| GET    | `/api/worlds/:id/dimensions/export`     | 导出世界维度（YAML / JSON）                                    |
-| POST   | `/api/worlds/:id/dimensions/import`     | 导入世界维度                                                   |
-| POST   | `/api/worlds/:id/restore-package`       | 把改过的包世界换回世界包里的版本                               |
-| POST   | `/api/worlds/:id/sync-dimensions`       | 作者和工具：把世界维度同步到指定的一个活跃会话                 |
-| POST   | `/api/worlds/:id/world-data/preflight`  | 只读地预演 worldData 导入                                      |
-| POST   | `/api/worlds/:id/sync-data`             | 作者和工具：同步由导入器管理的 worldData 行，默认 dry-run      |
-| POST   | `/api/worlds/:id/translate`             | 用配置的模型为用户世界目录里的世界包增加一种语言版本（SSE）    |
-| GET    | `/api/worlds/:id/gallery`               | 列出世界包自带的图片（场景、立绘）                             |
-| GET    | `/api/media/library`                    | 玩家的媒体库（仅 `self` / 桌面端）                             |
-| POST   | `/api/media/library/delete`             | 删除玩家选中的媒体，或所有没有会话使用的媒体                   |
-| GET    | `/api/worlds/:id/gallery/:source/:file` | 读取 gallery 列表里的一张图片                                  |
+<!-- prettier-ignore -->
+| 方法 | 路径 | 描述 |
+| --- | --- | --- |
+| GET | `/api/worlds` | 列出所有世界的摘要（不含 `lore` / `dimensions`） |
+| GET | `/api/worlds/:id` | 获取世界完整记录 |
+| POST | `/api/worlds` | 创建世界；ID 已存在返回 `409 world_already_exists` |
+| PATCH | `/api/worlds/:id` | 部分更新世界（支持顶层 `dimensions`，`metadata` 与现有值合并） |
+| DELETE | `/api/worlds/:id` | 删除世界及其全部会话，规则见下文 |
+| GET | `/api/worlds/:id/dimensions/export` | 导出世界维度（YAML / JSON） |
+| POST | `/api/worlds/:id/dimensions/import` | 导入世界维度 |
+| POST | `/api/worlds/:id/restore-package` | 把改过的包世界换回世界包里的版本 |
+| POST | `/api/worlds/:id/sync-dimensions` | 作者和工具：把世界维度同步到指定的一个活跃会话 |
+| POST | `/api/worlds/:id/world-data/preflight` | 只读地预演 worldData 导入 |
+| POST | `/api/worlds/:id/sync-data` | 作者和工具：同步由导入器管理的 worldData 行，默认 dry-run |
+| POST | `/api/worlds/:id/translate` | 用配置的模型为用户世界目录里的世界包增加一种语言版本（SSE） |
+| GET | `/api/worlds/:id/gallery` | 列出世界包自带的图片（场景、立绘） |
+| GET | `/api/media/library` | 玩家的媒体库（仅 `self` / 桌面端） |
+| POST | `/api/media/library/delete` | 删除玩家选中的媒体，或所有没有会话使用的媒体 |
+| GET | `/api/worlds/:id/gallery/:source/:file` | 读取 gallery 列表里的一张图片 |
 
 几条补充：
 
@@ -1012,21 +1014,22 @@ setup runtime 反复失败、用完重试预算（`maxTriggerCount`）后进入 
 - 在 `demo` / `commercial` 层级，所有安装管理接口必须持有运维 token。启用安装 API 不会绕过这项检查。
 - 世界安装还要满足全局世界写入的鉴权：生产 MemoryStore（包括 `self`）和 托管层级必须持有运维 token。启用安装 API 同样不会绕过。
 
-| 方法   | 路径                                                | 请求                           | 描述                                                         |
-| ------ | --------------------------------------------------- | ------------------------------ | ------------------------------------------------------------ |
-| POST   | `/api/install/plugin`                               | multipart 字段 `file`          | 把插件 `.zip` 解压到用户插件目录                             |
-| POST   | `/api/install/world`                                | multipart 字段 `file`          | 把世界 `.zip` 解压到用户世界目录                             |
-| POST   | `/api/install/plugin/github/preview`                | `{ url }`                      | 解析公开的 GitHub 仓库或子目录并返回预览；不安装、不执行插件 |
-| POST   | `/api/install/plugin/github`                        | `{ token, acceptRisk: true }`  | 校验已确认的预览并安装                                       |
-| POST   | `/api/install/world/github/preview`                 | `{ url }`                      | 同上，对象是世界包                                           |
-| POST   | `/api/install/world/github`                         | `{ token, acceptRisk: true }`  | 校验已确认的预览并安装世界                                   |
-| POST   | `/api/install/{plugin,world}/github/update/preview` | `{ id, url? }`                 | 检查一个从 GitHub 安装的包有没有更新                         |
-| POST   | `/api/install/{plugin,world}/github/update`         | `{ token, acceptRisk: true }`  | 应用已预览的更新                                             |
-| DELETE | `/api/install/{plugin,world}/github/update/:id`     | —                              | 取消还没有应用的更新，返回 `{ ok: true }`                    |
-| POST   | `/api/install/github/preview`                       | `{ url }`                      | 一次预览链接下的插件、世界或合集成员                         |
-| POST   | `/api/install/github/batch`                         | `{ tokens, acceptRisk: true }` | 把已预览的包作为一个整体安装，失败时回滚本次写入             |
-| POST   | `/api/install/collection`                           | multipart 字段 `file`          | 导入打包好的合集 ZIP                                         |
-| GET    | `/api/install/plugins`                              | —                              | 列出用户插件目录中的包及可用的来源记录                       |
+<!-- prettier-ignore -->
+| 方法 | 路径 | 请求 | 描述 |
+| --- | --- | --- | --- |
+| POST | `/api/install/plugin` | multipart 字段 `file` | 把插件 `.zip` 解压到用户插件目录 |
+| POST | `/api/install/world` | multipart 字段 `file` | 把世界 `.zip` 解压到用户世界目录 |
+| POST | `/api/install/plugin/github/preview` | `{ url }` | 解析公开的 GitHub 仓库或子目录并返回预览；不安装、不执行插件 |
+| POST | `/api/install/plugin/github` | `{ token, acceptRisk: true }` | 校验已确认的预览并安装 |
+| POST | `/api/install/world/github/preview` | `{ url }` | 同上，对象是世界包 |
+| POST | `/api/install/world/github` | `{ token, acceptRisk: true }` | 校验已确认的预览并安装世界 |
+| POST | `/api/install/{plugin,world}/github/update/preview` | `{ id, url? }` | 检查一个从 GitHub 安装的包有没有更新 |
+| POST | `/api/install/{plugin,world}/github/update` | `{ token, acceptRisk: true }` | 应用已预览的更新 |
+| DELETE | `/api/install/{plugin,world}/github/update/:id` | — | 取消还没有应用的更新，返回 `{ ok: true }` |
+| POST | `/api/install/github/preview` | `{ url }` | 一次预览链接下的插件、世界或合集成员 |
+| POST | `/api/install/github/batch` | `{ tokens, acceptRisk: true }` | 把已预览的包作为一个整体安装，失败时回滚本次写入 |
+| POST | `/api/install/collection` | multipart 字段 `file` | 导入打包好的合集 ZIP |
+| GET | `/api/install/plugins` | — | 列出用户插件目录中的包及可用的来源记录 |
 
 各端点接受什么、返回什么：
 
@@ -1379,30 +1382,31 @@ fork 和社区插件的授权：
 
 ### 配置信息
 
-| 方法 | 路径                           | 描述                                                                        |
-| ---- | ------------------------------ | --------------------------------------------------------------------------- |
-| GET  | `/api/presets`                 | 列出配置的模型预设（`{ items }`）                                           |
-| GET  | `/api/plugins`                 | 列出插件（`PluginSummary`）                                                 |
-| GET  | `/api/worlds/:id/plugin-plan`  | 返回某个世界的插件方案 `WorldPluginPlan`                                    |
-| GET  | `/api/ui-specs?sessionId=<id>` | 列出插件的 UI 声明，按 slot 分组                                            |
-| GET  | `/api/llm-config`              | 返回 slot 配置与能力信息                                                    |
-| POST | `/api/llm-config/reload`       | 重读 `llm.toml` 并应用，无需重启                                            |
-| GET  | `/api/provider-keys`           | 返回哪些 provider 配置了密钥，不含密钥内容                                  |
-| GET  | `/api/config/info`             | 返回当前部署信息（`isDesktop`、`covelHome`、`dataRoot` 等）                 |
-| GET  | `/api/config/server-settings`  | 所有层级：返回服务端设置的生效值、来源和能否设置                            |
-| PUT  | `/api/config/server-settings`  | 仅 `self` 层级：保存服务端设置                                              |
-| GET  | `/api/config/keys`             | 仅桌面：以 `{ items: string[] }` 列出已配置的 provider（不返回值）          |
-| PUT  | `/api/config/keys`             | 仅桌面：写入 `<covelHome>/keys.env`；body `{ provider: value }`             |
-| GET  | `/api/config/settings`         | 仅桌面：读取 `<covelHome>/settings.json`（统一的 SettingsStore）            |
-| PUT  | `/api/config/settings`         | 仅桌面：原子写 `settings.json`；body `{ entries: Record<string, unknown> }` |
-| GET  | `/api/config/proxy`            | 仅桌面：读取出站请求的代理模式与生效状态                                    |
-| PUT  | `/api/config/proxy`            | 仅桌面：写入代理并立即应用                                                  |
-| GET  | `/api/app-update/latest`       | 仅桌面：查询 GitHub 上最新的稳定 Release                                    |
-| PUT  | `/api/config/data-root`        | 仅桌面：改写 `config.toml` 的 `data_root` 行，需要重启服务器                |
-| POST | `/api/config/open-folder`      | 仅桌面：打开 config / data / logs 目录，或 `llm.toml` / `keys.env`          |
-| GET  | `/api/config/raw`              | 列出可以在应用内当文本编辑的配置文件                                        |
-| GET  | `/api/config/raw/:name`        | 读取一个配置文件的文本和 `digest`                                           |
-| PUT  | `/api/config/raw/:name`        | 校验并保存文本；body `{ content, baseDigest }`                              |
+<!-- prettier-ignore -->
+| 方法 | 路径 | 描述 |
+| --- | --- | --- |
+| GET | `/api/presets` | 列出配置的模型预设（`{ items }`） |
+| GET | `/api/plugins` | 列出插件（`PluginSummary`） |
+| GET | `/api/worlds/:id/plugin-plan` | 返回某个世界的插件方案 `WorldPluginPlan` |
+| GET | `/api/ui-specs?sessionId=<id>` | 列出插件的 UI 声明，按 slot 分组 |
+| GET | `/api/llm-config` | 返回 slot 配置与能力信息 |
+| POST | `/api/llm-config/reload` | 重读 `llm.toml` 并应用，无需重启 |
+| GET | `/api/provider-keys` | 返回哪些 provider 配置了密钥，不含密钥内容 |
+| GET | `/api/config/info` | 返回当前部署信息（`isDesktop`、`covelHome`、`dataRoot` 等） |
+| GET | `/api/config/server-settings` | 所有层级：返回服务端设置的生效值、来源和能否设置 |
+| PUT | `/api/config/server-settings` | 仅 `self` 层级：保存服务端设置 |
+| GET | `/api/config/keys` | 仅桌面：以 `{ items: string[] }` 列出已配置的 provider（不返回值） |
+| PUT | `/api/config/keys` | 仅桌面：写入 `<covelHome>/keys.env`；body `{ provider: value }` |
+| GET | `/api/config/settings` | 仅桌面：读取 `<covelHome>/settings.json`（统一的 SettingsStore） |
+| PUT | `/api/config/settings` | 仅桌面：原子写 `settings.json`；body `{ entries: Record<string, unknown> }` |
+| GET | `/api/config/proxy` | 仅桌面：读取出站请求的代理模式与生效状态 |
+| PUT | `/api/config/proxy` | 仅桌面：写入代理并立即应用 |
+| GET | `/api/app-update/latest` | 仅桌面：查询 GitHub 上最新的稳定 Release |
+| PUT | `/api/config/data-root` | 仅桌面：改写 `config.toml` 的 `data_root` 行，需要重启服务器 |
+| POST | `/api/config/open-folder` | 仅桌面：打开 config / data / logs 目录，或 `llm.toml` / `keys.env` |
+| GET | `/api/config/raw` | 列出可以在应用内当文本编辑的配置文件 |
+| GET | `/api/config/raw/:name` | 读取一个配置文件的文本和 `digest` |
+| PUT | `/api/config/raw/:name` | 校验并保存文本；body `{ content, baseDigest }` |
 
 各端点的补充说明：
 
@@ -4483,22 +4487,23 @@ runtime 导出的处理：
 
 **错误**
 
-| 状态码 | `code`                        | 什么时候                                            |
-| ------ | ----------------------------- | --------------------------------------------------- |
-| 400    | —                             | 缺少 `fromSnapshotId`                               |
-| 403    | `media_reference_forbidden`   | 用到的媒体没有授权给父会话                          |
-| 404    | `session_not_found`           | 父会话不存在                                        |
-| 404    | `not_found`                   | 快照不存在，或不属于这个会话                        |
-| 404    | `world_not_found`             | 会话关联的世界已经不存在                            |
-| 409    | `cursor_missing`              | `messagesCursor` 或聊天边界指向的消息已不在父会话里 |
-| 409    | `snapshot_schema_missing`     | 有状态记录找不到对应的表结构                        |
-| 409    | `dimension_provider_required` | 快照的维度数据属于某个社区插件，而子会话无法启用它  |
-| 409    | `world_deleting`              | 会话关联的世界正在删除                              |
-| 429    | `rate_limit_exceeded`         | 超过分叉频率上限，带 `Retry-After`                  |
-| 500    | `fork_media_reference_failed` | 写媒体引用失败                                      |
-| 500    | `fork_failed`                 | 无法为子会话生成合法的 ID，不创建子会话             |
-| 500    | —                             | 其他内部写入失败                                    |
-| 503    | `session_busy`                | PostgreSQL 部署下等会话锁超时                       |
+<!-- prettier-ignore -->
+| 状态码 | `code` | 什么时候 |
+| --- | --- | --- |
+| 400 | — | 缺少 `fromSnapshotId` |
+| 403 | `media_reference_forbidden` | 用到的媒体没有授权给父会话 |
+| 404 | `session_not_found` | 父会话不存在 |
+| 404 | `not_found` | 快照不存在，或不属于这个会话 |
+| 404 | `world_not_found` | 会话关联的世界已经不存在 |
+| 409 | `cursor_missing` | `messagesCursor` 或聊天边界指向的消息已不在父会话里 |
+| 409 | `snapshot_schema_missing` | 有状态记录找不到对应的表结构 |
+| 409 | `dimension_provider_required` | 快照的维度数据属于某个社区插件，而子会话无法启用它 |
+| 409 | `world_deleting` | 会话关联的世界正在删除 |
+| 429 | `rate_limit_exceeded` | 超过分叉频率上限，带 `Retry-After` |
+| 500 | `fork_media_reference_failed` | 写媒体引用失败 |
+| 500 | `fork_failed` | 无法为子会话生成合法的 ID，不创建子会话 |
+| 500 | — | 其他内部写入失败 |
+| 503 | `session_busy` | PostgreSQL 部署下等会话锁超时 |
 
 其他规则：
 
@@ -5800,37 +5805,38 @@ SSE 是服务器向客户端持续推送事件的方式。Covel 有两条独立�
 
 完整的分类表见 [protocol.md § 一、事件类型](./protocol.md#一事件类型covelevent)。
 
-| 类型                            | 分类         | 说明                                                                              |
-| ------------------------------- | ------------ | --------------------------------------------------------------------------------- |
-| `narrative.delta`               | 叙事         | 叙事文本增量（逐 token 流式）                                                     |
-| `narrative.completed`           | 叙事         | 叙事文本完成                                                                      |
-| `interaction.requested`         | 交互         | 请求玩家输入（表单/选择/确认）                                                    |
-| `ui.rendered`                   | UI           | `ui.render` proposal 提交后发出                                                   |
-| `ui.part.update`                | UI           | UI part 状态更新（每个 part 一条）                                                |
-| `state.changed`                 | 状态         | 游戏状态变更                                                                      |
-| `state.snapshot.created`        | 状态         | 自动、手动或 fork 写入快照后发出                                                  |
-| `session.forked`                | 会话         | `POST /api/sessions/:id/fork` 建好子会话后发出                                    |
-| `execution.started`             | 执行生命周期 | 回合开始执行                                                                      |
-| `runtime.started`               | 执行生命周期 | 单个 runtime 开始执行                                                             |
-| `runtime.deferred`              | 执行生命周期 | staged runtime 已随原回合提交并转入后台；payload 含 `jobId/sourceTurnId`          |
-| `runtime.completed`             | 执行生命周期 | 单个 runtime 执行完成                                                             |
-| `runtime.failed`                | 执行生命周期 | runtime 执行失败                                                                  |
-| `execution.completed`           | 执行生命周期 | 回合执行完成                                                                      |
-| `event.emitted`                 | 会话生命周期 | 事件发射                                                                          |
-| `asset.progress`                | 资产         | 多模态生成进度（`0..100`）                                                        |
-| `asset.generated`               | 资产         | `asset.generate` proposal 提交后发出                                              |
-| `world.dimensions.changed`      | 世界         | 作者的维度声明变了（热更新），不重置会话的当前值                                  |
-| `dimensions.changed`            | 状态         | 已提交的当前值变了；payload 含提供者、公共 snapshot 子集和可选的 settlement 摘要  |
-| `dimensions.settlement.changed` | 状态         | pending 或没有数值变化的回执变更；payload 不含规则和初值                          |
-| `plugin-data.changed`           | 插件数据     | 所有写路径都会发出：`plugin-data-set`、DELETE、batch 等                           |
-| `turn.suspended`                | 流程控制     | `finalizeExecution` 成功提交挂起记录后发出                                        |
-| `turn.resumed`                  | 流程控制     | `POST /api/sessions/:id/suspensions/:suspensionId/resume` 重启 runtime 时发出     |
-| `proposal.failed`               | 流程控制     | 单条 proposal 提交失败。明确上报，不悄悄丢弃；由提交方直接写入 action stream      |
-| `job-status.updated`            | 流程控制     | 后台 function runtime 通过 `ctx.progress` 汇报进度；只追加，转发到 action stream  |
-| `context.pruned`                | 系统         | 提示词超出 slot 预算，历史被硬裁剪；只进 trace（`/debug` 用），不进 action stream |
-| `context.compaction.failed`     | 系统         | 历史压缩失败和原因；只进 trace（`/debug` 用）                                     |
-| `commit.fanout.failed`          | 系统         | 回合已提交，但部分提交后的事件没能发布；只进 trace，订阅流同时收到 `system.reset` |
-| `error.occurred`                | 系统         | 执行错误                                                                          |
+<!-- prettier-ignore -->
+| 类型 | 分类 | 说明 |
+| --- | --- | --- |
+| `narrative.delta` | 叙事 | 叙事文本增量（逐 token 流式） |
+| `narrative.completed` | 叙事 | 叙事文本完成 |
+| `interaction.requested` | 交互 | 请求玩家输入（表单/选择/确认） |
+| `ui.rendered` | UI | `ui.render` proposal 提交后发出 |
+| `ui.part.update` | UI | UI part 状态更新（每个 part 一条） |
+| `state.changed` | 状态 | 游戏状态变更 |
+| `state.snapshot.created` | 状态 | 自动、手动或 fork 写入快照后发出 |
+| `session.forked` | 会话 | `POST /api/sessions/:id/fork` 建好子会话后发出 |
+| `execution.started` | 执行生命周期 | 回合开始执行 |
+| `runtime.started` | 执行生命周期 | 单个 runtime 开始执行 |
+| `runtime.deferred` | 执行生命周期 | staged runtime 已随原回合提交并转入后台；payload 含 `jobId/sourceTurnId` |
+| `runtime.completed` | 执行生命周期 | 单个 runtime 执行完成 |
+| `runtime.failed` | 执行生命周期 | runtime 执行失败 |
+| `execution.completed` | 执行生命周期 | 回合执行完成 |
+| `event.emitted` | 会话生命周期 | 事件发射 |
+| `asset.progress` | 资产 | 多模态生成进度（`0..100`） |
+| `asset.generated` | 资产 | `asset.generate` proposal 提交后发出 |
+| `world.dimensions.changed` | 世界 | 作者的维度声明变了（热更新），不重置会话的当前值 |
+| `dimensions.changed` | 状态 | 已提交的当前值变了；payload 含提供者、公共 snapshot 子集和可选的 settlement 摘要 |
+| `dimensions.settlement.changed` | 状态 | pending 或没有数值变化的回执变更；payload 不含规则和初值 |
+| `plugin-data.changed` | 插件数据 | 所有写路径都会发出：`plugin-data-set`、DELETE、batch 等 |
+| `turn.suspended` | 流程控制 | `finalizeExecution` 成功提交挂起记录后发出 |
+| `turn.resumed` | 流程控制 | `POST /api/sessions/:id/suspensions/:suspensionId/resume` 重启 runtime 时发出 |
+| `proposal.failed` | 流程控制 | 单条 proposal 提交失败。明确上报，不悄悄丢弃；由提交方直接写入 action stream |
+| `job-status.updated` | 流程控制 | 后台 function runtime 通过 `ctx.progress` 汇报进度；只追加，转发到 action stream |
+| `context.pruned` | 系统 | 提示词超出 slot 预算，历史被硬裁剪；只进 trace（`/debug` 用），不进 action stream |
+| `context.compaction.failed` | 系统 | 历史压缩失败和原因；只进 trace（`/debug` 用） |
+| `commit.fanout.failed` | 系统 | 回合已提交，但部分提交后的事件没能发布；只进 trace，订阅流同时收到 `system.reset` |
+| `error.occurred` | 系统 | 执行错误 |
 
 ### 转发的运行时内部事件（已纳入 `CovelEventType`）
 

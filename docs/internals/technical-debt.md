@@ -15,15 +15,16 @@ rg -n "ponytail:" apps packages plugins
 
 ## Kernel / runtime
 
-| 位置                                                             | 接受的限制                                                                           | 什么时候重新考虑                                                      |
-| ---------------------------------------------------------------- | ------------------------------------------------------------------------------------ | --------------------------------------------------------------------- |
-| `packages/runtime/src/schedule/effects.ts`                       | 对 `self` 字面量做字符串相等比较，可能把不同插件的 effects 误判为相同                | 误报的冲突多到值得把 `self` 解析成插件 ID                             |
-| `packages/runtime/src/function-runtime/plugin-runtime-context.ts` | 撤销只在新调用进入时检查；已经发出的外部效果可能在期限之后才结束                     | 原语需要协作式取消，或者需要用 worker 隔离迟到的外部效果              |
-| `packages/runtime/src/turn-executor/turn-runtime-execution.ts`   | 带 `accepts` 的消费者每次都重新加载生产者声明的输出 schema                           | 性能分析显示重复的工作多到值得做每回合的 schema 缓存                  |
-| `packages/shared/src/llm-slots.ts`                               | 所有 LLM provider 共用一个进程级的并发上限                                           | 互相独立的 provider 需要各自的容量                                    |
-| `packages/runtime/tests/scheduling-acceptance-contract.test.ts`  | 恢复（resume）数据进入工具循环前不检查其中的 MediaRef；提交时才把要保存的内容规范化  | 一个恢复的 runtime 在任何 proposal 带上某个媒体引用之前就对它做了操作 |
-| `packages/runtime/tests/scheduling-acceptance-contract.test.ts`  | 验收场景 12 和 19-25（plan/confirm 启用流程、持久化的审批授权）是 `it.todo`          | 启用解析器或持久化的审批授权排进了实现计划                            |
-| `packages/events/src/event-bus.ts`                               | 接收顺序的状态按最近使用淘汰；被淘汰的流必须从序号 1 重新开始，它的会话会 reset 一次 | 多 pod 部署同时活跃的流多于上限，值得加每条状态的 TTL 或更大的上限    |
+<!-- prettier-ignore -->
+| 位置 | 接受的限制 | 什么时候重新考虑 |
+| --- | --- | --- |
+| `packages/runtime/src/schedule/effects.ts` | 对 `self` 字面量做字符串相等比较，可能把不同插件的 effects 误判为相同 | 误报的冲突多到值得把 `self` 解析成插件 ID |
+| `packages/runtime/src/function-runtime/plugin-runtime-context.ts` | 撤销只在新调用进入时检查；已经发出的外部效果可能在期限之后才结束 | 原语需要协作式取消，或者需要用 worker 隔离迟到的外部效果 |
+| `packages/runtime/src/turn-executor/turn-runtime-execution.ts` | 带 `accepts` 的消费者每次都重新加载生产者声明的输出 schema | 性能分析显示重复的工作多到值得做每回合的 schema 缓存 |
+| `packages/shared/src/llm-slots.ts` | 所有 LLM provider 共用一个进程级的并发上限 | 互相独立的 provider 需要各自的容量 |
+| `packages/runtime/tests/scheduling-acceptance-contract.test.ts` | 恢复（resume）数据进入工具循环前不检查其中的 MediaRef；提交时才把要保存的内容规范化 | 一个恢复的 runtime 在任何 proposal 带上某个媒体引用之前就对它做了操作 |
+| `packages/runtime/tests/scheduling-acceptance-contract.test.ts` | 验收场景 12 和 19-25（plan/confirm 启用流程、持久化的审批授权）是 `it.todo` | 启用解析器或持久化的审批授权排进了实现计划 |
+| `packages/events/src/event-bus.ts` | 接收顺序的状态按最近使用淘汰；被淘汰的流必须从序号 1 重新开始，它的会话会 reset 一次 | 多 pod 部署同时活跃的流多于上限，值得加每条状态的 TTL 或更大的上限 |
 
 ## Server
 
@@ -47,34 +48,35 @@ rg -n "ponytail:" apps packages plugins
 - 行数会变。动手之前用 `wc -l` 重新量一次。
 - 表里只统计 `apps/` 和 `packages/` 下的 TypeScript 源文件，不含测试，也不含 `packages/store/src/contract/` 里各存储后端共用的测试套件。
 
-| File                                                          | Lines |
-| ------------------------------------------------------------- | ----: |
-| `packages/shared/src/schemas/plugin-schemas.ts`               |  1258 |
-| `packages/ai-provider/src/gateway.ts`                         |  1225 |
-| `apps/server/src/routes/api/actions.ts`                       |  1165 |
-| `packages/runtime/src/turn-executor/turn-executor.ts`         |  1065 |
-| `apps/server/src/world-data/session-import.ts`                |  1005 |
-| `packages/settings/src/store.ts`                              |   996 |
-| `apps/server/src/routes/api/plugin-rpc/runtime-job-worker.ts` |   996 |
-| `apps/server/src/world-data/validate-world-package.ts`        |   988 |
-| `packages/runtime/src/agent-loop/turn-agent-tool-loop.ts`     |   979 |
-| `packages/store/src/types.ts`                                 |   976 |
-| `apps/web/src/stores/session-store/actions.ts`                |   958 |
-| `apps/web/src/services/data-service/local.ts`                 |   954 |
-| `packages/plugin-handlers-utils/src/plugin-api.ts`            |   950 |
-| `apps/server/src/routes/api/bootstrap.ts`                     |   944 |
-| `packages/events/src/event-bus.ts`                            |   918 |
-| `apps/server/src/routes/api/bootstrap/plugin-entry.ts`        |   889 |
-| `packages/runtime/src/retry/llm-retry.ts`                     |   875 |
-| `packages/runtime/src/interaction/interaction-submission.ts`  |   845 |
-| `packages/plugin-handlers-utils/src/dimension-schemas.ts`     |   845 |
-| `packages/runtime/src/commit/finalize-execution.ts`           |   838 |
-| `apps/web/src/stores/session-store/reducer.ts`                |   837 |
-| `apps/web/src/stores/session-store/sse-handler.ts`            |   827 |
-| `packages/create/src/create-world.ts`                         |   823 |
-| `packages/runtime/src/schedule/input-bindings.ts`             |   821 |
-| `apps/server/src/routes/api/ai.ts`                            |   817 |
-| `apps/server/src/routes/api/plugin-rpc/jobs.ts`               |   815 |
-| `apps/server/src/routes/api/plugin-rpc/runtime-turn.ts`       |   803 |
+<!-- prettier-ignore -->
+| File | Lines |
+| --- | ---: |
+| `packages/shared/src/schemas/plugin-schemas.ts` | 1258 |
+| `packages/ai-provider/src/gateway.ts` | 1225 |
+| `apps/server/src/routes/api/actions.ts` | 1165 |
+| `packages/runtime/src/turn-executor/turn-executor.ts` | 1065 |
+| `apps/server/src/world-data/session-import.ts` | 1005 |
+| `packages/settings/src/store.ts` | 996 |
+| `apps/server/src/routes/api/plugin-rpc/runtime-job-worker.ts` | 996 |
+| `apps/server/src/world-data/validate-world-package.ts` | 988 |
+| `packages/runtime/src/agent-loop/turn-agent-tool-loop.ts` | 979 |
+| `packages/store/src/types.ts` | 976 |
+| `apps/web/src/stores/session-store/actions.ts` | 958 |
+| `apps/web/src/services/data-service/local.ts` | 954 |
+| `packages/plugin-handlers-utils/src/plugin-api.ts` | 950 |
+| `apps/server/src/routes/api/bootstrap.ts` | 944 |
+| `packages/events/src/event-bus.ts` | 918 |
+| `apps/server/src/routes/api/bootstrap/plugin-entry.ts` | 889 |
+| `packages/runtime/src/retry/llm-retry.ts` | 875 |
+| `packages/runtime/src/interaction/interaction-submission.ts` | 845 |
+| `packages/plugin-handlers-utils/src/dimension-schemas.ts` | 845 |
+| `packages/runtime/src/commit/finalize-execution.ts` | 838 |
+| `apps/web/src/stores/session-store/reducer.ts` | 837 |
+| `apps/web/src/stores/session-store/sse-handler.ts` | 827 |
+| `packages/create/src/create-world.ts` | 823 |
+| `packages/runtime/src/schedule/input-bindings.ts` | 821 |
+| `apps/server/src/routes/api/ai.ts` | 817 |
+| `apps/server/src/routes/api/plugin-rpc/jobs.ts` | 815 |
+| `apps/server/src/routes/api/plugin-rpc/runtime-turn.ts` | 803 |
 
 这份清单跟着当前源码里的注释走。历史上的数量和行号不是当前的契约。

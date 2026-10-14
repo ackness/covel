@@ -265,54 +265,56 @@ v0.0.42 调整了插件扩展契约，旧的开发数据不会自动升级。桌
 
 **服务端与存储**
 
-| 变量                            | 默认值                    | 用途                                                                                                                                                                                    |
-| ------------------------------- | ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `NODE_ENV`                      | `development`             | Node 运行模式（`development` / `production` / `test`）                                                                                                                                  |
-| `STORE_BACKEND`                 | `sqlite`                  | 服务端数据存在哪里（`memory` / `sqlite` / `pg`）                                                                                                                                        |
-| `SQLITE_PATH`                   | `./data/covel.db`         | SQLite 数据库文件的路径                                                                                                                                                                 |
-| `DATABASE_URL`                  | —                         | PostgreSQL 连接串，`STORE_BACKEND=pg` 时必填                                                                                                                                            |
-| `MEDIA_BACKEND` / `MEDIA_ROOT`  | `mirror` / —              | 媒体存在哪里（`mirror` / `memory` / `sqlite` / `pg` / `none`）和文件根目录。`mirror` 跟随 `STORE_BACKEND`，`none` 关闭媒体接口；`MEDIA_ROOT` 未设置时用 `SQLITE_PATH` 旁边的 media 目录 |
-| `VECTOR_BACKEND`                | `embedded`                | 向量能力（`embedded` / `none` / `external`）                                                                                                                                            |
-| `POSTGRES_USER` / `POSTGRES_DB` | `covel` / `covel`         | Docker Compose 里 PostgreSQL 的用户名和库名                                                                                                                                             |
-| `POSTGRES_PASSWORD`             | —                         | Docker Compose 里 PostgreSQL 的密码                                                                                                                                                     |
-| `POSTGRES_PORT`                 | `5432`                    | Docker Compose 的 PostgreSQL 在宿主机上的端口                                                                                                                                           |
-| `SERVER_PORT`                   | `3001`                    | HTTP 服务监听的端口                                                                                                                                                                     |
-| `APP_PORT`                      | `3001`                    | Docker Compose 的应用在宿主机上的端口                                                                                                                                                   |
-| `COVEL_BIND_HOST`               | `127.0.0.1`               | HTTP 服务监听的地址                                                                                                                                                                     |
-| `COVEL_ALLOWED_HOSTS`           | —                         | 除 `localhost`、`127.0.0.1`、`[::1]` 外，`self` 档位还回答哪些主机名，逗号分隔                                                                                                          |
-| `DEPLOYMENT_TIER`               | `self`                    | 部署层级（`self` / `demo` / `commercial`），决定鉴权的严格程度                                                                                                                          |
-| `SERVE_STATIC` / `STATIC_DIR`   | `false` / `./web-dist`    | 让 server 托管指定目录里的网页前端                                                                                                                                                      |
-| `CORS_ORIGIN`                   | —                         | 允许的 HTTP origin 列表，逗号分隔                                                                                                                                                       |
-| `ENABLE_DEBUG_PAGE`             | `false`                   | 在生产环境开启调试和内部路由                                                                                                                                                            |
-| `RATE_LIMIT_RPM`                | `60`                      | 每个 IP 每分钟的请求额度，只用于 `GET /api/events/stream`；其余路由的额度写在各自的路由里                                                                                               |
-| `TRUSTED_PROXY_IPS`             | —                         | 可信代理的地址列表。只有来自这些地址的请求，才信任它带的转发 IP 头                                                                                                                      |
-| `COVEL_MEDIA_TOKEN_SECRET`      | 生产环境必填              | 给媒体短期访问链接签名的密钥。开发环境没设置时，每次启动随机生成一个                                                                                                                    |
-| `COVEL_MEDIA_CLEANUP_ENABLED`   | `false`                   | 开启 `POST /api/media/cleanup`                                                                                                                                                          |
-| `COVEL_INSTALL_API_ENABLED`     | `false`                   | 没有桌面 bearer token 时，显式开启安装、卸载插件和世界的接口                                                                                                                            |
-| `COVEL_SUSPENSION_TTL_MS`       | `604800000`（7 天）       | 未解决的挂起项多久后被清理                                                                                                                                                              |
-| `COVEL_PG_LOCK_POOL_MAX`        | `16`                      | PostgreSQL 会话锁专用连接池的大小                                                                                                                                                       |
-| `COVEL_PG_INGEST_LOCK_POOL_MAX` | `4`                       | 语义记忆摄取专用的 PostgreSQL 锁连接池的大小                                                                                                                                            |
-| `COVEL_LOG_QUIET_PATHS`         | `/api/health`             | 请求日志里不记录的路径，逗号分隔                                                                                                                                                        |
-| `COVEL_APP_VERSION`             | 对应应用的 `package.json` | 覆盖桌面 preload 和服务端 health 里的框架版本                                                                                                                                           |
+<!-- prettier-ignore -->
+| 变量 | 默认值 | 用途 |
+| --- | --- | --- |
+| `NODE_ENV` | `development` | Node 运行模式（`development` / `production` / `test`） |
+| `STORE_BACKEND` | `sqlite` | 服务端数据存在哪里（`memory` / `sqlite` / `pg`） |
+| `SQLITE_PATH` | `./data/covel.db` | SQLite 数据库文件的路径 |
+| `DATABASE_URL` | — | PostgreSQL 连接串，`STORE_BACKEND=pg` 时必填 |
+| `MEDIA_BACKEND` / `MEDIA_ROOT` | `mirror` / — | 媒体存在哪里（`mirror` / `memory` / `sqlite` / `pg` / `none`）和文件根目录。`mirror` 跟随 `STORE_BACKEND`，`none` 关闭媒体接口；`MEDIA_ROOT` 未设置时用 `SQLITE_PATH` 旁边的 media 目录 |
+| `VECTOR_BACKEND` | `embedded` | 向量能力（`embedded` / `none` / `external`） |
+| `POSTGRES_USER` / `POSTGRES_DB` | `covel` / `covel` | Docker Compose 里 PostgreSQL 的用户名和库名 |
+| `POSTGRES_PASSWORD` | — | Docker Compose 里 PostgreSQL 的密码 |
+| `POSTGRES_PORT` | `5432` | Docker Compose 的 PostgreSQL 在宿主机上的端口 |
+| `SERVER_PORT` | `3001` | HTTP 服务监听的端口 |
+| `APP_PORT` | `3001` | Docker Compose 的应用在宿主机上的端口 |
+| `COVEL_BIND_HOST` | `127.0.0.1` | HTTP 服务监听的地址 |
+| `COVEL_ALLOWED_HOSTS` | — | 除 `localhost`、`127.0.0.1`、`[::1]` 外，`self` 档位还回答哪些主机名，逗号分隔 |
+| `DEPLOYMENT_TIER` | `self` | 部署层级（`self` / `demo` / `commercial`），决定鉴权的严格程度 |
+| `SERVE_STATIC` / `STATIC_DIR` | `false` / `./web-dist` | 让 server 托管指定目录里的网页前端 |
+| `CORS_ORIGIN` | — | 允许的 HTTP origin 列表，逗号分隔 |
+| `ENABLE_DEBUG_PAGE` | `false` | 在生产环境开启调试和内部路由 |
+| `RATE_LIMIT_RPM` | `60` | 每个 IP 每分钟的请求额度，只用于 `GET /api/events/stream`；其余路由的额度写在各自的路由里 |
+| `TRUSTED_PROXY_IPS` | — | 可信代理的地址列表。只有来自这些地址的请求，才信任它带的转发 IP 头 |
+| `COVEL_MEDIA_TOKEN_SECRET` | 生产环境必填 | 给媒体短期访问链接签名的密钥。开发环境没设置时，每次启动随机生成一个 |
+| `COVEL_MEDIA_CLEANUP_ENABLED` | `false` | 开启 `POST /api/media/cleanup` |
+| `COVEL_INSTALL_API_ENABLED` | `false` | 没有桌面 bearer token 时，显式开启安装、卸载插件和世界的接口 |
+| `COVEL_SUSPENSION_TTL_MS` | `604800000`（7 天） | 未解决的挂起项多久后被清理 |
+| `COVEL_PG_LOCK_POOL_MAX` | `16` | PostgreSQL 会话锁专用连接池的大小 |
+| `COVEL_PG_INGEST_LOCK_POOL_MAX` | `4` | 语义记忆摄取专用的 PostgreSQL 锁连接池的大小 |
+| `COVEL_LOG_QUIET_PATHS` | `/api/health` | 请求日志里不记录的路径，逗号分隔 |
+| `COVEL_APP_VERSION` | 对应应用的 `package.json` | 覆盖桌面 preload 和服务端 health 里的框架版本 |
 
 **桌面与路径**
 
-| 变量                                               | 默认值       | 用途                                                                                          |
-| -------------------------------------------------- | ------------ | --------------------------------------------------------------------------------------------- |
-| `COVEL_HOME`                                       | `~/.covel`   | 个人配置根目录，`keys.env` 也在这里                                                           |
-| `COVEL_DATA_ROOT`                                  | —            | 桌面版存放 SQLite、世界和日志的数据根目录                                                     |
-| `COVEL_USER_CONFIG_DIR`                            | —            | 桌面版模型数据库和设置所在的配置目录                                                          |
-| `COVEL_LLM_TOML`                                   | `./llm.toml` | 生效的 `llm.toml` 的路径                                                                      |
-| `COVEL_PLUGINS_DIR` / `COVEL_WORLDS_DIR`           | —            | 随应用自带的插件、世界目录                                                                    |
-| `COVEL_USER_PLUGINS_DIR` / `COVEL_USER_WORLDS_DIR` | —            | 用户安装的插件、世界目录                                                                      |
-| `COVEL_USER_TRANSLATIONS_DIR`                      | —            | 包外插件译文的目录                                                                            |
-| `COVEL_DESKTOP_REST`                               | `false`      | 开启桌面配置 REST 接口                                                                        |
-| `COVEL_DESKTOP_REST_TOKEN`                         | —            | 桌面配置写接口的 bearer token，也是托管层级的运维凭证                                         |
-| `COVEL_SYSTEM_PROXY_URL`                           | —            | 给不支持动态系统代理解析的旧桌面程序用的兼容入口                                              |
-| `COVEL_DESKTOP_SYSTEM_PROXY_IPC`                   | `false`      | Electron 注入的内部标记，表示后端可以逐个 URL 询问系统代理                                    |
-| `COVEL_LOGS_DIR`                                   | —            | 桌面版日志目录（设置页显示）                                                                  |
-| `COVEL_LOG_MAX_SIZE_MB` / `COVEL_LOG_MAX_FILES`    | `10` / `10`  | 桌面版日志轮转：单个文件的上限和保留的份数                                                    |
-| `COVEL_SERVER_LOG_FILE`                            | —            | server 把 stdout/stderr 另存到哪个文件。空字符串表示不存；未设置时用日志目录下的 `server.log` |
+<!-- prettier-ignore -->
+| 变量 | 默认值 | 用途 |
+| --- | --- | --- |
+| `COVEL_HOME` | `~/.covel` | 个人配置根目录，`keys.env` 也在这里 |
+| `COVEL_DATA_ROOT` | — | 桌面版存放 SQLite、世界和日志的数据根目录 |
+| `COVEL_USER_CONFIG_DIR` | — | 桌面版模型数据库和设置所在的配置目录 |
+| `COVEL_LLM_TOML` | `./llm.toml` | 生效的 `llm.toml` 的路径 |
+| `COVEL_PLUGINS_DIR` / `COVEL_WORLDS_DIR` | — | 随应用自带的插件、世界目录 |
+| `COVEL_USER_PLUGINS_DIR` / `COVEL_USER_WORLDS_DIR` | — | 用户安装的插件、世界目录 |
+| `COVEL_USER_TRANSLATIONS_DIR` | — | 包外插件译文的目录 |
+| `COVEL_DESKTOP_REST` | `false` | 开启桌面配置 REST 接口 |
+| `COVEL_DESKTOP_REST_TOKEN` | — | 桌面配置写接口的 bearer token，也是托管层级的运维凭证 |
+| `COVEL_SYSTEM_PROXY_URL` | — | 给不支持动态系统代理解析的旧桌面程序用的兼容入口 |
+| `COVEL_DESKTOP_SYSTEM_PROXY_IPC` | `false` | Electron 注入的内部标记，表示后端可以逐个 URL 询问系统代理 |
+| `COVEL_LOGS_DIR` | — | 桌面版日志目录（设置页显示） |
+| `COVEL_LOG_MAX_SIZE_MB` / `COVEL_LOG_MAX_FILES` | `10` / `10` | 桌面版日志轮转：单个文件的上限和保留的份数 |
+| `COVEL_SERVER_LOG_FILE` | — | server 把 stdout/stderr 另存到哪个文件。空字符串表示不存；未设置时用日志目录下的 `server.log` |
 
 **模型**
 

@@ -55,22 +55,23 @@ fallback = "story"
 
 Schema：`packages/ai-provider/src/config/llm-schema.ts`。
 
-| 字段                                | 必填 | 说明                                                                                                                                                                          |
-| ----------------------------------- | ---- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `provider`                          | ✅   | 服务商标识，对应 `.env.llm` / `keys.env` 里的 `{PROVIDER}_API_KEY`。同一个 `provider` 的用途共用一个密钥                                                                      |
-| `model`                             | ✅   | 模型 ID，原样发给服务商，带 `/` 的 ID 也不改动                                                                                                                                |
-| `baseUrl`                           | —    | API 地址。[内置服务商](#内置服务商与协议)可以不写，其他服务商必填。远端地址必须是 https；本机地址只在 `self` 部署下允许，可以用 http                                          |
-| `protocol`                          | —    | 接口协议，取值见[内置服务商与协议](#内置服务商与协议)。不写时用内置服务商自己的协议，其他服务商用 `openai-chat-v1`                                                            |
-| `tag`                               | —    | 能力标签：`text` / `image` / `embedding` / `speech` / `transcription` / `music` / `evaluation`。不写时从 `output` 推断（`audio` 推断为 `speech`，音乐用途必须明确写 `music`） |
-| `fallback`                          | —    | 调用失败时改用的用途名。目标用途必须是同一种能力，并且已经配置好密钥；回退关系不能成环                                                                                        |
-| `input` / `output`                  | —    | 模型接受和产出的内容类型，不写时自动识别（见[模型能力从哪里来](#模型能力从哪里来)）。`output` 可以是 `text` / `image` / `audio` / `video` / `embedding` / `evaluation`        |
-| `features`                          | —    | 模型特性（`function_calling`、`reasoning`、`vision`…）                                                                                                                        |
-| `contextWindow` / `maxOutputTokens` | —    | 覆盖上下文窗口和最大输出的 token 数                                                                                                                                           |
-| `pricing`                           | —    | 计价信息，只用于 `/debug` 的成本面板                                                                                                                                          |
-| `reasoningEffort`                   | —    | 思考档位（例如 `disabled` 关闭思考）。它是这个模型的默认值，发送时换成各家接口自己的字段，见[思考强度](#思考强度)                                                             |
-| `embeddingFormat`                   | —    | 向量用途的请求格式：`openai`（默认）或 `nemotron-multimodal`                                                                                                                  |
-| `providerRequestMetadata`           | —    | 随生成请求发出的自由键值，单次调用给的值优先；评估请求不使用。选择图片、语音协议的键也放这里，见下文“媒体 wire 路由键”一节                                                    |
-| `providerOptions`                   | —    | 按服务商或协议分组的原生参数，只用于文本、对象和流式调用，见[供应商参数](#供应商参数)                                                                                         |
+<!-- prettier-ignore -->
+| 字段 | 必填 | 说明 |
+| --- | --- | --- |
+| `provider` | ✅ | 服务商标识，对应 `.env.llm` / `keys.env` 里的 `{PROVIDER}_API_KEY`。同一个 `provider` 的用途共用一个密钥 |
+| `model` | ✅ | 模型 ID，原样发给服务商，带 `/` 的 ID 也不改动 |
+| `baseUrl` | — | API 地址。[内置服务商](#内置服务商与协议)可以不写，其他服务商必填。远端地址必须是 https；本机地址只在 `self` 部署下允许，可以用 http |
+| `protocol` | — | 接口协议，取值见[内置服务商与协议](#内置服务商与协议)。不写时用内置服务商自己的协议，其他服务商用 `openai-chat-v1` |
+| `tag` | — | 能力标签：`text` / `image` / `embedding` / `speech` / `transcription` / `music` / `evaluation`。不写时从 `output` 推断（`audio` 推断为 `speech`，音乐用途必须明确写 `music`） |
+| `fallback` | — | 调用失败时改用的用途名。目标用途必须是同一种能力，并且已经配置好密钥；回退关系不能成环 |
+| `input` / `output` | — | 模型接受和产出的内容类型，不写时自动识别（见[模型能力从哪里来](#模型能力从哪里来)）。`output` 可以是 `text` / `image` / `audio` / `video` / `embedding` / `evaluation` |
+| `features` | — | 模型特性（`function_calling`、`reasoning`、`vision`…） |
+| `contextWindow` / `maxOutputTokens` | — | 覆盖上下文窗口和最大输出的 token 数 |
+| `pricing` | — | 计价信息，只用于 `/debug` 的成本面板 |
+| `reasoningEffort` | — | 思考档位（例如 `disabled` 关闭思考）。它是这个模型的默认值，发送时换成各家接口自己的字段，见[思考强度](#思考强度) |
+| `embeddingFormat` | — | 向量用途的请求格式：`openai`（默认）或 `nemotron-multimodal` |
+| `providerRequestMetadata` | — | 随生成请求发出的自由键值，单次调用给的值优先；评估请求不使用。选择图片、语音协议的键也放这里，见下文“媒体 wire 路由键”一节 |
+| `providerOptions` | — | 按服务商或协议分组的原生参数，只用于文本、对象和流式调用，见[供应商参数](#供应商参数) |
 
 `baseUrl` 等值可以引用环境变量，例如 `baseUrl = "${MY_API_BASE}"`。配置读不进来时，错误只写出行号、列号和出错的键，不会写出环境变量的值。旧字段 `reasoning_effort` 和 `thinking` 不再接受，写了会在加载时报错，改用 `reasoningEffort` 或 `providerOptions`。
 
@@ -94,30 +95,31 @@ Schema：`packages/ai-provider/src/config/llm-schema.ts`。
 
 内置服务商自带官方地址和默认协议。`llm.toml` 里只写 `provider` 和 `model` 就行，设置页里可以直接从列表选：
 
-| `provider`    | 名称                     | 端点                                                | 协议                      |
-| ------------- | ------------------------ | --------------------------------------------------- | ------------------------- |
-| `openai`      | OpenAI                   | `https://api.openai.com/v1`                         | `openai-chat-v1`          |
-| `anthropic`   | Anthropic                | `https://api.anthropic.com`                         | `anthropic-messages-v1`   |
-| `google`      | Google Gemini            | `https://generativelanguage.googleapis.com/v1beta`  | `google-generative-ai-v1` |
-| `deepseek`    | DeepSeek                 | `https://api.deepseek.com`                          | `openai-chat-v1`          |
-| `dashscope`   | Alibaba DashScope (Qwen) | `https://dashscope.aliyuncs.com/compatible-mode/v1` | `openai-chat-v1`          |
-| `xai`         | xAI                      | `https://api.x.ai/v1`                               | `openai-chat-v1`          |
-| `mistral`     | Mistral AI               | `https://api.mistral.ai/v1`                         | `openai-chat-v1`          |
-| `groq`        | Groq                     | `https://api.groq.com/openai/v1`                    | `openai-chat-v1`          |
-| `together`    | Together AI              | `https://api.together.xyz/v1`                       | `openai-chat-v1`          |
-| `fireworks`   | Fireworks AI             | `https://api.fireworks.ai/inference/v1`             | `openai-chat-v1`          |
-| `moonshot`    | Moonshot AI (Kimi)       | `https://api.moonshot.cn/v1`                        | `openai-chat-v1`          |
-| `zhipu`       | Zhipu AI (GLM)           | `https://open.bigmodel.cn/api/paas/v4`              | `openai-chat-v1`          |
-| `siliconflow` | SiliconFlow              | `https://api.siliconflow.cn/v1`                     | `openai-chat-v1`          |
-| `volcengine`  | Volcengine Ark (Doubao)  | `https://ark.cn-beijing.volces.com/api/v3`          | `openai-chat-v1`          |
-| `openrouter`  | OpenRouter               | `https://openrouter.ai/api/v1`                      | `openai-chat-v1`          |
-| `vercel`      | Vercel AI Gateway        | `https://ai-gateway.vercel.sh/v1`                   | `openai-chat-v1`          |
-| `typesafe`    | TypeSafe                 | `https://api.typesafe.ai/v1`                        | `typesafe-systemone-v1`   |
-| `ollama`      | Ollama（本机）           | `http://localhost:11434/v1`                         | `openai-chat-v1`          |
-| `lmstudio`    | LM Studio（本机）        | `http://localhost:1234/v1`                          | `openai-chat-v1`          |
-| `llamacpp`    | llama.cpp server（本机） | `http://localhost:8080/v1`                          | `openai-chat-v1`          |
-| `vllm`        | vLLM（本机）             | `http://localhost:8000/v1`                          | `openai-chat-v1`          |
-| `litellm`     | LiteLLM Proxy（本机）    | `http://localhost:4000/v1`                          | `openai-chat-v1`          |
+<!-- prettier-ignore -->
+| `provider` | 名称 | 端点 | 协议 |
+| --- | --- | --- | --- |
+| `openai` | OpenAI | `https://api.openai.com/v1` | `openai-chat-v1` |
+| `anthropic` | Anthropic | `https://api.anthropic.com` | `anthropic-messages-v1` |
+| `google` | Google Gemini | `https://generativelanguage.googleapis.com/v1beta` | `google-generative-ai-v1` |
+| `deepseek` | DeepSeek | `https://api.deepseek.com` | `openai-chat-v1` |
+| `dashscope` | Alibaba DashScope (Qwen) | `https://dashscope.aliyuncs.com/compatible-mode/v1` | `openai-chat-v1` |
+| `xai` | xAI | `https://api.x.ai/v1` | `openai-chat-v1` |
+| `mistral` | Mistral AI | `https://api.mistral.ai/v1` | `openai-chat-v1` |
+| `groq` | Groq | `https://api.groq.com/openai/v1` | `openai-chat-v1` |
+| `together` | Together AI | `https://api.together.xyz/v1` | `openai-chat-v1` |
+| `fireworks` | Fireworks AI | `https://api.fireworks.ai/inference/v1` | `openai-chat-v1` |
+| `moonshot` | Moonshot AI (Kimi) | `https://api.moonshot.cn/v1` | `openai-chat-v1` |
+| `zhipu` | Zhipu AI (GLM) | `https://open.bigmodel.cn/api/paas/v4` | `openai-chat-v1` |
+| `siliconflow` | SiliconFlow | `https://api.siliconflow.cn/v1` | `openai-chat-v1` |
+| `volcengine` | Volcengine Ark (Doubao) | `https://ark.cn-beijing.volces.com/api/v3` | `openai-chat-v1` |
+| `openrouter` | OpenRouter | `https://openrouter.ai/api/v1` | `openai-chat-v1` |
+| `vercel` | Vercel AI Gateway | `https://ai-gateway.vercel.sh/v1` | `openai-chat-v1` |
+| `typesafe` | TypeSafe | `https://api.typesafe.ai/v1` | `typesafe-systemone-v1` |
+| `ollama` | Ollama（本机） | `http://localhost:11434/v1` | `openai-chat-v1` |
+| `lmstudio` | LM Studio（本机） | `http://localhost:1234/v1` | `openai-chat-v1` |
+| `llamacpp` | llama.cpp server（本机） | `http://localhost:8080/v1` | `openai-chat-v1` |
+| `vllm` | vLLM（本机） | `http://localhost:8000/v1` | `openai-chat-v1` |
+| `litellm` | LiteLLM Proxy（本机） | `http://localhost:4000/v1` | `openai-chat-v1` |
 
 ```toml
 [covel.story]

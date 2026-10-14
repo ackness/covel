@@ -265,54 +265,56 @@ The variables below are also in `registry.ts`. For variables whose use is alread
 
 **Server and storage**
 
-| Variable                        | Default                  | Purpose                                                                                                                                                                                                                                                  |
-| ------------------------------- | ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `NODE_ENV`                      | `development`            | Node run mode (`development` / `production` / `test`)                                                                                                                                                                                                    |
-| `STORE_BACKEND`                 | `sqlite`                 | Where server data is stored (`memory` / `sqlite` / `pg`)                                                                                                                                                                                                 |
-| `SQLITE_PATH`                   | `./data/covel.db`        | Path of the SQLite database file                                                                                                                                                                                                                         |
-| `DATABASE_URL`                  | —                        | PostgreSQL connection string. Required when `STORE_BACKEND=pg`                                                                                                                                                                                           |
-| `MEDIA_BACKEND` / `MEDIA_ROOT`  | `mirror` / —             | Where media is stored (`mirror` / `memory` / `sqlite` / `pg` / `none`) and the root folder for files. `mirror` follows `STORE_BACKEND`. `none` turns off the media interface. If `MEDIA_ROOT` is not set, the media folder next to `SQLITE_PATH` is used |
-| `VECTOR_BACKEND`                | `embedded`               | Vector capability (`embedded` / `none` / `external`)                                                                                                                                                                                                     |
-| `POSTGRES_USER` / `POSTGRES_DB` | `covel` / `covel`        | PostgreSQL user name and database name in Docker Compose                                                                                                                                                                                                 |
-| `POSTGRES_PASSWORD`             | —                        | PostgreSQL password in Docker Compose                                                                                                                                                                                                                    |
-| `POSTGRES_PORT`                 | `5432`                   | Host port of PostgreSQL in Docker Compose                                                                                                                                                                                                                |
-| `SERVER_PORT`                   | `3001`                   | Port the HTTP service listens on                                                                                                                                                                                                                         |
-| `APP_PORT`                      | `3001`                   | Host port of the app in Docker Compose                                                                                                                                                                                                                   |
-| `COVEL_BIND_HOST`               | `127.0.0.1`              | Address the HTTP service listens on                                                                                                                                                                                                                      |
-| `COVEL_ALLOWED_HOSTS`           | —                        | Host names, besides `localhost`, `127.0.0.1` and `[::1]`, that the `self` tier answers to, separated by commas                                                                                                                                           |
-| `DEPLOYMENT_TIER`               | `self`                   | Deployment tier (`self` / `demo` / `commercial`). It decides how strict authentication is                                                                                                                                                                |
-| `SERVE_STATIC` / `STATIC_DIR`   | `false` / `./web-dist`   | Lets the server host the web front end in the given folder                                                                                                                                                                                               |
-| `CORS_ORIGIN`                   | —                        | List of allowed HTTP origins, separated by commas                                                                                                                                                                                                        |
-| `ENABLE_DEBUG_PAGE`             | `false`                  | Turns on debug and internal routes in production                                                                                                                                                                                                         |
-| `RATE_LIMIT_RPM`                | `60`                     | Request quota per IP address per minute, used only by `GET /api/events/stream`; other routes set their quota in their own code                                                                                                                           |
-| `TRUSTED_PROXY_IPS`             | —                        | List of trusted proxy addresses. Only requests from these addresses are trusted to carry forwarded IP headers                                                                                                                                            |
-| `COVEL_MEDIA_TOKEN_SECRET`      | Required in production   | Key used to sign short-lived access links for media. If it is not set in development, a random one is generated at each start                                                                                                                            |
-| `COVEL_MEDIA_CLEANUP_ENABLED`   | `false`                  | Turns on `POST /api/media/cleanup`                                                                                                                                                                                                                       |
-| `COVEL_INSTALL_API_ENABLED`     | `false`                  | Without a desktop bearer token, explicitly turns on the API for installing and uninstalling plugins and worlds                                                                                                                                           |
-| `COVEL_SUSPENSION_TTL_MS`       | `604800000` (7 days)     | How long an unresolved suspension is kept before it is cleaned up                                                                                                                                                                                        |
-| `COVEL_PG_LOCK_POOL_MAX`        | `16`                     | Size of the connection pool used only for PostgreSQL session locks                                                                                                                                                                                       |
-| `COVEL_PG_INGEST_LOCK_POOL_MAX` | `4`                      | Size of the PostgreSQL lock connection pool used only for semantic memory ingestion                                                                                                                                                                      |
-| `COVEL_LOG_QUIET_PATHS`         | `/api/health`            | Paths that are not logged in request logs, separated by commas                                                                                                                                                                                           |
-| `COVEL_APP_VERSION`             | The app's `package.json` | Overrides the framework version shown in the desktop preload and the server health check                                                                                                                                                                 |
+<!-- prettier-ignore -->
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `NODE_ENV` | `development` | Node run mode (`development` / `production` / `test`) |
+| `STORE_BACKEND` | `sqlite` | Where server data is stored (`memory` / `sqlite` / `pg`) |
+| `SQLITE_PATH` | `./data/covel.db` | Path of the SQLite database file |
+| `DATABASE_URL` | — | PostgreSQL connection string. Required when `STORE_BACKEND=pg` |
+| `MEDIA_BACKEND` / `MEDIA_ROOT` | `mirror` / — | Where media is stored (`mirror` / `memory` / `sqlite` / `pg` / `none`) and the root folder for files. `mirror` follows `STORE_BACKEND`. `none` turns off the media interface. If `MEDIA_ROOT` is not set, the media folder next to `SQLITE_PATH` is used |
+| `VECTOR_BACKEND` | `embedded` | Vector capability (`embedded` / `none` / `external`) |
+| `POSTGRES_USER` / `POSTGRES_DB` | `covel` / `covel` | PostgreSQL user name and database name in Docker Compose |
+| `POSTGRES_PASSWORD` | — | PostgreSQL password in Docker Compose |
+| `POSTGRES_PORT` | `5432` | Host port of PostgreSQL in Docker Compose |
+| `SERVER_PORT` | `3001` | Port the HTTP service listens on |
+| `APP_PORT` | `3001` | Host port of the app in Docker Compose |
+| `COVEL_BIND_HOST` | `127.0.0.1` | Address the HTTP service listens on |
+| `COVEL_ALLOWED_HOSTS` | — | Host names, besides `localhost`, `127.0.0.1` and `[::1]`, that the `self` tier answers to, separated by commas |
+| `DEPLOYMENT_TIER` | `self` | Deployment tier (`self` / `demo` / `commercial`). It decides how strict authentication is |
+| `SERVE_STATIC` / `STATIC_DIR` | `false` / `./web-dist` | Lets the server host the web front end in the given folder |
+| `CORS_ORIGIN` | — | List of allowed HTTP origins, separated by commas |
+| `ENABLE_DEBUG_PAGE` | `false` | Turns on debug and internal routes in production |
+| `RATE_LIMIT_RPM` | `60` | Request quota per IP address per minute, used only by `GET /api/events/stream`; other routes set their quota in their own code |
+| `TRUSTED_PROXY_IPS` | — | List of trusted proxy addresses. Only requests from these addresses are trusted to carry forwarded IP headers |
+| `COVEL_MEDIA_TOKEN_SECRET` | Required in production | Key used to sign short-lived access links for media. If it is not set in development, a random one is generated at each start |
+| `COVEL_MEDIA_CLEANUP_ENABLED` | `false` | Turns on `POST /api/media/cleanup` |
+| `COVEL_INSTALL_API_ENABLED` | `false` | Without a desktop bearer token, explicitly turns on the API for installing and uninstalling plugins and worlds |
+| `COVEL_SUSPENSION_TTL_MS` | `604800000` (7 days) | How long an unresolved suspension is kept before it is cleaned up |
+| `COVEL_PG_LOCK_POOL_MAX` | `16` | Size of the connection pool used only for PostgreSQL session locks |
+| `COVEL_PG_INGEST_LOCK_POOL_MAX` | `4` | Size of the PostgreSQL lock connection pool used only for semantic memory ingestion |
+| `COVEL_LOG_QUIET_PATHS` | `/api/health` | Paths that are not logged in request logs, separated by commas |
+| `COVEL_APP_VERSION` | The app's `package.json` | Overrides the framework version shown in the desktop preload and the server health check |
 
 **Desktop and paths**
 
-| Variable                                           | Default      | Purpose                                                                                                                                   |
-| -------------------------------------------------- | ------------ | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| `COVEL_HOME`                                       | `~/.covel`   | Root folder of personal config. `keys.env` is also here                                                                                   |
-| `COVEL_DATA_ROOT`                                  | —            | Data root folder of the desktop app, where SQLite, worlds, and logs are stored                                                            |
-| `COVEL_USER_CONFIG_DIR`                            | —            | Config folder of the desktop app, where the model database and settings are                                                               |
-| `COVEL_LLM_TOML`                                   | `./llm.toml` | Path of the `llm.toml` that is in effect                                                                                                  |
-| `COVEL_PLUGINS_DIR` / `COVEL_WORLDS_DIR`           | —            | Folders of plugins and worlds that ship with the app                                                                                      |
-| `COVEL_USER_PLUGINS_DIR` / `COVEL_USER_WORLDS_DIR` | —            | Folders of plugins and worlds that the user installs                                                                                      |
-| `COVEL_USER_TRANSLATIONS_DIR`                      | —            | Folder of translations for plugins outside the package                                                                                    |
-| `COVEL_DESKTOP_REST`                               | `false`      | Turns on the desktop config REST interface                                                                                                |
-| `COVEL_DESKTOP_REST_TOKEN`                         | —            | Bearer token for the desktop config write interface. It is also the operator credential for the hosted tier                               |
-| `COVEL_SYSTEM_PROXY_URL`                           | —            | Compatibility entry for older desktop programs that cannot resolve a dynamic system proxy                                                 |
-| `COVEL_DESKTOP_SYSTEM_PROXY_IPC`                   | `false`      | Internal flag injected by Electron. It means the backend can ask the system proxy one URL at a time                                       |
-| `COVEL_LOGS_DIR`                                   | —            | Log folder of the desktop app (shown on the settings page)                                                                                |
-| `COVEL_LOG_MAX_SIZE_MB` / `COVEL_LOG_MAX_FILES`    | `10` / `10`  | Log rotation for the desktop app: the size limit of one file, and how many files are kept                                                 |
-| `COVEL_SERVER_LOG_FILE`                            | —            | File where the server saves its stdout/stderr. An empty string means nothing is saved. If not set, `server.log` in the log folder is used |
+<!-- prettier-ignore -->
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `COVEL_HOME` | `~/.covel` | Root folder of personal config. `keys.env` is also here |
+| `COVEL_DATA_ROOT` | — | Data root folder of the desktop app, where SQLite, worlds, and logs are stored |
+| `COVEL_USER_CONFIG_DIR` | — | Config folder of the desktop app, where the model database and settings are |
+| `COVEL_LLM_TOML` | `./llm.toml` | Path of the `llm.toml` that is in effect |
+| `COVEL_PLUGINS_DIR` / `COVEL_WORLDS_DIR` | — | Folders of plugins and worlds that ship with the app |
+| `COVEL_USER_PLUGINS_DIR` / `COVEL_USER_WORLDS_DIR` | — | Folders of plugins and worlds that the user installs |
+| `COVEL_USER_TRANSLATIONS_DIR` | — | Folder of translations for plugins outside the package |
+| `COVEL_DESKTOP_REST` | `false` | Turns on the desktop config REST interface |
+| `COVEL_DESKTOP_REST_TOKEN` | — | Bearer token for the desktop config write interface. It is also the operator credential for the hosted tier |
+| `COVEL_SYSTEM_PROXY_URL` | — | Compatibility entry for older desktop programs that cannot resolve a dynamic system proxy |
+| `COVEL_DESKTOP_SYSTEM_PROXY_IPC` | `false` | Internal flag injected by Electron. It means the backend can ask the system proxy one URL at a time |
+| `COVEL_LOGS_DIR` | — | Log folder of the desktop app (shown on the settings page) |
+| `COVEL_LOG_MAX_SIZE_MB` / `COVEL_LOG_MAX_FILES` | `10` / `10` | Log rotation for the desktop app: the size limit of one file, and how many files are kept |
+| `COVEL_SERVER_LOG_FILE` | — | File where the server saves its stdout/stderr. An empty string means nothing is saved. If not set, `server.log` in the log folder is used |
 
 **Models**
 
