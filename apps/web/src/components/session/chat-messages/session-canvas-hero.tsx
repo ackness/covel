@@ -26,9 +26,10 @@ export function SessionCanvasHero({
   const locale = i18n.language;
 
   const worldName = world ? resolveI18n(world.name, locale) : "";
-  const entry = dimensionSnapshotSchema.parse(
-    dimensions ?? {},
-  ).startingConditions;
+  const parsedDimensions = dimensionSnapshotSchema.safeParse(dimensions ?? {});
+  const entry = parsedDimensions.success
+    ? parsedDimensions.data.startingConditions
+    : undefined;
   const parsed = z
     .object({
       openingHook: z.string().optional(),

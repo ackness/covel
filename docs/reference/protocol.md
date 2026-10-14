@@ -1070,7 +1070,7 @@ interface SseEnvelope {
 narrative.delta       → messages (streaming buffer)
 narrative.completed   → messages (completed)
 interaction.requested → messages (block)
-state.changed         → gameState (deep merge) + statePatches
+state.changed         → gameState.tables (deep merge) + statePatches
 event.emitted         → gameState.events
 interaction.submitted → handled by the caller that submitted the form: SUBMIT_BLOCK + player bubble (not through handleSseEvent)
 execution.started     → executionSteps
