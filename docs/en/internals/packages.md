@@ -10,6 +10,7 @@ Covel is a modular monolith: one repository, released together, with its code sp
 > So when the build output is older than the source (for example, you pulled new commits but did not run `pnpm install` again), a plugin that imports a new name will fail to load.
 >
 > - The development server checks and rebuilds it every time its process starts (`scripts/ensure-plugin-sdk.mjs`).
+> - Turbo finishes the SDK build before running its own lint and tests. SDK tests read their own `dist` declarations through `shared`, so dependency-only `^build` ordering is not enough.
 > - Before you run the tests of a single package on their own, you still have to run `pnpm --filter @covel/plugin-handlers-utils build` by hand.
 
 The other libraries are mainly combined inside the workspace by the applications and the framework.

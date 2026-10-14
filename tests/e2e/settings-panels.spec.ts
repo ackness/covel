@@ -26,6 +26,10 @@ test("saved custom roles remain editable in generation, assignment and import pa
     "llm.paramOverrides": { default: { temperature: 0.3 } },
   });
   await page.goto("/session");
+  const savedEntries = () =>
+    page.evaluate(
+      () => JSON.parse(localStorage.getItem("covel:settings") ?? "{}").entries,
+    );
   await page
     .getByRole("button", { name: /Configure Providers & Models/ })
     .click();
@@ -43,6 +47,12 @@ test("saved custom roles remain editable in generation, assignment and import pa
   // Number drafts commit on blur; selectOption changes the select without
   // moving focus away from the input as a player would.
   await settings.getByRole("spinbutton", { name: "Temperature" }).press("Tab");
+  await expect
+    .poll(
+      async () =>
+        (await savedEntries())?.["llm.paramOverrides"]?.default?.temperature,
+    )
+    .toBe(0.2);
   await settings
     .getByRole("combobox", { name: "Select Slot" })
     .selectOption("custom-analysis");
@@ -50,6 +60,15 @@ test("saved custom roles remain editable in generation, assignment and import pa
     settings.getByText("fixture-text", { exact: true }),
   ).toBeVisible();
   await settings.getByRole("spinbutton", { name: "Temperature" }).fill("0.4");
+  await settings.getByRole("spinbutton", { name: "Temperature" }).press("Tab");
+  // A draft value is visible before its queued persistence completes.
+  await expect
+    .poll(
+      async () =>
+        (await savedEntries())?.["llm.paramOverrides"]?.["custom-analysis"]
+          ?.temperature,
+    )
+    .toBe(0.4);
   await settings
     .getByRole("button", { name: "Model Roles", exact: true })
     .click();
@@ -80,11 +99,10 @@ test("saved custom roles remain editable in generation, assignment and import pa
   await settings
     .getByRole("button", { name: "Apply (1)", exact: true })
     .click();
+  await expect(settings.getByText("Imported", { exact: true })).toBeVisible();
   await settings.getByRole("button", { name: "Close", exact: true }).click();
   await page.reload();
-  const entries = await page.evaluate(
-    () => JSON.parse(localStorage.getItem("covel:settings") ?? "{}").entries,
-  );
+  const entries = await savedEntries();
   expect(entries["llm.paramOverrides"]["custom-analysis"].temperature).toBe(
     0.4,
   );
