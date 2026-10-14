@@ -35,7 +35,7 @@ example/
 
 布局规则：
 
-- 根 `PLUGIN.md` 必须有，它的 `id` 必须和包目录同名。
+- 根 `PLUGIN.md` 必须有，它的 `id` 必须和包目录同名。`framework` 留给框架自己，不能用作 `id`。
 - 只有一个 runtime 时，写在根文件的 `runtime` 里，根文件的正文就是它的提示词。
 - 有多个 runtime 时，每个放在 `runtimes/<id>/RUNTIME.md`，逻辑 ID 是 `<pluginId>/<id>`，各自文件的正文是各自的提示词。
 - 两种布局不能混用。子 runtime 不能声明包级贡献。
@@ -197,6 +197,15 @@ homepage: https://example.com/tidefall
 | `guard`       | runtime 相对的 guard 模块                                                  |
 | `effects`     | 读写资源与 `parallelSafe`                                                  |
 | `permissions` | 执行权限声明                                                               |
+
+根 `PLUGIN.md` 也可以写 `permissions.http`。它管 `entry` 模块的代码：社区包的 `covel.http`（工具、钩子、RPC、服务、扩展、wire 里都用它）只能访问根文件和各 runtime 的 `permissions.http` 里列出的源和方法。wire 还能访问它正在服务的那个用途的端点。没有声明的请求在发出之前就失败：`http permission denied: …`。
+
+```yaml
+permissions:
+  http:
+    - origin: https://api.example.com
+      methods: [POST]
+```
 
 ### 两种 runtime
 

@@ -535,6 +535,7 @@ export {
 } from "./utils/host-version-range.js";
 
 export { pluginManifestSchema } from "./schemas/plugin-manifest.js";
+export { FRAMEWORK_PLUGIN_ID } from "./framework-plugin-id.js";
 export {
   runtimeAuthoringManifestSchema,
   contractIdSchema,

@@ -1,3 +1,4 @@
+import { FRAMEWORK_PLUGIN_ID } from "@covel/shared";
 import { AsyncLocalStorage } from "node:async_hooks";
 /**
  * Plugin RPC registry.
@@ -226,6 +227,10 @@ export function createPluginRpcRegistry(): PluginRpcRegistry {
       );
     },
     registerPluginHandler(pluginId, action, handler, options, pluginTrust) {
+      if (pluginId === FRAMEWORK_PLUGIN_ID)
+        throw new Error(
+          `[plugin-rpc] "${FRAMEWORK_PLUGIN_ID}" is reserved for framework actions`,
+        );
       const key = `${pluginId}::${action}`;
       if (pluginEntries.has(key)) {
         throw new Error(

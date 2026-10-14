@@ -1,4 +1,4 @@
-import { compareText } from "@covel/shared";
+import { compareText, FRAMEWORK_PLUGIN_ID } from "@covel/shared";
 import { Hono } from "hono";
 import { z } from "zod";
 import {
@@ -277,7 +277,7 @@ export function createPluginDiagnostics(deps: PluginDiagnosticsDeps) {
   deps.rpc.registerFrameworkDefault(
     "slash-plugins",
     async (_payload, context) => {
-      if (context.command?.commandId !== "framework:plugins")
+      if (context.command?.commandId !== `${FRAMEWORK_PLUGIN_ID}:plugins`)
         throw new RpcValidationError(
           "Use the /plugins command to open plugin diagnostics",
         );

@@ -35,7 +35,7 @@ example/
 
 Layout rules:
 
-- The root `PLUGIN.md` is required. Its `id` must match the package directory name.
+- The root `PLUGIN.md` is required. Its `id` must match the package directory name. `framework` is kept for the framework itself and cannot be used as an `id`.
 - If there is only one runtime, write it in the `runtime` section of the root file. The body of the root file is then its prompt.
 - If there are several runtimes, put each one in `runtimes/<id>/RUNTIME.md`. Its logical ID is `<pluginId>/<id>`. The body of each file is the prompt for that runtime.
 - You cannot mix the two layouts. A child runtime cannot declare package-level contributions.
@@ -197,6 +197,15 @@ Authors of external plugins should follow the framework's [CHANGELOG](../../CHAN
 | `guard`       | The guard module, relative to the runtime                                  |
 | `effects`     | Read and write resources, and `parallelSafe`                               |
 | `permissions` | Declaration of the permissions the execution needs                         |
+
+The root `PLUGIN.md` can also have `permissions.http`. It covers the code of the `entry` module: in a community package, `covel.http` (used in tools, hooks, RPC, services, extensions and wires) reaches only the origins and methods listed in the `permissions.http` of the root file and of each runtime. A wire can also reach the endpoint of the slot it is serving. An undeclared request fails before it is sent: `http permission denied: …`.
+
+```yaml
+permissions:
+  http:
+    - origin: https://api.example.com
+      methods: [POST]
+```
 
 ### Two kinds of runtime
 
