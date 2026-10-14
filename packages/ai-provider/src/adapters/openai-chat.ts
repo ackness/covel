@@ -299,7 +299,11 @@ export function createOpenAiChatAdapter(): ModelProviderAdapter {
     async generateText(config, params, context) {
       params = withTextRequestDefaults(params);
       const messages = applyCapabilityFallback(
-        withResponseFormatInstruction(params.messages, params.responseFormat),
+        withResponseFormatInstruction(
+          params.messages,
+          params.responseFormat,
+          params.instructionLocale,
+        ),
         context,
       );
       const body: Record<string, unknown> = {
@@ -374,6 +378,7 @@ export function createOpenAiChatAdapter(): ModelProviderAdapter {
         withResponseFormatInstruction(
           params.messages,
           objectResponseFormat(params.schema, "openai-chat"),
+          params.instructionLocale,
         ),
         context,
       );
@@ -438,7 +443,11 @@ export function createOpenAiChatAdapter(): ModelProviderAdapter {
     async *streamText(config, params, context) {
       params = withTextRequestDefaults(params);
       const messages = applyCapabilityFallback(
-        withResponseFormatInstruction(params.messages, params.responseFormat),
+        withResponseFormatInstruction(
+          params.messages,
+          params.responseFormat,
+          params.instructionLocale,
+        ),
         context,
       );
       const body: Record<string, unknown> = {

@@ -175,6 +175,9 @@ const FRAMEWORK_CHINESE_LINES = {
   "packages/runtime/src/interaction/interaction-submission.ts": 18,
   "packages/plugin-handlers-utils/src/locale-registry.ts": 4,
   // Chinese variants of framework instructions, each beside its English text.
+  // Adapter instructions use the host-selected session instruction language.
+  "packages/ai-provider/src/adapters/structured-output.ts": 1,
+  "packages/ai-provider/src/adapters/http/anthropic-readers.ts": 1,
   "packages/context/src/message-insertion.ts": 3,
   "packages/context/src/prompt-assembler.ts": 2,
   "packages/context/src/prompt-internals.ts": 20,

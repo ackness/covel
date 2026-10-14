@@ -256,7 +256,7 @@ model    = "glm-5"
 一次调用按下面的步骤找到模型：
 
 1. **请求绑定**。`X-Slot-Config.slotBindings` 优先。它区分本地的 `modelRef` 和服务端的 `presetId`；本地模型必须在这次请求里声明。密钥通过 `X-Provider-Keys` 提供，不写进插件或世界包。
-2. **按名字命中**。按预设 ID 或用途名解析。图片调用要求名字完全一致，并且目标能产出图片。名字拼错、没有配置或者选到文本模型，都返回 `CONFIG_ERROR`，不调用服务商。
+2. **按名字命中**。按预设 ID 或用途名解析。所有显式目标都要支持本次调用的能力，包括语音、转写和音乐。不匹配时返回 `CONFIG_ERROR`，不调用服务商。图片调用要求名字完全一致，并且目标能产出图片。名字拼错、没有配置或者选到文本模型，都返回 `CONFIG_ERROR`，不调用服务商。
 3. **没给名字**。`generateImage` 和 `resolveSlot({ fallbackTag: "image" })` 都使用 `image`。不会自动挑别的图像用途，也不会使用默认的文本模型。语音和转写使用各自的默认名 `speech` / `transcription`，并保留原有的同标签解析。
 4. **同标签回退（图片除外）**。文本等调用按名字没找到时，可以回落到 `tag` 相同的用途。不会跨标签回退。
 5. **任务选择用途**。Agent 的 `runtimeModelOverrides` 优先于 `manifest.model`。function 的图片任务由插件的 `modelPresetId` 设置选择用途。两者最后使用同一份请求级的模型绑定。

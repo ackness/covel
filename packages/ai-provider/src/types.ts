@@ -331,6 +331,8 @@ export type TextMessageContent =
 // ── Text Generation ────────────────────────────────────────────────
 
 export interface TextGenerationParams {
+  /** Host-selected instruction language for adapter-authored text. */
+  instructionLocale?: "en" | "zh";
   model: string;
   messages: TextMessage[];
   /** Tool definitions to pass to the model (OpenAI function calling format). */
