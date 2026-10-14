@@ -40,6 +40,39 @@ export interface LocaleFile {
   readonly origin: "plugin" | "translations";
 }
 
+/** Parse package or external translation text without executing package code. */
+export function parseLocaleFile(
+  content: string,
+  file: string,
+  origin: LocaleFile["origin"] = "plugin",
+): LocaleFile | undefined {
+  const tag = /^(.+)\.ya?ml$/.exec(path.basename(file))?.[1];
+  const locale = tag ? canonicalizeLocale(tag) : undefined;
+  if (!locale || !isKnownLocale(locale)) return undefined;
+  let document: unknown;
+  try {
+    document = parseYaml(content);
+  } catch (error) {
+    // A broken translation must not disable a plugin, including its preview.
+    console.warn(
+      `[plugin-loader] ${file}: cannot be parsed, its text is ignored - ${error instanceof Error ? error.message.split("\n")[0] : String(error)}`,
+    );
+    return undefined;
+  }
+  if (
+    document === null ||
+    typeof document !== "object" ||
+    Array.isArray(document)
+  )
+    return undefined;
+  return {
+    locale,
+    file,
+    document: document as Record<string, unknown>,
+    origin,
+  };
+}
+
 async function readDirectory(
   directory: string,
   label: string,
@@ -60,28 +93,17 @@ async function readDirectory(
     const full = path.join(directory, name);
     // A link could point outside the directory: read regular files only.
     if (!(await fs.lstat(full)).isFile()) continue;
-    let document: unknown;
+    let content: string;
     try {
-      document = parseYaml(await fs.readFile(full, "utf-8"));
+      content = await fs.readFile(full, "utf-8");
     } catch (error) {
-      // A broken translation file must not disable the plugin.
       console.warn(
-        `[plugin-loader] ${full}: cannot be parsed, its text is ignored - ${error instanceof Error ? error.message.split("\n")[0] : String(error)}`,
+        `[plugin-loader] ${full}: cannot be read, its text is ignored - ${error instanceof Error ? error.message : String(error)}`,
       );
       continue;
     }
-    if (
-      document === null ||
-      typeof document !== "object" ||
-      Array.isArray(document)
-    )
-      continue;
-    files.push({
-      locale,
-      file: `${label}/${name}`,
-      document: document as Record<string, unknown>,
-      origin,
-    });
+    const parsed = parseLocaleFile(content, `${label}/${name}`, origin);
+    if (parsed) files.push(parsed);
   }
   return files;
 }

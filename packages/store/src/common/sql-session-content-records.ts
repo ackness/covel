@@ -103,6 +103,7 @@ export type SqlSessionContentRecords = Pick<
   | "upsertCharacterSchema"
   | "upsertCharacter"
   | "listCharacters"
+  | "getCharacter"
   | "deleteCharacter"
 >;
 
@@ -307,6 +308,16 @@ export function createSqlSessionContentRecords(
         orderBy: [asc(characters.createdAt), asc(byteOrder(characters.id))],
       });
       return rows.map((row) => toCharacterRecord(row, json));
+    },
+
+    async getCharacter(
+      sessionId: string,
+      id: string,
+    ): Promise<CharacterRecord | null> {
+      const row = await runner.selectFirst<CharacterRow>(characters, {
+        where: and(eq(characters.sessionId, sessionId), eq(characters.id, id)),
+      });
+      return row ? toCharacterRecord(row, json) : null;
     },
 
     async deleteCharacter(sessionId: string, id: string): Promise<void> {

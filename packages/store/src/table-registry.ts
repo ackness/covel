@@ -69,6 +69,8 @@ export type SessionScopedMemoryKey = Extract<
   | "setupAttempts"
   | "jobStatus"
   | "runtimeExports"
+  | "recordChanges"
+  | "sessionWriteCounters"
 >;
 
 export type MemoryCollectionKind = "map" | "array";
@@ -84,9 +86,10 @@ export interface SessionScopedTable {
 
 /**
  * Every session-scoped child table, in cascade order (children deleted before
- * the parent `sessions` row). With zero declared foreign keys the order is not
- * load-bearing for correctness; it is preserved for stable, diff-friendly DDL
- * and delete ordering.
+ * the parent `sessions` row). With zero declared foreign keys the order is
+ * load-bearing in one place only: `record_changes` and `session_write_counters`
+ * come last, because deleting the lorebook, character and plugin data rows
+ * fires triggers that write to them (`common/write-order-ddl.ts`).
  */
 export const SESSION_SCOPED_TABLES: readonly SessionScopedTable[] = [
   {
@@ -212,6 +215,17 @@ export const SESSION_SCOPED_TABLES: readonly SessionScopedTable[] = [
   {
     table: "runtime_exports",
     memoryKey: "runtimeExports",
+    memoryKind: "map",
+  },
+  // Last: the triggers of the tables above write to these two.
+  {
+    table: "record_changes",
+    memoryKey: "recordChanges",
+    memoryKind: "map",
+  },
+  {
+    table: "session_write_counters",
+    memoryKey: "sessionWriteCounters",
     memoryKind: "map",
   },
 ];

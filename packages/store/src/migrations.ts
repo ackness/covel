@@ -14,7 +14,7 @@ export { BROWSER_IDB_DATABASE_NAME };
  * it whenever a column changes in a way an existing database cannot follow;
  * `tests/schema-version.test.ts` fails when the table shapes change without it.
  */
-export const DATA_SCHEMA_VERSION = 4;
+export const DATA_SCHEMA_VERSION = 5;
 
 export type StorageMigrationDomain = "data" | "media" | "vector" | "browser";
 export type StorageMigrationStatus =

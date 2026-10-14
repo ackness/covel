@@ -61,6 +61,7 @@ pluginInstallRoutes.post("/plugin", async (c) => {
         kind: "plugin",
         id: summary.pluginId,
         restartRequired: true,
+        hasServerCode: summary.hasServerCode,
       },
       201,
     );

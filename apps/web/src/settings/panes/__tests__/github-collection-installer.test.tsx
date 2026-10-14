@@ -183,3 +183,25 @@ it("drops the preview when the URL changes", async () => {
   expect(screen.queryByText("Collection: Barrow Pack · 1.2.0")).toBeNull();
   expect(screen.queryByRole("button", { name: /Install/ })).toBeNull();
 });
+
+it("resolves plugin and world descriptions when the UI language changes", async () => {
+  await previewWith({
+    ...pack,
+    items: [
+      {
+        ...plugin,
+        description: { en: "English plugin", "zh-CN": "中文插件简介" },
+      },
+      {
+        ...world,
+        description: { en: "English world", "zh-CN": "中文世界简介" },
+      },
+    ],
+  });
+  expect(screen.getByText("English plugin")).toBeTruthy();
+  expect(screen.getByText("English world")).toBeTruthy();
+  await i18n.changeLanguage("zh-CN");
+  expect(await screen.findByText("中文插件简介")).toBeTruthy();
+  expect(await screen.findByText("中文世界简介")).toBeTruthy();
+  expect(screen.queryByText("English plugin")).toBeNull();
+});

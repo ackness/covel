@@ -166,6 +166,8 @@ When there are errors, the command ends with a failure, so you can put it direct
 
 When importing from a ZIP, there is no preview step, and a problem causes the install to be refused directly.
 
+Plugins in GitHub and offline collections follow the [installer’s runtime dependency rule](../reference/plugin-installation.md#what-the-installer-does-and-does-not-do). Authors must bundle dependencies into release files; the installer does not install dependencies for players.
+
 Collection members cannot carry the installer's source receipt. Worlds and plugins share the [reserved-file rule](../reference/world-installation.md#api).
 
 ## Installing Several at Once Without a Manifest

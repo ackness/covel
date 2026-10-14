@@ -9,7 +9,11 @@
 
 import { compareText } from "@covel/shared";
 import { worldForSession } from "./world-model-view.js";
-import type { DataStore, TurnMessageRecord } from "@covel/store";
+import type {
+  DataStore,
+  TurnMessageRecord,
+  WriteOrderedTurnMessage,
+} from "@covel/store";
 import type {
   PluginDataWriter,
   PluginLogger,
@@ -114,29 +118,20 @@ function assertPluginDataSize(
 const TURN_MESSAGE_PAGE_DEFAULT = 100;
 const TURN_MESSAGE_PAGE_MAX = 500;
 
-/** The cursor is opaque to plugins; it encodes the store's keyset position. */
-function encodeTurnMessageCursor(message: TurnMessageRecord): string {
-  return JSON.stringify([message.createdAt, message.id]);
+/**
+ * The cursor is opaque to plugins; it is the save order (`writeSeq`) of the
+ * last message read. A message saved later never has a lower one, so a stored
+ * cursor misses nothing, even a background execution's older-timestamped text.
+ */
+function encodeTurnMessageCursor(message: WriteOrderedTurnMessage): string {
+  return String(message.writeSeq);
 }
 
-function decodeTurnMessageCursor(cursor: string): {
-  readonly createdAt: string;
-  readonly id: string;
-} {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(cursor);
-  } catch {
-    parsed = undefined;
-  }
-  if (
-    !Array.isArray(parsed) ||
-    parsed.length !== 2 ||
-    typeof parsed[0] !== "string" ||
-    typeof parsed[1] !== "string"
-  )
+function decodeTurnMessageCursor(cursor: string): number {
+  const writeSeq = /^(0|[1-9]\d*)$/.test(cursor) ? Number(cursor) : NaN;
+  if (!Number.isSafeInteger(writeSeq))
     throw new TypeError("Invalid turn message cursor");
-  return { createdAt: parsed[0], id: parsed[1] };
+  return writeSeq;
 }
 
 function toPluginTurnMessage(message: TurnMessageRecord): PluginTurnMessage {

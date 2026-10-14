@@ -112,6 +112,14 @@ export interface VectorSearchResult {
   readonly payload: string | null;
 }
 
+/** Point read of stored vectors by key, within one plugin namespace. */
+export interface GetVectorPayloadsInput {
+  readonly sessionId: string;
+  readonly pluginId: string;
+  readonly namespace: string;
+  readonly keys: readonly string[];
+}
+
 /** Scope for bulk deletion. Omit fields to widen the scope. */
 export interface DeleteVectorsInput {
   readonly sessionId: string;
@@ -164,6 +172,14 @@ export interface VectorStoreCapability {
   upsertVector(input: UpsertVectorInput): Promise<void>;
   /** Top-k nearest neighbours for a query within the session's vector space. */
   searchVectors(input: SearchVectorsInput): Promise<VectorSearchResult[]>;
+  /**
+   * The payloads of the stored vectors among `keys`, keyed by key. A key with
+   * no vector is absent. Lets an indexer skip a record whose text it already
+   * embedded without keeping its own copy of what the index holds.
+   */
+  getVectorPayloads(
+    input: GetVectorPayloadsInput,
+  ): Promise<Map<string, string | null>>;
   /** Bulk delete by scope. */
   deleteVectors(input: DeleteVectorsInput): Promise<void>;
 }
@@ -219,6 +235,7 @@ export function supportsVector<T extends object>(
   return (
     typeof candidate.upsertVector === "function" &&
     typeof candidate.searchVectors === "function" &&
+    typeof candidate.getVectorPayloads === "function" &&
     typeof candidate.deleteVectors === "function" &&
     typeof candidate.getVectorIndexProgress === "function" &&
     typeof candidate.commitVectorIndexBatch === "function" &&

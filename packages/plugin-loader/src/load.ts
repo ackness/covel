@@ -1,4 +1,7 @@
-import { validateRuntimeDeclarations } from "./static-validation.js";
+import {
+  pluginImportReferences,
+  validateRuntimeDeclarations,
+} from "./static-validation.js";
 import { resolvePluginDeclarations } from "./declarations.js";
 import { loadPluginUiSpec } from "./ui-spec.js";
 import { readMessageCatalogs } from "./locale-messages.js";
@@ -409,8 +412,10 @@ export async function loadPluginEntryDefinition(
     pluginRoot: discovery.rootPath,
     entryPaths: [
       ...new Set(
-        declarations.flatMap(({ manifest }) =>
-          manifest.entry ? [manifest.entry] : [],
+        declarations.flatMap((declaration) =>
+          pluginImportReferences(declaration, [])
+            .filter(({ field }) => field === "entry")
+            .map(({ reference }) => reference),
         ),
       ),
     ],

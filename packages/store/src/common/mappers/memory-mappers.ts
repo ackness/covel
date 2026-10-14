@@ -29,6 +29,8 @@ export interface TurnMessageRow {
   order: number;
   createdAt: string;
   compactedAtTurnId: string | null;
+  /** Save order in the session; see `listTurnMessagesAfter`. */
+  writeSeq: number;
 }
 
 export interface PlayerInputRow {
