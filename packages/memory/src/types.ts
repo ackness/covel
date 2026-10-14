@@ -3,8 +3,11 @@ import type { MemoryStore } from "./store-contracts.js";
 // ── Recall Memory (conversation history search) ─────────────────
 
 export interface RecallSearchResult {
+  /** Internal dedupe identity; summaries have no message ID. Never render to a model. */
+  readonly messageId?: string;
   readonly turnId: string;
   readonly role: string;
+  /** Query-centered excerpt, shared by keyword and vector search. */
   readonly content: string;
   /**
    * Relevance score (higher = more relevant). Keyword search returns a BM25
@@ -34,6 +37,7 @@ export interface RecallSearcher {
 
 export interface ArchivalSearchResult {
   readonly key: string;
+  /** Query-centered excerpt, shared by keyword and vector search. */
   readonly content: string;
   /** Relevance score (higher = more relevant); see {@link RecallSearchResult.score}. */
   readonly score: number;

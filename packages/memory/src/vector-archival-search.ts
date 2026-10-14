@@ -93,7 +93,7 @@ export function createVectorArchivalSearcher(deps: {
       return results.map((row) =>
         archivalResult(
           items.get(row.key)!,
-          undefined,
+          query,
           distanceToScore(row.distance),
         ),
       );

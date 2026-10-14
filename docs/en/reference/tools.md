@@ -549,13 +549,13 @@ Search the session's memory. It looks in two sources:
 | scope    | enum   |          | `recall` / `archival` / `all`, default `all`                      |
 | limit    | number |          | Maximum number of results, 1–20, default 5                        |
 
-Each result's content is at most 500 characters. The search rules are in the next section.
+Both keyword and vector search return an excerpt around a query term: up to 500 source characters, plus ellipses and the recall role prefix. A semantic hit without a literal query term returns a prefix excerpt. The tool preserves the excerpt without truncating its ending. The next section describes retrieval.
 
 ### Plugin memory and vector search
 
 This section explains how `memory-search` searches, and how plugin data gets into the search scope.
 
-**No embedding model is needed.** When no embedding slot is configured, recall and archival rank results with BM25 (`rankTexts` from `@covel/plugin-handlers-utils`):
+**No embedding model is needed.** When no embedding slot is configured, recall and archival rank results with BM25 (`rankTexts` from `@covel/plugin-handlers-utils`): When vector recall has too few results, keyword hits fill the remaining places and are deduplicated by message ID. Distinct messages with identical text in the same turn remain separate hits. Message IDs are internal and are not returned to the model by the tool.
 
 - Both the query and the texts are split into words. Chinese, Japanese, and Korean text is split into pairs of adjacent characters. English is split into words, and plurals and possessives are reduced to the base form.
 - A word that appears in only a few texts (a person's name, an item's name) gets a high weight. A word that appears in almost every text gets a weight close to zero. A long text is not penalized just for being long.
