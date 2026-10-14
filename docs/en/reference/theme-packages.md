@@ -235,7 +235,7 @@ The structure of `manifest.json`:
 {
   "id": "paper",
   "label": {
-    "zh-CN": "Paper",
+    "zh-CN": "纸本",
     "en-US": "Paper"
   },
   "source": "builtin",
@@ -243,6 +243,11 @@ The structure of `manifest.json`:
   "description": {
     "zh-CN": "温暖、偏叙事阅读器的纸本风格。",
     "en-US": "A warm editorial reading style."
+  },
+  "group": "classic",
+  "groupLabel": {
+    "zh-CN": "经典",
+    "en-US": "Classic"
   }
 }
 ```
@@ -607,7 +612,9 @@ To keep a theme package stable and usable over the long term, we recommend this:
 - Narrative themes should explicitly override the `--story-*` tokens
 - Tool themes should explicitly override the `--surface-*`, `--radius-*`, and `--title-*` tokens
 
-## 10. Reference examples
+<a id="10-reference-examples"></a>
+
+## 11. Reference examples
 
 You can use the built-in themes as real references:
 

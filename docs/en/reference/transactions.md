@@ -319,7 +319,7 @@ Browser-private persistence is kept deliberately outside `DataStore`. Dexie mana
 
 - Uploads and downloads of browser checkpoints are serialized by `LocalDataService`. Before hydration or staging another action, it restores the persisted pending commits.
 - When the temporary session does not exist, it clears the pending mark and allows a rebuild from the browser checkpoint. Other errors keep the mark and block newer commits.
-- Checkpoint export calls `listRuntimeResults(sessionId)` once per session to read runtime results. Omitting `turnId` returns all rows of the session, including executions that were interrupted and have no turn-result row. When `turnId` is passed, the existing per-turn filter is kept on every backend.
+- Checkpoint export reads `listTurnResults(sessionId)` and `listRuntimeOutputs(sessionId)`, and keeps only the rows of the latest 40 executions (`JOURNAL_EXECUTION_WINDOW`). Executions that were interrupted and have no turn-result row are not saved in the checkpoint.
 - Before it uses a revision or an idempotency cache, the upload and commit routes check the owner, the incarnation, and the deletion state again inside the session lock. A cache entry belongs to one incarnation. After the same ID is created again, the old entries are discarded.
 
 **Import and replacement.**
