@@ -735,7 +735,7 @@ data: {
 | `runtime.skipped`                                          | `apps/server/src/routes/api/actions.ts`                                                       | runtime 因 cooldown / startTurn / maxTriggerCount 被跳过              |
 | `character.upserted`                                       | `packages/runtime/src/commit/session-commit-emitter.ts`（`character.upsert` proposal commit） | 角色快照事件                                                          |
 | `tool.calling` / `tool.completed` / `tool.failed`          | TurnEmitter                                                                                   | LLM 工具调用 trace                                                    |
-| `domain-event.previewed`                                   | ToolExecutor（`emittedEvents` 成功后）                                                        | 服务端投影成 UI slot 预览；前端不直接消费，不代表领域提交                                  |
+| `domain-event.previewed`                                   | ToolExecutor（`emittedEvents` 成功后）                                                        | 服务端投影成 UI slot 预览；前端不直接消费，不代表领域提交             |
 | `llm.calling` / `llm.responded` / `message.completed`      | TurnEmitter                                                                                   | LLM 调用 trace                                                        |
 | `block.emitted` / `state.patch.applied`                    | TurnEmitter                                                                                   | 块发出 / state patch 应用 trace                                       |
 | `hook.fired` / `hook.aborted`                              | TurnEmitter                                                                                   | Hook 行为 trace                                                       |
@@ -983,6 +983,8 @@ data: {
 `submit_interaction` 的一批回答可以涉及多个来源插件，不限制阶段的数量。所有来源的 server-code 授权都齐了，才校验并原子保存。
 
 **框架默认 action：** 见 [api.md](./api.md#post-apisessionsidplugin-rpc) 的“框架默认 action”小节。
+
+恢复挂起的 runtime 也逐项请求缺少的授权。审批期间释放客户端的会话队列；切换会话或拒绝审批会停止重试并保留挂起项。见 [恢复接口](./api.md#post-apisessionsidsuspensionssuspensionidresume)。
 
 ### RPC Approval
 

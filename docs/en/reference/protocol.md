@@ -984,6 +984,8 @@ A batch of answers in `submit_interaction` can involve several source plugins, a
 
 **Framework default actions:** see the "Framework default actions" section in [api.md](./api.md#post-apisessionsidplugin-rpc).
 
+Resuming a suspended runtime also requests each missing grant. The client releases its session queue while asking for approval. Switching sessions or denying approval stops retries and leaves the suspension pending. See the [resume endpoint](./api.md#post-apisessionsidsuspensionssuspensionidresume).
+
 ### RPC Approval
 
 Calls to community plugin RPCs need the player's explicit approval. After the framework returns 202, the frontend reads the pending items through the endpoints below, and submits a decision.

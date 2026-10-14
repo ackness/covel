@@ -15,7 +15,8 @@ import {
 } from "@covel/store/browser-sync";
 import i18n from "@/i18n";
 import { emitToast } from "@/lib/toast-channel";
-import { isNotFound, request } from "./request.js";
+import { actionApprovalSchema, type ActionApproval } from "./actions.js";
+import { isNotFound, request, requestResponse } from "./request.js";
 import { ignoreError } from "../../lib/ignore-error.js";
 import { verifyCreatedSessionCredential } from "./session-credential-cleanup.js";
 import {
@@ -405,14 +406,20 @@ export async function resumeSuspension(
   sessionId: string,
   suspensionId: string,
   data: unknown,
-): Promise<ResumeSuspensionResponse> {
-  return request<ResumeSuspensionResponse>(
+): Promise<ResumeSuspensionResponse | ActionApproval> {
+  const response = await requestResponse(
     `/api/sessions/${encodeURIComponent(sessionId)}/suspensions/${encodeURIComponent(suspensionId)}/resume`,
     {
       method: "POST",
       body: JSON.stringify({ data }),
+      sessionId,
+      operatorAuth: true,
     },
   );
+  const body: unknown = await response.json();
+  return response.status === 202
+    ? actionApprovalSchema.parse(body)
+    : (body as ResumeSuspensionResponse);
 }
 
 export async function cancelSuspension(

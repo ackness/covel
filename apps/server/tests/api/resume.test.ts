@@ -8,6 +8,11 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { Hono } from "hono";
+import {
+  createRpcApprovalGate,
+  COMMUNITY_SERVER_CODE_ACTION,
+  type RpcApprovalGate,
+} from "@covel/approval";
 import type { BudgetOptions } from "@covel/context";
 import { type DataStore } from "@covel/store";
 import { createMemoryStore } from "@covel/store/memory";
@@ -25,12 +30,16 @@ import {
   createInProcessSessionLock,
   type SessionLock,
 } from "../../src/lib/session-lock.js";
-import { SESSION_INCARNATION_KEY } from "../../src/routes/api/session/session-guard.js";
+import {
+  SESSION_INCARNATION_KEY,
+  sessionApprovalScope,
+} from "../../src/routes/api/session/session-guard.js";
 import { setSessionWorld } from "../helpers/session-world.js";
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
 type Deps = {
+  rpcApprovalGate?: RpcApprovalGate;
   contextBudget?: Omit<BudgetOptions, "estimator">;
   store: DataStore;
   pluginRegistry: PluginRegistry;
@@ -76,6 +85,7 @@ function createTestApp(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     c.set("resolveModel", deps.resolveModel as any);
     c.set("sessionLock", sessionLock);
+    if (deps.rpcApprovalGate) c.set("rpcApprovalGate", deps.rpcApprovalGate);
     if (deps.prepareToolsForSession) {
       c.set("prepareToolsForSession", deps.prepareToolsForSession);
     }
@@ -220,7 +230,7 @@ function makeDefaultDeps(store: DataStore, overrides?: Partial<Deps>): Deps {
       pluginType: "plugin",
       runtimeCount: 1,
     },
-    source: "community",
+    source: "builtin",
     packageManifest: {
       plugin: {
         id: "test-plugin",
@@ -288,6 +298,187 @@ describe("Resume Routes", () => {
   });
 
   describe("POST /api/sessions/:id/suspensions/:suspensionId/resume", () => {
+    it("asks for each missing grant before claiming or loading the continuation", async () => {
+      const gate = createRpcApprovalGate();
+      const deps = makeDefaultDeps(store, { rpcApprovalGate: gate });
+      const entry = deps.pluginRegistry.get("test-plugin");
+      if (!entry?.manifests) throw new Error("expected fixture runtimes");
+      deps.pluginRegistry.register({
+        ...entry,
+        source: "community",
+        manifests: [
+          ...entry.manifests,
+          {
+            runtime: { type: "agent" },
+            manifest: { ...TEST_MANIFEST, name: "test-plugin/unrelated" },
+            promptTemplate: "Unrelated runtime must not require approval here",
+            rawFrontmatter: {},
+          },
+        ],
+      });
+      const load = vi.spyOn(deps, "loadRuntimeFn");
+      const claim = vi.spyOn(store, "claimSuspension");
+      await createSuspension(store);
+      const app = createTestApp(deps);
+      const resume = (data: unknown = { name: "Alice" }) =>
+        app.request("/api/sessions/sess-1/suspensions/susp-1/resume", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ data }),
+        });
+      for (const action of [
+        COMMUNITY_SERVER_CODE_ACTION,
+        "runtime:test-plugin",
+      ]) {
+        // Authorization precedes validation of the submitted form.
+        const response = await resume({});
+        expect(response.status).toBe(202);
+        const body = await response.json();
+        expect(body).toMatchObject({
+          status: "approval-required",
+          pending: { sessionId: "sess-1", pluginId: "test-plugin", action },
+        });
+        expect(claim).not.toHaveBeenCalled();
+        expect(load).not.toHaveBeenCalled();
+        expect(
+          (await store.getSuspension("susp-1"))?.resolvedAt,
+        ).toBeUndefined();
+        const session = await store.getSession("sess-1");
+        expect(
+          gate.decide(
+            {
+              approvalId: body.approvalId,
+              decision: "allow",
+              scope: "session",
+              decidedAt: new Date().toISOString(),
+            },
+            sessionApprovalScope(session!, "test-plugin"),
+          ),
+        ).toMatchObject({ ok: true });
+      }
+      expect((await resume()).status).toBe(200);
+      expect(load).toHaveBeenCalledOnce();
+      expect(claim).toHaveBeenCalledOnce();
+    });
+
+    it("rechecks revoked grants under the session lock, including manual continuations", async () => {
+      const gate = createRpcApprovalGate();
+      const deps = makeDefaultDeps(store, { rpcApprovalGate: gate });
+      const entry = deps.pluginRegistry.get("test-plugin");
+      if (!entry?.manifests) throw new Error("expected fixture runtimes");
+      deps.pluginRegistry.register({
+        ...entry,
+        source: "community",
+        manifests: entry.manifests.map((record) => ({
+          ...record,
+          manifest: {
+            ...record.manifest,
+            trigger: { type: "manual" },
+            stage: undefined,
+          },
+        })),
+      });
+      const scope = sessionApprovalScope(
+        (await store.getSession("sess-1"))!,
+        "test-plugin",
+      );
+      for (const action of [
+        COMMUNITY_SERVER_CODE_ACTION,
+        "runtime:test-plugin",
+      ]) {
+        const verdict = gate.evaluate({
+          sessionId: "sess-1",
+          sessionScope: scope,
+          pluginId: "test-plugin",
+          action,
+          payload: {},
+          trustLevel: "community",
+        });
+        if (verdict.status !== "pending")
+          throw new Error("expected pending approval");
+        gate.decide(
+          {
+            approvalId: verdict.approvalId,
+            decision: "allow",
+            scope: "session",
+            decidedAt: new Date().toISOString(),
+          },
+          scope,
+        );
+      }
+      const lock = createInProcessSessionLock();
+      const withLock = lock.withLock.bind(lock);
+      vi.spyOn(lock, "withLock").mockImplementationOnce((sid, fn) =>
+        withLock(sid, async () => {
+          gate.revoke(sid);
+          return fn();
+        }),
+      );
+      const claim = vi.spyOn(store, "claimSuspension");
+      const load = vi.spyOn(deps, "loadRuntimeFn");
+      await createSuspension(store);
+      const response = await createTestApp(deps, lock).request(
+        "/api/sessions/sess-1/suspensions/susp-1/resume",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ data: { name: "Alice" } }),
+        },
+      );
+      expect(response.status).toBe(202);
+      expect(await response.json()).toMatchObject({
+        status: "approval-required",
+        pending: { action: COMMUNITY_SERVER_CODE_ACTION },
+      });
+      expect(claim).not.toHaveBeenCalled();
+      expect(load).not.toHaveBeenCalled();
+    });
+
+    it.each(["before lock", "under lock"])(
+      "refuses an invalid resume schema %s without claiming or loading",
+      async (when) => {
+        vi.spyOn(console, "warn").mockImplementation(() => {});
+        const invalid = { type: "not-a-json-schema-type" };
+        const suspension = await createSuspension(
+          store,
+          when === "before lock" ? { resumeSchema: invalid } : undefined,
+        );
+        const lock = createInProcessSessionLock();
+        if (when === "under lock") {
+          const withLock = lock.withLock.bind(lock);
+          vi.spyOn(lock, "withLock").mockImplementationOnce((sid, fn) =>
+            withLock(sid, async () => {
+              await store.saveSuspension({
+                ...suspension,
+                resumeSchema: invalid,
+              });
+              return fn();
+            }),
+          );
+        }
+        const deps = makeDefaultDeps(store);
+        const claim = vi.spyOn(store, "claimSuspension");
+        const load = vi.spyOn(deps, "loadRuntimeFn");
+        const response = await createTestApp(deps, lock).request(
+          "/api/sessions/sess-1/suspensions/susp-1/resume",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ data: { name: "Alice" } }),
+          },
+        );
+        expect(response.status).toBe(400);
+        expect(await response.json()).toMatchObject({
+          code: "resume_schema_invalid",
+        });
+        expect(claim).not.toHaveBeenCalled();
+        expect(load).not.toHaveBeenCalled();
+        expect(
+          (await store.getSuspension("susp-1"))?.resolvedAt,
+        ).toBeUndefined();
+      },
+    );
+
     it.each(["acquire", "claimed", "unknown"])(
       "classifies %s failures without losing retryability",
       async (seam) => {
