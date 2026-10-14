@@ -16,6 +16,11 @@
  * transport only needs best-effort ordering — `max: 1` sends NOTIFYs in call
  * order and PG delivers them in commit order; the bus's receive side
  * order-buffers by seq as the safety net for any other transport.
+ *
+ * Backpressure: the outbox holds a bounded number of frames per session. A
+ * NOTIFY that never returns (half-open connection) makes later frames drop
+ * into a seq hole that receivers reset on, so this transport adds no timeout
+ * of its own — a timeout would only move the backlog into the client's queue.
  */
 
 import type { EventBusTransport } from "@covel/events";

@@ -55,6 +55,7 @@ import {
 } from "../turn-executor/turn-output-helpers.js";
 import {
   buildAssistantToolCallMessage,
+  normalizeAssistantToolCall,
   buildPreToolAbortMessage,
   buildToolExecutionUnavailableMessage,
   buildToolResultMessage,
@@ -209,6 +210,7 @@ async function runAgentToolLoopWithinBudget(
   // as having done nothing. The transcript is not evidence: a failed call
   // leaves a tool name there too.
   const seededBusinessWork = hasCompletedBusinessWork(
+    manifest,
     initialState?.completionCalls,
   );
   // A failure still unresolved at the suspension stays visible to the
@@ -453,6 +455,7 @@ async function runAgentToolLoopWithinBudget(
       // reference tool_call_ids that don't appear in any assistant message.
       // reasoningContent is carried back verbatim so thinking-mode
       // providers (DashScope Qwen, DeepSeek v4) accept the follow-up turn.
+      const assistantMessageIndex = messages.length;
       messages.push(buildAssistantToolCallMessage(response));
 
       let successfulCompletingToolsInResponse = 0;
@@ -491,6 +494,18 @@ async function runAgentToolLoopWithinBudget(
 
           // Use the (possibly replaced) toolCall from the hook outcome
           const effectiveTc = preToolOutcome.toolCall;
+          // The hook may rewrite the name or arguments. Replay that effective
+          // call while the executor still receives the original argument text
+          // so an unrepairable call remains INVALID_ARGS.
+          const assistantMessage = messages[assistantMessageIndex]!;
+          messages[assistantMessageIndex] = {
+            ...assistantMessage,
+            toolCalls: assistantMessage.toolCalls!.map((call, index) =>
+              index === toolCallIndex
+                ? normalizeAssistantToolCall(effectiveTc)
+                : call,
+            ),
+          };
 
           // ── search-tools interception (deferred tool loading) ─
           // Framework-injected sentinel, same pattern as suspend /
@@ -612,6 +627,8 @@ async function runAgentToolLoopWithinBudget(
           }
 
           // ── Suspend detection ────────────────────────
+          // These names are reserved to builtins by ToolRegistry. A matching
+          // field from a plugin tool is ordinary data, not loop control.
           // When the suspend tool is called, capture the current loop state as
           // an execution-local artifact. The tool result is not pushed back to
           // the LLM; instead we exit the loop with status 'suspended'.
@@ -619,7 +636,11 @@ async function runAgentToolLoopWithinBudget(
           // The resume path runs the same loop with `allowSuspend: false`: a
           // nested suspend mid-resume is unsupported, so the sentinel is fed
           // back to the LLM as an error tool result and the loop continues.
-          if (isSuspendSentinel(toolResult.parsedResult)) {
+          if (
+            effectiveTc.name === "suspend" &&
+            toolResult.success &&
+            isSuspendSentinel(toolResult.parsedResult)
+          ) {
             if (!allowSuspend) {
               messages.push(
                 buildToolResultMessage({
@@ -692,7 +713,11 @@ async function runAgentToolLoopWithinBudget(
             ...(toolResult.refused ? { refused: true as const } : {}),
           });
 
-          if (!isRuntimeDoneSentinel(toolResult.parsedResult)) {
+          if (
+            effectiveTc.name !== "runtime-done" ||
+            !toolResult.success ||
+            !isRuntimeDoneSentinel(toolResult.parsedResult)
+          ) {
             if (toolResult.success) {
               if (completeAfterTools.has(effectiveTc.name)) {
                 successfulCompletingToolsInResponse++;
@@ -759,7 +784,12 @@ async function runAgentToolLoopWithinBudget(
       // results.
       const doneCall = executedToolCalls
         .slice(firstCallOfResponse)
-        .find((c) => isRuntimeDoneSentinel(c.result));
+        .find(
+          (c) =>
+            c.name === "runtime-done" &&
+            c.success &&
+            isRuntimeDoneSentinel(c.result),
+        );
       if (doneCall) {
         // The runtime-done tool itself should not appear as a business
         // output — drop it from collected calls so downstream consumers
@@ -792,7 +822,7 @@ async function runAgentToolLoopWithinBudget(
         if (
           requireToolUse &&
           noToolCallCorrections === 0 &&
-          !hasBusinessWork(executedToolCalls, seededBusinessWork)
+          !hasBusinessWork(manifest, executedToolCalls, seededBusinessWork)
         ) {
           noToolCallCorrections++;
           toolCallRequested = true;
@@ -955,7 +985,8 @@ async function runAgentToolLoopWithinBudget(
     // `runtime-done`, a completing tool, a hook that stops the loop, or the
     // step limit — so none of them can pass a runtime that did no work.
     requiredToolUseUnmet:
-      requireToolUse && !hasBusinessWork(executedToolCalls, seededBusinessWork),
+      requireToolUse &&
+      !hasBusinessWork(manifest, executedToolCalls, seededBusinessWork),
     lastTarget,
     requiredCompletionUnmet:
       manifest.requireExplicitCompletion === true &&

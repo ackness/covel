@@ -268,6 +268,172 @@ describe("createRpcExecutor", () => {
     });
   });
 
+  describe("handler time limit", () => {
+    function recordingStore(writeDelay?: Promise<void>) {
+      const writes: string[] = [];
+      const store = {
+        getSession: async () => ({}),
+        listTurnMessages: async () => [],
+        setPluginData: async (record: { key: string }) => {
+          await writeDelay;
+          writes.push(record.key);
+        },
+      };
+      return { store, writes };
+    }
+
+    it("fails a handler that never finishes and refuses its later writes", async () => {
+      const registry = createPluginRpcRegistry();
+      const executor = createRpcExecutor({ registry, handlerTimeoutMs: 20 });
+      const { store, writes } = recordingStore();
+      let signal: AbortSignal | undefined;
+      let writeLate!: () => Promise<void>;
+      registry.registerPluginHandler(
+        "stuck",
+        "hang",
+        async (_payload, context) => {
+          signal = context.signal;
+          writeLate = () =>
+            context.store.setPluginData!({
+              namespace: "state",
+              key: "late",
+              value: 1,
+            });
+          await context.store.setPluginData!({
+            namespace: "state",
+            key: "early",
+            value: 1,
+          });
+          return new Promise(() => {});
+        },
+        {},
+        "community",
+      );
+
+      await expect(
+        executor.dispatch(
+          { pluginId: "stuck", action: "hang", payload: null },
+          { sessionId: "sess-1", store },
+        ),
+      ).rejects.toMatchObject({
+        name: "RpcDispatchError",
+        code: "handler-timeout",
+      });
+      expect(signal?.aborted).toBe(true);
+      await expect(writeLate()).rejects.toThrow(/accepts no more calls/);
+      expect(writes).toEqual(["early"]);
+    });
+
+    it("refuses writes from synchronous abort listeners", async () => {
+      const registry = createPluginRpcRegistry();
+      const executor = createRpcExecutor({ registry, handlerTimeoutMs: 20 });
+      const { store, writes } = recordingStore();
+      let lateWrite: Promise<void> | undefined;
+      registry.registerPluginHandler(
+        "stuck",
+        "abort-write",
+        async (_payload, context) => {
+          context.signal!.addEventListener("abort", () => {
+            lateWrite = context.store.setPluginData!({
+              namespace: "state",
+              key: "after-abort",
+              value: 1,
+            });
+          });
+          return new Promise(() => {});
+        },
+        {},
+        "community",
+      );
+      await expect(
+        executor.dispatch(
+          { pluginId: "stuck", action: "abort-write", payload: null },
+          { sessionId: "sess-1", store },
+        ),
+      ).rejects.toMatchObject({ code: "handler-timeout" });
+      await expect(lateWrite).rejects.toThrow(/accepts no more calls/);
+      expect(writes).toEqual([]);
+    });
+
+    it("settles a write already in flight before reporting the timeout", async () => {
+      const registry = createPluginRpcRegistry();
+      const executor = createRpcExecutor({ registry, handlerTimeoutMs: 20 });
+      let finishWrite!: () => void;
+      const { store, writes } = recordingStore(
+        new Promise<void>((resolve) => {
+          finishWrite = resolve;
+        }),
+      );
+      registry.registerPluginHandler(
+        "slow",
+        "write",
+        async (_payload, context) => {
+          await context.store.setPluginData!({
+            namespace: "state",
+            key: "in-flight",
+            value: 1,
+          });
+          return "done";
+        },
+        {},
+        "community",
+      );
+
+      let settled = false;
+      const dispatched = executor
+        .dispatch(
+          { pluginId: "slow", action: "write", payload: null },
+          { sessionId: "sess-1", store },
+        )
+        .finally(() => {
+          settled = true;
+        });
+      dispatched.catch(() => undefined);
+      await new Promise((resolve) => setTimeout(resolve, 60));
+      // The limit has passed, but the caller still holds the lock while the
+      // store write it started is unsettled.
+      expect(settled).toBe(false);
+      finishWrite();
+      await expect(dispatched).rejects.toMatchObject({
+        code: "handler-timeout",
+      });
+      expect(writes).toEqual(["in-flight"]);
+    });
+
+    it("refuses a write the handler left running after it returned", async () => {
+      const registry = createPluginRpcRegistry();
+      const executor = createRpcExecutor({ registry });
+      const { store, writes } = recordingStore();
+      let floating: Promise<void> | undefined;
+      registry.registerPluginHandler(
+        "leaky",
+        "fire-and-forget",
+        async (_payload, context) => {
+          setTimeout(() => {
+            floating = context.store.setPluginData!({
+              namespace: "state",
+              key: "after-return",
+              value: 1,
+            });
+          }, 0);
+          return "returned";
+        },
+        {},
+        "community",
+      );
+
+      await expect(
+        executor.dispatch(
+          { pluginId: "leaky", action: "fire-and-forget", payload: null },
+          { sessionId: "sess-1", store },
+        ),
+      ).resolves.toMatchObject({ result: "returned" });
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      await expect(floating).rejects.toThrow(/accepts no more calls/);
+      expect(writes).toEqual([]);
+    });
+  });
+
   it("lookupEntry exposes resolution without invoking the handler", () => {
     const { registry, executor } = makeExecutor();
     registry.registerFrameworkDefault("cancel", async () => null);

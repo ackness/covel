@@ -38,6 +38,7 @@ export function createKeywordRecallSearcher(
       const candidates = [
         ...messages
           .map((message) => ({
+            messageId: message.id,
             turnId: message.turnId ?? "",
             role: message.role,
             content: String(message.content ?? ""),

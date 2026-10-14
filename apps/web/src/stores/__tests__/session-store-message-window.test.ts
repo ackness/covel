@@ -101,3 +101,90 @@ describe("live message window cap", () => {
     expect(next.messages).toHaveLength(301);
   });
 });
+
+it("skips clock-skewed echoes even after a turn is assigned", () => {
+  configureMessagesWindowCap(CAP_MIN);
+  const full = stateWith(Array.from({ length: CAP_MIN }, (_, i) => msg(i)));
+  full.messages[1] = msg(1, {
+    role: "user",
+    requestId: "echo-request",
+    turnId: "confirmed-turn",
+    timestamp: "2000-01-01T00:00:00Z",
+  });
+  const next = addMessage(full, msg(CAP_MIN));
+  expect(next.olderMessagesCursor).toBe(
+    encodePageCursor({ createdAt: msg(2).timestamp, id: msg(2).id }),
+  );
+});
+
+it("keeps a server anchor when only local echoes would survive the cap", () => {
+  configureMessagesWindowCap(CAP_MIN);
+  const full = stateWith([
+    msg(0),
+    ...Array.from({ length: CAP_MIN - 1 }, (_, i) =>
+      msg(i + 1, { requestId: `echo-${i}`, role: "user" }),
+    ),
+  ]);
+  const next = addMessage(
+    full,
+    msg(CAP_MIN, { requestId: "last", role: "user" }),
+  );
+  expect(next.messages[0]?.id).toBe(msg(0).id);
+});
+
+it("only assigns a turn to the echo from that request", () => {
+  const state = stateWith([
+    msg(1, { role: "user", requestId: "accepted" }),
+    msg(2, { role: "user", requestId: "rejected" }),
+  ]);
+  const unrelated = reducer(state, {
+    type: "BACKFILL_TURN_ID",
+    requestId: "command",
+    turnId: "command-turn",
+  });
+  expect(unrelated).toBe(state);
+  const claimed = reducer(state, {
+    type: "BACKFILL_TURN_ID",
+    requestId: "accepted",
+    turnId: "accepted-turn",
+  });
+  expect(claimed.messages[0]?.turnId).toBe("accepted-turn");
+  expect(claimed.messages[1]?.turnId).toBeUndefined();
+});
+
+it("replaces a same-ID echo with the recovered server row and timestamp", () => {
+  const echo = msg(1, {
+    role: "user",
+    requestId: "accepted",
+    timestamp: "2000-01-01",
+  });
+  const durable = msg(1, { role: "user", turnId: "accepted-turn" });
+  const next = reducer(stateWith([echo]), {
+    type: "MERGE_RECOVERED_MESSAGES",
+    messages: [durable],
+  });
+  expect(next.messages).toEqual([durable]);
+});
+
+it("releases progress and assets when the last message of their turn leaves the live window", () => {
+  configureMessagesWindowCap(CAP_MIN);
+  const full = stateWith(
+    Array.from({ length: CAP_MIN }, (_, i) =>
+      msg(i, { turnId: i === 0 ? "old" : "kept" }),
+    ),
+  );
+  const withAssets = {
+    ...full,
+    assetsByTurn: new Map([
+      ["old", []],
+      ["kept", []],
+    ]),
+    assetProgressByTurn: new Map([
+      ["old", []],
+      ["kept", []],
+    ]),
+  };
+  const next = addMessage(withAssets, msg(CAP_MIN));
+  expect([...next.assetsByTurn.keys()]).toEqual(["kept"]);
+  expect([...next.assetProgressByTurn.keys()]).toEqual(["kept"]);
+});

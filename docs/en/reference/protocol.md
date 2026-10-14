@@ -72,6 +72,7 @@ return { result: execution.result, committed: outcome.status === "committed" };
 - The commit plan keeps the reason a TurnStart Hook vetoed the turn, and any cancellation seen during execution.
 - For such an execution, `commitExecution` returns a failure. It stops before the domain transaction, does not allow the host's `extraInTx` writes, and produces no successful completion event or snapshot. Client input that was already saved stays.
 - When an execution ends without a commit, the client removes the assistant content that this execution produced, and keeps the player's input.
+- Local input echoes claim a `turnId` by the action’s `requestId`. Rejected input cannot be claimed by a later action; echoes cannot supply a history pagination cursor until replaced by authoritative messages.
 - A successful result that declares `output.recordAs` must have the output schema recorded during execution. A missing dependency rolls back the whole commit. It does not quietly skip the export. The loaded schema still controls how each exported value is checked, how media is organized, and how revision conflicts are handled, as described in the [transactions contract](./transactions.md).
 
 ### Suspend and resume
@@ -708,6 +709,9 @@ Details of `transport-gap`:
 
 - Each `(origin, session, stream)` is checked starting from `seq=1`. If the first frame of a new stream is greater than `1`, or the first frame after the receiving state was evicted is greater than `1`, it is handled as a gap.
 - After the events before the faulty frame are delivered, and before the events after it are delivered, the local replay buffer is cleared and gets a new epoch. Every connected client receives the reset and reconnects.
+- The receiver keeps state only for the current stream of each `(origin, session)`. When the sender starts a new stream, the old stream's state is reclaimed; if events of the old stream are still waiting for an earlier frame, they are delivered first, with a reset.
+- There are at most 1024 receiving states. When full, the state that has gone longest without a frame and has no waiting events is evicted first. If every state has waiting events, the one that has gone longest without a frame is evicted after its waiting events are delivered, with a reset.
+- The sender holds at most 256 frames per session waiting to be sent. When the transport stops returning and that number is reached, new frames are dropped with a warning. When the receiver gets a later frame, it sees the missing range and resets as for a gap.
 
 Details of `publish-failed`:
 
@@ -1189,6 +1193,8 @@ These events use the standard SSE envelope, and they are saved to `trace_events`
 | `command.invoked`        | `{ invocationId, commandId, command, pluginId, action, source, canonical, raw, argv, args }`. The input box and JSON-RENDER use the same structure                                                                                                                                                                                                                                                                                                                                                                                                           |
 | `command.completed`      | The fields of `command.invoked` + `{ durationMs, resultOk? }`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | `command.failed`         | The fields of `command.invoked` + `{ durationMs, error }`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+
+`tool.completed` means the executor accepted the tool result; it does not mean its proposals were committed. Cancellation before acceptance emits only `tool.failed`; cancellation after acceptance does not emit a failure for the same call. Tool trace or domain-event preview delivery failures only warn and do not turn a successful tool result into a failure.
 
 Narrative fragments are still sent live to the interface through `narrative.delta`. To keep `trace_events` lean, only `message.completed` is saved.
 

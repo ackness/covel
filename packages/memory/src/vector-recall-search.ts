@@ -1,3 +1,4 @@
+import { searchExcerpt } from "@covel/plugin-handlers-utils";
 /**
  * Recall Memory — semantic (vector) conversation-history search.
  *
@@ -87,9 +88,10 @@ export function createVectorRecallSearcher(deps: {
       const vectorResults = results.map((r) => {
         const payload = parsePayload(r.payload);
         return {
+          messageId: r.key,
           turnId: payload.turnId ?? "",
           role: payload.role ?? "assistant",
-          content: payload.content ?? "",
+          content: searchExcerpt(payload.content ?? "", query),
           score: distanceToScore(r.distance),
           timestamp: payload.createdAt ?? "",
         };
@@ -98,20 +100,21 @@ export function createVectorRecallSearcher(deps: {
       // During backfill the vector index lags the live message log (ingestion
       // walks oldest-first), so a short vector result set means the most recent
       // — and usually most relevant — messages aren't indexed yet. Top up with
-      // keyword hits (which scan the recent tail) and dedupe by turnId+content,
+      // keyword hits (which scan the recent tail) and dedupe by message ID,
       // preferring the vector hit. Once the index is caught up, vector returns a
       // full `limit` and keyword is never consulted.
       if (vectorResults.length >= limit) {
         return vectorResults;
       }
       const keywordResults = await fallback.search(sessionId, query, limit);
-      const seen = new Set(
-        vectorResults.map((r) => `${r.turnId}\u0000${r.content}`),
-      );
-      const merged = [...vectorResults];
+      const seen = new Set(vectorResults.map((r) => r.messageId));
+      const merged: RecallSearchResult[] = [...vectorResults];
       for (const kr of keywordResults) {
         if (merged.length >= limit) break;
-        if (seen.has(`${kr.turnId}\u0000${kr.content}`)) continue;
+        if (kr.messageId !== undefined) {
+          if (seen.has(kr.messageId)) continue;
+          seen.add(kr.messageId);
+        }
         merged.push(kr);
       }
       return merged;

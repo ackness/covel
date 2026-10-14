@@ -64,9 +64,10 @@ export interface SessionLock {
     fn: () => Promise<T>,
   ): Promise<TrySessionLockResult<T>>;
   /**
-   * Acquire several lock keys in the supplied order and release them after
-   * `fn`. Callers must provide one consistent global order; implementations
-   * must not consume one pool connection per key.
+   * Acquire several lock keys and release them after `fn`. Implementations
+   * take the keys in sorted order whatever order the caller lists them in,
+   * so two overlapping calls cannot deadlock; they must not consume one pool
+   * connection per key.
    */
   withLocks<T>(keys: readonly string[], fn: () => Promise<T>): Promise<T>;
 }
@@ -197,7 +198,9 @@ export function createInProcessSessionLock(
       }
     },
     async withLocks<T>(keys: readonly string[], fn: () => Promise<T>) {
-      const ordered = [...new Set(keys)];
+      // Sorted here, not by each caller: one global order is what keeps two
+      // overlapping key sets from deadlocking.
+      const ordered = [...new Set(keys)].sort();
       const acquire = (index: number): Promise<T> => {
         const key = ordered[index];
         return key ? api.withLock(key, () => acquire(index + 1)) : fn();
