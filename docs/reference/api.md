@@ -2850,7 +2850,7 @@ Submission 里的其他键会被丢弃。来源插件、字段定义和模板只
 
 action handler 拿到的 `context.store` 绑定在当前会话和当前插件上，只提供：
 
-- `getSession()`
+- `getSession()`：当前会话的只读视图（见[会话视图](./plugins.md#会话视图storegetsession)）
 - `listTurnMessages(limit?)`：只返回最近的已提交消息，最多 200 条；省略 `limit` 时也是 200。
 - 本插件的 `getPluginData` / `setPluginData` / `listPluginData`
 

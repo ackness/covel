@@ -202,8 +202,8 @@ export interface PluginToolContext {
   readonly logicalTurn?: number;
   /** Topics emitted earlier in this tool loop, used for event deduplication. */
   readonly emittedEventTopics?: readonly string[];
-  /** Dice and other game rolls; a session host always supplies it. */
-  readonly random?: import("./function-runtime.js").PluginRandom;
+  /** Dice and other game rolls. */
+  readonly random: import("./function-runtime.js").PluginRandom;
 }
 export type PluginInputSlot =
   | {
@@ -255,13 +255,13 @@ export interface PluginToolkit {
     prefix: string,
     label: string,
     sessionId: string,
-    random?: import("./function-runtime.js").PluginRandom,
+    random: import("./function-runtime.js").PluginRandom,
   ) => string;
   readonly shortIdBatch: (
     prefix: string,
     labels: readonly string[],
     sessionId: string,
-    random?: import("./function-runtime.js").PluginRandom,
+    random: import("./function-runtime.js").PluginRandom,
   ) => string[];
   readonly withPendingProposals: typeof withPendingProposals;
 }
@@ -525,7 +525,8 @@ export interface PluginServiceDefinition<Input, Output> {
 }
 
 export interface PluginRpcStore {
-  getSession(): Promise<unknown>;
+  /** Read the current session's clock, language and setup progress. */
+  getSession(): Promise<import("./function-runtime.js").PluginSessionView>;
   /** The most recent committed messages: `limit` of them, at most 200 (also the default). */
   listTurnMessages(limit?: number): Promise<
     ReadonlyArray<{
@@ -554,8 +555,8 @@ export interface PluginRpcContext {
   readonly action?: string;
   readonly runtimeId?: string;
   readonly store: PluginRpcStore;
-  /** Dice and other game rolls; a session host always supplies it. */
-  readonly random?: import("./function-runtime.js").PluginRandom;
+  /** Dice and other game rolls. */
+  readonly random: import("./function-runtime.js").PluginRandom;
   readonly locale?: string;
   /** This plugin's translations, read by `translate` and `labelText`. */
   readonly messages?: PluginMessages;

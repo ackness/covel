@@ -15,7 +15,10 @@ import type {
   PluginLogger,
   FunctionStoreView,
   PluginTurnMessage,
+  PluginSessionView,
+  PluginSetupRuntimeState,
 } from "@covel/shared/plugin-runtime";
+import type { Session, SetupRuntimeState } from "@covel/shared";
 import {
   pluginCodeNamespaceWriteError,
   pluginDataEntry,
@@ -222,7 +225,8 @@ export function createTrustedHandlerStore(
     );
   const { sessionId, pluginId } = ctx;
   return {
-    getSession: async () => structuredClone(await store.getSession(sessionId)),
+    getSession: async () =>
+      pluginSessionView(await store.getSession(sessionId)),
     getWorld: async () => {
       if (world) return structuredClone(world.worldRecord ?? null);
       const session = await store.getSession(sessionId);
@@ -519,6 +523,58 @@ export function createPluginLogger(
 }
 
 /**
+ * What plugin code reads of the session: the public `PluginSessionView`, a
+ * projection of the record, never the record itself.
+ */
+export function pluginSessionView(
+  session: Pick<
+    Session,
+    "phase" | "completedPlayerTurns" | "locale" | "setupRuntimes"
+  > | null,
+): PluginSessionView {
+  if (!session) throw new Error("The session no longer exists");
+  return {
+    phase: session.phase,
+    completedPlayerTurns: session.completedPlayerTurns,
+    locale: session.locale,
+    setupRuntimes: Object.fromEntries(
+      Object.entries(session.setupRuntimes).map(([runtimeId, state]) => [
+        runtimeId,
+        pluginSetupRuntimeState(state),
+      ]),
+    ),
+  };
+}
+
+function pluginSetupRuntimeState(
+  state: SetupRuntimeState,
+): PluginSetupRuntimeState {
+  switch (state.state) {
+    case "pending":
+      return {
+        state: "pending",
+        ...(state.lastError !== undefined
+          ? { lastError: state.lastError }
+          : {}),
+      };
+    case "done":
+      return {
+        state: "done",
+        resolution: state.resolution,
+        ...(state.warning !== undefined ? { warning: state.warning } : {}),
+      };
+    case "blocked":
+      return {
+        state: "blocked",
+        reason: state.reason,
+        ...(state.lastError !== undefined
+          ? { lastError: state.lastError }
+          : {}),
+      };
+  }
+}
+
+/**
  * Build a narrow `FunctionStoreView` for community function-runtime
  * handlers. Only documented, session-scoped read methods are
  * exposed — handlers that try to call `setPluginData`, `upsertCharacter`,
@@ -591,7 +647,7 @@ export function createRpcHandlerStoreView(
 ): RpcHandlerStore {
   return {
     async getSession() {
-      return structuredClone(await store.getSession(ctx.sessionId));
+      return pluginSessionView(await store.getSession(ctx.sessionId));
     },
     async listTurnMessages(limit) {
       // An action wants recent context, never the whole history.

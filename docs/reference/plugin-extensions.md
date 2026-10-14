@@ -323,7 +323,7 @@ const value = await ctx.services.call(
 
 ### 用已有的模型能力
 
-- 文本、图片、语音、音乐：用 `ctx.gateway`、`ctx.images`、`ctx.speech`、`ctx.music`。
+- 文本、图片、语音、音乐：用 `ctx.gateway`、`ctx.images`、`ctx.speech`、`ctx.music`。它们的类型（`PluginServiceGateway`、`PluginImages`、`PluginSpeech`、`PluginMusic`、`PluginMedia`）由 `@covel/plugin-handlers-utils` 导出，宿主实现的就是这些类型。
 - 评估：`ctx.gateway.evaluate({ presetId, state, questions, signal })`，支持 Boolean、Choice、Score 三种问题。
 
 ### 自己拼长提示词时的预算

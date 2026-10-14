@@ -8,6 +8,7 @@ import {
   createPluginTestStore,
   executeToolAndCommit as executeAndCommit,
   commitToolResults,
+  makeRandom,
 } from "@covel/plugin-test-utils";
 /**
  * inventory plugin tests.
@@ -50,6 +51,7 @@ describe("update-inventory", () => {
     turnId: "turn-1",
     pluginId: "inventory",
     runtimeId: "inventory/ledger",
+    random: makeRandom(),
   };
   let mockStore;
   let updateInventoryTool;
@@ -601,6 +603,7 @@ describe("inventory from WorldIR", () => {
       turnId: "turn-1",
       pluginId: "inventory",
       runtimeId: "inventory/ledger",
+      random: makeRandom(),
       store: {
         listPluginData: async () => [],
         getPluginData: async () => null,
@@ -650,6 +653,7 @@ describe("inventory from WorldIR", () => {
       turnId: "turn-1",
       pluginId: "inventory",
       runtimeId: "inventory/ledger",
+      random: makeRandom(),
       store: {
         listPluginData: async () => [],
         getPluginData: async () => null,

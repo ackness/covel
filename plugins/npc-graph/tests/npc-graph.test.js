@@ -8,6 +8,7 @@ import {
   createPluginTestStore,
   executeToolAndCommit as executeAndCommit,
   commitToolResults,
+  makeRandom,
 } from "@covel/plugin-test-utils";
 /**
  * npc-graph plugin tests.
@@ -36,6 +37,7 @@ const ctx = {
   turnId: "turn-3",
   pluginId: "npc-graph",
   runtimeId: "npc-graph",
+  random: makeRandom(),
 };
 
 const PLUGINS_DIR = path.resolve(import.meta.dirname, "../..");

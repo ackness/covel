@@ -65,12 +65,11 @@ server event schema directory. Turn hooks run through the runtime pipeline.
 HTTP/UI registrations and session/compaction hooks appear in unsupportedCapabilities
 and emit a warning; use the server to verify those capabilities.
 
-Example:
-  covel-test-runtime dashscope-image-gen --mode live --case generate-image-json --pretty
+Examples, for the plugin \`pnpm create-plugin my-plugin\` makes:
+  covel-test-runtime my-plugin --pretty
 
-  covel-test-runtime dashscope-image-gen/prompt-generator \\
-    --plugins-dir ~/.covel/plugins \\
-    --payload '{"prompt":"画一张奇幻城市插画"}' \\
+  covel-test-runtime my-plugin/note \\
+    --payload '{"title":"Gate"}' \\
     --pretty
 `;
 

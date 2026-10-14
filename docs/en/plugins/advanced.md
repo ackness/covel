@@ -292,6 +292,8 @@ When you do not write `firstTokenTimeoutMs`, the time each attempt waits for the
 
 A function has several things it calls directly. These do not go through the tool list or the authorization flow: `ctx.gateway` (calls a model), `ctx.images`, `ctx.speech`, and `ctx.music` (generate media), `ctx.media` (saves media), and `ctx.utils` (network requests).
 
+They are all in the `PluginFunctionContext` type. The host gives them only when it has a model and media storage set up, so check before use: `if (!ctx.images) return …`.
+
 To generate an image, call `ctx.images.generate(...)` directly in the function. Do not make a "generate image" tool for the model to call, and do not write your own request to an image provider. For details, see [Image generation](../reference/image-generation.md) and [Media store](../reference/media-store.md).
 
 ## Permissions

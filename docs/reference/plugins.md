@@ -102,7 +102,7 @@ Extract facts supported by runtime-inputs.narrative.value, then call save-facts.
 | 根字段                                          | 含义                                                                                                        |
 | ----------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
 | `id`, `kind`                                    | 包身份；`kind` 为 `core` 或 `plugin`                                                                        |
-| `version`, `displayName`, `description`, `tags` | 元数据；标签用于准备页的分组和筛选，不决定运行时调度                                                                         |
+| `version`, `displayName`, `description`, `tags` | 元数据；标签用于准备页的分组和筛选，不决定运行时调度                                                        |
 | `covel`                                         | 适配的宿主版本范围，如 `">=0.0.45"`；范围之外的宿主不安装也不加载该包                                       |
 | `author`, `license`, `homepage`                 | 作者信息，只用于展示；见[作者信息](#作者信息)                                                               |
 | `provides`                                      | 版本化契约字符串，或 `{contract, default: true}`                                                            |
@@ -501,17 +501,31 @@ Agent 的副作用只来自工具：模型能写什么，以 `agent.tools` 白�
 | `ctx.logicalTurn`             | 调度器的逻辑回合：已提交的主循环玩家回合数加一。函数 handler 和插件工具的上下文里都有。setup、开场续写和第一条玩家消息同为第 1 回合，`startTurn` / `interval` 也按它计数 |
 | 工具上下文的 `turnNumber`     | 会话里已记录的玩家消息数，包括 setup 的表单提交                                                                                                                          |
 | `ctx.session.lastPlayerInput` | 源执行开始时最近的一条 `PlayerInputSubmission \| null`，包含 `id/sessionId/turnId/formId/values/createdAt`                                                               |
+| `ctx.execution.origin`        | 这次执行因何而起：`player`、`continuation`、`manual`、`background`、`recursive` 或 `resume`。agent guard 没有 `ctx.execution`                                            |
+| `ctx.execution.sourceTurnId`  | 重试一个已提交的回合时，是那个回合的 ID。用它做键，重试时复用上次的掷骰和揭示，不重新抽                                                                                  |
+| `ctx.recursionDepth`          | 顶层执行是 `0`，`ctx.recursiveCall` 每嵌套一层加一                                                                                                                       |
 
 `ctx.session.lastPlayerInput` 可能来自更早的回合。有这条记录不等于本回合提交了表单。
 
+#### 会话视图（`store.getSession()`）
+
+`ctx.store.getSession()`（工具里是 `context.store.getSession()`，action 里是 `context.store.getSession()`）返回当前会话的只读视图 `PluginSessionView`，不是会话记录本身：
+
+| 字段                   | 含义                                                                                                                                                                                             |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `phase`                | `setup` 或 `playing`                                                                                                                                                                             |
+| `completedPlayerTurns` | 已提交的主循环玩家回合数；setup 和开场不算                                                                                                                                                       |
+| `locale`               | 这一局的内容语言                                                                                                                                                                                 |
+| `setupRuntimes`        | 每个 setup runtime 的进度，键是 runtime ID：`{ state: "pending", lastError? }`、`{ state: "done", resolution: "completed" \| "waived", warning? }` 或 `{ state: "blocked", reason, lastError? }` |
+
 #### 随机数（`ctx.random`）
 
-`ctx.random` 是宿主提供的随机源。函数 handler、agent guard、插件工具和 RPC action 的上下文里都有。
+`ctx.random` 是宿主提供的随机源。函数 handler、agent guard、插件工具和 RPC action 的上下文里一定有它，类型上也是必有的字段。
 
 - 骰子和其他游戏内的随机取数用 `ctx.random.int(min, max)`。它返回 `min <= n < max` 的整数，和 `node:crypto` 的 `randomInt` 相同。
 - 不要直接用 `node:crypto` 或 `Math.random`。
 - 平时它就是 `randomInt`。测试服务端设置 `COVEL_RANDOM_SEED` 后，同一个 runtime（或同一个 RPC action）取的第 n 个数每次运行都相同，脚本会话因此可以重复（见[环境变量](./env-registry.md#runtime-contract)和[录制与回放](../ship/real-model.md#录制与回放)）。
-- `shortId` / `shortIdBatch` 的第四个参数接受它，ID 的随机部分也随之可以重复。
+- `shortId` / `shortIdBatch` 的第四个参数必须传它，ID 的随机部分也随之可以重复。SDK 里没有别的随机来源可以退回。
 
 #### 模型看不到的簿记字段
 
@@ -542,7 +556,17 @@ Agent 的副作用只来自工具：模型能写什么，以 `agent.tools` 白�
 
 #### 内核输入 `turn-digest@1`
 
-内核输入 `turn-digest@1` 冻结同一份 `lastPlayerInput` 快照，以及 `runtimeResults`。
+内核输入 `turn-digest@1` 冻结源回合的事实。前台 runtime 和后台作业读到同一个值，SDK 里的类型是 `PluginTurnDigest`：
+
+| 字段                | 含义                                                   |
+| ------------------- | ------------------------------------------------------ |
+| `turnId`            | 源回合的 ID                                            |
+| `playerMessage`     | 玩家这一回合的输入                                     |
+| `lastPlayerInput`   | 和 `ctx.session.lastPlayerInput` 同一份快照，或 `null` |
+| `narrativeText`     | 这一回合成功的 story runtime 写的正文，用空行连接      |
+| `toolCallSummaries` | 成功、可见的工具调用，每次一行简短摘要                 |
+| `runtimeResults`    | 已结束的 runtime：`{ runtimeId, status }`              |
+| `locale`            | 这一局的内容语言（有时才有）                           |
 
 - `runtimeResults` 是已经观察到的终态 `{runtimeId, status}`，`status` 为 `success/failed/skipped/suspended`。还没结束的 runtime 不会被预测为成功。
 - 后台（detached）worker 读的是源执行的快照，不重新查询最新的表单或回合状态。

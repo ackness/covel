@@ -2850,7 +2850,7 @@ When several records must succeed or fail together, use a function runtime with 
 
 The `context.store` that an action handler receives is bound to the current session and the current plugin. It provides only:
 
-- `getSession()`
+- `getSession()`: a read-only view of the current session (see [the session view](./plugins.md#the-session-view-storegetsession))
 - `listTurnMessages(limit?)`: returns only the most recent committed messages, up to 200. If `limit` is omitted, it is also 200.
 - This plugin's `getPluginData` / `setPluginData` / `listPluginData`
 

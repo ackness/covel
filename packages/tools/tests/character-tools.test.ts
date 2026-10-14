@@ -119,6 +119,7 @@ class Loop {
       turnId: "turn-1",
       pluginId,
       runtimeId: `${pluginId}/runtime`,
+      random: { int: (min: number) => min },
       pendingProposals: this.pending,
     };
   }
@@ -377,6 +378,7 @@ describe("builtin character tools", () => {
             turnId: "turn-1",
             pluginId: "char-creator",
             runtimeId: "char-creator/runtime",
+            random: { int: (min: number) => min },
           },
         ),
       ).rejects.toThrow();
@@ -392,6 +394,7 @@ describe("builtin character tools", () => {
             turnId: "turn-1",
             pluginId: "char-creator",
             runtimeId: "char-creator/runtime",
+            random: { int: (min: number) => min },
           },
         ),
       ).rejects.toThrow();
@@ -850,6 +853,7 @@ describe("builtin character tools", () => {
             turnId: "turn-1",
             pluginId: "char-creator",
             runtimeId: "char-creator/runtime",
+            random: { int: (min: number) => min },
           },
         ),
       ).rejects.toThrow();

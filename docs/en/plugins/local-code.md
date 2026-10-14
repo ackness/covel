@@ -397,7 +397,11 @@ Things a function often uses:
 | `ctx.logger`                                                                  | Writes to the plugin log                                                                                                                     |
 | `ctx.signal`                                                                  | Gets notified when the run is cancelled                                                                                                      |
 | `ctx.recursiveCall({ playerMessage, manualTrigger: { runtimeId, payload } })` | Runs one more manual runtime within this turn. Only these two fields count; the session, language, settings and model stay those of this run |
+| `ctx.recursionDepth`                                                          | Above 0 when `recursiveCall` runs this one nested. Check it before doing what belongs to the top level only                                  |
+| `ctx.execution?.sourceTurnId`                                                 | When an old turn is retried, the ID of that turn. Key rolls and reveals by it, and a retry does not draw again                               |
+| `ctx.store.getSession()`                                                      | This game's phase, turn count, language, and the progress of the opening steps (read-only)                                                   |
 
+- Every field above is in the `PluginFunctionContext` type, so the type comment at the top lets the editor suggest and check them.
 - The tools a function can call are listed in `function.tools`. The function's time limit is `function.timeoutMs`. Do not write these two under `agent`: a function runtime cannot have an `agent` setting.
 - To let the next turn or another run read this result, declare `io.output.recordAs` on this side, and declare `scope: committed` with the same `recordAs` on the reading side.
 - A function has no assembled conversation. It reads this turn's content from `ctx.playerMessage`, from the inputs you declared, or from the `turn-digest@1` input that Covel provides (which includes `playerMessage` and `narrativeText`).
