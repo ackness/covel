@@ -163,6 +163,7 @@ Sender checks and startup error delivery have regression tests in `apps/desktop/
 
 A plugin's server-side JavaScript (`entry`, handler, guard, hook, wire) runs in the server process, and has all of the server's permissions. There is no process sandbox, no VM sandbox, and no module sandbox. The only thing between a community package and these permissions is the player's consent:
 
+- Manifest loading, installation, validation, and localization share one plain YAML reader that rejects engine directives such as `---js` before parsing.
 - Before approval, a `community` package is just data. Installing, previewing, listing, and validating only parse its files. Nothing is imported. The two-step approval (first `covel:plugin-server-code`, then the specific operations; see [Hosted auth](#hosted-auth)) guards the first import.
 - After approval, this code can do anything the server process can do: read and write files that the server's system user can access (`keys.env`, `llm.toml`, the SQLite file), read `process.env`, open sockets, and start processes.
 - `permissions.http` is an allowlist on the plugin API, applied to `ctx.utils.fetchWithRetry`, `ctx.media.ingestUrl`, and the media bindings built on them (`packages/runtime/src/function-runtime/http-permissions.ts`). It stops a package from reaching an origin it did not declare through this API. It cannot stop code that calls the global `fetch` or `node:https` directly.

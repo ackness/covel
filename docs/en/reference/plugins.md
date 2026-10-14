@@ -41,6 +41,8 @@ Layout rules:
 - You cannot mix the two layouts. A child runtime cannot declare package-level contributions.
 - A package that has only an entry, UI, or extensions can have no runtime at all.
 
+Every real subdirectory under `runtimes/` must contain a correctly capitalized `RUNTIME.md`; put shared code in `lib/` at the package root. When a manifest is missing, the loader reports its path and still loads the other runtimes. Static validation and installation reject that layout. Runtime directory symlinks are excluded from discovery and localization scans.
+
 Every `PLUGIN.md` and `RUNTIME.md`, and their language variants, must start with plain YAML wrapped in a single `---` line. Forms such as `---javascript` and `---js` that would run code are rejected before parsing. This means installing, copying a folder in by hand, and reloading can never run code through metadata.
 
 The full list of fields is generated from the Zod schemas. It is not maintained by hand:

@@ -98,6 +98,8 @@
 
 ### 包的布局要求
 
+安装使用与加载器相同的[清单与 runtime 目录规则](./plugins.md#包与运行时文件)，缺少 `RUNTIME.md` 的子目录会得到具体路径诊断。
+
 - 插件包目录必须同时有 `package.json` 和根 `PLUGIN.md`。 `package.json` 必须声明 `"type": "module"`，否则返回 400。
 - 根声明使用 `{ id, kind, contributes, runtime? }`。
 - 多 runtime 的包把执行声明放在 `runtimes/<sub>/RUNTIME.md`。子声明使用 `{ type, schedule, io, agent/function }`，不重复插件身份。

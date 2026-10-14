@@ -122,8 +122,8 @@ export async function discoverAndRegisterPlugins(
 
       // Package declarations and executable runtimes have separate identities.
       // `source` comes from `discoverPluginsMulti`: bundled first-dir plugins
-      // keep their prefix-derived trust, everything else is clamped to
-      // `'community'` — so a third-party plugin can't self-assign a higher
+      // get builtin trust, everything else (including an absent source) is
+      // community — so a third-party plugin can't self-assign a higher
       // trust level by forging `pluginType: core-plugin` in its frontmatter.
       registry.register({
         id: discovery.id,

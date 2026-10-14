@@ -1,7 +1,8 @@
 import path from "node:path";
-import { parse } from "yaml";
 import {
   packageModuleTypeProblem,
+  readPlainYamlFrontmatter,
+  runtimeDirectoryDiagnostics,
   parsePluginMd,
   validatePluginFiles,
   compileInlineRuntime,
@@ -10,23 +11,21 @@ import {
   multiRuntimeRootDiagnostics,
   type ParsedRuntimeMd,
 } from "@covel/plugin-loader";
-import { z } from "zod";
 import { assertHostVersionInRange } from "../../../lib/app-version.js";
 import { httpError, type ExtractedEntry } from "./shared.js";
 
-/** Installation parses data only; gray-matter also supports executable JS engines. */
+/** Installation reports parsing errors as invalid package input. */
 export function readPluginFrontmatter(
   content: string,
 ): Record<string, unknown> {
-  const match = /^\uFEFF?---[ \t]*\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/.exec(
-    content,
-  );
-  if (!match)
+  try {
+    return readPlainYamlFrontmatter(content).data;
+  } catch (error) {
     throw httpError(
       400,
-      "PLUGIN.md requires plain YAML frontmatter; executable frontmatter is not supported",
+      error instanceof Error ? error.message : String(error),
     );
-  return z.record(z.string(), z.unknown()).parse(parse(match[1]!));
+  }
 }
 
 interface PluginManifestSummary {
@@ -121,16 +120,24 @@ export function validatePluginBundle(
     );
   }
 
-  const legacy = entries.find((entry) =>
-    /^runtimes\/[^/]+\/PLUGIN(?:\.[a-zA-Z0-9-]+)?\.md$/.test(
-      entry.relativePath,
-    ),
-  );
-  if (legacy)
-    throw httpError(
-      400,
-      `${legacy.relativePath}: runtime manifests must be named RUNTIME.md`,
+  const runtimeFiles = new Map<string, string[]>();
+  for (const entry of entries) {
+    const match = /^runtimes\/([^/]+)\/(.+)$/.exec(entry.relativePath);
+    const directory = match?.[1];
+    const file = match?.[2];
+    if (!directory || !file) continue;
+    const files = runtimeFiles.get(directory) ?? [];
+    files.push(file);
+    runtimeFiles.set(directory, files);
+  }
+  for (const [directory, files] of runtimeFiles) {
+    const diagnostic = runtimeDirectoryDiagnostics(
+      `runtimes/${directory}`,
+      files,
     );
+    const problem = diagnostic.error ?? diagnostic.warning;
+    if (problem) throw httpError(400, problem);
+  }
   const children = entries.filter((entry) =>
     /^runtimes\/[^/]+\/RUNTIME\.md$/.test(entry.relativePath),
   );
@@ -160,7 +167,7 @@ export function validatePluginBundle(
           root.plugin!,
         ),
       );
-    validatePluginDeclarations([root]);
+    validatePluginDeclarations(root);
     validatePluginFiles(root, declarations, (absolutePath) => {
       const relative = path
         .relative(path.resolve(canonicalId), absolutePath)

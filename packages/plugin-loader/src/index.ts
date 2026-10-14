@@ -8,7 +8,13 @@ export {
 } from "./parse-plugin-md.js";
 
 // ── Discovery & Loading ──────────────────────────────────────────
-export { discoverPlugins, discoverPluginsMulti } from "./discover.js";
+export {
+  discoverPluginAt,
+  discoverPlugins,
+  discoverPluginsMulti,
+} from "./discover.js";
+export { readPlainYamlFrontmatter } from "./plain-yaml-frontmatter.js";
+export { runtimeDirectoryDiagnostics } from "./runtime-directory.js";
 export {
   loadPluginSummary,
   loadPluginManifest,
@@ -45,10 +51,7 @@ export {
   resolvePluginRuntimeManifest,
   validatePluginDeclarations,
 } from "./declarations.js";
-export {
-  hasRuntimeDeclaration,
-  multiRuntimeRootDiagnostics,
-} from "./root-manifest-diagnostics.js";
+export { multiRuntimeRootDiagnostics } from "./root-manifest-diagnostics.js";
 
 // ── Registry ─────────────────────────────────────────────────────
 export { normalizeRuntimeManifest, getRuntimeSpec } from "./normalize.js";

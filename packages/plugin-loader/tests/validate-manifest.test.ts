@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, rm, writeFile, symlink } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -56,6 +56,40 @@ const runtime = {
   schedule: { trigger: { type: "manual" } },
 };
 describe("manifest authoring CLI", () => {
+  it("ignores runtime symlinks in both discovery and locale validation", async () => {
+    const root = await fixture();
+    const target = path.join(root, "lib/linked");
+    await mkdir(target, { recursive: true });
+    await mkdir(path.join(root, "runtimes"));
+    const globals = globalThis as typeof globalThis & Record<string, unknown>;
+    const probe = "__covelValidateFrontmatterProbe";
+    await writeFile(
+      path.join(target, "RUNTIME.md"),
+      `---js\n(() => { globalThis.${probe} = true; return {}; })()\n---\n`,
+    );
+    await symlink(target, path.join(root, "runtimes/linked"));
+    try {
+      expect(await validate(root)).toMatchObject({ status: 0, stderr: "" });
+      expect(globals[probe]).toBeUndefined();
+    } finally {
+      delete globals[probe];
+    }
+  });
+
+  it.each([undefined, "runtime.md", "RUNTIME.zh.md", "helper.js"])(
+    "explains a missing runtime manifest beside %s",
+    async (filename) => {
+      const root = await fixture();
+      const child = path.join(root, "runtimes/missing");
+      await mkdir(child, { recursive: true });
+      if (filename) await writeFile(path.join(child, filename), "");
+      const result = await validate(root);
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain(`${child}/RUNTIME.md`);
+      expect(result.stderr).toContain("shared code in lib/");
+    },
+  );
+
   it.each([
     { runtime: { ...runtime, function: { handler: "./missing.js" } } },
     { runtime: { type: "function", function: { handler: "./handler.js" } } },
