@@ -392,7 +392,9 @@ export interface PluginServiceGateway {
     readonly reasoningContent?: string;
     /**
      * `stop`, `length` (cut at a limit), `tool_calls`, `content_filter`,
-     * `error` or `other`: the same words for every provider.
+     * `error` or `other`: the same words for every provider. Only `stop` and
+     * `tool_calls` mark a whole answer; `other` (a reason the provider did
+     * not explain) may stop anywhere.
      */
     readonly finishReason: string;
     readonly usage: PluginUsageSummary;
@@ -855,6 +857,9 @@ export interface PluginTextMessage {
 }
 export interface PluginTextParams {
   model: string;
+  /** Host-selected language for adapter instructions. */
+  instructionLocale?: "en" | "zh";
+  /** Text and text blocks contain no internal prompt-cache markers. */
   messages: PluginTextMessage[];
   tools?: {
     type: "function";

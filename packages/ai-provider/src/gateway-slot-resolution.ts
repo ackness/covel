@@ -256,6 +256,59 @@ export function createGatewaySlotResolution(
     return resolvedId;
   }
 
+  function validateNamedTarget(
+    resolvedId: string,
+    role: string,
+    requestedTag: string,
+    options?: GatewayOptions,
+  ): void {
+    // Images already validate every source in resolveSlotOrPassthrough.
+    if (requestedTag === "image") return;
+    const target = applyRequestCapabilityOverlay(
+      deps.presetRegistry.resolveTextTarget({ presetId: resolvedId }),
+      role,
+      options?.slotOverrides,
+      options?.capabilityOverridePolicy ?? "restrict-only",
+      true,
+    );
+    const capability = target.preset?.capability;
+    const modes =
+      target.preset?.supportedModes ?? target.profile.supportedModes;
+    const protocolOutput = protocolOutputModalities(target.preset?.protocol);
+    const output = protocolOutput.includes("evaluation")
+      ? protocolOutput
+      : (capability?.output ??
+        modes.map((mode) =>
+          mode === "speech" || mode === "music"
+            ? "audio"
+            : mode === "embed"
+              ? "embedding"
+              : mode === "object" ||
+                  mode === "stream" ||
+                  mode === "transcription"
+                ? "text"
+                : mode,
+        ));
+    const roleTag =
+      deps.slotRegistry?.getSlotTag(role) ?? defaultModelRoleTag(role);
+    const supportsRequest =
+      requestedTag === "transcription"
+        ? capability
+          ? capability.input.includes("audio") &&
+            capability.output.includes("text")
+          : modes.includes("transcription")
+        : supportsModelRole(output, requestedTag);
+    if (!supportsRequest || !supportsModelRole(output, roleTag)) {
+      throw new AiProviderError({
+        code: "CONFIG_ERROR",
+        message: `Model "${targetModel(target)}" cannot serve role "${role}" (${requestedTag}).`,
+        provider: targetProvider(target),
+        model: targetModel(target),
+        retriable: false,
+      });
+    }
+  }
+
   function resolvePresetId(
     presetId: string | undefined,
     fallbackTag: string,
@@ -275,29 +328,7 @@ export function createGatewaySlotResolution(
       );
       // The image path validates every resolution source in its caller.
       if (fallbackTag === "image") return resolvedId;
-      const target = applyRequestCapabilityOverlay(
-        deps.presetRegistry.resolveTextTarget({ presetId: resolvedId }),
-        presetId,
-        options?.slotOverrides,
-        options?.capabilityOverridePolicy ?? "restrict-only",
-        true,
-      );
-      const tag =
-        deps.slotRegistry?.getSlotTag(presetId) ??
-        defaultModelRoleTag(presetId);
-      const protocolOutput = protocolOutputModalities(target.preset?.protocol);
-      const output = protocolOutput.includes("evaluation")
-        ? protocolOutput
-        : (target.preset?.capability?.output ?? protocolOutput);
-      if (!supportsModelRole(output, tag)) {
-        throw new AiProviderError({
-          code: "CONFIG_ERROR",
-          message: `Model "${targetModel(target)}" cannot serve role "${presetId}" (${tag}).`,
-          provider: targetProvider(target),
-          model: targetModel(target),
-          retriable: false,
-        });
-      }
+      validateNamedTarget(resolvedId, presetId, fallbackTag, options);
       return resolvedId;
     }
     const overlayId = resolveOverlayPresetId(
@@ -305,18 +336,27 @@ export function createGatewaySlotResolution(
       options?.slotOverrides,
       (id) => deps.presetRegistry.hasPreset?.(id) ?? false,
     );
-    if (overlayId !== presetId) return overlayId;
+    if (overlayId !== undefined && overlayId !== presetId) {
+      validateNamedTarget(overlayId, presetId, fallbackTag, options);
+      return overlayId;
+    }
 
     // Direct preset-id match trumps the slot lookup. Without this the
     // tag-based fallback below would divert calls made with a raw preset
     // id (e.g. a browser-registered `custom_abc`) into the first
     // same-tag slot, silently swapping the target model.
-    if (deps.presetRegistry.hasPreset?.(presetId)) return presetId;
+    if (deps.presetRegistry.hasPreset?.(presetId)) {
+      validateNamedTarget(presetId, presetId, fallbackTag, options);
+      return presetId;
+    }
 
     if (!deps.slotRegistry) return presetId;
 
     const direct = deps.slotRegistry.resolveSlot(presetId);
-    if (direct) return direct;
+    if (direct) {
+      validateNamedTarget(direct, presetId, fallbackTag, options);
+      return direct;
+    }
 
     // Image roles are explicit choices; another image slot is not a substitute.
     if (fallbackTag === "image") return presetId;

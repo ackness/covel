@@ -116,6 +116,8 @@ A new spec runs on the built page by default. Write `import("/src/...")` only wh
 
 ### How to Tell a Turn Has Ended
 
+Finishing a click or input does not mean an asynchronous read or save has finished. Use Playwright locator assertions or `expect.poll` to wait for the final value; wait for persistence before reloading after a save. In React unit tests, use `findBy*` or `waitFor` for the actual result being asserted. Nearby content appearing does not mean a lazy component has mounted. Do not replace these conditions with fixed delays.
+
 **Read `data-executing`. Do not infer it from `input:disabled`.**
 
 - After clicking the button that starts a turn, first wait for `waitForTurnStarted`, and then wait for `waitForTurnIdle`. There is an asynchronous preparation step before sending. If the state has not yet switched to "executing", an assertion of `false` passes too early.

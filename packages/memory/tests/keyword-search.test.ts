@@ -3,7 +3,7 @@ import { createMemoryStore } from "@covel/store/memory";
 import type { LorebookEntryRecord } from "@covel/store";
 import { createKeywordRecallSearcher } from "../src/recall-search.js";
 import { createKeywordArchivalSearcher } from "../src/archival-search.js";
-import { characterItems, collectArchivalItems } from "../src/archival-items.js";
+import { characterItems, pluginDataItems } from "../src/archival-items.js";
 
 it("keeps UUID storage keys private while retaining readable archival keys", async () => {
   const uuid = "0b6f6a2e-3c1d-4f5a-9b7e-1a2b3c4d5e6f";
@@ -80,7 +80,7 @@ it("keeps UUID storage keys private while retaining readable archival keys", asy
     );
     expect(JSON.stringify(hits)).not.toContain(uuid);
     // The vector ingestor uses these same items: storage identity stays internal.
-    const items = await collectArchivalItems(store, "session", declared);
+    const items = await pluginDataItems(store, "session", declared);
     expect(items.some((item) => item.vecKey.includes(uuid))).toBe(true);
     expect(items.map((item) => item.displayKey)).not.toContain(uuid);
   } finally {

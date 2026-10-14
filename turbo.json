@@ -152,6 +152,12 @@
     "lint": {
       "dependsOn": ["^build"]
     },
+    "@covel/plugin-handlers-utils#lint": {
+      "dependsOn": ["^build", "build"]
+    },
+    "@covel/plugin-handlers-utils#test": {
+      "dependsOn": ["^build", "build"]
+    },
     "@covel/web#lint": {
       "dependsOn": ["^build", "generate:routes"]
     },

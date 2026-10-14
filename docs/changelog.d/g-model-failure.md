@@ -1,0 +1,8 @@
+### Changed
+
+- **An empty account or a refused key is no longer retried at the same provider, and now switches to a configured backup.** A 429 `insufficient_quota`, a 402, a 401 / 403, or a 400 that says the balance is used up is sent once: the HTTP layer and the runtime no longer resend it, and a fallback model the player configured takes over (before, a 429 quota error was resent up to three times and a 402 or 401 never reached the backup). The kinds are `ProviderFailureKind` and `isAccountFailure` in `@covel/shared`. Rules: `docs/reference/slots.md`.
+
+### Fixed
+
+- **A generation that ended for a reason the provider did not explain is no longer taken as complete.** `finishReason: other` (for example Anthropic's `pause_turn` or DeepSeek's `insufficient_system_resource`) used to be read as a normal `stop`. A story keeps the text already written and the app says it is not finished, so the player can retry the turn; other runtime answers, world generation and the history summary fail instead of saving half a result. The vocabulary also maps more documented provider words (Mistral `model_length`, Gemini `SPII` / `IMAGE_SAFETY` / `MALFORMED_FUNCTION_CALL`, Cohere `ERROR_TOXIC` / `ERROR_LIMIT`). Rules: `docs/reference/slots.md`.
+- **Failed model calls count the tokens the provider reported.** A refusal, an error finish reason, an error body or a stream that reaches EOF without its terminal event now carries the reported usage in `error.details.usage`; it reaches `llm.responded` / `gateway.failed`, and the debug page's cost view counts `gateway.failed`. Model calls made by kernel extension providers, such as history compaction, are traced as `gateway.*` events under the provider, so their cost is no longer invisible.

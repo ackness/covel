@@ -438,6 +438,7 @@ await ctx.pluginData.set("progress", "cursor", after ?? null);
 - `limit` defaults to 100, and the maximum is 500.
 - `cursor` is a string you do not need to understand. It points to the last message read. When the page is empty, it returns the `after` you passed in, unchanged.
 - `hasMore` being `false` means you have reached the end.
+- Messages come in the order they were saved. A background execution's message can carry an earlier time than the message before it, but it was saved later, so it still comes after the position you stored and is not missed.
 - It returns only saved messages. It does not include the turn that is still running.
 
 ## Ask the player for input: a form

@@ -26,6 +26,7 @@ import {
   publicPluginDataValue,
 } from "./plugin-rpc/runtime-job-public.js";
 import { resolveSessionParam } from "./session/session-guard.js";
+import { runnablePluginIds } from "./session/plugins.js";
 import { withLockedSessionMutation } from "./session/locked-mutation.js";
 
 type Env = {
@@ -85,7 +86,7 @@ pluginDataRoutes.get("/:id/plugin-data", async (c) => {
   const guard = await resolveSessionParam(c);
   if (!guard.ok) return guard.response;
   const active = new Set(
-    guard.session.activePlugins.filter((id) => registry.get(id)),
+    runnablePluginIds(guard.session.activePlugins, registry),
   );
 
   const records = await store.listPluginDataSessionScope(sessionId);
@@ -236,7 +237,7 @@ pluginDataRoutes.put(
           registry,
           pluginId,
           true,
-          live.activePlugins,
+          runnablePluginIds(live.activePlugins, registry),
         );
         if (accessErr)
           return c.json(errorBody(accessErr.error), accessErr.status);
@@ -286,7 +287,7 @@ pluginDataRoutes.delete(
           registry,
           pluginId,
           true,
-          live.activePlugins,
+          runnablePluginIds(live.activePlugins, registry),
         );
         if (accessErr)
           return c.json(errorBody(accessErr.error), accessErr.status);

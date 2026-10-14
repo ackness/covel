@@ -50,7 +50,7 @@ export function HistoryTab({ dimensions, onChange, t, problems }: TabProps) {
         <div key={ei} className="border border-border p-4 space-y-3">
           <div className="flex items-center justify-between">
             <span className="text-sm font-medium">
-              {text(ev.name) || `${t("world.history")} #${ei + 1}`}
+              {text(ev.name) || t("world.unnamedHistory", { number: ei + 1 })}
             </span>
             <Button
               variant="ghost"

@@ -6,24 +6,36 @@
  * the per-session vector tables so a vector searcher has something to find.
  *
  * Strategy: a **post-turn best-effort sweep**, not a per-write hook. Each sweep
- * reads the same corpus the keyword searchers read — turn messages (recall) and
- * lorebook + character records (archival) — embeds whatever is new or changed
- * since the last sweep, and upserts it. This single mechanism covers both
- * steady-state ingestion (the delta each turn) AND cold-start backfill (an
- * existing session's first sweep embeds its whole history, bounded per pass).
+ * reads what was saved since the last sweep, embeds it and upserts it:
+ *
+ *  - recall: turn messages past a cursor on their save order (`writeSeq`);
+ *  - archival: the store's change feed of lorebook entries, characters and
+ *    plugin data (`listRecordChanges`), past a cursor on the same order. A
+ *    change names a record; the sweep reads that record and embeds it, or
+ *    deletes its vector when the record is gone or yields no text.
+ *
+ * The same walk covers steady-state ingestion (the delta each turn) and a
+ * cold-start backfill (an existing session's first sweep starts at the
+ * beginning, bounded per pass). Neither reads the whole history.
  *
  * It must never block or fail a turn: callers fire-and-forget it after commit,
- * and every store/embed error is swallowed with a warning. Incremental progress
- * is persisted alongside the vector index (a recall cursor + an archival content-hash map)
- * so a process restart does not re-embed everything.
+ * and every store/embed error is swallowed with a warning. Progress is
+ * persisted alongside the vector index and moves only past what a sweep
+ * handled, so a failed read or embedding is retried by the next sweep and a
+ * process restart does not re-embed everything.
  */
 
 import {
-  collectArchivalItems,
+  archivalVecKey,
+  readArchivalItem,
+  searchableSourceKey,
+  type ArchivalItem,
+  type SearchablePluginData,
   type SearchablePluginDataResolver,
 } from "./archival-items.js";
 import type { VectorIngestStore } from "./store-contracts.js";
 
+import type { RecordChange } from "@covel/store/contracts";
 import type {
   CommitVectorIndexBatchInput,
   VectorStoreCapability,
@@ -37,7 +49,6 @@ type VectorIndexUpsert = NonNullable<
 >[number];
 import {
   ARCHIVAL_NAMESPACE,
-  contentHash,
   type EmbedFn,
   MAX_INGEST_BATCH,
   MEMORY_VECTOR_PLUGIN_ID,
@@ -56,17 +67,38 @@ export interface IngestResult {
 
 const SKIPPED: IngestResult = { skipped: true, recall: 0, archival: 0 };
 
-/** Persisted recall progress cursor: last embedded message `(createdAt, id)`. */
-interface RecallCursor {
-  readonly createdAt: string;
-  readonly id: string;
+/** Persisted recall progress: the `writeSeq` of the last message handled. */
+interface RecallProgress {
+  readonly writeSeq: number;
 }
 
-/** Persisted archival fingerprints: vector key → content hash at embed time. */
-type ArchivalHashes = Record<string, string>;
+/** A searchable plugin data namespace as progress records it: `[pluginId, namespace, textField]`. */
+type SourceTuple = readonly [string, string, string];
+
+/**
+ * A namespace that became searchable after the index had passed its records
+ * (`add`: walk its changes up to `through`), or stopped being searchable
+ * (`remove`: delete the vector of every record it ever had).
+ */
+interface SourceJob {
+  readonly source: SourceTuple;
+  readonly remove: boolean;
+  /** Last change of the walk handled; null before the first. */
+  readonly after: number | null;
+  readonly through?: number;
+}
+
+/** Persisted archival progress. */
+interface ArchivalProgress {
+  /** `seq` of the last change of the session's records handled; null before the first. */
+  readonly cursor: number | null;
+  /** The searchable plugin data namespaces the index holds. */
+  readonly sources: readonly SourceTuple[];
+  readonly jobs: readonly SourceJob[];
+}
 
 const CURSOR_NS = "recall-ingest";
-const HASHES_NS = "archival-ingest";
+const ARCHIVAL_NS = "archival-ingest";
 
 export interface VectorIngestor {
   /**
@@ -213,7 +245,7 @@ export function createVectorIngestor(deps: {
   };
 }
 
-// ── Recall (turn messages, cursor-incremental) ───────────────────
+// ── Recall (turn messages, save-order cursor) ────────────────────
 
 async function ingestRecall(
   store: VectorStore,
@@ -222,19 +254,18 @@ async function ingestRecall(
   expectedSessionCreatedAt: string,
   limits: EmbeddingLimits,
 ): Promise<{ written: number; more: boolean }> {
-  const progress = await readProgress<RecallCursor>(
+  const progress = await readProgress<RecallProgress>(
     store,
     sessionId,
     CURSOR_NS,
   );
-  const cursor = progress.value;
 
-  // Keyset read of just the batch window past the cursor — the store orders by
-  // the same `(createdAt, id)` total order the cursor is written in, so a long
-  // session never streams its whole history through this per-turn sweep.
+  // The batch window past the cursor, in save order. A message is never
+  // visible before one saved earlier, so nothing behind the cursor can appear
+  // later — even a background execution's message with an older createdAt.
   const batch = await store.listTurnMessagesAfter(
     sessionId,
-    cursor,
+    progress.value?.writeSeq ?? null,
     MAX_INGEST_BATCH,
   );
   if (batch.length === 0) return { written: 0, more: false };
@@ -259,17 +290,17 @@ async function ingestRecall(
   // `embed` returns an empty/short array for some entry, stop WITHOUT moving
   // past it, so the next sweep retries it — otherwise a transient empty
   // embedding would silently drop that message from recall forever.
-  let lastHandled: RecallCursor | null = null;
+  let lastHandled: number | null = null;
   let vectorIndex = 0;
   for (const msg of batch) {
     if (!isEmbeddable(msg)) {
-      lastHandled = { createdAt: msg.createdAt, id: msg.id };
+      lastHandled = msg.writeSeq;
       continue;
     }
     const embedding = vectors[vectorIndex];
     vectorIndex += 1;
     if (embedding === null) {
-      lastHandled = { createdAt: msg.createdAt, id: msg.id };
+      lastHandled = msg.writeSeq;
       continue;
     }
     if (!embedding || embedding.length === 0) break;
@@ -284,15 +315,15 @@ async function ingestRecall(
         createdAt: msg.createdAt,
       }),
     });
-    lastHandled = { createdAt: msg.createdAt, id: msg.id };
+    lastHandled = msg.writeSeq;
   }
 
-  if (lastHandled) {
+  if (lastHandled !== null) {
     await commitIndexBatch(
       store,
       sessionId,
       CURSOR_NS,
-      lastHandled,
+      { writeSeq: lastHandled } satisfies RecallProgress,
       progress.raw,
       expectedSessionCreatedAt,
       { upserts },
@@ -301,11 +332,61 @@ async function ingestRecall(
   return {
     written: upserts.length,
     more:
-      batch.length === MAX_INGEST_BATCH && lastHandled?.id === batch.at(-1)?.id,
+      batch.length === MAX_INGEST_BATCH &&
+      lastHandled === batch.at(-1)?.writeSeq,
   };
 }
 
-// ── Archival (lorebook + characters, hash-incremental) ───────────
+// ── Archival (lorebook + characters + plugin data, change feed) ──
+
+const sourceTuple = (source: SearchablePluginData): SourceTuple => [
+  source.pluginId,
+  source.namespace,
+  source.textField,
+];
+const tupleKey = (tuple: SourceTuple): string => JSON.stringify(tuple);
+
+/**
+ * Compare the namespaces the index holds with the ones searchable now. A new
+ * one is walked from its first record up to the cursor (the main walk covers
+ * what comes after); one no longer searchable has every vector of its records
+ * removed. Before the first change is handled, the main walk covers it all.
+ */
+function reconcileSources(
+  progress: ArchivalProgress,
+  current: readonly SearchablePluginData[],
+): ArchivalProgress {
+  const now = new Map(current.map((s) => [tupleKey(sourceTuple(s)), s]));
+  const before = new Set(progress.sources.map(tupleKey));
+  let jobs = [...progress.jobs];
+  for (const tuple of progress.sources) {
+    const key = tupleKey(tuple);
+    if (now.has(key)) continue;
+    jobs = jobs.filter((job) => tupleKey(job.source) !== key);
+    jobs.push({ source: tuple, remove: true, after: null });
+  }
+  for (const [key, source] of now) {
+    if (before.has(key)) continue;
+    jobs = jobs.filter((job) => tupleKey(job.source) !== key);
+    if (progress.cursor !== null)
+      jobs.push({
+        source: sourceTuple(source),
+        remove: false,
+        after: null,
+        through: progress.cursor,
+      });
+  }
+  return {
+    cursor: progress.cursor,
+    sources: [...now.values()].map(sourceTuple),
+    // Removals first: a namespace whose text field changed is removed and
+    // added again under the same vector keys.
+    jobs: [
+      ...jobs.filter((job) => job.remove),
+      ...jobs.filter((j) => !j.remove),
+    ],
+  };
+}
 
 async function ingestArchival(
   store: VectorStore,
@@ -315,65 +396,140 @@ async function ingestArchival(
   limits: EmbeddingLimits,
   pluginData: SearchablePluginDataResolver | undefined,
 ): Promise<{ written: number; more: boolean }> {
-  const items = await collectArchivalItems(store, sessionId, pluginData);
-
-  const progress = await readProgress<ArchivalHashes>(
+  const progress = await readProgress<ArchivalProgress>(
     store,
     sessionId,
-    HASHES_NS,
+    ARCHIVAL_NS,
   );
-  const hashes = progress.value ?? {};
-
-  // Read the complete corpus before removing anything. A source read failure
-  // must preserve both existing vectors and progress.
-  const liveKeys = new Set(items.map((it) => it.vecKey));
-  const removedKeys = Object.keys(hashes).filter((key) => !liveKeys.has(key));
-  const hasDeletion = removedKeys.length > 0;
-  const deletes = removedKeys.map((key) => ({
-    namespace: ARCHIVAL_NAMESPACE,
-    key,
-  }));
-  for (const key of removedKeys) {
-    delete hashes[key];
-  }
-
-  // Embed only items whose content fingerprint is new or changed.
-  const changed = items.filter(
-    (it) => hashes[it.vecKey] !== contentHash(it.text),
+  const searchable = pluginData ? await pluginData(sessionId) : [];
+  const sources = new Map(
+    searchable.map((s) => [searchableSourceKey(s.pluginId, s.namespace), s]),
   );
-  if (changed.length === 0) {
-    if (hasDeletion)
-      await commitIndexBatch(
-        store,
-        sessionId,
-        HASHES_NS,
-        hashes,
-        progress.raw,
-        expectedSessionCreatedAt,
-        { deletes },
-      );
-    return { written: 0, more: false };
-  }
-
-  const batch = changed.slice(0, MAX_INGEST_BATCH);
-  const vectors = await embedWithRetry(
-    embed,
-    batch.map((it) => it.text),
-    sessionId,
-    "archival",
-    limits,
+  const state = reconcileSources(
+    progress.value ?? { cursor: null, sources: [], jobs: [] },
+    searchable,
   );
+  const deletes: { namespace: string; key: string }[] = [];
+  let budget = MAX_INGEST_BATCH;
 
-  const nextHashes: ArchivalHashes = { ...hashes };
-  const upserts: VectorIndexUpsert[] = [];
-  for (const [i, it] of batch.entries()) {
-    const embedding = vectors[i];
-    if (embedding === null) {
-      nextHashes[it.vecKey] = contentHash(it.text);
-      deletes.push({ namespace: ARCHIVAL_NAMESPACE, key: it.vecKey });
+  // Removals only delete vectors. Nothing is embedded until they are done, so
+  // an addition under the same keys cannot be deleted after it is written.
+  const jobs: SourceJob[] = [];
+  for (const job of state.jobs) {
+    if (!job.remove || budget === 0) {
+      jobs.push(job);
       continue;
     }
-    if (!embedding || embedding.length === 0) continue;
+    const [pluginId, namespace] = job.source;
+    const limit = budget;
+    const page = await store.listRecordChanges(sessionId, {
+      after: job.after,
+      pluginData: { pluginId, namespace },
+      limit,
+    });
+    budget -= page.length;
+    for (const change of page) deletes.push(vectorRef(change));
+    // A short page is the end of the namespace: the job is done.
+    if (page.length === limit) jobs.push({ ...job, after: page.at(-1)!.seq });
+  }
+  if (jobs.some((job) => job.remove)) {
+    await commitArchival(
+      store,
+      sessionId,
+      progress.raw,
+      expectedSessionCreatedAt,
+      {
+        state: { ...state, jobs },
+        deletes,
+      },
+    );
+    return { written: 0, more: true };
+  }
+
+  // The changes to handle this sweep: additions first, then the main walk.
+  interface Walk {
+    readonly job: SourceJob | null;
+    readonly changes: RecordChange[];
+    readonly full: boolean;
+  }
+  const walks: Walk[] = [];
+  for (const job of jobs) {
+    if (budget === 0) {
+      walks.push({ job, changes: [], full: true });
+      continue;
+    }
+    const [pluginId, namespace] = job.source;
+    const changes = await store.listRecordChanges(sessionId, {
+      after: job.after,
+      ...(job.through === undefined ? {} : { through: job.through }),
+      pluginData: { pluginId, namespace },
+      limit: budget,
+    });
+    walks.push({ job, changes, full: changes.length === budget });
+    budget -= changes.length;
+  }
+  const main =
+    budget === 0
+      ? []
+      : await store.listRecordChanges(sessionId, {
+          after: state.cursor,
+          limit: budget,
+        });
+  walks.push({ job: null, changes: main, full: main.length === budget });
+
+  // Read each changed record once. A failed read throws: progress stays put.
+  const items = new Map<string, ArchivalItem | null>();
+  for (const walk of walks) {
+    for (const change of walk.changes) {
+      const key = vectorRef(change).key;
+      if (!items.has(key))
+        items.set(
+          key,
+          await readArchivalItem(store, sessionId, change, sources),
+        );
+    }
+  }
+  // Skip a record whose text the index already holds.
+  const stored = await store.getVectorPayloads({
+    sessionId,
+    pluginId: MEMORY_VECTOR_PLUGIN_ID,
+    namespace: ARCHIVAL_NAMESPACE,
+    keys: [...items.keys()],
+  });
+  // A source removal may delete these keys in this same batch. Its replacement
+  // must restore them even when the new text field contains identical text.
+  for (const deletion of deletes) stored.delete(deletion.key);
+  const toEmbed: ArchivalItem[] = [];
+  for (const [key, item] of items) {
+    if (!item) {
+      if (stored.has(key)) deletes.push({ namespace: ARCHIVAL_NAMESPACE, key });
+    } else if (payloadContent(stored.get(key)) !== item.text) {
+      toEmbed.push(item);
+    }
+  }
+  const vectors = toEmbed.length
+    ? await embedWithRetry(
+        embed,
+        toEmbed.map((it) => it.text),
+        sessionId,
+        "archival",
+        limits,
+      )
+    : [];
+  const upserts: VectorIndexUpsert[] = [];
+  const failed = new Set<string>();
+  for (const [i, it] of toEmbed.entries()) {
+    const embedding = vectors[i];
+    if (embedding === null) {
+      // A rejected input is not retried; its old text must not stay findable.
+      if (stored.has(it.vecKey))
+        deletes.push({ namespace: ARCHIVAL_NAMESPACE, key: it.vecKey });
+      continue;
+    }
+    if (!embedding || embedding.length === 0) {
+      failed.add(it.vecKey);
+      continue;
+    }
     upserts.push({
       namespace: ARCHIVAL_NAMESPACE,
       key: it.vecKey,
@@ -386,26 +542,96 @@ async function ingestArchival(
         ...(it.namespace ? { namespace: it.namespace } : {}),
       }),
     });
-    nextHashes[it.vecKey] = contentHash(it.text);
   }
 
-  await commitIndexBatch(
+  // Each walk moves past the changes it handled, up to the first one whose
+  // embedding came back empty; that one is retried by the next sweep.
+  let stopped = false;
+  let more = false;
+  let cursor = state.cursor;
+  const nextJobs: SourceJob[] = [];
+  for (const walk of walks) {
+    let after = walk.job ? walk.job.after : cursor;
+    for (const change of walk.changes) {
+      if (stopped || failed.has(vectorRef(change).key)) {
+        stopped = true;
+        break;
+      }
+      after = change.seq;
+    }
+    const finished = !stopped && !walk.full;
+    if (walk.job) {
+      if (!finished) nextJobs.push({ ...walk.job, after });
+    } else {
+      cursor = after;
+    }
+    more ||= !stopped && walk.full;
+  }
+  const next: ArchivalProgress = {
+    cursor,
+    sources: state.sources,
+    jobs: nextJobs,
+  };
+  if (
+    upserts.length > 0 ||
+    deletes.length > 0 ||
+    JSON.stringify(next) !== progress.raw
+  ) {
+    await commitArchival(
+      store,
+      sessionId,
+      progress.raw,
+      expectedSessionCreatedAt,
+      {
+        state: next,
+        upserts,
+        deletes,
+      },
+    );
+  }
+  return { written: upserts.length, more };
+}
+
+/** The archival vector a change addresses. */
+function vectorRef(change: RecordChange): { namespace: string; key: string } {
+  return { namespace: ARCHIVAL_NAMESPACE, key: archivalVecKey(change) };
+}
+
+function commitArchival(
+  store: VectorStore,
+  sessionId: string,
+  expectedValue: string | null,
+  expectedSessionCreatedAt: string,
+  batch: {
+    readonly state: ArchivalProgress;
+    readonly upserts?: VectorIndexUpsert[];
+    readonly deletes: { namespace: string; key: string }[];
+  },
+): Promise<void> {
+  return commitIndexBatch(
     store,
     sessionId,
-    HASHES_NS,
-    nextHashes,
-    progress.raw,
+    ARCHIVAL_NS,
+    batch.state,
+    expectedValue,
     expectedSessionCreatedAt,
-    { upserts, deletes },
+    { upserts: batch.upserts ?? [], deletes: batch.deletes },
   );
-  return {
-    written: upserts.length,
-    more:
-      changed.length > batch.length &&
-      batch.every(
-        (_, i) => vectors[i] === null || (vectors[i]?.length ?? 0) > 0,
-      ),
-  };
+}
+
+function payloadContent(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  try {
+    const value: unknown = JSON.parse(raw);
+    return value !== null &&
+      typeof value === "object" &&
+      "content" in value &&
+      typeof value.content === "string"
+      ? value.content
+      : null;
+  } catch {
+    return null;
+  }
 }
 
 // Index progress is deliberately absent from business-data snapshots/checkpoints.

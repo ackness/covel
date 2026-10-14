@@ -19,6 +19,7 @@ import {
   shouldRetryResponse,
   sleepWithAbort,
 } from "./retry.js";
+import { readAccountFailure } from "./response.js";
 import { buildProviderUrl, validateBaseUrl } from "./url-safety.js";
 
 /**
@@ -176,8 +177,22 @@ export async function postJson(
             Date.now() + retryAfterMs > scope.budget.deadline))
       )
         return response;
+      // A 429 for an empty account is no rate limit: the provider answers the
+      // same way until the player adds credit.
+      let bodyRead = false;
+      if (
+        response.status === 429 &&
+        response.headers.get("x-should-retry") !== "true"
+      ) {
+        const read = await awaitLlmRequest(
+          readAccountFailure(response),
+          effectiveSignal,
+        );
+        if (read.account) return read.response;
+        bodyRead = true;
+      }
       // Discard rejected bodies without buffering an unbounded error stream.
-      if (response.body) {
+      if (!bodyRead && response.body) {
         await awaitLlmRequest(
           response.body.cancel().catch(() => {}),
           effectiveSignal,

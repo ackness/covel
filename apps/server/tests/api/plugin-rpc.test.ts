@@ -21,6 +21,7 @@ import {
 import { createRpcApprovalGate, type RpcApprovalGate } from "@covel/approval";
 import {
   createPluginRegistry,
+  parsePluginMd,
   type PluginRegistry,
   type PluginRegistryEntry,
   type PluginSummary,
@@ -102,6 +103,26 @@ function setup(options: { readonly handlerTimeoutMs?: number } = {}): {
     pluginRegistry,
     sessionLock,
   };
+}
+
+/** Install a package with no runtimes, as an action fixture's plugin. */
+function installPackage(
+  pluginRegistry: PluginRegistry,
+  id: string,
+  options: { requires?: string[]; source?: PluginSource } = {},
+): void {
+  pluginRegistry.register({
+    id,
+    packageManifest: parsePluginMd(
+      `---\n${JSON.stringify({ id, kind: "plugin", description: id, requires: options.requires })}\n---\n`,
+      `${id}/PLUGIN.md`,
+    ),
+    manifests: [],
+    summary: makeSummary(id),
+    loadedRuntimes: new Map(),
+    status: "registered",
+    source: options.source ?? "builtin",
+  });
 }
 
 let nextClient = 0;
@@ -545,6 +566,7 @@ describe("POST /api/sessions/:id/plugin-rpc", () => {
   });
 
   it("gives builtin plugin actions scoped immediate writes without host store authority", async () => {
+    installPackage(pluginRegistry, "codex");
     await store.updateSession("sess-rpc-1", { activePlugins: ["codex"] });
     let exposed: string[] = [];
     const createdAt = "2026-01-01T00:00:00.000Z";
@@ -643,8 +665,31 @@ describe("POST /api/sessions/:id/plugin-rpc", () => {
     },
   );
 
+  it("rejects actions from a confirmed plugin whose requirement is missing", async () => {
+    installPackage(pluginRegistry, "fixture", { requires: ["missing@1"] });
+    await store.updateSession("sess-rpc-1", { activePlugins: ["fixture"] });
+    const handler = vi.fn(async () => ({ updated: true }));
+    registry.registerPluginHandler("fixture", "update", handler, {}, "builtin");
+    const response = await app.request("/api/sessions/sess-rpc-1/plugin-rpc", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        kind: "action",
+        pluginId: "fixture",
+        action: "update",
+      }),
+    });
+    expect(response.status).toBe(404);
+    const body = (await response.json()) as { code: string; error: string };
+    expect(body.code).toBe("plugin_not_active");
+    // The player is told why the plugin is off.
+    expect(body.error).toContain("missing@1");
+    expect(handler).not.toHaveBeenCalled();
+  });
+
   it("rechecks action activation after waiting for the session lock", async () => {
-    const { app, store, registry, sessionLock, gate } = setup();
+    const { app, store, registry, sessionLock, gate, pluginRegistry } = setup();
+    installPackage(pluginRegistry, "fixture");
     await seedSession(store);
     await store.updateSession("sess-rpc-1", { activePlugins: ["fixture"] });
     const handler = vi.fn(async () => ({ updated: true }));
@@ -682,6 +727,7 @@ describe("POST /api/sessions/:id/plugin-rpc", () => {
   });
 
   it("dispatches an entry-registered plugin action", async () => {
+    installPackage(pluginRegistry, "codex");
     await store.updateSession("sess-rpc-1", { activePlugins: ["codex"] });
     registry.registerPluginHandler(
       "codex",
@@ -709,6 +755,7 @@ describe("POST /api/sessions/:id/plugin-rpc", () => {
 
   it("fails an action that passes its time limit and frees the session", async () => {
     const limited = setup({ handlerTimeoutMs: 50 });
+    installPackage(limited.pluginRegistry, "codex");
     await seedSession(limited.store);
     await limited.store.updateSession("sess-rpc-1", {
       activePlugins: ["codex"],
@@ -841,13 +888,16 @@ describe("POST /api/sessions/:id/plugin-rpc — deferred community entry (H2)", 
     const hasPendingEntry = (pluginId: string): boolean =>
       pluginId === PLUGIN_ID && !activated;
 
+    const pluginRegistry = createPluginRegistry();
+    installPackage(pluginRegistry, PLUGIN_ID, { source: "community" });
+
     const app = new Hono();
     app.use("*", async (c, next) => {
       c.set("store", store);
       c.set("rpcExecutor", executor);
       c.set("rpcRegistry", registry);
       c.set("rpcApprovalGate", gate);
-      c.set("pluginRegistry", createPluginRegistry());
+      c.set("pluginRegistry", pluginRegistry);
       c.set("hasPendingPluginEntry", hasPendingEntry);
       c.set("activatePluginServerCode", activate);
       await next();

@@ -72,3 +72,10 @@ it("retries the current error through the same refresh path", async () => {
   expect(await screen.findByText("recovered-table")).toBeTruthy();
   expect(screen.queryByText(/current failure/)).toBeNull();
 });
+
+it("includes the database error and its punctuation in the translation", async () => {
+  await i18n.changeLanguage("zh-CN");
+  api.listStateTables.mockRejectedValue(new Error("Unavailable"));
+  render(<DatabasePanel sessionId="session" />);
+  expect(await screen.findByText("加载数据库失败：Unavailable")).toBeTruthy();
+});

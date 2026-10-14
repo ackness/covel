@@ -3,6 +3,7 @@ import { buildHookSettings, type HookScope } from "@covel/runtime";
 import type { TurnInput } from "@covel/shared";
 import type { DataStore, SessionRecord } from "@covel/store";
 import { loadSessionPluginUserSettings } from "../plugin-user-settings.js";
+import { runnablePluginIds } from "./plugins.js";
 
 /** Resolve before mutating: a settings read failure must not follow a durable write. */
 export async function loadSessionHookScope(args: {
@@ -23,7 +24,10 @@ export async function loadSessionHookScope(args: {
   });
 }
 
-/** Use the persisted activation set, including plugins with no runtimes. */
+/**
+ * Hooks of the session's runnable plugins (`runnablePluginIds`), including
+ * plugins with no runtimes; `activePluginIds` is the confirmed set.
+ */
 export function buildSessionHookScope(args: {
   readonly pluginRegistry?: PluginRegistry;
   readonly activePluginIds: Iterable<string>;
@@ -31,7 +35,11 @@ export function buildSessionHookScope(args: {
   /** The session's content locale; a turn falls back to its input's locale. */
   readonly locale?: string;
 }): HookScope {
-  const activePluginIds = new Set(args.activePluginIds);
+  const activePluginIds = new Set(
+    args.pluginRegistry
+      ? runnablePluginIds([...args.activePluginIds], args.pluginRegistry)
+      : args.activePluginIds,
+  );
   const declarations = [...activePluginIds].flatMap((pluginId) => {
     const entry = args.pluginRegistry?.get(pluginId);
     return entry
