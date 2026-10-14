@@ -1027,6 +1027,8 @@ setup runtime 反复失败、用完重试预算（`maxTriggerCount`）后进入 
 - `POST /api/install/github/preview`：返回 `{ collection, items, problems }`，见[插件安装](./plugin-installation.md#http-契约)。
 - `POST /api/install/github/batch`：返回 `201 { ok, installed, restartRequired }`。
 - `POST /api/install/collection`：响应和 batch 相同。
+
+批量安装失败的撤回结果见[插件安装](./plugin-installation.md#多包预览和批量安装)：`details.rolledBack` 和 `details.retained` 分别列出已撤回和保留的包。
 - `GET /api/install/plugins`：列表里包含还没有重启加载的插件。
 
 `/api/install/world` 在写入世界记录之前检查 worldData 的 diagnostics：

@@ -1027,6 +1027,8 @@ What each endpoint accepts and returns:
 - `POST /api/install/github/preview`: returns `{ collection, items, problems }`. See [Plugin install](./plugin-installation.md#http-contract).
 - `POST /api/install/github/batch`: returns `201 { ok, installed, restartRequired }`.
 - `POST /api/install/collection`: the response is the same as for batch.
+
+Rollback results for failed batch installations are documented in [Plugin installation](./plugin-installation.md#multi-package-preview-and-batch-install): `details.rolledBack` and `details.retained` list removed and retained packages.
 - `GET /api/install/plugins`: the list includes plugins that have not yet been loaded after a restart.
 
 `/api/install/world` checks the worldData diagnostics before it writes the world record:
