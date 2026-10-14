@@ -46,24 +46,6 @@ export interface SessionDiscoverySnapshot {
   }>;
 }
 
-const DEFAULT_BUILTIN_TOOLS = [
-  "render-ui",
-  "create-form",
-  "create-choices",
-  "create-notification",
-  "suspend",
-  "runtime-done",
-  "plugin-data-set",
-  "plugin-data-set-batch",
-  "plugin-data-get",
-  "plugin-data-list",
-  "create-character",
-  "update-character",
-  "get-character",
-  "list-characters",
-  "get-world-dimensions",
-] as const;
-
 // Proposal type list is derived from the single source of truth in
 // @covel/shared (`PROPOSAL_TYPES`), which is exhaustiveness-checked against the
 // commit-handler registry. Discovery therefore advertises exactly what the
@@ -98,8 +80,12 @@ function enumValues<T extends string>(schema: { options: readonly T[] }): T[] {
   return [...schema.options];
 }
 
+/**
+ * `builtinToolNames` is the registry's own builtin list. Bootstrap sets it on
+ * every request, so the advertised names cannot drift from the tools that run.
+ */
 export function buildFrameworkCapabilities(
-  builtinToolNames?: readonly string[],
+  builtinToolNames: readonly string[],
 ): FrameworkCapabilities {
   return {
     schemaVersion: 1,
@@ -142,7 +128,7 @@ export function buildFrameworkCapabilities(
         ],
       },
       tools: {
-        builtin: uniqueSorted(builtinToolNames ?? DEFAULT_BUILTIN_TOOLS),
+        builtin: uniqueSorted(builtinToolNames),
       },
       proposals: {
         types: PROPOSAL_TYPES,
@@ -219,7 +205,7 @@ export async function buildSessionDiscoverySnapshot(options: {
   readonly store: DataStore;
   readonly registry?: PluginRegistry;
   readonly sessionId: string;
-  readonly builtinToolNames?: readonly string[];
+  readonly builtinToolNames: readonly string[];
   readonly isEntryPublished?: (pluginId: string) => boolean;
 }): Promise<SessionDiscoverySnapshot> {
   const session = await options.store.getSession(options.sessionId);

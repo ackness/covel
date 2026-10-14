@@ -545,7 +545,7 @@ The bridge accepts only the actions that the host explicitly provides:
 | `invokeRuntime`, `invokePluginAction`, `invokeCommand` | Everywhere            | Execution actions. They are bound to the current plugin automatically.   |
 | `emitEvent({ topic, data })`                           | Everywhere            | Emits an event that this plugin declares.                                |
 | `draftMessage({ text, selectionGroup? })`              | Right-side panel      | Puts a line into the pending area, to be sent after the player confirms. |
-| `sendMessage({ text })`                                | Stage                 | Sends one message.                                                       |
+| `sendMessage({ text })`                                | Stage                 | Fills the stage input for the player to confirm and send.                |
 | `setUiState({ value })`                                | Everywhere            | Saves the temporary state of the panel. See below.                       |
 
 You cannot change the pluginId in a parameter to call another plugin. When you need to work with another plugin, use `ctx.services` or an event from your own runtime. Do not read the other plugin's private data in the browser.

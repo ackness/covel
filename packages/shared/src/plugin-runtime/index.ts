@@ -56,4 +56,3 @@ export type {
 } from "./handler.js";
 export type { LoadedRuntime } from "./loaded-runtime.js";
 export type PluginSource = "builtin" | "community";
-export type { PluginLlmSlot, PluginLlmConfig } from "./model-config.js";

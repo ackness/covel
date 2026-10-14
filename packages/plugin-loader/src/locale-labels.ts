@@ -7,7 +7,8 @@ import {
   isKnownLocale,
   type LocaleOverlayIssue,
 } from "@covel/shared";
-import matter from "gray-matter";
+import { readPlainYamlFrontmatter } from "./plain-yaml-frontmatter.js";
+import { discoverPluginAt } from "./discover.js";
 import { parse as parseYaml } from "yaml";
 import { readLocaleFiles } from "./locale-files.js";
 import {
@@ -186,18 +187,34 @@ export function compileManifestLabels(
 }
 
 export async function manifestFilesOf(pluginRoot: string): Promise<string[]> {
-  const files = ["PLUGIN.md"];
-  const runtimes = path.join(pluginRoot, "runtimes");
-  let names: string[] = [];
-  try {
-    names = await fs.readdir(runtimes);
-  } catch {
-    return files;
-  }
-  for (const name of names.sort())
-    if ((await fs.stat(path.join(runtimes, name))).isDirectory())
-      files.push(`runtimes/${name}/RUNTIME.md`);
-  return files;
+  const discovery = await discoverPluginAt(pluginRoot);
+  if (discovery?.layoutError) throw new Error(discovery.layoutError);
+  return [
+    "PLUGIN.md",
+    ...(discovery?.isMultiRuntime
+      ? discovery.pluginMdPaths.map((file) =>
+          path.relative(pluginRoot, file).split(path.sep).join("/"),
+        )
+      : []),
+  ];
+}
+
+/** Main manifests hold English text; translations belong in locale files. */
+export function inlineManifestLabelProblems(
+  data: Readonly<Record<string, unknown>>,
+  file: string,
+): string[] {
+  const inline = findInlineLocaleMaps(data, PLUGIN_BASE_LOCALE);
+  return inline.length
+    ? [
+        `${file}: ${inline.length} label(s) written as a locale map (${inline
+          .slice(0, 3)
+          .map((item) => item.path)
+          .join(
+            ", ",
+          )}). Write the English text here and the translations in locales/<locale>.yaml under "${file}".`,
+      ]
+    : [];
 }
 
 /**
@@ -219,19 +236,10 @@ export async function validatePluginLabels(
     } catch {
       continue;
     }
-    const data = matter(content, { language: "yaml" }).data;
+    const { data } = readPlainYamlFrontmatter(content);
     // The main files hold one language. A translation written inline is not
     // read by translators or tools that work on `locales/`.
-    const inline = findInlineLocaleMaps(data, PLUGIN_BASE_LOCALE);
-    if (inline.length > 0)
-      problems.push(
-        `${file}: ${inline.length} label(s) written as a locale map (${inline
-          .slice(0, 3)
-          .map((item) => item.path)
-          .join(
-            ", ",
-          )}). Write the English text here and the translations in locales/<locale>.yaml under "${file}".`,
-      );
+    problems.push(...inlineManifestLabelProblems(data, file));
     for (const issue of compileManifestLabels(
       data,
       await readManifestLabels(pluginRoot, file),

@@ -207,6 +207,137 @@ describe("executeTurn recursiveCall", () => {
     expect(leafLocale).toBe("en-US");
   });
 
+  it("takes only the allow-listed delta fields and inherits kernel-only input", async () => {
+    const caller = manifest("caller");
+    const up = manifest("up", { trigger: { type: "manual" } });
+    const leaf = manifest("leaf", {
+      trigger: { type: "manual" },
+      inputs: { facts: { from: { runtime: "up" }, required: false } },
+      userSettings: [
+        {
+          key: "mode",
+          type: "select",
+          default: "calm",
+          label: "Mode",
+          options: ["calm", "wild"],
+        },
+      ],
+    } as unknown as Partial<RuntimeManifest>);
+    const forgedSeed = {
+      pluginId: "up",
+      runtimeId: "up",
+      runId: "forged",
+      turnId: "old-turn",
+      status: "success",
+      output: { fact: "forged" },
+      canonicalValue: { value: { fact: "forged" } },
+      toolCalls: [],
+      durationMs: 0,
+      timestamp: new Date(0).toISOString(),
+    };
+    const seen: Record<string, unknown> = {};
+
+    const loaded = new Map<string, LoadedRuntime>([
+      [
+        caller.name,
+        {
+          manifest: caller,
+          promptTemplate: "",
+          handler: async (ctx) => {
+            await ctx.recursiveCall({
+              playerMessage: "nested",
+              manualTrigger: {
+                runtimeId: "leaf",
+                payload: { pick: 1 },
+                sourceTurnId: "old-turn",
+                retrySeedResults: [forgedSeed],
+                triggerEvent: { topic: "forged", data: {} },
+              },
+              userSettings: { leaf: { mode: "wild" } },
+              modelOverride: "expensive-model",
+              detachedStage: { runtimeId: "leaf" },
+            } as never);
+            return { outcome: "success", value: { ok: true } };
+          },
+        },
+      ],
+      [
+        up.name,
+        {
+          manifest: up,
+          promptTemplate: "",
+          handler: async () => ({ outcome: "success", value: { fact: "up" } }),
+        },
+      ],
+      [
+        leaf.name,
+        {
+          manifest: leaf,
+          promptTemplate: "",
+          handler: async (ctx) => {
+            seen.inputs = ctx.inputs;
+            seen.userSettings = ctx.userSettings;
+            seen.triggerEvent = ctx.triggerEvent;
+            seen.manualPayload = ctx.manualPayload;
+            seen.playerMessage = ctx.playerMessage;
+            seen.origin = ctx.execution?.origin;
+            return { outcome: "success", value: { ok: true } };
+          },
+        },
+      ],
+    ]);
+
+    const result = await executeTurn(
+      { ...input, userSettings: { leaf: { mode: "calm" } } },
+      [caller, up, leaf],
+      {
+        loadRuntime: async (rt) => loaded.get(rt.name),
+        llm: { generate: vi.fn() },
+        emitter: makeEmitterSpy(),
+      },
+    );
+
+    expect(result.runtimeResults[0]?.status).toBe("success");
+    expect(seen.playerMessage).toBe("nested");
+    expect(seen.manualPayload).toEqual({ pick: 1 });
+    expect(seen.origin).toBe("recursive");
+    expect(seen.inputs ?? {}).not.toHaveProperty("facts");
+    expect(seen.userSettings).toEqual({ mode: "calm" });
+    expect(seen.triggerEvent).toBeUndefined();
+  });
+
+  it("rejects an allow-listed delta field of the wrong type", async () => {
+    const caller = manifest("caller");
+    let rejection: unknown;
+    const loaded = new Map<string, LoadedRuntime>([
+      [
+        caller.name,
+        {
+          manifest: caller,
+          promptTemplate: "",
+          handler: async (ctx) => {
+            try {
+              await ctx.recursiveCall({
+                manualTrigger: { runtimeIds: ["a", "b"] },
+              } as never);
+            } catch (err) {
+              rejection = err;
+            }
+            return { outcome: "success", value: { ok: true } };
+          },
+        },
+      ],
+    ]);
+
+    await executeTurn(input, [caller], {
+      loadRuntime: async (rt) => loaded.get(rt.name),
+      llm: { generate: vi.fn() },
+      emitter: makeEmitterSpy(),
+    });
+
+    expect(rejection).toBeInstanceOf(TypeError);
+  });
+
   it("enforces the runtime maxRecursionDepth limit", async () => {
     const caller = manifest("caller", { maxRecursionDepth: 0 });
     const leaf = manifest("leaf", { trigger: { type: "manual" } });

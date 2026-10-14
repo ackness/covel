@@ -172,7 +172,7 @@ Metadata private to the framework never appears in any response. The owner hash,
 | `self` (default) / desktop | Usually not checked. A token, if sent, is not verified. For the exception, see "Production MemoryStore exception" below |
 | `demo` / `commercial`      | Checked every time                                                                                                      |
 
-`self` and the desktop rely on network boundaries. By default the server listens only on the loopback address (`COVEL_BIND_HOST=127.0.0.1`, see [env-registry](./env-registry.md)).
+`self` and the desktop rely on network boundaries. By default the server listens only on the loopback address (`COVEL_BIND_HOST=127.0.0.1`, see [env-registry](./env-registry.md)), and it answers only requests whose `Host` is `localhost`, `127.0.0.1`, `[::1]` or listed in `COVEL_ALLOWED_HOSTS`. Other requests get `403 { code: "host_not_allowed" }`.
 
 Rules for `demo` / `commercial`:
 
@@ -315,7 +315,7 @@ Settings in the interface are only override values sent along with the request. 
 
 **Differences on hosted tiers (`demo` / `commercial`)**
 
-- The public `GET /api/llm-config` still returns the model catalog that the client needs at startup, but without `source` and the load `error`. Only a request with the operator token can see these two diagnostics.
+- The public `GET /api/llm-config` still returns the model catalog that the client needs at startup, but without `source`, `envKeyOverrides`, the load `error`, or slot `baseUrl` values. `GET /api/presets` also omits `baseUrl`. Only a request with the operator token can see these fields.
 - The public `GET /api/config/info` returns `isDesktop: false` and `requiresAuth: true`, and all path fields are `null`. A request with the operator token gets the full deployment paths.
 - Responses on your own `self` machine and in the desktop app are not affected.
 
@@ -1387,7 +1387,7 @@ In the table below, "hosted deployment" means `DEPLOYMENT_TIER` is `demo` or `co
 
 Notes on each endpoint:
 
-- `GET /api/plugins`: the data comes from a snapshot of the registry. Plugins that failed to load are also returned, as an item with `status: "error"`.
+- `GET /api/plugins`: the data comes from a snapshot of the registry. Plugins that failed to load are also returned, as an item with `status: "error"`. In that `error` text the server's absolute plugin-directory path is written as `<plugin>` (for example `<plugin>/PLUGIN.md: …`); the full original message goes only to the server log.
 - `GET /api/worlds/:id/plugin-plan`: the server resolves the world's plugin policy, the packs, and the default selection.
   - Each `requested` and `defaultPluginIds` list contains only installed plugins.
   - A plugin the world requests but the host does not have is listed in `missing: [{ pluginId, packId? }]`.
@@ -1417,13 +1417,17 @@ If the disk write fails, the old dispatcher and the state returned by GET both s
 > [!NOTE]
 > For authors of server code: the low-level `prepareOutboundProxy()` provides `commit()` / `dispose()`. A transport that is not committed is released by the caller. `configureOutboundProxy()` is used to apply immediately.
 
+#### GET /api/config/keys
+
+`GET /api/config/keys` uses the same guard as writes: when `COVEL_DESKTOP_REST_TOKEN` is set, a matching Bearer token is required; otherwise the response is `401`.
+
 #### PUT /api/config/keys
 
 Desktop only. It writes provider keys to `<covelHome>/keys.env`.
 
 - The body is `{ provider: string | null }`. An empty string or `null` means delete that key.
 - The whole batch of input is validated first. If a value contains a newline, or is of another type, it returns `400`, and the file and the runtime both stay as they were.
-- The runtime's keys are updated only after the file is written atomically and successfully.
+- The runtime's keys are updated only after the file is written atomically and successfully. Turns, connection tests, and model lists use the new keys immediately. External keys (shell, `.env`, `.env.llm`) retain precedence; deleting or replacing a local key changes only the saved copy, without clearing or overriding the external key.
 
 How the desktop app (Electron) behaves when it saves keys:
 
@@ -2475,7 +2479,7 @@ This group of endpoints manages the background jobs (`_runtime_jobs`) that the s
 **How "can it run" is decided:**
 
 - The decision and the execution use the same model resolution and the same check of environment key sources.
-- When the source request's service is used, both are resolved with that request's model configuration (slot bindings, custom presets, and the model target in the plugin's `llm.toml`) and its credentials.
+- When the source request's service is used, both are resolved with that request's model configuration (slot bindings and custom presets) and its credentials.
 - When the server adapter is used, it is resolved only with the server configuration. It is not affected by other requests that happen to wake the worker.
 - It cannot prove statically whether a function handler will call a model. It also does not automatically allow a local endpoint that has no key.
 - An embedded host or a test can use `ApiBootstrapConfig.canRunRuntimeJobWithServerServices` to confirm explicitly that its own adapter is available. This confirmation does not change runtime authorization, session identity checks, or commit checks.

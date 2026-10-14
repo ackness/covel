@@ -52,6 +52,7 @@ const previousStory: StreamMessage = {
 
 function fixture(): StageViewProps {
   return {
+    panelState: { rightSpecs: [], specsStatus: "ready", retrySpecs: vi.fn() },
     session: {
       id: "stage-test",
       phase: "playing",

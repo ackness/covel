@@ -292,8 +292,8 @@ async function runAgentToolLoopWithinBudget(
     eventBus: deps.eventBus,
     emitter: deps.emitter,
   };
-  // Set by a PostToolUse hook returning `terminate` — ends the loop after the
-  // current response's tool calls are recorded.
+  // Set by a PostToolUse hook returning `terminate` — ends the loop. The calls
+  // after the terminating one in the same response are not executed.
   let terminatedByHook = false;
   const reviewResponse = createResponseReviewer(
     hookOpts,
@@ -329,7 +329,7 @@ async function runAgentToolLoopWithinBudget(
     }
 
     // Model resolution chain for story runtimes:
-    // API override > plugin llm.toml > manifest.model > undefined.
+    // API override > manifest.model (a role the player binds) > undefined.
     // Tool-heavy plugin runtimes stay on their declared slot so E2E story
     // overrides do not destabilize function-calling behaviour.
     const effectiveModel = deps.resolveModel

@@ -22,6 +22,11 @@ export function buildTurnDigest(
   const successful = results.filter(
     (result) => result.status === "success" && result.turnId === input.turnId,
   );
+  const concealed = new Set(
+    runtimes
+      .filter((runtime) => runtime.concealed)
+      .map((runtime) => runtime.name),
+  );
   return freezeSnapshot(
     turnDigestSchema.parse({
       turnId: input.turnId,
@@ -47,22 +52,24 @@ export function buildTurnDigest(
         })
         .join("\n\n"),
       toolCallSummaries: Object.freeze(
-        successful.flatMap((result) =>
-          (result.toolCalls ?? [])
-            .filter(
-              (call) =>
-                call.approvalStatus === "auto-allowed" &&
-                !(
-                  call.output &&
-                  typeof call.output === "object" &&
-                  "error" in call.output
-                ),
-            )
-            .map(
-              (call) =>
-                `[${call.toolName}] ${JSON.stringify(call.input).slice(0, 200)}`,
-            ),
-        ),
+        successful
+          .filter((result) => !concealed.has(result.runtimeId))
+          .flatMap((result) =>
+            (result.toolCalls ?? [])
+              .filter(
+                (call) =>
+                  call.approvalStatus === "auto-allowed" &&
+                  !(
+                    call.output &&
+                    typeof call.output === "object" &&
+                    "error" in call.output
+                  ),
+              )
+              .map(
+                (call) =>
+                  `[${call.toolName}] ${JSON.stringify(call.input).slice(0, 200)}`,
+              ),
+          ),
       ),
     }),
   );

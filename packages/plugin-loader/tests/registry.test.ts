@@ -549,6 +549,27 @@ describe("PluginRegistry", () => {
   });
 
   describe("getActiveRuntimes", () => {
+    it("reuses effective manifests until registration changes, including inside a snapshot", () => {
+      const entry = makeEntry("probe", {
+        manifests: [makeParsedRuntimeMd("probe/run", 500)],
+      });
+      registry.register(entry);
+      registry.syncSessionActivations("session-1", ["probe"]);
+      const first = registry.getActiveRuntimes("session-1")[0];
+      expect(first).toBeDefined();
+      expect(registry.getActiveRuntimes("session-1")[0]).toBe(first);
+      registry.withSnapshot(() => {
+        registry.register({
+          ...entry,
+          manifests: [makeParsedRuntimeMd("probe/run", 999)],
+        });
+        expect(registry.getActiveRuntimes("session-1")[0]).toBe(first);
+      });
+      const updated = registry.getActiveRuntimes("session-1")[0];
+      expect(updated).not.toBe(first);
+      expect(updated?.stage).toBe("post-turn");
+      expect(registry.getActiveRuntimes("session-1")[0]).toBe(updated);
+    });
     it("should return runtime manifests from active plugins sorted by stage ascending", () => {
       // Distinct stages: high(100)=pre-turn, mid(500)=narrative, low(800)=post-turn.
       const entryLow = makeEntry("low", {

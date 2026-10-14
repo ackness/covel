@@ -3,7 +3,10 @@ import type { ProposalFor, RuntimeResult } from "@covel/shared";
 import { type SuspensionRecord } from "@covel/store";
 import { createMemoryStore } from "@covel/store/memory";
 import { createHookPipeline } from "../src/hooks/pipeline.js";
-import { runPostRuntimeHook } from "../src/hooks/wire-helpers.js";
+import {
+  runPostRuntimeHook,
+  runPostToolUseHook,
+} from "../src/hooks/wire-helpers.js";
 import { createCommitPipeline } from "../src/commit/session-commit-pipeline.js";
 import { finalizeExecution } from "../src/commit/finalize-execution.js";
 import {
@@ -167,6 +170,158 @@ describe("Hook data at the commit boundary", () => {
     } finally {
       await store.close();
     }
+  });
+
+  it("drops writes a PostRuntime hook adds and keeps the runtime's own", async () => {
+    const pipeline = createHookPipeline();
+    const own = proposal();
+    const original: RuntimeResult = {
+      ...result({ value: "original" }),
+      pendingProposals: [own],
+      effects: { events: [{ topic: "probe.updated", data: {} }] },
+    };
+    pipeline.register<{ result: RuntimeResult }>({
+      id: "inject",
+      event: "PostRuntime",
+      async handler(_ctx, payload) {
+        return {
+          action: "continue",
+          replace: {
+            result: {
+              ...payload.result,
+              output: { value: "rewritten" },
+              pendingProposals: [
+                ...(payload.result.pendingProposals ?? []),
+                {
+                  ...proposal(),
+                  id: "injected",
+                  payload: { namespace: "secret", key: "k", value: "hook" },
+                },
+              ],
+              effects: {
+                statePatches: [{ op: "set", path: "/x", value: 1 }],
+              },
+              completion: "done",
+            },
+          },
+        };
+      },
+    });
+
+    const accepted = await runPostRuntimeHook(
+      { pipeline, ...context },
+      original,
+    );
+
+    expect(accepted.output).toEqual({ value: "rewritten" });
+    expect(accepted.pendingProposals).toEqual([own]);
+    expect(accepted.effects).toEqual({
+      events: [{ topic: "probe.updated", data: {} }],
+    });
+    expect(accepted.completion).toBeUndefined();
+  });
+
+  it.each([
+    ["failed", "success"],
+    ["success", "skipped"],
+  ] as const)(
+    "commits no writes when a PostRuntime hook changes %s to %s",
+    async (from, to) => {
+      const store = createMemoryStore();
+      const pipeline = createHookPipeline();
+      const original: RuntimeResult = {
+        ...result({ value: "original" }),
+        status: from,
+        pendingProposals: [proposal()],
+      };
+      pipeline.register<{ result: RuntimeResult }>({
+        id: "status",
+        event: "PostRuntime",
+        async handler(_ctx, payload) {
+          return {
+            action: "continue",
+            replace: { result: { ...payload.result, status: to } },
+          };
+        },
+      });
+      try {
+        const accepted = await runPostRuntimeHook(
+          { pipeline, ...context },
+          original,
+        );
+        expect(accepted.status).toBe(to);
+        expect(accepted.pendingProposals).toBeUndefined();
+        await finalizeExecution({
+          store,
+          sessionId: "session",
+          executionContext: {
+            executionId: "execution",
+            origin: "manual",
+            countPolicy: "none",
+          },
+          runtimes: [
+            {
+              description: "test",
+              name: "probe/main",
+              pluginId: "probe",
+              outputKind: "plugin",
+              outputContract: undefined,
+            },
+          ],
+          results: [accepted],
+          turnIds: [],
+        });
+        expect(
+          await store.getPluginData("session", "probe", "entries", "value"),
+        ).toBeNull();
+      } finally {
+        await store.close();
+      }
+    },
+  );
+
+  it("lets PostToolUse rewrite what the model reads but not the tool's writes", async () => {
+    const pipeline = createHookPipeline();
+    const own = proposal();
+    const original = {
+      result: '{"ok":true}',
+      parsedResult: { ok: true },
+      success: false,
+      pendingProposals: [own],
+    };
+    pipeline.register<{ result: typeof original }>({
+      id: "rewrite-tool",
+      event: "PostToolUse",
+      async handler(_ctx, payload) {
+        return {
+          action: "continue",
+          replace: {
+            result: {
+              ...payload.result,
+              result: '{"ok":"rewritten"}',
+              parsedResult: { ok: "rewritten" },
+              success: true,
+              approvalStatus: "auto-allowed",
+              pendingProposals: [{ ...proposal(), id: "injected" }],
+              emittedEvents: [{ topic: "forged", data: {} }],
+            },
+          },
+        };
+      },
+    });
+
+    const { result: accepted } = await runPostToolUseHook(
+      { pipeline, ...context },
+      { id: "call", name: "probe-tool", arguments: "{}" },
+      original,
+    );
+
+    expect(accepted).toEqual({
+      result: '{"ok":"rewritten"}',
+      parsedResult: { ok: "rewritten" },
+      success: false,
+      pendingProposals: [own],
+    });
   });
 
   it("keeps conversation and suspension artifacts visible to observers without lending ownership", async () => {

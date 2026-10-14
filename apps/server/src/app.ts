@@ -27,7 +27,6 @@ import {
 import {
   createGatewayAdapter,
   createPluginRuntimeGateway,
-  type PluginLlmModelTarget,
 } from "@covel/runtime";
 import { fetchWithRetry, validateBaseUrlForPlugin } from "@covel/ai-provider";
 import { setTranslationsDirectory } from "@covel/plugin-loader";
@@ -50,6 +49,7 @@ import { createAppUpdateRoutes } from "./routes/app-update.js";
 import { createPerRequestLlmMiddleware } from "./middleware/per-request-llm.js";
 import { createRequestBodyLimitMiddleware } from "./middleware/request-body-limit.js";
 import { createOriginGuardMiddleware } from "./middleware/origin-guard.js";
+import { createHostGuardMiddleware } from "./middleware/host-guard.js";
 import { pluginFrameHeaders } from "./middleware/plugin-frame-headers.js";
 import {
   errorBody,
@@ -142,6 +142,10 @@ app.use("*", async (c, next) => {
   return honoLogger(c, next);
 });
 app.use("*", secureHeaders());
+// Before any route or static file: on the token-less self tier, a request
+// must name this server by a loopback name or a COVEL_ALLOWED_HOSTS entry,
+// which refuses DNS-rebound pages (see middleware/host-guard.ts).
+app.use("*", createHostGuardMiddleware(env));
 app.use("*", createRequestBodyLimitMiddleware());
 
 // Guard any /api/debug/* or /api/internal/* route in production so that an
@@ -190,9 +194,9 @@ app.use("*", createOriginGuardMiddleware(isAllowedOrigin));
 // createAiStack(). ai-setup reads llm.toml which does `${ENV}`
 // interpolation — if keys.env loaded after, a slot spec like
 // `apiKey = "${DEEPSEEK_API_KEY}"` sees `undefined` and silently falls
-// back to the built-in default. Desktop shells already pre-merge this
-// into the child env; this keeps parity for `pnpm dev:server` / CI /
-// docker where the server is spawned directly.
+// back to the built-in default. Capture external keys first so saved-key
+// edits cannot remove or replace shell/.env credentials, even if equal.
+const externalApiKeys = providerApiKeysFromEnv(process.env);
 loadKeysEnvInto(process.env);
 
 const resources: ServerResources = { applicationWork, worldWatchers: [] };
@@ -253,13 +257,11 @@ async function initializeServer(): Promise<void> {
     // Collect all *_API_KEY env vars dynamically so any provider can be added
     // to llm.toml without requiring code changes here.
     const apiKeys = providerApiKeysFromEnv(process.env);
-    const pluginModelTargets = new Map<string, PluginLlmModelTarget>();
     // Env-derived keys ride the `envApiKeys` channel so the provider registry
     // origin-gates them — the startup paths never carry request-scoped
     // slot overlays today, but the provenance stays honest if that changes.
     const llmAdapter = createGatewayAdapter(ai.gateway, {
       envApiKeys: apiKeys,
-      modelTargets: pluginModelTargets,
     });
     // Function-runtime gateway facade — shares the same preset/provider
     // registry and env apiKeys as the agent-runtime LLM adapter. Plugins
@@ -304,7 +306,6 @@ async function initializeServer(): Promise<void> {
     const perRequestLlm = createPerRequestLlmMiddleware({
       ai,
       envApiKeys: apiKeys,
-      modelTargets: pluginModelTargets,
       defaultLlmAdapter: llmAdapter,
       defaultPluginGateway: pluginGateway,
     });
@@ -316,7 +317,6 @@ async function initializeServer(): Promise<void> {
     const worldsDirs = mergeDirs(bundledWorldsDir, userDirs.worlds);
 
     const api = (resources.api = await bootstrapApi({
-      pluginModelTargets,
       applicationWork,
       pluginsDir: bundledPluginsDir,
       pluginsDirs,
@@ -324,12 +324,7 @@ async function initializeServer(): Promise<void> {
       covelHome: env.covelHome,
       llmAdapter,
       canRunRuntimeJobWithServerServices: ({ model }) =>
-        hasServerRuntimeJobCredentials(
-          ai.gateway,
-          model,
-          apiKeys,
-          pluginModelTargets,
-        ),
+        hasServerRuntimeJobCredentials(ai.gateway, model, apiKeys),
       pluginGateway,
       pluginUtils,
       store,
@@ -371,7 +366,7 @@ async function initializeServer(): Promise<void> {
     app.route("/", api.app);
     app.route("/", createModelDbRoutes(ai));
     app.route("/", createMiscApiRoutes(ai, api.registry, store, apiKeys));
-    app.route("/", createConfigApiRoutes({ apiKeys }));
+    app.route("/", createConfigApiRoutes({ apiKeys, externalApiKeys }));
     app.route("/", createRawConfigApiRoutes({ ai }));
     app.route("/", createAppUpdateRoutes());
 

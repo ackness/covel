@@ -172,7 +172,7 @@ PostgreSQL 一列的细节：
 | `self`（默认）/ 桌面  | 通常不检查。带了 token 也不校验。例外见下面的“生产 MemoryStore 例外” |
 | `demo` / `commercial` | 强制检查                                                             |
 
-`self` 和桌面靠网络边界保护：服务器默认只监听回环地址（`COVEL_BIND_HOST=127.0.0.1`，见 [env-registry](./env-registry.md)）。
+`self` 和桌面靠网络边界保护：服务器默认只监听回环地址（`COVEL_BIND_HOST=127.0.0.1`，见 [env-registry](./env-registry.md)），并且只回答 `Host` 是 `localhost`、`127.0.0.1`、`[::1]` 或列在 `COVEL_ALLOWED_HOSTS` 里的请求，其他请求返回 `403 { code: "host_not_allowed" }`。
 
 `demo` / `commercial` 的规则：
 
@@ -315,7 +315,7 @@ CORS 只能阻止网页读取响应，所以另有一道写入来源检查：
 
 **托管层级（`demo` / `commercial`）的差别**
 
-- 公开的 `GET /api/llm-config` 仍然返回客户端启动要用的模型目录，但不含 `source` 和加载 `error`。带运维 token 才能看到这两项诊断。
+- 公开的 `GET /api/llm-config` 仍然返回客户端启动要用的模型目录，但不含 `source`、`envKeyOverrides`、加载 `error` 和槽位的 `baseUrl`。`GET /api/presets` 也不返回 `baseUrl`。带运维 token 才能看到这些字段。
 - 公开的 `GET /api/config/info` 返回 `isDesktop: false`、`requiresAuth: true`，路径字段都是 `null`。带运维 token 的请求能拿到完整的部署路径。
 - 本机 `self` 和桌面端的响应不受影响。
 
@@ -1387,7 +1387,7 @@ fork 和社区插件的授权：
 
 各端点的补充说明：
 
-- `GET /api/plugins`：数据来自 registry 快照。加载失败的插件也会返回，是一条 `status: "error"` 的 item。
+- `GET /api/plugins`：数据来自 registry 快照。加载失败的插件也会返回，是一条 `status: "error"` 的 item。它的 `error` 文字里，插件目录的服务器绝对路径写成 `<plugin>`（例如 `<plugin>/PLUGIN.md: …`）；完整原文只写进服务器日志。
 - `GET /api/worlds/:id/plugin-plan`：服务端解析世界的插件策略、组合包和默认选择。
   - 各个 `requested` 和 `defaultPluginIds` 只含已安装的插件。
   - 世界请求了、但宿主没装的插件列在 `missing: [{ pluginId, packId? }]`。
@@ -1417,13 +1417,17 @@ fork 和社区插件的授权：
 > [!NOTE]
 > 给服务器代码的作者：底层 `prepareOutboundProxy()` 提供 `commit()` / `dispose()`，没有提交的传输由调用者释放；`configureOutboundProxy()` 用于立即应用。
 
+#### GET /api/config/keys
+
+`GET /api/config/keys` 和写入接口一样：设置了 `COVEL_DESKTOP_REST_TOKEN` 时，必须携带匹配的 Bearer token，否则返回 `401`。
+
 #### PUT /api/config/keys
 
 仅桌面可用。把 provider 密钥写入 `<covelHome>/keys.env`。
 
 - body 是 `{ provider: string | null }`。空字符串或 `null` 表示删除这个密钥。
 - 整批输入先校验。值里有换行，或者是其它类型时，返回 `400`，文件和运行时都保持原状。
-- 文件原子写入成功后，运行时的密钥才更新。
+- 文件原子写入成功后，运行时的密钥才更新，立即对回合、连接测试和模型列表生效。外部环境（shell、`.env`、`.env.llm`）的密钥始终优先；删除或替换本地密钥只改变保存的副本，不清除或覆盖外部密钥。
 
 桌面应用（Electron）保存密钥时的行为：
 
@@ -2475,7 +2479,7 @@ Web 设置页根据 `operatorTokenRequired` 决定是否显示“运维访问”
 **“能不能跑”是怎么判断的:**
 
 - 判断与执行使用同一套模型解析和环境密钥来源校验。
-- 使用来源请求的服务时，两者都按那个请求的模型配置（槽位绑定、自定义预设、插件 `llm.toml` 的模型目标）和凭据解析。
+- 使用来源请求的服务时，两者都按那个请求的模型配置（槽位绑定、自定义预设）和凭据解析。
 - 使用服务端 adapter 时，只按服务端配置解析，不受碰巧唤醒 worker 的其他请求影响。
 - 它无法静态证明一个 function handler 会不会调用模型，也不会自动放行没有密钥的本地端点。
 - 嵌入式宿主或测试可以通过 `ApiBootstrapConfig.canRunRuntimeJobWithServerServices` 显式确认自己的 adapter 可用。这个确认不改变运行时授权、会话身份校验或提交校验。

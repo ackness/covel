@@ -545,7 +545,7 @@ const response = await window.covel.invoke("invokePluginAction", {
 | `invokeRuntime`、`invokePluginAction`、`invokeCommand` | 都可用   | 执行类动作，自动绑定当前插件。           |
 | `emitEvent({ topic, data })`                           | 都可用   | 发出本插件声明的事件。                   |
 | `draftMessage({ text, selectionGroup? })`              | 右侧面板 | 把一句话放进待发送区，由玩家确认后发出。 |
-| `sendMessage({ text })`                                | 舞台     | 发出一条消息。                           |
+| `sendMessage({ text })`                                | 舞台     | 把文字填进舞台输入框，由玩家确认发送。   |
 | `setUiState({ value })`                                | 都可用   | 保存面板的临时状态，见下。               |
 
 不能通过参数改写 pluginId 去调用别的插件。需要和别的插件配合时，从自己的 runtime 里用 `ctx.services` 或事件，不要在浏览器里读对方的私有数据。

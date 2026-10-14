@@ -36,10 +36,11 @@ const world = {
 /** Start a revision and give back the handler the panel listens with. */
 function startRevision(onRevised = vi.fn()) {
   let onEvent: ((event: GenerateWorldEvent) => void) | undefined;
+  const controller = new AbortController();
   api.reviseWorld.mockImplementation(
     (_id: string, _text: string, next: (event: GenerateWorldEvent) => void) => {
       onEvent = next;
-      return new AbortController();
+      return controller;
     },
   );
   render(<WorldRevisePanel world={world} onRevised={onRevised} />);
@@ -47,7 +48,12 @@ function startRevision(onRevised = vi.fn()) {
     target: { value: "  add a rival  " },
   });
   fireEvent.click(screen.getByRole("button", { name: "Apply the change" }));
-  return { onRevised, emit: (event: GenerateWorldEvent) => onEvent!(event) };
+  const emit = onEvent!;
+  return {
+    controller,
+    onRevised,
+    emit,
+  };
 }
 
 beforeEach(async () => {
@@ -61,6 +67,39 @@ afterEach(() => {
 });
 
 describe("WorldRevisePanel", () => {
+  it.each(["generating", "validating", "saving"] as const)(
+    "cancels a revision during %s and ignores its late events after retry",
+    (phase) => {
+      storage.mode = "local";
+      const { controller, onRevised, emit } = startRevision();
+      act(() => emit({ type: "progress", phase }));
+      fireEvent.click(
+        screen.getByRole("button", { name: i18n.t("common.cancel") }),
+      );
+      expect(controller.signal.aborted).toBe(true);
+      expect(
+        (screen.getByRole("textbox") as HTMLTextAreaElement).disabled,
+      ).toBe(false);
+      expect((screen.getByRole("textbox") as HTMLTextAreaElement).value).toBe(
+        "  add a rival  ",
+      );
+      expect(
+        screen.queryByRole("button", { name: i18n.t("common.cancel") }),
+      ).toBeNull();
+
+      fireEvent.click(screen.getByRole("button", { name: "Apply the change" }));
+      expect(api.reviseWorld).toHaveBeenCalledTimes(2);
+      act(() => {
+        emit({ type: "progress", phase: "validating" });
+        emit({ type: "error", message: "Old failure" });
+        emit({ type: "done", world: { ...world, lore: "Stale result" } });
+      });
+      expect(screen.queryByText("Old failure")).toBeNull();
+      expect(screen.getByRole("button", { name: "Revising…" })).toBeTruthy();
+      expect(onRevised).not.toHaveBeenCalled();
+      expect(dataService.saveGeneratedWorld).not.toHaveBeenCalled();
+    },
+  );
   it("offers revision for worlds created in the app only", () => {
     const from = (metadata: Record<string, unknown>) =>
       ({ ...world, metadata }) as WorldRecord;
