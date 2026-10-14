@@ -99,7 +99,7 @@ interface RightPanelProps {
    * tab. We pass the length as `refreshKey` so the panel re-fetches
    * whenever a new patch lands.
    */
-  statePatches: Array<{ id: string }>;
+  statePatchRevision: number;
 }
 
 /**
@@ -138,7 +138,7 @@ function OwnedRightPanel(props: RightPanelProps) {
 function SessionRightPanel({
   sessionId,
   world,
-  statePatches,
+  statePatchRevision,
   panelState,
 }: RightPanelProps & { panelState: RightPanelState }) {
   const { t, i18n } = useTranslation();
@@ -397,7 +397,7 @@ function SessionRightPanel({
               )}
               <DatabasePanel
                 sessionId={sessionId}
-                refreshKey={statePatches.length}
+                refreshKey={statePatchRevision}
               />
             </TabsContent>
           )}

@@ -261,7 +261,6 @@ export function createSseEventHandler(
     // `assertNeverEvent` (warn — never silently dropped).
     if (turnId && turnId !== deps.lastBackfilledTurnIdRef.current) {
       deps.lastBackfilledTurnIdRef.current = turnId;
-      deps.dispatch({ type: "BACKFILL_TURN_ID", turnId });
     }
 
     // Compat boundary: rollout can deliver the new event before the web app's

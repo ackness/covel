@@ -277,7 +277,10 @@ Committed form block IDs and form values are merged in one IndexedDB read-write 
 
 The display history of state changes is a read-through cache on IndexedDB. It is not a second, authoritative copy of the game state.
 
-- When appending a record, the read and the write happen in the same read-write transaction, and records are deduplicated by event ID.
+- Only the latest value of each `table.field` is cached, up to the 256 most recently updated fields. Reading, compaction, and writing share one read-write transaction; the last 256 event IDs deduplicate replays.
+- The reducer uses the same field limit and a separate revision counter to refresh the state panel. Full game state is not capped; authoritative snapshots take precedence.
+- Asset progress is coalesced by asset (or plugin and runtime when the asset ID is absent) and phase, with at most 256 turns and 256 entries per turn. Removing a turn’s last message from the live window also clears that turn’s assets and progress.
+- The development state-patch cache format has changed: clear the old browser display cache. There is no migration or dual read. Save checkpoints are unaffected.
 - A state patch keeps the `table.field` shape. The identity of a live event is `traceId` plus `seq`. When there is no valid pair, a UUID is used.
 - There is no "one array per service" cache, so the history of other tabs is not overwritten, and stale read results are not kept.
 - LocalDataService takes a snapshot for each append, holds the world and session ownership for the whole write, and checks after it is released that the session still exists. Local form and timeline writes use the same ownership and existence checks. Input is copied before waiting for release.

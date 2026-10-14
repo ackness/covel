@@ -72,6 +72,7 @@ return { result: execution.result, committed: outcome.status === "committed" };
 - The commit plan keeps the reason a TurnStart Hook vetoed the turn, and any cancellation seen during execution.
 - For such an execution, `commitExecution` returns a failure. It stops before the domain transaction, does not allow the host's `extraInTx` writes, and produces no successful completion event or snapshot. Client input that was already saved stays.
 - When an execution ends without a commit, the client removes the assistant content that this execution produced, and keeps the player's input.
+- Local input echoes claim a `turnId` by the action’s `requestId`. Rejected input cannot be claimed by a later action; echoes cannot supply a history pagination cursor until replaced by authoritative messages.
 - A successful result that declares `output.recordAs` must have the output schema recorded during execution. A missing dependency rolls back the whole commit. It does not quietly skip the export. The loaded schema still controls how each exported value is checked, how media is organized, and how revision conflicts are handled, as described in the [transactions contract](./transactions.md).
 
 ### Suspend and resume

@@ -143,6 +143,7 @@ export function runActionStream(
   },
 ): Promise<void> {
   return new Promise<void>((resolve, reject) => {
+    let claimedTurn = false;
     let terminalReceived = false;
     let executionStarted = false;
     let recoveryRequired = false;
@@ -173,6 +174,14 @@ export function runActionStream(
       request,
       (envelope) => {
         if (!isCurrent()) return;
+        if (!claimedTurn && envelope.turnId) {
+          claimedTurn = true;
+          dispatch({
+            type: "BACKFILL_TURN_ID",
+            turnId: envelope.turnId,
+            requestId: request.requestId,
+          });
+        }
         if (envelope.type === "execution.started") executionStarted = true;
         if (
           envelope.type === "execution.completed" ||
@@ -271,7 +280,13 @@ export async function runSingleSessionAction({
     const timestamp = new Date().toISOString();
     dispatch({
       type: "ADD_MESSAGE",
-      message: { id, role: "user", content, timestamp },
+      message: {
+        id,
+        role: "user",
+        content,
+        timestamp,
+        requestId: owner.requestId,
+      },
     });
     input = {
       id,

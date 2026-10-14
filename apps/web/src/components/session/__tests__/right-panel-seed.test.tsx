@@ -122,7 +122,7 @@ it.each(["set", "delete"] as const)(
       ),
     );
     render(
-      <RightPanel sessionId={session.id} world={null} statePatches={[]} />,
+      <RightPanel sessionId={session.id} world={null} statePatchRevision={0} />,
     );
     await waitFor(() =>
       expect(api.listPluginData).toHaveBeenCalledExactlyOnceWith(
