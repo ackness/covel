@@ -800,6 +800,7 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 - **向上翻页。** 视图带一个不透明的 `messagesCursor`。前端向上滚动时，把它原样作为 `?cursor=` 传给 `GET /api/sessions/:id/messages/page`。
 - **窗口外的旧回合**不渲染执行时间线。
 - **会话时钟。** 视图内嵌的 session 对象带有和会话 API 相同的必填时钟：`phase`、`completedPlayerTurns`、`setupRuntimes`。恢复和重连只以这些字段判断进度。
+- **事件游标。** `eventCursor` 是读视图之前这个会话最新的订阅事件 id（`${epoch}:${seq}`）。第一次订阅用它接上视图，见[订阅流的连接过程](./protocol.md)。
 
 视图的 `submittedInteractions` 列出玩家已经回答过的交互，形状是 `{ turnId, interactionId, values }[]`。`values` 是服务端保存的值。
 
@@ -1029,6 +1030,7 @@ setup runtime 反复失败、用完重试预算（`maxTriggerCount`）后进入 
 - `POST /api/install/collection`：响应和 batch 相同。
 
 批量安装失败的撤回结果见[插件安装](./plugin-installation.md#多包预览和批量安装)：`details.rolledBack` 和 `details.retained` 分别列出已撤回和保留的包。
+
 - `GET /api/install/plugins`：列表里包含还没有重启加载的插件。
 
 `/api/install/world` 在写入世界记录之前检查 worldData 的 diagnostics：

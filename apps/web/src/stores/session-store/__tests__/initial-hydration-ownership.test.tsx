@@ -619,6 +619,29 @@ it("keeps newer contents for a shared message ID and adopts the initial history 
   expect(stateRef.current.olderMessagesCursor).toBe("older-edge");
 });
 
+it("keeps the view's event cursor for the first subscription, and a new visit drops it", async () => {
+  api.getSessionView.mockResolvedValueOnce({
+    session,
+    messages: [],
+    characters: [],
+    gameState: {},
+    executionSteps: [],
+    submittedInteractions: [],
+    eventCursor: "epoch:5",
+  });
+  const { restore, stateRef } = setup();
+  await act(async () => {
+    await restore();
+  });
+  expect(stateRef.current.initialEventCursor).toBe("epoch:5");
+
+  // The next visit's view has no cursor (the default mock): nothing stale stays.
+  await act(async () => {
+    await restore();
+  });
+  expect(stateRef.current.initialEventCursor).toBeNull();
+});
+
 it("projects committed state changes with the same table/field shape as session views", () => {
   const { stateRef, send } = setup();
   stateRef.current = {

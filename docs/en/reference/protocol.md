@@ -607,6 +607,11 @@ The data of `system.connected` has a `cursor`. It is the latest event ID this se
 - A client that has no cursor yet records it as its `lastEventId`. So even if the client received no event on this connection, the next connection (for example, resuming the subscription after an action ends) can catch up on the events it missed.
 - A client that already has a cursor ignores it.
 
+**The first connection joins the restored view.** When a session opens, the subscription and `GET /api/sessions/:id/view` go out almost together, and the server may handle either first. The view's `eventCursor` is the session's newest event id before the view was read, and the client uses it to join the two:
+
+- If the first connection has not been sent yet, the client sends `eventCursor` as its `lastEventId`, and the server replays the events after the view was read.
+- If the first connection already went out without a cursor, the client compares the `cursor` of its `system.connected` with `eventCursor`. A newer one, or another epoch, means the subscription registered after the view was read and the events in between reached neither, so the client reads the whole session again (as on `system.reset`). Otherwise it does nothing.
+
 **Which topics you can subscribe to**
 
 - The topics accepted by `/api/events/stream` are defined by `SUBSCRIPTION_TOPICS` in `@covel/shared`: `runtime / state / game / plugin / session / store / system / trace / hooks / job`. `VALID_TOPICS` in `subscribe.ts` is generated from it.
@@ -736,7 +741,7 @@ The events below are forwarded by the server through the actions SSE stream. The
 | `runtime.skipped`                                          | `apps/server/src/routes/api/actions.ts`                                                      | A runtime was skipped because of cooldown / startTurn / maxTriggerCount                                                                                    |
 | `character.upserted`                                       | `packages/runtime/src/commit/session-commit-emitter.ts` (`character.upsert` proposal commit) | Character snapshot event                                                                                                                                   |
 | `tool.calling` / `tool.completed` / `tool.failed`          | TurnEmitter                                                                                  | LLM tool call trace                                                                                                                                        |
-| `domain-event.previewed`                                   | ToolExecutor (after `emittedEvents` succeeds)                                                | Projected server-side into UI slot previews; not consumed directly by the frontend and not a domain commit |
+| `domain-event.previewed`                                   | ToolExecutor (after `emittedEvents` succeeds)                                                | Projected server-side into UI slot previews; not consumed directly by the frontend and not a domain commit                                                 |
 | `llm.calling` / `llm.responded` / `message.completed`      | TurnEmitter                                                                                  | LLM call trace                                                                                                                                             |
 | `block.emitted` / `state.patch.applied`                    | TurnEmitter                                                                                  | Trace of a block emitted / a state patch applied                                                                                                           |
 | `hook.fired` / `hook.aborted`                              | TurnEmitter                                                                                  | Hook behavior trace                                                                                                                                        |

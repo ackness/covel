@@ -36,6 +36,7 @@ function stateFor(
     session: baseSession,
     messages: [],
     olderMessagesCursor: null,
+    initialEventCursor: null,
     worldSessions: [],
     executing: false,
     executionError: null,

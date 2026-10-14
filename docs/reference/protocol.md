@@ -607,6 +607,11 @@ Gemini 原生的思考强度、`providerOptions.google.thinkingConfig`、`cached
 - 还没有游标的客户端把它记成 `lastEventId`。这样即使这条连接上一个事件都没收到，下次连接（例如一次 action 结束之后恢复订阅）也能补上这期间错过的事件。
 - 已经有游标的客户端忽略它。
 
+**第一次连接接上恢复的视图。** 打开会话时，订阅流和 `GET /api/sessions/:id/view` 几乎同时发出，服务端先处理哪个没有保证。视图的 `eventCursor` 是读视图之前这个会话最新的事件 id，客户端用它把两者接上：
+
+- 第一次连接还没发出时，客户端把 `eventCursor` 当作 `lastEventId`，服务端补发读视图之后的事件。
+- 第一次连接已经不带游标发出了，客户端拿它的 `system.connected` 里的 `cursor` 和 `eventCursor` 比：前者更新，或 epoch 不同，说明订阅在读视图之后才登记，中间的事件两边都没有，客户端重新读整个会话（和收到 `system.reset` 一样）。不比它新就什么都不做。
+
 **订阅哪些 topic**
 
 - `/api/events/stream` 接受的 topic 由 `@covel/shared` 的 `SUBSCRIPTION_TOPICS` 定义：`runtime / state / game / plugin / session / store / system / trace / hooks / job`。`subscribe.ts` 的 `VALID_TOPICS` 从它生成。
@@ -736,7 +741,7 @@ data: {
 | `runtime.skipped`                                          | `apps/server/src/routes/api/actions.ts`                                                       | runtime 因 cooldown / startTurn / maxTriggerCount 被跳过                                                               |
 | `character.upserted`                                       | `packages/runtime/src/commit/session-commit-emitter.ts`（`character.upsert` proposal commit） | 角色快照事件                                                                                                           |
 | `tool.calling` / `tool.completed` / `tool.failed`          | TurnEmitter                                                                                   | LLM 工具调用 trace                                                                                                     |
-| `domain-event.previewed`                                   | ToolExecutor（`emittedEvents` 成功后）                                                        | 服务端投影成 UI slot 预览；前端不直接消费，不代表领域提交                                  |
+| `domain-event.previewed`                                   | ToolExecutor（`emittedEvents` 成功后）                                                        | 服务端投影成 UI slot 预览；前端不直接消费，不代表领域提交                                                              |
 | `llm.calling` / `llm.responded` / `message.completed`      | TurnEmitter                                                                                   | LLM 调用 trace                                                                                                         |
 | `block.emitted` / `state.patch.applied`                    | TurnEmitter                                                                                   | 块发出 / state patch 应用 trace                                                                                        |
 | `hook.fired` / `hook.aborted`                              | TurnEmitter                                                                                   | Hook 行为 trace                                                                                                        |

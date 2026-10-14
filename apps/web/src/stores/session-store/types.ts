@@ -180,6 +180,14 @@ export interface SessionState {
    */
   olderMessagesCursor: PageCursor | null;
 
+  /**
+   * Subscription cursor of the session view this visit restored from
+   * (`SessionSnapshot.eventCursor`). The subscription replays from it, or
+   * reads the session again when its first stream opened later than the view
+   * was read. `null` until the view has been applied.
+   */
+  initialEventCursor: string | null;
+
   /** All sessions for the current world (for switching). */
   worldSessions: api.SessionRecord[];
 
@@ -342,6 +350,7 @@ export type SessionAction =
       cursor: PageCursor | null;
     }
   | { type: "SET_OLDER_MESSAGES_CURSOR"; cursor: PageCursor | null }
+  | { type: "SET_INITIAL_EVENT_CURSOR"; cursor: string | null }
   | {
       type: "MERGE_INITIAL_STATE_PATCHES";
       patches: Array<{
