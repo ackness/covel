@@ -23,6 +23,7 @@ import { resolveUserResourceDirs } from "./lib/user-resource-dirs.js";
 import {
   createEmbeddingLockHelper,
   createMemoryEmbed,
+  createMemoryIndexControl,
 } from "./embedding-lock.js";
 import {
   createGatewayAdapter,
@@ -309,6 +310,7 @@ async function initializeServer(): Promise<void> {
       apiKeys,
     });
     const memoryEmbed = createMemoryEmbed({ ai, apiKeys });
+    const memoryIndex = createMemoryIndexControl({ store, ai, apiKeys });
     const perRequestLlm = createPerRequestLlmMiddleware({
       ai,
       envApiKeys: apiKeys,
@@ -339,6 +341,7 @@ async function initializeServer(): Promise<void> {
       mediaBackend: env.mediaBackend,
       vectorBackend: env.vectorBackend,
       ensureEmbeddingLock,
+      memoryIndex,
       memoryEmbed,
       preferredMemorySlot,
       perRequestMiddleware: [perRequestLlm],

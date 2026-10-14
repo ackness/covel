@@ -270,6 +270,7 @@ compareAndSetPluginDataBatch(
 - 摄取使用它自己的按会话的锁（跨 PostgreSQL 主机时是 advisory 锁），从不使用回合锁。
 - 生命周期里的替换和删除按这个顺序取锁：会话 → 需要时的世界 → 摄取 → 存储事务。
 - 它们等所有延迟的向量、游标更新、哈希更新和归档删除完成，再替换或删除状态。保留 `createdAt` 的 checkpoint 也一样。
+- 重建记忆索引（[`POST /api/sessions/:id/memory-index/rebuild`](./api.md#post-apisessionsidmemory-indexrebuild)）也在摄取锁里换模型：先等进行中的摄取结束，换好之后再安排新的摄取。
 - embedding 运行期间，普通回合可以照常提交。摄取器会合并出下一趟来读到这些提交。
 - 关闭时先排空被跟踪的记忆任务，再关闭存储。
 - embedding 失败不改变已提交回合的结果。
@@ -612,8 +613,11 @@ await store.withTransaction(async (tx) => {
 - 先执行删除，再执行 upsert。所有修改和新的进度值一起提交。
 - CAS 冲突返回 `false`，向量和进度都不变。
 - 会话 incarnation 过期或不存在，或者任何一条修改无效，会抛错并回滚整个批次。
+- 可选的 `expectedModelRegistryId` 写明这一批是用哪个模型嵌入的。会话已经锁到别的模型时，抛错并回滚整个批次。
 
 各后端：PostgreSQL 用 `FOR KEY SHARE` 持有父会话行；SQLite 使用 immediate 事务；Memory 使用它串行化的 store 边界。这些操作不在 `StoreTransaction` 的业务数据视图上运行。
+
+**换模型。** `VectorModelOps.resetSessionVectorIndex({ sessionId, expectedSessionCreatedAt, expectedModelRegistryId, target })` 在一个事务里删掉会话在当前模型下的全部向量和全部进度，再把会话锁到 `target`（`null` 表示解除锁定）。会话当前锁定的不是 `expectedModelRegistryId` 时返回 `false`，什么都不改；incarnation 不对时抛错。PostgreSQL 用 `FOR UPDATE` 锁住会话行，等持有 `FOR KEY SHARE` 的向量写入结束。
 
 **进度存在哪里。** 进度属于 `vector_index_progress`，不属于 `plugin_data`。
 

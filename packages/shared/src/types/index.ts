@@ -177,6 +177,7 @@ export type {
   SessionStatus,
   Session,
   SessionEmbeddingInfo,
+  SessionMemoryIndexStatus,
 } from "./session.js";
 
 export type {

@@ -83,6 +83,7 @@ import { registerSessionPluginRoutes } from "./session/plugin-routes.js";
 import type { SessionRouteEnv } from "./session/route-env.js";
 import { registerSessionViewRoute } from "./session/view-route.js";
 import { registerSessionDeleteRoute } from "./session/delete-route.js";
+import { registerSessionMemoryIndexRoutes } from "./session/memory-index-route.js";
 import {
   fireSessionEnd,
   lifecycleLeaseIsFresh,
@@ -96,6 +97,7 @@ registerSessionMediaTokenRoute(sessionRoutes);
 registerSessionPluginRoutes(sessionRoutes);
 registerSessionViewRoute(sessionRoutes);
 registerSessionDeleteRoute(sessionRoutes);
+registerSessionMemoryIndexRoutes(sessionRoutes);
 
 /**
  * Whether any plugin in the set declares a setup-stage runtime. Discovered by

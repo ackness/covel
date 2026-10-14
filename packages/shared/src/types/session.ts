@@ -15,6 +15,34 @@ export interface SessionEmbeddingInfo {
   readonly lockedAt: string | null;
 }
 
+/**
+ * `GET /api/sessions/:id/memory-index`: the embedding model a session's memory
+ * index was built with, and whether the configuration still selects it.
+ */
+export interface SessionMemoryIndexStatus {
+  /** False when the server keeps no vector index (no vector support, or `VECTOR_BACKEND=none`). */
+  readonly available: boolean;
+  /** The model the index was built with; null before the session is first indexed. */
+  readonly locked: {
+    readonly provider: string;
+    readonly modelName: string;
+    readonly dim: number;
+    readonly lockedAt: string | null;
+  } | null;
+  /** The embedding model the configuration selects now; null when none is configured. */
+  readonly configured: {
+    readonly provider: string;
+    readonly modelName: string;
+  } | null;
+  /**
+   * True when `configured` is not the model in `locked`. Memory search then
+   * matches keywords only, and nothing new is indexed, until the index is
+   * rebuilt (`POST /api/sessions/:id/memory-index/rebuild`) or the old model
+   * is configured again.
+   */
+  readonly stale: boolean;
+}
+
 export interface Session {
   readonly id: string;
   /** Opaque API identity for one persisted incarnation; not an authorization token. */
@@ -34,7 +62,8 @@ export interface Session {
   readonly updatedAt: string;
   /**
    * FK to vector_models.id; null/undefined = RAG disabled for this session.
-   * Set once at session creation, immutable for the session's lifetime.
+   * Set when the session is first indexed; a memory index rebuild moves it
+   * to the model configured at that time.
    */
   readonly embeddingModelId?: number | null;
   /**
