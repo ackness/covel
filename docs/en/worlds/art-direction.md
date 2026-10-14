@@ -135,7 +135,7 @@ cover: media/gallery/world-cover.webp
 accentColor: "oklch(72% 0.15 350)"
 ```
 
-`accentColor` accepts six-digit hex or `oklch(L C H)` with Oklab lightness from 55% to 90%; hex is converted from sRGB first. World package validation rejects darker or brighter accents, including existing development worlds until their manifests are updated. If stored metadata contains an unusable colour, the interface derives its default accent from the world ID.
+See the [world data reference](../reference/world-data.md#background-music) for the formats and lightness range of `accentColor`. Loading discards invalid colours, so the world still loads and the interface derives its default accent from the world ID. `pnpm validate:world` still reports an error for the author to fix. The interface also uses the default accent when stored metadata contains an unusable colour.
 
 - `cover` is the path of one picture, and it must be in a folder under `media/`. The interface shows this picture directly. If a character picture in the world package is updated, the cover does not change automatically.
 - If `cover` is not set, the interface uses the default background.

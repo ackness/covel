@@ -453,18 +453,25 @@ function worldAccentLightness(value: string): number {
   return 0.2104542553 * l + 0.793617785 * m - 0.0040720468 * ss;
 }
 
+const WORLD_ACCENT_FORMAT_ERROR =
+  'accentColor must be a hex colour like "#c9a24b" (#rrggbb) or an oklch colour like "oklch(72% 0.12 75)", with Oklab lightness between 55% and 90%.';
+
 export const worldAccentColorSchema = z
-  .string()
+  .string({ error: WORLD_ACCENT_FORMAT_ERROR })
   .regex(WORLD_ACCENT_PATTERN, {
-    message:
-      'accentColor must be a hex colour like "#c9a24b" or an oklch colour like "oklch(72% 0.12 75)"',
+    message: WORLD_ACCENT_FORMAT_ERROR,
   })
   .refine(
     (value) => {
+      // The format error already explains malformed colours.
+      if (!WORLD_ACCENT_PATTERN.test(value)) return true;
       const lightness = worldAccentLightness(value);
       return lightness >= 0.55 && lightness <= 0.9;
     },
-    { message: "accentColor must have Oklab lightness between 55% and 90%." },
+    {
+      message:
+        "accentColor must have Oklab lightness between 55% and 90%; use a hex colour (#rrggbb) or oklch(L C H).",
+    },
   );
 
 export const worldManifestSchema = z
@@ -586,7 +593,7 @@ export const worldManifestSchema = z
       .optional(),
     accentColor: worldAccentColorSchema
       .describe(
-        "Accent colour of the world's cards and headings: a hex colour (`#rrggbb`) or an `oklch(L C H)` colour, with Oklab lightness from 55% to 90%. Without it the app derives one from the world ID.",
+        "Accent colour of the world's cards and headings: a hex colour (`#rrggbb`) or an `oklch(L C H)` colour, with Oklab lightness from 55% to 90%. World loading discards invalid values and logs a warning; authoring validation reports them as errors. Without a valid value the app derives one from the world ID.",
       )
       .meta({ examples: ["#c9a24b", "oklch(72% 0.12 75)"] })
       .optional(),

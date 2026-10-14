@@ -477,7 +477,7 @@
     "accentColor": {
       "type": "string",
       "pattern": "^(?:#[0-9a-fA-F]{6}|oklch\\(\\s*\\d+(?:\\.\\d+)?%?\\s+\\d+(?:\\.\\d+)?\\s+\\d+(?:\\.\\d+)?\\s*\\))$",
-      "description": "Accent colour of the world's cards and headings: a hex colour (`#rrggbb`) or an `oklch(L C H)` colour, with Oklab lightness from 55% to 90%. Without it the app derives one from the world ID.",
+      "description": "Accent colour of the world's cards and headings: a hex colour (`#rrggbb`) or an `oklch(L C H)` colour, with Oklab lightness from 55% to 90%. World loading discards invalid values and logs a warning; authoring validation reports them as errors. Without a valid value the app derives one from the world ID.",
       "examples": ["#c9a24b", "oklch(72% 0.12 75)"]
     },
     "themeMusic": {
