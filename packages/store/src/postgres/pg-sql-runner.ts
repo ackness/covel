@@ -161,6 +161,14 @@ export function createPgSqlRunner(getDb: () => PgDb): SqlRunner {
       await (where ? stmt.where(where) : stmt);
     },
 
+    async deleteReturningCount(table: Table, where: SQL): Promise<number> {
+      const rows = await getDb()
+        .delete(table as PgTable)
+        .where(where)
+        .returning({ deleted: sql<number>`1` });
+      return rows.length;
+    },
+
     // The bigserial default allocates atomically across connections. MAX+1 in
     // an INSERT subquery gives simultaneous writers the same snapshot value.
     nextWriteOrderSeq: () => undefined,

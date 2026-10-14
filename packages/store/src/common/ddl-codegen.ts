@@ -25,12 +25,17 @@
  * yields an identical string every run (determinism is pinned by a test).
  */
 
-import { getTableName, is } from "drizzle-orm";
+import { getTableName, is, type SQL } from "drizzle-orm";
 import {
+  SQLiteSyncDialect,
   SQLiteTable,
   getTableConfig as getSqliteConfig,
 } from "drizzle-orm/sqlite-core";
-import { PgTable, getTableConfig as getPgConfig } from "drizzle-orm/pg-core";
+import {
+  PgDialect,
+  PgTable,
+  getTableConfig as getPgConfig,
+} from "drizzle-orm/pg-core";
 
 export type Dialect = "sqlite" | "pg";
 
@@ -49,6 +54,8 @@ interface IndexSpec {
   readonly name: string;
   readonly unique: boolean;
   readonly columns: readonly string[];
+  /** The predicate of a partial index, rendered for the dialect. */
+  readonly where?: string;
 }
 
 interface TableSpec {
@@ -122,7 +129,8 @@ function renderTable(spec: TableSpec, dialect: Dialect): string {
   const indexes = spec.indexes.map((idx) => {
     const kw = idx.unique ? "CREATE UNIQUE INDEX" : "CREATE INDEX";
     const cols = idx.columns.map(quoteIdent).join(", ");
-    return `${kw} IF NOT EXISTS ${quoteIdent(idx.name)} ON ${table}(${cols});`;
+    const where = idx.where === undefined ? "" : ` WHERE ${idx.where}`;
+    return `${kw} IF NOT EXISTS ${quoteIdent(idx.name)} ON ${table}(${cols})${where};`;
   });
   return [create, ...indexes].join("\n");
 }
@@ -151,6 +159,7 @@ function toTableSpec(table: unknown, dialect: Dialect): TableSpec | null {
         columns: idx.config.columns.map(
           (col) => (col as { name?: string }).name ?? String(col),
         ),
+        ...renderIndexWhere(idx.config.where, dialect),
       })),
       primaryKeys: cfg.primaryKeys.map((key) =>
         key.columns.map((column) => column.name),
@@ -177,11 +186,32 @@ function toTableSpec(table: unknown, dialect: Dialect): TableSpec | null {
       columns: idx.config.columns.map(
         (col) => (col as { name?: string }).name ?? String(col),
       ),
+      ...renderIndexWhere(idx.config.where, dialect),
     })),
     primaryKeys: cfg.primaryKeys.map((key) =>
       key.columns.map((column) => column.name),
     ),
   };
+}
+
+/**
+ * The `WHERE` of a partial index (`index(...).on(...).where(...)`) as SQL text.
+ * DDL takes no bound parameters, so a predicate must be written without
+ * values: `isNull(table.column)`, not `eq(table.column, "x")`.
+ */
+function renderIndexWhere(
+  where: SQL | undefined,
+  dialect: Dialect,
+): { where?: string } {
+  if (where === undefined) return {};
+  const query = (
+    dialect === "sqlite" ? new SQLiteSyncDialect() : new PgDialect()
+  ).sqlToQuery(where);
+  if (query.params.length > 0)
+    throw new Error(
+      `A partial index predicate must not take parameters: ${query.sql}`,
+    );
+  return { where: query.sql };
 }
 
 /**
