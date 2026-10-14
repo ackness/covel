@@ -4,6 +4,8 @@ import type { SettingEntry, WidgetKind } from "@covel/settings";
 import i18n from "@/i18n";
 import { SettingWidget } from "../widgets/index.js";
 
+vi.mock("../use-settings-save.js", () => ({ useSettingsWritable: () => true }));
+
 vi.mock("../use-settings.js", () => ({
   useSetting: (_key: string) => ["", vi.fn()],
   useSettingOverride: (_key: string) => [false, vi.fn()],

@@ -114,8 +114,8 @@ describe("subscription visibility", () => {
     const setVisibility = visibility();
     const fetch = vi.fn(async () => new Response(new ReadableStream()));
     vi.stubGlobal("fetch", fetch);
-    const releaseFirst = pauseSessionSubscriptions();
-    const releaseSecond = pauseSessionSubscriptions();
+    const releaseFirst = pauseSessionSubscriptions("session");
+    const releaseSecond = pauseSessionSubscriptions("session");
     try {
       subscription = createSessionSubscription("session");
       expect(subscription.state).toBe("paused");
@@ -154,7 +154,7 @@ describe("subscription visibility", () => {
     subscription = createSessionSubscription("session");
     subscription.on("system", event);
     await vi.waitFor(() => expect(event).toHaveBeenCalledOnce());
-    const release = pauseSessionSubscriptions();
+    const release = pauseSessionSubscriptions("session");
     release();
     await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(2));
     expect(fetch.mock.calls[1]![0]).toContain("lastEventId=epoch%3A7");
@@ -234,4 +234,34 @@ describe("subscription visibility", () => {
     expect(subscription.state).toBe("connected");
     expect(fetch).toHaveBeenCalledTimes(2);
   });
+});
+
+it("only pauses the session whose action is running, including newly opened subscriptions", async () => {
+  visibility();
+  const fetch = vi.fn(
+    async (_url: string) => new Response(new ReadableStream()),
+  );
+  vi.stubGlobal("fetch", fetch);
+  const releaseA = pauseSessionSubscriptions("A");
+  const releaseA2 = pauseSessionSubscriptions("A");
+  const a = createSessionSubscription("A");
+  const b = createSessionSubscription("B");
+  try {
+    expect(a.state).toBe("paused");
+    await vi.waitFor(() => expect(b.state).toBe("connected"));
+    expect(fetch).toHaveBeenCalledOnce();
+    expect(fetch.mock.calls[0]?.[0]).toContain("sessionId=B");
+    releaseA();
+    releaseA();
+    expect(a.state).toBe("paused");
+    releaseA2();
+    await vi.waitFor(() => expect(a.state).toBe("connected"));
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(b.state).toBe("connected");
+  } finally {
+    releaseA();
+    releaseA2();
+    a.close();
+    b.close();
+  }
 });

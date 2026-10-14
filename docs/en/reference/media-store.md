@@ -152,7 +152,7 @@ See [slots.md](./slots.md).
 
 **Registering a wire**
 
-- A plugin calls `covel.registerWires({ image?, speech?, transcription?, music?, text? })` in its `entry` module. The IDs get a prefix automatically and become `<pluginId>/<wireId>`. Whether they are loaded is controlled by the trust level. See [plugin-extensions.md § Models and new protocols](./plugin-extensions.md#models-and-new-protocols).
+- A plugin calls `covel.registerWires({ image?, speech?, transcription?, music?, text? })` in its `entry` module. The IDs get a prefix automatically and become `<pluginId>/<wireId>`. In a session a wire can be chosen only when its plugin is enabled there; a request that belongs to no session can choose only a builtin plugin's wire, and on the `self` tier a community plugin's as well. See [plugin-extensions.md § Models and new protocols](./plugin-extensions.md#models-and-new-protocols).
 - Code bundled with the framework can also call `registerImageWire` / `registerSpeechWire` / `registerTranscriptionWire` directly. The ID is any string, not an enum value.
 
 ## Metadata Conventions & Querying
@@ -199,6 +199,8 @@ Returns the files owned by `sessionId` whose `meta` contains every key-value pai
 - A partial hit (fewer than `n` files exist, for example because one image failed to save last time) **does not** count as a hit. In that case, the whole batch is generated again, instead of quietly returning fewer images.
 
 ## Ownership
+
+SQLite stores `media_assets.path` as a relative path (`ab/cd/<sha256>.bin`) beneath `mediaRoot`, which defaults to `media/` beside the database. Reads, streams, repairs and deletion resolve it against the current root. Copy or back up the database and this directory together; moving them does not require rewriting rows. A custom `mediaRoot` must be copied and configured separately. Development databases containing absolute media paths must be recreated; there is no migration or fallback.
 
 **Writes to SQLite / local files**
 

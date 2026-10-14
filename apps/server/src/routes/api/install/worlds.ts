@@ -9,7 +9,7 @@
 import { worldOperationLockId } from "../../../world-lifecycle.js";
 import path from "node:path";
 import { rm } from "node:fs/promises";
-import { loadSingleWorld } from "../../../world-seed-loader.js";
+import { loadWorldForPublication } from "../../../world-data/publication.js";
 import { Hono, type Context } from "hono";
 import { resolveUserResourceDirs } from "../../../lib/user-resource-dirs.js";
 import { parse as parseYaml } from "yaml";
@@ -21,6 +21,7 @@ import {
   SAFE_WORLD_ID_DESC,
 } from "../../../lib/validators.js";
 import {
+  assertNoReservedInstallFiles,
   collectUpload,
   errorResponse,
   httpError,
@@ -46,6 +47,7 @@ function findWorldYaml(
 export function validateWorldBundle(
   entries: readonly ExtractedEntry[],
 ): WorldManifestSummary {
+  assertNoReservedInstallFiles(entries);
   const yamlEntry = findWorldYaml(entries);
   if (!yamlEntry) {
     throw httpError(400, "world.yaml not found at zip root");
@@ -127,21 +129,7 @@ export async function activateWorldPackage(
       throw httpError(409, "World already exists");
     await materializeEntries(finalDir, entries);
     try {
-      const record = await loadSingleWorld(finalDir, {
-        includeWorldDataOverrides: false,
-        onWorldDataDiagnostics(diagnostics) {
-          const errors = diagnostics.filter((item) => item.level === "error");
-          if (errors.length > 0)
-            throw httpError(
-              400,
-              `Invalid worldData:\n${errors
-                .map(
-                  (item) =>
-                    `${item.sourceId ? `${item.sourceId}: ` : ""}${item.message}`,
-                )
-                .join("\n")}`,
-            );
-        },
+      const record = await loadWorldForPublication(finalDir, {
         source: "generated-file",
         storage: {
           scope: "server",
@@ -149,8 +137,12 @@ export async function activateWorldPackage(
           path: root,
           durable: true,
         },
+      }).catch((error: unknown) => {
+        throw httpError(
+          400,
+          error instanceof Error ? error.message : String(error),
+        );
       });
-      if (!record) throw httpError(400, "Installed world could not be loaded");
       if (
         !(await c
           .get("store")

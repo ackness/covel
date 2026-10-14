@@ -23,13 +23,14 @@ import {
 } from "./stage-selectors.js";
 
 export interface StageChoicesProps {
-  readonly extensions?: (choices: readonly StageChoiceItem[]) => ReactNode;
+  readonly extensions?: (
+    choices: readonly StageChoiceItem[],
+    onDraftMessage: (text: string) => void,
+  ) => ReactNode;
   readonly visible: boolean;
   readonly executing: boolean;
   readonly interactionChoices: readonly StageInteractionChoice[];
   readonly suggestions?: StageChoicesModel;
-  /** Current-story fallback for legacy guide rows without `recap`. */
-  readonly fallbackRecap?: string;
   readonly locale: string;
   readonly onSubmitInteraction?: (
     blockId: string,
@@ -54,7 +55,6 @@ export function StageChoices({
   executing,
   interactionChoices,
   suggestions,
-  fallbackRecap,
   locale,
   onSubmitInteraction,
   onSendMessage,
@@ -107,7 +107,7 @@ export function StageChoices({
   };
 
   const itemOrder = new Map(items.map((item, index) => [item.id, index]));
-  const recap = context.recap ?? fallbackRecap;
+  const recap = context.recap;
   const decision =
     context.decision ??
     (context.scene
@@ -239,7 +239,7 @@ export function StageChoices({
               </div>
             </div>
           )}
-          {extensions?.(items)}
+          {extensions?.(items, setDraft)}
         </div>
 
         <div className="flex shrink-0 items-end gap-2 border-t border-border/50 px-3 py-2.5">

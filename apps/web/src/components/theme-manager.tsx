@@ -1,3 +1,6 @@
+import { importCssImages } from "@/lib/import-image.js";
+import { useSettingsWritable } from "@/settings/use-settings-save.js";
+import { requestConfirm } from "@/lib/confirm-channel.js";
 import { useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { resolveI18nText } from "@covel/shared";
@@ -33,6 +36,7 @@ function labelToString(
 export function ThemeManagerWidget() {
   const { t, i18n } = useTranslation();
   const store = useSettingsStore();
+  const writable = useSettingsWritable();
   const [appearance] = useSetting<string>("ui.appearance");
   const [customThemes] = useSetting<unknown>(CUSTOM_THEMES_KEY);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -64,7 +68,14 @@ export function ThemeManagerWidget() {
     try {
       const text = await file.text();
       const payload = parseImportedThemeFile(text, file.name);
-      await saveCustomTheme(store, payload.theme, payload.fileName);
+      await saveCustomTheme(
+        store,
+        {
+          ...payload.theme,
+          cssText: await importCssImages(payload.theme.cssText),
+        },
+        payload.fileName,
+      );
       await store.set("ui.appearance", payload.theme.id);
       flash(
         t("settings.themeImported", {
@@ -97,7 +108,21 @@ export function ThemeManagerWidget() {
   }
 
   async function handleDelete(themeId: string): Promise<void> {
+    if (!writable || busy) return;
     setBusy(true);
+    if (
+      !(await requestConfirm({
+        title: t("settings.deleteThemeTitle"),
+        message: t("settings.deleteThemeConfirm"),
+        subject: themeId,
+        confirmLabel: t("common.delete"),
+        cancelLabel: t("common.cancel"),
+        destructive: true,
+      }))
+    ) {
+      setBusy(false);
+      return;
+    }
     setError(null);
     try {
       await deleteCustomTheme(store, themeId);
@@ -153,7 +178,7 @@ export function ThemeManagerWidget() {
             size="sm"
             variant="outline"
             className="ml-auto shrink-0"
-            disabled={busy}
+            disabled={busy || !writable}
             onClick={() => fileRef.current?.click()}
           >
             <Upload className="w-3.5 h-3.5 mr-1.5" />
@@ -167,6 +192,7 @@ export function ThemeManagerWidget() {
         <input
           ref={fileRef}
           type="file"
+          disabled={!writable}
           accept=".css,.json,.theme,.theme.json"
           className="hidden"
           onChange={(event) => void handleImport(event)}
@@ -235,7 +261,7 @@ html[data-theme="my-theme"].dark {
                   <Button
                     size="sm"
                     variant="outline"
-                    disabled={busy}
+                    disabled={busy || !writable}
                     onClick={() => void handleApply(theme.id)}
                   >
                     {t("settings.themeApply")}
@@ -255,7 +281,7 @@ html[data-theme="my-theme"].dark {
                     <Button
                       size="icon-sm"
                       variant="ghost"
-                      disabled={busy}
+                      disabled={busy || !writable}
                       onClick={() => void handleDelete(theme.id)}
                       aria-label={t("common.delete", "Delete")}
                     >

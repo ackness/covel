@@ -236,7 +236,6 @@ async function modelAdapter() {
   const ai = createAiStack();
   return createGatewayAdapter(ai.gateway, {
     envApiKeys: providerApiKeysFromEnv(process.env),
-    modelTargets: new Map(),
   });
 }
 

@@ -265,6 +265,8 @@ function:
 
 代码里调用 `ctx.gateway` 时传同一个名字（`presetId: "memory"`）。Covel 用这个声明判断模型的密钥是否就绪，再决定要不要开始这个后台任务。这一行不会替你改代码里的参数，两边要自己写成一样。
 
+插件只能写用途名。用哪个模型、请求发到哪里，由玩家的模型设置决定。在插件目录里放一个 `llm.toml` 不起作用，`pnpm validate:plugin` 会提醒你删掉它。
+
 ### 时限
 
 | 类型  | 字段                             | 意思                                            |
@@ -308,6 +310,7 @@ permissions:
 - `origin` 只能是 `https` 地址，不带路径、参数和账号密码。
 - `methods` 可选，取 `GET`、`POST`、`PUT`、`PATCH`、`DELETE`、`HEAD`。
 - 请求用 `ctx.utils.fetchWithRetry` 发出。社区插件访问没有声明的地址会被拒绝。
+- 入口代码用 `covel.http.fetchWithRetry` 发请求时，在根 `PLUGIN.md` 声明 `permissions.http`。包级权限与 wire 端点的规则见[插件参考](../reference/plugins.md#runtime-分组字段)。
 - 不要把玩家输入的任意网址直接交给后端去抓取。先用 `ctx.utils.validateBaseUrl` 检查。
 
 > [!WARNING]

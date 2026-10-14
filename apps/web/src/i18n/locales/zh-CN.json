@@ -17,6 +17,7 @@
     "primary": "主导航"
   },
   "session": {
+    "historyLoadFailed": "无法读取历史存档，请重试。",
     "reasoningContent": "思考内容",
     "reasoningContentHint": "模型返回的思考文本或摘要，按调用顺序展示。",
     "config": "工作室配置",
@@ -261,6 +262,10 @@
     "suspensionAgoMinutes": "{{count}} 分钟前",
     "suspensionAgoHours": "{{count}} 小时前",
     "suspensionAgoDays": "{{count}} 天前",
+    "suspensionOutdated": "这个请求已经过时，已撤下",
+    "suspensionOutdatedMovedOn": "提出它之后，故事已经往前走了。",
+    "suspensionOutdatedPlugin": "提出它的插件之后更新过。",
+    "suspensionOutdatedSuperseded": "同一个插件已经提出了更新的请求。",
     "memoryUpdateFailed": "故事记忆更新失败",
     "memoryUpdateFailedHint": "本轮剧情已保存。请检查用途分配中的记忆模型和服务商配置；下一回合会再次尝试更新。",
     "memoryUpdateErrorDetails": "错误详情",
@@ -599,7 +604,11 @@
     "listNeedsEntry": "请至少添加一项。",
     "numberTooSmall": "请输入不小于 {{minimum}} 的数值。",
     "wholeNumberNeeded": "请输入整数。",
-    "fixMarkedFields": "请修正标记的字段后再保存。"
+    "fixMarkedFields": "请修正标记的字段后再保存。",
+    "discardChangesTitle": "放弃未保存的修改？",
+    "discardChangesMessage": "世界的修改尚未保存。要放弃这些修改并退出编辑器吗？",
+    "discardChanges": "放弃修改",
+    "keepEditing": "继续编辑"
   },
   "settings": {
     "loadFailedReadOnly": "设置读取失败。为保护已有数据，暂时禁止修改。请排除存储错误后重新加载应用。",
@@ -859,7 +868,8 @@
       "uninstallFailed": "卸载失败",
       "restartHint": "资源包文件已变更，请重启后端以应用安装或卸载。执行插件仍需会话授权。",
       "restartNow": "立即重启",
-      "reloadFailed": "重新加载失败"
+      "reloadFailed": "重新加载失败",
+      "uninstallConfirm": "卸载此插件？卸载后需重启才生效，再次使用需要重新安装。"
     },
     "desktopDataLocations": "数据位置",
     "desktopProxy": "网络代理",
@@ -1205,7 +1215,14 @@
       "risk": "世界包包含第三方提示词、设置与媒体。开始游戏前请检查内容及所需插件。安装世界不会自动安装或授权插件，也不会执行仓库脚本。",
       "updateRisk": "更新将在后端重启时应用，本地编辑过的世界不会被覆盖。已有存档不会自动同步，请另行使用世界数据同步功能。",
       "installed": "已安装的世界包"
-    }
+    },
+    "deleteProviderTitle": "删除服务商？",
+    "deleteProviderConfirm": "同时删除此服务商的模型配置、已保存的 API 密钥和指向这些模型的角色绑定。",
+    "deleteModelTitle": "删除模型配置？",
+    "deleteModelConfirm": "同时移除指向此模型配置的角色绑定。服务商的 API 密钥会保留。",
+    "deleteThemeTitle": "删除主题？",
+    "deleteThemeConfirm": "此自定义主题将被删除。再次使用需要重新导入。",
+    "exportReadOnlyHint": "设置尚未成功加载，导出仅包含当前可读取的值，可能不完整；原始备份可在下方查看和下载。"
   },
   "appearance": {
     "styleTitle": "风格方案",
@@ -1753,8 +1770,20 @@
       "enemy": "敌人"
     }
   },
+  "catalog": {
+    "mediaGallery": {
+      "empty": "暂无媒体。",
+      "open": "打开",
+      "download": "下载"
+    },
+    "jobList": {
+      "empty": "暂无任务。",
+      "copy": "复制",
+      "rerun": "重新运行"
+    }
+  },
   "graph": {
-    "empty": "关系图当前为空——等待 NPC 出现。",
+    "empty": "暂无图数据。",
     "clearSelection": "清除选中",
     "loading": "加载关系图……",
     "stats": "{{nodes}} 个节点 · {{links}} 条关系",

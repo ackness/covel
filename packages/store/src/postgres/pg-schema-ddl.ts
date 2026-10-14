@@ -61,7 +61,8 @@ const CREATE_CORE_TABLES_SQL = buildCreateTablesSql(coreTables, "pg");
  * BEFORE INSERT trigger: PG evaluates SERIAL defaults before BEFORE INSERT
  * triggers fire, so NEW.id is already populated. We mutate NEW.table_name in
  * place — no separate UPDATE statement needed. Drizzle does not model triggers,
- * so this is hand-written.
+ * so this is hand-written. The trigger is created only when it is missing, so a
+ * routine boot takes no exclusive lock on `vector_models`.
  */
 const VECTOR_MODELS_TRIGGER_SQL = `
   CREATE OR REPLACE FUNCTION vector_models_fill_table_name() RETURNS TRIGGER AS $fn$
@@ -73,11 +74,18 @@ const VECTOR_MODELS_TRIGGER_SQL = `
   END;
   $fn$ LANGUAGE plpgsql;
 
-  DROP TRIGGER IF EXISTS vector_models_fill_table_name_trigger ON vector_models;
-  CREATE TRIGGER vector_models_fill_table_name_trigger
-    BEFORE INSERT ON vector_models
-    FOR EACH ROW
-    EXECUTE FUNCTION vector_models_fill_table_name();
+  DO $$ BEGIN
+    IF NOT EXISTS (
+      SELECT 1 FROM pg_trigger
+      WHERE tgname = 'vector_models_fill_table_name_trigger'
+        AND tgrelid = 'vector_models'::regclass
+    ) THEN
+      CREATE TRIGGER vector_models_fill_table_name_trigger
+        BEFORE INSERT ON vector_models
+        FOR EACH ROW
+        EXECUTE FUNCTION vector_models_fill_table_name();
+    END IF;
+  END $$;
 `;
 
 export const CREATE_TABLES_SQL = [

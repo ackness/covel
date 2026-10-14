@@ -151,11 +151,13 @@ const flightHolds = new WeakMap<Context, () => () => void>();
  * Response before its work ends, so the work takes its own hold with
  * {@link holdSingleFlight}; the mark goes when the last hold is released.
  */
-export function singleFlight(): MiddlewareHandler {
+export function singleFlight(
+  keyOf: (c: Context) => string = (c) => c.req.path,
+): MiddlewareHandler {
   const inflight = new Set<string>();
 
   return async (c, next) => {
-    const key = c.req.path;
+    const key = keyOf(c);
     if (inflight.has(key)) {
       return c.json(
         errorBody("Operation already in progress", {

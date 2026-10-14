@@ -157,7 +157,8 @@ subscribeRoutes.get(
         )
       : null; // null = all topics
 
-    const lastEventId = c.req.query("lastEventId");
+    const lastEventId =
+      c.req.query("lastEventId") ?? c.req.header("Last-Event-ID");
 
     // Per-session concurrent-connection cap. Checked (and reserved) before the
     // stream starts so we can still return a 429 JSON body; released in the

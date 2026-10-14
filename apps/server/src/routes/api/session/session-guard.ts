@@ -25,7 +25,9 @@
  * Tiered enforcement:
  *   - `self` (default) / desktop / dev: NOT enforced. Single-user local play
  *     must keep working token-free; the network boundary for these tiers is
- *     the loopback bind in `index.ts` (COVEL_BIND_HOST=127.0.0.1 default).
+ *     the loopback bind in `index.ts` (COVEL_BIND_HOST=127.0.0.1 default)
+ *     plus the Host check in `middleware/host-guard.ts`, which refuses
+ *     DNS-rebound pages.
  *   - `demo` / `commercial`: hard-required on every session-scoped route that
  *     goes through this guard. Sessions without a stored hash fail closed.
  *     The operator token (COVEL_DESKTOP_REST_TOKEN) acts as a master key.

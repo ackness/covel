@@ -79,6 +79,7 @@ return { result: execution.result, committed: outcome.status === "committed" };
 - When a function runtime suspends, the continuation saves the commands not yet committed, the input, the exported bindings, and the activation.
 - A resume uses these frozen snapshots. Commands not yet committed can still be read by the resumed run, and they are committed together, atomically, if the resume succeeds.
 - A failed resume discards these domain writes.
+- The continuation also records the number of player turns in the history and the plugin version at the moment of the suspension. If either has changed at resume time, the suspended item is voided and does not run; see [Out-of-date suspended items](./api.md#out-of-date-suspended-items).
 
 > [!WARNING]
 > After the continuation format changes, existing development-time suspension records must be rebuilt.
@@ -144,7 +145,7 @@ In the tables, "S→C" means sent from the server to the client.
 
 - It is sent right after the `emit-event` tool passes schema validation and produces `emittedEvents`. This is before the turn's event chain and the final transaction commit.
 - It can only drive display effects that can be undone. It does not mean business state was saved, and it does not satisfy the runtime's bindings and gates.
-- When the web app receives `execution.completed`, an error, or a failed proposal commit, it clears the previews for the same turn. Once the matching persistent state arrives, `plugin-data.changed` is the source of truth.
+- The web client does not store or read this event directly. The server projects it into `ui.slot.preview`; the client displays and clears previews through UI slot events.
 
 This lets stage animations react while the narrative is still being generated, and the turn's transaction stays atomic.
 
@@ -317,6 +318,7 @@ When an execution ends, the framework handles the jobs that this execution repor
 - A job that has not finished gets a final state that matches the runtime's result.
 - If the plugin already reported `succeeded`, but this execution's domain writes were not committed (the whole execution rolled back, this runtime failed, or its writes were discarded on their own at commit time), the framework appends a `failed` entry and does not keep the success state.
 - A `failed` or `cancelled` that the plugin reported itself is not rewritten.
+- The jobs of a suspended runtime stay in `waiting-input`. They belong to the execution that suspended: they become `succeeded` once a resume commits, `cancelled` when the suspended item is abandoned, expires or is voided, and keep waiting while a failed resume can be retried.
 
 **How background job states map**
 
@@ -597,7 +599,7 @@ A failed commit holds back the "execution completed" step, and the client shows 
 
 1. When the connection opens, the server first sends `system.connected`.
 2. After that, it sends `system.heartbeat` every 30 seconds.
-3. If the request carries `lastEventId`, the server first replays the events in the EventBus cache with `seq > lastEventId`, then switches to live events.
+3. Send the reconnect cursor in the `lastEventId` query parameter or the standard `Last-Event-ID` request header. The query parameter takes precedence when both are present. If the cursor epoch is still valid, the server replays cached EventBus events with a sequence greater than the cursor seq before switching to live events. If replay cannot bridge the cursor, it sends `system.reset`.
 
 The data of `system.connected` has a `cursor`. It is the latest event ID this session has emitted at this moment (`${epoch}:${seq}`. If no event has been sent yet, seq is 0).
 
@@ -729,7 +731,7 @@ The events below are forwarded by the server through the actions SSE stream. The
 | `runtime.skipped`                                          | `apps/server/src/routes/api/actions.ts`                                                      | A runtime was skipped because of cooldown / startTurn / maxTriggerCount          |
 | `character.upserted`                                       | `packages/runtime/src/commit/session-commit-emitter.ts` (`character.upsert` proposal commit) | Character snapshot event                                                         |
 | `tool.calling` / `tool.completed` / `tool.failed`          | TurnEmitter                                                                                  | LLM tool call trace                                                              |
-| `domain-event.previewed`                                   | ToolExecutor (after `emittedEvents` succeeds)                                                | Instant preview for display that can be undone. It does not mean a domain commit |
+| `domain-event.previewed`                                   | ToolExecutor (after `emittedEvents` succeeds)                                                | Projected server-side into UI slot previews; not consumed directly by the frontend and not a domain commit |
 | `llm.calling` / `llm.responded` / `message.completed`      | TurnEmitter                                                                                  | LLM call trace                                                                   |
 | `block.emitted` / `state.patch.applied`                    | TurnEmitter                                                                                  | Trace of a block emitted / a state patch applied                                 |
 | `hook.fired` / `hook.aborted`                              | TurnEmitter                                                                                  | Hook behavior trace                                                              |
@@ -811,6 +813,7 @@ It requires the session to already have a non-empty `activePlugins` (chosen when
 
 - Each of the six actions in the table above can add `payload.recoverFromTurnId`. It must match the original action description the server returns.
 - The client reads read-only state from `GET /api/sessions/:id/execution`. Refreshing the page does not resubmit the action. The new requestId is sent only after the player explicitly clicks retry.
+- Recovery polls every 3 seconds after success. Failures wait 3, 6, 12, and 24 seconds, then at most once every 30 seconds; success resets the delay. Status requests do not add HTTP retries. Polling pauses while hidden and checks immediately on becoming visible, without overlapping reads for the same observation.
 - The server checks the source turn inside the session lock. An opening recovery keeps the source of the continuation, and does not increase the player's turn count.
 - Before it sends the answer, the execution-state query rechecks the authenticated session generation. If the session was deleted during the query, or rebuilt with the same ID, it returns `409 session_incarnation_changed`, instead of treating the new session's retry input as its own. This read-only check does not wait for a long turn that is running, and it does not resubmit the action automatically.
 
@@ -1265,6 +1268,7 @@ Privacy boundary:
 
 **Event handlers in the browser**
 
+- An action stream pauses only its own session’s background subscription, with pause counts per session. Switching sessions does not abort the old action stream or its checkpoint commit; the new session can connect immediately. Subscriptions pause while the page is hidden and resume when it becomes visible.
 - The browser subscription isolates each event handler.
 - When a handler throws synchronously, the report includes the session ID, the event ID and type, and the error type. It does not record the event payload or the exception message, and other subscribers keep running.
 - Connection recovery and `system.reset` still rebuild from authoritative state. A single handler warning does not change the replay cursor, and it does not trigger a retry.
@@ -1287,7 +1291,7 @@ Warnings from media resolution in the browser state the session, the media ID, a
 | `ui.slot.cleared { turnId }`                              | Removes the previews for this turn                                            |
 
 - These events are forwarded to both the action stream and background subscriptions.
-- When a turn completes, fails, or is cancelled, the client also clears its previews.
+- When a turn completes, fails, or is cancelled, the client also clears its previews. Leaving a session or unmounting its host clears that session’s entire slot cache; revisiting reads authoritative state again. Refreshing the same session preserves its active previews.
 - A preview that arrives late for a turn that has already ended is ignored. Explicitly starting a new execution allows the same turn ID to be retried.
 - A GET that was sent before a newer SSE event must not overwrite those updates when its answer arrives.
 
@@ -1307,7 +1311,7 @@ About `lastPlayerInput`:
 `turn-digest@1` contains `turnId/playerMessage/locale/narrativeText/toolCallSummaries/lastPlayerInput/runtimeResults`:
 
 - `runtimeResults` lists only the `runtimeId` and status (`success/failed/skipped/suspended`) that the source turn had already seen at the moment of recording. It does not include consumers that have not run yet, and it does not include retry seeds from other turns.
-- Only successful story text and accepted tool calls go into the text summary.
+- Only successful story text and accepted tool calls go into the text summary. Tool calls from a runtime declaring `io.concealed: true` are excluded from `toolCallSummaries`; `runtimeResults` still includes its ID and status.
 
 How snapshots are saved:
 

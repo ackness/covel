@@ -303,6 +303,8 @@ export async function loadPluginDefinition(
   locale?: string,
 ): Promise<PluginDefinition> {
   if (discovery.layoutError) throw new Error(discovery.layoutError);
+  for (const warning of discovery.layoutWarnings ?? [])
+    console.warn(`[plugin-loader] ${warning}`);
   const rootPath = path.join(discovery.rootPath, "PLUGIN.md");
   const parsedPackage = await parsePluginMdForLocale(
     discovery.rootPath,
@@ -363,7 +365,7 @@ export async function loadPluginDefinition(
     messages: await readMessageCatalogs(discovery.rootPath),
     languages: await pluginLanguages(discovery.rootPath),
   };
-  validatePluginDeclarations([packageManifest]);
+  validatePluginDeclarations(packageManifest);
   return definition;
 }
 
@@ -378,6 +380,7 @@ export async function loadPluginManifest(
 export async function loadPluginEntryDefinition(
   discovery: PluginDiscoveryResult,
   declarations: readonly ParsedPluginMd[],
+  runtimes: readonly ParsedRuntimeMd[],
 ): Promise<PluginEntryDefinition> {
   const staticPromptVariants: Record<
     string,
@@ -410,6 +413,10 @@ export async function loadPluginEntryDefinition(
           manifest.entry ? [manifest.entry] : [],
         ),
       ),
+    ],
+    httpPermissions: [
+      ...(declarations[0]?.plugin.permissions?.http ?? []),
+      ...runtimes.flatMap(({ manifest }) => manifest.permissions?.http ?? []),
     ],
   };
 }

@@ -30,7 +30,7 @@ pnpm dev                       # 同时启动前端与后端
 
 ### PostgreSQL 18 开发环境
 
-先按上面的步骤创建根 `.env`，核对 `POSTGRES_USER`、`POSTGRES_PASSWORD`、`POSTGRES_DB`、`POSTGRES_PORT` 与 `DATABASE_URL`。仅启动数据库，不需要 Docker 应用服务的 operator token：
+SQLite 是默认后端，从源码运行不需要数据库服务。要用 PostgreSQL，先按上面的步骤创建根 `.env`，取消 `.env.example` 里“PostgreSQL (optional)”一段的注释，核对 `POSTGRES_USER`、`POSTGRES_PASSWORD`、`POSTGRES_DB`、`POSTGRES_PORT` 与 `DATABASE_URL`。仅启动数据库，不需要 Docker 应用服务的 operator token：
 
 ```bash
 pnpm db:up
@@ -39,11 +39,24 @@ pnpm dev:pg                    # PostgreSQL-backed API server
 
 首次初始化时先确认数据库已就绪，再运行 `dev:pg`；可用 `docker compose -f docker/docker-compose.yml --env-file .env ps postgres` 查看 `healthy` 状态。需要前端时，在另一个终端运行 `pnpm dev:web`。`dev:pg` 先读取根 `.env` 做连接预检，默认检查 `DATABASE_URL` 的 host/port；未设置 URL 时使用 `127.0.0.1:POSTGRES_PORT`。更换端口时同步更新 URL；完整覆盖规则见[环境变量说明](./reference/env-registry.md#加载路径与环境差异)。
 
-Compose 使用 PostgreSQL 18 + pgvector 0.8.6，数据库存入 `pgdata18` 卷。旧 PG17 `pgdata` 卷不会被挂载、自动迁移或删除。
+Compose 使用 PostgreSQL 18 + pgvector 0.8.7，数据库存入 `pgdata18` 卷。旧 PG17 `pgdata` 卷不会被挂载、自动迁移或删除。
 
-`pnpm docker:build` 会构建并启动**数据库和应用**，应用采用 `commercial` 配置，还需在 `.env` 设置 `COVEL_DESKTOP_REST_TOKEN`、`COVEL_MEDIA_TOKEN_SECRET` 和 `CORS_ORIGIN`，并准备根 `llm.toml`。`appdata` 卷持久化安装及生成的用户世界与插件；模型配置仍从宿主机只读挂载。详见[Docker 配置](./reference/env-registry.md#docker-compose)。
+### Docker 自托管
 
-`pnpm docker:down` 停止容器并保留数据。**`pnpm docker:down-all` 会删除当前 Compose 项目的 `pgdata18` 和 `appdata`，包括数据库及用户世界、插件**；仅在备份后明确需要清空整套环境时使用。`db:generate` / `db:studio` 是 PostgreSQL 开发维护工具，不是数据库自动升级命令，见[数据库维护](./reference/env-registry.md#数据库维护命令)。
+自托管有两套 Compose，都是绑定回环地址的个人实例（`DEPLOYMENT_TIER=self`）。默认用 SQLite，只有一个应用容器；要用 PostgreSQL 时换成带 `pg` 的命令。两套各用自己的 Compose 项目和卷，互不影响。
+
+| 后端           | 启动（构建并运行）     | 启动已有容器        | 停止，保留数据        | 停止并**删除卷**          | 日志                  |
+| -------------- | ---------------------- | ------------------- | --------------------- | ------------------------- | --------------------- |
+| SQLite（默认） | `pnpm docker:build`    | `pnpm docker:up`    | `pnpm docker:down`    | `pnpm docker:down-all`    | `pnpm docker:logs`    |
+| PostgreSQL     | `pnpm docker:pg:build` | `pnpm docker:pg:up` | `pnpm docker:pg:down` | `pnpm docker:pg:down-all` | `pnpm docker:pg:logs` |
+
+两套都需要根 `.env`、根 `llm.toml`（模型配置从宿主机只读挂载），并在 `.env` 里设置 `COVEL_MEDIA_TOKEN_SECRET`（`openssl rand -hex 32` 生成；缺少它，应用在生产模式下无法签发媒体地址；SQLite 那套缺少它时 Compose 直接拒绝启动，PostgreSQL 那套不检查，要自己设置）。PostgreSQL 那套还要取消 `.env.example` 里 PostgreSQL 一段的注释并设置 `POSTGRES_PASSWORD`。
+
+SQLite 那套的 `appdata` 卷挂载到 `/home/node/.covel`：数据库文件 `data/covel.db`、媒体文件和安装、生成的用户世界与插件都在里面。PostgreSQL 那套的数据库在 `pgdata18` 卷，`appdata` 卷只保存用户世界与插件。详见 [Docker 配置](./reference/env-registry.md#docker-compose)。
+
+`docker:down` 和 `docker:pg:down` 停止容器并保留数据。**`docker:down-all` 会删除 SQLite 那套的 `appdata` 卷，包括数据库和用户世界、插件；`docker:pg:down-all` 会删除 PostgreSQL 那套的 `pgdata18` 和 `appdata`**；仅在备份后明确需要清空整套环境时使用。
+
+`db:generate` / `db:studio` 是 PostgreSQL 开发维护工具，不是数据库自动升级命令，见[数据库维护](./reference/env-registry.md#数据库维护命令)。
 
 ### 官网演示媒体
 

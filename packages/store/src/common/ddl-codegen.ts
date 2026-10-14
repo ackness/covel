@@ -206,3 +206,20 @@ export function buildCreateTablesSql(
 export function tableNameOf(table: unknown): string {
   return getTableName(table as never);
 }
+
+/** The column names of every Drizzle table in `tables`, keyed by table name. */
+export function tableColumnsOf(
+  tables: readonly unknown[],
+  dialect: Dialect,
+): ReadonlyMap<string, readonly string[]> {
+  const columns = new Map<string, readonly string[]>();
+  for (const table of tables) {
+    const spec = toTableSpec(table, dialect);
+    if (spec)
+      columns.set(
+        spec.name,
+        spec.columns.map((c) => c.name),
+      );
+  }
+  return columns;
+}

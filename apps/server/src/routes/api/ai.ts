@@ -1,3 +1,4 @@
+import { worldAuthoringFlight } from "../../authoring/flight.js";
 import { worldGenerationDataContracts } from "../../world-data/portable-contract-data.js";
 /**
  * API AI routes — LLM-driven generation endpoints.
@@ -11,7 +12,7 @@ import { worldGenerationDataContracts } from "../../world-data/portable-contract
  */
 
 import { worldOperationLockId } from "../../world-lifecycle.js";
-import { readdir, rm, stat } from "node:fs/promises";
+import { readdir, stat } from "node:fs/promises";
 import { isDeepStrictEqual } from "node:util";
 import path from "node:path";
 import { Hono } from "hono";
@@ -39,8 +40,8 @@ import {
 import type { LLMAdapter } from "@covel/runtime";
 import type { LLMUsageSummary } from "@covel/shared";
 import type { DataStore, WorldRecord } from "@covel/store";
-import { rateLimiter, singleFlight } from "../../middleware/rate-limit.js";
-import { loadSingleWorld } from "../../world-seed-loader.js";
+import { rateLimiter } from "../../middleware/rate-limit.js";
+import { loadWorldForPublication } from "../../world-data/publication.js";
 import { errorBody, readJsonBody } from "../../api-error.js";
 import { checkHostedOperator } from "./session/session-guard.js";
 import { checkWorldWriteAccess } from "./worlds/world-write-guard.js";
@@ -335,7 +336,7 @@ aiRoutes.post(
     await next();
   },
   rateLimiter({ max: 10 }),
-  singleFlight(),
+  worldAuthoringFlight,
   async (c) => {
     const llm = c.get("llmAdapter");
     const store = c.get("store");
@@ -363,8 +364,10 @@ aiRoutes.post(
       const denied = checkWorldWriteAccess(c);
       if (denied) return denied;
     }
+    const contractWarnings: string[] = [];
     const dataContracts = await worldGenerationDataContracts(
       c.get("pluginRegistry"),
+      (message) => contractWarnings.push(message),
     );
     const brief = parseCreationBrief(
       body.brief,
@@ -387,8 +390,6 @@ aiRoutes.post(
         await stream.writeSSE({ data: JSON.stringify(event) });
       };
 
-      let generatedWorldDir: string | undefined;
-      let activated = false;
       const progress = partProgress(send);
       const usage = authoringUsage();
       try {
@@ -453,53 +454,67 @@ aiRoutes.post(
 
         await send({ type: "progress", phase: "validating" });
 
-        let loadedRecord: WorldRecord | null;
         const metadata = {
           source: saveTarget === "server-file" ? "generated-file" : "generated",
           storage: storageMetadata(saveTarget, env.storeBackend, worldsDir),
         };
-        if (saveTarget === "server-file") {
+        const makeRecord = (loaded: WorldRecord) => {
+          const generated = withGeneratedPackageMetadata(
+            loaded,
+            result.packageContent,
+          );
+          return saveTarget === "server-file"
+            ? generated
+            : recordForStoreOnly(generated, saveTarget);
+        };
+        const save = async (): Promise<WorldRecord> => {
           createOpts.signal.throwIfAborted();
-          await writeWorldPackage(worldsDir, result, { dataContracts });
-          generatedWorldDir = path.join(worldsDir, result.id);
-          loadedRecord = await loadSingleWorld(generatedWorldDir, metadata);
-          if (!loadedRecord)
-            throw new Error(
-              `Generated world "${result.id}" failed post-write validation`,
+          if (saveTarget !== "return-only" && (await store.getWorld(result.id)))
+            throw new WorldAuthoringConflictError(
+              `World already exists: ${result.id}`,
             );
-        } else {
-          loadedRecord = worldRecordFromManifest(result.manifest, result.lore, {
-            ...metadata,
-            ...(result.packageContent.characters.length
-              ? { embeddedCharacters: result.packageContent.characters }
-              : {}),
-          });
-        }
-        const generatedRecord = withGeneratedPackageMetadata(
-          loadedRecord,
-          result.packageContent,
-        );
-
+          const commit = async (record: WorldRecord) => {
+            createOpts.signal.throwIfAborted();
+            if (
+              saveTarget !== "return-only" &&
+              !(await store.createWorld(record))
+            )
+              throw new WorldAuthoringConflictError(
+                `World already exists: ${record.id}`,
+              );
+          };
+          if (saveTarget === "server-file") {
+            let record!: WorldRecord;
+            await writeWorldPackage(worldsDir, result, {
+              dataContracts,
+              beforePublish: async (staging) => {
+                record = makeRecord(
+                  await loadWorldForPublication(staging, metadata),
+                );
+                createOpts.signal.throwIfAborted();
+              },
+              afterPublish: () => commit(record),
+            });
+            return record;
+          }
+          const record = makeRecord(
+            worldRecordFromManifest(result.manifest, result.lore, {
+              ...metadata,
+              ...(result.packageContent.characters.length
+                ? { embeddedCharacters: result.packageContent.characters }
+                : {}),
+            }),
+          );
+          await commit(record);
+          return record;
+        };
         await send({ type: "progress", phase: "saving" });
         const record =
-          saveTarget === "server-file"
-            ? generatedRecord
-            : recordForStoreOnly(generatedRecord, saveTarget);
-        if (saveTarget !== "return-only") {
-          shutdownSignal?.throwIfAborted();
-          if (
-            !(await c
-              .get("sessionLock")
-              .withLock(worldOperationLockId(record.id), () =>
-                store.createWorld(record),
-              ))
-          ) {
-            throw new WorldAuthoringConflictError(
-              `World already exists: ${record.id}`,
-            );
-          }
-          activated = true;
-        }
+          saveTarget === "return-only"
+            ? await save()
+            : await c
+                .get("sessionLock")
+                .withLock(worldOperationLockId(result.id), save);
 
         console.log(
           `[ai/generate-world] world generated: id=${record.id} saveTarget=${saveTarget}`,
@@ -512,7 +527,9 @@ aiRoutes.post(
         await send({
           type: "done",
           world: record,
-          ...(result.warnings.length > 0 ? { warnings: result.warnings } : {}),
+          ...([...contractWarnings, ...result.warnings].length > 0
+            ? { warnings: [...contractWarnings, ...result.warnings] }
+            : {}),
           ...usage.field(),
         });
       } catch (err) {
@@ -523,10 +540,6 @@ aiRoutes.post(
           type: "error",
           message: authoringErrorMessage(err),
         });
-      } finally {
-        if (saveTarget === "server-file" && generatedWorldDir && !activated) {
-          await rm(generatedWorldDir, { recursive: true, force: true });
-        }
       }
     });
   },
@@ -582,7 +595,7 @@ aiRoutes.post(
     await next();
   },
   rateLimiter({ max: 10 }),
-  singleFlight(),
+  worldAuthoringFlight,
   async (c) => {
     const llm = c.get("llmAdapter");
     const store = c.get("store");
@@ -684,8 +697,10 @@ aiRoutes.post(
     }
     const packageIdentity =
       saveTarget === "server-file" ? await stat(worldDir) : undefined;
+    const contractWarnings: string[] = [];
     const dataContracts = await worldGenerationDataContracts(
       c.get("pluginRegistry"),
+      (message) => contractWarnings.push(message),
     );
     const shutdownSignal = c.get("requestWork")?.signal;
 
@@ -790,23 +805,22 @@ aiRoutes.post(
             };
             if (saveTarget === "return-only") return record;
             await store.upsertWorld(record);
-            // The record as the store gives it, in the shape of `GET /worlds/:id`.
-            return (await store.getWorld(record.id)) ?? record;
+            return record;
           };
           if (saveTarget === "server-file") {
             signal.throwIfAborted();
             let saved: WorldRecord | undefined;
-            // The old package stays until the read-back and the record update
-            // have succeeded; a failure of either puts it back.
+            let loaded!: WorldRecord;
+            // Validate the copy before the swap; restore the old package if
+            // updating its record fails.
             await writeWorldPackage(worldsDir, result, {
               replace: true,
               dataContracts,
+              beforePublish: async (staging) => {
+                loaded = await loadWorldForPublication(staging, metadata);
+                signal.throwIfAborted();
+              },
               afterPublish: async () => {
-                const loaded = await loadSingleWorld(worldDir, metadata);
-                if (!loaded)
-                  throw new Error(
-                    `Revised world "${result.id}" failed post-write validation`,
-                  );
                 saved = await commit(loaded);
               },
             });
@@ -836,7 +850,9 @@ aiRoutes.post(
         await send({
           type: "done",
           world: record,
-          ...(result.warnings.length > 0 ? { warnings: result.warnings } : {}),
+          ...([...contractWarnings, ...result.warnings].length > 0
+            ? { warnings: [...contractWarnings, ...result.warnings] }
+            : {}),
           ...usage.field(),
         });
       } catch (err) {

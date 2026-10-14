@@ -549,7 +549,7 @@ Search the session's memory. It looks in two sources:
 | scope    | enum   |          | `recall` / `archival` / `all`, default `all`                      |
 | limit    | number |          | Maximum number of results, 1–20, default 5                        |
 
-Each result's content is at most 500 characters. The search rules are in the next section.
+Each result's content is at most 500 characters. An archival result's `key` is a readable source identifier. When a lorebook entry has no first keyword, it may use a readable entry ID, but never a UUID. UUID keywords and plugin data keys are also omitted: the result keeps its content without a `key`. The search rules are in the next section.
 
 ### Plugin memory and vector search
 
@@ -605,6 +605,8 @@ All plugins read the same public snapshot, `ctx.world.dimensions`, which is froz
 - Does not read a provider's private namespace.
 - Does not add in the caller's own writes that are not yet committed.
 - Does not fall back to the world's initial values.
+
+The model's `_text` queries and pages dimension values after applying `modelFacingJson`. A direct query of a bookkeeping field cannot expose it; code still receives the full values in `results`.
 
 | Argument  | Type                                       | Required | Description                       |
 | --------- | ------------------------------------------ | -------- | --------------------------------- |
@@ -749,7 +751,7 @@ When one of the model's replies has several tool calls, the `suspend` call first
 **Things to note:**
 
 - `resumeSchema` must be serializable with `JSON.stringify`, because the state is written to storage.
-- A runtime can have only one unresolved suspension at a time. The resume endpoint looks it up by `runtimeId + sessionId`.
+- Only a runtime's newest suspension can resume. When the same runtime suspended again later, the player played another turn, or the plugin changed version, the old suspended item is voided on resume; see [Out-of-date suspended items](./api.md#out-of-date-suspended-items). The resume endpoint looks it up by the suspended item's ID.
 - `createDefaultToolRegistry` in `@covel/tools` registers it as a builtin tool. An agent still has to list `suspend` in `agent.tools.builtin` before it can call it.
 - Resuming continues the execution that was suspended:
   - `ctx.locale`, `ctx.logicalTurn`, and `ctx.turnNumber` keep the values from the time of suspension. They do not change with the turn count of the session afterwards.
@@ -775,7 +777,7 @@ When a runtime has many tools, putting every tool's schema into every model call
 - This call is handled directly by the agent loop. It **does not go through ToolExecutor**, and it is not in the tool registry. Its name is still a reserved framework name.
 - The search is strictly limited to the deferred tools that this runtime declared itself. Schemas are obtained through `getToolInfo(name, context)`, and they follow the same builtin / local access boundaries. A tool the runtime has no permission for cannot be found, so it does not leak.
 - Scoring uses BM25 with no dependencies (k1=1.2 / b=0.75). Chinese, Japanese, and Korean text is split into pairs of adjacent characters. The searched text is: the tool name, the description, and the field names and field descriptions in the parameter schema.
-- The description of `search-tools` tells the model how many tools are in the deferred pool and which plugins they come from. The model uses this to know that there are tools it has not loaded yet that it can search for.
+- The description of `search-tools` tells the model how many tools are in the deferred pool, and names the plugin that declared it. The pool can hold framework built-in tools too, so not all of them come from that plugin. The model uses this to know that there are tools it has not loaded yet that it can search for.
 - When to use it: when a runtime's allow-list has more than about 10 tools, preloading every schema on every call starts to take up the prompt budget.
 
 The contract is declared in `packages/tools/src/builtin/tool-search.ts`, and the execution logic is in `packages/runtime/src/agent-loop/tool-search.ts`. The approach follows openai/codex's `tool_search` (`ToolExposure::Deferred` + BM25).
@@ -1025,6 +1027,7 @@ Characters in session (3 total, sorted by frequency then recency):
 Read the session's character attribute schema. The argument is `{}`, and it returns `{ schema: CharacterSchemaRecord | null, _text }`.
 
 - The schema belongs to the session's World Model. It contains `version` / `types` / `attributes`. When it does not exist, it returns `null`.
+- The `_text` the model reads passes through `modelFacingJson`, removing the session ID and write timestamps. Code still receives the complete `schema` record.
 - The read includes the validated pending domain proposals. It does not infer the schema from the plugin's private `schema` data.
 - This tool does not write data, and it does not accept IDs of other sessions or plugins.
 
@@ -1437,21 +1440,23 @@ Plugin authors use `covel.toolkit.tool()` in `entry`. The common context, the re
 
 ## Approval policy
 
-Every tool call goes through the approval check in `ApprovalPipeline`. The current rules are built by `createDefaultToolApprovalPipeline()` from `@covel/approval`, which the server and `test-runtime` share:
+The host resolves a tool before `ApprovalPipeline` checks the static rules. The default rules are built by `createDefaultToolApprovalPipeline()` from `@covel/approval`, which the server and `test-runtime` share:
 
-| Source category | Rule      | Notes                                                |
-| --------------- | --------- | ---------------------------------------------------- |
-| `builtin:*`     | **allow** | Built-in framework tools, always allowed             |
-| `local:*`       | **allow** | Discovered local plugin tools, allowed automatically |
-| `third-party:*` | **deny**  | Tools from an unknown source, refused                |
+| Source category | Rule      | Notes                                                                                       |
+| --------------- | --------- | ------------------------------------------------------------------------------------------- |
+| `builtin:*`     | **allow** | Registered framework tools                                                                  |
+| `local:*`       | **allow** | Registered plugin tools callable in the current session, including approved community tools |
+
+A host can supply custom rules. The first matching rule wins, and exact tool-name rules apply regardless of source. To deny a tool, place its `deny` rule before the source wildcard. When no rule matches, the default is allow.
 
 ### How the source category is decided
 
-It is classified automatically at startup:
+After the executor resolves a tool, `ToolRegistry.source()` classifies it by registration:
 
-- Tools in `builtinUITools` → `builtin`
+- Framework tools registered with `registerBuiltin()` (including `builtinUITools`) → `builtin`
 - Tools that a plugin's `entry` registered successfully with `registerTool()` → `local`
-- Anything else → `third-party` (currently no tool falls into this category)
+
+These are the only two sources. Missing tools and another plugin's private tools return `NOT_FOUND` before the source check. Source categories do not represent plugin trust levels. The authorization flow below decides whether community code may run.
 
 ### The approval boundary for third-party plugin server code and plugin tools
 

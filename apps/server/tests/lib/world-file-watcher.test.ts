@@ -186,3 +186,68 @@ it("reports a missing worlds directory in one line", async () => {
     await rm(root, { recursive: true, force: true });
   }
 });
+
+it("keeps the complete world and emits no notification after a dimension source fails", async () => {
+  const root = await mkdtemp(
+    path.join(os.tmpdir(), "covel-world-watch-dimensions-"),
+  );
+  const dir = path.join(root, "fixture");
+  const store = createMemoryStore();
+  const lock = createInProcessSessionLock();
+  const bus = createEventBus(store);
+  const emit = vi.spyOn(bus, "emit");
+  const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+  const watcher = createWorldFileWatcher(root, store, bus, lock);
+  try {
+    await mkdir(path.join(dir, "data"), { recursive: true });
+    await writeFile(
+      path.join(dir, "world.yaml"),
+      'schemaVersion: "1.0"\nid: fixture\nname: Fixture\nsummary: Fixture\ndefaultLocale: en-US\n',
+    );
+    const file = path.join(dir, "data/dimensions.yaml");
+    await writeFile(
+      file,
+      "alarm:\n  name: Alarm\n  schema: { type: number }\n  initialValue: 0\n",
+    );
+    await seedWorlds(store, root, lock);
+    const before = await store.getWorld("fixture");
+    expect(before?.metadata?.dimensions).toHaveProperty("alarm");
+    const now = new Date().toISOString();
+    await store.createSession({
+      id: "session",
+      worldId: "fixture",
+      metadata: { sessionIncarnationNonce: crypto.randomUUID() },
+      status: "active",
+      locale: "en-US",
+      phase: "playing",
+      completedPlayerTurns: 0,
+      setupRuntimes: {},
+      activePlugins: [],
+      createdAt: now,
+      updatedAt: now,
+    });
+    watcher.start();
+    await writeFile(file, "alarm: invalid");
+    await vi.waitFor(
+      async () => {
+        try {
+          expect(warn).toHaveBeenCalledWith(
+            expect.stringContaining("the version loaded before stays in use"),
+          );
+        } catch (error) {
+          await writeFile(file, "alarm: invalid");
+          throw error;
+        }
+      },
+      { timeout: 15000, interval: 500 },
+    );
+    await watcher.stop();
+    expect(await store.getWorld("fixture")).toEqual(before);
+    expect(emit).not.toHaveBeenCalled();
+  } finally {
+    await watcher.stop();
+    warn.mockRestore();
+    await store.close();
+    await rm(root, { recursive: true, force: true });
+  }
+});

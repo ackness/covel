@@ -52,12 +52,13 @@ export function createMiscApiRoutes(
   //
   // Each entry carries enough info for the settings UI to identify exactly
   // what a Ping would hit:
-  //   - `baseUrl`: preset-level override, else the provider default
+  //   - `baseUrl`: operator-only on hosted deployments
   //   - `protocol`: preset-level protocol, else the provider default
   //   - `slotBindings`: every slot id whose `presetId` resolves here — lets
   //     the UI show e.g. `default, fast` next to the preset so operators can
   //     tell which aliases share a single underlying model.
   app.get("/api/presets", (c) => {
+    const canReadDiagnostics = !checkHostedOperator(c);
     const slotMap = ai.slotRegistry.listSlots();
     const slotBindingsByPreset = new Map<string, string[]>();
     for (const [slotId, slot] of Object.entries(slotMap)) {
@@ -90,7 +91,9 @@ export function createMiscApiRoutes(
         enabled: p.enabled,
         isDefault: p.isDefault ?? false,
         scope: "global",
-        baseUrl: p.baseUrl ?? providerBaseUrl,
+        ...(canReadDiagnostics
+          ? { baseUrl: p.baseUrl ?? providerBaseUrl }
+          : {}),
         protocol: p.protocol ?? providerProtocol,
         slotBindings: slotBindingsByPreset.get(p.id) ?? [],
         ...(p.capability ? { capability: p.capability } : {}),
@@ -168,7 +171,7 @@ export function createMiscApiRoutes(
             : fallbackPresetId
           : undefined;
       slotsInfo[slotId] = {
-        baseUrl: resolved.config.baseUrl,
+        ...(canReadDiagnostics ? { baseUrl: resolved.config.baseUrl } : {}),
         provider: preset.provider,
         model: preset.model,
         protocol: resolved.protocol,
@@ -269,7 +272,7 @@ export function createMiscApiRoutes(
         }),
         parseProviderKeys(c.req.header("X-Provider-Keys")) ?? {},
         provider,
-        providerApiKeysFromEnv(),
+        apiKeys,
       );
       const models = await listProtocolModels(
         resolution.protocol,
@@ -332,7 +335,8 @@ export function createMiscApiRoutes(
       return c.json(errorBody("Invalid ping request body"), 400);
     }
     const body = parsedBody.data;
-    const apiKeys = parseProviderKeys(c.req.header("X-Provider-Keys")) ?? {};
+    const requestApiKeys =
+      parseProviderKeys(c.req.header("X-Provider-Keys")) ?? {};
     const slotHeader = c.req.header("X-Slot-Config");
     const parsedSlots = parseSlotOverrides(slotHeader);
     if (slotHeader !== undefined && parsedSlots === null) {
@@ -449,13 +453,13 @@ export function createMiscApiRoutes(
     }, 30_000);
 
     const gatewayOptions: import("@covel/ai-provider").GatewayOptions = {
-      apiKeys,
+      apiKeys: requestApiKeys,
       signal: abort.signal,
       allowFallback: false,
       // One request: a retried probe would report a later answer and the
       // time of the waits as the model's own.
       transportRetry: false,
-      envApiKeys: providerApiKeysFromEnv(),
+      envApiKeys: apiKeys,
       slotOverrides: requestedSlot
         ? {
             ...slotConfig,

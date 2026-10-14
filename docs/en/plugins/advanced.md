@@ -265,6 +265,8 @@ function:
 
 In the code, pass the same name when calling `ctx.gateway` (`presetId: "memory"`). Covel uses this declaration to check whether the model's key is ready, and then decides whether to start the background job at all. This line does not change the parameters in your code for you. You must make both match yourself.
 
+A plugin can only name a role. Which model is used, and where the request goes, is decided by the player's model settings. An `llm.toml` in the plugin's directory does nothing, and `pnpm validate:plugin` reminds you to delete it.
+
 ### Time limits
 
 | Type     | Field                            | Meaning                                                                                                            |
@@ -308,6 +310,7 @@ permissions:
 - `origin` must be an `https` address. It cannot include a path, query parameters, or a user name and password.
 - `methods` is optional. The values are `GET`, `POST`, `PUT`, `PATCH`, `DELETE`, and `HEAD`.
 - Requests are sent with `ctx.utils.fetchWithRetry`. A community plugin that calls an address it did not declare is refused.
+- For entry code that sends requests with `covel.http.fetchWithRetry`, declare `permissions.http` in the root `PLUGIN.md`. See the [plugin reference](../reference/plugins.md#runtime-field-groups) for package permissions and wire endpoints.
 - Do not pass a URL that the player typed straight to the backend to fetch. Check it first with `ctx.utils.validateBaseUrl`.
 
 > [!WARNING]
