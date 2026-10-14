@@ -17,6 +17,7 @@
     "primary": "主导航"
   },
   "session": {
+    "cached": "已缓存",
     "historyLoadFailed": "无法读取历史存档，请重试。",
     "reasoningContent": "思考内容",
     "reasoningContentHint": "模型返回的思考文本或摘要，按调用顺序展示。",
@@ -198,14 +199,7 @@
     "pluginsSelected": "个插件已选择",
     "searchPlugins": "搜索插件、标签、能力",
     "pluginGroups": {
-      "core": "核心",
-      "setup": "开局准备",
-      "traditional": "传统故事",
-      "dialogue": "对话模式",
-      "characters": "角色",
-      "memory": "记忆与检索",
-      "guidance": "引导",
-      "utility": "工具"
+      "untagged": "无标签"
     },
     "recommendationReasons": {
       "requiredByWorld": "世界必需",
@@ -1540,8 +1534,9 @@
     "triggerInterval": "间隔",
     "triggerManual": "手动",
     "triggerEvent": "事件触发",
-    "locked": "核心插件 — 不可关闭",
-    "core": "核心",
+    "locked": "此插件已锁定",
+    "defaultEnabled": "默认启用",
+    "defaultEnabledHint": "默认启用，可以关闭",
     "enable": "开启插件",
     "disable": "关闭插件",
     "emptyPlaceholder": "{{label}} 暂无数据，等待游戏推进……",
@@ -1611,8 +1606,8 @@
     },
     "source": {
       "builtin": {
-        "label": "核心",
-        "tooltip": "Covel 框架内置的核心插件"
+        "label": "内置",
+        "tooltip": "随 Covel 提供的插件"
       },
       "official": {
         "label": "官方",
@@ -1865,7 +1860,7 @@
     }
   },
   "characterPresence": {
-    "hint": "点击立绘可放大，鼠标悬停可替换成你自己的图片。",
+    "hint": "点击立绘可放大，选择“替换”可上传新图片。",
     "empty": "本世界暂未提供角色立绘。",
     "replace": "替换",
     "uploading": "上传中…",

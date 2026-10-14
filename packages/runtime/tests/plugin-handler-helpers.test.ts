@@ -330,16 +330,18 @@ describe("createFunctionStoreView", () => {
     });
     expect(second.messages.map((m) => m.id)).toEqual(["m3"]);
     expect(second.hasMore).toBe(false);
-    // The end cursor resumes later: new messages appear after it.
+    expect(first.messages[0]).not.toHaveProperty("writeSeq");
+    // The end cursor resumes later: new messages appear after it, even one
+    // whose timestamp is older (a background execution saved after a turn).
     await store.appendTurnMessage({
       id: "m4",
       sessionId: SESSION_ID,
       turnId: "t4",
-      sourceType: "player",
-      role: "user",
+      sourceType: "runtime",
+      role: "assistant",
       content: "message 4",
       order: 0,
-      createdAt: "2024-01-01T00:00:04Z",
+      createdAt: "2023-12-31T23:59:59Z",
     });
     const resumed = await view.readTurnMessages({ after: second.cursor! });
     expect(resumed.messages.map((m) => m.id)).toEqual(["m4"]);
@@ -352,6 +354,10 @@ describe("createFunctionStoreView", () => {
     await expect(view.readTurnMessages({ after: "forged" })).rejects.toThrow(
       "Invalid turn message cursor",
     );
+    // A cursor from before the save order existed is not accepted.
+    await expect(
+      view.readTurnMessages({ after: JSON.stringify(["2024", "m1"]) }),
+    ).rejects.toThrow("Invalid turn message cursor");
     await expect(view.readTurnMessages({ limit: 0 })).rejects.toThrow(
       RangeError,
     );

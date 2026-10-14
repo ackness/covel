@@ -14,6 +14,16 @@ const baseProps = {
 };
 
 describe("StageDialog", () => {
+  it("exposes narration outside the named advance button", () => {
+    render(<StageDialog {...baseProps} />);
+    const prose = screen.getByText(/Mio speaks/);
+    expect(prose.closest("button")).toBeNull();
+    expect(prose.getAttribute("aria-live")).toBe("polite");
+    expect(prose.getAttribute("aria-busy")).toBe("false");
+    const advance = screen.getByRole("button", { name: "点击继续对话" });
+    fireEvent.click(advance);
+    expect(screen.getByText(/Rin answers/).closest("button")).toBeNull();
+  });
   it("changes the nameplate at each paragraph and removes it for narration", () => {
     render(
       <StageDialog {...baseProps} paragraphSpeakers={["Mio", "Rin", null]} />,

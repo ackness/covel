@@ -334,7 +334,58 @@ export interface CharacterStore {
   /** Replace the complete snapshot, including timestamps. Null fields clear attributes. */
   upsertCharacter(record: CharacterRecord): Promise<void>;
   listCharacters(sessionId: string): Promise<CharacterRecord[]>;
+  getCharacter(sessionId: string, id: string): Promise<CharacterRecord | null>;
   deleteCharacter(sessionId: string, id: string): Promise<void>;
+}
+
+/**
+ * The latest change of one lorebook entry, character or plugin data row,
+ * deletions included. Read the record itself to learn what the change was: a
+ * record that is gone was deleted.
+ */
+export type RecordChange =
+  | {
+      readonly kind: "lorebook";
+      readonly owner: LorebookOwner;
+      readonly id: string;
+      readonly seq: number;
+    }
+  | { readonly kind: "character"; readonly id: string; readonly seq: number }
+  | {
+      readonly kind: "plugin_data";
+      readonly pluginId: string;
+      readonly namespace: string;
+      readonly key: string;
+      readonly seq: number;
+    };
+
+export interface RecordChangeQuery {
+  /** Only changes with a higher `seq`; null reads from the start. */
+  readonly after: number | null;
+  /** Only changes up to this `seq`, inclusive. */
+  readonly through?: number;
+  /** Only the plugin data of this namespace. */
+  readonly pluginData?: {
+    readonly pluginId: string;
+    readonly namespace: string;
+  };
+  readonly limit: number;
+}
+
+/**
+ * Change feed of the records a search index is built from (`common/write-order-ddl.ts`).
+ * Every insert, update and delete of a lorebook entry, character or plugin data
+ * row gives that record the next write number of its session. One row per
+ * record is kept, so the feed grows with the records a session ever had, not
+ * with its writes. Numbers follow the order writes were saved in: a change is
+ * never visible before one with a lower `seq` of the same session.
+ */
+export interface RecordChangeStore {
+  /** Changes of a session in ascending `seq` order. `limit <= 0` ⇒ `[]`. */
+  listRecordChanges(
+    sessionId: string,
+    query: RecordChangeQuery,
+  ): Promise<RecordChange[]>;
 }
 
 export interface PluginDataBatchCasEntry {
@@ -512,6 +563,11 @@ export interface CompactedTurnMessageTag {
   readonly summaryId: string;
 }
 
+/** A turn message and its save order in the session (see `listTurnMessagesAfter`). */
+export type WriteOrderedTurnMessage = TurnMessageRecord & {
+  readonly writeSeq: number;
+};
+
 /** Append-only turn-message log. Part of `sql-session-journal-records`. */
 export interface TurnMessageStore {
   appendTurnMessage(record: TurnMessageRecord): Promise<void>;
@@ -537,16 +593,23 @@ export interface TurnMessageStore {
     limit?: number,
   ): Promise<TurnMessageRecord[]>;
   /**
-   * Forward keyset read: the first `limit` messages strictly after the
-   * `(createdAt, id)` cursor position, oldest-first (all messages from the
-   * start when `after` is null). Lets incremental consumers (vector-ingest's
-   * recall cursor) walk the log without loading it whole. `limit <= 0` ⇒ `[]`.
+   * Forward read in save order: the first `limit` messages whose `writeSeq` is
+   * greater than `after` (all messages from the start when `after` is null),
+   * lowest `writeSeq` first. Lets incremental consumers (vector-ingest's recall
+   * cursor, a plugin's `readTurnMessages`) walk the log without loading it
+   * whole. `limit <= 0` ⇒ `[]`.
+   *
+   * `writeSeq` follows the order messages were saved in, not `createdAt`: a
+   * background execution takes its timestamps while it runs and can be saved
+   * after a later turn, and a cursor on `createdAt` would step over it. A
+   * message is never visible before one with a lower `writeSeq` of the same
+   * session, so a cursor at the last `writeSeq` read misses nothing.
    */
   listTurnMessagesAfter(
     sessionId: string,
-    after: { readonly createdAt: string; readonly id: string } | null,
+    after: number | null,
     limit: number,
-  ): Promise<TurnMessageRecord[]>;
+  ): Promise<WriteOrderedTurnMessage[]>;
   /**
    * Aggregate counts over the FULL message log (compacted rows included),
    * resolved as a grouped count query on SQL backends. Replaces the per-turn
@@ -931,6 +994,7 @@ export interface DataStore
     ServerSettingStore,
     TraceStore,
     TurnMessageStore,
+    RecordChangeStore,
     PlayerInputStore,
     WorldDataImportLedgerStore,
     LorebookStore,

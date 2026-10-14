@@ -9,6 +9,7 @@ import type {
 } from "../types.js";
 import type { MemoryState, MemoryStoreMethods } from "./memory-types.js";
 import { assertSessionRecordScope } from "./session-record-scope.js";
+import { recordChange } from "./write-order.js";
 
 export function createWorldDataImportLedgerMethods(
   state: MemoryState,
@@ -71,6 +72,11 @@ export function createLorebookMethods(state: MemoryState): MemoryStoreMethods {
           key,
           existing ? { ...record, createdAt: existing.createdAt } : record,
         );
+        recordChange(state, record.sessionId, {
+          kind: "lorebook",
+          owner: record.owner,
+          id: record.id,
+        });
       }
     },
 
@@ -109,7 +115,8 @@ export function createLorebookMethods(state: MemoryState): MemoryStoreMethods {
       owner: LorebookOwner,
       id: string,
     ): Promise<void> {
-      state.lorebookEntries.delete(lorebookEntryKey(sessionId, owner, id));
+      if (state.lorebookEntries.delete(lorebookEntryKey(sessionId, owner, id)))
+        recordChange(state, sessionId, { kind: "lorebook", owner, id });
     },
   };
 }

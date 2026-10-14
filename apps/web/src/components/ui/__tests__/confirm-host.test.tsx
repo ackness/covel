@@ -5,7 +5,7 @@ import {
   render,
   screen,
 } from "@testing-library/react";
-import { afterEach, expect, it } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 import { requestChoices, requestConfirm } from "@/lib/confirm-channel.js";
 import { ConfirmHost } from "../confirm-host.js";
 
@@ -109,4 +109,32 @@ it("never approves a prompt with entries to tick on Enter", async () => {
   fireEvent.click(screen.getByRole("button", { name: "Not now" }));
 
   await expect(answer).resolves.toEqual([]);
+});
+
+it("remounts queued requests and returns focus to Cancel before another approval", async () => {
+  render(<ConfirmHost />);
+  const secondSettled = vi.fn();
+  let first!: Promise<boolean>;
+  await act(async () => {
+    first = requestConfirm(DELETE_REQUEST);
+    void requestConfirm({
+      ...DELETE_REQUEST,
+      title: "Delete another session",
+    }).then(secondSettled);
+  });
+  const firstDialog = screen.getByRole("dialog");
+  const approve = screen.getByRole("button", { name: "Delete" });
+  approve.focus();
+  fireEvent.click(approve);
+  await expect(first).resolves.toBe(true);
+  expect(
+    screen.getByRole("dialog", { name: "Delete another session" }),
+  ).not.toBe(firstDialog);
+  expect(document.activeElement).toBe(
+    screen.getByRole("button", { name: "Cancel" }),
+  );
+  expect(secondSettled).not.toHaveBeenCalled();
+  fireEvent.click(document.activeElement!);
+  await act(async () => {});
+  expect(secondSettled).toHaveBeenCalledWith(false);
 });

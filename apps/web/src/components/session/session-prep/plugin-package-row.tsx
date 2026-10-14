@@ -1,4 +1,4 @@
-import { Cpu, Lock, Wrench } from "lucide-react";
+import { Cpu, Wrench } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { pluginHasTextIn } from "@covel/shared";
 import { Badge } from "@/components/ui/badge.js";
@@ -41,7 +41,6 @@ export function PluginPackageRow({
   pluginPlan,
   activePluginPack,
   selectedPluginIdSet,
-  corePluginIds,
   lockedPluginIds,
   bindingState,
   resolvedSlots,
@@ -54,7 +53,7 @@ export function PluginPackageRow({
   const description = text(pkg.description);
   const isSelected = selectedPluginIdSet.has(pkg.id);
   const isLocked = lockedPluginIds.has(pkg.id);
-  const isCore = corePluginIds.has(pkg.id);
+  const isCore = pkg.kind === "core";
   const reason = recommendationReason(pkg, pluginPlan, activePluginPack, {
     locale: i18n.language,
     requiredByWorld: t(
@@ -120,11 +119,10 @@ export function PluginPackageRow({
         </span>
         {isCore && (
           <span
-            title={t("plugin.locked")}
+            title={t("plugin.defaultEnabledHint")}
             className="inline-flex shrink-0 items-center gap-0.5 text-xs text-muted-foreground"
           >
-            <Lock className="w-3 h-3" />
-            <span className="hidden sm:inline">{t("plugin.core", "core")}</span>
+            {t("plugin.defaultEnabled")}
           </span>
         )}
         <RuntimeStageBadges runtimes={runtimes} />

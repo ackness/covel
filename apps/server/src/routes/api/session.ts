@@ -354,6 +354,11 @@ sessionRoutes.post("/", async (c) => {
       registry: pluginRegistry,
     },
   });
+  // A file that several active plugins name is left out, and the session
+  // starts without it. The log tells the world's author why.
+  for (const diagnostic of preparedWorldData.diagnostics)
+    if (diagnostic.code === "convention-collision")
+      console.warn(`[sessions] world ${rawWorldId}: ${diagnostic.message}`);
 
   const sessionLock = c.get("sessionLock");
   // Keep the persistent commit, media finalisation and process-local registry

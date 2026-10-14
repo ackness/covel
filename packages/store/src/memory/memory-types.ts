@@ -27,6 +27,7 @@ import type {
   WorldDataImportLedgerRecord,
   WorldRecord,
   ServerSettingRecord,
+  RecordChange,
 } from "../types.js";
 import type {
   VectorModelOps,
@@ -43,6 +44,17 @@ export interface MemoryVectorRow {
   dim: number;
   embedding: Float32Array;
   payload: string | null;
+}
+
+/** A stored turn message and its save order in the session. */
+export type MemoryTurnMessage = TurnMessageRecord & {
+  readonly writeSeq: number;
+};
+
+/** The latest change of one record; mirrors a `record_changes` row. */
+export interface MemoryRecordChange {
+  readonly sessionId: string;
+  readonly change: RecordChange;
 }
 
 export interface MemoryState {
@@ -74,7 +86,7 @@ export interface MemoryState {
   readonly traceEvents: TraceEventRecord[];
   readonly runtimeOutputs: RuntimeOutputRecord[];
   readonly interactionRecords: InteractionRecordRow[];
-  readonly turnMessages: TurnMessageRecord[];
+  readonly turnMessages: MemoryTurnMessage[];
   readonly playerInputs: PlayerInputRecord[];
   readonly worldDataImportLedger: Map<string, WorldDataImportLedgerRecord>;
   readonly lorebookEntries: Map<string, LorebookEntryRecord>;
@@ -89,6 +101,14 @@ export interface MemoryState {
   // composite unique key (see memory/export-methods.ts) so appends stay
   // idempotent, mirroring the SQL unique index.
   readonly runtimeExports: Map<string, RuntimeExportRecord>;
+  // Write order (see common/write-order-ddl.ts). `recordChanges` is keyed by
+  // the record's identity; `sessionWriteCounters` by session ID. Transactions
+  // do not snapshot the counters, so a rollback never hands a number out twice.
+  readonly recordChanges: Map<string, MemoryRecordChange>;
+  readonly sessionWriteCounters: Map<
+    string,
+    { readonly sessionId: string; readonly value: number }
+  >;
 }
 
 export type MemoryStore = DataStore & VectorStoreCapability & VectorModelOps;

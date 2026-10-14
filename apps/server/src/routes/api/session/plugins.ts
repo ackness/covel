@@ -62,7 +62,7 @@ export function readSessionPluginSelection(
   };
 }
 export function authorizedSessionPluginIds(
-  registry: PluginRegistry,
+  registry: Pick<PluginRegistry, "getAll">,
   gate?: RpcApprovalGate,
   session?: SessionRecord,
 ): string[] {
@@ -84,7 +84,7 @@ export function authorizedSessionPluginIds(
 }
 export function resolveSessionPluginPlan(
   requested: readonly string[],
-  registry: PluginRegistry,
+  registry: Pick<PluginRegistry, "getAll">,
   options: {
     excluded?: readonly string[];
     authorized?: readonly string[];
