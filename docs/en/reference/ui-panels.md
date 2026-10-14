@@ -76,6 +76,7 @@ Another page can jump into a session with a parameter and ask for a panel to be 
 
 - This request is used only once. After the session is restored and `GameView` has mounted, the page handles the request and removes the `panel` parameter from the address.
 - On a phone, the request is not swallowed by the drawer: the page waits until the drawer and the asynchronously loaded UI specs are both ready, and only then selects the target panel.
+- The Images entry opens only a right-panel spec declaring top-level `navTarget: "images"`; icons do not assign navigation destinations. If several panels declare it, the first by `groupOrder` and load order wins. Undeclared panels remain manually accessible; community image plugins must add this field to their gallery spec. After a successful load, a missing target (including an explicitly requested plugin panel) clears the request and shows “This panel is not available in this session.” Later spec reloads do not replay it. A failed load retains the request until the player retries loading.
 - When the session ID changes, the session view is rebuilt as a whole. This keeps drafts and panel selections from mixing with the previous session.
 - The debug page switches its data by the `sid` in the address. When you return to the session from the debug page, the ID currently being viewed also takes priority.
 
@@ -530,12 +531,13 @@ The original keys can still be read directly with `$state: "/someKey"`. Both way
 
 **Merge rules**:
 
-| Field                                               | Behavior                                                                                                    |
-| --------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| Same `group`                                        | Merged into one outer tab (switched with horizontal sub-tabs)                                               |
-| Different `group` or omitted                        | Separate outer tab (fallback key is `${pluginId}::${specId}`)                                               |
-| `groupLabel` / `shortLabel` / `icon` / `groupOrder` | On conflict, the **first declarer wins**, in the order `/api/ui-specs` returns them (the plugin load order) |
-| `groupOrder`                                        | Sort order of the outer tab in the activity bar (smaller numbers first, default 500)                        |
+| Field                                               | Behavior                                                                                                                                      |
+| --------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| Same `group`                                        | Merged into one outer tab (switched with horizontal sub-tabs)                                                                                 |
+| Different `group` or omitted                        | Separate outer tab (fallback key is `${pluginId}::${specId}`)                                                                                 |
+| `groupLabel` / `shortLabel` / `icon` / `groupOrder` | On conflict, the **first declarer wins**, in the order `/api/ui-specs` returns them (the plugin load order)                                   |
+| `groupOrder`                                        | Sort order of the outer tab in the activity bar (smaller numbers first, default 500)                                                          |
+| `navTarget`                                         | Optional; only `"images"` is supported. Each spec declares its own destination for Images navigation. Omitted specs stay manually selectable. |
 
 **Naming convention**: a group name shared across plugins works like a CSS class name. Authors add their own namespace prefix to avoid conflicts, for example `core.character` or `myorg.combat`. The framework does not add prefixes automatically.
 
