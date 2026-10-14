@@ -189,6 +189,8 @@ Web 客户端只发送它的请求用得到的供应商的密钥：
 
 社区服务端代码（`entry`、handler、hook、wire、运行时 JavaScript）的 import 由两阶段批准把守：先授予 `covel:plugin-server-code`，再授予具体操作。
 
+设置了启动令牌时，桌面敏感配置接口的读取和写入都受其保护，包括只返回供应商名称的 `GET /api/config/keys`。托管档位的公开模型目录（`/api/presets`、`/api/llm-config`）省略 `baseUrl`，避免泄露私有网关地址和 URL 内的凭据；运维令牌持有者仍可读取地址。
+
 ### Server settings
 
 有少数玩家设置要由服务端执行（比如 trace 保留多久）。所以服务端把它们存在自己的数据库里，浏览器通过 `PUT /api/config/server-settings` 写入。

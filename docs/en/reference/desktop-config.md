@@ -223,12 +223,12 @@ In source development the priority of the root `llm.toml`, the user resource dir
 
 The desktop shell generates a one-time bearer token at every launch and passes it to the backend as `COVEL_DESKTOP_REST_TOKEN`.
 
-| Endpoint                                                                                                                                                   | Token                                            |
-| ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
-| `PUT /api/config/keys`, `PUT /api/config/settings`, `PUT /api/config/proxy`, `PUT /api/config/data-root`, `POST /api/config/open-folder` (write endpoints) | Required                                         |
-| `GET /api/config/settings`, `GET /api/config/proxy`, `GET /api/app-update/latest` (return local config, or send an outbound request for you)               | Required                                         |
-| `GET /api/config/info`                                                                                                                                     | Not required                                     |
-| `GET /api/config/keys`                                                                                                                                     | Not required. Returns provider names, never keys |
+| Endpoint                                                                                                                                                   | Token                                        |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------- |
+| `PUT /api/config/keys`, `PUT /api/config/settings`, `PUT /api/config/proxy`, `PUT /api/config/data-root`, `POST /api/config/open-folder` (write endpoints) | Required                                     |
+| `GET /api/config/settings`, `GET /api/config/proxy`, `GET /api/app-update/latest` (return local config, or send an outbound request for you)               | Required                                     |
+| `GET /api/config/info`                                                                                                                                     | Not required                                 |
+| `GET /api/config/keys`                                                                                                                                     | Required. Returns provider names, never keys |
 
 An endpoint that requires the token checks the `Authorization: Bearer <token>` header and returns `401` when it is missing or wrong.
 

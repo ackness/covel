@@ -132,7 +132,7 @@ export function createConfigApiRoutes(deps: ConfigApiDeps): Hono {
       worldsDir: env.userWorldsDir ?? null,
       // True when the desktop shell injected a per-launch bearer token. The
       // renderer must attach `Authorization: Bearer <token>` on privileged
-      // config calls (settings read/write, key writes, data-root writes,
+      // config calls (settings read/write, key reads/writes, data-root writes,
       // open-folder).
       requiresAuth: !!env.desktopRestToken,
     });
@@ -141,7 +141,7 @@ export function createConfigApiRoutes(deps: ConfigApiDeps): Hono {
   // GET /api/config/keys — list configured providers WITHOUT returning values.
   // Values travel only inside the server process; the UI shows "configured /
   // not configured" rather than echoing secrets back across HTTP.
-  app.get("/api/config/keys", (c) => {
+  app.get("/api/config/keys", requireToken, (c) => {
     const covelHome = resolveCovelHome();
     if (!covelHome) return c.json(listBody([]));
 

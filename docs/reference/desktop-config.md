@@ -222,12 +222,12 @@ ANTHROPIC_API_KEY=sk-ant-xxxxxxxxxxxx
 
 桌面程序每次启动时生成一个一次性的 bearer token，通过 `COVEL_DESKTOP_REST_TOKEN` 传给后端。
 
-| 接口                                                                                                                                               | 要不要 token                       |
-| -------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------- |
-| `PUT /api/config/keys`、`PUT /api/config/settings`、`PUT /api/config/proxy`、`PUT /api/config/data-root`、`POST /api/config/open-folder`（写接口） | 要                                 |
-| `GET /api/config/settings`、`GET /api/config/proxy`、`GET /api/app-update/latest`（返回本地配置，或者代你向外发请求）                              | 要                                 |
-| `GET /api/config/info`                                                                                                                             | 不要                               |
-| `GET /api/config/keys`                                                                                                                             | 不要。只返回服务商列表，不含密钥值 |
+| 接口                                                                                                                                               | 要不要 token                     |
+| -------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------- |
+| `PUT /api/config/keys`、`PUT /api/config/settings`、`PUT /api/config/proxy`、`PUT /api/config/data-root`、`POST /api/config/open-folder`（写接口） | 要                               |
+| `GET /api/config/settings`、`GET /api/config/proxy`、`GET /api/app-update/latest`（返回本地配置，或者代你向外发请求）                              | 要                               |
+| `GET /api/config/info`                                                                                                                             | 不要                             |
+| `GET /api/config/keys`                                                                                                                             | 要。只返回服务商列表，不含密钥值 |
 
 需要 token 的接口检查请求头 `Authorization: Bearer <token>`，缺失或不匹配返回 `401`。
 

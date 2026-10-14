@@ -1,3 +1,7 @@
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { createConfigApiRoutes } from "../../src/routes/config-api.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   applySlotOverlay,
@@ -12,7 +16,9 @@ import { createPluginRegistry } from "@covel/plugin-loader";
 import { createMemoryStore } from "@covel/store/memory";
 import { createMiscApiRoutes } from "../../src/routes/misc-api.js";
 
-function setup(options: { failModel?: string } = {}) {
+function setup(
+  options: { failModel?: string; apiKeys?: Record<string, string> } = {},
+) {
   const requests: Array<{ model: string; metadata?: Record<string, unknown> }> =
     [];
   const unsupported = async (): Promise<never> => {
@@ -94,8 +100,9 @@ function setup(options: { failModel?: string } = {}) {
     },
     createPluginRegistry(),
     createMemoryStore(),
+    options.apiKeys,
   );
-  return { app, requests, presetRegistry, slotRegistry };
+  return { app, requests, presetRegistry, slotRegistry, gateway };
 }
 
 afterEach(() => {
@@ -680,4 +687,50 @@ describe("connection test by model kind and failure", () => {
     });
     expect(fetchMock).toHaveBeenCalledOnce();
   });
+});
+
+it("uses saved key replacements and deletions immediately in both probes", async () => {
+  vi.stubEnv("DEPLOYMENT_TIER", "self");
+  vi.stubEnv("COVEL_DESKTOP_REST", "1");
+  vi.stubEnv("COVEL_DESKTOP_REST_TOKEN", "");
+  vi.stubEnv("COVEL_HOME", mkdtempSync(join(tmpdir(), "probe-keys-")));
+  vi.stubEnv("OPENAI_API_KEY", "stale-boot-key");
+  const apiKeys: Record<string, string> = { openai: "stale-boot-key" };
+  const { app, gateway } = setup({ apiKeys });
+  app.route("/", createConfigApiRoutes({ apiKeys }));
+  const stream = vi.spyOn(gateway, "streamText");
+  const fetchMock = vi
+    .fn()
+    .mockImplementation(async () => Response.json({ data: [{ id: "model" }] }));
+  vi.stubGlobal("fetch", fetchMock);
+  for (const key of ["replacement-key", null]) {
+    expect(
+      (
+        await app.request("/api/config/keys", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ openai: key }),
+        })
+      ).status,
+    ).toBe(200);
+    await app.request("/api/ai/models", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ provider: "openai" }),
+    });
+    const call = fetchMock.mock.calls.at(-1);
+    expect(call).toBeDefined();
+    expect(new Headers(call?.[1].headers).get("authorization")).toBe(
+      key ? `Bearer ${key}` : null,
+    );
+    const response = await app.request("/api/ai/ping", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ presetId: "slot-story" }),
+    });
+    expect(await response.json()).toMatchObject({ ok: true });
+    expect(stream.mock.calls.at(-1)?.[1]?.envApiKeys).toEqual(
+      key ? { openai: key } : {},
+    );
+  }
 });

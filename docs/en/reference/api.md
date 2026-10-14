@@ -315,7 +315,7 @@ Settings in the interface are only override values sent along with the request. 
 
 **Differences on hosted tiers (`demo` / `commercial`)**
 
-- The public `GET /api/llm-config` still returns the model catalog that the client needs at startup, but without `source` and the load `error`. Only a request with the operator token can see these two diagnostics.
+- The public `GET /api/llm-config` still returns the model catalog that the client needs at startup, but without `source`, `envKeyOverrides`, the load `error`, or slot `baseUrl` values. `GET /api/presets` also omits `baseUrl`. Only a request with the operator token can see these fields.
 - The public `GET /api/config/info` returns `isDesktop: false` and `requiresAuth: true`, and all path fields are `null`. A request with the operator token gets the full deployment paths.
 - Responses on your own `self` machine and in the desktop app are not affected.
 
@@ -1417,13 +1417,17 @@ If the disk write fails, the old dispatcher and the state returned by GET both s
 > [!NOTE]
 > For authors of server code: the low-level `prepareOutboundProxy()` provides `commit()` / `dispose()`. A transport that is not committed is released by the caller. `configureOutboundProxy()` is used to apply immediately.
 
+#### GET /api/config/keys
+
+`GET /api/config/keys` uses the same guard as writes: when `COVEL_DESKTOP_REST_TOKEN` is set, a matching Bearer token is required; otherwise the response is `401`.
+
 #### PUT /api/config/keys
 
 Desktop only. It writes provider keys to `<covelHome>/keys.env`.
 
 - The body is `{ provider: string | null }`. An empty string or `null` means delete that key.
 - The whole batch of input is validated first. If a value contains a newline, or is of another type, it returns `400`, and the file and the runtime both stay as they were.
-- The runtime's keys are updated only after the file is written atomically and successfully.
+- The runtime's keys are updated only after the file is written atomically and successfully. Turns, connection tests, and model lists use the new keys immediately.
 
 How the desktop app (Electron) behaves when it saves keys:
 
