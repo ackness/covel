@@ -496,6 +496,35 @@ sources:
     ]);
   });
 
+  it.each(["haruka-academy", "lantern-barrow", "mistport"])(
+    "still rejects missing data contracts in strict author validation of %s",
+    async (worldId) => {
+      const narratorOnly = await mkdtemp(
+        path.join(tmpdir(), "covel-narrator-only-"),
+      );
+      await cp(
+        path.join(repoRoot, "plugins/narrator"),
+        path.join(narratorOnly, "narrator"),
+        {
+          recursive: true,
+        },
+      );
+      const { diagnostics } = await validateWorldPackage({
+        worldDir: path.join(repoRoot, "worlds", worldId),
+        pluginsDirs: [narratorOnly],
+        strict: true,
+      });
+      expect(diagnostics).toContainEqual(
+        expect.objectContaining({
+          level: "error",
+          code: "unresolved-contract",
+          sourceId: "cast",
+          message: expect.stringContaining('"character.blueprints@1"'),
+        }),
+      );
+    },
+  );
+
   it("reports a translation that the main file has no place for", async () => {
     const worldDir = path.join(
       await mkdtemp(path.join(tmpdir(), "covel-validate-overlay-")),

@@ -130,6 +130,17 @@ function activeWorldProjections(options: {
   return projections;
 }
 
+export function hasActiveWorldProjections(options: {
+  readonly source: OrderedWorldDataSource;
+  readonly deps?: WorldDataImportPreflightDeps;
+}): boolean {
+  return (
+    options.source.descriptor.visibility !== "hidden" &&
+    options.source.descriptor.kind !== "media" &&
+    activeWorldProjections(options).length > 0
+  );
+}
+
 function projectionLabel(projection: ActiveWorldProjection): string {
   return `world projection "${projection.pluginId}/${projection.projectionId}"`;
 }

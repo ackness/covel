@@ -734,6 +734,9 @@ export async function syncWorldDataForSession(
         `${output.sourceId}\u0000${output.pluginId}/${output.projectionId}\u0000${output.outputId}`,
     ),
   );
+  const deferredSources = new Map(
+    plan.deferredSources?.map((source) => [source.sourceId, source.scope]),
+  );
   const conflicts: Array<SyncWorldDataForSessionResult["conflicts"][number]> =
     [];
   let unchanged = 0;
@@ -745,7 +748,12 @@ export async function syncWorldDataForSession(
   for (const ledger of ledgers) {
     if (writesByKey.has(ledgerKey(ledger))) continue;
     const deferredKey = deferredProjectionLedgerKey(ledger);
-    if (deferredKey && deferredProjectionKeys.has(deferredKey)) {
+    const deferredSourceScope = deferredSources.get(ledger.sourceId);
+    if (
+      deferredSourceScope === "all" ||
+      (deferredSourceScope === "primary" && !deferredKey) ||
+      (deferredKey && deferredProjectionKeys.has(deferredKey))
+    ) {
       // Missing writes are non-authoritative while their producer is
       // deferred. Preserve both the target and ledger; a later successful
       // empty output is what authorizes deletion.

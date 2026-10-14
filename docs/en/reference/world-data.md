@@ -682,13 +682,13 @@ For a field-by-field explanation, see the generated [World data descriptor field
 - When the target is `contract:<id>` (including `+lorebook`), the data is checked against that contract's schema. You can leave it out.
 - When the target is `world:metadata.dimensions`, the data is checked against the dimension schema. You can leave it out.
 - You need it only when you want to check against a JSON Schema file in the world package.
-- When it is left out and no plugin declares a schema for the contract, that source is not checked. When you write `schema: contract:<id>` and no schema can be found, that is an error.
+- When it is left out and no plugin declares a schema for the contract, that source is not checked. When you write `schema: contract:<id>` and no schema can be found, that is an error; session imports do not look up schemas for sources they have already skipped.
 
 **Media sources** need both `key: filename` and `indexTo: contract:<contractId>`:
 
 - A missing `key` is an error.
 - Without `indexTo`, nothing records which images exist, so these files are not imported.
-- When the plugin that receives the image index is not enabled, the files of this source are not imported either. This is a warning, and it does not affect other data. When the receiving plugin is enabled later in the game, its data is imported once on its own (see [Receivers that join after the game starts](#receivers-that-join-after-the-game-starts)).
+- When the plugin that receives the image index is not installed or not enabled, the files of this source are not imported either. This is a warning, and it does not affect other data. When the receiving plugin is enabled later in the game, its data is imported once on its own (see [Receivers that join after the game starts](#receivers-that-join-after-the-game-starts)).
 
 ### Images visible before a session
 
@@ -844,7 +844,7 @@ For plugin authors: the merge rule is `applyLocaleOverlay` in `@covel/shared`. T
 - A media source uses `to: media` with `indexTo` in contract form. A structured source cannot set `to` to `media`. This kind of wrong combination is rejected during validation.
 - A path in `world:metadata.<path>` cannot contain dangerous segments such as `__proto__`. Paths other than `dimensions` are only recorded for now, and they have no effect.
 - World data is imported when a session is created. Authors and tools can update existing sessions through [`sync-data`](#preflight-and-sync). Calling `preflight` first lets you see the diagnostics before anything is written. The app has no sync control for players.
-- The create-session response lists the data that was not imported in `worldDataNotices` (warnings and errors, such as a receiving plugin that is not enabled), and the game screen shows them to the player.
+- The create-session response lists the data that was not imported in `worldDataNotices` (warnings and errors, such as a receiving plugin that is not installed or not enabled), and the game screen shows them to the player.
 
 ### Receivers that join after the game starts
 
@@ -931,14 +931,16 @@ Other points:
 
 **Results:**
 
-| Case                                                                                            | Result                                                                                    |
-| ----------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
-| No registered plugin receives this contract                                                     | Error. This is the author's mistake.                                                      |
-| Some plugin receives it, but none is enabled in this game                                       | Warning. Only the write for this contract is skipped. Other sources are handled as usual. |
-| Several enabled receivers                                                                       | Each one gets a copy. The data is not tied to a specific plugin ID.                       |
-| A missing schema, a path that leaves the world package, an unreadable file, or an invalid value | Error. The import is blocked.                                                             |
+| Case                                                                                            | Result                                                                                                                        |
+| ----------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| No registered plugin receives this contract                                                     | Session preflight, creation, and later import or sync warn and skip only this contract’s writes. Other data imports as usual. |
+| Some plugin receives it, but none is enabled in this game                                       | Warning. Only the write for this contract is skipped. Other sources are handled as usual.                                     |
+| Several enabled receivers                                                                       | Each one gets a copy. The data is not tied to a specific plugin ID.                                                           |
+| A missing schema, a path that leaves the world package, an unreadable file, or an invalid value | Error. The import is blocked.                                                                                                 |
 
 Built-in schemas and schemas local to the world package are checked when the world loads. A contract's schema depends on which plugins are installed, so it is checked when a session is created or during preflight.
+
+In a session without a direct receiver, matching active projections still read, validate, and process the source. Only when neither direct receivers nor projection consumers are available is the source skipped together with its schema checks and media import. Missing plugins do not prevent the game from starting. The author tool `pnpm validate:world` still reports unresolved contracts under the [static validation rules](#static-validation-pnpm-validateworld): likely typos and `--strict` produce errors; other missing contracts warn by default. `--plugins` adds directories to scan for receiving plugins.
 
 ZIP installation and AI file write-back share package preflight, without local overrides. Generation, revision, and translation validate a staging copy before publishing; failures preserve the original package. This does not require enabled receivers or replace session contract preflight.
 
@@ -1525,6 +1527,7 @@ Sync rules:
 6. An ordinary imported record can be overwritten with `force:true` to clear a `modified` or `missing` conflict. This does not lift the protection on dimension values that have evolved or that are pending settlement.
 7. A record with a conflict stays as it is and is listed in `conflicts`. It does not affect the other records. New records that are not in the ledger (sources or portraits added later to the world package) are still written, and unchanged records are still updated or deleted.
 8. A character changed by sync keeps its original `createdAt`, so its place in the character list does not change. Characters added to the world package come after the existing characters.
+9. When a source is skipped because it has no receiver, its existing managed data, ledger rows, and media references are preserved, even with `force:true`. If only the primary target has no receiver, its direct writes and derived character and lorebook records are preserved while active projections sync independently. Once the receiver returns, successfully read empty data deletes the old records as usual.
 
 **Extra rules for dimensions:**
 

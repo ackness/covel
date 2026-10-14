@@ -2246,6 +2246,7 @@ Web 设置页根据 `operatorTokenRequired` 决定是否显示“运维访问”
   - 这些需求随会话保存在 `metadata.pluginSelection.requiredContracts`。之后的启停与重载沿用它，不再读取世界。
   - 有需求没满足时会话照常创建：没有已安装的提供者，有多个提供者而请求里没有指定，玩家显式停用了提供者，或提供者是还在等授权的社区插件。响应在 `unmetRequirements` 里列出每一项 `{ contract, code, candidates? }`，`code` 是 `missing-provider`、`ambiguous-provider`、`excluded` 或 `approval-required`。前两种还会在服务端日志里记一条 warning。
 - 世界声明了维度，而本次启用的插件里没有提供 `world.dimensions@1` 的，维度不导入，会话照常创建。响应的 `ignoredDimensions` 列出这些维度 ID；会话在没有维度的情况下运行。
+- 世界数据契约没有接收插件（未安装或没有启用）时，跳过对应契约写入，会话照常创建。已启用的投影仍独立处理；同步保留被跳过写入的已有托管数据。响应的 `worldDataNotices` 带 warning；会话预检和开局后的导入或同步遵守同一条[接收规则](./world-data.md#target-uri)。
 - 依赖缺失的插件：它依赖的契约没有提供者（例如玩家关掉了提供者）时，会话照常创建，这个插件自动停用。玩家要的和 `kind: core` 的这类插件仍写进 `activePlugins`，`GET /api/sessions/:id/plugins` 把它们列在 `unavailable`，依赖回来后自动恢复。规则见[会话插件选择](./plugins.md#会话插件选择)。
 - `metadata.characterSchema`：Web 私有模式创建本地会话时写入同样的 schema。预设不合法时，会话不创建。
 - `metadata.embeddedCharacters`：它不是插件的角色卡，不会产生插件数据的副本。
