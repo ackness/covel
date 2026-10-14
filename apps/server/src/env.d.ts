@@ -157,6 +157,8 @@ declare module "hono" {
      * test DI need not wire it.
      */
     clearSessionToolOverrides?: (sessionId: string) => void;
+    /** Forget a session's consecutive history-compaction failure count. */
+    clearCompactionFailures?: (sessionId: string) => void;
     /** Release revision and full-commit replay state after session deletion. */
     clearBrowserWorkspace?: (sessionId: string) => void;
     getPluginSource?: GetPluginSourceFn;

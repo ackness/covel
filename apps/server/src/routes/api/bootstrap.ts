@@ -119,6 +119,7 @@ import {
 } from "./browser-workspace.js";
 export { wrapStoreWithPluginDataEvents } from "./bootstrap/plugin-data-store-events.js";
 import {
+  CompactionFailureTracker,
   createBootstrapCompactorRunner,
   createTurnContextBudget,
 } from "./bootstrap/compactor.js";
@@ -597,10 +598,13 @@ async function assembleApi(
     runtimeEnv.compactorContextWindow !== undefined
       ? { contextWindowOverride: runtimeEnv.compactorContextWindow }
       : {};
+  // Shared by every request's runner so a run of failures counts across turns.
+  const compactionFailures = new CompactionFailureTracker();
   const compactorRunner = createBootstrapCompactorRunner({
     extensions,
     store,
     llmAdapter: config.llmAdapter,
+    failures: compactionFailures,
     ...budgetSource,
   });
   const turnContextBudget = createTurnContextBudget(budgetSource);
@@ -824,6 +828,9 @@ async function assembleApi(
     c.set("settledSessionLock", settledSessionLock);
     c.set("prepareToolsForSession", prepareToolsForSession);
     c.set("clearSessionToolOverrides", clearSessionToolOverrides);
+    c.set("clearCompactionFailures", (id: string) =>
+      compactionFailures.reset(id),
+    );
     c.set("clearBrowserWorkspace", browserWorkspaceCache.clearSession);
     c.set("getPluginSource", getPluginSource);
     c.set("activatePluginServerCode", activatePluginServerCode);
@@ -852,7 +859,15 @@ async function assembleApi(
 
   // Apply request overrides after base dependency injection, then rebind services.
   for (const mw of config.perRequestMiddleware ?? []) app.use("*", mw);
-  app.use("*", requestLlmServices({ extensions, store, ...budgetSource }));
+  app.use(
+    "*",
+    requestLlmServices({
+      extensions,
+      store,
+      failures: compactionFailures,
+      ...budgetSource,
+    }),
+  );
 
   // 10. Mount routes — all under /api/ prefix
   // Session routes: frontend uses /api/sessions (plural) for all session operations
