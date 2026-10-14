@@ -301,7 +301,8 @@
       "serverBackend": "服务端 {{backend}}",
       "builtIn": "内置",
       "serverStore": "服务端存储",
-      "server": "服务端"
+      "server": "服务端",
+      "memory": "内存"
     },
     "jumpToLatest": "跳到最新",
     "loadOlderFailed": "无法加载更早的消息。",
@@ -376,7 +377,27 @@
     "panelLoadFailed": "插件面板加载失败。",
     "modelCredentialsMissing": "开始前请先在服务商设置中填写 API 密钥。",
     "steerNotTaken": "本回合未接收这条消息，已放回输入框，可作为下一条消息发送。",
-    "outputTruncated": "这段正文达到了模型的输出上限，可能停在半句。调大最大输出 token 或换用其他模型可以避免。"
+    "outputTruncated": "这段正文达到了模型的输出上限，可能停在半句。调大最大输出 token 或换用其他模型可以避免。",
+    "canvasEyebrow": "§ 故事开场",
+    "blockType": "内容块：{{type}}",
+    "dbLoadErrorDetail": "加载数据库失败：{{error}}",
+    "retryTaskNamed": "重试此任务：{{label}}",
+    "activeTaskDetail": "{{label}}：{{detail}}…",
+    "jobStatus": {
+      "pending": "等待中",
+      "queued": "排队中",
+      "running": "进行中",
+      "done": "已完成",
+      "completed": "已完成",
+      "failed": "失败",
+      "cancelled": "已取消",
+      "suspended": "已暂停",
+      "progress": "进行中",
+      "waiting-input": "等待输入",
+      "succeeded": "已完成"
+    },
+    "retryScopeLimited": "只重试选中的失败任务，正文和其他已完成结果会保留。每批最多 {{count}} 个任务，完成后可继续重试其余任务。",
+    "activeTask": "{{label}}…"
   },
   "blocks": {
     "actionPlaceholder": "或输入自定义行动...",
@@ -606,6 +627,12 @@
     "numberTooSmall": "请输入不小于 {{minimum}} 的数值。",
     "wholeNumberNeeded": "请输入整数。",
     "fixMarkedFields": "请修正标记的字段后再保存。",
+    "unnamedCurrency": "货币 {{number}}",
+    "numberedResource": "资源 {{number}}",
+    "unnamedFaction": "势力 {{number}}",
+    "unnamedHistory": "历史事件 {{number}}",
+    "pendingDimensionsTurn": "维度待结算 · 第 {{turn}} 回合",
+    "currentDimensionValue": "当前值：{{id}}",
     "discardChangesTitle": "放弃未保存的修改？",
     "discardChangesMessage": "世界的修改尚未保存。要放弃这些修改并退出编辑器吗？",
     "discardChanges": "放弃修改",
@@ -1656,7 +1683,11 @@
     },
     "runtimeModelMissing": "模型用途 {{slot}} 不可用，请选择已配置的用途或前往用途分配补齐。",
     "untranslated": "未翻译",
-    "untranslatedHint": "这个插件没有当前语言的文字，它的面板显示英文。"
+    "untranslatedHint": "这个插件没有当前语言的文字，它的面板显示英文。",
+    "invalidPanelSpecDetail": "面板定义无效：{{label}}（{{reason}}）",
+    "rpc": {
+      "failed": "插件任务失败，请重试。"
+    }
   },
   "pluginJob": {
     "runtimesNotLoaded": "{{plugin}} 已授权，但它有 {{count}} 个任务无法加载，不会运行。",
@@ -1705,7 +1736,10 @@
       "zh": "中文（推荐 DashScope）",
       "en": "英文（推荐 GPT/Gemini）"
     },
-    "generationFailed": "图像生成失败"
+    "generationFailed": "图像生成失败",
+    "approvalAction": "生成图像",
+    "sessionUnavailable": "当前会话不可用，请重新打开会话后重试。",
+    "mediaUnavailable": "图片不可用，请重新加载后重试。"
   },
   "onboarding": {
     "language": "语言",
@@ -1803,7 +1837,8 @@
     "submittedHint": "已选择",
     "selectPrefix": "选择{{label}}",
     "selectPlaceholder": "请选择...",
-    "requiredMissing": "请填写必填字段"
+    "requiredMissing": "请填写必填字段",
+    "missingInteraction": "无法提交此表单，请重新打开会话后重试。"
   },
   "interaction": {
     "playerSelected": "你的选择：",
@@ -1835,7 +1870,20 @@
       "showDetail": "查看详情",
       "hideDetail": "收起详情",
       "copyDetail": "复制详情",
-      "copied": "已复制"
+      "copied": "已复制",
+      "badge": {
+        "auth": "认证",
+        "forbidden": "权限",
+        "not-found": "未找到",
+        "rate-limited": "请求受限",
+        "server": "服务异常",
+        "timeout": "超时",
+        "network": "网络",
+        "invalid-output": "输出格式",
+        "incomplete": "未完成",
+        "error": "错误",
+        "unknown": "未知错误"
+      }
     },
     "plugin": {
       "loadFailed": "插件加载失败"

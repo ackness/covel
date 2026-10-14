@@ -159,7 +159,7 @@ it("reports failed runtime results instead of silently completing the replacemen
   });
   upload();
   await waitFor(() =>
-    expect(mocks.toast).toHaveBeenCalledWith("error", "Runtime save failed"),
+    expect(mocks.toast).toHaveBeenCalledWith("error", "插件任务失败，请重试。"),
   );
 });
 it("stops after a denied approval", async () => {

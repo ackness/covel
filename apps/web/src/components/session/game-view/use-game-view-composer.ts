@@ -203,7 +203,7 @@ export function useGameViewComposer({
           t,
         });
         if (!response) return;
-        const failure = getPluginRpcFailureMessage(response);
+        const failure = getPluginRpcFailureMessage(response, t);
         if (failure) {
           setCommandFeedback({ tone: "error", message: failure });
           return;

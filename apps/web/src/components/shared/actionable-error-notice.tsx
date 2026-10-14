@@ -37,11 +37,6 @@ const DEFAULT_MESSAGES: Record<ActionableErrorKind, string> = {
   unknown: "The request failed without an error message.",
 };
 
-const BADGE_LABELS: Partial<Record<ActionableErrorKind, string>> = {
-  "invalid-output": "output",
-  incomplete: "incomplete",
-};
-
 export function ActionableErrorNotice({
   error,
   kind: kindOverride,
@@ -89,7 +84,7 @@ export function ActionableErrorNotice({
         }
       >
         <span className="shrink-0 rounded-sm border border-destructive/40 bg-destructive/5 px-1.5 py-0.5 font-mono text-[10px] uppercase text-destructive">
-          {BADGE_LABELS[kind] ?? kind}
+          {t(`error.actionable.badge.${kind}`)}
         </span>
         <span className="min-w-0 text-[11px] text-destructive">
           {t(MESSAGE_KEYS[kind], DEFAULT_MESSAGES[kind])}

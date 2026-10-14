@@ -64,7 +64,7 @@ export function ChatBlockRenderer({
     return (
       <div className="flex flex-col gap-1.5">
         <span className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">
-          {t("session.blockLabel", "Block")}: {block.type as string}
+          {t("session.blockType", { type: block.type as string })}
         </span>
         <RawJsonBlock content={JSON.stringify(block, null, 2)} />
       </div>
