@@ -50,7 +50,7 @@ Where:
 - The `ui.appearance` setting stores the theme package ID, and it is written as `data-theme`. The default value is `stage` (Stage). A theme choice that is already saved stays the same.
 - After the theme package's `layout` is resolved, it is written as `data-layout` and as one attribute for each option (see §3.1). There is no separate layout setting: the layout changes along with the theme package.
 - `ui.scheme` stores the color scheme (light / dark), and it is written as `data-scheme` and as the `.dark` class that Tailwind expects.
-- The theme package's `schemes` decides which color schemes it supports. A theme that supports only one scheme changes `ui.scheme` to that value automatically.
+- A theme’s `schemes` determines its display mode. A single-scheme theme displays its supported mode without writing `ui.scheme`. Missing themes display the default, with an explanation in Settings; saved preferences remain until the player chooses again.
 
 ## 2. Supported import formats
 
@@ -236,27 +236,19 @@ The structure of `manifest.json`:
 ```json
 {
   "id": "paper",
-  "label": {
-    "zh-CN": "纸本",
-    "en-US": "Paper"
-  },
   "source": "builtin",
   "schemes": ["light", "dark"],
-  "description": {
-    "zh-CN": "温暖、偏叙事阅读器的纸本风格。",
-    "en-US": "A warm editorial reading style."
-  },
-  "group": "classic",
-  "groupLabel": {
-    "zh-CN": "经典",
-    "en-US": "Classic"
-  }
+  "group": "classic"
 }
 ```
 
 A built-in theme with a layout has one more `layout` field in its manifest, for example `"layout": { "preset": "book" }`.
 
 ## 5. Shared token contract
+
+Importing and saving a theme checks text and secondary text against the background, and button text against its fill, in every declared mode. Recommended ratios are at least 4.5:1 for text and buttons and 3:1 for secondary text. Low contrast is advisory and never blocks activation; missing or unsupported colours are reported as unmeasurable. These solid-token checks do not certify images, transparent layers, or visual effects.
+
+Builtin themes have regression checks for these fixed colour pairs. Their names, descriptions, and group labels come from `appearance.builtinThemes.<id>` in the Web catalogs and follow the UI language.
 
 The main job of a theme package is to override the semantic tokens. The full list of tokens is below, grouped by category.
 
@@ -541,7 +533,7 @@ When a theme is imported, the runtime does these steps in this order:
 4. Save to local settings
 5. Inject `<style data-theme-style="theme-id">`
 6. Register again with `ui.appearance`
-7. Correct `ui.scheme` according to `schemes`
+7. Resolve the display mode from `schemes` without writing settings
 8. Show it in the settings panel and the theme library
 
 ## 8. Persistence behavior

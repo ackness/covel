@@ -10,7 +10,7 @@ import {
   ensureThemeId,
   slugifyThemeId,
 } from "../theme-export.js";
-import { parseImportedThemeFile } from "../validate.js";
+import { parseImportedThemeFile, validateThemeCss } from "../validate.js";
 import { resolveActivity } from "@/hooks/use-document-session-state.js";
 
 // Read from disk rather than `?raw`: vitest does not process CSS assets, so
@@ -207,7 +207,7 @@ describe("aurora reference theme", () => {
   it("passes the same import validation a player's theme would", () => {
     // It is documented as a copyable template, so it has to survive the
     // scope/at-rule checks that a hand-written theme goes through.
-    expect(() => parseImportedThemeFile(auroraCss, "aurora.css")).not.toThrow();
+    expect(() => validateThemeCss(auroraCss, "aurora")).not.toThrow();
   });
 
   it("uses the turn-state hook the framework publishes", () => {

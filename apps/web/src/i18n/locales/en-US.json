@@ -1330,7 +1330,8 @@
       "invalid-json": "This theme file is not valid JSON.",
       "invalid-manifest": "The theme fields do not match the theme package format.",
       "theme-changed": "Theme {{id}} changed while you were saving. Review it and try again."
-    }
+    },
+    "themeSelectionAdjusted": "Showing {{name}} in {{scheme}} mode. Your saved preference is unchanged; choose a theme to update it."
   },
   "appearance": {
     "styleTitle": "Style",
@@ -1634,7 +1635,52 @@
     },
     "replaceThemeTitle": "Replace existing theme?",
     "replaceThemeConfirm": "This name produces an existing theme ID. Replacing it will overwrite that custom theme.",
-    "replaceTheme": "Replace theme"
+    "replaceTheme": "Replace theme",
+    "builtinThemes": {
+      "paper": {
+        "label": "Paper",
+        "description": "A warm editorial reading style.",
+        "groupLabel": "Classic"
+      },
+      "panel": {
+        "label": "Panel",
+        "description": "A modern app shell: icon rail, conversational story stream, card-based side panel.",
+        "groupLabel": "Panel"
+      },
+      "aurora": {
+        "label": "Aurora",
+        "description": "Glassmorphism with drifting aurora — a template showing animation, blur, glow and turn-state effects.",
+        "groupLabel": "Classic"
+      },
+      "book": {
+        "label": "Book",
+        "description": "Reading first: paper ground, serif story text and indented paragraphs, like a novel that answers back.",
+        "groupLabel": "Book"
+      },
+      "stage": {
+        "label": "Stage",
+        "description": "Scene first: world art fills the screen and the story unfolds in a translucent side column.",
+        "groupLabel": "Stage"
+      },
+      "modern": {
+        "label": "Modern",
+        "description": "A sharp, tool-first workbench style.",
+        "groupLabel": "Classic"
+      },
+      "abyss": {
+        "label": "Abyss",
+        "description": "A dim codex style — deep indigo + violet markers + serif italic, tuned for immersive reading.",
+        "groupLabel": "Classic"
+      }
+    },
+    "contrast": {
+      "advisory": "Contrast advice only; you can keep using this theme. These checks cover solid token colours, not images or visual effects.",
+      "body": "Text",
+      "muted": "Secondary text",
+      "button": "Button text",
+      "low": "{{scheme}} · {{pair}}: {{ratio}}:1 (recommended at least {{minimum}}:1).",
+      "unknown": "{{scheme}} · {{pair}}: contrast could not be measured."
+    }
   },
   "plugin": {
     "runtimes": "Runtimes",

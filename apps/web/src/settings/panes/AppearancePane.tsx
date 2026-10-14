@@ -1,6 +1,15 @@
+import {
+  checkThemeContrast,
+  type ThemeContrastResult,
+} from "@/theme-system/contrast.js";
+import { ContrastNotice } from "@/components/appearance/ContrastNotice.js";
+import { storedThemeSelection } from "@/theme-system/selection.js";
 import { requestConfirm } from "@/lib/confirm-channel.js";
 import { themeImportErrorText } from "@/theme-system/import-error.js";
-import { loadStoredCustomThemes } from "@/theme-system/storage.js";
+import {
+  CUSTOM_THEMES_KEY,
+  loadStoredCustomThemes,
+} from "@/theme-system/storage.js";
 import { useSettingsWritable } from "../use-settings-save.js";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -46,10 +55,12 @@ export function AppearancePane() {
   const writable = useSettingsWritable();
   const fileRef = useRef<HTMLInputElement>(null);
   const [error, setError] = useState<string | null>(null);
+  const [contrast, setContrast] = useState<ThemeContrastResult[]>([]);
 
   const [rawOverrides] = useSetting<unknown>(APPEARANCE_TOKENS_KEY);
   const [appearance] = useSetting<string>("ui.appearance");
   const [scheme] = useSetting<ThemeScheme>(THEME_SCHEME_KEY);
+  const [customThemes] = useSetting<unknown>(CUSTOM_THEMES_KEY);
 
   const overrides = useMemo<AppearanceOverrides>(
     () => loadOverrides(store),
@@ -61,10 +72,11 @@ export function AppearancePane() {
   const [defaults, setDefaults] = useState<Record<string, string>>({});
   useEffect(() => {
     setDefaults(readTokenDefaults());
-  }, [appearance, scheme]);
+  }, [appearance, scheme, customThemes]);
 
   const customCount = countOverrides(overrides);
-  const activeScheme: ThemeScheme = scheme === "light" ? "light" : "dark";
+  const selection = storedThemeSelection(store);
+  const activeScheme = selection.scheme;
   const localizedTokenGroups = useMemo(
     () => localizeTokenGroups(TOKEN_GROUPS, i18n.language, t),
     [i18n.language, t],
@@ -106,7 +118,7 @@ export function AppearancePane() {
         return;
       // Carry the source theme's scheme support: a dark-only theme must not
       // come out of the snapshot labelled light-only.
-      const sourceTheme = registered.find((theme) => theme.id === appearance);
+      const sourceTheme = registered.find((theme) => theme.id === selection.id);
       const snapshot = buildThemeCss(
         store,
         id,
@@ -114,6 +126,7 @@ export function AppearancePane() {
         sourceTheme,
       );
 
+      setContrast(checkThemeContrast({ id, ...snapshot }));
       await saveCustomTheme(
         store,
         {
@@ -193,6 +206,17 @@ export function AppearancePane() {
 
   return (
     <div className="space-y-5">
+      <ContrastNotice results={contrast} />
+      {selection.corrected && (
+        <p role="status" className="text-xs text-(--accent-warning)">
+          {t("settings.themeSelectionAdjusted", {
+            name:
+              resolveI18nText(selection.theme?.label, i18n.language) ??
+              selection.id,
+            scheme: t(`settings.themeScheme.${selection.scheme}`),
+          })}
+        </p>
+      )}
       <fieldset disabled={!writable} className="min-w-0">
         <StylePicker />
       </fieldset>

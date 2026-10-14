@@ -1,5 +1,5 @@
 import type { SettingsStoreApi } from "@covel/settings";
-import { DEFAULT_COLOR_SCHEME, THEME_SCHEME_KEY } from "@/lib/appearance.js";
+import { storedThemeSelection } from "./selection.js";
 import {
   getTokenSpec,
   isAdjustableToken,
@@ -81,10 +81,7 @@ async function saveOverrides(
 }
 
 function currentScheme(store: SettingsStoreApi): ThemeScheme {
-  const scheme = store.get<ThemeScheme>(THEME_SCHEME_KEY);
-  return scheme === "light" || scheme === "dark"
-    ? scheme
-    : DEFAULT_COLOR_SCHEME;
+  return storedThemeSelection(store).scheme;
 }
 
 /** Flatten to what should actually be on the element right now. */

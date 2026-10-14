@@ -426,6 +426,41 @@ export const characterSchemaSchema = z
 export const WORLD_ACCENT_PATTERN =
   /^(?:#[0-9a-fA-F]{6}|oklch\(\s*\d+(?:\.\d+)?%?\s+\d+(?:\.\d+)?\s+\d+(?:\.\d+)?\s*\))$/;
 
+/** Oklab lightness of supported world accents; hex channels are decoded from sRGB. */
+function worldAccentLightness(value: string): number {
+  if (!value.startsWith("#")) {
+    const lightness = /^oklch\(\s*(\d+(?:\.\d+)?)(%?)/.exec(value);
+    return lightness ? Number(lightness[1]) / (lightness[2] ? 100 : 1) : NaN;
+  }
+  const channels = [1, 3, 5].map((offset) => {
+    const channel = Number.parseInt(value.slice(offset, offset + 2), 16) / 255;
+    return channel <= 0.04045
+      ? channel / 12.92
+      : ((channel + 0.055) / 1.055) ** 2.4;
+  });
+  const [r, g, b] = channels as [number, number, number];
+  // CSS Color 4: linear sRGB -> LMS -> Oklab L.
+  // https://www.w3.org/TR/css-color-4/#color-conversion-code
+  const l = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b);
+  const m = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b);
+  const ss = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b);
+  return 0.2104542553 * l + 0.793617785 * m - 0.0040720468 * ss;
+}
+
+export const worldAccentColorSchema = z
+  .string()
+  .regex(WORLD_ACCENT_PATTERN, {
+    message:
+      'accentColor must be a hex colour like "#c9a24b" or an oklch colour like "oklch(72% 0.12 75)"',
+  })
+  .refine(
+    (value) => {
+      const lightness = worldAccentLightness(value);
+      return lightness >= 0.55 && lightness <= 0.9;
+    },
+    { message: "accentColor must have Oklab lightness between 55% and 90%." },
+  );
+
 export const worldManifestSchema = z
   .object({
     schemaVersion: z
@@ -543,14 +578,9 @@ export const worldManifestSchema = z
       )
       .meta({ examples: ["media/gallery/world-cover.webp"] })
       .optional(),
-    accentColor: z
-      .string()
-      .regex(WORLD_ACCENT_PATTERN, {
-        message:
-          'accentColor must be a hex colour like "#c9a24b" or an oklch colour like "oklch(72% 0.12 75)"',
-      })
+    accentColor: worldAccentColorSchema
       .describe(
-        "Accent colour of the world's cards and headings: a hex colour (`#rrggbb`) or an `oklch(L C H)` colour. Without it the app derives one from the world ID.",
+        "Accent colour of the world's cards and headings: a hex colour (`#rrggbb`) or an `oklch(L C H)` colour, with Oklab lightness from 55% to 90%. Without it the app derives one from the world ID.",
       )
       .meta({ examples: ["#c9a24b", "oklch(72% 0.12 75)"] })
       .optional(),
