@@ -19,7 +19,7 @@ export function MaxOutputTokensCard({
   contextWindow?: number;
   onChange: (value: number | undefined) => Promise<boolean> | void;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const errorId = useId();
   const { draft, setDraft, conflict, reset } = useSettingDraft(
     String(override ?? ""),
@@ -79,14 +79,14 @@ export function MaxOutputTokensCard({
         <ValueCell
           label={t("settings.defaultValue", "Default")}
           value={
-            defaultValue?.toLocaleString() ??
+            defaultValue?.toLocaleString(i18n.language) ??
             t("settings.taskOutputDefault", "Task default (up to 16,384)")
           }
         />
         <ValueCell
           label={t("settings.requestedOutputLimit", "Requested limit")}
           value={
-            (override ?? defaultValue)?.toLocaleString() ??
+            (override ?? defaultValue)?.toLocaleString(i18n.language) ??
             t("settings.taskOutputDefault", "Task default (up to 16,384)")
           }
           active={override !== undefined}
@@ -120,7 +120,7 @@ export function MaxOutputTokensCard({
         {modelLimit !== undefined && (
           <span className="shrink-0 text-[10px] text-muted-foreground">
             {t("settings.modelOutputLimit", {
-              value: modelLimit.toLocaleString(),
+              value: modelLimit.toLocaleString(i18n.language),
               defaultValue: "Reference model limit: {{value}}",
             })}
           </span>
@@ -129,11 +129,11 @@ export function MaxOutputTokensCard({
       <div className="grid grid-cols-2 gap-2 text-[10px]">
         <ValueCell
           label={t("settings.effectiveOutputBudget", "Effective output budget")}
-          value={effectiveOutput?.toLocaleString() ?? "—"}
+          value={effectiveOutput?.toLocaleString(i18n.language) ?? "—"}
         />
         <ValueCell
           label={t("settings.remainingInputBudget", "Remaining input budget")}
-          value={inputBudget?.toLocaleString() ?? "—"}
+          value={inputBudget?.toLocaleString(i18n.language) ?? "—"}
         />
       </div>
       <p className="text-[10px] leading-relaxed text-muted-foreground">

@@ -1,3 +1,4 @@
+import { PaneNotice, usePaneNotice } from "../pane-notice.js";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ArrowLeft, Download, Plus, Server, Upload } from "lucide-react";
@@ -39,6 +40,7 @@ import { useSettingsRevision } from "../use-settings-revision.js";
 
 /** Provider catalogue with connection settings and one-to-many model editing. */
 export function LlmPresetsPane() {
+  const { notice, show, clear } = usePaneNotice();
   const { t } = useTranslation();
   const { state } = useSession();
   const fileRef = useRef<HTMLInputElement>(null);
@@ -317,6 +319,7 @@ export function LlmPresetsPane() {
     const ownsRead = () =>
       mounted.current && importGeneration.current === generation;
     setImportError(null);
+    clear();
     let imported: ProviderModelProfile[];
     try {
       const text = await file.text();
@@ -344,7 +347,13 @@ export function LlmPresetsPane() {
       return;
     }
     for (const profile of imported) current.set(profile.id, profile);
-    await commit(normalizeProviderProfiles([...current.values()]));
+    if (await commit(normalizeProviderProfiles([...current.values()]))) {
+      if (ownsRead())
+        show({
+          tone: "success",
+          message: t("settings.providerImportSucceeded"),
+        });
+    }
   };
 
   return (
@@ -438,11 +447,13 @@ export function LlmPresetsPane() {
         </section>
       </div>
 
-      {(importError || saveError) && (
-        <p role="alert" className="text-xs text-destructive">
-          {importError || saveError}
-        </p>
-      )}
+      <PaneNotice
+        notice={
+          importError || saveError
+            ? { tone: "error", message: importError || saveError || "" }
+            : notice
+        }
+      />
       <div className="flex gap-2">
         <Button
           variant="outline"

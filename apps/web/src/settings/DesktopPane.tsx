@@ -41,6 +41,7 @@ import {
 import { resetOnboarding } from "@/components/onboarding-wizard.js";
 import { useSession } from "@/stores/session-store.js";
 import { useOpenLlmToml } from "./use-open-llm-toml.js";
+import { PaneNotice, usePaneNotice } from "./pane-notice.js";
 import { ignoreError } from "@/lib/ignore-error.js";
 
 interface DesktopInfo {
@@ -63,8 +64,7 @@ export function DesktopPane() {
   const openLlmTomlFile = useOpenLlmToml();
   const [info, setInfo] = useState<DesktopInfo | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
-  const [toast, setToast] = useState<string | null>(null);
-  const [toastError, setToastError] = useState(false);
+  const { notice, show, clear } = usePaneNotice();
   const [proxy, setProxy] = useState<DesktopProxyConfig | null>(null);
   const [proxyMode, setProxyMode] = useState<DesktopProxyMode>("direct");
   const [proxyUrl, setProxyUrl] = useState("");
@@ -124,14 +124,14 @@ export function DesktopPane() {
       setProxy(config);
       setProxyMode(config.mode);
       setProxyUrl(config.url ?? "");
-      setToastError(false);
-      setToast(t("settings.desktopProxySaved"));
+      show({ tone: "success", message: t("settings.desktopProxySaved") });
     } catch (error) {
-      setToastError(true);
-      setToast(error instanceof Error ? error.message : String(error));
+      show({
+        tone: "error",
+        message: error instanceof Error ? error.message : String(error),
+      });
     } finally {
       setBusy(null);
-      setTimeout(() => setToast(null), 5000);
     }
   }
 
@@ -140,6 +140,8 @@ export function DesktopPane() {
     try {
       const i = await getDesktopInfo();
       setInfo(i as DesktopInfo | null);
+    } catch {
+      show({ tone: "error", message: t("settings.desktopRefreshFailed") });
     } finally {
       setBusy(null);
     }
@@ -147,9 +149,10 @@ export function DesktopPane() {
 
   async function handleRestart() {
     if (!hasElectronIpc()) {
-      setToastError(true);
-      setToast(t("settings.desktopRestartElectronOnly"));
-      setTimeout(() => setToast(null), 3000);
+      show({
+        tone: "error",
+        message: t("settings.desktopRestartElectronOnly"),
+      });
       return;
     }
     setBusy("restart");
@@ -158,14 +161,14 @@ export function DesktopPane() {
         message: t("reload.reloadingServer", "Restarting backend…"),
       });
     } catch (err) {
-      setToastError(true);
-      setToast(
-        err instanceof Error
-          ? err.message
-          : t("settings.desktopRestartFailed", "Restart failed"),
-      );
+      show({
+        tone: "error",
+        message:
+          err instanceof Error
+            ? err.message
+            : t("settings.desktopRestartFailed", "Restart failed"),
+      });
       setBusy(null);
-      setTimeout(() => setToast(null), 3000);
     }
     // On success the helper calls window.location.reload(); any code path
     // that reaches here means we need to leave `busy` cleared.
@@ -191,81 +194,73 @@ export function DesktopPane() {
         // One message per outcome: what the restart does with the data, and
         // where the current data stays.
         const values = { path: picked.path, old: info?.dataRoot ?? "" };
-        setToastError(false);
-        setToast(
-          picked.mode === "copy"
-            ? t("settings.desktopDataRootCopyPending", values)
-            : picked.mode === "existing"
-              ? t("settings.desktopDataRootSetExisting", values)
-              : picked.mode === "unchanged"
-                ? t("settings.desktopDataRootUnchanged", values)
-                : picked.mode === "manual"
-                  ? t("settings.desktopDataRootSetManual", values)
-                  : t("settings.desktopDataRootSetEmpty", values),
+        show(
+          {
+            tone: "success",
+            message:
+              picked.mode === "copy"
+                ? t("settings.desktopDataRootCopyPending", values)
+                : picked.mode === "existing"
+                  ? t("settings.desktopDataRootSetExisting", values)
+                  : picked.mode === "unchanged"
+                    ? t("settings.desktopDataRootUnchanged", values)
+                    : picked.mode === "manual"
+                      ? t("settings.desktopDataRootSetManual", values)
+                      : t("settings.desktopDataRootSetEmpty", values),
+          },
+          15000,
         );
         await refreshInfo();
       }
     } catch (err) {
-      setToastError(true);
-      setToast(
-        err instanceof Error
-          ? err.message
-          : t(
-              "settings.desktopChangeDataRootFailed",
-              "Could not change data root",
-            ),
-      );
+      show({
+        tone: "error",
+        message:
+          err instanceof Error
+            ? err.message
+            : t(
+                "settings.desktopChangeDataRootFailed",
+                "Could not change data root",
+              ),
+      });
     } finally {
       setBusy(null);
-      setTimeout(() => setToast(null), 15000);
     }
   }
 
   async function handleResetOnboarding() {
     if (busy !== null) return;
     setBusy("onboarding");
-    setToast(null);
-    setToastError(false);
+    clear();
     try {
       await resetOnboarding();
-      setToast(
-        t(
-          "settings.desktopOnboardingResetToast",
-          "Onboarding will show on next launch",
-        ),
-      );
+      show({
+        tone: "success",
+        message: t("settings.desktopOnboardingResetToast"),
+      });
     } catch {
-      setToastError(true);
-      setToast(t("settings.saveFailed"));
+      show({ tone: "error", message: t("settings.saveFailed") });
     } finally {
       setBusy(null);
-      setTimeout(() => setToast(null), 3000);
     }
   }
 
   return (
     <div className="space-y-5">
-      {toast && (
-        <div
-          role={toastError ? "alert" : "status"}
-          className="text-xs px-3 py-2 rounded bg-primary/10 border border-primary/20 text-primary"
-        >
-          {toast}
-        </div>
-      )}
+      <PaneNotice notice={notice} />
 
       {showLlmMissingBanner && (
-        <div className="border border-amber-500/40 bg-amber-500/10 px-3 py-2.5 rounded space-y-2">
+        <div className="border border-(--accent-warning)/40 bg-(--accent-warning)/10 px-3 py-2.5 rounded space-y-2">
           <div className="flex items-start gap-2">
-            <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+            <AlertTriangle className="w-4 h-4 text-(--accent-warning) shrink-0 mt-0.5" />
             <div className="space-y-1 flex-1">
-              <p className="text-xs font-medium text-amber-900 dark:text-amber-200">
+              <p className="text-xs font-medium text-(--accent-warning)">
                 {t(
                   "settings.desktopLlmMissingTitle",
                   "No LLM slots configured yet",
                 )}
               </p>
-              <p className="text-[11px] text-amber-800/80 dark:text-amber-200/70 leading-relaxed">
+              <p className="text-[11px] text-(--accent-warning)/80 leading-relaxed">
                 {t(
                   "settings.desktopLlmMissingHint",
                   "Click below to open ~/.covel/llm.toml and add at least one [covel.<slot>] section.",
@@ -357,8 +352,7 @@ export function DesktopPane() {
             variant="outline"
             onClick={() =>
               openKeysEnv().catch((err) => {
-                setToastError(true);
-                setToast(String(err));
+                show({ tone: "error", message: String(err) });
               })
             }
           >
@@ -407,7 +401,7 @@ export function DesktopPane() {
           )}
         </div>
         {proxyMode === "system" && !proxy?.systemAvailable && (
-          <div className="text-[10px] text-amber-600">
+          <div className="text-[10px] text-(--accent-warning)">
             {t("settings.desktopProxySystemDirect")}
           </div>
         )}
@@ -418,7 +412,7 @@ export function DesktopPane() {
           </div>
         )}
         {proxyLoadState === "error" && (
-          <div className="flex items-center gap-2 text-[10px] text-amber-600">
+          <div className="flex items-center gap-2 text-[10px] text-(--accent-warning)">
             <span>{t("settings.desktopProxyLoadFailed")}</span>
             <Button
               size="sm"
@@ -460,11 +454,7 @@ export function DesktopPane() {
           {t("settings.desktopServer")}
         </h3>
         <div className="text-xs text-muted-foreground">
-          {t("settings.desktopServerPort")}
-          <span className="font-mono text-foreground">
-            {info?.serverPort ?? "?"}
-          </span>
-          .
+          {t("settings.desktopServerPort", { port: info?.serverPort ?? "?" })}
         </div>
         <div className="text-[11px] text-muted-foreground leading-relaxed">
           {t("settings.desktopRestartHint")}
@@ -561,13 +551,11 @@ function InfoRow({
   mono?: boolean;
 }) {
   return (
-    <div className="flex items-start gap-3">
-      <span className="text-muted-foreground min-w-20">{label}:</span>
-      <span
-        className={`flex-1 break-all ${mono ? "font-mono text-[11px]" : ""}`}
-      >
+    <dl className="flex items-start gap-3">
+      <dt className="text-muted-foreground min-w-20">{label}</dt>
+      <dd className={`flex-1 break-all ${mono ? "font-mono text-[11px]" : ""}`}>
         {value}
-      </span>
-    </div>
+      </dd>
+    </dl>
   );
 }

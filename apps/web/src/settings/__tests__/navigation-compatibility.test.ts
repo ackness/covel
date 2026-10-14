@@ -54,3 +54,14 @@ it("searches custom pane entries and excludes the internal onboarding revision f
       ?.children.map((entry) => entry.key),
   ).not.toContain("ui.onboardedVersion");
 });
+
+it("F-079 does not offer custom widgets as inert General settings", () => {
+  const general = navigation().find((node) => node.id === "general");
+  expect(general?.children.length).toBeGreaterThan(0);
+  expect(general?.children.some((entry) => entry.widget === "custom")).toBe(
+    false,
+  );
+  expect(general?.children.map((entry) => entry.key)).not.toContain(
+    "media.allowedImageHosts",
+  );
+});
