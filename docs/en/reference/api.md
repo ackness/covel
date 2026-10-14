@@ -886,10 +886,9 @@ Both endpoints return `409` when no turn is in progress.
 
 `steer` (interject):
 
-- The message is merged into the story runtime's next LLM call, and saved to the message history.
+- The message is merged into the story runtime's next LLM call. When the turn commits, it is saved in the same transaction to the conversation history and the chat log; when the turn does not commit, it is not saved.
 - It applies only to runtimes with `outputKind: story`. A plugin runtime runs a structured task and does not accept interjections.
 - When an interjection arrives while the final response is streaming, the story runtime adds one more LLM call before it wraps up, to take it in. This call is limited by maxSteps.
-- If saving the message fails, that item is withdrawn from the queue and the request returns `500`.
 
 `abort` (stop):
 

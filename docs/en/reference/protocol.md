@@ -188,7 +188,7 @@ Control during a turn uses HTTP endpoints, not SSE events (see [api.md § Contro
 
 - The message goes into the queue for this session on the server. Before the next model call, the story runtime merges the queued content into the live conversation record.
 - If the interjection arrives while the final answer is still streaming, the story runtime makes one more model call to handle it before it finishes (limited by maxSteps).
-- The interjection is also saved as a user message, so later turn history includes it naturally. If saving fails, the queued item is withdrawn and a 500 is returned, so the queue and the history stay consistent.
+- The interjection is saved with its turn. When the turn commits, it is written in the same transaction to the conversation history (after the player's message of the turn) and to the chat log, so later turns read it. An interjection does not count as a new player turn. When the turn is stopped, fails or is rolled back, neither keeps it.
 - The client shows the interjection locally itself. There is no new SSE event.
 
 **abort: the player stops this turn** (`POST /api/sessions/:id/abort`)

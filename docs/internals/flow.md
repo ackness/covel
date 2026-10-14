@@ -951,6 +951,10 @@ turn_messages (canonical 追加式执行日志):
   （pendingInput）与 UI 附件。结构化输出保留在 turn_results；既无文本也
   无附件的运行（如 codex 只写结构化条目）不写 runtime 行。
 
+  回合中的插话（steer）是 source `player-interjection`、role `user` 的行，
+  随回合的 finalize 事务写入，排在这一回合的 player 行之后；回合没有提交
+  就不写。它不算玩家回合：玩家消息计数只数 `player` 行。
+
   trigger 台账（kernel 所有的 plugin data，owner `__kernel:triggers`）
   按 runtime 记录已提交的运行次数和最后一次运行时的
   completedPlayerTurns，随 finalize 事务写入，回滚的执行不计数。

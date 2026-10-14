@@ -16,9 +16,28 @@ interface ActiveTurnEntry {
   readonly requestId?: string;
   readonly startedAt: string;
   readonly controller: AbortController;
+  /** Accepted interjections no model call has read yet, oldest first. */
   readonly steering: string[];
+  /** Every interjection accepted for the turn, in arrival order. */
+  readonly accepted: TurnInterjection[];
+  /** How many of `accepted` a model call has read. */
+  read: number;
   /** False once no runtime of the execution reads the queue any more. */
   steeringOpen: boolean;
+}
+
+/**
+ * `turn_messages.sourceType` of a saved interjection: a user row of its turn
+ * that the prompt history shows, but not a player turn of its own (the turn
+ * count reads only `player` rows).
+ */
+export const PLAYER_INTERJECTION_SOURCE = "player-interjection";
+
+/** A player interjection accepted for a turn; saved only if the turn commits. */
+export interface TurnInterjection {
+  readonly content: string;
+  /** When a model call of the turn read it; absent when none did. */
+  readonly readAt?: string;
 }
 
 const activeTurns = new Map<string, ActiveTurnEntry>();
@@ -28,6 +47,11 @@ export type SteerRefusal = "no_active_turn" | "steering_closed";
 
 export interface RegisteredTurn {
   readonly turnControl: TurnControl;
+  /**
+   * In the turn's commit: stop accepting interjections and hand over every
+   * one accepted, so they are saved with the turn or not at all.
+   */
+  readonly closeInterjections: () => readonly TurnInterjection[];
   readonly release: () => void;
 }
 
@@ -47,30 +71,34 @@ export function registerActiveTurn(
     startedAt: new Date().toISOString(),
     controller: new AbortController(),
     steering: [],
+    accepted: [],
+    read: 0,
     steeringOpen: true,
   };
   activeTurns.set(sessionId, entry);
   return {
     turnControl: {
       signal: entry.controller.signal,
-      drainSteering: () => entry.steering.splice(0),
+      drainSteering: () => {
+        const drained = entry.steering.splice(0);
+        const readAt = new Date().toISOString();
+        for (let i = 0; i < drained.length; i += 1) {
+          const index = entry.read + i;
+          entry.accepted[index] = { ...entry.accepted[index]!, readAt };
+        }
+        entry.read += drained.length;
+        return drained;
+      },
       closeSteering: () => {
         entry.steeringOpen = false;
       },
     },
+    closeInterjections: () => {
+      entry.steeringOpen = false;
+      return [...entry.accepted];
+    },
     release: () => {
-      if (activeTurns.get(sessionId) === entry) {
-        if (entry.steering.length > 0) {
-          // Accepted while a story runtime could still read the queue, which
-          // then ended without another step. The chat log has them; the
-          // prompt history of later turns comes from the turn journal, which
-          // does not.
-          console.warn(
-            `[turn-control] ${sessionId}: ${entry.steering.length} steering message(s) were accepted for turn ${entry.turnId} but no story runtime read them; they are in the chat log only, not in the prompt history of later turns`,
-          );
-        }
-        activeTurns.delete(sessionId);
-      }
+      if (activeTurns.get(sessionId) === entry) activeTurns.delete(sessionId);
     },
   };
 }
@@ -90,19 +118,8 @@ export function steerActiveTurn(
     return { refused: "steering_closed" };
   }
   entry.steering.push(message);
+  entry.accepted.push({ content: message });
   return { turnId: entry.turnId };
-}
-
-/**
- * Best-effort removal of a queued interjection whose persistence failed —
- * no-op when the loop already drained it (the retry may then duplicate,
- * but the common case is retracted before the next LLM step).
- */
-export function retractSteering(sessionId: string, message: string): void {
-  const entry = activeTurns.get(sessionId);
-  if (!entry) return;
-  const idx = entry.steering.lastIndexOf(message);
-  if (idx >= 0) entry.steering.splice(idx, 1);
 }
 
 /** Abort the session's active turn. Idempotent. */

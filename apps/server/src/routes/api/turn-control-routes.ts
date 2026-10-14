@@ -9,8 +9,9 @@
  * `steering_closed`): every story runtime of the execution has finished and
  * only bookkeeping is left. On either 409 the client restores the message to
  * the composer for the player to send as a normal message. An accepted
- * interjection is also persisted to the messages table, so the chat log keeps
- * it.
+ * interjection is saved with its turn: the turn's commit writes it to the
+ * prompt history and the chat log, and a turn that does not commit keeps
+ * neither.
  */
 
 import { Hono } from "hono";
@@ -19,7 +20,6 @@ import { errorBody } from "../../api-error.js";
 import { rateLimiter } from "../../middleware/rate-limit.js";
 import {
   abortActiveTurn,
-  retractSteering,
   steerActiveTurn,
   type SteerRefusal,
 } from "./turn-control.js";
@@ -86,24 +86,6 @@ turnControlRoutes.post("/:id/steer", rateLimiter({ max: 30 }), async (c) => {
       }),
       409,
     );
-  }
-
-  // Persist so the chat log keeps the interjection — the live injection into
-  // the current loop happens via the steering queue.
-  try {
-    await store.addMessage({
-      id: crypto.randomUUID(),
-      sessionId,
-      role: "user",
-      content: message,
-      metadata: { turnId: steered.turnId, steered: true },
-      createdAt: new Date().toISOString(),
-    });
-  } catch (err) {
-    // Keep queue and persistence consistent: the client sees a failure and
-    // will retry, so retract the queued copy or the retry double-injects.
-    retractSteering(sessionId, message);
-    throw err;
   }
 
   return c.json({ ok: true, turnId: steered.turnId });

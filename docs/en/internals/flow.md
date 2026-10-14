@@ -951,6 +951,10 @@ turn_messages (canonical append-only execution log):
   (pendingInput) and the UI attachments. Structured output is kept in turn_results. A run that has
   neither text nor attachments (for example, codex, which writes only structured entries) writes no runtime row.
 
+  An interjection during a turn (steer) is a row with source `player-interjection` and role `user`.
+  It is written in the turn's finalize transaction, after the turn's player row; a turn that does
+  not commit writes none. It is not a player turn: the player message count reads only `player` rows.
+
   Trigger ledger (plugin data owned by the kernel, owner `__kernel:triggers`).
   It records, per runtime, how many committed runs there have been and the completedPlayerTurns at the
   last run. It is written with the finalize transaction, so a rolled-back execution is not counted.

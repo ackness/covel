@@ -39,6 +39,30 @@ describe("turn-control registry", () => {
     });
   });
 
+  it("hands every accepted interjection to the commit, read or not", () => {
+    const { turnControl, closeInterjections, release } = registerActiveTurn(
+      "sess-i",
+      "turn-i",
+    );
+    try {
+      steerActiveTurn("sess-i", "first");
+      expect(turnControl.drainSteering?.()).toEqual(["first"]);
+      steerActiveTurn("sess-i", "second");
+
+      const saved = closeInterjections();
+      expect(saved).toEqual([
+        { content: "first", readAt: expect.any(String) },
+        { content: "second" },
+      ]);
+      // After the commit took them, a late one is refused, not lost.
+      expect(steerActiveTurn("sess-i", "too late")).toEqual({
+        refused: "steering_closed",
+      });
+    } finally {
+      release();
+    }
+  });
+
   it("refuses steering once the executor closed the queue", () => {
     const { turnControl, release } = registerActiveTurn("sess-c", "turn-c");
     try {
@@ -135,38 +159,6 @@ describe("steer/abort routes", () => {
     expect(abortNoTurn.status).toBe(409);
   });
 
-  it("retracts the queued interjection when persistence fails", async () => {
-    const { store } = await makeApp();
-    const failing = new Proxy(store, {
-      get(target, prop, receiver) {
-        if (prop === "addMessage") {
-          return () => Promise.reject(new Error("disk full"));
-        }
-        return Reflect.get(target, prop, receiver);
-      },
-    });
-    const appFailing = new Hono();
-    appFailing.use("*", async (c, next) => {
-      c.set("store" as never, failing as never);
-      await next();
-    });
-    appFailing.route("/api/sessions", turnControlRoutes);
-
-    const { turnControl, release } = registerActiveTurn("sess-r", "turn-r");
-    try {
-      const res = await appFailing.request("/api/sessions/sess-r/steer", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: "lost write" }),
-      });
-      expect(res.status).toBe(500);
-      // Queue and history stay consistent: nothing left for the loop to drain.
-      expect(turnControl.drainSteering?.()).toEqual([]);
-    } finally {
-      release();
-    }
-  });
-
   it("409s with steering_closed and stores nothing once the queue is closed", async () => {
     const { app, store } = await makeApp();
     const { turnControl, release } = registerActiveTurn("sess-r", "turn-r");
@@ -189,9 +181,12 @@ describe("steer/abort routes", () => {
     }
   });
 
-  it("steers and aborts an active turn; steered message is persisted", async () => {
+  it("steers and aborts an active turn; the interjection waits for the turn's commit", async () => {
     const { app, store } = await makeApp();
-    const { turnControl, release } = registerActiveTurn("sess-r", "turn-r");
+    const { turnControl, closeInterjections, release } = registerActiveTurn(
+      "sess-r",
+      "turn-r",
+    );
     try {
       const steer = await app.request("/api/sessions/sess-r/steer", {
         method: "POST",
@@ -203,12 +198,11 @@ describe("steer/abort routes", () => {
       expect(await steer.json()).toEqual({ ok: true, turnId: "turn-r" });
       expect(turnControl.drainSteering?.()).toEqual(["take the left path"]);
 
-      const messages = await store.listMessages("sess-r");
-      expect(
-        messages.some(
-          (m) => m.role === "user" && m.content === "take the left path",
-        ),
-      ).toBe(true);
+      // Nothing is written outside the turn: its commit saves the text.
+      expect(await store.listMessages("sess-r")).toEqual([]);
+      expect(closeInterjections()).toEqual([
+        { content: "take the left path", readAt: expect.any(String) },
+      ]);
 
       const abort = await app.request("/api/sessions/sess-r/abort", {
         method: "POST",
