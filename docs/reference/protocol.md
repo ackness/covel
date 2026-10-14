@@ -984,6 +984,8 @@ data: {
 
 **框架默认 action：** 见 [api.md](./api.md#post-apisessionsidplugin-rpc) 的“框架默认 action”小节。
 
+恢复挂起的 runtime 也逐项请求缺少的授权。审批期间释放客户端的会话队列；切换会话或拒绝审批会停止重试并保留挂起项。见 [恢复接口](./api.md#post-apisessionsidsuspensionssuspensionidresume)。
+
 ### RPC Approval
 
 社区插件的 RPC 调用需要玩家明确批准。框架返回 202 之后，前端通过下面的接口读取待批准的项，并提交决定。
