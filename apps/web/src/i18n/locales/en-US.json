@@ -329,6 +329,8 @@
     "recoveryUnknownDetail": "We cannot confirm the result yet. Reconnecting will check the original task without starting another turn.",
     "recoveryRunningDetail": "The server is continuing the original task. Its result will appear here automatically; you can wait or stop it.",
     "recoveryInterruptedDetail": "The unfinished task is no longer running. Your saved progress is preserved. Retry starts a new attempt only when you choose it.",
+    "unsavedNarrative": "Unsaved",
+    "unsavedNarrativeDetail": "This text was not saved. It stays here until you leave the session.",
     "recoveryHydratingDetail": "Recovering the latest saved result before you continue.",
     "recoveryRetry": "Retry unfinished turn",
     "recoveryRefresh": "Check status",
