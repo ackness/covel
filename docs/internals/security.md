@@ -147,7 +147,17 @@ Web 客户端只发送它的请求用得到的供应商的密钥：
 - Web 端存在 `localStorage`（`covel:keys`）。
 - 两处都不加密。渲染进程需要明文才能拼出 `X-Provider-Keys`，所以即使落盘加密，`covel:keys:load` 这条 IPC 通道（只接受受信任的发送方）也还是原样；而在未签名的构建上，Electron `safeStorage` 只会多出一个 macOS 钥匙串弹窗。
 
-文件权限和浏览器的同源策略能挡住其他系统用户和其他网站。它们挡不住以该用户身份运行的代码，其中就包括已批准的社区插件（见下一节）。
+文件权限和浏览器的同源策略能挡住其他系统用户和其他网站。它们挡不住以该用户身份运行的代码，其中就包括已批准的社区插件（见 [Community plugin code](#community-plugin-code)）。
+
+## 桌面窗口
+
+桌面窗口启用 `contextIsolation` 和 `sandbox`，关闭 `nodeIntegration`，不启用子 frame 的 Node 集成。`preload.ts` 通过 `contextBridge` 暴露 `window.covelIpc`：应用元信息、只允许白名单通道的 `invoke` 和 `on`；订阅回调拿不到 Electron 事件对象。
+
+敏感 IPC（包括明文密钥、REST token 和设置读写）要求发送方是其 `webContents.mainFrame`，且 URL 与主窗口已提交的回环 HTTP 源相同。同源子 frame 也被拒绝。恢复通道（重试启动、打开日志、配置或数据目录）同样要求主 frame，但也接受主进程生成的当前启动页。启动页不能读取密钥或 REST token。
+
+`windows.ts` 阻止主 frame 导航或重定向到其他源；主进程主动加载启动页或应用地址不受此事件守卫限制。`window.open` 不创建新窗口：HTTPS 和回环 HTTP 链接交给系统浏览器，其他 HTTP 链接先确认，其他协议拒绝。这些限制不能防住受信任主页面内的恶意脚本，也不能隔离已批准的插件服务端代码。
+
+发送方校验和启动错误投递的回归测试在 `apps/desktop/scripts/restart-server.test.mjs`；源和启动页 URL 匹配测试在 `apps/desktop/src/trusted-origin.selfcheck.ts`。
 
 ## Community plugin code
 
