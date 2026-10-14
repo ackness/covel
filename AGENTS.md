@@ -15,6 +15,35 @@ zero or more runtimes; the kernel resolves each session's plugin set, routes
 turns, assembles context, drives LLM tool calls, and commits proposals. It ships
 as Web or Electron desktop (`pnpm build:electron`).
 
+**Product principles.** The full text is the "产品理念" section of
+`docs/internals/design-principles.md`. They decide trade-offs; when code
+disagrees with them, change the code.
+
+- Players come first: playing a world someone else built, or one's own, must be
+  easy. Developers, experienced players and agents extend gameplay and settings.
+- Every framework capability serves every plugin. Bundled plugins are showcases
+  on equal footing with community plugins: they use no interface a community
+  plugin cannot use and differ only in trust. The framework runs with every
+  plugin removed, and one narrative plugin is enough to play a world. The
+  bundled worlds are demos too: three show one play mode each, and `emberback`
+  is written in English to show a world in several languages.
+- Missing pieces never stop the game: a plugin ignores fields that are absent,
+  a world runs with fields nothing uses, and a missing plugin or data only
+  removes its feature. Validation tools report the problem to the author and
+  the UI tells the player what is missing.
+- One core serves the desktop app, the self-hosted web app and, later, the
+  official web app (player data stays in the browser; the server must not
+  store it). The desktop and self-hosted apps are the current focus; the
+  official web app is not supported yet. Keep the core generic: storage, auth
+  and model access get no special case for one form, so the official web app
+  can be added without rewriting it. SQLite is the default; PostgreSQL must keep working for professional
+  developers and special needs, and any behaviour difference between the two is
+  a bug the shared contract suite catches. A commercial edition is not developed
+  in this repository.
+- Plugins mix function and agent runtimes freely and describe their UI with
+  json-render; manifests ask only for what cannot be derived or defaulted.
+- Development is fast: change contracts directly (see Current contract only).
+
 ## Documentation
 
 `docs/` is the source of truth; this file only points at it. It is the
@@ -55,7 +84,7 @@ Reference (`docs/reference/`) — authoritative contracts:
 Internals (`docs/internals/`) — why, how modules connect, and how to work on the framework:
 
 - Turn pipeline, background jobs, end-to-end data flow: `flow.md`
-- Kernel vs plugin rulings: `design-principles.md`
+- Product principles and kernel vs plugin rulings: `design-principles.md`
 - Package responsibilities and host composition: `packages.md`
 - Storage profiles and contracts: `storage.md`
 - Security boundaries (SSRF/DNS pinning, key binding, hosted auth): `security.md`
@@ -381,8 +410,10 @@ any plugin must not break the framework.
   same route: a source targets `contract:<id>` and the kernel delivers it to active
   namespaces that declare `contributes.data.*.accepts`.
 - Dispatch on `RuntimeManifest.outputKind` (`story` / `plugin` / `system`, authored
-  as `io.visibility`); gate core vs optional on `kind` / `pluginType` and trust on
-  source (`builtin` / `community`).
+  as `io.visibility`). `kind` only decides whether a package is requested by
+  default (`resolveSessionPlugins`); framework code must not treat `core`
+  packages differently in any other way. Trust follows the source (`builtin` /
+  `community`), never `kind`.
 - When a legitimate scenario cannot be expressed, add a generic primitive (a
   proposal type, hook event, extension point, or trigger), not a special case.
 - Test files may use real plugin IDs as fixtures.
@@ -545,7 +576,9 @@ Summary only; the boundaries and their reasons are in `docs/internals/security.m
   request keys arrive in `X-Provider-Keys` and are never persisted.
 - `DEPLOYMENT_TIER` `demo` / `commercial` enforce per-session owner tokens and the
   operator token (`COVEL_DESKTOP_REST_TOKEN`); `self` / desktop binds `127.0.0.1`
-  and treats tokens as no-ops.
+  and treats tokens as no-ops. `commercial` is reserved for a possible future
+  commercial edition: there are no accounts, tenant isolation or quotas, and this
+  repository does not maintain it.
 - Plugin server JavaScript is not sandboxed. Community code runs only after player
   approval, with its declared `permissions.http` origins enforced fail-closed.
   Manifests are plain YAML — frontmatter engine directives such as `---js` are

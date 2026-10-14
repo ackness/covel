@@ -102,7 +102,7 @@ Extract facts supported by runtime-inputs.narrative.value, then call save-facts.
 <!-- prettier-ignore -->
 | Root field | Meaning |
 | --- | --- |
-| `id`, `kind` | Package identity. `kind` is `core` or `plugin`. |
+| `id`, `kind` | Package identity. `kind` is `core` (added to every game by default) or `plugin` (added only when chosen). |
 | `version`, `displayName`, `description`, `tags` | Metadata. Tags group and filter plugins in session prep; they do not determine runtime scheduling. |
 | `covel` | The range of host versions the package works with, such as `">=0.0.45"`. A host outside that range does not install or load the package. |
 | `author`, `license`, `homepage` | Author information, shown only for display. See [Author information](#author-information). |
@@ -886,7 +886,7 @@ Output of the first command:
 
 ## Built-in plugins at a glance
 
-Below are all the plugins that ship with Covel from [plugins/](../../../plugins/), excluding `_archive/`. `core` is basic functionality, and `plugin` is an optional gameplay feature. In the "runtime" column, "inline" means there is only the one runtime in the root file, and "none" means the plugin has only an entry, extensions, or UI.
+Below are all the plugins that ship with Covel from [plugins/](../../../plugins/), excluding `_archive/`. `kind: core` means the plugin joins every game by default, and a player can exclude it. `kind: plugin` is enabled only when a player chooses it. In the "runtime" column, "inline" means there is only the one runtime in the root file, and "none" means the plugin has only an entry, extensions, or UI.
 
 <!-- prettier-ignore -->
 | ID | Name | `kind` | Contracts provided | runtime | What it does |

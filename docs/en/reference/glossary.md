@@ -13,11 +13,14 @@ Each English term has only one Chinese term. The Chinese docs, the UI text, and 
 | --- | --- | --- |
 | Alias | 别名 | Another name for the same character (`aliases`). It is not a compatibility name for a field or ID. |
 | Binding | 绑定 |  |
+| Bundled plugin | 内置插件 | A plugin that ships with Covel. Not the same as `kind: core`. |
 | Capability | 能力标签 | The `tag` of a model route (`text`, `image`, and so on). Plugins are found by **Contract**, not by capability tag. |
 | Collection | 合集 |  |
 | Contract | 契约 | A versioned ID, for example `narrative-engine@1`. |
 | Credits | 作者信息 | The `author`, `license`, and `homepage` fields of a package. |
+| Deployment form | 部署形态 | The desktop app, the self-hosted web app, the official web app. Not `DEPLOYMENT_TIER`. |
 | Kernel | 内核 |  |
+| Official web app | 官方网页版 |  |
 | Pack | 玩法包 |  |
 | PluginType | 插件类型 |  |
 | Preset | 预设 |  |
@@ -80,6 +83,12 @@ A data path: a runtime says "I want to read another runtime's result". It is wri
 
 See: [plugin field reference](./plugins.md), [turn pipeline](../internals/flow.md), `packages/shared/src/types/runtime-scheduling.ts`.
 
+## Bundled plugin
+
+A bundled plugin ships with Covel and lives under `plugins/`. Its source is `builtin`, so its code runs without player approval; a community plugin's code needs the player's approval. The bundled plugins are demos, not part of the framework: the framework must keep working when any one of them is removed. A bundled plugin is not the same thing as a `kind: core` plugin: `kind` decides whether a plugin is added to every game by default.
+
+See: [built-in plugins and features](../builtin/index.md), [plugin field reference](./plugins.md).
+
 ## Collection
 
 A list (`covel-collection.yaml`) of worlds and plugins to install together. It can also include packages from other repositories that are pinned to a commit.
@@ -107,6 +116,14 @@ It is for display only, and it is shown before the game starts. The framework ma
 
 See: [author information](./plugins.md#author-information), [security boundaries](../internals/security.md#package-credits-and-author-links).
 
+## Deployment form
+
+Covel runs in three deployment forms: the desktop app, the self-hosted web app, and the official web app. The first two are supported now; the official web app is not supported yet. Each one stores data in its own way. The commercial edition is not built yet, and this repository does not maintain it.
+
+It is not the same thing as the deployment tier (`DEPLOYMENT_TIER`): the tier decides how strict authentication and the security checks are. See [Security boundaries](../internals/security.md).
+
+See: [storage](../internals/storage.md).
+
 ## Extension point
 
 A versioned connection point defined by the kernel, which plugins implement, for example `prompt.segment@1` or `ui.slot@1`.
@@ -130,6 +147,12 @@ The part of `WORLD.md` between the two lines `<!-- narrator-only -->` and `<!-- 
 Its purpose is to avoid spoiling the story for the player. It is not secret: the world record and the files in the package both store the full text. Content that is revealed only when a condition is met uses a different mechanism, called hidden data (`visibility: hidden`).
 
 See: [world data](./world-data.md).
+
+## Official web app
+
+The official web app is the web app that the Covel project plans to deploy for everyone to use. It is not supported yet. By design, the copy in the player's browser is the save (storage profile `browser-private`), and nothing is written to a database on the server.
+
+See: [storage](../internals/storage.md), [storage mode notes](./api.md#storage-mode-notes).
 
 ## Pack
 

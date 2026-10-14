@@ -13,11 +13,14 @@
 | --- | --- | --- |
 | Alias | 别名 | 同一个角色的另一个名字（`aliases`）。不是字段或 ID 的兼容名。 |
 | Binding | 绑定 |  |
+| Bundled plugin | 内置插件 | 随 Covel 一起安装的插件。不等于 `kind: core`。 |
 | Capability | 能力标签 | 一条模型路由的 `tag`（`text`、`image` 等）。找插件靠的是 **Contract**，不是能力标签。 |
 | Collection | 合集 |  |
 | Contract | 契约 | 带版本号的 ID，例如 `narrative-engine@1`。 |
 | Credits | 作者信息 | 一个包的 `author`、`license` 和 `homepage` 字段。 |
+| Deployment form | 部署形态 | 桌面客户端、自部署网页版、官方网页版。不是 `DEPLOYMENT_TIER`。 |
 | Kernel | 内核 |  |
+| Official web app | 官方网页版 |  |
 | Pack | 玩法包 |  |
 | PluginType | 插件类型 |  |
 | Preset | 预设 |  |
@@ -80,6 +83,12 @@
 
 详见：[插件字段参考](./plugins.md)、[回合管线](../internals/flow.md)、`packages/shared/src/types/runtime-scheduling.ts`。
 
+## Bundled plugin
+
+内置插件是随 Covel 一起发布、放在 `plugins/` 下的插件。它的来源是 `builtin`，代码不用玩家批准就能运行；社区插件的代码要玩家批准。内置插件是示范，不是框架的一部分：删掉任何一个，框架都应当照常运行。它和 `kind: core` 不是一回事：`kind` 决定插件默认是否加入每一局。
+
+详见：[内置插件与功能](../builtin/index.md)、[插件字段参考](./plugins.md)。
+
 ## Collection
 
 一份清单（`covel-collection.yaml`），列出要一起安装的世界和插件，也可以包含别的仓库里按提交固定的包。
@@ -107,6 +116,12 @@
 
 详见：[作者信息](./plugins.md#作者信息)、[安全边界](../internals/security.md#package-credits-and-author-links)。
 
+## Deployment form
+
+部署形态是 Covel 的三种运行方式：桌面客户端、自部署网页版和官方网页版。现在支持前两种，官方网页版还不支持。各自的存储方式见[存储](../internals/storage.md)。商业版现在没有做，本仓库不为它更新。
+
+它和部署档位（`DEPLOYMENT_TIER`）不是一回事：档位决定鉴权和安全检查有多严，见[安全边界](../internals/security.md)。
+
 ## Extension point
 
 内核定义的一个带版本的接入点，由插件来实现，例如 `prompt.segment@1` 或 `ui.slot@1`。
@@ -130,6 +145,12 @@
 它的作用是不向玩家剧透，并不是保密：世界记录和包里的文件都保存着全文。满足条件才揭示的内容是另一种机制，叫隐藏数据（`visibility: hidden`）。
 
 详见：[世界数据](./world-data.md)。
+
+## Official web app
+
+官方网页版是 Covel 项目打算部署给所有人用的网页版，现在还不支持。按设计，存档以玩家浏览器里的为准（存储配置 `browser-private`），不写进服务器的数据库。
+
+详见：[存储](../internals/storage.md)、[存储模式说明](./api.md#存储模式说明)。
 
 ## Pack
 

@@ -13,7 +13,7 @@ On the world selection screen, pick one of the built-in worlds. To read the back
 
 For a first game, these are good choices:
 
-- To read a story: **Mistport Chronicles** (雾港·裂潮纪).
+- To read a story: **Mistport Chronicles** (雾港・裂潮纪).
 - To see portraits and scenes: **Haruka Academy · Spring Mint** (遥风学园).
 - To use dice, quests, and an inventory: **Emberback Relay** or **Lantern Barrow: First Expedition**.
 

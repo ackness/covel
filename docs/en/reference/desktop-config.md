@@ -20,7 +20,7 @@ On first launch the desktop app creates `~/.covel/`. Small config files and user
   app-update.json            ← ignored desktop app release
   window-state.json          ← window size, position, maximized and fullscreen state
   data-root-copy.json        ← a pending data directory copy; exists only until the next start
-  plugins/                   ← user plugins (merged with the bundled core plugins)
+  plugins/                   ← user plugins (merged with the built-in plugins)
 
 <data_root>/                 ← default ~/.covel/data; can point anywhere
   covel.db                   ← SQLite database

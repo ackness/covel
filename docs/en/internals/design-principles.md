@@ -1,6 +1,6 @@
 # Design Principles
 
-This page answers the question "why is Covel designed this way?": what belongs in the kernel, and what is left to plugins. Anyone who wants to add a feature to the framework, or who is not sure where a piece of logic should go, should read this page first.
+This page first sets out Covel's product principles, then answers the question "why is Covel designed this way?": what belongs in the kernel, and what is left to plugins. Anyone who wants to add a feature to the framework, or who is not sure where a piece of logic should go, should read this page first.
 
 For other questions, go to other pages:
 
@@ -8,6 +8,54 @@ For other questions, go to other pages:
 - Field contracts: [Reference](../reference/index.md)
 - How to write a plugin: [Plugin Essentials](../plugins/essentials.md)
 - Term definitions: [Glossary](../reference/glossary.md)
+
+## Product principles
+
+These are the grounds for every trade-off. Where the code disagrees with them, the code is what changes.
+
+### Players come first
+
+- Covel is for players and for developers. What matters most is that a player can easily play a world someone else built, or one they made themselves.
+- Developers, experienced players, or agents working for them extend the gameplay and the settings.
+- What the framework provides is the scheduling between agents and the player: when the player says something, the framework decides which plugins respond, in what order, and with what context. On top of that, it serves world packages and plugins at every layer: loading, scheduling, storage and the interface.
+
+### Every plugin is equal
+
+- Every framework capability serves every plugin, not just the bundled ones.
+- Bundled plugins are examples shipped with the app to show what the framework can do. They use the same interfaces as community plugins, and nothing a community plugin cannot use. The only difference is trust: bundled plugins ship with the app and run without the player's approval.
+- Framework code makes no special case for any particular plugin; see "The core: the kernel provides primitives, plugins carry gameplay" below. With every plugin removed, the framework must still run.
+- One narrative plugin must be enough to play a world from start to finish. Every other plugin is there to enrich play.
+- The four bundled worlds are demos too. Mistport, Haruka Academy and Lantern Barrow each show one play style: traditional narrative, stage mode and tabletop rules. Emberback is written in English for English-speaking players, and shows how a world carries several languages.
+
+### Missing pieces must not stop the game
+
+- If a field a plugin needs is missing, the plugin ignores it. If a world package has fields that nothing uses, the game still runs.
+- A missing plugin or missing data only removes the matching feature. It must not block the start of a game or stop the story.
+- Problems are reported, not hidden: the validation tools tell the author, and the interface tells the player what is missing.
+
+### Several deployments, one core
+
+| Deployment          | Who runs it                   | Where player data lives                                                                                  | Now                      |
+| ------------------- | ----------------------------- | -------------------------------------------------------------------------------------------------------- | ------------------------ |
+| Desktop app         | The player, on their computer | A local SQLite file; PostgreSQL also works (for now only through environment variables)                  | The focus                |
+| Self-hosted web app | The player or a team          | A SQLite file on the server, or their own PostgreSQL                                                     | The focus                |
+| Official web app    | The Covel project             | In the player's own browser (IndexedDB). The server only handles requests and must not store player data | Not supported yet; later |
+
+- The desktop app and the self-hosted web app come first: their details are being polished now. The official web app is not supported yet and comes later.
+- The core stays generic: storage, authentication and model access get no special case for one deployment, and the differences between deployments should live in one place in the configuration. Adding the official web app later then means adding one more configuration, not rewriting the core.
+- SQLite is enough for ordinary players, and the choice of database makes almost no difference to them. PostgreSQL must keep working, but it is for professional developers and users with special needs. Any difference in behaviour between the two backends is a bug, and the shared contract suite catches it.
+- How each deployment stores data is in [Storage](./storage.md).
+- A commercial edition is not being built, and this repository is not updated for one. If one is built later, it builds on the same core.
+
+### Writing should be simple
+
+- A plugin can use functions only, agents only, or both; see "Two primitives plus composition" below. Agents call tools to do complex work, and functions handle what must be exact.
+- A plugin describes its interface with one shared declaration format (json-render today), and the framework renders it. The framework writes no special interface for any plugin.
+- A plugin or a world package should need as few fields as possible. Anything that can be derived, or has a sensible default, should not be required. Before adding a field, check whether the existing contracts, extension points and data namespaces can already express it.
+
+### Development is fast for now
+
+This is not a stable release yet. Contracts and definitions can change directly, with no compatibility branches for old data or old fields; see "Current contract only" in [AGENTS.md](../../../AGENTS.md). When a contract changes, the release notes say which data has to be recreated.
 
 ## Basic goal
 

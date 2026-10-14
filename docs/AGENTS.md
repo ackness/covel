@@ -37,6 +37,11 @@ reader-facing documentation, built into the documentation site by `apps/docs`
 - Examples are community packages in the user directories (`~/.covel/worlds`,
   `~/.covel/plugins`). They do not rely on builtin trust, on a concrete plugin
   ID in framework code, on private APIs or on a path of the author's machine.
+- Pages follow the product principles in `internals/design-principles.md`
+  (plugins on equal footing, the deployment forms, no compatibility promise
+  during fast development). Where the code does not meet a principle yet,
+  describe what the code does and raise a code issue; do not present the
+  principle as current behaviour.
 
 ## Links and format
 

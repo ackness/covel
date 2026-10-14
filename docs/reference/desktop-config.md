@@ -20,7 +20,7 @@
   app-update.json            ← 已忽略的桌面应用版本
   window-state.json          ← 窗口尺寸、位置、最大化和全屏状态
   data-root-copy.json        ← 待执行的数据目录复制，只在下次启动前存在
-  plugins/                   ← 用户插件（和应用自带的核心插件合并）
+  plugins/                   ← 用户插件（和应用自带的内置插件合并）
 
 <data_root>/                 ← 默认 ~/.covel/data；可以改到任意路径
   covel.db                   ← SQLite 数据库

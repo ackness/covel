@@ -127,13 +127,13 @@ Neither reading nor a probe can say how often a model produces an outcome, how l
 
 Write to `devs/audits/<YYYY-MM-DD>-<short-slug>/` in the main checkout (gitignored, so a worktree has no such folder; name the worktree path and HEAD in the baseline when it is the target). Probes, their logs, and analyser output go to `debugs/audits/<same-slug>/` and stay there as supporting material.
 
-- `README.md`: baseline, scope, conclusion, finding table, open questions, everything that ran (each probe with what it asserts), and the limits above.
+- `README.md`: the short entry point. Baseline, scope, conclusion, finding table, open questions, everything that ran (each probe with what it asserts), and the limits above. The finding table is the index: every finding, sorted by severity (`P1` first) and then by ID, one row each with the broken property in one sentence, the main `path:line`, the trigger class, and a link to its trace.
 - `01-model.md`: runtimes, schedule table, outcome set, state, actors, properties.
 - `02-reasoning.md`: layers A to D — branch tables, substitutions, interleavings, and the properties that hold.
-- `03-findings.md`: one counterexample trace per finding.
+- `03-findings.md`: the full version. One counterexample trace per finding, in the order of the finding table. Each heading carries an anchor on the same line, such as `## <a id="f-03"></a>F-03 ...`, so the table can link to it.
 - `map.html`: the audit map, when the user asked for one.
 
-A narrow audit may keep everything in `README.md`. Cite code as `path:line`, written as a Markdown link relative to the report folder (`../../../packages/...#L120`).
+Write the detailed files first and the README last. The README is rewritten from them, not trimmed down from them, and stays short; the detail lives in the numbered files. A narrow audit may keep everything in `README.md`, with the finding table still sorted by severity. Cite code as `path:line`, written as a Markdown link relative to the report folder (`../../../packages/...#L120`).
 
 ## Evidence Commands
 
