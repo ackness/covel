@@ -5372,7 +5372,7 @@ Trace 是服务器为每个回合记下的调试事件：哪个 runtime 开始�
 
 它先扫描 `messages`、`plugin_data`、`runtime_outputs`、`trace_events`、`snapshots`、`turn_results`，收集仍被引用的 mediaId，再调用 `MediaStore.cleanup()` 删掉其余的。
 
-每次清理还会释放世界数据导入留下的、创建已满 24 小时的临时引用（`world-data-import:<uuid>`）。演练只在 `expiredRefs` 里列出它们，真正的清理移除它们。更新的临时引用继续保护它的文件。这个时限是固定的，规则见 [媒体存储](./media-store.md#世界数据导入时的临时引用)。
+每次清理还会释放世界数据导入、上传或 runtime 写入留下的、创建已满 24 小时的临时引用（`media-pin:<uuid>`）。演练只在 `expiredRefs` 里列出它们，真正的清理移除它们。更新的临时引用继续保护它的文件。这个时限是固定的，规则见 [媒体存储](./media-store.md#世界数据导入时的临时引用)。
 
 > [!WARNING]
 > 这个端点默认禁用，必须设置 `COVEL_MEDIA_CLEANUP_ENABLED` 才能用。真正删除还要带确认头。
@@ -5405,7 +5405,7 @@ Trace 是服务器为每个回合记下的调试事件：哪个 runtime 开始�
   "policy": {
     "dryRun": true,
     "expireRefs": {
-      "sessionIdPrefix": "world-data-import:",
+      "sessionIdPrefix": "media-pin:",
       "maxAgeMs": 86400000
     },
     "maxBytes": 0
@@ -5423,7 +5423,7 @@ Trace 是服务器为每个回合记下的调试事件：哪个 runtime 开始�
     "expiredRefs": [
       {
         "mediaId": "...",
-        "sessionId": "world-data-import:...",
+        "sessionId": "media-pin:...",
         "pluginId": null,
         "createdAt": "2026-10-01T08:00:00.000Z"
       }

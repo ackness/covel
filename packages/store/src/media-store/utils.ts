@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { join } from "node:path";
-import { withoutNul } from "../common/without-nul.js";
+import type { MediaClaim } from "@covel/shared";
+import { assertStoreIdentifiers, withoutNul } from "../common/without-nul.js";
 
 export async function toBytes(blob: Uint8Array | Blob): Promise<Uint8Array> {
   if (blob instanceof Uint8Array) return new Uint8Array(blob);
@@ -45,3 +46,11 @@ export function normalizeBytes(value: Uint8Array | Buffer): Uint8Array {
 
 // filterAssetsByMetadata lives in ./filter.js; re-exported for the backends.
 export { filterAssetsByMetadata } from "./filter.js";
+
+/**
+ * Check every identifier of a claim batch before the first write, so an
+ * invalid claim late in the batch is refused the same way on every backend.
+ */
+export function assertMediaClaims(claims: readonly MediaClaim[]): void {
+  assertStoreIdentifiers(claims);
+}

@@ -7,61 +7,79 @@ interface StoredAsset {
   readonly id: string;
   readonly mime: string;
   readonly size: number;
-  readonly ownerSessionId: string | null;
-  readonly ownerPluginId: string | null;
   readonly createdAt: string;
   readonly meta: Record<string, unknown>;
+  /** Set by the batch's `claim()`; only claimed assets are visible to the cache. */
+  ownerSessionId: string | null;
+  readonly ownerPluginId: string | null;
 }
 
 function makeMediaStub() {
   const assets: StoredAsset[] = [];
   let n = 0;
 
+  const store = (
+    mime: string,
+    size: number,
+    meta?: Record<string, unknown>,
+  ) => {
+    n += 1;
+    const asset: StoredAsset = {
+      id: `media-${n}`,
+      createdAt: "2026-01-01T00:00:00.000Z",
+      mime,
+      size,
+      meta: meta ?? {},
+      ownerSessionId: null,
+      ownerPluginId: null,
+    };
+    assets.push(asset);
+    return { id: asset.id, mime: asset.mime, size: asset.size };
+  };
+  const put = vi.fn(
+    async (bytes: Uint8Array, mime: string, meta?: Record<string, unknown>) =>
+      store(mime, bytes.byteLength, meta),
+  );
+  const ingestUrl = vi.fn(
+    async (_url: string, opts?: { meta?: Record<string, unknown> }) =>
+      store("image/png", 1, opts?.meta),
+  );
   const media = {
-    put: vi.fn(
-      async (
-        bytes: Uint8Array,
-        mime: string,
-        meta?: Record<string, unknown>,
-      ) => {
-        n += 1;
-        const asset: StoredAsset = {
-          id: `media-${n}`,
-          ownerSessionId: null,
-          ownerPluginId: null,
-          createdAt: "2026-01-01T00:00:00.000Z",
-          mime,
-          size: bytes.byteLength,
-          meta: meta ?? {},
-        };
-        assets.push(asset);
-        return { id: asset.id, mime: asset.mime, size: asset.size };
-      },
-    ),
-    ingestUrl: vi.fn(
-      async (_url: string, opts?: { meta?: Record<string, unknown> }) => {
-        n += 1;
-        const asset: StoredAsset = {
-          id: `media-${n}`,
-          ownerSessionId: null,
-          ownerPluginId: null,
-          createdAt: "2026-01-01T00:00:00.000Z",
-          mime: "image/png",
-          size: 1,
-          meta: opts?.meta ?? {},
-        };
-        assets.push(asset);
-        return { id: asset.id, mime: asset.mime, size: asset.size };
-      },
-    ),
+    put,
+    ingestUrl,
+    beginBatch: vi.fn(() => {
+      const stored: string[] = [];
+      const keep = (ref: { id: string; mime: string; size: number }) => {
+        stored.push(ref.id);
+        return ref;
+      };
+      return {
+        put: async (
+          bytes: Uint8Array | Blob,
+          mime: string,
+          meta?: Record<string, unknown>,
+        ) => keep(await put(bytes as Uint8Array, mime, meta)),
+        ingestUrl: async (
+          url: string,
+          opts?: { meta?: Record<string, unknown> },
+        ) => keep(await ingestUrl(url, opts)),
+        claim: async () => {
+          for (const asset of assets)
+            if (stored.includes(asset.id)) asset.ownerSessionId = "claimed";
+        },
+        release: async () => {},
+      };
+    }),
   };
 
   const listByMetadata = vi.fn(
     async (_sessionId: string, filter: Record<string, unknown>) =>
-      assets.filter((asset) =>
-        Object.entries(filter).every(
-          ([key, value]) => asset.meta[key] === value,
-        ),
+      assets.filter(
+        (asset) =>
+          asset.ownerSessionId !== null &&
+          Object.entries(filter).every(
+            ([key, value]) => asset.meta[key] === value,
+          ),
       ),
   );
 

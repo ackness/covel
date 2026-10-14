@@ -374,6 +374,9 @@ describe("executeTurn: manual trigger", () => {
           async recordOwnership() {
             /* no-op for this test */
           },
+          async claimAssets() {
+            /* no-op for this test */
+          },
           async lookup(id) {
             return {
               id,
@@ -384,6 +387,9 @@ describe("executeTurn: manual trigger", () => {
             };
           },
           async addRef() {
+            /* no-op for this test */
+          },
+          async removeRef() {
             /* no-op for this test */
           },
           async isReferencedBy() {
