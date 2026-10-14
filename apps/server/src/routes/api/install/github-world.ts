@@ -48,11 +48,6 @@ export function findWorldDirectories(
 
 export async function inspectWorldBundle(entries: readonly ExtractedEntry[]) {
   const { worldId } = validateWorldBundle(entries);
-  if (entries.some((entry) => entry.relativePath === ".covel-install.json"))
-    throw httpError(
-      400,
-      "World package contains a reserved installation receipt",
-    );
   const manifest = worldManifestSchema.parse(
     parseYaml(
       entries

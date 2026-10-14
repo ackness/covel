@@ -84,6 +84,10 @@ services:
       # Same-origin browser access needs no CORS override. Configure an
       # authenticated reverse proxy before exposing this personal instance.
       CORS_ORIGIN: ${CORS_ORIGIN:-}
+      # Browsers reach the instance at localhost by default. List any other
+      # name it is opened by (a domain, a LAN address, or the Host a reverse
+      # proxy forwards); every other Host gets 403 host_not_allowed.
+      COVEL_ALLOWED_HOSTS: ${COVEL_ALLOWED_HOSTS:-}
 
       # World package seed directory (inside container)
       COVEL_LLM_TOML: /app/llm.toml

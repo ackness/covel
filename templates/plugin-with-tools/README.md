@@ -13,6 +13,10 @@
 - `PLUGIN.md` 的 Markdown 正文是运行时提示词，用 English 写
 - `locales/zh.yaml` 是名称与说明的中文译文
 
+`PLUGIN.md` 和 `package.json` 的版本都从 `0.1.0` 开始。发布新版本时同时修改两处，再做静态校验。
+
+`tests/runtime-cases.json` 带编辑器用的 `$schema`。用例必须写 `name` 和 `runtimeId`；未知字段（包括拼错的 `expect`）会在执行前报错。
+
 ## 开发
 
 1. 修改 `README.md`，维护给人类和开发者看的说明。

@@ -1,4 +1,6 @@
-import { describe, expect, it } from "vitest";
+import * as runtime from "@covel/runtime";
+import { runtimeManifestInputSchema } from "@covel/shared";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { tool, z } from "@covel/tools";
 import {
   makeProposal,
@@ -71,4 +73,36 @@ describe("tool integration harness", () => {
     expect(await store.listPluginData("session", "notes")).toEqual([]);
     await store.close();
   });
+});
+
+afterEach(() => vi.restoreAllMocks());
+it("executes a schema-valid manual function manifest", async () => {
+  const executeTurn = runtime.executeTurn;
+  const spy = vi
+    .spyOn(runtime, "executeTurn")
+    .mockImplementationOnce(async (...args) => {
+      const manifest = args[1][0];
+      expect(manifest).toBeDefined();
+      const { pluginId, ...input } = manifest!;
+      expect(pluginId).toBe(context.pluginId);
+      expect(runtimeManifestInputSchema.safeParse(input).success).toBe(true);
+      expect(manifest).toMatchObject({
+        runtimeType: "function",
+        trigger: { type: "manual" },
+        handler: expect.any(String),
+      });
+      expect(manifest?.stage).toBeUndefined();
+      return executeTurn(...args);
+    });
+  const store = await createPluginTestStore(context);
+  try {
+    await commitToolResults([result("notes")], context, store);
+    expect(spy).toHaveBeenCalledOnce();
+    expect(
+      (await store.getPluginData("session", "notes", "notes", "current"))
+        ?.value,
+    ).toBe("saved");
+  } finally {
+    await store.close();
+  }
 });

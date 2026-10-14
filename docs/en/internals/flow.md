@@ -203,7 +203,11 @@ Details to remember:
 - Background work started while the lock is held, such as a job worker that was woken, does not inherit the lock. It queues for the lock itself and is never taken for its owner.
 - When several locks are needed at once (for example, deleting a session locks all its runtimes), the lock implementation sorts the keys and takes them in that order, so callers cannot deadlock each other whatever order they pass.
 - A plugin action's handler runs inside the session lock and has 30 seconds. Past that the action fails and the lock is released. Store calls the handler makes afterwards are refused; store calls already in progress finish before the lock is released. Data written before the limit is kept.
-- **The only exception** is the attempt count of a setup runtime. It updates the count in `setupRuntimes` after the transaction. A rolled-back attempt still uses up a try, but it does not switch `phase`.
+- A few writes happen outside this transaction. None of them switches `phase`:
+  - The attempt count of a setup runtime. It updates the count in `setupRuntimes` after the transaction. A rolled-back attempt still uses up a try.
+  - Setup runtimes caught in a `needs(scope: session)` cycle. The executor marks them `blocked` before anything runs.
+  - The player retrying or waiving a setup runtime in the UI.
+  - The execution record. `turn_results` and each runtime's output are written before the commit; `turn_results` starts as `pending` and is settled to `committed` or `failed` after the commit.
 - `turn.suspended` is sent only after the commit.
 - The automatic snapshot is taken after all proposals are committed. This makes sure the conversation position, characters, state, and plugin data all belong to the same committed turn.
 - `execution.completed.committed` is the final signal to the client. The frontend uses it to confirm or take back what it showed first.
@@ -355,6 +359,8 @@ flowchart LR
 - Its result is exported with `recordAs`;
 - It emits events;
 - It changes characters, state, or interactions directly.
+
+**When the turn has a suspension.** When a runtime in the turn suspends, these jobs are not queued yet: they are saved with the suspended item, and the turn is not counted yet either. The exit that ends the turn queues the jobs and counts the turn: the last suspended item resumes successfully, or it is abandoned, expires, or is voided as out of date. The rules are in [Suspensions and turn counting](../reference/api.md#suspensions-and-turn-counting).
 
 **Time limits.**
 

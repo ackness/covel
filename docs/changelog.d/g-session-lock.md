@@ -1,6 +1,6 @@
 ### Changed
 
-- **A plugin action has 30 seconds.** An action handler runs inside the session lock; one that does not finish in 30 seconds now fails with `504 handler_timeout` and releases the session, instead of holding every request for the session (deleting it included) until the server restarts. The handler gets `ctx.signal`, which aborts at the limit, and its `ctx.store` refuses every call after the action ends. Writes made before the limit are kept. Details: `docs/reference/api.md`.
+- **A plugin action has 30 seconds.** An action handler runs inside the session lock; one that does not finish in 30 seconds now fails with `504 handler_timeout` and releases the session after already-started store calls settle, instead of holding every request for the session (deleting it included) until the server restarts. The handler gets `ctx.signal`, which aborts at the limit, and its `ctx.store` refuses every call after the action ends. Writes made before the limit are kept. Details: `docs/reference/api.md`.
 
 ### Fixed
 

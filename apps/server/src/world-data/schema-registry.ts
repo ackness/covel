@@ -155,6 +155,60 @@ export async function resolvePluginSchema(
   };
 }
 
+/** Resolve one contract across healthy providers, rejecting conflicting schemas. */
+export async function resolveWorldContractSchema(
+  contract: string,
+  deps?: WorldDataSchemaRegistryDeps,
+  implicit = false,
+): Promise<LocalWorldDataSchemaRef | WorldDataDiagnostic | null> {
+  const uri = `contract:${contract}`;
+  let selected: { path: string; canonical: string } | undefined;
+  for (const [, entry] of deps?.registry?.getAll() ?? []) {
+    const declaration = entry.packageManifest?.plugin?.contracts?.[contract];
+    if (entry.status === "error" || !declaration || !entry.rootPath) continue;
+    const schemaPath = await resolveContainedPath(
+      entry.rootPath,
+      declaration.schema,
+      { rejectSymlinks: true },
+    );
+    if (!schemaPath)
+      return {
+        level: "error",
+        schema: uri,
+        message: `Invalid schema path for contract "${contract}"`,
+      };
+    const canonical = canonicalJson(
+      JSON.parse(await readFile(schemaPath, "utf-8")),
+    );
+    if (selected && selected.canonical !== canonical)
+      return {
+        level: "error",
+        schema: uri,
+        message: `Conflicting schemas for contract "${contract}"`,
+      };
+    selected = { path: schemaPath, canonical };
+  }
+  if (!selected) {
+    // The source did not ask for this schema; it is the default of its
+    // destination. A contract without a schema has nothing to check by.
+    if (implicit) return null;
+    return {
+      level: "error",
+      schema: uri,
+      message: `No schema declared for contract "${contract}"`,
+    };
+  }
+  return {
+    kind: "local",
+    uri,
+    path: selected.path,
+    validate: await loadJsonSchemaValidator({
+      cacheKey: uri,
+      path: selected.path,
+    }),
+  };
+}
+
 export async function resolveWorldDataSchema(options: {
   readonly source: OrderedWorldDataSource;
   readonly deps?: WorldDataSchemaRegistryDeps;
@@ -173,51 +227,11 @@ export async function resolveWorldDataSchema(options: {
     };
   if (uri.startsWith("contract:")) {
     const contract = uri.slice("contract:".length);
-    let selected: { path: string; canonical: string } | undefined;
-    for (const [, entry] of options.deps?.registry?.getAll() ?? []) {
-      const declaration = entry.packageManifest?.plugin?.contracts?.[contract];
-      if (!declaration || !entry.rootPath) continue;
-      const schemaPath = await resolveContainedPath(
-        entry.rootPath,
-        declaration.schema,
-        { rejectSymlinks: true },
-      );
-      if (!schemaPath)
-        return {
-          level: "error",
-          schema: uri,
-          message: `Invalid schema path for contract "${contract}"`,
-        };
-      const canonical = canonicalJson(
-        JSON.parse(await readFile(schemaPath, "utf-8")),
-      );
-      if (selected && selected.canonical !== canonical)
-        return {
-          level: "error",
-          schema: uri,
-          message: `Conflicting schemas for contract "${contract}"`,
-        };
-      selected = { path: schemaPath, canonical };
-    }
-    if (!selected) {
-      // The source did not ask for this schema; it is the default of its
-      // destination. A contract without a schema has nothing to check by.
-      if (options.source.schemaImplicit) return null;
-      return {
-        level: "error",
-        schema: uri,
-        message: `No schema declared for contract "${contract}"`,
-      };
-    }
-    return {
-      kind: "local",
-      uri,
-      path: selected.path,
-      validate: await loadJsonSchemaValidator({
-        cacheKey: uri,
-        path: selected.path,
-      }),
-    };
+    return resolveWorldContractSchema(
+      contract,
+      options.deps,
+      options.source.schemaImplicit,
+    );
   }
 
   const schemaRoot =

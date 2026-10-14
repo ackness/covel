@@ -65,3 +65,18 @@ it("rejects an array instead of treating it as a settings map", async () => {
   expect(await screen.findByRole("alert")).toBeTruthy();
   expect(mocks.save).not.toHaveBeenCalled();
 });
+
+it("F-199 allows import preview but disables applying it while settings are read-only", async () => {
+  vi.spyOn(mocks.store, "isHydrated").mockReturnValue(false);
+  render(<DataPane />);
+  importBundle({ schemaVersion: 1, entries: { "fixture.count": 2 } });
+  const apply = await screen.findByRole("button", { name: /Apply.*1/ });
+  expect(apply.matches(":disabled")).toBe(true);
+  expect(
+    screen
+      .getByRole("button", { name: i18n.t("settings.exportDownload") })
+      .matches(":disabled"),
+  ).toBe(false);
+  fireEvent.click(apply);
+  expect(mocks.save).not.toHaveBeenCalled();
+});

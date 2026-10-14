@@ -229,20 +229,16 @@ model    = "glm-5"
 一次调用用哪个用途，按下面的顺序决定：
 
 1. 运行时的明确选择，包括会话的 `runtimeModelOverrides`。它决定用哪个用途或预设。
-2. 没有明确选择时，当前请求里的 UI 用途绑定。
-3. 插件自己的 `llm.toml` 里的偏好。
-4. 系统 `llm.toml` 的默认值，以及可用文本用途的回退。
+2. 没有明确选择时，runtime 自己写的用途名（`agent.model` / `function.model`）。没写时，当前请求绑定了 `default` 就用它，否则用系统的默认用途。
+3. 这个用途先按当前请求里的 UI 用途绑定解析，没有绑定时按系统 `llm.toml` 的定义，以及可用文本用途的回退。
 
 补充规则：
 
-- 插件偏好保留完整的 provider、model、baseUrl 和 protocol，不会把一个光秃秃的模型 ID 当成系统用途。重新加载文件不会丢失插件的目标。
+- 插件只说明想用哪个用途，不能自己指定服务商、模型、地址或协议。用哪个模型、请求发到哪里，由玩家（或运营者）的模型设置决定，所以玩家的密钥只会发到这些设置里的地址。插件目录里的 `llm.toml` 不会被读取，`pnpm validate:plugin` 遇到它会给出提醒。
 - `fast`、`memory` 等文本用途没有定义时，回退到现有用途。这个用途同样读取当前请求的 UI 绑定、参数和能力。
 - 准备页的任务对应关系必须先保存成功，并同步到服务端的临时镜像，之后才发布可运行的会话。保存失败时保留选择并回滚启动，不会用默认值继续启动。
 
 价格覆盖和服务商倍率只用于调试时估算成本，不随模型请求发送，也不改变服务商实际收的钱。手动价格只在 trace 里的实际 provider/model 能唯一对应当前配置时才应用；对应不上时沿用资料库的估算。
-
-> [!NOTE]
-> 给集成框架的开发者：`createModelResolver` 和 `createGatewayAdapter` 必须共用同一个 `Map<string, PluginLlmModelTarget>`。服务端启动时通过 `pluginModelTargets` 接收它，请求 adapter 也使用这个 map。内部引用只用来保留完整的插件目标，不作为客户端模型 ID。`isRoleSelected` 用来识别当前请求里明确的用途绑定。
 
 ### 备用策略归属用途
 
@@ -650,6 +646,7 @@ providerRequestMetadata = { musicWire = "<pluginId>/<wireId>" }
 
 - 路由键在进入 wire 之前被去掉，不会出现在发给厂商的请求体里。
 - wire ID 没有注册时，生成时抛 `CONFIG_ERROR`（报错信息里有修复办法），不会悄悄换成别的 wire。
+- 插件注册的 wire 只服务启用了该插件的会话，规则和文本协议相同。别的会话用到它时抛 `CONFIG_ERROR`，报错里写明要启用哪个插件。
 - 插件在 `entry` 模块里用 `covel.registerWires({ image?, speech?, transcription?, music?, text? })` 注册自定义 wire。frontmatter 的 `wires` 字段仍然接受，但已弃用。见 [plugin-extensions.md § 模型与新协议](./plugin-extensions.md#模型与新协议)。
 - wire 与 MediaStore 的关系见 [media-store.md](./media-store.md#media-wire-registries-image--speech--transcription--music)。
 

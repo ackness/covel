@@ -186,6 +186,7 @@ export function readRuntimeEnv(source: EnvSource = defaultSource()) {
     // expose the unauthenticated API on all interfaces. Containers and
     // multi-pod deploys opt into a public interface explicitly.
     bindHost: readEnvString("COVEL_BIND_HOST", "127.0.0.1", source)!,
+    allowedHosts: readEnvCsv("COVEL_ALLOWED_HOSTS", source),
     nodeEnv: readEnvChoice(
       "NODE_ENV",
       ["development", "production", "test"] as const,

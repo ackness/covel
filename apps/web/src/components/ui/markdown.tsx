@@ -1,4 +1,5 @@
-import { lazy, memo, Suspense, useContext, useState } from "react";
+import { importImage } from "@/lib/import-image.js";
+import { lazy, memo, Suspense, useContext, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   ALLOWED_IMAGE_HOSTS_SETTING,
@@ -50,7 +51,7 @@ function ExternalImage({
   );
   const [loaded, setLoaded] = useState(false);
   if (loaded || isHostAllowed(allowed, worldId, host)) {
-    return <img src={src} alt={alt ?? ""} referrerPolicy="no-referrer" />;
+    return <DownloadedImage key={src} src={src} alt={alt} />;
   }
   return (
     <span className="not-prose my-1 inline-flex max-w-full flex-col gap-1 rounded-md border border-dashed border-border px-3 py-2 text-xs text-muted-foreground">
@@ -78,6 +79,33 @@ function ExternalImage({
       </span>
     </span>
   );
+}
+
+function DownloadedImage({ src, alt }: { src: string; alt?: string }) {
+  const { t } = useTranslation();
+  const [data, setData] = useState<string>();
+  useEffect(() => {
+    let active = true;
+    void importImage(src).then(
+      (value) => {
+        if (active) setData(value);
+      },
+      () => {
+        if (active) setData("");
+      },
+    );
+    return () => {
+      active = false;
+    };
+  }, [src]);
+  if (!data)
+    return (
+      <span>
+        {alt ?? ""}
+        {data === "" ? t("session.externalImageBlocked") : ""}
+      </span>
+    );
+  return <img src={data} alt={alt ?? ""} referrerPolicy="no-referrer" />;
 }
 
 function MarkdownImage({ src, alt }: { src?: string | Blob; alt?: string }) {

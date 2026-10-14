@@ -383,11 +383,7 @@ async function startServer(
   const projectRoot = resolveProjectRoot();
   const tsxPath = resolveTsx();
 
-  const configuredEnv = loadChildEnvironment(
-    projectRoot,
-    paths.userKeysEnvPath,
-    process.env,
-  );
+  const configuredEnv = loadChildEnvironment(projectRoot, process.env);
   // Data dir lives at <dataRoot>/; ensure the db's parent (and logs dir) exist.
   fs.mkdirSync(path.dirname(paths.dbPath), { recursive: true });
 
@@ -639,10 +635,14 @@ async function productionStartup(
       void clearStaleOriginStorage(serverPort);
     } catch (err) {
       if (quitting) return;
-      const diag = diagnoseStartupError(err);
+      const logs = serverStderrLines.slice(-80).join("\n");
+      const diag = diagnoseStartupError(err, {
+        logs,
+        dataRoot: paths.dataRoot,
+        configTomlPath: paths.configTomlPath,
+      });
       writeLog("error", `Startup failed: ${diag.title}: ${diag.detail}`);
 
-      const logs = serverStderrLines.slice(-80).join("\n");
       await showStartupError(win, { ...diag, logs });
       if (quitting || win.isDestroyed()) return;
 

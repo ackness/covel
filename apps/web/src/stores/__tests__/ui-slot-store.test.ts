@@ -76,7 +76,16 @@ describe("UI slot subscription state", () => {
       }),
     );
     const { result } = renderHook(() => useUiSlots("s"));
+    act(() => {
+      applyUiSlotEvent("s", "ui.slot.changed", snapshot("committed"));
+      applyUiSlotEvent("s", "ui.slot.preview", {
+        ...snapshot("preview"),
+        turnId: "turn",
+      });
+    });
+    expect(result.current[0]?.value).toMatchObject({ name: "preview" });
     act(() => clearUiSlots("s"));
+    expect(result.current).toEqual([]);
     await act(async () => {
       finish({ items: [snapshot("old")] });
     });

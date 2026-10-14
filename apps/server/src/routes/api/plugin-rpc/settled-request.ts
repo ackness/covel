@@ -3,9 +3,11 @@ import type { RuntimeJobServices } from "./runtime-job-credentials.js";
 import type { SettleWaitBudget } from "./settled-session-lock.js";
 import { getRequestLlmOptions } from "../../../request-llm-context.js";
 import { listRuntimeJobs } from "./jobs.js";
+import type { EventBus } from "@covel/events";
 import {
   publishRuntimeJobStatusEvent,
   runtimeJobIncarnation,
+  type RuntimeJobWorker,
 } from "./runtime-job-worker.js";
 import type {
   QueuedActivatedRuntimeJob,
@@ -156,7 +158,26 @@ export async function announceDeferredRuntimeJobs(
   queued: readonly QueuedRuntimeJob[],
   writeEvent?: (payload: Record<string, unknown>) => Promise<void>,
 ): Promise<void> {
-  const eventBus = c.get("eventBus");
+  await publishDeferredRuntimeJobs(
+    { eventBus: c.get("eventBus"), worker: c.get("runtimeJobWorker") },
+    queued,
+    writeEvent,
+  );
+}
+
+/**
+ * The request-free half of {@link announceDeferredRuntimeJobs}, also used by
+ * the suspension expiry sweep, which runs outside any request.
+ */
+export async function publishDeferredRuntimeJobs(
+  deps: {
+    readonly eventBus: EventBus | undefined;
+    readonly worker: Pick<RuntimeJobWorker, "wake"> | undefined;
+  },
+  queued: readonly QueuedRuntimeJob[],
+  writeEvent?: (payload: Record<string, unknown>) => Promise<void>,
+): Promise<void> {
+  const { eventBus } = deps;
   for (const { job, status } of queued) {
     if (eventBus) publishRuntimeJobStatusEvent(eventBus, status);
     const payload = {
@@ -180,5 +201,5 @@ export async function announceDeferredRuntimeJobs(
     });
   }
   for (const sessionId of new Set(queued.map(({ job }) => job.sessionId)))
-    c.get("runtimeJobWorker")?.wake(sessionId);
+    deps.worker?.wake(sessionId);
 }

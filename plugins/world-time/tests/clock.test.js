@@ -144,7 +144,7 @@ describe("world-owned time", () => {
   });
   it("carries custom minutes, hours and unequal month lengths deterministically", () => {
     const tick = initialTick(calendar);
-    const next = advanceTime(calendar, tick, { amount: 1 }, "turn");
+    const next = advanceTime(calendar, tick, { amount: 1 });
     expect(describeTime(calendar, next.tick)).toMatchObject({
       year: 3,
       month: 2,
@@ -165,14 +165,11 @@ describe("world-owned time", () => {
       evolution: { ...calendar.evolution, mode: "backward" },
     };
     expect(
-      describeTime(
-        definition,
-        advanceTime(definition, 0, { amount: 1 }, "t").tick,
-      ),
+      describeTime(definition, advanceTime(definition, 0, { amount: 1 }).tick),
     ).toMatchObject({ year: 0, month: 2, day: 3, hour: 9, minute: 5 });
   });
   it("wraps coarse phases backwards without inventing clock hours", () => {
-    const next = advanceTime(phases, initialTick(phases), {}, "t");
+    const next = advanceTime(phases, initialTick(phases), {});
     expect(describeTime(phases, next.tick)).toEqual({
       cycle: -1,
       phase: 2,
@@ -186,14 +183,13 @@ describe("world-owned time", () => {
       evolution: { ...phases.evolution, mode: "bidirectional" },
     };
     expect(
-      advanceTime(
-        definition,
-        5,
-        { amount: 2, unit: "cycle", direction: "backward" },
-        "t",
-      ).tick,
+      advanceTime(definition, 5, {
+        amount: 2,
+        unit: "cycle",
+        direction: "backward",
+      }).tick,
     ).toBe(-1);
-    expect(advanceTime(definition, 5, { amount: 0 }, "t").tick).toBe(5);
+    expect(advanceTime(definition, 5, { amount: 0 }).tick).toBe(5);
   });
   it("samples signed random time reproducibly within the authored range", () => {
     const definition = {
@@ -205,49 +201,55 @@ describe("world-owned time", () => {
         randomRange: { min: -4, max: 4 },
       },
     };
+    const random = {
+      int: vi
+        .fn()
+        .mockReturnValueOnce(-4)
+        .mockReturnValueOnce(0)
+        .mockReturnValueOnce(4),
+    };
     const samples = Array.from(
-      { length: 100 },
-      (_, i) => advanceTime(definition, 0, {}, `turn-${i}`).delta,
+      { length: 3 },
+      () => advanceTime(definition, 0, {}, random).delta,
     );
-    expect(samples.every((value) => value >= -4 && value <= 4)).toBe(true);
-    expect(samples.some((value) => value < 0)).toBe(true);
-    expect(samples.some((value) => value > 0)).toBe(true);
-    expect(advanceTime(definition, 0, {}, "stable")).toEqual(
-      advanceTime(definition, 0, {}, "stable"),
-    );
-    expect(() => advanceTime(definition, 0, { amount: 1 }, "t")).toThrow(
+    expect(samples).toEqual([-4, 0, 4]);
+    expect(random.int.mock.calls).toEqual([
+      [-4, 5],
+      [-4, 5],
+      [-4, 5],
+    ]);
+    expect(() => advanceTime(definition, 0, { amount: 1 }, random)).toThrow(
       /omit/,
     );
+    expect(random.int).toHaveBeenCalledTimes(3);
   });
   it("names the units of the clock and takes zero in any unit", () => {
     expect(timeUnits(phases)).toEqual(["phase", "cycle"]);
     expect(timeUnits(calendar)).toEqual(["minute", "hour", "day"]);
     // A short scene on a phase clock: the model reports minutes.
     expect(() =>
-      advanceTime(phases, 0, { amount: 15, unit: "minute" }, "t"),
+      advanceTime(phases, 0, { amount: 15, unit: "minute" }),
     ).toThrow(/Use unit "phase" or "cycle"\. Use amount 0/);
     expect(() =>
-      advanceTime(calendar, 0, { amount: 1, unit: "phase" }, "t"),
+      advanceTime(calendar, 0, { amount: 1, unit: "phase" }),
     ).toThrow(/Use unit "minute", "hour" or "day"/);
-    expect(
-      advanceTime(phases, 5, { amount: 0, unit: "minute" }, "t"),
-    ).toMatchObject({ tick: 5 });
+    expect(advanceTime(phases, 5, { amount: 0, unit: "minute" })).toMatchObject(
+      { tick: 5 },
+    );
   });
   it("rejects unsupported units, direction violations, excessive spans and overflow", () => {
-    expect(() =>
-      advanceTime(phases, 0, { amount: 1, unit: "hour" }, "t"),
-    ).toThrow(/Unit/);
-    expect(() => advanceTime(calendar, 0, { unit: "day" }, "t")).toThrow(
+    expect(() => advanceTime(phases, 0, { amount: 1, unit: "hour" })).toThrow(
+      /Unit/,
+    );
+    expect(() => advanceTime(calendar, 0, { unit: "day" })).toThrow(
       /Specify amount/,
     );
-    expect(() =>
-      advanceTime(calendar, 0, { direction: "backward" }, "t"),
-    ).toThrow(/policy/);
-    expect(() => advanceTime(phases, 0, { amount: 13 }, "t")).toThrow(
-      /maxStep/,
+    expect(() => advanceTime(calendar, 0, { direction: "backward" })).toThrow(
+      /policy/,
     );
+    expect(() => advanceTime(phases, 0, { amount: 13 })).toThrow(/maxStep/);
     expect(() =>
-      advanceTime(calendar, Number.MAX_SAFE_INTEGER, { amount: 1 }, "t"),
+      advanceTime(calendar, Number.MAX_SAFE_INTEGER, { amount: 1 }),
     ).toThrow(/safe integer/);
   });
   it("rejects invalid phase indices, unordered periods and random ranges", () => {

@@ -54,38 +54,17 @@ describe("server detached runtime credential readiness", () => {
     },
   );
 
-  it("checks complete plugin targets instead of falling back to a server role", () => {
+  it("resolves the job's role with the server keys only", () => {
     const resolveSlot = vi.fn(
       (_model: string | undefined, _options: unknown) => null,
     );
-    const modelTargets = new Map([
-      [
-        "plugin-target",
-        {
-          role: "story",
-          provider: "configured",
-          model: "plugin-model",
-          baseUrl: "https://example.invalid/v1",
-          protocol: "openai-chat-v1" as const,
-        },
-      ],
-    ]);
     expect(
-      hasServerRuntimeJobCredentials(
-        { resolveSlot },
-        "plugin-target",
-        {},
-        modelTargets,
-      ),
+      hasServerRuntimeJobCredentials({ resolveSlot }, "memory", {
+        configured: "key",
+      }),
     ).toBe(false);
-    const options = resolveSlot.mock.calls[0]?.[1] as {
-      slotOverrides: {
-        customPresets: Array<{ model: string; baseUrl: string }>;
-      };
-    };
-    expect(options.slotOverrides.customPresets[0]).toMatchObject({
-      model: "plugin-model",
-      baseUrl: "https://example.invalid/v1",
+    expect(resolveSlot).toHaveBeenCalledWith("memory", {
+      envApiKeys: { configured: "key" },
     });
   });
 

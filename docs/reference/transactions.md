@@ -8,6 +8,8 @@
 - 一次执行（一个回合、一次手动运行、一次后台作业）的全部写入放进一个事务里提交。
 - 三个后端（Memory、SQLite、PostgreSQL）对外的行为相同，并发方式不同。
 
+世界包文件不在数据库事务里。生成、修订和翻译通过暂存、包预检、目录替换和失败恢复协调文件与世界记录；[API 的写回规则](./api.md#post-apiworldsidtranslate)说明失败时保留哪些内容。
+
 ## Contract
 
 ```ts
@@ -417,7 +419,8 @@ SqliteStore、MemoryStore 和 PgStore（都在 Node 上）用同一种办法：
 **resume。**
 
 - resume 通过 `extraInTx` 把助手的回合消息和 suspension 的 resolved 标记放进同一个事务。任何一处失败，连同 proposal 一起回滚；claim 释放之后可以重试。
-- resolved 标记同时清掉这条 suspension 里已被本次 resume 用掉的内容（消息、已缓冲的工具调用和 proposal、输入），只留执行标识、语言和回合号。回滚时这些内容随事务恢复。
+- resolved 标记同时清掉这条 suspension 里已被本次 resume 用掉的内容（消息、已缓冲的工具调用和 proposal、输入），只留执行标识、挂起时的玩家回合数和插件版本、语言和回合号。回滚时这些内容随事务恢复。
+- 放弃、过期和作废走同一个出口：删除 suspension、给回合计数（它是这个逻辑回合最后一个还在等待的 suspension 时）、把回合扣下的 detached 作业入队，都在一个事务里。
 
 **会话时钟写入进同一事务。**
 
@@ -428,7 +431,7 @@ SqliteStore、MemoryStore 和 PgStore（都在 Node 上）用同一种办法：
 - 整回合回滚时（story 或 setup 失败，或者没有 story 的执行里任何一个 proposal 失败），计数、phase 和 setup 镜像都不推进，ledger 不写入。
 - 只丢弃可选 runtime 的提交，照常推进时钟。
 - manual / background 的 finalize 不传 `sessionClock`，时钟不动。
-- resume 会传入。同一个逻辑回合的最后一个 suspension 恢复时计数一次。被恢复的是 setup runtime 并且它报告完成时，`done` 镜像和（全部 setup 都完成时的）phase 翻转随这次提交写入；attempt 账本沿用挂起时的那次尝试。
+- resume 会传入。同一个逻辑回合的最后一个 suspension 恢复、被放弃、过期或作废时计数一次。被恢复的是 setup runtime 并且它报告完成时，`done` 镜像和（全部 setup 都完成时的）phase 翻转随这次提交写入；attempt 账本沿用挂起时的那次尝试。
 
 **Action 级 plugin-rpc 的锁边界。** action handler 在 session lock 里完成读、校验和写入。所以它不会和同一个 session 的回合穿插。PG 多进程部署也由同一个分布式锁键串行化。
 

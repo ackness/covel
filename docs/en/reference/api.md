@@ -172,7 +172,7 @@ Metadata private to the framework never appears in any response. The owner hash,
 | `self` (default) / desktop | Usually not checked. A token, if sent, is not verified. For the exception, see "Production MemoryStore exception" below |
 | `demo` / `commercial`      | Checked every time                                                                                                      |
 
-`self` and the desktop rely on network boundaries. By default the server listens only on the loopback address (`COVEL_BIND_HOST=127.0.0.1`, see [env-registry](./env-registry.md)).
+`self` and the desktop rely on network boundaries. By default the server listens only on the loopback address (`COVEL_BIND_HOST=127.0.0.1`, see [env-registry](./env-registry.md)), and it answers only requests whose `Host` is `localhost`, `127.0.0.1`, `[::1]` or listed in `COVEL_ALLOWED_HOSTS`. Other requests get `403 { code: "host_not_allowed" }`.
 
 Rules for `demo` / `commercial`:
 
@@ -315,7 +315,7 @@ Settings in the interface are only override values sent along with the request. 
 
 **Differences on hosted tiers (`demo` / `commercial`)**
 
-- The public `GET /api/llm-config` still returns the model catalog that the client needs at startup, but without `source` and the load `error`. Only a request with the operator token can see these two diagnostics.
+- The public `GET /api/llm-config` still returns the model catalog that the client needs at startup, but without `source`, `envKeyOverrides`, the load `error`, or slot `baseUrl` values. `GET /api/presets` also omits `baseUrl`. Only a request with the operator token can see these fields.
 - The public `GET /api/config/info` returns `isDesktop: false` and `requiresAuth: true`, and all path fields are `null`. A request with the operator token gets the full deployment paths.
 - Responses on your own `self` machine and in the desktop app are not affected.
 
@@ -564,6 +564,8 @@ The delete runs in several steps:
 1. The server holds the world lock briefly, records a "deleting" state, and then releases the world lock.
 2. It runs the full session delete flow for each session one by one. That means waiting for writes in progress, running lifecycle hooks, and clearing media references and in-process state.
 3. It deletes the world record and the matching package files.
+
+The package is moved out of discovery before its record and files are deleted. See [world installation](./world-installation.md#updates-and-data-protection) for startup recovery after an interruption.
 
 > [!NOTE]
 > The low-level `DataStore.deleteWorld` deletes only the world record. Any call that also needs to clean up sessions must go through this API.
@@ -975,6 +977,7 @@ Both endpoints return `{ ok, runtimeId, state }`.
 
 - Authentication: the desktop app requires a bearer token. A production deployment with no token requires `COVEL_INSTALL_API_ENABLED=1`.
 - On success it returns `{ ok, id, restartRequired: true }`.
+- The directory is renamed out of discovery before its files are removed. If the rename fails, the response is 500 and the original package remains complete. Cleanup failure still returns success and logs a warning; the next startup retries cleanup.
 
 | Status code | When                        |
 | ----------- | --------------------------- |
@@ -1419,13 +1422,17 @@ If the disk write fails, the old dispatcher and the state returned by GET both s
 > [!NOTE]
 > For authors of server code: the low-level `prepareOutboundProxy()` provides `commit()` / `dispose()`. A transport that is not committed is released by the caller. `configureOutboundProxy()` is used to apply immediately.
 
+#### GET /api/config/keys
+
+`GET /api/config/keys` uses the same guard as writes: when `COVEL_DESKTOP_REST_TOKEN` is set, a matching Bearer token is required; otherwise the response is `401`.
+
 #### PUT /api/config/keys
 
 Desktop only. It writes provider keys to `<covelHome>/keys.env`.
 
 - The body is `{ provider: string | null }`. An empty string or `null` means delete that key.
 - The whole batch of input is validated first. If a value contains a newline, or is of another type, it returns `400`, and the file and the runtime both stay as they were.
-- The runtime's keys are updated only after the file is written atomically and successfully.
+- The runtime's keys are updated only after the file is written atomically and successfully. Turns, connection tests, and model lists use the new keys immediately. External keys (shell, `.env`, `.env.llm`) retain precedence; deleting or replacing a local key changes only the saved copy, without clearing or overriding the external key.
 
 How the desktop app (Electron) behaves when it saves keys:
 
@@ -1989,7 +1996,8 @@ After that, a session created in this language uses this version.
 **When it writes:**
 
 - While the model is generating, the server does not hold the world operation lock and does not write any language file.
-- The lock is taken only at publish time. Inside the lock, the server checks the world's creation time and the package's real path and directory identity. Then it writes the language files and merges the language metadata. Edits you saved while the model was working are kept.
+- The lock is taken only at publish time. Inside it, the server checks the world's creation time and the package's real path and directory identity, writes language files and `supportedLocales` in a staging copy, then replaces the directory and saves the record after read-back preflight passes. Edits saved while the model was working are kept.
+- A file-write or read-back failure discards the copy; a record-save failure restores the original package. The copy preserves media, authored files, and the generation marker.
 - If the world is being deleted, has been deleted, or has been rebuilt with the same ID, the request receives an SSE `error`. The old request does not write files into the new package, and it does not clean up the new package's files.
 
 **Response:** An SSE event stream.
@@ -2477,7 +2485,7 @@ This group of endpoints manages the background jobs (`_runtime_jobs`) that the s
 **How "can it run" is decided:**
 
 - The decision and the execution use the same model resolution and the same check of environment key sources.
-- When the source request's service is used, both are resolved with that request's model configuration (slot bindings, custom presets, and the model target in the plugin's `llm.toml`) and its credentials.
+- When the source request's service is used, both are resolved with that request's model configuration (slot bindings and custom presets) and its credentials.
 - When the server adapter is used, it is resolved only with the server configuration. It is not affected by other requests that happen to wake the worker.
 - It cannot prove statically whether a function handler will call a model. It also does not automatically allow a local endpoint that has no key.
 - An embedded host or a test can use `ApiBootstrapConfig.canRunRuntimeJobWithServerServices` to confirm explicitly that its own adapter is available. This confirmation does not change runtime authorization, session identity checks, or commit checks.
@@ -2792,8 +2800,8 @@ Sends a structured command to a plugin in a session. It does not go through chat
 Calls the handler that the plugin registers in `entry` with `covel.registerRpc`, or a default framework handler (such as `slash-debug`).
 
 - The plugin must be one of the session's currently enabled plugins. The server checks once before approval, and again after taking the session lock. If the plugin is disabled, it returns `404 plugin_not_active`. It does not run the handler and does not add a new approval. A late request from an old panel is also subject to this check.
-- `pluginId: "framework"` means a default framework action. It is not part of the plugin set that is enabled, and it runs under its own entry conditions.
-- The handler runs inside the session lock and has 30 seconds. Past that the request returns `504 handler_timeout` and the lock is released at once, so other requests for the session stop waiting for it. The handler's `ctx.signal` aborts, and every later call it makes to `ctx.store` is refused. Data it wrote before the limit is kept, not rolled back.
+- `pluginId: "framework"` means a default framework action. It is not part of the plugin set that is enabled, and it runs under its own entry conditions. `framework` is a reserved ID that no plugin can take, so such a request runs only a framework default action; a request that names a plugin ID runs only an action that plugin registered itself.
+- The handler runs inside the session lock and has 30 seconds. Past that the handler's `ctx.signal` aborts, and every later call it makes to `ctx.store` is refused. Store calls already in progress finish before the request returns `504 handler_timeout` and releases the lock. Data it wrote before the limit is kept, not rolled back.
 
 ##### Runtime level
 
@@ -3403,6 +3411,7 @@ Returns the list of what can go into a world, for the world creation screen and 
 
 - All of the content comes from the `contributes.data.*.authoring` declarations in plugin manifests. There is no hard-coded plugin list.
 - `pnpm describe:authoring` prints the same data.
+- An unreadable or non-JSON example, or a missing, invalid, or conflicting schema for generatable content, skips only that contract. The optional `diagnostics` array returns `{ pluginId, namespace, message }` for each problem, also logged by the server; other contracts and plugins remain available.
 - The `locale` query parameter sets the language of display text such as `title`. If it is omitted, the server's default language is used.
 
 **Response excerpt:**
@@ -3968,7 +3977,7 @@ Deletes one piece of plugin data.
 A runtime can pause partway through and wait for the player to provide data. This is called suspending. The endpoints in this section let you list the suspended items, submit data so that a runtime continues, or discard an item.
 
 > [!NOTE]
-> **Expiry cleanup**: Before it handles a resume request or a `GET /api/sessions/:id/suspensions` request, the server also runs a global expiry cleanup. The cleanup runs at most once per time interval. If it fails, the current request still goes ahead.
+> **Expiry cleanup**: Before it handles a resume request or a `GET /api/sessions/:id/suspensions` request, the server also runs a global expiry cleanup. The cleanup runs at most once per time interval. If it fails, the current request still goes ahead. An expired suspended item is handled the way [abandoning](#delete-apisessionsidsuspensionssuspensionid) one is; see [Suspensions and turn counting](#suspensions-and-turn-counting).
 >
 > If the process exits while a resume is in progress, it leaves a "resuming" lock behind. Both this cleanup and server startup release that lock, so the suspended item can be resumed or discarded again later. External calls that were already sent are not undone. This is the same as retrying after a failed resume. For the related environment variables, see [`env-registry.md`](./env-registry.md).
 
@@ -4002,13 +4011,14 @@ Resume a suspended runtime with the data the player submitted.
 
 **Errors**
 
-| Status | `code`         | When                                                                                                                                     |
-| ------ | -------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| 400    | —              | The request body is not valid JSON or has the wrong structure, or `data` fails `resumeSchema` validation                                 |
-| 404    | —              | The session or the suspended item does not exist, or the matching runtime cannot be found                                                |
-| 409    | —              | The suspended item has already been handled. If two resume requests arrive at the same time, the later one gets this result              |
-| 500    | —              | The runtime failed or the commit failed (`error` gives the reason). In production, an unknown exception shows as `Internal server error` |
-| 503    | `session_busy` | Waiting for the session lock timed out. The fixed message is `Session is busy, please retry`                                             |
+| Status | `code`                | When                                                                                                                                     |
+| ------ | --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| 400    | —                     | The request body is not valid JSON or has the wrong structure, or `data` fails `resumeSchema` validation                                 |
+| 404    | —                     | The session or the suspended item does not exist, or the matching runtime cannot be found                                                |
+| 409    | —                     | The suspended item has already been handled. If two resume requests arrive at the same time, the later one gets this result              |
+| 409    | `suspension_outdated` | The suspended item is out of date and the server voided it; see "Out-of-date suspended items" below                                      |
+| 500    | —                     | The runtime failed or the commit failed (`error` gives the reason). In production, an unknown exception shows as `Internal server error` |
+| 503    | `session_busy`        | Waiting for the session lock timed out. The fixed message is `Session is busy, please retry`                                             |
 
 Rules for failed responses:
 
@@ -4017,12 +4027,28 @@ Rules for failed responses:
 - If the commit fails, `error` is `Resume commit failed: <reason>. The suspension remains unresolved and can be retried.`
 - After a failure, this request releases its hold on the suspended item (unless the session was deleted and recreated), so you can retry. The internal cause is written only to the server log.
 
+##### Out-of-date suspended items
+
+A suspension records two things: how many player turns the history holds at that moment, and the version of the plugin that asked. Before a resume, the server checks whether the suspended item is out of date. An out-of-date item does not run again, because the writes it saved could overwrite newer state.
+
+| `details.reason`   | When                                                                                      |
+| ------------------ | ----------------------------------------------------------------------------------------- |
+| `session-moved-on` | The number of player turns in the history changed (the player played on, or rewound)      |
+| `plugin-updated`   | The plugin that asked changed version                                                     |
+| `superseded`       | The same runtime suspended again later; only a runtime's newest suspended item can resume |
+
+The server voids it the way [abandoning](#delete-apisessionsidsuspensionssuspensionid) does, then answers `409` with `code` `suspension_outdated` and an `error` written for the player. The web client removes it from the waiting list and tells the player the request is out of date.
+
+Writes that a background job or a manual run made after the suspension do not count as the session moving on, so they do not make the item out of date.
+
 ##### Suspensions and turn counting
 
 - A suspension does not by itself count as a completed player turn.
 - When a runtime suspends, the record of "where to continue from" is saved in the same transaction as this request's proposals, log, and session clock. The `turn.suspended` event is sent only after the commit succeeds. So if the commit is rolled back, no suspended item is left behind that can be resumed but has no origin, and no extra events are sent.
 - The original execution's `logicalTurnId` and `countPolicy` are saved with the suspended item. When a resume succeeds, the player's turn count goes up by one, in the same transaction that commits the proposals.
 - If one logical turn has several parallel suspended items, the count happens only after the last one is resumed. Retries do not count twice.
+- When a suspended item is abandoned, expires or is voided, the turn ends the way a normal end does: if it was the last item of the logical turn still waiting, the player's turn count goes up by one and the background jobs the turn held back (`schedule.completion.mode: detached`) are queued as usual. Both happen in the transaction that deletes the record. An item that another request is resuming still counts as waiting.
+- Progress jobs (`ctx.progress`) that the suspended execution reported stay in `waiting-input`. When a resume commits, they end as `succeeded`; when the item is abandoned, expires or is voided, they end as `cancelled`. While a failed resume can be retried, they keep waiting.
 
 ##### Resuming setup runtimes
 
@@ -4064,6 +4090,8 @@ Each item is a `SuspensionSummary`. It contains only the public information the 
 #### `DELETE /api/sessions/:id/suspensions/:suspensionId`
 
 Discards a suspended item by deleting it. This is used when the player gives up the current choice, or when an admin screen cleans up. If the suspended item does not exist, it returns `404`.
+
+If it was the last item of its turn still waiting, the turn counts as complete and the background jobs the turn held back are queued as usual; see [Suspensions and turn counting](#suspensions-and-turn-counting). The request may carry `X-Plugin-User-Settings`, which works as it does for a resume.
 
 **Response**
 
@@ -4458,6 +4486,8 @@ Subscribes to a session's live event stream. This is a long-lived SSE connection
 | `topics`      | string | No       | A comma-separated topic filter (for example `runtime,state`). If omitted, all topics are sent |
 | `lastEventId` | string | No       | Resend the events after this ID. Used to reconnect after a disconnect                         |
 
+Reconnects also accept the standard `Last-Event-ID` request header. The `lastEventId` query parameter takes precedence when both are present. See the [subscription protocol](./protocol.md) for cursor format and reset behavior.
+
 ```bash
 curl -N "http://localhost:3001/api/events/stream?sessionId=<sessionId>"
 ```
@@ -4476,11 +4506,11 @@ After that, events follow. The `event:` line is the event type (`CovelEventType`
 ```
 event: execution.completed
 data: {"runtimeCount":4,"resultCount":4,"durationMs":2500}
-id: evt-001
+id: example-epoch:1
 
 event: state.changed
 data: {"table":"character_stats","field":"hp","value":85}
-id: evt-002
+id: example-epoch:2
 ```
 
 Usage notes:
@@ -4906,7 +4936,7 @@ Fields of `brief`:
 | `contracts`              | string[] | Plugin content. Contains data contract IDs                                                                                             |
 | `additionalInstructions` | string   | Extra requirements for the world package (up to 2000 characters), such as character relationships, taboos, pacing, or content to avoid |
 
-The allowed values for `contracts` come from the contracts marked with `generate` in `GET /api/framework/authoring`. Any other value returns `400`.
+The allowed values for `contracts` come from the contracts marked with `generate` in `GET /api/framework/authoring`. Any other value returns `400`. Contracts that fail preparation are absent from the choices; generation and revision continue with the remaining content, and `done.warnings` identifies the skipped plugin, namespace, and contract.
 
 Values for `saveTarget`:
 
@@ -4917,7 +4947,7 @@ Values for `saveTarget`:
 | `return-only`  | The SSE response body                                   | The caller saves it            | Browser-local IndexedDB, previewing a generated result, or a public service that should not write to the server's persistent layer |
 
 - The `server-file` directory is chosen in this order: `COVEL_USER_WORLDS_DIR`, `$COVEL_HOME/worlds`, `~/.covel/worlds`. This matches the world package install entry point. `COVEL_WORLDS_DIR` is used only for built-in world packages.
-- `server-store` and `return-only` first write the world package to a temporary directory for validation, and then delete that directory.
+- `server-store` and `return-only` assemble the record from the structured result validated by the generator; they do not write package files.
 - For these two modes, the saved `WorldRecord.metadata` is handled as follows:
   - It removes the file-path fields `worldDataPath`, `worldData`, and `dimensionSources`.
   - It keeps the normalized `metadata.dimensions`.
@@ -5916,7 +5946,8 @@ The three endpoints have the same gate as the install endpoints:
 
 **Generated world files**
 
-- A generated world is first written to a hidden staging directory, and published only after it is fully written.
+- Generated, revised, and translated world files are written into a hidden staging directory. The complete copy passes the same package preflight as ZIP installation before publication: manifest and world-data read-back must have no errors, and local overrides are excluded.
+- This package preflight does not require receiving plugins to be enabled; session preflight still handles session-data contract checks.
 - Existing packages and identities in the database are kept. An ID conflict or an activation failure is reported through one SSE error event.
 - If activation fails, only the package created by this request is deleted.
 
@@ -6090,7 +6121,8 @@ Each snapshot is `{ slot, key?, value, revision }`:
 - When a local validation fails, the correction request carries the previous answer and the validation error.
 - When the output is cut off, or the model stream has no completion event, it reports the error at once. A broken result is not rewritten as if it were a complete package.
 - The final save still runs an atomic conflict check, so a world with the same name that appears during generation is not overwritten.
-- Generation, revision, and translation exclude each other, and the exclusion covers the whole SSE lifetime.
+- Generation, revision, and translation on one server share an admission mark through the entire SSE lifetime and cleanup. A new request receives `429 operation_in_progress` immediately while busy, without calling the model; completion or failure releases the mark.
+- This mark does not block editing or deletion. Saving still takes the world operation lock and rechecks: generation cannot overwrite an existing ID, revision cannot overwrite changes made while the model ran, and translation cannot write into a deleted or replaced package.
 
 **Locale overrides for world data**
 

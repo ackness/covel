@@ -23,11 +23,12 @@ export function useSettingsWritable(): boolean {
   );
 }
 
-/** Await persistence once and restore the panel from the confirmed store. */
+/** Serialize edits; each operation reads the confirmed store when its turn starts. */
 export function useSettingsSave(restore: () => void) {
   const { t } = useTranslation();
   const writable = useSettingsWritable();
-  const pending = useRef(false);
+  const pending = useRef(Promise.resolve());
+  const count = useRef(0);
   const mounted = useRef(true);
   useEffect(() => {
     mounted.current = true;
@@ -36,26 +37,32 @@ export function useSettingsSave(restore: () => void) {
     };
   }, []);
   const [saving, setSaving] = useState(false);
-  const save = async (operation: () => Promise<void>): Promise<boolean> => {
-    if (!writable || pending.current || !mounted.current) return false;
-    pending.current = true;
+  const save = (operation: () => Promise<void>): Promise<boolean> => {
+    if (!writable || !mounted.current) return Promise.resolve(false);
+    count.current += 1;
     setSaving(true);
-    try {
-      await operation();
-      return true;
-    } catch (error) {
-      if (!(error instanceof SettingsRevisionConflictError))
-        emitToast(
-          "error",
-          t("settings.saveFailed"),
-          error instanceof Error ? error.message : String(error),
-        );
-      return false;
-    } finally {
-      if (mounted.current) restore();
-      pending.current = false;
-      if (mounted.current) setSaving(false);
-    }
+    const result = pending.current.then(async () => {
+      try {
+        await operation();
+        return true;
+      } catch (error) {
+        if (!(error instanceof SettingsRevisionConflictError))
+          emitToast(
+            "error",
+            t("settings.saveFailed"),
+            error instanceof Error ? error.message : String(error),
+          );
+        return false;
+      } finally {
+        count.current -= 1;
+        if (mounted.current) {
+          restore();
+          setSaving(count.current > 0);
+        }
+      }
+    });
+    pending.current = result.then(() => undefined);
+    return result;
   };
   return { save, saving, writable };
 }

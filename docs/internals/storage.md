@@ -359,6 +359,18 @@ Electron 以远程模式使用 Web 界面，业务记录通过本地服务端的
 
 Dexie BrowserVault 的 schema 归 `apps/web` 所有，不作为服务端 `DataStore` 的迁移对外报告。`VECTOR_BACKEND=embedded` 使用当前服务端 store 的能力；BrowserVault 有意不实现向量检索。
 
+**启动时检查数据 schema 版本。** 两个 SQL 后端共用一个数据 schema 版本：`packages/store/src/migrations.ts` 里的 `DATA_SCHEMA_VERSION`。Covel 不迁移旧数据，所以打开数据库时先比对版本，再执行建表语句：
+
+- SQLite 把版本记在 `PRAGMA user_version`，PostgreSQL 记在单行表 `covel_schema_meta`。
+- 记录的版本和当前相同：正常打开。
+- 记录的是别的版本，不管更旧还是更新：拒绝打开，抛出 `StoreSchemaVersionError`（`code: "store_schema_incompatible"`）。错误信息让用户先备份，再换一个新的数据目录、`SQLITE_PATH` 或空的 PostgreSQL 数据库。拒绝发生在任何建表语句之前，旧库不会被改动。
+- 没有记录版本（新库，或加入这项检查之前写的库）：只检查已经存在的 Covel 表是否有当前 schema 的每一列。缺列就同样拒绝；缺整张表没关系，启动时会建。检查通过后写入当前版本。
+- 桌面版把这个错误显示在启动页上，并给出数据目录和 `config.toml` 的路径。
+
+某张已有表的列发生了旧库跟不上的变化（增、删、改名、改类型）时，要把 `DATA_SCHEMA_VERSION` 加一。`packages/store/tests/schema-version.test.ts` 记录了每个版本对应的表结构摘要，表结构变了而摘要没更新，这个测试就会失败。
+
+**PostgreSQL 的启动建表串行执行。** 版本检查、建表语句和写入版本放在同一个事务里，开头先拿一把固定键的事务级 advisory lock。几个服务同时启动、连着同一个库时（滚动发布、多个实例），它们依次建表，不会在系统目录上冲突。单独启动的 PostgreSQL 媒体存储建表时也拿同一把锁。`vector_models` 的触发器只在缺失时创建，日常启动不再锁这张表。
+
 ## Prep Drafts and Session Lore
 
 **草稿。** 按世界存放的应用 KV 覆盖层，是留给以后访问用的编辑草稿。
@@ -391,6 +403,8 @@ Dexie BrowserVault 的 schema 归 `apps/web` 所有，不作为服务端 `DataSt
 - `commitPlayerInputMessage` 是另一条幂等的“采纳输入”路径，它的语义不适用于普通插入。
 - 浏览器检查点校验会在打开替换事务之前，拒绝 `checkpoint.messages` 里重复的 ID。同一个 ID 被别的记录领域使用仍然有效。
 
+**显示消息顺序。** 完整列表、游标分页和分支都按 `createdAt` 排列，同一时间戳内保持写入顺序。检查点数组保留这个并列顺序。分支筛选快照边界后沿用父会话的顺序，再分配新的消息 ID。浏览器分页按检查点数组里游标行的位置切页；游标的 ID 和时间戳没有匹配行时，只返回更早时间戳的消息。
+
 **更新不换行。** 更新改的是一行里装的内容，不是换成另一行：
 
 - 更新已有的状态条目，ID 不变；
@@ -413,7 +427,7 @@ Dexie BrowserVault 的 schema 归 `apps/web` 所有，不作为服务端 `DataSt
 - PostgreSQL 用每张表各自的序列分配消息、trace 和回合产物的位置，多个连接同时写也一样。
 - SQLite 在它串行化的写入边界内分配。
 - 回滚后序号有空洞是正常的。按顺序导入时，按导入列表的顺序分配新的位置。游标分页和完整列表用相同的位置。
-- 两个 SQL 后端的数据 schema 元数据版本都是 4；已有的开发数据库需要重建。
+- 两个 SQL 后端的数据 schema 版本都是 4。启动时会检查它，见[启动时检查数据 schema 版本](#capabilities-and-migrations)。
 
 **向量检索。** 先按会话、插件、命名空间过滤，再精确选出 top-K。内存、SQLite 和 PostgreSQL 都返回欧氏 L2 距离。PostgreSQL 会把过滤后的候选物化，而不是用全局的近似索引，因为后者在过滤之后可能漏掉命中。
 

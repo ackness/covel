@@ -279,14 +279,78 @@ export interface WriteWorldPackageOptions {
    */
   readonly replace?: boolean;
   /**
-   * With `replace`: runs once the new package is in place, before the old one
+   * Runs once the new package is in place, before the old one
    * is dropped. If it throws, the old package is put back and the error is
    * rethrown, so the caller can tie the swap to its own read-back and record
    * update.
    */
   readonly afterPublish?: () => Promise<void>;
+  /** Validate the complete staging directory before publishing any files. */
+  readonly beforePublish?: (staging: string) => Promise<void>;
   /** The contracts the world was generated with; each may name its file. */
   readonly dataContracts?: readonly ContractFile[];
+}
+
+/** Publish a fully prepared sibling directory; restore the old package on failure.
+ * Callers serialize publication and validate their current package before calling.
+ */
+export async function publishWorldPackage(
+  staging: string,
+  finalDir: string,
+  options: { replace?: boolean; afterPublish?: () => Promise<void> } = {},
+): Promise<void> {
+  const { afterPublish } = options;
+  if (options.replace) {
+    const previous = await mkdtemp(
+      path.join(path.dirname(finalDir), ".covel-replaced-"),
+    );
+    const kept = path.join(previous, "package");
+    await rename(finalDir, kept);
+    let removePrevious = true;
+    try {
+      try {
+        await rename(staging, finalDir);
+      } catch (error) {
+        try {
+          await rename(kept, finalDir);
+        } catch (restoreError) {
+          throw new WorldPackageRecoveryError(kept, [error, restoreError]);
+        }
+        throw error;
+      }
+      try {
+        await afterPublish?.();
+      } catch (error) {
+        // Set the rejected package aside, then bring the old one back.
+        try {
+          await rename(finalDir, path.join(previous, "rejected"));
+          await rename(kept, finalDir);
+        } catch (restoreError) {
+          console.error(
+            `[world-writer] could not restore ${finalDir} from ${kept}:`,
+            restoreError,
+          );
+          throw new WorldPackageRecoveryError(kept, [error, restoreError]);
+        }
+        throw error;
+      }
+    } catch (error) {
+      if (error instanceof WorldPackageRecoveryError) removePrevious = false;
+      throw error;
+    } finally {
+      if (removePrevious)
+        await rm(previous, { recursive: true, force: true }).catch(() => {});
+    }
+  } else {
+    // A complete concurrent winner is non-empty and cannot be overwritten.
+    await rename(staging, finalDir);
+    try {
+      await afterPublish?.();
+    } catch (error) {
+      await rm(finalDir, { recursive: true, force: true });
+      throw error;
+    }
+  }
 }
 
 /** Publish one complete package without overwriting an existing world. */
@@ -340,6 +404,7 @@ export async function writeWorldPackage(
     for (const file of await packageFilePaths(staging))
       written[file] = await fileHash(staging, file);
     await writeMarker(staging, written);
+    await options.beforePublish?.(staging);
     if (options.replace) {
       // Checked last, just before the swap: the model ran for a while, and a
       // person may have put a file into the package in that time.
@@ -350,49 +415,8 @@ export async function writeWorldPackage(
         );
       if (current.state === "modified")
         throw new WorldPackageModifiedError(current.added, current.changed);
-      const previous = await mkdtemp(path.join(outputDir, ".covel-replaced-"));
-      const kept = path.join(previous, "package");
-      await rename(finalDir, kept);
-      let removePrevious = true;
-      try {
-        try {
-          await rename(staging, finalDir);
-        } catch (error) {
-          try {
-            await rename(kept, finalDir);
-          } catch (restoreError) {
-            throw new WorldPackageRecoveryError(kept, [error, restoreError]);
-          }
-          throw error;
-        }
-        try {
-          await options.afterPublish?.();
-        } catch (error) {
-          // Set the rejected package aside, then bring the old one back.
-          try {
-            await rename(finalDir, path.join(previous, "rejected"));
-            await rename(kept, finalDir);
-          } catch (restoreError) {
-            console.error(
-              `[world-writer] could not restore ${finalDir} from ${kept}:`,
-              restoreError,
-            );
-            throw new WorldPackageRecoveryError(kept, [error, restoreError]);
-          }
-          throw error;
-        }
-      } catch (error) {
-        if (error instanceof WorldPackageRecoveryError) removePrevious = false;
-        throw error;
-      } finally {
-        if (removePrevious)
-          await rm(previous, { recursive: true, force: true }).catch(() => {});
-      }
-    } else {
-      // Concurrent creators race only at publication; a complete winner is
-      // non-empty and cannot be replaced by the loser's directory rename.
-      await rename(staging, finalDir);
     }
+    await publishWorldPackage(staging, finalDir, options);
     return [...files, "world.yaml", "WORLD.md"].map((file) => `${id}/${file}`);
   } finally {
     await rm(staging, { recursive: true, force: true }).catch(() => {});

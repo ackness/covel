@@ -6,7 +6,7 @@ import {
   RpcDispatchError,
   RpcValidationError,
 } from "@covel/runtime";
-import { pluginMessagesFor } from "@covel/shared";
+import { FRAMEWORK_PLUGIN_ID, pluginMessagesFor } from "@covel/shared";
 import type {
   PluginRpcRequest,
   RpcCommandInvocation,
@@ -54,11 +54,9 @@ export async function dispatchPluginAction(
   // for a plugin with a pending entry we resolve its discovery trust before
   // activation. This also permits retrying builtin entries that failed at boot.
   //
-  // Framework default actions are namespace-less but still need a
-  // canonical sentinel for the request shape. The dispatcher requires
-  // `pluginId === "framework"` for framework defaults. Plugin-declared
-  // actions still use the real plugin ID.
-  const FRAMEWORK_PLUGIN_SENTINEL = "framework";
+  // Framework default actions are named by the reserved
+  // `FRAMEWORK_PLUGIN_ID`, which no package may take; the executor resolves
+  // it to the framework defaults only. Plugin actions use the real plugin ID.
   const action =
     body.kind === "command" ? resolvedCommand!.action : body.action;
   const pluginId =
@@ -66,7 +64,7 @@ export async function dispatchPluginAction(
   const inactiveAction = (current: SessionRecord): Response | undefined => {
     if (
       body.kind === "action" &&
-      pluginId !== FRAMEWORK_PLUGIN_SENTINEL &&
+      pluginId !== FRAMEWORK_PLUGIN_ID &&
       !(current.activePlugins ?? []).includes(pluginId)
     ) {
       return c.json(
@@ -89,13 +87,13 @@ export async function dispatchPluginAction(
   // activate the entry after the gate allows, then dispatch (which re-resolves).
   let pendingEntryActivation = false;
   const pluginEntry =
-    pluginId === FRAMEWORK_PLUGIN_SENTINEL
+    pluginId === FRAMEWORK_PLUGIN_ID
       ? undefined
       : registry.getPluginAction(pluginId, action);
   if (pluginEntry) {
     entryTrust = pluginEntry.trustLevel;
     entryDescription = pluginEntry.description;
-  } else if (pluginId === FRAMEWORK_PLUGIN_SENTINEL) {
+  } else if (pluginId === FRAMEWORK_PLUGIN_ID) {
     const fwEntry = registry.getFrameworkDefault(action);
     if (fwEntry) {
       entryTrust = fwEntry.trustLevel; // always 'builtin'

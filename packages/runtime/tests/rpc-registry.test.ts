@@ -208,6 +208,37 @@ describe("createRpcExecutor", () => {
     expect(result.result).toBe("plugin-version");
   });
 
+  it("refuses a plugin handler under the reserved framework ID", () => {
+    const { registry } = makeExecutor();
+    expect(() =>
+      registry.registerPluginHandler(
+        "framework",
+        "slash-debug",
+        async () => "impostor",
+        {},
+        "community",
+      ),
+    ).toThrow(/reserved/);
+  });
+
+  it("resolves the framework ID to framework defaults and a plugin ID to its own actions only", async () => {
+    const { registry, executor } = makeExecutor();
+    registry.registerFrameworkDefault("slash-debug", async () => "framework");
+    await expect(
+      executor.dispatch(
+        { pluginId: "framework", action: "slash-debug", payload: null },
+        { sessionId: "sess-1", store: {} as never },
+      ),
+    ).resolves.toMatchObject({ result: "framework" });
+    // A plugin that did not register the action does not reach the default.
+    await expect(
+      executor.dispatch(
+        { pluginId: "codex", action: "slash-debug", payload: null },
+        { sessionId: "sess-1", store: {} as never },
+      ),
+    ).rejects.toMatchObject({ code: "unknown-action" });
+  });
+
   it('throws RpcDispatchError with code "unknown-action" when nothing is registered', async () => {
     const { executor } = makeExecutor();
     await expect(
@@ -291,6 +322,37 @@ describe("createRpcExecutor", () => {
       expect(signal?.aborted).toBe(true);
       await expect(writeLate()).rejects.toThrow(/accepts no more calls/);
       expect(writes).toEqual(["early"]);
+    });
+
+    it("refuses writes from synchronous abort listeners", async () => {
+      const registry = createPluginRpcRegistry();
+      const executor = createRpcExecutor({ registry, handlerTimeoutMs: 20 });
+      const { store, writes } = recordingStore();
+      let lateWrite: Promise<void> | undefined;
+      registry.registerPluginHandler(
+        "stuck",
+        "abort-write",
+        async (_payload, context) => {
+          context.signal!.addEventListener("abort", () => {
+            lateWrite = context.store.setPluginData!({
+              namespace: "state",
+              key: "after-abort",
+              value: 1,
+            });
+          });
+          return new Promise(() => {});
+        },
+        {},
+        "community",
+      );
+      await expect(
+        executor.dispatch(
+          { pluginId: "stuck", action: "abort-write", payload: null },
+          { sessionId: "sess-1", store },
+        ),
+      ).rejects.toMatchObject({ code: "handler-timeout" });
+      await expect(lateWrite).rejects.toThrow(/accepts no more calls/);
+      expect(writes).toEqual([]);
     });
 
     it("settles a write already in flight before reporting the timeout", async () => {

@@ -549,7 +549,7 @@ Search the session's memory. It looks in two sources:
 | scope    | enum   |          | `recall` / `archival` / `all`, default `all`                      |
 | limit    | number |          | Maximum number of results, 1–20, default 5                        |
 
-Each result's content is at most 500 characters. The search rules are in the next section.
+Each result's content is at most 500 characters. An archival result's `key` is a readable source identifier. When a lorebook entry has no first keyword, it may use a readable entry ID, but never a UUID. UUID keywords and plugin data keys are also omitted: the result keeps its content without a `key`. The search rules are in the next section.
 
 ### Plugin memory and vector search
 
@@ -605,6 +605,8 @@ All plugins read the same public snapshot, `ctx.world.dimensions`, which is froz
 - Does not read a provider's private namespace.
 - Does not add in the caller's own writes that are not yet committed.
 - Does not fall back to the world's initial values.
+
+The model's `_text` queries and pages dimension values after applying `modelFacingJson`. A direct query of a bookkeeping field cannot expose it; code still receives the full values in `results`.
 
 | Argument  | Type                                       | Required | Description                       |
 | --------- | ------------------------------------------ | -------- | --------------------------------- |
@@ -749,7 +751,7 @@ When one of the model's replies has several tool calls, the `suspend` call first
 **Things to note:**
 
 - `resumeSchema` must be serializable with `JSON.stringify`, because the state is written to storage.
-- A runtime can have only one unresolved suspension at a time. The resume endpoint looks it up by `runtimeId + sessionId`.
+- Only a runtime's newest suspension can resume. When the same runtime suspended again later, the player played another turn, or the plugin changed version, the old suspended item is voided on resume; see [Out-of-date suspended items](./api.md#out-of-date-suspended-items). The resume endpoint looks it up by the suspended item's ID.
 - `createDefaultToolRegistry` in `@covel/tools` registers it as a builtin tool. An agent still has to list `suspend` in `agent.tools.builtin` before it can call it.
 - Resuming continues the execution that was suspended:
   - `ctx.locale`, `ctx.logicalTurn`, and `ctx.turnNumber` keep the values from the time of suspension. They do not change with the turn count of the session afterwards.
@@ -1025,6 +1027,7 @@ Characters in session (3 total, sorted by frequency then recency):
 Read the session's character attribute schema. The argument is `{}`, and it returns `{ schema: CharacterSchemaRecord | null, _text }`.
 
 - The schema belongs to the session's World Model. It contains `version` / `types` / `attributes`. When it does not exist, it returns `null`.
+- The `_text` the model reads passes through `modelFacingJson`, removing the session ID and write timestamps. Code still receives the complete `schema` record.
 - The read includes the validated pending domain proposals. It does not infer the schema from the plugin's private `schema` data.
 - This tool does not write data, and it does not accept IDs of other sessions or plugins.
 
