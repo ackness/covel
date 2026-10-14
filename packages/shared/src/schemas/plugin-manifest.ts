@@ -4,9 +4,14 @@ import {
   kernelConflictMessage,
 } from "../extension-points/contracts.js";
 import { z } from "zod";
+import { FRAMEWORK_PLUGIN_ID } from "../framework-plugin-id.js";
 import { hostVersionRangeSchema } from "../utils/host-version-range.js";
 import { packageCreditFields } from "./package-info.js";
 import { attributeFieldTypeSchema } from "./world.js";
+import {
+  RESERVED_WORLD_PACKAGE_PATHS,
+  isReservedWorldPackagePath,
+} from "../world-package-paths.js";
 import {
   contractIdSchema,
   runtimeAuthoringManifestSchema,
@@ -15,6 +20,7 @@ import {
   runtimeManifestInputSchema,
   extensionDeclarationSchema,
   hookDeclarationSchema,
+  permissionsDeclSchema,
   pluginDataSchemaDeclSchema,
   worldProjectionMapSchema,
 } from "./plugin-schemas.js";
@@ -73,9 +79,12 @@ const dataAuthoringSchema = z
             message:
               "source path must be a world-package-relative path (no leading `/`, no `..` segments)",
           })
+          .refine((path) => !isReservedWorldPackagePath(path), {
+            message: `source path must not name a file the kernel or the world package owns (${RESERVED_WORLD_PACKAGE_PATHS.join(", ")})`,
+          })
           .meta({
             description:
-              "Conventional path of the source inside a world package.",
+              "Conventional path of the source inside a world package. It may not name a path the kernel or the package itself owns: `world.yaml`, `WORLD.md`, `data/world.data.yaml`, `data/dimensions.yaml`, `data/lorebook.yaml`, `characters/characters.json`, `media/gallery.json`, `media/portraits.json`, `media/scenes.json` or `media/gallery/`, nor an edition of one.",
             examples: ["data/quests.yaml"],
           }),
         key: z
@@ -173,9 +182,13 @@ export const pluginManifestSchema = z.strictObject({
   id: z
     .string()
     .regex(/^[a-z][a-z0-9-]*$/)
+    .refine(
+      (id) => id !== FRAMEWORK_PLUGIN_ID,
+      `"${FRAMEWORK_PLUGIN_ID}" is reserved for the framework`,
+    )
     .meta({
       description:
-        "Stable package ID: lowercase letters, digits and hyphens. It must match the package directory name.",
+        "Stable package ID: lowercase letters, digits and hyphens. It must match the package directory name. `framework` is reserved.",
       examples: ["dice-check"],
     }),
   kind: z
@@ -276,6 +289,11 @@ export const pluginManifestSchema = z.strictObject({
     )
     .optional(),
   entry: shape.entry,
+  permissions: permissionsDeclSchema
+    .describe(
+      "Upper bounds of the package's own code. `http` lists the origins and methods the entry module of a community package may reach through `covel.http`, in addition to those its runtimes declare.",
+    )
+    .optional(),
   contributes: z
     .strictObject({
       tools: z

@@ -1,3 +1,4 @@
+import { useSettingsWritable } from "../use-settings-save.js";
 import { defaultModelRoleTag } from "@covel/shared";
 import { isRoleModelCompatible, modelRoleTag } from "@/lib/model-role.js";
 import { formatModelConfigLabel } from "@/lib/model-config-label.js";
@@ -37,6 +38,7 @@ interface LlmSlotCardProps {
   isFirst: boolean;
   isDiscovered: boolean;
   isEditing: boolean;
+  savingCapabilities?: boolean;
   commitSlot: (next: Record<string, SlotConfigEntry>) => void;
   onToggleEditing: () => void;
   onResetCapability: () => void;
@@ -56,12 +58,14 @@ export function LlmSlotCard({
   isFirst,
   isDiscovered,
   isEditing,
+  savingCapabilities = false,
   commitSlot,
   onToggleEditing,
   onResetCapability,
   onUpdateCapability,
 }: LlmSlotCardProps) {
   const { t } = useTranslation();
+  const writable = useSettingsWritable();
   const [editingParameters, setEditingParameters] = useState(false);
   const selectedKey = slotBindingKey(slotConfig[slotId]) ?? "";
   const candidateKey = (preset: (typeof allPresets)[number]) =>
@@ -194,6 +198,7 @@ export function LlmSlotCard({
               variant="ghost"
               size="sm"
               className="h-6 px-1.5 text-[10px]"
+              disabled={!writable}
               onClick={() => {
                 const updated = { ...slotConfig };
                 delete updated[slotId];
@@ -231,6 +236,7 @@ export function LlmSlotCard({
             {t("settings.providerLabel", "Provider")}
           </span>
           <select
+            disabled={!writable}
             value={effectiveProvider}
             onChange={(event) => {
               commitSlot(
@@ -262,6 +268,7 @@ export function LlmSlotCard({
             {t("settings.modelConfiguration")}
           </span>
           <select
+            disabled={!writable}
             value={
               selectedPreset || missingBinding || incompatibleBinding
                 ? selectedKey
@@ -383,6 +390,7 @@ export function LlmSlotCard({
               variant="ghost"
               size="sm"
               className="h-7 px-2 text-[11px] text-amber-600"
+              disabled={!writable || savingCapabilities}
               onClick={onResetCapability}
             >
               <RotateCw className="mr-1 h-3 w-3" />
@@ -393,21 +401,24 @@ export function LlmSlotCard({
       )}
 
       {effectiveModel && isEditing && (
-        <CapabilityEditor
-          serverCap={resolveDisplayCapability(
-            lookup,
-            target.baseCapability,
-            undefined,
-            { protocol: effectiveProtocol, role: roleTag },
-          )}
-          override={capOverride}
-          onUpdate={onUpdateCapability}
-          context={
-            lookup?.usesBuiltinAdapter === false
-              ? undefined
-              : { protocol: effectiveProtocol, role: roleTag }
-          }
-        />
+        <fieldset disabled={!writable} className="min-w-0">
+          <CapabilityEditor
+            busy={savingCapabilities}
+            serverCap={resolveDisplayCapability(
+              lookup,
+              target.baseCapability,
+              undefined,
+              { protocol: effectiveProtocol, role: roleTag },
+            )}
+            override={capOverride}
+            onUpdate={onUpdateCapability}
+            context={
+              lookup?.usesBuiltinAdapter === false
+                ? undefined
+                : { protocol: effectiveProtocol, role: roleTag }
+            }
+          />
+        </fieldset>
       )}
       {effectiveModel &&
         !incompatibleBinding &&

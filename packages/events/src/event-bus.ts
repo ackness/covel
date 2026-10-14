@@ -146,16 +146,22 @@ export const PERSIST_QUEUE_MAX = 1000;
 const RECEIVE_PENDING_MAX = 64;
 /** How long a receiver waits on a transport seq hole before skipping it. */
 export const RECEIVE_GAP_FLUSH_MS = 2000;
-/** FIFO cap on receive-ordering states across transport streams. */
+/** LRU cap on receive-ordering states, one per (origin, session). */
 export const RECEIVE_STATES_MAX = 1024;
+/**
+ * Per-session cap on frames waiting in the publish outbox. A publish that
+ * stops returning must not grow memory without bound: past the cap the frame
+ * is dropped and its transport seq becomes a hole that receivers reset on.
+ */
+export const OUTBOX_PENDING_MAX = 256;
 
 const DROP_WARN_INTERVAL_MS = 10_000;
 // PG NOTIFY hard-fails payloads ≥ 8000 bytes; leave slack for frame overhead.
 const MAX_TRANSPORT_INLINE_BYTES = 7500;
-// ponytail: FIFO cap on receive-ordering states; oldest entry dropped when
-// full. A later frame for an evicted stream is conservatively treated as a
-// fresh stream and must start at seq 1. Upgrade to LRU + per-entry TTL if
-// multi-pod fleets ever grow.
+// ponytail: LRU cap on receive-ordering states. A later frame for an evicted
+// (idle) state is conservatively treated as a fresh stream and must start at
+// seq 1, so its session resets once. Add a per-entry TTL or a larger cap if
+// multi-pod fleets ever keep more live streams than the cap.
 
 interface SessionState {
   /** Locally assigned replay sequence used only for SSE ids/buffering. */
@@ -191,9 +197,11 @@ interface TransportFrame {
   };
 }
 
-/** Per-(origin, session) receive-side ordering state. */
+/** Per-(origin, session) receive-side ordering state for its current stream. */
 interface ReceiveState {
   readonly sessionId: string;
+  /** Sender stream this state orders; a new stream replaces the state. */
+  readonly stream: string;
   /** Next expected origin seq; every transport stream starts at 1. */
   expected: number;
   /** Out-of-order frames parked until their predecessors arrive. */
@@ -317,9 +325,17 @@ export function createEventBus(
   let lastDropWarnMs = 0;
 
   // ── Transport ordering state ──────────────────
-  // Publisher: per-session promise chain so frames leave in seq order.
-  const outboxTails = new Map<string, Promise<void>>();
-  // Receiver: per-(origin, session) seq ordering + serialized delivery.
+  // Publisher: per-session promise chain so frames leave in seq order, with
+  // the number of frames still waiting on it.
+  interface Outbox {
+    tail: Promise<void>;
+    pending: number;
+  }
+  const outboxes = new Map<string, Outbox>();
+  let outboxDroppedSinceWarn = 0;
+  let lastOutboxDropWarnMs = 0;
+  // Receiver: per-(origin, session) seq ordering + serialized delivery,
+  // ordered least-recently-received first (Map insertion order as LRU).
   const receiveStates = new Map<string, ReceiveState>();
 
   function touchSession(sessionId: string, pin = false): SessionState {
@@ -449,14 +465,36 @@ export function createEventBus(
    * ref frame that is still waiting on its store save.
    */
   function enqueueOutbox(sessionId: string, task: () => Promise<void>): void {
-    const tail = outboxTails.get(sessionId) ?? Promise.resolve();
-    const next = tail.then(task).catch((err) => {
+    let outbox = outboxes.get(sessionId);
+    if (outbox && outbox.pending >= OUTBOX_PENDING_MAX) {
+      // The transport is not keeping up. Drop this frame: its transport seq
+      // was already taken, so receivers see a hole and reset their clients.
+      outboxDroppedSinceWarn += 1;
+      const now = Date.now();
+      if (now - lastOutboxDropWarnMs >= DROP_WARN_INTERVAL_MS) {
+        console.warn(
+          `[EventBus] transport outbox full (${OUTBOX_PENDING_MAX} frames waiting for session "${sessionId}"); dropped ${outboxDroppedSinceWarn} frame(s) since last warning`,
+        );
+        lastOutboxDropWarnMs = now;
+        outboxDroppedSinceWarn = 0;
+      }
+      return;
+    }
+    if (!outbox) {
+      outbox = { tail: Promise.resolve(), pending: 0 };
+      outboxes.set(sessionId, outbox);
+    }
+    const owner = outbox;
+    owner.pending += 1;
+    owner.tail = owner.tail.then(task).catch((err) => {
       console.error("[EventBus] transport publish failed:", err);
     });
-    outboxTails.set(sessionId, next);
-    void next.then(() => {
-      // Drop the tail once idle so the map doesn't grow with session count.
-      if (outboxTails.get(sessionId) === next) outboxTails.delete(sessionId);
+    void owner.tail.then(() => {
+      owner.pending -= 1;
+      // Drop the outbox once idle so the map doesn't grow with session count.
+      if (owner.pending === 0 && outboxes.get(sessionId) === owner) {
+        outboxes.delete(sessionId);
+      }
     });
   }
 
@@ -536,25 +574,55 @@ export function createEventBus(
     broadcast(event);
   }
 
-  function getReceiveState(key: string, sessionId: string): ReceiveState {
-    let rs = receiveStates.get(key);
-    if (!rs) {
-      if (receiveStates.size >= RECEIVE_STATES_MAX) {
-        const oldestKey = receiveStates.keys().next().value as string;
-        const oldest = receiveStates.get(oldestKey);
-        if (oldest?.timer) clearTimeout(oldest.timer);
-        receiveStates.delete(oldestKey);
-      }
-      rs = {
-        sessionId,
-        expected: 1,
-        pending: new Map(),
-        timer: undefined,
-        chain: Promise.resolve(),
-      };
-      receiveStates.set(key, rs);
+  /**
+   * Receive state for the frame's (origin, session), moved to the most
+   * recently used end. A sender publishes one session's streams in order, so a
+   * new stream means the previous one has ended: its state is retired, and the
+   * new one continues its delivery chain so no frame overtakes an older one.
+   */
+  function getReceiveState(
+    origin: string,
+    sessionId: string,
+    stream: string,
+  ): ReceiveState {
+    const key = JSON.stringify([origin, sessionId]);
+    const current = receiveStates.get(key);
+    if (current) receiveStates.delete(key);
+    if (current?.stream === stream) {
+      receiveStates.set(key, current);
+      return current;
     }
+    if (current) flushPending(current);
+    else if (receiveStates.size >= RECEIVE_STATES_MAX) evictReceiveState();
+    const rs: ReceiveState = {
+      sessionId,
+      stream,
+      expected: 1,
+      pending: new Map(),
+      timer: undefined,
+      chain: current?.chain ?? Promise.resolve(),
+    };
+    receiveStates.set(key, rs);
     return rs;
+  }
+
+  /**
+   * Evict the least recently used state with no parked frames. When every
+   * state has some, evict the least recently used one after flushing it, so
+   * its parked frames are delivered and the skipped hole resets replay.
+   */
+  function evictReceiveState(): void {
+    let victim: [string, ReceiveState] | undefined;
+    for (const entry of receiveStates) {
+      victim ??= entry;
+      if (entry[1].pending.size === 0) {
+        victim = entry;
+        break;
+      }
+    }
+    if (!victim) return;
+    flushPending(victim[1]);
+    receiveStates.delete(victim[0]);
   }
 
   /** Queue a frame onto the per-key delivery chain (preserves seq order even across async ref re-fetches). */
@@ -618,10 +686,7 @@ export function createEventBus(
     if (frame.origin === originId) return; // self-echo
     const sessionId = frame.event?.sessionId ?? frame.ref!.sessionId;
     const stream = frame.stream ?? "legacy";
-    const rs = getReceiveState(
-      JSON.stringify([frame.origin, sessionId, stream]),
-      sessionId,
-    );
+    const rs = getReceiveState(frame.origin, sessionId, stream);
     if (frame.seq < rs.expected) return; // duplicate/late
     if (frame.seq === rs.expected) {
       scheduleDeliver(rs, frame);
@@ -834,7 +899,7 @@ export function createEventBus(
         try {
           await Promise.all([
             bus.flush(),
-            ...outboxTails.values(),
+            ...[...outboxes.values()].map((outbox) => outbox.tail),
             ...deliveries,
           ]);
         } finally {

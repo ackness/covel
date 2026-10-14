@@ -1,16 +1,15 @@
 /**
- * Approval pipeline — checks tool calls against permission rules.
+ * Static tool policy — checks resolved tool calls against permission rules.
  *
  * The host's rules are built by `createDefaultToolApprovalPipeline` below and
- * used by the server's tool bootstrap (apps/server/src/routes/api/bootstrap/tools.ts):
- *   - builtin:*     → allow (framework-owned tools)
- *   - local:*       → allow (tools of installed plugins that the loader found)
- *   - third-party:* → deny  (no tool is classified this way today: the registry
- *                            only yields builtin or local)
+ * used by apps/server/src/routes/api/bootstrap/tools.ts:
+ *   - builtin:* → allow (framework-owned tools)
+ *   - local:*   → allow (registered plugin tools)
  *
- * A community plugin's server code is not loaded until the player approves it,
- * through the plugin-RPC approval gate (rpc-approval.ts) and the approvals
- * route. Its tools are then classified as local:* like any plugin tool.
+ * Community server-code and runtime authorization happens before plugin tools
+ * become callable, through the plugin-RPC approval gate (rpc-approval.ts) and
+ * approvals route. Approved tools are local; this source policy is separate
+ * from plugin trust.
  */
 
 import type { ApprovalRequest } from "@covel/shared";
@@ -21,7 +20,7 @@ export interface ApprovalCheckResult {
 }
 
 export interface PermissionRule {
-  /** Pattern: 'builtin:*', 'local:*', 'third-party:*', or specific tool name. */
+  /** Pattern: 'builtin:*', 'local:*', or specific tool name. */
   readonly pattern: string;
   readonly action: "allow" | "deny";
 }
@@ -30,28 +29,24 @@ export interface ApprovalPipeline {
   /** Resolve the policy decision for a tool call. */
   check(
     request: ApprovalRequest,
-    toolSource?: "builtin" | "local" | "third-party",
+    toolSource?: "builtin" | "local",
   ): ApprovalCheckResult;
 }
 
 /** Source-category wildcards supported by permission rules. */
-const SOURCE_WILDCARDS: ReadonlyMap<
-  string,
-  "builtin" | "local" | "third-party"
-> = new Map([
+const SOURCE_WILDCARDS: ReadonlyMap<string, "builtin" | "local"> = new Map([
   ["builtin:*", "builtin"],
   ["local:*", "local"],
-  ["third-party:*", "third-party"],
 ]);
 
 /**
  * Match a tool name against a permission pattern.
- * Supports: exact match, 'builtin:*', 'local:*', 'third-party:*'.
+ * Supports: exact match, 'builtin:*', 'local:*'.
  * Returns the first matching rule, or undefined.
  */
 export function matchPermissionRule(
   toolName: string,
-  toolSource: "builtin" | "local" | "third-party",
+  toolSource: "builtin" | "local",
   rules: readonly PermissionRule[],
 ): PermissionRule | undefined {
   for (const rule of rules) {
@@ -76,7 +71,7 @@ export function matchPermissionRule(
  * When no custom rules are provided, all tool calls are auto-approved (default-allow-all).
  * When custom rules are provided, each tool call is matched against the rule list in order.
  *
- * @param rules - Optional permission rules (e.g., `[{ pattern: 'third-party:*', action: 'deny' }]`). Defaults to allow-all.
+ * @param rules - Optional permission rules (e.g., `[{ pattern: 'delete-record', action: 'deny' }]`). Defaults to allow-all.
  * @returns An `ApprovalPipeline` with a `check` method.
  *
  * @example
@@ -88,10 +83,10 @@ export function matchPermissionRule(
  * const result = pipeline.check({ toolName: 'get-weather', sessionId: 's1', turnId: 't1' });
  * // => { decision: 'allow', reason: 'default-allow-all' }
  *
- * // With rules: deny third-party tools
+ * // With rules: deny one tool before allowing the other local tools
  * const gated = createApprovalPipeline([
- *   { pattern: 'builtin:*', action: 'allow' },
- *   { pattern: 'third-party:*', action: 'deny' },
+ *   { pattern: 'delete-record', action: 'deny' },
+ *   { pattern: 'local:*', action: 'allow' },
  * ]);
  * ```
  */
@@ -102,14 +97,14 @@ export function createApprovalPipeline(
     const action: unknown = (rule as { readonly action?: unknown }).action;
     if (action !== "allow" && action !== "deny") {
       throw new Error(
-        `Approval action ${JSON.stringify(action)} is not supported. Use "allow" or "deny" until durable approval decisions are implemented.`,
+        `Approval action ${JSON.stringify(action)} is not supported. Static tool rules accept only "allow" or "deny".`,
       );
     }
   }
 
   function check(
     request: ApprovalRequest,
-    toolSource?: "builtin" | "local" | "third-party",
+    toolSource?: "builtin" | "local",
   ): ApprovalCheckResult {
     // No custom rules → default allow-all.
     if (rules === undefined || rules.length === 0) {
@@ -145,10 +140,11 @@ export function createApprovalPipeline(
 }
 
 /** The host's tool-source policy, shared by production and isolated runtime tests. */
+export const DEFAULT_TOOL_APPROVAL_RULES: readonly PermissionRule[] = [
+  { pattern: "builtin:*", action: "allow" },
+  { pattern: "local:*", action: "allow" },
+];
+
 export function createDefaultToolApprovalPipeline(): ApprovalPipeline {
-  return createApprovalPipeline([
-    { pattern: "builtin:*", action: "allow" },
-    { pattern: "local:*", action: "allow" },
-    { pattern: "third-party:*", action: "deny" },
-  ]);
+  return createApprovalPipeline(DEFAULT_TOOL_APPROVAL_RULES);
 }

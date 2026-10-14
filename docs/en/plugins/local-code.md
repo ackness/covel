@@ -331,6 +331,7 @@ Notes:
 
 - The `payload` that the UI sends is external input. Check it before you use it.
 - An action's writes take effect at once. They do not belong to a turn, so if a later step fails, they are not undone. To "save only if everything succeeds", use a function runtime that is triggered manually.
+- Keep actions quick. An action that runs longer than 30 seconds fails: `ctx.signal` aborts and every later `ctx.store` call is refused. Put slow work in a runtime with `schedule.manual.execution: background`.
 - Offline runs do not support actions. When one runs, it prints `Unsupported rpc: notebook/inspect-note. Verify with the server.`, and this is not an error. Verify actions on a real server.
 
 ## Write a function
@@ -382,19 +383,20 @@ Putting effects inside `value` has no effect. On failure, return `{ outcome: "fa
 
 Things a function often uses:
 
-| Form                          | What it does                                                 |
-| ----------------------------- | ------------------------------------------------------------ |
-| `ctx.inputs.<名字>.value`     | An input you declared                                        |
-| `ctx.playerMessage`           | The player's input for this turn                             |
-| `ctx.manualPayload`           | The data the UI sends with a manual trigger                  |
-| `ctx.pluginData.get/list/set` | Reads and writes your own data                               |
-| `ctx.world`                   | Characters, character field definitions, lorebook. Read-only |
-| `ctx.userSettings`            | The player's settings                                        |
-| `ctx.random`                  | Random numbers. Use only this for dice rolls                 |
-| `ctx.locale`                  | The language of this game                                    |
-| `ctx.tools.call(name, args)`  | Calls a tool listed in `function.tools`                      |
-| `ctx.logger`                  | Writes to the plugin log                                     |
-| `ctx.signal`                  | Gets notified when the run is cancelled                      |
+| Form                                                                          | What it does                                                                                                                                 |
+| ----------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ctx.inputs.<名字>.value`                                                     | An input you declared                                                                                                                        |
+| `ctx.playerMessage`                                                           | The player's input for this turn                                                                                                             |
+| `ctx.manualPayload`                                                           | The data the UI sends with a manual trigger                                                                                                  |
+| `ctx.pluginData.get/list/set`                                                 | Reads and writes your own data                                                                                                               |
+| `ctx.world`                                                                   | Characters, character field definitions, lorebook. Read-only                                                                                 |
+| `ctx.userSettings`                                                            | The player's settings                                                                                                                        |
+| `ctx.random`                                                                  | Random numbers. Use only this for dice rolls                                                                                                 |
+| `ctx.locale`                                                                  | The language of this game                                                                                                                    |
+| `ctx.tools.call(name, args)`                                                  | Calls a tool listed in `function.tools`                                                                                                      |
+| `ctx.logger`                                                                  | Writes to the plugin log                                                                                                                     |
+| `ctx.signal`                                                                  | Gets notified when the run is cancelled                                                                                                      |
+| `ctx.recursiveCall({ playerMessage, manualTrigger: { runtimeId, payload } })` | Runs one more manual runtime within this turn. Only these two fields count; the session, language, settings and model stay those of this run |
 
 - The tools a function can call are listed in `function.tools`. The function's time limit is `function.timeoutMs`. Do not write these two under `agent`: a function runtime cannot have an `agent` setting.
 - To let the next turn or another run read this result, declare `io.output.recordAs` on this side, and declare `scope: committed` with the same `recordAs` on the reading side.

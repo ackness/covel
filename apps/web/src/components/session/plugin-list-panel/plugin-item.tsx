@@ -65,20 +65,18 @@ export function PluginItem({
               title={t(
                 `plugin.source.${sessionPlugin.source}.tooltip`,
                 sessionPlugin.source === "builtin"
-                  ? "Builtin core plugin shipped with Covel"
+                  ? "Plugin shipped with Covel"
                   : "Third-party plugin installed under ~/.covel/plugins",
               )}
             >
               {t(
                 `plugin.source.${sessionPlugin.source}.label`,
-                sessionPlugin.source === "builtin" ? "Core" : "Third-party",
+                sessionPlugin.source === "builtin" ? "Builtin" : "Third-party",
               )}
             </Badge>
           )}
           {isLocked && (
-            <span
-              title={t("plugin.locked", "Core plugin — cannot be disabled")}
-            >
+            <span title={t("plugin.locked")}>
               <Lock className="w-3 h-3 shrink-0 text-muted-foreground/50" />
             </span>
           )}

@@ -178,7 +178,7 @@ PLUGIN.md:
           title: 已知事实
 ```
 
-世界包把文件放在 `source.path` 写的位置，它就会被导入，不需要再写别的配置。两个插件声明了同一个 `path` 时，这个路径不再算约定位置，所以选一个别的插件不会用的路径。
+世界包把文件放在 `source.path` 写的位置，它就会被导入，不需要再写别的配置。同一个会话启用的两个插件声明了同一个 `path` 时，这个路径不再算约定位置，所以选一个别的插件不会用的路径。内核和世界包自己的路径（如 `data/dimensions.yaml`、`world.yaml`）不能声明，列表见[世界数据](../reference/world-data.md)。
 
 `generate` 有两个取值：`offer` 把这类内容列为创作界面里的可选项，`default` 列出并默认选中。它要求有 `example`，并且 `source` 是公开的、不是媒体、以 `id` 为 `key`。玩家选中后，生成器会把 schema、提示和示例写进它的提示词，并把这个插件加进世界要启用的插件里。只给在真实模型上验证过生成质量的内容声明它。
 
@@ -310,6 +310,7 @@ permissions:
 - `origin` 只能是 `https` 地址，不带路径、参数和账号密码。
 - `methods` 可选，取 `GET`、`POST`、`PUT`、`PATCH`、`DELETE`、`HEAD`。
 - 请求用 `ctx.utils.fetchWithRetry` 发出。社区插件访问没有声明的地址会被拒绝。
+- 入口代码用 `covel.http.fetchWithRetry` 发请求时，在根 `PLUGIN.md` 声明 `permissions.http`。包级权限与 wire 端点的规则见[插件参考](../reference/plugins.md#runtime-分组字段)。
 - 不要把玩家输入的任意网址直接交给后端去抓取。先用 `ctx.utils.validateBaseUrl` 检查。
 
 > [!WARNING]

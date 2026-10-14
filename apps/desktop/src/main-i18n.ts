@@ -24,6 +24,9 @@ const messages: Readonly<Record<string, Messages | undefined>> = {
     "startup.missingFile.hint":
       "A required bundled file is missing. The installation may be corrupt. Reinstall the app.",
     "startup.failed.title": "Startup failed",
+    "startup.schemaMismatch.title": "Data from another Covel version",
+    "startup.schemaMismatch.hint":
+      "The save database in {dataRoot} was written by a Covel version this one cannot open, and Covel does not convert old saves. Quit Covel and back up that folder. Then set a new, empty data_root in {configToml} and start Covel again, or go back to the version that wrote the data.",
     "startup.status.initializing": "Initializing...",
     "startup.status.loading": "Loading...",
     "startup.status.startingServer": "Starting server...",
@@ -120,6 +123,9 @@ const messages: Readonly<Record<string, Messages | undefined>> = {
     "startup.missingFile.hint":
       "缺少必需的内置文件。当前安装可能已损坏，请重新安装应用。",
     "startup.failed.title": "启动失败",
+    "startup.schemaMismatch.title": "数据来自另一个 Covel 版本",
+    "startup.schemaMismatch.hint":
+      "{dataRoot} 里的存档数据库是另一个 Covel 版本写的，当前版本打不开，也不会转换旧存档。请退出 Covel，备份这个文件夹；然后在 {configToml} 里把 data_root 改成一个新的空目录，再启动 Covel。也可以回到写入这些数据的那个版本。",
     "startup.status.initializing": "正在初始化...",
     "startup.status.loading": "正在加载...",
     "startup.status.startingServer": "正在启动服务器...",
@@ -214,6 +220,9 @@ const messages: Readonly<Record<string, Messages | undefined>> = {
     "startup.missingFile.hint":
       "Отсутствует необходимый встроенный файл. Возможно, приложение установлено с ошибками. Переустановите его.",
     "startup.failed.title": "Не удалось запустить приложение",
+    "startup.schemaMismatch.title": "Данные другой версии Covel",
+    "startup.schemaMismatch.hint":
+      "База сохранений в {dataRoot} записана версией Covel, которую эта версия не может открыть, а старые сохранения Covel не преобразует. Закройте Covel и сделайте резервную копию этой папки. Затем укажите новый пустой data_root в {configToml} и снова запустите Covel или вернитесь к версии, записавшей данные.",
     "startup.status.initializing": "Инициализация...",
     "startup.status.loading": "Загрузка...",
     "startup.status.startingServer": "Запуск сервера...",

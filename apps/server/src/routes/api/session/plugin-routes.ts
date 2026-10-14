@@ -1,4 +1,7 @@
-import { withSettledSessionLock } from "../plugin-rpc/settled-request.js";
+import {
+  provideRequestJobCredentials,
+  withSettledSessionLock,
+} from "../plugin-rpc/settled-request.js";
 import type { Hono } from "hono";
 import { COMMUNITY_SERVER_CODE_ACTION } from "@covel/approval";
 import { getPluginTrustInfo } from "@covel/plugin-loader";
@@ -51,48 +54,38 @@ function dimensionProviderRequired(pluginId: string) {
 export function registerSessionPluginRoutes(
   routes: Hono<SessionRouteEnv>,
 ): void {
+  // A read-only projection of the committed session record. It takes neither
+  // the settle barrier nor the session lock, so a refresh during a running
+  // turn gets the plugin panel and commands at once instead of waiting for
+  // the turn to end. A selection change that commits later publishes its own
+  // event, and the client fetches the list again.
   routes.get("/:id/plugins", async (c) => {
     const pluginRegistry = c.get("pluginRegistry");
     const id = c.req.param("id");
     const guard = await resolveSessionParam(c);
     if (!guard.ok) return guard.response;
-    const expectedIncarnation = sessionIncarnationIdentity(guard.session);
-    return withSettledSessionLock(c, id, async () => {
-      const lockedGuard = await resolveSessionParam(c);
-      if (!lockedGuard.ok) return lockedGuard.response;
-      if (
-        sessionIncarnationIdentity(lockedGuard.session) !== expectedIncarnation
-      ) {
-        return c.json(
-          errorBody("Session was replaced while the request was waiting", {
-            code: "session_incarnation_changed",
-          }),
-          409,
-        );
-      }
-      if (lockedGuard.session.metadata?.[SESSION_DELETION_PENDING_KEY]) {
-        return c.json(
-          errorBody("Session deletion is in progress", {
-            code: "session_deleting",
-          }),
-          409,
-        );
-      }
-      const view = buildSessionPluginView(lockedGuard.session, pluginRegistry, {
-        isEntryPublished: c.get("isPluginEntryPublished"),
-        authorized: authorizedSessionPluginIds(
-          pluginRegistry,
-          c.get("rpcApprovalGate"),
-          lockedGuard.session,
-        ),
-      });
-      return c.json({
-        ...view,
-        commands: buildSessionCommandList(
-          view.resolution.active,
-          pluginRegistry,
-        ),
-      });
+    // Queued jobs may be waiting for this owner's request credentials.
+    if ((await provideRequestJobCredentials(c, id)) > 0)
+      c.get("runtimeJobWorker")?.wake(id);
+    if (guard.session.metadata?.[SESSION_DELETION_PENDING_KEY]) {
+      return c.json(
+        errorBody("Session deletion is in progress", {
+          code: "session_deleting",
+        }),
+        409,
+      );
+    }
+    const view = buildSessionPluginView(guard.session, pluginRegistry, {
+      isEntryPublished: c.get("isPluginEntryPublished"),
+      authorized: authorizedSessionPluginIds(
+        pluginRegistry,
+        c.get("rpcApprovalGate"),
+        guard.session,
+      ),
+    });
+    return c.json({
+      ...view,
+      commands: buildSessionCommandList(view.resolution.active, pluginRegistry),
     });
   });
 

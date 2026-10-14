@@ -166,7 +166,7 @@ function isPluginHandlerJsFile(rel) {
  */
 const FRAMEWORK_CHINESE_LINES = {
   // Player-facing label and notice pairs.
-  "apps/desktop/src/main-i18n.ts": 78,
+  "apps/desktop/src/main-i18n.ts": 80,
   "apps/server/src/routes/api/bootstrap/compactor.ts": 1,
   "apps/server/src/routes/api/bootstrap/plugin-rpc-wiring.ts": 2,
   "apps/server/src/routes/api/plugin-diagnostics.ts": 1,
@@ -183,7 +183,7 @@ const FRAMEWORK_CHINESE_LINES = {
   "packages/plugin-handlers-utils/src/narrative-review.ts": 13,
   "packages/runtime/src/agent-loop/request-context-budget.ts": 2,
   "packages/runtime/src/agent-loop/response-review.ts": 1,
-  "packages/runtime/src/agent-loop/runtime-completion.ts": 3,
+  "packages/runtime/src/agent-loop/runtime-completion.ts": 4,
   "packages/runtime/src/agent-loop/turn-agent-tool-loop.ts": 1,
   "packages/runtime/src/commit/commit-ui.ts": 2,
   "packages/runtime/src/llm/gateway-llm-adapter.ts": 1,

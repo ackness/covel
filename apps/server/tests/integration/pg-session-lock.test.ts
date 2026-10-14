@@ -397,6 +397,29 @@ describe.skipIf(!pgAvailable)("pg-session-lock", () => {
     await sql.end();
   });
 
+  it("orders overlapping key sets itself, so two Pods cannot deadlock", async () => {
+    const sqlA = postgres(DATABASE_URL, { max: 1 });
+    const sqlB = postgres(DATABASE_URL, { max: 1 });
+    const options = { acquireTimeoutMs: 2_000, pollIntervalMs: 5 };
+    const lockA = createPgAdvisorySessionLock(sqlA, options);
+    const lockB = createPgAdvisorySessionLock(sqlB, options);
+    const suffix = globalThis.crypto.randomUUID();
+    const first = `order-a-${suffix}`;
+    const second = `order-b-${suffix}`;
+    const hold = () => new Promise((resolve) => setTimeout(resolve, 50));
+    try {
+      // Unsorted, each Pod would take one key and time out waiting for the other.
+      await expect(
+        Promise.all([
+          lockA.withLocks([second, first], hold),
+          lockB.withLocks([first, second], hold),
+        ]),
+      ).resolves.toHaveLength(2);
+    } finally {
+      await Promise.all([sqlA.end(), sqlB.end()]);
+    }
+  });
+
   it("holds every batch key against another Pod", async () => {
     const sqlA = postgres(DATABASE_URL, { max: 1 });
     const sqlB = postgres(DATABASE_URL, { max: 1 });

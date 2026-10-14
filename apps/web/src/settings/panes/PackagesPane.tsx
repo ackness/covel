@@ -1,3 +1,4 @@
+import { requestConfirm } from "@/lib/confirm-channel.js";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Boxes, Package, Upload, Globe, Puzzle, RotateCw } from "lucide-react";
@@ -142,6 +143,17 @@ export function PackagesPane() {
   }
 
   async function uninstall(id: string) {
+    if (
+      !(await requestConfirm({
+        title: t("settings.packages.uninstall"),
+        message: t("settings.packages.uninstallConfirm"),
+        subject: id,
+        confirmLabel: t("settings.packages.uninstall"),
+        cancelLabel: t("common.cancel"),
+        destructive: true,
+      }))
+    )
+      return;
     setRemoving(id);
     try {
       await uninstallPlugin(id);

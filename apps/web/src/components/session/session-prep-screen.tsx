@@ -48,16 +48,17 @@ import { DimensionActions } from "./session-prep/dimension-actions.js";
 import { ModelsCard } from "./session-prep/models-card.js";
 import { PluginSelectionCard } from "./session-prep/plugin-selection-card.js";
 import type { SessionPrepScreenProps } from "./session-prep/types.js";
-import { worldPlayLocale } from "@/lib/world-locale.js";
+import { worldDisplayText, worldPlayLocale } from "@/lib/world-locale.js";
 import { worldVisual } from "@/lib/world-visuals.js";
 import { usePluginSelection } from "./session-prep/use-plugin-selection.js";
 import { useWorldDataPreflight } from "./session-prep/use-world-data-preflight.js";
 import { usePrepRuntimeBindings } from "./session-prep/use-prep-runtime-bindings.js";
+import { useSessionHistory } from "./session-prep/use-session-history.js";
 import { ignoreError } from "@/lib/ignore-error.js";
 import { getDataService } from "@/services/data-service.js";
-import { isLockedCorePackage } from "./session-prep/plugin-selection-helpers.js";
+import { isBuiltinDefaultPackage } from "./session-prep/plugin-selection-helpers.js";
 
-export { isLockedCorePackage };
+export { isBuiltinDefaultPackage };
 
 const worldPluginSettingsSchema = z.record(
   z.string(),
@@ -163,17 +164,16 @@ export function SessionPrepScreen({
   const [loreExpanded, setLoreExpanded] = useState(false);
   const [modelsExpanded, setModelsExpanded] = useState(false);
   const [pluginSectionExpanded, setPluginSectionExpanded] = useState(false);
-  const [existingSessions, setExistingSessions] = useState<api.SessionRecord[]>(
-    [],
-  );
+  const {
+    sessions: existingSessions,
+    setSessions: setExistingSessions,
+    status: sessionHistoryStatus,
+    retry: retrySessionHistory,
+  } = useSessionHistory(world.id);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
-  useEffect(() => {
-    getDataService()
-      .listSessions(world.id)
-      .then(setExistingSessions)
-      .catch(ignoreError("list existing sessions"));
-  }, [world.id]);
+  const playLocale = worldPlayLocale(world, i18n.language) ?? i18n.language;
+  const displayText = worldDisplayText(world, playLocale);
 
   const handleRequestDelete = useCallback(
     async (target: api.SessionRecord) => {
@@ -182,7 +182,7 @@ export function SessionPrepScreen({
         t,
         i18n.resolvedLanguage ?? i18n.language,
         target,
-        text(world.name),
+        displayText.name ?? "",
       );
       if (!approved) return;
       setDeletingId(target.id);
@@ -193,7 +193,14 @@ export function SessionPrepScreen({
         setDeletingId(null);
       }
     },
-    [deletingId, t, i18n, world.name, onDeleteSession],
+    [
+      deletingId,
+      t,
+      i18n,
+      displayText.name,
+      onDeleteSession,
+      setExistingSessions,
+    ],
   );
 
   // The list's summary paints the header; the lore and the dimension flag come
@@ -204,7 +211,6 @@ export function SessionPrepScreen({
   // The edition the session will play in: the same rule that picks the
   // session's content locale. A session whose lore the player left alone
   // carries no override, so the server reads this edition itself.
-  const playLocale = worldPlayLocale(world, i18n.language) ?? i18n.language;
   const originalLore =
     localizedWorldText(
       {
@@ -428,7 +434,7 @@ export function SessionPrepScreen({
               <div className="max-w-2xl space-y-4">
                 <SessionBreadcrumb
                   step="prep"
-                  worldName={text(world.name)}
+                  worldName={displayText.name ?? ""}
                   onGoWorldSelect={onBack}
                 />
                 <div>
@@ -436,10 +442,10 @@ export function SessionPrepScreen({
                     {t("session.preparation", "Session Setup")}
                   </p>
                   <h1 className="ui-title text-3xl sm:text-4xl md:text-6xl leading-[.98] text-white">
-                    {text(world.name)}
+                    {displayText.name ?? ""}
                   </h1>
                   <p className="mt-4 max-w-xl text-sm md:text-base leading-relaxed text-white/72">
-                    {text(world.description)}
+                    {displayText.description}
                   </p>
                 </div>
               </div>
@@ -575,12 +581,15 @@ export function SessionPrepScreen({
             <section className="order-2 min-w-0 space-y-4 lg:order-1">
               <WorldInfoCard
                 world={world}
+                playLocale={playLocale}
                 expanded={worldInfoExpanded}
                 onToggle={() => setWorldInfoExpanded(!worldInfoExpanded)}
               />
 
               <SessionHistoryCard
                 activeSessions={activeSessions}
+                status={sessionHistoryStatus}
+                onRetry={retrySessionHistory}
                 expanded={sessionsExpanded}
                 onToggle={() => setSessionsExpanded(!sessionsExpanded)}
                 onResume={handleResume}

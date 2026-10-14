@@ -73,6 +73,7 @@ function makeSuspension(): SuspensionRecord {
     reason: "wait",
     resumeSchema: {},
     pendingContinuation: {
+      takenUnder: { playerTurns: 0, pluginVersion: "1.0.0" },
       executionContext: {
         executionId: crypto.randomUUID(),
         origin: "player",

@@ -94,7 +94,7 @@ For how the other person imports it, see [Import a theme](#import-a-theme) below
 An imported theme is saved in this device's settings, and it is still there after a restart. On another device, you need to import it again.
 
 > [!WARNING]
-> Import only themes from sources you trust. The CSS in a theme is applied to the whole interface as it is. It cannot run scripts, but it can use `url(...)` to make the interface request images or fonts from a remote address.
+> Theme CSS can change or obscure the interface, but the page policy blocks its external resources. Background images are downloaded at import time. See the [theme package reference](../reference/theme-packages.md) for formats and limits.
 
 ## Route 2: Write a Theme by Hand
 

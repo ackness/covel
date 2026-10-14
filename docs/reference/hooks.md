@@ -62,17 +62,17 @@ handler 收到两个参数：上下文 `ctx` 和负载 `payload`。它返回一�
 
 所有事件的所有 handler 收到同一种形状的上下文。
 
-| 字段              | 值                                                                                                                                                |
-| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `event`           | 事件名。                                                                                                                                          |
-| `sessionId`       | 会话。                                                                                                                                            |
-| `turnId`          | 事件所属的那次执行。`SessionStart` 和 `SessionEnd` 时是空字符串。                                                                                 |
-| `locale`          | 会话的内容语言，创建会话时就定下。Hook 自己添加文字时用它：`instructionLocaleFor(ctx.locale)` 给出提示词正文的语言（`en` 或 `zh`）。              |
-| `pluginId`        | 事件说的是哪个 runtime，这里就是那个 runtime 所属的插件。它不是注册 handler 的插件。下表里范围为 `runtime` 的事件才有这个字段，其余事件没有。     |
-| `runtimeId`       | 事件说的是哪个 runtime，例如 `world-init/dimension-tracker`。和 `pluginId` 同时出现、同时缺席。两个提交事件里，它是产生那条 proposal 的 runtime。 |
-| `activePluginIds` | 会话里启用的插件。                                                                                                                                |
-| `getOwnSettings`  | 返回 handler 所属插件解析后的设置（清单默认值、世界预设、玩家填的值），只读。写法：`ctx.getOwnSettings?.() ?? {}`。                               |
-| `signal`          | 一个 `AbortSignal`。这次执行被取消，或 handler 超过时间上限时，它会触发。把它传给任何可能等待的调用。                                             |
+| 字段              | 值                                                                                                                                                                                                                |
+| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `event`           | 事件名。                                                                                                                                                                                                          |
+| `sessionId`       | 会话。                                                                                                                                                                                                            |
+| `turnId`          | 事件所属的那次执行。`SessionStart` 和 `SessionEnd` 时是空字符串。                                                                                                                                                 |
+| `locale`          | 会话的内容语言，创建会话时就定下。Hook 自己添加文字时用它：`instructionLocaleFor(ctx.locale)` 给出提示词正文的语言（`en` 或 `zh`）。                                                                              |
+| `pluginId`        | 事件说的是哪个 runtime，这里就是那个 runtime 所属的插件。它不是注册 handler 的插件。下表里范围为 `runtime` 的事件才有这个字段，其余事件没有。                                                                     |
+| `runtimeId`       | 事件说的是哪个 runtime，例如 `world-init/dimension-tracker`。和 `pluginId` 同时出现、同时缺席。两个提交事件里，它是产生那条 proposal 的 runtime。                                                                 |
+| `activePluginIds` | 会话里启用的插件。                                                                                                                                                                                                |
+| `getOwnSettings`  | 返回 handler 所属插件解析后的设置（清单默认值、世界预设、玩家填的值），只读。写法：`ctx.getOwnSettings?.() ?? {}`。                                                                                               |
+| `signal`          | 一个 `AbortSignal`。这次执行被取消，或 handler 超过时间上限时，它会触发。把它传给任何可能等待的调用。`SessionStart`、`SessionEnd`、`PostStateCommit` 和 `TurnStop` 不随执行取消，它们的 `signal` 只在超时时触发。 |
 
 runtime 的身份只在上下文里。负载不会重复 `pluginId` 或 `runtimeId`，所以一句 `ctx.runtimeId === "..."` 对每个事件都适用。
 
@@ -224,12 +224,14 @@ agent runtime 的每次模型调用之前触发，包括工具结果之后的调
 `replace.result` 替换结果。内核对替换后的结果做这几件事：
 
 - 保留原结果的 `pluginId`、`runtimeId`、`runId`、`turnId`，以及挂起结果的挂起字段。
+- 写入只来自 runtime 自己：`pendingProposals`、`effects` 和 `completion` 一律取原结果的值，Hook 加的会被丢掉。要拦下一条写入，用 `PreStateCommit`。
+- Hook 改了 `status` 时（比如把失败改成成功），结果不带任何写入。失败的函数 handler 在失败前攒下的写入也不提交。
 - handler 改了 `output` 却没动 `canonicalValue` 时，内核丢掉旧的 `canonicalValue`。这样其他 runtime 读到的值不会和改写后的输出对不上。
-- 再按 runtime 的 `output.schema` 检查一遍：函数 runtime 检查 `canonicalValue`，agent 在 Hook 改了 `output` 时检查 `output`。不符合时 runtime 以 `output-schema-invalid` 失败，什么都不提交。
+- 再按 runtime 的 `output.schema` 检查一遍：函数 runtime 检查 `canonicalValue`，agent 在 Hook 改了 `output` 时检查 `output`。从失败或跳过改成成功的结果没有 `canonicalValue`，检查的是 `output`，和正常成功走同样的检查。不符合时 runtime 以 `output-schema-invalid` 失败，什么都不提交。
 
 ### `PreToolUse`
 
-agent runtime 的每次工具调用之前触发。
+agent runtime 的每次工具调用之前触发，函数 runtime 经 `ctx.tools.call` 的每次调用之前也触发。
 
 负载：`{ toolCall: { id, name, arguments } }`，`arguments` 是 JSON 字符串。
 
@@ -242,7 +244,7 @@ agent runtime 的每次工具调用之前触发。
 
 负载：`{ toolCall, result }`。
 
-- `replace.result` 替换模型读到的结果。
+- `replace.result` 替换模型读到的结果（函数 runtime 里是 `ctx.tools.call` 返回的值）。工具交出的写入和事件、是否成功、审批状态都保持原样。
 - `replace.terminate: true` 在记下这条结果之后结束工具循环。
 
 ### `PreStateCommit`
@@ -274,6 +276,6 @@ agent runtime 的每次工具调用之前触发。
 
 ## Limits
 
-- Hook 没有自己的写入途径。它只能通过返回值改变状态。插件的数据由它的 runtime 和工具写入。
+- Hook 没有自己的写入途径。插件的数据由它的 runtime 和工具写入。Hook 的返回值能改写结果和 proposal 的 payload，但加不了新的写入。
 - handler 不能依赖其他插件 handler 的先后顺序，自己的 `enforce` 分组除外。
 - 声明了 `io.concealed` 的 runtime，提示词和回答不会出现在 trace 和实时流里。但已启用插件的 Hook 仍然会在负载里收到它们。社区插件的 Hook 只有在玩家批准了它的服务端代码之后才运行。

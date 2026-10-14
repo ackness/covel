@@ -6,7 +6,6 @@ import {
   assignStations,
   computeSpriteLanes,
   computeSpriteSlots,
-  deriveDecisionRecapFallback,
   extractInteractionChoices,
   extractPendingFormMessages,
   filterStalePrompts,
@@ -508,7 +507,7 @@ describe("mergeChoices", () => {
     },
   ];
 
-  it("orders interaction choices before guide prompts, unpacking prompt{N} by ascending N", () => {
+  it("orders interaction choices before slot choices, preserving declared order", () => {
     const prompts = {
       scene: "library",
       recap: "You followed the archivist into the restricted library.",
@@ -633,39 +632,27 @@ describe("mergeChoices", () => {
   });
 });
 
-describe("deriveDecisionRecapFallback", () => {
-  it("normalizes a short current story for legacy prompt rows", () => {
-    expect(
-      deriveDecisionRecapFallback(
-        "纸还在你手里。\n\n被划掉的那半句，你其实认得字。",
-      ),
-    ).toBe("纸还在你手里。 被划掉的那半句，你其实认得字。");
-  });
-
-  it("keeps the latest complete sentences within the decision-panel limit", () => {
-    expect(
-      deriveDecisionRecapFallback(
-        "你走进教室。凛把采访本推到桌边。澪问你放学后是否需要带路。窗外又传来吉他声。",
-        28,
-      ),
-    ).toBe("澪问你放学后是否需要带路。窗外又传来吉他声。");
-  });
-
-  it("keeps a closing quote with the sentence it belongs to", () => {
-    expect(
-      deriveDecisionRecapFallback(
-        "凛问：『你会先回应谁？』夏帆没理，只比了个『等你』的口型。纸还在你手里。",
-        32,
-      ),
-    ).toBe("夏帆没理，只比了个『等你』的口型。纸还在你手里。");
-  });
-
-  it("returns undefined for an empty story", () => {
-    expect(deriveDecisionRecapFallback(" \n ")).toBeUndefined();
-  });
-});
-
 describe("filterStalePrompts", () => {
+  it("does not show turn-scoped choices before a current turn is known", () => {
+    const suggestions = {
+      turnId: "turn-5",
+      choices: [{ id: "inspect", text: "Inspect" }],
+    };
+    expect(filterStalePrompts(suggestions, undefined)).toBeUndefined();
+  });
+
+  it("keeps retry choices resolved to the current story and drops them after it advances", () => {
+    const suggestions = {
+      turnId: "retry",
+      choices: [{ id: "inspect", text: "Inspect" }],
+    };
+    const resolve = (id: string) => (id === "retry" ? "turn-5" : id);
+    expect(filterStalePrompts(suggestions, "turn-5", resolve)).toBe(
+      suggestions,
+    );
+    expect(filterStalePrompts(suggestions, "turn-6", resolve)).toBeUndefined();
+  });
+
   it("keeps prompts stamped with the current turn", () => {
     const ns = {
       turnId: "turn-5",
@@ -682,8 +669,10 @@ describe("filterStalePrompts", () => {
     expect(filterStalePrompts(ns, "turn-5")).toBeUndefined();
   });
 
-  it("keeps prompts with no __turnId stamp (back-compat with old data)", () => {
+  it("keeps unscoped choices allowed by the current optional turnId contract", () => {
     const ns = { choices: [{ id: "prompt:1", text: "环顾四周" }] };
     expect(filterStalePrompts(ns, "turn-5")).toBe(ns);
+    expect(filterStalePrompts(ns, "turn-6")).toBe(ns);
+    expect(filterStalePrompts(ns, undefined)).toBe(ns);
   });
 });

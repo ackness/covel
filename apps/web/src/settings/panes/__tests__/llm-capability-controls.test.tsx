@@ -166,13 +166,19 @@ describe("llm capability controls", () => {
     fireEvent.change(screen.getByPlaceholderText("0.3"), {
       target: { value: "0.9" },
     });
+    fireEvent.blur(screen.getByDisplayValue("0.9"));
     expect(onUpdate).toHaveBeenLastCalledWith({
-      pricing: { outputPerMToken: 1.2, inputPerMToken: 0.9 },
+      pricing: { inputPerMToken: 0.9 },
     });
 
     fireEvent.change(screen.getByDisplayValue("1.2"), {
       target: { value: "" },
     });
+    fireEvent.blur(
+      screen.getByRole("spinbutton", {
+        name: i18n.t("settings.pricingOutput"),
+      }),
+    );
     expect(onUpdate).toHaveBeenLastCalledWith({
       pricing: { outputPerMToken: undefined },
     });

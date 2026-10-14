@@ -1,20 +1,4 @@
-/**
- * Integration test for direct-generate trace emission paths in turn-executor.
- *
- * Specifically covers the malformed-tool-arguments fallback path where
- * `deps.llm.generate` is called directly (bypassing the retry helper) — the
- * Q1 fix ensures this path pairs every `llm.calling` with an `llm.responded`
- * on both success AND error branches.
- *
- * Setup: two sequential LLM failures classified as malformed-tool-args:
- *   1st (retry-helper path): throws the specific error string that
- *      `shouldRetryMalformedToolArguments` recognises → retry helper throws
- *      LLMRetryError with that cause.
- *   2nd (direct-generate fallback): throws another classified error →
- *      exercises the Q1 try/catch and emits llm.responded with
- *      finishReason=error.
- */
-
+/** Request validation failures produce one paired error trace, without resending history. */
 import { describe, it, expect } from "vitest";
 import type { RuntimeManifest, TurnInput } from "@covel/shared";
 import type { LoadedRuntime } from "@covel/plugin-loader";
@@ -155,8 +139,8 @@ describe("turn-executor message.completed trace emission", () => {
   });
 });
 
-describe("turn-executor direct-generate error trace pairing (Q1)", () => {
-  it("emits llm.responded with finishReason=error when malformed-args fallback also throws", async () => {
+describe("turn-executor request error trace pairing", () => {
+  it("pairs the error trace without resending malformed history", async () => {
     const fallbackTool = tool({
       name: "fallback-tool",
       description: "x",
@@ -167,19 +151,17 @@ describe("turn-executor direct-generate error trace pairing (Q1)", () => {
     const manifest: RuntimeManifest = {
       name: "trace-fallback",
       pluginId: "trace-fallback",
-      description: "Runtime exercising the malformed-args fallback error path.",
+      description: "Runtime exercising request validation errors.",
       stage: "post-turn",
       model: "plugin",
       tools: { plugin: ["fallback-tool"] },
     };
     const loaded: LoadedRuntime = {
       manifest,
-      promptTemplate: "Exercise fallback trace.",
+      promptTemplate: "Exercise error trace.",
     };
 
-    // Error text that matches shouldRetryMalformedToolArguments and causes
-    // the retry helper to throw with that classified cause, triggering the
-    // direct-generate fallback path.
+    // A request validation error must not resend the unchanged history.
     const malformedArgsError = () =>
       new Error(
         '[openai-chat] HTTP 400 — <400> InternalError.Algo.InvalidParameter: The "function.arguments" parameter of the code model must be in JSON format.',
@@ -193,14 +175,10 @@ describe("turn-executor direct-generate error trace pairing (Q1)", () => {
       },
       async generate(params) {
         callCount++;
-        params.onTargetAttempt?.(
-          callCount === 1
-            ? { provider: "deepseek-proxy", model: "deepseek-chat" }
-            : { provider: "backup-proxy", model: "backup-chat" },
-        );
-        // Every attempt throws a malformed-args-classified error.
-        // Helper path: throws → LLMRetryError with classified cause.
-        // Fallback direct call: throws → Q1 catch block runs here.
+        params.onTargetAttempt?.({
+          provider: "deepseek-proxy",
+          model: "deepseek-chat",
+        });
         throw malformedArgsError();
       },
     } satisfies LLMAdapter;
@@ -220,11 +198,10 @@ describe("turn-executor direct-generate error trace pairing (Q1)", () => {
     };
 
     await executeTurn(makeTurnInput(), [manifest], deps, { maxSteps: 2 });
-    // At least 2 calls: retry helper (1 attempt with maxRetries=0 by default, plus the fallback).
-    expect(callCount).toBeGreaterThanOrEqual(2);
+    expect(callCount).toBe(1);
 
     // Every llm.calling must have a paired llm.responded — even on the
-    // direct-generate fallback error path (Q1 fix).
+    // request validation error path.
     const callingEvents = emitter.events.filter(
       (e) => e.type === "llm.calling",
     );
@@ -241,8 +218,8 @@ describe("turn-executor direct-generate error trace pairing (Q1)", () => {
       provider: "deepseek-proxy",
     });
     expect(callingEvents.at(-1)?.payload).toMatchObject({
-      model: "backup-chat",
-      provider: "backup-proxy",
+      model: "deepseek-chat",
+      provider: "deepseek-proxy",
     });
 
     // At least one llm.responded carries finishReason:error, usage, durationMs.

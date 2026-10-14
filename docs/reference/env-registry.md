@@ -181,6 +181,7 @@ pnpm docker:pg:logs
 
 - 使用 `DEPLOYMENT_TIER=self`。宿主机默认只绑定回环地址，同源的界面不需要 operator token 或 CORS 配置。
 - 应用容器内 `SERVER_PORT` 固定为 `3001`。宿主机入口由 `APP_BIND_IP`（默认 `127.0.0.1`）和 `APP_PORT`（默认 `3001`）决定。两套用同一个默认端口，不要同时启动。
+- 浏览器用 `localhost` 或 `127.0.0.1` 打开就能用。改了 `APP_BIND_IP`、要从别的机器打开时，把打开它用的名字写进 `COVEL_ALLOWED_HOSTS`。
 - 内置健康检查访问容器内的 `http://127.0.0.1:3001/api/health`。
 - 根 `llm.toml` 只读挂载到 `/app/llm.toml`。文件缺失时 Compose 会报错。
 - `appdata` 卷挂载到 `/home/node/.covel`，保存用户世界和插件。
@@ -278,6 +279,7 @@ v0.0.42 调整了插件扩展契约，旧的开发数据不会自动升级。桌
 | `SERVER_PORT`                   | `3001`                    | HTTP 服务监听的端口                                                                                                                                                                     |
 | `APP_PORT`                      | `3001`                    | Docker Compose 的应用在宿主机上的端口                                                                                                                                                   |
 | `COVEL_BIND_HOST`               | `127.0.0.1`               | HTTP 服务监听的地址                                                                                                                                                                     |
+| `COVEL_ALLOWED_HOSTS`           | —                         | 除 `localhost`、`127.0.0.1`、`[::1]` 外，`self` 档位还回答哪些主机名，逗号分隔                                                                                                          |
 | `DEPLOYMENT_TIER`               | `self`                    | 部署层级（`self` / `demo` / `commercial`），决定鉴权的严格程度                                                                                                                          |
 | `SERVE_STATIC` / `STATIC_DIR`   | `false` / `./web-dist`    | 让 server 托管指定目录里的网页前端                                                                                                                                                      |
 | `CORS_ORIGIN`                   | —                         | 允许的 HTTP origin 列表，逗号分隔                                                                                                                                                       |
@@ -418,6 +420,13 @@ v0.0.42 调整了插件扩展契约，旧的开发数据不会自动升级。桌
 
 - 默认 `127.0.0.1`：本地和桌面部署只监听回环接口，网络上访问不到。
 - 容器或多 pod 部署要显式设置 `COVEL_BIND_HOST=0.0.0.0`（两个 Docker Compose 文件都已经设置）。公开监听前先确认 `DEPLOYMENT_TIER` 和鉴权配置。
+
+**`COVEL_ALLOWED_HOSTS`**
+
+- `self` 档位只回答用 `localhost`、`127.0.0.1` 或 `[::1]` 打开的请求（端口不限），其他主机名一律 `403 host_not_allowed`。这挡住 DNS 重绑定：恶意网页把自己的域名指向本机，也没法驱动不要令牌的接口。
+- 自部署的网页版要从别的机器打开时，把打开它用的名字写进来，例如 `COVEL_ALLOWED_HOSTS=covel.example.com,192.168.1.20`。写了端口也只比较主机名。
+- 放在反向代理后面时，写代理转发过来的 `Host`。代理把 `Host` 改成上游名字（比如 nginx 默认的 `app:3001`）时，写那个名字。
+- `demo` / `commercial` 档位使用各自的鉴权规则，不做这个检查。
 
 **`TRUSTED_PROXY_IPS`**
 

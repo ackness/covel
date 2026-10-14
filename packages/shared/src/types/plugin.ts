@@ -595,13 +595,11 @@ export interface RuntimeManifest extends PluginScopedManifestFields {
    */
   readonly loopDetectionThreshold?: number;
   /**
-   * Agent runtimes only. When `true`, a loop that finishes without ever
-   * successfully executing a tool (LLM returned prose with no tool call) is
-   * given one corrective retry — a system message telling it to call its
-   * declared tool first — before being allowed to finish. Guards against
-   * models that drift into free-form narration and skip their sole tool.
-   * `maxSteps` still bounds the loop, so a second bare finish is released
-   * (with a warn) rather than looping forever. Default `false`.
+   * Agent runtimes only. Requires a successful completeAfterTools call;
+   * without that list, any successful business tool counts. Failed calls and
+   * runtime-done do not count. A text finish without this evidence gets one
+   * corrective retry, then fails. The same rule applies after resume and at
+   * every loop exit. Default false.
    */
   readonly requireToolUse?: boolean;
   /**

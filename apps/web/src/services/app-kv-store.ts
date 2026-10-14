@@ -12,6 +12,10 @@ import {
   APP_KV_STORE_SUBMITTED_BLOCKS,
   APP_KV_STORE_WORLD_OVERLAYS,
 } from "@covel/store/idb-schema";
+import {
+  compactStatePatches,
+  rememberStatePatchIds,
+} from "./state-patch-cache.js";
 import { mergeExecutionHistory } from "./execution-history.js";
 import { openBrowserCacheDb } from "./storage/cache-db.js";
 import type { StatePatchRecord } from "./api/types.js";
@@ -72,10 +76,18 @@ async function idbDelete(storeName: StoreNames, key: string): Promise<void> {
 
 // ── State Patches ───────────────────────────────────────────────
 
+interface StatePatchCache {
+  patches: StatePatchRecord[];
+  recentIds: string[];
+}
+
 export async function getStatePatches(
   sessionId: string,
 ): Promise<StatePatchRecord[] | null> {
-  return idbGet<StatePatchRecord[]>(STORE_STATE_PATCHES, sessionId);
+  return (
+    (await idbGet<StatePatchCache>(STORE_STATE_PATCHES, sessionId))?.patches ??
+    null
+  );
 }
 
 export async function appendStatePatch(patch: StatePatchRecord): Promise<void> {
@@ -85,15 +97,35 @@ export async function appendStatePatch(patch: StatePatchRecord): Promise<void> {
     const tx = db.transaction(STORE_STATE_PATCHES, "readwrite");
     const store = tx.objectStore(STORE_STATE_PATCHES);
     const req = store.get(owned.sessionId);
+    let failure: unknown;
     req.onsuccess = () => {
-      const current = (req.result as StatePatchRecord[] | undefined) ?? [];
-      if (!current.some((existing) => existing.id === owned.id)) {
-        store.put([...current, owned], owned.sessionId);
+      try {
+        const current = (req.result as StatePatchCache | undefined) ?? {
+          patches: [],
+          recentIds: [],
+        };
+        if (!current.recentIds.includes(owned.id)) {
+          store.put(
+            {
+              patches: compactStatePatches([...current.patches, owned]),
+              recentIds: rememberStatePatchIds([
+                ...current.recentIds,
+                owned.id,
+              ]),
+            } satisfies StatePatchCache,
+            owned.sessionId,
+          );
+        }
+      } catch (error) {
+        failure = error;
+        tx.abort();
       }
     };
     tx.oncomplete = () => resolve();
     tx.onabort = () =>
-      reject(tx.error ?? new Error("State patch transaction aborted"));
+      reject(
+        failure ?? tx.error ?? new Error("State patch transaction aborted"),
+      );
   });
 }
 

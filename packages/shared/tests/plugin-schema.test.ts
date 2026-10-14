@@ -267,6 +267,26 @@ describe("plugin manifest dataSchemas", () => {
     ).toBe(false);
   });
 
+  it("reserves the framework ID and accepts package-level http permissions", () => {
+    const root = { id: "probe", kind: "plugin", description: "Probe" };
+    expect(
+      pluginManifestSchema.safeParse({ ...root, id: "framework" }).success,
+    ).toBe(false);
+    const withHttp = {
+      ...root,
+      permissions: {
+        http: [{ origin: "https://api.example.com", methods: ["POST"] }],
+      },
+    };
+    expect(pluginManifestSchema.parse(withHttp)).toEqual(withHttp);
+    expect(
+      pluginManifestSchema.safeParse({
+        ...root,
+        permissions: { http: [{ origin: "http://api.example.com" }] },
+      }).success,
+    ).toBe(false);
+  });
+
   it("accepts a world data source inside the world package and rejects one outside it", () => {
     const withSource = (sourcePath: string) => ({
       id: "probe",
@@ -300,6 +320,27 @@ describe("plugin manifest dataSchemas", () => {
       expect(pluginManifestSchema.safeParse(withSource(outside)).success).toBe(
         false,
       );
+    // A path the kernel or the package owns would take a convention away
+    // from every world, whatever the case or the edition.
+    for (const reserved of [
+      "data/dimensions.yaml",
+      "data/lorebook.yaml",
+      "characters/characters.json",
+      "Data/Dimensions.yaml",
+      "./data/lorebook.yaml",
+      "world.yaml",
+      "world.zh-CN.yaml",
+      "WORLD.md",
+      "data/world.data.yaml",
+      "media/gallery",
+      "media/gallery/extra.json",
+    ]) {
+      const result = pluginManifestSchema.safeParse(withSource(reserved));
+      expect(result.success, reserved).toBe(false);
+      expect(result.error?.issues[0]?.message, reserved).toContain(
+        "must not name a file the kernel or the world package owns",
+      );
+    }
   });
 });
 

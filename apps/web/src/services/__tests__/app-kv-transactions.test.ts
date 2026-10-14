@@ -167,3 +167,36 @@ it("deduplicates replayed state patches atomically while preserving distinct sam
     { ...patch, id: "sp_trace:2", data: { stats: { mp: 3 } } },
   ]);
 });
+
+it("retains one latest patch per field after a thousand writes and ignores a recent replay", async () => {
+  const sessionId = `compact-patches-${crypto.randomUUID()}`;
+  const patch = (index: number) => ({
+    id: `event-${index}`,
+    sessionId,
+    summary: "stats.hp",
+    packageName: "probe",
+    createdAt: "2026-01-01",
+    data: { stats: { hp: index } },
+  });
+  for (let i = 0; i < 1000; i++) await appendStatePatch(patch(i));
+  await appendStatePatch(patch(998));
+  expect(await getStatePatches(sessionId)).toEqual([patch(999)]);
+});
+
+it("caps distinct cached fields, preserves independent keys and their latest values", async () => {
+  const sessionId = `bounded-patches-${crypto.randomUUID()}`;
+  for (let i = 0; i < 300; i++) {
+    await appendStatePatch({
+      id: `event-${i}`,
+      sessionId,
+      summary: `stats.${i}`,
+      packageName: "probe",
+      createdAt: "2026-01-01",
+      data: { stats: { [i]: i } },
+    });
+  }
+  const kept = await getStatePatches(sessionId);
+  expect(kept).toHaveLength(256);
+  expect(kept?.[0]?.data).toEqual({ stats: { 44: 44 } });
+  expect(kept?.at(-1)?.data).toEqual({ stats: { 299: 299 } });
+});

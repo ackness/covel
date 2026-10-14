@@ -16,6 +16,9 @@ import { reconcileExecutionSteps } from "./snapshot-execution-steps.js";
 import type { MutableRef } from "./runtime-refs.js";
 import type { SessionDispatch, SessionState } from "./types.js";
 
+const POLL_INTERVAL_MS = 3000;
+const MAX_FAILURE_BACKOFF_MS = 30_000;
+
 interface RecoveryOptions {
   state: SessionState;
   stateRef: MutableRef<SessionState>;
@@ -108,6 +111,9 @@ export function useExecutionRecovery(options: RecoveryOptions): void {
   useEffect(() => {
     if (!sessionId || !watching) return;
     let cancelled = false;
+    let polling = true;
+    let inFlight = false;
+    let failureBackoffMs = POLL_INTERVAL_MS;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const isCurrent = () =>
       !cancelled &&
@@ -115,10 +121,21 @@ export function useExecutionRecovery(options: RecoveryOptions): void {
       sessionGenerationRef.current === sessionGeneration &&
       (stateRef.current.actionGeneration ?? 0) === actionGeneration &&
       stateRef.current.executionRecovery?.sessionId === sessionId;
+    const hidden = () =>
+      typeof document !== "undefined" && document.visibilityState === "hidden";
+    const schedule = (delay: number) => {
+      if (isCurrent() && polling && !hidden())
+        timer = setTimeout(() => {
+          timer = undefined;
+          void poll();
+        }, delay);
+    };
     const poll = async () => {
+      if (!isCurrent() || !polling || hidden() || inFlight) return;
+      inFlight = true;
       try {
-        let status = await api.getSessionExecution(sessionId);
-        if (!isCurrent()) return;
+        let status = await api.getSessionExecution(sessionId, { retry: false });
+        if (!isCurrent() || hidden()) return;
         if (!hydrating) {
           status = await refreshRecoveredExecution(
             sessionId,
@@ -134,9 +151,10 @@ export function useExecutionRecovery(options: RecoveryOptions): void {
           );
         }
         if (!isCurrent()) return;
+        failureBackoffMs = POLL_INTERVAL_MS;
         dispatch({ type: "OBSERVE_EXECUTION_STATUS", sessionId, status });
-        if (hydrating || status.state === "running")
-          timer = setTimeout(() => void poll(), 3000);
+        polling = hydrating || status.state === "running";
+        if (polling) schedule(POLL_INTERVAL_MS);
       } catch (error) {
         if (!isCurrent()) return;
         dispatch({
@@ -144,13 +162,26 @@ export function useExecutionRecovery(options: RecoveryOptions): void {
           sessionId,
           error: error instanceof Error ? error.message : String(error),
         });
-        timer = setTimeout(() => void poll(), 3000);
+        schedule(failureBackoffMs);
+        failureBackoffMs = Math.min(
+          failureBackoffMs * 2,
+          MAX_FAILURE_BACKOFF_MS,
+        );
+      } finally {
+        inFlight = false;
       }
     };
+    const visibilityChanged = () => {
+      clearTimeout(timer);
+      timer = undefined;
+      if (!hidden()) void poll();
+    };
+    document.addEventListener("visibilitychange", visibilityChanged);
     void poll();
     return () => {
       cancelled = true;
       clearTimeout(timer);
+      document.removeEventListener("visibilitychange", visibilityChanged);
     };
   }, [
     sessionId,

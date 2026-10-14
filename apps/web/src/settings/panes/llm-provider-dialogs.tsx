@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { describeProviderFailure } from "@/lib/provider-failure-hint.js";
 import {
   fetchProviderProtocols,
@@ -270,6 +270,16 @@ function ModelIdsTextarea({
   listTarget?: { provider: string; baseUrl?: string; protocol?: string };
 }) {
   const { t } = useTranslation();
+  const targetKey = JSON.stringify(listTarget);
+  const previousTarget = useRef(targetKey);
+  const picked = useRef(new Set<string>());
+  useEffect(() => {
+    if (previousTarget.current === targetKey) return;
+    previousTarget.current = targetKey;
+    const next = parseModelIds(value).filter((id) => !picked.current.has(id));
+    if (picked.current.size > 0) onChange(next.join("\n"));
+    picked.current.clear();
+  }, [targetKey, value, onChange]);
   return (
     <div className="space-y-1.5">
       <label className="block space-y-1.5">
@@ -278,7 +288,12 @@ function ModelIdsTextarea({
         </span>
         <textarea
           value={value}
-          onChange={(event) => onChange(event.target.value)}
+          onChange={(event) => {
+            const remaining = new Set(parseModelIds(event.target.value));
+            for (const id of picked.current)
+              if (!remaining.has(id)) picked.current.delete(id);
+            onChange(event.target.value);
+          }}
           rows={6}
           placeholder={"openai/gpt-5.6-sol\ndeepseek/deepseek-v4-flash"}
           className="w-full resize-y border border-border bg-background px-3 py-2 font-mono text-sm leading-relaxed outline-none focus:ring-1 focus:ring-primary"
@@ -292,9 +307,18 @@ function ModelIdsTextarea({
       </label>
       {listTarget && (
         <ModelListPicker
+          key={JSON.stringify(listTarget)}
           target={listTarget}
           value={value}
-          onChange={onChange}
+          onChange={(next) => {
+            const existing = new Set(parseModelIds(value));
+            const nextIds = new Set(parseModelIds(next));
+            for (const id of nextIds)
+              if (!existing.has(id)) picked.current.add(id);
+            for (const id of picked.current)
+              if (!nextIds.has(id)) picked.current.delete(id);
+            onChange(next);
+          }}
         />
       )}
     </div>

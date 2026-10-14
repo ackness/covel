@@ -1340,6 +1340,7 @@ describe("Snapshot routes", () => {
           required: ["answer"],
         },
         pendingContinuation: {
+          takenUnder: { playerTurns: 0, pluginVersion: "0.0.0" },
           executionContext: {
             executionId: "exec-snapshot-unresolved",
             origin: "player",
@@ -1399,6 +1400,7 @@ describe("Snapshot routes", () => {
         reason: "Already handled",
         resumeSchema: {},
         pendingContinuation: {
+          takenUnder: { playerTurns: 0, pluginVersion: "0.0.0" },
           executionContext: {
             executionId: "exec-snapshot-resolved",
             origin: "player",

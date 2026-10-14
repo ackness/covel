@@ -671,11 +671,13 @@ The stage reads the server's `ui.slot@1` projection. Each provider builds the ge
 
 - "Streaming" follows the kernel's convention: there is no streaming boolean. The condition is `executing` together with a story message ID that starts with `stream_`.
 - New narrative is shown character by character by `StageDialog`, and each paragraph stops and waits for the player to click. The last paragraph also pauses once, waiting for a closing click. Auto-play moves on by itself according to the pause time. An empty paragraph at the end of the text does not produce an empty pause.
+- Narrative text is separate from the “Continue the dialogue” button so screen readers can read it. Live announcements wait until typing finishes for the paragraph. Tab focuses the advance button; Enter or Space continues.
 - When typing catches up with the end of the stream, it does not jump to the decision panel automatically.
 - After the text has been read, and the turn execution has ended, the same spot is replaced by the unified decision panel. It shows, in order: the scene, a "Current context" summary, the "Decision" question, grouped options, and an inline free text input.
 - Right after submitting, the whole old decision panel is hidden, including areas added by plugins. While the new narrative is coming, "Generating" is shown. Narrative that was already read is not replayed.
 - When a session is restored, or when you switch into the stage from another view, the latest narrative that already existed before mounting counts as read, so it is not typed out again.
-- When an old action-suggestion row has no `recap/decision`, the panel takes up to three sentences, at most 180 characters, from the latest story as the situation recap, and uses `scene` to make a context-aware decision question. New data always uses the fields the agent generated first.
+- `stage.choices@1.recap` is optional. When omitted or empty, the panel omits “Current context” and does not extract a summary from the story. If `decision` is omitted, the scene or a generic question guides free input. Reading narration and submitting free input still work without a suggestions provider.
+- Omitting `turnId` declares unscoped choices. Choices with a `turnId` appear only when it matches the current story turn; they stay hidden when that turn is unknown. A committed retry can resolve to the source story through the turn resolver. Providers should set `turnId` on choices that expire with the turn, without relying on the framework to infer old data.
 
 **Previews and caching of slots.**
 

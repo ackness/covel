@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Download, ExternalLink, ImageIcon } from "lucide-react";
+import { Download, ExternalLink, File } from "lucide-react";
 import { mediaGalleryPropsSchema } from "@covel/shared";
 import { Button } from "@/components/ui/button.js";
 import { Media } from "@/components/Media.js";
@@ -15,7 +15,7 @@ import { resolvePath, useI18nResolver } from "@/lib/catalog/helpers.js";
 import { useActiveSessionId } from "@/lib/catalog/session-context.js";
 import { emitToast } from "@/lib/toast-channel.js";
 import { formatJobDuration } from "@/lib/job-ui.js";
-import { downloadImage } from "./actions.js";
+import { downloadMedia } from "./actions.js";
 
 export function MediaGalleryPanel({
   props: input,
@@ -34,7 +34,7 @@ export function MediaGalleryPanel({
   if (!items.length)
     return (
       <p className="text-xs text-muted-foreground italic text-center px-4 pt-6">
-        {resolve(input.emptyText) || t("coreImage.panel.noImagesYet")}
+        {resolve(input.emptyText) || t("catalog.mediaGallery.empty")}
       </p>
     );
   return (
@@ -57,27 +57,37 @@ export function MediaGalleryPanel({
               key={id}
               className="image-gallery-row rounded-lg border border-border bg-card/60 overflow-hidden"
             >
-              <button
-                type="button"
-                className="block w-full text-left"
-                onClick={() => ref && setPreview(ref)}
-                disabled={!ref}
-              >
-                {ref ? (
+              {ref ? (
+                ref.mime.startsWith("image/") ? (
+                  <button
+                    type="button"
+                    className="block w-full text-left"
+                    onClick={() => setPreview(ref)}
+                  >
+                    <Media
+                      src={ref}
+                      sessionId={sessionId}
+                      alt={title}
+                      aspectRatio="1/1"
+                      rounded="none"
+                      fit="cover"
+                    />
+                  </button>
+                ) : (
                   <Media
                     src={ref}
                     sessionId={sessionId}
                     alt={title}
-                    aspectRatio="1/1"
+                    aspectRatio="auto"
                     rounded="none"
-                    fit="cover"
+                    fit="contain"
                   />
-                ) : (
-                  <div className="aspect-square flex items-center justify-center text-muted-foreground">
-                    <ImageIcon className="w-4 h-4" />
-                  </div>
-                )}
-              </button>
+                )
+              ) : (
+                <div className="min-h-24 flex items-center justify-center text-muted-foreground">
+                  <File className="w-4 h-4" />
+                </div>
+              )}
               <div className="p-2 space-y-2">
                 <div className="flex justify-between gap-2 text-[10px] text-muted-foreground">
                   <span>{title}</span>
@@ -111,21 +121,21 @@ export function MediaGalleryPanel({
                         onClick={() => setPreview(ref)}
                       >
                         <ExternalLink className="w-3 h-3" />
-                        {t("coreImage.panel.viewLargeAction")}
+                        {t("catalog.mediaGallery.open")}
                       </Button>
                       <Button
                         variant="outline"
                         size="sm"
                         onClick={() =>
-                          downloadImage({
+                          downloadMedia({
                             ref,
                             sessionId,
-                            filename: `${id}.png`,
+                            filenameStem: id,
                           })
                         }
                       >
                         <Download className="w-3 h-3" />
-                        {t("coreImage.panel.download")}
+                        {t("catalog.mediaGallery.download")}
                       </Button>
                     </>
                   ) : null}
@@ -148,7 +158,7 @@ export function MediaGalleryPanel({
                       }}
                     >
                       {resolve(props.rerunAction.label) ||
-                        t("coreImage.panel.rerun")}
+                        t("catalog.jobList.rerun")}
                     </Button>
                   ) : null}
                 </div>

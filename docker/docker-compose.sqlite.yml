@@ -64,6 +64,8 @@ services:
       # Same-origin browser access needs no CORS override. Configure an
       # authenticated reverse proxy before exposing this personal instance.
       CORS_ORIGIN: ${CORS_ORIGIN:-}
+      # List any domain, LAN address, or Host forwarded by a reverse proxy.
+      COVEL_ALLOWED_HOSTS: ${COVEL_ALLOWED_HOSTS:-}
 
       COVEL_LLM_TOML: /app/llm.toml
       COVEL_PLUGINS_DIR: /app/plugins

@@ -23,6 +23,7 @@ import type {
 } from "./evaluation/types.js";
 
 import { AiProviderError } from "./errors.js";
+import { describeUnavailableWire } from "./wire-lifecycle.js";
 import {
   IMAGE_TOKEN_ESTIMATE,
   messagesForTarget,
@@ -111,6 +112,23 @@ function assertExplicitMediaWire(
       retriable: false,
     });
   }
+}
+
+/**
+ * The message for a media wire the gateway could not use. A plugin's wire
+ * that exists but serves only sessions in which its plugin is enabled names
+ * that plugin, so the player knows what to turn on.
+ */
+function missingMediaWireMessage(
+  kind: "image" | "speech" | "transcription" | "music",
+  wireId: string,
+  unknown: string,
+): string {
+  const unavailable = describeUnavailableWire(kind, wireId);
+  if (!unavailable) return unknown;
+  return unavailable.inSession
+    ? `${kind} wire "${wireId}" is provided by the plugin "${unavailable.pluginId}", which is not enabled for this session. Enable that plugin to use this model.`
+    : `${kind} wire "${wireId}" is provided by the plugin "${unavailable.pluginId}", which can only be used in a session that has enabled it.`;
 }
 
 interface GatewayDependencies {
@@ -737,7 +755,11 @@ export function createGateway(deps: GatewayDependencies) {
           if (!wire) {
             throw new AiProviderError({
               code: "CONFIG_ERROR",
-              message: `unknown speech wire "${wireId}" — register it via registerSpeechWire() or fix llm.toml providerRequestMetadata.speechWire`,
+              message: missingMediaWireMessage(
+                "speech",
+                wireId,
+                `unknown speech wire "${wireId}" — register it via registerSpeechWire() or fix llm.toml providerRequestMetadata.speechWire`,
+              ),
               provider: targetProvider(target),
               retriable: false,
             });
@@ -804,7 +826,11 @@ export function createGateway(deps: GatewayDependencies) {
             throw new AiProviderError({
               code: "CONFIG_ERROR",
               message: wireId
-                ? `unknown music wire "${wireId}" — register it via registerMusicWire() or fix llm.toml providerRequestMetadata.musicWire`
+                ? missingMediaWireMessage(
+                    "music",
+                    wireId,
+                    `unknown music wire "${wireId}" — register it via registerMusicWire() or fix llm.toml providerRequestMetadata.musicWire`,
+                  )
                 : "no music wire configured — set llm.toml providerRequestMetadata.musicWire to a registered music wire",
               provider: targetProvider(target),
               retriable: false,
@@ -876,7 +902,11 @@ export function createGateway(deps: GatewayDependencies) {
           if (!wire) {
             throw new AiProviderError({
               code: "CONFIG_ERROR",
-              message: `unknown transcription wire "${wireId}" — register it via registerTranscriptionWire() or fix llm.toml providerRequestMetadata.transcriptionWire`,
+              message: missingMediaWireMessage(
+                "transcription",
+                wireId,
+                `unknown transcription wire "${wireId}" — register it via registerTranscriptionWire() or fix llm.toml providerRequestMetadata.transcriptionWire`,
+              ),
               provider: targetProvider(target),
               retriable: false,
             });
@@ -953,7 +983,11 @@ export function createGateway(deps: GatewayDependencies) {
           if (!wire) {
             throw new AiProviderError({
               code: "CONFIG_ERROR",
-              message: `unknown image wire "${wireId}" — register it via registerImageWire() or fix llm.toml providerRequestMetadata.imageWire`,
+              message: missingMediaWireMessage(
+                "image",
+                wireId,
+                `unknown image wire "${wireId}" — register it via registerImageWire() or fix llm.toml providerRequestMetadata.imageWire`,
+              ),
               provider: targetProvider(target),
               retriable: false,
             });

@@ -5,8 +5,7 @@ import {
 } from "@covel/plugin-handlers-utils";
 import { tool, z } from "@covel/tools";
 import initializeWorld from "../tools/initialize-world.js";
-import setWorldSchema from "../tools/set-world-schema.js";
-import setWorldDimensions from "../tools/set-world-dimensions.js";
+import register from "../server/index.js";
 import updateDimensions from "../tools/update-dimensions.js";
 import editDimensions from "../runtimes/edit-dimensions/handler.js";
 import trackerGuard from "../runtimes/dimension-tracker/guard.js";
@@ -62,6 +61,22 @@ function trackerContext(receipt = null) {
   };
 }
 describe("world-init domain tools", () => {
+  it("registers only tools that a runtime can call", () => {
+    const registered: string[] = [];
+    register({
+      toolkit: { tool, z },
+      provideExtension() {},
+      on() {},
+      registerTool(instance: { name: string }) {
+        registered.push(instance.name);
+      },
+    });
+    expect(registered.sort()).toEqual([
+      "dimension-rule-get",
+      "initialize-world",
+      "update-dimensions",
+    ]);
+  });
   it("initializes attributes and arbitrary declarations in one buffered call without lorebook/legacy state writes", async () => {
     const result = await initializeWorld({ tool, z }).execute(
       { attributes, definitions: { reputation: definition } },
@@ -142,25 +157,29 @@ describe("world-init domain tools", () => {
       getPendingProposals(withoutGenerated)[1].payload.definitions,
     ).toEqual({ reputation: definition });
   });
-  it("validates dimension schemas/ranges and exposes a single initialization proposal", async () => {
-    const instance = setWorldDimensions({ tool, z });
+  it("validates dimension schemas/ranges through atomic initialization", async () => {
+    const instance = initializeWorld({ tool, z });
     expect(
       getPendingProposals(
         await instance.execute(
-          { definitions: { reputation: definition } },
+          { attributes, definitions: { reputation: definition } },
           base,
         ),
       ),
-    ).toHaveLength(1);
+    ).toHaveLength(2);
     await expect(
       instance.execute(
-        { definitions: { reputation: { ...definition, initialValue: 101 } } },
+        {
+          attributes,
+          definitions: { reputation: { ...definition, initialValue: 101 } },
+        },
         base,
       ),
     ).rejects.toThrow();
     await expect(
       instance.execute(
         {
+          attributes,
           definitions: {
             reputation: { ...definition, schema: { $ref: "unsafe" } },
           },
@@ -170,9 +189,10 @@ describe("world-init domain tools", () => {
     ).rejects.toThrow();
   });
   it("keeps structured character attributes separate from global values", async () => {
-    const result = await setWorldSchema({ tool, z }).execute(
+    const result = await initializeWorld({ tool, z }).execute(
       {
         attributes: [
+          ...attributes.slice(1),
           {
             id: "hp",
             name: "Health",
@@ -189,7 +209,9 @@ describe("world-init domain tools", () => {
     expect(getPendingProposals(result)[0]).toMatchObject({
       type: "character.schema.set",
       payload: {
-        attributes: [expect.objectContaining({ id: "hp", type: "number" })],
+        attributes: expect.arrayContaining([
+          expect.objectContaining({ id: "hp", type: "number" }),
+        ]),
       },
     });
   });

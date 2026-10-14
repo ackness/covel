@@ -648,6 +648,7 @@ providerRequestMetadata = { musicWire = "<pluginId>/<wireId>" }
 
 - 路由键在进入 wire 之前被去掉，不会出现在发给厂商的请求体里。
 - wire ID 没有注册时，生成时抛 `CONFIG_ERROR`（报错信息里有修复办法），不会悄悄换成别的 wire。
+- 插件注册的 wire 只服务启用了该插件的会话，规则和文本协议相同。别的会话用到它时抛 `CONFIG_ERROR`，报错里写明要启用哪个插件。
 - 插件在 `entry` 模块里用 `covel.registerWires({ image?, speech?, transcription?, music?, text? })` 注册自定义 wire。frontmatter 的 `wires` 字段仍然接受，但已弃用。见 [plugin-extensions.md § 模型与新协议](./plugin-extensions.md#模型与新协议)。
 - wire 与 MediaStore 的关系见 [media-store.md](./media-store.md#media-wire-registries-image--speech--transcription--music)。
 
@@ -893,7 +894,7 @@ Gemini 上的默认形状只在一个模拟 Gemini 接口的本机中转上验�
 
 **拒绝。** 明确的 refusal 或 content filter 抛出不可重试的 `REFUSAL`，拒绝原因保留在 `error.details.diagnostics.refusal`，不切换备用模型。
 
-**失败也记下用掉的 token。** 拒答、`finishReason: error`、错误正文、流在结束标志之前断开：服务商在失败之前报告过用量时，错误带着它（`error.details.usage`）。runtime 把它写进这次调用的 `llm.responded`，function 插件和扩展点提供方的调用写进 `gateway.failed`，调试页的用量和费用都算上它。服务商没报告用量，就不写 `usage`，不当成 0。
+**失败也记下用掉的 token。** 拒答、`finishReason: error`、错误正文、流正常读到 EOF 却没有结束标志：服务商在失败之前报告过用量时，错误带着它（`error.details.usage`）。runtime 把它写进这次调用的 `llm.responded`，function 插件和扩展点提供方的调用写进 `gateway.failed`，调试页的用量和费用都算上它。服务商没报告用量，就不写 `usage`，不当成 0。绕过适配器收尾检查的底层网络异常仍可能丢失此前报告的用量。
 
 - 即使已经有普通文本或工具内容，也不能把夹着拒绝的回答记成成功。
 - 流式文本可能已经交付出去，但不会产生成功的 `done`。

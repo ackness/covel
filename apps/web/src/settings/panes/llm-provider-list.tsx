@@ -11,6 +11,7 @@ export function ProviderList({
   onQueryChange,
   onSelect,
   onAddProvider,
+  busy = false,
 }: {
   providers: ProviderCatalogEntry[];
   selectedProviderId?: string;
@@ -19,6 +20,7 @@ export function ProviderList({
   onQueryChange: (value: string) => void;
   onSelect: (id: string) => void;
   onAddProvider: () => void;
+  busy?: boolean;
 }) {
   const { t } = useTranslation();
   return (
@@ -80,6 +82,7 @@ export function ProviderList({
           variant="ghost"
           size="sm"
           className="w-full justify-start text-xs"
+          disabled={busy}
           onClick={onAddProvider}
         >
           <Plus className="h-3.5 w-3.5" />

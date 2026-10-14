@@ -178,7 +178,7 @@ PLUGIN.md:
           title: 已知事实
 ```
 
-The world package puts the file where `source.path` says, and it is imported. No other configuration is needed. When two plugins declare the same `path`, that path no longer counts as an agreed location. So choose a path that no other plugin uses.
+The world package puts the file where `source.path` says, and it is imported. No other configuration is needed. When two plugins enabled in the same session declare the same `path`, that path no longer counts as an agreed location. So choose a path that no other plugin uses. The kernel's and the world package's own paths (such as `data/dimensions.yaml` and `world.yaml`) cannot be declared; the list is in [World data](../reference/world-data.md).
 
 `generate` takes two values. `offer` lists this kind of content as an option on the authoring screen. `default` lists it and selects it by default. It requires an `example`. Its `source` must be public, not media, and use `id` as the `key`. When a player selects it, the generator writes the schema, the hint, and the example into its prompt. It also adds this plugin to the plugins the world enables. Declare it only for content whose generation quality has been checked with a real model.
 
@@ -310,6 +310,7 @@ permissions:
 - `origin` must be an `https` address. It cannot include a path, query parameters, or a user name and password.
 - `methods` is optional. The values are `GET`, `POST`, `PUT`, `PATCH`, `DELETE`, and `HEAD`.
 - Requests are sent with `ctx.utils.fetchWithRetry`. A community plugin that calls an address it did not declare is refused.
+- For entry code that sends requests with `covel.http.fetchWithRetry`, declare `permissions.http` in the root `PLUGIN.md`. See the [plugin reference](../reference/plugins.md#runtime-field-groups) for package permissions and wire endpoints.
 - Do not pass a URL that the player typed straight to the backend to fetch. Check it first with `ctx.utils.validateBaseUrl`.
 
 > [!WARNING]

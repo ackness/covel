@@ -3,31 +3,12 @@ import path from "node:path";
 import type { MediaStore } from "@covel/store";
 
 import type { RunRuntimeDebugOptions } from "./types.js";
-import type { CaseArtifactConfig, CaseExpectations } from "./reporting.js";
-
-interface RuntimeCaseFile {
-  readonly cases?: readonly RuntimeCase[];
-}
-
-export interface RuntimeCase {
-  readonly name: string;
-  readonly runtimeId: string;
-  readonly pluginId?: string;
-  readonly withPlugins?: readonly string[];
-  readonly message?: string;
-  readonly payload?: Record<string, unknown>;
-  readonly userSettings?: Record<string, unknown>;
-  readonly llmResponse?: Record<string, unknown>;
-  readonly llmResponses?: readonly Record<string, unknown>[];
-  readonly llmContent?: string;
-  readonly llmObject?: Record<string, unknown>;
-  readonly mockPresetId?: string;
-  readonly ignoreUpstreams?: boolean;
-  readonly expectsBackgroundFollower?: boolean;
-  readonly mode?: "mock" | "live" | "both";
-  readonly expect?: CaseExpectations;
-  readonly artifacts?: CaseArtifactConfig;
-}
+import {
+  runtimeCaseFileSchema,
+  runtimeCasesSchema,
+  type RuntimeCase,
+} from "@covel/shared";
+export type { RuntimeCase } from "@covel/shared";
 
 export function caseFilesFor(pluginRoot: string): readonly string[] {
   return [
@@ -37,12 +18,25 @@ export function caseFilesFor(pluginRoot: string): readonly string[] {
 }
 
 export function parseCaseFile(file: string): readonly RuntimeCase[] {
-  const parsed: unknown = JSON.parse(fs.readFileSync(file, "utf-8"));
-  if (Array.isArray(parsed)) return parsed as readonly RuntimeCase[];
-  if (parsed && typeof parsed === "object") {
-    return (parsed as RuntimeCaseFile).cases ?? [];
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(fs.readFileSync(file, "utf-8"));
+  } catch (cause) {
+    throw new Error(
+      `${file}: ${cause instanceof Error ? cause.message : String(cause)}`,
+      { cause },
+    );
   }
-  return [];
+  const result = (
+    Array.isArray(parsed) ? runtimeCasesSchema : runtimeCaseFileSchema
+  ).safeParse(parsed);
+  if (!result.success) {
+    const details = result.error.issues
+      .map((issue) => `${issue.path.join(".") || "(root)"}: ${issue.message}`)
+      .join("; ");
+    throw new Error(`${file}: ${details}`, { cause: result.error });
+  }
+  return Array.isArray(result.data) ? result.data : result.data.cases;
 }
 
 export function filterRuntimeCases(args: {

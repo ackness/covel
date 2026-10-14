@@ -40,6 +40,9 @@ test("saved custom roles remain editable in generation, assignment and import pa
     settings.getByRole("spinbutton", { name: "Temperature" }),
   ).toHaveValue("0.3");
   await settings.getByRole("spinbutton", { name: "Temperature" }).fill("0.2");
+  // Number drafts commit on blur; selectOption changes the select without
+  // moving focus away from the input as a player would.
+  await settings.getByRole("spinbutton", { name: "Temperature" }).press("Tab");
   await settings
     .getByRole("combobox", { name: "Select Slot" })
     .selectOption("custom-analysis");

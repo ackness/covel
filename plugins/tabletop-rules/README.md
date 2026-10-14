@@ -15,9 +15,7 @@
 
 世界既没有配置规则、也没有可配点属性（如纯对话世界）时，`creation` 静默跳过配点：不弹表单、不报错，也不阻塞开场流程；`check` 相应保持惰性，面板按钮会给出明确提示。世界显式配置了规则但与角色 schema 不符时仍会失败，避免展示一张无法完成的表单。
 
-世界 schema 已在之前的 setup 回合生成时，通过公开的 `get-character-schema` 工具读取已提交结果，支持配点失败后恢复以及已有角色的后补启用。
-
-同一 setup execution 中通过 `world-data-provider` 的 `worldSchema` 输出读取属性，兼容 schema 映射和直接的角色属性 schema；世界初始化 guard 从世界包导入数据并跳过模型调用时也能直接配点。
+`creation` 从执行视图 `ctx.world.characterSchema` 读取属性结构，不调用 `get-character-schema`，也不直接读取上游的 `worldSchema` 输出。执行视图包含已提交的 schema，以及同一执行里成功完成的上游 `character.schema.set` proposal；世界初始化 guard 采用作者 schema 后也能配点。
 
 世界可通过 world-data 导入声明 `schema: contract:tabletop-rules.rules.initial@1`、`to: contract:tabletop-rules.rules.initial@1`、`key: id`，提供 `{ "id": "creation", "budget": 4, "attributes": [{ "id": "combat", "label": "格斗", "base": 1, "max": 5 }] }`。`key` 是 JSON 对象中的字段名。所选属性必须符合世界角色 schema。表单首次显示时冻结规则，避免后续改配置改变已展示表单的含义。
 

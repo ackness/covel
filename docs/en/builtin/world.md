@@ -87,7 +87,7 @@ At the start, it prepares the character attributes and the "dimensions" of this 
 **Notes**
 
 - The starting values that the world author writes are not overwritten by play. The current value of each game is kept separately.
-- If the world already has enough data, the start does not generate it again, and it does not reset values that have already changed.
+- If the world already has enough data, the start does not generate it again, and it does not reset values that have already changed. When a plugin upgrade reruns setup, it only adopts newly declared dimensions and does not write another system message.
 - Dimensions that change over time, such as a countdown, follow the world's time.
 
 ## World Time (`world-time`)
@@ -137,7 +137,7 @@ When a named place, person, item, skill, legend or monster first appears in the 
 
 ## Relationship Graph (`npc-graph`)
 
-Records relationships between people, groups and factions. When the story mentions them again, the narrative recalls these relationships, so it is less likely to contradict itself.
+Records relationships between people, groups and factions. It checks existing nodes and relationships when recording new ones. When the story mentions them again, the narrative recalls these relationships, so it is less likely to contradict itself.
 
 **What you will see**: the "Relationship Graph" tab on the right. Nodes are people or factions. Green lines are positive relationships, red lines are negative ones, and gray lines are neutral. Click a node to see its profile.
 

@@ -32,7 +32,7 @@ export function createMemoryTools(deps: MemoryToolDeps): ToolModule[] {
     tool({
       name: "memory-search",
       description:
-        "Search conversation memory and the long-term knowledge base. The search matches words, not meaning: put the names involved in the query, and add other words the story may have used for the same thing.",
+        "Search conversation memory and the long-term knowledge base. Put the names involved and key words in the query, and add other words the story may have used for the same thing.",
       parameters: z.object({
         query: z
           .string()
@@ -64,10 +64,10 @@ export function createMemoryTools(deps: MemoryToolDeps): ToolModule[] {
         const results = hits.map((hit) => ({
           source: hit.source,
           ...(hit.key !== undefined ? { key: hit.key } : {}),
-          content: (hit.source === "recall"
-            ? `[${hit.role}] ${hit.content}`
-            : hit.content
-          ).slice(0, 500),
+          content:
+            hit.source === "recall"
+              ? `[${hit.role}] ${hit.content}`
+              : hit.content,
           score: hit.score,
           ...(hit.timestamp !== undefined ? { timestamp: hit.timestamp } : {}),
         }));

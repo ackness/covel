@@ -27,28 +27,24 @@ try {
   if (process.platform !== "win32") {
     assert.equal(fs.statSync(file).mode & 0o777, 0o600);
   }
+  assert.equal(loadChildEnvironment(root, {}).OPENAI_API_KEY, "synthetic-llm");
   assert.equal(
-    loadChildEnvironment(root, file, {}).OPENAI_API_KEY,
-    "synthetic-llm",
-  );
-  assert.equal(
-    loadChildEnvironment(root, file, { OPENAI_API_KEY: "synthetic-shell" })
+    loadChildEnvironment(root, { OPENAI_API_KEY: "synthetic-shell" })
       .OPENAI_API_KEY,
     "synthetic-shell",
   );
   assert.equal(
-    loadChildEnvironment(root, file, { OPENAI_API_KEY: undefined })
-      .OPENAI_API_KEY,
+    loadChildEnvironment(root, { OPENAI_API_KEY: undefined }).OPENAI_API_KEY,
     "synthetic-llm",
   );
   fs.unlinkSync(path.join(root, ".env.llm"));
-  assert.equal(
-    loadChildEnvironment(root, file, {}).OPENAI_API_KEY,
-    "synthetic-env",
-  );
+  assert.equal(loadChildEnvironment(root, {}).OPENAI_API_KEY, "synthetic-env");
   fs.unlinkSync(path.join(root, ".env"));
+  assert.equal(loadChildEnvironment(root, {}).OPENAI_API_KEY, undefined);
+  // Even equal-valued external and saved keys retain distinct ownership.
   assert.equal(
-    loadChildEnvironment(root, file, {}).OPENAI_API_KEY,
+    loadChildEnvironment(root, { OPENAI_API_KEY: "synthetic-home" })
+      .OPENAI_API_KEY,
     "synthetic-home",
   );
   saveKeysEnv(file, { deepseek: "synthetic-original" });

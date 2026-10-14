@@ -1,9 +1,3 @@
-/**
- * set-world-schema — Store character attribute schema for this world.
- * Single call to define all character attributes at once.
- *
- * @param {{ tool: Function, z: import('zod') }} injection
- */
 import {
   makeProposal,
   withPendingProposals,
@@ -78,35 +72,20 @@ export function createWorldAttributeSchema(z) {
   return attributeSchema;
 }
 
-export default function ({ tool, z }) {
-  const attributeSchema = createWorldAttributeSchema(z);
-
-  return tool({
-    name: "set-world-schema",
-    description:
-      "Define the world's character attribute schema. Pass all attribute definitions in a single call. Supported types: string | number (may set min/max/defaultValue) | boolean | enum (needs options) | array (needs itemType) | object (needs subSchema to describe sub-fields) | map (optional valueType). Cover at least the core mechanics that recur throughout the worldbuilding document.",
-    parameters: z.object({
-      types: z.array(z.string().min(1)).default(["npc", "companion"]),
-      attributes: z
-        .array(attributeSchema)
-        .min(1)
-        .describe("Array of character attribute definitions"),
-    }),
-    execute: async (params, context) => {
-      const now = new Date().toISOString();
-      const worldSchema = {
-        types: params.types ?? ["npc", "companion"],
-        attributes: params.attributes,
-      };
-      return withPendingProposals(
-        {
-          success: true,
-          attributeCount: params.attributes.length,
-          categories: [...new Set(params.attributes.map((a) => a.category))],
-          worldSchema,
-        },
-        [makeProposal(context, now, "character.schema.set", worldSchema)],
-      );
-    },
-  });
+export function initializeCharacterSchema(params, context) {
+  const worldSchema = {
+    types: params.types ?? ["npc", "companion"],
+    attributes: params.attributes,
+  };
+  return withPendingProposals(
+    { success: true, attributeCount: params.attributes.length, worldSchema },
+    [
+      makeProposal(
+        context,
+        new Date().toISOString(),
+        "character.schema.set",
+        worldSchema,
+      ),
+    ],
+  );
 }

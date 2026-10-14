@@ -14,6 +14,7 @@ import {
   createRuntimeJob,
   getRuntimeJob,
   listSettlingRuntimeJobs,
+  markRunnableSettlingJobs,
   RuntimeJobSupersededError,
   transitionRuntimeJob,
 } from "../../src/routes/api/plugin-rpc/jobs.js";
@@ -160,6 +161,31 @@ describe.each([
       [],
     );
   });
+  it("marks a refused job and the later jobs of its runtime as not runnable", async () => {
+    const settling = { settle: "before-next-execution" as const };
+    await createRuntimeJob(store, { ...job("refused"), ...settling });
+    await createRuntimeJob(store, { ...job("behind"), ...settling });
+    await createRuntimeJob(store, {
+      ...job("other"),
+      ...settling,
+      runtimeId: "plugin/other",
+    });
+    const canStart = vi.fn(
+      (candidate: { jobId: string }) => candidate.jobId !== "refused",
+    );
+    const marked = await markRunnableSettlingJobs(
+      await listSettlingRuntimeJobs(store, "session"),
+      canStart,
+    );
+    expect(marked.map(({ jobId, runnable }) => ({ jobId, runnable }))).toEqual([
+      { jobId: "refused", runnable: false },
+      { jobId: "behind", runnable: false },
+      { jobId: "other", runnable: true },
+    ]);
+    // A job queued behind a refused head is not asked about at all.
+    expect(canStart).toHaveBeenCalledTimes(2);
+  });
+
   it("captures an eligible executor before claim and keeps unavailable work queued", async () => {
     await createRuntimeJob(store, job("credential-job"));
     let selected: RuntimeJobExecutor | undefined;

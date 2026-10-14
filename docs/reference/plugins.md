@@ -35,7 +35,7 @@ example/
 
 布局规则：
 
-- 根 `PLUGIN.md` 必须有，它的 `id` 必须和包目录同名。
+- 根 `PLUGIN.md` 必须有，它的 `id` 必须和包目录同名。`framework` 留给框架自己，不能用作 `id`。
 - 只有一个 runtime 时，写在根文件的 `runtime` 里，根文件的正文就是它的提示词。
 - 有多个 runtime 时，每个放在 `runtimes/<id>/RUNTIME.md`，逻辑 ID 是 `<pluginId>/<id>`，各自文件的正文是各自的提示词。
 - 两种布局不能混用。子 runtime 不能声明包级贡献。
@@ -102,7 +102,7 @@ Extract facts supported by runtime-inputs.narrative.value, then call save-facts.
 | 根字段                                          | 含义                                                                                                        |
 | ----------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
 | `id`, `kind`                                    | 包身份；`kind` 为 `core` 或 `plugin`                                                                        |
-| `version`, `displayName`, `description`, `tags` | 元数据；`role:*` 标签不驱动任何业务                                                                         |
+| `version`, `displayName`, `description`, `tags` | 元数据；标签用于准备页的分组和筛选，不决定运行时调度                                                                         |
 | `covel`                                         | 适配的宿主版本范围，如 `">=0.0.45"`；范围之外的宿主不安装也不加载该包                                       |
 | `author`, `license`, `homepage`                 | 作者信息，只用于展示；见[作者信息](#作者信息)                                                               |
 | `provides`                                      | 版本化契约字符串，或 `{contract, default: true}`                                                            |
@@ -121,6 +121,8 @@ Extract facts supported by runtime-inputs.narrative.value, then call save-facts.
 - 不同的包可以提供同一个契约。消费者用 `cardinality: one` 或 `all` 说明要一个还是全部。
 - 只允许一个提供者的扩展点，以及显式写出的 `conflicts`，另外做互斥检查。
 - `conflicts` 只能写插件契约。写内核扩展点或 UI 槽位会得到 `invalid-conflict`，并指出 `conflicts` 字段的位置。内核扩展点怎样组合由它的 mode 决定。
+
+准备页按插件声明的第一个标签分组，组名直接显示标签原文；没有标签的插件放入“无标签”。每个插件只出现一次，后续标签仍可用于筛选。`kind: core` 的徽章显示“默认启用”，不表示锁定；会话列表的“内置”只表示来源。
 
 ### contributes 字段
 
@@ -198,6 +200,15 @@ homepage: https://example.com/tidefall
 | `effects`     | 读写资源与 `parallelSafe`                                                  |
 | `permissions` | 执行权限声明                                                               |
 
+根 `PLUGIN.md` 也可以写 `permissions.http`。它管 `entry` 模块的代码：社区包的 `covel.http`（工具、钩子、RPC、服务、扩展、wire 里都用它）只能访问根文件和各 runtime 的 `permissions.http` 里列出的源和方法。wire 还能访问它正在服务的那个用途的端点。没有声明的请求在发出之前就失败：`http permission denied: …`。
+
+```yaml
+permissions:
+  http:
+    - origin: https://api.example.com
+      methods: [POST]
+```
+
 ### 两种 runtime
 
 - **Function runtime** 必须声明 `function.handler`，这个模块必须默认导出一个函数，不能同时配置 `agent`。
@@ -234,7 +245,7 @@ Agent 的 guard 在调用模型之前执行。
 
 ### 依赖和引用的范围
 
-`schedule.needs`、`schedule.after` 和 `io.inputs.*.from.runtime` 里写的 runtime ID 只能属于本包：写完整的 `<pluginId>/<runtimeId>`，单 runtime 的包写包 ID。不带前缀的字符串依赖同样受这条限制。
+`schedule.needs`、`schedule.after` 和 `io.inputs.*.from.runtime` 里写的 runtime ID 只能属于本包：写完整的 `<pluginId>/<runtimeId>`，单 runtime 的包写包 ID。不带前缀的字符串依赖会被拒绝，诊断会建议补全为 `<pluginId>/<runtimeId>`；只有其他包的完整 runtime ID 才建议改用契约。
 
 **跨包 runtime 引用边界**：
 
@@ -352,7 +363,7 @@ Agent 的超时、重试和步数都在 `agent.loop` 里。
 **完成条件。**
 
 - `completion.afterTools`：指定的工具成功后就结束。
-- `completion.require: tool-use`：要求有效的工具调用，也就是至少一次执行成功的业务工具调用。失败的调用不算。
+- `completion.require: tool-use`：声明了非空的 `afterTools` 时，至少一个列出的完成工具必须成功。没有列表时，任意成功的业务工具调用都算。失败的调用和 `runtime-done` 不算。
 - 模型只回了纯文本，或者调用了 `runtime-done`，而这时还没有这样的调用：框架先注入一次纠正提示，仍未完成才判为失败。所以“无变化”也要通过业务工具提交一个空结果。
 - 纠正之后的那次请求要求模型必须调用工具（`toolChoice: "required"`，清单指名的工具保持不变）。模型调用工具后恢复自选。模型处于思考模式时服务商不接受强制选择，这时仍由模型自选。
 - 这个判定在循环返回处统一进行，普通执行和 resume 的所有结束方式都适用：文本回答、`runtime-done`、`afterTools` 自动完成、`PostToolUse` Hook 终止，以及步数用尽。
@@ -424,6 +435,7 @@ CLI 和安装器的静态校验对 `scope: turn` 和 `scope: committed` 的输�
 发布 runtime 的输出契约时，在根 `contracts.<contractId>.schema` 声明完整输出的公共 schema。
 
 - 同一个契约 ID 的所有提供者必须发布一致的 schema。
+- 公共 schema 同时覆盖模型输出和 guard 跳过输出。例如 `world-init` 的 `world-data-provider@1` 允许作者提供少于 15 项的属性结构；生成至少 15 项的要求留在 `initialize-world` 的工具参数中。
 - 替代插件的 `provides` 必须和它自己 runtime 的 `io.output.contract` 对齐。其他已安装插件的产出不能替它满足声明。
 - 被消费的契约缺少 schema，或者提供者只有声明而没有产出，都会产生加载诊断。
 
@@ -565,7 +577,7 @@ Agent 的副作用只来自工具：模型能写什么，以 `agent.tools` 白�
 
 **插件自己的数据。**
 
-- 插件自有的持久数据经绑定的 `ctx.store.getPluginData(namespace, key)` 和 `listPluginData(namespace?)` 访问。
+- 插件自有的持久数据经绑定的 `ctx.store.getPluginData(namespace, key)` 和 `listPluginData(namespace)` 访问。
 - 插件不能指定任意的 sessionId 或 pluginId 去读其他插件的私有数据。
 - 要跨插件公开数据，用契约、服务或扩展，不要扫描对方的 namespace。
 
@@ -631,6 +643,8 @@ namespace 接收某个契约，就说明了这个契约的记录长什么样。�
 - 两个 namespace 用不同的 schema 接收同一个契约。这时必须说明哪一份是公共的。
 
 接收世界数据的 namespace 还可以声明 `authoring`（`title`、`summary`、`hint`、`example`、`source`、`references`、`generate`）。它告诉世界作者怎样提供这份内容，以及应用内的生成器能不能生成它。
+
+请求期读取示例或准备可生成契约的 schema 失败时，只略过该契约并报告插件、namespace 和原因，不会停用整个插件或阻止其他内容生成。`pnpm describe:authoring --check` 仍把损坏的示例报给作者。
 
 - 只有列出了 `accepts` 的 namespace 才能声明它。
 - `pnpm describe:authoring` 汇总所有已扫描插件的声明；加 `--check` 会按 namespace 的 schema 校验每份 `example`。

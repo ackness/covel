@@ -648,6 +648,7 @@ providerRequestMetadata = { musicWire = "<pluginId>/<wireId>" }
 
 - The routing key is removed before the wire is used. It does not appear in the request body sent to the vendor.
 - If a wire ID is not registered, generation throws `CONFIG_ERROR`. The error message includes a fix. The system does not quietly switch to another wire.
+- A wire a plugin registers serves only sessions that enable that plugin, by the same rule as a text protocol. Another session that uses it gets `CONFIG_ERROR`, and the message names the plugin to enable.
 - A plugin registers a custom wire in its `entry` module with `covel.registerWires({ image?, speech?, transcription?, music?, text? })`. The frontmatter `wires` field is still accepted, but it is deprecated. See [plugin-extensions.md § Models and new protocols](./plugin-extensions.md#models-and-new-protocols).
 - For how wires relate to MediaStore, see [media-store.md](./media-store.md#media-wire-registries-image--speech--transcription--music).
 
@@ -893,7 +894,7 @@ The provider's own words (for example Anthropic's `end_turn` / `max_tokens` / `t
 
 **Refusals.** A clear refusal or content filter throws a non-retryable `REFUSAL`. The reason for the refusal is kept in `error.details.diagnostics.refusal`. No fallback model is used.
 
-**A failure still records the tokens it used.** A refusal, `finishReason: error`, an error body, or a stream that breaks before its terminal event: when the provider reported usage before the failure, the error carries it (`error.details.usage`). The runtime writes it into the call's `llm.responded`; a call from a function plugin or an extension provider writes it into `gateway.failed`. The debug page counts it in usage and cost. When the provider reported no usage, `usage` is left out rather than written as 0.
+**A failure still records the tokens it used.** A refusal, `finishReason: error`, an error body, or a stream that reaches EOF without its terminal event: when the provider reported usage before the failure, the error carries it (`error.details.usage`). The runtime writes it into the call's `llm.responded`; a call from a function plugin or an extension provider writes it into `gateway.failed`. The debug page counts it in usage and cost. When the provider reported no usage, `usage` is left out rather than written as 0. Low-level transport exceptions that bypass adapter completion checks may still omit earlier usage.
 
 - Even if ordinary text or tool content already exists, an answer that contains a refusal cannot be recorded as a success.
 - Streamed text may already have been delivered, but it will not produce a successful `done`.

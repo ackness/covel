@@ -241,6 +241,27 @@ describe("createInProcessSessionLock", () => {
     }
   });
 
+  it("orders overlapping key sets itself, so callers cannot deadlock", async () => {
+    const lock = createInProcessSessionLock();
+    const entered: string[] = [];
+    const both = Promise.all([
+      lock.withLocks(["b", "a"], async () => {
+        entered.push("first");
+      }),
+      lock.withLocks(["a", "b"], async () => {
+        entered.push("second");
+      }),
+    ]);
+    const outcome = await Promise.race([
+      both.then(() => "done" as const),
+      new Promise<"deadlocked">((resolve) =>
+        setTimeout(() => resolve("deadlocked"), 500),
+      ),
+    ]);
+    expect(outcome).toBe("done");
+    expect(entered).toEqual(["first", "second"]);
+  });
+
   it("propagates fn return value to the caller", async () => {
     const lock = createInProcessSessionLock();
     const result = await lock.withLock("sess-ret", async () => 42);

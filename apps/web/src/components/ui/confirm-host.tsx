@@ -42,6 +42,7 @@ export function ConfirmHost() {
     };
   }, []);
 
+  const cancelRef = useRef<HTMLButtonElement>(null);
   const current = queue[0];
 
   // A multi-item prompt starts with every entry ticked: the player opted into
@@ -79,6 +80,11 @@ export function ConfirmHost() {
       }}
     >
       <DialogContent
+        key={currentId}
+        onOpenAutoFocus={(event) => {
+          event.preventDefault();
+          cancelRef.current?.focus();
+        }}
         className="sm:max-w-md"
         onKeyDown={(event) => {
           if (event.key !== "Enter" || isImeComposing(event)) return;
@@ -137,7 +143,12 @@ export function ConfirmHost() {
           </ul>
         )}
         <div className="flex justify-end gap-2 pt-2">
-          <Button variant="outline" size="sm" onClick={() => settle(false)}>
+          <Button
+            ref={cancelRef}
+            variant="outline"
+            size="sm"
+            onClick={() => settle(false)}
+          >
             {current?.cancelLabel}
           </Button>
           <Button

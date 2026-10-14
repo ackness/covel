@@ -595,6 +595,12 @@ export interface PluginRpcContext {
     }[];
   };
   readonly emit?: (event: { type: string; data: unknown }) => void;
+  /**
+   * Aborts when the action passes its time limit (30 seconds). The action has
+   * then already failed and released the session; `store` refuses every
+   * further call, and writes made before the limit are kept.
+   */
+  readonly signal?: AbortSignal;
 }
 export type PluginRpcHandler = (
   payload: unknown,

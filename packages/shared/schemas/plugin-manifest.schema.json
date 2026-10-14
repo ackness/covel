@@ -8,7 +8,7 @@
     "id": {
       "type": "string",
       "pattern": "^[a-z][a-z0-9-]*$",
-      "description": "Stable package ID: lowercase letters, digits and hyphens. It must match the package directory name.",
+      "description": "Stable package ID: lowercase letters, digits and hyphens. It must match the package directory name. `framework` is reserved.",
       "examples": ["dice-check"]
     },
     "kind": {
@@ -244,6 +244,39 @@
       "minLength": 1,
       "pattern": "^(?!\\/)(?!.*\\/\\.\\.\\/)(?!\\.\\.\\/)[a-zA-Z0-9_./-]+\\.[mMcC]?[jJ][sS]$",
       "description": "Package-relative path of the server entry module. It registers tools, actions, services, hooks and extensions."
+    },
+    "permissions": {
+      "type": "object",
+      "properties": {
+        "http": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "origin": {
+                "type": "string",
+                "pattern": "^https:\\/\\/[^/?#@]+$",
+                "description": "HTTPS origin the runtime may call, without path, query or credentials.",
+                "examples": ["https://api.example.com"]
+              },
+              "methods": {
+                "minItems": 1,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD"]
+                },
+                "description": "HTTP methods allowed for the origin. Entries must be unique."
+              }
+            },
+            "required": ["origin"],
+            "additionalProperties": false
+          },
+          "description": "Upper bound of the HTTP origins and methods the runtime may use."
+        }
+      },
+      "additionalProperties": false,
+      "description": "Upper bounds of the package's own code. `http` lists the origins and methods the entry module of a community package may reach through `covel.http`, in addition to those its runtimes declare."
     },
     "contributes": {
       "type": "object",
@@ -747,7 +780,7 @@
                         "type": "string",
                         "minLength": 1,
                         "pattern": "^(?!\\/)(?!.*(?:^|\\/)\\.\\.(?:\\/|$))[a-z0-9_./-]+$",
-                        "description": "Conventional path of the source inside a world package.",
+                        "description": "Conventional path of the source inside a world package. It may not name a path the kernel or the package itself owns: `world.yaml`, `WORLD.md`, `data/world.data.yaml`, `data/dimensions.yaml`, `data/lorebook.yaml`, `characters/characters.json`, `media/gallery.json`, `media/portraits.json`, `media/scenes.json` or `media/gallery/`, nor an edition of one.",
                         "examples": ["data/quests.yaml"]
                       },
                       "key": {
@@ -1547,7 +1580,7 @@
                     "require": {
                       "type": "string",
                       "enum": ["explicit", "tool-use"],
-                      "description": "`explicit` needs a completing tool or `runtime-done`. `tool-use` needs a valid business tool call, so \"no change\" is also submitted through the tool."
+                      "description": "`explicit` needs a completing tool or `runtime-done`. `tool-use` needs a successful tool named in `afterTools`, or any successful business tool when `afterTools` is empty. Failed calls and `runtime-done` do not count."
                     },
                     "afterTools": {
                       "type": "array",
