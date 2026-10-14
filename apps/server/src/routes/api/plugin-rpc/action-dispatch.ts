@@ -26,7 +26,10 @@ import {
 import { runTracedCommand } from "./command-trace.js";
 import { errorBody } from "../../../api-error.js";
 import { readLockedSession } from "../session/locked-mutation.js";
-import { sessionPluginIds } from "../session/plugins.js";
+import {
+  resolveSessionPluginSet,
+  sessionPluginIds,
+} from "../session/plugins.js";
 
 /** Action dispatch shares the session commit lock with turns. */
 export async function dispatchPluginAction(
@@ -62,19 +65,27 @@ export async function dispatchPluginAction(
     body.kind === "command" ? resolvedCommand!.action : body.action;
   const pluginId =
     body.kind === "command" ? resolvedCommand!.pluginId : body.pluginId;
+  // A confirmed member that cannot run now (a requirement is gone, it
+  // conflicts or failed to load) is as inactive as one never chosen.
   const inactiveAction = (current: SessionRecord): Response | undefined => {
-    if (
-      body.kind === "action" &&
-      pluginId !== FRAMEWORK_PLUGIN_ID &&
-      !(current.activePlugins ?? []).includes(pluginId)
-    ) {
-      return c.json(
-        errorBody(`plugin "${pluginId}" is not active in this session`, {
-          code: "plugin_not_active",
-        }),
-        404,
-      );
-    }
+    if (body.kind !== "action" || pluginId === FRAMEWORK_PLUGIN_ID) return;
+    const set = resolveSessionPluginSet(
+      current.activePlugins ?? [],
+      c.get("pluginRegistry").getAll(),
+    );
+    if (set.active.includes(pluginId)) return;
+    const reason = set.rejected.find(
+      (item) => item.pluginId === pluginId,
+    )?.reason;
+    return c.json(
+      errorBody(
+        reason
+          ? `plugin "${pluginId}" is unavailable in this session: ${reason}`
+          : `plugin "${pluginId}" is not active in this session`,
+        { code: "plugin_not_active" },
+      ),
+      404,
+    );
   };
   const actionPayload =
     body.kind === "command" ? commandInvocation : body.payload;

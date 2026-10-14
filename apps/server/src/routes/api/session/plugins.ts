@@ -138,13 +138,25 @@ export function resolveSessionPluginSet(
   };
 }
 
-/** IDs of the session's plugin set; see `resolveSessionPluginSet`. */
+/**
+ * The confirmed plugins that can run now (`resolveSessionPluginSet`). Every
+ * execution gate reads this, never the stored IDs: a member whose
+ * requirement is gone, that conflicts or that failed to load is disabled
+ * everywhere, and the plugin list's `unavailable` tells the player why.
+ */
+export function runnablePluginIds(
+  confirmed: readonly string[],
+  registry: Pick<PluginRegistry, "getAll">,
+): string[] {
+  return resolveSessionPluginSet(confirmed, registry.getAll()).active;
+}
+
+/** IDs of the session's plugin set; see `runnablePluginIds`. */
 export function sessionPluginIds(
   session: Pick<SessionRecord, "activePlugins">,
   registry: Pick<PluginRegistry, "getAll">,
 ): string[] {
-  return resolveSessionPluginSet(session.activePlugins ?? [], registry.getAll())
-    .active;
+  return runnablePluginIds(session.activePlugins ?? [], registry);
 }
 /** A world record's `pluginPolicy.requires`: contracts it needs a provider for. */
 export function worldRequiredContracts(
