@@ -17,7 +17,6 @@
 import type {
   InputInjectDecl,
   PluginDataInjectDecl,
-  RuntimeInjectDecl,
   RuntimeManifest,
 } from "@covel/shared";
 import {
@@ -180,13 +179,6 @@ export function escapeXmlContent(value: string): string {
     .replace(/>/g, "&gt;");
 }
 
-/**
- * Check whether a declaration is the runtime-output variant.
- */
-function isRuntimeInject(decl: InputInjectDecl): decl is RuntimeInjectDecl {
-  return decl.kind === "runtime";
-}
-
 function isPluginDataInject(
   decl: InputInjectDecl,
 ): decl is PluginDataInjectDecl {
@@ -194,50 +186,7 @@ function isPluginDataInject(
 }
 
 /**
- * Resolve a single runtime-output inject to its XML block, or null when
- * the upstream runtime has no output or the named field is absent.
- */
-function resolveRuntimeInject(
-  inject: RuntimeInjectDecl,
-  params: ContextBuildParams,
-): string | null {
-  const result = params.completedResults.get(inject.from);
-  if (!result?.output) return null;
-
-  const value = result.output[inject.field];
-  if (value === undefined || value === null) return null;
-
-  const tagName = validateTagName(parseTagName(inject.as));
-  return `<${tagName}>${escapeXmlContent(renderTemplateValue(value))}</${tagName}>`;
-}
-
-/**
  * Build the inject XML blocks from `manifest.input.inject` declarations.
- *
- * Synchronous path — only supports `kind: 'runtime'` entries. Any
- * `kind: 'plugin-data'` entries are silently skipped here; use
- * {@link buildInjectBlocksAsync} when the manifest declares plugin-data
- * injects. Callers decide which path to take by inspecting
- * `manifest.input?.inject` before building the context.
- */
-export function buildInjectBlocks(params: ContextBuildParams): string {
-  const injects = params.manifest.input?.inject;
-  if (!injects || injects.length === 0) {
-    return "";
-  }
-
-  const blocks: string[] = [];
-  for (const inject of injects) {
-    if (!isRuntimeInject(inject)) continue;
-    const block = resolveRuntimeInject(inject, params);
-    if (block) blocks.push(block);
-  }
-  return blocks.join("\n");
-}
-
-/**
- * Async variant of {@link buildInjectBlocks} — handles both `kind: 'runtime'`
- * and `kind: 'plugin-data'` declarations.
  *
  * `plugin-data` entries trigger a `store.getPluginDataPromptWindow(sessionId, pluginId,
  * namespace)` call to fetch the runtime's own plugin-data, which is then
@@ -256,16 +205,9 @@ export async function buildInjectBlocksAsync(
 
   const blocks: string[] = [];
   for (const inject of injects) {
-    if (isRuntimeInject(inject)) {
-      const block = resolveRuntimeInject(inject, params);
-      if (block) blocks.push(block);
-      continue;
-    }
-
     if (isPluginDataInject(inject)) {
       const block = await resolvePluginDataInject(inject, params);
       if (block) blocks.push(block);
-      continue;
     }
   }
   return blocks.join("\n");

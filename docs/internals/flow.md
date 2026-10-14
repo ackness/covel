@@ -359,7 +359,7 @@ flowchart LR
 
 - 有前台的消费者在等它的结果；
 - 用 `recordAs` 导出结果；
-- 输出事件；
+- 能发出事件：它的 `tools.builtin` 列了 `emit-event`，或者声明了 `advertiseEvents: true`；
 - 直接修改角色、状态或交互。
 
 **回合里有挂起时。** 回合里有 runtime 挂起时，这些作业先不入队，随挂起项一起保存，回合也先不计数。结束这个回合的那个出口把作业入队、给回合计数：最后一个挂起项恢复成功，或者它被放弃、过期、因过时而作废。规则见[挂起与回合计数](../reference/api.md#挂起与回合计数)。
@@ -959,6 +959,10 @@ turn_messages (canonical 追加式执行日志):
   runtime 行只把 narrativeOutput / content 文本写入 content，并携带表单
   （pendingInput）与 UI 附件。结构化输出保留在 turn_results；既无文本也
   无附件的运行（如 codex 只写结构化条目）不写 runtime 行。
+
+  回合中的插话（steer）是 source `player-interjection`、role `user` 的行，
+  随回合的 finalize 事务写入，排在这一回合的 player 行之后；回合没有提交
+  就不写。它不算玩家回合：玩家消息计数只数 `player` 行。
 
   trigger 台账（kernel 所有的 plugin data，owner `__kernel:triggers`）
   按 runtime 记录已提交的运行次数和最后一次运行时的

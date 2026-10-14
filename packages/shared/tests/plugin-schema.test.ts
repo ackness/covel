@@ -1,58 +1,48 @@
 import { describe, expect, it } from "vitest";
-import { runtimeManifestInputSchema } from "../src/schemas/plugin.js";
+import {
+  pluginCommandsSchema,
+  pluginEntryPathSchema,
+  runtimeManifestInputSchema,
+  worldProjectionMapSchema,
+} from "../src/schemas/plugin.js";
 import { pluginManifestSchema } from "../src/schemas/plugin-manifest.js";
+import { validatePluginManifest } from "../src/schemas/validate.js";
 
 describe("plugin manifest dataSchemas", () => {
   it("accepts scoped slash commands and rejects malformed arguments", () => {
-    const manifest = runtimeManifestInputSchema.parse({
-      name: "command-plugin",
-      description: "Commands",
-      commands: [
-        {
-          name: "inspect",
-          aliases: ["i"],
-          description: { en: "Inspect runtime state", zh: "检查运行时状态" },
-          action: "inspect-state",
-          context: ["session", "active-runtimes", "models"],
-          arguments: [
-            { name: "runtime", type: "string", required: true },
-            { name: "details", type: "boolean" },
-          ],
-        },
-      ],
-    });
+    const commands = pluginCommandsSchema.parse([
+      {
+        name: "inspect",
+        aliases: ["i"],
+        description: { en: "Inspect runtime state", zh: "检查运行时状态" },
+        action: "inspect-state",
+        context: ["session", "active-runtimes", "models"],
+        arguments: [
+          { name: "runtime", type: "string", required: true },
+          { name: "details", type: "boolean" },
+        ],
+      },
+    ]);
 
-    expect(manifest.commands?.[0]).toMatchObject({
+    expect(commands[0]).toMatchObject({
       name: "inspect",
       action: "inspect-state",
       context: ["session", "active-runtimes", "models"],
     });
     expect(() =>
-      runtimeManifestInputSchema.parse({
-        name: "bad-command-plugin",
-        description: "Bad commands",
-        commands: [
-          {
-            name: "Bad/Command",
-            description: "bad",
-            action: "inspect",
-          },
-        ],
-      }),
+      pluginCommandsSchema.parse([
+        { name: "Bad/Command", description: "bad", action: "inspect" },
+      ]),
     ).toThrow(/lowercase kebab-case/);
     expect(() =>
-      runtimeManifestInputSchema.parse({
-        name: "bad-variadic-plugin",
-        description: "Bad commands",
-        commands: [
-          {
-            name: "inspect",
-            description: "bad",
-            action: "inspect",
-            arguments: [{ name: "rest", variadic: true }, { name: "after" }],
-          },
-        ],
-      }),
+      pluginCommandsSchema.parse([
+        {
+          name: "inspect",
+          description: "bad",
+          action: "inspect",
+          arguments: [{ name: "rest", variadic: true }, { name: "after" }],
+        },
+      ]),
     ).toThrow(/must be last/);
   });
 
@@ -137,40 +127,26 @@ describe("plugin manifest dataSchemas", () => {
   });
 
   it("accepts a plugin-relative entry path and rejects traversal", () => {
-    const manifest = runtimeManifestInputSchema.parse({
-      name: "tts-runtime",
-      description: "TTS runtime",
-      stage: "post-turn",
-      entry: "server/index.js",
-    });
-    expect(manifest.entry).toBe("server/index.js");
-
-    expect(() =>
-      runtimeManifestInputSchema.parse({
-        name: "tts-runtime",
-        description: "TTS runtime",
-        entry: "../outside/entry.js",
-      }),
-    ).toThrow(/plugin-relative/);
+    expect(pluginEntryPathSchema.parse("server/index.js")).toBe(
+      "server/index.js",
+    );
+    expect(() => pluginEntryPathSchema.parse("../outside/entry.js")).toThrow(
+      /plugin-relative/,
+    );
   });
 
   it("accepts strict plugin-scoped world projection declarations", () => {
-    const manifest = runtimeManifestInputSchema.parse({
-      name: "world-projector",
-      description: "Projects world characters into plugin data",
-      stage: "setup",
-      worldProjections: {
-        characters: {
-          from: "plugin://character-blueprint/blueprints",
-          handler: "server/project-characters.js",
-          outputs: {
-            characters: { namespace: "characters", key: "characterId" },
-          },
+    const projections = worldProjectionMapSchema.parse({
+      characters: {
+        from: "plugin://character-blueprint/blueprints",
+        handler: "server/project-characters.js",
+        outputs: {
+          characters: { namespace: "characters", key: "characterId" },
         },
       },
     });
 
-    expect(manifest.worldProjections?.characters).toEqual({
+    expect(projections.characters).toEqual({
       from: "plugin://character-blueprint/blueprints",
       handler: "server/project-characters.js",
       outputs: {
@@ -180,50 +156,35 @@ describe("plugin manifest dataSchemas", () => {
   });
 
   it("rejects unsafe or structurally invalid world projections", () => {
-    const base = {
-      name: "world-projector",
-      description: "Projects world data",
-      stage: "setup" as const,
-    };
-
     expect(() =>
-      runtimeManifestInputSchema.parse({
-        ...base,
-        worldProjections: {
-          Characters: {
-            from: "plugin://characters",
-            handler: "server/project.js",
-            outputs: {
-              characters: { namespace: "characters", key: "characterId" },
-            },
+      worldProjectionMapSchema.parse({
+        Characters: {
+          from: "plugin://characters",
+          handler: "server/project.js",
+          outputs: {
+            characters: { namespace: "characters", key: "characterId" },
           },
         },
       }),
     ).toThrow(/projection\/output id/);
 
     expect(() =>
-      runtimeManifestInputSchema.parse({
-        ...base,
-        worldProjections: {
-          characters: {
-            from: "plugin://characters",
-            handler: "../outside/project.js",
-            outputs: {},
-          },
+      worldProjectionMapSchema.parse({
+        characters: {
+          from: "plugin://characters",
+          handler: "../outside/project.js",
+          outputs: {},
         },
       }),
     ).toThrow(/plugin-relative/);
 
     expect(() =>
-      runtimeManifestInputSchema.parse({
-        ...base,
-        worldProjections: {
-          characters: {
-            from: " ",
-            handler: "server/project.js",
-            outputs: {
-              characters: { namespace: "characters", key: "character.id" },
-            },
+      worldProjectionMapSchema.parse({
+        characters: {
+          from: " ",
+          handler: "server/project.js",
+          outputs: {
+            characters: { namespace: "characters", key: "character.id" },
           },
         },
       }),
@@ -414,4 +375,16 @@ describe("kernel extension conflicts", () => {
         );
     },
   );
+});
+
+describe("validatePluginManifest", () => {
+  it("validates PLUGIN.md frontmatter, not a compiled runtime", () => {
+    expect(
+      validatePluginManifest({ id: "probe", kind: "plugin", description: "x" })
+        .valid,
+    ).toBe(true);
+    expect(
+      validatePluginManifest({ name: "probe", description: "x" }).valid,
+    ).toBe(false);
+  });
 });

@@ -895,10 +895,9 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 
 `steer`（插话）：
 
-- 消息并入 story runtime 的下一次 LLM 调用，并保存到消息历史。
+- 消息并入 story runtime 的下一次 LLM 调用。回合提交时，它和回合在同一个事务里保存到对话历史和聊天记录；回合没有提交，就不保存。
 - 只对 `outputKind: story` 的 runtime 生效。plugin runtime 执行的是结构化任务，不接受插话。
 - 插话在最终响应流式输出期间到达时，story runtime 在收尾前追加一步 LLM 调用来消化它（受 maxSteps 约束）。
-- 消息保存失败时，撤回队列里的这一项并返回 `500`。
 
 `abort`（中止）：
 
@@ -3513,6 +3512,7 @@ runtime 报告失败时，它的原始错误保留在 `result.runtimeResults` �
 返回“写一个世界可以填哪些内容”的清单，供世界创建界面和开发 Agent 使用。它反映服务端当前已加载的插件。
 
 - 内容全部来自插件清单的 `contributes.data.*.authoring` 声明，没有写死的插件列表。
+- `packs` 列出服务端玩法包目录（`packs/builtin.yaml`）里的全部玩法包：`id`、`label`、`description`、`tags`、`requested`、`recommended`，以及包写了的 `defaultViewMode`。世界在 `pluginPolicy.presetId` 里写其中一个 `id`；AI 创建世界把它们作为选项。
 - `pnpm describe:authoring` 输出的是同一份数据。
 - 示例无法读取、不是 JSON，或可生成契约的 schema 缺失、无效或冲突时，只略过对应契约。可选的 `diagnostics` 数组逐项返回 `{ pluginId, namespace, message }`，服务端也记录警告；其他契约和插件仍可用。
 - 查询参数 `locale` 决定 `title` 等展示文本的语言，省略时用服务端默认语言。
@@ -3575,6 +3575,22 @@ runtime 报告失败时，它的原始错误保留在 `result.runtimeResults` �
       "requires": [],
       "settings": []
     }
+  ],
+  "packs": [
+    {
+      "id": "dialogue-mode",
+      "label": "对话模式",
+      "description": "对话优先叙事、场景演员、快速短句和角色资料。",
+      "tags": ["mode:dialogue"],
+      "requested": [
+        "pregame",
+        "world-init",
+        "char-creator",
+        "chat-mode-narrator"
+      ],
+      "recommended": ["memory", "npc-graph"],
+      "defaultViewMode": "stage"
+    }
   ]
 }
 ```
@@ -3586,6 +3602,7 @@ runtime 报告失败时，它的原始错误保留在 `result.runtimeResults` �
 | `contracts`    | 每个有插件接收的数据契约：接收插件、标题、写作提示、可直接写进 `world.data.yaml` 的条目、示例 |
 | `generate`     | 只在应用内生成器能生成这份内容时出现：`offer` 表示列为可选项，`default` 表示列出并默认选中    |
 | `plugins`      | 插件目录：ID、名称、简介、提供和依赖的契约、可以用 `pluginSettings` 预置的设置项              |
+| `packs`        | 玩法包目录：世界可以在 `pluginPolicy.presetId` 里写的玩法包，以及包写了的 `defaultViewMode`   |
 
 #### `GET /api/framework/capabilities`
 
@@ -3666,7 +3683,7 @@ runtime 报告失败时，它的原始错误保留在 `result.runtimeResults` �
 - `eventTopics`：会话解析插件集合时用它保证一个 topic 只有一个声明者。
 - `languages.text`：插件有文字的语言，包括标签、界面文字、代码里的文字，以及翻译目录里的译文。`languages.instructions`：有指令（prompt 正文）的语言。两者都至少包含 `en`。
 - `author.about` 和链接的 `label` 可能是按语言分的 map。
-- 每个 runtime 摘要包含 `id`、`runtimeType`、`trigger`、`execution`、生效的 `turnCompletion`、`outputKind`、可选的 `outputContract` 等字段。
+- 每个 runtime 摘要包含 `id`、`runtimeType`、`trigger`、`execution`、生效的 `turnCompletion`、`outputKind`、可选的 `outputContract` 等字段。 `tags` 属于包摘要，runtime 摘要不重复提供。
 
 `hostState` 说的是服务端有没有加载这个插件，不是某个会话有没有启用它。这是两种状态，列表不会把前者写成某个会话的 active。
 
@@ -3694,6 +3711,7 @@ runtime 报告失败时，它的原始错误保留在 `result.runtimeResults` �
 注意：
 
 - `runtimes[].after` / `needs` / `inputs` / `effects` / `turnCompletion` 是编译后的执行描述，用来解释执行顺序、输入条件和 detached 行为。作者写的是另一种格式：在 `PLUGIN.md` 里声明包级 `contributes`，在 `RUNTIME.md` 的 `schedule` / `io` / `agent` / `function` 分组里声明执行配置。不要把这里的内部结构当作清单提交。
+- UI 声明在包级 `ui` 字段中，`runtimes[]` 不提供 UI。`GET /api/plugin-flows` 的 runtime 项也不提供 `uiSlots`；UI 声明从插件详情或 `/api/ui-specs` 读取。
 - 动态 key 不在清单里列举。用当前会话的 plugin-data 查询或 `_index` 端点读取。
 - 服务、工具、action、slash command 和 extension 是不同的注册种类，必须分别声明。
 
@@ -5048,7 +5066,7 @@ interface SseEnvelope {
   "saveTarget": "server-file",
   "idleTimeoutMs": 300000,
   "brief": {
-    "experienceMode": "traditional-story",
+    "pack": "traditional-story",
     "content": ["characters", "lorebook", "rules", "opening-kit"],
     "contracts": ["memory.blocks@1"],
     "additionalInstructions": "让三个主要角色共同隐瞒一次失败的远征。"
@@ -5069,14 +5087,14 @@ interface SseEnvelope {
 
 `brief` 的字段：
 
-| 字段                     | 类型     | 说明                                                                          |
-| ------------------------ | -------- | ----------------------------------------------------------------------------- |
-| `experienceMode`         | string   | `traditional-story` 或 `dialogue-mode`；后者同时生成 `defaultViewMode: stage` |
-| `content`                | string[] | 内核内容：可选 `characters`、`lorebook`、`rules`、`opening-kit`               |
-| `contracts`              | string[] | 插件内容，写数据契约 ID                                                       |
-| `additionalInstructions` | string   | 对世界包的补充要求（最多 2000 字符），如角色关系、禁忌、节奏或要避开的内容    |
+| 字段                     | 类型     | 说明                                                                                                                                                                                                                                                             |
+| ------------------------ | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pack`                   | string   | 世界为哪个玩法包而做：服务端玩法包目录（`packs/builtin.yaml`）里的 ID，可选值见 [`GET /api/framework/authoring`](#get-apiframeworkauthoring) 的 `packs`。它写进世界的 `pluginPolicy.presetId`；玩法包写了 `defaultViewMode` 时，世界也带上它。不写就不指定玩法包 |
+| `content`                | string[] | 内核内容：可选 `characters`、`lorebook`、`rules`、`opening-kit`                                                                                                                                                                                                  |
+| `contracts`              | string[] | 插件内容，写数据契约 ID                                                                                                                                                                                                                                          |
+| `additionalInstructions` | string   | 对世界包的补充要求（最多 2000 字符），如角色关系、禁忌、节奏或要避开的内容                                                                                                                                                                                       |
 
-`contracts` 的可选值来自 `GET /api/framework/authoring` 里带 `generate` 的契约，传其他值返回 `400`。准备失败的契约不会出现在可选列表里；生成和修订继续处理其余内容，`done.warnings` 说明略过了哪个插件、namespace 和契约。
+`pack` 不在目录里返回 `400`。`contracts` 的可选值来自 `GET /api/framework/authoring` 里带 `generate` 的契约，传其他值返回 `400`。准备失败的契约不会出现在可选列表里；生成和修订继续处理其余内容，`done.warnings` 说明略过了哪个插件、namespace 和契约。
 
 `saveTarget` 的取值：
 

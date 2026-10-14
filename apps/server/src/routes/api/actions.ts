@@ -21,7 +21,7 @@ import {
 
 import { Hono } from "hono";
 import { streamOwnedSSE } from "../../application-work.js";
-import type { DataStore, MediaStore } from "@covel/store";
+import type { DataStore, MediaStore, StoreTransaction } from "@covel/store";
 import type { PluginRegistry, LoadedRuntime } from "@covel/plugin-loader";
 import type { LLMAdapter, ToolExecutor, HookPipeline } from "@covel/runtime";
 import type { EventBus } from "@covel/events";
@@ -73,7 +73,11 @@ import {
   decodePluginUserSettingsHeader,
   loadSessionPluginUserSettings,
 } from "./plugin-user-settings.js";
-import { registerActionRequest } from "./turn-control.js";
+import {
+  PLAYER_INTERJECTION_SOURCE,
+  registerActionRequest,
+  type TurnInterjection,
+} from "./turn-control.js";
 import { ActionRejectedError } from "./actions/action-rejection.js";
 import {
   assertRecoverableTurn,
@@ -877,6 +881,38 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
             readonly status: JobStatusRecord;
           }> = [];
           const followerJobs: QueuedActivatedRuntimeJob[] = [];
+          // Interjections the player sent during the turn are part of it: the
+          // turn's commit saves them to the prompt history (after the player's
+          // message, at the moment a model call read them; one no call read
+          // comes after the turn's output) and to the chat log. A turn that
+          // does not commit keeps neither.
+          const saveInterjections = async (
+            tx: StoreTransaction,
+            interjections: readonly TurnInterjection[],
+          ) => {
+            const savedAt = new Date().toISOString();
+            for (const [index, interjection] of interjections.entries()) {
+              const createdAt = interjection.readAt ?? savedAt;
+              await tx.appendTurnMessage({
+                id: crypto.randomUUID(),
+                sessionId,
+                turnId: result.turnId,
+                sourceType: PLAYER_INTERJECTION_SOURCE,
+                role: "user",
+                content: interjection.content,
+                order: index,
+                createdAt,
+              });
+              await tx.addMessage({
+                id: crypto.randomUUID(),
+                sessionId,
+                role: "user",
+                content: interjection.content,
+                metadata: { turnId: result.turnId, steered: true },
+                createdAt,
+              });
+            }
+          };
           const outcome = await commitExecution({
             memorySystem: c.get("memorySystem"),
             imageFlowRuntimeIds: (
@@ -932,82 +968,68 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
             signal: commitSignal,
             store,
             execution,
-            ...(playerInputWrites ||
-            result.deferredRuntimeJobs?.length ||
-            result.deferredFollowers?.length
-              ? {
-                  extraInTx: async (tx, { droppedRuntimeIds }) => {
-                    // Work derived from a runtime whose writes were dropped
-                    // builds on output that never landed: queue none of it.
-                    const committedView = {
-                      runtimes: activeRuntimes,
-                      results: result.runtimeResults,
-                      dropped: droppedRuntimeIds,
-                    };
-                    const descriptors = (result.deferredRuntimeJobs ?? [])
-                      .filter((descriptor) => {
-                        const target = activeRuntimes.find(
-                          (runtime) => runtime.name === descriptor.runtimeId,
-                        );
-                        return (
-                          !target || !droppedUpstream(target, committedView)
-                        );
-                      })
-                      .map((descriptor) =>
-                        settleDroppedInputs(descriptor, droppedRuntimeIds),
-                      );
-                    const followers = (result.deferredFollowers ?? []).filter(
-                      (follower) =>
-                        !droppedEmitter(
-                          follower.triggerEvent.topic,
-                          committedView,
-                        ),
+            extraInTx: async (tx, { droppedRuntimeIds }) => {
+              // Work derived from a runtime whose writes were dropped
+              // builds on output that never landed: queue none of it.
+              const committedView = {
+                runtimes: activeRuntimes,
+                results: result.runtimeResults,
+                dropped: droppedRuntimeIds,
+              };
+              const descriptors = (result.deferredRuntimeJobs ?? [])
+                .filter((descriptor) => {
+                  const target = activeRuntimes.find(
+                    (runtime) => runtime.name === descriptor.runtimeId,
+                  );
+                  return !target || !droppedUpstream(target, committedView);
+                })
+                .map((descriptor) =>
+                  settleDroppedInputs(descriptor, droppedRuntimeIds),
+                );
+              const followers = (result.deferredFollowers ?? []).filter(
+                (follower) =>
+                  !droppedEmitter(follower.triggerEvent.topic, committedView),
+              );
+              if (playerInputWrites) {
+                await tx.commitPlayerInputMessage(playerInputWrites.message);
+                await tx.saveInteractionRecord(playerInputWrites.interaction);
+              }
+              queuedRuntimeJobs.push(
+                ...(await enqueueDeferredRuntimeJobs(tx, {
+                  sessionId,
+                  session: effectiveSession,
+                  activeRuntimes,
+                  descriptors,
+                  locale: effectiveLocale,
+                  ...(model ? { modelOverride: model } : {}),
+                  ...(userSettings ? { userSettings } : {}),
+                  registerCredentials: (credentialKey, maxQueueMs) => {
+                    const services = requestJobServices(c);
+                    if (!services) return;
+                    c.get("runtimeJobCredentials")?.register(
+                      credentialKey,
+                      services,
+                      maxQueueMs,
                     );
-                    if (playerInputWrites) {
-                      await tx.commitPlayerInputMessage(
-                        playerInputWrites.message,
-                      );
-                      await tx.saveInteractionRecord(
-                        playerInputWrites.interaction,
-                      );
-                    }
-                    queuedRuntimeJobs.push(
-                      ...(await enqueueDeferredRuntimeJobs(tx, {
-                        sessionId,
-                        session: effectiveSession,
-                        activeRuntimes,
-                        descriptors,
-                        locale: effectiveLocale,
-                        ...(model ? { modelOverride: model } : {}),
-                        ...(userSettings ? { userSettings } : {}),
-                        registerCredentials: (credentialKey, maxQueueMs) => {
-                          const services = requestJobServices(c);
-                          if (!services) return;
-                          c.get("runtimeJobCredentials")?.register(
-                            credentialKey,
-                            services,
-                            maxQueueMs,
-                          );
-                          credentialKeys.push(credentialKey);
-                        },
-                      })),
-                    );
-                    // Background followers (e.g. image generation) are
-                    // queued with the writes they react to, so a
-                    // rolled-back turn queues none.
-                    followerJobs.push(
-                      ...(await enqueueEventFollowers(tx, {
-                        sessionId,
-                        activeRuntimes,
-                        followers,
-                        sourceTurnId: result.turnId,
-                        locale: effectiveLocale,
-                        ...(userSettings ? { userSettings } : {}),
-                      })),
-                    );
+                    credentialKeys.push(credentialKey);
                   },
-                }
-              : {}),
+                })),
+              );
+              // Background followers (e.g. image generation) are
+              // queued with the writes they react to, so a
+              // rolled-back turn queues none.
+              followerJobs.push(
+                ...(await enqueueEventFollowers(tx, {
+                  sessionId,
+                  activeRuntimes,
+                  followers,
+                  sourceTurnId: result.turnId,
+                  locale: effectiveLocale,
+                  ...(userSettings ? { userSettings } : {}),
+                })),
+              );
+              await saveInterjections(tx, control.closeInterjections());
+            },
             ...(hookPipeline ? { hookPipeline } : {}),
             eventBus,
             emitter,

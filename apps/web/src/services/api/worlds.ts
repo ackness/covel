@@ -251,21 +251,65 @@ export interface GeneratableWorldContent {
   readonly selectedByDefault: boolean;
 }
 
+/** A plugin pack of the server's catalogue that a world can be made for. */
+export interface WorldGenerationPack {
+  readonly id: string;
+  readonly label: string;
+  readonly description?: string;
+}
+
+/** What the world generator offers for the server's plugins and packs. */
+export interface WorldGenerationChoices {
+  /** Plugin content a generated world may include. */
+  readonly content: GeneratableWorldContent[];
+  /** The packs a world can be made for, in the catalogue's order. */
+  readonly packs: WorldGenerationPack[];
+}
+
 /**
- * List the plugin content a generated world may include. The list comes from
- * the plugins' own authoring declarations, so it changes with the plugins
- * that are installed.
+ * List what a generated world may be made for and include. Both lists come
+ * from the server: the content from the plugins' own authoring declarations,
+ * the packs from its pack catalogue, so they change with what is installed.
  */
-export async function listGeneratableWorldContent(
+export async function listWorldGenerationChoices(
   locale: string,
-): Promise<GeneratableWorldContent[]> {
-  const surface = await request<{ contracts?: unknown }>(
+): Promise<WorldGenerationChoices> {
+  const surface = await request<{ contracts?: unknown; packs?: unknown }>(
     `/api/framework/authoring?locale=${encodeURIComponent(locale)}`,
     { silentErrors: true },
   );
-  if (!Array.isArray(surface.contracts)) return [];
+  return {
+    content: generatableContent(surface.contracts),
+    packs: generationPacks(surface.packs),
+  };
+}
+
+function generationPacks(value: unknown): WorldGenerationPack[] {
+  if (!Array.isArray(value)) return [];
+  const result: WorldGenerationPack[] = [];
+  for (const item of value as Record<string, unknown>[]) {
+    if (
+      !item ||
+      typeof item.id !== "string" ||
+      typeof item.label !== "string" ||
+      result.some((known) => known.id === item.id)
+    )
+      continue;
+    result.push({
+      id: item.id,
+      label: item.label,
+      ...(typeof item.description === "string"
+        ? { description: item.description }
+        : {}),
+    });
+  }
+  return result;
+}
+
+function generatableContent(value: unknown): GeneratableWorldContent[] {
+  if (!Array.isArray(value)) return [];
   const result: GeneratableWorldContent[] = [];
-  for (const item of surface.contracts as Record<string, unknown>[]) {
+  for (const item of value as Record<string, unknown>[]) {
     if (
       !item ||
       typeof item.contract !== "string" ||

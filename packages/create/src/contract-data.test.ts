@@ -63,8 +63,7 @@ it("requests the receiving plugin of every selected contract", () => {
       { ...contract, pluginId: "custom-plugin" },
     ]),
   ).toEqual({ errors: [], warnings: [] });
-  expect(manifest.pluginPolicy).toMatchObject({
-    presetId: "traditional-story",
+  expect(manifest.pluginPolicy).toEqual({
     requested: ["narrator", "custom-plugin"],
   });
 });

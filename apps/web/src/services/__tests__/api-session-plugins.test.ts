@@ -70,7 +70,6 @@ function plugin(overrides: Partial<PluginSummary> = {}): PluginSummary {
         turnCompletion: { mode: "await" },
         outputKind: "plugin",
         outputContract: "memory-panel",
-        tags: [],
       },
     ],
     tools: [],

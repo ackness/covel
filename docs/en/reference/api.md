@@ -895,10 +895,9 @@ Both endpoints return `409` when no turn is in progress. `abort` stops the playe
 
 `steer` (interject):
 
-- The message is merged into the story runtime's next LLM call, and saved to the message history.
+- The message is merged into the story runtime's next LLM call. When the turn commits, it is saved in the same transaction to the conversation history and the chat log; when the turn does not commit, it is not saved.
 - It applies only to runtimes with `outputKind: story`. A plugin runtime runs a structured task and does not accept interjections.
 - When an interjection arrives while the final response is streaming, the story runtime adds one more LLM call before it wraps up, to take it in. This call is limited by maxSteps.
-- If saving the message fails, that item is withdrawn from the queue and the request returns `500`.
 
 `abort` (stop):
 
@@ -3513,6 +3512,7 @@ Other rules:
 Returns the list of what can go into a world, for the world creation screen and for development agents. It reflects the plugins the server has loaded right now.
 
 - All of the content comes from the `contributes.data.*.authoring` declarations in plugin manifests. There is no hard-coded plugin list.
+- `packs` lists every gameplay pack of the server's pack catalogue (`packs/builtin.yaml`): `id`, `label`, `description`, `tags`, `requested`, `recommended`, and `defaultViewMode` when the pack has one. A world writes one of these `id`s in `pluginPolicy.presetId`; AI world creation offers them as choices.
 - `pnpm describe:authoring` prints the same data.
 - An unreadable or non-JSON example, or a missing, invalid, or conflicting schema for generatable content, skips only that contract. The optional `diagnostics` array returns `{ pluginId, namespace, message }` for each problem, also logged by the server; other contracts and plugins remain available.
 - The `locale` query parameter sets the language of display text such as `title`. If it is omitted, the server's default language is used.
@@ -3575,6 +3575,22 @@ Returns the list of what can go into a world, for the world creation screen and 
       "requires": [],
       "settings": []
     }
+  ],
+  "packs": [
+    {
+      "id": "dialogue-mode",
+      "label": "Dialogue Mode",
+      "description": "Dialogue-first narration, scene cast state, quick replies, and character profiles.",
+      "tags": ["mode:dialogue"],
+      "requested": [
+        "pregame",
+        "world-init",
+        "char-creator",
+        "chat-mode-narrator"
+      ],
+      "recommended": ["memory", "npc-graph"],
+      "defaultViewMode": "stage"
+    }
   ]
 }
 ```
@@ -3586,6 +3602,7 @@ Returns the list of what can go into a world, for the world creation screen and 
 | `contracts`    | Each data contract that a plugin receives: the receiving plugin, the title, writing hints, the entries that can go directly into `world.data.yaml`, and an example |
 | `generate`     | Appears only when the in-app generator can produce this content: `offer` lists it as an option, and `default` lists it and selects it by default                   |
 | `plugins`      | The plugin catalog: ID, name, description, the contracts it provides and requires, and the settings that can be preset with `pluginSettings`                       |
+| `packs`        | The gameplay pack catalogue: the packs a world can write in `pluginPolicy.presetId`, and `defaultViewMode` when the pack has one                                   |
 
 #### `GET /api/framework/capabilities`
 
@@ -3666,7 +3683,7 @@ Field notes:
 - `eventTopics`: when a session resolves its plugin set, it uses this to make sure a topic has only one declaring plugin.
 - `languages.text`: the languages the plugin has text in. This covers labels, interface text, text in code, and translations in the translation catalog. `languages.instructions`: the languages it has instructions (prompt body) in. Both always include at least `en`.
 - `author.about` and the `label` of links can be maps split by language.
-- Each runtime summary includes `id`, `runtimeType`, `trigger`, `execution`, the effective `turnCompletion`, `outputKind`, and optionally `outputContract`.
+- Each runtime summary includes `id`, `runtimeType`, `trigger`, `execution`, the effective `turnCompletion`, `outputKind`, and optionally `outputContract`. `tags` belongs to the package summary; runtime summaries do not repeat it.
 
 `hostState` says whether the server has loaded this plugin. It does not say whether a session has enabled it. These are two different states, and the list does not show the first as a session's active state.
 
@@ -3694,6 +3711,7 @@ Returns the full description of one plugin, `PluginDetail`. If the plugin does n
 Notes:
 
 - `runtimes[].after` / `needs` / `inputs` / `effects` / `turnCompletion` are compiled execution descriptions. They explain execution order, input conditions, and detached behavior. Authors write something different: they declare package-level `contributes` in `PLUGIN.md`, and they declare execution settings in the `schedule` / `io` / `agent` / `function` groups of `RUNTIME.md`. Do not submit this internal structure as a manifest.
+- UI declarations belong to the package-level `ui` field, not to `runtimes[]`. Runtime entries in `GET /api/plugin-flows` also omit `uiSlots`; read plugin details or `/api/ui-specs` for UI declarations.
 - Dynamic keys are not listed in the manifest. Read them with a plugin-data query for the current session or with the `_index` endpoint.
 - Services, tools, actions, slash commands, and extensions are different kinds of registration, and each must be declared separately.
 
@@ -5050,7 +5068,7 @@ The response is SSE. First come progress frames, and the generated world comes l
   "saveTarget": "server-file",
   "idleTimeoutMs": 300000,
   "brief": {
-    "experienceMode": "traditional-story",
+    "pack": "traditional-story",
     "content": ["characters", "lorebook", "rules", "opening-kit"],
     "contracts": ["memory.blocks@1"],
     "additionalInstructions": "让三个主要角色共同隐瞒一次失败的远征。"
@@ -5071,14 +5089,14 @@ If `idleTimeoutMs` is out of range, the server returns `400`. The app's own sett
 
 Fields of `brief`:
 
-| Field                    | Type     | Description                                                                                                                            |
-| ------------------------ | -------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| `experienceMode`         | string   | `traditional-story` or `dialogue-mode`. The latter also generates `defaultViewMode: stage`                                             |
-| `content`                | string[] | Kernel content. Allowed values: `characters`, `lorebook`, `rules`, `opening-kit`                                                       |
-| `contracts`              | string[] | Plugin content. Contains data contract IDs                                                                                             |
-| `additionalInstructions` | string   | Extra requirements for the world package (up to 2000 characters), such as character relationships, taboos, pacing, or content to avoid |
+| Field                    | Type     | Description                                                                                                                                                                                                                                                                                                                                     |
+| ------------------------ | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pack`                   | string   | The gameplay pack the world is made for: an ID of the server's pack catalogue (`packs/builtin.yaml`); the choices are `packs` in [`GET /api/framework/authoring`](#get-apiframeworkauthoring). It is written into the world's `pluginPolicy.presetId`; when the pack has `defaultViewMode`, the world gets it too. Leave it out to name no pack |
+| `content`                | string[] | Kernel content. Allowed values: `characters`, `lorebook`, `rules`, `opening-kit`                                                                                                                                                                                                                                                                |
+| `contracts`              | string[] | Plugin content. Contains data contract IDs                                                                                                                                                                                                                                                                                                      |
+| `additionalInstructions` | string   | Extra requirements for the world package (up to 2000 characters), such as character relationships, taboos, pacing, or content to avoid                                                                                                                                                                                                          |
 
-The allowed values for `contracts` come from the contracts marked with `generate` in `GET /api/framework/authoring`. Any other value returns `400`. Contracts that fail preparation are absent from the choices; generation and revision continue with the remaining content, and `done.warnings` identifies the skipped plugin, namespace, and contract.
+A `pack` that is not in the catalogue returns `400`. The allowed values for `contracts` come from the contracts marked with `generate` in `GET /api/framework/authoring`. Any other value returns `400`. Contracts that fail preparation are absent from the choices; generation and revision continue with the remaining content, and `done.warnings` identifies the skipped plugin, namespace, and contract.
 
 Values for `saveTarget`:
 

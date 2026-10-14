@@ -358,7 +358,7 @@ flowchart LR
 
 - A foreground consumer is waiting for its result;
 - Its result is exported with `recordAs`;
-- It emits events;
+- It can emit events: its `tools.builtin` lists `emit-event`, or it declares `advertiseEvents: true`;
 - It changes characters, state, or interactions directly.
 
 **When the turn has a suspension.** When a runtime in the turn suspends, these jobs are not queued yet: they are saved with the suspended item, and the turn is not counted yet either. The exit that ends the turn queues the jobs and counts the turn: the last suspended item resumes successfully, or it is abandoned, expires, or is voided as out of date. The rules are in [Suspensions and turn counting](../reference/api.md#suspensions-and-turn-counting).
@@ -959,6 +959,10 @@ turn_messages (canonical append-only execution log):
   A runtime row writes only the narrativeOutput / content text into content. It also carries the form
   (pendingInput) and the UI attachments. Structured output is kept in turn_results. A run that has
   neither text nor attachments (for example, codex, which writes only structured entries) writes no runtime row.
+
+  An interjection during a turn (steer) is a row with source `player-interjection` and role `user`.
+  It is written in the turn's finalize transaction, after the turn's player row; a turn that does
+  not commit writes none. It is not a player turn: the player message count reads only `player` rows.
 
   Trigger ledger (plugin data owned by the kernel, owner `__kernel:triggers`).
   It records, per runtime, how many committed runs there have been and the completedPlayerTurns at the
