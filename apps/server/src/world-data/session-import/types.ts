@@ -104,6 +104,7 @@ export interface WorldDataImportedMediaRef {
 }
 
 export interface WorldDataImportPreflightDeps {
+  /** Session receiver selection; omit only when validating the full author catalogue. */
   readonly activePlugins?: readonly string[];
   readonly registry?: Pick<PluginRegistry, "get" | "getAll">;
   /**

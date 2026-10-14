@@ -726,34 +726,68 @@ sources:
     expect(await contentFor({}, overlay)).toBe("safe");
   });
 
-  it("rejects missing plugin schemas during preflight", async () => {
-    const { worldsDir, worldId } = await makeWorld({
-      descriptor: `schemaVersion: 1
+  it.each(["preflight", "import", "sync"])(
+    "skips uninstalled receivers and their explicit schema during %s",
+    async (operation) => {
+      const { worldsDir, worldId } = await makeWorld({
+        descriptor: `schemaVersion: 1
 sources:
   facts:
     kind: json
     path: data/fact.json
+    schema: contract:missing-plugin.facts@1
     to: contract:missing-plugin.facts@1
     key: id
+  characters:
+    kind: json
+    path: characters/characters.json
+    to: characters
+    key: id
 `,
-      files: { "data/fact.json": JSON.stringify({ id: "one" }) },
-    });
-    const store = await makeStore(["missing-plugin"]);
-
-    await expect(
-      importWorldDataForSession({
+        files: {
+          "data/fact.json": JSON.stringify({ id: "one" }),
+          "characters/characters.json": JSON.stringify([
+            { id: "guide", name: "Guide", type: "npc" },
+          ]),
+        },
+      });
+      const store = await makeStore([]);
+      const options = {
         store,
         sessionId: "sess-1",
         worldId,
         worldsDirs: [worldsDir],
         now: NOW,
         preflight: {
-          activePlugins: ["missing-plugin"],
+          activePlugins: [],
           registry: registry({}),
         },
-      }),
-    ).rejects.toThrow(/No registered receiver/);
-  });
+      };
+      const result =
+        operation === "preflight"
+          ? await preflightWorldDataForSession(options)
+          : operation === "import"
+            ? await importWorldDataForSession(options)
+            : await syncWorldDataForSession({ ...options, dryRun: false });
+      expect(result).toMatchObject({ imported: true, planned: 1 });
+      expect(result.diagnostics).toEqual([
+        {
+          level: "warning",
+          sourceId: "facts",
+          message:
+            'No registered receiver for data contract "missing-plugin.facts@1"; source skipped',
+        },
+      ]);
+      expect(await store.listCharacters("sess-1")).toEqual(
+        operation === "preflight"
+          ? []
+          : [expect.objectContaining({ id: "guide", name: "Guide" })],
+      );
+      expect(await store.listWorldDataImportLedger("sess-1")).toHaveLength(
+        operation === "preflight" ? 0 : 1,
+      );
+    },
+  );
 
   it("skips sources targeting plugins outside final activePlugins (warning, not a session-blocking error)", async () => {
     const { worldsDir, worldId } = await makeWorld({

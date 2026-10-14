@@ -13,7 +13,11 @@ export type ResolvedWorldDataTarget =
   | Exclude<ParsedWorldDataTarget, { kind: "contract-data" }>
   | ResolvedPluginDataTarget;
 
-/** Resolve only declared, active receivers; a contract may fan out to many layouts. */
+/**
+ * Resolve only declared, active receivers; a contract may fan out to many layouts.
+ * A session's explicit active set may lack installed receivers and still play.
+ * Authoring checks omit that set and diagnose missing declarations as errors.
+ */
 export function resolveWorldDataTargets(
   target: ParsedWorldDataTarget,
   deps:
@@ -48,11 +52,12 @@ export function resolveWorldDataTargets(
   }
   if (!registered || !receivers.length)
     diagnostics.push({
-      level: registered ? "warning" : "error",
+      level:
+        registered || deps?.activePlugins !== undefined ? "warning" : "error",
       sourceId,
       message: registered
         ? `No active receiver for data contract "${target.contract}"; source skipped`
-        : `No registered receiver for data contract "${target.contract}"`,
+        : `No registered receiver for data contract "${target.contract}"; source skipped`,
     });
   return receivers.sort(
     (a, b) =>

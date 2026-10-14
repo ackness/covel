@@ -511,6 +511,8 @@ await store.withTransaction(async (tx) => {
 - 保存在 `plugin_data` 里的媒体索引行
 - `world_data_import_ledger`
 
+没有接收插件的数据按[世界数据的接收规则](./world-data.md#target-uri)在规划时跳过，warning 不使事务失败。跳过的 source 不产生写入或新的导入账本行。
+
 导入开始规划任何写入之前，先解析语言覆盖文件。source 的 `localeArrayKeys` 给出嵌套列表的身份字段（排在 `key` 和 `id` 之后），所以作者调整了列表顺序，译文记录仍然对得上。sync 也一样。
 
 ### 导入账本

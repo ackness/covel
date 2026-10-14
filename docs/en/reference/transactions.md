@@ -511,6 +511,8 @@ When a session is created with `worldData`, the same `DataStore` transaction con
 - the media index rows stored in `plugin_data`
 - `world_data_import_ledger`
 
+Data without a receiving plugin is skipped during planning under the [world-data receiver rules](./world-data.md#target-uri). Warnings do not fail the transaction. A skipped source produces no writes or new import ledger rows.
+
 Before the import starts planning any writes, it parses the locale override file. A source's `localeArrayKeys` gives the identity fields of nested lists (placed after `key` and `id`). So when the author reorders a list, the translation records still match. Sync works the same way.
 
 ### Import ledger
