@@ -300,6 +300,27 @@ describe("plugin manifest dataSchemas", () => {
       expect(pluginManifestSchema.safeParse(withSource(outside)).success).toBe(
         false,
       );
+    // A path the kernel or the package owns would take a convention away
+    // from every world, whatever the case or the edition.
+    for (const reserved of [
+      "data/dimensions.yaml",
+      "data/lorebook.yaml",
+      "characters/characters.json",
+      "Data/Dimensions.yaml",
+      "./data/lorebook.yaml",
+      "world.yaml",
+      "world.zh-CN.yaml",
+      "WORLD.md",
+      "data/world.data.yaml",
+      "media/gallery",
+      "media/gallery/extra.json",
+    ]) {
+      const result = pluginManifestSchema.safeParse(withSource(reserved));
+      expect(result.success, reserved).toBe(false);
+      expect(result.error?.issues[0]?.message, reserved).toContain(
+        "must not name a file the kernel or the world package owns",
+      );
+    }
   });
 });
 

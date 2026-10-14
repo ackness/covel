@@ -5,12 +5,14 @@ import path from "node:path";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import {
   KERNEL_SOURCES,
+  conventionCollisions,
   conventionsOfPlugins,
   setWorldDataConventions,
   worldHasData,
 } from "../../src/world-data/conventions.js";
 import { loadWorldDataDescriptor } from "../../src/world-data/descriptor.js";
 import { worldGenerationDataContracts } from "../../src/world-data/portable-contract-data.js";
+import { prepareWorldDataImportForSession } from "../../src/world-data/session-import.js";
 import {
   loadPluginCatalogue,
   validateWorldPackage,
@@ -19,6 +21,40 @@ import type { WorldDataSourceDescriptor } from "@covel/shared";
 
 const REPO = path.resolve(import.meta.dirname, "../../../..");
 const PLUGINS = path.join(REPO, "plugins");
+
+/** A plugin that names `data/quests.yaml`, the quest log's file, for its own contract. */
+const RIVAL_PLUGIN: Record<string, string> = {
+  "PLUGIN.md": `---
+id: rival-log
+kind: plugin
+version: 0.1.0
+description: Names the quest log's file for records of its own.
+contributes:
+  data:
+    records:
+      schema: ./schemas/records.schema.json
+      version: 1
+      accepts:
+        - rival.records@1
+      authoring:
+        title: Rival records
+        source:
+          kind: yaml
+          path: data/quests.yaml
+          key: id
+---
+
+# Rival log
+`,
+  "package.json": JSON.stringify({
+    name: "rival-log",
+    version: "0.1.0",
+    private: true,
+    type: "module",
+  }),
+  "README.md": "# Rival log\n",
+  "schemas/records.schema.json": JSON.stringify({ type: "array" }),
+};
 
 /**
  * A world package needs no descriptor for a file at a well-known path. The
@@ -213,5 +249,165 @@ describe("world data conventions", () => {
     expect(
       contracts.find((item) => item.contract === target.contract)?.source,
     ).toBeUndefined();
+  });
+
+  /** The bundled plugins and the rival, as one catalogue. */
+  const crowdedCatalogue = async (status?: "error") => {
+    const catalogue = await loadPluginCatalogue([PLUGINS]);
+    const owner = catalogue.get("core-quest")!;
+    const rival = {
+      ...owner,
+      id: "rival-log",
+      ...(status ? { status } : {}),
+      packageManifest: {
+        ...owner.packageManifest!,
+        plugin: {
+          ...owner.packageManifest!.plugin!,
+          id: "rival-log",
+          contributes: {
+            data: {
+              records: {
+                schema: "./schemas/records.schema.json",
+                version: 1,
+                accepts: ["rival.records@1"],
+                authoring: {
+                  title: "Rival records",
+                  source: { kind: "yaml", path: "data/quests.yaml" },
+                },
+              },
+            },
+          },
+        },
+      },
+    } as typeof owner;
+    const entries = new Map([
+      ...catalogue.getAll(),
+      ["rival-log", rival] as const,
+    ]);
+    return {
+      get: (id: string) => entries.get(id),
+      getAll: () => entries,
+    };
+  };
+  const paths = (sources: ReturnType<typeof conventionsOfPlugins>) =>
+    sources.map((source) => source.entry.path);
+
+  it("lets only the session's loaded plugins decide a conventional path", async () => {
+    const crowded = await crowdedCatalogue();
+    // Both plugins in play: the path is a convention for neither.
+    expect(paths(conventionsOfPlugins(crowded))).not.toContain(
+      "data/quests.yaml",
+    );
+    expect(conventionCollisions(crowded)).toEqual([
+      {
+        path: "data/quests.yaml",
+        claimants: [
+          { pluginId: "core-quest", label: "core-quest/quests (quests@1)" },
+          {
+            pluginId: "rival-log",
+            label: "rival-log/records (rival.records@1)",
+          },
+        ],
+      },
+    ]);
+    // A session without the rival reads the file for the quest log.
+    const active = [...crowded.getAll().keys()].filter(
+      (id) => id !== "rival-log",
+    );
+    expect(paths(conventionsOfPlugins(crowded, active))).toContain(
+      "data/quests.yaml",
+    );
+    expect(conventionCollisions(crowded, active)).toEqual([]);
+    // A plugin that failed to load names nothing.
+    expect(
+      paths(conventionsOfPlugins(await crowdedCatalogue("error"))),
+    ).toContain("data/quests.yaml");
+  });
+
+  it("starts a session without a file its plugins both name, and says why", async () => {
+    const root = await world({
+      "data/quests.yaml":
+        "- id: main\n  name: Find the keeper\n  description: The keeper is gone.\n  status: active\n",
+    });
+    const crowded = await crowdedCatalogue();
+    const prepare = (activePlugins: readonly string[]) =>
+      prepareWorldDataImportForSession({
+        sessionId: "s1",
+        worldId: "small",
+        worldsDirs: [path.dirname(root)],
+        now: new Date(0).toISOString(),
+        locale: "en-US",
+        preflight: {
+          registry: crowded,
+          activePlugins,
+          executeProjectionHandlers: false,
+        },
+      });
+
+    const both = await prepare(["core-quest", "rival-log"]);
+    expect(both.diagnostics).toContainEqual(
+      expect.objectContaining({
+        level: "warning",
+        code: "convention-collision",
+        path: "data/quests.yaml",
+      }),
+    );
+    expect(both.diagnostics.some((item) => item.level === "error")).toBe(false);
+
+    const one = await prepare(["core-quest"]);
+    expect(
+      one.diagnostics.some((item) => item.code === "convention-collision"),
+    ).toBe(false);
+    expect(
+      one.imported && one.plan.writes.map((write) => write.source.id),
+    ).toContain("quests");
+  });
+
+  it("checks a package against the plugins a new session starts with", async () => {
+    const quests =
+      "- id: main\n  name: Find the keeper\n  description: The keeper is gone.\n  status: active\n";
+    const codes = async (manifest: string, pluginsDirs = [PLUGINS]) => {
+      const root = await world({
+        "world.yaml": manifest,
+        "data/quests.yaml": quests,
+      });
+      return (
+        await validateWorldPackage({ worldDir: root, pluginsDirs })
+      ).diagnostics
+        .filter((item) =>
+          [
+            "unrequested-receiver",
+            "convention-collision",
+            "data-file-unused",
+          ].includes(item.code),
+        )
+        .map((item) => [item.level, item.code, item.file]);
+    };
+    const manifest =
+      'schemaVersion: "1.0"\nid: small\nname: Small\nsummary: A small world.\ndefaultLocale: en-US\n';
+
+    // The quest log is not among the plugins a session starts with.
+    expect(await codes(manifest)).toEqual([
+      ["warning", "unrequested-receiver", "data/quests.yaml"],
+    ]);
+    const requested = `${manifest}pluginPolicy:\n  requested:\n    - core-quest\n`;
+    expect(await codes(requested)).toEqual([]);
+
+    // A scanned plugin names the same file.
+    const rivalDir = await mkdtemp(path.join(tmpdir(), "covel-rival-"));
+    roots.push(rivalDir);
+    for (const [file, content] of Object.entries(RIVAL_PLUGIN)) {
+      const full = path.join(rivalDir, "rival-log", file);
+      await mkdir(path.dirname(full), { recursive: true });
+      await writeFile(full, content);
+    }
+    // Only a player who turns the rival on loses the file.
+    expect(await codes(requested, [rivalDir, PLUGINS])).toEqual([
+      ["warning", "convention-collision", "data/quests.yaml"],
+    ]);
+    // A new session starts with both, and reads the file for neither.
+    expect(
+      await codes(`${requested}    - rival-log\n`, [rivalDir, PLUGINS]),
+    ).toEqual([["error", "convention-collision", "data/quests.yaml"]]);
   });
 });

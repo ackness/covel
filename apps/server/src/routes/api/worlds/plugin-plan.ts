@@ -134,6 +134,33 @@ function defaultPluginIds(
   return [...requested];
 }
 
+/**
+ * The packs, the policy and the plugins a new session of a world starts with
+ * when the player changes nothing (`defaultPluginIds`), from the world's
+ * `pluginPolicy` and the plugins of this host.
+ */
+export function worldPluginPlan(
+  worldId: string,
+  metadata: Readonly<Record<string, unknown>> | undefined,
+  plugins: readonly PluginSummary[],
+): WorldPluginPlan {
+  const { policy, packs, missing } = dropMissingRequests(
+    resolvePolicy(metadata),
+    new Set(plugins.map((plugin) => plugin.id)),
+  );
+  const selectedPack = policy.presetId
+    ? packs.find((pack) => pack.id === policy.presetId)
+    : undefined;
+  return {
+    worldId,
+    packs,
+    policy,
+    ...(selectedPack ? { selectedPackId: selectedPack.id } : {}),
+    defaultPluginIds: defaultPluginIds(plugins, policy, selectedPack),
+    missing,
+  };
+}
+
 worldPluginPlanRoutes.get("/:id/plugin-plan", async (c) => {
   const worldId = c.req.param("id");
   const world = await c.get("store").getWorld(worldId);
@@ -146,20 +173,5 @@ worldPluginPlanRoutes.get("/:id/plugin-plan", async (c) => {
   const plugins = [...c.get("pluginRegistry").getAll().values()].map((entry) =>
     buildPluginSummary(entry, c.get("isPluginEntryPublished")),
   );
-  const { policy, packs, missing } = dropMissingRequests(
-    resolvePolicy(world.metadata),
-    new Set(plugins.map((plugin) => plugin.id)),
-  );
-  const selectedPack = policy.presetId
-    ? packs.find((pack) => pack.id === policy.presetId)
-    : undefined;
-  const plan: WorldPluginPlan = {
-    worldId,
-    packs,
-    policy,
-    ...(selectedPack ? { selectedPackId: selectedPack.id } : {}),
-    defaultPluginIds: defaultPluginIds(plugins, policy, selectedPack),
-    missing,
-  };
-  return c.json(plan);
+  return c.json(worldPluginPlan(worldId, world.metadata, plugins));
 });
