@@ -79,6 +79,8 @@ Three rules that are easiest to get wrong:
 - With only one runtime, put it in the `runtime:` section of `PLUGIN.md`. With several, put each one in `runtimes/<name>/RUNTIME.md`. You cannot use both styles at once. If you do, validation reports `inline runtime and runtimes/ cannot coexist`.
 - When `PLUGIN.md` has a `version`, it must be the same as the `version` in `package.json`. `package.json` must also say `"type": "module"`: a plugin package is ESM only, and validation and installation both refuse a package without that line.
 
+Every `pnpm create-plugin` mode starts both `PLUGIN.md` and `package.json` at version `0.1.0`. Update both when publishing a new version, then check with `pnpm validate:plugin <plugin-dir>`.
+
 After validation passes, select the plugin on the session-prep screen of the game and authorize it. Only then does it run. See the last step in [your first plugin](./first-plugin.md). For packaging and trial installs, see [package and try install](../ship/package.md).
 
 ## Where to declare what my code registers

@@ -1,39 +1,17 @@
 import fs from "node:fs";
 import path from "node:path";
-import type { RuntimeResult } from "@covel/shared";
+import type {
+  RuntimeResult,
+  CaseExpectations,
+  CaseArtifactConfig,
+} from "@covel/shared";
 import type { DataStore, MediaStore } from "@covel/store";
 
-export interface CaseExpectations {
-  readonly runtimeResults?: readonly {
-    readonly runtimeId?: string;
-    readonly status: RuntimeResult["status"];
-    readonly errorIncludes?: string;
-  }[];
-  readonly events?: readonly string[];
-  readonly logs?: readonly string[];
-  readonly pluginData?: readonly {
-    readonly namespace: string;
-    readonly key?: string;
-    readonly status?: string;
-    readonly field?: string;
-  }[];
-  readonly assetGenerations?: readonly {
-    readonly modality?: string;
-    readonly field?: string;
-  }[];
-}
+export type { CaseExpectations, CaseArtifactConfig } from "@covel/shared";
 
 export interface CaseAssertion {
   readonly status: "passed" | "failed";
   readonly message: string;
-}
-
-export interface CaseArtifactConfig {
-  readonly saveImages?: {
-    readonly namespace?: string;
-    readonly dir?: string;
-    readonly field?: string;
-  };
 }
 
 export interface CaseArtifact {
