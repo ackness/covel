@@ -1,3 +1,4 @@
+import { SecretInput } from "@/components/ui/secret-input.js";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Eye, EyeOff, KeyRound, ShieldCheck, Trash2 } from "lucide-react";
@@ -30,7 +31,7 @@ export function OperatorAccessPane({
   onCredentialChange = reloadAfterCredentialChange,
 }: OperatorAccessPaneProps) {
   const { t } = useTranslation();
-  const [token, setToken] = useState(() => getOperatorToken() ?? "");
+  const [token, setToken] = useState("");
   const [configured, setConfigured] = useState(
     () => getOperatorToken() !== undefined,
   );
@@ -42,6 +43,7 @@ export function OperatorAccessPane({
     if (!normalizedToken) return;
     if (!storeOperatorToken(normalizedToken)) return setStorageFailed(true);
     setConfigured(true);
+    setToken("");
     onCredentialChange();
   }
 
@@ -83,7 +85,7 @@ export function OperatorAccessPane({
           {t("settings.operatorTokenLabel")}
         </Label>
         <div className="flex gap-1">
-          <input
+          <SecretInput
             id="operator-token"
             type={visible ? "text" : "password"}
             autoComplete="current-password"
