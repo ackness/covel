@@ -775,7 +775,7 @@ JSON Schema 只能检查字段的形状，检查不了“这个结果和骰子�
 - 这个调用由 agent 循环直接处理，**不进入 ToolExecutor**，也不在工具注册表里。它的名字仍然是框架保留名。
 - 搜索的范围严格限于这个 runtime 自己声明并且被延迟的工具。schema 通过 `getToolInfo(name, context)` 取得，沿用 builtin / local 的访问边界：没有权限的工具搜不到，也不会泄露。
 - 打分用不带任何依赖的 BM25（k1=1.2 / b=0.75）。中日韩文本按相邻两个字切分。被搜索的文本是：工具名、描述、参数 schema 里的字段名和字段描述。
-- `search-tools` 的描述会告诉模型延迟池里有多少工具、来自哪些插件。模型据此知道还有没加载的工具可以搜。
+- `search-tools` 的描述会告诉模型延迟池里有多少工具，并写上声明它的插件 ID。池子里的工具可能是框架内置工具，不一定都来自这个插件。模型据此知道还有没加载的工具可以搜。
 - 适用场景：一个 runtime 的白名单超过大约 10 个工具，每次调用都预载全部 schema 开始挤占提示词预算。
 
 契约声明在 `packages/tools/src/builtin/tool-search.ts`，执行逻辑在 `packages/runtime/src/agent-loop/tool-search.ts`。做法参照 openai/codex 的 `tool_search`（`ToolExposure::Deferred` + BM25）。
@@ -1449,9 +1449,9 @@ export default function ({ tool, z, shortId, shortIdBatch }) {
 
 启动时自动分类：
 
-- `builtinUITools` 里的工具 → `builtin`
-- 插件 `entry` 通过 `registerTool()` 注册成功的工具 → `local`
-- 其他 → `third-party`（当前没有工具属于这一类）
+- 框架用 `registerBuiltin` 注册的工具（包括 `builtinUITools`）→ `builtin`
+- 其他工具，即插件 `entry` 通过 `registerTool()` 注册成功的工具 → `local`
+- `third-party` 目前不会被分给任何工具（分类只产生 `builtin` 和 `local`）
 
 ### 第三方插件 server-code / plugin tool 审批边界
 
