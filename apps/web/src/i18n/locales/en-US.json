@@ -367,6 +367,8 @@
     "stoppedDetail": "Generated content was not saved. Retry with the original input.",
     "submittedInteraction": "Completed interaction · expand to review",
     "advancedPluginSettings": "Customize plugins and advanced settings",
+    "minimalPluginSet": "Back to the minimal set",
+    "minimalPluginSetHint": "The narrative plugins, the plugin that holds the world's dimensions, and what they and the world need; everything else is turned off.",
     "configureModelBeforeRetry": "Change model / parameters",
     "retryModelSettingsHint": "Change the model or lower its output limit, then retry this task. The retry uses your current settings.",
     "allWorlds": "All worlds ({{total}})",

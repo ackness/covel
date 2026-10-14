@@ -391,14 +391,14 @@ These fields change only how the world is shown. You can leave all of them out.
 
 `pluginPolicy` says which plugins this world would like to use. It does not lock in any plugin. Which ones are finally on is worked out by Covel, from the capabilities and dependencies each plugin declares, the player's authorization, and the player's own checkboxes.
 
-| Field                           | Description                                                                                                              |
-| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| `presetId`                      | The ID of the default pack. It can refer to a `packs[].id` or a built-in pack.                                           |
-| `preferredTags` / `avoidedTags` | Plugin tag preferences                                                                                                   |
-| `requires`                      | Contract IDs the world needs (such as `action-check@1`). Any installed plugin that provides the contract can satisfy it. |
-| `requested`                     | Plugin IDs the world suggests as the starting selection                                                                  |
-| `recommended`                   | Plugin IDs suggested in addition                                                                                         |
-| `packs`                         | Custom packs. Each item has `id/label`, and can optionally have `description/requested/recommended/tags/reason`.         |
+| Field                           | Description                                                                                                                                                                                                          |
+| ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `presetId`                      | The ID of the default pack. It can refer to a `packs[].id` or a built-in pack.                                                                                                                                       |
+| `preferredTags` / `avoidedTags` | Plugin tag preferences                                                                                                                                                                                               |
+| `requires`                      | Contract IDs the world needs (such as `action-check@1`). Any installed plugin that provides the contract can satisfy it.                                                                                             |
+| `requested`                     | Plugin IDs the world suggests as the starting selection                                                                                                                                                              |
+| `recommended`                   | Plugin IDs suggested in addition                                                                                                                                                                                     |
+| `packs`                         | Custom packs. Each item has `id/label`, and can optionally have `description/requested/recommended/excluded/tags/reason`. `excluded` lists the plugin IDs the pack turns off when chosen, `kind: core` ones included |
 
 `presetId` must be the ID of a built-in pack or of one of this world's `packs`. Otherwise `pnpm validate:world` reports `unknown-preset`.
 

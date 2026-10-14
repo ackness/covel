@@ -1480,10 +1480,10 @@ Each slot is an array. Its elements are `{ pluginId, specs[] }`. Each item in `s
 
 **Validation and `specVersion`**:
 
-- When aggregating, every spec is validated with Zod (its structure and `specVersion`).
+- When aggregating, every spec is validated with the same rules as `pnpm validate:plugin` (structure, `specVersion`, data ownership, `webview`).
 - `specVersion` can be left out, and is treated as v1. A declared version higher than the server supports (currently `CURRENT_UI_SPEC_VERSION = 1`) is rejected.
 - If one spec fails validation, it **does not affect the whole response**. Only that spec is removed from its slot.
-- The reason for failure is written in the top-level `diagnostics[]`. Each item is `{ pluginId, runtimeId, slot, specIndex, specId?, issues[{ path, message, code }] }`. It says which plugin, which field, and what the problem is.
+- The reason for failure is written in the top-level `diagnostics[]`. Each item is `{ pluginId, runtimeId, slot, specIndex, specId?, issues[{ path, message, code }] }`. It says which plugin, which field, and what the problem is. A file that cannot be read (missing, not JSON, or pointing outside the plugin directory) is reported here too; `code` is always `invalid`.
 - With `sessionId`, `diagnostics` includes only the plugins active in that session.
 
 **Development hot reload**: `POST /api/plugins/:id/reload` reloads one community plugin.
