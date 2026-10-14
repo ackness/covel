@@ -79,6 +79,7 @@ return { result: execution.result, committed: outcome.status === "committed" };
 - When a function runtime suspends, the continuation saves the commands not yet committed, the input, the exported bindings, and the activation.
 - A resume uses these frozen snapshots. Commands not yet committed can still be read by the resumed run, and they are committed together, atomically, if the resume succeeds.
 - A failed resume discards these domain writes.
+- The continuation also records the number of player turns in the history and the plugin version at the moment of the suspension. If either has changed at resume time, the suspended item is voided and does not run; see [Out-of-date suspended items](./api.md#out-of-date-suspended-items).
 
 > [!WARNING]
 > After the continuation format changes, existing development-time suspension records must be rebuilt.
@@ -317,6 +318,7 @@ When an execution ends, the framework handles the jobs that this execution repor
 - A job that has not finished gets a final state that matches the runtime's result.
 - If the plugin already reported `succeeded`, but this execution's domain writes were not committed (the whole execution rolled back, this runtime failed, or its writes were discarded on their own at commit time), the framework appends a `failed` entry and does not keep the success state.
 - A `failed` or `cancelled` that the plugin reported itself is not rewritten.
+- The jobs of a suspended runtime stay in `waiting-input`. They belong to the execution that suspended: they become `succeeded` once a resume commits, `cancelled` when the suspended item is abandoned, expires or is voided, and keep waiting while a failed resume can be retried.
 
 **How background job states map**
 

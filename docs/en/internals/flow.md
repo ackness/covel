@@ -353,6 +353,8 @@ flowchart LR
 - It emits events;
 - It changes characters, state, or interactions directly.
 
+**When the turn has a suspension.** When a runtime in the turn suspends, these jobs are not queued yet: they are saved with the suspended item, and the turn is not counted yet either. The exit that ends the turn queues the jobs and counts the turn: the last suspended item resumes successfully, or it is abandoned, expires, or is voided as out of date. The rules are in [Suspensions and turn counting](../reference/api.md#suspensions-and-turn-counting).
+
 **Time limits.**
 
 | Field            | Counted from               | What it limits                             |

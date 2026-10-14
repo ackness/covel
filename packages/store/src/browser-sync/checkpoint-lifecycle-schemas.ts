@@ -118,6 +118,10 @@ const suspensions = createdRow.extend({
       sourceTurnId: z.string().optional(),
       countPolicy: z.enum(["none", "complete-player-turn"]),
     }),
+    takenUnder: z.object({
+      playerTurns: z.number().int().nonnegative(),
+      pluginVersion: z.string(),
+    }),
     locale: z.string().optional(),
     logicalTurn: z.number().int().optional(),
     turnNumber: z.number().int().optional(),

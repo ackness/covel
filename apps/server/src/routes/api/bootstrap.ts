@@ -95,7 +95,10 @@ import { mediaRoutes } from "./media.js";
 import type { MediaStore } from "@covel/store";
 import type { MediaStoreBackend, VectorBackend } from "@covel/store";
 import { resumeRoutes } from "./resume.js";
-import { maybeSweepExpiredSuspensions } from "./suspension-sweep.js";
+import {
+  maybeSweepExpiredSuspensions,
+  suspensionExpirer,
+} from "./suspension-sweep.js";
 import { installTraceRetentionSource } from "../../lib/trace-retention-source.js";
 import { createServerSettings } from "../../lib/server-settings.js";
 import { createServerSettingsRoutes } from "./server-settings.js";
@@ -911,7 +914,17 @@ async function assembleApi(
 
   // Start maintenance only after assembly succeeds. These scans remain
   // non-blocking for readiness, but belong to the host's drain boundary.
-  const startupMaintenance = maybeSweepExpiredSuspensions(store, {
+  const suspensionSweep = {
+    store,
+    expire: suspensionExpirer({
+      store,
+      pluginRegistry: registry,
+      sessionLock,
+      eventBus,
+      worker: runtimeJobWorker,
+    }),
+  };
+  const startupMaintenance = maybeSweepExpiredSuspensions(suspensionSweep, {
     force: true,
     // Only PostgreSQL can have another server process with a live claim.
     ...(config.storeBackend === "pg" ? {} : { claimMaxAgeMs: 0 }),

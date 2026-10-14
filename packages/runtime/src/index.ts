@@ -90,7 +90,19 @@ export type {
 export {
   createProgressReporter,
   finalizeJobStatuses,
+  finalizeSuspendedJobStatuses,
 } from "./job-status/job-status.js";
+export {
+  applySuspensionAbandonTx,
+  isPendingSuspension,
+  planSuspensionAbandon,
+  settleAbandonedSuspensionJobs,
+  suspensionOutdatedReason,
+} from "./resume/suspension-settlement.js";
+export type {
+  SuspensionAbandonPlan,
+  SuspensionOutdatedReason,
+} from "./resume/suspension-settlement.js";
 export type {
   ProgressReporterDeps,
   ExecutionJobOutcome,
