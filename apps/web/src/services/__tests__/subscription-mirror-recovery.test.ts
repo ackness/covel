@@ -95,7 +95,7 @@ it.each([false, true])(
     // Pausing and resuming during hydrate must neither open a stream early nor
     // duplicate the workspace upload.
     if (pause) {
-      const release = pauseSessionSubscriptions();
+      const release = pauseSessionSubscriptions("session");
       release();
     }
     await vi.advanceTimersByTimeAsync(60_000);
