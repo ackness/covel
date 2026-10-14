@@ -599,7 +599,7 @@ A failed commit holds back the "execution completed" step, and the client shows 
 
 1. When the connection opens, the server first sends `system.connected`.
 2. After that, it sends `system.heartbeat` every 30 seconds.
-3. If the request carries `lastEventId`, the server first replays the events in the EventBus cache with `seq > lastEventId`, then switches to live events.
+3. Send the reconnect cursor in the `lastEventId` query parameter or the standard `Last-Event-ID` request header. The query parameter takes precedence when both are present. If the cursor epoch is still valid, the server replays cached EventBus events with a sequence greater than the cursor seq before switching to live events. If replay cannot bridge the cursor, it sends `system.reset`.
 
 The data of `system.connected` has a `cursor`. It is the latest event ID this session has emitted at this moment (`${epoch}:${seq}`. If no event has been sent yet, seq is 0).
 

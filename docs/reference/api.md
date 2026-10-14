@@ -4480,6 +4480,8 @@ runtime 导出的处理：
 | `topics`      | string | 否   | 逗号分隔的 topic 过滤（如 `runtime,state`）。省略表示全部 |
 | `lastEventId` | string | 否   | 补发这个 ID 之后的事件，用于断线重连                      |
 
+重连也接受标准 `Last-Event-ID` 请求头；同时传入时，`lastEventId` 查询参数优先。游标格式和重置行为见 [订阅流协议](./protocol.md)。
+
 ```bash
 curl -N "http://localhost:3001/api/events/stream?sessionId=<sessionId>"
 ```
@@ -4498,11 +4500,11 @@ data: {"sessionId":"mistport-a1b2c3d4","topics":"all","cursor":"...","timestamp"
 ```
 event: execution.completed
 data: {"runtimeCount":4,"resultCount":4,"durationMs":2500}
-id: evt-001
+id: example-epoch:1
 
 event: state.changed
 data: {"table":"character_stats","field":"hp","value":85}
-id: evt-002
+id: example-epoch:2
 ```
 
 使用说明：
