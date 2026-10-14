@@ -63,6 +63,7 @@ Covel 不用一个大而全的存储适配器去覆盖所有环境。它按部�
 - 回合消息把号码存在 `write_seq`。增量读取（`listTurnMessagesAfter`、插件的 `readTurnMessages`）按它前进，而不是按 `createdAt`：后台执行在运行时就取了时间，可能在之后的回合保存完才保存，按时间的游标会永远跳过它。时间线本身仍按时间排序。
 - 设定集条目、角色和插件数据的最近一次变化存在 `record_changes`，每条记录一行，删除也留一行（墓碑）。`listRecordChanges` 按号码读出来；这张表随会话里出现过的记录增长，不随写入次数增长。
 - 删除会话时，删掉这些记录的触发器又会写入变化，所以注册表把 `record_changes` 和 `session_write_counters` 放在最后删。
+- 这一列和两张表从数据 schema 版本 5 开始有。版本 4 的 SQLite 或 PostgreSQL 数据库在启动时就被拒绝打开（`StoreSchemaVersionError`），旧库不会被改动；先备份，再换一个新的数据库，见[启动时检查数据 schema 版本](#capabilities-and-migrations)。
 
 **归档向量的写入。** 归档索引不再每回合读取全部角色、设定集和插件数据。每次写入任务从上次的位置读变化，逐条读取变化指向的那条记录：记录还在就嵌入它，记录不在、被停用或没有文字就删掉它的向量。向量里已经是同样的文字时不再调用 embedding。
 
