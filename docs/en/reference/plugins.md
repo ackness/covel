@@ -102,7 +102,7 @@ Extract facts supported by runtime-inputs.narrative.value, then call save-facts.
 | Root field                                      | Meaning                                                                                                                                                          |
 | ----------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `id`, `kind`                                    | Package identity. `kind` is `core` or `plugin`.                                                                                                                  |
-| `version`, `displayName`, `description`, `tags` | Metadata. Tags group and filter plugins in session prep; they do not determine runtime scheduling.                                                                                                         |
+| `version`, `displayName`, `description`, `tags` | Metadata. Tags group and filter plugins in session prep; they do not determine runtime scheduling.                                                               |
 | `covel`                                         | The range of host versions the package works with, such as `">=0.0.45"`. A host outside that range does not install or load the package.                         |
 | `author`, `license`, `homepage`                 | Author information, shown only for display. See [Author information](#author-information).                                                                       |
 | `provides`                                      | Versioned contract strings, or `{contract, default: true}`.                                                                                                      |
@@ -295,7 +295,7 @@ So the guard of a setup runtime must return `{ skip: true }` for work that is al
 The trigger types are `auto`, `scheduled`, `manual`, and `event`.
 
 - A runtime that enters the main loop automatically should declare a stage. `manual` and `event` runtimes are triggered separately, by a request or by an event.
-- `schedule.manual.execution: background` makes a manual run execute in the background.
+- `schedule.manual.execution: background` makes a manual run execute in the background. Such a manual or event runtime has no upstream in the same execution, so it cannot read a `scope: turn` input; use `scope: committed` or a kernel input instead.
 - `schedule.completion` controls whether the turn waits for the runtime to finish. The manifest validation and the runtime admission check enforce the specific limits.
 
 ### History window (`agent.history`)
@@ -394,7 +394,6 @@ io:
       required: false
     digest:
       from: { kernel: turn-digest@1 }
-      required: false
   selfData:
     - namespace: facts
       as: <known-facts>
@@ -410,6 +409,7 @@ io:
 
 - A normal input reads the result of an upstream runtime that has already finished in the same execution. `select` is a JSON Pointer into the result value.
 - To read a result left by an earlier execution, use `scope: committed` with `recordAs`.
+- A kernel input (`from: { kernel: turn-digest@1 }`) has only `from`. It always has a value and is not checked against a schema, so writing `scope`, `select`, `required`, `accepts` or `recordAs` is rejected.
 - A schema can be a local path, or it can be written as `contract:<contractId>`. A contract schema from another provider is resolved when the package loads.
 - In the prompt, an input is at `runtime-inputs.<binding>.value`. Do not rely on the old injection tags.
 - If an agent runs after the narrative and it is bound to this turn's story text, that `value` is a sentence that points to the story message in the conversation. The story text itself is not repeated (see [Prompt structure](./prompt-structure.md#this-turns-story-text)).
@@ -719,7 +719,10 @@ After a namespace declares `search`, its records enter the framework's memory re
 - When a provider is activated explicitly, the default provider steps aside.
 - A required contract automatically brings in a provider. When a contract is missing, ambiguous, in conflict, or not authorized enough, the result gives the reason.
 - An event topic has only one declarer in a session. When two active plugins both declare the same topic in `contributes.events`, the one accepted second is rejected with `event-topic-conflict`. The reason names the topic and the two plugin IDs. Explicit requests come before automatic dependencies, and the rest follow request order. A topic is a name that is global to the session. The sender and the subscribers often belong to other plugins, so a topic can match only one payload schema. Two plugins can be installed at the same time, but they cannot both be in the same session. To avoid name clashes, add a prefix tied to your plugin to your own topics.
-- A plugin that loses its required provider, and an automatic dependency that nothing needs anymore, are removed.
+- A plugin that loses its required provider, and an automatic dependency that nothing needs anymore, are removed. Such a rejection has the `code` `missing-provider` or `ambiguous-provider`, and `contract` names the contract it waits for.
+- When a plugin that others depend on is missing, the plugins that depend on it are turned off automatically, and the game still starts. When a session is created, or a plugin is turned on or off, the requested plugins (`requested`) and the `kind: core` plugins turned off this way are still written into `activePlugins`. They do not run for now, they are listed in `unavailable`, and they come back on their own once the dependency is back. Creation returns `400 plugin_rejected` only when a plugin the player asked for is rejected for another reason, such as a conflict; the message names the plugin and the reason.
+- Before the game starts, the session prep screen lists the plugins this will turn off, the contract each one lacks, and the installed plugins that provide it, with a button to turn one on. The game screen does the same for `unavailable`.
+- When none of the enabled plugins has a narrative runtime (`io.visibility: story`), turns do not tell a story. The session prep screen and the game screen both say so and list the narrative plugins that can be turned on. When none is installed, they point to Settings → Install & manage.
 - `requested` and the computed `active` set are stored separately. An automatic dependency does not become the player's explicit choice.
 - The world's `pluginPolicy.requires` is passed in as `requiredContracts`. A world is a dependent, just like a plugin. A single provider is added automatically, and it is not removed as an unneeded dependency. A need that cannot be met is returned in `unmet`, with the reason `missing-provider`, `ambiguous-provider`, `approval-required`, or `excluded`. The first two block session creation. The last two are the player's choice, and they do not block it.
 
@@ -737,6 +740,8 @@ After a namespace declares `search`, its records enter the framework's memory re
 - The other initial default requests, the world's `requested` list, and the requests the player added by hand are kept. An explicit exclusion still wins.
 - A manual change clears the highlight on the pack card. The source of the old pack is still remembered, though, so the next switch does not add the old pack's plugins back. A plugin in a pack that the player re-enables by hand is kept as a manual choice.
 - The resolver still checks the world's `requires` on its own. Do not treat `requested` as a required item that cannot be canceled.
+- A gameplay pack can have `excluded`: choosing the pack turns those plugins off, `kind: core` ones included, and the player can turn them back on. Switching to the next pack lifts only the exclusions the previous pack added; the player's own exclusions stay. The exclusions of the pack the world selects at the start apply from the beginning. A plugin that is not installed does not appear in `excluded`.
+- The "Back to the minimal set" button keeps only the narrative plugins (the selected ones, or the core ones when none is selected), the plugin that provides `world.dimensions@1`, and the plugins that these and the world's `requires` pull in. Every other core plugin and every plugin the world `requested` is excluded, and the pack highlight is cleared.
 
 **A save keeps the set the player confirmed.**
 
@@ -757,8 +762,17 @@ The directory-level command `pnpm validate:plugin <dir>` and the ZIP install sha
 
 - The referenced entry, handler, guard, JSON Schema, and UI files must be inside the package.
 - Each JSON UI spec declares one of `view` and `webview`. Component names in `view` must be in the [component catalogue](./ui-components.md). `repeat.statePath` and `$item` must have a legal form (see [UI panels](./ui-panels.md#json-render-binding-cheat-sheet)). The error gives the spec file and the path of the node.
-- Automatic and scheduled runtimes must have a stage.
 - The built-in tool names and the plugin tool declarations, the runtime references inside the package, and the root contract dependencies must all be consistent.
+- An error from a cross-field rule (for example, `schedule.completion.mode: detached` is only allowed on `post-turn` or `audit`) gives the file path and the field path you wrote, for example `runtimes/note/RUNTIME.md: schedule.stage: …`.
+
+Loading, `pnpm validate:plugin` and installation use one copy of the manifest rules (the schemas in `@covel/shared`), and the same holds for UI specs: a panel that passes the check is not dropped in the game for its format.
+
+Some errors stop one runtime from ever running and leave the rest of the package unaffected:
+
+- An automatic or scheduled runtime has no `schedule.stage`. The framework does not guess a default stage.
+- A manual or event runtime that runs in the background reads an input from the same execution (see [Triggers](#triggers)).
+
+When a package placed in the plugin directory by hand has such an error, the loader leaves out only that runtime and writes the file, the field and the reason to the server log. The package's other runtimes, tools and panels load as usual, and its output contract no longer counts as provided by the package. `pnpm validate:plugin` and installation report it as an error.
 
 The directory-level check also warns when the plugin's root has an `llm.toml`: the file is not read, and it does not fail the check.
 

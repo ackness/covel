@@ -253,6 +253,12 @@ const pluginPackSchema = z
         "Plugin IDs the pack suggests. They are not enabled automatically.",
       )
       .optional(),
+    excluded: z
+      .array(z.string().min(1))
+      .describe(
+        "Plugin IDs the pack turns off, `kind: core` ones included. The player can turn them back on.",
+      )
+      .optional(),
     tags: z
       .array(z.string().min(1))
       .describe(

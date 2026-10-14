@@ -67,10 +67,10 @@ In the path headings below, `[]` is a list item and `.*` is a map value.
 
 ## `schedule.after[]` (form 2 of 2)
 
-| Field         | Type               | Required | Description                                                               |
-| ------------- | ------------------ | -------- | ------------------------------------------------------------------------- |
-| `contract`    | string             | yes      | Contract ID. It must be listed in the package's `requires` or `optional`. |
-| `cardinality` | `"one"` or `"all"` | no       | `one` takes a single provider; `all` takes every provider.                |
+| Field         | Type               | Required | Description                                                                                                                                |
+| ------------- | ------------------ | -------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `contract`    | string             | yes      | Contract ID. This runtime runs after the contract's active providers; the contract does not have to be listed in `requires` or `optional`. |
+| `cardinality` | `"one"` or `"all"` | no       | `one` takes a single provider; `all` takes every provider.                                                                                 |
 
 ## `schedule.completion`
 
@@ -105,7 +105,7 @@ In the path headings below, `[]` is a list item and `.*` is a map value.
 
 | Field      | Type                      | Required | Description                                                                                                                                                                   |
 | ---------- | ------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `from`     | object                    | yes      | Producer of the value: a runtime in this package, a contract, or a kernel input.                                                                                              |
+| `from`     | object                    | yes      | Producer of the value: a runtime in this package, a contract, or a kernel input. A kernel input takes no other field.                                                         |
 | `scope`    | `"turn"` or `"committed"` | no       | `turn` reads the same execution's upstream result. `committed` reads the latest committed export and needs `recordAs`. Defaults to `turn`.                                    |
 | `select`   | string                    | no       | JSON Pointer applied to the upstream value. Declaring `select` with `scope: committed` is rejected; committed inputs read the complete export. Example: `"/narrativeOutput"`. |
 | `required` | boolean                   | no       | `true` stops this runtime when the upstream value is missing or failed.                                                                                                       |

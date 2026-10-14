@@ -243,6 +243,14 @@
                 },
                 "description": "Plugin IDs the pack suggests. They are not enabled automatically."
               },
+              "excluded": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "description": "Plugin IDs the pack turns off, `kind: core` ones included. The player can turn them back on."
+              },
               "tags": {
                 "type": "array",
                 "items": {

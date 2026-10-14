@@ -1,17 +1,9 @@
-import fs from "node:fs/promises";
-import { loadPluginUiSpec, pluginDeclarations } from "@covel/plugin-loader";
-import path from "node:path";
-import type {
-  LoadedRuntime,
-  PluginRegistry,
-  PluginRegistryEntry,
-} from "@covel/plugin-loader";
+import { loadPluginUiSpecs, pluginDeclarations } from "@covel/plugin-loader";
+import type { PluginRegistry } from "@covel/plugin-loader";
 import type { DataStore, SessionRecord } from "@covel/store";
-import type { RuntimeManifest } from "@covel/shared";
 import { runnablePluginIds } from "../api/session/plugins.js";
-import { pluginRuntimeDirectory } from "./registry-projection.js";
 import { type UiSlotName } from "./shared.js";
-import { partitionSlotSpecs, type UiSpecDiagnostic } from "./ui-spec-schema.js";
+import type { UiSpecDiagnostic } from "./ui-spec-schema.js";
 
 const UI_SLOTS = [
   "right",
@@ -49,64 +41,6 @@ export function __resetUiSpecsCache(): void {
   specCache = new WeakMap<PluginRegistry, Promise<ValidatedSpecs>>();
 }
 
-async function assertInsidePluginRoot(
-  pluginRoot: string,
-  filePath: string,
-): Promise<void> {
-  const realRoot = await fs.realpath(pluginRoot);
-  const realFile = await fs
-    .realpath(filePath)
-    .catch((error: NodeJS.ErrnoException) => {
-      // Preserve missing non-JSON paths for unsupported-component diagnostics.
-      // Missing JSON resources still fail when read below.
-      if (error.code === "ENOENT") {
-        return path.resolve(realRoot, path.relative(pluginRoot, filePath));
-      }
-      throw error;
-    });
-  const relative = path.relative(realRoot, realFile);
-  if (relative.startsWith("..") || path.isAbsolute(relative)) {
-    throw new Error(`UI spec path escapes plugin root: ${filePath}`);
-  }
-}
-
-async function loadSlot(
-  ownerPluginId: string,
-  pluginRoot: string,
-  runtimeDirectory: string,
-  paths: readonly string[] | undefined,
-): Promise<readonly Readonly<Record<string, unknown>>[] | undefined> {
-  if (!paths || paths.length === 0) return undefined;
-  const specs: Readonly<Record<string, unknown>>[] = [];
-  for (const declaredPath of paths) {
-    const filePath = path.resolve(runtimeDirectory, declaredPath);
-    await assertInsidePluginRoot(pluginRoot, filePath);
-    if (filePath.endsWith(".json")) {
-      specs.push(await loadPluginUiSpec(pluginRoot, filePath, ownerPluginId));
-    } else {
-      // The validator reports this unsupported declaration without hiding siblings.
-      specs.push({ _componentPath: declaredPath });
-    }
-  }
-  return specs;
-}
-
-async function loadDeclaredUiSpecs(
-  entry: PluginRegistryEntry,
-  runtimeName: string,
-  ui: NonNullable<RuntimeManifest["ui"]>,
-): Promise<LoadedRuntime["uiSpecs"]> {
-  const runtimeDirectory = pluginRuntimeDirectory(entry, runtimeName);
-  if (!entry.rootPath || !runtimeDirectory) return undefined;
-  const [right, message, left] = await Promise.all([
-    loadSlot(entry.id, entry.rootPath, runtimeDirectory, ui.right),
-    loadSlot(entry.id, entry.rootPath, runtimeDirectory, ui.message),
-    loadSlot(entry.id, entry.rootPath, runtimeDirectory, ui.left),
-  ]);
-  if (!right && !message && !left) return undefined;
-  return { right, message, left };
-}
-
 async function projectRegistryUiSpecs(
   registry: PluginRegistry,
 ): Promise<ValidatedSpecs> {
@@ -114,37 +48,40 @@ async function projectRegistryUiSpecs(
   const diagnostics: UiSpecDiagnostic[] = [];
 
   for (const entry of registry.getAll().values()) {
-    if (entry.status === "error") continue;
+    if (entry.status === "error" || !entry.rootPath) continue;
     const runtimes: RuntimeSlotSpecs[] = [];
 
     for (const { manifest } of pluginDeclarations(entry)) {
       if (!manifest.ui) continue;
-      const loaded = entry.loadedRuntimes.get(manifest.name);
-      const uiSpecs =
-        loaded?.uiSpecs ??
-        (await loadDeclaredUiSpecs(entry, manifest.name, manifest.ui).catch(
-          (error: unknown) => {
-            console.error(
-              `[ui-specs] Failed to load static UI specs for "${entry.id}/${manifest.name}":`,
-              error,
-            );
-            return undefined;
-          },
-        ));
-      if (!uiSpecs) continue;
-
-      const slots: SlotSpecs = {};
-      for (const slot of UI_SLOTS) {
-        const specs = uiSpecs[slot];
-        if (!specs || specs.length === 0) continue;
-        const partition = partitionSlotSpecs({
-          specs: specs as readonly Record<string, unknown>[],
+      // The loader checks each spec with the rules `pnpm validate:plugin`
+      // uses. A spec it cannot show is reported; the others still render.
+      const loaded = await loadPluginUiSpecs(
+        entry.rootPath,
+        entry.id,
+        manifest.ui,
+      );
+      for (const diagnostic of loaded.diagnostics) {
+        console.warn(
+          `[ui-specs] ${entry.id}: contributes.ui.${diagnostic.slot}: ${diagnostic.declaredPath} is not shown: ${diagnostic.issues
+            .map((issue) => `${issue.path}: ${issue.message}`)
+            .join("; ")}`,
+        );
+        diagnostics.push({
           pluginId: entry.id,
           runtimeId: manifest.name,
-          slot,
+          slot: diagnostic.slot,
+          specIndex: diagnostic.specIndex,
+          ...(diagnostic.specId ? { specId: diagnostic.specId } : {}),
+          issues: diagnostic.issues.map((issue) => ({
+            ...issue,
+            code: "invalid",
+          })),
         });
-        diagnostics.push(...partition.diagnostics);
-        if (partition.valid.length > 0) slots[slot] = partition.valid;
+      }
+      const slots: SlotSpecs = {};
+      for (const slot of UI_SLOTS) {
+        const specs = loaded.slots[slot];
+        if (specs?.length) slots[slot] = specs;
       }
       if (Object.keys(slots).length > 0) {
         runtimes.push({ runtimeName: manifest.name, slots });
