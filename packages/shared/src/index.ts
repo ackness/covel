@@ -291,14 +291,20 @@ export {
   MAX_SETTLE_WAIT_MS,
   effectsDeclSchema,
   permissionsDeclSchema,
-  validateRuntimeManifestSemantics,
 } from "./schemas/plugin.js";
+export {
+  isRuntimeDisablingIssue,
+  type RuntimeRuleIssue,
+} from "./schemas/runtime-rules.js";
+export {
+  CURRENT_UI_SPEC_VERSION,
+  MAX_UI_WEBVIEW_BYTES,
+  pluginUiSpecIssues,
+  pluginUiSpecSchema,
+  type PluginUiSpecIssue,
+} from "./schemas/ui-spec.js";
 
-export type {
-  RuntimeManifestInput,
-  RuntimeManifestSemanticDiagnostic,
-  RuntimeManifestSemanticDiagnosticCode,
-} from "./schemas/plugin.js";
+export type { RuntimeManifestInput } from "./schemas/plugin.js";
 
 // ── World Schemas ───────────────────────────────────────────────
 export {
@@ -467,6 +473,8 @@ export {
   resolveSessionPlugins,
   resolveConfirmedSessionPlugins,
   isBlockingWorldRequirement,
+  isDependencyRejection,
+  disabledDependents,
   providedContracts,
 } from "./plugin-selection.js";
 export {
