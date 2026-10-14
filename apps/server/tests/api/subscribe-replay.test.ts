@@ -44,6 +44,36 @@ describe("R-01 SSE reconnect + replay/live race", () => {
     await seedSession(store, SESSION_ID);
   });
 
+  it.each([false, true])(
+    "replays a Last-Event-ID header cursor (query overrides header: %s)",
+    async (withQuery) => {
+      for (let n = 1; n <= 5; n++) emitSeq(eventBus, SESSION_ID, "state", n);
+      const epoch = eventBus.getEventsAfter(SESSION_ID, 0).epoch!;
+      const query = withQuery
+        ? `&lastEventId=${encodeURIComponent(`${epoch}:3`)}`
+        : "";
+      const ac = new AbortController();
+      try {
+        const res = await app.request(
+          `/api/events/stream?sessionId=${SESSION_ID}&topics=state${query}`,
+          {
+            signal: ac.signal,
+            headers: { "Last-Event-ID": `${epoch}:${withQuery ? 1 : 3}` },
+          },
+        );
+        expect(res.status).toBe(200);
+        const reader = res.body!.getReader();
+        const frames = await drain(reader, { deadlineMs: 400 });
+        expect(
+          frames.filter((f) => !isSystemFrame(f)).map((f) => f.id),
+        ).toEqual([`${epoch}:4`, `${epoch}:5`]);
+        await reader.cancel();
+      } finally {
+        ac.abort();
+      }
+    },
+  );
+
   it("Bug B: connected frame carries no id, so reconnect does not reset the cursor / no full replay when nothing missed", async () => {
     // Three events already in the buffer (seqs 1..3).
     for (let n = 1; n <= 3; n++) emitSeq(eventBus, SESSION_ID, "state", n);

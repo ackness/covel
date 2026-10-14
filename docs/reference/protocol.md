@@ -597,7 +597,7 @@ Gemini 原生的思考强度、`providerOptions.google.thinkingConfig`、`cached
 
 1. 连接建立时，先发一条 `system.connected`。
 2. 之后每 30 秒发一条 `system.heartbeat`。
-3. 请求带了 `lastEventId` 时，先补发 EventBus 缓存里 `seq > lastEventId` 的事件，再切换到实时事件。
+3. 重连游标可通过 `lastEventId` 查询参数或标准 `Last-Event-ID` 请求头传入；两者都有时，查询参数优先。游标的 epoch 仍有效时，先补发 EventBus 缓存里序号大于游标 seq 的事件，再切换到实时事件；无法补齐时发送 `system.reset`。
 
 `system.connected` 的 data 里有 `cursor`：这一刻这个会话已经发出的最新事件 id（`${epoch}:${seq}`，还没发过事件时 seq 是 0）。
 

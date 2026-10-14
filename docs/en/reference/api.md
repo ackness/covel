@@ -4454,6 +4454,8 @@ Subscribes to a session's live event stream. This is a long-lived SSE connection
 | `topics`      | string | No       | A comma-separated topic filter (for example `runtime,state`). If omitted, all topics are sent |
 | `lastEventId` | string | No       | Resend the events after this ID. Used to reconnect after a disconnect                         |
 
+Reconnects also accept the standard `Last-Event-ID` request header. The `lastEventId` query parameter takes precedence when both are present. See the [subscription protocol](./protocol.md) for cursor format and reset behavior.
+
 ```bash
 curl -N "http://localhost:3001/api/events/stream?sessionId=<sessionId>"
 ```
@@ -4472,11 +4474,11 @@ After that, events follow. The `event:` line is the event type (`CovelEventType`
 ```
 event: execution.completed
 data: {"runtimeCount":4,"resultCount":4,"durationMs":2500}
-id: evt-001
+id: example-epoch:1
 
 event: state.changed
 data: {"table":"character_stats","field":"hp","value":85}
-id: evt-002
+id: example-epoch:2
 ```
 
 Usage notes:
