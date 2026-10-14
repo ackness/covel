@@ -895,10 +895,9 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 
 `steer`（插话）：
 
-- 消息并入 story runtime 的下一次 LLM 调用，并保存到消息历史。
+- 消息并入 story runtime 的下一次 LLM 调用。回合提交时，它和回合在同一个事务里保存到对话历史和聊天记录；回合没有提交，就不保存。
 - 只对 `outputKind: story` 的 runtime 生效。plugin runtime 执行的是结构化任务，不接受插话。
 - 插话在最终响应流式输出期间到达时，story runtime 在收尾前追加一步 LLM 调用来消化它（受 maxSteps 约束）。
-- 消息保存失败时，撤回队列里的这一项并返回 `500`。
 
 `abort`（中止）：
 
