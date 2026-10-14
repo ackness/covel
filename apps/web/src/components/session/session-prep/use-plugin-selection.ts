@@ -1,6 +1,10 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import { DIMENSION_CONTRACT, resolveSessionPlugins } from "@covel/shared";
+import {
+  DIMENSION_CONTRACT,
+  providedContracts,
+  resolveSessionPlugins,
+} from "@covel/shared";
 import {
   collectPluginTags,
   defaultSelectedPluginIds,
@@ -289,7 +293,16 @@ export function usePluginSelection(
     setActivePluginPackId(null);
     setPackRequestedPlugins(new Set());
     setPackExcludedPlugins(new Set());
-    setOtherSelectedPlugins(new Set(story));
+    // Dimensions are an extra requirement of this reset, so retain their
+    // chosen provider even when it is not requested by default as core.
+    const dimensionProviders = candidates
+      .filter(
+        (plugin) =>
+          minimal.has(plugin.id) &&
+          providedContracts(plugin).includes(DIMENSION_CONTRACT),
+      )
+      .map((plugin) => plugin.id);
+    setOtherSelectedPlugins(new Set([...story, ...dimensionProviders]));
     setExcludedPlugins(
       new Set(
         [
@@ -312,6 +325,13 @@ export function usePluginSelection(
     (name: string) => {
       if (lockedPluginIds.has(name)) return;
       setActivePluginPackId(null);
+      // Once the player changes it, the previous pack no longer owns its
+      // exclusion and cannot lift a later manual "off" choice.
+      setPackExcludedPlugins((previous) => {
+        const next = new Set(previous);
+        next.delete(name);
+        return next;
+      });
       const enabling = !selectedPluginIdSet.has(name);
       const next = new Set(
         enabling ? [name, ...otherSelectedPlugins] : otherSelectedPlugins,
