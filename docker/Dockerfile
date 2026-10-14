@@ -1,15 +1,15 @@
-# syntax=docker/dockerfile:1.20.0@sha256:26147acbda4f14c5add9946e2fd2ed543fc402884fd75146bd342a7f6271dc1d
-# Follow the latest Node 26 release on Alpine 3.24.
-FROM node:26-alpine3.24 AS base
+# syntax=docker/dockerfile:1.27.1@sha256:4edf897a3ffa55b89f906fc8cc78afdb3f1834cc9c7083565e611a8a7d5fe99e
+# Pin the eligible Node 26 release on Alpine 3.24 (seven-day release window).
+FROM node:26.10.0-alpine3.24@sha256:0b36e8c136b94cd4fcf02188228e76c31ad5872eef3fec8cbd2eee500cfd9e80 AS base
 RUN apk add --no-cache libc6-compat libstdc++
 # Node 25+ no longer bundles Corepack. Pin both the shim and pnpm payload so
 # builds cannot drift and the non-root runtime never downloads a package
 # manager on first start. Keep pnpm aligned with package.json.
 ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0 \
     COREPACK_HOME=/opt/corepack
-RUN npm i -g corepack@0.35.0 \
+RUN npm i -g corepack@0.36.0 \
     && corepack enable pnpm \
-    && corepack install --global pnpm@12.6.0 \
+    && corepack install --global pnpm@12.10.1 \
     && chmod -R a+rX /opt/corepack
 WORKDIR /app
 
@@ -17,7 +17,7 @@ WORKDIR /app
 FROM base AS workspace-manifests
 RUN apk add --no-cache --virtual .build-deps python3 make g++
 # Every workspace importer declared in pnpm-lock.yaml must have its manifest
-# present for --frozen-lockfile to succeed. Stable Dockerfile 1.20 supports
+# present for --frozen-lockfile to succeed. Stable Dockerfile 1.27 supports
 # `--parents`, which preserves workspace paths without a drifting member list.
 COPY --parents pnpm-lock.yaml package.json pnpm-workspace.yaml apps/*/package.json packages/*/package.json plugins/*/package.json ./
 # The root preinstall guard is local and lockfile-independent; it must be

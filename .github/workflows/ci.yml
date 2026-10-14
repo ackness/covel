@@ -101,7 +101,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version-file: package.json
+          node-version: "26.10.0"
           cache: pnpm
 
       - name: Install dependencies
@@ -173,7 +173,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version-file: package.json
+          node-version: "26.10.0"
           cache: pnpm
 
       - name: Install dependencies
@@ -224,7 +224,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version-file: package.json
+          node-version: "26.10.0"
           cache: pnpm
 
       - name: Install dependencies
@@ -252,8 +252,8 @@ jobs:
     timeout-minutes: 10
     services:
       postgres:
-        # PostgreSQL 18 + pgvector 0.8.6, pinned by multi-platform digest.
-        image: pgvector/pgvector:0.8.6-pg18@sha256:2ba9ca5f2e7daa0f0e7723cba1ee9167bab54efd3640516a44ac1a928dd67e7a
+        # PostgreSQL 18 + pgvector 0.8.7, pinned by multi-platform digest.
+        image: pgvector/pgvector:0.8.7-pg18@sha256:2358fcba361ed2233a5ed81b5fe4ca779ccb304120ce531a3bf51c0ed7e2bc11
         env:
           POSTGRES_USER: covel
           POSTGRES_PASSWORD: covel_ci
@@ -282,7 +282,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version-file: package.json
+          node-version: "26.10.0"
           cache: pnpm
 
       - name: Install dependencies
@@ -309,7 +309,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version-file: package.json
+          node-version: "26.10.0"
           cache: pnpm
 
       - name: Install dependencies

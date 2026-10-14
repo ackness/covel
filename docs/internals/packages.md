@@ -55,7 +55,7 @@ Covel 是模块化单体：一个仓库、一起发布，内部分成若干包�
 - 不要因为一个包体量小或只在开发时用，就把它并进 `runtime`。
 - 也不要为了“看起来通用”而增加只做转发的包。
 
-**依赖方向。** `plugin-handlers-utils` 是依赖图的根，不依赖任何工作区包。`shared` 紧挨在它上面。`@covel/server` 组合所有功能包。精确的依赖边写在各包的 `package.json` 里，`pnpm check:boundaries` 检查公开入口和依赖方向。
+**依赖方向。** `plugin-handlers-utils` 是依赖图的根，不依赖任何工作区包。`shared` 紧挨在它上面。`@covel/server` 组合所有功能包。精确的依赖边写在各包的 `package.json` 里，`pnpm check:boundaries` 检查公开入口和依赖方向。 SQLite 向量扩展 `sqlite-vec` 由 `store` 直接声明，根包不重复提供。
 
 ## 宿主组合的关键边界
 
