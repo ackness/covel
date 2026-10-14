@@ -2,7 +2,7 @@
  * Effects read/write-set derivation and same-layer hazard policy (01 §7).
  *
  * A runtime's read/write sets are derived from its declared surfaces — builtin
- * tools, `events` topics, `dataSchemas` namespaces, `outputKind`, `ui` — and
+ * tools, `dataSchemas` namespaces, `outputKind` — and
  * optionally supplemented by an explicit `effects` declaration. Two runtimes
  * scheduled in the SAME level (parallel group) are checked pairwise: a
  * read/write conflict with no ordering edge between them is a hazard. The
@@ -96,29 +96,15 @@ export function deriveEffects(manifest: RuntimeManifest): RuntimeEffects {
     for (const k of pluginDataKeys) reads.add(k);
   }
 
-  // emit-event: one write key per declared topic; no declared topics → the
-  // conservative `event:*` wildcard.
-  if (builtinTools.includes("emit-event")) {
-    const topics = (manifest.events ?? []).map((e) => e.topic);
-    if (topics.length > 0) {
-      for (const topic of topics)
-        writes.add(`event:${topic}` as EffectResource);
-    } else {
-      writes.add("event:*" as EffectResource);
-    }
-  }
+  // emit-event: the tool can emit any topic the package declares, so it
+  // writes the conservative `event:*` wildcard; `effects.writes` may add the
+  // exact topics.
+  if (builtinTools.includes("emit-event"))
+    writes.add("event:*" as EffectResource);
 
-  // outputKind: story runtimes write the narrative stream. Declared UI panels
-  // imply ui writes (conservative — better over-declared than a missed hazard).
+  // outputKind: story runtimes write the narrative stream. A package's UI
+  // panels are not a per-turn write; `render-ui` and friends above are.
   if (manifest.outputKind === "story") writes.add("narrative:*");
-  // One key per declared UI slot, not a blanket `ui:*`. Two plugins that
-  // render into different surfaces (a right-panel vs a message block) never
-  // collide, and reporting them as a hazard every turn buries the pairs that
-  // genuinely share a surface. `ui:*` still wildcard-matches these, so an
-  // explicit `effects.writes: ["ui:*"]` keeps its old meaning.
-  for (const slot of Object.keys(manifest.ui ?? {})) {
-    writes.add(`ui:${slot}` as EffectResource);
-  }
 
   // Explicit `effects` is UNIONed with the derivation (v1 rule): an author may
   // ADD or tighten reads+writes but can never REMOVE a derived resource, so a

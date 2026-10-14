@@ -9,10 +9,10 @@
  *   - `world-data.schema.json`                 (world data descriptor)
  *   - `world-dimensions.schema.json`           (external dimension files)
  *   - `runtime-cases.schema.json`              (offline/live runtime test cases)
- *   - `runtime-manifest.input.schema.json`     (compiled loader input)
- *   - `runtime-manifest.authoring.schema.json` (compiled strict target)
+ *   - `runtime-manifest.compiled.schema.json`  (compiled internal IR)
  *
- * The first six are what authors write. Their field descriptions come from
+ * The first six are what authors write. The last one documents the internal
+ * RuntimeManifest the loader compiles a runtime into; no author writes it. Their field descriptions come from
  * `.describe()` / `.meta()` on the Zod schemas, which makes those schemas the
  * single source for editor hints and for the generated reference pages under
  * `docs/reference/schema/`.
@@ -33,10 +33,7 @@
 import { writeFileSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { z } from "zod";
-import {
-  runtimeManifestInputSchema,
-  runtimeManifestAuthoringSchema,
-} from "../src/schemas/plugin.js";
+import { runtimeManifestInputSchema } from "../src/schemas/plugin.js";
 
 import { worldDimensionsSchema } from "../src/schemas/dimensions.js";
 import { pluginManifestSchema } from "../src/schemas/plugin-manifest.js";
@@ -78,23 +75,12 @@ interface ManifestSchemaDoc {
   readonly constraints: readonly string[];
 }
 
-const INPUT_DOC: ManifestSchemaDoc = {
-  id: "https://covel.local/schemas/runtime-manifest.input.schema.json",
-  title: "Covel runtime manifest (loader input)",
+const COMPILED_DOC: ManifestSchemaDoc = {
+  id: "https://covel.local/schemas/runtime-manifest.compiled.schema.json",
+  title: "Covel compiled runtime manifest (internal, not an authoring format)",
   summary:
-    "What the plugin loader accepts — the field set that decides whether a PLUGIN.md parses at all. Same fields as the authoring schema, with fewer cross-field constraints enforced.",
+    "The internal RuntimeManifest the plugin loader compiles each RUNTIME.md or inline runtime into. Authors write runtime-manifest.schema.json instead; this file documents the compiled form for host and tool code.",
   constraints: SHARED_UNREPRESENTABLE_CONSTRAINTS,
-};
-
-const AUTHORING_DOC: ManifestSchemaDoc = {
-  id: "https://covel.local/schemas/runtime-manifest.authoring.schema.json",
-  title: "Covel runtime manifest (strict authoring)",
-  summary:
-    "Strict target for newly authored plugins. Enforces every cross-field constraint, including a required stage on auto / scheduled runtimes.",
-  constraints: [
-    ...SHARED_UNREPRESENTABLE_CONSTRAINTS,
-    "auto / scheduled runtimes must declare a stage.",
-  ],
 };
 
 function toDocumentedJsonSchema(
@@ -194,7 +180,7 @@ const AUTHOR_SCHEMAS = {
 >;
 
 export type AuthorSchemaName = keyof typeof AUTHOR_SCHEMAS;
-export type SchemaArtifactName = AuthorSchemaName | "input" | "authoring";
+export type SchemaArtifactName = AuthorSchemaName | "compiled";
 
 export const AUTHOR_SCHEMA_NAMES = Object.keys(
   AUTHOR_SCHEMAS,
@@ -226,19 +212,15 @@ export function buildManifestJsonSchemas(): Record<
     world: toAuthorJsonSchema("world"),
     worldData: toAuthorJsonSchema("worldData"),
     worldDimensions: toAuthorJsonSchema("worldDimensions"),
-    input: toDocumentedJsonSchema(runtimeManifestInputSchema, INPUT_DOC),
-    authoring: toDocumentedJsonSchema(
-      runtimeManifestAuthoringSchema,
-      AUTHORING_DOC,
-    ),
+    compiled: toDocumentedJsonSchema(runtimeManifestInputSchema, COMPILED_DOC),
   };
 }
 
 /** Path of a committed schema artifact, relative to this script. */
 export function schemaOutputPath(name: SchemaArtifactName): string {
   const file =
-    name === "input" || name === "authoring"
-      ? `runtime-manifest.${name}.schema.json`
+    name === "compiled"
+      ? "runtime-manifest.compiled.schema.json"
       : AUTHOR_SCHEMAS[name].file;
   return fileURLToPath(new URL(`../schemas/${file}`, import.meta.url));
 }

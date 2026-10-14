@@ -294,7 +294,6 @@ const pluginRuntimeSummarySchema: z.ZodType<PluginRuntimeSummary> = z
     model: z.string().optional(),
     outputKind: z.enum(["story", "plugin", "system"]),
     outputContract: z.string().optional(),
-    tags: z.array(z.string()),
   })
   .strict();
 

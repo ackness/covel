@@ -11,7 +11,7 @@ import {
   PROMPT_CACHE_BREAKPOINT_MARKER,
   splitPromptCacheSegments,
 } from "@covel/shared";
-import type { RuntimeManifest, RuntimeResult, TurnInput } from "@covel/shared";
+import type { RuntimeManifest, TurnInput } from "@covel/shared";
 
 // ── Helpers ─────────────────────────────────────────────────────
 
@@ -21,21 +21,6 @@ function makeManifest(overrides?: Partial<RuntimeManifest>): RuntimeManifest {
     pluginId: "test-plugin",
     description: "test",
     stage: "narrative",
-    ...overrides,
-  };
-}
-
-function makeRuntimeResult(overrides?: Partial<RuntimeResult>): RuntimeResult {
-  return {
-    pluginId: "test-plugin",
-    runtimeId: "test-rt",
-    runId: "run-1",
-    turnId: "turn-1",
-    status: "success",
-    output: {},
-    toolCalls: [],
-    durationMs: 10,
-    timestamp: new Date().toISOString(),
     ...overrides,
   };
 }
@@ -157,26 +142,17 @@ describe("prompt-assembler", () => {
   it("places this turn's data ahead of the current turn and keeps it out of the system prompt", () => {
     const params = baselineParams({
       promptTemplate: "You are a downstream runtime.",
-      manifest: makeManifest({
-        input: {
-          inject: [
-            {
-              kind: "runtime",
-              from: "upstream/rt",
-              field: "narrativeOutput",
-              as: "<upstream-output>",
-            },
-          ],
+      inputSlots: {
+        upstream: {
+          cardinality: "one",
+          value: "the upstream story",
+          source: {
+            pluginId: "upstream",
+            runtimeId: "upstream/rt",
+            resultId: "r1",
+          },
         },
-      }),
-      completedResults: new Map([
-        [
-          "upstream/rt",
-          makeRuntimeResult({
-            output: { narrativeOutput: "the upstream story" },
-          }),
-        ],
-      ]),
+      },
     });
 
     const result = buildSegmentedContext(params);
@@ -184,14 +160,14 @@ describe("prompt-assembler", () => {
     // A system prompt that carries this turn's data differs every turn, and
     // a provider cache stops at the first byte that differs.
     expect(result.systemPrompt).toContain("You are a downstream runtime.");
-    expect(result.systemPrompt).not.toContain("<upstream-output>");
+    expect(result.systemPrompt).not.toContain("<runtime-inputs>");
 
-    const block = "<upstream-output>the upstream story</upstream-output>";
+    const block = result.turnContext;
+    expect(block).toMatch(/^<runtime-inputs>[\s\S]*the upstream story/);
     expect(result.messages).toEqual([
       { role: "system", content: block },
       { role: "user", content: "I step forward" },
     ]);
-    expect(result.turnContext).toBe(block);
   });
 
   it("omits empty segments without leaving double blank lines in the output", () => {

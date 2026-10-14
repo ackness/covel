@@ -156,18 +156,6 @@ function fixture() {
             pluginId: id,
             description: "private-description",
             stage: "post-turn",
-            commands: [
-              {
-                name: "inspect",
-                description: "Inspect",
-                action: "inspect-action",
-              },
-              {
-                name: "missing",
-                description: "Missing",
-                action: "missing-action",
-              },
-            ],
           },
           promptTemplate: "private-prompt",
           rawFrontmatter: { secret: "private-frontmatter" },

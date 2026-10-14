@@ -279,8 +279,6 @@ export {
   toolsConfigSchema,
   hookDeclarationSchema,
   runtimeManifestInputSchema,
-  runtimeManifestAuthoringSchema,
-  authoringTriggerConfigSchema,
   stageSchema,
   turnCompletionConfigSchema,
   MAX_SETTLE_WAIT_MS,

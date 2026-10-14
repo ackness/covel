@@ -4,31 +4,27 @@ import type { ValidateFunction } from "ajv";
 import { describe, expect, it } from "vitest";
 import {
   runtimeManifestInputSchema,
-  runtimeManifestAuthoringSchema,
+  worldProjectionMapSchema,
 } from "../src/schemas/plugin.js";
+import { runtimeAuthoringManifestSchema } from "../src/schemas/runtime-manifest.js";
 import {
   AUTHOR_SCHEMA_NAMES,
   buildManifestJsonSchemas,
   schemaOutputPath,
 } from "../scripts/generate-json-schemas.js";
 
-// ── Ajv compiled from the committed JSON Schema artifacts ────────────
-// Fixtures are asserted against BOTH the Zod schema and the generated JSON
-// Schema so the two stay in lockstep. Cross-field superRefine constraints and
-// array uniqueness cannot cross into JSON Schema, so those fixtures are marked
+// ── Ajv compiled from the committed JSON Schema artifact ─────────────
+// The compiled RuntimeManifest is the loader's internal form. Fixtures are
+// asserted against BOTH the Zod schema and the generated JSON Schema so the
+// two stay in lockstep. Cross-field superRefine constraints and array
+// uniqueness cannot cross into JSON Schema, so those fixtures are marked
 // `zodOnly` and only asserted against Zod (the JSON Schema accepts them).
 
 const ajv = new Ajv({ allErrors: true, strict: false });
 
-function compileCommitted(name: "input" | "authoring"): ValidateFunction {
-  const schema = JSON.parse(readFileSync(schemaOutputPath(name), "utf8"));
-  return ajv.compile(schema);
-}
-
-const validators = {
-  input: compileCommitted("input"),
-  authoring: compileCommitted("authoring"),
-};
+const compiledValidator: ValidateFunction = ajv.compile(
+  JSON.parse(readFileSync(schemaOutputPath("compiled"), "utf8")),
+);
 
 const base = { name: "sample-runtime", description: "A sample runtime." };
 
@@ -39,27 +35,18 @@ interface Fixture {
   readonly zodOnly?: boolean;
 }
 
-function assertAccepted(
-  target: "input" | "authoring",
-  { manifest }: Fixture,
-): void {
-  const zodSchema =
-    target === "input"
-      ? runtimeManifestInputSchema
-      : runtimeManifestAuthoringSchema;
-  expect(zodSchema.safeParse(manifest).success).toBe(true);
-  expect(validators[target](manifest)).toBe(true);
+function assertAccepted({ manifest }: Fixture): void {
+  expect(runtimeManifestInputSchema.safeParse(manifest).success).toBe(true);
+  expect(compiledValidator(manifest)).toBe(true);
 }
 
-function assertRejected(target: "input" | "authoring", fixture: Fixture): void {
-  const zodSchema =
-    target === "input"
-      ? runtimeManifestInputSchema
-      : runtimeManifestAuthoringSchema;
-  expect(zodSchema.safeParse(fixture.manifest).success).toBe(false);
+function assertRejected(fixture: Fixture): void {
+  expect(runtimeManifestInputSchema.safeParse(fixture.manifest).success).toBe(
+    false,
+  );
   if (!fixture.zodOnly) {
     // Structural rejection — the generated JSON Schema must agree.
-    expect(validators[target](fixture.manifest)).toBe(false);
+    expect(compiledValidator(fixture.manifest)).toBe(false);
   }
 }
 
@@ -101,9 +88,9 @@ const newShapeFields = {
   },
 } as const;
 
-// ── Compat (input) positives — current shipping shapes ──────────────
+// ── Positives — shapes the compiler produces ────────────────────────
 
-const compatCurrentPositives: readonly Fixture[] = [
+const compiledPositives: readonly Fixture[] = [
   {
     name: "required tool choice for explicit completion",
     manifest: {
@@ -164,8 +151,8 @@ const compatCurrentPositives: readonly Fixture[] = [
   },
 ];
 
-const compatNewPositive: Fixture = {
-  name: "full new-shape manifest (compat superset)",
+const fullPositive: Fixture = {
+  name: "every scheduling, io and policy field",
   manifest: {
     ...base,
     trigger: { type: "scheduled", interval: 1 },
@@ -173,21 +160,9 @@ const compatNewPositive: Fixture = {
   },
 };
 
-// ── Authoring positive — pure new shape ─────────────────────────────
-
-const authoringPositive: Fixture = {
-  name: "pure new-shape manifest (strict authoring)",
-  manifest: {
-    ...base,
-    trigger: { type: "scheduled", interval: 1 },
-    ...newShapeFields,
-  },
-};
-
-// The bundled plugins declare `description` as an I18nText map (preferred);
-// the schema must accept it so editor tooling doesn't flag every manifest.
-// The loader still folds it to a single string after parse.
-const authoringI18nDescriptionPositive: Fixture = {
+// The compiler parses the description as written (a locale map from an
+// older locale file is accepted) and folds it to a string after parse.
+const i18nDescriptionPositive: Fixture = {
   name: "I18nText description map",
   manifest: {
     ...base,
@@ -197,6 +172,7 @@ const authoringI18nDescriptionPositive: Fixture = {
   },
 };
 
+// World projections are a package field (`contributes.worldProjections`).
 const emptyWorldProjectionRejections: readonly Fixture[] = [
   {
     name: "empty worldProjections map",
@@ -255,9 +231,9 @@ const caseInsensitiveProjectionPositive: Fixture = {
   },
 };
 
-// ── Authoring rejections ────────────────────────────────────────────
+// ── Rejections ──────────────────────────────────────────────────────
 
-const authoringStructuralRejections: readonly Fixture[] = [
+const structuralRejections: readonly Fixture[] = [
   {
     name: "priority (unknown field)",
     manifest: { ...base, stage: "narrative", priority: 500 },
@@ -308,7 +284,17 @@ const authoringStructuralRejections: readonly Fixture[] = [
   },
 ];
 
-const authoringCrossFieldRejections: readonly Fixture[] = [
+const crossFieldRejections: readonly Fixture[] = [
+  {
+    name: "empty i18n description map",
+    zodOnly: true,
+    manifest: {
+      ...base,
+      description: {},
+      stage: "post-turn",
+      trigger: { type: "auto" },
+    },
+  },
   {
     name: "function runtime without handler",
     zodOnly: true,
@@ -342,11 +328,6 @@ const authoringCrossFieldRejections: readonly Fixture[] = [
       stage: "setup",
       trigger: { type: "auto", interval: 2 },
     },
-  },
-  {
-    name: "auto trigger without stage",
-    zodOnly: true,
-    manifest: { ...base, trigger: { type: "auto" } },
   },
   {
     name: "output.recordAs without output.schema",
@@ -397,9 +378,9 @@ const authoringCrossFieldRejections: readonly Fixture[] = [
   },
 ];
 
-// ── Compat (input) malformed rejections ─────────────────────────────
+// ── Malformed rejections ────────────────────────────────────────────
 
-const compatMalformedRejections: readonly Fixture[] = [
+const malformedRejections: readonly Fixture[] = [
   {
     name: "function runtime without handler",
     zodOnly: true,
@@ -502,8 +483,6 @@ const compatMalformedRejections: readonly Fixture[] = [
     },
   },
   {
-    // Step 6: reserved triggers are now rejected by the compat input schema too
-    // (the enum narrowed to the four production types).
     name: "reserved conditional trigger (rejected)",
     manifest: { ...base, stage: "narrative", trigger: { type: "conditional" } },
   },
@@ -515,77 +494,92 @@ const compatMalformedRejections: readonly Fixture[] = [
 
 // ── Tests ───────────────────────────────────────────────────────────
 
-describe("runtimeManifestInputSchema (compat superset)", () => {
-  for (const fixture of compatCurrentPositives) {
-    it(`accepts current shape: ${fixture.name}`, () => {
-      assertAccepted("input", fixture);
+describe("runtimeManifestInputSchema (compiled RuntimeManifest)", () => {
+  for (const fixture of [
+    ...compiledPositives,
+    fullPositive,
+    i18nDescriptionPositive,
+  ])
+    it(`accepts: ${fixture.name}`, () => {
+      assertAccepted(fixture);
     });
-  }
 
-  it(`accepts ${compatNewPositive.name}`, () => {
-    assertAccepted("input", compatNewPositive);
-  });
-
-  it(`accepts ${caseInsensitiveProjectionPositive.name}`, () => {
-    assertAccepted("input", caseInsensitiveProjectionPositive);
-  });
-
-  for (const fixture of emptyWorldProjectionRejections) {
-    it(`rejects projection cardinality: ${fixture.name}`, () => {
-      assertRejected("input", fixture);
+  for (const fixture of [...structuralRejections, ...malformedRejections])
+    it(`rejects: ${fixture.name}`, () => {
+      assertRejected(fixture);
     });
-  }
 
-  for (const fixture of compatMalformedRejections) {
-    it(`rejects malformed: ${fixture.name}`, () => {
-      assertRejected("input", fixture);
+  for (const fixture of crossFieldRejections)
+    it(`rejects (Zod cross-field only): ${fixture.name}`, () => {
+      assertRejected(fixture);
     });
-  }
-});
 
-describe("runtimeManifestAuthoringSchema (strict authoring)", () => {
-  it(`accepts ${authoringPositive.name}`, () => {
-    assertAccepted("authoring", authoringPositive);
+  // Package-level fields live on the package declaration only; a compiled
+  // runtime that carried them would always hold an empty copy.
+  it.each([
+    ["events", [{ topic: "scene.set", schema: "./e.json", description: "x" }]],
+    ["ui", { right: ["./ui/panel.json"] }],
+    ["tags", ["mode:dialogue"]],
+    ["entry", "./server/index.js"],
+    ["extensions", []],
+    ["commands", []],
+    ["displayName", "Sample"],
+    ["worldProjections", {}],
+    ["i18n", { zh: "x" }],
+  ])("rejects the package-level field %s", (field, value) => {
+    assertRejected({
+      name: field,
+      manifest: { ...base, stage: "post-turn", [field]: value },
+    });
   });
 
-  it(`accepts ${authoringI18nDescriptionPositive.name}`, () => {
-    assertAccepted("authoring", authoringI18nDescriptionPositive);
-  });
-
-  it(`accepts ${caseInsensitiveProjectionPositive.name}`, () => {
-    assertAccepted("authoring", caseInsensitiveProjectionPositive);
-  });
-
-  it("rejects an empty i18n description map (Zod refine only)", () => {
-    assertRejected("authoring", {
-      name: "empty i18n description map",
-      zodOnly: true,
+  it("rejects the in-code inject kind runtime", () => {
+    assertRejected({
+      name: "inject kind runtime",
       manifest: {
         ...base,
-        description: {},
         stage: "post-turn",
-        trigger: { type: "auto" },
+        input: {
+          inject: [
+            { kind: "runtime", from: "narrator", field: "x", as: "<x>" },
+          ],
+        },
       },
     });
   });
 
-  for (const fixture of emptyWorldProjectionRejections) {
-    it(`rejects projection cardinality: ${fixture.name}`, () => {
-      assertRejected("authoring", fixture);
-    });
-  }
+  it("is not the authoring format", () => {
+    const authored = {
+      description: "A sample runtime.",
+      type: "agent",
+      schedule: { stage: "post-turn" },
+    };
+    expect(runtimeAuthoringManifestSchema.safeParse(authored).success).toBe(
+      true,
+    );
+    expect(compiledValidator({ name: "sample", ...authored })).toBe(false);
+    expect(buildManifestJsonSchemas().compiled.title).toMatch(
+      /not an authoring format/,
+    );
+  });
+});
 
-  for (const fixture of authoringStructuralRejections) {
-    it(`rejects (structural, JSON Schema agrees): ${fixture.name}`, () => {
-      assertRejected("authoring", fixture);
-    });
-  }
+describe("worldProjectionMapSchema", () => {
+  it(`accepts ${caseInsensitiveProjectionPositive.name}`, () => {
+    expect(
+      worldProjectionMapSchema.safeParse(
+        caseInsensitiveProjectionPositive.manifest.worldProjections,
+      ).success,
+    ).toBe(true);
+  });
 
-  for (const fixture of authoringCrossFieldRejections) {
-    it(`rejects (Zod cross-field only): ${fixture.name}`, () => {
-      assertRejected("authoring", fixture);
+  for (const fixture of emptyWorldProjectionRejections)
+    it(`rejects: ${fixture.name}`, () => {
+      expect(
+        worldProjectionMapSchema.safeParse(fixture.manifest.worldProjections)
+          .success,
+      ).toBe(false);
     });
-  }
 });
 
 type JsonNode = Record<string, unknown>;
@@ -650,10 +644,9 @@ describe("generated JSON Schema artifacts", () => {
     });
   }
 
-  it("both artifacts compile under Ajv v8 (draft-7)", () => {
-    // compileCommitted throws on an invalid schema; reaching here is the assert.
-    expect(typeof validators.input).toBe("function");
-    expect(typeof validators.authoring).toBe("function");
+  it("the compiled artifact compiles under Ajv v8 (draft-7)", () => {
+    // ajv.compile throws on an invalid schema; reaching here is the assert.
+    expect(typeof compiledValidator).toBe("function");
   });
 });
 

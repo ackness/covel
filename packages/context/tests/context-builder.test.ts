@@ -1,11 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { interpolateTemplate, buildInjectBlocks } from "@covel/context";
+import { interpolateTemplate } from "@covel/context";
 import { buildContextSync as buildContext } from "../src/context-builder.js";
 import type { ContextBuildParams, MessageHistoryRecord } from "@covel/context";
 import {
   PROMPT_CACHE_BREAKPOINT_MARKER,
   type RuntimeManifest,
-  type RuntimeResult,
   type TurnInput,
 } from "@covel/shared";
 
@@ -17,21 +16,6 @@ function makeManifest(overrides?: Partial<RuntimeManifest>): RuntimeManifest {
     pluginId: "test-plugin",
     description: "test",
     stage: "narrative",
-    ...overrides,
-  };
-}
-
-function makeRuntimeResult(overrides?: Partial<RuntimeResult>): RuntimeResult {
-  return {
-    pluginId: "test-plugin",
-    runtimeId: "test-rt",
-    runId: "run-1",
-    turnId: "turn-1",
-    status: "success",
-    output: {},
-    toolCalls: [],
-    durationMs: 100,
-    timestamp: new Date().toISOString(),
     ...overrides,
   };
 }
@@ -124,188 +108,38 @@ describe("interpolateTemplate", () => {
   });
 });
 
-// ── buildInjectBlocks ───────────────────────────────────────────
-
-describe("buildInjectBlocks", () => {
-  it("should build a single inject block", () => {
-    const params: ContextBuildParams = {
-      promptTemplate: "",
-      manifest: makeManifest({
-        input: {
-          inject: [
-            {
-              kind: "runtime",
-              from: "narrator/main",
-              field: "narrativeOutput",
-              as: "<narrator-output>",
-            },
-          ],
-        },
-      }),
-      turnInput: makeTurnInput(),
-      completedResults: new Map([
-        [
-          "narrator/main",
-          makeRuntimeResult({ output: { narrativeOutput: "the story" } }),
-        ],
-      ]),
-    };
-
-    const result = buildInjectBlocks(params);
-    expect(result).toBe("<narrator-output>the story</narrator-output>");
-  });
-
-  it("should build multiple inject blocks", () => {
-    const params: ContextBuildParams = {
-      promptTemplate: "",
-      manifest: makeManifest({
-        input: {
-          inject: [
-            {
-              kind: "runtime",
-              from: "narrator/main",
-              field: "narrativeOutput",
-              as: "<narrator-output>",
-            },
-            {
-              kind: "runtime",
-              from: "combat/engine",
-              field: "combatLog",
-              as: "<combat-log>",
-            },
-          ],
-        },
-      }),
-      turnInput: makeTurnInput(),
-      completedResults: new Map([
-        [
-          "narrator/main",
-          makeRuntimeResult({ output: { narrativeOutput: "the story" } }),
-        ],
-        [
-          "combat/engine",
-          makeRuntimeResult({ output: { combatLog: "hit for 10 damage" } }),
-        ],
-      ]),
-    };
-
-    const result = buildInjectBlocks(params);
-    expect(result).toBe(
-      "<narrator-output>the story</narrator-output>\n<combat-log>hit for 10 damage</combat-log>",
-    );
-  });
-
-  it("serializes structured runtime injects as JSON", () => {
-    const params: ContextBuildParams = {
-      promptTemplate: "",
-      manifest: makeManifest({
-        input: {
-          inject: [
-            {
-              kind: "runtime",
-              from: "world-init/schema-gen",
-              field: "worldSchema",
-              as: "<same-turn-world-schema>",
-            },
-          ],
-        },
-      }),
-      turnInput: makeTurnInput(),
-      completedResults: new Map([
-        [
-          "world-init/schema-gen",
-          makeRuntimeResult({
-            output: {
-              worldSchema: {
-                "character-attributes": {
-                  version: 1,
-                  attributes: [{ id: "club", type: "string" }],
-                },
-              },
-            },
-          }),
-        ],
-      ]),
-    };
-
-    const result = buildInjectBlocks(params);
-    expect(result).toContain('<same-turn-world-schema>{"character-attributes"');
-    expect(result).toContain('"id":"club"');
-    expect(result).toContain("</same-turn-world-schema>");
-    expect(result).not.toContain("[object Object]");
-  });
-
-  it("should return empty string when inject references a missing result", () => {
-    const params: ContextBuildParams = {
-      promptTemplate: "",
-      manifest: makeManifest({
-        input: {
-          inject: [
-            {
-              kind: "runtime",
-              from: "missing/runtime",
-              field: "data",
-              as: "<missing>",
-            },
-          ],
-        },
-      }),
-      turnInput: makeTurnInput(),
-      completedResults: new Map(),
-    };
-
-    expect(buildInjectBlocks(params)).toBe("");
-  });
-
-  it("should return empty string when manifest has no injects", () => {
-    const params: ContextBuildParams = {
-      promptTemplate: "",
-      manifest: makeManifest(),
-      turnInput: makeTurnInput(),
-      completedResults: new Map(),
-    };
-
-    expect(buildInjectBlocks(params)).toBe("");
-  });
-});
-
 // ── buildContext ─────────────────────────────────────────────────
 
 describe("buildContext", () => {
-  it("should assemble full context with inject and interpolation", () => {
+  it("should assemble full context with inputs and interpolation", () => {
     const params: ContextBuildParams = {
       promptTemplate: "You are a narrator.\n{{ player.message }}\n",
-      manifest: makeManifest({
-        input: {
-          inject: [
-            {
-              kind: "runtime",
-              from: "narrator/main",
-              field: "narrativeOutput",
-              as: "<narrator-output>",
-            },
-          ],
-        },
-      }),
+      manifest: makeManifest(),
       turnInput: makeTurnInput({ playerMessage: "I open the door" }),
-      completedResults: new Map([
-        [
-          "narrator/main",
-          makeRuntimeResult({ output: { narrativeOutput: "the story" } }),
-        ],
-      ]),
+      completedResults: new Map(),
+      inputSlots: {
+        upstream: {
+          cardinality: "one",
+          value: "the story",
+          source: {
+            pluginId: "upstream",
+            runtimeId: "upstream/rt",
+            resultId: "r1",
+          },
+        },
+      },
     };
 
     const ctx = buildContext(params);
 
     expect(ctx.systemPrompt).toContain("I open the door");
-    // The inject is data of this turn: it leaves the system prompt and
+    // The input is data of this turn: it leaves the system prompt and
     // stands ahead of the current turn.
-    expect(ctx.systemPrompt).not.toContain("<narrator-output>");
+    expect(ctx.systemPrompt).not.toContain("<runtime-inputs>");
     expect(ctx.messages).toEqual([
       {
         role: "system",
-        content: "<narrator-output>the story</narrator-output>",
+        content: expect.stringMatching(/^<runtime-inputs>[\s\S]*the story/),
       },
       { role: "user", content: "I open the door" },
     ]);

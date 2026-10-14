@@ -87,7 +87,7 @@ describe("package declarations", () => {
     expect(effective.userSettings).toEqual([setting]);
     expect(effective.dataSchemas).toEqual(root.manifest.dataSchemas);
     expect(effective.outputContract).toBe("compute@1");
-    expect(effective.ui).toBeUndefined();
+    expect(Object.keys(effective)).not.toContain("ui");
     expect(pluginDeclarations(record)).toEqual([root]);
   });
   it("publishes one package contribution set for multiple runtimes", async () => {
