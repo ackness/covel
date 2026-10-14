@@ -198,14 +198,7 @@
     "pluginsSelected": "plugins selected",
     "searchPlugins": "Search plugins, tags, capabilities",
     "pluginGroups": {
-      "core": "Core",
-      "setup": "Setup",
-      "traditional": "Traditional story",
-      "dialogue": "Dialogue mode",
-      "characters": "Characters",
-      "memory": "Memory & retrieval",
-      "guidance": "Guidance",
-      "utility": "Utility"
+      "untagged": "Untagged"
     },
     "recommendationReasons": {
       "requiredByWorld": "Required by world",
@@ -1540,8 +1533,9 @@
     "triggerInterval": "Interval",
     "triggerManual": "Manual",
     "triggerEvent": "Event",
-    "locked": "Core plugin — cannot be disabled",
-    "core": "core",
+    "locked": "This plugin is locked",
+    "defaultEnabled": "Enabled by default",
+    "defaultEnabledHint": "Enabled by default; you can disable it",
     "enable": "Enable plugin",
     "disable": "Disable plugin",
     "emptyPlaceholder": "{{label}} has no data yet. Waiting for the story to progress…",
@@ -1611,8 +1605,8 @@
     },
     "source": {
       "builtin": {
-        "label": "Core",
-        "tooltip": "Builtin core plugin shipped with Covel"
+        "label": "Builtin",
+        "tooltip": "Plugin shipped with Covel"
       },
       "official": {
         "label": "Official",

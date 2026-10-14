@@ -102,7 +102,7 @@ Extract facts supported by runtime-inputs.narrative.value, then call save-facts.
 | 根字段                                          | 含义                                                                                                        |
 | ----------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
 | `id`, `kind`                                    | 包身份；`kind` 为 `core` 或 `plugin`                                                                        |
-| `version`, `displayName`, `description`, `tags` | 元数据；`role:*` 标签不驱动任何业务                                                                         |
+| `version`, `displayName`, `description`, `tags` | 元数据；标签用于准备页的分组和筛选，不决定运行时调度                                                                         |
 | `covel`                                         | 适配的宿主版本范围，如 `">=0.0.45"`；范围之外的宿主不安装也不加载该包                                       |
 | `author`, `license`, `homepage`                 | 作者信息，只用于展示；见[作者信息](#作者信息)                                                               |
 | `provides`                                      | 版本化契约字符串，或 `{contract, default: true}`                                                            |
@@ -121,6 +121,8 @@ Extract facts supported by runtime-inputs.narrative.value, then call save-facts.
 - 不同的包可以提供同一个契约。消费者用 `cardinality: one` 或 `all` 说明要一个还是全部。
 - 只允许一个提供者的扩展点，以及显式写出的 `conflicts`，另外做互斥检查。
 - `conflicts` 只能写插件契约。写内核扩展点或 UI 槽位会得到 `invalid-conflict`，并指出 `conflicts` 字段的位置。内核扩展点怎样组合由它的 mode 决定。
+
+准备页按插件声明的第一个标签分组，组名直接显示标签原文；没有标签的插件放入“无标签”。每个插件只出现一次，后续标签仍可用于筛选。`kind: core` 的徽章显示“默认启用”，不表示锁定；会话列表的“内置”只表示来源。
 
 ### contributes 字段
 
