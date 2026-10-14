@@ -200,6 +200,9 @@ These are committed or rolled back together in the same `finalizeExecution` tran
 
 Details to remember:
 
+- Background work started while the lock is held, such as a job worker that was woken, does not inherit the lock. It queues for the lock itself and is never taken for its owner.
+- When several locks are needed at once (for example, deleting a session locks all its runtimes), the lock implementation sorts the keys and takes them in that order, so callers cannot deadlock each other whatever order they pass.
+- A plugin action's handler runs inside the session lock and has 30 seconds. Past that the action fails and the lock is released. Store calls the handler makes afterwards are refused; store calls already in progress finish before the lock is released. Data written before the limit is kept.
 - A few writes happen outside this transaction. None of them switches `phase`:
   - The attempt count of a setup runtime. It updates the count in `setupRuntimes` after the transaction. A rolled-back attempt still uses up a try.
   - Setup runtimes caught in a `needs(scope: session)` cycle. The executor marks them `blocked` before anything runs.
@@ -409,6 +412,7 @@ The waiting process:
 2. After they get the lock, they check again. This avoids missing a job that was queued between the check and the lock.
 3. When the worker commits, it always uses the original session lock and does not enter its own waiting barrier.
 4. If the earliest waiting deadline passes and the work is still not done, the kernel records `execution.settle-timeout` and then lets the new execution continue.
+5. Jobs the worker cannot start right now are not waited for. For example, when no usable credentials exist for the model a job needs (neither those the request handed over nor the server's own), the job stays queued, and so do the later jobs of the same runtime. The new execution does not wait for them; it records one `execution.settle-skipped` that lists them.
 
 > [!IMPORTANT]
 > A settle timeout does not mean the background task succeeded, and it does not mean the task was cancelled. While the new execution holds the session lock, background tasks that have already finished are committed after it. This waiting time does not count toward `maxExecutionMs`.

@@ -81,9 +81,9 @@ function createTestApp(
   activatePluginServerCode: (
     pluginId: string,
   ) => Promise<void> = async () => {},
+  sessionLock = createInProcessSessionLock(),
 ): Hono {
   const app = new Hono();
-  const sessionLock = createInProcessSessionLock();
   app.use("*", async (c, next) => {
     c.set("store", store);
     c.set("pluginRegistry", registry);
@@ -399,6 +399,43 @@ describe("Session plugin routes (real sessionRoutes)", () => {
         "narrator",
         "optional-plugin",
       ]);
+    });
+
+    it("answers while a turn holds the session lock", async () => {
+      const sessionLock = createInProcessSessionLock();
+      const lockedApp = createTestApp(
+        registry,
+        store,
+        rpcApprovalGate,
+        undefined,
+        sessionLock,
+      );
+      let release!: () => void;
+      const held = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      let entered!: () => void;
+      const ownerEntered = new Promise<void>((resolve) => {
+        entered = resolve;
+      });
+      const turn = sessionLock.withLock(SESSION_ID, async () => {
+        entered();
+        await held;
+      });
+      await ownerEntered;
+      try {
+        const response = await Promise.race([
+          lockedApp.request(`/api/sessions/${SESSION_ID}/plugins`),
+          new Promise<"waited">((resolve) =>
+            setTimeout(() => resolve("waited"), 500),
+          ),
+        ]);
+        expect(response).not.toBe("waited");
+        expect((response as Response).status).toBe(200);
+      } finally {
+        release();
+        await turn;
+      }
     });
   });
 

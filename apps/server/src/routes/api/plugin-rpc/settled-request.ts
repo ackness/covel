@@ -32,6 +32,40 @@ export function requestJobServices(c: Context): RuntimeJobServices | undefined {
   };
 }
 
+/**
+ * Hand this request's provider credentials to the session's queued jobs. A job
+ * queued by a request whose credentials did not survive a restart runs only
+ * once a later request of the session's owner brings them. Returns how many
+ * jobs received them.
+ */
+export async function provideRequestJobCredentials(
+  c: Context,
+  sessionId: string,
+): Promise<number> {
+  const services = requestJobServices(c);
+  if (!services) return 0;
+  const session = await c.get("store").getSession(sessionId);
+  if (!session || checkSessionOwner(c, session)) return 0;
+  const incarnation = sessionIncarnationIdentity(session);
+  const queued = await listRuntimeJobs(c.get("store"), { sessionId });
+  let provided = 0;
+  for (const job of queued) {
+    if (job.status !== "queued") continue;
+    if (runtimeJobIncarnation(job.payload) !== incarnation) continue;
+    c.get("runtimeJobCredentials")?.register(
+      {
+        jobId: job.jobId,
+        sessionId,
+        expectedSessionIncarnation: incarnation,
+      },
+      services,
+      job.maxQueueMs,
+    );
+    provided += 1;
+  }
+  return provided;
+}
+
 /** Application entry only; worker commits and recovery use the raw lock. */
 export async function withSettledSessionLock<T>(
   c: Context,
@@ -40,25 +74,18 @@ export async function withSettledSessionLock<T>(
   waitBudget?: SettleWaitBudget,
 ): Promise<T> {
   const provideCredentials = async () => {
-    const services = requestJobServices(c);
-    if (!services) return;
-    const session = await c.get("store").getSession(sessionId);
-    if (!session || checkSessionOwner(c, session)) return;
-    const incarnation = sessionIncarnationIdentity(session);
-    const queued = await listRuntimeJobs(c.get("store"), { sessionId });
-    for (const job of queued) {
-      if (job.status !== "queued") continue;
-      if (runtimeJobIncarnation(job.payload) !== incarnation) continue;
-      c.get("runtimeJobCredentials")?.register(
-        {
-          jobId: job.jobId,
-          sessionId,
-          expectedSessionIncarnation: incarnation,
-        },
-        services,
-        job.maxQueueMs,
-      );
-    }
+    await provideRequestJobCredentials(c, sessionId);
+  };
+  const recordSettleTrace = async (type: string, payload: object) => {
+    await c.get("store").addTraceEvent({
+      id: crypto.randomUUID(),
+      sessionId,
+      traceId: crypto.randomUUID(),
+      turnId: "",
+      type,
+      payload,
+      createdAt: new Date().toISOString(),
+    });
   };
   // Non-settling jobs also need request-only credentials after a restart.
   await provideCredentials();
@@ -70,17 +97,13 @@ export async function withSettledSessionLock<T>(
       waitBudget,
       signal: c.get("requestWork")?.signal ?? c.req.raw.signal,
       provideCredentials,
-      onTimeout: async (info) => {
-        await c.get("store").addTraceEvent({
-          id: crypto.randomUUID(),
-          sessionId,
-          traceId: crypto.randomUUID(),
-          turnId: "",
-          type: "execution.settle-timeout",
-          payload: info,
-          createdAt: new Date().toISOString(),
-        });
-      },
+      onTimeout: (info) => recordSettleTrace("execution.settle-timeout", info),
+      // A job no usable model can serve is not waited for; say why in the trace.
+      onSkipped: (info) =>
+        recordSettleTrace("execution.settle-skipped", {
+          ...info,
+          reason: "not-runnable",
+        }),
     },
     fn,
   );
