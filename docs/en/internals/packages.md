@@ -130,7 +130,7 @@ For details, see [transactions](../reference/transactions.md) and [world data](.
 The prompt loader is also split by instance:
 
 - The shared templates use the default `loadPrompt`.
-- A plugin's own directory is injected through `createPromptLoader(root)`.
+- Another template directory is injected through `createPromptLoader(root)`, with the same lookup order as `loadPrompt`. Plugins do not use it: a plugin's templates use the loader of the same name in the SDK, which reads only the English and Simplified Chinese files.
 - The public entry of the package does not export the process-wide `setPromptsRoot`.
 - `buildContext` always returns a Promise. The caller does not need to decide in advance whether a synchronous or asynchronous path is used.
 

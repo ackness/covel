@@ -317,15 +317,15 @@ A plugin's code depends only on the public SDK `@covel/plugin-handlers-utils`. D
 
 Helpers you will often use:
 
-| Need                                          | Use                                                                                                               |
-| --------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| Dice rolls and other random numbers           | `ctx.random` (in a tool it is `context.random`; when generating IDs, pass it as the fourth argument of `shortId`) |
-| Get the current language of multilingual text | `resolveI18nText` / `resolveI18nDeep`                                                                             |
-| Estimate the token count of a piece of text   | `estimateTokens`                                                                                                  |
-| Sort your own text by relevance               | `rankTexts` / `searchTerms` / `searchExcerpt`. These do not call a model.                                         |
-| Sort IDs, keys and timestamps                 | `compareText`                                                                                                     |
-| Load your own prompt template                 | `createPromptLoader(root)` from `@covel/plugin-handlers-utils/prompts`                                            |
-| Validate forms and character fields           | The form tools and character field validation in the SDK                                                          |
+| Need                                          | Use                                                                                                                  |
+| --------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| Dice rolls and other random numbers           | `ctx.random` (in a tool it is `context.random`; when generating IDs, pass it as the fourth argument of `shortId`)    |
+| Get the current language of multilingual text | `resolveI18nText` / `resolveI18nDeep`                                                                                |
+| Estimate the token count of a piece of text   | `estimateTokens`                                                                                                     |
+| Sort your own text by relevance               | `rankTexts` / `searchTerms` / `searchExcerpt`. These do not call a model.                                            |
+| Sort IDs, keys and timestamps                 | `compareText`                                                                                                        |
+| Load your own prompt template                 | `createPromptLoader(root)` from `@covel/plugin-handlers-utils/prompts`; it reads only `<name>.md` and `<name>.zh.md` |
+| Validate forms and character fields           | The form tools and character field validation in the SDK                                                             |
 
 Two rules about repeatability:
 

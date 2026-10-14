@@ -484,6 +484,7 @@ This is an **optional explicit override**.
 - Not set: sessions in Simplified Chinese read the plugins' `*.zh.md` prompts and the framework's Chinese instructions. Sessions in other languages read the English versions.
 - `en`: all sessions read English.
 - `zh`: all sessions prefer the Chinese version. Plugins without a Chinese version still read English.
+- Instructions that plugin code writes (`pickLocaleText`, `instructionLocaleFor`, templates a plugin loads with `createPromptLoader`) follow it as well.
 - It only decides the language of the instructions. It does not change the language of the session content. Use it to compare the effect of two instruction languages, or to fix one language for a particular model.
 
 ### Testing
