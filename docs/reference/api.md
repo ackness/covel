@@ -1017,7 +1017,7 @@ setup runtime 反复失败、用完重试预算（`maxTriggerCount`）后进入 
 
 各端点接受什么、返回什么：
 
-- `POST /api/install/plugin`：接受根目录有 `PLUGIN.md` + `package.json` 的 `.zip`，或多 runtime 布局的 `.zip`。返回 `201 { ok, kind: "plugin", id, restartRequired: true }`。
+- `POST /api/install/plugin`：接受根目录有 `PLUGIN.md` + `package.json` 的 `.zip`，或多 runtime 布局的 `.zip`。返回 `201 { ok, kind: "plugin", id, restartRequired: true, hasServerCode }`。
 - `POST /api/install/world`：接受根目录有 `world.yaml` + `WORLD.md` 的 `.zip`。返回 `201 { ok, kind: "world", id, restartRequired: false }`。
 - `POST /api/install/plugin/github/preview`：返回固定的提交、摘要和签名预览。
 - `.../github/update/preview`：返回 `{ status: "current" }`、`{ status: "pinned" }`，或 `{ status: "available", ... }` 加预览。更新端点的完整契约见[插件安装](./plugin-installation.md#http-契约)和[世界安装](./world-installation.md)。
