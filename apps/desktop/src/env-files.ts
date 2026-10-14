@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 import {
-  normalizeProviderKeyMap,
+  parseProviderKeysEnv,
   providerKeyToId,
   toApiKeyEnvMap,
 } from "@covel/shared";
@@ -20,14 +20,11 @@ function loadEnvFiles(baseDir: string): Record<string, string> {
 
 /**
  * Read `~/.covel/keys.env` into a provider-id keyed record for the renderer.
- * Missing file is fine (fresh install). Legacy bare keys like `deepseek=...`
- * are folded into the same shape as `DEEPSEEK_API_KEY=...`.
+ * Only *_API_KEY entries are keys. Unrecognized lines are preserved on save.
  */
 export function loadKeysEnv(keysFile: string): Record<string, string> {
-  const result: Record<string, string> = {};
-  if (!fs.existsSync(keysFile)) return result;
-  parseEnvFileInto(keysFile, result);
-  return normalizeProviderKeyMap(result);
+  if (!fs.existsSync(keysFile)) return {};
+  return parseProviderKeysEnv(fs.readFileSync(keysFile, "utf-8")).keys;
 }
 
 /** Shell > .env.llm > .env. The sidecar loads saved keys separately. */
@@ -66,6 +63,9 @@ export function saveKeysEnv(
   keys: Record<string, string>,
 ): void {
   const envKeys = toApiKeyEnvMap(keys);
+  const unrecognized = fs.existsSync(keysFile)
+    ? parseProviderKeysEnv(fs.readFileSync(keysFile, "utf-8")).unrecognizedLines
+    : [];
   const body =
     `# Covel provider API keys. One KEY=VALUE per line.\n` +
     `# Example:\n#   DEEPSEEK_API_KEY=sk-xxx\n#   OPENAI_API_KEY=sk-xxx\n\n` +
@@ -85,7 +85,11 @@ export function saveKeysEnv(
   fs.mkdirSync(path.dirname(keysFile), { recursive: true });
   const temporaryFile = `${keysFile}.${process.pid}.${randomUUID()}.tmp`;
   try {
-    fs.writeFileSync(temporaryFile, body, { mode: 0o600, flag: "wx" });
+    fs.writeFileSync(
+      temporaryFile,
+      body + unrecognized.map((line) => `${line}\n`).join(""),
+      { mode: 0o600, flag: "wx" },
+    );
     // Set permissions before publishing: a failed write or chmod must leave
     // the existing keys intact, and rename is the last required operation.
     fs.chmodSync(temporaryFile, 0o600);

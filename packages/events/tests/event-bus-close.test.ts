@@ -100,6 +100,7 @@ describe("EventBus close", () => {
     receive(
       JSON.stringify({
         origin: "remote",
+        stream: "remote-session",
         seq: 1,
         ref: { sessionId: "session", eventId: "remote-event" },
       }),
@@ -110,6 +111,7 @@ describe("EventBus close", () => {
     receive(
       JSON.stringify({
         origin: "remote",
+        stream: "remote-session",
         seq: 2,
         ref: { sessionId: "session", eventId: "late-event" },
       }),
@@ -138,6 +140,7 @@ describe("EventBus close", () => {
       receive(
         JSON.stringify({
           origin: "remote",
+          stream: "remote-session",
           seq: 2,
           event: {
             id: "remote:2",

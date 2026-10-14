@@ -7,7 +7,8 @@
  * Chinese sessions behave differently. Three checks make that visible:
  *
  *   1. The canonical prompt is English; only Simplified Chinese variants
- *      (`*.zh.md`) exist.
+ *      (`*.zh.md`) exist. The templates under a plugin's `prompts/`
+ *      directory follow the same rule.
  *   2. Both languages name the same tools, injected blocks and bound inputs.
  *   3. A lock file records the hash of each pair. When the English prompt
  *      changes and the Chinese one does not, the check fails.
@@ -94,6 +95,29 @@ function promptDirs(pluginRoot, problems) {
   );
 }
 
+/**
+ * Templates a plugin loads with `createPromptLoader` from its own `prompts/`
+ * directory follow the same rule: `<name>.md` and a `<name>.zh.md` variant.
+ */
+function unreadTemplateVariants(pluginRoot, labelRoot) {
+  const root = path.join(pluginRoot, "prompts");
+  if (!existsSync(root)) return [];
+  const problems = [];
+  const walk = (dir) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) walk(full);
+      const tag = /^[^.]+\.([^.]+)\.md$/.exec(entry.name)?.[1];
+      if (entry.isFile() && tag && !isSimplifiedChinese(tag))
+        problems.push(
+          `${path.relative(labelRoot, full)}: not read. A plugin's prompt templates exist only as the English <name>.md and a Simplified Chinese <name>.zh.md.`,
+        );
+    }
+  };
+  walk(root);
+  return problems.sort();
+}
+
 /** Whether a model reads this file: an agent body or a static prompt segment. */
 function isModelPrompt(data, stem) {
   if ((data?.contributes?.prompt ?? []).length > 0) return true;
@@ -162,7 +186,9 @@ export function checkPromptVariants({
     .filter((dir) => statSync(dir).isDirectory())
     .sort();
 
-  const problems = [];
+  const problems = plugins.flatMap((plugin) =>
+    unreadTemplateVariants(plugin, labelRoot),
+  );
   const directories = new Map(
     plugins.map((plugin) => [plugin, promptDirs(plugin, problems)]),
   );

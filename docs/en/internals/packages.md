@@ -130,7 +130,7 @@ For details, see [transactions](../reference/transactions.md) and [world data](.
 The prompt loader is also split by instance:
 
 - The shared templates use the default `loadPrompt`.
-- A plugin's own directory is injected through `createPromptLoader(root)`.
+- Another template directory is injected through `createPromptLoader(root)`, with the same lookup order as `loadPrompt`. Plugins do not use it: a plugin's templates use the loader of the same name in the SDK, which reads only the English and Simplified Chinese files.
 - The public entry of the package does not export the process-wide `setPromptsRoot`.
 - `buildContext` always returns a Promise. The caller does not need to decide in advance whether a synchronous or asynchronous path is used.
 
@@ -161,3 +161,5 @@ Covel is still in early development, and it targets only the current contracts. 
 > These libraries currently make no promise of a persistence migration across versions. When the store schema or the vector progress table changes, the affected development data must be created again. Do not treat "old data can still be read" or "old entry points still work" as a guarantee.
 
 `pnpm check:boundaries` checks three things in the production source: the public entry points of the workspace, the dependency declarations, and the direction of the packages. When a new cross-package dependency is needed, review it together with the responsibility split on this page.
+
+The web app applies theme and color scheme from SettingsStore through its appearance helpers; it has no `next-themes` dependency.

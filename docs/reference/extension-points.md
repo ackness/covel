@@ -217,13 +217,13 @@ export default function (covel) {
 
 插件代码只依赖 SDK（`@covel/plugin-handlers-utils`），不需要为下面这些东西引入宿主的内部包。宿主自己也用同一份实现。
 
-| 需要                                | 从哪里拿                                                                                                 |
-| ----------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| 估算 token 数                       | `estimateTokens`                                                                                         |
-| 内置工具的名字表                    | `FRAMEWORK_TOOL_NAMES`                                                                                   |
-| 解析多语言文本                      | `resolveI18nText` / `resolveI18nDeep`，以及 locale registry                                              |
-| 表单工具、角色字段校验              | SDK 根入口                                                                                               |
-| `world.dimensions@1` 提供者用的类型 | `@covel/plugin-handlers-utils/dimensions` 的 schema 与 materializer                                      |
-| 加载插件自己的提示词模板（Node）    | `@covel/plugin-handlers-utils/prompts` 的 `createPromptLoader(root)`。这个子入口不进入浏览器用的根模块。 |
+| 需要                                | 从哪里拿                                                                                                                                                          |
+| ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 估算 token 数                       | `estimateTokens`                                                                                                                                                  |
+| 内置工具的名字表                    | `FRAMEWORK_TOOL_NAMES`                                                                                                                                            |
+| 解析多语言文本                      | `resolveI18nText` / `resolveI18nDeep`，以及 locale registry                                                                                                       |
+| 表单工具、角色字段校验              | SDK 根入口                                                                                                                                                        |
+| `world.dimensions@1` 提供者用的类型 | `@covel/plugin-handlers-utils/dimensions` 的 schema 与 materializer                                                                                               |
+| 加载插件自己的提示词模板（Node）    | `@covel/plugin-handlers-utils/prompts` 的 `createPromptLoader(root)`，只读 English 的 `<name>.md` 和简体中文的 `<name>.zh.md`。这个子入口不进入浏览器用的根模块。 |
 
 Hook 的返回规则见 [Hooks](./hooks.md#how-an-event-runs)：不返回值表示继续；可以拦截的事件上 handler 出故障算作拒绝；其他事件上出故障的 handler 被跳过，之前成功的改写保留。

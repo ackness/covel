@@ -25,18 +25,9 @@ const ResizableHandle = ({
   orientation,
   ...props
 }: React.ComponentProps<typeof Separator> & {
-  /** kept for API compat; no longer renders a grip badge */
-  withHandle?: boolean;
   orientation?: "horizontal" | "vertical";
 }) => {
   const isVertical = orientation === "vertical";
-
-  // Strip out the legacy `withHandle` prop so it doesn't reach the DOM.
-  // (We accept it for API compatibility but ignore it.)
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const { withHandle: _withHandle, ...rest } = props as {
-    withHandle?: boolean;
-  };
 
   return (
     <Separator
@@ -47,7 +38,7 @@ const ResizableHandle = ({
           : "h-full w-px cursor-col-resize",
         className,
       )}
-      {...rest}
+      {...props}
     />
   );
 };

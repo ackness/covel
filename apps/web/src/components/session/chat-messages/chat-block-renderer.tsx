@@ -81,9 +81,9 @@ export function ChatBlockRenderer({
   // state via plugin-data namespace=message. Each spec runs through
   // PluginPanel, which reads the live plugin-data store for reactive state.
   if (blockType === "plugin_message") {
-    const pluginId =
-      ((block.data as Record<string, unknown> | undefined)?.pluginId as
-        string | undefined) ?? msg.runtimeId;
+    const pluginId = (block.data as Record<string, unknown> | undefined)
+      ?.pluginId;
+    const pluginLabel = typeof pluginId === "string" ? pluginId : undefined;
     return (
       // All providers share this surface; their own title identifies history.
       <HistoryBlock
@@ -96,9 +96,9 @@ export function ChatBlockRenderer({
         })}
       >
         <div className="flex flex-col gap-1.5">
-          {viewMode === "detailed" && pluginId && (
+          {viewMode === "detailed" && pluginLabel && (
             <span className="text-[10px] font-mono text-muted-foreground/70 uppercase tracking-wider">
-              plugin · {pluginId}
+              plugin · {pluginLabel}
             </span>
           )}
           <PluginMessageBlock

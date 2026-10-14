@@ -667,6 +667,8 @@ Gemini 原生的思考强度、`providerOptions.google.thinkingConfig`、`cached
 - 持久化是一条有上限的、尽力而为的审计队列。`flush()` 等队列排空，但不保证 transport 已经送达。
 - 特别大的 transport 帧，在保存成功之后只发送一个引用，接收方通过同一个存储读出内容。
 
+进程间的 transport 帧必须带非空 `stream`，标识发送端的这一代状态；缺少它的帧会被拒绝。发布端应一起升级并重启。追踪事件按扁平 payload 读取：嵌套的 `data` 是普通数据，不会合并到顶层。旧的嵌套追踪需重新生成，才能按当前调试界面查看。
+
 #### 事件 id 形态：`${epoch}:${seq}`（H-05/H-06）
 
 每条订阅事件的 `id` 是 `${epoch}:${seq}`。它同时是 SSE 的 `id:` 行，也是重连时的 `lastEventId` 游标。
