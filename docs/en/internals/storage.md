@@ -52,7 +52,7 @@ There is no `STORE_BACKEND=idb`, and no `createStore({ backend: "idb" })`. If yo
 
 When you add a table or a query, put it in the module for its feature area, add it to both backends, and do not put it in the factory.
 
-**The media backend is chosen separately.** `MEDIA_BACKEND` does not depend on the data backend. `mirror` means it follows the current server data backend. An explicitly chosen browser IDB is only an implementation for media and caches. It is not a business `DataStore`.
+**The media backend is chosen separately.** `MEDIA_BACKEND` does not depend on the data backend. `mirror` means it follows the current server data backend. When the media backend is `pg` (chosen or followed) and `DATABASE_URL` is missing, the server refuses to start instead of quietly turning media off; to run without media, set `MEDIA_BACKEND=none`. The web app's media display cache lives in the browser and is not a `MediaStore` backend.
 
 **PostgreSQL does not mean automatic failover.** PostgreSQL lets multiple processes coordinate database writes, session locks and EventBus event dispatch. But the "steer" and "cancel" of a turn still depend on the in-process execution handle, so a request must reach the instance that is running that turn. The guarantees after a restart also differ for legacy background jobs and for persisted staged jobs. These limits are recorded in [API multi-instance boundaries](../reference/api.md#limits-of-running-several-instances).
 
@@ -308,7 +308,6 @@ The display history of state changes is a read-through cache on IndexedDB. It is
 - When a version change notice arrives, the handle is closed and released so that a delete or an upgrade can proceed. It does not delete data, and it does not replay failed operations automatically.
 - A blocked open fails immediately and does not wait forever. While the native request is still blocked, later calls reuse this failure instead of queuing a new open. An upgrade that is later abandoned is aborted, or its handle is closed.
 - On error, the app KV reports the error. The render cache falls back to an authorized network response.
-- IndexedDbMediaStore's explicit backend connection has its own lifecycle.
 - A failure to persist a patch is returned to the caller. The SSE consumer reports it as a "best-effort display cache failure", and it does not change the committed game result.
 
 ### Render Blob Cache

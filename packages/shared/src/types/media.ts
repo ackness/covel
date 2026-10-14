@@ -112,7 +112,12 @@ export interface MediaStore {
   get(ref: MediaRef): Promise<Uint8Array | Blob>;
   exists(id: string): Promise<boolean>;
   resolveUrl(ref: MediaRef): Promise<string>;
-  delete(id: string, opts?: { force?: boolean }): Promise<void>;
+  /**
+   * Remove the asset with every ownership and reference claim on it, whoever
+   * holds them. Callers decide beforehand whether deleting a claimed asset is
+   * allowed; the store does not refuse it.
+   */
+  delete(id: string): Promise<void>;
   /**
    * Returns owner / size metadata for an existing asset, or `null` if the id
    * is unknown. Used by route-level auth checks and by the runtime to decide
