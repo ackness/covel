@@ -1029,6 +1029,7 @@ What each endpoint accepts and returns:
 - `POST /api/install/collection`: the response is the same as for batch.
 
 Rollback results for failed batch installations are documented in [Plugin installation](./plugin-installation.md#multi-package-preview-and-batch-install): `details.rolledBack` and `details.retained` list removed and retained packages.
+
 - `GET /api/install/plugins`: the list includes plugins that have not yet been loaded after a restart.
 
 `/api/install/world` checks the worldData diagnostics before it writes the world record:
@@ -1852,6 +1853,8 @@ The request can be written in two ways:
 
 Preflight does not load or run the `worldProjections` handlers. So the output of a projection is not counted in `planned` / `targets`. The response carries a warning that says this part is deferred until the real import or sync runs.
 
+When the world declares dimensions and none of these plugins provides `world.dimensions@1`, the response carries a warning with `code: "dimension-provider-missing"`: these dimensions will not be imported. The session-prep screen uses it to tell the player.
+
 **Request body:**
 
 ```json
@@ -1911,6 +1914,7 @@ Updating a world package, hot-reloading files, enabling a plugin or approving it
 - If the source of a dimension has not changed, its progress is not reset.
 - The report shows a conflict when the author changed or removed a dimension, and the value in the session has already evolved, was edited by hand, or still has a pending receipt.
 - `force: true` does not lift these dimension protections. It does not trigger a structure migration and does not force a reset.
+- When no plugin that provides `world.dimensions@1` is turned on in the session now, dimensions take no part in the sync: the existing dimension records stay as they are, and the response carries a `dimension-provider-missing` warning.
 
 **Concurrency:**
 
@@ -2203,8 +2207,8 @@ Notes:
 - `pluginPolicy.requires`:
   - When the session is created, the world takes part in resolution as a dependent. If a contract has only one provider, that provider is added automatically.
   - These requirements are saved with the session in `metadata.pluginSelection.requiredContracts`. Later starts, stops, and reloads use this list and do not read the world again.
-  - If no provider is installed, or there are several providers and the request does not pick one, the response is `400 { "code": "world_requirement_unmet", "details": { contract, code, candidates? } }`.
-  - If the player turned a provider off on purpose, or the provider is a community plugin that is still waiting for approval, the session is still created.
+  - When a requirement is not met, the session is still created: no provider is installed, there are several providers and the request does not pick one, the player turned a provider off on purpose, or the provider is a community plugin that is still waiting for approval. The response lists each one in `unmetRequirements` as `{ contract, code, candidates? }`, where `code` is `missing-provider`, `ambiguous-provider`, `excluded`, or `approval-required`. The first two also write a warning to the server log.
+- When the world declares dimensions and none of the plugins turned on for this session provides `world.dimensions@1`, the dimensions are not imported and the session is still created. The response's `ignoredDimensions` lists these dimension IDs; the session runs without dimensions.
 - `metadata.characterSchema`: when a local session is created in Web private mode, the same schema is written. If the preset is not valid, the session is not created.
 - `metadata.embeddedCharacters`: these are not a plugin's character cards. They do not make a copy of plugin data.
 - `metadata.embeddedLorebook`: AI-generated worlds with `server-store` / `return-only` use it to carry their material and rules.
@@ -2232,16 +2236,18 @@ The response is the session record, plus a one-time `ownerToken`.
 
 **Response fields**:
 
-| Field                  | Type                                   | Description                                                                                                                                                                                       |
-| ---------------------- | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ownerToken`           | string                                 | The session's owner token. It is **returned only here** (the server stores only a hash). When it must be sent is explained below                                                                  |
-| `locale`               | string                                 | The session's actual content language                                                                                                                                                             |
-| `requestedLocale`      | string (optional)                      | Appears only when the actual language differs from the requested one                                                                                                                              |
-| `pluginsWithoutLocale` | string[] (optional)                    | IDs of enabled plugins that have no text in the session's language (they have only English labels, so the panel shows English). This is only a hint and does not stop creation                    |
-| `status`               | `'active' \| 'paused' \| 'ended'`      | The session lifecycle status                                                                                                                                                                      |
-| `phase`                | `'setup' \| 'playing'`                 | Whether the session is in opening setup or in normal play. It starts as `setup` if the active set has a setup runtime, otherwise `playing`. It becomes `playing` once all setup runtimes are done |
-| `completedPlayerTurns` | number                                 | The number of committed player turns in normal play. Interaction during setup is not counted. The same turn is never counted twice                                                                |
-| `setupRuntimes`        | `Record<runtimeId, SetupRuntimeState>` | The state of each setup runtime. See the table below                                                                                                                                              |
+| Field                  | Type                                           | Description                                                                                                                                                                                       |
+| ---------------------- | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ownerToken`           | string                                         | The session's owner token. It is **returned only here** (the server stores only a hash). When it must be sent is explained below                                                                  |
+| `locale`               | string                                         | The session's actual content language                                                                                                                                                             |
+| `requestedLocale`      | string (optional)                              | Appears only when the actual language differs from the requested one                                                                                                                              |
+| `pluginsWithoutLocale` | string[] (optional)                            | IDs of enabled plugins that have no text in the session's language (they have only English labels, so the panel shows English). This is only a hint and does not stop creation                    |
+| `unmetRequirements`    | `{ contract, code, candidates? }[]` (optional) | Contracts the world requires that have no provider turned on in this session. The session runs without this part. This is only a hint and does not stop creation                                  |
+| `ignoredDimensions`    | string[] (optional)                            | IDs of dimensions the world declares that no turned-on plugin can store. They were not imported. This is only a hint and does not stop creation                                                   |
+| `status`               | `'active' \| 'paused' \| 'ended'`              | The session lifecycle status                                                                                                                                                                      |
+| `phase`                | `'setup' \| 'playing'`                         | Whether the session is in opening setup or in normal play. It starts as `setup` if the active set has a setup runtime, otherwise `playing`. It becomes `playing` once all setup runtimes are done |
+| `completedPlayerTurns` | number                                         | The number of committed player turns in normal play. Interaction during setup is not counted. The same turn is never counted twice                                                                |
+| `setupRuntimes`        | `Record<runtimeId, SetupRuntimeState>`         | The state of each setup runtime. See the table below                                                                                                                                              |
 
 When `ownerToken` must be sent:
 
@@ -2265,7 +2271,6 @@ When `ownerToken` must be sent:
 
 | Status | `code`                    | When                                                                                               |
 | ------ | ------------------------- | -------------------------------------------------------------------------------------------------- |
-| 400    | `world_requirement_unmet` | A contract the world requires has no provider, or has several providers and none is picked         |
 | 401    | `operator_token_required` | On a hosted deployment (`demo` / `commercial`), the session was created without the operator token |
 | 404    | `world_not_found`         | A `worldId` was given, but the world does not exist                                                |
 | 409    | `world_deleting`          | The world is being deleted                                                                         |

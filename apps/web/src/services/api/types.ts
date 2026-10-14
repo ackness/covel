@@ -129,6 +129,8 @@ export interface WorldDataPreflightDiagnostic {
   schema?: string;
   pointer?: string;
   message: string;
+  /** Set on a finding the prep screen reports on its own. */
+  code?: "convention-collision" | "dimension-provider-missing";
 }
 
 export interface WorldDataPreflightTarget {

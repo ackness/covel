@@ -7,6 +7,7 @@ import { createPluginRegistry } from "@covel/plugin-loader";
 import { registerDimensionProvider } from "../helpers/dimension-provider.js";
 import {
   importWorldDataForSession,
+  preflightWorldDataForSession,
   syncWorldDataForSession,
 } from "../../src/world-data/session-import.js";
 
@@ -360,6 +361,62 @@ describe("dynamic dimension author import and sync", () => {
         "stamina",
       ))!.value,
     ).toMatchObject({ value: 3, version: 2 });
+    await args.store.close();
+  });
+  it("leaves the dimensions out, and a session's own alone, when no active plugin keeps them", async () => {
+    const args = await fixture();
+    await args.store.upsertWorld({
+      id: "world",
+      name: "World",
+      description: "",
+      metadata: { dimensions: { stamina: definition(1) } },
+      createdAt: at,
+    });
+    await importWorldDataForSession({ ...args, worldsDirs: [] });
+    const missing = expect.objectContaining({
+      level: "warning",
+      code: "dimension-provider-missing",
+    });
+    const withoutProvider = {
+      ...args,
+      worldsDirs: [],
+      preflight: { activePlugins: [], registry: args.registry },
+    };
+
+    // The check before a session says so instead of failing.
+    const preflight = await preflightWorldDataForSession({
+      ...withoutProvider,
+      dimensions: { stamina: definition(1) },
+    });
+    expect(preflight.diagnostics).toEqual([missing]);
+    expect(preflight.planned).toBe(0);
+
+    // A sync without the provider removes nothing the session has.
+    await args.store.upsertWorld({
+      id: "world",
+      name: "World",
+      description: "",
+      metadata: { dimensions: { stamina: definition(2) } },
+      createdAt: at,
+    });
+    const sync = await syncWorldDataForSession({
+      ...withoutProvider,
+      dryRun: false,
+      force: true,
+    });
+    expect(sync).toMatchObject({ deleted: 0, upserted: 0, conflicts: [] });
+    expect(sync.diagnostics).toEqual([missing]);
+    expect(
+      (await args.store.getPluginData(
+        "session",
+        "world-init",
+        "_dimensions",
+        "stamina",
+      ))!.value,
+    ).toMatchObject({ value: 1, version: 1 });
+    expect(await args.store.listWorldDataImportLedger("session")).toHaveLength(
+      1,
+    );
     await args.store.close();
   });
 });

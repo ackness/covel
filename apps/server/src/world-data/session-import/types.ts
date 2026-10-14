@@ -79,6 +79,12 @@ export interface ImportPlan {
   readonly diagnostics: readonly WorldDataDiagnostic[];
   readonly mergeEvents: readonly MergeEvent[];
   readonly deferredProjectionOutputs: readonly DeferredProjectionOutput[];
+  /**
+   * Dimensions the world declares that no active plugin can store. They are
+   * left out: the session starts without them, and a sync leaves the
+   * session's dimension records alone.
+   */
+  readonly skippedDimensions?: readonly string[];
 }
 
 /** Read-only sync plan prepared before entering the session mutation lock. */

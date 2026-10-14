@@ -102,7 +102,7 @@ Extract facts supported by runtime-inputs.narrative.value, then call save-facts.
 | 根字段                                          | 含义                                                                                                        |
 | ----------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
 | `id`, `kind`                                    | 包身份；`kind` 为 `core` 或 `plugin`                                                                        |
-| `version`, `displayName`, `description`, `tags` | 元数据；标签用于准备页的分组和筛选，不决定运行时调度                                                                         |
+| `version`, `displayName`, `description`, `tags` | 元数据；标签用于准备页的分组和筛选，不决定运行时调度                                                        |
 | `covel`                                         | 适配的宿主版本范围，如 `">=0.0.45"`；范围之外的宿主不安装也不加载该包                                       |
 | `author`, `license`, `homepage`                 | 作者信息，只用于展示；见[作者信息](#作者信息)                                                               |
 | `provides`                                      | 版本化契约字符串，或 `{contract, default: true}`                                                            |
@@ -721,7 +721,7 @@ namespace 声明 `search` 之后，它的记录进入框架的记忆检索（[`m
 - 一个事件 topic 在一个会话里只有一个声明者。两个活动插件的 `contributes.events` 含同一个 topic 时，后被接受的那个以 `event-topic-conflict` 被拒绝，原因里写出 topic 和两个插件的 ID（显式请求先于自动依赖，其余按请求顺序）。topic 是会话内全局的名字，发出者和订阅者往往属于别的插件，所以它只能对应一份 payload schema。两个插件可以同时安装，只是不能进同一个会话。给自己的 topic 加上和插件相关的前缀可以避免撞名。
 - 失去必需提供者的插件，以及没人再需要的自动依赖，会被移除。
 - `requested` 和计算出的 `active` 分开保存。自动依赖不会变成玩家的显式选择。
-- 世界的 `pluginPolicy.requires` 作为 `requiredContracts` 传入。世界和插件一样是依赖方：唯一的提供者自动加入，而且不会被当作没人需要的依赖移除。无法满足的需求在 `unmet` 里返回，原因是 `missing-provider`、`ambiguous-provider`、`approval-required` 或 `excluded`。前两种阻止创建会话；后两种是玩家的选择，不阻止。
+- 世界的 `pluginPolicy.requires` 作为 `requiredContracts` 传入。世界和插件一样是依赖方：唯一的提供者自动加入，而且不会被当作没人需要的依赖移除。无法满足的需求在 `unmet` 里返回，原因是 `missing-provider`、`ambiguous-provider`、`approval-required` 或 `excluded`。四种都不阻止创建会话：会话少了这部分照常开始，准备页和创建会话的响应（`unmetRequirements`）告诉玩家缺了什么。前两种是安装问题，后两种是玩家的选择。
 
 **世界和玩法包怎样给出初始请求。**
 
