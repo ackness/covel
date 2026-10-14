@@ -124,9 +124,13 @@ it("preserves history when the injected template source fails", async () => {
   }
 });
 
-it.each(["length"])(
-  "keeps raw history when the gateway summary ends with %s",
-  async (finishReason) => {
+it.each([
+  { finishReason: "length", failure: /truncated/ },
+  // A reason the provider did not explain is not a normal end either.
+  { finishReason: "other", failure: /stopped before it finished \(other\)/ },
+])(
+  "keeps raw history when the gateway summary ends with $finishReason",
+  async ({ finishReason, failure }) => {
     const { default: register } = await import("../server/index.js");
     let handler;
     register({
@@ -166,7 +170,7 @@ it.each(["length"])(
         },
         { threshold: 0 },
       );
-      await expect(compacting).rejects.toThrow(/truncated/);
+      await expect(compacting).rejects.toThrow(failure);
       expect(await store.listSessionSummaries("truncated")).toEqual([]);
       expect(await store.listUncompactedTurnMessages("truncated")).toEqual(
         messages,

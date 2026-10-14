@@ -1,6 +1,7 @@
 import type { LLMProviderRequest } from "./llm-provider-request.js";
 import type { LLMDiagnostics } from "./llm-diagnostics.js";
 import type { LLMRequestBudget } from "../llm-request-budget.js";
+import type { LLMFinishReason } from "../llm-finish-reason.js";
 /**
  * LLM adapter — thin abstraction for calling language models.
  *
@@ -89,7 +90,13 @@ export interface LLMResponse {
   readonly diagnostics?: LLMDiagnostics;
   readonly content: string | null;
   readonly toolCalls: readonly LLMToolCall[];
-  readonly finishReason: "stop" | "tool_calls" | "length" | "error";
+  /**
+   * Why the answer ended. Only `stop` and `tool_calls` mark a whole answer;
+   * a story kept after `length` or `other` is not whole.
+   */
+  readonly finishReason: LLMFinishReason;
+  /** The provider's own word for `finishReason`, when it gave one. */
+  readonly rawFinishReason?: string;
   readonly usage: LLMUsageSummary;
   /**
    * Provider-exposed reasoning text or summary, separate from the answer.
@@ -134,6 +141,8 @@ export type LLMStreamEvent =
       readonly type: "done";
       readonly diagnostics?: LLMDiagnostics;
       readonly finishReason: string;
+      /** The provider's own word for `finishReason`, when it gave one. */
+      readonly rawFinishReason?: string;
       /** Accumulated provider-exposed reasoning text or summary. */
       readonly reasoningContent?: string;
       readonly providerContinuation?: LLMProviderContinuation;

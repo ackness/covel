@@ -68,6 +68,8 @@ function harness(retrying = true) {
 describe("a story cut at the output limit", () => {
   it.each([
     { finishReason: "length", notices: 1 },
+    // Ended for a reason the provider did not explain: kept, but not whole.
+    { finishReason: "other", notices: 1 },
     { finishReason: "stop", notices: 0 },
   ])(
     "shows $notices notice(s) for a response that finished with $finishReason",

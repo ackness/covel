@@ -101,6 +101,25 @@ describe("cost-panel aggregate", () => {
     expect(m.byRuntime[0]!.runtimeId).toBe("img");
   });
 
+  it("counts the usage a failed gateway call reported, and skips one without", () => {
+    const turns = [
+      turn(1, "turn-1", [
+        evt("gateway.failed", {
+          runtimeId: "compact/summary",
+          pluginId: "compact",
+          ...usage(900, 40),
+        }),
+        evt("gateway.failed", { runtimeId: "compact/summary" }),
+      ]),
+    ];
+
+    const m = aggregate(turns);
+
+    expect(m.totalCalls).toBe(1);
+    expect(m.totalInput).toBe(900);
+    expect(m.totalOutput).toBe(40);
+  });
+
   it("attributes gateway usage when the executed target is recorded", () => {
     const model = aggregate([
       turn(1, "turn-1", [

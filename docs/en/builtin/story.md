@@ -151,7 +151,7 @@ When a story gets longer, the early conversation can fill the length the model c
 
 ### What you will see
 
-Usually nothing. The original messages are still kept in the save. The model just sees the summary instead. If compaction fails three times in a row, the app tells you that the story's memory could not be condensed.
+Usually nothing. The original messages are still kept in the save. The model just sees the summary instead. A summary the model stopped before finishing counts as a failure, and a half summary never replaces the original conversation. If compaction fails three times in a row, the app tells you that the story's memory could not be condensed.
 
 ### When it is on
 

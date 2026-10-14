@@ -677,6 +677,20 @@ describe("Gemini native generateContent", () => {
     },
   );
 
+  it("keeps the usage Gemini reported on a refused or failed answer", async () => {
+    const usageMetadata = { promptTokenCount: 12, candidatesTokenCount: 5 };
+    mockJson({ ...answer([{ text: "no" }], "SAFETY"), usageMetadata });
+    await expect(adapter.generateText(config, params)).rejects.toMatchObject({
+      code: "REFUSAL",
+      details: { usage: { inputTokens: 12, outputTokens: 5 } },
+    });
+    mockJson({ ...answer([], "MALFORMED_FUNCTION_CALL"), usageMetadata });
+    await expect(adapter.generateText(config, params)).rejects.toMatchObject({
+      code: "PROVIDER_ERROR",
+      details: { usage: { inputTokens: 12, outputTokens: 5 } },
+    });
+  });
+
   it("classifies blocked prompt without candidates as refusal", async () => {
     mockJson({
       promptFeedback: { blockReason: "SAFETY", blockReasonMessage: "Blocked" },

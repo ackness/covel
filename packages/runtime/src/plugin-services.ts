@@ -18,6 +18,7 @@ import {
   withDefaultUtilsSignal,
 } from "./function-runtime/runtime-abort-boundaries.js";
 import type { TurnEmitter } from "./trace/turn-emitter.js";
+import { withGatewayTrace } from "./function-runtime/gateway-trace.js";
 
 class ServiceOutputValidationError extends Error {
   constructor() {
@@ -527,9 +528,26 @@ export class PluginServiceRegistry {
               // Never lend the caller's store, settings, tools or proposal buffer.
               // The lent gateway strips slot secrets, and the nested client carries
               // the stripped facade so deeper hops cannot recover key material.
-              const gateway = caller.gateway
+              const lent = caller.gateway
                 ? withDefaultGatewaySignal(lendGateway(caller.gateway)!, signal)
                 : undefined;
+              // A kernel extension provider runs outside any runtime, so no
+              // runtime traces its model calls. They are traced under the
+              // provider here, failures with the tokens already spent, so
+              // the cost view counts them.
+              const gateway =
+                lent &&
+                kernel &&
+                entry.extension &&
+                caller.emitter &&
+                caller.turnId
+                  ? withGatewayTrace(lent, caller.emitter, {
+                      sessionId: caller.sessionId,
+                      turnId: caller.turnId,
+                      pluginId: entry.pluginId,
+                      runtimeId: `${entry.pluginId}/${entry.extension.id}`,
+                    })
+                  : lent;
               const utils = caller.utils
                 ? withDefaultUtilsSignal(caller.utils, signal)
                 : undefined;
