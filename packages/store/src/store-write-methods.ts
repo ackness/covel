@@ -37,6 +37,7 @@ export const MEDIA_WRITE_METHODS: ReadonlySet<string> = new Set([
   "delete",
   "recordOwnership",
   "addRef",
+  "claimAssets",
   "removeRef",
   "releaseSession",
   "cleanup",

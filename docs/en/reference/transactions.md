@@ -535,7 +535,7 @@ The bytes of media are stored in `MediaStore`. Its lifecycle is separate from `D
 - When sync deletes an import-managed media index row, it removes only that one explicit media reference of the current session. The lifecycle GC reclaims the bytes only after all ownership and reference claims are gone.
 - A failure to release a temporary reference is logged, and it does not hide the result of the import itself.
 - A process crash may leave a fixed reference (pin) behind. It expires 24 hours after it was created, and `POST /api/media/cleanup` releases it (see [Media store](./media-store.md#temporary-references-during-world-data-import)).
-- When the semantic data is already committed but media finalization fails, the temporary references are kept to protect that data. Creation rollback releases them only after the session deletion succeeds.
+- When the semantic data of a sync is already committed but media finalization fails, the temporary references are kept to protect that data. Session creation always releases them when finalization fails, even when the rollback fails to delete the session: the session data left behind still refers to those files, and the scan before cleanup protects them.
 
 ### Observability
 
@@ -565,7 +565,7 @@ The table and index DDL is generated from the Drizzle schema (`packages/store/sr
   - Session create and sync prepare media before the semantic transaction. `put` atomically sets up a temporary reference that belongs to this import.
   - On a successful publish: first set up the session claims, then release the temporary reference.
   - A failure before commit: only this attempt's temporary reference is released. Bytes with no owner are left to the GC, and content is not forcibly deleted.
-  - A failure in finalization after commit: the protection is kept. It can be released only after a creation rollback has successfully deleted the session.
+  - A failure in finalization after commit: sync keeps the protection. Create always releases it, even when the rollback fails to delete the session, because the session data left behind still refers to those files, and the scan before cleanup protects them.
   - A compatible entry point that materializes inside a DataStore transaction follows the same reference rules.
   - A process crash may leave temporary references behind. They expire 24 hours after they were created, and the media cleanup endpoint releases them.
 - **The compactor's** summary write and message tags are in the same transaction. Writing only the summary creates an orphan: `message-insertion` emits it as a system message, while the untagged raw history is still injected, which makes two copies of the context.

@@ -123,6 +123,24 @@ describe("execution recovery notice", () => {
     ).toBeNull();
     expect(screen.queryByRole("button", { name: "Stop task" })).toBeNull();
   });
+  it.each([undefined, "restore failed"])(
+    "shows stopped unknown checks while hydration remains unfinished (error: %s)",
+    (error) => {
+      const { onRefresh } = setup({
+        ...interrupted,
+        status: { state: "unknown" },
+        hydrating: true,
+        stalled: true,
+        ...(error ? { error } : {}),
+      });
+      const notice = screen.getByRole("alert");
+      expect(screen.getByText("Could not confirm the turn")).toBeTruthy();
+      expect(notice.querySelector(".animate-spin")).toBeNull();
+      fireEvent.click(screen.getByRole("button", { name: "Check status" }));
+      expect(onRefresh).toHaveBeenCalledOnce();
+    },
+  );
+
   it("says when automatic checks stopped and checks again on request (F-203)", () => {
     const { onRefresh } = setup({
       ...interrupted,

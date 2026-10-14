@@ -679,6 +679,34 @@ describe("a status the server could not check (F-203)", () => {
     expect(result.current.state.executionRecovery?.stalled).toBeUndefined();
   });
 
+  it.each([undefined, "restore failed"])(
+    "stops unknown checks even while hydration is unfinished (error: %s)",
+    async (error) => {
+      vi.useFakeTimers();
+      setVisibilityForTest();
+      const { result } = setup({
+        session: null,
+        executionRecovery: {
+          sessionId: "s",
+          status: unknown,
+          hydrating: true,
+          checking: true,
+          ...(error ? { error } : {}),
+        },
+      });
+      await act(async () => vi.advanceTimersByTimeAsync(45_000));
+      expect(result.current.executionRecovery).toMatchObject({
+        status: unknown,
+        hydrating: true,
+        stalled: true,
+      });
+      await act(async () => vi.advanceTimersByTimeAsync(300_000));
+      expect(api.getSessionExecution).toHaveBeenCalledTimes(MAX_UNKNOWN_CHECKS);
+      expect(result.current.executing).toBe(true);
+      expect(workspace.hydrate).not.toHaveBeenCalled();
+    },
+  );
+
   it("keeps the turn's streamed prose and running steps without finishing them", async () => {
     const { result, delta, flush, recover } = ownedRecovery();
     act(() => {

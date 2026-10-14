@@ -5379,7 +5379,7 @@ Deletes media that is no longer referenced. This is a destructive maintenance en
 
 It first scans `messages`, `plugin_data`, `runtime_outputs`, `trace_events`, `snapshots`, and `turn_results`. It collects the mediaIds that are still referenced. Then it calls `MediaStore.cleanup()` to delete the rest.
 
-Every cleanup also releases the temporary references (`world-data-import:<uuid>`) that a world-data import left behind and that were created 24 hours ago or earlier. A dry run only lists them in `expiredRefs`, and a real run removes them. A younger temporary reference keeps protecting its file. The limit is fixed. The rule is in [Media store](./media-store.md#temporary-references-during-world-data-import).
+Every cleanup also releases the temporary references (`media-pin:<uuid>`) that a world-data import, upload or runtime write left behind and that were created 24 hours ago or earlier. A dry run only lists them in `expiredRefs`, and a real run removes them. A younger temporary reference keeps protecting its file. The limit is fixed. The rule is in [Media store](./media-store.md#temporary-references-during-world-data-import).
 
 > [!WARNING]
 > This endpoint is disabled by default. You must set `COVEL_MEDIA_CLEANUP_ENABLED` to use it. Actual deletion also requires a confirmation header.
@@ -5412,7 +5412,7 @@ Every cleanup also releases the temporary references (`world-data-import:<uuid>`
   "policy": {
     "dryRun": true,
     "expireRefs": {
-      "sessionIdPrefix": "world-data-import:",
+      "sessionIdPrefix": "media-pin:",
       "maxAgeMs": 86400000
     },
     "maxBytes": 0
@@ -5430,7 +5430,7 @@ Every cleanup also releases the temporary references (`world-data-import:<uuid>`
     "expiredRefs": [
       {
         "mediaId": "...",
-        "sessionId": "world-data-import:...",
+        "sessionId": "media-pin:...",
         "pluginId": null,
         "createdAt": "2026-10-01T08:00:00.000Z"
       }

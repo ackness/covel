@@ -24,7 +24,7 @@ export function ExecutionRecoveryNotice({
   if (!recovery) return null;
   const status = recovery.status;
   // The server could not tell whether a turn runs; `stalled` once it gave up.
-  const unavailable = !recovery.error && status?.state === "unknown";
+  const unavailable = status?.state === "unknown";
   const stalled = unavailable && !!recovery.stalled;
   const unknown = !!recovery.error || !status || unavailable;
   const running = status?.state === "running";
@@ -33,7 +33,7 @@ export function ExecutionRecoveryNotice({
   const stopped = failed && status?.abortReason === PLAYER_ABORT_REASON;
   if (!unknown && !running && !interrupted && !failed && !recovery.hydrating)
     return null;
-  const waiting = recovery.hydrating || running || (unknown && !stalled);
+  const waiting = !stalled && (recovery.hydrating || running || unknown);
   const retry = status?.retry;
   const retryLabel =
     retry?.type === "retry_runtime"

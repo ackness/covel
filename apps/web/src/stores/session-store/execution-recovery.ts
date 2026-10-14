@@ -112,9 +112,8 @@ export function useExecutionRecovery(options: RecoveryOptions): void {
   const hydrating = recovery?.hydrating ?? false;
   const watching =
     !!recovery &&
-    (hydrating ||
-      recovery.checking ||
-      (executionMayBeRunning(recovery.status) && !recovery.stalled));
+    !recovery.stalled &&
+    (hydrating || recovery.checking || executionMayBeRunning(recovery.status));
 
   useEffect(() => {
     if (!sessionId || !watching) return;
@@ -170,7 +169,7 @@ export function useExecutionRecovery(options: RecoveryOptions): void {
           status,
           ...(stalled ? { stalled } : {}),
         });
-        polling = hydrating || (executionMayBeRunning(status) && !stalled);
+        polling = !stalled && (hydrating || executionMayBeRunning(status));
         if (!polling) return;
         if (unknownChecks > 0) {
           schedule(failureBackoffMs);

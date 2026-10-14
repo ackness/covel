@@ -32,6 +32,9 @@ interface MediaStore {
     ownerPluginId?: string,
   ): Promise<void>;
   addRef(id: string, sessionId: string, pluginId?: string): Promise<void>;
+  claimAssets(
+    claims: readonly { id: string; sessionId: string; pluginId?: string }[],
+  ): Promise<void>;
   removeRef(id: string, sessionId: string): Promise<void>;
   releaseSession(sessionId: string): Promise<void>;
   isReferencedBy(id: string, sessionId: string): Promise<boolean>;
@@ -65,6 +68,9 @@ The types are defined in `packages/shared/src/types/media.ts`.
 
 **`releaseSession(sessionId)`** is used when a session is deleted. It clears that session's ownership and references in one step. The file bytes and the references from other sessions are kept.
 
+- Deleting a session removes the session's data first and calls it afterwards. If the deletion fails, the session is still there and can still read its own media.
+- A failure of this call is only logged, and the deletion still succeeds. The claims it leaves behind show as "held" in the media library.
+
 ## HTTP content safety
 
 **Upload: `POST /api/media`**
@@ -77,6 +83,8 @@ The types are defined in `packages/shared/src/types/media.ts`.
 **Session check during upload**
 
 An upload uses the same session record to authenticate, and it records the session's "incarnation" (a number that changes each time a session with the same ID is rebuilt). Before it records the owner and the references, the server checks again inside the session lock: the owner, the incarnation, whether the session is active, and whether it is being deleted.
+
+The uploaded bytes are stored together with a temporary reference `media-pin:<uuid>`, so a concurrent cleanup cannot delete them before they are recorded inside the session lock. Whether the upload succeeds or is rejected, the request releases this temporary reference when it ends. The bytes of a rejected upload have no owner and are left to media cleanup.
 
 | Situation                                                                       | Result                                           |
 | ------------------------------------------------------------------------------- | ------------------------------------------------ |
@@ -194,7 +202,14 @@ Returns the files owned by `sessionId` whose `meta` contains every key-value pai
 **Two things to be aware of**
 
 - Two calls with the same prompt but different `metadata` hit the same cached file. The disk keeps the metadata from the **first** call. Each cached reference returned carries the business metadata of the current call.
-- A partial hit (fewer than `n` files exist, for example because one image failed to save last time) **does not** count as a hit. In that case, the whole batch is generated again, instead of quietly returning fewer images.
+- A partial hit (fewer than `n` files exist) **does not** count as a hit. In that case, the whole batch is generated again, instead of quietly returning fewer images.
+
+**A batch of images is recorded together**
+
+When `ctx.images.generate()` makes several images in one call, it stores every one of them first and then records them for the session together.
+
+- If one of them fails to download or save (an expired URL, a type that is not allowed, a timeout, an abort), the whole call fails, and the images already stored are not recorded for the session either. They have no owner and are left to media cleanup.
+- So a failed call never leaves part of a batch behind. The next identical request generates the whole batch again.
 
 ## Ownership
 
@@ -208,14 +223,19 @@ SQLite stores `media_assets.path` as a relative path (`ab/cd/<sha256>.bin`) bene
 
 **Ownership and references**
 
-| Method              | What it does                                                                                                               |
-| ------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| `recordOwnership()` | Sets the first owner of a file. First come, first served: a second call with a different `sessionId` does not overwrite it |
-| `addRef()`          | Gives another session read access. Used for forks and snapshots                                                            |
-| `removeRef()`       | Removes one session's reference. It can be called repeatedly. It does not delete the bytes or change the owner             |
-| `isReferencedBy()`  | Returns true for the owner session, or for a session that has a reference record                                           |
+| Method              | What it does                                                                                                                  |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `recordOwnership()` | Sets the first owner of a file. First come, first served: a second call with a different `sessionId` does not overwrite it    |
+| `addRef()`          | Gives another session read access. Used for forks and snapshots                                                               |
+| `claimAssets()`     | Does `recordOwnership()` and then `addRef()` for each file of a batch, in one transaction: every claim is recorded or none is |
+| `removeRef()`       | Removes one session's reference. It can be called repeatedly. It does not delete the bytes or change the owner                |
+| `isReferencedBy()`  | Returns true for the owner session, or for a session that has a reference record                                              |
 
-`ctx.media.put()` and `ctx.media.ingestUrl()` record the owner and this session's reference after the bytes are stored. If the runtime or guard that called them is aborted or times out during this time, the call is rejected, and neither is recorded. Bytes with no owner are left for media cleanup to reclaim.
+`ctx.media.put()` and `ctx.media.ingestUrl()` store the bytes together with a temporary reference `media-pin:<uuid>` (see [Creating a reference at the time of storing](#creating-a-reference-at-the-time-of-storing)), and release it once the owner and this session's reference are recorded. So from the moment the bytes are stored until they are recorded, a concurrent cleanup cannot delete them.
+
+The claims are recorded with `claimAssets()`. The images stored by one `ctx.images.generate()` call, the files of one world-data import and one upload are each recorded in one transaction. When it fails part-way, none of the batch is recorded: ownership and references other sessions already hold stay as they are, and the session is not left with half a batch. All three backends behave the same, and a batch with U+0000 in an identifier is refused before anything is written.
+
+If the runtime or guard that called them is aborted or times out during this time, the call is rejected, neither is recorded, and the temporary reference is still released. Bytes with no owner are left for media cleanup to reclaim.
 
 **`addRef()` is idempotent per `(sessionId, mediaId)`**
 
@@ -251,7 +271,7 @@ The UNIQUE constraint on `media_refs` does not include `plugin_id`. The plugin I
 
 ### Temporary references during world data import
 
-When preparing world data, the operation above is used to "pin" the bytes. The reference name is the unique `world-data-import:<uuid>`. The colon is not one of the characters allowed in user session IDs, so it cannot clash with a real session.
+When preparing world data, the operation above is used to "pin" the bytes. The reference name is the unique `media-pin:<uuid>`. The colon is not one of the characters allowed in user session IDs, so it cannot clash with a real session. Uploads and runtime writes use the same temporary references.
 
 - Each import attempt has its own temporary reference. Even if several concurrent attempts target the same session and the same content, they do not affect each other.
 - At the end, ownership and a reference are first recorded for the real session, and then the temporary reference is released.
@@ -261,14 +281,15 @@ When preparing world data, the operation above is used to "pin" the bytes. The r
 
 When something goes wrong:
 
-- If the semantic data was committed but finalization failed, the temporary reference is kept until the permanent claims can be restored. Session creation releases it after a successful rollback. If the rollback fails, the reference is kept too.
+- If the semantic data of a sync was committed but finalization failed, the temporary reference is kept until the permanent claims can be restored.
+- Session creation always releases it when finalization fails, even when the rollback (deleting the session) fails: the session data left behind still refers to those files, and the scan before cleanup protects them.
 - Releasing a temporary reference is best effort. A failure is only logged, and it does not change the result of the import.
 - A process crash or a failed release can leave a temporary reference behind. Until it expires, cleanup keeps its bytes.
 
 > [!NOTE]
 > An abandoned temporary reference expires 24 hours after it was created. Only `POST /api/media/cleanup` releases expired references: a dry run lists them in `expiredRefs`, and a real run removes them. No timer does this, and neither does a delete from the media library.
 >
-> An import holds its temporary references for one request only, far less than 24 hours, so cleanup does not take a reference from an import that is still running. The limit is fixed. A request or an environment variable cannot change it.
+> An import, upload or runtime write holds its temporary reference for one request or call only, far less than 24 hours, so cleanup does not take a reference from a write that is still running. The limit is fixed. A request or an environment variable cannot change it.
 
 ## Pictures sent to the story model
 
@@ -326,7 +347,7 @@ A `self` deployment keeps the single-user, local behavior, and it does not need 
 | `keepRecentBytes` | Keeps this many bytes of the newest unprotected files. Older unprotected files are chosen for deletion       |
 
 - An empty policy returns a list-style dry-run result, with zero selected for deletion.
-- `expireRefs: { sessionIdPrefix, maxAgeMs }` exists only in the store interface. It makes cleanup also release abandoned references: those whose session ID starts with `sessionIdPrefix` and that were created at or before `now - maxAgeMs`. The prefix must contain a colon, or the call is rejected: no session ID contains a colon, so a real session's reference never matches. The cleanup endpoint always passes `world-data-import:` and 24 hours. The released references are listed in `expiredRefs` of the result. Such a reference no longer protects its file, but whether the file is deleted still depends on the other fields and the other claims.
+- `expireRefs: { sessionIdPrefix, maxAgeMs }` exists only in the store interface. It makes cleanup also release abandoned references: those whose session ID starts with `sessionIdPrefix` and that were created at or before `now - maxAgeMs`. The prefix must contain a colon, or the call is rejected: no session ID contains a colon, so a real session's reference never matches. The cleanup endpoint always passes `media-pin:` and 24 hours. The released references are listed in `expiredRefs` of the result. Such a reference no longer protects its file, but whether the file is deleted still depends on the other fields and the other claims.
 - `onlyIds` exists only in the store interface. The cleanup endpoint does not accept it. It limits the policy to the listed files: other files are kept no matter what the other fields say. The media library deletes with `{ maxBytes: 0, onlyIds }`, so one delete can touch only the files it names. Each file still has to pass the ownership and reference checks above.
 
 The desktop app and the web app read media using the same authoritative store metadata. An entry in the browser cache is checked against the `MediaRef` before it is used for display.
@@ -343,12 +364,12 @@ The player views and deletes saved media in **Settings → Stored media**. It is
 
 This gives four states:
 
-| State                 | Meaning                                                                                                                                                            |
-| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| In use                | At least one current session uses it                                                                                                                               |
-| **Unused** (unused)   | A complete scan found no such session, and nothing else claims it                                                                                                  |
-| **Held** (held)       | Its owner or reference is not a current session: a temporary reference `world-data-import:<uuid>` from an import in progress, or a claim that outlives its session |
-| **Unknown** (unknown) | The scan was incomplete, and no known user was found for this file                                                                                                 |
+| State                 | Meaning                                                                                                                                                  |
+| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| In use                | At least one current session uses it                                                                                                                     |
+| **Unused** (unused)   | A complete scan found no such session, and nothing else claims it                                                                                        |
+| **Held** (held)       | Its owner or reference is not a current session: a temporary reference `media-pin:<uuid>` from a write in progress, or a claim that outlives its session |
+| **Unknown** (unknown) | The scan was incomplete, and no known user was found for this file                                                                                       |
 
 When a scan is incomplete: a session has more rows than the limit (for the media library, it is 200,000, and the `scanLimit` parameter can change it). In that case no file counts as "unused", and a request to delete unused media is refused with `409 scan_incomplete`. A session that cannot be read is never treated as a "session with no references".
 
