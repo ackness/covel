@@ -19,6 +19,7 @@ import {
   parseJsonText,
   type EmittedEvent,
   type ToolModule,
+  type ToolSource,
 } from "@covel/tools";
 import type { DataStore } from "@covel/store";
 import type { ApprovalPipeline } from "@covel/approval";
@@ -158,9 +159,7 @@ export interface ToolExecutorConfig {
   /** Optional approval pipeline for permission checking. */
   readonly approval?: ApprovalPipeline;
   /** Optional function to determine tool source category. */
-  readonly getToolSource?: (
-    toolName: string,
-  ) => "builtin" | "local" | "third-party";
+  readonly getToolSource?: (toolName: string) => ToolSource;
 }
 
 function toolLabel(pluginId: string, toolName: string): string {
@@ -198,7 +197,7 @@ async function emitToolEvent(
 function emitToolCalling(
   ctx: ToolCallContext,
   call: ToolCall,
-  source: "builtin" | "local" | "third-party",
+  source: ToolSource,
   approvalStatus: ApprovalStatus,
 ): Promise<void> {
   return emitToolEvent(ctx, call, "tool.calling", approvalStatus, {
