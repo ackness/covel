@@ -244,22 +244,7 @@ describe("setup frozen snapshot (cross-execution read of committed setup data)",
           if (m.name === "p/schema-gen") {
             // Buffered domain write → flushed onto the result as a plugin.data
             // proposal (NOT a direct store write), committed by finalize below.
-            // The kernel hands a function runtime a buffering store; its write
-            // surface is wider than the read-only `FunctionStoreView` type.
-            const buffered = ctx.store as unknown as Pick<
-              DataStore,
-              "setPluginData"
-            >;
-            await buffered.setPluginData({
-              id: `${sessionId}:p:world:schema`,
-              sessionId,
-              pluginId: "p",
-              namespace: "world",
-              key: "schema",
-              value: SCHEMA,
-              createdAt: new Date().toISOString(),
-              updatedAt: new Date().toISOString(),
-            });
+            await ctx.pluginData!.set("world", "schema", SCHEMA);
             return {
               outcome: "success",
               value: {},

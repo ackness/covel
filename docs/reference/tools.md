@@ -457,9 +457,8 @@ interface UIRenderPart {
 
 - REST `PUT /api/sessions/:id/plugin-data/...`
 - `plugin.data` / `plugin.data.batch` 的提交，包括由函数 runtime 的输出规范化出来的 proposal
-- 函数 runtime 的 `ctx.pluginData`
+- 函数 runtime 和 agent guard 的 `ctx.pluginData`
 - RPC handler 的 store view。所有插件的 RPC action（包括内置插件的）都通过 `createRpcHandlerStoreView()` 得到一个绑定了会话和插件的即时写入能力
-- 内置函数 runtime 和 agent guard 通过 `createTrustedHandlerStore()` 得到的显式提案写入能力
 
 两类插件句柄都不暴露宿主的事务、会话生命周期或关闭存储的方法。框架自己的特权写入者（后台任务运行器、runtime 日志）直接调用 store，不走这些入口。
 
@@ -1461,7 +1460,7 @@ export default function ({ tool, z, shortId, shortIdBatch }) {
 工具和 guard 能拿到什么：
 
 - 所有 entry 工厂的 toolkit 都只提供纯辅助函数，不注入 store。工具通过 `execute(params, context)` 的 `context.store` 读取当前会话和插件的状态。RPC 和函数 runtime 各用自己限定范围的 store。
-- 社区插件的 agent guard 只拿到只读的 store 和纯输入。`pluginData`、logger、gateway、utils、media、assetProgress 这些会产生副作用的能力不注入，`recursiveCall` 会被拒绝。写入要放在 runtime handler 返回的 proposal 或 `pluginData[]` 里。
+- agent guard 和函数 handler 拿到同样的上下文：只读的 store、`ctx.world`、`ctx.inputs`、`pluginData`、logger、gateway、utils、媒体和 `recursiveCall`。内置插件和社区插件拿到的一样，只是社区插件的 `utils` 只能访问 `permissions.http` 声明的地址。guard 返回或超时之后，这些能力全部失效。
 
 **工具里的文字用哪种语言。** `context.locale` 是会话的内容语言，`context.messages` 是本插件 `locales/` 里的译文。
 

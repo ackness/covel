@@ -28,6 +28,12 @@ export {
   reloadGenerationUrl,
   trackReloadGeneration,
 } from "./reload-generation.js";
+export {
+  HOST_MODULE_PARENT_URL,
+  HOST_MODULES,
+  isHostModule,
+  provideHostModules,
+} from "./host-modules.js";
 export type { PluginDefinition } from "./load.js";
 export {
   compileManifestLabels,

@@ -14,6 +14,56 @@ import {
 } from "./world-data-projection-fixtures.js";
 
 describe("world data projections", () => {
+  it("lets a handler outside the workspace import the plugin SDK and zod", async () => {
+    const pluginsRoot = await mkdtemp(
+      path.join(tmpdir(), "covel-world-projection-host-modules-"),
+    );
+    const plugin = await makePlugin({
+      root: pluginsRoot,
+      id: "installed",
+      source: "community",
+      handlers: {
+        "main.mjs": `import { z } from "zod";
+import { resolveI18nText } from "@covel/plugin-handlers-utils";
+const Statement = z.object({ id: z.string() });
+export default ({ value }) => ({
+  facts: value.statements.map((statement) => ({
+    id: Statement.parse(statement).id,
+    kind: resolveI18nText({ en: "rule", zh: "规则" }, "en-US"),
+  })),
+});`,
+      },
+      projections: {
+        main: {
+          from: WORLD_IR_SCHEMA,
+          handler: "./handlers/main.mjs",
+          outputs: { facts: { namespace: "facts", key: "id" } },
+        },
+      },
+      namespaces: ["facts"],
+    });
+    const plan = await buildImportPlan({
+      sessionId: "sess-1",
+      worldId: "world-1",
+      sources: [await makeSource(VALID_WORLD_IR)],
+      now: NOW,
+      locale: "en-US",
+      deps: {
+        activePlugins: ["installed"],
+        registry: registry([plugin]),
+        canExecuteProjection: () => true,
+      },
+    });
+    expect(plan.diagnostics.filter((item) => item.level === "error")).toEqual(
+      [],
+    );
+    expect(
+      plan.writes.flatMap((write) =>
+        write.kind === "plugin-data" ? [`${write.pluginId}:${write.key}`] : [],
+      ),
+    ).toEqual(["installed:harbor-rule"]);
+  });
+
   it("fans out WorldIR to active plugins in stable plugin/projection/output order", async () => {
     const pluginsRoot = await mkdtemp(
       path.join(tmpdir(), "covel-world-projection-plugins-"),

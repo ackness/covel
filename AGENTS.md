@@ -234,9 +234,10 @@ scripts; a change to the SDK source restarts the server). The SDK's own Turbo
 lint/test tasks also wait for its build: their test imports reach its `dist`
 through `shared`. After editing its
 source a direct `pnpm --filter <pkg> test` still needs
-`pnpm --filter @covel/plugin-handlers-utils build` first. It is not on npm, so
-nothing outside this workspace can depend on it by version — a standalone plugin
-ships self-contained and bundles the helpers it uses.
+`pnpm --filter @covel/plugin-handlers-utils build` first. It is not on npm; the
+host resolves it and `zod` for the modules of every plugin, bundled or installed
+(`provideHostModules` in `plugin-loader`), so a standalone plugin imports them
+directly and bundles only its other dependencies.
 
 `plugin-handlers-utils` is the root of the dependency graph and depends on no
 workspace package; `shared` sits directly above it, and `@covel/server` composes

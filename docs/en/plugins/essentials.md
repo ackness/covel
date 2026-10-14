@@ -313,7 +313,7 @@ Write `version`, `author`, `license` and `homepage` in `PLUGIN.md`. The author n
 A plugin's code depends only on the public SDK `@covel/plugin-handlers-utils`. Do not import Covel's internal packages, database tables or front-end components.
 
 > [!IMPORTANT]
-> This SDK is not published to npm, and installing a plugin does not run `npm install`. A plugin in the user directory must be able to run by itself. What it needs must either come from the arguments Covel passes in (`ctx`, `covel.toolkit`), or be bundled into the plugin. Built-in plugins under the repository's `plugins/` can `import` it directly.
+> This SDK is not published to npm, and installing a plugin does not run `npm install`. Covel provides the SDK (including the `/dimensions` and `/prompts` subpaths) and `zod` to every plugin, so plugin code can `import` them directly, the same for built-in plugins and plugins in the user directory. Bundle any other library you use into the plugin.
 
 Helpers you will often use:
 

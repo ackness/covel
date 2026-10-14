@@ -1,6 +1,6 @@
 # Plugin invocation context
 
-Function handlers default-export `async function (ctx)`. Type a handler with `PluginFunctionHandler` and `PluginFunctionContext` from `@covel/plugin-handlers-utils`; bundle runtime helpers into standalone plugin artifacts. A helper's types are structural and do not grant authority.
+Function handlers default-export `async function (ctx)`. Type a handler with `PluginFunctionHandler` and `PluginFunctionContext` from `@covel/plugin-handlers-utils`; the host provides that package and `zod` to every plugin at run time. A helper's types are structural and do not grant authority.
 
 ## Identity, inputs, and state
 

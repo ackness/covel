@@ -65,6 +65,26 @@ const rules = {
   ],
 };
 
+
+describe("attribute labels", () => {
+  it("resolves a name by language code, as the SDK does", () => {
+    const schema = {
+      attributes: [
+        {
+          ...mistportAbilities[0],
+          name: { en: "Tide reading", ru: "Чтение приливов" },
+        },
+      ],
+    };
+    expect(creationRules(schema, undefined, "ru-RU").attributes[0].label).toBe(
+      "Чтение приливов",
+    );
+    expect(creationRules(schema, undefined, "fr-FR").attributes[0].label).toBe(
+      "Tide reading",
+    );
+  });
+});
+
 describe("creationRules", () => {
   it("derives rules from bounded integer abilities", () => {
     expect(

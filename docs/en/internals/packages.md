@@ -28,6 +28,7 @@ The SDK for plugin authors and the implementation for the host are kept apart:
 - `plugin-handlers-utils` does not depend on any private workspace package.
 - `shared` holds the DTOs and schemas that the framework's layers share.
 - `tools` implements the tool protocol that the SDK describes.
+- `plugin-loader` depends on the SDK and `zod`. Before it imports a plugin's entry, handlers or guards, it registers the plugin directory (`provideHostModules`); a module in that directory that imports either package gets the host's copy. Bundled and installed plugins take the same path, and a plugin does not ship these two packages.
 
 For details, see the [plugin contract](../reference/plugins.md) and [tools](../reference/tools.md).
 

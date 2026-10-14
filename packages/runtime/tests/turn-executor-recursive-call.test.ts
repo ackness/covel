@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { LoadedRuntime } from "@covel/plugin-loader";
 import type { RuntimeManifest, TurnInput } from "@covel/shared";
-import type { DataStore } from "@covel/store";
 import { createMemoryStore } from "@covel/store/memory";
 import {
   executeTurn,
@@ -554,18 +553,7 @@ describe("executeTurn recursiveCall", () => {
             await leafReleased;
             leafSignalAborted = ctx.signal?.aborted === true;
             try {
-              await (
-                ctx.store as unknown as Pick<DataStore, "setPluginData">
-              ).setPluginData({
-                id: "late",
-                sessionId: ctx.sessionId,
-                pluginId: ctx.pluginId,
-                namespace: "ns",
-                key: "late",
-                value: true,
-                createdAt: new Date().toISOString(),
-                updatedAt: new Date().toISOString(),
-              });
+              await ctx.pluginData!.set("ns", "late", true);
             } catch (error) {
               lateWriteError =
                 error instanceof Error ? error.message : String(error);

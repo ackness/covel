@@ -8,7 +8,6 @@
  */
 
 import { compareText } from "@covel/shared";
-import { worldForSession } from "./world-model-view.js";
 import type {
   DataStore,
   TurnMessageRecord,
@@ -29,16 +28,12 @@ import {
   readEnvChoice,
   readEnvString,
   type RpcHandlerStore,
-  type WorldModelView,
 } from "@covel/shared";
 import { overlayPluginDataValue } from "@covel/tools";
 import { pluginDataSizeError } from "@covel/shared";
 import {
-  bufferCharacterUpsert,
   bufferPluginData,
-  bufferPluginDataBatch,
   bufferPluginDataDelete,
-  mergeCharacterRecords,
   mergePluginDataRows,
   type ExecutionWriteBuffer,
 } from "./execution-write-buffer.js";
@@ -178,134 +173,6 @@ async function readTurnMessagePage(
     messages: rows.map(toPluginTurnMessage),
     cursor: last ? encodeTurnMessageCursor(last) : (options?.after ?? null),
     hasMore: rows.length === limit,
-  };
-}
-
-/** Builtin runtime reads and proposal-backed writes; host control stays private. */
-export interface TrustedHandlerStore extends FunctionStoreView {
-  getWorld(): ReturnType<DataStore["getWorld"]>;
-  listCharacters(): ReturnType<DataStore["listCharacters"]>;
-  getPluginData(
-    namespace: string,
-    key: string,
-  ): ReturnType<DataStore["getPluginData"]>;
-  listPluginData(
-    namespace?: string,
-    pagination?: { limit?: number; offset?: number },
-  ): ReturnType<DataStore["listPluginData"]>;
-  setPluginData(record: {
-    namespace: string;
-    key: string;
-    value: unknown;
-  }): Promise<void>;
-  setPluginDataBatch(
-    records: readonly { namespace: string; key: string; value: unknown }[],
-  ): Promise<void>;
-  deletePluginData(namespace: string, key: string): Promise<void>;
-  upsertCharacter(
-    record: Omit<import("@covel/store").CharacterRecord, "sessionId">,
-  ): Promise<void>;
-}
-
-/** Bound read authority and proposal-backed writes for builtin handlers. */
-export function createTrustedHandlerStore(
-  store: DataStore,
-  ctx: HandlerHelperContext,
-  buffer: ExecutionWriteBuffer,
-  world?: WorldModelView,
-): TrustedHandlerStore {
-  if (!ctx || !buffer)
-    throw new Error(
-      "Runtime store requires an execution context and write buffer",
-    );
-  const { sessionId, pluginId } = ctx;
-  return {
-    getSession: async () =>
-      pluginSessionView(await store.getSession(sessionId)),
-    getWorld: async () => {
-      if (world) return structuredClone(world.worldRecord ?? null);
-      const session = await store.getSession(sessionId);
-      return session?.worldId
-        ? structuredClone(
-            worldForSession(
-              await store.getWorld(session.worldId),
-              session.locale,
-            ),
-          )
-        : null;
-    },
-    listPlayerInputs: async () =>
-      structuredClone(await store.listPlayerInputs(sessionId)),
-    listTurnMessages: async (limit) =>
-      structuredClone(
-        typeof limit === "number"
-          ? await store.listRecentTurnMessages(sessionId, limit)
-          : await store.listTurnMessages(sessionId),
-      ),
-    readTurnMessages: (options) =>
-      readTurnMessagePage(store, sessionId, options),
-    setPluginData(record) {
-      assertWritableNamespace(record.namespace);
-      bufferPluginData(buffer, ctx, record.namespace, record.key, record.value);
-      return Promise.resolve();
-    },
-    setPluginDataBatch(records) {
-      for (const record of records) assertWritableNamespace(record.namespace);
-      bufferPluginDataBatch(buffer, ctx, records);
-      return Promise.resolve();
-    },
-    upsertCharacter(record) {
-      bufferCharacterUpsert(buffer, ctx, { ...record, sessionId });
-      return Promise.resolve();
-    },
-    deletePluginData(namespace, key) {
-      assertWritableNamespace(namespace);
-      bufferPluginDataDelete(buffer, ctx, namespace, key);
-      return Promise.resolve();
-    },
-    async getPluginData(namespace, key) {
-      const hit = overlayPluginDataValue(buffer, pluginId, namespace, key);
-      if (hit.hit) {
-        if (hit.deleted) return null;
-        const now = new Date().toISOString();
-        return {
-          id: `${sessionId}:${pluginId}:${namespace}:${key}`,
-          sessionId,
-          pluginId,
-          namespace,
-          key,
-          value: structuredClone(hit.value),
-          createdAt: now,
-          updatedAt: now,
-        };
-      }
-      return structuredClone(
-        await store.getPluginData(sessionId, pluginId, namespace, key),
-      );
-    },
-    async listPluginData(namespace, pagination) {
-      const stored = await store.listPluginData(sessionId, pluginId, namespace);
-      const rows = mergePluginDataRows(
-        stored,
-        buffer,
-        sessionId,
-        pluginId,
-        namespace,
-      );
-      const offset = pagination?.offset ?? 0;
-      return rows.slice(
-        offset,
-        pagination?.limit === undefined ? undefined : offset + pagination.limit,
-      );
-    },
-    async listCharacters() {
-      if (world) return structuredClone([...world.characters]);
-      return mergeCharacterRecords(
-        await store.listCharacters(sessionId),
-        buffer,
-        sessionId,
-      );
-    },
   };
 }
 
@@ -570,15 +437,13 @@ function pluginSetupRuntimeState(
 }
 
 /**
- * Build a narrow `FunctionStoreView` for community function-runtime
- * handlers. Only documented, session-scoped read methods are
- * exposed — handlers that try to call `setPluginData`, `upsertCharacter`,
- * etc. will get `undefined` and a runtime TypeError, surfacing the
- * misuse loudly instead of letting third-party code silently bypass
- * proposal/tool governance.
- *
- * Builtin handlers additionally receive explicit world/character reads and
- * proposal-backed writes through createTrustedHandlerStore.
+ * Build the narrow `FunctionStoreView` every function handler and agent
+ * guard receives, bundled or installed. Only documented, session-scoped read
+ * methods are exposed — handlers that try to call `setPluginData`,
+ * `upsertCharacter`, etc. will get `undefined` and a runtime TypeError,
+ * surfacing the misuse loudly instead of letting plugin code silently bypass
+ * proposal/tool governance. World reads go through `ctx.world`, writes
+ * through `ctx.pluginData` and returned proposals.
  */
 export function createFunctionStoreView(
   store: DataStore | undefined,
@@ -600,29 +465,54 @@ export function createFunctionStoreView(
       readTurnMessages: unavailable,
     };
   }
-  const reads = createTrustedHandlerStore(store, ctx, buffer ?? []);
+  const { sessionId, pluginId } = ctx;
+  const overlay = buffer ?? [];
   return {
-    getPluginData(namespace, key) {
-      return reads.getPluginData(namespace, key);
+    getSession: async () =>
+      pluginSessionView(await store.getSession(sessionId)),
+    listPlayerInputs: async () =>
+      structuredClone(await store.listPlayerInputs(sessionId)),
+    // A bounded read from inside a runtime handler means "recent context":
+    // plugins asking for `limit` turn messages want the MOST RECENT ones.
+    // `listTurnMessages(sessionId, { limit })` would return the OLDEST N, so
+    // route a numeric limit through the tail query. No limit → full history.
+    listTurnMessages: async (limit) =>
+      structuredClone(
+        typeof limit === "number"
+          ? await store.listRecentTurnMessages(sessionId, limit)
+          : await store.listTurnMessages(sessionId),
+      ),
+    readTurnMessages: (options) =>
+      readTurnMessagePage(store, sessionId, options),
+    async getPluginData(namespace, key) {
+      const hit = overlayPluginDataValue(overlay, pluginId, namespace, key);
+      if (hit.hit) {
+        if (hit.deleted) return null;
+        const now = new Date().toISOString();
+        return {
+          id: `${sessionId}:${pluginId}:${namespace}:${key}`,
+          sessionId,
+          pluginId,
+          namespace,
+          key,
+          value: structuredClone(hit.value),
+          createdAt: now,
+          updatedAt: now,
+        };
+      }
+      return structuredClone(
+        await store.getPluginData(sessionId, pluginId, namespace, key),
+      );
     },
-    listPluginData(namespace) {
-      return reads.listPluginData(namespace);
-    },
-    getSession() {
-      return reads.getSession();
-    },
-    listPlayerInputs() {
-      return reads.listPlayerInputs();
-    },
-    listTurnMessages(limit) {
-      // A bounded read from inside a runtime handler means "recent context":
-      // plugins asking for `limit` turn messages want the MOST RECENT ones.
-      // `listTurnMessages(sessionId, { limit })` would return the OLDEST N, so
-      // route a numeric limit through the tail query. No limit → full history.
-      return reads.listTurnMessages(limit);
-    },
-    readTurnMessages(options) {
-      return reads.readTurnMessages(options);
+    async listPluginData(namespace) {
+      const stored = await store.listPluginData(sessionId, pluginId, namespace);
+      return mergePluginDataRows(
+        stored,
+        overlay,
+        sessionId,
+        pluginId,
+        namespace,
+      );
     },
   };
 }

@@ -51,7 +51,7 @@ zip -r ~/tavern-rumors.zip . -x "node_modules/*" ".*"
 Open the ZIP. At the top level, you should see `PLUGIN.md` and `package.json`.
 
 > [!IMPORTANT]
-> When installing, Covel does not install dependencies for you, and it does not run any build commands. The code in the package must be ready to run as it is.
+> When installing, Covel does not install dependencies for you, and it does not run any build commands. The code in the package must be ready to run as it is. Covel provides the plugin SDK `@covel/plugin-handlers-utils` and `zod`: `import` them directly, without bundling them.
 
 ## 3. Move the development copy out of the way
 
