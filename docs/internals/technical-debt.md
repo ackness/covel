@@ -8,7 +8,7 @@
 rg -n "ponytail:" apps packages plugins
 ```
 
-当前源码里有 13 个标记，下面三张表每行对应一个。
+当前源码里有 12 个标记，下面三张表每行对应一个。
 
 > [!IMPORTANT]
 > 增加或删除一条 `ponytail:` 注释时，在同一次改动里更新这一页。
@@ -37,7 +37,6 @@ rg -n "ponytail:" apps packages plugins
 | 位置                                                                   | 接受的限制                                        | 什么时候重新考虑                                    |
 | ---------------------------------------------------------------------- | ------------------------------------------------- | --------------------------------------------------- |
 | `apps/web/src/components/session/stage/StageSprites.tsx`               | 最多四个立绘对 `left`、`width` 这类布局属性做动画 | 登场角色更多或更频繁，值得改成基于 transform 的动画 |
-| `apps/web/src/components/session/stage/stage-selectors.ts`             | 选项的 icon/color 字段目前没有使用者              | 有组件用到这些字段                                  |
 | `apps/web/src/components/session/chat-messages/message-primitives.tsx` | Markdown 的软换行用字符串改写实现                 | 代码块的边界情况或其他转换多到值得改用解析器插件    |
 | `apps/web/src/theme-system/token-schema.ts`                            | 氛围背景只接受 URL 和渐变，不能上传本地图片       | 上传的需求多到值得把图片存到设置数据之外            |
 

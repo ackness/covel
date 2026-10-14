@@ -47,7 +47,6 @@ import { StagePluginPanels } from "./StagePluginPanels.js";
 import { StageChoices } from "./StageChoices.js";
 import { StageExecutionStatus } from "./StageExecutionStatus.js";
 import {
-  deriveDecisionRecapFallback,
   extractInteractionChoices,
   extractPendingFormMessages,
   filterStalePrompts,
@@ -214,8 +213,7 @@ export function StageView(props: StageViewProps): ReactElement {
     () => extractPendingFormMessages(messages, submittedBlockIds),
     [messages, submittedBlockIds],
   );
-  // Drop guide prompts left over from a previous turn (StageChoices merges them
-  // in via mergeChoices, which doesn't itself check freshness).
+  // Only current turn-scoped suggestions reach the decision panel.
   const freshPrompts = useMemo(
     () =>
       filterStalePrompts(
@@ -243,10 +241,6 @@ export function StageView(props: StageViewProps): ReactElement {
     ];
   }, [storyTurnId, props.executionSteps, messages]);
   const activeForm = pendingForms.find((m) => !dismissedFormIds.has(m.id));
-  const fallbackRecap = useMemo(
-    () => deriveDecisionRecapFallback(storyText),
-    [storyText],
-  );
   const allRead = Boolean(storyKey && readStoryKey === storyKey);
   // Hide the previous decision, including plugin surfaces, as soon as a turn
   // starts. Keep already-read narration hidden while waiting for the new story.
@@ -309,7 +303,6 @@ export function StageView(props: StageViewProps): ReactElement {
         executing={executing}
         interactionChoices={interactionChoices}
         suggestions={freshPrompts}
-        fallbackRecap={fallbackRecap}
         locale={locale}
         onSubmitInteraction={onSubmitInteraction}
         onSendMessage={onSendMessage}
