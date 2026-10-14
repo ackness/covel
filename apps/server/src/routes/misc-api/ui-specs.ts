@@ -8,6 +8,7 @@ import type {
 } from "@covel/plugin-loader";
 import type { DataStore, SessionRecord } from "@covel/store";
 import type { RuntimeManifest } from "@covel/shared";
+import { runnablePluginIds } from "../api/session/plugins.js";
 import { pluginRuntimeDirectory } from "./registry-projection.js";
 import { type UiSlotName } from "./shared.js";
 import { partitionSlotSpecs, type UiSpecDiagnostic } from "./ui-spec-schema.js";
@@ -190,7 +191,7 @@ export async function buildUiSpecsResponse(params: {
   const session =
     knownSession ?? (sessionId ? await store.getSession(sessionId) : undefined);
   const activeFilter = session
-    ? new Set(session.activePlugins ?? [])
+    ? new Set(runnablePluginIds(session.activePlugins ?? [], registry))
     : undefined;
   const loaded = await loadValidatedSpecs(registry);
 

@@ -455,6 +455,7 @@ export type {
 } from "./proposals/asset-generate.js";
 export {
   resolveSessionPlugins,
+  resolveConfirmedSessionPlugins,
   isBlockingWorldRequirement,
   providedContracts,
 } from "./plugin-selection.js";
