@@ -107,7 +107,6 @@ The tool files are in `plugins/npc-graph/tools/`:
   - Replaces an edge's `sourceName` / `targetName` with node IDs. An edge where either end has no node is skipped.
   - Versions edges: a relationship with no change does nothing. If `strength` or `fact` changes, it sets `invalidAt` on the old version and opens a new version.
   - When the tool is called several times in one execution, a later call can read the writes buffered by an earlier one. They are committed together at the end of the execution.
-- **`list-npc-graph.js`**: a read-only tool for custom runtimes. It returns a summary of the existing nodes and edges (120 by default, at most 200). The built-in extractor does not declare it, because the nodes and edges are already placed into the prompt before the model is called.
 
 Entities of type `character` in the World IR correspond to `individual` nodes in the graph. Places, items, skills, and concepts are not nodes of this graph. The tool ignores them, and edges that point to them are skipped.
 

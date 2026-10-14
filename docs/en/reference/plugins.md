@@ -243,7 +243,7 @@ Use `io.concealed: true` for runtimes that handle hidden content, such as an age
 
 ### Scope of dependencies and references
 
-The runtime IDs written in `schedule.needs`, `schedule.after`, and `io.inputs.*.from.runtime` must belong to this package. Write the full `<pluginId>/<runtimeId>`. In a package with a single runtime, write the package ID. A dependency given as a string without a prefix is held to the same rule.
+The runtime IDs written in `schedule.needs`, `schedule.after`, and `io.inputs.*.from.runtime` must belong to this package. Write the full `<pluginId>/<runtimeId>`. In a package with a single runtime, write the package ID. An unprefixed string dependency is rejected with a suggestion to write `<pluginId>/<runtimeId>`. Only a complete runtime ID from another package receives the advice to use a contract.
 
 **Limits on references to runtimes in other packages:**
 
@@ -573,7 +573,7 @@ The rules are in [Aliases and name resolution](./world-model.md#aliases-and-name
 
 **The plugin's own data.**
 
-- Persistent data owned by a plugin is accessed through the bound `ctx.store.getPluginData(namespace, key)` and `listPluginData(namespace?)`.
+- Persistent data owned by a plugin is accessed through the bound `ctx.store.getPluginData(namespace, key)` and `listPluginData(namespace)`.
 - A plugin cannot specify an arbitrary sessionId or pluginId to read another plugin's private data.
 - To share data publicly across plugins, use a contract, a service, or an extension. Do not scan the other plugin's namespace.
 

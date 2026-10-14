@@ -54,17 +54,17 @@ A world can have its own gameplay pack. For example, "Lantern Barrow" (提灯古
 
 ### Characters and world
 
-| Plugin                                                 | What it does                                                            | Always on |
-| ------------------------------------------------------ | ----------------------------------------------------------------------- | --------- |
-| [Pre-Game Setup](./world.md) `pregame`                 | Collects the player's choices when a game starts                        | Yes       |
-| [Character Creator](./world.md) `char-creator`         | Creates the player character, and updates characters during play        | Yes       |
-| [Character Profiles](./world.md) `character-blueprint` | Holds the characters and portraits the world provides                   |           |
-| [World Dimensions](./world.md) `world-init`            | Prepares and updates the world state that changes over time             | Yes       |
-| [World Time](./world.md) `world-time`                  | Time passing, and day and night                                         | Yes       |
-| [World Rules](./world.md) `living-world-rules`         | Brings the world's rules into every turn                                |           |
-| [Codex](./world.md) `codex`                            | Records people, places and things that appear in the story as entries   |           |
-| [Relationship Graph](./world.md) `npc-graph`           | Records the relationships between characters, and draws them as a graph |           |
-| [World Fact Extraction](./world.md) `world-ir`         | Sorts out what happened in each turn, for other plugins to use          |           |
+| Plugin                                                 | What it does                                                              | Always on |
+| ------------------------------------------------------ | ------------------------------------------------------------------------- | --------- |
+| [Pre-Game Setup](./world.md) `pregame`                 | Collects the player's choices when a game starts                          | Yes       |
+| [Character Creator](./world.md) `char-creator`         | Creates the player character, and updates characters during play          | Yes       |
+| [Character Profiles](./world.md) `character-blueprint` | Holds the characters and portraits the world provides                     |           |
+| [World Dimensions](./world.md) `world-init`            | Prepares character attributes and dimensions, and updates dimension state | Yes       |
+| [World Time](./world.md) `world-time`                  | Time passing, and day and night                                           | Yes       |
+| [World Rules](./world.md) `living-world-rules`         | Brings the world's rules into every turn                                  |           |
+| [Codex](./world.md) `codex`                            | Records people, places and things that appear in the story as entries     |           |
+| [Relationship Graph](./world.md) `npc-graph`           | Records a graph of relationships between people, groups and factions      |           |
+| [World Fact Extraction](./world.md) `world-ir`         | Sorts out what happened in each turn, for other plugins to use            |           |
 
 ### Stage and sound
 

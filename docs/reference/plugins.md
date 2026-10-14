@@ -243,7 +243,7 @@ Agent 的 guard 在调用模型之前执行。
 
 ### 依赖和引用的范围
 
-`schedule.needs`、`schedule.after` 和 `io.inputs.*.from.runtime` 里写的 runtime ID 只能属于本包：写完整的 `<pluginId>/<runtimeId>`，单 runtime 的包写包 ID。不带前缀的字符串依赖同样受这条限制。
+`schedule.needs`、`schedule.after` 和 `io.inputs.*.from.runtime` 里写的 runtime ID 只能属于本包：写完整的 `<pluginId>/<runtimeId>`，单 runtime 的包写包 ID。不带前缀的字符串依赖会被拒绝，诊断会建议补全为 `<pluginId>/<runtimeId>`；只有其他包的完整 runtime ID 才建议改用契约。
 
 **跨包 runtime 引用边界**：
 
@@ -573,7 +573,7 @@ Agent 的副作用只来自工具：模型能写什么，以 `agent.tools` 白�
 
 **插件自己的数据。**
 
-- 插件自有的持久数据经绑定的 `ctx.store.getPluginData(namespace, key)` 和 `listPluginData(namespace?)` 访问。
+- 插件自有的持久数据经绑定的 `ctx.store.getPluginData(namespace, key)` 和 `listPluginData(namespace)` 访问。
 - 插件不能指定任意的 sessionId 或 pluginId 去读其他插件的私有数据。
 - 要跨插件公开数据，用契约、服务或扩展，不要扫描对方的 namespace。
 
