@@ -17,6 +17,7 @@
     "primary": "Primary"
   },
   "session": {
+    "historyLoadFailed": "Could not load previous sessions. Retry to see your saves.",
     "reasoningContent": "Thinking",
     "reasoningContentHint": "Reasoning text or summaries returned by the model, in call order.",
     "config": "Studio Config",
