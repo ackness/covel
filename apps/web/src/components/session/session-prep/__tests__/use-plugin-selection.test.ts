@@ -473,6 +473,39 @@ describe("usePluginSelection", () => {
     );
   });
 
+  it("lists the selected plugins that turning off their provider leaves off", async () => {
+    const opening = plugin("opening", {
+      kind: "core",
+      provides: ["opening@1"],
+    });
+    const creator = plugin("creator", {
+      kind: "core",
+      requires: ["opening@1"],
+    });
+    vi.mocked(api.getWorldPluginPlan).mockResolvedValue(
+      selectionPlan(["opening", "creator"]),
+    );
+    const { result } = renderHook(() =>
+      usePluginSelection(
+        PLAN.worldId,
+        [opening, creator],
+        prepareWorldForServer,
+      ),
+    );
+    await waitFor(() => expect(result.current.pluginPlanLoading).toBe(false));
+    expect(result.current.dependentsOff).toEqual([]);
+    act(() => result.current.togglePlugin("opening"));
+    expect(result.current.dependentsOff).toEqual([
+      expect.objectContaining({
+        pluginId: "creator",
+        code: "missing-provider",
+        contract: "opening@1",
+      }),
+    ]);
+    act(() => result.current.togglePlugin("opening"));
+    expect(result.current.dependentsOff).toEqual([]);
+  });
+
   it("reports missing world plugins for the policy and for the active pack only", async () => {
     const pack = {
       id: "tabletop",
