@@ -44,6 +44,7 @@ import type {
   SearchVectorsInput,
   VectorSearchResult,
   DeleteVectorsInput,
+  GetVectorPayloadsInput,
   VectorIndexProgressScope,
   CommitVectorIndexBatchInput,
 } from "../vector-store.js";
@@ -477,6 +478,25 @@ export function createPgVectorCapability(
     }));
   }
 
+  async function getVectorPayloads(
+    input: GetVectorPayloadsInput,
+  ): Promise<Map<string, string | null>> {
+    const payloads = new Map<string, string | null>();
+    if (input.keys.length === 0) return payloads;
+    const target = await resolveSessionVectorTarget(input.sessionId);
+    if (!target) return payloads;
+    const keys = [...new Set(input.keys)];
+    const placeholders = keys.map((_, i) => `$${i + 4}`).join(", ");
+    const rows = (await client.unsafe(
+      `SELECT key, payload FROM ${physicalTableName(target.modelRegistryId)}
+        WHERE session_id = $1 AND plugin_id = $2 AND namespace = $3
+          AND key IN (${placeholders})`,
+      [input.sessionId, input.pluginId, input.namespace, ...keys],
+    )) as Array<{ key: string; payload: string | null }>;
+    for (const row of rows) payloads.set(row.key, row.payload);
+    return payloads;
+  }
+
   async function getVectorIndexProgress(
     scope: VectorIndexProgressScope,
   ): Promise<string | null> {
@@ -598,6 +618,7 @@ export function createPgVectorCapability(
     commitVectorIndexBatch,
     upsertVector,
     searchVectors,
+    getVectorPayloads,
     deleteVectors,
     ensureVectorModel,
     lockSessionEmbeddingModel,

@@ -20,5 +20,6 @@ export type {
   MemoryStore,
   RecallStore,
   ArchivalStore,
+  ArchivalLookupStore,
   VectorIngestStore,
 } from "./store-contracts.js";

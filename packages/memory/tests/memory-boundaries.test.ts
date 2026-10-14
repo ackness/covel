@@ -261,3 +261,132 @@ describe("unified memory search", () => {
     }
   });
 });
+
+describe("incremental archival ingestion (F-039)", () => {
+  const facts = (count: number, prefix = "fact") =>
+    Array.from({ length: count }, (_, i) => ({
+      id: `${prefix}-${i}`,
+      sessionId: "session",
+      pluginId: "journal",
+      namespace: "facts",
+      key: `${prefix}-${i}`,
+      value: { text: `${prefix} number ${i}`, note: `${prefix} note ${i}` },
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    }));
+
+  async function searchable(
+    declared: { pluginId: string; namespace: string; textField: string }[],
+  ) {
+    const embed = vi.fn(async (texts: readonly string[]) =>
+      texts.map(() => new Float32Array([1, 0])),
+    );
+    const { store, character } = await fixture();
+    const sources = { current: declared };
+    const memory = createMemorySystem({
+      store,
+      embed,
+      searchablePluginData: async () => sources.current,
+    });
+    const corpusReads = [
+      vi.spyOn(store, "listCharacters"),
+      vi.spyOn(store, "listSessionLorebookEntries"),
+      vi.spyOn(store, "listPluginData"),
+      vi.spyOn(store, "listPluginDataSessionScope"),
+    ];
+    const archivalKeys = async () =>
+      (
+        await store.searchVectors({
+          sessionId: "session",
+          query: new Float32Array([1, 0]),
+          topK: 500,
+          pluginId: "__kernel:vector",
+          namespace: "archival",
+        })
+      )
+        .map((row) => row.key)
+        .sort();
+    return {
+      store,
+      memory,
+      embed,
+      character,
+      sources,
+      corpusReads,
+      archivalKeys,
+    };
+  }
+  const journal = {
+    pluginId: "journal",
+    namespace: "facts",
+    textField: "text",
+  };
+
+  it("reads only the changed record after the index has caught up", async () => {
+    const { store, memory, embed, corpusReads } = await searchable([journal]);
+    await store.setPluginDataBatch(facts(200));
+    // 1 character + 200 facts: two sweeps of at most 128 changes.
+    expect((await memory.ingest("session")).archival).toBe(201);
+    embed.mockClear();
+    const get = vi.spyOn(store, "getPluginData");
+
+    await store.setPluginData({
+      ...facts(200)[7]!,
+      value: { text: "fact number 7, revised" },
+    });
+    expect((await memory.ingest("session")).archival).toBe(1);
+    expect(embed).toHaveBeenCalledTimes(1);
+    expect(embed.mock.calls[0]![0]).toEqual(["fact number 7, revised"]);
+    expect(get).toHaveBeenCalledTimes(1);
+    for (const read of corpusReads) expect(read).not.toHaveBeenCalled();
+
+    // A rewrite that keeps the text costs a read, not an embedding.
+    await store.setPluginData({
+      ...facts(200)[7]!,
+      value: { text: "fact number 7, revised", note: "touched" },
+    });
+    expect((await memory.ingest("session")).archival).toBe(0);
+    expect(embed).toHaveBeenCalledTimes(1);
+  });
+
+  it("checks only the records its hits name when searching", async () => {
+    const { store, memory, corpusReads } = await searchable([journal]);
+    await store.setPluginDataBatch(facts(50));
+    await memory.ingest("session");
+    const get = vi.spyOn(store, "getPluginData");
+    const hits = await memory.archival.search("session", "seaport", 3);
+    expect(hits).toHaveLength(3);
+    expect(get.mock.calls.length).toBeLessThanOrEqual(3);
+    for (const read of corpusReads) expect(read).not.toHaveBeenCalled();
+  });
+
+  it("adds a namespace that becomes searchable and removes one that stops", async () => {
+    const { store, memory, sources, archivalKeys } = await searchable([]);
+    await store.setPluginDataBatch(facts(3));
+    await memory.ingest("session");
+    expect(await archivalKeys()).toEqual([
+      JSON.stringify(["character", "character"]),
+    ]);
+
+    // The cursor has passed these records: the new namespace is walked again.
+    sources.current = [journal];
+    expect((await memory.ingest("session")).archival).toBe(3);
+    expect(await archivalKeys()).toHaveLength(4);
+    const hits = await memory.archival.search("session", "seaport", 10);
+    expect(hits.filter((hit) => hit.source === "plugin_data")).toHaveLength(3);
+
+    // A changed text field is the same keys under new text.
+    sources.current = [{ ...journal, textField: "note" }];
+    expect((await memory.ingest("session")).archival).toBe(3);
+    const notes = await memory.archival.search("session", "seaport", 10);
+    expect(
+      notes.filter((hit) => hit.source === "plugin_data").map((h) => h.content),
+    ).toEqual(expect.arrayContaining(["fact note 0", "fact note 2"]));
+
+    sources.current = [];
+    expect((await memory.ingest("session")).archival).toBe(0);
+    expect(await archivalKeys()).toEqual([
+      JSON.stringify(["character", "character"]),
+    ]);
+  });
+});

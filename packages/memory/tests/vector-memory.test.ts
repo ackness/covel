@@ -607,16 +607,12 @@ describe("vector archival (semantic over lorebook + characters)", () => {
         pluginId: MEMORY_VECTOR_PLUGIN_ID,
         namespace: ARCHIVAL_NAMESPACE,
       });
-    const readHashes = async () =>
-      JSON.parse(
-        (await store.getVectorIndexProgress({
-          sessionId,
-          pluginId: MEMORY_VECTOR_PLUGIN_ID,
-          namespace: "archival-ingest",
-        }))!,
-      ) as Record<string, string>;
-    const mutedKey = `lorebook:${JSON.stringify(entry.owner)}:${entry.id}`;
-    const otherKey = `lorebook:${JSON.stringify({ kind: "plugin", pluginId: "other-owner" })}:${entry.id}`;
+    const mutedKey = JSON.stringify(["lorebook", entry.owner, entry.id]);
+    const otherKey = JSON.stringify([
+      "lorebook",
+      { kind: "plugin", pluginId: "other-owner" },
+      entry.id,
+    ]);
 
     expect((await system.ingest(sessionId)).archival).toBe(4);
     // No source contains this query: only the real vector path can return hits.
@@ -660,11 +656,6 @@ describe("vector archival (semantic over lorebook + characters)", () => {
     expect(remaining).toHaveLength(3);
     expect(remaining.map((row) => row.key)).not.toContain(mutedKey);
     expect(remaining.map((row) => row.key)).toContain(otherKey);
-    const hashes = await readHashes();
-    expect(hashes).not.toHaveProperty(mutedKey);
-    expect(Object.keys(hashes).sort()).toEqual(
-      remaining.map((row) => row.key).sort(),
-    );
     const disabledHits = await system.archival.search(sessionId, "seaport", 10);
     expect(disabledHits.map((hit) => hit.key).sort()).toEqual([
       "Aldric",
@@ -745,9 +736,20 @@ describe("vector archival (semantic over lorebook + characters)", () => {
     expect(calls[calls.length - 1]!.length).toBe(1);
   });
 
-  it.each(["listCharacters", "listSessionLorebookEntries"] as const)(
-    "preserves the archival index and hashes when %s fails",
-    async (reader) => {
+  it.each([
+    [
+      "getCharacter",
+      (store: DataStore) =>
+        addCharacter(store, sessionId, "c1", "Aldric", "a retired painter"),
+    ],
+    [
+      "getLorebookEntry",
+      (store: DataStore) =>
+        addLorebook(store, sessionId, "l1", "forge", "the forge went cold"),
+    ],
+  ] as const)(
+    "preserves the archival index and progress when %s fails",
+    async (reader, change) => {
       const { fn, calls } = spyEmbed();
       const ingestor = createVectorIngestor({ store, embed: fn });
       expect((await ingestor.ingest(sessionId)).archival).toBe(3);
@@ -759,15 +761,16 @@ describe("vector archival (semantic over lorebook + characters)", () => {
           pluginId: MEMORY_VECTOR_PLUGIN_ID,
           namespace: ARCHIVAL_NAMESPACE,
         });
-      const readHashes = () =>
+      const readProgress = () =>
         store.getVectorIndexProgress({
           sessionId,
           pluginId: MEMORY_VECTOR_PLUGIN_ID,
           namespace: "archival-ingest",
         });
       const vectorsBefore = await readVectors();
-      const hashesBefore = structuredClone(await readHashes());
+      const progressBefore = await readProgress();
       expect(vectorsBefore).toHaveLength(3);
+      await change(store);
       const error = new Error(`synthetic ${reader} failure`);
       const readFailure = vi.spyOn(store, reader).mockRejectedValueOnce(error);
       const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
@@ -778,7 +781,7 @@ describe("vector archival (semantic over lorebook + characters)", () => {
           archival: 0,
         });
         expect.soft(await readVectors()).toEqual(vectorsBefore);
-        expect.soft(await readHashes()).toEqual(hashesBefore);
+        expect.soft(await readProgress()).toEqual(progressBefore);
         expect.soft(calls).toHaveLength(1);
         expect.soft(warn).toHaveBeenCalledTimes(1);
         expect
@@ -792,9 +795,11 @@ describe("vector archival (semantic over lorebook + characters)", () => {
           .soft(warn)
           .toHaveBeenCalledWith(expect.stringContaining(error.message));
 
-        // A healthy read of unchanged sources must not pay to rebuild the index.
-        expect.soft((await ingestor.ingest(sessionId)).archival).toBe(0);
-        expect.soft(calls).toHaveLength(1);
+        // The next healthy sweep handles the change it could not read, and
+        // pays only for that record.
+        expect.soft((await ingestor.ingest(sessionId)).archival).toBe(1);
+        expect.soft(calls).toHaveLength(2);
+        expect.soft(calls[1]).toHaveLength(1);
       } finally {
         readFailure.mockRestore();
         warn.mockRestore();
@@ -802,7 +807,7 @@ describe("vector archival (semantic over lorebook + characters)", () => {
     },
   );
 
-  it("clears vectors and hashes after successful reads confirm all archival records were deleted", async () => {
+  it("clears the vectors of every deleted archival record", async () => {
     const { fn, calls } = spyEmbed();
     const ingestor = createVectorIngestor({ store, embed: fn });
     expect((await ingestor.ingest(sessionId)).archival).toBe(3);
@@ -824,13 +829,6 @@ describe("vector archival (semantic over lorebook + characters)", () => {
         namespace: ARCHIVAL_NAMESPACE,
       }),
     ).toEqual([]);
-    expect(
-      await store.getVectorIndexProgress({
-        sessionId,
-        pluginId: MEMORY_VECTOR_PLUGIN_ID,
-        namespace: "archival-ingest",
-      }),
-    ).toEqual("{}");
     expect(calls).toHaveLength(1);
   });
 });
@@ -981,6 +979,45 @@ describe("vector recall", () => {
     expect(hits.length).toBe(3); // nothing silently dropped
   });
 
+  it("ingests a message saved after the cursor passed its createdAt (F-025)", async () => {
+    // A background execution takes its timestamp while it runs; a later turn
+    // can be saved and ingested before it.
+    const ingestor = createVectorIngestor({ store, embed });
+    await store.appendTurnMessage({
+      id: "turn-later",
+      sessionId,
+      turnId: "t-2",
+      sourceType: "runtime",
+      role: "assistant",
+      content: "the bridge collapsed",
+      order: 500,
+      createdAt: "2026-01-01T00:00:20.000Z",
+    });
+    expect((await ingestor.ingest(sessionId)).recall).toBe(1);
+    await store.appendTurnMessage({
+      id: "background-earlier",
+      sessionId,
+      turnId: "t-1",
+      sourceType: "runtime",
+      role: "assistant",
+      content: "the ferryman counted coins",
+      order: 700,
+      createdAt: "2026-01-01T00:00:10.000Z",
+    });
+    expect((await ingestor.ingest(sessionId)).recall).toBe(1);
+    const hits = await store.searchVectors({
+      sessionId,
+      query: embedText("ferryman"),
+      topK: 10,
+      pluginId: MEMORY_VECTOR_PLUGIN_ID,
+      namespace: RECALL_NAMESPACE,
+    });
+    expect(hits.map((hit) => hit.key).sort()).toEqual([
+      "background-earlier",
+      "turn-later",
+    ]);
+  });
+
   it("tops up short vector results with keyword hits during backfill", async () => {
     // 3 messages live, but only the oldest is in the vector index (backfill lag).
     await addMessage(store, sessionId, "assistant", "the dragon breathed fire");
@@ -1013,7 +1050,7 @@ describe("vector recall", () => {
     expect(new Set(contents).size).toBe(contents.length); // deduped
   });
 
-  it("purges archival vectors for a deleted record and bounds the hash map", async () => {
+  it("purges archival vectors for a deleted record", async () => {
     await addCharacter(store, sessionId, "c1", "Aldric", "a blacksmith");
     await addLorebook(store, sessionId, "l1", "forge", "the ancient forge");
     const ingestor = createVectorIngestor({ store, embed });

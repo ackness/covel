@@ -23,6 +23,7 @@ export function createPgDataCrud(getDb: () => PgDb): PgDataCrud {
       pluginData: schema.pluginData,
       worldDataImportLedger: schema.worldDataImportLedger,
       lorebookEntries: schema.lorebookEntries,
+      recordChanges: schema.recordChanges,
     },
     json: pgJsonReader,
     values: makeInsertValues(pgJsonWriter),

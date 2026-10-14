@@ -3,8 +3,7 @@
  *
  * Two kinds of log are paged here:
  *
- *  - A log ordered by `(createdAt, id)` (snapshots, the forward read of turn
- *    messages). The tuple is a *total* order even when rows share a
+ *  - A log ordered by `(createdAt, id)` (snapshots). The tuple is a *total* order even when rows share a
  *    millisecond `createdAt`, so pages never skip or repeat a row — see
  *    {@link CursorPageOpts}.
  *  - A log that keeps the order its rows were written in (chat messages, trace
@@ -16,7 +15,7 @@
  * SQLite and MemoryStore do.
  */
 
-import { and, asc, desc, eq, gt, lt, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, lt, or, sql } from "drizzle-orm";
 import type { Column, SQL, Table } from "drizzle-orm";
 
 import type { CursorPageOpts } from "../records/pagination-records.js";
@@ -62,35 +61,6 @@ export function cursorPageOrder(
   byteOrder: ByteOrder,
 ): SQL[] {
   return [desc(cols.createdAt), desc(byteOrder(cols.id))];
-}
-
-/**
- * WHERE for a forward keyset read: `sessionId = ?` plus, when a cursor is
- * supplied, the strict `(createdAt, id) > (after.createdAt, after.id)` tuple
- * predicate — the mirror of {@link cursorPageWhere} for oldest-first
- * consumers that walk the log incrementally (vector-ingest's recall cursor).
- */
-export function cursorAfterWhere(
-  cols: CursorColumns,
-  sessionId: string,
-  after: { readonly createdAt: string; readonly id: string } | null,
-  byteOrder: ByteOrder,
-): SQL | undefined {
-  const base = eq(cols.sessionId, sessionId);
-  if (!after) return base;
-  const newer = or(
-    gt(cols.createdAt, after.createdAt),
-    and(eq(cols.createdAt, after.createdAt), gt(byteOrder(cols.id), after.id)),
-  );
-  return and(base, newer);
-}
-
-/** ORDER BY for a forward keyset read — oldest-first, no reverse needed. */
-export function cursorAfterOrder(
-  cols: CursorColumns,
-  byteOrder: ByteOrder,
-): SQL[] {
-  return [asc(cols.createdAt), asc(byteOrder(cols.id))];
 }
 
 /**

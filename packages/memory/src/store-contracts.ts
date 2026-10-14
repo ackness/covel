@@ -5,14 +5,24 @@ export type RecallStore = Pick<
   DataStore,
   "listRecentTurnMessages" | "listSessionSummaries"
 >;
+/** The whole archival corpus, for keyword search. */
 export type ArchivalStore = Pick<
   DataStore,
   "listSessionLorebookEntries" | "listCharacters" | "listPluginData"
 >;
+/** One archival record by its identity, for checking a vector hit or a change. */
+export type ArchivalLookupStore = Pick<
+  DataStore,
+  "getLorebookEntry" | "getCharacter" | "getPluginData"
+>;
 
 export interface VectorIngestStore
   extends
-    ArchivalStore,
-    Pick<DataStore, "getSession" | "listTurnMessagesAfter"> {}
+    ArchivalLookupStore,
+    Pick<
+      DataStore,
+      "getSession" | "listTurnMessagesAfter" | "listRecordChanges"
+    > {}
 
-export interface MemoryStore extends RecallStore, VectorIngestStore {}
+export interface MemoryStore
+  extends RecallStore, ArchivalStore, VectorIngestStore {}
