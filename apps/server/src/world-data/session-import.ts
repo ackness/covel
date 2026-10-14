@@ -11,7 +11,10 @@ import {
 } from "@covel/shared";
 import { portableContractSources } from "./portable-contract-data.js";
 import type { WorldDataImportLedgerRecord } from "@covel/store";
+import type { WorldDataDiagnostic } from "./types.js";
 import {
+  conventionCollisionDiagnostics,
+  conventionCollisions,
   conventionsOfPlugins,
   worldHasData,
   type ConventionalSource,
@@ -61,13 +64,31 @@ function deferredProjectionLedgerKey(
 
 /**
  * The conventions of the plugins this import runs with. A caller that gives
- * a registry gets the paths of that registry; without one the list of the
- * process applies.
+ * a registry gets the paths of its plugins, only the session's active ones
+ * when it names them; without a registry the list of the process applies.
  */
 function conventionsFor(
   deps: WorldDataImportPreflightDeps | undefined,
 ): readonly ConventionalSource[] | undefined {
-  return deps?.registry ? conventionsOfPlugins(deps.registry) : undefined;
+  return deps?.registry
+    ? conventionsOfPlugins(deps.registry, deps.activePlugins)
+    : undefined;
+}
+
+/**
+ * Warnings for the package's files at a path that more than one of these
+ * plugins names: without a descriptor such a file is read for none of them.
+ */
+async function collisionsFor(
+  worldRoot: string,
+  manifest: { readonly worldData?: string },
+  deps: WorldDataImportPreflightDeps | undefined,
+): Promise<WorldDataDiagnostic[]> {
+  if (manifest.worldData || !deps?.registry) return [];
+  return conventionCollisionDiagnostics(
+    worldRoot,
+    conventionCollisions(deps.registry, deps.activePlugins),
+  );
 }
 
 export { finalizeWorldDataMediaRefs, releaseWorldDataMediaRefs };
@@ -89,6 +110,10 @@ export async function prepareWorldDataImportForSession(
     ? await resolveWorldRoot(options.worldId, options.worldsDirs)
     : null;
   const manifest = worldRoot ? await readWorldManifest(worldRoot) : null;
+  const collisions =
+    worldRoot && manifest
+      ? await collisionsFor(worldRoot, manifest, options.preflight)
+      : [];
   const effectiveDimensions = worldRoot
     ? await readEffectiveDimensions({
         worldRoot,
@@ -107,7 +132,7 @@ export async function prepareWorldDataImportForSession(
   ) {
     const sources = portableContractSources(options.contractData);
     if (options.contractData === undefined && effectiveDimensions === undefined)
-      return { imported: false, diagnostics: [] };
+      return { imported: false, diagnostics: collisions };
     const basePlan = await buildImportPlan({
       sessionId: options.sessionId,
       worldId: options.worldId,
@@ -126,7 +151,7 @@ export async function prepareWorldDataImportForSession(
     return {
       imported: true,
       portableOnly: true,
-      diagnostics: [...plan.diagnostics, ...plan.mergeEvents],
+      diagnostics: [...collisions, ...plan.diagnostics, ...plan.mergeEvents],
       plan,
       mediaRefs: [],
     };
@@ -185,6 +210,7 @@ export async function prepareWorldDataImportForSession(
   return {
     imported: true,
     diagnostics: [
+      ...collisions,
       ...descriptor.diagnostics,
       ...plan.diagnostics,
       ...plan.mergeEvents,
@@ -321,6 +347,11 @@ export async function preflightWorldDataForSession(
         };
   }
   const manifest = await readWorldManifest(worldRoot);
+  const collisions = await collisionsFor(
+    worldRoot,
+    manifest,
+    options.preflight,
+  );
   if (
     !(await worldHasData(
       worldRoot,
@@ -333,14 +364,10 @@ export async function preflightWorldDataForSession(
       worldsDirs: [],
       preflight: { ...options.preflight, executeProjectionHandlers: false },
     });
+    const diagnostics = [...collisions, ...prepared.diagnostics];
     return prepared.imported
-      ? preflightPlanResult(prepared.plan, prepared.diagnostics)
-      : {
-          imported: false,
-          diagnostics: prepared.diagnostics,
-          planned: 0,
-          targets: [],
-        };
+      ? preflightPlanResult(prepared.plan, diagnostics)
+      : { imported: false, diagnostics, planned: 0, targets: [] };
   }
 
   const descriptor = await loadWorldDataDescriptor({
@@ -355,7 +382,7 @@ export async function preflightWorldDataForSession(
   ) {
     return {
       imported: true,
-      diagnostics: descriptor.diagnostics,
+      diagnostics: [...collisions, ...descriptor.diagnostics],
       planned: 0,
       targets: [],
     };
@@ -390,6 +417,7 @@ export async function preflightWorldDataForSession(
         options.locale,
       );
   return preflightPlanResult(plan, [
+    ...collisions,
     ...descriptor.diagnostics,
     ...plan.diagnostics,
     ...plan.mergeEvents,
@@ -457,6 +485,11 @@ export async function prepareWorldDataSyncForSession(
     return preparePortableWorldDataSync(options);
   }
   const manifest = await readWorldManifest(worldRoot);
+  const collisions = await collisionsFor(
+    worldRoot,
+    manifest,
+    options.preflight,
+  );
   if (
     !(await worldHasData(
       worldRoot,
@@ -485,7 +518,7 @@ export async function prepareWorldDataSyncForSession(
     return {
       imported: true,
       dimensionOnly: true,
-      diagnostics: [...plan.diagnostics, ...plan.mergeEvents],
+      diagnostics: [...collisions, ...plan.diagnostics, ...plan.mergeEvents],
       plan,
     };
   }
@@ -502,7 +535,7 @@ export async function prepareWorldDataSyncForSession(
   ) {
     return {
       imported: true,
-      diagnostics: descriptor.diagnostics,
+      diagnostics: [...collisions, ...descriptor.diagnostics],
       plan: emptyImportPlan(),
     };
   }
@@ -529,6 +562,7 @@ export async function prepareWorldDataSyncForSession(
       imported: true,
       dimensionOnly: true,
       diagnostics: [
+        ...collisions,
         ...descriptor.diagnostics,
         ...plan.diagnostics,
         ...plan.mergeEvents,
@@ -572,6 +606,7 @@ export async function prepareWorldDataSyncForSession(
   return {
     imported: true,
     diagnostics: [
+      ...collisions,
       ...descriptor.diagnostics,
       ...plan.diagnostics,
       ...plan.mergeEvents,

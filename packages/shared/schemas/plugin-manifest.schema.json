@@ -780,7 +780,7 @@
                         "type": "string",
                         "minLength": 1,
                         "pattern": "^(?!\\/)(?!.*(?:^|\\/)\\.\\.(?:\\/|$))[a-z0-9_./-]+$",
-                        "description": "Conventional path of the source inside a world package.",
+                        "description": "Conventional path of the source inside a world package. It may not name a path the kernel or the package itself owns: `world.yaml`, `WORLD.md`, `data/world.data.yaml`, `data/dimensions.yaml`, `data/lorebook.yaml`, `characters/characters.json`, `media/gallery.json`, `media/portraits.json`, `media/scenes.json` or `media/gallery/`, nor an edition of one.",
                         "examples": ["data/quests.yaml"]
                       },
                       "key": {
