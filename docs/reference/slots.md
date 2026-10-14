@@ -72,7 +72,7 @@ Schema：`packages/ai-provider/src/config/llm-schema.ts`。
 | `providerRequestMetadata`           | —    | 随生成请求发出的自由键值，单次调用给的值优先；评估请求不使用。选择图片、语音协议的键也放这里，见下文“媒体 wire 路由键”一节                                                    |
 | `providerOptions`                   | —    | 按服务商或协议分组的原生参数，只用于文本、对象和流式调用，见[供应商参数](#供应商参数)                                                                                         |
 
-`baseUrl` 等值可以引用环境变量，例如 `baseUrl = "${MY_API_BASE}"`。旧字段 `reasoning_effort` 和 `thinking` 不再接受，写了会在加载时报错，改用 `reasoningEffort` 或 `providerOptions`。
+`baseUrl` 等值可以引用环境变量，例如 `baseUrl = "${MY_API_BASE}"`。配置读不进来时，错误只写出行号、列号和出错的键，不会写出环境变量的值。旧字段 `reasoning_effort` 和 `thinking` 不再接受，写了会在加载时报错，改用 `reasoningEffort` 或 `providerOptions`。
 
 ## 内置服务商与协议
 
