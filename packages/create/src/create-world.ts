@@ -131,6 +131,7 @@ function checkManifest(
     yamlData,
     options.brief,
     options.dataContracts,
+    options.packs,
   );
   const errors = briefResult.errors;
   warnings.push(...briefResult.warnings);
@@ -804,6 +805,7 @@ export async function createWorld(
     options.brief,
     options.loadPrompt,
     options.dataContracts,
+    options.packs,
   );
   log(
     options,

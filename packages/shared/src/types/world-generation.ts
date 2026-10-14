@@ -1,10 +1,3 @@
-export const WORLD_EXPERIENCE_MODES = [
-  "traditional-story",
-  "dialogue-mode",
-] as const;
-
-export type WorldExperienceMode = (typeof WORLD_EXPERIENCE_MODES)[number];
-
 export const WORLD_PACKAGE_CONTENT_KINDS = [
   "characters",
   "lorebook",
@@ -22,7 +15,12 @@ export type WorldPackageContentKind =
  * authored content they want without knowing plugin IDs or worldData URIs.
  */
 export interface WorldCreationBrief {
-  readonly experienceMode?: WorldExperienceMode;
+  /**
+   * The plugin pack the world is made for: the ID of a pack of the server's
+   * catalogue (`packs/builtin.yaml`). It becomes the world's
+   * `pluginPolicy.presetId`, and the pack's `defaultViewMode` the world's.
+   */
+  readonly pack?: string;
   /** Kernel-owned content: characters, lorebook, rules, opening resources. */
   readonly content?: readonly WorldPackageContentKind[];
   /**

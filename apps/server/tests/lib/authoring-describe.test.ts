@@ -10,6 +10,7 @@ import {
   describeAuthoringSurface,
   validateAuthoringExamples,
 } from "../../src/authoring/describe.js";
+import { BUILTIN_PLUGIN_PACKS } from "../../src/config/plugin-packs.js";
 import {
   loadPluginCatalogue,
   validateWorldPackage,
@@ -74,6 +75,25 @@ describe("authoring surface", () => {
       indexTo: "contract:character.portrait-assets@1",
       key: "filename",
     });
+  });
+
+  it("lists the pack catalogue a world can name, in the requested language", async () => {
+    const catalogue = await loadPluginCatalogue([bundledPlugins]);
+    const surface = await describeAuthoringSurface(catalogue, {
+      locale: "zh-CN",
+    });
+
+    // Every pack of `packs/builtin.yaml`, in its order.
+    expect(surface.packs.map((pack) => pack.id)).toEqual(
+      BUILTIN_PLUGIN_PACKS.map((pack) => pack.id),
+    );
+    // The view a pack asks for is data of the pack.
+    expect(
+      surface.packs.find((pack) => pack.id === "dialogue-mode"),
+    ).toMatchObject({ label: "对话模式", defaultViewMode: "stage" });
+    expect(
+      surface.packs.find((pack) => pack.id === "traditional-story"),
+    ).not.toHaveProperty("defaultViewMode");
   });
 
   it("every bundled namespace that accepts world data explains how to author it", async () => {

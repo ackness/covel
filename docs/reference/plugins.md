@@ -102,7 +102,7 @@ Extract facts supported by runtime-inputs.narrative.value, then call save-facts.
 | 根字段                                          | 含义                                                                                                        |
 | ----------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
 | `id`, `kind`                                    | 包身份；`kind` 为 `core` 或 `plugin`                                                                        |
-| `version`, `displayName`, `description`, `tags` | 元数据；标签用于准备页的分组和筛选，不决定运行时调度                                                                         |
+| `version`, `displayName`, `description`, `tags` | 元数据；标签用于准备页的分组和筛选，不决定运行时调度                                                        |
 | `covel`                                         | 适配的宿主版本范围，如 `">=0.0.45"`；范围之外的宿主不安装也不加载该包                                       |
 | `author`, `license`, `homepage`                 | 作者信息，只用于展示；见[作者信息](#作者信息)                                                               |
 | `provides`                                      | 版本化契约字符串，或 `{contract, default: true}`                                                            |
@@ -726,6 +726,7 @@ namespace 声明 `search` 之后，它的记录进入框架的记忆检索（[`m
 **世界和玩法包怎样给出初始请求。**
 
 - 世界的 `pluginPolicy` 使用 `presetId/preferredTags/avoidedTags/requested/recommended/packs`。玩法包使用 `requested/recommended`。
+- 内置玩法包（`packs/builtin.yaml`）还可以写 `defaultViewMode`（`stage` 或 `parsed`）。AI 创建世界时选了这个玩法包，生成的世界就带上这个 `defaultViewMode`。框架不按玩法包的 ID 做判断：AI 创建世界的选项就是这份目录里的全部玩法包，见 [`GET /api/framework/authoring`](./api.md#get-apiframeworkauthoring) 的 `packs`。
 - 推荐项不自动启用，也不会覆盖玩家的显式排除。
 - `GET /api/worlds/:id/plugin-plan` 的 `defaultPluginIds` 是初始的显式请求。准备页和创建端再用同一个解析器计算活动集合。
 - 这个接口返回的各 `requested` 和 `defaultPluginIds` 只含已安装的插件。世界或玩法包请求了但没有安装的插件列在 `missing` 里，由准备页提示，不进入创建请求。

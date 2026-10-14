@@ -82,12 +82,10 @@ export type {
 
 export {
   WORLD_AUTHORING_IDLE_TIMEOUT_MS,
-  WORLD_EXPERIENCE_MODES,
   WORLD_PACKAGE_CONTENT_KINDS,
 } from "./world-generation.js";
 export type {
   WorldCreationBrief,
-  WorldExperienceMode,
   WorldGenerationPart,
   WorldPackageContentKind,
 } from "./world-generation.js";

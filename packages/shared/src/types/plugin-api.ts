@@ -201,6 +201,11 @@ export interface PluginPack {
   readonly tags: readonly string[];
   readonly reason?: I18nText;
   readonly source: "builtin" | "world";
+  /**
+   * The view a world made for this pack opens new sessions in. The world
+   * generator writes it into the world's `defaultViewMode`.
+   */
+  readonly defaultViewMode?: "stage" | "parsed";
 }
 
 export interface ResolvedWorldPluginPolicy {

@@ -1029,6 +1029,7 @@ What each endpoint accepts and returns:
 - `POST /api/install/collection`: the response is the same as for batch.
 
 Rollback results for failed batch installations are documented in [Plugin installation](./plugin-installation.md#multi-package-preview-and-batch-install): `details.rolledBack` and `details.retained` list removed and retained packages.
+
 - `GET /api/install/plugins`: the list includes plugins that have not yet been loaded after a restart.
 
 `/api/install/world` checks the worldData diagnostics before it writes the world record:
@@ -3414,6 +3415,7 @@ Other rules:
 Returns the list of what can go into a world, for the world creation screen and for development agents. It reflects the plugins the server has loaded right now.
 
 - All of the content comes from the `contributes.data.*.authoring` declarations in plugin manifests. There is no hard-coded plugin list.
+- `packs` lists every gameplay pack of the server's pack catalogue (`packs/builtin.yaml`): `id`, `label`, `description`, `tags`, `requested`, `recommended`, and `defaultViewMode` when the pack has one. A world writes one of these `id`s in `pluginPolicy.presetId`; AI world creation offers them as choices.
 - `pnpm describe:authoring` prints the same data.
 - An unreadable or non-JSON example, or a missing, invalid, or conflicting schema for generatable content, skips only that contract. The optional `diagnostics` array returns `{ pluginId, namespace, message }` for each problem, also logged by the server; other contracts and plugins remain available.
 - The `locale` query parameter sets the language of display text such as `title`. If it is omitted, the server's default language is used.
@@ -3476,6 +3478,22 @@ Returns the list of what can go into a world, for the world creation screen and 
       "requires": [],
       "settings": []
     }
+  ],
+  "packs": [
+    {
+      "id": "dialogue-mode",
+      "label": "Dialogue Mode",
+      "description": "Dialogue-first narration, scene cast state, quick replies, and character profiles.",
+      "tags": ["mode:dialogue"],
+      "requested": [
+        "pregame",
+        "world-init",
+        "char-creator",
+        "chat-mode-narrator"
+      ],
+      "recommended": ["memory", "npc-graph"],
+      "defaultViewMode": "stage"
+    }
   ]
 }
 ```
@@ -3487,6 +3505,7 @@ Returns the list of what can go into a world, for the world creation screen and 
 | `contracts`    | Each data contract that a plugin receives: the receiving plugin, the title, writing hints, the entries that can go directly into `world.data.yaml`, and an example |
 | `generate`     | Appears only when the in-app generator can produce this content: `offer` lists it as an option, and `default` lists it and selects it by default                   |
 | `plugins`      | The plugin catalog: ID, name, description, the contracts it provides and requires, and the settings that can be preset with `pluginSettings`                       |
+| `packs`        | The gameplay pack catalogue: the packs a world can write in `pluginPolicy.presetId`, and `defaultViewMode` when the pack has one                                   |
 
 #### `GET /api/framework/capabilities`
 
@@ -4923,7 +4942,7 @@ The response is SSE. First come progress frames, and the generated world comes l
   "saveTarget": "server-file",
   "idleTimeoutMs": 300000,
   "brief": {
-    "experienceMode": "traditional-story",
+    "pack": "traditional-story",
     "content": ["characters", "lorebook", "rules", "opening-kit"],
     "contracts": ["memory.blocks@1"],
     "additionalInstructions": "让三个主要角色共同隐瞒一次失败的远征。"
@@ -4944,14 +4963,14 @@ If `idleTimeoutMs` is out of range, the server returns `400`. The app's own sett
 
 Fields of `brief`:
 
-| Field                    | Type     | Description                                                                                                                            |
-| ------------------------ | -------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| `experienceMode`         | string   | `traditional-story` or `dialogue-mode`. The latter also generates `defaultViewMode: stage`                                             |
-| `content`                | string[] | Kernel content. Allowed values: `characters`, `lorebook`, `rules`, `opening-kit`                                                       |
-| `contracts`              | string[] | Plugin content. Contains data contract IDs                                                                                             |
-| `additionalInstructions` | string   | Extra requirements for the world package (up to 2000 characters), such as character relationships, taboos, pacing, or content to avoid |
+| Field                    | Type     | Description                                                                                                                                                                                                                                                                                                                                     |
+| ------------------------ | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pack`                   | string   | The gameplay pack the world is made for: an ID of the server's pack catalogue (`packs/builtin.yaml`); the choices are `packs` in [`GET /api/framework/authoring`](#get-apiframeworkauthoring). It is written into the world's `pluginPolicy.presetId`; when the pack has `defaultViewMode`, the world gets it too. Leave it out to name no pack |
+| `content`                | string[] | Kernel content. Allowed values: `characters`, `lorebook`, `rules`, `opening-kit`                                                                                                                                                                                                                                                                |
+| `contracts`              | string[] | Plugin content. Contains data contract IDs                                                                                                                                                                                                                                                                                                      |
+| `additionalInstructions` | string   | Extra requirements for the world package (up to 2000 characters), such as character relationships, taboos, pacing, or content to avoid                                                                                                                                                                                                          |
 
-The allowed values for `contracts` come from the contracts marked with `generate` in `GET /api/framework/authoring`. Any other value returns `400`. Contracts that fail preparation are absent from the choices; generation and revision continue with the remaining content, and `done.warnings` identifies the skipped plugin, namespace, and contract.
+A `pack` that is not in the catalogue returns `400`. The allowed values for `contracts` come from the contracts marked with `generate` in `GET /api/framework/authoring`. Any other value returns `400`. Contracts that fail preparation are absent from the choices; generation and revision continue with the remaining content, and `done.warnings` identifies the skipped plugin, namespace, and contract.
 
 Values for `saveTarget`:
 

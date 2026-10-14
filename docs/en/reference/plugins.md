@@ -102,7 +102,7 @@ Extract facts supported by runtime-inputs.narrative.value, then call save-facts.
 | Root field                                      | Meaning                                                                                                                                                          |
 | ----------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `id`, `kind`                                    | Package identity. `kind` is `core` or `plugin`.                                                                                                                  |
-| `version`, `displayName`, `description`, `tags` | Metadata. Tags group and filter plugins in session prep; they do not determine runtime scheduling.                                                                                                         |
+| `version`, `displayName`, `description`, `tags` | Metadata. Tags group and filter plugins in session prep; they do not determine runtime scheduling.                                                               |
 | `covel`                                         | The range of host versions the package works with, such as `">=0.0.45"`. A host outside that range does not install or load the package.                         |
 | `author`, `license`, `homepage`                 | Author information, shown only for display. See [Author information](#author-information).                                                                       |
 | `provides`                                      | Versioned contract strings, or `{contract, default: true}`.                                                                                                      |
@@ -726,6 +726,7 @@ After a namespace declares `search`, its records enter the framework's memory re
 **How a world and a gameplay pack give the initial request.**
 
 - A world's `pluginPolicy` uses `presetId`, `preferredTags`, `avoidedTags`, `requested`, `recommended`, and `packs`. A gameplay pack uses `requested` and `recommended`.
+- A built-in gameplay pack (`packs/builtin.yaml`) can also have `defaultViewMode` (`stage` or `parsed`). When a world is created with AI for this pack, the generated world gets this `defaultViewMode`. The framework makes no decision by pack ID: the choices of AI world creation are all the packs of this catalogue; see `packs` in [`GET /api/framework/authoring`](./api.md#get-apiframeworkauthoring).
 - A recommendation is not enabled automatically, and it does not override the player's explicit exclusion.
 - `defaultPluginIds` from `GET /api/worlds/:id/plugin-plan` is the initial set of explicit requests. The session-prep screen and the create endpoint then use the same resolver to compute the active set.
 - Each `requested` list and `defaultPluginIds` returned by this endpoint contains only installed plugins. A plugin that a world or pack requests but that is not installed is listed in `missing`. The session-prep screen shows it as a notice, and it is not sent in the create request.
