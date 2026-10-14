@@ -82,6 +82,7 @@ export function MediaPreviewDialog({
                 className="shrink-0"
                 onClick={() =>
                   downloadImage({
+                    t,
                     ref: mediaRef,
                     sessionId,
                     filename: `${title || "image"}.png`,

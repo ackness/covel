@@ -14,7 +14,7 @@ import {
 import { resolvePath, useI18nResolver } from "@/lib/catalog/helpers.js";
 import { useActiveSessionId } from "@/lib/catalog/session-context.js";
 import { emitToast } from "@/lib/toast-channel.js";
-import { formatJobDuration } from "@/lib/job-ui.js";
+import { formatJobDuration, jobStatusLabel } from "@/lib/job-ui.js";
 import { downloadImage } from "./actions.js";
 
 export function MediaGalleryPanel({
@@ -81,7 +81,9 @@ export function MediaGalleryPanel({
               <div className="p-2 space-y-2">
                 <div className="flex justify-between gap-2 text-[10px] text-muted-foreground">
                   <span>{title}</span>
-                  {status ? <span>{String(status)}</span> : null}
+                  {status ? (
+                    <span>{jobStatusLabel(String(status), t)}</span>
+                  ) : null}
                   {typeof duration === "number" ? (
                     <span>{formatJobDuration(duration)}</span>
                   ) : null}
@@ -99,7 +101,11 @@ export function MediaGalleryPanel({
                 })}
                 {error ? (
                   <p className="text-[10px] text-destructive">
-                    {String(error)}
+                    {error instanceof Error
+                      ? error.message
+                      : typeof error === "string"
+                        ? error
+                        : t("common.error")}
                   </p>
                 ) : null}
                 <div className="flex gap-1.5">
@@ -118,6 +124,7 @@ export function MediaGalleryPanel({
                         size="sm"
                         onClick={() =>
                           downloadImage({
+                            t,
                             ref,
                             sessionId,
                             filename: `${id}.png`,
@@ -143,7 +150,14 @@ export function MediaGalleryPanel({
                           scope: { item, props: input },
                           t,
                         })
-                          .catch((err) => emitToast("error", String(err)))
+                          .catch((err) =>
+                            emitToast(
+                              "error",
+                              err instanceof Error
+                                ? err.message
+                                : t("common.error"),
+                            ),
+                          )
                           .finally(() => setBusy(false));
                       }}
                     >

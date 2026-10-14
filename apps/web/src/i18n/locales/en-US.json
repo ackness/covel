@@ -302,7 +302,8 @@
       "serverBackend": "Server {{backend}}",
       "builtIn": "Built-in",
       "serverStore": "Server store",
-      "server": "Server"
+      "server": "Server",
+      "memory": "Memory"
     },
     "jumpToLatest": "Jump to latest",
     "loadOlderFailed": "Could not load earlier messages.",
@@ -377,7 +378,27 @@
     "panelLoadFailed": "Plugin panels could not be loaded.",
     "modelCredentialsMissing": "Add an API key in provider settings before starting.",
     "steerNotTaken": "This turn did not take your message. It is back in the input box for you to send next.",
-    "outputTruncated": "The story reached the model's output limit and may stop mid-sentence. Raise the maximum output tokens or choose another model to avoid this."
+    "outputTruncated": "The story reached the model's output limit and may stop mid-sentence. Raise the maximum output tokens or choose another model to avoid this.",
+    "canvasEyebrow": "§ SESSION CANVAS",
+    "blockType": "Block: {{type}}",
+    "dbLoadErrorDetail": "Failed to load database: {{error}}",
+    "retryTaskNamed": "Retry this task: {{label}}",
+    "activeTaskDetail": "{{label}} — {{detail}}…",
+    "jobStatus": {
+      "pending": "Pending",
+      "queued": "Queued",
+      "running": "Running",
+      "done": "Done",
+      "completed": "Completed",
+      "failed": "Failed",
+      "cancelled": "Cancelled",
+      "suspended": "Suspended",
+      "progress": "In progress",
+      "waiting-input": "Waiting for input",
+      "succeeded": "Succeeded"
+    },
+    "retryScopeLimited": "Only the selected failed tasks will run again. The story and other completed results are preserved. Each batch handles up to {{count}} tasks. Retry the remaining tasks afterward.",
+    "activeTask": "{{label}}…"
   },
   "blocks": {
     "actionPlaceholder": "Or type your own action...",
@@ -606,7 +627,13 @@
     "listNeedsEntry": "Add at least one entry.",
     "numberTooSmall": "Enter {{minimum}} or more.",
     "wholeNumberNeeded": "Enter a whole number.",
-    "fixMarkedFields": "Fix the marked fields before saving."
+    "fixMarkedFields": "Fix the marked fields before saving.",
+    "unnamedCurrency": "Currency #{{number}}",
+    "numberedResource": "Resource {{number}}",
+    "unnamedFaction": "Faction #{{number}}",
+    "unnamedHistory": "Historical event #{{number}}",
+    "pendingDimensionsTurn": "Dimension settlement pending · Turn {{turn}}",
+    "currentDimensionValue": "Current value · {{id}}"
   },
   "settings": {
     "loadFailedReadOnly": "Settings could not be loaded. Changes are disabled to protect existing data. Fix the storage error and reload the app.",
@@ -1644,7 +1671,11 @@
     },
     "runtimeModelMissing": "Model role {{slot}} is unavailable. Choose a configured role or update Model Roles.",
     "untranslated": "Not translated",
-    "untranslatedHint": "This plugin has no text in your language. Its panels show English."
+    "untranslatedHint": "This plugin has no text in your language. Its panels show English.",
+    "invalidPanelSpecDetail": "Invalid panel spec: {{label}} — {{reason}}",
+    "rpc": {
+      "failed": "The plugin task failed. Try again."
+    }
   },
   "pluginJob": {
     "runtimesNotLoaded": "{{plugin}} was approved, but {{count}} of its tasks cannot be loaded and will not run.",
@@ -1693,7 +1724,10 @@
       "zh": "Chinese (recommended for DashScope)",
       "en": "English (recommended for GPT/Gemini)"
     },
-    "generationFailed": "Image generation failed"
+    "generationFailed": "Image generation failed",
+    "approvalAction": "Generate image",
+    "sessionUnavailable": "This session is unavailable. Reopen it and try again.",
+    "mediaUnavailable": "This image is unavailable. Reload and try again."
   },
   "onboarding": {
     "language": "Language",
@@ -1779,7 +1813,8 @@
     "submittedHint": "Selected",
     "selectPrefix": "Select {{label}}",
     "selectPlaceholder": "Select...",
-    "requiredMissing": "Please fill in required fields"
+    "requiredMissing": "Please fill in required fields",
+    "missingInteraction": "This form cannot be submitted. Reopen the session and try again."
   },
   "interaction": {
     "playerSelected": "You chose:",
@@ -1811,7 +1846,20 @@
       "showDetail": "Show details",
       "hideDetail": "Hide details",
       "copyDetail": "Copy details",
-      "copied": "Copied"
+      "copied": "Copied",
+      "badge": {
+        "auth": "auth",
+        "forbidden": "forbidden",
+        "not-found": "not found",
+        "rate-limited": "rate limited",
+        "server": "server",
+        "timeout": "timeout",
+        "network": "network",
+        "invalid-output": "output",
+        "incomplete": "incomplete",
+        "error": "error",
+        "unknown": "unknown"
+      }
     },
     "plugin": {
       "loadFailed": "Plugin load failed"
