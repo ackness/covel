@@ -1,3 +1,4 @@
+import i18n from "@/i18n";
 import { Check } from "lucide-react";
 import { useInputDraft } from "../use-input-draft.js";
 import { useTranslation } from "react-i18next";
@@ -70,17 +71,36 @@ const FEATURE_LABEL_KEYS: Record<string, string> = {
   computer_use: "settings.featComputerUse",
 };
 
-export function formatTokenCount(n: number): string {
-  if (n >= 1_000_000)
-    return `${(n / 1_000_000).toFixed(n % 1_000_000 === 0 ? 0 : 1)}M`;
-  if (n >= 1_000) return `${(n / 1_000).toFixed(n % 1_000 === 0 ? 0 : 1)}K`;
-  return String(n);
+export function formatTokenCount(n: number, locale = i18n.language): string {
+  return new Intl.NumberFormat(locale, {
+    notation: "compact",
+    maximumFractionDigits: 1,
+  }).format(n);
 }
 
-export function formatPrice(perMToken: number): string {
-  if (perMToken < 0.01) return `$${perMToken.toFixed(3)}/M`;
-  if (perMToken < 1) return `$${perMToken.toFixed(2)}/M`;
-  return `$${perMToken.toFixed(1)}/M`;
+export function formatPrice(perMToken: number, locale = i18n.language): string {
+  const digits = perMToken < 0.01 ? 3 : perMToken < 1 ? 2 : 1;
+  return i18n.getFixedT(locale)("settings.pricePerMillionValue", {
+    price: new Intl.NumberFormat(locale, {
+      style: "currency",
+      currency: "USD",
+      minimumFractionDigits: digits,
+      maximumFractionDigits: digits,
+    }).format(perMToken),
+  });
+}
+
+export function formatImagePrice(
+  value: number,
+  locale = i18n.language,
+): string {
+  return i18n.getFixedT(locale)("settings.pricePerImageValue", {
+    price: new Intl.NumberFormat(locale, {
+      style: "currency",
+      currency: "USD",
+      maximumFractionDigits: 4,
+    }).format(value),
+  });
 }
 
 export function CapabilityTags({
@@ -173,7 +193,7 @@ export function CapabilityTags({
             </span>
           ) : cap.pricing?.perImage != null ? (
             <span title={t("settings.pricePerImage", "Price per image")}>
-              ${cap.pricing.perImage}/img
+              {formatImagePrice(cap.pricing.perImage)}
             </span>
           ) : null}
         </div>

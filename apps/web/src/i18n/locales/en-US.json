@@ -281,7 +281,13 @@
       "errors": "{{count}} error(s)",
       "failed": "Check failed",
       "retry": "Retry",
-      "moreTargets": "{{count}} more"
+      "moreTargets": "{{count}} more",
+      "ready_one": "{{count}} item will be imported",
+      "ready_other": "{{count}} items will be imported",
+      "warnings_one": "{{count}} warning",
+      "warnings_other": "{{count}} warnings",
+      "errors_one": "{{count}} error",
+      "errors_other": "{{count}} errors"
     },
     "dbSchema": "Schema",
     "dbValues": "Values",
@@ -399,7 +405,35 @@
     },
     "retryScopeLimited": "Only the selected failed tasks will run again. The story and other completed results are preserved. Each batch handles up to {{count}} tasks. Retry the remaining tasks afterward.",
     "activeTask": "{{label}}…",
-    "panelUnavailable": "This panel is not available in this session."
+    "panelUnavailable": "This panel is not available in this session.",
+    "dbVolumes_one": "{{count}} volume",
+    "dbVolumes_other": "{{count}} volumes",
+    "pluginsLoaded_one": "{{count}} plugin loaded",
+    "pluginsLoaded_other": "{{count}} plugins loaded",
+    "loreModified_one": "Modified ({{count}} char)",
+    "loreModified_other": "Modified ({{count}} chars)",
+    "loreOriginal_one": "Original ({{count}} char)",
+    "loreOriginal_other": "Original ({{count}} chars)",
+    "executionSummary_one": "Execution · {{count}} runtime",
+    "executionSummary_other": "Execution · {{count}} runtimes",
+    "slotsConfigured_one": "{{count}} slot configured",
+    "slotsConfigured_other": "{{count}} slots configured",
+    "historySummary_one": "{{count}} session",
+    "historySummary_other": "{{count}} sessions",
+    "loreSummary_one": "{{count}} char",
+    "loreSummary_other": "{{count}} chars",
+    "loreSummaryHint_one": "{{count}} character · click to edit world lore",
+    "loreSummaryHint_other": "{{count}} characters · click to edit world lore",
+    "tagsCount_one": "{{count}} tag",
+    "tagsCount_other": "{{count}} tags",
+    "selectionsReady_one": "{{count}} selection ready",
+    "selectionsReady_other": "{{count}} selections ready",
+    "retryFailedBatch_one": "Retry the first {{count}} failed task",
+    "retryFailedBatch_other": "Retry the first {{count}} failed tasks",
+    "retryBatchLimit_one": "Each batch handles up to {{count}} task. Retry the remaining tasks afterward.",
+    "retryBatchLimit_other": "Each batch handles up to {{count}} tasks. Retry the remaining tasks afterward.",
+    "retryScopeLimited_one": "Only the selected failed tasks will run again. The story and other completed results are preserved. Each batch handles up to {{count}} task. Retry the remaining tasks afterward.",
+    "retryScopeLimited_other": "Only the selected failed tasks will run again. The story and other completed results are preserved. Each batch handles up to {{count}} tasks. Retry the remaining tasks afterward."
   },
   "blocks": {
     "actionPlaceholder": "Or type your own action...",
@@ -899,7 +933,8 @@
       "restartHint": "Package files changed. Restart the backend to apply installation or removal; execution still requires session authorization.",
       "restartNow": "Restart now",
       "reloadFailed": "Reload failed",
-      "uninstallConfirm": "Uninstall this plugin? Restart to apply the removal. You will need to install it again to use it later."
+      "uninstallConfirm": "Uninstall this plugin? Restart to apply the removal. You will need to install it again to use it later.",
+      "nothingInstalled": "No packages were installed from this collection."
     },
     "desktopDataLocations": "Data Locations",
     "desktopProxy": "Network Proxy",
@@ -930,7 +965,7 @@
     "desktopEditLlm": "Edit llm.toml",
     "desktopEditKeys": "Edit keys.env",
     "desktopServer": "Backend Server",
-    "desktopServerPort": "Local API server running on port ",
+    "desktopServerPort": "Local API server running on port {{port}}.",
     "desktopRestart": "Restart server",
     "desktopApplyConfigChanges": "Apply config changes",
     "desktopRestartElectronOnly": "This action is only available in the Electron desktop app.",
@@ -961,7 +996,9 @@
       "reloadFailed": "llm.toml could not be parsed",
       "activeFile": "Active configuration: {{path}}",
       "activeBuiltin": "Active configuration: built-in default",
-      "parseError": "llm.toml could not be loaded. The currently active configuration has been kept. Fix it and reload: {{error}}"
+      "parseError": "llm.toml could not be loaded. The currently active configuration has been kept. Fix it and reload: {{error}}",
+      "reloadOkDetail_one": "{{count}} slot active: {{slots}}",
+      "reloadOkDetail_other": "{{count}} slots active: {{slots}}"
     },
     "runtimeSlotsDiscovered": "Plugin-declared model roles",
     "temperature": "Temperature",
@@ -1067,7 +1104,9 @@
       "days30": "30 days",
       "days90": "90 days",
       "keep": "Keep everything",
-      "otherDays": "{{count}} days"
+      "otherDays": "{{count}} days",
+      "otherDays_one": "{{count}} day",
+      "otherDays_other": "{{count}} days"
     },
     "serverSetting": {
       "pending": "Asking the server for its value…",
@@ -1256,7 +1295,27 @@
     "desktopProxyMode": "Proxy mode",
     "desktopProxyUrl": "Proxy address",
     "providerIdLabel": "Provider ID",
-    "themeSchemeLocked": "This theme supports only one color mode."
+    "themeSchemeLocked": "This theme supports only one color mode.",
+    "description": "Adjust appearance, models, packages, and local data.",
+    "desktopRefreshFailed": "Could not refresh desktop information. Try again.",
+    "providerImportSucceeded": "Providers and models imported.",
+    "numberExample": "e.g. {{value}}",
+    "pricePerImageValue": "{{price}}/img",
+    "pricePerMillionValue": "{{price}}/M",
+    "modelDbRefreshSucceeded_one": "Model database updated: {{count}} model",
+    "modelDbRefreshSucceeded_other": "Model database updated: {{count}} models",
+    "modelCount_one": "{{count}} model (LiteLLM)",
+    "modelCount_other": "{{count}} models (LiteLLM)",
+    "importKeysCount_one": "Include {{count}} API key from the bundle",
+    "importKeysCount_other": "Include {{count}} API keys from the bundle",
+    "overrideCount_one": "{{count}} override",
+    "overrideCount_other": "{{count}} overrides",
+    "modelCountShort_one": "{{count}} model",
+    "modelCountShort_other": "{{count}} models",
+    "addModelsCount_one": "Add {{count}} model",
+    "addModelsCount_other": "Add {{count}} models",
+    "importInvalidEntries_one": "{{count}} entry does not match the current settings schema and will be skipped.",
+    "importInvalidEntries_other": "{{count}} entries do not match the current settings schema and will be skipped."
   },
   "appearance": {
     "styleTitle": "Style",
@@ -1672,7 +1731,9 @@
     "invokeRuntime": {
       "setupPending": "This plugin needs setup first. Continue the story for one turn and complete any setup form, then try again.",
       "submitted": "Submitted {{count}} background job(s): {{ids}}. Waiting for completion…",
-      "noFollowerEvents": "{{runtimeId}} finished but emitted no background follower (missing matching events[]). Check that the model output a valid JSON envelope."
+      "noFollowerEvents": "{{runtimeId}} finished but emitted no background follower (missing matching events[]). Check that the model output a valid JSON envelope.",
+      "submitted_one": "Submitted {{count}} background job: {{ids}}. Waiting for completion…",
+      "submitted_other": "Submitted {{count}} background jobs: {{ids}}. Waiting for completion…"
     },
     "jobs": {
       "imagePromptGenerating": "Generating image prompt...",
@@ -1790,7 +1851,9 @@
     "testBindings": "Review and test existing models ({{count}} roles)",
     "languageExperimental": "experimental",
     "credentialsMissing": "Add credentials for the configured models",
-    "credentialsMissingHint": "Your model bindings are saved. Configure a provider API key before starting, or explicitly test a local service that requires no key."
+    "credentialsMissingHint": "Your model bindings are saved. Configure a provider API key before starting, or explicitly test a local service that requires no key.",
+    "testBindings_one": "Review and test existing models ({{count}} role)",
+    "testBindings_other": "Review and test existing models ({{count}} roles)"
   },
   "character": {
     "noCharacters": "Characters will appear here once created.",
@@ -2028,7 +2091,11 @@
       "dependencies": "Dependencies",
       "autoAdded": "Added by dependency resolution",
       "rejection": "Resolution rejection",
-      "failure": "Load / activation error"
+      "failure": "Load / activation error",
+      "installedCount_one": "{{count}} installed plugin",
+      "installedCount_other": "{{count}} installed plugins",
+      "historyLimit_one": "Last {{count}} completed service call (process memory)",
+      "historyLimit_other": "Last {{count}} completed service calls (process memory)"
     },
     "cost": {
       "tab": "Cost",
@@ -2152,7 +2219,27 @@
       "schemas": "{{count}} schemas",
       "namespaces": "{{count}} namespaces",
       "keys": "{{count}} keys",
-      "empty": "empty"
+      "empty": "empty",
+      "triggers_one": "{{count}} trigger",
+      "triggers_other": "{{count}} triggers",
+      "outputs_one": "{{count}} output",
+      "outputs_other": "{{count}} outputs",
+      "writes_one": "{{count}} write",
+      "writes_other": "{{count}} writes",
+      "reads_one": "{{count}} read",
+      "reads_other": "{{count}} reads",
+      "sources_one": "{{count}} source",
+      "sources_other": "{{count}} sources",
+      "mergeModes_one": "{{count}} merge mode",
+      "mergeModes_other": "{{count}} merge modes",
+      "targets_one": "{{count}} target",
+      "targets_other": "{{count}} targets",
+      "schemas_one": "{{count}} schema",
+      "schemas_other": "{{count}} schemas",
+      "namespaces_one": "{{count}} namespace",
+      "namespaces_other": "{{count}} namespaces",
+      "keys_one": "{{count}} key",
+      "keys_other": "{{count}} keys"
     },
     "snapshotRefreshFailed": "Could not refresh session data. Displayed data may be outdated; use Refresh to retry.",
     "snapshotUpdatedAt": "Data updated at {{time}}",
@@ -2178,7 +2265,22 @@
       "failed": "Failed",
       "recovered": "Recovered by retry"
     },
-    "attemptTimingHint": "“—” means not recorded. Model time includes reading the response stream and excludes queue wait. Tool durations appear in tool details."
+    "attemptTimingHint": "“—” means not recorded. Model time includes reading the response stream and excludes queue wait. Tool durations appear in tool details.",
+    "nRuntimes_other": "{{count}} runtimes",
+    "promptCount_one": "{{count}} prompt",
+    "promptCount_other": "{{count}} prompts",
+    "characterCount_one": "{{count}} char",
+    "characterCount_other": "{{count}} chars",
+    "promptTools_one": "{{count}} available tool",
+    "promptTools_other": "{{count}} available tools",
+    "promptContentUnavailable_one": "This function-runtime call recorded {{count}} message and {{chars}} characters. Prompt content was not persisted to avoid exposing sensitive data.",
+    "promptContentUnavailable_other": "This function-runtime call recorded {{count}} messages and {{chars}} characters. Prompt content was not persisted to avoid exposing sensitive data.",
+    "slowCalls_one": "{{count}} slow call",
+    "slowCalls_other": "{{count}} slow calls",
+    "tokenCount_one": "{{count}} token",
+    "tokenCount_other": "{{count}} tokens",
+    "requestOmitted_one": "The captured body omits {{count}} field.",
+    "requestOmitted_other": "The captured body omits {{count}} fields."
   },
   "reload": {
     "reloading": "Restarting server…",
@@ -2270,7 +2372,8 @@
       "message": "This link was provided by the author of “{{package}}”, not by Covel. Covel has not checked this site and is not responsible for what it contains. Do not enter passwords or payment details there unless you trust it.",
       "site": "Site: {{host}}",
       "confirm": "Open link"
-    }
+    },
+    "authorLine": "Author: {{author}}"
   },
   "serverStatus": {
     "restarting": "The local server stopped. Restarting…",

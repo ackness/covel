@@ -132,7 +132,7 @@ export function ReasoningEffortCard({
         </p>
       )}
       {unsupported && (
-        <p role="alert" className="text-xs text-amber-600 dark:text-amber-400">
+        <p role="alert" className="text-xs text-(--accent-warning)">
           {t("settings.reasoningUnsupported")}
         </p>
       )}
@@ -144,7 +144,7 @@ export function ReasoningEffortCard({
         )}
       </p>
       {profile?.family === "deepseek" && effective !== "disabled" && (
-        <p className="border-l-2 border-amber-500/60 pl-2 text-[10px] leading-relaxed text-muted-foreground">
+        <p className="border-l-2 border-(--accent-warning)/60 pl-2 text-[10px] leading-relaxed text-muted-foreground">
           {t("settings.deepseekReasoningSamplingHint")}
         </p>
       )}

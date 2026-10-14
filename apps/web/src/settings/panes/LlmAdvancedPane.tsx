@@ -41,9 +41,7 @@ type NumericParameter = Exclude<
 interface ParameterDefinition {
   field: NumericParameter;
   labelKey: string;
-  fallbackLabel: string;
   descriptionKey: string;
-  fallbackDescription: string;
   defaultValue: number;
   min: number;
   max: number;
@@ -54,9 +52,7 @@ const PARAMETER_DEFINITIONS: readonly ParameterDefinition[] = [
   {
     field: "temperature",
     labelKey: "settings.temperature",
-    fallbackLabel: "Temperature",
     descriptionKey: "settings.temperatureHint",
-    fallbackDescription: "Higher values make responses more varied.",
     defaultValue: 1,
     min: 0,
     max: 2,
@@ -65,9 +61,7 @@ const PARAMETER_DEFINITIONS: readonly ParameterDefinition[] = [
   {
     field: "topP",
     labelKey: "settings.topP",
-    fallbackLabel: "Top P",
     descriptionKey: "settings.topPHint",
-    fallbackDescription: "Limits sampling to the most likely token set.",
     defaultValue: 1,
     min: 0,
     max: 1,
@@ -76,9 +70,7 @@ const PARAMETER_DEFINITIONS: readonly ParameterDefinition[] = [
   {
     field: "frequencyPenalty",
     labelKey: "settings.frequencyPenalty",
-    fallbackLabel: "Frequency penalty",
     descriptionKey: "settings.frequencyPenaltyHint",
-    fallbackDescription: "Reduces repeated words and phrases.",
     defaultValue: 0,
     min: -2,
     max: 2,
@@ -87,9 +79,7 @@ const PARAMETER_DEFINITIONS: readonly ParameterDefinition[] = [
   {
     field: "presencePenalty",
     labelKey: "settings.presencePenalty",
-    fallbackLabel: "Presence penalty",
     descriptionKey: "settings.presencePenaltyHint",
-    fallbackDescription: "Encourages the model to introduce new topics.",
     defaultValue: 0,
     min: -2,
     max: 2,
@@ -395,10 +385,10 @@ function ParameterCard({
         <div className="min-w-0">
           <div className="flex items-center gap-1.5 text-sm font-medium">
             <SlidersHorizontal className="h-3.5 w-3.5 text-muted-foreground" />
-            {t(definition.labelKey, definition.fallbackLabel)}
+            {t(definition.labelKey)}
           </div>
           <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
-            {t(definition.descriptionKey, definition.fallbackDescription)}
+            {t(definition.descriptionKey)}
           </p>
         </div>
         {override !== undefined && (
@@ -426,7 +416,7 @@ function ParameterCard({
 
       <div className="flex items-center gap-3">
         <input
-          aria-label={t(definition.labelKey, definition.fallbackLabel)}
+          aria-label={t(definition.labelKey)}
           type="range"
           min={definition.min}
           max={definition.max}
@@ -445,7 +435,7 @@ function ParameterCard({
           className="h-1.5 min-w-0 flex-1 cursor-pointer appearance-none rounded-full bg-muted accent-primary [&::-webkit-slider-thumb]:h-3.5 [&::-webkit-slider-thumb]:w-3.5 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary"
         />
         <input
-          aria-label={t(definition.labelKey, definition.fallbackLabel)}
+          aria-label={t(definition.labelKey)}
           type="number"
           min={definition.min}
           max={definition.max}

@@ -170,7 +170,7 @@ export function LlmSlotCard({
           {isVirtualSlot && (
             <Badge
               variant="outline"
-              className="text-[10px] text-amber-600 border-amber-400"
+              className="text-[10px] text-(--accent-warning) border-(--accent-warning)"
             >
               {t("settings.frontendOverlay", "frontend overlay")}
             </Badge>
@@ -186,7 +186,7 @@ export function LlmSlotCard({
           {selectedPreset && (
             <Badge
               variant="outline"
-              className="text-[10px] text-amber-600 border-amber-400"
+              className="text-[10px] text-(--accent-warning) border-(--accent-warning)"
             >
               {t("settings.overrideApplied")}
             </Badge>
@@ -389,7 +389,7 @@ export function LlmSlotCard({
             <Button
               variant="ghost"
               size="sm"
-              className="h-7 px-2 text-[11px] text-amber-600"
+              className="h-7 px-2 text-[11px] text-(--accent-warning)"
               disabled={!writable || savingCapabilities}
               onClick={onResetCapability}
             >

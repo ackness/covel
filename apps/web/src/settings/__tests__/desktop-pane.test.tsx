@@ -7,6 +7,7 @@ import {
 } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import i18n from "@/i18n";
+import { getDesktopInfo } from "@/lib/desktop-bridge.js";
 import { DesktopPane } from "../DesktopPane.js";
 
 const bridgeMocks = vi.hoisted(() => ({
@@ -147,4 +148,19 @@ describe("DesktopPane proxy loading", () => {
       ).value,
     ).toBe("system");
   });
+});
+
+it("F-090 reports refresh failures and re-enables the action", async () => {
+  vi.mocked(getDesktopInfo)
+    .mockResolvedValueOnce(null)
+    .mockRejectedValueOnce(new Error("offline"));
+  render(<DesktopPane />);
+  const button = screen.getByRole("button", {
+    name: i18n.t("settings.desktopRefresh"),
+  });
+  await act(async () => fireEvent.click(button));
+  expect(screen.getByRole("alert").textContent).toBe(
+    i18n.t("settings.desktopRefreshFailed"),
+  );
+  expect((button as HTMLButtonElement).disabled).toBe(false);
 });

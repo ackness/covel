@@ -205,3 +205,25 @@ describe("llm capability controls", () => {
     });
   });
 });
+
+it("F-080/F-096 localizes compact numbers and image price units", async () => {
+  await i18n.changeLanguage("zh-CN");
+  expect(formatTokenCount(100_000)).toBe(
+    new Intl.NumberFormat("zh-CN", {
+      notation: "compact",
+      maximumFractionDigits: 1,
+    }).format(100_000),
+  );
+  render(
+    <CapabilityTags
+      capability={{
+        input: ["text"],
+        output: ["image"],
+        pricing: { perImage: 0.04 },
+      }}
+    />,
+  );
+  expect(
+    screen.getByTitle(i18n.t("settings.pricePerImage")).textContent,
+  ).toContain("/张");
+});

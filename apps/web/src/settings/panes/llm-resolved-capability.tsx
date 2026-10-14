@@ -4,7 +4,11 @@ import {
   type ModelCapabilityInfo,
   type ModelCapabilityLookupResult,
 } from "@/services/api.js";
-import { CapabilityTags, formatPrice } from "./llm-capability-controls.js";
+import {
+  CapabilityTags,
+  formatPrice,
+  formatImagePrice,
+} from "./llm-capability-controls.js";
 import { resolveDisplayCapability } from "./llm-effective-capability.js";
 
 export function ResolvedCapability({
@@ -68,7 +72,7 @@ export function ResolvedCapability({
             </span>
           )}
           {lookup.pricingKind === "reference" && (
-            <span className="ml-1 text-amber-600">
+            <span className="ml-1 text-(--accent-warning)">
               {t(
                 "settings.referencePricing",
                 "Pricing is a model reference; the provider's actual bill may differ.",
@@ -88,7 +92,7 @@ export function ResolvedCapability({
           {inputPrice != null && outputPrice != null
             ? `${formatPrice(inputPrice * priceMultiplier)} / ${formatPrice(outputPrice * priceMultiplier)}`
             : imagePrice != null
-              ? `$${(imagePrice * priceMultiplier).toFixed(4)}/img`
+              ? formatImagePrice(imagePrice * priceMultiplier)
               : "—"}
         </div>
       )}
