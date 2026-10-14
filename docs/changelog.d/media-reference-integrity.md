@@ -1,0 +1,4 @@
+### Fixed
+
+- **Forking past a deleted picture works.** A fork whose history names media that is no longer stored (for example, removed with "Delete" in Settings → Stored media) used to fail with `409 media_reference_missing`. It now goes ahead: the child keeps its messages and data, shows the "media unavailable" placeholder there, and the `POST /api/sessions/:id/fork` response reports `missingMediaCount`, the number of distinct missing files. Media that exists but that the parent may not read is still refused with `403 media_reference_forbidden`.
+- **World-data sync no longer takes away pictures a session has already shown.** When a sync drops a media index row, the session keeps its reference if the file still appears in its other index rows (identical files share one ID), messages, snapshots or other history. Pictures in earlier turns stay readable, and forks of snapshots from before the sync keep working.

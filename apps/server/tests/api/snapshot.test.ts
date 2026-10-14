@@ -1011,22 +1011,80 @@ describe("Snapshot routes", () => {
       expect(await mediaStore.isReferencedBy(ref.id, childId)).toBe(true);
     });
 
-    it("fails the whole fork (409) when a referenced media asset is missing", async () => {
-      // A MediaRef pointing at an asset that does not exist in the MediaStore.
-      // The fork gate must reject the entire operation — no child session is
-      // created (docs 02 §2.1.5).
+    it("forks with a placeholder and counts each missing media asset once (F-162)", async () => {
+      // MediaRefs to an asset the media library deleted. The fork goes ahead:
+      // the child keeps the refs (the picture shows as a placeholder, as in
+      // the parent), gains no reference to them, and the response says how
+      // many distinct pictures are missing.
       const mediaStore = createMemoryMediaStore();
       const missingId = "d".repeat(64);
+      for (const key of ["ghost", "ghost-again"]) {
+        await store.setPluginData({
+          id: `sess-1-pd-${key}`,
+          sessionId: "sess-1",
+          pluginId: "test-plugin",
+          namespace: "images",
+          key,
+          value: { ref: { id: missingId, mime: "image/png", size: 3 } },
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        });
+      }
+      const present = await mediaStore.put(new Uint8Array([4, 5]), "image/png");
+      await mediaStore.recordOwnership(present.id, "sess-1", "test-plugin");
       await store.setPluginData({
-        id: "sess-1-pd-missing-media",
+        id: "sess-1-pd-present",
         sessionId: "sess-1",
         pluginId: "test-plugin",
         namespace: "images",
-        key: "ghost",
-        value: { ref: { id: missingId, mime: "image/png", size: 3 } },
+        key: "present",
+        value: { ref: { id: present.id, mime: "image/png", size: 2 } },
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       });
+
+      const app = createTestApp(store, undefined, mediaStore);
+      const snapId = await createParentSnapshot(store, app);
+      const res = await app.request("/api/sessions/sess-1/fork", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fromSnapshotId: snapId }),
+      });
+      expect(res.status).toBe(201);
+      const body = (await res.json()) as {
+        sessionId: string;
+        missingMediaCount: number;
+      };
+      expect(body.missingMediaCount).toBe(1);
+      const childId = body.sessionId;
+      expect(await store.getSession(childId)).not.toBeNull();
+      expect(
+        (await store.getPluginData(childId, "test-plugin", "images", "ghost"))
+          ?.value,
+      ).toEqual({ ref: { id: missingId, mime: "image/png", size: 3 } });
+      expect(await mediaStore.isReferencedBy(missingId, childId)).toBe(false);
+      expect(await mediaStore.isReferencedBy(present.id, childId)).toBe(true);
+    });
+
+    it("still refuses (403) an existing asset the parent cannot read when another is missing", async () => {
+      const mediaStore = createMemoryMediaStore();
+      const foreign = await mediaStore.put(new Uint8Array([6, 7]), "image/png");
+      await mediaStore.recordOwnership(foreign.id, "someone-else");
+      for (const [key, ref] of [
+        ["ghost", { id: "e".repeat(64), mime: "image/png", size: 3 }],
+        ["foreign", { id: foreign.id, mime: "image/png", size: 2 }],
+      ] as const) {
+        await store.setPluginData({
+          id: `sess-1-pd-${key}`,
+          sessionId: "sess-1",
+          pluginId: "test-plugin",
+          namespace: "images",
+          key,
+          value: { ref },
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        });
+      }
 
       const app = createTestApp(store, undefined, mediaStore);
       const snapId = await createParentSnapshot(store, app);
@@ -1036,11 +1094,10 @@ describe("Snapshot routes", () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ fromSnapshotId: snapId }),
       });
-      expect(res.status).toBe(409);
+      expect(res.status).toBe(403);
       expect(((await res.json()) as { code?: string }).code).toBe(
-        "media_reference_missing",
+        "media_reference_forbidden",
       );
-      // The transaction rolled back — no orphan child persisted.
       expect(await store.listSessions()).toHaveLength(before);
     });
 

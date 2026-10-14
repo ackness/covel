@@ -1282,7 +1282,7 @@
     },
     "worldGithub": {
       "risk": "Worlds contain third-party prompts, settings and media. Review their content and plugin requirements before playing. World installation does not install or authorize plugins, or run repository scripts.",
-      "updateRisk": "Updates are staged until backend restart. Locally edited worlds cannot be overwritten. Existing saves are not automatically synchronized; use world-data sync separately.",
+      "updateRisk": "Updates are staged until backend restart. Locally edited worlds cannot be overwritten. Updating does not change data already imported into an existing game. To use new starting data, start a new game.",
       "installed": "Installed world packages"
     },
     "deleteProviderTitle": "Delete provider?",

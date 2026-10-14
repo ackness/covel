@@ -27,6 +27,7 @@ pnpm --filter @covel/docs preview  # serves the build on port 5175
   in the config; a label missing there fails the build.
 - The changelog page includes `docs/CHANGELOG.md`, and a ` ```mermaid `
   block is drawn as a diagram (`theme/Mermaid.vue`).
+- Diagrams use Mermaid 12 and require an ES2024 browser (Safari 17.4+); this browser floor applies only to the documentation site.
 - `README.md`, `AGENTS.md` and `CLAUDE.md` in `docs/` are for editors and
   are left out of the site.
 - The colours in `.vitepress/theme/custom.css` are those of

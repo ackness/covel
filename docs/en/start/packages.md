@@ -46,7 +46,7 @@ Authorization lasts only while the server is running. After you restart the back
 Next to an installed package, click "Check for updates" to see what has changed. A confirmed update takes effect after the backend restarts.
 
 - A package you have changed locally is not overwritten by an update.
-- Updating a world package does not change existing saves. To update existing saves, use world data sync.
+- Updating a world package does not automatically rewrite the starting data of existing saves. They keep their own data and progress. To use the new starting data, start a new game.
 
 You also uninstall from "Install & manage". After you uninstall a plugin, you need to restart the backend.
 
