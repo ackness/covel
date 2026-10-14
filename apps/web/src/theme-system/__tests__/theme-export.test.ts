@@ -204,7 +204,7 @@ describe("buildThemeCss", () => {
 });
 
 describe("aurora reference theme", () => {
-  it("passes the same import validation a player's theme would", () => {
+  it("passes CSS scope validation as a template for a new theme ID", () => {
     // It is documented as a copyable template, so it has to survive the
     // scope/at-rule checks that a hand-written theme goes through.
     expect(() => validateThemeCss(auroraCss, "aurora")).not.toThrow();
