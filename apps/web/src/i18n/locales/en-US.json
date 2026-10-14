@@ -364,7 +364,6 @@
     },
     "stoppedDetail": "Generated content was not saved. Retry with the original input.",
     "submittedInteraction": "Completed interaction · expand to review",
-    "previousSuggestions": "Earlier suggestions · expand to review",
     "advancedPluginSettings": "Customize plugins and advanced settings",
     "configureModelBeforeRetry": "Change model / parameters",
     "retryModelSettingsHint": "Change the model or lower its output limit, then retry this task. The retry uses your current settings.",
@@ -397,7 +396,9 @@
       "succeeded": "Succeeded"
     },
     "retryScopeLimited": "Only the selected failed tasks will run again. The story and other completed results are preserved. Each batch handles up to {{count}} tasks. Retry the remaining tasks afterward.",
-    "activeTask": "{{label}}…"
+    "activeTask": "{{label}}…",
+    "previousPluginContent": "{{title}} · expand to review",
+    "pluginContent": "Plugin content"
   },
   "blocks": {
     "actionPlaceholder": "Or type your own action...",
@@ -1815,6 +1816,14 @@
       "empty": "No jobs yet.",
       "copy": "Copy",
       "rerun": "Re-run"
+    },
+    "candidateList": {
+      "draft": "Draft",
+      "send": "Send",
+      "accept": "Accept",
+      "regenerate": "Regenerate",
+      "title": "Candidates",
+      "regenerateHint": "Generate another set of candidates."
     }
   },
   "graph": {
@@ -2235,17 +2244,6 @@
     "confirmDelete": "Delete",
     "deleted": "Deleted items: {{count}} · {{size}} freed",
     "skipped": "Kept because a session uses them now: {{count}}"
-  },
-  "branchReply": {
-    "replyCandidates": "Reply candidates",
-    "draft": "Draft",
-    "send": "Send",
-    "accept": "Accept",
-    "regenerate": "Regenerate",
-    "regenerateHint": "Tap Regenerate for alternative phrasings of this reply.",
-    "jobSubmitted": "Submitted branch-reply job: {{jobId}}",
-    "approvalRequired": "Branch reply action requires approval.",
-    "actionFailed": "Branch reply action failed"
   },
   "characterBlueprint": {
     "empty": "No character blueprints yet",

@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from "react";
 import type { InteractionSubmitResult } from "@/stores/session-store/types.js";
 import type { TFunction } from "i18next";
+import { resolveDisplayText } from "@/lib/i18n-text.js";
 import { isAssetGenerateView } from "@covel/shared";
 import { AssetRender } from "@/components/asset-render/index.js";
 import type { StreamMessage } from "@/stores/session-store.js";
@@ -35,6 +36,7 @@ export interface ChatBlockRendererProps {
     values: Record<string, unknown>,
   ) => Promise<InteractionSubmitResult>;
   readonly t: TFunction;
+  readonly plugins?: readonly { id: string; displayName: unknown }[];
 }
 
 /**
@@ -54,6 +56,7 @@ export function ChatBlockRenderer({
   onSubmitBlock,
   onSubmitInteraction,
   t,
+  plugins = [],
 }: ChatBlockRendererProps) {
   const block = msg.block;
   if (!block) return null;
@@ -82,11 +85,15 @@ export function ChatBlockRenderer({
       ((block.data as Record<string, unknown> | undefined)?.pluginId as
         string | undefined) ?? msg.runtimeId;
     return (
-      // The current turn's suggestions are the player's next move, so they
-      // stay open; once a later message exists they fold into history.
+      // All providers share this surface; their own title identifies history.
       <HistoryBlock
         collapsed={viewMode === "parsed" && locked}
-        label={t("session.previousSuggestions")}
+        label={t("session.previousPluginContent", {
+          title:
+            resolveDisplayText(
+              plugins.find((plugin) => plugin.id === pluginId)?.displayName,
+            ) || t("session.pluginContent"),
+        })}
       >
         <div className="flex flex-col gap-1.5">
           {viewMode === "detailed" && pluginId && (

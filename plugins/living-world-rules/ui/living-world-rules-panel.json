@@ -6,13 +6,17 @@
   "shortLabel": "Rules",
   "icon": "book-marked",
   "groupOrder": 300,
-  "dataSource": { "namespace": "rules" },
+  "dataSource": {
+    "namespace": "rules"
+  },
   "emptyState": {
     "message": "This world declares no lasting rules. Rules are authored in the world package (imported via world-data)."
   },
   "view": {
     "component": "Stack",
-    "props": { "gap": "md" },
+    "props": {
+      "gap": "md"
+    },
     "children": [
       {
         "component": "Text",
@@ -25,7 +29,9 @@
       {
         "component": "FilterContainer",
         "props": {
-          "items": { "$state": "/entries" },
+          "items": {
+            "$state": "/entries"
+          },
           "itemComponent": "EntryCard",
           "itemKeyField": "key",
           "itemPropMap": {
@@ -35,7 +41,21 @@
           },
           "itemLiteralProps": {
             "collapsible": true,
-            "defaultExpanded": false
+            "defaultExpanded": false,
+            "categoryOptions": [
+              {
+                "value": "constant",
+                "label": "Constant"
+              },
+              {
+                "value": "triggered",
+                "label": "Triggered"
+              },
+              {
+                "value": "evolving",
+                "label": "Evolving"
+              }
+            ]
           },
           "emptyMessage": "No rules"
         }
