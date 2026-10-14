@@ -1,11 +1,20 @@
 import { Ajv } from "ajv";
 
+export interface ResumeValidationError {
+  readonly code: "resume_schema_invalid" | "resume_data_invalid";
+  readonly message: string;
+}
+
 /** Bounded structural cache: SQL reads return a new schema object each time. */
 export function createResumeValidator(capacity = 256) {
   const ajv = new Ajv({ allErrors: false, strict: false });
   const cache = new Map<string, ReturnType<typeof ajv.compile>>();
-  return (data: unknown, schema: unknown): string | null => {
-    if (!schema || typeof schema !== "object") return null;
+  return (data: unknown, schema: unknown): ResumeValidationError | null => {
+    if (!schema || typeof schema !== "object" || Array.isArray(schema))
+      return {
+        code: "resume_schema_invalid",
+        message: "resumeSchema must be a JSON Schema object",
+      };
     const key = JSON.stringify(schema);
     let validate = cache.get(key);
     if (!validate) {
@@ -16,7 +25,11 @@ export function createResumeValidator(capacity = 256) {
           "[resume] resumeSchema failed to compile:",
           error instanceof Error ? error.message : String(error),
         );
-        return null;
+        return {
+          code: "resume_schema_invalid",
+          message:
+            "resumeSchema could not be compiled; correct the plugin schema and create a new suspension",
+        };
       } finally {
         // Ajv keeps its own strong-reference cache; only our bounded map owns
         // compiled plugin schemas after this call, including failed compiles.
@@ -29,12 +42,15 @@ export function createResumeValidator(capacity = 256) {
     cache.set(key, validate);
     return validate(data)
       ? null
-      : (validate.errors ?? [])
-          .map(
-            (error) =>
-              `${error.instancePath || "$"} ${error.message ?? "invalid"}`,
-          )
-          .join("; ");
+      : {
+          code: "resume_data_invalid",
+          message: (validate.errors ?? [])
+            .map(
+              (error) =>
+                `${error.instancePath || "$"} ${error.message ?? "invalid"}`,
+            )
+            .join("; "),
+        };
   };
 }
 

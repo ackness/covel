@@ -130,4 +130,12 @@ describe("plugin UI spec rules", () => {
       }),
     ]);
   });
+
+  it("validates explicit navigation destinations independently of icons", () => {
+    const view = { component: "Text" };
+    expect(
+      paths({ id: "gallery", navTarget: "images", icon: "book-open", view }),
+    ).toEqual([]);
+    expect(paths({ navTarget: "unknown", view })).toEqual(["navTarget"]);
+  });
 });

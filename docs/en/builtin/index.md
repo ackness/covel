@@ -47,7 +47,7 @@ A world can have its own gameplay pack. For example, "Lantern Barrow" (提灯古
 | ---------------------------------------------- | --------------------------------------------------------------------------------- | --------- |
 | [Dice Check](./rpg.md) `dice-check`            | Risky actions are decided by dice that are rolled in advance                      |           |
 | [Tabletop Rules](./rpg.md) `tabletop-rules`    | Assigns attribute points at the start, and lets the player start attribute checks |           |
-| [Quest Log](./rpg.md) `core-quest`             | Records quests and objectives, and moves them forward as the story goes           |           |
+| [Quest Log](./rpg.md) `core-quest`             | Records quests and objectives, with localized status badges                       |           |
 | [Inventory](./rpg.md) `inventory`              | Records what the player character carries; items can be used and dropped          |           |
 | [Affinity](./rpg.md) `affinity`                | Records each character's attitude toward the player character                     |           |
 | [Hidden Story Events](./rpg.md) `story-events` | Story events that only happen when their conditions are met                       |           |
@@ -61,8 +61,8 @@ A world can have its own gameplay pack. For example, "Lantern Barrow" (提灯古
 | [Character Profiles](./world.md) `character-blueprint` | Holds the characters and portraits the world provides                     |           |
 | [World Dimensions](./world.md) `world-init`            | Prepares character attributes and dimensions, and updates dimension state | Yes       |
 | [World Time](./world.md) `world-time`                  | Time passing, and day and night                                           | Yes       |
-| [World Rules](./world.md) `living-world-rules`         | Brings the world's rules into every turn                                  |           |
-| [Codex](./world.md) `codex`                            | Records people, places and things that appear in the story as entries     |           |
+| [World Rules](./world.md) `living-world-rules`         | Brings the world's rules into every turn, with localized category badges  |           |
+| [Codex](./world.md) `codex`                            | Records people, places and things, with localized category badges         |           |
 | [Relationship Graph](./world.md) `npc-graph`           | Records a graph of relationships between people, groups and factions      |           |
 | [World Fact Extraction](./world.md) `world-ir`         | Sorts out what happened in each turn, for other plugins to use            |           |
 

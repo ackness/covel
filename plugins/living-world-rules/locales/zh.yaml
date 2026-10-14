@@ -16,3 +16,6 @@ messages:
   This world declares no lasting rules. Rules are authored in the world package (imported via world-data).: 本世界没有声明长期规则。规则由世界作者写在世界包里（world-data 导入）。
   Lasting setting rules and taboos in effect for this world (read-only).: 本世界生效中的长期设定与禁忌（只读）。
   No rules: 暂无规则
+  Constant: 恒常规则
+  Triggered: 触发规则
+  Evolving: 演变规则

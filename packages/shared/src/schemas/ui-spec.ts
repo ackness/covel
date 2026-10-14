@@ -103,6 +103,7 @@ export const pluginUiSpecSchema = z
     group: z.string().optional(),
     groupLabel: i18nTextSchema.optional(),
     groupOrder: z.number().optional(),
+    navTarget: z.enum(["images"]).optional(),
     dataSource: z
       .looseObject({
         namespace: z.string().optional(),
