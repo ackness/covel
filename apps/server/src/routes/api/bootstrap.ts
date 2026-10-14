@@ -6,7 +6,6 @@ import {
   getRequestLlmOptions,
   withRequestLlmOptions,
 } from "../../request-llm-context.js";
-import type { PluginLlmModelTarget } from "@covel/runtime";
 import { memoryIngestLockId } from "../../lib/memory-ingest-lock.js";
 import type { EmbedFn, MemorySystem } from "@covel/memory";
 import { createPluginReloadRoutes } from "./plugin-reload.js";
@@ -32,13 +31,11 @@ import { Hono, type MiddlewareHandler } from "hono";
 import { readRuntimeEnv } from "@covel/shared";
 import type { RuntimeManifest } from "@covel/shared";
 import {
-  loadPluginLlmConfig,
   pluginRuntimeManifests,
   pluginDeclarations,
   resolvePluginRuntimeManifest,
   deriveBuiltinPluginIds,
   type PluginRegistry,
-  type PluginLlmConfig,
   type PluginRuntimeGateway,
   type PluginRuntimeUtils,
 } from "@covel/plugin-loader";
@@ -53,7 +50,6 @@ import {
   PluginServiceRegistry,
   PluginExtensionHost,
   createHookPipeline,
-  createModelResolver,
   maybeSweepOldTraces,
 } from "@covel/runtime";
 import { estimateTokens } from "@covel/context";
@@ -159,7 +155,6 @@ export interface ApiBootstrapConfig {
   readonly covelHome?: string;
   /** LLM adapter (real or mock). */
   readonly llmAdapter: LLMAdapter;
-  readonly pluginModelTargets?: Map<string, PluginLlmModelTarget>;
   /** Explicit server credential readiness; absent means request services are required. */
   readonly canRunRuntimeJobWithServerServices?: (input: {
     readonly job: RuntimeJobRecord;
@@ -396,27 +391,19 @@ async function assembleApi(
     [...registry.getAll().values()].map(prepareEventDeclarations),
   );
 
-  // 3. Load plugin-level llm.toml configs for model resolution
-  const pluginLlmConfigs = new Map<string, PluginLlmConfig>();
-  for (const [pluginId, discovery] of discoveryMap) {
-    const llmConfig = await loadPluginLlmConfig(discovery.rootPath);
-    if (llmConfig) {
-      // Map each runtime name to its plugin's LLM config
-      const manifests = manifestCache.get(pluginId);
-      if (manifests) {
-        for (const parsed of manifests) {
-          pluginLlmConfigs.set(parsed.manifest.name, llmConfig);
-        }
-      }
-    }
-  }
-
-  const resolveModel = createModelResolver({
-    pluginLlmConfigs,
-    modelTargets: config.pluginModelTargets ?? new Map(),
-    isRoleSelected: (role) =>
-      getRequestLlmOptions()?.slotOverrides?.slotBindings?.[role] !== undefined,
-  });
+  // A runtime names only the role (slot) it wants; which model serves that
+  // role, and where the request goes, is the player's configuration. An
+  // explicit runtime/API selection wins; a runtime that names no role uses
+  // the request's `default` binding when there is one, else the default slot.
+  const resolveModel = (
+    manifest: RuntimeManifest,
+    apiOverride?: string,
+  ): string | undefined =>
+    apiOverride ??
+    manifest.model ??
+    (getRequestLlmOptions()?.slotOverrides?.slotBindings?.default !== undefined
+      ? "default"
+      : undefined);
 
   // Runtime loader + community dual-authorization gate, extracted to
   // bootstrap/runtime-loader.ts. It forward-references two things built

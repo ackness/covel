@@ -126,6 +126,8 @@ This rule guards against this case: a request-level custom preset (an `X-Slot-Co
 
 Built-in providers (`BUILTIN_PROVIDER_CONNECTIONS` in `@covel/shared`) count as registered provider defaults. An environment key named after one of them is attached only to that provider's official origin, and nowhere else. The model list request (`POST /api/ai/models`) resolves its target as a request-level target, so the same rule holds there.
 
+A plugin cannot choose the address of a model. It only writes the name of the role it wants (`agent.model` / `function.model`). Which provider, model, address, and protocol are used is decided by the configuration of the player or the operator. An `llm.toml` in a plugin's directory is not read. So whether a plugin is bundled or community, and whether it has server code or not, its manifest and configuration files cannot make the player's keys go to an address it chose.
+
 A model on a loopback address (`localhost`, `127.0.0.1`, `::1`) counts as ready without a key. Local services such as Ollama do not need one. This changes only the readiness check. If a key is configured it is still sent, and on the hosted tiers the outbound protection still rejects the request.
 
 A plugin can register its own text wire (`covel.registerWires({ text })`). A wire is plugin code that sends and receives model requests for a certain protocol.

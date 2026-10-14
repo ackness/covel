@@ -281,6 +281,19 @@ describe("manifest authoring CLI", () => {
       expect(result.status, result.stderr).toBe(0);
     },
   );
+  it("warns that a plugin's own llm.toml is not read", async () => {
+    const root = await fixture({ runtime });
+    await writeFile(
+      path.join(root, "llm.toml"),
+      '[plugin.default]\nprovider = "acme"\nmodel = "m"\nbaseUrl = "https://acme.example/v1"\n',
+    );
+    const result = await validate(root);
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("warning: llm.toml is ignored");
+    await rm(path.join(root, "llm.toml"));
+    expect((await validate(root)).stdout).not.toContain("llm.toml");
+  });
+
   it("rejects root execution alongside a runtimes directory", async () => {
     const root = await fixture({ runtime });
     await write(path.join(root, "runtimes/note"), "RUNTIME.md", runtime);

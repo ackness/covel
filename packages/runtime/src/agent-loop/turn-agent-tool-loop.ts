@@ -329,7 +329,7 @@ async function runAgentToolLoopWithinBudget(
     }
 
     // Model resolution chain for story runtimes:
-    // API override > plugin llm.toml > manifest.model > undefined.
+    // API override > manifest.model (a role the player binds) > undefined.
     // Tool-heavy plugin runtimes stay on their declared slot so E2E story
     // overrides do not destabilize function-calling behaviour.
     const effectiveModel = deps.resolveModel

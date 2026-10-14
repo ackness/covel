@@ -265,6 +265,8 @@ function:
 
 In the code, pass the same name when calling `ctx.gateway` (`presetId: "memory"`). Covel uses this declaration to check whether the model's key is ready, and then decides whether to start the background job at all. This line does not change the parameters in your code for you. You must make both match yourself.
 
+A plugin can only name a role. Which model is used, and where the request goes, is decided by the player's model settings. An `llm.toml` in the plugin's directory does nothing, and `pnpm validate:plugin` reminds you to delete it.
+
 ### Time limits
 
 | Type     | Field                            | Meaning                                                                                                            |
