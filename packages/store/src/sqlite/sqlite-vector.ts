@@ -139,6 +139,24 @@ export function createSqliteVectorCapability(
   // embedding_locked_at columns are owned by sqlite-store-mappers.ts.
   // We trust they exist by the time this factory runs.
 
+  // Session deletion remains available without this optional extension. Now
+  // that vec0 is loaded, reclaim the rows those deletions had to leave behind.
+  runSqliteTransaction(
+    sqlite,
+    () => {
+      const models = sqlite
+        .prepare("SELECT id, table_name FROM vector_models")
+        .all() as Array<{ id: number; table_name: string }>;
+      for (const model of models) {
+        const table = requireCurrentTableName(model.id, model.table_name);
+        sqlite.exec(
+          `DELETE FROM ${table} WHERE session_id NOT IN (SELECT id FROM sessions)`,
+        );
+      }
+    },
+    "immediate",
+  );
+
   // ── Helpers ──────────────────────────────────────────────────────
 
   function ensurePhysicalTable(target: VectorTarget): void {
