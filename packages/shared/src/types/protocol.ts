@@ -108,7 +108,8 @@ export interface ExecutionCompletedPayload {
   readonly error?: string;
   /**
    * Set when the turn was aborted before producing results (e.g. a
-   * TurnStart hook that aborts the turn). The client
+   * TurnStart hook that aborts the turn, or the player stopping the action,
+   * {@link PLAYER_ABORT_REASON}, possibly before it began). The client
    * surfaces this so an empty turn carries a visible reason instead of being
    * silently dropped. Absent on normal completions.
    */
@@ -610,7 +611,13 @@ export interface CursorPage<T> {
 
 /** Read-only recovery state for the latest foreground action. */
 export interface SessionExecutionStatus {
-  readonly state: "idle" | "running" | "completed" | "failed" | "interrupted";
+  /**
+   * `unknown`: the server could not check (its lock pool had no connection
+   * free). A turn may be running; the client checks again later and neither
+   * retries nor finishes anything until it knows.
+   */
+  readonly state:
+    "idle" | "running" | "completed" | "failed" | "interrupted" | "unknown";
   /** A stopped, uncommitted turn remains retryable through the failed state. */
   readonly abortReason?: string;
   readonly turnId?: string;
@@ -631,6 +638,17 @@ export interface SessionExecutionStatus {
       | "retry_runtime";
     readonly payload: Readonly<Record<string, unknown>>;
   };
+}
+
+/**
+ * True while a turn may still be running: the server saw one (`running`) or
+ * could not check (`unknown`). Neither allows a retry, finishing the turn's
+ * steps or dropping its unsaved text.
+ */
+export function executionMayBeRunning(
+  status: SessionExecutionStatus | null | undefined,
+): boolean {
+  return status?.state === "running" || status?.state === "unknown";
 }
 
 export interface SessionSnapshot {
@@ -667,6 +685,15 @@ export interface SessionSnapshot {
   readonly gameState: Readonly<Record<string, unknown>>;
   readonly executionSteps: readonly SnapshotTraceEvent[];
   readonly execution?: SessionExecutionStatus;
+  /**
+   * Subscription cursor (`${epoch}:${seq}`) of the newest event published
+   * before this view was read; set by `GET /api/sessions/:id/view`. A
+   * subscription that connects with it as `lastEventId` receives every event
+   * the view may not include. A stream opened without a cursor whose
+   * `system.connected` head is past it, or in another epoch, has missed
+   * events and must read the session again.
+   */
+  readonly eventCursor?: string;
   readonly plugins: readonly SnapshotPluginStatus[];
   /** Character attribute schema from world-data-provider plugin (if available). */
   readonly characterSchema?: Readonly<Record<string, unknown>>;

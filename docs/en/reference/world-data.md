@@ -413,7 +413,7 @@ pluginPolicy:
 ```
 
 - When only one installed plugin provides it, that plugin is turned on automatically.
-- When there is no provider, or there are several and neither the world nor the player has chosen one, the session-prep screen explains why and disables the start button.
+- When there is no provider, or there are several and neither the world nor the player has chosen one, the session-prep screen says what is missing. The session starts as usual, only without this part of the gameplay. The response that creates the session lists them in `unmetRequirements`.
 - The player can still turn off a provider. That is the player's choice. The session starts as usual, and the session-prep screen shows a notice.
 - `requires` accepts only contract IDs in the form `name@version`. A plugin ID written here causes an error when the world loads.
 
@@ -422,6 +422,16 @@ pluginPolicy:
 - `GET /api/worlds/:id/plugin-plan` removes the IDs that are not installed from the world policy and from each pack's `requested`. They are listed in `missing` instead (for packs, with a `packId`).
 - The session-prep screen uses this to show which plugins are missing. The session can still be created, but the gameplay those plugins provide will not work.
 - `recommended` does not take part in the default selection. It is returned as it is.
+
+### World records and world packages
+
+Covel plays the **world record** in the database. The files of a world package are only the format for installing, importing and exporting a world:
+
+- The startup seed, file reloads, installs and updates read the package's files into the world record.
+- New sessions, the world-data preflight and sync use the dimensions and the character schema (`characterSchema`) of the world record. They do not read these from the package files.
+- What the world record does not keep is read from the package: the characters, lorebook entries and plugin data in `data/`, and the images in `media/`. The app has no place to edit them, so there is only one copy of them.
+- Once a player edits a world that came from a world package in the app (the world editor, importing dimensions, or `PATCH /api/worlds/:id`), the record is marked `packageModified`. From then on the seed, file reloads and updates no longer overwrite it with the files, and a new version of the package is not used automatically.
+- To go back to the package's version, click "Restore the package version" on the world's detail page ([`POST /api/worlds/:id/restore-package`](./api.md#post-apiworldsidrestore-package)). The edits are replaced with what the package files hold now, and the record follows the files again. Saved session data is preserved. Sessions without their own lore (`loreOverride`) read the restored world lore on the next turn.
 
 ### Loading at startup and reconciling (seed & reconcile)
 
@@ -432,11 +442,11 @@ When the server starts, each world package in the world directories is written i
 1. The built-in directory: `COVEL_WORLDS_DIR`. When running from source, the default is the repository's `worlds/`.
 2. The user directory: `COVEL_USER_WORLDS_DIR`. If it is not set, it is `$COVEL_HOME/worlds`. If `COVEL_HOME` is not set either, it is `~/.covel/worlds`. The desktop app uses `<data_root>/worlds`.
 
-Seed can run again and again. Each world package has one world record. If the record exists, it is updated. If not, it is added, and it is marked with `metadata.source = "file"`. Seed itself never deletes anything.
+Seed can run again and again. Each world package has one world record. If the record exists, it is updated. If not, it is added, and it is marked with `metadata.source = "file"`. A record the player has edited (`packageModified`) is not updated. Seed itself never deletes anything.
 
 **Cleanup (reconcile).** Adding without ever deleting leaves one problem. A world that was once built in, and later removed from the packages, would stay in the database of older users. So after all the directories have been seeded, old records that are "no longer in any world directory" are deleted. Three safeguards make sure only that kind of record is cleaned up, and no user data is deleted by mistake:
 
-1. **Only the source is checked**: only worlds with `metadata.source === "file"` can be cleaned up. AI-generated worlds (`generated` / `generated-file`) and worlds from any other source are never touched, even when they are not in the current world directories.
+1. **Player edits are kept**: only worlds with `metadata.source === "file"` and no `packageModified` marker can be cleaned up. An edited world is kept even if its package is gone and it has no sessions. AI-generated worlds (`generated` / `generated-file`) and worlds from any other source are never touched, even when they are not in the current world directories.
 2. **A world with saved games is kept**: an old world that still has sessions is kept, not deleted, and a `warn` line is written to the log. Deleting a world that has saved games must be an explicit action by a person.
 3. **An incomplete scan means no cleanup**: if any world directory cannot be scanned, if any world package fails to read, parse or validate, or if not a single world loaded successfully, cleanup is skipped as a whole. Healthy worlds are still updated as usual.
 
@@ -477,14 +487,14 @@ For installing and updating from GitHub, see [world catalog and installation](./
 - After a file in a world package changes, Covel waits 500 milliseconds to combine a run of changes, and then reads the package again. Changes to images, audio and editor temporary files do not trigger a reload. Changes to `world.yaml`, `WORLD.md`, language versions, `data/`, `characters/`, `media/*.json` and similar files do trigger one.
 - After reading, Covel finds the world by the manifest's `id`. If anything is different, it updates the world record and writes to the log what was reloaded: the lore, the name and summary, the dimensions, the plugin policy and settings, and the world data and settings.
 - If the manifest or the lore cannot be read, a warning is logged, and the version already loaded keeps being used.
-- A world that a player has edited in the app (`packageModified`) keeps the edited copy. File changes do not overwrite it.
+- A world that a player has edited in the app (`packageModified`) keeps the edited record. File changes do not overwrite it. See [World records and world packages](#world-records-and-world-packages).
 - A reload does not change the world's source or its creation time. An AI-generated world does not turn into a built-in world that cannot be deleted just because it was reloaded.
 
 **What a reload affects:**
 
 | Target                    | Result                                                                                                                                                                                                                                 |
 | ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| New sessions              | Read the latest world package                                                                                                                                                                                                          |
+| New sessions              | Use the reloaded world record, plus the content of `data/` and `media/` in the package                                                                                                                                                 |
 | Lore of existing sessions | The next turn reads the new lore. A session that has its own `loreOverride` keeps using it.                                                                                                                                            |
 | Data of existing sessions | Characters, lorebook entries, dimension values and existing state are not rewritten automatically. Players who want the new starting data need to start a new session. Authors and tools can call the [sync API](#preflight-and-sync). |
 
@@ -506,6 +516,7 @@ For installing and updating from GitHub, see [world catalog and installation](./
 **What stays the same when a world record is edited:**
 
 - The world's `metadata.source` and `metadata.storage` keep their original values through a normal update request (PATCH). Editing or browser sync does not change which files the world belongs to.
+- A world that came from a world package (`metadata.source` is `file` or `generated-file`, or it has `packageManaged`) is marked `packageModified` when it is edited. See [World records and world packages](#world-records-and-world-packages).
 - Dimensions follow `metadata.dimensions`. The top-level `dimensions` is a way to read the same content. When only top-level dimensions are given, they are written to `metadata.dimensions`. When `metadata.dimensions` is replaced or cleared, the top level is updated too. All three database backends behave the same way.
 
 ### Default plugin settings (`pluginSettings`)
@@ -1616,38 +1627,40 @@ Output when it passes:
 - Error messages include the file, the record number and the key. When an error is found before import, the whole plan is rejected, and the other valid records are not written either.
 - An empty source gives a warning.
 - When a receiving plugin declares with [`authoring.references`](./plugins.md) that a value is the `id` of a character attribute, the value is checked against the world's `characterSchema`. A missing attribute, a wrong type or a number outside the attribute's range is an `attribute-reference` error. A world without a `characterSchema` is not checked.
+- When it declares that a value is the ID of a dimension, the value is checked against the dimensions the world declares (`dimensions` and `dimensionSources` in `world.yaml`, and `data/dimensions.yaml`, together). A dimension that does not exist, or a path beside it that does not reach a place the dimension's `schema` allows, is a `dimension-reference` error. For example, an event condition that writes `barowAlarm` for `barrowAlarm` never fires. A world that declares no dimensions is not checked.
 - In a record or a character field, a field whose name ends in `At` or is `timestamp`, with an ISO time as its value, is treated as bookkeeping, and the model does not read it. Each such field gives a `model-hidden-field` warning. To let the model see a time of the story, use a different name (`date`, `diedOn`), or do not write it as an ISO time.
 - A field of a record whose name is `id` or ends in `Id` / `Ids`, with a UUID as its value, is also treated as bookkeeping. No model reads it, and it gets a `model-hidden-field` warning too. Use an ID a person can read, in lower-case words and hyphens, for example `npc-lin-yao`.
 - `dimensionSources` is checked even when there are no conventional data files at all.
 
 **Diagnostics at a glance:**
 
-| Diagnostic code         | Level             | Meaning                                                                                                                                                                                               |
-| ----------------------- | ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `manifest-invalid`      | error             | `world.yaml` cannot be parsed or does not match the schema                                                                                                                                            |
-| `lore-missing`          | error             | A declared language (`defaultLocale` / `supportedLocales`) has no lore file                                                                                                                           |
-| `lore-fallback-missing` | warning           | There is no `WORLD.md`, so a session in an undeclared language gets empty lore                                                                                                                        |
-| `lore-narrator-only`    | warning           | The [narrator-only marker](#narrator-only-lore-narrator-only) is missing its end, missing its start, nested or written wrong. The lore after it is hidden from the player.                            |
-| `unknown-plugin`        | error or warning  | A plugin ID referenced by `pluginPolicy` / `pluginSettings` is not in the scanned directories                                                                                                         |
-| `unknown-preset`        | error             | `pluginPolicy.presetId` is neither a built-in pack nor an ID in this world's `packs`                                                                                                                  |
-| `unknown-setting`       | warning           | A key in `pluginSettings` is not a setting the plugin declares, so the value is ignored                                                                                                               |
-| `invalid-setting`       | error             | A value in `pluginSettings` does not match the type, range or options the setting declares                                                                                                            |
-| `unprovided-contract`   | error or warning  | A contract in `pluginPolicy.requires` has no provider                                                                                                                                                 |
-| `unresolved-contract`   | error or warning  | A data contract used by a source has no receiving plugin among the scanned plugins                                                                                                                    |
-| `unrequested-receiver`  | warning           | No plugin a new session enables by default receives this source. The source is not imported until the player turns a receiving plugin on.                                                             |
-| `convention-collision`  | error or warning  | The world has no descriptor, and more than one plugin declares the path of one of its files. A session that enables those plugins together does not import it.                                        |
-| `world-data`            | same as preflight | The descriptor, source order, file reading, targets, hidden-data rules, and each record checked against its contract schema                                                                           |
-| `locale-file-name`      | error             | A language file's name gives only the language (`.en.`) and not the locale the world declares (`.en-US.`). This file is not read.                                                                     |
-| `locale-overlay`        | warning           | A translation in a language file has no place to go (the main file has no such key or ID, or it changed a value that is not text). That entry is ignored.                                             |
-| `locale-script`         | warning           | A language file for a language other than Chinese, Japanese or Korean still contains CJK characters: untranslated text, or a trigger word copied from the main file.                                  |
-| `edition-incomplete`    | warning           | `supportedLocales` declares a language, but that language's version is missing some translations. A session in that language reads the world's original default-language text.                        |
-| `inline-locale-map`     | error             | The main file writes text as a multi-language map. The main file should have one language, and the translations go in language files.                                                                 |
-| `data-file-unused`      | warning           | A file in `data/`, `characters/` or `media/` is not used by any source or framework feature                                                                                                           |
-| `attribute-reference`   | error             | A value in a record that names a character attribute (declared by the receiving plugin's `authoring.references`) is missing from the world's `characterSchema`, has the wrong type or is out of range |
-| `model-hidden-field`    | warning           | A record has a field that no model reads: a name ending in `At` or `timestamp` with an ISO time, or `id` / a name ending in `Id` or `Ids` with a UUID                                                 |
-| `cover`                 | error             | The file that `cover` points to cannot be shown by the app                                                                                                                                            |
-| `theme-music`           | error             | The file that `themeMusic` points to cannot be played in the world list                                                                                                                               |
-| `prompt-size`           | warning           | The content takes up too much of the prompt. See below.                                                                                                                                               |
+| Diagnostic code         | Level             | Meaning                                                                                                                                                                                                            |
+| ----------------------- | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `manifest-invalid`      | error             | `world.yaml` cannot be parsed or does not match the schema                                                                                                                                                         |
+| `lore-missing`          | error             | A declared language (`defaultLocale` / `supportedLocales`) has no lore file                                                                                                                                        |
+| `lore-fallback-missing` | warning           | There is no `WORLD.md`, so a session in an undeclared language gets empty lore                                                                                                                                     |
+| `lore-narrator-only`    | warning           | The [narrator-only marker](#narrator-only-lore-narrator-only) is missing its end, missing its start, nested or written wrong. The lore after it is hidden from the player.                                         |
+| `unknown-plugin`        | error or warning  | A plugin ID referenced by `pluginPolicy` / `pluginSettings` is not in the scanned directories                                                                                                                      |
+| `unknown-preset`        | error             | `pluginPolicy.presetId` is neither a built-in pack nor an ID in this world's `packs`                                                                                                                               |
+| `unknown-setting`       | warning           | A key in `pluginSettings` is not a setting the plugin declares, so the value is ignored                                                                                                                            |
+| `invalid-setting`       | error             | A value in `pluginSettings` does not match the type, range or options the setting declares                                                                                                                         |
+| `unprovided-contract`   | error or warning  | A contract in `pluginPolicy.requires` has no provider                                                                                                                                                              |
+| `unresolved-contract`   | error or warning  | A data contract used by a source has no receiving plugin among the scanned plugins                                                                                                                                 |
+| `unrequested-receiver`  | warning           | No plugin a new session enables by default receives this source. The source is not imported until the player turns a receiving plugin on.                                                                          |
+| `convention-collision`  | error or warning  | The world has no descriptor, and more than one plugin declares the path of one of its files. A session that enables those plugins together does not import it.                                                     |
+| `world-data`            | same as preflight | The descriptor, source order, file reading, targets, hidden-data rules, and each record checked against its contract schema                                                                                        |
+| `locale-file-name`      | error             | A language file's name gives only the language (`.en.`) and not the locale the world declares (`.en-US.`). This file is not read.                                                                                  |
+| `locale-overlay`        | warning           | A translation in a language file has no place to go (the main file has no such key or ID, or it changed a value that is not text). That entry is ignored.                                                          |
+| `locale-script`         | warning           | A language file for a language other than Chinese, Japanese or Korean still contains CJK characters: untranslated text, or a trigger word copied from the main file.                                               |
+| `edition-incomplete`    | warning           | `supportedLocales` declares a language, but that language's version is missing some translations. A session in that language reads the world's original default-language text.                                     |
+| `inline-locale-map`     | error             | The main file writes text as a multi-language map. The main file should have one language, and the translations go in language files.                                                                              |
+| `data-file-unused`      | warning           | A file in `data/`, `characters/` or `media/` is not used by any source or framework feature                                                                                                                        |
+| `attribute-reference`   | error             | A value in a record that names a character attribute (declared by the receiving plugin's `authoring.references`) is missing from the world's `characterSchema`, has the wrong type or is out of range              |
+| `dimension-reference`   | error             | A value in a record that names a dimension (declared by the receiving plugin's `authoring.references`) is not a dimension the world declares, or the path beside it is not a place the dimension's `schema` allows |
+| `model-hidden-field`    | warning           | A record has a field that no model reads: a name ending in `At` or `timestamp` with an ISO time, or `id` / a name ending in `Id` or `Ids` with a UUID                                                              |
+| `cover`                 | error             | The file that `cover` points to cannot be shown by the app                                                                                                                                                         |
+| `theme-music`           | error             | The file that `themeMusic` points to cannot be played in the world list                                                                                                                                            |
+| `prompt-size`           | warning           | The content takes up too much of the prompt. See below.                                                                                                                                                            |
 
 For `unknown-plugin`, `unprovided-contract` and `unresolved-contract`: a spelling close to a known ID is an error, and it suggests "Did you mean". Otherwise the default is a warning, because the provider may be a community plugin that was not scanned. With `--strict`, all of them are errors. `pnpm release:preflight` uses `--strict` for the built-in worlds.
 

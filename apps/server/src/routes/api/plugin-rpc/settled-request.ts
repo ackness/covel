@@ -1,6 +1,9 @@
 import type { Context } from "hono";
 import type { RuntimeJobServices } from "./runtime-job-credentials.js";
-import type { SettleWaitBudget } from "./settled-session-lock.js";
+import {
+  withAbortableLock,
+  type SettleWaitBudget,
+} from "./settled-session-lock.js";
 import { getRequestLlmOptions } from "../../../request-llm-context.js";
 import { listRuntimeJobs } from "./jobs.js";
 import type { EventBus } from "@covel/events";
@@ -72,6 +75,8 @@ export async function withSettledSessionLock<T>(
   sessionId: string,
   fn: () => Promise<T>,
   waitBudget?: SettleWaitBudget,
+  /** Also ends the wait, e.g. the player stopping the action. */
+  stopSignal?: AbortSignal,
 ): Promise<T> {
   const provideCredentials = async () => {
     await provideRequestJobCredentials(c, sessionId);
@@ -87,15 +92,19 @@ export async function withSettledSessionLock<T>(
       createdAt: new Date().toISOString(),
     });
   };
+  const hostSignal = c.get("requestWork")?.signal ?? c.req.raw.signal;
   // Non-settling jobs also need request-only credentials after a restart.
   await provideCredentials();
   const settled = c.get("settledSessionLock");
-  if (!settled) return c.get("sessionLock").withLock(sessionId, fn);
+  if (!settled)
+    return withAbortableLock(c.get("sessionLock"), sessionId, stopSignal, fn);
   return settled.withLock(
     sessionId,
     {
       waitBudget,
-      signal: c.get("requestWork")?.signal ?? c.req.raw.signal,
+      signal: stopSignal
+        ? AbortSignal.any([hostSignal, stopSignal])
+        : hostSignal,
       provideCredentials,
       onTimeout: (info) => recordSettleTrace("execution.settle-timeout", info),
       // A job no usable model can serve is not waited for; say why in the trace.
@@ -115,6 +124,7 @@ export async function withSettledExecutionLock<T>(
   sessionId: string,
   fn: () => Promise<T>,
   waitBudget?: SettleWaitBudget,
+  stopSignal?: AbortSignal,
 ): Promise<T> {
   return withSettledSessionLock(
     c,
@@ -130,6 +140,7 @@ export async function withSettledExecutionLock<T>(
       return snapshot ? snapshot(sessionId, fn) : fn();
     },
     waitBudget,
+    stopSignal,
   );
 }
 

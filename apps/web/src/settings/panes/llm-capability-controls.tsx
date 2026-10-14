@@ -1,3 +1,4 @@
+import { Check } from "lucide-react";
 import { useInputDraft } from "../use-input-draft.js";
 import { useTranslation } from "react-i18next";
 import { projectModelCapabilityForBuiltinAdapter } from "@covel/shared";
@@ -230,7 +231,11 @@ export function CapabilityEditor({
   };
   return (
     <div className="space-y-3 pt-1 border-t border-dashed border-border mt-2">
-      <div className="space-y-1">
+      <div
+        role="group"
+        aria-label={t("settings.inputModalities")}
+        className="space-y-1"
+      >
         <Label className="text-[10px] uppercase tracking-widest text-muted-foreground">
           {t("settings.inputModalities")}
         </Label>
@@ -240,6 +245,8 @@ export function CapabilityEditor({
             return (
               <button
                 key={id}
+                type="button"
+                aria-pressed={active}
                 disabled={
                   busy || (available ? !available.input.includes(id) : false)
                 }
@@ -252,6 +259,9 @@ export function CapabilityEditor({
                     : "bg-muted/30 text-muted-foreground border-transparent hover:border-border"
                 }`}
               >
+                {active && (
+                  <Check aria-hidden="true" className="mr-1 inline h-3 w-3" />
+                )}
                 {t(MODALITY_LABEL_KEYS[`in:${id}`] ?? `in:${id}`, {
                   defaultValue: id,
                 })}
@@ -260,7 +270,11 @@ export function CapabilityEditor({
           })}
         </div>
       </div>
-      <div className="space-y-1">
+      <div
+        role="group"
+        aria-label={t("settings.outputModalities")}
+        className="space-y-1"
+      >
         <Label className="text-[10px] uppercase tracking-widest text-muted-foreground">
           {t("settings.outputModalities")}
         </Label>
@@ -270,6 +284,8 @@ export function CapabilityEditor({
             return (
               <button
                 key={id}
+                type="button"
+                aria-pressed={active}
                 disabled={
                   busy || (available ? !available.output.includes(id) : false)
                 }
@@ -282,6 +298,9 @@ export function CapabilityEditor({
                     : "bg-muted/30 text-muted-foreground border-transparent hover:border-border"
                 }`}
               >
+                {active && (
+                  <Check aria-hidden="true" className="mr-1 inline h-3 w-3" />
+                )}
                 {t(MODALITY_LABEL_KEYS[`out:${id}`] ?? `out:${id}`, {
                   defaultValue: id,
                 })}
@@ -290,7 +309,11 @@ export function CapabilityEditor({
           })}
         </div>
       </div>
-      <div className="space-y-1">
+      <div
+        role="group"
+        aria-label={t("settings.featureTags")}
+        className="space-y-1"
+      >
         <Label className="text-[10px] uppercase tracking-widest text-muted-foreground">
           {t("settings.featureTags")}
         </Label>
@@ -300,6 +323,8 @@ export function CapabilityEditor({
             return (
               <button
                 key={id}
+                type="button"
+                aria-pressed={active}
                 disabled={
                   busy ||
                   (available ? !available.features?.includes(id) : false)
@@ -313,6 +338,9 @@ export function CapabilityEditor({
                     : "bg-muted/30 text-muted-foreground border-transparent hover:border-border"
                 }`}
               >
+                {active && (
+                  <Check aria-hidden="true" className="mr-1 inline h-3 w-3" />
+                )}
                 {t(FEATURE_LABEL_KEYS[id] ?? id, { defaultValue: id })}
               </button>
             );

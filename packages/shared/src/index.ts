@@ -35,6 +35,7 @@ export {
 export * from "./types/index.js";
 export * from "./types/llm-diagnostics.js";
 export * from "./llm-request-budget.js";
+export * from "./llm-slots.js";
 export {
   isCompleteFinishReason,
   unifyFinishReason,
@@ -76,6 +77,11 @@ export type {
 } from "./provider-protocols.js";
 export type { CharacterRecord } from "./types/character-record.js";
 export { materializeCharacterUpsert } from "./proposals/character-upsert.js";
+export {
+  checkProposalPayload,
+  proposalPayloadSchemas,
+  type ProposalPayloadCheck,
+} from "./proposals/payload-schemas.js";
 export {
   materializeWorldModel,
   validateWorldModel,

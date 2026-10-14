@@ -46,12 +46,17 @@ type StoreTransaction = Omit<DataStore, "withTransaction" | "close"> & {
 2. **回滚恢复可观察的状态。** 事务回滚之后，每个读方法返回的结果，和事务开始前那一刻相同。之前就有的记录保留原来的身份；事务里做的修改被丢弃。
 3. **没有共享的句柄。** 事务的范围只绑定这一次 `fn` 调用。外层的 store 不会停在“事务进行中”的状态，失败的事务不会把 store 卡住。
 4. **事务之外的写入立即生效。** 不在 `withTransaction` 里调用的写方法，写完就是持久的。
-5. **不允许嵌套。** 每个后端都拒绝在事务里再开事务（见[下文](#nesting-is-rejected-on-every-backend)）。需要一段可以单独回滚的范围时，用 `tx.savepoint`：
+5. **事务里只能用 `tx` 写。** 在 `fn` 里（包括它 `await` 的代码）通过外层的根 store 调用写方法，每个后端都拒绝，抛 `RootStoreWriteInTransactionError`，什么也不写。错误逃出 `fn` 时整个事务回滚。读方法不受限制。`fn` 结束之后才运行的代码（比如它留下的定时器）不算在事务里，照常写入。
+6. **不允许嵌套。** 每个后端都拒绝在事务里再开事务（见[下文](#nesting-is-rejected-on-every-backend)）。需要一段可以单独回滚的范围时，用 `tx.savepoint`：
    - SQLite 在唯一的连接上执行 `SAVEPOINT` / `ROLLBACK TO`。
    - PostgreSQL 打开 Drizzle 的嵌套事务，也就是保留连接上的一个 savepoint。
    - MemoryStore 为每一层打开的 savepoint 保留一份惰性快照。
 
 **消息 ID 不能重复。** 普通的 `addMessage` 插入会拒绝一个已被占用的全局消息 ID，即使占用它的是另一个会话。拒绝不会改动原来那一行。错误逃出事务回调时，之前的写入回滚；失败的 savepoint 只回滚它自己的写入。另一个接口 `commitPlayerInputMessage` 保留它明确的“幂等接管”约定。
+
+**追加型记录的 ID 不能重复。** 回合结果、工具调用、运行时输出、交互记录、状态变化、事件、trace、回合消息、玩家输入和会话摘要的 ID 都是全局主键。在每个后端上，用已有的 ID 再写一次都会报错，原来那一行不变。
+
+**设定条目的批量写入是原子的。** `upsertLorebookEntries` 的一批里只要有一条失败（比如 ID 含 U+0000），整批都不写。
 
 **快照刷新。** 同一个属主刷新快照时，采集时间和内容在同一次写入里更新，并跟随外层事务的提交或回滚。它不改变快照 ID，也不放松对跨会话归属的拒绝。
 
@@ -230,6 +235,7 @@ compareAndSetPluginDataBatch(
 
 - 事务外面的读写等事务结束。
 - 通过 `tx` 范围发出的操作就地执行。它属于这个事务，让它排队会造成死锁。
+- 事务回调里通过根 store 发出的读就地执行；`DataStore` 的写被拒绝（规则 5）。共用这个连接的镜像 MediaStore 不受规则 5 限制，它的写仍然就地执行。
 - “里面还是外面”由 `AsyncLocalStorage` 判断。所以一个真正并发的调用方，即使在事务停在某个 `await` 时开始，也不会被误认为是嵌套调用。
 
 **这道门按连接设，不按 store 设。** 所有通过同一个 `node:sqlite` 句柄做修改的代码共用一道门，由 `sqlite/shared-connection.ts` 里的 `getConnectionWriteGate(db)` 取得。共用它的有：
@@ -270,6 +276,7 @@ compareAndSetPluginDataBatch(
 - 摄取使用它自己的按会话的锁（跨 PostgreSQL 主机时是 advisory 锁），从不使用回合锁。
 - 生命周期里的替换和删除按这个顺序取锁：会话 → 需要时的世界 → 摄取 → 存储事务。
 - 它们等所有延迟的向量、游标更新、哈希更新和归档删除完成，再替换或删除状态。保留 `createdAt` 的 checkpoint 也一样。
+- 重建记忆索引（[`POST /api/sessions/:id/memory-index/rebuild`](./api.md#post-apisessionsidmemory-indexrebuild)）也在摄取锁里换模型：先等进行中的摄取结束，换好之后再安排新的摄取。
 - embedding 运行期间，普通回合可以照常提交。摄取器会合并出下一趟来读到这些提交。
 - 关闭时先排空被跟踪的记忆任务，再关闭存储。
 - embedding 失败不改变已提交回合的结果。
@@ -612,8 +619,11 @@ await store.withTransaction(async (tx) => {
 - 先执行删除，再执行 upsert。所有修改和新的进度值一起提交。
 - CAS 冲突返回 `false`，向量和进度都不变。
 - 会话 incarnation 过期或不存在，或者任何一条修改无效，会抛错并回滚整个批次。
+- 可选的 `expectedModelRegistryId` 写明这一批是用哪个模型嵌入的。会话已经锁到别的模型时，抛错并回滚整个批次。
 
 各后端：PostgreSQL 用 `FOR KEY SHARE` 持有父会话行；SQLite 使用 immediate 事务；Memory 使用它串行化的 store 边界。这些操作不在 `StoreTransaction` 的业务数据视图上运行。
+
+**换模型。** `VectorModelOps.resetSessionVectorIndex({ sessionId, expectedSessionCreatedAt, expectedModelRegistryId, target })` 在一个事务里删掉会话在当前模型下的全部向量和全部进度，再把会话锁到 `target`（`null` 表示解除锁定）。会话当前锁定的不是 `expectedModelRegistryId` 时返回 `false`，什么都不改；incarnation 不对时抛错。PostgreSQL 用 `FOR UPDATE` 锁住会话行，等持有 `FOR KEY SHARE` 的向量写入结束。
 
 **进度存在哪里。** 进度属于 `vector_index_progress`，不属于 `plugin_data`。
 

@@ -10,6 +10,10 @@ export type {
   MemorySearchResult,
 } from "./types.js";
 export type { EmbedFn } from "./vector-common.js";
+export {
+  EmbeddingModelChangedError,
+  isEmbeddingModelChanged,
+} from "./vector-common.js";
 export type {
   SearchablePluginData,
   SearchablePluginDataResolver,

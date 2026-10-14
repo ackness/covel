@@ -183,3 +183,11 @@ describe("SettingsDialog navigation", () => {
     );
   });
 });
+
+it("keeps a visible focus ring around the settings search", () => {
+  render(<SettingsDialog open onOpenChange={vi.fn()} />);
+  const search = screen.getByRole("textbox", {
+    name: i18n.t("settings.searchPlaceholder"),
+  });
+  expect(search.parentElement?.className).toContain("focus-within:ring-1");
+});

@@ -26,6 +26,32 @@ describe("EventBus Subscription Features", () => {
     bus = createEventBus();
   });
 
+  describe("headCursor", () => {
+    it("starts tracking an untracked session and names its newest event", () => {
+      expect(bus.getEventsAfter("sess-1", 0).epoch).toBeUndefined();
+      const empty = parseSubscriptionEventId(bus.headCursor("sess-1"))!;
+      expect(empty.seq).toBe(0);
+      // Tracked now: events emitted next keep the epoch the cursor named.
+      expect(bus.getEventsAfter("sess-1", 0).epoch).toBe(empty.epoch);
+
+      bus.emit(makeMessage({ sessionId: "sess-1" }));
+      bus.emit(makeMessage({ sessionId: "sess-1" }));
+      expect(bus.headCursor("sess-1")).toBe(`${empty.epoch}:2`);
+      const replay = bus.getEventsAfter("sess-1", empty.seq);
+      expect(replay.gap).toBe(false);
+      expect(replay.events.map(seqOf)).toEqual([1, 2]);
+    });
+
+    it("names a new epoch after the replay state is invalidated", () => {
+      bus.emit(makeMessage({ sessionId: "sess-1" }));
+      const before = parseSubscriptionEventId(bus.headCursor("sess-1"))!;
+      bus.invalidateReplay?.("sess-1", "transport-gap");
+      const after = parseSubscriptionEventId(bus.headCursor("sess-1"))!;
+      expect(after.epoch).not.toBe(before.epoch);
+      expect(after.seq).toBe(0);
+    });
+  });
+
   describe("sequence numbering", () => {
     it("should assign incrementing sequence IDs to subscription events", () => {
       const events: SubscriptionEvent[] = [];

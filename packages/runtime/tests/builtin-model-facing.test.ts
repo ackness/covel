@@ -110,6 +110,17 @@ describe("builtin model-facing results", () => {
   async function setup() {
     const store = createMemoryStore();
     stores.push(store);
+    await store.createSession({
+      id: sessionId,
+      phase: "playing",
+      status: "active",
+      locale: "en",
+      completedPlayerTurns: 1,
+      setupRuntimes: {},
+      activePlugins: ["journal"],
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    });
     await store.upsertCharacterSchema(schema);
     await store.upsertCharacter(character);
     await store.setPluginData({

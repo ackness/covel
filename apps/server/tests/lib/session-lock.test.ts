@@ -77,7 +77,7 @@ describe("createInProcessSessionLock", () => {
       await lock.tryWithLock("probe", async () => {
         ran = true;
       }),
-    ).toEqual({ acquired: false });
+    ).toEqual({ acquired: false, reason: "busy" });
     expect(ran).toBe(false);
     release();
     expect(await owner).toEqual({ acquired: true, value: undefined });
@@ -123,7 +123,7 @@ describe("createInProcessSessionLock", () => {
     });
     const owner = lock.withLock("probe", () => ownerGate);
     startProbe();
-    expect(await probe).toEqual({ acquired: false });
+    expect(await probe).toEqual({ acquired: false, reason: "busy" });
     releaseOwner();
     await owner;
   });

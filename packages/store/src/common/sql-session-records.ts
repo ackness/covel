@@ -26,12 +26,17 @@ import type { SessionRow } from "./mappers/session-mappers.js";
 import type { SqlRunner } from "./sql-runner.js";
 import type { DataStore, SessionRecord } from "../types.js";
 import { mergeSessionPatch } from "../types.js";
+import { withoutNul } from "./without-nul.js";
 import {
   isUniqueConstraintError,
   SessionAlreadyExistsError,
 } from "../errors.js";
 
-type SessionsTable = Table & { id: Column; createdAt: Column };
+type SessionsTable = Table & {
+  id: Column;
+  createdAt: Column;
+  metadata: Column;
+};
 
 export interface SqlSessionTables {
   readonly sessions: SessionsTable;
@@ -82,6 +87,30 @@ export function createSqlSessionRecords(
       id: string,
       patch: Parameters<DataStore["updateSession"]>[1],
     ): Promise<void> {
+      if ("metadata" in patch) {
+        // U+0000 leaves keys and values as on every write; `undefined` removes.
+        const metadata = withoutNul(patch.metadata ?? {});
+        const merge = runner.mergeJsonObject(
+          sessions.metadata,
+          Object.fromEntries(
+            Object.entries(metadata).filter(([, value]) => value !== undefined),
+          ),
+          Object.keys(metadata).filter((key) => metadata[key] === undefined),
+        );
+        if (merge) {
+          const { metadata: _merged, ...rest } = patch;
+          await runner.update(
+            sessions,
+            {
+              // Reads no stored field: only `metadata` comes from the record.
+              ...values.sessionUpdate(rest, rest as SessionRecord),
+              metadata: merge,
+            },
+            eq(sessions.id, id),
+          );
+          return;
+        }
+      }
       const existingRow = await runner.selectFirst<SessionRow>(sessions, {
         where: eq(sessions.id, id),
       });

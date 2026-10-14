@@ -5,7 +5,11 @@ import type {
   LLMTextPart,
 } from "@covel/shared";
 import type { LLMProviderRequest } from "@covel/shared";
-import type { LLMDiagnostics, LLMRequestBudget } from "@covel/shared";
+import type {
+  LLMDiagnostics,
+  LLMRequestBudget,
+  LLMQueueStart,
+} from "@covel/shared";
 /**
  * Bridge adapter: @covel/ai-provider gateway → LLMAdapter interface.
  *
@@ -146,6 +150,7 @@ export interface GatewayLike {
       traceId?: string;
       signal?: AbortSignal;
       requestBudget?: LLMRequestBudget;
+      onQueueStart?: LLMQueueStart;
       slotOverrides?: SlotOverridesInput;
       capabilityOverridePolicy?: CapabilityOverridePolicy;
       /** Request-hard generation limit; gateway applies it after metadata. */
@@ -195,6 +200,7 @@ export interface GatewayLike {
       traceId?: string;
       signal?: AbortSignal;
       requestBudget?: LLMRequestBudget;
+      onQueueStart?: LLMQueueStart;
       slotOverrides?: SlotOverridesInput;
       capabilityOverridePolicy?: CapabilityOverridePolicy;
       /** @see generateText options.parameterOverrides */
@@ -335,6 +341,7 @@ export function createGatewayAdapter(
               }
             : {}),
           ...(params.signal ? { signal: params.signal } : {}),
+          ...(params.onQueueStart ? { onQueueStart: params.onQueueStart } : {}),
           ...(params.requestBudget
             ? { requestBudget: params.requestBudget }
             : {}),
@@ -413,6 +420,7 @@ export function createGatewayAdapter(
               }
             : {}),
           ...(params.signal ? { signal: params.signal } : {}),
+          ...(params.onQueueStart ? { onQueueStart: params.onQueueStart } : {}),
           ...(params.requestBudget
             ? { requestBudget: params.requestBudget }
             : {}),

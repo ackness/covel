@@ -77,16 +77,21 @@ function setup() {
   const streams: {
     emit: SubscriptionEventHandler;
     state: (state: ConnectionState) => void;
+    align: ReturnType<typeof vi.fn>;
+    missed: () => void;
   }[] = [];
   subscription.createSessionSubscription.mockImplementation(
     (_id: string, options: SessionSubscriptionOptions) => {
       const stream = {
         emit: (() => {}) as SubscriptionEventHandler,
         state: options.onStateChange!,
+        align: vi.fn(),
+        missed: options.onMissedEvents!,
       };
       streams.push(stream);
       return {
         close: vi.fn(),
+        alignWithSnapshot: stream.align,
         on: (_topic: string, handler: SubscriptionEventHandler) => {
           stream.emit = handler;
         },
@@ -114,6 +119,7 @@ function setup() {
         .mockResolvedValue(undefined),
     } satisfies SessionWorkspace,
     dispatch: vi.fn(),
+    initialEventCursor: null as string | null,
   };
   const hook = renderHook(() => useSessionSubscription(options));
   return { ...hook, options, streams };
@@ -248,6 +254,30 @@ it("recovers once when a reconnect opens with a stale-cursor reset", async () =>
   expect(api.getSessionView).toHaveBeenCalledTimes(2);
 });
 
+it("hands the restored view's cursor to the stream and reads everything again when the stream missed events", async () => {
+  const { streams, options, rerender } = setup();
+  expect(streams[0]!.align).not.toHaveBeenCalled();
+  options.initialEventCursor = "epoch:5";
+  rerender();
+  expect(streams[0]!.align).toHaveBeenCalledExactlyOnceWith("epoch:5");
+  expect(api.getSessionView).not.toHaveBeenCalled();
+
+  await act(async () => {
+    streams[0]!.missed();
+  });
+  expect(api.getSessionView).toHaveBeenCalledOnce();
+  expect(api.listSessionPlugins).toHaveBeenCalledOnce();
+
+  // A later visit gets its own stream; the old one's report is ignored.
+  options.sessionGenerationRef.current += 1;
+  rerender();
+  expect(streams[1]!.align).toHaveBeenCalledExactlyOnceWith("epoch:5");
+  await act(async () => {
+    streams[0]!.missed();
+  });
+  expect(api.getSessionView).toHaveBeenCalledOnce();
+});
+
 it("ignores events and connection updates from a closed visit", () => {
   const { streams, options, rerender } = setup();
   options.sessionGenerationRef.current += 1;
@@ -306,7 +336,7 @@ it("coalesces committed state notices during a snapshot read without replaying t
     characterSchema: null,
     dimensions: {},
     dimensionSettlements: [],
-    ...current.gameState,
+    tables: current.gameState,
     characters: current.characters,
   });
   expect(options.stateRef.current.statePatches).toEqual([]);
@@ -342,8 +372,7 @@ it("refreshes once when a state commit follows snapshot publication but other re
     characterSchema: null,
     dimensions: {},
     dimensionSettlements: [],
-    stats: { hp: 9, mp: 3 },
-    weather: { sky: "clear" },
+    tables: { stats: { hp: 9, mp: 3 }, weather: { sky: "clear" } },
     characters: [],
   });
   expect(options.stateRef.current.statePatches).toEqual([]);
@@ -407,7 +436,7 @@ it("does not duplicate action-stream patch history when the subscription observe
     characterSchema: null,
     dimensions: {},
     dimensionSettlements: [],
-    ...current.gameState,
+    tables: current.gameState,
     characters: [],
   });
   expect(options.stateRef.current.statePatches).toHaveLength(2);
@@ -485,7 +514,7 @@ it("reads only the snapshot for committed state and shows what a turn changed", 
   expectSnapshotReadsOnly(2);
   const state = options.stateRef.current;
   expect(state.gameState).toMatchObject({
-    stats: { hp: 9 },
+    tables: { stats: { hp: 9 } },
     characters: committed.characters,
     dimensions: committed.dimensions,
   });
@@ -629,7 +658,7 @@ it("backs off failed recovery reads, stops, and reads again on the next commit",
   expect(api.getSessionView).toHaveBeenCalledTimes(reads + 1);
   expect(options.stateRef.current.executionError).toBeNull();
   expect(options.stateRef.current.gameState).toMatchObject({
-    stats: { hp: 2 },
+    tables: { stats: { hp: 2 } },
   });
   unmount();
 });

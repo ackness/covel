@@ -1,4 +1,5 @@
 import {
+  executionMayBeRunning,
   PLAYER_ABORT_REASON,
   type SessionExecutionStatus,
   type SessionSnapshot,
@@ -87,7 +88,7 @@ export function publishRecoveredMessages(
   deltaRafRef: DeltaRafRef,
 ): void {
   const terminalTurnId =
-    mayTakeOver && execution && execution.state !== "running"
+    mayTakeOver && execution && !executionMayBeRunning(execution)
       ? execution.turnId
       : undefined;
   const messages = toStreamMessages(snapshot.messages);

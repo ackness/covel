@@ -172,7 +172,7 @@ return { result: execution.result, committed: outcome.status === "committed" };
 | `resync`      | 只在 `committed: true`、并且这一回合提交之后有一部分事件没发出去时为 `true`。数据已经保存，客户端应该去读已保存的状态，不要等那些事件。订阅流同时会收到 `system.reset`，`reason: "publish-failed"` |
 
 > [!NOTE]
-> **开场接力。** 一次玩家动作完成了最后一个 setup runtime 时，`POST /api/actions` 的同一条 SSE 流会自动接着跑一个主循环回合（见 [api.md § POST /api/actions](./api.md)）。这时流里会出现**两轮** `execution.started` 和 runtime 生命周期事件，它们外层的 `turnId` 不同（setup 回合和接力回合）。但只有**一个** `execution.completed` 收尾。前端靠它结束“执行中”的状态，并按 `committed` 处理先行显示的内容。setup 提交失败时不会启动接力，直接以 `committed: false` 结束。
+> **开场接力。** 一次玩家动作完成了最后一个 setup runtime 时，`POST /api/actions` 的同一条 SSE 流会自动接着跑一个主循环回合（见 [api.md § POST /api/actions](./api.md)）。这时流里会出现**两轮** `execution.started` 和 runtime 生命周期事件，它们外层的 `turnId` 不同（setup 回合和接力回合）。但只有**一个** `execution.completed` 收尾。前端靠它结束“执行中”的状态，并按 `committed` 处理先行显示的内容。setup 提交失败时不会启动接力，直接以 `committed: false` 结束。玩家在接力开始前停止时，接力不再开始，`execution.completed` 带接力回合的 `turnId` 和 `abortReason: "aborted-by-player"`。
 
 **`runtime.deferred` 是“移交公告”**
 
@@ -193,6 +193,7 @@ return { result: execution.result, committed: outcome.status === "committed" };
 
 **abort：玩家停止这一回合**（`POST /api/sessions/:id/abort`）
 
+- 停止作用于玩家的这次动作请求，不只是当前的一个回合。请求还在等会话锁或等记忆更新时停止，回合不再开始，流里只有一个带 `abortReason` 的 `execution.completed`。
 - 它触发回合级的取消信号。重试层立刻切断正在进行的模型调用和流。玩家停止不会自动重试，也不会把半截叙事当成结果提交。
 - executor 停止调度后面的 runtime 组，并跳过事件链。
 - 被中止的 runtime 以失败上报（`runtime.failed`），它的提案不产出。最终提交时会检查玩家的取消信号：提交之前收到取消，整个回合都不提交。
@@ -216,7 +217,7 @@ return { result: execution.result, committed: outcome.status === "committed" };
 | ---------------- | ---- | -------- | ------------------------------ |
 | `error.occurred` | S→C  | 执行错误 | `{ message, code?, details? }` |
 
-- `code` 是可选的、稳定的错误码（如 `"session_busy"`）。客户端可以据此做翻译和重试。没有 `code` 时按 `message` 显示。
+- `code` 是可选的、稳定的错误码（如 `"session_busy"`）。客户端可以据此做翻译和重试。没有 `code` 时按 `message` 显示。动作开始前被拒绝的 code 见 [api.md § 流里的拒绝](./api.md#流里的拒绝)。
 - `details` 只随 `code: "form_rejected"` 出现，见[交互响应](#交互响应)。
 
 世界翻译接口使用另一种独立的 SSE 事件 `{ type: "error", message }`，没有 `code` 字段：
@@ -366,7 +367,7 @@ staged detached worker 也用这个事件报告持久状态：
 
 | durable status        | 语义                                                                                                                                                                                                                    |
 | --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `queued`              | 已随原始回合提交，等待 worker；超过 `maxQueueMs` 转 `timed_out`                                                                                                                                                         |
+| `queued`              | 已随原始回合提交，等待 worker；超过 `maxQueueMs` 转 `timed_out`。正常关闭时还没进入 `committing` 的作业也回到这里                                                                                                       |
 | `claimed` / `running` | worker 已取得 CAS lease / 正在执行；同一 session/plugin/runtime 保持串行                                                                                                                                                |
 | `committing`          | 已通过 owner CAS，正在 session lock 内做 stale/effect guard 和领域提交                                                                                                                                                  |
 | `succeeded`           | 后台 proposal 已提交，`result` 保存 background turn/execution/runtime 摘要                                                                                                                                              |
@@ -376,9 +377,10 @@ staged detached worker 也用这个事件报告持久状态：
 | `stale`               | session inactive、session/plugin incarnation 或版本已变化；提交屏障以 `reason: commit-barrier-rejected` 拒绝结果                                                                                                        |
 | `orphaned`            | 在途 owner 停止续租且 lease 过期；owner 自己连续续租失败直到 lease 过期时，会立即中止正在进行的执行并落此状态                                                                                                           |
 
-**启动时的恢复**
+**关闭和启动时的恢复**
 
-- 还没过排队期限、并且从来没被领取过的 `queued` 作业，继续执行。
+- 正常关闭时，还没进入 `committing` 的作业等这次执行返回后放回 `queued`，jobId 不变，下次认领时 `attempt` 加 1。停下前对外做过的事会在重跑时再做一次。已经进入 `committing` 的作业照常提交完。
+- 还没过排队期限的 `queued` 作业，继续执行。排队期限从最初入队时算起。
 - 排队超时的，结束为 `timed_out`。
 - 租约已经过期的 `claimed` / `running` / `committing` 作业，结束为 `orphaned`。
 - 这些终态**不会自动重放**。原因：服务商可能已经计费，只是回答没保存下来；重放会重复扣费。
@@ -607,6 +609,11 @@ Gemini 原生的思考强度、`providerOptions.google.thinkingConfig`、`cached
 - 还没有游标的客户端把它记成 `lastEventId`。这样即使这条连接上一个事件都没收到，下次连接（例如一次 action 结束之后恢复订阅）也能补上这期间错过的事件。
 - 已经有游标的客户端忽略它。
 
+**第一次连接接上恢复的视图。** 打开会话时，订阅流和 `GET /api/sessions/:id/view` 几乎同时发出，服务端先处理哪个没有保证。视图的 `eventCursor` 是读视图之前这个会话最新的事件 id，客户端用它把两者接上：
+
+- 第一次连接还没发出时，客户端把 `eventCursor` 当作 `lastEventId`，服务端补发读视图之后的事件。
+- 第一次连接已经不带游标发出了，客户端拿它的 `system.connected` 里的 `cursor` 和 `eventCursor` 比：前者更新，或 epoch 不同，说明订阅在读视图之后才登记，中间的事件两边都没有，客户端重新读整个会话（和收到 `system.reset` 一样）。不比它新就什么都不做。
+
 **订阅哪些 topic**
 
 - `/api/events/stream` 接受的 topic 由 `@covel/shared` 的 `SUBSCRIPTION_TOPICS` 定义：`runtime / state / game / plugin / session / store / system / trace / hooks / job`。`subscribe.ts` 的 `VALID_TOPICS` 从它生成。
@@ -736,7 +743,7 @@ data: {
 | `runtime.skipped`                                          | `apps/server/src/routes/api/actions.ts`                                                       | runtime 因 cooldown / startTurn / maxTriggerCount 被跳过                                                               |
 | `character.upserted`                                       | `packages/runtime/src/commit/session-commit-emitter.ts`（`character.upsert` proposal commit） | 角色快照事件                                                                                                           |
 | `tool.calling` / `tool.completed` / `tool.failed`          | TurnEmitter                                                                                   | LLM 工具调用 trace                                                                                                     |
-| `domain-event.previewed`                                   | ToolExecutor（`emittedEvents` 成功后）                                                        | 服务端投影成 UI slot 预览；前端不直接消费，不代表领域提交                                  |
+| `domain-event.previewed`                                   | ToolExecutor（`emittedEvents` 成功后）                                                        | 服务端投影成 UI slot 预览；前端不直接消费，不代表领域提交                                                              |
 | `llm.calling` / `llm.responded` / `message.completed`      | TurnEmitter                                                                                   | LLM 调用 trace                                                                                                         |
 | `block.emitted` / `state.patch.applied`                    | TurnEmitter                                                                                   | 块发出 / state patch 应用 trace                                                                                        |
 | `hook.fired` / `hook.aborted`                              | TurnEmitter                                                                                   | Hook 行为 trace                                                                                                        |
@@ -1063,7 +1070,7 @@ interface SseEnvelope {
 narrative.delta       → messages (streaming buffer)
 narrative.completed   → messages (completed)
 interaction.requested → messages (block)
-state.changed         → gameState (deep merge) + statePatches
+state.changed         → gameState.tables (deep merge) + statePatches
 event.emitted         → gameState.events
 interaction.submitted → handled by the caller that submitted the form: SUBMIT_BLOCK + player bubble (not through handleSseEvent)
 execution.started     → executionSteps

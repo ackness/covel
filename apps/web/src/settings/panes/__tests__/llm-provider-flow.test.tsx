@@ -124,14 +124,20 @@ describe("provider configuration flow", () => {
           },
     }));
     render(<LlmPresetsPane />);
+    expect(
+      screen.getByRole("textbox", { name: i18n.t("settings.searchProviders") }),
+    ).toBeTruthy();
     fireEvent.click(
       screen.getAllByRole("button", { name: "Add provider" })[0]!,
     );
     const dialog = within(screen.getByRole("dialog"));
-    fireEvent.change(
-      dialog.getByPlaceholderText(i18n.t("settings.providerIdExample")),
-      { target: { value: "fixture" } },
-    );
+    expect(
+      dialog.getByRole("textbox", { name: i18n.t("settings.baseUrl") }),
+    ).toBeTruthy();
+    expect(screen.queryByRole("main")).toBeNull();
+    fireEvent.change(dialog.getByRole("textbox", { name: "Provider ID" }), {
+      target: { value: "fixture" },
+    });
     fireEvent.change(dialog.getByRole("textbox", { name: /Model IDs/ }), {
       target: { value: "qwen3.8-flash\ndeepseek-v4-flash" },
     });
@@ -201,7 +207,9 @@ describe("provider configuration flow", () => {
   it("switches between a full-width provider list and details on narrow screens", () => {
     const { container } = render(<LlmPresetsPane />);
     const aside = container.querySelector("aside")!;
-    const main = container.querySelector("main")!;
+    const main = screen.getByRole("region", {
+      name: i18n.t("settings.providerConnections"),
+    });
     expect(aside.parentElement?.className).toContain("grid-cols-1");
     expect(main.className).toContain("hidden lg:block");
     fireEvent.click(screen.getByRole("button", { name: /example.*1 models/ }));
@@ -238,10 +246,9 @@ it("keeps the provider draft open after failed persistence and saves it on retry
   render(<LlmPresetsPane />);
   fireEvent.click(screen.getAllByRole("button", { name: "Add provider" })[0]!);
   const dialog = within(screen.getByRole("dialog"));
-  fireEvent.change(
-    dialog.getByPlaceholderText(i18n.t("settings.providerIdExample")),
-    { target: { value: "fixture" } },
-  );
+  fireEvent.change(dialog.getByRole("textbox", { name: "Provider ID" }), {
+    target: { value: "fixture" },
+  });
   const input = dialog.getByRole("textbox", { name: /Model IDs/ });
   fireEvent.change(input, { target: { value: "opaque-model" } });
   const gate = deferred<void>();

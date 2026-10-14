@@ -321,7 +321,7 @@ v0.0.42 调整了插件扩展契约，旧的开发数据不会自动升级。桌
 | `DEFAULT_BASE_URL` / `DEFAULT_MODEL` | — / `deepseek-v4-flash` | 没有 `llm.toml` 时，内置的 `story` 用途改用这个 OpenAI 兼容端点和模型（服务商 `default`）；`e2e:replay --record` 也向它录制 |
 | `DEFAULT_API_KEY`                    | —                       | `default` 服务商的密钥：上面的内置用途和 `tests/llm-replay/` 的会话都用它                                                   |
 | `COVEL_LLM_RETRY_DISABLED`           | `false`                 | 设为 `1` 时关闭服务商 HTTP 重试                                                                                             |
-| `COVEL_LLM_MAX_CONCURRENT`           | `4`                     | 整个进程同时进行的模型调用上限                                                                                              |
+| `COVEL_LLM_MAX_CONCURRENT`           | `4`                     | 整个进程同时进行的文本模型调用上限                                                                                          |
 | `COVEL_MODEL_DB_PATH`                | —                       | 覆盖模型数据库 JSON 的路径                                                                                                  |
 | `COVEL_PROMPTS_DIR`                  | —                       | 覆盖提示词模板根目录                                                                                                        |
 | `COVEL_IMG_KEY`                      | —                       | 离线立绘、场景生成脚本用的密钥，优先于服务商自己的密钥                                                                      |
@@ -464,8 +464,9 @@ v0.0.42 调整了插件扩展契约，旧的开发数据不会自动升级。桌
 
 **`COVEL_LLM_MAX_CONCURRENT`**
 
-- 整个进程同时进行的模型调用上限，默认 `4`。`0` 或负数关闭这个限制。由 `packages/runtime/src/retry/llm-slots.ts` 读取。
-- 排队等待的时间不算进 runtime 的超时：排了多久，截止时间就顺延多久。
+- 整个进程同时进行的文本模型调用上限，默认 `4`。`0` 或负数关闭这个限制。由 `packages/shared/src/llm-slots.ts` 读取。
+- 网关统一限制文本、对象、流式和评估调用；agent、函数、后台任务和直接调用共用队列。embedding 和媒体不占文本槽。
+- agent 的排队时间补偿到 runtime 截止时间；函数保持固定的执行截止时间。逻辑请求预算都计入排队。
 - 多会话的托管部署可以按服务商的吞吐调整。
 
 **`COVEL_COMPACTOR_CONTEXT_WINDOW`**

@@ -1,8 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import {
-  acquireLLMSlot,
-  setLLMSlotCapForTests,
-} from "../src/retry/llm-slots.js";
+import { acquireLLMSlot, setLLMSlotCapForTests } from "../src/llm-slots.js";
 
 afterEach(() => {
   setLLMSlotCapForTests(undefined);
@@ -155,4 +152,23 @@ describe("slot cancellation and handoff", () => {
     });
     (await acquireLLMSlot()).release();
   });
+});
+
+it("does not enqueue when queue admission notification cancels the call", async () => {
+  setLLMSlotCapForTests(1);
+  const holder = await acquireLLMSlot();
+  const controller = new AbortController();
+  const admitted = vi.fn();
+  try {
+    await expect(
+      acquireLLMSlot(controller.signal, () => {
+        controller.abort(new Error("cancelled while queuing"));
+        return admitted;
+      }),
+    ).rejects.toThrow("cancelled while queuing");
+    expect(admitted).not.toHaveBeenCalled();
+  } finally {
+    holder.release();
+  }
+  (await acquireLLMSlot()).release();
 });

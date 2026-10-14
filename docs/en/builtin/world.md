@@ -77,7 +77,7 @@ At the start, it prepares the character attributes and the "dimensions" of this 
 
 **What you will see**
 
-- "Overview" and "Character Traits" in the "World Details" tab on the right.
+- "Overview" and "Character Traits" in the "World Details" tab on the right. Character Traits reads the current session character schema, so a save with an existing schema shows it immediately.
 - The current value of each dimension is shown in the panel, and you can change it by hand. If a turn's settlement fails, the panel tells you. You can retry, mark it as handled manually, or skip it explicitly. Before your next action, the system automatically retries once.
 
 **When it is on**: a basic feature, on by default. All three built-in packs include it.

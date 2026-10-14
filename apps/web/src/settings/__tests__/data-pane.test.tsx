@@ -49,6 +49,7 @@ it("previews old-schema entries without silently reporting them as imported", as
   fireEvent.click(screen.getByRole("button", { name: /Apply.*1/ }));
   await waitFor(() => expect(mocks.store.get("fixture.extra")).toBe(true));
   expect(mocks.store.get("fixture.count")).toBe(1);
+  expect(screen.getByRole("status")).toBeTruthy();
 });
 it("keeps the import preview and reports a persistence failure", async () => {
   render(<DataPane />);
