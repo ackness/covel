@@ -165,6 +165,11 @@ export interface SessionState {
   sessionCommandsLoaded: boolean;
   /** Confirmed plugins of this session that cannot run now. */
   unavailableSessionPlugins: readonly import("@covel/shared").PluginResolutionRejection[];
+  /**
+   * World data this session is without, from its creation or from the last
+   * import for a plugin that joined it.
+   */
+  worldDataNotices: readonly import("@covel/shared").WorldDataImportNotice[];
 
   // Active session
   world: api.WorldSummary | null;
@@ -396,6 +401,10 @@ export type SessionAction =
       unavailable?: readonly import("@covel/shared").PluginResolutionRejection[];
     }
   | { type: "TOGGLE_SESSION_PLUGIN"; pluginId: string; active: boolean }
+  | {
+      type: "SET_WORLD_DATA_NOTICES";
+      notices: readonly import("@covel/shared").WorldDataImportNotice[];
+    }
   | { type: "BACKFILL_TURN_ID"; turnId: string; requestId: string }
   | {
       type: "PLUGIN_DATA_CHANGED";

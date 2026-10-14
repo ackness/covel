@@ -1486,10 +1486,10 @@ Each slot is an array. Its elements are `{ pluginId, specs[] }`. Each item in `s
 
 **Validation and `specVersion`**:
 
-- When aggregating, every spec is validated with Zod (its structure and `specVersion`).
+- When aggregating, every spec is validated with the same rules as `pnpm validate:plugin` (structure, `specVersion`, data ownership, `webview`).
 - `specVersion` can be left out, and is treated as v1. A declared version higher than the server supports (currently `CURRENT_UI_SPEC_VERSION = 1`) is rejected.
 - If one spec fails validation, it **does not affect the whole response**. Only that spec is removed from its slot.
-- The reason for failure is written in the top-level `diagnostics[]`. Each item is `{ pluginId, runtimeId, slot, specIndex, specId?, issues[{ path, message, code }] }`. It says which plugin, which field, and what the problem is.
+- The reason for failure is written in the top-level `diagnostics[]`. Each item is `{ pluginId, runtimeId, slot, specIndex, specId?, issues[{ path, message, code }] }`. It says which plugin, which field, and what the problem is. A file that cannot be read (missing, not JSON, or pointing outside the plugin directory) is reported here too; `code` is always `invalid`.
 - With `sessionId`, `diagnostics` includes only the plugins active in that session.
 
 **Development hot reload**: `POST /api/plugins/:id/reload` reloads one community plugin.
@@ -2239,16 +2239,17 @@ The response is the session record, plus a one-time `ownerToken`.
 
 **Response fields**:
 
-| Field                  | Type                                   | Description                                                                                                                                                                                       |
-| ---------------------- | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ownerToken`           | string                                 | The session's owner token. It is **returned only here** (the server stores only a hash). When it must be sent is explained below                                                                  |
-| `locale`               | string                                 | The session's actual content language                                                                                                                                                             |
-| `requestedLocale`      | string (optional)                      | Appears only when the actual language differs from the requested one                                                                                                                              |
-| `pluginsWithoutLocale` | string[] (optional)                    | IDs of enabled plugins that have no text in the session's language (they have only English labels, so the panel shows English). This is only a hint and does not stop creation                    |
-| `status`               | `'active' \| 'paused' \| 'ended'`      | The session lifecycle status                                                                                                                                                                      |
-| `phase`                | `'setup' \| 'playing'`                 | Whether the session is in opening setup or in normal play. It starts as `setup` if the active set has a setup runtime, otherwise `playing`. It becomes `playing` once all setup runtimes are done |
-| `completedPlayerTurns` | number                                 | The number of committed player turns in normal play. Interaction during setup is not counted. The same turn is never counted twice                                                                |
-| `setupRuntimes`        | `Record<runtimeId, SetupRuntimeState>` | The state of each setup runtime. See the table below                                                                                                                                              |
+| Field                  | Type                                         | Description                                                                                                                                                                                                                                                                               |
+| ---------------------- | -------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ownerToken`           | string                                       | The session's owner token. It is **returned only here** (the server stores only a hash). When it must be sent is explained below                                                                                                                                                          |
+| `locale`               | string                                       | The session's actual content language                                                                                                                                                                                                                                                     |
+| `requestedLocale`      | string (optional)                            | Appears only when the actual language differs from the requested one                                                                                                                                                                                                                      |
+| `pluginsWithoutLocale` | string[] (optional)                          | IDs of enabled plugins that have no text in the session's language (they have only English labels, so the panel shows English). This is only a hint and does not stop creation                                                                                                            |
+| `worldDataNotices`     | `{ level, sourceId?, message }[]` (optional) | World data that was not imported (warnings and errors), such as data that only a community plugin still waiting for approval receives. The game screen shows it to the player; see [Receivers that join after the game starts](./world-data.md#receivers-that-join-after-the-game-starts) |
+| `status`               | `'active' \| 'paused' \| 'ended'`            | The session lifecycle status                                                                                                                                                                                                                                                              |
+| `phase`                | `'setup' \| 'playing'`                       | Whether the session is in opening setup or in normal play. It starts as `setup` if the active set has a setup runtime, otherwise `playing`. It becomes `playing` once all setup runtimes are done                                                                                         |
+| `completedPlayerTurns` | number                                       | The number of committed player turns in normal play. Interaction during setup is not counted. The same turn is never counted twice                                                                                                                                                        |
+| `setupRuntimes`        | `Record<runtimeId, SetupRuntimeState>`       | The state of each setup runtime. See the table below                                                                                                                                                                                                                                      |
 
 When `ownerToken` must be sent:
 
@@ -3677,6 +3678,15 @@ Turns on a plugin in this session. The server recalculates the session's active 
 ```
 
 The response also has `resolution`, which is the full result of this solve.
+
+When the session has a world and plugins newly join its active set, the server imports the world's data once for them (rules: [Receivers that join after the game starts](./world-data.md#receivers-that-join-after-the-game-starts)), and the response has a `worldData`:
+
+| Field       | Type                              | Meaning                                                        |
+| ----------- | --------------------------------- | -------------------------------------------------------------- |
+| `receivers` | string[]                          | The plugins that received data for the first time              |
+| `imported`  | number                            | The rows written                                               |
+| `conflicts` | number                            | The rows left as they were because the game changed them       |
+| `notices`   | `{ level, sourceId?, message }[]` | World data still not imported with the plugins that are on now |
 
 Rules (enabling and disabling are the same):
 

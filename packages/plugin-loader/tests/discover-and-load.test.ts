@@ -228,15 +228,17 @@ describe("current package discovery and loading", () => {
     await expect(loadPluginDefinition(d!)).resolves.toBeDefined();
   });
   it.each([
-    { schedule: { needs: ["foreign/step"] } },
+    { schedule: { stage: "narrative", needs: ["foreign/step"] } },
     {
       schedule: {
         stage: "setup",
         needs: [{ runtime: "foreign/step", scope: "session" }],
       },
     },
-    { schedule: { after: ["probe-other/step"] } },
-    { schedule: { after: [{ runtime: "foreign/step" }] } },
+    { schedule: { stage: "narrative", after: ["probe-other/step"] } },
+    {
+      schedule: { stage: "narrative", after: [{ runtime: "foreign/step" }] },
+    },
     { io: { inputs: { facts: { from: { runtime: "foreign/step" } } } } },
   ])(
     "rejects cross-package runtime references in $schedule $io",

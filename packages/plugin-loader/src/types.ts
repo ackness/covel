@@ -72,12 +72,26 @@ interface ParsedMarkdown {
   readonly rawFrontmatter: Readonly<Record<string, unknown>>;
 }
 
+/**
+ * A runtime left out at load: its manifest can never run, and nothing else in
+ * the package depends on that. Authoring validation and installation reject it.
+ */
+export interface DisabledRuntime {
+  readonly sourcePath: string;
+  /** One line per problem: file, field path, problem. */
+  readonly message: string;
+  /** The contract its output would have provided; the package no longer provides it. */
+  readonly outputContract?: string;
+}
+
 export interface ParsedPluginMd extends ParsedMarkdown {
   readonly plugin: import("@covel/shared").PluginManifest;
   readonly manifest: PackageManifest;
   readonly contractSchemas?: Readonly<
     Record<string, Readonly<Record<string, unknown>>>
   >;
+  /** The inline runtime, when it was left out (`plugin.runtime` is then absent). */
+  readonly disabledRuntime?: DisabledRuntime;
 }
 
 export interface ParsedRuntimeMd extends ParsedMarkdown {
