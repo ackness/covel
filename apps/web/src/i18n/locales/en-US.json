@@ -271,6 +271,11 @@
     "memoryUpdateFailedHint": "This turn was saved. Check the memory model assignment and provider settings; memory will be attempted again after the next turn.",
     "memoryUpdateErrorDetails": "Error details",
     "memoryStoreWarning": "Data lost on restart",
+    "worldDataNotices": {
+      "title": "Some of this world's data is not in this game:",
+      "hint": "Data for a plugin that is off, or waiting for your approval, arrives when you turn that plugin on.",
+      "hide": "Hide"
+    },
     "worldDataPreflight": {
       "title": "World Data",
       "loading": "Checking",
@@ -367,6 +372,8 @@
     "stoppedDetail": "Generated content was not saved. Retry with the original input.",
     "submittedInteraction": "Completed interaction · expand to review",
     "advancedPluginSettings": "Customize plugins and advanced settings",
+    "minimalPluginSet": "Back to the minimal set",
+    "minimalPluginSetHint": "The narrative plugins, the plugin that holds the world's dimensions, and what they and the world need; everything else is turned off.",
     "configureModelBeforeRetry": "Change model / parameters",
     "retryModelSettingsHint": "Change the model or lower its output limit, then retry this task. The retry uses your current settings.",
     "allWorlds": "All worlds ({{total}})",
@@ -607,7 +614,7 @@
     "packageEditedHint": "You edited this world in Covel. Your version is the one you play: changes to its package files, including updates, no longer replace it.",
     "restorePackageAction": "Restore the package version",
     "restorePackageTitle": "Restore the package version?",
-    "restorePackageConfirm": "Your edits to this world are replaced with what its package files hold now. Sessions you already started keep what they have.",
+    "restorePackageConfirm": "Your edits to this world are replaced with the current package files. Saved session data is kept; sessions without their own lore read the restored world lore on the next turn.",
     "restorePackageFailed": "The package version could not be restored.",
     "translateHint": "This world is written in {{worldLanguage}}, and a session plays in a language the world has. You can add a {{language}} edition.",
     "translateConfirm": "Your model translates every text of the world: names, lore, rules and characters. This uses model calls, and a machine translation of names and tone needs a look afterwards.",
@@ -1672,7 +1679,7 @@
       "allowSelected": "Authorize selected",
       "notNow": "Not now"
     },
-    "unavailable": "Some plugins of this session cannot run now: {{plugins}}. The game goes on without them; open the plugin list to see why.",
+    "unavailable": "Some plugins of this session are off. The game goes on without them:",
     "invokeRuntime": {
       "setupPending": "This plugin needs setup first. Continue the story for one turn and complete any setup form, then try again.",
       "submitted": "Submitted {{count}} background job(s): {{ids}}. Waiting for completion…",
@@ -1698,7 +1705,22 @@
     "invalidPanelSpecDetail": "Invalid panel spec: {{label}} — {{reason}}",
     "rpc": {
       "failed": "The plugin task failed. Try again."
-    }
+    },
+    "off": {
+      "needsProvider": "{{plugin}} is off: it needs {{contract}}. Turn on {{providers}} to use it.",
+      "noProvider": "{{plugin}} is off: it needs {{contract}}, and no installed plugin provides it. Install one under Settings → Install & manage, then restart the backend.",
+      "notInstalled": "{{plugin}} is not installed, or it failed to load.",
+      "conflict": "{{plugin}} conflicts with another plugin of this session.",
+      "other": "{{plugin}} cannot run now. Open the plugin list to see why.",
+      "turnOn": "Turn on {{plugin}}"
+    },
+    "noStory": {
+      "title": "No narrative plugin is on",
+      "detail": "Turns will not tell a story: none of the enabled plugins writes narration.",
+      "enable": "Turn on {{plugins}} to get a story.",
+      "install": "Install a narrative plugin under Settings → Install & manage, then restart the backend."
+    },
+    "dependentsOff": "These plugins will be off, because something they need is off:"
   },
   "pluginJob": {
     "runtimesNotLoaded": "{{plugin}} was approved, but {{count}} of its tasks cannot be loaded and will not run.",

@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import {
   discoverPlugins,
   compileInlineRuntime,
-  loadPluginUi,
+  loadPluginUiSpecs,
   loadPluginManifest,
   loadPluginDefinition,
   loadRuntime,
@@ -122,9 +122,14 @@ describe("guide manifest and UI loading", () => {
     expect(chinese.promptTemplate).toContain(
       "叙事里已经做完的动作、已经回答的问题，不能再作为短句给出",
     );
-    const ui = await loadPluginUi(discovery!);
-    expect(ui.uiSpecs?.message).toHaveLength(1);
-    expect(ui.uiSpecs?.message?.[0]).toMatchObject({
+    const ui = await loadPluginUiSpecs(
+      discovery!.rootPath,
+      discovery!.id,
+      (await loadPluginDefinition(discovery!)).packageManifest.manifest.ui,
+    );
+    expect(ui.diagnostics).toEqual([]);
+    expect(ui.slots.message).toHaveLength(1);
+    expect(ui.slots.message?.[0]).toMatchObject({
       id: "guide",
       dataSource: { namespace: "message" },
       view: {

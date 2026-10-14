@@ -391,14 +391,14 @@ These fields change only how the world is shown. You can leave all of them out.
 
 `pluginPolicy` says which plugins this world would like to use. It does not lock in any plugin. Which ones are finally on is worked out by Covel, from the capabilities and dependencies each plugin declares, the player's authorization, and the player's own checkboxes.
 
-| Field                           | Description                                                                                                              |
-| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| `presetId`                      | The ID of the default pack. It can refer to a `packs[].id` or a built-in pack.                                           |
-| `preferredTags` / `avoidedTags` | Plugin tag preferences                                                                                                   |
-| `requires`                      | Contract IDs the world needs (such as `action-check@1`). Any installed plugin that provides the contract can satisfy it. |
-| `requested`                     | Plugin IDs the world suggests as the starting selection                                                                  |
-| `recommended`                   | Plugin IDs suggested in addition                                                                                         |
-| `packs`                         | Custom packs. Each item has `id/label`, and can optionally have `description/requested/recommended/tags/reason`.         |
+| Field                           | Description                                                                                                                                                                                                          |
+| ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `presetId`                      | The ID of the default pack. It can refer to a `packs[].id` or a built-in pack.                                                                                                                                       |
+| `preferredTags` / `avoidedTags` | Plugin tag preferences                                                                                                                                                                                               |
+| `requires`                      | Contract IDs the world needs (such as `action-check@1`). Any installed plugin that provides the contract can satisfy it.                                                                                             |
+| `requested`                     | Plugin IDs the world suggests as the starting selection                                                                                                                                                              |
+| `recommended`                   | Plugin IDs suggested in addition                                                                                                                                                                                     |
+| `packs`                         | Custom packs. Each item has `id/label`, and can optionally have `description/requested/recommended/excluded/tags/reason`. `excluded` lists the plugin IDs the pack turns off when chosen, `kind: core` ones included |
 
 `presetId` must be the ID of a built-in pack or of one of this world's `packs`. Otherwise `pnpm validate:world` reports `unknown-preset`.
 
@@ -431,7 +431,7 @@ Covel plays the **world record** in the database. The files of a world package a
 - New sessions, the world-data preflight and sync use the dimensions and the character schema (`characterSchema`) of the world record. They do not read these from the package files.
 - What the world record does not keep is read from the package: the characters, lorebook entries and plugin data in `data/`, and the images in `media/`. The app has no place to edit them, so there is only one copy of them.
 - Once a player edits a world that came from a world package in the app (the world editor, importing dimensions, or `PATCH /api/worlds/:id`), the record is marked `packageModified`. From then on the seed, file reloads and updates no longer overwrite it with the files, and a new version of the package is not used automatically.
-- To go back to the package's version, click "Restore the package version" on the world's detail page ([`POST /api/worlds/:id/restore-package`](./api.md#post-apiworldsidrestore-package)). The edits are replaced with what the package files hold now, and the record follows the files again. Sessions that have already started are not affected.
+- To go back to the package's version, click "Restore the package version" on the world's detail page ([`POST /api/worlds/:id/restore-package`](./api.md#post-apiworldsidrestore-package)). The edits are replaced with what the package files hold now, and the record follows the files again. Saved session data is preserved. Sessions without their own lore (`loreOverride`) read the restored world lore on the next turn.
 
 ### Loading at startup and reconciling (seed & reconcile)
 
@@ -446,7 +446,7 @@ Seed can run again and again. Each world package has one world record. If the re
 
 **Cleanup (reconcile).** Adding without ever deleting leaves one problem. A world that was once built in, and later removed from the packages, would stay in the database of older users. So after all the directories have been seeded, old records that are "no longer in any world directory" are deleted. Three safeguards make sure only that kind of record is cleaned up, and no user data is deleted by mistake:
 
-1. **Only the source is checked**: only worlds with `metadata.source === "file"` can be cleaned up. AI-generated worlds (`generated` / `generated-file`) and worlds from any other source are never touched, even when they are not in the current world directories.
+1. **Player edits are kept**: only worlds with `metadata.source === "file"` and no `packageModified` marker can be cleaned up. An edited world is kept even if its package is gone and it has no sessions. AI-generated worlds (`generated` / `generated-file`) and worlds from any other source are never touched, even when they are not in the current world directories.
 2. **A world with saved games is kept**: an old world that still has sessions is kept, not deleted, and a `warn` line is written to the log. Deleting a world that has saved games must be an explicit action by a person.
 3. **An incomplete scan means no cleanup**: if any world directory cannot be scanned, if any world package fails to read, parse or validate, or if not a single world loaded successfully, cleanup is skipped as a whole. Healthy worlds are still updated as usual.
 
@@ -688,7 +688,7 @@ For a field-by-field explanation, see the generated [World data descriptor field
 
 - A missing `key` is an error.
 - Without `indexTo`, nothing records which images exist, so these files are not imported.
-- When the plugin that receives the image index is not enabled, the files of this source are not imported either. This is a warning, and it does not affect other data. Enabling the receiving plugin later in an existing session does not import them automatically. Authors and tools can call the [sync API](#preflight-and-sync). Players who want this starting data should enable the receiving plugin when starting a new session.
+- When the plugin that receives the image index is not enabled, the files of this source are not imported either. This is a warning, and it does not affect other data. When the receiving plugin is enabled later in the game, its data is imported once on its own (see [Receivers that join after the game starts](#receivers-that-join-after-the-game-starts)).
 
 ### Images visible before a session
 
@@ -844,6 +844,16 @@ For plugin authors: the merge rule is `applyLocaleOverlay` in `@covel/shared`. T
 - A media source uses `to: media` with `indexTo` in contract form. A structured source cannot set `to` to `media`. This kind of wrong combination is rejected during validation.
 - A path in `world:metadata.<path>` cannot contain dangerous segments such as `__proto__`. Paths other than `dimensions` are only recorded for now, and they have no effect.
 - World data is imported when a session is created. Authors and tools can update existing sessions through [`sync-data`](#preflight-and-sync). Calling `preflight` first lets you see the diagnostics before anything is written. The app has no sync control for players.
+- The create-session response lists the data that was not imported in `worldDataNotices` (warnings and errors, such as a receiving plugin that is not enabled), and the game screen shows them to the player.
+
+### Receivers that join after the game starts
+
+A plugin that is not enabled when the session is created gets no world data, for example a community plugin approved after the game starts. When a plugin is enabled in the game (`PUT /api/sessions/:id/plugins/:pluginId`), Covel imports once for the plugins that just joined:
+
+- It writes data only for joined plugins that have no import ledger rows for this world yet. Other plugins' data and ledger rows stay as they are; turning the same plugin off and on again does not overwrite what the game changed.
+- A community plugin's projection code runs only after it is approved for this game.
+- The response's `worldData` says which plugins received data, how many rows were written, and which data is still missing with the current plugins (`notices`). The game screen replaces its earlier notice with it.
+- If the import fails, the plugin stays enabled and `notices` carries an error.
 
 ### Lorebook entries injected by player message
 
@@ -1006,7 +1016,7 @@ Execution limits:
 - `preflight` checks only the source, the declarations, the target and the schema. **It does not load or run any handler.** Which keys a projection actually produces is known only after an import or a sync.
 - Import and sync run only the matching declarations of the plugins enabled in this game. When one projection fails, it only produces a warning. It does not stop the original source from being written, and it does not affect other plugins' projections.
 - Each declared output either succeeds as a whole group or is not written at all. If any record has an invalid key or schema, the group keeps the last successful content and ledger, and old and new content are never mixed. Only when the handler successfully returns `[]` does it mean "there really are no records". Only then are the old records deleted.
-- A built-in plugin's handler can run directly. A community plugin's handler needs this game to explicitly allow it to run server code. Permission cannot be given before the session is created, so authors and tools must use the HTTP API to run a community projection afterward: after the session is created, call the plugin enable (you can call it again even when the plugin is already enabled). This triggers the session-level permission for `covel:plugin-server-code`. Then call `sync-data`. Enabling or approving the plugin does not run the projection by itself. Without permission, an import only emits a warning and does not run the code in secret.
+- A built-in plugin's handler can run directly. A community plugin's handler needs this game to explicitly allow it to run server code. Permission cannot be given before the session is created, so at creation a community projection does not run: the import only emits a warning and does not run the code in secret. When the player approves and enables the plugin, the projection runs once with the import for [receivers that join after the game starts](#receivers-that-join-after-the-game-starts). To run it again for a newer world package, authors and tools call `sync-data`; the app has no sync control for players.
 - Each call runs in its own Worker. Its input is a structured clone:
 
   | Limit                          | Value                      |
@@ -1217,7 +1227,7 @@ sources:
 - A single media file can be at most 20 MB. The total of one source's directory can be at most 100 MB.
 - The extensions that can be imported are `.png`, `.jpg`, `.jpeg`, `.webp`, `.mp3`, `.wav` and `.mp4`.
 - The preflight check requires that the schema of the matching contract and the receiving declaration are registered. The `assets` and `presence` of `character-blueprint` receive `character.portrait-assets@1` and `character.portraits@1` respectively.
-- Put the receiving plugin in `pluginPolicy.recommended`, and the player can choose it. When it is not enabled, its data and media index are skipped, and a warning is given.
+- Put the receiving plugin in `pluginPolicy.recommended`, and the player can choose it. When it is not enabled, its data and media index are skipped, and a warning is given; when it is enabled later in the game, its data is imported once.
 
 For real examples, see `worlds/mistport` and `worlds/haruka-academy` (`data/world.data.yaml` + `media/`).
 
@@ -1494,7 +1504,7 @@ POST /api/worlds/<world-id>/world-data/preflight
 
 **Sync (sync):** an HTTP API for authors and tools that applies later data changes in a world package to one specified existing session. The app currently has no sync control for players.
 
-Updating a world package, hot-reloading files, enabling a plugin or approving its server code does not call sync automatically. Players who want the new starting data should start a new session. Existing sessions keep their own data and progress. Lore still follows this page's rules under "Automatic reload after a file change."
+Updating a world package, hot-reloading files or approving a plugin's server code does not call sync automatically. Enabling a plugin imports once only for the plugins that just joined and have not received this world's data yet (see [Receivers that join after the game starts](#receivers-that-join-after-the-game-starts)); it updates nothing else. Players who want the new starting data should start a new session. Existing sessions keep their own data and progress. Lore still follows this page's rules under "Automatic reload after a file change."
 
 ```http
 POST /api/worlds/<world-id>/sync-data

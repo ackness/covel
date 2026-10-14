@@ -271,6 +271,11 @@
     "memoryUpdateFailedHint": "本轮剧情已保存。请检查用途分配中的记忆模型和服务商配置；下一回合会再次尝试更新。",
     "memoryUpdateErrorDetails": "错误详情",
     "memoryStoreWarning": "重启后数据将丢失",
+    "worldDataNotices": {
+      "title": "这个世界的部分数据没有进入这局游戏：",
+      "hint": "给已关闭或正在等你批准的插件的数据，会在打开那个插件时导入。",
+      "hide": "隐藏"
+    },
     "worldDataPreflight": {
       "title": "世界数据",
       "loading": "检查中",
@@ -367,6 +372,8 @@
     "stoppedDetail": "本轮生成内容未写入存档，可使用原输入重新尝试。",
     "submittedInteraction": "已完成的交互 · 展开查看",
     "advancedPluginSettings": "自定义插件与高级设置",
+    "minimalPluginSet": "回到最小集合",
+    "minimalPluginSetHint": "只留叙事插件、保存世界维度的插件，以及它们和世界必需的插件，其余全部关闭。",
     "configureModelBeforeRetry": "更换模型 / 调整参数",
     "retryModelSettingsHint": "可先更换模型或调低输出限制，再重试此任务；重试使用当前设置。",
     "allWorlds": "全部世界（{{total}}）",
@@ -607,7 +614,7 @@
     "packageEditedHint": "你在 Covel 里改过这个世界。游玩用的是你改过的版本：它的包文件之后的变化，包括更新，都不再覆盖它。",
     "restorePackageAction": "恢复为包里的版本",
     "restorePackageTitle": "恢复为包里的版本？",
-    "restorePackageConfirm": "你对这个世界的修改会被换成它的包文件现在的内容。已经开始的会话保留它们现有的内容。",
+    "restorePackageConfirm": "你对这个世界的修改会被换成包文件现在的内容。已保存的会话数据保留；没有设置会话专用背景的会话，下一回合会读到恢复后的世界背景。",
     "restorePackageFailed": "没能恢复包里的版本。",
     "translateHint": "这个世界是用{{worldLanguage}}写的，而会话只能使用世界已有的语言。你可以给它加一个{{language}}版本。",
     "translateConfirm": "你的模型会翻译这个世界的全部文字：名称、设定、规则和角色。这会消耗模型调用；机器翻译的人名地名和语气，事后需要看一遍。",
@@ -1672,7 +1679,7 @@
       "allowSelected": "授权所选",
       "notNow": "暂不授权"
     },
-    "unavailable": "本存档有插件现在无法运行：{{plugins}}。游戏照常进行，只是少了它们的功能；打开插件列表可以看到原因。",
+    "unavailable": "本存档有插件没有运行，游戏照常进行：",
     "invokeRuntime": {
       "setupPending": "这个插件还需要初始化。请先继续一个故事回合，并完成出现的初始化表单，再重试此操作。",
       "submitted": "已提交 {{count}} 个后台任务：{{ids}}，等待返回…",
@@ -1698,7 +1705,22 @@
     "invalidPanelSpecDetail": "面板定义无效：{{label}}（{{reason}}）",
     "rpc": {
       "failed": "插件任务失败，请重试。"
-    }
+    },
+    "off": {
+      "needsProvider": "{{plugin}} 已停用：它需要 {{contract}}。打开 {{providers}} 就能用。",
+      "noProvider": "{{plugin}} 已停用：它需要 {{contract}}，但没有已安装的插件提供它。请在「设置 → 安装与管理」中安装一个，安装后重启后端生效。",
+      "notInstalled": "{{plugin}} 没有安装，或者加载失败。",
+      "conflict": "{{plugin}} 和本存档的另一个插件冲突。",
+      "other": "{{plugin}} 现在无法运行，打开插件列表可以看到原因。",
+      "turnOn": "打开 {{plugin}}"
+    },
+    "noStory": {
+      "title": "没有开启叙事插件",
+      "detail": "回合不会产生故事：开启的插件里没有负责叙事的。",
+      "enable": "打开 {{plugins}} 就能得到故事。",
+      "install": "请在「设置 → 安装与管理」中安装一个叙事插件，安装后重启后端生效。"
+    },
+    "dependentsOff": "下面这些插件需要的东西被关掉了，开局后它们会停用："
   },
   "pluginJob": {
     "runtimesNotLoaded": "{{plugin}} 已授权，但它有 {{count}} 个任务无法加载，不会运行。",

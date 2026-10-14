@@ -4,6 +4,8 @@
 
 ### Fixed
 
+- **Edits survive a removed world package.** Startup cleanup keeps edited world records even when the original package disappears and no session uses them.
+
 - **Edits to a bundled, ZIP-installed, hand-placed or generated world survive a restart and a file change.** Only GitHub installs were marked `packageModified` when edited, so the startup seed and the file watcher silently replaced every other edited world with its files. Every world that came from a package is now marked, and the seed, file reloads, translations and updates keep the edited record.
 
 ### Added

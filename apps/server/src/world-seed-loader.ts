@@ -500,7 +500,7 @@ export interface WorldReconcileResult {
  * user's DB and keeps showing up in the world list. This drops those stragglers.
  *
  * Safety rails — this only ever removes data it is certain is a dead seed:
- *  1. **Origin gate** — only `metadata.source === "file"` worlds are eligible.
+ *  1. **Origin gate** — only unedited `metadata.source === "file"` worlds are eligible.
  *     AI-generated worlds (`generated` / `generated-file`) and any other origin
  *     are never touched, even when absent from `liveWorldIds`.
  *  2. **Save protection** — a stale world that still has saved sessions is KEPT
@@ -522,7 +522,12 @@ export async function reconcileSeededWorlds(
     if (liveWorldIds.has(world.id)) continue;
     await sessionLock.withLock(worldOperationLockId(world.id), async () => {
       const live = await store.getWorld(world.id);
-      if (!live || live.metadata?.source !== "file" || isWorldDeleting(live))
+      if (
+        !live ||
+        live.metadata?.source !== "file" ||
+        live.metadata.packageModified ||
+        isWorldDeleting(live)
+      )
         return;
       const sessions = await store.listSessions();
       if (sessions.some((session) => session.worldId === world.id)) {
