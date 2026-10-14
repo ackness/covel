@@ -217,6 +217,17 @@ SQLite 的 `media_assets.path` 保存相对 `mediaRoot` 的路径（`ab/cd/<sha2
 
 `ctx.media.put()` 和 `ctx.media.ingestUrl()` 在字节存好之后登记归属和本会话的引用。如果调用它们的 runtime 或 guard 在这期间被中止或超时，这次调用被拒绝，两样都不登记。没有归属的字节留给媒体清理去回收。
 
+<a id="提交时检查引用"></a>
+
+**提交时检查引用**
+
+一条 proposal 提交之前，内核检查它 payload 里的每个 `MediaRef`（例如 `asset.generate` 的 `ref`、`plugin.data` 的值、`ui.render` 的 spec 里的图片），用的是 runtime 绑定、导出和任务数据共用的那一个检查：
+
+- 文件不存在、本会话既不拥有也没有引用它，或者声明的 MIME 类型和保存的不一致：这条 proposal 被拒绝，按提交失败处理（见[工具参考](./tools.md#proposal-类型)）。
+- 通过的引用按保存的元数据改写：MIME 类型和大小取存储里的值，去掉 `url`（读取时再签发），保留 `meta`。
+
+所以外来的或悬空的引用不会进入消息和插件数据，也不会等到 fork 时才以 403 / 409 暴露出来。
+
 **`addRef()` 按 `(sessionId, mediaId)` 幂等**
 
 `media_refs` 的 UNIQUE 约束不包含 `plugin_id`，它只作为“最先来源”的说明被记录下来。这样做是安全的：SQL 的 `UNIQUE` 把每个 `NULL` 都当成不同的值，如果约束里包含可以为空的 `plugin_id`，调用方传 `undefined` 时就会悄悄产生无数条重复记录。这个键的形状和 Memory 一致，它也用 `(sessionId, mediaId)` 作为 map 的键。

@@ -217,6 +217,17 @@ SQLite stores `media_assets.path` as a relative path (`ab/cd/<sha256>.bin`) bene
 
 `ctx.media.put()` and `ctx.media.ingestUrl()` record the owner and this session's reference after the bytes are stored. If the runtime or guard that called them is aborted or times out during this time, the call is rejected, and neither is recorded. Bytes with no owner are left for media cleanup to reclaim.
 
+<a id="checking-references-at-commit"></a>
+
+**Checking references at commit**
+
+Before a proposal commits, the kernel checks every `MediaRef` in its payload (for example the `ref` of `asset.generate`, the value of `plugin.data`, a picture in a `ui.render` spec). It uses the same check that runtime bindings, exports and job data share:
+
+- If the file does not exist, if this session neither owns nor references it, or if the declared MIME type differs from the stored one, the proposal is rejected and handled as a commit failure (see [Tools reference](./tools.md#proposal-types)).
+- A reference that passes is rewritten from the stored metadata: the MIME type and size come from the store, `url` is removed (it is signed again on read), and `meta` is kept.
+
+So a foreign or dangling reference never reaches messages or plugin data, and does not surface only later as a 403 / 409 when the session is forked.
+
 **`addRef()` is idempotent per `(sessionId, mediaId)`**
 
 The UNIQUE constraint on `media_refs` does not include `plugin_id`. The plugin ID is recorded only as a note about the first source. This is safe. In SQL, `UNIQUE` treats every `NULL` as a different value. If the constraint included the nullable `plugin_id`, a caller passing `undefined` would quietly create countless duplicate records. The shape of this key matches Memory, which also uses `(sessionId, mediaId)` as the map key.
