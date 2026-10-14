@@ -36,7 +36,7 @@ export function sendAction(
   onApproval?: (approval: ActionApproval) => Promise<boolean>,
 ): AbortController {
   const controller = new AbortController();
-  const resumeSubscriptions = pauseSessionSubscriptions();
+  const resumeSubscriptions = pauseSessionSubscriptions(req.sessionId);
 
   (async () => {
     try {
