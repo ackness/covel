@@ -775,7 +775,7 @@ When a runtime has many tools, putting every tool's schema into every model call
 - This call is handled directly by the agent loop. It **does not go through ToolExecutor**, and it is not in the tool registry. Its name is still a reserved framework name.
 - The search is strictly limited to the deferred tools that this runtime declared itself. Schemas are obtained through `getToolInfo(name, context)`, and they follow the same builtin / local access boundaries. A tool the runtime has no permission for cannot be found, so it does not leak.
 - Scoring uses BM25 with no dependencies (k1=1.2 / b=0.75). Chinese, Japanese, and Korean text is split into pairs of adjacent characters. The searched text is: the tool name, the description, and the field names and field descriptions in the parameter schema.
-- The description of `search-tools` tells the model how many tools are in the deferred pool and which plugins they come from. The model uses this to know that there are tools it has not loaded yet that it can search for.
+- The description of `search-tools` tells the model how many tools are in the deferred pool, and names the plugin that declared it. The pool can hold framework built-in tools too, so not all of them come from that plugin. The model uses this to know that there are tools it has not loaded yet that it can search for.
 - When to use it: when a runtime's allow-list has more than about 10 tools, preloading every schema on every call starts to take up the prompt budget.
 
 The contract is declared in `packages/tools/src/builtin/tool-search.ts`, and the execution logic is in `packages/runtime/src/agent-loop/tool-search.ts`. The approach follows openai/codex's `tool_search` (`ToolExposure::Deferred` + BM25).
@@ -1449,9 +1449,9 @@ Every tool call goes through the approval check in `ApprovalPipeline`. The curre
 
 It is classified automatically at startup:
 
-- Tools in `builtinUITools` → `builtin`
-- Tools that a plugin's `entry` registered successfully with `registerTool()` → `local`
-- Anything else → `third-party` (currently no tool falls into this category)
+- Tools registered with `registerBuiltin` (including `builtinUITools`) → `builtin`
+- Every other tool, that is, a plugin tool that its `entry` registered successfully with `registerTool()` → `local`
+- No tool is given `third-party` today: the classification only produces `builtin` and `local`
 
 ### The approval boundary for third-party plugin server code and plugin tools
 

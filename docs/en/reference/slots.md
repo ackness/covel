@@ -72,7 +72,7 @@ Schema: `packages/ai-provider/src/config/llm-schema.ts`.
 | `providerRequestMetadata`           | —        | Free-form key-value pairs sent with generation requests. A value given for a single call takes priority. Evaluation requests do not use it. The keys that choose the image and speech protocols also go here. See the section "Media wire routing keys" below                   |
 | `providerOptions`                   | —        | Native parameters grouped by provider or protocol. They are used only for text, object, and streaming calls. See [Provider parameters](#provider-parameters)                                                                                                                    |
 
-Values such as `baseUrl` can read an environment variable, for example `baseUrl = "${MY_API_BASE}"`. The old fields `reasoning_effort` and `thinking` are no longer accepted. If you write them, loading fails with an error. Use `reasoningEffort` or `providerOptions` instead.
+Values such as `baseUrl` can read an environment variable, for example `baseUrl = "${MY_API_BASE}"`. When the file cannot be read, the error gives the line, the column and the key, never the value of an environment variable. The old fields `reasoning_effort` and `thinking` are no longer accepted. If you write them, loading fails with an error. Use `reasoningEffort` or `providerOptions` instead.
 
 ## Built-in providers and protocols
 

@@ -52,7 +52,7 @@ import {
   parseStoredPort,
   waitForServer,
 } from "./network.js";
-import { diagnoseStartupError, type DiagnosedError } from "./startup-errors.js";
+import { diagnoseStartupError } from "./startup-errors.js";
 import {
   initPersistentLog,
   writeLog,
@@ -71,6 +71,7 @@ import {
   getMainWindow,
   loadSplashInto,
   navigateToApp,
+  showStartupError,
 } from "./windows.js";
 import { initDesktopI18n, t } from "./main-i18n.js";
 import { resolveSystemProxyRequest } from "./system-proxy.js";
@@ -254,14 +255,6 @@ function broadcastProgress(label: string): void {
   }
 }
 
-function broadcastStartupError(diag: DiagnosedError, logs: string): void {
-  for (const win of BrowserWindow.getAllWindows()) {
-    if (!win.isDestroyed()) {
-      win.webContents.send("covel:startup:error", { ...diag, logs });
-    }
-  }
-}
-
 /** The port the last sidecar ran on, from `server.port`. */
 function readPreviousPort(portFile: string): number | undefined {
   try {
@@ -334,12 +327,7 @@ async function copyDataToNewRoot(): Promise<DataRootCopyOutcome> {
   if (isDev || !readPendingDataRootCopy(recordFile)) return { kind: "none" };
   initDesktopI18n(userSettingsJsonPath(), app.getLocale());
   const win = createMainWindow();
-  const splashLoaded = new Promise<void>((resolve) => {
-    win.webContents.once("did-finish-load", () => resolve());
-    win.webContents.once("did-fail-load", () => resolve());
-  });
-  loadSplashInto(win);
-  await splashLoaded;
+  await loadSplashInto(win);
   if (!win.isDestroyed()) {
     win.webContents.send("covel:startup:progress", {
       label: t("startup.status.copyingData"),
@@ -639,7 +627,7 @@ async function productionStartup(
 ): Promise<void> {
   // The data copy before this may have opened the window already.
   const win = getMainWindow() ?? createMainWindow();
-  loadSplashInto(win);
+  await loadSplashInto(win);
 
   const attemptStart = async (): Promise<void> => {
     serverStderrLines.length = 0;
@@ -655,10 +643,8 @@ async function productionStartup(
       writeLog("error", `Startup failed: ${diag.title}: ${diag.detail}`);
 
       const logs = serverStderrLines.slice(-80).join("\n");
-      // Reset splash back if we already navigated
-      loadSplashInto(win);
-      // Wait a tick for the splash to mount before sending the error
-      setTimeout(() => broadcastStartupError(diag, logs), 150);
+      await showStartupError(win, { ...diag, logs });
+      if (quitting || win.isDestroyed()) return;
 
       await new Promise<void>((resolve) => {
         pendingRetrySignal = () => resolve();
@@ -666,7 +652,7 @@ async function productionStartup(
 
       await stopServer();
       serverRecovery.resetBudget();
-      loadSplashInto(win);
+      await loadSplashInto(win);
       await attemptStart();
     }
   };

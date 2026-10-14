@@ -606,7 +606,11 @@
     "listNeedsEntry": "请至少添加一项。",
     "numberTooSmall": "请输入不小于 {{minimum}} 的数值。",
     "wholeNumberNeeded": "请输入整数。",
-    "fixMarkedFields": "请修正标记的字段后再保存。"
+    "fixMarkedFields": "请修正标记的字段后再保存。",
+    "discardChangesTitle": "放弃未保存的修改？",
+    "discardChangesMessage": "世界的修改尚未保存。要放弃这些修改并退出编辑器吗？",
+    "discardChanges": "放弃修改",
+    "keepEditing": "继续编辑"
   },
   "settings": {
     "loadFailedReadOnly": "设置读取失败。为保护已有数据，暂时禁止修改。请排除存储错误后重新加载应用。",

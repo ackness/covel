@@ -1,4 +1,5 @@
-import { parse as parseToml } from "smol-toml";
+import { parse as parseToml, TomlError } from "smol-toml";
+import { z } from "zod";
 import { readFileSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 
@@ -61,11 +62,49 @@ export function parseLlmConfig(toml: string): {
   llmConfig: LlmConfig;
   aiConfig: AiConfig;
 } {
-  const interpolated = interpolateEnv(toml);
-  const parsed = parseToml(interpolated);
-  const llmConfig = llmConfigSchema.parse(parsed);
+  const { text, substituted } = interpolateEnv(toml);
+  // The text being parsed holds the values of environment variables (API
+  // keys, database URLs). Parse and validation errors reach logs, the
+  // Settings page and the raw-config API, so none of them may quote it.
+  let parsed: unknown;
+  try {
+    parsed = parseToml(text);
+  } catch (err) {
+    if (err instanceof TomlError) {
+      // smol-toml appends a code block cut from the interpolated text; the
+      // short reason before it is a fixed phrase.
+      const reason = err.message.split("\n")[0] ?? "Invalid TOML document";
+      throw new Error(
+        `llm.toml: ${reason} (line ${err.line}, column ${err.column})`,
+      );
+    }
+    throw new Error("llm.toml: could not be parsed");
+  }
+  const checked = llmConfigSchema.safeParse(parsed);
+  if (!checked.success) {
+    // A substituted value can still appear as a key name in an issue.
+    throw new Error(
+      redactSubstituted(
+        `llm.toml: ${z.prettifyError(checked.error)}`,
+        substituted,
+      ),
+    );
+  }
+  const llmConfig = checked.data;
   const aiConfig = convertToAiConfig(llmConfig);
   return { llmConfig, aiConfig };
+}
+
+/** Put `${NAME}` back in place of every environment value that was substituted. */
+function redactSubstituted(
+  message: string,
+  substituted: Map<string, string>,
+): string {
+  let out = message;
+  for (const [name, value] of substituted) {
+    if (value.length > 0) out = out.split(value).join("${" + name + "}");
+  }
+  return out;
 }
 
 /**
@@ -249,8 +288,12 @@ function formatPresetName(slotName: string, def: SlotDefinition): string {
  * Only processes non-comment lines (TOML comments start with #).
  * Throws if `${...}` patterns are found in active lines but the variable is undefined.
  */
-function interpolateEnv(input: string): string {
+function interpolateEnv(input: string): {
+  text: string;
+  substituted: Map<string, string>;
+} {
   const missing: string[] = [];
+  const substituted = new Map<string, string>();
   const result = input
     .split("\n")
     .map((line) => {
@@ -270,6 +313,7 @@ function interpolateEnv(input: string): string {
             missing.push(varName);
             return match;
           }
+          substituted.set(varName, value);
           return value;
         },
       );
@@ -281,7 +325,7 @@ function interpolateEnv(input: string): string {
       `llm.toml: unresolved environment variables: ${missing.join(", ")}`,
     );
   }
-  return result;
+  return { text: result, substituted };
 }
 
 /**

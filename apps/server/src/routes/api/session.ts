@@ -722,6 +722,7 @@ sessionRoutes.patch("/:id", async (c) => {
 
   if (updated.hookScope) {
     c.get("clearSessionToolOverrides")?.(id);
+    c.get("clearCompactionFailures")?.(id);
     await fireSessionEnd(
       c.get("hookPipeline"),
       c.get("eventBus"),

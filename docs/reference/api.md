@@ -1387,7 +1387,7 @@ fork 和社区插件的授权：
 
 各端点的补充说明：
 
-- `GET /api/plugins`：数据来自 registry 快照。加载失败的插件也会返回，是一条 `status: "error"` 的 item。
+- `GET /api/plugins`：数据来自 registry 快照。加载失败的插件也会返回，是一条 `status: "error"` 的 item。它的 `error` 文字里，插件目录的服务器绝对路径写成 `<plugin>`（例如 `<plugin>/PLUGIN.md: …`）；完整原文只写进服务器日志。
 - `GET /api/worlds/:id/plugin-plan`：服务端解析世界的插件策略、组合包和默认选择。
   - 各个 `requested` 和 `defaultPluginIds` 只含已安装的插件。
   - 世界请求了、但宿主没装的插件列在 `missing: [{ pluginId, packId? }]`。

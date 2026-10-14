@@ -200,6 +200,8 @@ interface MediaStore {
 
 ## Ownership
 
+SQLite 的 `media_assets.path` 保存相对 `mediaRoot` 的路径（`ab/cd/<sha256>.bin`）。`mediaRoot` 默认是数据库旁的 `media/`。读取、流式读取、修复和删除都使用当前目录。复制或备份时要把数据库和这个目录一起带走，搬迁后不需要改写记录。自定义的 `mediaRoot` 需要另行复制和配置。含绝对媒体路径的开发数据库必须重建，不提供迁移或兼容读取。
+
 **SQLite / 本地文件的写入**
 
 - `put()` 先把完整的字节写到目标目录里的一个独占临时文件，再原子地改名到内容路径，最后登记元数据。

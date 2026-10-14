@@ -442,7 +442,6 @@ export class LocalDataService implements DataService {
     };
     delete metadata.worldDataPath;
     delete metadata.worldData;
-    delete metadata.characterBlueprintSources;
     const record = {
       ...world,
       metadata,

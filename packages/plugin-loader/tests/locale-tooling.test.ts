@@ -58,6 +58,29 @@ contributes:
     await fs.rm(dir, { recursive: true, force: true });
   });
 
+  it.each(["PLUGIN.md", "runtimes/run/RUNTIME.md"])(
+    "rejects engine directives in %s without executing them",
+    async (file) => {
+      const globals = globalThis as typeof globalThis & Record<string, unknown>;
+      const probe = "__covelLocaleFrontmatterProbe";
+      try {
+        for (const engine of ["js", "javascript", "yaml", "json"]) {
+          delete globals[probe];
+          await write(
+            file,
+            `---${engine}\n(() => { globalThis.${probe} = true; return { description: "Probe" }; })()\n---\n`,
+          );
+          for (const read of [validatePluginLabels, pluginLabelUnits]) {
+            await expect(read(dir)).rejects.toThrow("plain YAML frontmatter");
+            expect(globals[probe]).toBeUndefined();
+          }
+        }
+      } finally {
+        delete globals[probe];
+      }
+    },
+  );
+
   it("lists the labels a player reads, with their places", async () => {
     expect(
       (await pluginLabelUnits(dir)).map((unit) => [unit.pointer, unit.text]),

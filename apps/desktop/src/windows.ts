@@ -9,6 +9,7 @@ import {
   type WebPreferences,
 } from "electron";
 import fs from "node:fs";
+import type { DiagnosedError } from "./startup-errors.js";
 
 import { isDev, resolvePreloadScript, resolveWindowIconPath } from "./paths.js";
 import {
@@ -380,11 +381,13 @@ export function createMainWindow(titleSuffix?: string): BrowserWindow {
   return win;
 }
 
-export function loadSplashInto(win: BrowserWindow): void {
+export function loadSplashInto(win: BrowserWindow): Promise<void> {
   // The app may have set the colours of its theme; the splash has its own.
   setTitleBarColors(win, splashTitleBarColors());
   const html = buildSplashHtml();
-  win.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
+  return win.loadURL(
+    `data:text/html;charset=utf-8,${encodeURIComponent(html)}`,
+  );
 }
 
 /**
@@ -397,4 +400,13 @@ export function navigateToApp(win: BrowserWindow, port: number): void {
   // The query can carry a session id; the log keeps to the page.
   writeLog("info", `Loading ${url.split("?")[0]}`);
   win.loadURL(url);
+}
+
+/** Deliver the error only once the splash has registered its IPC listeners. */
+export async function showStartupError(
+  win: BrowserWindow,
+  error: DiagnosedError & { logs: string },
+): Promise<void> {
+  await loadSplashInto(win);
+  if (!win.isDestroyed()) win.webContents.send("covel:startup:error", error);
 }

@@ -1,5 +1,5 @@
 /** Strict current-format PLUGIN.md and RUNTIME.md authoring parsers. */
-import matter from "gray-matter";
+import { readPlainYamlFrontmatter } from "./plain-yaml-frontmatter.js";
 import path from "node:path";
 import {
   pluginManifestSchema,
@@ -22,13 +22,7 @@ function frontmatter(
   canonical?: Readonly<Record<string, unknown>>,
   labels?: readonly ManifestLabels[],
 ) {
-  // Reject engine directives before gray-matter can select an executable parser.
-  // The block may be empty: a language variant that translates only the body
-  // has nothing to declare.
-  if (!/^\uFEFF?---[ \t]*\r?\n(?:[\s\S]*?\r?\n)?---(?:\r?\n|$)/.test(content)) {
-    throw new Error("Manifest requires plain YAML frontmatter");
-  }
-  const parsed = matter(content, { language: "yaml" });
+  const parsed = readPlainYamlFrontmatter(content);
   let data = parsed.data;
   if (labels?.length) {
     // Label translations from `locales/<locale>.yaml` become locale maps
@@ -42,7 +36,7 @@ function frontmatter(
       );
   }
   return {
-    body: parsed.content,
+    body: parsed.body,
     data: canonical
       ? reconcileLocalizedManifest(canonical, data, filePath)
       : data,

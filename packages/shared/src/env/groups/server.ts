@@ -81,7 +81,8 @@ export const SERVER_ENV_VARS = [
     type: "integer",
     status: "active",
     defaultValue: "60",
-    description: "Default per-IP requests per minute for rate-limited routes.",
+    description:
+      "Per-IP requests per minute for GET /api/events/stream only. Other rate-limited routes set their own quota in code.",
   },
   {
     name: "TRUSTED_PROXY_IPS",

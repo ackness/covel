@@ -85,7 +85,7 @@ describe("host guard", () => {
   });
 
   it.each(["demo", "commercial"])(
-    "is off on the %s tier, where every route checks a token",
+    "is off on the %s tier, which uses its own authentication policy",
     async (deploymentTier) => {
       const { hono } = app({ deploymentTier, allowedHosts: [] });
       expect((await get(hono, "covel.onrender.example")).status).toBe(200);

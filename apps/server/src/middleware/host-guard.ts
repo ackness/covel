@@ -36,7 +36,7 @@ function hostnameOf(host: string): string | undefined {
  * `COVEL_ALLOWED_HOSTS`. The port is not compared: rebinding changes the name,
  * not the port, and the Vite dev proxy forwards its own port. A request with
  * no `Host` header comes from no browser and passes. The `demo` and
- * `commercial` tiers check tokens on every route, so the guard is off there.
+ * `commercial` tiers use their own authentication policy; the guard is off there.
  */
 export function createHostGuardMiddleware(env: {
   deploymentTier: string;

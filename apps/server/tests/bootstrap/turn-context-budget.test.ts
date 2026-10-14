@@ -11,6 +11,7 @@ import { type TurnMessageRecord } from "@covel/store";
 import { createMemoryStore } from "@covel/store/memory";
 import {
   COMPACTION_NOTICE_EVERY,
+  CompactionFailureTracker,
   createBootstrapCompactorRunner,
   createTurnContextBudget,
 } from "../../src/routes/api/bootstrap/compactor.js";
@@ -88,6 +89,7 @@ describe("createBootstrapCompactorRunner", () => {
       extensions,
       store,
       llmAdapter,
+      failures: new CompactionFailureTracker(),
     });
 
     const emitter = createTurnEmitter({
@@ -171,6 +173,7 @@ describe("createBootstrapCompactorRunner", () => {
         extensions,
         store,
         llmAdapter,
+        failures: new CompactionFailureTracker(),
       });
       const message: TurnMessageRecord = {
         id: "history",
@@ -226,6 +229,7 @@ describe("createBootstrapCompactorRunner", () => {
       extensions,
       store,
       llmAdapter,
+      failures: new CompactionFailureTracker(),
     });
     const messages: TurnMessageRecord[] = Array.from(
       { length: 10 },
@@ -274,6 +278,89 @@ describe("createBootstrapCompactorRunner", () => {
         }),
       ),
     );
+    const notices = traces.filter((t) => t.type === "job-status.updated");
+    expect(notices).toHaveLength(1);
+    expect(notices[0]).toMatchObject({
+      turnId: `current-${COMPACTION_NOTICE_EVERY}`,
+      payload: {
+        state: "failed",
+        message: expect.stringContaining("could not be condensed"),
+      },
+    });
+    await store.close();
+  });
+
+  it("keeps the consecutive failure count across runners built per request", async () => {
+    // Requests that carry their own model configuration each get a fresh
+    // runner; the count must come from the shared tracker, not the runner.
+    const store = createMemoryStore();
+    const services = new PluginServiceRegistry({
+      list: async () => ["history-compaction"],
+      ensure: async () => {},
+    });
+    const extensions = new PluginExtensionHost(services);
+    registerCompaction({
+      provideExtension(
+        point: string,
+        id: string,
+        implementation: Parameters<PluginExtensionHost["register"]>[2],
+      ) {
+        extensions.register(
+          "history-compaction",
+          { point, id },
+          implementation,
+        );
+      },
+    });
+    const llmAdapter: LLMAdapter = {
+      generate: vi.fn(async (): Promise<LLMResponse> => {
+        throw new Error("fast model unreachable");
+      }),
+      resolveBudget: () => ({ contextWindow: 1000, maxOutputTokens: 400 }),
+    };
+    const failures = new CompactionFailureTracker();
+    const messages: TurnMessageRecord[] = Array.from(
+      { length: 10 },
+      (_, index) => ({
+        id: `message-${index}`,
+        sessionId: "session-1",
+        turnId: `turn-${index}`,
+        role: index % 2 === 0 ? "user" : "assistant",
+        sourceType: index % 2 === 0 ? "player" : "narrative",
+        order: index,
+        content: "x".repeat(200),
+        createdAt: new Date(index).toISOString(),
+      }),
+    );
+    for (const message of messages) await store.appendTurnMessage(message);
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      for (let turn = 1; turn <= COMPACTION_NOTICE_EVERY; turn++) {
+        const emitter = createTurnEmitter({
+          store,
+          sessionId: "session-1",
+          turnId: `current-${turn}`,
+        });
+        const runner = createBootstrapCompactorRunner({
+          extensions,
+          store,
+          llmAdapter,
+          failures,
+        });
+        await runner.run(
+          "session-1",
+          "",
+          messages,
+          "en-US",
+          emitter.traceId,
+          emitter,
+        );
+      }
+    } finally {
+      warn.mockRestore();
+    }
+
+    const traces = await store.listTraceEvents("session-1");
     const notices = traces.filter((t) => t.type === "job-status.updated");
     expect(notices).toHaveLength(1);
     expect(notices[0]).toMatchObject({
