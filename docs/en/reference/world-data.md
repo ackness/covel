@@ -1513,7 +1513,7 @@ Sync rules:
 
 **Protection of media files.** Image and music bytes are stored by content, and several games share them. So the handling of deletes and failures is conservative:
 
-- When sync deletes a media index record, it removes the current session's reference to that file only after the transaction commits. The file itself is reclaimed by media cleanup (GC) when nothing uses it.
+- When sync deletes a media index record, it removes the current session's reference to that file only after the transaction commits. If the file still appears in the session's other index rows (files with the same content share one ID), messages or snapshots, the reference is kept, so pictures in the history stay readable and forking an old snapshot still works. The file itself is reclaimed by media cleanup (GC) when nothing uses it.
 - During the import preparation, the file is written together with a temporary reference that belongs to this import (`world-data-import:<uuid>`). This stops the file from being cleaned up before the import completes.
 - When the import completes, the real session first takes ownership of the file and creates its reference. Then the temporary reference is released.
 - When preparation, the transaction or session admission fails, only this import's temporary reference is released. Shared files are not forcibly deleted, and the references of existing sessions are not touched.

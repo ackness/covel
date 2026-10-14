@@ -4289,9 +4289,12 @@ Returns `201 Created`.
   "sessionId": "mistport-<new-uuid8>",
   "parentSessionId": "mistport-a1b2c3d4",
   "fromSnapshotId": "<parent-snapshot-id>",
-  "forkSnapshotId": "<child-fork-snapshot-id>"
+  "forkSnapshotId": "<child-fork-snapshot-id>",
+  "missingMediaCount": 0
 }
 ```
+
+`missingMediaCount` is the number of files the fork uses that are no longer in the media store, each file counted once. The interface shows a "media unavailable" placeholder in their place.
 
 **What the server does**
 
@@ -4337,7 +4340,8 @@ The chat history shown in the interface is copied separately, using `payload.dis
 Media handling:
 
 - Creates the child session's own references to the media in the copied messages.
-- All media used in messages, state, and runtime exports must already be authorized for the parent session. Otherwise the whole fork fails with `403 media_reference_forbidden`. Knowing a media ID does not give you access to it.
+- All media used in messages, state, and runtime exports that still exists must already be authorized for the parent session. Otherwise the whole fork fails with `403 media_reference_forbidden`. Knowing a media ID does not give you access to it.
+- Media that no longer exists (for example, deleted in the media library) does not stop the fork. The child session is created as usual and keeps the original messages and data, but gets no reference to that file. It shows a placeholder in the child as it does in the parent, and is counted in `missingMediaCount`.
 
 Runtime export handling:
 
