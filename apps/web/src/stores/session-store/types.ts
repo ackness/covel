@@ -187,6 +187,8 @@ export interface SessionState {
   /** Real-time execution progress steps from kernel. */
   executionSteps: ExecutionStep[];
   executionRecovery?: ExecutionRecovery | null;
+  /** Local unsaved prose; never part of history, stage or plugin state. */
+  unsavedNarratives?: StreamMessage[];
   /** Browser action generation; rejects recovery reads from an older POST. */
   actionGeneration?: number;
 
@@ -327,6 +329,7 @@ export type SessionAction =
       type: "MERGE_RECOVERED_MESSAGES";
       messages: StreamMessage[];
       terminalTurnId?: string;
+      unsavedNarratives?: StreamMessage[];
       actionGeneration?: number;
     }
   | {
