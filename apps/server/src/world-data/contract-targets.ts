@@ -56,8 +56,8 @@ export function resolveWorldDataTargets(
         registered || deps?.activePlugins !== undefined ? "warning" : "error",
       sourceId,
       message: registered
-        ? `No active receiver for data contract "${target.contract}"; source skipped`
-        : `No registered receiver for data contract "${target.contract}"; source skipped`,
+        ? `No active receiver for data contract "${target.contract}"; contract writes skipped`
+        : `No registered receiver for data contract "${target.contract}"; contract writes skipped`,
     });
   return receivers.sort(
     (a, b) =>

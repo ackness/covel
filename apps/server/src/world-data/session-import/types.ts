@@ -80,6 +80,15 @@ export interface ImportPlan {
   readonly mergeEvents: readonly MergeEvent[];
   readonly deferredProjectionOutputs: readonly DeferredProjectionOutput[];
   /**
+   * Missing receivers make these writes non-authoritative during sync.
+   * `primary` preserves direct writes and their kernel effects while active
+   * projections still reconcile independently; `all` preserves the whole source.
+   */
+  readonly deferredSources?: readonly {
+    readonly sourceId: string;
+    readonly scope: "primary" | "all";
+  }[];
+  /**
    * Dimensions the world declares that no active plugin can store. They are
    * left out: the session starts without them, and a sync leaves the
    * session's dimension records alone.

@@ -75,13 +75,13 @@ describe("session creation without installed world-data receivers", () => {
             level: "warning",
             sourceId: "cast",
             message:
-              'No registered receiver for data contract "character.blueprints@1"; source skipped',
+              'No registered receiver for data contract "character.blueprints@1"; contract writes skipped',
           }),
           expect.objectContaining({
             level: "warning",
             sourceId: "portraits",
             message:
-              'No registered receiver for data contract "character.portrait-assets@1"; source skipped',
+              'No registered receiver for data contract "character.portrait-assets@1"; contract writes skipped',
           }),
         ]),
       );
