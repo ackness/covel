@@ -87,6 +87,16 @@ export interface EventBus {
   /** Get subscription events after a given sequence number for replay. */
   getEventsAfter(sessionId: string, afterSeq: number): EventReplay;
   /**
+   * The cursor of a session's newest event, `${epoch}:${seq}` (`seq` 0 when
+   * none was emitted this epoch). A session that is not tracked starts being
+   * tracked, so the cursor names an epoch that a later subscription can replay
+   * from. Read it before reading the state it goes with: a subscription that
+   * passes it as `lastEventId` then receives every event after that read. If
+   * eviction drops the state first, the epoch no longer matches and the
+   * subscription gets a reset instead.
+   */
+  headCursor(sessionId: string): string;
+  /**
    * Pin a session's replay state while it has an active subscriber: pinned
    * sessions are excluded from LRU/TTL eviction. A transport gap can
    * still invalidate replay explicitly and is announced through `onReset`.
@@ -803,6 +813,11 @@ export function createEventBus(
           settle: persistSettle,
         });
       }
+    },
+
+    headCursor(sessionId: string): string {
+      const state = touchSession(sessionId);
+      return `${state.epoch}:${state.seq}`;
     },
 
     getEventsAfter(sessionId: string, afterSeq: number): EventReplay {

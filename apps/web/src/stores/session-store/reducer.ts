@@ -149,6 +149,7 @@ export const initialState: SessionState = {
   messages: [],
   unsavedNarratives: [],
   olderMessagesCursor: null,
+  initialEventCursor: null,
   worldSessions: [],
   executing: false,
   executionError: null,
@@ -185,6 +186,7 @@ const SESSION_RESET: Partial<SessionState> = {
   messages: [],
   unsavedNarratives: [],
   olderMessagesCursor: null,
+  initialEventCursor: null,
   statePatches: [],
   statePatchRevision: 0,
   recentStatePatchIds: [],
@@ -496,6 +498,8 @@ export function reducer(
     }
     case "SET_OLDER_MESSAGES_CURSOR":
       return { ...state, olderMessagesCursor: action.cursor };
+    case "SET_INITIAL_EVENT_CURSOR":
+      return { ...state, initialEventCursor: action.cursor };
     case "MERGE_INITIAL_STATE_PATCHES": {
       const currentIds = new Set(state.recentStatePatchIds);
       const historical = action.patches;

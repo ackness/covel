@@ -668,6 +668,15 @@ export interface SessionSnapshot {
   readonly gameState: Readonly<Record<string, unknown>>;
   readonly executionSteps: readonly SnapshotTraceEvent[];
   readonly execution?: SessionExecutionStatus;
+  /**
+   * Subscription cursor (`${epoch}:${seq}`) of the newest event published
+   * before this view was read; set by `GET /api/sessions/:id/view`. A
+   * subscription that connects with it as `lastEventId` receives every event
+   * the view may not include. A stream opened without a cursor whose
+   * `system.connected` head is past it, or in another epoch, has missed
+   * events and must read the session again.
+   */
+  readonly eventCursor?: string;
   readonly plugins: readonly SnapshotPluginStatus[];
   /** Character attribute schema from world-data-provider plugin (if available). */
   readonly characterSchema?: Readonly<Record<string, unknown>>;

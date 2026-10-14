@@ -77,16 +77,21 @@ function setup() {
   const streams: {
     emit: SubscriptionEventHandler;
     state: (state: ConnectionState) => void;
+    align: ReturnType<typeof vi.fn>;
+    missed: () => void;
   }[] = [];
   subscription.createSessionSubscription.mockImplementation(
     (_id: string, options: SessionSubscriptionOptions) => {
       const stream = {
         emit: (() => {}) as SubscriptionEventHandler,
         state: options.onStateChange!,
+        align: vi.fn(),
+        missed: options.onMissedEvents!,
       };
       streams.push(stream);
       return {
         close: vi.fn(),
+        alignWithSnapshot: stream.align,
         on: (_topic: string, handler: SubscriptionEventHandler) => {
           stream.emit = handler;
         },
@@ -114,6 +119,7 @@ function setup() {
         .mockResolvedValue(undefined),
     } satisfies SessionWorkspace,
     dispatch: vi.fn(),
+    initialEventCursor: null as string | null,
   };
   const hook = renderHook(() => useSessionSubscription(options));
   return { ...hook, options, streams };
@@ -246,6 +252,30 @@ it("recovers once when a reconnect opens with a stale-cursor reset", async () =>
     streams[0]!.emit(event("system.reset"));
   });
   expect(api.getSessionView).toHaveBeenCalledTimes(2);
+});
+
+it("hands the restored view's cursor to the stream and reads everything again when the stream missed events", async () => {
+  const { streams, options, rerender } = setup();
+  expect(streams[0]!.align).not.toHaveBeenCalled();
+  options.initialEventCursor = "epoch:5";
+  rerender();
+  expect(streams[0]!.align).toHaveBeenCalledExactlyOnceWith("epoch:5");
+  expect(api.getSessionView).not.toHaveBeenCalled();
+
+  await act(async () => {
+    streams[0]!.missed();
+  });
+  expect(api.getSessionView).toHaveBeenCalledOnce();
+  expect(api.listSessionPlugins).toHaveBeenCalledOnce();
+
+  // A later visit gets its own stream; the old one's report is ignored.
+  options.sessionGenerationRef.current += 1;
+  rerender();
+  expect(streams[1]!.align).toHaveBeenCalledExactlyOnceWith("epoch:5");
+  await act(async () => {
+    streams[0]!.missed();
+  });
+  expect(api.getSessionView).toHaveBeenCalledOnce();
 });
 
 it("ignores events and connection updates from a closed visit", () => {

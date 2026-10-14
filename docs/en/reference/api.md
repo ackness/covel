@@ -801,6 +801,7 @@ A few things to know about `GET /api/sessions/:id/view`:
 - **Paging backward.** The view carries an opaque `messagesCursor`. When the front end scrolls up, it passes this value unchanged as `?cursor=` to `GET /api/sessions/:id/messages/page`.
 - **Older turns outside the window** do not render an execution timeline.
 - **Session clock.** The session object embedded in the view carries the same required clock fields as the session API: `phase`, `completedPlayerTurns`, and `setupRuntimes`. Restore and reconnect judge progress only from these fields.
+- **Event cursor.** `eventCursor` is the session's newest subscription event id (`${epoch}:${seq}`) before the view was read. The first subscription uses it to join the view; see [the subscription stream](./protocol.md).
 
 The view's `submittedInteractions` lists the interactions the player has already answered. Its shape is `{ turnId, interactionId, values }[]`. `values` are the values the server saved.
 

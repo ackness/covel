@@ -9,7 +9,11 @@
  * The subscription handles lifecycle events: runtime.*, state.*, game.*, plugin.*, session.*, system.*.
  */
 
-import type { SubscriptionEvent, SubscriptionTopic } from "@covel/shared";
+import {
+  parseSubscriptionEventId,
+  type SubscriptionEvent,
+  type SubscriptionTopic,
+} from "@covel/shared";
 import { ApiError, requestResponse } from "./api/request.js";
 import { parseJsonSseData, readSseStream } from "./sse.js";
 
@@ -52,6 +56,12 @@ export interface SessionSubscriptionOptions {
   onStateChange?: ConnectionStateHandler;
   /** Local storage can rebuild a missing server mirror before reconnecting. */
   recoverMissingSession?: () => Promise<void>;
+  /**
+   * The stream opened without a cursor after the view passed to
+   * `alignWithSnapshot` was read, so events published in between reached
+   * neither. Runs at most once.
+   */
+  onMissedEvents?: () => void;
 }
 
 export interface SessionSubscription {
@@ -64,6 +74,13 @@ export interface SessionSubscription {
   close(): void;
   /** Retry immediately after a connection failure. */
   reconnect(): void;
+  /**
+   * The `eventCursor` of the session view the caller restored from. A first
+   * connection not yet opened replays every event after it. A stream already
+   * opened without a cursor is checked against it once its
+   * `system.connected` head arrives; see `onMissedEvents`.
+   */
+  alignWithSnapshot(cursor: string): void;
 }
 
 // ── Constants ─────────────────────────────────────────────────────
@@ -126,6 +143,23 @@ export function createSessionSubscription(
   let resumeActionSilently = false;
   let clientErrorStreak = 0;
   let mirrorRecovery: Promise<boolean> | null = null;
+  // The view the caller restored from names the newest event before it was
+  // read. A stream opened without a cursor learns the newest event at its own
+  // registration from `system.connected`. A head past the view's cursor, or
+  // in another epoch, means the events in between reached neither.
+  let snapshotCursor = "";
+  let snapshotChecked = false;
+  let openedWithoutCursor = false;
+  let firstStreamHead = "";
+
+  function checkSnapshotCursor(): void {
+    if (snapshotChecked || !snapshotCursor || !firstStreamHead) return;
+    snapshotChecked = true;
+    const view = parseSubscriptionEventId(snapshotCursor);
+    const head = parseSubscriptionEventId(firstStreamHead);
+    if (!view || !head || view.epoch !== head.epoch || head.seq > view.seq)
+      options?.onMissedEvents?.();
+  }
 
   // Topic -> Set<handler>
   const handlers = new Map<string, Set<SubscriptionEventHandler>>();
@@ -193,6 +227,11 @@ export function createSessionSubscription(
       // workspace upload is still pending. Reuse that upload before any stream.
       await mirrorRecovery;
       if (closed || paused || controller !== abortController) return;
+      if (!lastEventId && snapshotCursor && !snapshotChecked) {
+        lastEventId = snapshotCursor;
+        snapshotChecked = true;
+      }
+      openedWithoutCursor = !lastEventId;
       const res = await requestResponse(buildUrl(), {
         signal: controller.signal,
         headers: { Accept: "text/event-stream" },
@@ -238,6 +277,9 @@ export function createSessionSubscription(
             lastEventId = headCursor;
           } else if (eventType === "system.connected") {
             if (!lastEventId) lastEventId = headCursor;
+            if (openedWithoutCursor && !firstStreamHead)
+              firstStreamHead = headCursor;
+            openedWithoutCursor = false;
           } else if (message.id) {
             lastEventId = message.id;
           }
@@ -256,8 +298,9 @@ export function createSessionSubscription(
           };
         },
         onMessage: (event) => {
-          if (!closed && !paused && controller === abortController)
-            dispatch(event);
+          if (closed || paused || controller !== abortController) return;
+          dispatch(event);
+          if (event.type === "system.connected") checkSnapshotCursor();
         },
       });
 
@@ -288,7 +331,10 @@ export function createSessionSubscription(
         mirrorRecovery ??= Promise.resolve()
           .then(options.recoverMissingSession)
           .then(() => {
+            // The rebuilt mirror starts the stream afresh; the view the
+            // caller restored from no longer describes it.
             lastEventId = "";
+            snapshotChecked = true;
             return true;
           })
           .catch(() => {
@@ -408,6 +454,12 @@ export function createSessionSubscription(
           handlers.delete(topic);
         }
       }
+    },
+
+    alignWithSnapshot(cursor: string): void {
+      if (snapshotChecked || snapshotCursor) return;
+      snapshotCursor = cursor;
+      checkSnapshotCursor();
     },
 
     reconnect() {
