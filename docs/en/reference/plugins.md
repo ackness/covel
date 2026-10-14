@@ -177,6 +177,8 @@ homepage: https://example.com/tidefall
 - **Translation:** a plugin translates `author.about` and the `label` of each `author.links` entry in the `PLUGIN.md` section of `locales/<locale>.yaml`. Links are matched by position. A world translates the same two items in `world.<locale>.yaml`. Author names and licenses are not translated, and `pnpm i18n` does not count them as text to translate.
 - **Version number:** the list shows the `version` from the manifest. When a plugin also has a `package.json`, the two versions must be the same. `pnpm validate:plugin` checks this. The install preview reads `package.json`, while the host reads `PLUGIN.md`. A change to `version` makes existing sessions run the plugin's setup runtimes again, so the setup guard or handler must return a skip for work that is already done.
 
+Bundled plugins follow the same current data contracts as external packages. Dice receipts carry a `checks` array, and `pluginData.get()` returns the stored value directly. A narrative binding projected with `select: /narrativeOutput` carries a string. World rules use flat records with `schemaVersion`, `id`, and `content`, without a `{ rule, ... }` wrapper. NPC edge history permits one open version per relation; duplicate open versions are rejected without automatic repair. Portrait replacement matches an exact character ID or the current `npc-<blueprintId>` projection, never an arbitrary session prefix.
+
 ### Contract version policy
 
 The `@N` in a contract ID is its version marker, such as `narrative-engine@1`. The kernel supports only the current version (current-only). It does not negotiate versions, it does not support several versions at once, and it has no cross-version compatible reads or dual-write migration.

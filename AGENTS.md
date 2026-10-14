@@ -179,6 +179,7 @@ bundled `worlds/` and `plugins/`.
   its pages are `docs/`, and it is published under `docs/` of the showcase
   site).
   The desktop shell validates persisted window geometry with its direct Zod dependency.
+  Web theme and color scheme changes come from SettingsStore through the appearance helpers; there is no separate theme provider.
 - `packages/` — framework libraries; responsibilities and consumers are in
   `docs/internals/packages.md`. In brief:
   - `plugin-handlers-utils` — the public plugin-author SDK (`PluginAPI`, handler,

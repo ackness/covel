@@ -9,10 +9,7 @@ import { collectCharacterVisualRefs } from "@/lib/character-visuals.js";
 import { useUiSlots } from "@/stores/ui-slot-store.js";
 
 /** Warm projected visual catalogs while opening/setup UI is still displayed. */
-export function useStageMediaPreload(
-  sessionId: string,
-  _sessionPlugins?: readonly unknown[],
-): void {
+export function useStageMediaPreload(sessionId: string): void {
   const slots = useUiSlots(sessionId);
   const warmed = useRef({ sessionId, ids: new Set<string>() });
   if (warmed.current.sessionId !== sessionId)

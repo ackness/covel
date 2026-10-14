@@ -109,14 +109,11 @@ export function getDisplayType(event: api.TraceEvent): string {
     : event.type;
 }
 
-/** Current trace payloads are flat; the fallback keeps old persisted traces readable. */
+/** Trace payloads use the current flat envelope; nested data stays nested. */
 export function getTraceData(
   payload: Record<string, unknown>,
 ): Record<string, unknown> {
-  const legacy = payload.data;
-  return typeof legacy === "object" && legacy !== null && !Array.isArray(legacy)
-    ? { ...(legacy as Record<string, unknown>), ...payload }
-    : payload;
+  return payload;
 }
 
 export function getTraceError(event: api.TraceEvent):

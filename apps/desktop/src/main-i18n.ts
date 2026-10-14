@@ -323,11 +323,7 @@ function readSettingsLocale(settingsJsonPath: string): DesktopLocale | null {
       entries?: Record<string, unknown>;
     };
     const entries = parsed.entries ?? {};
-    const nestedUi = entries.ui as { locale?: unknown } | undefined;
-    return (
-      normalizeDesktopLocale(entries["ui.locale"]) ??
-      normalizeDesktopLocale(nestedUi?.locale)
-    );
+    return normalizeDesktopLocale(entries["ui.locale"]);
   } catch {
     return null;
   }
@@ -347,11 +343,7 @@ export function initDesktopI18n(
 export function setDesktopLocaleFromSettings(
   entries: Record<string, unknown>,
 ): DesktopLocale {
-  const nestedUi = entries.ui as { locale?: unknown } | undefined;
-  currentLocale =
-    normalizeDesktopLocale(entries["ui.locale"]) ??
-    normalizeDesktopLocale(nestedUi?.locale) ??
-    currentLocale;
+  currentLocale = normalizeDesktopLocale(entries["ui.locale"]) ?? currentLocale;
   return currentLocale;
 }
 

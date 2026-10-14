@@ -137,6 +137,8 @@ When a named place, person, item, skill, legend or monster first appears in the 
 
 ## Relationship Graph (`npc-graph`)
 
+A development save with duplicate open versions of one relation is refused instead of repaired during play. Recreate the affected graph data or start a new session. Current relations without `invalidAt` remain valid open versions.
+
 Records relationships between people, groups and factions. It checks existing nodes and relationships when recording new ones. When the story mentions them again, the narrative recalls these relationships, so it is less likely to contradict itself.
 
 **What you will see**: the "Relationship Graph" tab on the right. Nodes are people or factions. Green lines are positive relationships, red lines are negative ones, and gray lines are neutral. Click a node to see its profile.

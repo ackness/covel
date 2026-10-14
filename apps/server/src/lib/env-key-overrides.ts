@@ -1,7 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { normalizeProviderKeyMap, providerApiKeysFromEnv } from "@covel/shared";
-import { parseEnvLines } from "./env-file.js";
+import { parseProviderKeysEnv, providerApiKeysFromEnv } from "@covel/shared";
 
 /** External keys are captured before saved keys are merged into process.env. */
 let bootEnvKeys: Readonly<Record<string, string>> = {};
@@ -11,10 +10,7 @@ function readSavedKeys(covelHome: string): Record<string, string> {
   const file = join(covelHome, "keys.env");
   if (!existsSync(file)) return {};
   try {
-    const raw: Record<string, string> = {};
-    for (const [key, value] of parseEnvLines(readFileSync(file, "utf-8")))
-      raw[key] = value;
-    return normalizeProviderKeyMap(raw);
+    return parseProviderKeysEnv(readFileSync(file, "utf-8")).keys;
   } catch {
     return {};
   }

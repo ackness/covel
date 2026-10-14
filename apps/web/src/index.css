@@ -66,10 +66,6 @@
   --surface-dialog: var(--color-card);
   --surface-player: color-mix(in oklab, var(--color-primary) 12%, transparent);
 
-  /* Legacy aliases (kept so all old usages keep working) */
-  --surface-app: var(--surface-page);
-  --surface-panel: var(--surface-rail);
-  --surface-panel-strong: var(--surface-elevated);
   --surface-empty: color-mix(in oklab, var(--color-muted) 70%, transparent);
   --border-subtle: color-mix(in oklab, var(--color-border) 65%, transparent);
 
