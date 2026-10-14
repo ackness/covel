@@ -70,6 +70,7 @@ export { getPluginTrustInfo, deriveBuiltinPluginIds } from "./trust.js";
 // ── Types ────────────────────────────────────────────────────────
 export type {
   DisabledRuntime,
+  IgnoredField,
   ParsedPluginMd,
   ParsedRuntimeMd,
   PackageManifest,

@@ -1,4 +1,8 @@
-/** Strict current-format PLUGIN.md and RUNTIME.md authoring parsers. */
+/**
+ * Current-format PLUGIN.md and RUNTIME.md parsers. A whole field this host
+ * does not know is left out and listed in `ignoredFields` (see
+ * unknown-fields.ts); every other problem rejects the file.
+ */
 import { readPlainYamlFrontmatter } from "./plain-yaml-frontmatter.js";
 import path from "node:path";
 import {
@@ -10,10 +14,17 @@ import {
 import type { PluginManifest } from "@covel/shared";
 import type {
   DisabledRuntime,
+  IgnoredField,
   ParsedPluginMd,
   ParsedRuntimeMd,
   PackageManifest,
 } from "./types.js";
+import {
+  parseLeavingOutUnknownFields,
+  unknownKeyMessage,
+  type ManifestForm,
+  type UnknownField,
+} from "./unknown-fields.js";
 import { reconcileLocalizedManifest } from "./localized-manifest.js";
 import { compileManifestLabels, type ManifestLabels } from "./locale-labels.js";
 import { compileRuntimeManifest } from "./compile-manifest.js";
@@ -49,6 +60,34 @@ interface ManifestIssue {
   readonly path: readonly PropertyKey[];
   readonly message: string;
   readonly params?: unknown;
+  readonly keys?: readonly string[];
+}
+
+/** A Zod error whose unknown-key issues say what to do about them. */
+function manifestError(
+  form: ManifestForm,
+  issues: readonly ManifestIssue[],
+): Error {
+  return Object.assign(new Error("invalid manifest"), {
+    issues: issues.map((issue) => ({
+      ...issue,
+      message: unknownKeyMessage(form, issue),
+    })),
+  });
+}
+
+function ignoredFields(
+  filePath: string,
+  fields: readonly UnknownField[],
+): IgnoredField[] {
+  return fields.map(({ at, key }) => {
+    const field = [...at, key].join(".");
+    return {
+      sourcePath: filePath,
+      field,
+      message: `${filePath}: ${field}: unknown field`,
+    };
+  });
 }
 function issueLine(filePath: string, issue: ManifestIssue, advice: string) {
   return `${filePath}: ${issue.path.map(String).join(".") || "frontmatter"}: ${issue.message}; ${advice}`;
@@ -132,18 +171,22 @@ export function parsePluginMd(
       canonicalFrontmatter,
       labels,
     );
-    let parsed = pluginManifestSchema.safeParse(data);
+    const lenient = parseLeavingOutUnknownFields("plugin", data, (input) =>
+      pluginManifestSchema.safeParse(input),
+    );
+    let parsed = lenient.result;
     let disabled: DisabledRuntime | undefined;
     if (!parsed.success) {
       // An inline runtime that can never run leaves the rest of the package.
       const issues = runtimeOnlyIssues(parsed.error.issues, ["runtime"]);
-      if (!issues) throw parsed.error;
-      disabled = disabledRuntime(filePath, issues, data.runtime);
-      const { runtime: _runtime, ...rest } = data;
+      if (!issues) throw manifestError("plugin", parsed.error.issues);
+      disabled = disabledRuntime(filePath, issues, lenient.data.runtime);
+      const { runtime: _runtime, ...rest } = lenient.data;
       parsed = pluginManifestSchema.safeParse(rest);
-      if (!parsed.success) throw parsed.error;
+      if (!parsed.success) throw manifestError("plugin", parsed.error.issues);
     }
     const plugin = withContractDefaults(parsed.data);
+    const ignored = ignoredFields(filePath, lenient.ignored);
     return {
       sourcePath: filePath,
       plugin,
@@ -151,6 +194,7 @@ export function parsePluginMd(
       promptTemplate: body,
       rawFrontmatter: data,
       ...(disabled ? { disabledRuntime: disabled } : {}),
+      ...(ignored.length ? { ignoredFields: ignored } : {}),
     };
   } catch (error) {
     return invalid(filePath, error);
@@ -171,14 +215,20 @@ export function parseRuntimeMd(
       canonicalFrontmatter,
       labels,
     );
-    const result = runtimeAuthoringManifestSchema.safeParse(data);
+    const lenient = parseLeavingOutUnknownFields("runtime", data, (input) =>
+      runtimeAuthoringManifestSchema.safeParse(input),
+    );
+    const result = lenient.result;
     if (!result.success) {
       const issues = runtimeOnlyIssues(result.error.issues);
       if (issues)
-        throw new RuntimeDisabledError(disabledRuntime(filePath, issues, data));
-      throw result.error;
+        throw new RuntimeDisabledError(
+          disabledRuntime(filePath, issues, lenient.data),
+        );
+      throw manifestError("runtime", result.error.issues);
     }
     const runtime = result.data;
+    const ignored = ignoredFields(filePath, lenient.ignored);
     const localId = path.basename(path.dirname(filePath));
     if (!/^[a-z][a-z0-9-]*$/.test(localId))
       throw new Error(`Invalid runtime directory name: ${localId}`);
@@ -192,6 +242,7 @@ export function parseRuntimeMd(
       ),
       promptTemplate: body,
       rawFrontmatter: data,
+      ...(ignored.length ? { ignoredFields: ignored } : {}),
     };
   } catch (error) {
     return invalid(filePath, error);

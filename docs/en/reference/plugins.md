@@ -811,6 +811,13 @@ Some errors stop one runtime from ever running and leave the rest of the package
 
 When a package placed in the plugin directory by hand has such an error, the loader leaves out only that runtime and writes the file, the field and the reason to the server log. The package's other runtimes, tools and panels load as usual, and its output contract no longer counts as provided by the package. `pnpm validate:plugin` and installation report it as an error.
 
+When a manifest has a field the host does not know (for example an old field that was removed, or a field written for a newer host), the loader leaves out that field and writes the file and the field to the server log. The package loads as usual, and installation goes ahead. `pnpm validate:plugin` reports it as an error: remove it, or change it to the field name this page gives.
+
+Only a whole field is left out: a field at the top of `PLUGIN.md`, an entry under `contributes`, or a field at the top of the inline `runtime` or of a `RUNTIME.md`. Two cases still make the load fail:
+
+- An unknown key inside a known field, for example `permissions.fs`, `io.conceal` or `schedule.priority`. The host does not run a declaration it only half understands.
+- A field that looks like a misspelled field that limits or identifies the package, for example `permision`, `gaurd` or `covle`. These fields are `id`, `kind`, `version`, `covel`, `provides`, `requires`, `optional`, `conflicts`, `permissions`, `entry` and `runtime` at the root, and `type`, `guard`, `permissions`, `effects`, `schedule`, `io` and `function` on a runtime. The error says which field it looks like.
+
 The directory-level check also warns when the plugin's root has an `llm.toml`: the file is not read, and it does not fail the check.
 
 These checks do not run plugin code, and they cannot replace the registration consistency check at startup.

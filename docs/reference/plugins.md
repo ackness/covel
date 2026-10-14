@@ -811,6 +811,13 @@ namespace 声明 `search` 之后，它的记录进入框架的记忆检索（[`m
 
 手动放进插件目录的包遇到这类错误时，加载器只去掉这个 runtime，在服务端日志里写明文件、字段和原因，包的其他 runtime、工具和面板照常加载；它的输出契约也不再算这个包提供。`pnpm validate:plugin` 和安装把它报为错误。
 
+清单里写了宿主不认识的字段（例如已经删掉的旧字段，或给新版宿主写的字段）时，加载器去掉这个字段，在服务端日志里写明文件和字段，包照常加载，安装也照常进行。`pnpm validate:plugin` 把它报为错误：删掉它，或改成本页写的字段名。
+
+只有整个字段会被去掉：`PLUGIN.md` 顶层的字段、`contributes` 下的一项、内联 `runtime` 或 `RUNTIME.md` 顶层的字段。下面两种情况仍然让加载失败：
+
+- 已知字段里面的未知键，例如 `permissions.fs`、`io.conceal`、`schedule.priority`。宿主不运行一个只看懂一半的声明。
+- 像是限制或标识包的字段写错了，例如 `permision`、`gaurd`、`covle`。这些字段是根上的 `id`、`kind`、`version`、`covel`、`provides`、`requires`、`optional`、`conflicts`、`permissions`、`entry`、`runtime`，以及 runtime 的 `type`、`guard`、`permissions`、`effects`、`schedule`、`io`、`function`。报错会说它像哪个字段。
+
 目录级检查还会在插件根目录有 `llm.toml` 时给出提醒：这个文件不会被读取，不影响通过。
 
 这些检查不执行插件代码，不能代替启动时的注册一致性检查。

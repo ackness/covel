@@ -1,6 +1,6 @@
 # Current plugin authoring contract
 
-Root `PLUGIN.md` and child `RUNTIME.md` use strict YAML frontmatter. The main checkout's `pluginManifestSchema` and `runtimeAuthoringManifestSchema` are authoritative. Old flat fields are rejected; do not add compatibility readers.
+Root `PLUGIN.md` and child `RUNTIME.md` use strict YAML frontmatter. The main checkout's `pluginManifestSchema` and `runtimeAuthoringManifestSchema` are authoritative. `pnpm validate:plugin` rejects old flat fields and any other unknown field; loading leaves an unknown whole field out with a warning (rules: [`docs/reference/plugins.md`](../../../../docs/reference/plugins.md#静态检查查什么)). Do not add compatibility readers.
 
 ## Package manifest
 
