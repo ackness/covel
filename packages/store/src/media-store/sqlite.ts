@@ -1,5 +1,10 @@
 import { randomUUID } from "node:crypto";
-import type { MediaRef, MediaRefRecord, MediaStore } from "@covel/shared";
+import type {
+  MediaAssetRecord,
+  MediaRef,
+  MediaRefRecord,
+  MediaStore,
+} from "@covel/shared";
 import {
   acquireSqliteConnection,
   getConnectionWriteGate,
@@ -104,6 +109,12 @@ function initializeSqliteMediaStore(
   const selectAllAssets = sqlite.prepare(`
     SELECT id, mime, size, meta, owner_session_id AS ownerSessionId, owner_plugin_id AS ownerPluginId, created_at AS createdAt
     FROM media_assets
+    ORDER BY created_at ASC, id ASC
+  `);
+  const selectOwnedAssets = sqlite.prepare(`
+    SELECT id, mime, size, meta, owner_session_id AS ownerSessionId, owner_plugin_id AS ownerPluginId, created_at AS createdAt
+    FROM media_assets
+    WHERE owner_session_id = ?
     ORDER BY created_at ASC, id ASC
   `);
   const selectAllRefs = sqlite.prepare(`
@@ -407,26 +418,7 @@ function initializeSqliteMediaStore(
     },
 
     async listAssets() {
-      const rows = selectAllAssets.all() as Array<{
-        id: string;
-        mime: string;
-        size: number;
-        meta: string | null;
-        ownerSessionId: string | null;
-        ownerPluginId: string | null;
-        createdAt: string;
-      }>;
-      return rows.map((row) => ({
-        id: row.id,
-        mime: row.mime,
-        size: row.size,
-        ownerSessionId: row.ownerSessionId ?? null,
-        ownerPluginId: row.ownerPluginId ?? null,
-        createdAt: row.createdAt,
-        ...(row.meta
-          ? { meta: JSON.parse(row.meta) as Readonly<Record<string, unknown>> }
-          : {}),
-      }));
+      return (selectAllAssets.all() as AssetRow[]).map(toAssetRecord);
     },
 
     async listRefs() {
@@ -434,7 +426,10 @@ function initializeSqliteMediaStore(
     },
 
     async listByMetadata(sessionId, filter) {
-      return filterAssetsByMetadata(await this.listAssets(), sessionId, filter);
+      const owned = (selectOwnedAssets.all(sessionId) as AssetRow[]).map(
+        toAssetRecord,
+      );
+      return filterAssetsByMetadata(owned, sessionId, filter);
     },
 
     async cleanup(protectedIds, policy) {
@@ -499,4 +494,28 @@ async function isReadable(path: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+type AssetRow = {
+  id: string;
+  mime: string;
+  size: number;
+  meta: string | null;
+  ownerSessionId: string | null;
+  ownerPluginId: string | null;
+  createdAt: string;
+};
+
+function toAssetRecord(row: AssetRow): MediaAssetRecord {
+  return {
+    id: row.id,
+    mime: row.mime,
+    size: row.size,
+    ownerSessionId: row.ownerSessionId ?? null,
+    ownerPluginId: row.ownerPluginId ?? null,
+    createdAt: row.createdAt,
+    ...(row.meta
+      ? { meta: JSON.parse(row.meta) as Readonly<Record<string, unknown>> }
+      : {}),
+  };
 }
