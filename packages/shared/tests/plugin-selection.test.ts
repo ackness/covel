@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  disabledDependents,
   resolveConfirmedSessionPlugins,
   resolveSessionPlugins,
   type SessionPluginCandidate,
@@ -111,6 +112,38 @@ describe("session plugin contract resolution", () => {
     expect(plan.rejected.find((r) => r.pluginId === "consumer")?.code).toBe(
       "missing-provider",
     );
+  });
+  it("names the missing contract and lists the dependents the player meant to have", () => {
+    const plugins = [
+      p("opening", { kind: "core", provides: ["opening@1"] }),
+      p("creator", { kind: "core", requires: ["opening@1"] }),
+      p("helper", { provides: ["helper@1"] }),
+      p("asked", { requires: ["absent@1"] }),
+      p("stray", { requires: ["absent@1"] }),
+    ];
+    const plan = resolveSessionPlugins({
+      requested: ["asked"],
+      excluded: ["opening"],
+      plugins,
+    });
+    expect(plan.active).toEqual([]);
+    expect(plan.rejected).toContainEqual(
+      expect.objectContaining({
+        pluginId: "creator",
+        code: "missing-provider",
+        contract: "opening@1",
+      }),
+    );
+    // A core plugin and a requested one stay confirmed; a plugin nobody
+    // asked for does not join.
+    expect(
+      disabledDependents(plan, { requested: ["asked"], plugins }).map(
+        (item) => [item.pluginId, item.contract],
+      ),
+    ).toEqual([
+      ["asked", "absent@1"],
+      ["creator", "opening@1"],
+    ]);
   });
   it("never auto-adds unauthorized community code", () => {
     const plan = resolveSessionPlugins({

@@ -1,4 +1,9 @@
-import type { MediaRef, MediaRefRecord, MediaStore } from "@covel/shared";
+import type {
+  MediaAssetRecord,
+  MediaRef,
+  MediaRefRecord,
+  MediaStore,
+} from "@covel/shared";
 import {
   finalizeMediaCleanupResult,
   planMediaCleanup,
@@ -52,6 +57,21 @@ export function createMemoryMediaStore(): MediaStore {
         createdAt: new Date().toISOString(),
       });
     }
+  }
+
+  function toAssetRecord(asset: StoredMedia): MediaAssetRecord {
+    const owner = owners.get(asset.ref.id);
+    return {
+      id: asset.ref.id,
+      mime: asset.ref.mime,
+      size: asset.ref.size,
+      ownerSessionId: owner?.sessionId ?? null,
+      ownerPluginId: owner?.pluginId ?? null,
+      createdAt: asset.createdAt,
+      ...(asset.ref.meta === undefined
+        ? {}
+        : { meta: structuredClone(asset.ref.meta) }),
+    };
   }
 
   return {
@@ -161,20 +181,7 @@ export function createMemoryMediaStore(): MediaStore {
     },
 
     async listAssets() {
-      return [...assets.values()].map((asset) => {
-        const owner = owners.get(asset.ref.id);
-        return {
-          id: asset.ref.id,
-          mime: asset.ref.mime,
-          size: asset.ref.size,
-          ownerSessionId: owner?.sessionId ?? null,
-          ownerPluginId: owner?.pluginId ?? null,
-          createdAt: asset.createdAt,
-          ...(asset.ref.meta === undefined
-            ? {}
-            : { meta: structuredClone(asset.ref.meta) }),
-        };
-      });
+      return [...assets.values()].map(toAssetRecord);
     },
 
     async listRefs() {
@@ -182,7 +189,13 @@ export function createMemoryMediaStore(): MediaStore {
     },
 
     async listByMetadata(sessionId, filter) {
-      return filterAssetsByMetadata(await this.listAssets(), sessionId, filter);
+      const owned: MediaAssetRecord[] = [];
+      for (const [id, owner] of owners) {
+        const asset = assets.get(id);
+        if (asset && owner.sessionId === sessionId)
+          owned.push(toAssetRecord(asset));
+      }
+      return filterAssetsByMetadata(owned, sessionId, filter);
     },
 
     async cleanup(protectedIds, policy) {

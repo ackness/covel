@@ -31,7 +31,10 @@ import { createMemoryStore } from "@covel/store/memory";
 import { sessionRoutes } from "../../src/routes/api/session.js";
 import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
 import { sessionApprovalScope } from "../../src/routes/api/session/session-guard.js";
-import { resolveSessionPluginSet } from "../../src/routes/api/session/plugins.js";
+import {
+  resolveSessionPluginSet,
+  runnablePluginIds,
+} from "../../src/routes/api/session/plugins.js";
 
 // ── Helpers ──────────────────────────────────────────────────────
 
@@ -739,7 +742,7 @@ describe("Session plugin routes (real sessionRoutes)", () => {
       expect(body.activePlugins).not.toContain("unsafe-community");
     });
 
-    it("rejects creation when conflicts make a requested dependency unavailable", async () => {
+    it("turns off a requested plugin whose dependency lost a conflict, and says why", async () => {
       registry.register(
         makeEntry({
           id: "dependent-plugin",
@@ -782,11 +785,89 @@ describe("Session plugin routes (real sessionRoutes)", () => {
         }),
       });
 
-      expect(res.status).toBe(400);
+      expect(res.status, await res.clone().text()).toBe(201);
+      const session = (await store.getSession(
+        "sess-unsatisfied-requires-create",
+      ))!;
+      // Confirmed, so it comes back with its dependency; off until then.
+      expect(session.activePlugins).toContain("dependent-plugin");
+      expect(session.activePlugins).not.toContain("required-plugin");
+      const view = (await (
+        await app.request(
+          "/api/sessions/sess-unsatisfied-requires-create/plugins",
+        )
+      ).json()) as { unavailable: unknown[] };
+      expect(view.unavailable).toEqual([
+        expect.objectContaining({
+          pluginId: "dependent-plugin",
+          code: "missing-provider",
+          contract: "required-plugin@1",
+        }),
+      ]);
+    });
+
+    it("turns off a core plugin whose provider the player turned off, and brings it back with it", async () => {
+      registry.register(
+        makeEntry({
+          id: "opening-reader",
+          summary: makeSummary({
+            id: "opening-reader",
+            name: "Opening Reader",
+            pluginType: "core-plugin",
+            requires: ["pregame@1"],
+          }),
+          source: "builtin",
+        }),
+      );
+      const create = await app.request("/api/sessions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: "sess-dependent-off",
+          plugins: [],
+          excludedPlugins: ["pregame"],
+        }),
+      });
+      expect(create.status, await create.clone().text()).toBe(201);
+      const unavailable = async () =>
+        (
+          (await (
+            await app.request("/api/sessions/sess-dependent-off/plugins")
+          ).json()) as { unavailable: { pluginId: string }[] }
+        ).unavailable;
+      expect(await unavailable()).toEqual([
+        expect.objectContaining({
+          pluginId: "opening-reader",
+          code: "missing-provider",
+          contract: "pregame@1",
+        }),
+      ]);
       expect(
-        await store.getSession("sess-unsatisfied-requires-create"),
-      ).toBeNull();
-      expect(await res.text()).toContain("Conflicts");
+        runnablePluginIds(
+          (await store.getSession("sess-dependent-off"))!.activePlugins,
+          registry,
+        ),
+      ).not.toContain("opening-reader");
+
+      const enable = await app.request(
+        "/api/sessions/sess-dependent-off/plugins/pregame",
+        { method: "PUT" },
+      );
+      expect(enable.status).toBe(200);
+      expect(await unavailable()).toEqual([]);
+
+      // Turning the provider off in game keeps the dependent confirmed.
+      const disable = await app.request(
+        "/api/sessions/sess-dependent-off/plugins/pregame",
+        { method: "DELETE" },
+      );
+      expect(disable.status).toBe(200);
+      expect(
+        (await store.getSession("sess-dependent-off"))?.activePlugins,
+      ).toContain("opening-reader");
+      expect(await unavailable()).toEqual([
+        expect.objectContaining({ pluginId: "opening-reader" }),
+      ]);
     });
 
     it("treats a world's required contracts as a requirer on create and on later toggles", async () => {

@@ -4,7 +4,8 @@ import { describe, expect, it } from "vitest";
 import {
   discoverPlugins,
   compileInlineRuntime,
-  loadPluginUi,
+  loadPluginDefinition,
+  loadPluginUiSpecs,
   loadPluginManifest,
   loadRuntime,
   parsePluginMd,
@@ -58,10 +59,15 @@ describe("branch-reply manifest and UI loading", () => {
     expect(manifests).toHaveLength(1);
 
     const loaded = await loadRuntime(discovery, "branch-reply");
-    const ui = await loadPluginUi(discovery);
+    const ui = await loadPluginUiSpecs(
+      discovery.rootPath,
+      discovery.id,
+      (await loadPluginDefinition(discovery)).packageManifest.manifest.ui,
+    );
+    expect(ui.diagnostics).toEqual([]);
     expect(loaded.handler).toBeTypeOf("function");
-    expect(ui.uiSpecs?.message).toHaveLength(1);
-    expect(ui.uiSpecs?.message?.[0]).toMatchObject({
+    expect(ui.slots.message).toHaveLength(1);
+    expect(ui.slots.message?.[0]).toMatchObject({
       id: "branch-reply",
       dataSource: { namespace: "message" },
       view: {

@@ -6,9 +6,6 @@ vi.mock("node:sqlite", () => {
 vi.mock("postgres", () => {
   throw new Error("PostgreSQL driver was eagerly loaded");
 });
-vi.mock("idb", () => {
-  throw new Error("IndexedDB driver was eagerly loaded");
-});
 
 it("imports the root and creates an in-memory store without loading other drivers", async () => {
   const { createStore } = await import("../src/index.js");
