@@ -4006,7 +4006,8 @@ Resume a suspended runtime with the data the player submitted.
 | ------ | ------ | -------- | ---------------------------------------------------------------------------- |
 | `data` | object | Yes      | Data the player submitted. It must match the suspended item's `resumeSchema` |
 
-- The server checks `data` against `resumeSchema` with full JSON Schema validation (Ajv). This covers `enum`, nested objects, `min` / `max`, `minLength` / `maxLength`, `pattern`, array `items`, `oneOf` / `anyOf`, and more. If the data does not match, the server returns `400`.
+- If a community plugin lacks execution grants, the server first returns `202 approval-required`, asking for `covel:plugin-server-code` and then `runtime:<runtimeId>`. Only the resumed runtime needs approval; the server rechecks the grants under the session lock. The client approves each request and retries the original submission. Denying approval leaves the suspension pending. Hosted deployments also require an operator credential.
+- The server checks `data` against `resumeSchema` with full JSON Schema validation (Ajv). This covers `enum`, nested objects, `min` / `max`, `minLength` / `maxLength`, `pattern`, array `items`, `oneOf` / `anyOf`, and more. If the data does not match, the server returns `400 resume_data_invalid`. If the schema is not an object or cannot compile, it returns `400 resume_schema_invalid` without claiming the suspension or running the plugin. The author must correct the schema produced by the plugin and create a new suspension. The player can abandon the original item.
 - A browser client can send an `X-Provider-Keys` header to give model keys for this request. The desktop app and self-hosted clients can leave it out, and the server then uses the keys it was started with. The server never returns keys through this endpoint.
 
 **Response**
@@ -4017,14 +4018,18 @@ Resume a suspended runtime with the data the player submitted.
 
 **Errors**
 
-| Status | `code`                | When                                                                                                                                     |
-| ------ | --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| 400    | —                     | The request body is not valid JSON or has the wrong structure, or `data` fails `resumeSchema` validation                                 |
-| 404    | —                     | The session or the suspended item does not exist, or the matching runtime cannot be found                                                |
-| 409    | —                     | The suspended item has already been handled. If two resume requests arrive at the same time, the later one gets this result              |
-| 409    | `suspension_outdated` | The suspended item is out of date and the server voided it; see "Out-of-date suspended items" below                                      |
-| 500    | —                     | The runtime failed or the commit failed (`error` gives the reason). In production, an unknown exception shows as `Internal server error` |
-| 503    | `session_busy`        | Waiting for the session lock timed out. The fixed message is `Session is busy, please retry`                                             |
+| Status | `code`                    | When                                                                                                                                     |
+| ------ | ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| 400    | —                         | The request body is not valid JSON or has the wrong structure                                                                            |
+| 400    | `resume_data_invalid`     | `data` fails `resumeSchema` validation                                                                                                   |
+| 400    | `resume_schema_invalid`   | `resumeSchema` is not an object or cannot compile; the suspension remains pending                                                        |
+| 401    | `operator_token_required` | A hosted deployment requires the operator credential to run a community plugin                                                           |
+| 429    | `approval_queue_full`     | The pending approval queue is full; resolve existing approvals first                                                                     |
+| 404    | —                         | The session or the suspended item does not exist, or the matching runtime cannot be found                                                |
+| 409    | —                         | The suspended item has already been handled. If two resume requests arrive at the same time, the later one gets this result              |
+| 409    | `suspension_outdated`     | The suspended item is out of date and the server voided it; see "Out-of-date suspended items" below                                      |
+| 500    | —                         | The runtime failed or the commit failed (`error` gives the reason). In production, an unknown exception shows as `Internal server error` |
+| 503    | `session_busy`            | Waiting for the session lock timed out. The fixed message is `Session is busy, please retry`                                             |
 
 Rules for failed responses:
 

@@ -4006,7 +4006,8 @@ runtime 可以中途停下来等玩家提供数据，这叫挂起。本节的端
 | ------ | ------ | ---- | ----------------------------------------------- |
 | `data` | object | 是   | 玩家提交的数据，必须符合挂起项的 `resumeSchema` |
 
-- 服务端用 `resumeSchema` 对 `data` 做完整的 JSON Schema 校验（Ajv）：`enum`、嵌套对象、`min` / `max`、`minLength` / `maxLength`、`pattern`、数组 `items`、`oneOf` / `anyOf` 等都会检查。不符合返回 `400`。
+- 缺少社区插件的运行授权时，先返回 `202 approval-required`，依次请求 `covel:plugin-server-code` 和 `runtime:<runtimeId>`。授权只针对这次恢复的 runtime；持有会话锁后还会重查。客户端逐项审批并重试原请求，拒绝审批则保留挂起项。托管部署还要求运营者凭据。
+- 服务端用 `resumeSchema` 对 `data` 做完整的 JSON Schema 校验（Ajv）：`enum`、嵌套对象、`min` / `max`、`minLength` / `maxLength`、`pattern`、数组 `items`、`oneOf` / `anyOf` 等都会检查。不符合返回 `400 resume_data_invalid`。schema 不是对象或无法编译时，返回 `400 resume_schema_invalid`；不会占用挂起项或运行插件，作者需修正插件产生的 schema，再发起新的挂起请求；玩家可以放弃原挂起项。
 - 浏览器客户端可以带 `X-Provider-Keys` 请求头，为这次请求提供模型密钥。桌面版和自部署客户端可以省略，沿用服务端启动时配置的密钥。服务端不会通过这个接口回传密钥。
 
 **响应**
@@ -4017,14 +4018,18 @@ runtime 可以中途停下来等玩家提供数据，这叫挂起。本节的端
 
 **错误**
 
-| 状态码 | `code`                | 什么时候                                                                                     |
-| ------ | --------------------- | -------------------------------------------------------------------------------------------- |
-| 400    | —                     | 请求体不是合法 JSON、结构不对，或 `data` 没通过 `resumeSchema` 校验                          |
-| 404    | —                     | 会话或挂起项不存在，或找不到对应的 runtime                                                   |
-| 409    | —                     | 挂起项已经处理过（两个请求同时恢复时，后到的一方也是这个结果）                               |
-| 409    | `suspension_outdated` | 挂起项已经过时，服务端把它作废了，见下面的“过时的挂起项”                                     |
-| 500    | —                     | runtime 执行失败或提交失败（`error` 说明原因）；未知异常在生产环境是 `Internal server error` |
-| 503    | `session_busy`        | 等会话锁超时，固定消息 `Session is busy, please retry`                                       |
+| 状态码 | `code`                    | 什么时候                                                                                     |
+| ------ | ------------------------- | -------------------------------------------------------------------------------------------- |
+| 400    | —                         | 请求体不是合法 JSON 或结构不对                                                               |
+| 400    | `resume_data_invalid`     | `data` 没通过 `resumeSchema` 校验                                                            |
+| 400    | `resume_schema_invalid`   | `resumeSchema` 不是对象或无法编译；挂起项保持未处理                                          |
+| 401    | `operator_token_required` | 托管部署缺少运行社区插件所需的运营者凭据                                                     |
+| 429    | `approval_queue_full`     | 待审批队列已满，先处理已有审批                                                               |
+| 404    | —                         | 会话或挂起项不存在，或找不到对应的 runtime                                                   |
+| 409    | —                         | 挂起项已经处理过（两个请求同时恢复时，后到的一方也是这个结果）                               |
+| 409    | `suspension_outdated`     | 挂起项已经过时，服务端把它作废了，见下面的“过时的挂起项”                                     |
+| 500    | —                         | runtime 执行失败或提交失败（`error` 说明原因）；未知异常在生产环境是 `Internal server error` |
+| 503    | `session_busy`            | 等会话锁超时，固定消息 `Session is busy, please retry`                                       |
 
 失败响应的规则：
 
