@@ -4,9 +4,10 @@
  * Wraps `PluginRuntimeGateway.generateImage()` (raw bytes/URLs, no
  * persistence) with promptHash-based dedup plus MediaStore persistence, so
  * plugin handlers get `MediaRef`s back instead of hand-rolling their own
- * generate → download → put logic. Ownership recording is delegated to the
- * caller's already-wired `ctx.media` (`put`/`ingestUrl`), so this module
- * only adds dedup + metadata stamping on top.
+ * generate → download → put logic. Persistence goes through the same pinned
+ * writer as `ctx.media`: every image of a call is stored first and the
+ * session claims them together, so a call that fails half-way leaves none of
+ * its images owned by the session.
  */
 
 import { createHash } from "node:crypto";
@@ -14,7 +15,6 @@ import { AiProviderError } from "@covel/ai-provider";
 import type { MediaRef } from "@covel/shared";
 import type { MediaStore } from "@covel/store";
 import type {
-  MediaContext,
   ImageGenerateInput,
   ImageGenerateOutput,
   ImagesContext,
@@ -23,6 +23,7 @@ import type {
 } from "@covel/shared/plugin-runtime";
 
 import { targetIdentity } from "./media-cache-key.js";
+import type { RuntimeMediaWriter } from "./runtime-media-context.js";
 
 const INGEST_ALLOWED_MIMES = ["image/png", "image/jpeg", "image/webp"];
 
@@ -53,7 +54,7 @@ export function createRuntimeImagesContext(
     Pick<PluginRuntimeGateway, "generateImage" | "resolveSlot">
   >,
   mediaStore: Pick<MediaStore, "listByMetadata">,
-  media: Pick<MediaContext, "put" | "ingestUrl">,
+  media: RuntimeMediaWriter,
   options: CreateRuntimeImagesContextOptions,
 ): ImagesContext {
   const { sessionId, pluginId } = options;
@@ -128,18 +129,27 @@ export function createRuntimeImagesContext(
         promptHash: promptHashOf(input, result.target),
       };
 
-      const refs: MediaRef[] = [];
-      for (const image of result.images) {
-        refs.push(
-          image.kind === "url"
-            ? await media.ingestUrl(image.url, {
-                allowedMimes: INGEST_ALLOWED_MIMES,
-                meta: generatedMeta,
-              })
-            : await media.put(image.bytes, image.mime, generatedMeta),
-        );
+      // All or nothing: a failed download, rejected MIME or abort releases
+      // the images already stored instead of leaving a partial batch owned
+      // by the session (it would never be served and never be reclaimed).
+      const batch = media.beginBatch();
+      try {
+        const refs: MediaRef[] = [];
+        for (const image of result.images) {
+          refs.push(
+            image.kind === "url"
+              ? await batch.ingestUrl(image.url, {
+                  allowedMimes: INGEST_ALLOWED_MIMES,
+                  meta: generatedMeta,
+                })
+              : await batch.put(image.bytes, image.mime, generatedMeta),
+          );
+        }
+        await batch.claim();
+        return { refs, warnings: result.warnings, cached: false };
+      } finally {
+        await batch.release();
       }
-      return { refs, warnings: result.warnings, cached: false };
     },
   };
 }

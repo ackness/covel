@@ -9,7 +9,7 @@ export type {
   MediaStore,
 } from "./media.js";
 
-export { mediaRefSchema } from "./media.js";
+export { MEDIA_PIN_REF_PREFIX, mediaRefSchema } from "./media.js";
 
 export type {
   LLMTextPart,

@@ -51,6 +51,14 @@ export interface MediaAssetRecord extends MediaAssetLookup {
   readonly meta?: Readonly<Record<string, unknown>>;
 }
 
+/**
+ * Session-ID prefix of the temporary reference that pins freshly written
+ * bytes until their owner is recorded (`media-pin:<uuid>`). No session ID
+ * contains a colon, so a pin never names a session; media cleanup releases
+ * the ones a crash left behind.
+ */
+export const MEDIA_PIN_REF_PREFIX = "media-pin:";
+
 export interface MediaRefRecord {
   readonly mediaId: string;
   readonly sessionId: string;

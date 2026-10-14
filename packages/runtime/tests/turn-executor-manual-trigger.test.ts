@@ -386,6 +386,9 @@ describe("executeTurn: manual trigger", () => {
           async addRef() {
             /* no-op for this test */
           },
+          async removeRef() {
+            /* no-op for this test */
+          },
           async isReferencedBy() {
             return true;
           },

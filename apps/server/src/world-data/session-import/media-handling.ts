@@ -1,15 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
+import { MEDIA_PIN_REF_PREFIX } from "@covel/shared";
 import type { MediaStore } from "@covel/store";
 import type { PlannedWrite, WorldDataImportedMediaRef } from "./types.js";
 import { isRecord } from "./utils.js";
-
-/**
- * Session-ID prefix of the temporary references an import attempt holds.
- * Colon is excluded from user session IDs, so it never names a session.
- */
-export const WORLD_DATA_IMPORT_REF_PREFIX = "world-data-import:";
 
 export function mediaMime(filePath: string): string {
   switch (path.extname(filePath).toLowerCase()) {
@@ -42,7 +37,7 @@ export async function materializeMediaIndexWrites(options: {
   const out: PlannedWrite[] = [];
   const mediaRefs: WorldDataImportedMediaRef[] = [];
   // Each attempt owns only its claims.
-  const temporarySessionId = `${WORLD_DATA_IMPORT_REF_PREFIX}${randomUUID()}`;
+  const temporarySessionId = `${MEDIA_PIN_REF_PREFIX}${randomUUID()}`;
   try {
     for (const write of options.writes) {
       if (write.kind !== "media-index") {

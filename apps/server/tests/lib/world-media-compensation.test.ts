@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { collectMediaRefIds, MEDIA_PIN_REF_PREFIX } from "@covel/shared";
 import { createPluginRegistry } from "@covel/plugin-loader";
 import { createRpcApprovalGate } from "@covel/approval";
 import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
@@ -367,9 +368,11 @@ it.each(["memory", "sqlite"] as const)(
         await store.getPluginData("session", "portraits", "assets", "hero"),
       ).not.toBeNull();
       expect(await mediaStore.listRefs()).toHaveLength(1);
-      expect((await mediaStore.listRefs())[0]!.sessionId).toMatch(
-        /^world-data-import:/,
-      );
+      expect(
+        (await mediaStore.listRefs())[0]!.sessionId.startsWith(
+          MEDIA_PIN_REF_PREFIX,
+        ),
+      ).toBe(true);
       expect(
         (await mediaStore.cleanup(new Set(), { maxAgeMs: 0 })).deleted,
       ).toBe(0);
@@ -481,12 +484,20 @@ it.each([
           "session",
         );
       } else if (failure === "rollback-failed") {
+        // The pins go even though the session row survived (F-170): its
+        // world data still names the asset, so the cleanup scan protects it.
         expect(await store.getSession("session")).not.toBeNull();
-        expect(refs).toHaveLength(1);
-        expect(refs[0]!.sessionId).toMatch(/^world-data-import:/);
+        expect(refs).toEqual([]);
+        const [asset] = await mediaStore.listAssets();
+        expect(asset).toBeDefined();
         expect(
-          (await mediaStore.cleanup(new Set(), { maxAgeMs: 0 })).deleted,
-        ).toBe(0);
+          collectMediaRefIds(
+            await store.listPluginDataSessionScope("session", {
+              limit: 100,
+              offset: 0,
+            }),
+          ).has(asset!.id),
+        ).toBe(true);
       } else {
         expect(refs).toEqual([]);
         expect(await store.getSession("session")).toBeNull();

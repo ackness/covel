@@ -112,6 +112,8 @@ describe("POST /api/media (upload)", () => {
       const [asset] = await mediaStore!.listAssets();
       expect(asset?.ownerSessionId).toBeNull();
       expect(await mediaStore!.isReferencedBy(asset!.id, "s1")).toBe(false);
+      // A rejected upload drops its pin too, so cleanup can reclaim the bytes.
+      expect(await mediaStore!.listRefs()).toEqual([]);
     },
   );
 
@@ -217,6 +219,32 @@ describe("POST /api/media (upload)", () => {
     const [asset] = await mediaStore!.listAssets();
     expect(asset?.ownerSessionId).toBeNull();
     expect(await mediaStore!.isReferencedBy(asset!.id, "s1")).toBe(false);
+  });
+
+  it("keeps the upload through a cleanup that runs before its owner is recorded (F-164)", async () => {
+    const { app, mediaStore } = await makeApp();
+    const put = mediaStore!.put.bind(mediaStore);
+    vi.spyOn(mediaStore!, "put").mockImplementation(async (...args) => {
+      const ref = await put(...args);
+      // "Delete every unused asset" lands before the route takes the lock.
+      await mediaStore!.cleanup(new Set(), { dryRun: false, maxBytes: 0 });
+      return ref;
+    });
+
+    const res = await app.request("/api/media?sessionId=s1", {
+      method: "POST",
+      headers: { "content-type": "image/png" },
+      body: IMG,
+    });
+
+    expect(res.status).toBe(201);
+    const { id } = (await res.json()) as { id: string };
+    expect(await mediaStore!.exists(id)).toBe(true);
+    expect((await mediaStore!.lookup(id))?.ownerSessionId).toBe("s1");
+    // The temporary pin is released once the claims are recorded.
+    expect((await mediaStore!.listRefs()).map((row) => row.sessionId)).toEqual([
+      "s1",
+    ]);
   });
 
   it("rejects a missing sessionId", async () => {

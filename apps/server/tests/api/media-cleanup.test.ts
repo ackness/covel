@@ -24,7 +24,7 @@ import {
 } from "@covel/store";
 import { createMemoryMediaStore, createMemoryStore } from "@covel/store/memory";
 import {
-  ABANDONED_IMPORT_REF_MAX_AGE_MS,
+  ABANDONED_MEDIA_PIN_MAX_AGE_MS,
   mediaRoutes,
 } from "../../src/routes/api/media.js";
 
@@ -234,13 +234,13 @@ describe("POST /api/media/cleanup gate", () => {
           new Uint8Array([byte, byte]),
           "image/png",
           undefined,
-          { sessionId: `world-data-import:${holder}` },
+          { sessionId: `media-pin:${holder}` },
         );
       } finally {
         vi.useRealTimers();
       }
     };
-    const old = ABANDONED_IMPORT_REF_MAX_AGE_MS + 60_000;
+    const old = ABANDONED_MEDIA_PIN_MAX_AGE_MS + 60_000;
     const abandoned = await putPinned(1, "crashed", old);
     // An import that committed its index and crashed before finalization.
     const committed = await putPinned(2, "committed", old);
@@ -257,7 +257,7 @@ describe("POST /api/media/cleanup gate", () => {
     const running = await putPinned(
       3,
       "running",
-      ABANDONED_IMPORT_REF_MAX_AGE_MS - 60_000,
+      ABANDONED_MEDIA_PIN_MAX_AGE_MS - 60_000,
     );
 
     const app = createTestApp(mediaStore, dataStore);
@@ -280,14 +280,14 @@ describe("POST /api/media/cleanup gate", () => {
       };
     };
     const expired = [
-      { mediaId: abandoned.id, sessionId: "world-data-import:crashed" },
-      { mediaId: committed.id, sessionId: "world-data-import:committed" },
+      { mediaId: abandoned.id, sessionId: "media-pin:crashed" },
+      { mediaId: committed.id, sessionId: "media-pin:committed" },
     ];
 
     const plan = await run(true);
     expect(plan.policy.expireRefs).toEqual({
-      sessionIdPrefix: "world-data-import:",
-      maxAgeMs: ABANDONED_IMPORT_REF_MAX_AGE_MS,
+      sessionIdPrefix: "media-pin:",
+      maxAgeMs: ABANDONED_MEDIA_PIN_MAX_AGE_MS,
     });
     expect(
       plan.result.expiredRefs.map(({ mediaId, sessionId }) => ({
@@ -308,7 +308,7 @@ describe("POST /api/media/cleanup gate", () => {
     expect(await mediaStore.listRefs()).toEqual([
       expect.objectContaining({
         mediaId: running.id,
-        sessionId: "world-data-import:running",
+        sessionId: "media-pin:running",
       }),
     ]);
   });

@@ -45,11 +45,12 @@ function createStore(): MediaStoreLike & {
     ownerships,
     refs,
     assets,
-    async put(bytes, mime, meta) {
+    async put(bytes, mime, meta, initialRef) {
       puts.push({ bytes, mime, meta });
       const size = bytes instanceof Uint8Array ? bytes.byteLength : bytes.size;
       const id = `media-${puts.length}`;
       assets.set(id, { mime, size, ownerSessionId: null, ownerPluginId: null });
+      if (initialRef) refs.push({ id, ...initialRef });
       return { id, mime, size };
     },
     async get(ref) {
@@ -91,6 +92,12 @@ function createStore(): MediaStoreLike & {
         sessionId,
         ...(pluginId === undefined ? {} : { pluginId }),
       });
+    },
+    async removeRef(id, sessionId) {
+      const index = refs.findIndex(
+        (r) => r.id === id && r.sessionId === sessionId,
+      );
+      if (index >= 0) refs.splice(index, 1);
     },
     async isReferencedBy(id, sessionId) {
       const asset = assets.get(id);

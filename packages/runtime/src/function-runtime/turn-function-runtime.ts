@@ -28,7 +28,10 @@ import { createExecutionWriteBuffer } from "./execution-write-buffer.js";
 import { normalizeHandlerResult } from "../commit/normalize-handler-result.js";
 import { materializeHandlerSuccess } from "../commit/materialize-handler-output.js";
 import { collectUiBlocks } from "../session/session-kernel-helpers.js";
-import { createRuntimeMediaContext } from "./runtime-media-context.js";
+import {
+  createRuntimeMediaContext,
+  createRuntimeMediaWriter,
+} from "./runtime-media-context.js";
 import { createRuntimeImagesContext } from "./runtime-images-context.js";
 import { createRuntimeMusicContext } from "./runtime-music-context.js";
 import { createRuntimeSpeechContext } from "./runtime-speech-context.js";
@@ -257,12 +260,17 @@ export async function executeFunctionRuntime({
         runtimeId: manifest.name,
       })
     : undefined;
+  const mediaOptions = {
+    sessionId: input.sessionId,
+    pluginId: manifest.pluginId,
+    signal: handlerAbort.signal,
+  };
   const mediaHandle = deps.mediaStore
-    ? createRuntimeMediaContext(deps.mediaStore, permissionedUtils, {
-        sessionId: input.sessionId,
-        pluginId: manifest.pluginId,
-        signal: handlerAbort.signal,
-      })
+    ? createRuntimeMediaContext(
+        deps.mediaStore,
+        permissionedUtils,
+        mediaOptions,
+      )
     : undefined;
   // Trace function-runtime provider calls when a turn emitter is present. The
   // wrapper persists gateway.calling/responded/failed to trace_events; without
@@ -294,7 +302,11 @@ export async function executeFunctionRuntime({
             resolveSlot: tracedGateway.resolveSlot.bind(tracedGateway),
           },
           deps.mediaStore,
-          mediaHandle,
+          createRuntimeMediaWriter(
+            deps.mediaStore,
+            permissionedUtils,
+            mediaOptions,
+          ),
           { sessionId: input.sessionId, pluginId: manifest.pluginId },
         )
       : undefined;

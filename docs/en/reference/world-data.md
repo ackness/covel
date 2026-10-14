@@ -1513,11 +1513,12 @@ Sync rules:
 **Protection of media files.** Image and music bytes are stored by content, and several games share them. So the handling of deletes and failures is conservative:
 
 - When sync deletes a media index record, it removes the current session's reference to that file only after the transaction commits. The file itself is reclaimed by media cleanup (GC) when nothing uses it.
-- During the import preparation, the file is written together with a temporary reference that belongs to this import (`world-data-import:<uuid>`). This stops the file from being cleaned up before the import completes.
+- During the import preparation, the file is written together with a temporary reference that belongs to this import (`media-pin:<uuid>`). This stops the file from being cleaned up before the import completes.
 - When the import completes, the real session first takes ownership of the file and creates its reference. Then the temporary reference is released.
 - When preparation, the transaction or session admission fails, only this import's temporary reference is released. Shared files are not forcibly deleted, and the references of existing sessions are not touched.
 - When cleanup fails while a new session is being created, the session is deleted inside the same session lock, and its media ownership and references are released.
-- When the data has already been committed but the cleanup fails, the temporary reference is kept, so the committed index does not lose its protection. The same applies when a rollback of session creation fails to delete.
+- When the data of a sync has already been committed but the cleanup fails, the temporary reference is kept, so the committed index does not lose its protection.
+- When the cleanup of a new session fails, the temporary reference is always released, even when deleting the session fails: the session data left behind still refers to those files, and the scan before cleanup protects them.
 - A failure to release a temporary reference is only logged. A process crash, or a failed release, can leave a temporary reference behind. It expires 24 hours after it was created, and `POST /api/media/cleanup` releases it. Until then, cleanup keeps those files (see [Media store](./media-store.md#temporary-references-during-world-data-import)).
 
 ### Boundary between a world package and a plugin package

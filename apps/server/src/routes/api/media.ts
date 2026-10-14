@@ -23,8 +23,13 @@
  * inside the route never surfaces uncaught.
  */
 
+import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
-import { isEnvTruthy, readEnvString } from "@covel/shared";
+import {
+  isEnvTruthy,
+  MEDIA_PIN_REF_PREFIX,
+  readEnvString,
+} from "@covel/shared";
 import type { MediaRef } from "@covel/shared";
 import type { DataStore, MediaLifecyclePolicy, MediaStore } from "@covel/store";
 import {
@@ -42,7 +47,6 @@ import {
   DEFAULT_SCAN_LIMIT_PER_SESSION,
   scanMediaReferences,
 } from "./media-reference-scan.js";
-import { WORLD_DATA_IMPORT_REF_PREFIX } from "../../world-data/session-import/media-handling.js";
 import {
   MEDIA_LIBRARY_TOKEN_SCOPE,
   isMediaLibraryAvailable,
@@ -202,30 +206,45 @@ mediaRoutes.post("/", rateLimiter({ max: 10 }), async (c) => {
       400,
     );
   }
-  const ref = await mediaStore.put(bytes, sniffed);
-  return withLockedSessionMutation({
-    c,
-    store: c.get("store"),
-    sessionLock: c.get("sessionLock"),
-    sessionId,
-    expectedSession: initialSession,
-    allowedStatuses: ["active"],
-    mutate: async () => {
-      // Unbound bytes from a rejected upload remain eligible for GC.
-      await mediaStore.recordOwnership(ref.id, sessionId);
-      await mediaStore.addRef(ref.id, sessionId);
-      return c.json({ id: ref.id, mime: ref.mime, size: ref.size }, 201);
-    },
+  // Pin the bytes until the session's claims are recorded under the lock, so
+  // a cleanup running in between cannot delete them.
+  const pin = `${MEDIA_PIN_REF_PREFIX}${randomUUID()}`;
+  const ref = await mediaStore.put(bytes, sniffed, undefined, {
+    sessionId: pin,
   });
+  try {
+    return await withLockedSessionMutation({
+      c,
+      store: c.get("store"),
+      sessionLock: c.get("sessionLock"),
+      sessionId,
+      expectedSession: initialSession,
+      allowedStatuses: ["active"],
+      mutate: async () => {
+        await mediaStore.recordOwnership(ref.id, sessionId);
+        await mediaStore.addRef(ref.id, sessionId);
+        return c.json({ id: ref.id, mime: ref.mime, size: ref.size }, 201);
+      },
+    });
+  } finally {
+    // Unbound bytes from a rejected upload remain eligible for GC.
+    await mediaStore.removeRef(ref.id, pin).catch((error: unknown) => {
+      console.warn(
+        "[media] failed to release a temporary media reference:",
+        error instanceof Error ? error.message : String(error),
+      );
+    });
+  }
 });
 
 /**
- * Age after which a cleanup run releases the temporary reference of a
- * world-data import. An import holds its references for one request, so one
- * this old was left by a crash or a failed release. Fixed, and far above any
- * import's duration, so a run never takes a reference an import still needs.
+ * Age after which a cleanup run releases a temporary pin reference
+ * (`media-pin:<uuid>`) of a world-data import, upload or runtime write. A
+ * writer holds its pin for one request or call, so one this old was left by a
+ * crash or a failed release. Fixed, and far above any write's duration, so a
+ * run never takes a pin a writer still needs.
  */
-export const ABANDONED_IMPORT_REF_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+export const ABANDONED_MEDIA_PIN_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
 interface CleanupRequestBody {
   readonly dryRun?: unknown;
@@ -272,8 +291,8 @@ function optionalPositiveInteger(value: unknown): number | undefined {
  *   4. Single-flight wrapper prevents two cleanup runs from racing each
  *      other (the protected-id scan is expensive; concurrent runs would
  *      double the load and risk inconsistent inventories).
- *   5. Temporary references of world-data imports older than
- *      {@link ABANDONED_IMPORT_REF_MAX_AGE_MS} are released (reported only
+ *   5. Temporary pin references (`media-pin:<uuid>`) older than
+ *      {@link ABANDONED_MEDIA_PIN_MAX_AGE_MS} are released (reported only
  *      in a dry run); younger ones keep protecting their bytes.
  *   6. Per-session row-scan cap (`scanLimit`, default 1_000) refuses to
  *      silently truncate. Operators may raise it explicitly, but the
@@ -325,8 +344,8 @@ mediaRoutes.post("/cleanup", singleFlight(), async (c) => {
     policy = {
       dryRun,
       expireRefs: {
-        sessionIdPrefix: WORLD_DATA_IMPORT_REF_PREFIX,
-        maxAgeMs: ABANDONED_IMPORT_REF_MAX_AGE_MS,
+        sessionIdPrefix: MEDIA_PIN_REF_PREFIX,
+        maxAgeMs: ABANDONED_MEDIA_PIN_MAX_AGE_MS,
       },
       ...(body.maxAgeMs === undefined
         ? {}
