@@ -909,10 +909,12 @@ An embedding call can pass `expectedModelId` (`provider/model`) and `expectedCon
 - The identity the server locks to a session is `provider/model#hash`. The hash covers the effective address, the protocol, and the embedding format. It does not include the key. The dimension cache is also isolated by this identity.
 - The request-level model and key apply to embedding too, including the asynchronous ingestion that the request starts. They are not written to the session or to the shared credential config.
 - Memory's `EmbedFn(texts, { sessionId, modelId })` must use the model identity locked to the session.
-- Changing the current config cannot write another model of the same dimension into an old index. When the identity does not match, a query falls back to keyword search, and ingestion does not advance. After the original model config is restored, backfilling can continue.
+- Changing the current config cannot write another model of the same dimension into an old index. When the identity does not match, a query falls back to keyword search, ingestion does not advance, and the server log notes it once per session. After the original model config is restored, backfilling can continue.
+- After the vector model changes, the session shows "Memory search is matching keywords only" with a "Rebuild index" button ("Clear index" when no vector model is configured). A rebuild first sends one request to the new model to measure its dimension and changes nothing when that fails. When it succeeds, one transaction deletes the old model's vectors and progress and locks the session to the new model, and the index is then built again in the background. See [`POST /api/sessions/:id/memory-index/rebuild`](./api.md#post-apisessionsidmemory-indexrebuild).
+- When the index is written, the store checks the model the session is locked to now. Vectors computed with the old model before a rebuild are never written into the new index.
 
-> [!WARNING]
-> When you switch the vector model, you must rebuild the development sessions and indexes. The system does not migrate them automatically. Data that already has wrong vectors mixed in must also be rebuilt.
+> [!NOTE]
+> Changing the model does not migrate the old index by itself: a rebuild sends the session's history to the vector model again, so the player decides when to do it. An index that already has wrong vectors mixed in is repaired by a rebuild too.
 
 ## Audio requests
 
@@ -944,7 +946,7 @@ A refused connection, or one dropped before any answer (`ECONNREFUSED` / `ECONNR
 
 **Request budget**
 
-Gateway calls for text, objects, streams, evaluation, and embedding share one budget by default: at most 8 actual HTTP requests, and a 120-second total time limit.
+Each logical gateway call for text, objects, streams, evaluation, or embedding has one default budget: at most 8 actual HTTP requests, with 120 seconds to the first output.
 
 - One logical call of a runtime creates only one budget. HTTP retries, fallback targets, and runtime retries all pass the same `requestBudget`.
 - The execution budget of the runtime is still calculated by the existing policy. Queued concurrency keeps its existing quota compensation.
@@ -970,6 +972,12 @@ One model call of an agent runtime uses `max(120 seconds, the runtime's remainin
 - Before the first output, a streamed call is bound by `firstTokenTimeoutMs` and the runtime's time limit.
 - After that, it is bound only by `idleTimeoutMs`. The time spent on output does not count toward the runtime's `timeoutMs`.
 - `callTimeoutMs` applies only to non-streaming calls.
+
+For each function runtime `generateText`, `generateObject`, or `evaluate` call, the host creates a fixed budget from the remaining `function.timeoutMs`, capped at the runtime deadline. HTTP retries, fallback targets, and a stalled-call resend share that budget and its 8 transport attempts; the next logical call recalculates the remaining time. Queuing spends the function’s remaining time, and player cancellation stops waiting immediately.
+
+**Text call concurrency**
+
+`COVEL_LLM_MAX_CONCURRENT` admits each text target attempt at the gateway, covering text, objects, streams, and evaluation from agents, functions, background jobs, and direct callers. Gateway instances share one process-wide queue. A stream holds its slot until completion, cancellation, or the consumer stops reading; failures and fallback switches release it. Queue notifications pause an agent’s call/first-token timers and credit its runtime deadline for the wait; the logical request budget still includes queuing. Embedding and media do not occupy this text slot.
 
 **Media and embedding**
 

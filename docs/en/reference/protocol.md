@@ -172,7 +172,7 @@ Fields of `execution.completed`:
 | `resync`      | `true` only when `committed: true` and some events from this turn were not sent after the commit. The data is saved, so the client should read the saved state and not wait for those events. The subscription stream also gets `system.reset`, with `reason: "publish-failed"` |
 
 > [!NOTE]
-> **Opening handoff.** When a player action completes the last setup runtime, the same SSE stream of `POST /api/actions` automatically goes on to run one main-loop turn (see [api.md § POST /api/actions](./api.md)). In this case the stream shows **two** rounds of `execution.started` and runtime lifecycle events, and their outer `turnId` values differ (the setup turn and the handoff turn). But only **one** `execution.completed` closes the stream. The frontend uses it to end the "running" state, and it handles the early content according to `committed`. If the setup commit fails, no handoff starts, and the stream ends directly with `committed: false`.
+> **Opening handoff.** When a player action completes the last setup runtime, the same SSE stream of `POST /api/actions` automatically goes on to run one main-loop turn (see [api.md § POST /api/actions](./api.md)). In this case the stream shows **two** rounds of `execution.started` and runtime lifecycle events, and their outer `turnId` values differ (the setup turn and the handoff turn). But only **one** `execution.completed` closes the stream. The frontend uses it to end the "running" state, and it handles the early content according to `committed`. If the setup commit fails, no handoff starts, and the stream ends directly with `committed: false`. If the player stops before the handoff starts, it does not start, and `execution.completed` carries the handoff turn's `turnId` and `abortReason: "aborted-by-player"`.
 
 **`runtime.deferred` is a "handoff notice"**
 
@@ -193,6 +193,7 @@ Control during a turn uses HTTP endpoints, not SSE events (see [api.md § Contro
 
 **abort: the player stops this turn** (`POST /api/sessions/:id/abort`)
 
+- The stop applies to the player's action request, not only to the current turn. A stop while the request still waits for the session lock or the memory update means the turn does not start, and the stream holds only one `execution.completed` with `abortReason`.
 - It fires the turn-level cancel signal. The retry layer immediately cuts off the model call and stream in progress. A player stop is not retried automatically, and a half-finished narrative is not committed as a result.
 - The executor stops scheduling the remaining runtime groups, and skips the event chain.
 - An aborted runtime is reported as a failure (`runtime.failed`), and its proposals are not produced. At the final commit the player's cancel signal is checked. If the cancel arrived before the commit, the whole turn is not committed.
@@ -216,7 +217,7 @@ The real session progress values are `SessionRecord.phase` (`'setup' | 'playing'
 | ---------------- | ---- | ------------------ | ------------------------------ |
 | `error.occurred` | S→C  | An execution error | `{ message, code?, details? }` |
 
-- `code` is an optional, stable error code (such as `"session_busy"`). The client can use it to translate the message and to retry. Without `code`, the client shows `message`.
+- `code` is an optional, stable error code (such as `"session_busy"`). The client can use it to translate the message and to retry. Without `code`, the client shows `message`. For the codes of an action refused before it starts, see [api.md § Rejections in the stream](./api.md#rejections-in-the-stream).
 - `details` appears only with `code: "form_rejected"`. See [Interaction responses](#interaction-responses).
 
 The world translation endpoint uses a different SSE event, `{ type: "error", message }`, with no `code` field:
@@ -366,7 +367,7 @@ Every background runtime uses `_runtime_jobs/<jobId>` as its reliable source of 
 
 | Durable status        | Meaning                                                                                                                                                                                                                                                                                                                                                                                 |
 | --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `queued`              | Committed with the original turn, waiting for a worker. After `maxQueueMs` it becomes `timed_out`                                                                                                                                                                                                                                                                                       |
+| `queued`              | Committed with the original turn, waiting for a worker. After `maxQueueMs` it becomes `timed_out`. A job that had not reached `committing` at a normal shutdown comes back here                                                                                                                                                                                                         |
 | `claimed` / `running` | A worker has the CAS lease, or is running it. The same session/plugin/runtime stays serial                                                                                                                                                                                                                                                                                              |
 | `committing`          | It passed the owner CAS, and it is running the stale and effect guards and the domain commit inside the session lock                                                                                                                                                                                                                                                                    |
 | `succeeded`           | The background proposals are committed, and `result` holds the summary of the background turn, execution, and runtime                                                                                                                                                                                                                                                                   |
@@ -376,9 +377,10 @@ Every background runtime uses `_runtime_jobs/<jobId>` as its reliable source of 
 | `stale`               | The session is inactive, or the session/plugin incarnation or version has changed. The commit barrier rejects the result with `reason: commit-barrier-rejected`                                                                                                                                                                                                                         |
 | `orphaned`            | The owner in flight stopped renewing and the lease expired. If the owner itself keeps failing to renew until the lease expires, it immediately aborts the running execution and lands in this state                                                                                                                                                                                     |
 
-**Recovery at startup**
+**Recovery at shutdown and startup**
 
-- A `queued` job that has not passed its queue deadline and has never been claimed continues to run.
+- At a normal shutdown, a job that has not reached `committing` goes back to `queued` once that execution returns, with the same jobId; its `attempt` goes up by 1 at the next claim. What it did outside before it stopped is done again when it reruns. A job already in `committing` finishes its commit.
+- A `queued` job that has not passed its queue deadline continues to run. The deadline counts from when the job was first queued.
 - A job whose queue time has run out ends as `timed_out`.
 - A `claimed` / `running` / `committing` job whose lease has expired ends as `orphaned`.
 - These final states are **never replayed automatically**. The reason: the provider may already have charged for the call, and only the answer was not saved. A replay would charge twice.
@@ -607,6 +609,11 @@ The data of `system.connected` has a `cursor`. It is the latest event ID this se
 - A client that has no cursor yet records it as its `lastEventId`. So even if the client received no event on this connection, the next connection (for example, resuming the subscription after an action ends) can catch up on the events it missed.
 - A client that already has a cursor ignores it.
 
+**The first connection joins the restored view.** When a session opens, the subscription and `GET /api/sessions/:id/view` go out almost together, and the server may handle either first. The view's `eventCursor` is the session's newest event id before the view was read, and the client uses it to join the two:
+
+- If the first connection has not been sent yet, the client sends `eventCursor` as its `lastEventId`, and the server replays the events after the view was read.
+- If the first connection already went out without a cursor, the client compares the `cursor` of its `system.connected` with `eventCursor`. A newer one, or another epoch, means the subscription registered after the view was read and the events in between reached neither, so the client reads the whole session again (as on `system.reset`). Otherwise it does nothing.
+
 **Which topics you can subscribe to**
 
 - The topics accepted by `/api/events/stream` are defined by `SUBSCRIPTION_TOPICS` in `@covel/shared`: `runtime / state / game / plugin / session / store / system / trace / hooks / job`. `VALID_TOPICS` in `subscribe.ts` is generated from it.
@@ -649,6 +656,7 @@ Each connection on `/api/actions` and `/api/events/stream` has a bounded queue t
 
 - After the web app gets a reset or reconnects, it refetches, checking revisions: the session snapshot, the plugin list, the data for every enabled plugin, unresolved suspensions, and the world. Live events that arrive during this are buffered first, and replayed afterwards.
 - The streamed placeholder is replaced with the saved final narrative for the same `turnId/runtimeId` only when the access generation and execution ownership still match. The external text of that placeholder and its pending fragments are removed. A new, healthy POST stream still owns its own live output.
+- After an error or stream loss, only authoritative recovery confirming a failed or interrupted turn without matching saved prose moves the displayed text to an “Unsaved” area and clears its placeholder and streaming buffers. This local copy lasts until leaving the session and never enters story history, stage content or plugin data. A retry appears beside it when recovery supplies an action. Unknown network state does not enable retry; saved prose still replaces placeholders as above. Player aborts and normal `committed: false` keep their existing removal behavior.
 - If the most recent window of the recovered snapshot does not join up with the history already loaded, the client first fills in older messages through the existing message pagination endpoint, read-only, up to the old anchor, and then merges and publishes. It does not delete the old window, and it does not resend the action.
 
 **For hosts that embed `@covel/events`**
@@ -735,7 +743,7 @@ The events below are forwarded by the server through the actions SSE stream. The
 | `runtime.skipped`                                          | `apps/server/src/routes/api/actions.ts`                                                      | A runtime was skipped because of cooldown / startTurn / maxTriggerCount                                                                                    |
 | `character.upserted`                                       | `packages/runtime/src/commit/session-commit-emitter.ts` (`character.upsert` proposal commit) | Character snapshot event                                                                                                                                   |
 | `tool.calling` / `tool.completed` / `tool.failed`          | TurnEmitter                                                                                  | LLM tool call trace                                                                                                                                        |
-| `domain-event.previewed`                                   | ToolExecutor (after `emittedEvents` succeeds)                                                | Projected server-side into UI slot previews; not consumed directly by the frontend and not a domain commit |
+| `domain-event.previewed`                                   | ToolExecutor (after `emittedEvents` succeeds)                                                | Projected server-side into UI slot previews; not consumed directly by the frontend and not a domain commit                                                 |
 | `llm.calling` / `llm.responded` / `message.completed`      | TurnEmitter                                                                                  | LLM call trace                                                                                                                                             |
 | `block.emitted` / `state.patch.applied`                    | TurnEmitter                                                                                  | Trace of a block emitted / a state patch applied                                                                                                           |
 | `hook.fired` / `hook.aborted`                              | TurnEmitter                                                                                  | Hook behavior trace                                                                                                                                        |
@@ -1062,7 +1070,7 @@ Frames on `/api/events/stream` use a different structure, `ProtocolEvent`: `{ id
 narrative.delta       → messages (streaming buffer)
 narrative.completed   → messages (completed)
 interaction.requested → messages (block)
-state.changed         → gameState (deep merge) + statePatches
+state.changed         → gameState.tables (deep merge) + statePatches
 event.emitted         → gameState.events
 interaction.submitted → handled by the caller that submitted the form: SUBMIT_BLOCK + player bubble (not through handleSseEvent)
 execution.started     → executionSteps

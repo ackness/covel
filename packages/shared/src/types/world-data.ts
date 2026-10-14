@@ -32,6 +32,29 @@ export interface WorldDataDescriptor {
   readonly sources: Readonly<Record<string, WorldDataSourceDescriptor>>;
 }
 
+/**
+ * A world-data import finding the player is shown: data of the world that
+ * did not reach the session, say because no enabled plugin receives it. The
+ * message is the importer's, in English, like the session prep preflight.
+ */
+export interface WorldDataImportNotice {
+  readonly level: "warning" | "error";
+  readonly sourceId?: string;
+  readonly message: string;
+}
+
+/** What importing world data for plugins that joined a session did. */
+export interface WorldDataReceiverImport {
+  /** The joined plugins that received data for the first time. */
+  readonly receivers: readonly string[];
+  /** Rows written for them. */
+  readonly imported: number;
+  /** Rows left as they were because the session changed them. */
+  readonly conflicts: number;
+  /** The import's findings for the session's current plugins. */
+  readonly notices: readonly WorldDataImportNotice[];
+}
+
 export interface WorldDataDiagnosticCounts {
   readonly info: number;
   readonly warning: number;

@@ -18,7 +18,10 @@ const api = vi.hoisted(() => ({
   listMessagesPage: vi.fn(),
 }));
 vi.mock("@/services/api.js", () => api);
-const { useExecutionRecovery } = await import("../execution-recovery.js");
+const { useExecutionRecovery, MAX_UNKNOWN_CHECKS } =
+  await import("../execution-recovery.js");
+const { useExecutionRecoveryActions } =
+  await import("../execution-recovery-actions.js");
 const workspace = {
   hydrate: vi.fn(async () => {}),
   run: vi.fn(),
@@ -558,4 +561,169 @@ it("does not overlap a pending recovery read when visibility changes", async () 
   await act(async () => pending.resolve({ state: "running", turnId: "t" }));
   await act(async () => vi.advanceTimersByTimeAsync(3000));
   expect(api.getSessionExecution).toHaveBeenCalledTimes(2);
+});
+
+it.each(["failed", "interrupted"] as const)(
+  "keeps unmatched %s prose as an unsaved local copy and drains its stream",
+  async (state) => {
+    api.getSessionExecution.mockResolvedValue({ state, turnId: "t" });
+    api.getSessionView.mockResolvedValue({
+      ...snapshot("running"),
+      execution: { state, turnId: "t" },
+    });
+    const { result, delta, flush, recover, frames } = ownedRecovery();
+    act(() => {
+      delta("t", "Already read");
+      flush();
+      delta("t", " queued");
+      recover();
+    });
+    await waitFor(() => expect(result.current.state.executing).toBe(false));
+    expect(result.current.state.unsavedNarratives).toEqual([
+      expect.objectContaining({ turnId: "t", content: "Already read queued" }),
+    ]);
+    expect(result.current.state.messages).toEqual([]);
+    expect(getStreamingText("stream_t_story/main")).toBeUndefined();
+    expect(result.current.refs.deltaBufferRef.current.size).toBe(0);
+    expect(result.current.refs.deltaRafRef.current).toBeNull();
+    act(() => {
+      for (const cb of frames.values()) cb(1);
+    });
+    expect(result.current.state.messages).toEqual([]);
+    expect(workspace.run).not.toHaveBeenCalled();
+    act(() => result.current.dispatch({ type: "RESET_SESSION" }));
+    expect(result.current.state.unsavedNarratives).toEqual([]);
+  },
+);
+
+describe("a status the server could not check (F-203)", () => {
+  const unknown = { state: "unknown" as const };
+  beforeEach(() => {
+    api.getSessionExecution.mockResolvedValue(unknown);
+    api.getSessionView.mockResolvedValue({
+      ...snapshot("running"),
+      execution: unknown,
+    });
+  });
+
+  it("checks again less often, stops after a few answers and checks again on refresh", async () => {
+    vi.useFakeTimers();
+    setVisibilityForTest();
+    const runKernelAction = vi.fn();
+    const { result } = renderHook(() => {
+      const [state, dispatch] = useReducer(reducer, {
+        ...initialState,
+        session,
+        executing: true,
+        executionRecovery: {
+          sessionId: "s",
+          status: unknown,
+          hydrating: false,
+          checking: false,
+        },
+      } as SessionState);
+      const stateRef = useRef(state);
+      stateRef.current = state;
+      useExecutionRecovery({
+        state,
+        dispatch,
+        stateRef,
+        sessionIdRef: useRef<string | null>("s"),
+        sessionGenerationRef: useRef(0),
+        deltaBufferRef: useRef(new Map()),
+        deltaRafRef: useRef<number | null>(null),
+        workspace,
+      });
+      const actions = useExecutionRecoveryActions({
+        stateRef,
+        dispatch,
+        runKernelAction,
+        resumeSessionById: async () => {},
+      });
+      return { state, ...actions };
+    });
+    await act(async () => {});
+    let calls = 1;
+    expect(api.getSessionExecution).toHaveBeenCalledTimes(calls);
+    for (const delay of [3000, 6000, 12000, 24000]) {
+      await act(async () => vi.advanceTimersByTimeAsync(delay - 1));
+      expect(api.getSessionExecution).toHaveBeenCalledTimes(calls);
+      await act(async () => vi.advanceTimersByTimeAsync(1));
+      expect(api.getSessionExecution).toHaveBeenCalledTimes(++calls);
+    }
+    await act(async () => vi.advanceTimersByTimeAsync(300_000));
+    expect(api.getSessionExecution).toHaveBeenCalledTimes(MAX_UNKNOWN_CHECKS);
+    expect(result.current.state.executionRecovery).toMatchObject({
+      status: unknown,
+      stalled: true,
+    });
+    // Still treated as possibly running: no new turn, no retry, no restore.
+    expect(result.current.state.executing).toBe(true);
+    act(() => result.current.retryInterruptedTurn());
+    expect(runKernelAction).not.toHaveBeenCalled();
+    expect(workspace.hydrate).not.toHaveBeenCalled();
+
+    api.getSessionExecution.mockResolvedValue({
+      state: "completed",
+      turnId: "t",
+    });
+    api.getSessionView.mockResolvedValue(snapshot("completed"));
+    await act(async () => {
+      result.current.refreshExecutionRecovery();
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(api.getSessionExecution).toHaveBeenCalledTimes(
+      MAX_UNKNOWN_CHECKS + 1,
+    );
+    expect(result.current.state.executing).toBe(false);
+    expect(result.current.state.executionRecovery?.stalled).toBeUndefined();
+  });
+
+  it.each([undefined, "restore failed"])(
+    "stops unknown checks even while hydration is unfinished (error: %s)",
+    async (error) => {
+      vi.useFakeTimers();
+      setVisibilityForTest();
+      const { result } = setup({
+        session: null,
+        executionRecovery: {
+          sessionId: "s",
+          status: unknown,
+          hydrating: true,
+          checking: true,
+          ...(error ? { error } : {}),
+        },
+      });
+      await act(async () => vi.advanceTimersByTimeAsync(45_000));
+      expect(result.current.executionRecovery).toMatchObject({
+        status: unknown,
+        hydrating: true,
+        stalled: true,
+      });
+      await act(async () => vi.advanceTimersByTimeAsync(300_000));
+      expect(api.getSessionExecution).toHaveBeenCalledTimes(MAX_UNKNOWN_CHECKS);
+      expect(result.current.executing).toBe(true);
+      expect(workspace.hydrate).not.toHaveBeenCalled();
+    },
+  );
+
+  it("keeps the turn's streamed prose and running steps without finishing them", async () => {
+    const { result, delta, flush, recover } = ownedRecovery();
+    act(() => {
+      delta("t", "Already read");
+      flush();
+      recover();
+    });
+    await waitFor(() =>
+      expect(result.current.state.executionRecovery?.status).toEqual(unknown),
+    );
+    expect(result.current.state.executing).toBe(true);
+    expect(result.current.state.unsavedNarratives).toEqual([]);
+    expect(getStreamingText("stream_t_story/main")).toBe("Already read");
+    expect(result.current.state.executionSteps).not.toHaveLength(0);
+    expect(
+      result.current.state.executionSteps.map((step) => step.status),
+    ).not.toContain("failed");
+    expect(workspace.hydrate).not.toHaveBeenCalled();
+  });
 });

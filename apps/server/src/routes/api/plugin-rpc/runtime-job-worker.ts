@@ -517,9 +517,11 @@ export function createRuntimeJobWorker(args: {
     let renewalTask: Promise<void> | undefined;
     let deadlineTask: Promise<void> | undefined;
     let onAbort: (() => void) | undefined;
+    let execution: Promise<void> | undefined;
     const stop = (): void => {
       // A job that crossed the commit barrier must finish settling its durable
-      // outcome. Cancellation before that barrier can never authorize replay.
+      // outcome. Work stopped before that barrier committed nothing; a normal
+      // shutdown hands it back to the queue (see the catch below).
       if (current.status !== "committing") {
         executionAbort.abort(new RuntimeJobWorkerClosedError());
       }
@@ -628,7 +630,7 @@ export function createRuntimeJobWorker(args: {
         timeoutTimer.unref?.();
       }
 
-      const execution = execute(current, {
+      execution = execute(current, {
         signal: executionAbort.signal,
         // A foreground turn may hold the session lock for minutes; that wait
         // is not execution. A deadline that already fired keeps its outcome.
@@ -692,11 +694,12 @@ export function createRuntimeJobWorker(args: {
         },
       });
       executions.add(execution);
-      void execution.then(
-        () => executions.delete(execution),
-        () => executions.delete(execution),
+      const started = execution;
+      void started.then(
+        () => executions.delete(started),
+        () => executions.delete(started),
       );
-      await Promise.race([execution, aborted]);
+      await Promise.race([started, aborted]);
       if (timeoutTimer) clearTimeout(timeoutTimer);
       const settled = await getRuntimeJob(args.store, current);
       const reportedFailure =
@@ -727,28 +730,38 @@ export function createRuntimeJobWorker(args: {
           (error.name === "SessionApprovalScopeChangedError" ||
             error.name === "SessionNotActiveError"));
       const shuttingDown = error instanceof RuntimeJobWorkerClosedError;
+      if (shuttingDown) {
+        // Queued again only once the stopped execution has returned: it can
+        // no longer commit (its signal is aborted), and no other worker runs
+        // the job while it is still unwinding. A run that never returns keeps
+        // its lease and is recovered like a crash.
+        if (execution) await Promise.allSettled([execution]);
+        await transition(
+          current,
+          ["claimed", "running", "committing"],
+          "queued",
+        ).catch((transitionError) =>
+          console.warn(
+            `[runtime-job-worker] failed to requeue ${current.jobId}:`,
+            errorMessage(transitionError),
+          ),
+        );
+        return;
+      }
       // The outcome the recovery pass of any worker gives an expired lease.
       const leaseLapsed = error instanceof RuntimeJobLeaseLapsedError;
       const terminal = await transition(
         current,
         ["claimed", "running", "committing"],
-        shuttingDown
-          ? "cancelled"
-          : leaseLapsed
-            ? "orphaned"
-            : stale
-              ? "stale"
-              : "failed",
+        leaseLapsed ? "orphaned" : stale ? "stale" : "failed",
         {
-          reason: shuttingDown
-            ? "worker-shutdown"
-            : leaseLapsed
-              ? "lease-expired"
-              : stale
-                ? commitBarrierReached
-                  ? "commit-barrier-rejected"
-                  : "pre-execution-rejected"
-                : "execution-failed",
+          reason: leaseLapsed
+            ? "lease-expired"
+            : stale
+              ? commitBarrierReached
+                ? "commit-barrier-rejected"
+                : "pre-execution-rejected"
+              : "execution-failed",
           error: errorMessage(error),
         },
       ).catch((transitionError) =>
@@ -757,7 +770,7 @@ export function createRuntimeJobWorker(args: {
           errorMessage(transitionError),
         ),
       );
-      if (terminal === null && !stale && !shuttingDown && !leaseLapsed) {
+      if (terminal === null && !stale && !leaseLapsed) {
         console.warn("[runtime-job-worker] completion follow-up failed", {
           sessionId: current.sessionId,
           jobId: current.jobId,

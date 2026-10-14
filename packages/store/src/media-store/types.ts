@@ -1,7 +1,6 @@
 import type { StoreBackend } from "../types.js";
 
-export type MediaStoreBackend =
-  "mirror" | "memory" | "sqlite" | "pg" | "idb" | "none";
+export type MediaStoreBackend = "mirror" | "memory" | "sqlite" | "pg" | "none";
 
 export interface MediaStoreConfig {
   readonly backend?: MediaStoreBackend;
@@ -9,7 +8,6 @@ export interface MediaStoreConfig {
   readonly sqlitePath?: string;
   readonly databaseUrl?: string;
   readonly mediaRoot?: string;
-  readonly idbDbName?: string;
 }
 
 export interface SqliteMediaStoreOptions {

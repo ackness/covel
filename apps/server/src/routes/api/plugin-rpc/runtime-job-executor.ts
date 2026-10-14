@@ -158,6 +158,10 @@ export function createRuntimeJobExecutor(deps: {
     const queuedRun = {
       executionSignal: control.signal,
       expectedSessionIncarnation: payload.expectedSessionIncarnation,
+      // The job commits only under the plugin version it started with.
+      ...(target.version !== undefined
+        ? { expectedPluginVersion: target.version }
+        : {}),
       beforeExecute: control.assertCurrent,
       executionFinished: control.executionFinished,
       beforeCommit: control.beforeCommit,

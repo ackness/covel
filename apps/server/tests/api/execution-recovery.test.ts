@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createMemoryStore } from "@covel/store/memory";
 import {
   getSessionExecutionStatus,
@@ -6,6 +6,10 @@ import {
   recoveryAction,
 } from "../../src/routes/api/actions/execution-recovery.js";
 import { registerActiveTurn } from "../../src/routes/api/turn-control.js";
+import {
+  createInProcessSessionLock,
+  type SessionLock,
+} from "../../src/lib/session-lock.js";
 
 async function fixture() {
   const store = createMemoryStore();
@@ -157,6 +161,26 @@ describe("foreground execution recovery", () => {
       (await store.listTraceEvents("recovery")).map((event) => event.type),
     ).toEqual(["turn.started", "turn.started", "runtime.started"]);
   });
+
+  it.each([
+    ["busy", "running"],
+    ["unavailable", "unknown"],
+  ] as const)(
+    "reports a %s lock probe as %s, never reading the trace (F-203)",
+    async (reason, state) => {
+      const { store, trace } = await fixture();
+      await trace("turn.started");
+      const read = vi.spyOn(store, "queryTraceEvents");
+      const lock: SessionLock = {
+        ...createInProcessSessionLock(),
+        tryWithLock: async () => ({ acquired: false, reason }),
+      };
+      expect(await getSessionExecutionStatus(store, "recovery", lock)).toEqual({
+        state,
+      });
+      expect(read).not.toHaveBeenCalled();
+    },
+  );
 
   it("returns running throughout execution and abort settlement without exposing steering", async () => {
     const { store } = await fixture();

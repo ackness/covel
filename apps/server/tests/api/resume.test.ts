@@ -123,6 +123,7 @@ async function createSuspension(
   store: DataStore,
   overrides?: Partial<{
     id: string;
+    runtimeId: string;
     sessionId: string;
     resolvedAt: string;
     resumeSchema: unknown;
@@ -135,7 +136,7 @@ async function createSuspension(
     id: overrides?.id ?? "susp-1",
     sessionId: overrides?.sessionId ?? "sess-1",
     turnId: "turn-1",
-    runtimeId: "test-plugin",
+    runtimeId: overrides?.runtimeId ?? "test-plugin",
     pluginId: "test-plugin",
     reason: "Need player input",
     resumeSchema: overrides?.resumeSchema ?? {
@@ -1099,15 +1100,36 @@ describe("Resume Routes", () => {
         logicalTurnId: "logical-parallel-suspensions",
         countPolicy: "complete-player-turn",
       };
+      const deps = makeDefaultDeps(store);
+      const entry = deps.pluginRegistry.get("test-plugin");
+      if (!entry?.manifests) throw new Error("expected fixture runtimes");
+      const siblingRuntimeId = "test-plugin/sibling";
+      deps.pluginRegistry.register({
+        ...entry,
+        manifests: [
+          ...entry.manifests,
+          {
+            runtime: { type: "agent" },
+            manifest: { ...TEST_MANIFEST, name: siblingRuntimeId },
+            promptTemplate: "Sibling runtime",
+            rawFrontmatter: {},
+          },
+        ],
+      });
+      // Parallel siblings belong to different runtimes. A newer suspension
+      // of the same runtime would correctly supersede the first one.
       await createSuspension(store, {
         id: "susp-a",
         executionContext,
+        createdAt: "2026-10-14T00:00:00.000Z",
       });
       await createSuspension(store, {
         id: "susp-b",
+        runtimeId: siblingRuntimeId,
         executionContext,
+        createdAt: "2026-10-14T00:00:00.001Z",
       });
-      const app = createTestApp(makeDefaultDeps(store));
+      const app = createTestApp(deps);
       const resume = (suspensionId: string) =>
         app.request(`/api/sessions/sess-1/suspensions/${suspensionId}/resume`, {
           method: "POST",

@@ -649,6 +649,41 @@ describe("plugin RPC detached-stage runner", () => {
     ).toMatchObject({ value: {} });
   });
 
+  it("refuses to commit when a reload changed the plugin version during execution", async () => {
+    // The live runtime list a development reload rewrites.
+    const live: RuntimeManifest[] = [producerManifest(), manifest()];
+    const { store, session, runner } = await setup(
+      async () => {
+        live[1] = { ...manifest(), version: "2.0.0" };
+        return {
+          outcome: "success",
+          value: {},
+          effects: {
+            pluginData: [{ namespace: "tracks", key: "old", value: true }],
+          },
+        };
+      },
+      undefined,
+      manifest(),
+      { activeRuntimes: live },
+    );
+    const beforeCommit = vi.fn(async () => {});
+
+    await expect(
+      runner.runDetachedStage({
+        descriptor: descriptor(),
+        backgroundTurnId: "background-turn-reloaded",
+        expectedSessionIncarnation: sessionIncarnationIdentity(session),
+        beforeCommit,
+        completeInTx: async () => {},
+      }),
+    ).rejects.toMatchObject({ name: "SessionApprovalScopeChangedError" });
+    expect(beforeCommit).not.toHaveBeenCalled();
+    await expect(
+      store.getPluginData(SESSION_ID, PLUGIN_ID, "tracks", "old"),
+    ).resolves.toBeNull();
+  });
+
   it("rejects an undeclared effect before any domain proposal commits", async () => {
     const { store, session, runner } = await setup(async () => ({
       outcome: "success",

@@ -199,12 +199,12 @@ In the path headings below, `[]` is a list item and `.*` is a map value.
 
 ## `contributes.data.*.authoring.references[]`
 
-| Field    | Type                                                                                      | Required | Description                                                                                                                                        |
-| -------- | ----------------------------------------------------------------------------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `path`   | string                                                                                    | yes      | Where the referring values are in each record: field names joined by `.`, with `[]` after a field that holds a list. Example: `"attributes[].id"`. |
-| `to`     | `"character-attribute"`                                                                   | yes      | What each value must name. `character-attribute` is the `id` of a top-level attribute of the world's `characterSchema`.                            |
-| `type`   | `"string"` or `"number"` or `"boolean"` or `"enum"` or `"array"` or `"object"` or `"map"` | no       | Value type the named attribute must have.                                                                                                          |
-| `within` | list of string                                                                            | no       | Number fields beside the referring value that must lie inside the `min` and `max` of the named attribute.                                          |
+| Field    | Type                                                                                      | Required | Description                                                                                                                                                                                                                                                        |
+| -------- | ----------------------------------------------------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `path`   | string                                                                                    | yes      | Where the referring values are in each record: field names joined by `.`, with `[]` after a field that holds a list. `**.` before a field name finds that field at any depth below. Example: `"attributes[].id"`, `"when.**.dimension"`.                           |
+| `to`     | `"character-attribute"` or `"world-dimension"`                                            | yes      | What each value must name. `character-attribute` is the `id` of a top-level attribute of the world's `characterSchema`; `world-dimension` is the ID of a dimension the world declares.                                                                             |
+| `type`   | `"string"` or `"number"` or `"boolean"` or `"enum"` or `"array"` or `"object"` or `"map"` | no       | Value type the named attribute must have. Only with `to: character-attribute`.                                                                                                                                                                                     |
+| `within` | list of string                                                                            | no       | Fields beside the referring value that must lie inside what it names. For `character-attribute`, number fields inside the attribute's `min` and `max`; for `world-dimension`, a path into the dimension's value (`a.b`, or a list of keys) that its schema allows. |
 
 ## `contributes.data.*.search`
 
@@ -309,10 +309,10 @@ In the path headings below, `[]` is a list item and `.*` is a map value.
 
 ## `runtime.schedule.after[]` (form 2 of 2)
 
-| Field         | Type               | Required | Description                                                               |
-| ------------- | ------------------ | -------- | ------------------------------------------------------------------------- |
-| `contract`    | string             | yes      | Contract ID. It must be listed in the package's `requires` or `optional`. |
-| `cardinality` | `"one"` or `"all"` | no       | `one` takes a single provider; `all` takes every provider.                |
+| Field         | Type               | Required | Description                                                                                                                                |
+| ------------- | ------------------ | -------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `contract`    | string             | yes      | Contract ID. This runtime runs after the contract's active providers; the contract does not have to be listed in `requires` or `optional`. |
+| `cardinality` | `"one"` or `"all"` | no       | `one` takes a single provider; `all` takes every provider.                                                                                 |
 
 ## `runtime.schedule.completion`
 
@@ -347,7 +347,7 @@ In the path headings below, `[]` is a list item and `.*` is a map value.
 
 | Field      | Type                      | Required | Description                                                                                                                                                                   |
 | ---------- | ------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `from`     | object                    | yes      | Producer of the value: a runtime in this package, a contract, or a kernel input.                                                                                              |
+| `from`     | object                    | yes      | Producer of the value: a runtime in this package, a contract, or a kernel input. A kernel input takes no other field.                                                         |
 | `scope`    | `"turn"` or `"committed"` | no       | `turn` reads the same execution's upstream result. `committed` reads the latest committed export and needs `recordAs`. Defaults to `turn`.                                    |
 | `select`   | string                    | no       | JSON Pointer applied to the upstream value. Declaring `select` with `scope: committed` is rejected; committed inputs read the complete export. Example: `"/narrativeOutput"`. |
 | `required` | boolean                   | no       | `true` stops this runtime when the upstream value is missing or failed.                                                                                                       |

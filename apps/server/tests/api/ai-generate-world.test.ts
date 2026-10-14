@@ -874,7 +874,7 @@ describe("ai world generation route", () => {
         const preflight = await preflightWorldDataForSession({
           sessionId: "clock-session",
           worldId: "generated-world",
-          contractData: records,
+          world: { metadata: { contractData: records } },
           now,
           preflight: { registry, activePlugins: ["world-init", pluginId] },
         });

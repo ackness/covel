@@ -4,7 +4,12 @@ import {
 } from "@/services/state-patch-cache.js";
 import { appendReasoningStep } from "./reasoning.js";
 import type { AssetGenerateView } from "@covel/shared";
-import { deepMerge, encodePageCursor, summarizeWorld } from "@covel/shared";
+import {
+  deepMerge,
+  encodePageCursor,
+  executionMayBeRunning,
+  summarizeWorld,
+} from "@covel/shared";
 import {
   mergeGameStateForReplacement,
   rebuildGameStateFromPatches,
@@ -147,7 +152,9 @@ export const initialState: SessionState = {
   world: null,
   session: null,
   messages: [],
+  unsavedNarratives: [],
   olderMessagesCursor: null,
+  initialEventCursor: null,
   worldSessions: [],
   executing: false,
   executionError: null,
@@ -166,6 +173,7 @@ export const initialState: SessionState = {
   sessionCommands: [],
   sessionCommandsLoaded: false,
   unavailableSessionPlugins: [],
+  worldDataNotices: [],
   messageUiSpecs: [],
   pendingInteractionDrafts: [],
   suspensions: [],
@@ -181,7 +189,9 @@ export const initialState: SessionState = {
 const SESSION_RESET: Partial<SessionState> = {
   session: null,
   messages: [],
+  unsavedNarratives: [],
   olderMessagesCursor: null,
+  initialEventCursor: null,
   statePatches: [],
   statePatchRevision: 0,
   recentStatePatchIds: [],
@@ -199,6 +209,7 @@ const SESSION_RESET: Partial<SessionState> = {
   sessionCommands: [],
   sessionCommandsLoaded: false,
   unavailableSessionPlugins: [],
+  worldDataNotices: [],
   messageUiSpecs: [],
   pendingInteractionDrafts: [],
   suspensions: [],
@@ -231,14 +242,14 @@ export function reducer(
               executing:
                 action.recovery.hydrating ||
                 action.recovery.checking ||
-                action.recovery.status?.state === "running",
+                executionMayBeRunning(action.recovery.status),
             }
           : {}),
       };
     case "OBSERVE_EXECUTION_STATUS": {
       const current = state.executionRecovery;
       if (current?.sessionId !== action.sessionId) return state;
-      const { error: previousError, ...rest } = current;
+      const { error: previousError, stalled: _stalled, ...rest } = current;
       const error =
         action.error ?? (current.hydrating ? previousError : undefined);
       const recovery = {
@@ -246,6 +257,7 @@ export function reducer(
         status: action.status ?? current.status,
         checking: !action.status,
         ...(error ? { error } : {}),
+        ...(action.stalled ? { stalled: true } : {}),
       };
       return {
         ...state,
@@ -253,7 +265,7 @@ export function reducer(
         executing:
           recovery.hydrating ||
           recovery.checking ||
-          recovery.status?.state === "running",
+          executionMayBeRunning(recovery.status),
       };
     }
     case "BOOT_SUCCESS":
@@ -410,7 +422,7 @@ export function reducer(
             state.executionRecovery &&
             (state.executionRecovery.hydrating ||
               state.executionRecovery.checking ||
-              state.executionRecovery.status?.state === "running")
+              executionMayBeRunning(state.executionRecovery.status))
           ),
       };
     case "DISCARD_TURN_STREAMS": {
@@ -431,7 +443,7 @@ export function reducer(
       const patchData = action.patch.data as
         Record<string, unknown> | undefined;
       const newGameState = patchData
-        ? deepMerge(state.gameState, patchData)
+        ? deepMerge(state.gameState, { tables: patchData })
         : state.gameState;
       return {
         ...state,
@@ -447,11 +459,22 @@ export function reducer(
         gameState: newGameState,
       };
     }
-    case "MERGE_RECOVERED_MESSAGES":
+    case "MERGE_RECOVERED_MESSAGES": {
+      const drafts =
+        action.actionGeneration === (state.actionGeneration ?? 0)
+          ? (action.unsavedNarratives ?? [])
+          : [];
+      const draftIds = new Set(drafts.map((row) => row.id));
       return {
         ...state,
+        unsavedNarratives: [
+          ...(state.unsavedNarratives ?? []).filter(
+            (row) => !draftIds.has(row.id),
+          ),
+          ...drafts,
+        ],
         messages: mergeRecoveredMessages(
-          state.messages,
+          state.messages.filter((row) => !draftIds.has(row.id)),
           action.messages,
           state.executing,
           action.actionGeneration === (state.actionGeneration ?? 0)
@@ -459,6 +482,7 @@ export function reducer(
             : undefined,
         ),
       };
+    }
     case "PREPEND_MESSAGES": {
       // 把更旧的一批消息合并到前部。已有消息（含流式占位/本地追加）优先保留，
       // 仅补入尚未出现的历史条目（按 id 去重）。整体覆盖会丢失历史。
@@ -480,6 +504,8 @@ export function reducer(
     }
     case "SET_OLDER_MESSAGES_CURSOR":
       return { ...state, olderMessagesCursor: action.cursor };
+    case "SET_INITIAL_EVENT_CURSOR":
+      return { ...state, initialEventCursor: action.cursor };
     case "MERGE_INITIAL_STATE_PATCHES": {
       const currentIds = new Set(state.recentStatePatchIds);
       const historical = action.patches;
@@ -647,6 +673,8 @@ export function reducer(
         unavailableSessionPlugins:
           action.unavailable ?? state.unavailableSessionPlugins,
       };
+    case "SET_WORLD_DATA_NOTICES":
+      return { ...state, worldDataNotices: action.notices };
     case "TOGGLE_SESSION_PLUGIN": {
       const plugin = state.sessionPlugins.find(
         (item) => item.id === action.pluginId,

@@ -87,13 +87,13 @@
       "detail": "不安装也可以开始，但这些插件为该世界提供的玩法不会生效。可在「设置 → 安装与管理」中安装，安装后重启后端生效。"
     },
     "worldRequirements": {
-      "blockedTitle": "这个世界暂时无法开始",
       "degradedTitle": "这个世界将缺少它依赖的一项能力",
       "missing-provider": "没有已安装的插件提供 {{contract}}。请在「设置 → 安装与管理」中安装一个，安装后重启后端生效。",
       "unavailable": "{{plugins}} 提供 {{contract}}，但在当前选择下无法启用。",
       "ambiguous-provider": "有多个插件提供 {{contract}}：{{plugins}}。请在下方插件列表中启用其中一个。",
       "excluded": "你关闭了提供 {{contract}} 的 {{plugins}}。游戏可以开始，但世界的这部分玩法不会生效。",
-      "approval-required": "{{plugins}} 提供 {{contract}}，开始游戏后会请求你的授权。"
+      "approval-required": "{{plugins}} 提供 {{contract}}，开始游戏后会请求你的授权。",
+      "dimensions": "你开启的插件里没有能保存这个世界维度的（{{contract}}），游戏会在没有维度的情况下开始。开启一个提供它的插件就能用上维度。"
     },
     "history": "历史会话",
     "worldLore": "世界文档",
@@ -212,6 +212,8 @@
     "dimensionsImported": "导入成功",
     "reasonConnectionClosed": "连接结束但后端未上报结束",
     "reasonSessionBusy": "会话繁忙，请稍后重试",
+    "reasonInputAlreadyCommitted": "这条消息已经发送过，它的回合已经保存。刷新即可看到。",
+    "reasonRetryStale": "任务状态已经变了，请先刷新再重试。",
     "reasonExecutionCommitFailed": "本回合未能保存，请重试。",
     "reasonExecutionFailed": "本回合执行失败，请重试。",
     "reasonHistoryRestoreFailed": "消息历史恢复失败。如果内容一直没有更新，请刷新页面。",
@@ -271,6 +273,11 @@
     "memoryUpdateFailedHint": "本轮剧情已保存。请检查用途分配中的记忆模型和服务商配置；下一回合会再次尝试更新。",
     "memoryUpdateErrorDetails": "错误详情",
     "memoryStoreWarning": "重启后数据将丢失",
+    "worldDataNotices": {
+      "title": "这个世界的部分数据没有进入这局游戏：",
+      "hint": "给已关闭或正在等你批准的插件的数据，会在打开那个插件时导入。",
+      "hide": "隐藏"
+    },
     "worldDataPreflight": {
       "title": "世界数据",
       "loading": "检查中",
@@ -327,8 +334,13 @@
     "recoveryFailed": "此回合未能完成",
     "recoveryHydrating": "正在恢复存档",
     "recoveryUnknownDetail": "暂时无法确认执行结果，正在重新连接。这里只检查原任务，不会重复发起回合。",
+    "recoveryUnavailableDetail": "服务器暂时无法确认是否有回合在执行，稍后会自动再查。确认之前不会重试，也不会发起新回合。",
+    "recoveryUnconfirmed": "无法确认回合状态",
+    "recoveryUnconfirmedDetail": "检查了几次，服务器仍无法确认，已停止自动检查。点“检查状态”再查一次。",
     "recoveryRunningDetail": "服务端仍在继续原任务，完成后会自动恢复结果。你可以等待，也可以停止任务。",
     "recoveryInterruptedDetail": "未完成的任务已停止运行，已保存的进度会保留。只有点击重试，才会发起新的尝试。",
+    "unsavedNarrative": "未保存",
+    "unsavedNarrativeDetail": "这段文字没有保存，离开会话后会消失。",
     "recoveryHydratingDetail": "正在取回最新保存的结果，随后即可继续游玩。",
     "recoveryRetry": "重试未完成回合",
     "recoveryRefresh": "检查状态",
@@ -341,6 +353,15 @@
     "setupUnfinishedDetail": "故事还在准备中。点击继续，会用你已填写的内容运行剩下的步骤。",
     "setupContinue": "继续开局准备",
     "setupRetryFailed": "无法重新开始准备，请检查网络后再试。",
+    "memoryIndex": {
+      "staleTitle": "记忆检索现在只按关键词匹配",
+      "staleDetail": "这个会话的记忆是用 {{locked}} 建的索引，现在配置的向量模型是 {{configured}}。重建索引后才能用新模型检索；重建会把会话的历史重新发给向量模型。",
+      "noModelDetail": "这个会话的记忆是用 {{locked}} 建的索引，现在没有配置向量模型。清除索引可以释放它占的空间；以后配置了向量模型，会话会用它重新建索引。",
+      "rebuild": "重建索引",
+      "clear": "清除索引",
+      "rebuilding": "正在重建…",
+      "failed": "没有重建，原来的索引保持不变：{{reason}}"
+    },
     "reasonInterrupted": "此任务在完成前已中断，没有提交结果。此处保留当时的执行记录。",
     "retryTask": "重试此任务",
     "executionHistory": "历史记录",
@@ -364,8 +385,9 @@
     },
     "stoppedDetail": "本轮生成内容未写入存档，可使用原输入重新尝试。",
     "submittedInteraction": "已完成的交互 · 展开查看",
-    "previousSuggestions": "历史建议 · 展开查看",
     "advancedPluginSettings": "自定义插件与高级设置",
+    "minimalPluginSet": "回到最小集合",
+    "minimalPluginSetHint": "只留叙事插件、保存世界维度的插件，以及它们和世界必需的插件，其余全部关闭。",
     "configureModelBeforeRetry": "更换模型 / 调整参数",
     "retryModelSettingsHint": "可先更换模型或调低输出限制，再重试此任务；重试使用当前设置。",
     "allWorlds": "全部世界（{{total}}）",
@@ -399,7 +421,9 @@
     },
     "retryScopeLimited": "只重试选中的失败任务，正文和其他已完成结果会保留。每批最多 {{count}} 个任务，完成后可继续重试其余任务。",
     "activeTask": "{{label}}…",
-    "panelUnavailable": "当前会话没有这个面板。"
+    "panelUnavailable": "当前会话没有这个面板。",
+    "previousPluginContent": "{{title}} · 展开查看",
+    "pluginContent": "插件内容"
   },
   "blocks": {
     "actionPlaceholder": "或输入自定义行动...",
@@ -601,6 +625,11 @@
     "revising": "正在修改…",
     "reviseAction": "应用修改",
     "translateTitle": "翻译这个世界",
+    "packageEditedHint": "你在 Covel 里改过这个世界。游玩用的是你改过的版本：它的包文件之后的变化，包括更新，都不再覆盖它。",
+    "restorePackageAction": "恢复为包里的版本",
+    "restorePackageTitle": "恢复为包里的版本？",
+    "restorePackageConfirm": "你对这个世界的修改会被换成包文件现在的内容。已保存的会话数据保留；没有设置会话专用背景的会话，下一回合会读到恢复后的世界背景。",
+    "restorePackageFailed": "没能恢复包里的版本。",
     "translateHint": "这个世界是用{{worldLanguage}}写的，而会话只能使用世界已有的语言。你可以给它加一个{{language}}版本。",
     "translateConfirm": "你的模型会翻译这个世界的全部文字：名称、设定、规则和角色。这会消耗模型调用；机器翻译的人名地名和语气，事后需要看一遍。",
     "translating": "正在翻译…",
@@ -1675,7 +1704,7 @@
       "allowSelected": "授权所选",
       "notNow": "暂不授权"
     },
-    "unavailable": "本存档有插件现在无法运行：{{plugins}}。游戏照常进行，只是少了它们的功能；打开插件列表可以看到原因。",
+    "unavailable": "本存档有插件没有运行，游戏照常进行：",
     "invokeRuntime": {
       "setupPending": "这个插件还需要初始化。请先继续一个故事回合，并完成出现的初始化表单，再重试此操作。",
       "submitted": "已提交 {{count}} 个后台任务：{{ids}}，等待返回…",
@@ -1701,7 +1730,22 @@
     "invalidPanelSpecDetail": "面板定义无效：{{label}}（{{reason}}）",
     "rpc": {
       "failed": "插件任务失败，请重试。"
-    }
+    },
+    "off": {
+      "needsProvider": "{{plugin}} 已停用：它需要 {{contract}}。打开 {{providers}} 就能用。",
+      "noProvider": "{{plugin}} 已停用：它需要 {{contract}}，但没有已安装的插件提供它。请在「设置 → 安装与管理」中安装一个，安装后重启后端生效。",
+      "notInstalled": "{{plugin}} 没有安装，或者加载失败。",
+      "conflict": "{{plugin}} 和本存档的另一个插件冲突。",
+      "other": "{{plugin}} 现在无法运行，打开插件列表可以看到原因。",
+      "turnOn": "打开 {{plugin}}"
+    },
+    "noStory": {
+      "title": "没有开启叙事插件",
+      "detail": "回合不会产生故事：开启的插件里没有负责叙事的。",
+      "enable": "打开 {{plugins}} 就能得到故事。",
+      "install": "请在「设置 → 安装与管理」中安装一个叙事插件，安装后重启后端生效。"
+    },
+    "dependentsOff": "下面这些插件需要的东西被关掉了，开局后它们会停用："
   },
   "pluginJob": {
     "runtimesNotLoaded": "{{plugin}} 已授权，但它有 {{count}} 个任务无法加载，不会运行。",
@@ -1829,6 +1873,14 @@
       "empty": "暂无任务。",
       "copy": "复制",
       "rerun": "重新运行"
+    },
+    "candidateList": {
+      "draft": "草稿",
+      "send": "发送",
+      "accept": "采纳",
+      "regenerate": "重新生成",
+      "title": "候选",
+      "regenerateHint": "重新生成一组候选。"
     }
   },
   "graph": {
@@ -2250,17 +2302,6 @@
     "confirmDelete": "删除",
     "deleted": "已删除 {{count}} 项 · 释放 {{size}}",
     "skipped": "有 {{count}} 项现在正被会话使用，已保留"
-  },
-  "branchReply": {
-    "replyCandidates": "回复候选",
-    "draft": "草稿",
-    "send": "发送",
-    "accept": "采纳",
-    "regenerate": "重新生成",
-    "regenerateHint": "点「重新生成」获取这条回复的其他说法。",
-    "jobSubmitted": "已提交 branch-reply 任务: {{jobId}}",
-    "approvalRequired": "Branch reply 操作需要授权。",
-    "actionFailed": "Branch reply 操作失败"
   },
   "characterBlueprint": {
     "empty": "暂无角色蓝图",

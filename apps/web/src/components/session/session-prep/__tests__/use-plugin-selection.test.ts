@@ -473,6 +473,39 @@ describe("usePluginSelection", () => {
     );
   });
 
+  it("lists the selected plugins that turning off their provider leaves off", async () => {
+    const opening = plugin("opening", {
+      kind: "core",
+      provides: ["opening@1"],
+    });
+    const creator = plugin("creator", {
+      kind: "core",
+      requires: ["opening@1"],
+    });
+    vi.mocked(api.getWorldPluginPlan).mockResolvedValue(
+      selectionPlan(["opening", "creator"]),
+    );
+    const { result } = renderHook(() =>
+      usePluginSelection(
+        PLAN.worldId,
+        [opening, creator],
+        prepareWorldForServer,
+      ),
+    );
+    await waitFor(() => expect(result.current.pluginPlanLoading).toBe(false));
+    expect(result.current.dependentsOff).toEqual([]);
+    act(() => result.current.togglePlugin("opening"));
+    expect(result.current.dependentsOff).toEqual([
+      expect.objectContaining({
+        pluginId: "creator",
+        code: "missing-provider",
+        contract: "opening@1",
+      }),
+    ]);
+    act(() => result.current.togglePlugin("opening"));
+    expect(result.current.dependentsOff).toEqual([]);
+  });
+
   it("reports missing world plugins for the policy and for the active pack only", async () => {
     const pack = {
       id: "tabletop",
@@ -549,6 +582,150 @@ describe("usePluginSelection", () => {
     expect(result.current.selectedPluginIdSet.has("core")).toBe(false);
     expect(result.current.excludedPluginIds).toEqual(["core"]);
   });
+
+  it("turns off what a pack excludes and lifts only those exclusions for the next pack", async () => {
+    const lean: PluginPack = {
+      id: "lean",
+      label: "Lean",
+      requested: ["alternative"],
+      recommended: [],
+      excluded: ["core", "extra"],
+      tags: [],
+      source: "builtin",
+    };
+    vi.mocked(api.getWorldPluginPlan).mockResolvedValue({
+      ...selectionPlan(["core"]),
+      packs: [lean, ...PACKS],
+    });
+    const { result } = renderHook(() =>
+      usePluginSelection(PLAN.worldId, PACK_PLUGINS, prepareWorldForServer),
+    );
+    await waitFor(() => expect(result.current.pluginPlanLoading).toBe(false));
+    act(() => result.current.togglePlugin("manual"));
+    act(() => result.current.togglePlugin("manual"));
+    expect(result.current.excludedPluginIds).toEqual(["manual"]);
+
+    act(() => result.current.applyPack("lean"));
+    expect(result.current.selectedPluginIdSet).toEqual(
+      new Set(["alternative", "dependency"]),
+    );
+    expect(new Set(result.current.excludedPluginIds)).toEqual(
+      new Set(["manual", "core", "extra"]),
+    );
+
+    act(() => result.current.applyPack("full"));
+    expect(result.current.selectedPluginIdSet).toEqual(
+      new Set(["core", "extra"]),
+    );
+    expect(result.current.excludedPluginIds).toEqual(["manual"]);
+  });
+
+  it("keeps a player's later exclusion when switching away from the pack that first excluded it", async () => {
+    const lean: PluginPack = {
+      id: "lean",
+      label: "Lean",
+      requested: [],
+      recommended: [],
+      excluded: ["core"],
+      tags: [],
+      source: "builtin",
+    };
+    vi.mocked(api.getWorldPluginPlan).mockResolvedValue({
+      ...selectionPlan(["core"]),
+      packs: [lean, ...PACKS],
+    });
+    const { result } = renderHook(() =>
+      usePluginSelection(PLAN.worldId, PACK_PLUGINS, prepareWorldForServer),
+    );
+    await waitFor(() => expect(result.current.pluginPlanLoading).toBe(false));
+    act(() => result.current.applyPack("lean"));
+    act(() => result.current.togglePlugin("core"));
+    expect(result.current.selectedPluginIdSet.has("core")).toBe(true);
+    act(() => result.current.togglePlugin("core"));
+    act(() => result.current.applyPack("full"));
+    expect(result.current.excludedPluginIds).toContain("core");
+    expect(result.current.selectedPluginIdSet.has("core")).toBe(false);
+  });
+
+  it("starts with the exclusions of the world's initial pack", async () => {
+    const lean: PluginPack = {
+      id: "lean",
+      label: "Lean",
+      requested: ["alternative"],
+      recommended: [],
+      excluded: ["core"],
+      tags: [],
+      source: "world",
+    };
+    vi.mocked(api.getWorldPluginPlan).mockResolvedValue({
+      ...selectionPlan(["alternative"]),
+      packs: [lean],
+      selectedPackId: "lean",
+    });
+    const { result } = renderHook(() =>
+      usePluginSelection(PLAN.worldId, PLUGINS, prepareWorldForServer),
+    );
+    await waitFor(() => expect(result.current.pluginPlanLoading).toBe(false));
+    expect(result.current.excludedPluginIds).toEqual(["core"]);
+    expect(result.current.selectedPluginIdSet).toEqual(
+      new Set(["alternative", "dependency"]),
+    );
+  });
+
+  it.each(["core", "plugin"] as const)(
+    "goes back to the narrative plugins and what they and the world need with a %s dimension provider",
+    async (kind) => {
+      const story = [
+        { outputKind: "story" },
+      ] as unknown as PluginSummary["runtimes"];
+      const plugins = [
+        plugin("teller", { kind: "core", runtimes: story }),
+        plugin("helper", { kind: "core" }),
+        plugin("keeper", { kind: "core", provides: ["need@1"] }),
+        plugin("dims", { kind, provides: ["world.dimensions@1"] }),
+        plugin("world-pick"),
+        plugin("extra"),
+      ];
+      vi.mocked(api.getWorldPluginPlan).mockResolvedValue({
+        ...PLAN,
+        policy: {
+          ...PLAN.policy,
+          requested: ["world-pick"],
+          requires: ["need@1"],
+        },
+        defaultPluginIds: ["world-pick", "extra", "dims"],
+        packs: [
+          {
+            id: "full",
+            label: "Full",
+            requested: ["extra"],
+            recommended: [],
+            tags: [],
+            source: "builtin",
+          },
+        ],
+        selectedPackId: "full",
+      });
+      const { result } = renderHook(() =>
+        usePluginSelection(PLAN.worldId, plugins, prepareWorldForServer),
+      );
+      await waitFor(() => expect(result.current.pluginPlanLoading).toBe(false));
+      expect(result.current.selectedPluginIdSet).toEqual(
+        new Set(["teller", "helper", "keeper", "dims", "world-pick", "extra"]),
+      );
+
+      act(() => result.current.resetToMinimal());
+
+      expect(result.current.selectedPluginIdSet).toEqual(
+        new Set(["teller", "keeper", "dims"]),
+      );
+      expect(new Set(result.current.excludedPluginIds)).toEqual(
+        new Set(["helper", "world-pick"]),
+      );
+      expect(result.current.activePluginPack).toBeNull();
+      expect(result.current.unmetRequirements).toEqual([]);
+    },
+  );
 
   it("applies a replacement pack even when it excludes the currently locked core", async () => {
     const pack = {

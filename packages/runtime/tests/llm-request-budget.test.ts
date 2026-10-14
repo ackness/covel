@@ -1,3 +1,4 @@
+import { throughGateway } from "./helpers/through-gateway.js";
 import {
   AiProviderError,
   createGateway,
@@ -20,10 +21,7 @@ import {
   requestLLMResponse,
   type RequestLLMResponseOptions,
 } from "../src/agent-loop/tool-loop-handler.js";
-import {
-  acquireLLMSlot,
-  setLLMSlotCapForTests,
-} from "../src/retry/llm-slots.js";
+import { acquireLLMSlot, setLLMSlotCapForTests } from "@covel/shared";
 
 const messages = [{ role: "user" as const, content: "Hello" }];
 const policy = buildRetryPolicy({ runtimeTimeoutMs: 120_000, maxRetries: 3 });
@@ -341,7 +339,7 @@ describe.each(["generate", "stream"] as const)(
         await new Promise<never>(() => {});
       });
       const pending = run({
-        llm: { generate, stream },
+        llm: throughGateway({ generate, stream }),
         messages,
         policy,
         requestBudget: createLlmRequestBudget({ timeoutMs: 25 }),
@@ -364,7 +362,7 @@ describe.each(["generate", "stream"] as const)(
       const stream = vi.fn<NonNullable<LLMAdapter["stream"]>>();
       try {
         const pending = run({
-          llm: { generate, stream },
+          llm: throughGateway({ generate, stream }),
           messages,
           policy,
           deadline: Date.now() + 120_000,
@@ -399,7 +397,7 @@ describe.each(["generate", "stream"] as const)(
       try {
         let settled = false;
         const pending = run({
-          llm: { generate, stream },
+          llm: throughGateway({ generate, stream }),
           messages,
           policy,
           deadline: Date.now() + 100,

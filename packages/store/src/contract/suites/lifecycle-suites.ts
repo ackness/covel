@@ -459,6 +459,48 @@ export function registerLifecycleStoreSuites(getStore: () => DataStore): void {
       expect(await store.pruneAutoSnapshots("sess-prune", 2)).toBe(0);
     });
 
+    it("prunes by (createdAt, id), only in its own session, and down to nothing with keep 0", async () => {
+      const at = "2024-02-02T00:00:00.000Z";
+      for (const id of ["tie-b", "tie-a", "tie-c"])
+        await store.saveSnapshot(
+          makeSnapshot({
+            id,
+            sessionId: "sess-prune",
+            kind: "auto",
+            createdAt: at,
+          }),
+        );
+      await store.saveSnapshot(
+        makeSnapshot({
+          id: "elsewhere",
+          sessionId: "sess-other",
+          kind: "auto",
+        }),
+      );
+
+      // Newest first by id among one millisecond: tie-c, then tie-b.
+      expect(await store.pruneAutoSnapshots("sess-prune", 2)).toBe(1);
+      expect(
+        (await store.listSnapshots("sess-prune")).map((s) => s.id),
+      ).toEqual(["tie-b", "tie-c"]);
+
+      await store.saveSnapshot(
+        makeSnapshot({
+          id: "fork-of-tie-b",
+          sessionId: "sess-other",
+          kind: "fork",
+          parentId: "tie-b",
+        }),
+      );
+      expect(await store.pruneAutoSnapshots("sess-prune", 0)).toBe(1);
+      expect(
+        (await store.listSnapshots("sess-prune")).map((s) => s.id),
+      ).toEqual(["tie-b"]);
+      expect(
+        (await store.listSnapshots("sess-other")).map((s) => s.id).sort(),
+      ).toEqual(["elsewhere", "fork-of-tie-b"]);
+    });
+
     it("rejects an uncaptured summary reference without overwriting the snapshot", async () => {
       const snapshot = makeSnapshot();
       await store.saveSnapshot(snapshot);

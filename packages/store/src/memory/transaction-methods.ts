@@ -131,16 +131,26 @@ export const WRITE_METHOD_TOUCHES: Readonly<Record<string, Touched>> = {
   upsertVector: ["vectorRows"],
   deleteVectors: ["vectorRows"],
   lockSessionEmbeddingModel: ["sessionVectorTargets"],
+  resetSessionVectorIndex: [
+    "vectorRows",
+    "vectorIndexProgress",
+    "sessionVectorTargets",
+  ],
   // The shared model registry is independent of session lifecycle; resolving
   // an existing target does not mutate state.
   ensureVectorModel: [],
   resolveSessionVectorTarget: [],
 };
 
-/** Method-name prefixes that never mutate MemoryState. */
-const READ_METHOD_PREFIXES = ["get", "list", "search"] as const;
+/**
+ * Method-name prefixes that never mutate MemoryState. Every other store method
+ * must be a key of {@link WRITE_METHOD_TOUCHES};
+ * `tests/memory-transaction-rollback.test.ts` checks that each one is exactly
+ * one of the two, so a read never falls into the capture-everything fallback.
+ */
+const READ_METHOD_PREFIXES = ["get", "list", "search", "query"] as const;
 
-function isReadMethod(name: string): boolean {
+export function isReadMethod(name: string): boolean {
   return READ_METHOD_PREFIXES.some((p) => name.startsWith(p));
 }
 

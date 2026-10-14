@@ -4,12 +4,13 @@ export type {
   MediaAssetLookup,
   MediaAssetRecord,
   MediaRefRecord,
+  MediaClaim,
   MediaLifecyclePolicy,
   MediaCleanupResult,
   MediaStore,
 } from "./media.js";
 
-export { mediaRefSchema } from "./media.js";
+export { MEDIA_PIN_REF_PREFIX, mediaRefSchema } from "./media.js";
 
 export type {
   LLMTextPart,
@@ -40,6 +41,8 @@ export type {
   WorldDataSourceDescriptor,
   WorldDataDescriptor,
   WorldDataDiagnosticCounts,
+  WorldDataImportNotice,
+  WorldDataReceiverImport,
   WorldDataSourceSummary,
   WorldDataMetadataSummary,
 } from "./world-data.js";
@@ -177,6 +180,7 @@ export type {
   SessionStatus,
   Session,
   SessionEmbeddingInfo,
+  SessionMemoryIndexStatus,
 } from "./session.js";
 
 export type {
@@ -269,6 +273,7 @@ export {
   COVEL_EVENT_META,
   FORWARDED_EVENT_TYPES,
   PLAYER_ABORT_REASON,
+  executionMayBeRunning,
 } from "./protocol.js";
 
 export type {

@@ -151,6 +151,15 @@ import type {
 export interface SessionStore {
   createSession(session: SessionRecord): Promise<void>;
   getSession(id: string): Promise<SessionRecord | null>;
+  /**
+   * Updates the given fields of an existing session; a missing session is
+   * left alone. `metadata` is merged shallowly into the stored object: each
+   * key replaces its value, a key whose value is `undefined` is removed, and
+   * an empty result is stored as no metadata. The merge is atomic on every
+   * backend, so two concurrent updates of different keys both survive. Two
+   * updates of the same key still race (one wins), and a caller that reads
+   * metadata to decide what to write needs the session lock.
+   */
   updateSession(
     id: string,
     patch: Partial<
@@ -299,6 +308,8 @@ export interface MessageStore {
    * no-ops. Call within the turn finalization transaction.
    */
   commitPlayerInputMessage(record: MessageRecord): Promise<void>;
+  /** One message of this session by ID, or null. */
+  getMessage(sessionId: string, id: string): Promise<MessageRecord | null>;
   listMessages(
     sessionId: string,
     pagination?: PaginationOpts,
@@ -685,7 +696,8 @@ export interface WorldDataImportLedgerStore {
 export interface LorebookStore {
   /**
    * Upsert a batch of session-scoped lorebook entries. Same `(sessionId, owner, id)`
-   * replaces the existing row. Used by the `lorebook.upsert` proposal commit
+   * replaces the existing row. The batch is atomic: when one entry fails, none
+   * of the batch is written. Used by the `lorebook.upsert` proposal commit
    * handler and by plugins that emit world data through the lorebook
    * pipeline.
    */
@@ -927,7 +939,8 @@ export interface SnapshotStore {
   /**
    * Delete a session's `auto` snapshots older than its newest `keep`, never
    * one that a fork still names as `parentId`. Manual and fork snapshots are
-   * kept. Returns how many snapshots were deleted.
+   * kept. Returns how many snapshots were deleted. The SQL backends do it in
+   * one DELETE statement.
    */
   pruneAutoSnapshots(sessionId: string, keep: number): Promise<number>;
 }
@@ -954,6 +967,11 @@ export interface TransactionalStore {
    *   serialize transactions and bundled root mutators through one write gate,
    *   so an unrelated root write waits instead of being folded into a rollback.
    *   SQLite gates every store sharing its connection.
+   *
+   * **Write only through `tx` inside `fn`.** A `DataStore` write made through
+   * the root store from inside `fn` rejects with
+   * `RootStoreWriteInTransactionError` on every backend and writes nothing;
+   * root reads are allowed.
    *
    * **Nesting is not supported on any backend.** Calling `withTransaction` from
    * inside another `withTransaction` callback rejects with a clear error rather

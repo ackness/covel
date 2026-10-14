@@ -36,7 +36,19 @@ export interface PluginResolutionRejection {
   readonly reason: string;
   readonly candidates?: readonly string[];
   readonly path?: readonly (string | number)[];
+  /** The required contract nobody provides, on a dependency rejection. */
+  readonly contract?: string;
 }
+/**
+ * A plugin turned off because something it requires is missing or has
+ * several providers. It is not the player's choice: the session plays on
+ * without it and tells the player which contract it waits for.
+ */
+export const isDependencyRejection = (
+  item: PluginResolutionRejection,
+): item is PluginResolutionRejection & { readonly contract: string } =>
+  (item.code === "missing-provider" || item.code === "ambiguous-provider") &&
+  item.contract !== undefined;
 /** A contract the session's world requires that no active plugin provides. */
 export interface UnmetWorldRequirement {
   readonly contract: string;
@@ -53,7 +65,11 @@ export interface SessionPluginResolution {
   readonly rejected: PluginResolutionRejection[];
   readonly unmet: UnmetWorldRequirement[];
 }
-/** Requirements that are a setup problem rather than a choice the player made. */
+/**
+ * Requirements that are a setup problem (no provider, or several and none
+ * chosen) rather than a choice the player made. Neither stops a session: it
+ * starts without that part of the world, and the player is told.
+ */
 export const isBlockingWorldRequirement = (item: UnmetWorldRequirement) =>
   item.code === "missing-provider" || item.code === "ambiguous-provider";
 const singlePoints = new Set<string>(
@@ -109,6 +125,7 @@ export function resolveSessionPlugins(args: {
     reason: string,
     candidates?: string[],
     path?: readonly (string | number)[],
+    contract?: string,
   ) => {
     active.delete(id);
     autoAdded.delete(id);
@@ -119,6 +136,7 @@ export function resolveSessionPlugins(args: {
         reason,
         ...(candidates ? { candidates } : {}),
         ...(path ? { path } : {}),
+        ...(contract ? { contract } : {}),
       });
   };
   const eligible = (p: SessionPluginCandidate) =>
@@ -216,6 +234,8 @@ export function resolveSessionPlugins(args: {
           (candidates.length ? candidates : awaitingApproval).map(
             (candidate) => candidate.id,
           ),
+          undefined,
+          required,
         );
         break;
       }
@@ -320,6 +340,8 @@ export function resolveSessionPlugins(args: {
           pending.length ? "approval-required" : "missing-provider",
           `Required contract ${missing} has no active provider`,
           pending.map((provider) => provider.id),
+          undefined,
+          missing,
         );
         changed = true;
       }
@@ -398,4 +420,28 @@ export function resolveConfirmedSessionPlugins(args: {
       : {}),
     fixed: true,
   });
+}
+
+/**
+ * The plugins a resolution turned off for a missing dependency that the
+ * player meant to have: requested ones and `core` ones. A session confirms
+ * them with the rest, so they stay off while the dependency is missing,
+ * the player is told why, and they run again once it is back.
+ */
+export function disabledDependents(
+  resolution: Pick<SessionPluginResolution, "rejected">,
+  args: {
+    readonly requested: readonly string[];
+    readonly plugins: readonly Pick<SessionPluginCandidate, "id" | "kind">[];
+  },
+): (PluginResolutionRejection & { readonly contract: string })[] {
+  const core = new Set(
+    args.plugins.filter((plugin) => plugin.kind === "core").map((p) => p.id),
+  );
+  return resolution.rejected
+    .filter(isDependencyRejection)
+    .filter(
+      (item) =>
+        args.requested.includes(item.pluginId) || core.has(item.pluginId),
+    );
 }

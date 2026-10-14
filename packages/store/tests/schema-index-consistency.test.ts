@@ -36,7 +36,10 @@
 import { describe, it, expect } from "vitest";
 import { DatabaseSync } from "node:sqlite";
 
-import { createTables } from "../src/sqlite/sqlite-schema-ddl.js";
+import {
+  CREATE_TABLES_SQL as SQLITE_CREATE_TABLES_SQL,
+  createTables,
+} from "../src/sqlite/sqlite-schema-ddl.js";
 import { CREATE_TABLES_SQL } from "../src/postgres/pg-schema-ddl.js";
 import * as sqliteSchema from "../src/sqlite/schema.js";
 import * as pgSchema from "../src/postgres/schema.js";
@@ -349,6 +352,21 @@ describe("schema/DDL index consistency", () => {
     } finally {
       sqlite.close();
     }
+  });
+
+  it("SQLite and PostgreSQL declare the same indexes, partial predicates included", () => {
+    // Both backends serve the same queries, so an index one of them lacks is a
+    // read the other answers by scanning (F-032: PG had no turn_results order
+    // index). Names differ only by the `pg_` prefix.
+    const indexLines = (ddl: string): string[] =>
+      ddl
+        .split("\n")
+        .filter((line) => /^CREATE (UNIQUE )?INDEX/.test(line))
+        .map((line) => line.replace(/IF NOT EXISTS "pg_/, 'IF NOT EXISTS "'))
+        .sort();
+    expect(indexLines(CREATE_TABLES_SQL)).toEqual(
+      indexLines(SQLITE_CREATE_TABLES_SQL),
+    );
   });
 
   it("SQLite DDL index set matches the Drizzle schema", () => {
