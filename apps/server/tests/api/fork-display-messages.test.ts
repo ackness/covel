@@ -126,19 +126,30 @@ async function successfulFork(snapshot: SnapshotRecord) {
 
 it("preserves ordered chat history and excludes later same-millisecond messages across repeated forks", async () => {
   await add("old", "2026-08-31T00:00:00.000Z");
-  // Insert out of id order to exercise the UI's timestamp/id ordering.
+  // Same-time rows keep write order even when their random IDs sort differently.
   await add("z-story");
   await add("b-story");
   const snapshot = await capture();
+  const parentMessages = await store.listMessagesPage("parent", { limit: 10 });
+  expect(parentMessages.map((message) => message.content)).toEqual([
+    "old",
+    "z-story",
+    "b-story",
+  ]);
   await add("a-later");
   await add("later", "2026-09-02T00:00:00.000Z");
   const child = await successfulFork(snapshot);
   const restored = await requireSnapshot(store, child.sessionId);
   expect(restored.messages.map((message) => message.content)).toEqual([
     "old",
-    "b-story",
     "z-story",
+    "b-story",
   ]);
+  expect(
+    (await store.listMessagesPage(child.sessionId, { limit: 10 })).map(
+      (message) => message.content,
+    ),
+  ).toEqual(parentMessages.map((message) => message.content));
   expect(restored.messages[1]!).toMatchObject({
     kind: "story",
     turnId: "turn",
@@ -156,7 +167,7 @@ it("preserves ordered chat history and excludes later same-millisecond messages 
     (await requireSnapshot(store, grandchild.sessionId)).messages.map(
       (message) => message.content,
     ),
-  ).toEqual(["old", "b-story", "z-story"]);
+  ).toEqual(parentMessages.map((message) => message.content));
   expect(await store.listMessages("parent")).toHaveLength(5);
 });
 
