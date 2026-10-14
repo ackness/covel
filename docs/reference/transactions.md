@@ -319,7 +319,7 @@ SqliteStore、MemoryStore 和 PgStore（都在 Node 上）用同一种办法：
 
 - 浏览器 checkpoint 的上传和下载由 `LocalDataService` 串行化。在补水（hydration）或暂存另一个动作之前，它负责恢复持久化的待定提交。
 - 临时会话不存在时，清除待定标记，并允许从浏览器 checkpoint 重建。其他错误保留标记，并阻止更新的提交。
-- checkpoint 导出用 `listRuntimeResults(sessionId)` 对每个会话只读一次 runtime 结果。省略 `turnId` 返回会话的全部行，包括被中断、没有 turn-result 行的执行；传入 `turnId` 时，每个后端上都保留原有的按回合过滤。
+- checkpoint 导出读 `listTurnResults(sessionId)` 与 `listRuntimeOutputs(sessionId)`，只保留最近 40 个执行（`JOURNAL_EXECUTION_WINDOW`）的行；被中断而没有 turn-result 行的执行不随检查点保存。
 - 上传和提交路由在使用 revision 或幂等缓存之前，在会话锁内重新检查属主、incarnation 和删除状态。缓存条目属于一个 incarnation；同一个 ID 被重新创建之后，旧条目被丢弃。
 
 **导入和替换。**

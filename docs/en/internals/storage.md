@@ -57,7 +57,7 @@ When you add a table or a query, put it in the module for its feature area, add 
 
 **World settings are not cached per process.** The schemas of world settings and memory blocks are read every time from the DataStore being used. A committed change, or a replacement with the same ID, is visible on the next read. Separate store instances do not accidentally share world records. Runtime settings are taken once at the start of each operation, and later changes do not affect an operation already in progress.
 
-**Deleting archived vectors.** Before archived vectors are deleted, both sources, the characters and the lorebook (the setting collection), must be read successfully.
+**Deleting archived vectors.** Before archived vectors are deleted, three kinds of source must be read successfully: the characters, the lorebook (the setting collection), and the plugin data of the active plugins that declare their namespace searchable (`contributes.data.<ns>.search`).
 
 - If reading either source fails, this round of archive cleanup is aborted. The existing vectors and content hashes are kept, and a warning with the session information is emitted.
 - If reading a source succeeds but its content is empty, the empty result is trusted, and outdated entries are still deleted.
@@ -67,7 +67,7 @@ When you add a table or a query, put it in the module for its feature area, add 
 
 `MemorySystem` manages its own background jobs. Before the host closes its store, it stops whatever produces the jobs, calls this instance's `drain()`, and then checks `pendingTaskCount()`. Separate instances do not share a process-level drain barrier.
 
-**Checking sources at query time.** Before a query on archived vectors returns content, it checks the candidates against the current character and lorebook records. If a candidate has been deleted or changed, the query falls back to keyword search until the asynchronous write job refreshes the index. Writing the lorebook through the API also schedules a write job. Deleting one archive source removes only its own vectors. The other unchanged vectors are kept, and embedding is not called again.
+**Checking sources at query time.** Before a query on archived vectors returns content, it checks the candidates against the current character, lorebook and searchable plugin data records. If a candidate has been deleted or changed, the query falls back to keyword search until the asynchronous write job refreshes the index. Writing the lorebook through the API also schedules a write job. Deleting one archive source removes only its own vectors. The other unchanged vectors are kept, and embedding is not called again.
 
 **Where progress is stored.** The recall cursor and the archive hashes are stored in the `vector_index_progress` table. They sit next to the physical index, not in `plugin_data`.
 
