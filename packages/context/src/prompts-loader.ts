@@ -8,13 +8,12 @@
  *
  *   prompts/
  *     server/
- *       compactor.zh.md
- *       compactor.en.md
  *       generate-world.md      ← locale-less default
+ *       repair-world-lore.md   ← locale-less default
  *
- *     <plugin-id>/
- *       <name>.zh.md
- *       <name>.en.md
+ * A locale file such as `generate-world.zh.md` next to a default takes over for
+ * that locale (see the resolution order below). Plugin prompts are not kept
+ * here: a plugin package keeps its own prompt files.
  *
  * Locale resolution order (matches the spec in AGENTS.md):
  *   1. exact match           — `compactor.zh-CN.md`

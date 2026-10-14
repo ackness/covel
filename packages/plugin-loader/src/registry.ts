@@ -31,13 +31,24 @@ import {
  * Complete declaration-time runtime definitions for a registry entry.
  * `loadedRuntimes` is deliberately excluded: it is only a partial executable
  * artifact cache and must not influence discovery or session activation.
+ * Registration replaces the entry object, so old snapshots retain their
+ * manifests while the new registration gets a fresh cache entry.
  */
+const runtimeManifestsCache = new WeakMap<
+  PluginRegistryEntry,
+  readonly RuntimeManifest[]
+>();
+
 function declaredRuntimeManifests(
   entry: PluginRegistryEntry,
 ): readonly RuntimeManifest[] {
-  return pluginRuntimeManifests(entry).map((parsed) =>
+  const cached = runtimeManifestsCache.get(entry);
+  if (cached) return cached;
+  const manifests = pluginRuntimeManifests(entry).map((parsed) =>
     resolvePluginRuntimeManifest(entry, parsed.manifest),
   );
+  runtimeManifestsCache.set(entry, manifests);
+  return manifests;
 }
 
 function mergeDataSchemas(
@@ -251,7 +262,6 @@ export function createPluginRegistry(
           );
     },
     register(entry: PluginRegistryEntry): void {
-      resolvePluginDeclarations(pluginDeclarations(entry));
       const dataSchemas = mergeDataSchemas(entry);
       const worldProjections = mergeWorldProjections(entry);
       validateWorldProjectionTargets(entry.id, dataSchemas, worldProjections);

@@ -4,7 +4,7 @@ Root `PLUGIN.md` and child `RUNTIME.md` use strict YAML frontmatter. The main ch
 
 ## Package manifest
 
-Optional credits (`author`, `license`, `homepage`) are display data shown before play; links are `https` only. Fields and limits: `docs/reference/plugins.md` ("作者信息"). When the package has a `package.json`, its `version` equals the manifest `version`.
+Optional credits (`author`, `license`, `homepage`) are display data shown before play; links are `https` only. Fields and limits: `docs/reference/plugins.md` ("作者信息"). The scaffold starts both the manifest and `package.json` at version `0.1.0`; update both together. When the package has a `package.json`, its `version` equals the manifest `version`.
 
 ```yaml
 ---
@@ -67,7 +67,7 @@ function:
 
 `type` is `agent` or `function`. Stage runtimes (`auto`/`scheduled`) declare `schedule.stage`: `setup`, `pre-turn`, `narrative`, `post-turn`, or `audit`. Manual/event runtimes omit stage and may use `schedule.manual.execution: background`. Stage background work uses `schedule.completion` with a detached mode and bounded queue/execution deadlines. Dependencies belong in `schedule.needs` (success gating) and `schedule.after` (ordering only).
 
-`io.inputs` binds named inputs from `{runtime: local-id}` or `{contract: name@1}`. Use relative local runtime IDs within the package. Required turn inputs imply a success dependency; optional inputs allow absence. `select` is a JSON Pointer into the successful upstream value. Function code reads `ctx.inputs.<name>.value`; agent prompts receive the `runtime-inputs` block. Committed outputs use `scope: committed` plus `recordAs`. A detached kernel digest uses `from: {kernel: turn-digest@1}`. Always-detached manual/event runtimes cannot bind same-execution turn outputs.
+`io.inputs` binds named inputs from `{runtime: sample-notes/extract}` or `{contract: name@1}`. Within a multi-runtime package, write the complete `<pluginId>/<runtimeId>`; an inline runtime uses its package ID. See [reference scope](../../../../docs/reference/plugins.md#依赖和引用的范围). Required turn inputs imply a success dependency; optional inputs allow absence. `select` is a JSON Pointer into the successful upstream value. Function code reads `ctx.inputs.<name>.value`; agent prompts receive the `runtime-inputs` block. Committed outputs use `scope: committed` plus `recordAs`. A detached kernel digest uses `from: {kernel: turn-digest@1}`. Always-detached manual/event runtimes cannot bind same-execution turn outputs.
 
 `io.selfData` contains own-plugin namespace injections, without a `kind` field. `io.payloadSchema` validates invocation payloads. `io.output` supports `contract`, `schema`, and `recordAs`. `io.visibility` is `story`, `plugin`, or `system`.
 

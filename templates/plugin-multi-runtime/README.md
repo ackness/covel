@@ -55,7 +55,7 @@ pnpm test:runtime -- {{pluginName}} --pretty
 - 改 `runtimes/note/ui/panel.json`，调整面板布局或加入更多组件（参考 `docs/reference/ui-components.md`）。
 - 加新 runtime：在 `runtimes/` 下新建子目录，里面放 `RUNTIME.md`（agent 模式）或 `RUNTIME.md` + `handler.js`（function 模式）。
 - 与其他插件协作：在根 `PLUGIN.md` 用 `provides` / `requires` / `optional` 声明版本化契约，runtime 通过 `io.inputs` 的 `from: { contract }` 读取；不要引用其他包的 runtime ID 或数据 namespace。
-- 脚手架已在根 `PLUGIN.md` 写入 `covel: ">=<创建时的宿主版本>"`，范围之外的宿主不安装也不加载这个包。发布前填写 `version`；在更早的版本上验证过就把下限调低，需要上限时写成 `">=0.0.45 <0.1.0"`。
+- 脚手架已在根 `PLUGIN.md` 写入 `covel: ">=<创建时的宿主版本>"`，范围之外的宿主不安装也不加载这个包。两处版本已统一为 `0.1.0`，发布新版本时同时修改 `PLUGIN.md` 和 `package.json` 的 `version`；在更早的版本上验证过就把下限调低，需要上限时写成 `">=0.0.45 <0.1.0"`。
 
 ## 参考
 
@@ -69,3 +69,5 @@ pnpm test:runtime -- {{pluginName}} --pretty
 发布给安装器的目录必须自包含，不携带 workspace 运行时依赖；需要的 SDK helpers 在发布前打包。
 
 默认 analyst 示例在 `post-turn` 自动运行，读取本回合叙事绑定；note 示例保留手动函数入口。记录 ID 来自 `ctx.random`，时间戳由代码或存储写入，agent 只提交稳定的事实 key 和内容。
+
+`tests/runtime-cases.json` 带编辑器用的 `$schema`。用例必须写 `name` 和 `runtimeId`；未知字段（包括拼错的 `expect`）会在执行前报错。

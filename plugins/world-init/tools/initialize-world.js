@@ -3,17 +3,17 @@ import {
   getToolContent,
   withPendingProposals,
 } from "@covel/plugin-handlers-utils";
-import makeSetWorldSchema, {
+import {
+  initializeCharacterSchema,
   createWorldAttributeSchema,
-} from "./set-world-schema.js";
-import makeSetWorldDimensions, {
+} from "../lib/initialize-character-schema.js";
+import {
+  initializeDimensionDefinitions,
   createDimensionDefinitionSchema,
-} from "./set-world-dimensions.js";
+} from "../lib/initialize-dimensions.js";
 
 export default function (toolkit) {
   const { tool, z } = toolkit;
-  const setSchema = makeSetWorldSchema(toolkit);
-  const setDimensions = makeSetWorldDimensions(toolkit);
   return tool({
     name: "initialize-world",
     description:
@@ -53,9 +53,12 @@ export default function (toolkit) {
       // tell the model whether the world has any, so a model often sends
       // definitions as well. Refusing them cost another model call at the
       // start of every session of such a world; they are left out instead.
-      const schemaResult = await setSchema.execute({ types, attributes }, ctx);
-      const dimensionsResult = await setDimensions.execute(
-        { definitions: declared ?? definitions ?? {} },
+      const schemaResult = initializeCharacterSchema(
+        { types, attributes },
+        ctx,
+      );
+      const dimensionsResult = initializeDimensionDefinitions(
+        declared ?? definitions ?? {},
         ctx,
       );
       const schema = getToolContent(schemaResult);

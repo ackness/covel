@@ -5,6 +5,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import type { PluginDiscoveryResult } from "./types.js";
+import { runtimeDirectoryDiagnostics } from "./runtime-directory.js";
 
 /**
  * Check whether a path is a directory.
@@ -62,62 +63,60 @@ export async function discoverPlugins(
       continue;
     }
 
-    const runtimesDir = path.join(rootPath, "runtimes");
-    const pluginMdPath = path.join(rootPath, "PLUGIN.md");
-    const disabledPath = path.join(rootPath, "PLUGIN.md.disabled");
-
-    // Skip disabled plugins
-    if (await fileExists(disabledPath)) {
-      continue;
-    }
-
-    // Check for multi-runtime layout
-    if (await isDirectory(runtimesDir)) {
-      const runtimeEntries = await fs.readdir(runtimesDir, {
-        withFileTypes: true,
-      });
-      const pluginMdPaths: string[] = [];
-      // One package with a broken layout must not hide every other package:
-      // it is reported with the error instead of failing the whole scan.
-      let layoutError: string | undefined;
-
-      for (const rtEntry of runtimeEntries) {
-        if (!rtEntry.isDirectory()) {
-          continue;
-        }
-        const oldPath = path.join(runtimesDir, rtEntry.name, "PLUGIN.md");
-        if (await fileExists(oldPath))
-          layoutError ??= `${oldPath}: runtime manifests must be named RUNTIME.md`;
-        const rtPluginMd = path.join(runtimesDir, rtEntry.name, "RUNTIME.md");
-        if (await fileExists(rtPluginMd)) {
-          pluginMdPaths.push(rtPluginMd);
-        }
-      }
-
-      if (!(await fileExists(pluginMdPath)))
-        layoutError ??= `${rootPath}: a plugin root PLUGIN.md is required`;
-      results.push({
-        id: entry.name,
-        rootPath,
-        isMultiRuntime: true,
-        pluginMdPaths,
-        ...(layoutError ? { layoutError } : {}),
-      });
-      continue;
-    }
-
-    // Check for single-runtime layout
-    if (await fileExists(pluginMdPath)) {
-      results.push({
-        id: entry.name,
-        rootPath,
-        isMultiRuntime: false,
-        pluginMdPaths: [pluginMdPath],
-      });
-    }
+    const discovery = await discoverPluginAt(rootPath);
+    if (discovery) results.push(discovery);
   }
 
   return results;
+}
+
+/** Discover one package without importing its code. Disabled/non-plugin roots are absent. */
+export async function discoverPluginAt(
+  rootPath: string,
+): Promise<PluginDiscoveryResult | undefined> {
+  rootPath = path.resolve(rootPath);
+  const id = path.basename(rootPath);
+  const pluginMdPath = path.join(rootPath, "PLUGIN.md");
+  if (await fileExists(path.join(rootPath, "PLUGIN.md.disabled")))
+    return undefined;
+  const runtimesDir = path.join(rootPath, "runtimes");
+  if (!(await isDirectory(runtimesDir))) {
+    return (await fileExists(pluginMdPath))
+      ? { id, rootPath, isMultiRuntime: false, pluginMdPaths: [pluginMdPath] }
+      : undefined;
+  }
+  const runtimeEntries = await fs.readdir(runtimesDir, { withFileTypes: true });
+  const pluginMdPaths: string[] = [];
+  const layoutWarnings: string[] = [];
+  let layoutError: string | undefined;
+  for (const entry of runtimeEntries.sort((a, b) =>
+    a.name.localeCompare(b.name),
+  )) {
+    // Match authoring tools: runtime symlinks are not runtime directories.
+    if (!entry.isDirectory()) continue;
+    const directory = path.join(runtimesDir, entry.name);
+    const files = (await fs.readdir(directory, { withFileTypes: true }))
+      .filter((file) => file.isFile() || file.isSymbolicLink())
+      .map((file) => file.name);
+    const diagnostic = runtimeDirectoryDiagnostics(directory, files);
+    layoutError ??= diagnostic.error;
+    if (diagnostic.warning) layoutWarnings.push(diagnostic.warning);
+    if (
+      files.includes("RUNTIME.md") &&
+      (await fileExists(path.join(directory, "RUNTIME.md")))
+    )
+      pluginMdPaths.push(path.join(directory, "RUNTIME.md"));
+  }
+  if (!(await fileExists(pluginMdPath)))
+    layoutError ??= `${rootPath}: a plugin root PLUGIN.md is required`;
+  return {
+    id,
+    rootPath,
+    isMultiRuntime: true,
+    pluginMdPaths,
+    ...(layoutError ? { layoutError } : {}),
+    ...(layoutWarnings.length ? { layoutWarnings } : {}),
+  };
 }
 
 /**

@@ -1040,3 +1040,78 @@ describe("vector recall", () => {
     expect(hits.every((h) => !h.payload?.includes("Aldric"))).toBe(true);
   });
 });
+
+describe("vector search result identity and excerpts", () => {
+  it("dedupes indexed messages by ID while retaining identical distinct messages", async () => {
+    const store = createMemoryStore();
+    const sessionId = "excerpt-top-up";
+    await lockModel(store, sessionId);
+    const content =
+      "unrelated background ".repeat(60) +
+      "sapphire compass was hidden here. " +
+      "afterwards ".repeat(60);
+    const now = "2026-01-01T00:00:00Z";
+    for (const [index, id] of ["indexed", "unindexed"].entries()) {
+      await store.appendTurnMessage({
+        id,
+        sessionId,
+        turnId: "same-turn",
+        role: "assistant",
+        sourceType: "runtime",
+        content,
+        order: index,
+        createdAt: now,
+      });
+    }
+    await store.upsertVector({
+      sessionId,
+      pluginId: MEMORY_VECTOR_PLUGIN_ID,
+      namespace: RECALL_NAMESPACE,
+      key: "indexed",
+      embedding: embedText(content),
+      payload: JSON.stringify({
+        turnId: "same-turn",
+        role: "assistant",
+        content,
+        createdAt: now,
+      }),
+    });
+    const system = createMemorySystem({ store, embed });
+    const results = await system.recall.search(
+      sessionId,
+      "sapphire compass",
+      5,
+    );
+    expect(results).toHaveLength(2);
+    expect(results.map((result) => result.messageId)).toEqual([
+      "indexed",
+      "unindexed",
+    ]);
+    for (const result of results) {
+      expect(result.content).toContain("sapphire compass was hidden here");
+      expect(result.content.length).toBeLessThanOrEqual(502);
+      expect(result.content).not.toBe(content);
+    }
+    expect(results[0]?.content).toBe(results[1]?.content);
+  });
+
+  it("returns query-centered archival excerpts, and a bounded prefix for semantic-only hits", async () => {
+    const store = createMemoryStore();
+    const sessionId = "archival-excerpt";
+    await lockModel(store, sessionId);
+    const content =
+      "unrelated background ".repeat(60) +
+      "sapphire compass was hidden here. " +
+      "afterwards ".repeat(60);
+    await addLorebook(store, sessionId, "long-entry", "navigation", content);
+    const system = createMemorySystem({ store, embed });
+    await system.ingest(sessionId);
+    const hits = await system.archival.search(sessionId, "sapphire compass", 1);
+    expect(hits).toHaveLength(1);
+    expect(hits[0]?.content).toContain("sapphire compass was hidden here");
+    expect(hits[0]!.content.length).toBeLessThanOrEqual(502);
+    const semantic = await system.archival.search(sessionId, "seafaring", 1);
+    expect(semantic).toHaveLength(1);
+    expect(semantic[0]!.content.length).toBeLessThanOrEqual(502);
+  });
+});

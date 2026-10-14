@@ -2,7 +2,13 @@ import { describe, it, expect, vi, beforeAll, afterAll } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { getMusicWire, getSpeechWire, getTextWire } from "@covel/ai-provider";
+import {
+  getImageWire,
+  getMusicWire,
+  getSpeechWire,
+  getTextWire,
+  getTranscriptionWire,
+} from "@covel/ai-provider";
 import {
   createPluginRegistry,
   loadPluginDefinition,
@@ -380,6 +386,49 @@ describe("createBootstrapPluginEntries", () => {
       expect(getTextWire("entry-text-wire/chat")).not.toBeNull();
       vi.stubEnv("DEPLOYMENT_TIER", "demo");
       expect(getTextWire("entry-text-wire/chat")).toBeNull();
+    } finally {
+      vi.unstubAllEnvs();
+      await entries.close();
+    }
+  });
+
+  it("serves a plugin's media wires only to sessions in which that plugin is active", async () => {
+    const plugin = writePlugin(
+      "entry-media-wire",
+      `
+      export default function(api) {
+        api.registerWires({
+          image: [{ id: "paint", async generate() { return { images: [], usage: null, warnings: [] }; } }],
+          speech: [{ id: "voice", async synthesize() { return {}; } }],
+          transcription: [{ id: "ears", async transcribe() { return {}; } }],
+          music: [{ id: "song", async compose() { return {}; } }],
+        });
+      }
+    `,
+      { source: "community" },
+    );
+    const params = makeParams([plugin]);
+    const entries = await createBootstrapPluginEntries(params);
+    const lookups = () => [
+      getImageWire("entry-media-wire/paint"),
+      getSpeechWire("entry-media-wire/voice"),
+      getTranscriptionWire("entry-media-wire/ears"),
+      getMusicWire("entry-media-wire/song"),
+    ];
+    try {
+      await entries.ensurePluginEntry("entry-media-wire", "with");
+      params.pluginRegistry.syncSessionActivations("with", [
+        "entry-media-wire",
+      ]);
+      params.pluginRegistry.syncSessionActivations("without", []);
+      await entries.withSnapshot("with", async () => {
+        expect(lookups().every(Boolean)).toBe(true);
+      });
+      await entries.withSnapshot("without", async () => {
+        expect(lookups()).toEqual([null, null, null, null]);
+      });
+      vi.stubEnv("DEPLOYMENT_TIER", "demo");
+      expect(lookups()).toEqual([null, null, null, null]);
     } finally {
       vi.unstubAllEnvs();
       await entries.close();

@@ -216,3 +216,56 @@ export async function finalizeJobStatuses(
     );
   }
 }
+
+/**
+ * Settle the jobs a suspended execution reported, which its own finalizer left
+ * in `waiting-input`. They live under the suspended execution's progress scope
+ * (its `executionId`), not under the resume's. A committed resume ends them as
+ * the resumed runtime ended (`success`); an abandoned, expired or voided
+ * suspension ends them `cancelled` (`skipped`). A failed resume that can be
+ * retried leaves them waiting. Best-effort like every job-status write: a
+ * failure is logged and never changes the outcome it follows.
+ */
+export async function finalizeSuspendedJobStatuses(
+  deps: {
+    readonly store: Pick<DataStore, "appendJobStatus" | "listJobStatus">;
+    readonly eventBus?: EventBus;
+  },
+  suspended: {
+    readonly sessionId: string;
+    readonly executionId: string;
+    readonly pluginId: string;
+    readonly runtimeId: string;
+  },
+  outcome: "success" | "skipped",
+): Promise<void> {
+  try {
+    const reported = await deps.store.listJobStatus(suspended.sessionId, {
+      progressScopeId: suspended.executionId,
+    });
+    const jobIds = reported
+      .filter(
+        (record) =>
+          record.pluginId === suspended.pluginId &&
+          record.runtimeId === suspended.runtimeId,
+      )
+      .map((record) => record.jobId);
+    if (jobIds.length === 0) return;
+    await finalizeJobStatuses(
+      {
+        store: deps.store,
+        ...(deps.eventBus ? { eventBus: deps.eventBus } : {}),
+        sessionId: suspended.sessionId,
+        progressScopeId: suspended.executionId,
+        pluginId: suspended.pluginId,
+        runtimeId: suspended.runtimeId,
+      },
+      { outcome, reportedJobs: jobIds },
+    );
+  } catch (err) {
+    console.warn(
+      "[job-status] settling a suspended execution's jobs failed:",
+      err instanceof Error ? err.message : String(err),
+    );
+  }
+}

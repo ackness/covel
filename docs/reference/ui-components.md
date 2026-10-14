@@ -138,7 +138,7 @@
 
 | 组件              | 用途                                                                                                                                                                        | 主要属性                                    |
 | ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------- |
-| `GraphCanvas`     | 力导向关系图，用 `react-force-graph-2d`（按需加载，gzip 后约 60 KB）。它画面板给它的节点和边。                                                                              | `nodes`、`edges`、`node`、`edge`、`height?` |
+| `GraphCanvas`     | 力导向关系图，用 `react-force-graph-2d`（按需加载，gzip 后约 60 KB）。它画面板给它的节点和边。                                                                              | `nodes`、`edges`、`node`、`edge`、`height?`、`emptyText?` |
 | `WorldDimensions` | 按 schema 显示会话维度的值和版本。宿主校验过的 runtime 元数据可用时，还提供编辑和待结算恢复。它读公开的会话快照，不读作者写的初值，也不读插件 namespace；不需要写任何绑定。 | —                                           |
 
 **`WorldDimensions`**
@@ -150,10 +150,13 @@
 **`GraphCanvas` 的数据映射**
 
 - `nodes` 和 `edges` 可以是数组，也可以是“键 → 记录”的对象。
-- `node` 映射声明：`idField`、`labelField`、`typeField`、`summaryField`、`labelsField`、`colors`（按类型）和 `defaultColor`。
-- `edge` 映射声明：`idField`、`sourceField`、`targetField`、`relationField`、`strengthField`、`factField`、`inactiveField` 和 `colors`（`positive`、`negative`、`neutral`）。
-- 字段路径相对于每条记录。
-- 一条边只要配置的 inactive 字段有值就隐藏，值是 `0` 也算。
+- `node` 必填映射：`idField`、`labelField`、`colors`（按类型）和 `defaultColor`。`typeField`、`summaryField`、`labelsField` 可省略。
+- `edge` 必填映射：`idField`、`sourceField`、`targetField`。`relationField`、`strengthField`、`factField`、`inactiveField`、`defaultColor` 和 `colors`（`positive`、`negative`、`neutral`）可省略。
+- 字段路径相对于每条记录。缺少端点的边不显示。
+- 没有强度字段或记录缺少强度值时，边使用 `defaultColor`，其次用 `colors.neutral`，最后用灰色 `#94a3b8`。模型线宽为 1，画布最小线宽为 2.5，布局距离为 110。
+- 有限数值强度保留原有行为：模型线宽为 `1 + abs(strength) * 2`，布局距离为 `110 + abs(strength) * 30`。配置 `colors` 后，强度 ≥ 0.33 用 positive，≤ -0.33 用 negative，其余用 neutral；未配置则用默认颜色。非数值、NaN 和无穷强度会丢弃该边。
+- 配置的 inactive 字段不是 `undefined` 就隐藏该边，`0`、`false` 和 `null` 也算。
+- 可用 `emptyText`（I18nText）覆盖默认空状态“暂无图数据。”。
 - 面板把自己的 namespace 绑定到这些属性上。组件自己不选择插件或 namespace。
 
 **`GraphCanvas` 的更新方式**
@@ -219,6 +222,8 @@
 - 上传只在工作区恢复之后才准备，授权重试时复用。
 - 拥有这个 runtime 的插件负责校验 payload 并实现业务规则，例如替换默认立绘、同时保留其他变体。
 - 这是当前唯一的契约。插件专用的组件名和跨插件的头像绑定已经不存在，开发中的 UI spec 需要按这里的写法更新。
+
+`MediaGallery` 和 `JobList` 可用 `emptyText`（I18nText）覆盖“暂无媒体。”和“暂无任务。”。图库按 MIME 显示图片、音频、视频或下载链接，播放控件不放在预览按钮内。图库与预览窗口下载时按 MIME 选择后缀，未知格式使用 `.bin`，不转换文件内容。
 
 **`JobList.relatedMedia`。** 可选。它把你提供的媒体记录关联到任务行上：
 

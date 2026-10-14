@@ -15,14 +15,15 @@ import {
   type SessionSlashCommand,
   type SlashCommandContextScope,
   type SlashCommandSpec,
+  FRAMEWORK_PLUGIN_ID,
 } from "@covel/shared";
 import type { SlashCommandParseResult } from "@covel/shared";
 import type { SessionRecord } from "@covel/store";
 
 const FRAMEWORK_SLASH_COMMANDS: readonly SessionSlashCommand[] = [
   {
-    id: "framework:plugins",
-    pluginId: "framework",
+    id: `${FRAMEWORK_PLUGIN_ID}:plugins`,
+    pluginId: FRAMEWORK_PLUGIN_ID,
     source: "framework",
     sourceLabel: { zh: "框架", en: "Framework" },
     name: "plugins",
@@ -34,8 +35,8 @@ const FRAMEWORK_SLASH_COMMANDS: readonly SessionSlashCommand[] = [
     action: "slash-plugins",
   },
   {
-    id: "framework:debug",
-    pluginId: "framework",
+    id: `${FRAMEWORK_PLUGIN_ID}:debug`,
+    pluginId: FRAMEWORK_PLUGIN_ID,
     source: "framework",
     sourceLabel: { zh: "框架", en: "Framework" },
     name: "debug",

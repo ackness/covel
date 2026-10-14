@@ -102,7 +102,7 @@ export function GameView({
     unavailableSessionPlugins,
     presets,
     llmConfig,
-    statePatches,
+    statePatchRevision,
     executionSteps,
     worldSessions,
     submittedBlockIds,
@@ -389,7 +389,7 @@ export function GameView({
             panelState={rightPanelState}
             sessionId={session.id}
             world={world}
-            statePatches={statePatches}
+            statePatchRevision={statePatchRevision}
           />
         </DialogContent>
       </Dialog>
@@ -557,6 +557,7 @@ export function GameView({
           />
           {stageActive ? (
             <StageView
+              panelState={rightPanelState}
               key={session.id}
               session={session}
               world={world}
@@ -663,7 +664,7 @@ export function GameView({
                 panelState={rightPanelState}
                 sessionId={session.id}
                 world={world}
-                statePatches={statePatches}
+                statePatchRevision={statePatchRevision}
               />
             </ResizablePanel>
           </>

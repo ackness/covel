@@ -29,6 +29,7 @@ import type {
   TurnInput,
 } from "@covel/shared";
 import type { HookPipeline } from "./pipeline.js";
+import { cloneHookData } from "./hook-data.js";
 import type { HookContext, HookEvent, HookResult } from "./types.js";
 import type { TurnEmitter } from "../trace/turn-emitter.js";
 import type {
@@ -281,8 +282,18 @@ export async function runPostRuntimeHook(
     { result },
     { pluginId: opts.pluginId, runtimeId: opts.runtimeId },
   );
-  const replaced = hookReplace(hookResult)?.result;
-  if (!replaced) return result;
+  const replacedResult = hookReplace(hookResult)?.result;
+  if (!replacedResult) return result;
+  // Hooks guard, rewrite or audit; they carry no writes. The write commands
+  // (`pendingProposals`, `effects`) and `completion` always come from the
+  // runtime itself — a hook that adds one would commit it under the rewritten
+  // runtime's identity. A hook that wants to stop a write uses PreStateCommit.
+  const {
+    pendingProposals: _hookProposals,
+    effects: _hookEffects,
+    completion: _hookCompletion,
+    ...replaced
+  } = replacedResult;
   // A hook may rewrite output/status, never execution identity: the proposal
   // rebinder downstream keys writes on these fields, so an approved hook could
   // otherwise redirect another plugin's writes under a forged identity.
@@ -306,8 +317,27 @@ export async function runPostRuntimeHook(
       ? {}
       : (replaced.canonicalValue ?? {})
     : undefined;
+  // The runtime's writes belong to the status it reported. When a hook changes
+  // that status (failed → success, success → skipped, …) the result carries
+  // no writes: a failed runtime's buffered writes never land through a
+  // recovery, and a skip a hook forced commits nothing. Owned copies, like the
+  // rest of the accepted result: a producer that still holds the originals
+  // cannot change what commits.
+  const status =
+    result.status === "suspended" ? result.status : replaced.status;
+  const writes =
+    status === result.status
+      ? cloneHookData({
+          ...(result.pendingProposals
+            ? { pendingProposals: result.pendingProposals }
+            : {}),
+          ...(result.effects ? { effects: result.effects } : {}),
+          ...(result.completion ? { completion: result.completion } : {}),
+        })
+      : {};
   return {
     ...replaced,
+    ...writes,
     canonicalValue,
     ...(result.status === "suspended"
       ? {
@@ -583,9 +613,43 @@ export async function runPostToolUseHook<R>(
   const replace = hookReplace(hookResult);
   if (replace) {
     return {
-      result: replace.result !== undefined ? (replace.result as R) : result,
+      result:
+        replace.result !== undefined
+          ? pinToolResultWrites(result, replace.result)
+          : result,
       terminate: replace.terminate === true,
     };
   }
   return { result, terminate: false };
+}
+
+/**
+ * Fields of a tool execution result that a PostToolUse hook cannot replace:
+ * the writes and events the tool produced, whether it succeeded, and how it
+ * was approved. A hook rewrites what the model reads (`result`,
+ * `parsedResult`); a write it adds would commit under the runtime's identity.
+ */
+const PINNED_TOOL_RESULT_FIELDS = [
+  "pendingProposals",
+  "emittedEvents",
+  "success",
+  "refused",
+  "approvalStatus",
+] as const;
+
+function pinToolResultWrites<R>(original: R, replaced: unknown): R {
+  if (
+    typeof original !== "object" ||
+    original === null ||
+    typeof replaced !== "object" ||
+    replaced === null
+  )
+    return original;
+  const pinned: Record<string, unknown> = { ...replaced };
+  const source = original as Record<string, unknown>;
+  for (const field of PINNED_TOOL_RESULT_FIELDS) {
+    if (Object.hasOwn(source, field)) pinned[field] = source[field];
+    else delete pinned[field];
+  }
+  return pinned as R;
 }

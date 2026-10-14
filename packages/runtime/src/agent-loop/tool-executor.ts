@@ -19,6 +19,7 @@ import {
   parseJsonText,
   type EmittedEvent,
   type ToolModule,
+  type ToolSource,
 } from "@covel/tools";
 import type { DataStore } from "@covel/store";
 import type { ApprovalPipeline } from "@covel/approval";
@@ -158,9 +159,7 @@ export interface ToolExecutorConfig {
   /** Optional approval pipeline for permission checking. */
   readonly approval?: ApprovalPipeline;
   /** Optional function to determine tool source category. */
-  readonly getToolSource?: (
-    toolName: string,
-  ) => "builtin" | "local" | "third-party";
+  readonly getToolSource?: (toolName: string) => ToolSource;
 }
 
 function toolLabel(pluginId: string, toolName: string): string {
@@ -184,21 +183,28 @@ async function emitToolEvent(
   extra: Record<string, unknown>,
 ): Promise<void> {
   if (!ctx.emitter) return;
-  await ctx.emitter.emit(eventType, {
-    runtimeId: ctx.runtimeId,
-    pluginId: ctx.pluginId,
-    toolName: call.name,
-    toolCallId: call.toolCallId,
-    label: toolLabel(ctx.pluginId, call.name),
-    approvalStatus,
-    ...extra,
-  });
+  try {
+    await ctx.emitter.emit(eventType, {
+      runtimeId: ctx.runtimeId,
+      pluginId: ctx.pluginId,
+      toolName: call.name,
+      toolCallId: call.toolCallId,
+      label: toolLabel(ctx.pluginId, call.name),
+      approvalStatus,
+      ...extra,
+    });
+  } catch (error) {
+    console.warn(
+      `[ToolExecutor] Failed to emit ${eventType} for ${call.name}:`,
+      error,
+    );
+  }
 }
 
 function emitToolCalling(
   ctx: ToolCallContext,
   call: ToolCall,
-  source: "builtin" | "local" | "third-party",
+  source: ToolSource,
   approvalStatus: ApprovalStatus,
 ): Promise<void> {
   return emitToolEvent(ctx, call, "tool.calling", approvalStatus, {
@@ -472,11 +478,12 @@ export function createToolExecutor(
         // (instead of JSON-stringifying the whole object). This keeps LLM
         // prompts human-readable while framework tracing still gets the full
         // structured object via `parsedResult`. Falls back to JSON.stringify
-        // for tools that don't opt in, without the bookkeeping a record carries
-        // (`updatedAt` of a plugin-data row, the time of a recalled message): a
-        // tool that hands the model an opaque handle writes it in `_text`.
-        // The `ui` blocks of a result are for the player's screen, and they
-        // repeat what the model has just written.
+        // for tools that don't opt in. That JSON goes through `modelFacingJson`
+        // (no bookkeeping such as `updatedAt` of a plugin-data row or the time
+        // of a recalled message) and without the `ui` blocks, which are for
+        // the player's screen and repeat what the model has just written.
+        // `_text` is sent as it is, so it is not projected: a tool that hands
+        // the model an opaque handle must write only the text it means to show.
         const resultStr =
           parsedResult &&
           typeof parsedResult === "object" &&
@@ -484,6 +491,10 @@ export function createToolExecutor(
             ? (parsedResult as { _text: string })._text
             : JSON.stringify(modelFacingJson(withoutUiBlocks(parsedResult)));
 
+        // Accept the snapshotted result before recording its terminal state.
+        // Cancellation after this point still aborts the enclosing runtime,
+        // but cannot turn this accepted call into a second, failed record.
+        context.signal?.throwIfAborted();
         const durationMs = Date.now() - startTime;
         await recordCall(
           config.store,
@@ -494,7 +505,6 @@ export function createToolExecutor(
           true,
           approvalStatus,
         );
-        context.signal?.throwIfAborted();
         await emitToolCompleted(
           context,
           call,
@@ -503,17 +513,22 @@ export function createToolExecutor(
           durationMs,
           approvalStatus,
         );
-        context.signal?.throwIfAborted();
         if (context.emitter && emittedEvents && emittedEvents.length > 0) {
           for (const event of emittedEvents) {
-            await context.emitter.emit("domain-event.previewed", {
-              runtimeId: context.runtimeId,
-              pluginId: context.pluginId,
-              toolCallId: call.toolCallId,
-              topic: event.topic,
-              data: event.data,
-            });
-            context.signal?.throwIfAborted();
+            try {
+              await context.emitter.emit("domain-event.previewed", {
+                runtimeId: context.runtimeId,
+                pluginId: context.pluginId,
+                toolCallId: call.toolCallId,
+                topic: event.topic,
+                data: event.data,
+              });
+            } catch (error) {
+              console.warn(
+                `[ToolExecutor] Failed to preview event ${event.topic}:`,
+                error,
+              );
+            }
           }
         }
         return {

@@ -99,10 +99,9 @@ export interface PluginDiscoveryResult {
   /** Discovered PLUGIN.md file paths. */
   readonly pluginMdPaths: readonly string[];
   /**
-   * Optional pre-classified trust source. When set this overrides
-   * prefix-based detection in `getPluginTrustInfo`. `discoverPluginsMulti`
-   * tags plugins outside the first (bundled) directory as `'community'`
-   * regardless of id, so a user-supplied `core-evil` cannot auto-load.
+   * Discovery-source trust. `discoverPluginsMulti` tags the first (bundled)
+   * directory as builtin and the others as community. When absent, trust
+   * defaults to community, regardless of the plugin's name.
    */
   readonly source?: PluginSource;
   /**
@@ -111,6 +110,8 @@ export interface PluginDiscoveryResult {
    * error and never loaded; the other packages are unaffected.
    */
   readonly layoutError?: string;
+  /** Authoring errors that leave the package's other runtimes loadable. */
+  readonly layoutWarnings?: readonly string[];
 }
 
 /**
@@ -136,6 +137,11 @@ export interface PluginEntryDefinition {
   readonly pluginRoot: string;
   /** Plugin-root-relative entry module paths, deduplicated in declaration order. */
   readonly entryPaths: readonly string[];
+  /**
+   * Origins the package's entry code may reach through `covel.http` when the
+   * package is community: the root `permissions.http` and every runtime's.
+   */
+  readonly httpPermissions: readonly import("@covel/shared").HttpPermissionDecl[];
 }
 
 // ── Progressive loading results ──────────────────────────────────
@@ -201,9 +207,7 @@ export interface PluginRegistryEntry {
    * approval gate, tool trust clamp, auto-load) use the path the plugin was
    * discovered from, not a `pluginType` field the plugin itself can forge.
    *
-   * When absent, callers fall back to id-prefix detection via
-   * `getPluginTrustInfo(pluginId)` — `core-*` → builtin, everything else →
-   * community.
+   * When absent, `getPluginTrustInfo` defaults to community regardless of ID.
    */
   readonly source?: PluginSource;
 }

@@ -26,6 +26,7 @@ import {
 } from "@covel/ai-provider";
 import { readRuntimeEnv } from "@covel/shared";
 import { preparePluginReload } from "./plugin-reload.js";
+import { publicPluginError } from "./plugin-discovery.js";
 import type { RuntimeLoader } from "./runtime-loader.js";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -258,11 +259,11 @@ export async function createBootstrapPluginEntries(
   for (const [pluginId, discovery] of discoveryMap) {
     const registryEntry = params.pluginRegistry?.get(pluginId);
     try {
+      const declared = registryEntry ?? (await loadPluginDefinition(discovery));
       const definition = await loadPluginEntryDefinition(
         discovery,
-        registryEntry
-          ? pluginDeclarations(registryEntry)
-          : pluginDeclarations(await loadPluginDefinition(discovery)),
+        pluginDeclarations(declared),
+        declared.manifests ?? [],
       );
       entryDefinitions.set(pluginId, definition);
     } catch (error) {
@@ -273,7 +274,11 @@ export async function createBootstrapPluginEntries(
         `[bootstrap] Failed to prepare the entry of plugin ${pluginId}:`,
         message,
       );
-      reportActivation(pluginId, message, error);
+      reportActivation(
+        pluginId,
+        publicPluginError(message, discovery.rootPath),
+        error,
+      );
     }
   }
 
@@ -294,7 +299,13 @@ export async function createBootstrapPluginEntries(
       definition.staticPromptVariants,
     );
     const checked = enforcePluginRegistrationContract(
-      buildEntryApi(params, pluginId, batch, registration.provideExtension),
+      buildEntryApi(
+        params,
+        pluginId,
+        batch,
+        registration.provideExtension,
+        definition.httpPermissions,
+      ),
       definition.contributions,
       (message) => new PluginRegistrationError("declarations", message),
     );

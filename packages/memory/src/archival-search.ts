@@ -59,12 +59,12 @@ export function createKeywordArchivalSearcher(
 
 export function archivalResult(
   item: ArchivalItem,
-  query: string | undefined,
+  query: string,
   score: number,
 ): ArchivalSearchResult {
   return {
-    key: item.displayKey,
-    content: query === undefined ? item.text : searchExcerpt(item.text, query),
+    ...(item.displayKey ? { key: item.displayKey } : {}),
+    content: searchExcerpt(item.text, query),
     score,
     source: item.source,
     ...(item.pluginId ? { pluginId: item.pluginId } : {}),

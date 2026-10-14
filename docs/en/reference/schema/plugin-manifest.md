@@ -12,7 +12,7 @@ In the path headings below, `[]` is a list item and `.*` is a map value.
 
 | Field         | Type                     | Required | Description                                                                                                                                                                                                  |
 | ------------- | ------------------------ | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `id`          | string                   | yes      | Stable package ID: lowercase letters, digits and hyphens. It must match the package directory name. Example: `"dice-check"`.                                                                                 |
+| `id`          | string                   | yes      | Stable package ID: lowercase letters, digits and hyphens. It must match the package directory name. `framework` is reserved. Example: `"dice-check"`.                                                        |
 | `kind`        | `"core"` or `"plugin"`   | yes      | Package kind. `core` marks a core plugin; other packages use `plugin`.                                                                                                                                       |
 | `version`     | string                   | no       | Package version. Setup runtimes rerun for existing sessions when it changes. A package without a version counts as `0.0.0`.                                                                                  |
 | `covel`       | string                   | no       | Host version range this package supports. A host outside it does not install or load the package. Example: `">=0.0.45"`.                                                                                     |
@@ -28,6 +28,7 @@ In the path headings below, `[]` is a list item and `.*` is a map value.
 | `conflicts`   | list of string           | no       | Contracts whose other providers cannot be active together with this package. Plugin contracts only.                                                                                                          |
 | `contracts`   | map of object            | no       | Public schema of each contract this package publishes or accepts, keyed by contract ID. A contract that a `contributes.data` namespace accepts needs no entry here: its schema is the one of that namespace. |
 | `entry`       | string                   | no       | Package-relative path of the server entry module. It registers tools, actions, services, hooks and extensions.                                                                                               |
+| `permissions` | object                   | no       | Upper bounds of the package's own code. `http` lists the origins and methods the entry module of a community package may reach through `covel.http`, in addition to those its runtimes declare.              |
 | `contributes` | object                   | no       | Package-level contributions. Every entry registration needs a declaration here, and every declaration needs an implementation.                                                                               |
 | `runtime`     | object                   | no       | The single inline runtime of this package; its prompt is the body of this file. Packages with several runtimes use `runtimes/<id>/RUNTIME.md` instead.                                                       |
 
@@ -59,6 +60,19 @@ In the path headings below, `[]` is a list item and `.*` is a map value.
 | Field    | Type   | Required | Description                                          |
 | -------- | ------ | -------- | ---------------------------------------------------- |
 | `schema` | string | yes      | Package-relative path of the contract's JSON Schema. |
+
+## `permissions`
+
+| Field  | Type           | Required | Description                                                      |
+| ------ | -------------- | -------- | ---------------------------------------------------------------- |
+| `http` | list of object | no       | Upper bound of the HTTP origins and methods the runtime may use. |
+
+## `permissions.http[]`
+
+| Field     | Type                                                                          | Required | Description                                                                                                  |
+| --------- | ----------------------------------------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------ |
+| `origin`  | string                                                                        | yes      | HTTPS origin the runtime may call, without path, query or credentials. Example: `"https://api.example.com"`. |
+| `methods` | list of `"GET"` or `"POST"` or `"PUT"` or `"PATCH"` or `"DELETE"` or `"HEAD"` | no       | HTTP methods allowed for the origin. Entries must be unique.                                                 |
 
 ## `contributes`
 
@@ -431,10 +445,10 @@ In the path headings below, `[]` is a list item and `.*` is a map value.
 
 ## `runtime.agent.loop.completion`
 
-| Field        | Type                         | Required | Description                                                                                                                                           |
-| ------------ | ---------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `require`    | `"explicit"` or `"tool-use"` | no       | `explicit` needs a completing tool or `runtime-done`. `tool-use` needs a valid business tool call, so "no change" is also submitted through the tool. |
-| `afterTools` | list of string               | no       | The runtime completes after a successful call to one of these tools.                                                                                  |
+| Field        | Type                         | Required | Description                                                                                                                                                                                                               |
+| ------------ | ---------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `require`    | `"explicit"` or `"tool-use"` | no       | `explicit` needs a completing tool or `runtime-done`. `tool-use` needs a successful tool named in `afterTools`, or any successful business tool when `afterTools` is empty. Failed calls and `runtime-done` do not count. |
+| `afterTools` | list of string               | no       | The runtime completes after a successful call to one of these tools.                                                                                                                                                      |
 
 ## `runtime.function`
 

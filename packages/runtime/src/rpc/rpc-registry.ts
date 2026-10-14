@@ -1,3 +1,4 @@
+import { FRAMEWORK_PLUGIN_ID } from "@covel/shared";
 import { AsyncLocalStorage } from "node:async_hooks";
 /**
  * Plugin RPC registry.
@@ -112,6 +113,11 @@ export interface RpcHandlerContext {
   readonly emit?: (event: { type: string; data: unknown }) => void;
   /** Dice and other game rolls; the executor supplies it for every action. */
   readonly random?: import("@covel/shared/plugin-runtime").PluginRandom;
+  /**
+   * Aborts when the handler passes its time limit. The executor supplies it
+   * for every action; after it aborts, `store` refuses every call.
+   */
+  readonly signal?: AbortSignal;
 }
 
 /**
@@ -226,6 +232,10 @@ export function createPluginRpcRegistry(): PluginRpcRegistry {
       );
     },
     registerPluginHandler(pluginId, action, handler, options, pluginTrust) {
+      if (pluginId === FRAMEWORK_PLUGIN_ID)
+        throw new Error(
+          `[plugin-rpc] "${FRAMEWORK_PLUGIN_ID}" is reserved for framework actions`,
+        );
       const key = `${pluginId}::${action}`;
       if (pluginEntries.has(key)) {
         throw new Error(

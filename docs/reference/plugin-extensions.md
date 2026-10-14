@@ -53,6 +53,8 @@ runtime 发出的事件在同一回合的事件链里逐层匹配订阅者。
 
 多条记录必须一起成功或一起失败时，用 `invokeRuntime`。这个函数 handler 不需要模型。手动触发本身不会运行叙事 runtime；它声明的事件下游仍按调度规则执行。
 
+RPC action 的 handler 收到 `ctx.signal`，到达时限时中止；存储调用的关闭与已开始写入的结算见下方 RPC 通道。
+
 参见 [RPC 通道](./api.md#post-apisessionsidplugin-rpc)与 [handler 写入契约](./plugins.md#输入和输出)。
 
 ### 工具不跨插件
@@ -371,7 +373,7 @@ ctx.music.generate({ prompt, lyrics?, instrumental?, durationSeconds?, format?, 
 
 ### 权限不会因为跨插件而变大
 
-服务里的 gateway 和 HTTP 工具继承发起调用的 runtime 的请求配置、权限、追踪、取消和撤销边界。尤其是：社区插件作为调用方时，它自己发的 HTTP 请求仍受它的 `permissions.http` 限制。gateway 已经有标准方法的能力，优先走 gateway。
+服务里的 gateway 继承发起调用的 runtime 的请求配置、追踪、取消和撤销边界。HTTP 请求由提供方的代码发出，所以按提供方的声明检查：社区提供方处理函数里的 `context.utils` 和它的 `covel.http` 一样，只能访问它自己包的 `permissions.http` 列出的源，不管调用方是谁。扩展的处理函数也是这样。gateway 已经有标准方法的能力，优先走 gateway。
 
 ### “不用改框架”的范围
 
@@ -445,10 +447,10 @@ export default function register(covel) {
 | 同上，`self` 形态                                        | 只有一个玩家，已加载的社区插件都经他授权，所以也可以选用社区插件的协议。 |
 | 同上，托管形态                                           | 社区插件的协议要在已启用它的会话里使用。                                 |
 
-请求级预设、`llm.toml` 的槽位和 runtime 自己的槽位偏好都按这张表判断。设置页的协议下拉仍列出所有已加载插件的协议。
+请求级预设、`llm.toml` 的槽位和 runtime 自己的槽位偏好都按这张表判断。设置页的协议下拉仍列出所有已加载插件的协议。插件注册的图像、语音、转写和音乐 wire 也按这张表选用；选不到时，生成以配置错误失败，错误里写明要启用哪个插件。
 
 > [!CAUTION]
-> 信任边界和媒体 wire 相同：社区插件的服务端代码要玩家授权后才运行，`permissions.http` 声明的来源照常强制。不同的是，文本 wire 会经手选用它的那个用途的**全部提示词和回答**。
+> 信任边界和媒体 wire 相同：社区插件的服务端代码要玩家授权后才运行。wire 里的 `covel.http` 只能访问包里 `permissions.http` 声明的源，以及它正在服务的那个用途的端点。不同的是，文本 wire 会经手选用它的那个用途的**全部提示词和回答**。
 
 ## 自定义组件与挂载
 
@@ -545,7 +547,7 @@ const response = await window.covel.invoke("invokePluginAction", {
 | `invokeRuntime`、`invokePluginAction`、`invokeCommand` | 都可用   | 执行类动作，自动绑定当前插件。           |
 | `emitEvent({ topic, data })`                           | 都可用   | 发出本插件声明的事件。                   |
 | `draftMessage({ text, selectionGroup? })`              | 右侧面板 | 把一句话放进待发送区，由玩家确认后发出。 |
-| `sendMessage({ text })`                                | 舞台     | 发出一条消息。                           |
+| `sendMessage({ text })`                                | 舞台     | 把文字填进舞台输入框，由玩家确认发送。   |
 | `setUiState({ value })`                                | 都可用   | 保存面板的临时状态，见下。               |
 
 不能通过参数改写 pluginId 去调用别的插件。需要和别的插件配合时，从自己的 runtime 里用 `ctx.services` 或事件，不要在浏览器里读对方的私有数据。

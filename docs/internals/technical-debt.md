@@ -8,23 +8,23 @@
 rg -n "ponytail:" apps packages plugins
 ```
 
-当前源码里有 13 个标记，下面三张表每行对应一个。
+当前源码里有 12 个标记，下面三张表每行对应一个。
 
 > [!IMPORTANT]
 > 增加或删除一条 `ponytail:` 注释时，在同一次改动里更新这一页。
 
 ## Kernel / runtime
 
-| 位置                                                             | 接受的限制                                                                          | 什么时候重新考虑                                                      |
-| ---------------------------------------------------------------- | ----------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
-| `packages/runtime/src/schedule/effects.ts`                       | 对 `self` 字面量做字符串相等比较，可能把不同插件的 effects 误判为相同               | 误报的冲突多到值得把 `self` 解析成插件 ID                             |
-| `packages/runtime/src/function-runtime/turn-function-runtime.ts` | 撤销只在新调用进入时检查；已经发出的外部效果可能在期限之后才结束                    | 原语需要协作式取消，或者需要用 worker 隔离迟到的外部效果              |
-| `packages/runtime/src/turn-executor/turn-runtime-execution.ts`   | 带 `accepts` 的消费者每次都重新加载生产者声明的输出 schema                          | 性能分析显示重复的工作多到值得做每回合的 schema 缓存                  |
-| `packages/runtime/src/retry/llm-slots.ts`                        | 所有 LLM provider 共用一个进程级的并发上限                                          | 互相独立的 provider 需要各自的容量                                    |
-| `packages/runtime/tests/scheduling-acceptance-contract.test.ts`  | 恢复（resume）数据进入工具循环前不检查其中的 MediaRef；提交时才把要保存的内容规范化 | 一个恢复的 runtime 在任何 proposal 带上某个媒体引用之前就对它做了操作 |
-| `packages/runtime/tests/scheduling-acceptance-contract.test.ts`  | 验收场景 12 和 19-25（plan/confirm 启用流程、持久化的审批授权）是 `it.todo`         | 启用解析器或持久化的审批授权排进了实现计划                            |
-| `packages/events/src/event-bus.ts`                               | 接收顺序的状态有先进先出的上限；被挤掉的流必须从序号 1 重新开始                     | 多 pod 的流量多到值得改用 LRU/TTL 状态                                |
-| `packages/store/src/media-store/filter.ts`                       | 按元数据过滤时扫描整个 `listAssets()`                                               | 单个会话的媒体数量多到值得把过滤条件下推到 SQL                        |
+| 位置                                                             | 接受的限制                                                                           | 什么时候重新考虑                                                      |
+| ---------------------------------------------------------------- | ------------------------------------------------------------------------------------ | --------------------------------------------------------------------- |
+| `packages/runtime/src/schedule/effects.ts`                       | 对 `self` 字面量做字符串相等比较，可能把不同插件的 effects 误判为相同                | 误报的冲突多到值得把 `self` 解析成插件 ID                             |
+| `packages/runtime/src/function-runtime/turn-function-runtime.ts` | 撤销只在新调用进入时检查；已经发出的外部效果可能在期限之后才结束                     | 原语需要协作式取消，或者需要用 worker 隔离迟到的外部效果              |
+| `packages/runtime/src/turn-executor/turn-runtime-execution.ts`   | 带 `accepts` 的消费者每次都重新加载生产者声明的输出 schema                           | 性能分析显示重复的工作多到值得做每回合的 schema 缓存                  |
+| `packages/runtime/src/retry/llm-slots.ts`                        | 所有 LLM provider 共用一个进程级的并发上限                                           | 互相独立的 provider 需要各自的容量                                    |
+| `packages/runtime/tests/scheduling-acceptance-contract.test.ts`  | 恢复（resume）数据进入工具循环前不检查其中的 MediaRef；提交时才把要保存的内容规范化  | 一个恢复的 runtime 在任何 proposal 带上某个媒体引用之前就对它做了操作 |
+| `packages/runtime/tests/scheduling-acceptance-contract.test.ts`  | 验收场景 12 和 19-25（plan/confirm 启用流程、持久化的审批授权）是 `it.todo`          | 启用解析器或持久化的审批授权排进了实现计划                            |
+| `packages/events/src/event-bus.ts`                               | 接收顺序的状态按最近使用淘汰；被淘汰的流必须从序号 1 重新开始，它的会话会 reset 一次 | 多 pod 部署同时活跃的流多于上限，值得加每条状态的 TTL 或更大的上限    |
+| `packages/store/src/media-store/filter.ts`                       | 按元数据过滤时扫描整个 `listAssets()`                                                | 单个会话的媒体数量多到值得把过滤条件下推到 SQL                        |
 
 ## Server
 
@@ -37,7 +37,6 @@ rg -n "ponytail:" apps packages plugins
 | 位置                                                                   | 接受的限制                                        | 什么时候重新考虑                                    |
 | ---------------------------------------------------------------------- | ------------------------------------------------- | --------------------------------------------------- |
 | `apps/web/src/components/session/stage/StageSprites.tsx`               | 最多四个立绘对 `left`、`width` 这类布局属性做动画 | 登场角色更多或更频繁，值得改成基于 transform 的动画 |
-| `apps/web/src/components/session/stage/stage-selectors.ts`             | 选项的 icon/color 字段目前没有使用者              | 有组件用到这些字段                                  |
 | `apps/web/src/components/session/chat-messages/message-primitives.tsx` | Markdown 的软换行用字符串改写实现                 | 代码块的边界情况或其他转换多到值得改用解析器插件    |
 | `apps/web/src/theme-system/token-schema.ts`                            | 氛围背景只接受 URL 和渐变，不能上传本地图片       | 上传的需求多到值得把图片存到设置数据之外            |
 
@@ -65,9 +64,9 @@ rg -n "ponytail:" apps packages plugins
 | `apps/web/src/services/data-service/local.ts`                 |   954 |
 | `packages/plugin-handlers-utils/src/plugin-api.ts`            |   950 |
 | `apps/server/src/routes/api/bootstrap.ts`                     |   944 |
+| `packages/events/src/event-bus.ts`                            |   918 |
 | `apps/server/src/routes/api/bootstrap/plugin-entry.ts`        |   889 |
 | `packages/runtime/src/retry/llm-retry.ts`                     |   875 |
-| `packages/events/src/event-bus.ts`                            |   853 |
 | `packages/runtime/src/interaction/interaction-submission.ts`  |   845 |
 | `packages/plugin-handlers-utils/src/dimension-schemas.ts`     |   845 |
 | `packages/runtime/src/commit/finalize-execution.ts`           |   838 |

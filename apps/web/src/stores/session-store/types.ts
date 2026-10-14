@@ -12,6 +12,8 @@ export interface StreamMessage {
   content: string;
   timestamp: string;
   turnId?: string;
+  /** Local echo ownership; removed when a durable server message replaces it. */
+  requestId?: string;
   /** Source runtime ID for retry tracking. */
   runtimeId?: string;
   /** Runtime kind (e.g. "story", "plugin") — controls main chat visibility. */
@@ -199,7 +201,11 @@ export interface SessionState {
    */
   suspensions: SuspensionSummary[];
 
-  // State patches from kernel
+  /** Refreshes consumers even when a field replaces a cached value. */
+  statePatchRevision: number;
+  recentStatePatchIds: string[];
+
+  // Latest bounded field patches from kernel
   statePatches: Array<{
     id: string;
     summary: string;
@@ -381,7 +387,7 @@ export type SessionAction =
       unavailable?: readonly import("@covel/shared").PluginResolutionRejection[];
     }
   | { type: "TOGGLE_SESSION_PLUGIN"; pluginId: string; active: boolean }
-  | { type: "BACKFILL_TURN_ID"; turnId: string }
+  | { type: "BACKFILL_TURN_ID"; turnId: string; requestId: string }
   | {
       type: "PLUGIN_DATA_CHANGED";
       pluginId: string;

@@ -328,7 +328,7 @@ describe("TurnExecutor E2E", () => {
     ]);
   });
 
-  it("retries once when the provider rejects malformed tool-call arguments", async () => {
+  it("sends repaired history before a provider can reject malformed tool-call arguments", async () => {
     const store = await createMainLoopStore("sess-1");
     const { createToolExecutor } =
       await import("../src/agent-loop/tool-executor.js");
@@ -352,7 +352,7 @@ describe("TurnExecutor E2E", () => {
     const manifest: RuntimeManifest = {
       name: "retry-guide",
       pluginId: "retry-guide",
-      description: "Guide runtime with retryable tool-call error",
+      description: "Guide runtime with repairable tool-call arguments",
       stage: "post-turn",
       tools: { plugin: ["generate-guide"] },
     };
@@ -363,27 +363,26 @@ describe("TurnExecutor E2E", () => {
 
     let callCount = 0;
     const llm: LLMAdapter = {
-      async generate() {
+      async generate(params) {
         callCount++;
         if (callCount === 1) {
-          throw new Error(
-            '[openai-chat] HTTP 400 — <400> InternalError.Algo.InvalidParameter: The "function.arguments" parameter of the code model must be in JSON format.',
-          );
-        }
-        if (callCount === 2) {
           return {
             content: null,
             toolCalls: [
               {
                 id: "tc-retry-guide",
                 name: "generate-guide",
-                arguments: JSON.stringify({ topic: "探查前准备" }),
+                arguments: '{"topic":"探查前准备"}]}',
               },
             ],
             finishReason: "tool_calls",
             usage: { inputTokens: 10, outputTokens: 10 },
           };
         }
+        const args = params.messages.find(
+          (message) => message.toolCalls?.length,
+        )?.toolCalls?.[0]?.arguments;
+        expect(JSON.parse(args!)).toEqual({ topic: "探查前准备" });
         return {
           content: null,
           toolCalls: [],
@@ -407,7 +406,7 @@ describe("TurnExecutor E2E", () => {
     const result = await executeTurn(makeTurnInput(), [manifest], deps, {
       maxSteps: 2,
     });
-    expect(callCount).toBe(3);
+    expect(callCount).toBe(2);
     expect(result.runtimeResults[0]?.status).toBe("success");
   });
 

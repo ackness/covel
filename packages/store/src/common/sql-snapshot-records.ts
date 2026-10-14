@@ -95,7 +95,7 @@ export type SqlSnapshotRecords = Pick<
   | "releaseSuspensionClaim"
   | "listSuspensions"
   | "deleteSuspension"
-  | "deleteExpiredSuspensions"
+  | "listExpiredSuspensions"
   | "releaseStaleSuspensionClaims"
 >;
 
@@ -277,21 +277,20 @@ export function createSqlSnapshotRecords(
       await runner.delete(suspensions, eq(suspensions.id, id));
     },
 
-    async deleteExpiredSuspensions(olderThanIso: string): Promise<number> {
-      // Unresolved-only: `resolvedAt IS NULL` reuses the same predicate
+    async listExpiredSuspensions(
+      olderThanIso: string,
+    ): Promise<readonly SuspensionRecord[]> {
+      // Unresolved-only: `resolvedAt IS NULL` is the predicate
       // `claimSuspension` relies on, so claimed (`claimed:<iso>`) and resolved
-      // records are excluded. `SqlRunner.delete` returns void, so the count
-      // comes from a prior select — acceptable for a best-effort sweep run
-      // serially; a concurrent claim between select and delete only skews the
-      // returned count, never deletes a claimed/resolved row.
-      const where = and(
-        isNull(suspensions.resolvedAt),
-        lt(suspensions.createdAt, olderThanIso),
-      );
-      const rows = await runner.select<SuspensionRow>(suspensions, { where });
-      if (rows.length === 0) return 0;
-      await runner.delete(suspensions, where);
-      return rows.length;
+      // records are excluded.
+      const rows = await runner.select<SuspensionRow>(suspensions, {
+        where: and(
+          isNull(suspensions.resolvedAt),
+          lt(suspensions.createdAt, olderThanIso),
+        ),
+        orderBy: [asc(suspensions.createdAt)],
+      });
+      return rows.map((row) => toSuspensionRecord(row, json));
     },
 
     async releaseStaleSuspensionClaims(olderThanIso: string): Promise<number> {

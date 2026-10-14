@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { makeRandom } from "@covel/plugin-test-utils";
+import { readFileSync } from "node:fs";
 import handler from "../runtimes/roller/handler.js";
 import { poolOf } from "../lib/turn-pool.js";
 
@@ -16,6 +17,13 @@ function makeCtx(overrides = {}) {
 }
 
 describe("dice-check roller handler", () => {
+  it("describes the same host random source the handler uses", () => {
+    for (const file of ["runtimes/roller/RUNTIME.md", "README.md"]) {
+      const text = readFileSync(new URL(`../${file}`, import.meta.url), "utf8");
+      expect(text).toContain("ctx.random");
+      expect(text).not.toContain("node:crypto");
+    }
+  });
   it("takes its dice from the host's ctx.random", async () => {
     const drawn = [17, 2, 20];
     const ranges = [];

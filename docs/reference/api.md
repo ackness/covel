@@ -172,7 +172,7 @@ PostgreSQL 一列的细节：
 | `self`（默认）/ 桌面  | 通常不检查。带了 token 也不校验。例外见下面的“生产 MemoryStore 例外” |
 | `demo` / `commercial` | 强制检查                                                             |
 
-`self` 和桌面靠网络边界保护：服务器默认只监听回环地址（`COVEL_BIND_HOST=127.0.0.1`，见 [env-registry](./env-registry.md)）。
+`self` 和桌面靠网络边界保护：服务器默认只监听回环地址（`COVEL_BIND_HOST=127.0.0.1`，见 [env-registry](./env-registry.md)），并且只回答 `Host` 是 `localhost`、`127.0.0.1`、`[::1]` 或列在 `COVEL_ALLOWED_HOSTS` 里的请求，其他请求返回 `403 { code: "host_not_allowed" }`。
 
 `demo` / `commercial` 的规则：
 
@@ -315,7 +315,7 @@ CORS 只能阻止网页读取响应，所以另有一道写入来源检查：
 
 **托管层级（`demo` / `commercial`）的差别**
 
-- 公开的 `GET /api/llm-config` 仍然返回客户端启动要用的模型目录，但不含 `source` 和加载 `error`。带运维 token 才能看到这两项诊断。
+- 公开的 `GET /api/llm-config` 仍然返回客户端启动要用的模型目录，但不含 `source`、`envKeyOverrides`、加载 `error` 和槽位的 `baseUrl`。`GET /api/presets` 也不返回 `baseUrl`。带运维 token 才能看到这些字段。
 - 公开的 `GET /api/config/info` 返回 `isDesktop: false`、`requiresAuth: true`，路径字段都是 `null`。带运维 token 的请求能拿到完整的部署路径。
 - 本机 `self` 和桌面端的响应不受影响。
 
@@ -564,6 +564,8 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 1. 服务端短暂持有世界锁，记录“删除中”状态，然后释放世界锁。
 2. 逐个走完整的会话删除流程：等待执行中的写入、运行生命周期钩子、清理媒体引用和进程内状态。
 3. 删除世界记录和对应的文件包。
+
+文件包先移出加载目录，再删除记录和文件。中断后的启动恢复规则见[世界安装](./world-installation.md#更新与数据保护)。
 
 > [!NOTE]
 > 底层 `DataStore.deleteWorld` 只删除世界记录。需要连带清理会话的调用必须走这个 API。
@@ -958,6 +960,8 @@ setup runtime 反复失败、用完重试预算（`maxTriggerCount`）后进入 
 | PUT    | `/api/sessions/:id/plugins/:pluginId` | 启用插件                                   |
 | DELETE | `/api/sessions/:id/plugins/:pluginId` | 禁用插件（必需的 core 插件返回 `403`）     |
 
+`GET` 只读已经保存的会话记录，不等正在运行的回合，也不等后台任务。回合进行中刷新页面，插件面板和命令列表照样立刻拿到。
+
 ### 全局插件
 
 | 方法   | 路径                          | 描述                                                                       |
@@ -973,6 +977,7 @@ setup runtime 反复失败、用完重试预算（`maxTriggerCount`）后进入 
 
 - 鉴权：桌面端要求 bearer token；没有 token 的生产部署要求 `COVEL_INSTALL_API_ENABLED=1`。
 - 成功返回 `{ ok, id, restartRequired: true }`。
+- 先改名移出加载目录，再清理文件。改名失败返回 500，原包保持完整；清理失败仍返回成功并记日志，下次启动重试清理。
 
 | 状态码      | 什么时候      |
 | ----------- | ------------- |
@@ -1387,7 +1392,7 @@ fork 和社区插件的授权：
 
 各端点的补充说明：
 
-- `GET /api/plugins`：数据来自 registry 快照。加载失败的插件也会返回，是一条 `status: "error"` 的 item。
+- `GET /api/plugins`：数据来自 registry 快照。加载失败的插件也会返回，是一条 `status: "error"` 的 item。它的 `error` 文字里，插件目录的服务器绝对路径写成 `<plugin>`（例如 `<plugin>/PLUGIN.md: …`）；完整原文只写进服务器日志。
 - `GET /api/worlds/:id/plugin-plan`：服务端解析世界的插件策略、组合包和默认选择。
   - 各个 `requested` 和 `defaultPluginIds` 只含已安装的插件。
   - 世界请求了、但宿主没装的插件列在 `missing: [{ pluginId, packId? }]`。
@@ -1417,13 +1422,17 @@ fork 和社区插件的授权：
 > [!NOTE]
 > 给服务器代码的作者：底层 `prepareOutboundProxy()` 提供 `commit()` / `dispose()`，没有提交的传输由调用者释放；`configureOutboundProxy()` 用于立即应用。
 
+#### GET /api/config/keys
+
+`GET /api/config/keys` 和写入接口一样：设置了 `COVEL_DESKTOP_REST_TOKEN` 时，必须携带匹配的 Bearer token，否则返回 `401`。
+
 #### PUT /api/config/keys
 
 仅桌面可用。把 provider 密钥写入 `<covelHome>/keys.env`。
 
 - body 是 `{ provider: string | null }`。空字符串或 `null` 表示删除这个密钥。
 - 整批输入先校验。值里有换行，或者是其它类型时，返回 `400`，文件和运行时都保持原状。
-- 文件原子写入成功后，运行时的密钥才更新。
+- 文件原子写入成功后，运行时的密钥才更新，立即对回合、连接测试和模型列表生效。外部环境（shell、`.env`、`.env.llm`）的密钥始终优先；删除或替换本地密钥只改变保存的副本，不清除或覆盖外部密钥。
 
 桌面应用（Electron）保存密钥时的行为：
 
@@ -1987,7 +1996,8 @@ Web 设置页根据 `operatorTokenRequired` 决定是否显示“运维访问”
 **写入的时机:**
 
 - 模型生成期间，服务端不持有世界操作锁，也不写语言文件。
-- 发布时才取锁。锁内核对世界的创建时间、包的实际路径与目录身份，然后写语言文件并合并语言元数据。模型等待期间你保存的编辑会保留。
+- 发布时才取锁。锁内核对世界的创建时间、包的实际路径与目录身份，在暂存副本里写语言文件和 `supportedLocales`，读回预检通过后替换目录并保存记录。模型等待期间你保存的编辑会保留。
+- 写文件或读回失败时丢弃暂存副本；保存记录失败时恢复原包。媒体、作者文件和生成标记都随副本保留。
 - 世界正在删除、已经删除，或用同一个 ID 重建过时，请求收到 SSE `error`。旧请求不会往新包里写文件，也不会清理新包的文件。
 
 **响应:** SSE 事件流。
@@ -2475,7 +2485,7 @@ Web 设置页根据 `operatorTokenRequired` 决定是否显示“运维访问”
 **“能不能跑”是怎么判断的:**
 
 - 判断与执行使用同一套模型解析和环境密钥来源校验。
-- 使用来源请求的服务时，两者都按那个请求的模型配置（槽位绑定、自定义预设、插件 `llm.toml` 的模型目标）和凭据解析。
+- 使用来源请求的服务时，两者都按那个请求的模型配置（槽位绑定、自定义预设）和凭据解析。
 - 使用服务端 adapter 时，只按服务端配置解析，不受碰巧唤醒 worker 的其他请求影响。
 - 它无法静态证明一个 function handler 会不会调用模型，也不会自动放行没有密钥的本地端点。
 - 嵌入式宿主或测试可以通过 `ApiBootstrapConfig.canRunRuntimeJobWithServerServices` 显式确认自己的 adapter 可用。这个确认不改变运行时授权、会话身份校验或提交校验。
@@ -2790,7 +2800,8 @@ Submission 里的其他键会被丢弃。来源插件、字段定义和模板只
 调用插件在 `entry` 里用 `covel.registerRpc` 注册的 handler，或者框架默认 handler（如 `slash-debug`）。
 
 - 插件必须在会话当前启用的插件里。服务端在审批前检查一次，取得会话锁后再检查一次。插件已禁用时返回 `404 plugin_not_active`，不执行 handler，也不新增审批。旧面板迟到的请求同样受这个检查约束。
-- `pluginId: "framework"` 表示框架默认 action。它不属于插件启用集，按各自的准入条件执行。
+- `pluginId: "framework"` 表示框架默认 action。它不属于插件启用集，按各自的准入条件执行。`framework` 是保留 ID，没有插件能用它，所以这样的请求只会执行框架默认 action；写插件 ID 的请求也只会执行该插件自己注册的 action。
+- handler 在会话锁内运行，时限 30 秒。超时后 handler 的 `ctx.signal` 中止，之后它对 `ctx.store` 的调用一律被拒绝。已在进行的存储调用先完成，再返回 `504 handler_timeout` 并放开锁。超时之前已经写入的数据保留，不会回滚。
 
 ##### runtime 级
 
@@ -3182,6 +3193,7 @@ runtime 报告失败时，它的原始错误保留在 `result.runtimeResults` �
 | 409    | `session_not_active` / `session_deleting` / `session_incarnation_changed` / `approval_scope_changed` / `command_changed` / `retry_source_not_committed` / `dimension-version-conflict` |
 | 429    | `queue_full`（社区插件的待批准队列已满）/ `background_queue_full`（会话排队中的后台任务达到上限，默认 256）                                                                            |
 | 500    | `turn_commit_failed`；handler 抛出未处理的异常；handler 模块加载失败                                                                                                                   |
+| 504    | `handler_timeout`（action 级：handler 超过 30 秒没有结束）                                                                                                                             |
 | 503    | `event_directory_unavailable`（event 级：事件目录不可用）                                                                                                                              |
 
 几个要点：
@@ -3399,6 +3411,7 @@ runtime 报告失败时，它的原始错误保留在 `result.runtimeResults` �
 
 - 内容全部来自插件清单的 `contributes.data.*.authoring` 声明，没有写死的插件列表。
 - `pnpm describe:authoring` 输出的是同一份数据。
+- 示例无法读取、不是 JSON，或可生成契约的 schema 缺失、无效或冲突时，只略过对应契约。可选的 `diagnostics` 数组逐项返回 `{ pluginId, namespace, message }`，服务端也记录警告；其他契约和插件仍可用。
 - 查询参数 `locale` 决定 `title` 等展示文本的语言，省略时用服务端默认语言。
 
 **响应节选:**
@@ -3966,7 +3979,7 @@ runtime 报告失败时，它的原始错误保留在 `result.runtimeResults` �
 runtime 可以中途停下来等玩家提供数据，这叫挂起。本节的端点用来查看挂起项、提交数据让它继续，或者放弃它。
 
 > [!NOTE]
-> **过期清理**：恢复请求和 `GET /api/sessions/:id/suspensions` 在处理前，会顺带做一次全局的过期清理。清理有时间间隔限制，失败也不影响本次请求。
+> **过期清理**：恢复请求和 `GET /api/sessions/:id/suspensions` 在处理前，会顺带做一次全局的过期清理。清理有时间间隔限制，失败也不影响本次请求。过期的挂起项按[放弃](#delete-apisessionsidsuspensionssuspensionid)的方式处理，见[挂起与回合计数](#挂起与回合计数)。
 >
 > 进程在恢复途中退出时，会留下一个“正在恢复”的占用标记。这次清理和服务启动时都会释放它，之后这个挂起项可以再次恢复或放弃。已经发出去的外部调用不会撤销，这一点与恢复失败后重试相同。相关环境变量见 [`env-registry.md`](./env-registry.md)。
 
@@ -4000,13 +4013,14 @@ runtime 可以中途停下来等玩家提供数据，这叫挂起。本节的端
 
 **错误**
 
-| 状态码 | `code`         | 什么时候                                                                                     |
-| ------ | -------------- | -------------------------------------------------------------------------------------------- |
-| 400    | —              | 请求体不是合法 JSON、结构不对，或 `data` 没通过 `resumeSchema` 校验                          |
-| 404    | —              | 会话或挂起项不存在，或找不到对应的 runtime                                                   |
-| 409    | —              | 挂起项已经处理过（两个请求同时恢复时，后到的一方也是这个结果）                               |
-| 500    | —              | runtime 执行失败或提交失败（`error` 说明原因）；未知异常在生产环境是 `Internal server error` |
-| 503    | `session_busy` | 等会话锁超时，固定消息 `Session is busy, please retry`                                       |
+| 状态码 | `code`                | 什么时候                                                                                     |
+| ------ | --------------------- | -------------------------------------------------------------------------------------------- |
+| 400    | —                     | 请求体不是合法 JSON、结构不对，或 `data` 没通过 `resumeSchema` 校验                          |
+| 404    | —                     | 会话或挂起项不存在，或找不到对应的 runtime                                                   |
+| 409    | —                     | 挂起项已经处理过（两个请求同时恢复时，后到的一方也是这个结果）                               |
+| 409    | `suspension_outdated` | 挂起项已经过时，服务端把它作废了，见下面的“过时的挂起项”                                     |
+| 500    | —                     | runtime 执行失败或提交失败（`error` 说明原因）；未知异常在生产环境是 `Internal server error` |
+| 503    | `session_busy`        | 等会话锁超时，固定消息 `Session is busy, please retry`                                       |
 
 失败响应的规则：
 
@@ -4015,12 +4029,28 @@ runtime 可以中途停下来等玩家提供数据，这叫挂起。本节的端
 - 提交失败时，`error` 是 `Resume commit failed: <原因>. The suspension remains unresolved and can be retried.`
 - 失败后，这次请求对挂起项的占用会被释放（前提是会话没有被删除重建），所以可以重试。内部原因只写进服务端日志。
 
+##### 过时的挂起项
+
+挂起时会记下两样东西：这时历史里有几个玩家回合，以及提出它的插件是哪个版本。恢复前，服务端先检查挂起项是否已经过时。过时的挂起项不会再运行，因为它保存的写入可能盖掉更新的状态。
+
+| `details.reason`   | 什么时候                                                       |
+| ------------------ | -------------------------------------------------------------- |
+| `session-moved-on` | 挂起之后历史里的玩家回合数变了（玩家又玩了一回合，或回退过）   |
+| `plugin-updated`   | 提出它的插件换了版本                                           |
+| `superseded`       | 同一个 runtime 之后又挂起过；一个 runtime 只有最新的那条能恢复 |
+
+服务端按[放弃](#delete-apisessionsidsuspensionssuspensionid)的方式作废它，然后返回 `409`，`code` 是 `suspension_outdated`，`error` 是给玩家看的说明。网页端收到后把它从等待列表里移除，并提示玩家这个请求已经过时。
+
+后台作业或手动运行在挂起之后写入的内容不算会话前进，不会让挂起项过时。
+
 ##### 挂起与回合计数
 
 - 挂起本身不算完成一个玩家回合。
 - 挂起时，“从哪里继续”的记录与本次的 proposal、日志和会话时钟在同一个事务里保存。提交成功后才广播 `turn.suspended`。所以提交回滚时，不会留下能恢复却没有来历的挂起项，也不会发出多余的事件。
 - 原执行的 `logicalTurnId` 和 `countPolicy` 随挂起项一起保存。恢复成功时，在提交 proposal 的同一个事务里给玩家回合数加一次。
 - 同一个逻辑回合有多个并行挂起项时，等最后一个恢复完才计数。重试不会重复计数。
+- 挂起项被放弃、过期或作废时，按回合正常结束的方式收尾：它是这个逻辑回合最后一个还在等待的挂起项时，玩家回合数加一，回合扣下的后台作业（`schedule.completion.mode: detached`）照常入队。这些和删除记录在同一个事务里完成。正在被另一个请求恢复的挂起项也算“还在等待”。
+- 挂起的执行上报过的进度作业（`ctx.progress`）停在 `waiting-input`。恢复成功提交后，它们以 `succeeded` 结束；挂起项被放弃、过期或作废时，以 `cancelled` 结束。恢复失败可以重试时，它们继续等待。
 
 ##### 恢复 setup runtime
 
@@ -4061,7 +4091,9 @@ runtime 可以中途停下来等玩家提供数据，这叫挂起。本节的端
 
 #### `DELETE /api/sessions/:id/suspensions/:suspensionId`
 
-放弃一个挂起项，把它直接删除。用于玩家放弃当前选择，或管理界面清理。挂起项不存在时返回 `404`。
+放弃一个挂起项，把它删除。用于玩家放弃当前选择，或管理界面清理。挂起项不存在时返回 `404`。
+
+它是所在回合最后一个还在等待的挂起项时，这个回合算完成，回合扣下的后台作业照常入队，见[挂起与回合计数](#挂起与回合计数)。请求可以带 `X-Plugin-User-Settings`，作用与恢复请求相同。
 
 **响应**
 
@@ -4454,6 +4486,8 @@ runtime 导出的处理：
 | `topics`      | string | 否   | 逗号分隔的 topic 过滤（如 `runtime,state`）。省略表示全部 |
 | `lastEventId` | string | 否   | 补发这个 ID 之后的事件，用于断线重连                      |
 
+重连也接受标准 `Last-Event-ID` 请求头；同时传入时，`lastEventId` 查询参数优先。游标格式和重置行为见 [订阅流协议](./protocol.md)。
+
 ```bash
 curl -N "http://localhost:3001/api/events/stream?sessionId=<sessionId>"
 ```
@@ -4472,11 +4506,11 @@ data: {"sessionId":"mistport-a1b2c3d4","topics":"all","cursor":"...","timestamp"
 ```
 event: execution.completed
 data: {"runtimeCount":4,"resultCount":4,"durationMs":2500}
-id: evt-001
+id: example-epoch:1
 
 event: state.changed
 data: {"table":"character_stats","field":"hp","value":85}
-id: evt-002
+id: example-epoch:2
 ```
 
 使用说明：
@@ -4902,7 +4936,7 @@ interface SseEnvelope {
 | `contracts`              | string[] | 插件内容，写数据契约 ID                                                       |
 | `additionalInstructions` | string   | 对世界包的补充要求（最多 2000 字符），如角色关系、禁忌、节奏或要避开的内容    |
 
-`contracts` 的可选值来自 `GET /api/framework/authoring` 里带 `generate` 的契约，传其他值返回 `400`。
+`contracts` 的可选值来自 `GET /api/framework/authoring` 里带 `generate` 的契约，传其他值返回 `400`。准备失败的契约不会出现在可选列表里；生成和修订继续处理其余内容，`done.warnings` 说明略过了哪个插件、namespace 和契约。
 
 `saveTarget` 的取值：
 
@@ -4913,7 +4947,7 @@ interface SseEnvelope {
 | `return-only`  | SSE 响应体                            | 调用方自行保存                 | 浏览器本地 IndexedDB、预览生成结果、公开服务避免写服务端持久层 |
 
 - `server-file` 的目录依次取 `COVEL_USER_WORLDS_DIR`、`$COVEL_HOME/worlds`、`~/.covel/worlds`，与世界包安装入口一致。`COVEL_WORLDS_DIR` 只用于内置世界包。
-- `server-store` 和 `return-only` 先把世界包写进临时目录做校验，然后删除临时目录。
+- `server-store` 和 `return-only` 用生成器校验后的结构化结果组装记录，不写世界包文件。
 - 这两个模式保存的 `WorldRecord.metadata`：
   - 去掉文件路径类的 `worldDataPath`、`worldData` 和 `dimensionSources`；
   - 保留已归一化的 `metadata.dimensions`；
@@ -5912,7 +5946,8 @@ STORE_BACKEND=pg DATABASE_URL=postgresql://covel:pass@localhost:5432/covel pnpm 
 
 **生成的世界文件**
 
-- 生成的世界先写进一个隐藏的暂存目录，写完整之后才发布。
+- 生成、修订和翻译的世界文件先写进隐藏的暂存目录。完整副本通过与 ZIP 安装相同的包预检后才发布：清单和世界数据读回不得有错误，且不读取本地覆盖。
+- 这项包预检不要求玩家启用接收插件；会话数据的契约检查仍由会话预检负责。
 - 已有的包和数据库里的身份都保留。ID 冲突或激活失败通过一条 SSE error 事件报告。
 - 激活失败时，只删除这次请求创建的包。
 
@@ -6086,7 +6121,8 @@ STORE_BACKEND=pg DATABASE_URL=postgresql://covel:pass@localhost:5432/covel pnpm 
 - 局部校验失败时，修正请求带上一份答案和校验错误。
 - 输出被截断，或者模型流缺少完成事件时，立即报告错误。残缺的内容不会被当成完整的包继续重写。
 - 最终保存时仍有原子的冲突检查，防止生成期间新出现的同名世界被覆盖。
-- 生成、修订和翻译相互排斥，互斥覆盖整个 SSE 生命周期。
+- 同一服务端的生成、修订和翻译共用一个互斥标记，覆盖整个 SSE 生命周期和清理阶段。忙时新请求立即返回 `429 operation_in_progress`，不调用模型；结束或失败后释放。
+- 这个标记不阻止编辑和删除。保存仍须取得世界操作锁并重新核对：生成不能覆盖已有 ID，修订不能覆盖模型等待期间的修改，翻译不能写进已删除或替换的包。
 
 **世界数据的语言覆盖**
 

@@ -1,4 +1,9 @@
-import type { LLMMessage, LLMResponse } from "../llm/llm-adapter.js";
+import { parseJsonText } from "@covel/tools";
+import type {
+  LLMMessage,
+  LLMResponse,
+  LLMToolCall,
+} from "../llm/llm-adapter.js";
 
 type ToolCallResponse = Pick<
   LLMResponse,
@@ -14,11 +19,25 @@ export function buildAssistantToolCallMessage(
       ? { providerContinuation: response.providerContinuation }
       : {}),
     content: response.content ?? "",
-    toolCalls: response.toolCalls,
+    toolCalls: response.toolCalls.map(normalizeAssistantToolCall),
     ...(response.reasoningContent
       ? { reasoningContent: response.reasoningContent }
       : {}),
   };
+}
+
+/** Keep history valid JSON without changing what the executor receives. */
+export function normalizeAssistantToolCall(call: LLMToolCall): LLMToolCall {
+  // Replay the same parsed value the executor sees. Keep an invalid call's
+  // original text as a JSON string, paired with its INVALID_ARGS result;
+  // never invent an empty object that appears to have been executed.
+  let value: unknown;
+  try {
+    value = parseJsonText(call.arguments);
+  } catch {
+    value = call.arguments;
+  }
+  return { ...call, arguments: JSON.stringify(value) };
 }
 
 export function buildToolResultMessage(args: {

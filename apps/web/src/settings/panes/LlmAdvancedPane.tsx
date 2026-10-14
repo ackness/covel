@@ -31,6 +31,8 @@ import { useLlmSlotIds } from "./use-llm-slot-ids.js";
 import { useSetting, useSettingsStore } from "../use-settings.js";
 import { useSettingsSave } from "../use-settings-save.js";
 
+import { useInputDraft } from "../use-input-draft.js";
+
 type NumericParameter = Exclude<
   keyof ModelParameterOverrides,
   "maxOutputTokens" | "reasoningEffort"
@@ -184,23 +186,21 @@ export function LlmAdvancedPane({
       getCapabilityOverrides()[selectedSlot]?.maxOutputTokens,
     ].filter((value) => value !== undefined).length;
 
-  const commit = (next: Record<string, ModelParameterOverrides>) => {
-    if (!selectedSlot) return Promise.resolve(false);
-    return save(() => setParamOverrides(next));
-  };
-
   const setField = <K extends keyof ModelParameterOverrides>(
     field: K,
     value: ModelParameterOverrides[K] | undefined,
   ) => {
-    const nextSlot = { ...current };
-    if (value === undefined) delete nextSlot[field];
-    else nextSlot[field] = value;
+    return save(() => {
+      const latest = getParamOverrides();
+      const nextSlot = { ...latest[selectedSlot] };
+      if (value === undefined) delete nextSlot[field];
+      else nextSlot[field] = value;
 
-    const next = { ...paramOverrides };
-    if (Object.keys(nextSlot).length === 0) delete next[selectedSlot];
-    else next[selectedSlot] = nextSlot;
-    return commit(next);
+      const next = { ...latest };
+      if (Object.keys(nextSlot).length === 0) delete next[selectedSlot];
+      else next[selectedSlot] = nextSlot;
+      return setParamOverrides(next);
+    });
   };
 
   useEffect(() => {
@@ -210,7 +210,7 @@ export function LlmAdvancedPane({
       selectedSlot,
       reasoningProfile,
     );
-    if (next !== paramOverrides) commit(next);
+    if (next !== paramOverrides) void setField("reasoningEffort", undefined);
   }, [
     canPruneReasoningOverride,
     reasoningProfile,
@@ -219,21 +219,21 @@ export function LlmAdvancedPane({
   ]);
 
   const resetSlot = () => {
-    const next = { ...paramOverrides };
-    delete next[selectedSlot];
-    const capabilities = { ...getCapabilityOverrides() };
-    const slotCapability = { ...capabilities[selectedSlot] };
-    delete slotCapability.contextWindow;
-    delete slotCapability.maxOutputTokens;
-    if (Object.keys(slotCapability).length)
-      capabilities[selectedSlot] = slotCapability;
-    else delete capabilities[selectedSlot];
-    void save(() =>
-      store.setMany({
+    void save(() => {
+      const next = { ...getParamOverrides() };
+      delete next[selectedSlot];
+      const capabilities = { ...getCapabilityOverrides() };
+      const slotCapability = { ...capabilities[selectedSlot] };
+      delete slotCapability.contextWindow;
+      delete slotCapability.maxOutputTokens;
+      if (Object.keys(slotCapability).length)
+        capabilities[selectedSlot] = slotCapability;
+      else delete capabilities[selectedSlot];
+      return store.setMany({
         "llm.paramOverrides": next,
         "llm.capabilityOverrides": capabilities,
-      }),
-    );
+      });
+    });
   };
 
   return (
@@ -305,7 +305,8 @@ export function LlmAdvancedPane({
 
       {supportsTextGeneration ? (
         <fieldset
-          disabled={!selectedSlot || saving || !writable}
+          disabled={!selectedSlot || !writable}
+          aria-busy={saving}
           className="grid grid-cols-1 gap-3 md:grid-cols-2"
         >
           <ModelTokenLimits
@@ -313,13 +314,13 @@ export function LlmAdvancedPane({
             capability={capability}
             override={getCapabilityOverrides()[selectedSlot]}
             onUpdate={(patch) => {
-              const overrides = getCapabilityOverrides();
-              return save(() =>
-                setCapabilityOverrides({
+              return save(() => {
+                const overrides = getCapabilityOverrides();
+                return setCapabilityOverrides({
                   ...overrides,
                   [selectedSlot]: { ...overrides[selectedSlot], ...patch },
-                }),
-              );
+                });
+              });
             }}
           />
           <MaxOutputTokensCard
@@ -332,7 +333,7 @@ export function LlmAdvancedPane({
           />
           {PARAMETER_DEFINITIONS.map((definition) => (
             <ParameterCard
-              key={definition.field}
+              key={`${selectedSlot}:${definition.field}`}
               definition={{
                 ...definition,
                 defaultValue:
@@ -377,10 +378,15 @@ function ParameterCard({
 }: {
   definition: ParameterDefinition;
   override: number | undefined;
-  onChange: (value: number | undefined) => void;
+  onChange: (value: number | undefined) => Promise<boolean>;
 }) {
   const { t } = useTranslation();
   const effective = effectiveParameterValue(override, definition.defaultValue);
+  const draft = useInputDraft(String(effective), (text) =>
+    onChange(
+      parseNumericParameterOverride(text, definition.min, definition.max),
+    ),
+  );
   const decimals = definition.step < 0.1 ? 2 : definition.step < 1 ? 1 : 0;
 
   return (
@@ -425,8 +431,17 @@ function ParameterCard({
           min={definition.min}
           max={definition.max}
           step={definition.step}
-          value={effective}
-          onChange={(event) => onChange(Number(event.target.value))}
+          value={
+            parseNumericParameterOverride(
+              draft.value,
+              definition.min,
+              definition.max,
+            ) ?? effective
+          }
+          onChange={(event) => draft.set(event.target.value)}
+          onPointerUp={() => void draft.flush()}
+          onKeyUp={() => void draft.flush()}
+          onBlur={() => void draft.flush()}
           className="h-1.5 min-w-0 flex-1 cursor-pointer appearance-none rounded-full bg-muted accent-primary [&::-webkit-slider-thumb]:h-3.5 [&::-webkit-slider-thumb]:w-3.5 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary"
         />
         <input
@@ -435,15 +450,11 @@ function ParameterCard({
           min={definition.min}
           max={definition.max}
           step={definition.step}
-          value={override ?? effective}
-          onChange={(event) => {
-            onChange(
-              parseNumericParameterOverride(
-                event.target.value,
-                definition.min,
-                definition.max,
-              ),
-            );
+          value={draft.value}
+          onChange={(event) => draft.set(event.target.value)}
+          onBlur={() => void draft.flush()}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") event.currentTarget.blur();
           }}
           className="w-20 border border-border bg-background px-2 py-1.5 text-right font-mono text-xs tabular-nums outline-none focus:ring-1 focus:ring-primary"
         />

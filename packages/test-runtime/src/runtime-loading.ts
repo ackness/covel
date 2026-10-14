@@ -359,6 +359,7 @@ export async function loadEntryTools(
   } = await loadPluginEntryDefinition(
     discovery,
     pluginDeclarations(definition),
+    definition.manifests,
   );
   if (
     entryPaths.length === 0 &&

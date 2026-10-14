@@ -27,9 +27,7 @@ function makeApp(
     if (options?.registry) {
       c.set("pluginRegistry" as never, options.registry);
     }
-    if (options?.builtinToolNames) {
-      c.set("builtinToolNames" as never, options.builtinToolNames);
-    }
+    c.set("builtinToolNames", options?.builtinToolNames ?? []);
     await next();
   });
   app.route("/api/traces", traceRoutes);

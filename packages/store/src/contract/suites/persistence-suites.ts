@@ -98,6 +98,7 @@ export function registerPersistenceStoreSuites(
         toolCallsSoFar: [],
         pendingProposals: [],
         executionContext: suspension.pendingContinuation.executionContext,
+        takenUnder: suspension.pendingContinuation.takenUnder,
         locale: "en-US",
         logicalTurn: 3,
       });
@@ -149,49 +150,48 @@ export function registerPersistenceStoreSuites(
       expect(result!.resumeSchema).toEqual(complexSchema);
     });
 
-    // ── deleteExpiredSuspensions (TTL sweep) ──────────────
-    // A global maintenance sweep: deletes ONLY records that are still
+    // ── listExpiredSuspensions (TTL sweep) ──────────────
+    // A global maintenance read: lists ONLY records that are still
     // unresolved (resolvedAt unset) AND older than the supplied cutoff.
     // Claimed (in-flight, `claimed:<iso>`) and successfully-resolved
-    // records must never be touched. Must behave identically on every
-    // backend (store-backend-parity rule).
-    describe("deleteExpiredSuspensions (TTL sweep)", () => {
+    // records are never listed. Listing deletes nothing: the sweep abandons
+    // each record itself. Must behave identically on every backend.
+    describe("listExpiredSuspensions (TTL sweep)", () => {
       const CUTOFF = "2025-06-01T00:00:00.000Z";
       const OLD = "2020-01-01T00:00:00.000Z";
+      const OLDER = "2019-01-01T00:00:00.000Z";
       const FRESH = "2099-01-01T00:00:00.000Z";
 
-      it("deletes unresolved suspensions older than the cutoff", async () => {
+      it("lists unresolved suspensions older than the cutoff, oldest first, and keeps them", async () => {
         const old = makeSuspension({ sessionId: "sess-ttl", createdAt: OLD });
-        await store.saveSuspension(old);
-
-        const deleted = await store.deleteExpiredSuspensions(CUTOFF);
-
-        expect(deleted).toBe(1);
-        expect(await store.getSuspension(old.id)).toBeNull();
-      });
-
-      it("keeps unresolved suspensions newer than the cutoff", async () => {
-        const fresh = makeSuspension({
+        const older = makeSuspension({
           sessionId: "sess-ttl",
-          createdAt: FRESH,
+          createdAt: OLDER,
         });
-        await store.saveSuspension(fresh);
+        await store.saveSuspension(old);
+        await store.saveSuspension(older);
 
-        const deleted = await store.deleteExpiredSuspensions(CUTOFF);
+        const expired = await store.listExpiredSuspensions(CUTOFF);
 
-        expect(deleted).toBe(0);
-        expect(await store.getSuspension(fresh.id)).not.toBeNull();
+        expect(expired.map((record) => record.id)).toEqual([older.id, old.id]);
+        expect(expired[1]).toEqual(old);
+        expect(await store.getSuspension(old.id)).not.toBeNull();
       });
 
-      it("never deletes claimed (in-flight) suspensions even when old", async () => {
+      it("leaves out unresolved suspensions newer than the cutoff", async () => {
+        await store.saveSuspension(
+          makeSuspension({ sessionId: "sess-ttl", createdAt: FRESH }),
+        );
+
+        expect(await store.listExpiredSuspensions(CUTOFF)).toEqual([]);
+      });
+
+      it("never lists claimed (in-flight) suspensions even when old", async () => {
         const old = makeSuspension({ sessionId: "sess-ttl", createdAt: OLD });
         await store.saveSuspension(old);
         expect(await store.claimSuspension(old.id)).not.toBeNull();
 
-        const deleted = await store.deleteExpiredSuspensions(CUTOFF);
-
-        expect(deleted).toBe(0);
-        expect(await store.getSuspension(old.id)).not.toBeNull();
+        expect(await store.listExpiredSuspensions(CUTOFF)).toEqual([]);
       });
 
       it("releases a claim older than the cutoff and leaves the rest", async () => {
@@ -215,42 +215,15 @@ export function registerPersistenceStoreSuites(
         expect(await store.claimSuspension(resolved.id)).toBeNull();
       });
 
-      it("never deletes successfully-resolved suspensions even when old", async () => {
+      it("never lists successfully-resolved suspensions even when old", async () => {
         const old = makeSuspension({ sessionId: "sess-ttl", createdAt: OLD });
         await store.saveSuspension(old);
         await store.markSuspensionResolved(old.id);
 
-        const deleted = await store.deleteExpiredSuspensions(CUTOFF);
-
-        expect(deleted).toBe(0);
-        expect(await store.getSuspension(old.id)).not.toBeNull();
+        expect(await store.listExpiredSuspensions(CUTOFF)).toEqual([]);
       });
 
-      it("returns the exact number of records deleted", async () => {
-        await store.saveSuspension(
-          makeSuspension({ sessionId: "sess-ttl", createdAt: OLD }),
-        );
-        await store.saveSuspension(
-          makeSuspension({ sessionId: "sess-ttl", createdAt: OLD }),
-        );
-        await store.saveSuspension(
-          makeSuspension({ sessionId: "sess-ttl", createdAt: FRESH }),
-        );
-
-        const deleted = await store.deleteExpiredSuspensions(CUTOFF);
-
-        expect(deleted).toBe(2);
-      });
-
-      it("is a no-op returning 0 when nothing is expired", async () => {
-        await store.saveSuspension(
-          makeSuspension({ sessionId: "sess-ttl", createdAt: FRESH }),
-        );
-
-        expect(await store.deleteExpiredSuspensions(CUTOFF)).toBe(0);
-      });
-
-      it("sweeps globally across sessions in one call", async () => {
+      it("covers every session in one call", async () => {
         await store.saveSuspension(
           makeSuspension({ sessionId: "sess-ttl-A", createdAt: OLD }),
         );
@@ -258,11 +231,11 @@ export function registerPersistenceStoreSuites(
           makeSuspension({ sessionId: "sess-ttl-B", createdAt: OLD }),
         );
 
-        const deleted = await store.deleteExpiredSuspensions(CUTOFF);
+        const expired = await store.listExpiredSuspensions(CUTOFF);
 
-        expect(deleted).toBe(2);
-        expect(await store.listSuspensions("sess-ttl-A")).toHaveLength(0);
-        expect(await store.listSuspensions("sess-ttl-B")).toHaveLength(0);
+        expect(new Set(expired.map((record) => record.sessionId))).toEqual(
+          new Set(["sess-ttl-A", "sess-ttl-B"]),
+        );
       });
     });
   });

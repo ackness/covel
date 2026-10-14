@@ -401,7 +401,7 @@ covel.provideExtension("prompt.segment@1", "character-sheets", {
 **簿记字段不进提示词。** 内核写进提示词的记录不带簿记字段：
 
 - `io.selfData` 的行是 `- <key> | <值的 JSON>`，没有行的 `updatedAt`，值里和 key 相同的 `id` 不重复。
-- 这些行、`<runtime-inputs>` / `<runtime-exports>` 的值和 `{{ world.schema }}` 里，UUID 型的 ID、ISO 时间和 `sessionId` 都被去掉。
+- 这些行、`<runtime-inputs>` / `<runtime-exports>` 的值、`<runtime-activation>` 的载荷和 `{{ world.schema }}` 里，UUID 型的 ID、ISO 时间和 `sessionId` 都被去掉。
 - `characterSheetSegments()` 的玩家表和 NPC fields，以及 `{{ characters.npcs }}` 的 fields，也在序列化之前递归地使用同一个投影。
 - 可读的语义 ID 和 `date` 这样的剧情字段保留。
 

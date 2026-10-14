@@ -1,7 +1,7 @@
 import { MapIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge.js";
 import { Card, CardContent } from "@/components/ui/card.js";
-import { text } from "@/components/world/editor-helpers.js";
+import { worldDisplayText } from "@/lib/world-locale.js";
 import { worldVisual } from "@/lib/world-visuals.js";
 import { worldPackageInfo } from "@/lib/package-info.js";
 import { PackageCredits } from "@/components/shared/package-credits.js";
@@ -11,17 +11,20 @@ import { useTranslation } from "react-i18next";
 
 interface WorldInfoCardProps {
   world: api.WorldSummary;
+  playLocale: string;
   expanded: boolean;
   onToggle: () => void;
 }
 
 export function WorldInfoCard({
   world,
+  playLocale,
   expanded,
   onToggle,
 }: WorldInfoCardProps) {
   const { t } = useTranslation();
   const visual = worldVisual(world);
+  const displayText = worldDisplayText(world, playLocale);
 
   return (
     <Card>
@@ -29,10 +32,10 @@ export function WorldInfoCard({
         expanded={expanded}
         onToggle={onToggle}
         contentId="world-info-card-content"
-        summary={text(world.description) || undefined}
+        summary={displayText.description || undefined}
       >
         <MapIcon className="w-4 h-4" />
-        {text(world.name)}
+        {displayText.name}
         {world.tags && world.tags.length > 0 && (
           <Badge variant="outline" className="text-xs ml-1">
             {t("session.tagsCount", { count: world.tags.length })}
@@ -56,7 +59,7 @@ export function WorldInfoCard({
             </div>
             <div className="space-y-2">
               <p className="text-sm text-muted-foreground wrap-break-word">
-                {text(world.description)}
+                {displayText.description}
               </p>
               {world.tags && world.tags.length > 0 && (
                 <div className="flex flex-wrap gap-1.5">
@@ -69,7 +72,7 @@ export function WorldInfoCard({
               )}
               <PackageCredits
                 info={worldPackageInfo(world)}
-                packageName={text(world.name) || world.id}
+                packageName={displayText.name || world.id}
               />
             </div>
           </div>

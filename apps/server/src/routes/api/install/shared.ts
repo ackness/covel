@@ -16,6 +16,7 @@ import type { Context } from "hono";
 import yauzl, { type Entry, type ZipFile } from "yauzl";
 import { errorBody } from "../../../api-error.js";
 import { ZodError } from "zod";
+import { INSTALL_STAGING_PREFIX } from "./package-staging.js";
 
 // ── Limits (defensive against zip bombs) ────────────────────────
 
@@ -79,6 +80,21 @@ export async function readInstallationJson(c: Context): Promise<unknown> {
 export interface ExtractedEntry {
   readonly relativePath: string;
   readonly content: Buffer;
+}
+
+export const INSTALL_RECEIPT_FILE = ".covel-install.json";
+
+/** Installation receipts are host-owned, including on case-insensitive disks. */
+export function assertNoReservedInstallFiles(
+  entries: readonly ExtractedEntry[],
+): void {
+  if (
+    entries.some(
+      (entry) =>
+        entry.relativePath.toLowerCase().split("/")[0] === INSTALL_RECEIPT_FILE,
+    )
+  )
+    throw httpError(400, "Package contains a reserved installation receipt");
 }
 
 /**
@@ -316,7 +332,7 @@ async function materializeAtomically(
 ): Promise<void> {
   const parent = path.dirname(finalDir);
   await mkdir(parent, { recursive: true });
-  const staging = await mkdtemp(path.join(parent, ".covel-install-"));
+  const staging = await mkdtemp(path.join(parent, INSTALL_STAGING_PREFIX));
   try {
     await writer(staging);
     // `rename` onto an existing non-empty dir fails with ENOTEMPTY on POSIX and

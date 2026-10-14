@@ -1,22 +1,19 @@
 import {
-  assertLlmRequestBudget,
   awaitLlmRequest,
   createLlmRequestBudget,
   createLlmRequestScope,
   DEFAULT_LLM_REQUEST_TIMEOUT_MS,
-  type LLMProviderRequest,
-  type LLMRequestBudget,
   type LLMTargetIdentity,
 } from "@covel/shared";
 /**
  * LLM request machinery for the agent tool-call loop.
  *
- * One agent step issues exactly one LLM response. Depending on the runtime it
- * goes through one of three paths:
- *   - streaming (story runtimes) — with a non-stream fallback when the stream
- *     exhausts retries or finishes empty with tool_calls but no parsed calls;
- *   - non-streaming — with a narrow secondary retry for DeepSeek's malformed
- *     tool-arguments error.
+ * One agent step issues exactly one LLM response. It goes through one of two
+ * paths, chosen by `useStreaming` (see agent-loop-policy.ts):
+ *   - streaming — with a non-stream fallback when the stream exhausts retries
+ *     or finishes empty with tool_calls but no parsed calls. Only story
+ *     runtimes forward the text deltas to the player;
+ *   - non-streaming — with the shared transient-error retry policy.
  *
  * Extracted from `turn-agent-tool-loop.ts` so the main loop body reads as a
  * sequence of named steps rather than a 170-line branch.
@@ -26,31 +23,18 @@ import type { LLMRequestDefaults, RuntimeManifest } from "@covel/shared";
 import type { LLMMessage, LLMResponse } from "../llm/llm-adapter.js";
 import {
   callLLMWithRetry,
-  streamLLMWithRetry,
   LLMRetryError,
+  streamLLMWithRetry,
   type RetryInfo,
   type RetryPolicy,
 } from "../retry/llm-retry.js";
-import {
-  emitLlmCalling,
-  emitLlmRespondedError,
-  emitLlmRespondedSuccess,
-} from "../llm/llm-telemetry.js";
-import { shouldRetryMalformedToolArguments } from "../turn-executor/turn-output-helpers.js";
-import {
-  isStreamRecoveryAllowed,
-  isTerminalLlmRequestError,
-} from "../retry/retry-common.js";
+import { isStreamRecoveryAllowed } from "../retry/retry-common.js";
 import type { AgentLoopDeps } from "../turn-executor/turn-executor-types.js";
 import type {
   LLMToolDefinition,
   LLMResponseFormat,
 } from "../llm/llm-adapter.js";
-import {
-  combineAbortSignals,
-  getTurnExecutionSignal,
-  throwIfTurnExecutionAborted,
-} from "../turn-executor/turn-control.js";
+import { getTurnExecutionSignal } from "../turn-executor/turn-control.js";
 
 export interface RequestLLMResponseOptions {
   readonly manifest: RuntimeManifest;
@@ -181,7 +165,7 @@ export async function requestLLMResponse(
     const response = await awaitLlmRequest(
       useStreaming
         ? requestStreaming(opts, callParams, onStreamDelta)
-        : requestNonStreaming(opts, callParams),
+        : callLLMWithRetry(callParams),
       requestScope.signal,
     );
     return { ...response, target: resolvedTarget };
@@ -257,188 +241,5 @@ async function requestStreaming(
     }
     response = await callLLMWithRetry(callParams);
   }
-  return response;
-}
-
-async function requestNonStreaming(
-  opts: RequestLLMResponseOptions,
-  callParams: CallParams,
-): Promise<LLMResponse> {
-  const {
-    manifest,
-    deps,
-    messages,
-    effectiveModel,
-    toolDefs,
-    responseFormat,
-    maxOutputTokens,
-    retryPolicy,
-    deadline,
-  } = opts;
-
-  // Non-streaming path: helper handles transient-error + call-timeout retry. A
-  // narrow secondary retry covers the DeepSeek-specific "function.arguments
-  // JSON format" error which isTransientError does not classify as retriable.
-  try {
-    return await callLLMWithRetry(callParams);
-  } catch (error) {
-    const cause = error instanceof LLMRetryError ? error.cause : error;
-    if (
-      isTerminalLlmRequestError(cause) ||
-      !toolDefs ||
-      !shouldRetryMalformedToolArguments(cause)
-    ) {
-      throw error;
-    }
-    return malformedToolArgsFallback({
-      manifest,
-      deps,
-      messages,
-      effectiveModel,
-      toolDefs,
-      responseFormat,
-      maxOutputTokens,
-      retryPolicy,
-      deadline,
-      resolvedModel: callParams.resolvedModel,
-      provider: callParams.provider,
-      onTargetAttempt: callParams.onTargetAttempt,
-      requestBudget: callParams.requestBudget!,
-      defaults: callParams.defaults,
-      promptCacheKey: callParams.promptCacheKey,
-    });
-  }
-}
-
-async function malformedToolArgsFallback(args: {
-  manifest: RuntimeManifest;
-  deps: AgentLoopDeps;
-  messages: LLMMessage[];
-  effectiveModel: string | undefined;
-  toolDefs: readonly LLMToolDefinition[];
-  responseFormat: LLMResponseFormat | undefined;
-  maxOutputTokens: number | undefined;
-  retryPolicy: RetryPolicy;
-  deadline: number;
-  resolvedModel: string | undefined;
-  provider: string | undefined;
-  onTargetAttempt?: (target: LLMTargetIdentity) => void;
-  requestBudget: LLMRequestBudget;
-  defaults: LLMRequestDefaults | undefined;
-  promptCacheKey: string | undefined;
-}): Promise<LLMResponse> {
-  const {
-    manifest,
-    deps,
-    messages,
-    effectiveModel,
-    toolDefs,
-    responseFormat,
-    maxOutputTokens,
-    retryPolicy,
-    deadline,
-    resolvedModel,
-    provider,
-  } = args;
-  const fallbackCallStart = Date.now();
-  let actualTarget =
-    provider && resolvedModel ? { provider, model: resolvedModel } : undefined;
-  const providerRequests: LLMProviderRequest[] = [];
-  let callingEmitted = false;
-  const ensureCalling = async (): Promise<void> => {
-    if (callingEmitted) return;
-    callingEmitted = true;
-    await emitLlmCalling(deps.emitter, {
-      runtimeId: manifest.name,
-      pluginId: manifest.pluginId,
-      slot: effectiveModel,
-      model: actualTarget?.model ?? resolvedModel ?? effectiveModel,
-      provider: actualTarget?.provider ?? provider,
-      messages,
-      tools: toolDefs,
-      responseFormat,
-      defaults: args.defaults,
-      maxOutputTokens,
-      providerRequests,
-      attempt: 0,
-      startedAt: new Date(fallbackCallStart).toISOString(),
-    });
-  };
-  let response: LLMResponse;
-  try {
-    assertLlmRequestBudget(args.requestBudget, {
-      requireAttempt: true,
-      signal: getTurnExecutionSignal(deps.turnControl),
-    });
-    const signal = combineAbortSignals(
-      getTurnExecutionSignal(deps.turnControl),
-      AbortSignal.timeout(
-        Math.max(
-          1000,
-          Math.min(
-            retryPolicy.callTimeoutMs,
-            deadline - Date.now(),
-            args.requestBudget.deadline - Date.now(),
-          ),
-        ),
-      ),
-    );
-    response = await awaitLlmRequest(
-      deps.llm.generate({
-        model: effectiveModel,
-        messages,
-        tools: toolDefs,
-        responseFormat,
-        defaults: args.defaults,
-        requestBudget: args.requestBudget,
-        ...(maxOutputTokens !== undefined ? { maxOutputTokens } : {}),
-        ...(args.promptCacheKey ? { promptCacheKey: args.promptCacheKey } : {}),
-        ...(deps.emitter
-          ? {
-              onProviderRequest: (request: LLMProviderRequest) => {
-                providerRequests.push(request);
-              },
-            }
-          : {}),
-        onTargetAttempt: (target) => {
-          actualTarget = target;
-          args.onTargetAttempt?.(target);
-        },
-        signal,
-      }),
-      signal,
-    );
-    throwIfTurnExecutionAborted(
-      deps.turnControl,
-      "malformed tool arguments fallback",
-    );
-    if (response.finishReason === "error") {
-      throw new Error("PROVIDER_ERROR: model generation ended with an error");
-    }
-    await ensureCalling();
-  } catch (fallbackErr) {
-    // Pair every `llm.calling` with an `llm.responded` on the error path so
-    // trace-viewer pairing stays intact when this fallback generate throws.
-    await ensureCalling();
-    await emitLlmRespondedError(deps.emitter, {
-      runtimeId: manifest.name,
-      pluginId: manifest.pluginId,
-      error: fallbackErr,
-      durationMs: Date.now() - fallbackCallStart,
-      attempt: 0,
-    });
-    throwIfTurnExecutionAborted(
-      deps.turnControl,
-      "malformed tool arguments fallback",
-    );
-    throw fallbackErr;
-  }
-  await emitLlmRespondedSuccess(deps.emitter, {
-    runtimeId: manifest.name,
-    pluginId: manifest.pluginId,
-    response,
-    durationMs: Date.now() - fallbackCallStart,
-    attempt: 0,
-  });
   return response;
 }

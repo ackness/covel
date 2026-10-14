@@ -284,3 +284,18 @@ describe("creation handler", () => {
     expect(calls.forms).toEqual([]);
   });
 });
+
+it("uses the World Model schema without reading a provider output or schema tool", async () => {
+  const { ctx, calls } = makeCtx({
+    phase: "setup",
+    worldSchema: mistportSchema,
+    inputs: { schema: { value: { worldSchema: dialogueSchema } } },
+  });
+  await handler(ctx);
+  expect(await ctx.pluginData.get("setup", "rules")).toMatchObject({
+    attributes: [{ id: "tideReading" }, { id: "combat" }],
+  });
+  expect(calls.tools.map((call) => call.name)).not.toContain(
+    "get-character-schema",
+  );
+});

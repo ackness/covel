@@ -19,7 +19,7 @@
 
 入口：[`.claude/skills/create-plugin/SKILL.md`](../../.claude/skills/create-plugin/SKILL.md)
 
-它带着助手从一个玩法想法走到一个通过校验的插件。字段怎么写、工具怎么注册、怎样测试这些细节放在同目录的 `references/` 里，助手需要时才读。
+它带着助手从一个玩法想法走到一个通过校验的插件。字段怎么写、工具怎么注册、怎样测试这些细节放在同目录的 `references/` 里，助手需要时才读。结果和读取接口以公开 SDK 的 `HandlerResult`、`FunctionStoreView` 为准；包内输入引用写完整的 `<pluginId>/<runtimeId>`。
 
 官方的社区插件仓库另有一份适合独立开发插件的版本：[`.agents/skills/create-plugin`](https://github.com/covel-ai/covel-plugins/tree/main/.agents/skills/create-plugin)。那一份的示例和校验命令按社区仓库的目录结构写。
 

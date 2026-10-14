@@ -34,20 +34,20 @@ import {
 import type { SettingsPersistenceBundle } from "@covel/shared/settings-persistence";
 
 /**
- * Defense-in-depth: reject secret/config IPC unless the sender frame is
- * the trusted app origin (the local sidecar / dev server). The main-frame
- * navigation guard (windows.ts) is the primary block; this stops any other
- * frame (a stray iframe, a not-yet-committed cross-origin page) from reading
- * provider keys or the REST token via the `covelIpc` bridge.
+ * Defense-in-depth: secret/config IPC requires the sender's main frame and
+ * the trusted app origin (the local sidecar / dev server). Same-origin child
+ * frames are not trusted, even if a future preload exposes IPC to them.
  */
 function isTrustedSender(
   event: Electron.IpcMainInvokeEvent,
   channel: string,
 ): boolean {
-  if (isTrustedFrameUrl(event.senderFrame?.url)) return true;
+  const frame = event.senderFrame;
+  if (frame && frame === event.sender.mainFrame && isTrustedFrameUrl(frame.url))
+    return true;
   writeLog(
     "warn",
-    `[ipc] blocked '${channel}' from untrusted origin: ${
+    `[ipc] blocked '${channel}' from untrusted frame: ${
       event.senderFrame?.url ?? "unknown"
     }`,
   );
