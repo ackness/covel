@@ -87,7 +87,7 @@ At the start, it prepares the character attributes and the "dimensions" of this 
 **Notes**
 
 - The starting values that the world author writes are not overwritten by play. The current value of each game is kept separately.
-- If the world already has enough data, the start does not generate it again, and it does not reset values that have already changed.
+- If the world already has enough data, the start does not generate it again, and it does not reset values that have already changed. When a plugin upgrade reruns setup, it only adopts newly declared dimensions and does not write another system message.
 - Dimensions that change over time, such as a countdown, follow the world's time.
 
 ## World Time (`world-time`)

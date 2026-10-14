@@ -176,6 +176,8 @@ One capability can have several providers. Use `cardinality: one` to mean "only 
 
 Runtimes triggered by an event can also be ordered. Among the runtimes triggered by the same event, `needs` and `after` still apply, and runtimes without a dependency still run at the same time. A dependency does not trigger a runtime that no event matched. Runtimes that run in the background cannot be ordered this way. To pass work along, send a follow-up event, or read the output the other side has already saved.
 
+When publishing output, declare its public schema in the root `contracts` and make guard skip output match it too. Existing data may be smaller than generated data, so keep generation size requirements in the tool rather than the public output; see [publishing an output contract](../reference/plugins.md#publishing-an-output-contract).
+
 For the ways of communicating (results for the same turn, saved results, events, services and extension points), see [plugin extensions and communication](../reference/plugin-extensions.md).
 
 ## Some content must not be visible to the player early
