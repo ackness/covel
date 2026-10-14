@@ -1187,6 +1187,8 @@ error.occurred        → executionError
 | `command.completed`      | `command.invoked` 的字段 + `{ durationMs, resultOk? }`                                                                                                                                                                                                                                                                                                                                                                      |
 | `command.failed`         | `command.invoked` 的字段 + `{ durationMs, error }`                                                                                                                                                                                                                                                                                                                                                                          |
 
+`tool.completed` 表示执行器已接受工具结果，不表示 proposal 已提交。接受前取消只报 `tool.failed`；接受后的取消不再为同一调用发失败事件。工具 trace 或领域事件预览发送失败只告警，不把工具成功改为失败。
+
 叙事的片段继续通过 `narrative.delta` 实时发给界面。为了让 `trace_events` 保持精简，只保存 `message.completed`。
 
 **`command.*`**

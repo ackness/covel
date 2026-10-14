@@ -431,10 +431,10 @@ In the path headings below, `[]` is a list item and `.*` is a map value.
 
 ## `runtime.agent.loop.completion`
 
-| Field        | Type                         | Required | Description                                                                                                                                           |
-| ------------ | ---------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `require`    | `"explicit"` or `"tool-use"` | no       | `explicit` needs a completing tool or `runtime-done`. `tool-use` needs a valid business tool call, so "no change" is also submitted through the tool. |
-| `afterTools` | list of string               | no       | The runtime completes after a successful call to one of these tools.                                                                                  |
+| Field        | Type                         | Required | Description                                                                                                                                                                                                               |
+| ------------ | ---------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `require`    | `"explicit"` or `"tool-use"` | no       | `explicit` needs a completing tool or `runtime-done`. `tool-use` needs a successful tool named in `afterTools`, or any successful business tool when `afterTools` is empty. Failed calls and `runtime-done` do not count. |
+| `afterTools` | list of string               | no       | The runtime completes after a successful call to one of these tools.                                                                                                                                                      |
 
 ## `runtime.function`
 

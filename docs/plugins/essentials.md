@@ -143,6 +143,8 @@ agent:
 
 内置工具的清单见[工具参考](../reference/tools.md)。
 
+Agent 的完成条件见[插件参考](../reference/plugins.md)：`completion.require: tool-use` 配合 `afterTools` 时，查询工具不能代替声明的完成工具。
+
 ## 怎样用别的插件的结果
 
 按能力找，不按名字找。能力有一个带版本号的名字，例如 `narrative-engine@1`。要读“写故事的插件”这一回合的输出，写三处：

@@ -477,6 +477,8 @@ plugin_data writes    ──►   │ SSE emit()                        │  Plu
 
 When the model wants to do something definite (for example, save a codex entry), it calls a tool. The framework finds the tool, checks permissions, runs it, and hands the result back to the model.
 
+Argument repairs and history replay follow the [tool argument rules](../reference/tools.md#malformed-argument-json-from-the-model). The executor waits for the callback and reads, snapshots the result, and checks cancellation before accepting it. Only then does it record the call and emit `tool.completed`. Later cancellation still aborts the runtime, but does not record the accepted tool call again as a failure. Recording or telemetry errors only warn; they do not change the result or pending proposals.
+
 ```
 LLM decides to call a tool     Framework handling                         Result
 ──────────────────────────     ──────────────────                         ──────
@@ -506,7 +508,7 @@ LLM: "call sync-           ToolExecutor:
 
 | Declaration                 | Meaning                                                                                                 |
 | --------------------------- | ------------------------------------------------------------------------------------------------------- |
-| `requireToolUse`            | A tool must run successfully at least once                                                              |
+| `requireToolUse`            | With `completeAfterTools`, a listed tool must succeed; otherwise any successful business tool counts    |
 | `completeAfterTools`        | The loop can end once the named final tool succeeds and there is no unresolved tool error in that batch |
 | `requireExplicitCompletion` | For tasks that allow "no change": there must be a real write, or an explicit call to `runtime-done`     |
 
