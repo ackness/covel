@@ -33,6 +33,18 @@ if (!LOOPBACK_BINDS.has(bindHost) && !sessionAuthEnforced) {
   );
 }
 
+if (
+  !LOOPBACK_BINDS.has(bindHost) &&
+  !isOwnerAuthEnforced(env.deploymentTier) &&
+  env.allowedHosts.length === 0
+) {
+  console.warn(
+    `[security] Listening on ${bindHost}, but requests are answered only when ` +
+      "their Host is localhost, 127.0.0.1 or [::1]. List any other name this " +
+      "server is opened by in COVEL_ALLOWED_HOSTS.",
+  );
+}
+
 // Loopback by default: the API has no per-request auth on the
 // self-deploy tier, so it must not listen on public interfaces unless the
 // operator opts in explicitly (COVEL_BIND_HOST=0.0.0.0 — containers, hosted).

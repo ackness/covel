@@ -167,6 +167,7 @@ Fixed behavior of Compose:
 
 - It uses `DEPLOYMENT_TIER=self`. The host binds only to the loopback address by default, and the same-origin interface does not need an operator token or CORS configuration.
 - Inside the app container, `SERVER_PORT` is fixed at `3001`. The host entry point is set by `APP_BIND_IP` (default `127.0.0.1`) and `APP_PORT` (default `3001`).
+- A browser that opens it at `localhost` or `127.0.0.1` needs nothing more. If you change `APP_BIND_IP` to open it from other machines, list the names it is opened by in `COVEL_ALLOWED_HOSTS`.
 - The built-in health check reaches `http://127.0.0.1:3001/api/health` inside the container.
 - The database address inside the container is fixed at `postgres:5432`. It does not depend on the host's `POSTGRES_PORT`.
 - The root `llm.toml` is mounted read-only at `/app/llm.toml`. If the file is missing, Compose reports an error.
@@ -254,6 +255,7 @@ The variables below are also in `registry.ts`. For variables whose use is alread
 | `SERVER_PORT`                   | `3001`                   | Port the HTTP service listens on                                                                                                                                                                                                                         |
 | `APP_PORT`                      | `3001`                   | Host port of the app in Docker Compose                                                                                                                                                                                                                   |
 | `COVEL_BIND_HOST`               | `127.0.0.1`              | Address the HTTP service listens on                                                                                                                                                                                                                      |
+| `COVEL_ALLOWED_HOSTS`           | —                        | Host names, besides `localhost`, `127.0.0.1` and `[::1]`, that the `self` tier answers to, separated by commas                                                                                                                                           |
 | `DEPLOYMENT_TIER`               | `self`                   | Deployment tier (`self` / `demo` / `commercial`). It decides how strict authentication is                                                                                                                                                                |
 | `SERVE_STATIC` / `STATIC_DIR`   | `false` / `./web-dist`   | Lets the server host the web front end in the given folder                                                                                                                                                                                               |
 | `CORS_ORIGIN`                   | —                        | List of allowed HTTP origins, separated by commas                                                                                                                                                                                                        |
@@ -394,6 +396,13 @@ This section explains, one by one, the variables whose behavior is more detailed
 
 - The default `127.0.0.1` means local and desktop deployments listen only on the loopback interface, and cannot be reached over the network.
 - A container or multi-pod deployment must set `COVEL_BIND_HOST=0.0.0.0` explicitly (`docker/docker-compose.yml` already does). Before listening publicly, check `DEPLOYMENT_TIER` and the authentication settings.
+
+**`COVEL_ALLOWED_HOSTS`**
+
+- The `self` tier answers only requests opened at `localhost`, `127.0.0.1` or `[::1]` (on any port). Every other host name gets `403 host_not_allowed`. This stops DNS rebinding: a malicious page that points its own domain at your machine still cannot drive the token-less API.
+- To open a self-hosted web app from other machines, list the names it is opened by, for example `COVEL_ALLOWED_HOSTS=covel.example.com,192.168.1.20`. A port in an entry is ignored; only the host name is compared.
+- Behind a reverse proxy, list the `Host` the proxy forwards. When the proxy rewrites `Host` to the upstream name (such as nginx's default `app:3001`), list that name.
+- The `demo` / `commercial` tiers check a token on every route and skip this check.
 
 **`TRUSTED_PROXY_IPS`**
 

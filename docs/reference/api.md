@@ -172,7 +172,7 @@ PostgreSQL 一列的细节：
 | `self`（默认）/ 桌面  | 通常不检查。带了 token 也不校验。例外见下面的“生产 MemoryStore 例外” |
 | `demo` / `commercial` | 强制检查                                                             |
 
-`self` 和桌面靠网络边界保护：服务器默认只监听回环地址（`COVEL_BIND_HOST=127.0.0.1`，见 [env-registry](./env-registry.md)）。
+`self` 和桌面靠网络边界保护：服务器默认只监听回环地址（`COVEL_BIND_HOST=127.0.0.1`，见 [env-registry](./env-registry.md)），并且只回答 `Host` 是 `localhost`、`127.0.0.1`、`[::1]` 或列在 `COVEL_ALLOWED_HOSTS` 里的请求，其他请求返回 `403 { code: "host_not_allowed" }`。
 
 `demo` / `commercial` 的规则：
 

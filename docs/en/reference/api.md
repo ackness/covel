@@ -172,7 +172,7 @@ Metadata private to the framework never appears in any response. The owner hash,
 | `self` (default) / desktop | Usually not checked. A token, if sent, is not verified. For the exception, see "Production MemoryStore exception" below |
 | `demo` / `commercial`      | Checked every time                                                                                                      |
 
-`self` and the desktop rely on network boundaries. By default the server listens only on the loopback address (`COVEL_BIND_HOST=127.0.0.1`, see [env-registry](./env-registry.md)).
+`self` and the desktop rely on network boundaries. By default the server listens only on the loopback address (`COVEL_BIND_HOST=127.0.0.1`, see [env-registry](./env-registry.md)), and it answers only requests whose `Host` is `localhost`, `127.0.0.1`, `[::1]` or listed in `COVEL_ALLOWED_HOSTS`. Other requests get `403 { code: "host_not_allowed" }`.
 
 Rules for `demo` / `commercial`:
 

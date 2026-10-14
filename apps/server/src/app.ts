@@ -50,6 +50,7 @@ import { createAppUpdateRoutes } from "./routes/app-update.js";
 import { createPerRequestLlmMiddleware } from "./middleware/per-request-llm.js";
 import { createRequestBodyLimitMiddleware } from "./middleware/request-body-limit.js";
 import { createOriginGuardMiddleware } from "./middleware/origin-guard.js";
+import { createHostGuardMiddleware } from "./middleware/host-guard.js";
 import { pluginFrameHeaders } from "./middleware/plugin-frame-headers.js";
 import {
   errorBody,
@@ -142,6 +143,10 @@ app.use("*", async (c, next) => {
   return honoLogger(c, next);
 });
 app.use("*", secureHeaders());
+// Before any route or static file: on the token-less self tier, a request
+// must name this server by a loopback name or a COVEL_ALLOWED_HOSTS entry,
+// which refuses DNS-rebound pages (see middleware/host-guard.ts).
+app.use("*", createHostGuardMiddleware(env));
 app.use("*", createRequestBodyLimitMiddleware());
 
 // Guard any /api/debug/* or /api/internal/* route in production so that an
