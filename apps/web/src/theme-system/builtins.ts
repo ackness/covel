@@ -36,3 +36,7 @@ export function getBuiltinThemes(): ThemeDefinition[] {
     toThemeDefinition(auroraManifest as ThemeManifest, auroraCss),
   ];
 }
+
+export const BUILTIN_THEME_IDS: ReadonlySet<string> = new Set(
+  getBuiltinThemes().map((theme) => theme.id),
+);

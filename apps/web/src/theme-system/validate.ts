@@ -1,3 +1,5 @@
+import { BUILTIN_THEME_IDS } from "./builtins.js";
+import { ThemeImportError } from "./import-error.js";
 import { z } from "zod";
 import { themeLayoutSpecSchema } from "./layout.js";
 import type {
@@ -47,6 +49,48 @@ function inferLabelFromFileName(fileName: string): string {
     .join(" ");
 }
 
+/** Commas in functional pseudos, attributes and strings stay inside their selector. */
+export function splitSelectorList(value: string): string[] {
+  const parts: string[] = [];
+  let start = 0;
+  let parentheses = 0;
+  let brackets = 0;
+  let quote = "";
+  for (let index = 0; index < value.length; index++) {
+    const char = value.charAt(index);
+    if (char === "\\") {
+      index++;
+      continue;
+    }
+    if (quote) {
+      if (char === quote) quote = "";
+      continue;
+    }
+    if (char === '"' || char === "'") {
+      quote = char;
+      continue;
+    }
+    if (char === "(") parentheses++;
+    if (char === ")") parentheses--;
+    if (char === "[") brackets++;
+    if (char === "]") brackets--;
+    if (char === "," && parentheses === 0 && brackets === 0) {
+      parts.push(value.slice(start, index));
+      start = index + 1;
+    }
+  }
+  parts.push(value.slice(start));
+  return parts;
+}
+
+function importedThemeId(value: unknown): string {
+  const result = themeIdSchema.safeParse(value);
+  if (!result.success) throw new ThemeImportError("invalid-id");
+  if (BUILTIN_THEME_IDS.has(result.data))
+    throw new ThemeImportError("builtin-id", { id: result.data });
+  return result.data;
+}
+
 function analyzeThemeSelectors(cssText: string): ThemeSelectorInfo {
   const ids: string[] = [];
   const darkIds: string[] = [];
@@ -56,7 +100,7 @@ function analyzeThemeSelectors(cssText: string): ThemeSelectorInfo {
 
   while ((match = selectorPattern.exec(code))) {
     const selectorList = match[1] ?? "";
-    for (const selector of selectorList.split(",")) {
+    for (const selector of splitSelectorList(selectorList)) {
       const idMatch = selector.match(THEME_ID_PATTERN);
       if (!idMatch) continue;
       for (const token of idMatch) {
@@ -170,7 +214,7 @@ function assertThemeCssIsScoped(cssText: string, themeId: string): void {
   const css = blankCssNonCode(cssText);
   // After blanking, so an `@import` mentioned in a comment doesn't trip it.
   if (AT_IMPORT_PATTERN.test(css)) {
-    throw new Error("Theme CSS must not use @import.");
+    throw new ThemeImportError("import-rule");
   }
 
   const scopePattern = new RegExp(
@@ -210,13 +254,14 @@ function assertThemeCssIsScoped(cssText: string, themeId: string): void {
     stack.push("");
     if (insideStyleRule || insideNonSelectorAtRule || !prelude) continue;
 
-    for (const selector of prelude.split(",")) {
+    for (const selector of splitSelectorList(prelude)) {
       const trimmed = selector.trim();
       if (!trimmed) continue;
       if (!scopePattern.test(stripFunctionalArgs(trimmed))) {
-        throw new Error(
-          `Every theme rule must be scoped to [data-theme="${themeId}"] — found "${trimmed.slice(0, 60)}".`,
-        );
+        throw new ThemeImportError("escapes-scope", {
+          id: themeId,
+          selector: trimmed.slice(0, 60),
+        });
       }
     }
   }
@@ -225,30 +270,24 @@ function assertThemeCssIsScoped(cssText: string, themeId: string): void {
 function assertThemeCssMatchesId(cssText: string, themeId: string): void {
   const { ids } = analyzeThemeSelectors(cssText);
   if (ids.length === 0) {
-    throw new Error(
-      'Theme CSS must include a selector like html[data-theme="your-theme"].',
-    );
+    throw new ThemeImportError("missing-scope");
   }
   if (ids.length > 1 || ids[0] !== themeId) {
-    throw new Error(
-      `Theme CSS must use exactly one data-theme id that matches "${themeId}".`,
-    );
+    throw new ThemeImportError("id-mismatch", { id: themeId });
   }
 }
 
 function parseCssTheme(text: string, fileName: string): ImportedThemePayload {
   const { ids } = analyzeThemeSelectors(text);
   if (ids.length === 0) {
-    throw new Error(
-      'Theme CSS must include a selector like html[data-theme="your-theme"].',
-    );
+    throw new ThemeImportError("missing-scope");
   }
 
   if (ids.length > 1) {
-    throw new Error("Theme CSS must use exactly one data-theme id.");
+    throw new ThemeImportError("multiple-ids");
   }
 
-  const id = themeIdSchema.parse(ids[0]);
+  const id = importedThemeId(ids[0]);
   assertThemeCssIsScoped(text, id);
   const schemes = detectSchemes(text, id);
   const theme: ThemeDefinition = {
@@ -263,7 +302,16 @@ function parseCssTheme(text: string, fileName: string): ImportedThemePayload {
 }
 
 function parseJsonTheme(text: string, fileName: string): ImportedThemePayload {
-  const parsed = jsonThemeSchema.parse(JSON.parse(text));
+  let value: unknown;
+  try {
+    value = JSON.parse(text);
+  } catch {
+    throw new ThemeImportError("invalid-json");
+  }
+  const result = jsonThemeSchema.safeParse(value);
+  if (!result.success) throw new ThemeImportError("invalid-manifest");
+  const parsed = result.data;
+  importedThemeId(parsed.id);
   assertThemeCssMatchesId(parsed.cssText, parsed.id);
   assertThemeCssIsScoped(parsed.cssText, parsed.id);
   const theme: ThemeDefinition = {
@@ -291,4 +339,10 @@ export function parseImportedThemeFile(
   }
 
   return parseCssTheme(text, fileName);
+}
+
+/** Validate a known source before deriving it; builtin sources are allowed here. */
+export function validateThemeCss(cssText: string, themeId: string): void {
+  assertThemeCssMatchesId(cssText, themeId);
+  assertThemeCssIsScoped(cssText, themeId);
 }
