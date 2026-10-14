@@ -161,22 +161,32 @@ describe("GET /api/ui-specs — registry snapshot", () => {
         ...registry.get("panel-plugin")!,
         source: "community",
       });
-      const logError = vi.spyOn(console, "error").mockImplementation(() => {});
+      const logWarn = vi.spyOn(console, "warn").mockImplementation(() => {});
 
       const response = await app.request("/api/ui-specs");
       expect(response.status).toBe(200);
-      const body = (await response.json()) as { right: unknown[] };
+      const body = (await response.json()) as {
+        right: unknown[];
+        diagnostics: unknown[];
+      };
       if (inside) {
         expect(body.right).toHaveLength(1);
         expect(JSON.stringify(body.right)).toContain("linked");
-        expect(logError).not.toHaveBeenCalled();
+        expect(logWarn).not.toHaveBeenCalled();
       } else {
         expect(body.right).toEqual([]);
-        expect(logError).toHaveBeenCalledWith(
-          expect.any(String),
+        expect(body.diagnostics).toEqual([
           expect.objectContaining({
-            message: expect.stringContaining("escapes plugin root"),
+            pluginId: "panel-plugin",
+            issues: [
+              expect.objectContaining({
+                message: expect.stringContaining("escapes plugin root"),
+              }),
+            ],
           }),
+        ]);
+        expect(logWarn).toHaveBeenCalledWith(
+          expect.stringContaining("escapes plugin root"),
         );
       }
     },
@@ -213,7 +223,11 @@ describe("GET /api/ui-specs — registry snapshot", () => {
           pluginId: "panel-plugin",
           slot: "right",
           specIndex: 1,
-          issues: [expect.objectContaining({ path: "_componentPath" })],
+          issues: [
+            expect.objectContaining({
+              message: expect.stringContaining("custom component files"),
+            }),
+          ],
         },
       ],
     });

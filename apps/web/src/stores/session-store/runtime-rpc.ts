@@ -47,6 +47,12 @@ function suspensionOutdatedDetailKey(details: unknown): string {
   return "session.suspensionOutdatedMovedOn";
 }
 
+type ResumeOutcome =
+  | { kind: "cancelled" }
+  | { kind: "approval"; approval: api.ActionApproval }
+  | ({ kind: "resumed" } & api.ResumeSuspensionResponse)
+  | { kind: "outdated"; error: ApiError };
+
 export async function resumeSessionSuspension(
   suspensionId: string,
   data: unknown,
@@ -67,58 +73,100 @@ export async function resumeSessionSuspension(
   const sid = sessionIdRef.current;
   if (!sid) return;
   const generation = sessionGenerationRef.current;
-  // An out-of-date suspension is withdrawn by the server; that is a settled
-  // outcome the workspace keeps, not a failure to roll back.
-  const outcome = await workspace.run(
-    sid,
-    `resume:${crypto.randomUUID()}`,
-    async () => {
-      try {
-        return {
-          kind: "resumed" as const,
-          ...(await api.resumeSuspension(sid, suspensionId, data)),
-        };
-      } catch (err) {
-        if (err instanceof ApiError && err.code === "suspension_outdated")
-          return { kind: "outdated" as const, error: err };
-        throw err;
-      }
-    },
-  );
-  if (
-    sessionIdRef.current !== sid ||
-    sessionGenerationRef.current !== generation
-  )
-    return;
-  if (outcome.kind === "outdated") {
-    dispatch({ type: "REMOVE_SUSPENSION", suspensionId });
-    emitToast(
-      "info",
-      i18n.t("session.suspensionOutdated", {
-        defaultValue: "This request is out of date and has been withdrawn",
-      }) as string,
-      i18n.t(suspensionOutdatedDetailKey(outcome.error.details), {
-        defaultValue: "The story has moved on since it was asked.",
-      }) as string,
+  const isCurrent = () =>
+    sessionIdRef.current === sid && sessionGenerationRef.current === generation;
+  const requested = new Set<string>();
+  while (isCurrent()) {
+    // An outdated suspension is a settled result, so the workspace saves it.
+    const outcome: ResumeOutcome = await workspace.run(
+      sid,
+      `resume:${crypto.randomUUID()}`,
+      async () => {
+        if (!isCurrent()) return { kind: "cancelled" as const };
+        try {
+          const result = await api.resumeSuspension(sid, suspensionId, data);
+          return "status" in result
+            ? { kind: "approval" as const, approval: result }
+            : { kind: "resumed" as const, ...result };
+        } catch (err) {
+          if (err instanceof ApiError && err.code === "suspension_outdated")
+            return { kind: "outdated" as const, error: err };
+          throw err;
+        }
+      },
     );
+    if (outcome.kind === "approval") {
+      const approval: api.ActionApproval = outcome.approval;
+      const key = JSON.stringify([
+        approval.pending.pluginId,
+        approval.pending.action,
+      ]);
+      if (approval.pending.sessionId !== sid || requested.has(key))
+        throw new Error(i18n.t("plugin.approval.unexpectedRequired"));
+      requested.add(key);
+      // Never hold the workspace FIFO while waiting for the player.
+      const allowed =
+        isCurrent() &&
+        (await requestConfirm({
+          title: i18n.t("plugin.approval.title"),
+          message: approvalConfirmMessage(
+            (key, options) => i18n.t(key, options) as string,
+            approval.pending.pluginId,
+            approval.pending.action,
+          ),
+          confirmLabel: i18n.t("plugin.approval.allow"),
+          cancelLabel: i18n.t("plugin.approval.deny"),
+        }));
+      const approved = await workspace.run(
+        sid,
+        `resume-approval:${crypto.randomUUID()}`,
+        async () => {
+          const proceed = allowed && isCurrent();
+          await api.resolveApproval(
+            approval.approvalId,
+            proceed ? "allow" : "deny",
+            "session",
+            sid,
+          );
+          if (proceed) refreshApprovedSessionPlugins(sid, dispatch, isCurrent);
+          return proceed;
+        },
+      );
+      if (!approved) return;
+      continue;
+    }
+    if (!isCurrent() || outcome.kind === "cancelled") return;
+    if (outcome.kind === "outdated") {
+      dispatch({ type: "REMOVE_SUSPENSION", suspensionId });
+      emitToast(
+        "info",
+        i18n.t("session.suspensionOutdated", {
+          defaultValue: "This request is out of date and has been withdrawn",
+        }) as string,
+        i18n.t(suspensionOutdatedDetailKey(outcome.error.details), {
+          defaultValue: "The story has moved on since it was asked.",
+        }) as string,
+      );
+      return;
+    }
+    const { result, events } = outcome;
+    applyResumeEvents(events);
+    dispatch({
+      type: "UPSERT_EXECUTION_STEP",
+      step: {
+        runtimeId: result.runtimeId,
+        pluginId: result.pluginId,
+        status: toExecutionStepStatus(result.status),
+        turnId: result.turnId,
+        ...(typeof result.durationMs === "number"
+          ? { durationMs: result.durationMs }
+          : {}),
+        ...(result.error ? { detail: result.error } : {}),
+      },
+    });
+    dispatch({ type: "REMOVE_SUSPENSION", suspensionId });
     return;
   }
-  const { result, events } = outcome;
-  applyResumeEvents(events);
-  dispatch({
-    type: "UPSERT_EXECUTION_STEP",
-    step: {
-      runtimeId: result.runtimeId,
-      pluginId: result.pluginId,
-      status: toExecutionStepStatus(result.status),
-      turnId: result.turnId,
-      ...(typeof result.durationMs === "number"
-        ? { durationMs: result.durationMs }
-        : {}),
-      ...(result.error ? { detail: result.error } : {}),
-    },
-  });
-  dispatch({ type: "REMOVE_SUSPENSION", suspensionId });
 }
 
 export function reportWorkspaceSyncError(

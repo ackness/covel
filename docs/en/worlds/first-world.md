@@ -73,7 +73,7 @@ Here is what each part says:
 | `pluginPolicy.presetId` | The gameplay pack used by default when a game starts. `traditional-story` is the built-in traditional story set   |
 | `characterSchema`       | The types and attributes of characters in this world. Here, one attribute is defined: "胆识" (nerve), from 1 to 5 |
 
-There are three built-in gameplay packs: `traditional-story` (Traditional Story), `dialogue-mode` (Dialogue Mode), and `low-cost` (Low Cost, which saves tokens).
+There are four built-in gameplay packs: `traditional-story` (Traditional Story), `dialogue-mode` (Dialogue Mode), `low-cost` (Low Cost, which saves tokens), and `narrative-only` (Narrative Only).
 
 ## 3. Write `WORLD.md`
 

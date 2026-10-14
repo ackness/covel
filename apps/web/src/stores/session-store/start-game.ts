@@ -120,6 +120,10 @@ export async function startGameSession({
     sessionIdRef.current = session.id;
     published = true;
     dispatch({ type: "SET_SESSION", session: hydratedSession });
+    dispatch({
+      type: "SET_WORLD_DATA_NOTICES",
+      notices: api.takeCreatedWorldDataNotices(session.id),
+    });
 
     await hydrateInitialSnapshot(session.id, isCurrent, dispatch);
     if (!isCurrent()) return;

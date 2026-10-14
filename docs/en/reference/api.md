@@ -1029,6 +1029,7 @@ What each endpoint accepts and returns:
 - `POST /api/install/collection`: the response is the same as for batch.
 
 Rollback results for failed batch installations are documented in [Plugin installation](./plugin-installation.md#multi-package-preview-and-batch-install): `details.rolledBack` and `details.retained` list removed and retained packages.
+
 - `GET /api/install/plugins`: the list includes plugins that have not yet been loaded after a restart.
 
 `/api/install/world` checks the worldData diagnostics before it writes the world record:
@@ -1480,10 +1481,10 @@ Each slot is an array. Its elements are `{ pluginId, specs[] }`. Each item in `s
 
 **Validation and `specVersion`**:
 
-- When aggregating, every spec is validated with Zod (its structure and `specVersion`).
+- When aggregating, every spec is validated with the same rules as `pnpm validate:plugin` (structure, `specVersion`, data ownership, `webview`).
 - `specVersion` can be left out, and is treated as v1. A declared version higher than the server supports (currently `CURRENT_UI_SPEC_VERSION = 1`) is rejected.
 - If one spec fails validation, it **does not affect the whole response**. Only that spec is removed from its slot.
-- The reason for failure is written in the top-level `diagnostics[]`. Each item is `{ pluginId, runtimeId, slot, specIndex, specId?, issues[{ path, message, code }] }`. It says which plugin, which field, and what the problem is.
+- The reason for failure is written in the top-level `diagnostics[]`. Each item is `{ pluginId, runtimeId, slot, specIndex, specId?, issues[{ path, message, code }] }`. It says which plugin, which field, and what the problem is. A file that cannot be read (missing, not JSON, or pointing outside the plugin directory) is reported here too; `code` is always `invalid`.
 - With `sessionId`, `diagnostics` includes only the plugins active in that session.
 
 **Development hot reload**: `POST /api/plugins/:id/reload` reloads one community plugin.
@@ -2205,6 +2206,7 @@ Notes:
   - These requirements are saved with the session in `metadata.pluginSelection.requiredContracts`. Later starts, stops, and reloads use this list and do not read the world again.
   - If no provider is installed, or there are several providers and the request does not pick one, the response is `400 { "code": "world_requirement_unmet", "details": { contract, code, candidates? } }`.
   - If the player turned a provider off on purpose, or the provider is a community plugin that is still waiting for approval, the session is still created.
+- A plugin with a missing dependency: when no provider gives a contract it depends on (say the player turned the provider off), the session is still created and the plugin is turned off automatically. Such plugins that the player asked for, or that are `kind: core`, are still written into `activePlugins`; `GET /api/sessions/:id/plugins` lists them in `unavailable`, and they come back on their own once the dependency is back. Rules: [Session plugin selection](./plugins.md#session-plugin-selection).
 - `metadata.characterSchema`: when a local session is created in Web private mode, the same schema is written. If the preset is not valid, the session is not created.
 - `metadata.embeddedCharacters`: these are not a plugin's character cards. They do not make a copy of plugin data.
 - `metadata.embeddedLorebook`: AI-generated worlds with `server-store` / `return-only` use it to carry their material and rules.
@@ -2232,16 +2234,17 @@ The response is the session record, plus a one-time `ownerToken`.
 
 **Response fields**:
 
-| Field                  | Type                                   | Description                                                                                                                                                                                       |
-| ---------------------- | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ownerToken`           | string                                 | The session's owner token. It is **returned only here** (the server stores only a hash). When it must be sent is explained below                                                                  |
-| `locale`               | string                                 | The session's actual content language                                                                                                                                                             |
-| `requestedLocale`      | string (optional)                      | Appears only when the actual language differs from the requested one                                                                                                                              |
-| `pluginsWithoutLocale` | string[] (optional)                    | IDs of enabled plugins that have no text in the session's language (they have only English labels, so the panel shows English). This is only a hint and does not stop creation                    |
-| `status`               | `'active' \| 'paused' \| 'ended'`      | The session lifecycle status                                                                                                                                                                      |
-| `phase`                | `'setup' \| 'playing'`                 | Whether the session is in opening setup or in normal play. It starts as `setup` if the active set has a setup runtime, otherwise `playing`. It becomes `playing` once all setup runtimes are done |
-| `completedPlayerTurns` | number                                 | The number of committed player turns in normal play. Interaction during setup is not counted. The same turn is never counted twice                                                                |
-| `setupRuntimes`        | `Record<runtimeId, SetupRuntimeState>` | The state of each setup runtime. See the table below                                                                                                                                              |
+| Field                  | Type                                         | Description                                                                                                                                                                                                                                                                               |
+| ---------------------- | -------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ownerToken`           | string                                       | The session's owner token. It is **returned only here** (the server stores only a hash). When it must be sent is explained below                                                                                                                                                          |
+| `locale`               | string                                       | The session's actual content language                                                                                                                                                                                                                                                     |
+| `requestedLocale`      | string (optional)                            | Appears only when the actual language differs from the requested one                                                                                                                                                                                                                      |
+| `pluginsWithoutLocale` | string[] (optional)                          | IDs of enabled plugins that have no text in the session's language (they have only English labels, so the panel shows English). This is only a hint and does not stop creation                                                                                                            |
+| `worldDataNotices`     | `{ level, sourceId?, message }[]` (optional) | World data that was not imported (warnings and errors), such as data that only a community plugin still waiting for approval receives. The game screen shows it to the player; see [Receivers that join after the game starts](./world-data.md#receivers-that-join-after-the-game-starts) |
+| `status`               | `'active' \| 'paused' \| 'ended'`            | The session lifecycle status                                                                                                                                                                                                                                                              |
+| `phase`                | `'setup' \| 'playing'`                       | Whether the session is in opening setup or in normal play. It starts as `setup` if the active set has a setup runtime, otherwise `playing`. It becomes `playing` once all setup runtimes are done                                                                                         |
+| `completedPlayerTurns` | number                                       | The number of committed player turns in normal play. Interaction during setup is not counted. The same turn is never counted twice                                                                                                                                                        |
+| `setupRuntimes`        | `Record<runtimeId, SetupRuntimeState>`       | The state of each setup runtime. See the table below                                                                                                                                                                                                                                      |
 
 When `ownerToken` must be sent:
 
@@ -2263,13 +2266,14 @@ When `ownerToken` must be sent:
 
 **Errors:**
 
-| Status | `code`                    | When                                                                                               |
-| ------ | ------------------------- | -------------------------------------------------------------------------------------------------- |
-| 400    | `world_requirement_unmet` | A contract the world requires has no provider, or has several providers and none is picked         |
-| 401    | `operator_token_required` | On a hosted deployment (`demo` / `commercial`), the session was created without the operator token |
-| 404    | `world_not_found`         | A `worldId` was given, but the world does not exist                                                |
-| 409    | `world_deleting`          | The world is being deleted                                                                         |
-| 409    | `session_already_exists`  | The `id` chosen by the client already exists                                                       |
+| Status | `code`                    | When                                                                                                                                   |
+| ------ | ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| 400    | `plugin_rejected`         | A plugin the player asked for is rejected for a reason other than a missing dependency, such as a conflict; `details` is the rejection |
+| 400    | `world_requirement_unmet` | A contract the world requires has no provider, or has several providers and none is picked                                             |
+| 401    | `operator_token_required` | On a hosted deployment (`demo` / `commercial`), the session was created without the operator token                                     |
+| 404    | `world_not_found`         | A `worldId` was given, but the world does not exist                                                                                    |
+| 409    | `world_deleting`          | The world is being deleted                                                                                                             |
+| 409    | `session_already_exists`  | The `id` chosen by the client already exists                                                                                           |
 
 - When `id` already exists, the response body is `{ "error": "Session already exists: <id>", "code": "session_already_exists" }`. Creating does not overwrite the existing session, and it does not treat the old session's child records as data for the new session.
 - The server checks the world once before preparing resources and once more when the session is committed. Preparing does not attach media to the session. If it fails, any leftover bytes that nothing refers to are cleaned up by media GC. It does not force-delete content that another session might be using.
@@ -3670,6 +3674,15 @@ Turns on a plugin in this session. The server recalculates the session's active 
 
 The response also has `resolution`, which is the full result of this solve.
 
+When the session has a world and plugins newly join its active set, the server imports the world's data once for them (rules: [Receivers that join after the game starts](./world-data.md#receivers-that-join-after-the-game-starts)), and the response has a `worldData`:
+
+| Field       | Type                              | Meaning                                                        |
+| ----------- | --------------------------------- | -------------------------------------------------------------- |
+| `receivers` | string[]                          | The plugins that received data for the first time              |
+| `imported`  | number                            | The rows written                                               |
+| `conflicts` | number                            | The rows left as they were because the game changed them       |
+| `notices`   | `{ level, sourceId?, message }[]` | World data still not imported with the plugins that are on now |
+
 Rules (enabling and disabling are the same):
 
 - Enabling, disabling, and other writes to the same session share the session lock. After it gets the lock, the server reads `activePlugins` again. It saves to storage first, and only then updates the in-process registry. This way concurrent requests do not overwrite each other, and a failed save never leaves memory and storage out of step.
@@ -4006,7 +4019,8 @@ Resume a suspended runtime with the data the player submitted.
 | ------ | ------ | -------- | ---------------------------------------------------------------------------- |
 | `data` | object | Yes      | Data the player submitted. It must match the suspended item's `resumeSchema` |
 
-- The server checks `data` against `resumeSchema` with full JSON Schema validation (Ajv). This covers `enum`, nested objects, `min` / `max`, `minLength` / `maxLength`, `pattern`, array `items`, `oneOf` / `anyOf`, and more. If the data does not match, the server returns `400`.
+- If a community plugin lacks execution grants, the server first returns `202 approval-required`, asking for `covel:plugin-server-code` and then `runtime:<runtimeId>`. Only the resumed runtime needs approval; the server rechecks the grants under the session lock. The client approves each request and retries the original submission. Denying approval leaves the suspension pending. Hosted deployments also require an operator credential.
+- The server checks `data` against `resumeSchema` with full JSON Schema validation (Ajv). This covers `enum`, nested objects, `min` / `max`, `minLength` / `maxLength`, `pattern`, array `items`, `oneOf` / `anyOf`, and more. If the data does not match, the server returns `400 resume_data_invalid`. If the schema is not an object or cannot compile, it returns `400 resume_schema_invalid` without claiming the suspension or running the plugin. The author must correct the schema produced by the plugin and create a new suspension. The player can abandon the original item.
 - A browser client can send an `X-Provider-Keys` header to give model keys for this request. The desktop app and self-hosted clients can leave it out, and the server then uses the keys it was started with. The server never returns keys through this endpoint.
 
 **Response**
@@ -4017,14 +4031,18 @@ Resume a suspended runtime with the data the player submitted.
 
 **Errors**
 
-| Status | `code`                | When                                                                                                                                     |
-| ------ | --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| 400    | —                     | The request body is not valid JSON or has the wrong structure, or `data` fails `resumeSchema` validation                                 |
-| 404    | —                     | The session or the suspended item does not exist, or the matching runtime cannot be found                                                |
-| 409    | —                     | The suspended item has already been handled. If two resume requests arrive at the same time, the later one gets this result              |
-| 409    | `suspension_outdated` | The suspended item is out of date and the server voided it; see "Out-of-date suspended items" below                                      |
-| 500    | —                     | The runtime failed or the commit failed (`error` gives the reason). In production, an unknown exception shows as `Internal server error` |
-| 503    | `session_busy`        | Waiting for the session lock timed out. The fixed message is `Session is busy, please retry`                                             |
+| Status | `code`                    | When                                                                                                                                     |
+| ------ | ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| 400    | —                         | The request body is not valid JSON or has the wrong structure                                                                            |
+| 400    | `resume_data_invalid`     | `data` fails `resumeSchema` validation                                                                                                   |
+| 400    | `resume_schema_invalid`   | `resumeSchema` is not an object or cannot compile; the suspension remains pending                                                        |
+| 401    | `operator_token_required` | A hosted deployment requires the operator credential to run a community plugin                                                           |
+| 429    | `approval_queue_full`     | The pending approval queue is full; resolve existing approvals first                                                                     |
+| 404    | —                         | The session or the suspended item does not exist, or the matching runtime cannot be found                                                |
+| 409    | —                         | The suspended item has already been handled. If two resume requests arrive at the same time, the later one gets this result              |
+| 409    | `suspension_outdated`     | The suspended item is out of date and the server voided it; see "Out-of-date suspended items" below                                      |
+| 500    | —                         | The runtime failed or the commit failed (`error` gives the reason). In production, an unknown exception shows as `Internal server error` |
+| 503    | `session_busy`            | Waiting for the session lock timed out. The fixed message is `Session is busy, please retry`                                             |
 
 Rules for failed responses:
 

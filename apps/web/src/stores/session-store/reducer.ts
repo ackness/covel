@@ -147,6 +147,7 @@ export const initialState: SessionState = {
   world: null,
   session: null,
   messages: [],
+  unsavedNarratives: [],
   olderMessagesCursor: null,
   worldSessions: [],
   executing: false,
@@ -166,6 +167,7 @@ export const initialState: SessionState = {
   sessionCommands: [],
   sessionCommandsLoaded: false,
   unavailableSessionPlugins: [],
+  worldDataNotices: [],
   messageUiSpecs: [],
   pendingInteractionDrafts: [],
   suspensions: [],
@@ -181,6 +183,7 @@ export const initialState: SessionState = {
 const SESSION_RESET: Partial<SessionState> = {
   session: null,
   messages: [],
+  unsavedNarratives: [],
   olderMessagesCursor: null,
   statePatches: [],
   statePatchRevision: 0,
@@ -199,6 +202,7 @@ const SESSION_RESET: Partial<SessionState> = {
   sessionCommands: [],
   sessionCommandsLoaded: false,
   unavailableSessionPlugins: [],
+  worldDataNotices: [],
   messageUiSpecs: [],
   pendingInteractionDrafts: [],
   suspensions: [],
@@ -447,11 +451,22 @@ export function reducer(
         gameState: newGameState,
       };
     }
-    case "MERGE_RECOVERED_MESSAGES":
+    case "MERGE_RECOVERED_MESSAGES": {
+      const drafts =
+        action.actionGeneration === (state.actionGeneration ?? 0)
+          ? (action.unsavedNarratives ?? [])
+          : [];
+      const draftIds = new Set(drafts.map((row) => row.id));
       return {
         ...state,
+        unsavedNarratives: [
+          ...(state.unsavedNarratives ?? []).filter(
+            (row) => !draftIds.has(row.id),
+          ),
+          ...drafts,
+        ],
         messages: mergeRecoveredMessages(
-          state.messages,
+          state.messages.filter((row) => !draftIds.has(row.id)),
           action.messages,
           state.executing,
           action.actionGeneration === (state.actionGeneration ?? 0)
@@ -459,6 +474,7 @@ export function reducer(
             : undefined,
         ),
       };
+    }
     case "PREPEND_MESSAGES": {
       // 把更旧的一批消息合并到前部。已有消息（含流式占位/本地追加）优先保留，
       // 仅补入尚未出现的历史条目（按 id 去重）。整体覆盖会丢失历史。
@@ -647,6 +663,8 @@ export function reducer(
         unavailableSessionPlugins:
           action.unavailable ?? state.unavailableSessionPlugins,
       };
+    case "SET_WORLD_DATA_NOTICES":
+      return { ...state, worldDataNotices: action.notices };
     case "TOGGLE_SESSION_PLUGIN": {
       const plugin = state.sessionPlugins.find(
         (item) => item.id === action.pluginId,
