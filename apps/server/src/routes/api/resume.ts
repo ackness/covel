@@ -1,3 +1,4 @@
+import { preflightRuntimeApprovals } from "./actions/approval-preflight.js";
 import { commitExecution } from "./commit-execution.js";
 import { resolveMediaImageFlow } from "./media-image-flow.js";
 import {
@@ -173,11 +174,18 @@ resumeRoutes.post("/:id/suspensions/:suspensionId/resume", async (c) => {
     return c.json(errorBody("Suspension already resolved"), 409);
   }
 
+  const approval = preflightRuntimeApprovals(c, guard.session, [
+    suspension.runtimeId,
+  ]);
+  if (approval) return approval;
+
   // Validate resume data against stored resumeSchema (Ajv — finding 5)
   const validationError = validateResumeData(data, suspension.resumeSchema);
   if (validationError !== null) {
     return c.json(
-      errorBody(`Resume data validation failed: ${validationError}`),
+      errorBody(`Resume data validation failed: ${validationError.message}`, {
+        code: validationError.code,
+      }),
       400,
     );
   }
@@ -228,13 +236,20 @@ resumeRoutes.post("/:id/suspensions/:suspensionId/resume", async (c) => {
       if (liveSuspension.resolvedAt) {
         return c.json(errorBody("Suspension already resolved"), 409);
       }
+      const liveApproval = preflightRuntimeApprovals(c, liveSession, [
+        liveSuspension.runtimeId,
+      ]);
+      if (liveApproval) return liveApproval;
       const liveValidationError = validateResumeData(
         data,
         liveSuspension.resumeSchema,
       );
       if (liveValidationError !== null) {
         return c.json(
-          errorBody(`Resume data validation failed: ${liveValidationError}`),
+          errorBody(
+            `Resume data validation failed: ${liveValidationError.message}`,
+            { code: liveValidationError.code },
+          ),
           400,
         );
       }

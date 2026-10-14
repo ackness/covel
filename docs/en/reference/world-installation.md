@@ -67,6 +67,8 @@ These endpoints are controlled by the "allow install" switch. Writing a world al
 - A warning does not block the install.
 - The check does not use local overrides, and it does not run scripts in the package or the code of community plugins.
 
+When a collection fails, rollback of an activated world uses the same deletion lifecycle and retains worlds with sessions. See the [batch installation contract](./plugin-installation.md#multi-package-preview-and-batch-install) for rollback result lists.
+
 ## Updates and data protection
 
 **Checking for updates:**

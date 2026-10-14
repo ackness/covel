@@ -197,3 +197,12 @@ describe("plugin UI spec validation", () => {
     expect(diagnostics).toEqual([]);
   });
 });
+
+it("validates explicit navigation destinations independently of icons", () => {
+  const view = { component: "Text" };
+  const valid = { id: "gallery", navTarget: "images", icon: "book-open", view };
+  const result = partition([valid, { navTarget: "unknown", view }]);
+  expect(result.valid).toEqual([valid]);
+  expect(result.diagnostics).toHaveLength(1);
+  expect(result.diagnostics[0]?.issues[0]?.path).toBe("navTarget");
+});
