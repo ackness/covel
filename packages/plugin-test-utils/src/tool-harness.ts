@@ -1,10 +1,7 @@
+import { compileRuntimeManifest } from "@covel/plugin-loader";
 import { createMemoryStore } from "@covel/store/memory";
 import type { DataStore } from "@covel/store";
-import {
-  isJsonValue,
-  type JsonValue,
-  type RuntimeManifest,
-} from "@covel/shared";
+import { isJsonValue, type JsonValue } from "@covel/shared";
 import {
   commitExecution,
   createToolExecutor,
@@ -112,15 +109,21 @@ async function executeAndCommitResults(
   context: ToolCallContext,
   store: DataStore,
 ): Promise<void> {
-  const manifest: RuntimeManifest = {
-    name: context.runtimeId,
-    description: "Tool integration test",
-    pluginId: context.pluginId,
-    runtimeType: "function",
-    stage: "narrative",
-    outputKind: "plugin",
-    trigger: { type: "manual" },
-  };
+  const manifest = compileRuntimeManifest(
+    {
+      id: context.pluginId,
+      kind: "plugin",
+      description: "Tool integration test",
+    },
+    {
+      type: "function",
+      schedule: { trigger: { type: "manual" } },
+      io: { visibility: "plugin" },
+      // loadRuntime below supplies this synthetic handler in memory.
+      function: { handler: "./tool-harness.js" },
+    },
+    context.runtimeId,
+  );
   let executionError: unknown;
   const execution = await executeTurn(
     {

@@ -656,3 +656,43 @@ describe("generated JSON Schema artifacts", () => {
     expect(typeof validators.authoring).toBe("function");
   });
 });
+
+it("runtime-case editor schema rejects misspelled expectations and missing runtime IDs", () => {
+  const validate = new Ajv({ strict: false }).compile(
+    JSON.parse(readFileSync(schemaOutputPath("runtimeCases"), "utf8")),
+  );
+  expect(
+    validate({
+      cases: [
+        {
+          name: "sample",
+          runtimeId: "sample/main",
+          expect: { runtimeResults: [{ status: "success" }] },
+        },
+      ],
+    }),
+  ).toBe(true);
+  expect(
+    validate({
+      cases: [
+        {
+          name: "sample",
+          runtimeId: "sample/main",
+          expect: { runtimeResult: [] },
+        },
+      ],
+    }),
+  ).toBe(false);
+  expect(validate([{ name: "sample" }])).toBe(false);
+  expect(
+    validate({
+      cases: [
+        {
+          name: "sample",
+          runtimeId: "sample/main",
+          artifacts: { saveImages: { directory: "out" } },
+        },
+      ],
+    }),
+  ).toBe(false);
+});

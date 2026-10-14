@@ -36,6 +36,8 @@ Without `-t` (or `--with-tools`) the scaffolder writes to the user plugin
 directory (`~/.covel/plugins`), not the repository. See
 [examples](references/example-plugins.md) for packages that show each pattern.
 
+Every mode starts `PLUGIN.md` and `package.json` at `0.1.0`; keep both versions equal when updating. Generated runtime case files include `$schema`; `name` and `runtimeId` are required, and unknown case/expectation/artifact fields fail before execution.
+
 The default analyst runs automatically in `post-turn` and consumes the current narrative binding. Function notes remain manual; generate keys through `ctx.random` and timestamps in code.
 
 ### 3. Declare the manifest

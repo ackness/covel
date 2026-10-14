@@ -78,6 +78,8 @@ Write one observation grounded in runtime-inputs.narrative.value.
 - 只有一个 runtime 时，把它写在 `PLUGIN.md` 的 `runtime:` 里。有多个时，每个放在 `runtimes/<名字>/RUNTIME.md`。两种写法不能同时用，否则校验报 `inline runtime and runtimes/ cannot coexist`。
 - `PLUGIN.md` 写了 `version` 时，它必须和 `package.json` 里的 `version` 相同。 `package.json` 还必须写 `"type": "module"`：插件包只支持 ESM，缺了这一行校验和安装都会拒绝。
 
+`pnpm create-plugin` 的每种模式都会把 `PLUGIN.md` 和 `package.json` 的版本设为 `0.1.0`。发布新版本时同时更新两处，再用 `pnpm validate:plugin <插件目录>` 检查。
+
 校验通过后，在游戏的准备页选中插件并授权，它才会运行，见[第一个插件](./first-plugin.md)的最后一步。打包和安装见[打包并试装](../ship/package.md)。
 
 ## 我注册的东西要在哪里声明
