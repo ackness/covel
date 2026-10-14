@@ -166,7 +166,6 @@ describe("plugin flow routes", () => {
       stage: "pre-turn",
       trigger: { type: "scheduled", interval: 3 },
       outputContract: "narrative-engine@1",
-      tags: ["mode:dialogue"],
       turnCompletion: {
         mode: "detached",
         maxQueueMs: 30_000,
@@ -192,6 +191,7 @@ describe("plugin flow routes", () => {
         },
         pluginType: "core-plugin",
         runtimeCount: 1,
+        tags: ["mode:dialogue"],
       },
       packageManifest: parsePluginMd(
         "---\nid: test-package\nkind: core\ndescription: Test\ntags: [mode:dialogue]\nprovides: [narrative-engine@1]\n---\n",
@@ -219,7 +219,6 @@ describe("plugin flow routes", () => {
           trigger: { type?: string; interval?: number };
           outputContract?: string;
           execution?: string;
-          tags?: string[];
           turnCompletion?: { mode: string; maxQueueMs?: number };
         }>;
       }>;
@@ -244,7 +243,7 @@ describe("plugin flow routes", () => {
     });
     expect(pkg?.runtimes?.[0]?.outputContract).toBe("narrative-engine@1");
     expect(pkg?.runtimes?.[0]?.execution).toBe("background");
-    expect(pkg?.runtimes?.[0]?.tags).toEqual(["mode:dialogue"]);
+    expect(pkg?.runtimes?.[0]).not.toHaveProperty("tags");
     expect(pkg?.runtimes?.[0]?.turnCompletion).toEqual({
       mode: "detached",
       maxQueueMs: 30_000,

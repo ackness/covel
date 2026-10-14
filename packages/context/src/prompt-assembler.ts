@@ -36,7 +36,6 @@ import {
   buildCurrentTurnUserMessage,
   buildExecutionStoryCue,
   buildFrameworkPreamble,
-  buildInjectBlocks,
   buildInjectBlocksAsync,
   escapeXmlContent,
   keepInsideBlock,
@@ -259,13 +258,12 @@ function buildExportsBindingBlock(params: ContextBuildParams): string {
 }
 
 /**
- * Build the 10 prompt segments for a single runtime context.
- *
- * Internal helper — used by the exported segmented context builder so tests
- * stay focused on the public shape.
+ * Build the 10 prompt segments for a single runtime context. The only inject
+ * kind that renders a block (`plugin-data`) needs the store, so this
+ * synchronous path renders none; use {@link buildPromptSegmentsAsync}.
  */
 function buildPromptSegments(params: ContextBuildParams): PromptSegments {
-  return buildPromptSegmentsCommon(params, buildInjectBlocks(params));
+  return buildPromptSegmentsCommon(params, "");
 }
 
 /**
@@ -303,7 +301,7 @@ function buildPromptSegmentsCommon(
     "after_plugin",
   );
   // Inject blocks are NOT re-interpolated. Their content is already
-  // XML-escaped upstream (see resolveRuntimeInject / resolvePluginDataInject),
+  // XML-escaped upstream (see resolvePluginDataInject),
   // but `escapeXmlContent` does not touch `{}` — so a second
   // `interpolateTemplate` pass expanded any `{{ ... }}` sequence that appeared
   // inside model-authored or player-authored DATA, and the expansion result

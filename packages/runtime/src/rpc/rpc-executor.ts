@@ -148,7 +148,11 @@ export function createRpcExecutor(deps: RpcDispatchDeps) {
     /** Dispatch an action-level RPC and await the result. */
     async dispatch(
       req: RpcDispatchRequest,
-      context: Omit<RpcHandlerContext, "pluginId" | "action" | "runtimeId">,
+      // The executor supplies the scoped store guard and `random` itself.
+      context: Omit<
+        RpcHandlerContext,
+        "pluginId" | "action" | "runtimeId" | "random"
+      >,
     ): Promise<RpcDispatchResult> {
       const entry = lookupEntry(req.pluginId, req.action);
       const store = closableStore(

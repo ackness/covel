@@ -69,7 +69,7 @@ export function makeGateway(
     },
     resolveSlot() {
       // Mock harness: return a synthetic slot config so plugins that own
-      // their own wire (e.g. openai-image-gen) can be unit-tested without
+      // their own wire (an image plugin, say) can be unit-tested without
       // a live llm.toml. Live mode replaces this whole gateway with a
       // real one via createPluginRuntimeGateway().
       return {

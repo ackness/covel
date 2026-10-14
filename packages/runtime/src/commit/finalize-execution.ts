@@ -484,6 +484,7 @@ export async function finalizeExecution(
       ? { messageSourceTurnId: executionContext.sourceTurnId }
       : {}),
     ...(args.proposalGuard ? { proposalGuard: args.proposalGuard } : {}),
+    ...(args.mediaStore ? { mediaStore: args.mediaStore } : {}),
     ...(deferPostCommit ? { deferPostCommit } : {}),
   });
   const kindOf = (result: FinalizableResult): string =>

@@ -34,7 +34,6 @@ export interface PluginRuntimeSummary {
   readonly model?: string;
   readonly outputKind: "story" | "plugin" | "system";
   readonly outputContract?: string;
-  readonly tags: readonly string[];
 }
 
 export interface PluginToolSummary {
@@ -110,11 +109,6 @@ export interface RuntimePluginContract extends PluginRuntimeSummary {
   readonly dataSchemas: readonly string[];
   readonly writablePluginDataNamespaces: readonly string[];
   readonly readablePluginDataNamespaces: readonly string[];
-  readonly ui: {
-    readonly right: readonly string[];
-    readonly message: readonly string[];
-    readonly left: readonly string[];
-  };
   readonly userSettings: readonly PluginUserSettingSpec[];
 }
 
@@ -208,6 +202,11 @@ export interface PluginPack {
   readonly tags: readonly string[];
   readonly reason?: I18nText;
   readonly source: "builtin" | "world";
+  /**
+   * The view a world made for this pack opens new sessions in. The world
+   * generator writes it into the world's `defaultViewMode`.
+   */
+  readonly defaultViewMode?: "stage" | "parsed";
 }
 
 export interface ResolvedWorldPluginPolicy {

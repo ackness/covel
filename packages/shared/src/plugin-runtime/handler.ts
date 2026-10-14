@@ -2,23 +2,13 @@ import type {
   NestedTurnResult,
   RecursiveCallDelta,
   InputSlot,
-  RuntimeActivation,
-  ExecutionContext,
 } from "../index.js";
 import type {
   PluginFunctionContext,
   PluginFunctionHandler,
   PluginAgentGuard,
 } from "@covel/plugin-handlers-utils";
-import type {
-  PluginRuntimeGateway,
-  PluginRuntimeUtils,
-  MediaContext,
-  ImagesContext,
-  SpeechContext,
-  MusicContext,
-  AssetProgressInput,
-} from "./services.js";
+import type { PluginRuntimeGateway, PluginRuntimeUtils } from "./services.js";
 
 export type {
   FunctionStoreView,
@@ -29,34 +19,30 @@ export type {
   ProgressEffect,
   ProgressReporter,
   PluginAgentGuardResult as AgentGuardResult,
+  PluginSessionView,
+  PluginSetupRuntimeState,
+  PluginExecutionInfo,
 } from "@covel/plugin-handlers-utils";
 
-/** Host capabilities extend the same scoped context used by public plugin authors. */
+/**
+ * The context the host builds for function handlers and agent guards: the
+ * public `PluginFunctionContext`, with host types where the kernel has a more
+ * precise one. It adds no field; `sdk-alignment.ts` in
+ * `@covel/plugin-test-utils` fails when the two drift apart.
+ */
 export interface FunctionHandlerContext extends PluginFunctionContext {
-  readonly session?: {
-    readonly lastPlayerInput:
-      import("../types/message.js").PlayerInputSubmission | null;
-  };
   readonly world?: import("../proposals/world-model.js").WorldModelView;
   readonly services?: import("./plugin-services.js").PluginServiceClient;
   /** Generation is available only when the host supplies a gateway. */
   readonly gateway?: PluginRuntimeGateway;
   readonly utils?: PluginRuntimeUtils;
-  readonly media?: MediaContext;
-  readonly images?: ImagesContext;
-  readonly speech?: SpeechContext;
-  readonly music?: MusicContext;
-  readonly assetProgress?: (progress: AssetProgressInput) => Promise<void>;
   /** Nested execution shares the parent's session and atomic commit boundary. */
   readonly recursiveCall: (
     delta: RecursiveCallDelta,
     opts?: { readonly reason?: string },
   ) => Promise<NestedTurnResult>;
-  readonly recursionDepth: number;
   readonly inputs?: Readonly<Record<string, InputSlot>>;
   readonly exports?: Readonly<Record<string, InputSlot>>;
-  readonly activation?: RuntimeActivation;
-  readonly execution?: ExecutionContext;
 }
 
 export type FunctionHandler = PluginFunctionHandler<FunctionHandlerContext>;

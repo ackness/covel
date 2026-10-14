@@ -215,16 +215,6 @@ describe("Plugin Routes", () => {
             schema: "./schemas/images.json",
           },
         },
-        worldProjections: {
-          "images-from-world-ir": {
-            from: "contract:world-ir@1",
-            handler: "./server/project-world-ir.js",
-            outputs: {
-              images: { namespace: "images", key: "id" },
-            },
-          },
-        },
-        ui: { right: ["./ui/panel.json"], message: ["./ui/message.json"] },
       });
       registry.register(
         makeEntry({
@@ -240,6 +230,15 @@ describe("Plugin Routes", () => {
               name: "my-plugin",
               pluginId: "my-plugin",
               pluginType: "plugin",
+              worldProjections: {
+                "images-from-world-ir": {
+                  from: "contract:world-ir@1",
+                  handler: "./server/project-world-ir.js",
+                  outputs: {
+                    images: { namespace: "images", key: "id" },
+                  },
+                },
+              },
               ui: {
                 right: ["./ui/panel.json"],
                 message: ["./ui/message.json"],
@@ -295,7 +294,8 @@ describe("Plugin Routes", () => {
         writablePluginDataNamespaces: ["images"],
         effects: {
           reads: ["plugin-data:self:images"],
-          writes: ["ui:message", "ui:right"],
+          // A package's static panels are not a per-turn write.
+          writes: [],
           parallelSafe: false,
         },
       });

@@ -146,7 +146,7 @@ Rules:
 
 - Each item that is read does not include `initialValue` or `updateRule`. It also does not include which turn it was last updated in.
 - The value is raw JSON. When it is shown or queried, only nodes that the schema explicitly marks with `x-i18n` are translated.
-- When no plugin is responsible for dimensions, or the dimensions have not been initialized yet, the snapshot can be empty.
+- When no plugin is responsible for dimensions, or the dimensions have not been initialized yet, the snapshot can be empty. When no plugin responsible for dimensions is turned on as a session is created, the dimensions the world declares are not imported and the session starts as usual; see the [session API](./api.md#post-apisessions). The kernel does not store dimensions itself.
 - When a plugin is responsible for dimensions but it is unavailable or the read fails, this must be an error. It cannot fall back to the world package's initial values, and it cannot pretend the snapshot is empty.
 
 ### Ownership and writing

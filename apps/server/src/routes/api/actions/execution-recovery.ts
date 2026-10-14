@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { SessionExecutionStatus } from "@covel/shared";
 import type { DataStore } from "@covel/store";
 import { getActiveTurn } from "../turn-control.js";
+import { ActionRejectedError } from "./action-rejection.js";
 import type { SessionLock } from "../../../lib/session-lock.js";
 
 const recoveryActionSchema = z.discriminatedUnion("type", [
@@ -70,7 +71,10 @@ export async function getSessionExecutionStatus(
     const result = await lock.tryWithLock(sessionId, () =>
       readExecutionStatus(store, sessionId),
     );
-    return result.acquired ? result.value : { state: "running" };
+    if (result.acquired) return result.value;
+    // A held lock is a live owner. No lock connection says nothing about
+    // one: the client checks again instead of treating it as a running turn.
+    return { state: result.reason === "busy" ? "running" : "unknown" };
   }
   const result = await readExecutionStatus(store, sessionId);
   const newlyActive = getActiveTurn(sessionId);
@@ -174,8 +178,9 @@ export async function assertRecoverableTurn(
         JSON.stringify(status.retry)) ||
     (status.state !== "interrupted" && status.state !== "failed")
   ) {
-    throw new Error(
+    throw new ActionRejectedError(
       "The previous turn is no longer available for recovery. Refresh its status before retrying.",
+      "recovery_unavailable",
     );
   }
   return status;

@@ -76,52 +76,16 @@ describe("executeTurn main-loop DAG scheduler", () => {
     // would time out.
     const narrator = manifest("narrator", 500);
     const guide = manifest("guide", 550, {
-      input: {
-        inject: [
-          {
-            kind: "runtime",
-            from: "narrator",
-            field: "narrativeOutput",
-            as: "<n>",
-          },
-        ],
-      },
+      inputs: { n: { from: { runtime: "narrator" } } },
     } as Partial<RuntimeManifest>);
     const extractor = manifest("npc-graph/extractor", 620, {
-      input: {
-        inject: [
-          {
-            kind: "runtime",
-            from: "narrator",
-            field: "narrativeOutput",
-            as: "<n>",
-          },
-        ],
-      },
+      inputs: { n: { from: { runtime: "narrator" } } },
     } as Partial<RuntimeManifest>);
     const codex = manifest("codex", 650, {
-      input: {
-        inject: [
-          {
-            kind: "runtime",
-            from: "narrator",
-            field: "narrativeOutput",
-            as: "<n>",
-          },
-        ],
-      },
+      inputs: { n: { from: { runtime: "narrator" } } },
     } as Partial<RuntimeManifest>);
     const charTracker = manifest("char-creator/character-tracker", 750, {
-      input: {
-        inject: [
-          {
-            kind: "runtime",
-            from: "narrator",
-            field: "narrativeOutput",
-            as: "<n>",
-          },
-        ],
-      },
+      inputs: { n: { from: { runtime: "narrator" } } },
     } as Partial<RuntimeManifest>);
 
     const downstreams = [

@@ -1,8 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   apiKeyEnvNameToProviderId,
   normalizeProviderKeyMap,
+  parseProviderKeysEnv,
   providerIdToApiKeyEnvName,
   providerKeyToId,
   toApiKeyEnvMap,
@@ -23,7 +24,7 @@ describe("provider key mapping", () => {
     );
   });
 
-  it("normalizes legacy bare keys and canonical env keys into one provider map", () => {
+  it("normalizes provider-id dictionaries independently of env file parsing", () => {
     expect(
       normalizeProviderKeyMap({
         deepseek: "legacy-value",
@@ -54,4 +55,27 @@ describe("provider key mapping", () => {
     expect(providerKeyToId("DEEPSEEK_API_KEY")).toBe("deepseek");
     expect(providerKeyToId("my_provider")).toBe("my-provider");
   });
+});
+
+it("reads only *_API_KEY entries from keys.env and preserves unknown lines without exposing values", () => {
+  const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+  try {
+    expect(
+      parseProviderKeysEnv(
+        '# keys\nDEEPSEEK_API_KEY="current-secret"\n  deepseek = bare-secret  \nOTHER_SETTING=private-value\n',
+      ),
+    ).toEqual({
+      keys: { deepseek: "current-secret" },
+      unrecognizedLines: [
+        "  deepseek = bare-secret  ",
+        "OTHER_SETTING=private-value",
+      ],
+    });
+    expect(warn).toHaveBeenCalledOnce();
+    expect(warn.mock.calls.flat().join(" ")).not.toMatch(
+      /secret|private-value/,
+    );
+  } finally {
+    warn.mockRestore();
+  }
 });

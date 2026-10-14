@@ -27,6 +27,7 @@ import type {
 } from "@covel/shared";
 import type {
   DisabledRuntime,
+  IgnoredField,
   PluginDiscoveryResult,
   PluginSummary,
   PluginEntryDefinition,
@@ -185,13 +186,18 @@ async function parsePluginMdForLocale(
     undefined,
     labels,
   );
-  return localizedPath === basePath
-    ? canonical
-    : parse(
-        await fs.readFile(localizedPath, "utf-8"),
-        localizedPath,
-        canonical.rawFrontmatter,
-      );
+  if (localizedPath === basePath) return canonical;
+  const localized = parse(
+    await fs.readFile(localizedPath, "utf-8"),
+    localizedPath,
+    canonical.rawFrontmatter,
+  );
+  // The variant inherits the canonical fields; an unknown one is reported
+  // where the author wrote it.
+  const { ignoredFields: _variant, ...rest } = localized;
+  return canonical.ignoredFields
+    ? { ...rest, ignoredFields: canonical.ignoredFields }
+    : rest;
 }
 
 /**
@@ -288,6 +294,11 @@ export interface PluginDefinition {
    * package loads; `pnpm validate:plugin` reports each one as an error.
    */
   readonly disabledRuntimes: readonly DisabledRuntime[];
+  /**
+   * Unknown whole fields left out of the manifests. The package loads
+   * without them; `pnpm validate:plugin` reports each one as an error.
+   */
+  readonly ignoredFields: readonly IgnoredField[];
 }
 
 /**
@@ -404,6 +415,13 @@ export async function loadPluginDefinition(
   }
   for (const disabled of disabledRuntimes)
     console.warn(`[plugin-loader] ${disabled.message}`);
+  const ignoredFields = [parsedPackage, ...manifests].flatMap(
+    (parsed) => parsed.ignoredFields ?? [],
+  );
+  for (const ignored of ignoredFields)
+    console.warn(
+      `[plugin-loader] ${ignored.message}; this host does not know it and loads the package without it`,
+    );
   const packageManifest = {
     ...withoutDisabledOutputs(parsedPackage, disabledRuntimes),
     contractSchemas,
@@ -420,6 +438,7 @@ export async function loadPluginDefinition(
     messages: await readMessageCatalogs(discovery.rootPath),
     languages: await pluginLanguages(discovery.rootPath),
     disabledRuntimes,
+    ignoredFields,
   };
   validatePluginDeclarations(packageManifest);
   return definition;

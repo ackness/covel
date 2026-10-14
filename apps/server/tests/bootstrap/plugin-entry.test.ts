@@ -1020,6 +1020,7 @@ export default async function (covel) {
           sessionId: "s1",
           pluginId: p.discovery.id,
           store: emptyRpcStore(),
+          random: { int: (min: number) => min },
         },
       ),
     ).toBe(2);

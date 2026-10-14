@@ -23,6 +23,7 @@ import { resolveUserResourceDirs } from "./lib/user-resource-dirs.js";
 import {
   createEmbeddingLockHelper,
   createMemoryEmbed,
+  createMemoryIndexControl,
 } from "./embedding-lock.js";
 import {
   createGatewayAdapter,
@@ -58,11 +59,11 @@ import {
   makeErrorHandler,
   redactSensitiveQueryParamsInText,
 } from "./api-error.js";
-import { parseEnvLines } from "./lib/env-file.js";
 import { validateSecurityPosture } from "./security-posture.js";
 import {
   providerApiKeysFromEnv,
-  providerIdToApiKeyEnvName,
+  parseProviderKeysEnv,
+  toApiKeyEnvMap,
   readEnvInt,
   readRuntimeEnv,
 } from "@covel/shared";
@@ -85,9 +86,9 @@ function loadKeysEnvInto(target: NodeJS.ProcessEnv): void {
   const file = join(home, "keys.env");
   if (!existsSync(file)) return;
   try {
-    for (const [key, val] of parseEnvLines(readFileSync(file, "utf-8"))) {
-      const envKey = providerIdToApiKeyEnvName(key);
-      if (envKey && target[envKey] === undefined) target[envKey] = val;
+    const { keys } = parseProviderKeysEnv(readFileSync(file, "utf-8"));
+    for (const [key, value] of Object.entries(toApiKeyEnvMap(keys))) {
+      if (target[key] === undefined) target[key] = value;
     }
   } catch (err) {
     console.warn(`[server] Could not read ${file}:`, err);
@@ -309,6 +310,7 @@ async function initializeServer(): Promise<void> {
       apiKeys,
     });
     const memoryEmbed = createMemoryEmbed({ ai, apiKeys });
+    const memoryIndex = createMemoryIndexControl({ store, ai, apiKeys });
     const perRequestLlm = createPerRequestLlmMiddleware({
       ai,
       envApiKeys: apiKeys,
@@ -339,6 +341,7 @@ async function initializeServer(): Promise<void> {
       mediaBackend: env.mediaBackend,
       vectorBackend: env.vectorBackend,
       ensureEmbeddingLock,
+      memoryIndex,
       memoryEmbed,
       preferredMemorySlot,
       perRequestMiddleware: [perRequestLlm],

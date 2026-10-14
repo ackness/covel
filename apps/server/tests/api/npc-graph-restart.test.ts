@@ -12,6 +12,8 @@ const context = {
   runtimeId: "npc-graph/extractor",
   turnId: "before",
   logicalTurn: 1,
+  // Repeat the same draw across restarts so allocation must avoid saved IDs.
+  random: { int: () => 0 },
 };
 const node = (name: string) => ({
   name,

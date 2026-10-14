@@ -26,6 +26,7 @@ describe("suspendTool", () => {
       turnId: "turn-1",
       pluginId: "test-plugin",
       runtimeId: "test-runtime",
+      random: { int: (min: number) => min },
     });
 
     expect(result).toMatchObject({
@@ -38,7 +39,13 @@ describe("suspendTool", () => {
   it("execute() sentinel passes isSuspendSentinel type guard", async () => {
     const result = await suspendTool.execute(
       { reason: "test reason", resumeSchema: { type: "object" } },
-      { sessionId: "sess-1", turnId: "turn-1", pluginId: "p", runtimeId: "r" },
+      {
+        sessionId: "sess-1",
+        turnId: "turn-1",
+        pluginId: "p",
+        runtimeId: "r",
+        random: { int: (min: number) => min },
+      },
     );
     expect(isSuspendSentinel(result)).toBe(true);
   });

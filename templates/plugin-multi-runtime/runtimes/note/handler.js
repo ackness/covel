@@ -26,7 +26,6 @@ export default async function noteHandler(ctx) {
     "Replace this placeholder note with plugin-specific state.";
   const tags = stringArray(payload.tags);
   const createdAt = new Date().toISOString();
-  if (!random) throw new Error("The host must provide ctx.random");
   let key;
   do {
     key = `note-${random.int(0, 0x100000000).toString(36)}`;

@@ -11,6 +11,7 @@ const context = {
   turnId: "turn",
   pluginId: "fixture",
   runtimeId: "fixture/tracker",
+  random: { int: (min: number) => min },
 };
 const existing = {
   id: "existing",

@@ -49,7 +49,6 @@ import type { EffectResource } from "../types/runtime-scheduling.js";
 import { slashCommandSpecSchema } from "./slash-command-schema.js";
 import {
   IR_RULE_FIELD_PATHS,
-  RUNTIME_DISABLING_ISSUE_PARAMS,
   runtimeRuleIssues,
   type RuntimeRuleView,
 } from "./runtime-rules.js";
@@ -132,7 +131,6 @@ export const triggerTypeSchema = z.enum([
   "event",
 ]);
 
-/** Trigger fields shared by the compat and authoring trigger schemas. */
 const triggerConfigShape = {
   interval: z
     .number()
@@ -175,23 +173,7 @@ export const triggerConfigSchema = z
   })
   .strict();
 
-/** Authoring trigger config shares the current production trigger shape. */
-export const authoringTriggerConfigSchema = triggerConfigSchema;
-
 // ── Input ────────────────────────────────────────────────────────
-
-/**
- * Runtime-output inject — read a field from a completed upstream runtime's
- * output and wrap it in an XML tag.
- */
-const runtimeInjectDeclSchema = z
-  .object({
-    kind: z.literal("runtime"),
-    from: z.string().min(1),
-    field: z.string().min(1),
-    as: z.string().min(1),
-  })
-  .strict();
 
 /**
  * Plugin-data inject — read the runtime's OWN plugin-data namespace
@@ -275,7 +257,6 @@ const runtimeExportInjectDeclSchema = z
  * with `kind` so manifest semantics stay explicit.
  */
 export const inputInjectDeclSchema = z.discriminatedUnion("kind", [
-  runtimeInjectDeclSchema,
   pluginDataInjectDeclSchema,
   runtimeExportInjectDeclSchema,
   z.strictObject({
@@ -411,6 +392,11 @@ const pluginRelativeJsPath = z
       "handler must be a plugin-relative .js/.mjs/.cjs path (no leading `/`, no `..` segments)",
   });
 
+/** PLUGIN.md `entry`: the package's server entry module. */
+export const pluginEntryPathSchema = pluginRelativeJsPath.describe(
+  "Package-relative path of the server entry module. It registers tools, actions, services, hooks and extensions.",
+);
+
 // ── World projections ─────────────────────────────────────
 
 const worldProjectionIdSchema = z
@@ -513,17 +499,6 @@ const pluginEventDeclSchema = z
   })
   .strict();
 
-// ── Plugin catalogue metadata ───────────────────────────────────
-
-const pluginTagSchema = z
-  .string()
-  .min(1)
-  .max(64)
-  .regex(/^[a-z][a-z0-9-]*(?::[a-z][a-z0-9-]*)?$/i, {
-    message:
-      'tags must be identifiers such as "mode:dialogue", "role:narrator", or "ui-only"',
-  });
-
 // A relation entry is a plugin id (or `pluginId/runtimeId`) — nothing more.
 // The object form that also accepted `target` / `plugin` / `runtime` / `type` /
 // `optional` / `reason` was four ways to spell one id plus three fields no
@@ -532,7 +507,8 @@ const pluginTagSchema = z
 // dependencies are a different field — see `needs` / `after`.
 // ── UI spec ─────────────────────────────────────────────────────
 
-const uiSpecSchema = z
+/** `contributes.ui`: package-relative paths of UI spec files, by placement. */
+export const pluginUiPathsSchema = z
   .object({
     right: z
       .array(z.string().min(1))
@@ -850,230 +826,196 @@ interface ManifestCrossFieldView {
   readonly trigger?: RuntimeRuleView["trigger"];
   readonly needs?: RuntimeRuleView["needs"];
   readonly output?: RuntimeRuleView["output"];
+  readonly execution?: string;
+  readonly tools?: { readonly builtin?: readonly string[] };
 }
 
 /** Report the shared runtime rules on the flat IR shape, under IR paths. */
 function addIrRuleIssues(
   m: ManifestCrossFieldView,
   ctx: z.RefinementCtx,
-  authoring = false,
 ): void {
-  const { outputKind, turnCompletion, ...rest } = m;
+  const { outputKind, turnCompletion, tools, ...rest } = m;
   for (const issue of runtimeRuleIssues(
-    { ...rest, visibility: outputKind, completion: turnCompletion },
+    {
+      ...rest,
+      visibility: outputKind,
+      completion: turnCompletion,
+      builtinTools: tools?.builtin,
+    },
     IR_RULE_FIELD_PATHS,
-    { authoring },
   ))
     ctx.addIssue({
       code: "custom",
       path: [...issue.path],
       message: issue.message,
-      ...(issue.disables ? { params: RUNTIME_DISABLING_ISSUE_PARAMS } : {}),
     });
 }
 
-// ── Runtime manifest ─────────────────────────────────────────────
+// ── Package-level fields ─────────────────────────────────────────
+// PLUGIN.md declares these once for the package (plugin-manifest.ts); they
+// are not part of a compiled runtime.
+
+/** PLUGIN.md `description`: a plain string, or a locale map. */
+export const pluginDescriptionSchema = z
+  .union([
+    z.string().min(1),
+    z
+      .record(z.string(), z.string().min(1))
+      .refine((m) => Object.keys(m).length > 0, {
+        message: "i18n description map must have at least one locale entry",
+      }),
+  ])
+  .describe(
+    "What the package does. Plain string; translations go in locale files.",
+  );
+
+/** PLUGIN.md `displayName`: the name players see, distinct from the id. */
+export const pluginDisplayNameSchema = i18nTextLoose.describe(
+  "Player-facing name. Plain string; translations go in locale files.",
+);
+
+/** `contributes.events`: domain events the package's runtimes may emit. */
+export const pluginEventsSchema = z
+  .array(pluginEventDeclSchema)
+  .describe(
+    "Domain events the package's runtimes may emit with the builtin `emit-event` tool.",
+  );
+
+/** `contributes.settings`: the package's player settings. */
+export const pluginUserSettingsSchema = z
+  .array(pluginUserSettingSpecSchema)
+  .describe(
+    "Player-configurable settings. A world can preset them with `pluginSettings`.",
+  );
+
+/** `contributes.commands`: the package's player slash commands. */
+export const pluginCommandsSchema = z
+  .array(slashCommandSpecSchema)
+  .max(32)
+  .describe(
+    "Player slash commands. Each `action` must be listed in `actions`.",
+  );
+
+// ── Compiled runtime manifest ────────────────────────────────────
 
 /**
- * Field definitions shared by the compat (`runtimeManifestInputSchema`) and
- * strict authoring (`runtimeManifestAuthoringSchema`) manifest schemas. Only
- * the schema-specific `trigger` is added per schema below, so the two never
- * drift.
- */
-const runtimeManifestCommonShape = {
-  name: z
-    .string()
-    .min(1)
-    .regex(/^[a-z][a-z0-9-]*(?:\/[a-z][a-z0-9-]*)*$/, {
-      message:
-        'name must be lowercase with hyphens, optional slash separators (e.g. "my-runtime" or "my-plugin/sub-runtime")',
-    }),
-  /**
-   * Author-facing description: a plain string or an I18nText map (the
-   * preferred form in bundled plugins). The loader folds a map to a single
-   * string after parse (`RuntimeManifest.description` stays `string`); the
-   * union here keeps editor tooling (generated JSON Schema) from flagging
-   * every I18nText manifest.
-   */
-  description: z
-    .union([
-      z.string().min(1),
-      z
-        .record(z.string(), z.string().min(1))
-        .refine((m) => Object.keys(m).length > 0, {
-          message: "i18n description map must have at least one locale entry",
-        }),
-    ])
-    .describe(
-      "What the package does. Plain string; translations go in locale files.",
-    ),
-  // Friendly, player-facing name (I18nText). Distinct from `name`, which is
-  // the runtime id. Surfaced via PluginSummary.displayName for plugin lists.
-  displayName: i18nTextLoose
-    .describe(
-      "Player-facing name. Plain string; translations go in locale files.",
-    )
-    .optional(),
-  version: z.string().optional(),
-  runtimeType: z.enum(["agent", "function"]).optional(),
-  handler: z.string().optional(),
-  guard: z.string().optional(),
-  /**
-   * Plugin-root-relative path to a unified server entry module
-   * (`export default function (covel) { ... }`). Declare on ONE runtime
-   * per plugin. Same traversal constraint as `wires` / rpc handlers.
-   */
-  entry: pluginRelativeJsPath
-    .describe(
-      "Package-relative path of the server entry module. It registers tools, actions, services, hooks and extensions.",
-    )
-    .optional(),
-  extensions: z.array(extensionDeclarationSchema).optional(),
-  model: z.string().optional(),
-  llm: z
-    .strictObject({
-      reasoningEffort: z
-        .literal("disabled")
-        .describe("`disabled` turns model reasoning off for this runtime.")
-        .optional(),
-      toolChoice: z
-        .union([
-          z.literal("required"),
-          z.strictObject({
-            name: z.string().min(1).describe("Name of the tool to force."),
-          }),
-        ])
-        .describe(
-          "`required` forces a tool call on every step. `{ name }` forces one named tool.",
-        )
-        .optional(),
-    })
-    .describe("Model call options for this runtime.")
-    .optional(),
-  /** Bounded agent prompt history; omitted keeps the shared session view. */
-  history: runtimeHistoryPolicySchema
-    .describe(
-      "Bounds the agent's prompt history. When omitted, the runtime sees the shared session history.",
-    )
-    .optional(),
-  timeoutMs: z.number().int().positive().optional(),
-  /**
-   * Per-runtime cap on the agent tool-call loop. Overrides the framework
-   * default (10). Lower values prevent runaway LLMs that keep calling the
-   * same tool indefinitely after a successful result. Set to 1 or 2 for
-   * single-shot plugins that should call one tool and stop.
-   */
-  maxSteps: z.number().int().positive().optional(),
-  /** Smart retry count on transient LLM failures. Default 1. Set 0 to disable. */
-  maxRetries: z.number().int().min(0).max(5).optional(),
-  /** Total timeout of one non-streaming LLM call (ms). */
-  callTimeoutMs: z.number().int().positive().optional(),
-  /**
-   * Streaming first-token (TTFB) timeout (ms). Default: at most 120000,
-   * shortened so the retries left fit into `timeoutMs`.
-   */
-  firstTokenTimeoutMs: z.number().int().positive().optional(),
-  /** Longest silence of a stream that has started to write (ms). Default 120000. */
-  idleTimeoutMs: z.number().int().positive().optional(),
-  /** Tool-call loop detection threshold. Default 3. Set 0 to disable. */
-  loopDetectionThreshold: z.number().int().min(0).max(20).optional(),
-  /** Retry a bare (no-tool-call) finish once before releasing. Default false. */
-  requireToolUse: z.boolean().optional(),
-  /** Require a completing tool or explicit runtime-done, preserving no-change. */
-  requireExplicitCompletion: z.boolean().optional(),
-  /** Complete after a response batch successfully calls one of these tools. */
-  completeAfterTools: z.array(z.string().min(1)).min(1).optional(),
-  /** Maximum nested ctx.recursiveCall() depth. Default 10. */
-  maxRecursionDepth: z.number().int().min(0).max(50).optional(),
-  pluginType: z.enum(["core-plugin", "plugin"]).optional(),
-  outputKind: outputKindSchema.optional(),
-  concealed: z.boolean().optional(),
-  outputContract: z.string().min(1).optional(),
-  defaultProvider: z.boolean().optional(),
-  tags: z.array(pluginTagSchema).optional(),
-  /** Coarse scheduling stage: which band this runtime runs in. */
-  stage: stageSchema.optional(),
-  /** Weak ordering dependencies (no gate). */
-  after: z.array(afterRefSchema).optional(),
-  /** Strong dependencies: ordering + gate. */
-  needs: z.array(needsRefSchema).optional(),
-  /** Typed same-execution data bindings, keyed by local binding name. */
-  inputs: inputsBindingMapSchema.optional(),
-  /** Explicit read/write-set override for parallel hazard detection. */
-  effects: effectsDeclSchema.optional(),
-  /** Declared permission upper bounds (currently HTTP origins + methods). */
-  permissions: permissionsDeclSchema.optional(),
-  /**
-   * Execution mode when activated via manual plugin-rpc or as an event
-   * follower (`sync` awaits, `background` queues a durable runtime job and
-   * returns its jobId). Ignored for scheduler-driven runtimes.
-   */
-  execution: z.enum(["sync", "background"]).optional(),
-  /** Scheduler-driven foreground turn-barrier policy. */
-  turnCompletion: turnCompletionConfigSchema.optional(),
-  /**
-   * When true, the session-level event directory (aggregated across all
-   * active runtimes' `events` declarations) is rendered into this
-   * runtime's segment 5 prompt so the LLM knows which topics it may emit
-   * via the builtin `emit-event` tool.
-   */
-  advertiseEvents: z.boolean().optional(),
-  tools: toolsConfigSchema.optional(),
-  input: inputConfigSchema.optional(),
-  output: outputConfigSchema.optional(),
-  dataSchemas: pluginDataSchemaMapSchema.optional(),
-  worldProjections: worldProjectionMapSchema.optional(),
-  /** Domain events this plugin's runtime may emit via `emit-event`. */
-  events: z
-    .array(pluginEventDeclSchema)
-    .describe(
-      "Domain events the package's runtimes may emit with the builtin `emit-event` tool.",
-    )
-    .optional(),
-  i18n: z.record(z.string(), z.string()).optional(),
-  ui: uiSpecSchema
-    .describe("Package-relative paths of declarative UI specs, by placement.")
-    .optional(),
-  userSettings: z
-    .array(pluginUserSettingSpecSchema)
-    .describe(
-      "Player-configurable settings. A world can preset them with `pluginSettings`.",
-    )
-    .optional(),
-  commands: z
-    .array(slashCommandSpecSchema)
-    .max(32)
-    .describe(
-      "Player slash commands. Each `action` must be listed in `actions`.",
-    )
-    .optional(),
-} as const;
-
-/**
- * Loader input schema — decides whether a PLUGIN.md parses at all. Accepts the
- * same field set as the authoring schema (both are `.strict()`, so an unknown
- * field is an error on either); it differs only in enforcing the smaller set of
- * cross-field constraints, so a manifest can load without yet satisfying every
- * authoring rule.
+ * The compiled RuntimeManifest: the internal form the loader produces from a
+ * RUNTIME.md or an inline `runtime`, one per runtime. It is not an authoring
+ * format — authors write the grouped form in runtime-manifest.ts. The loader
+ * copies the package's `userSettings` and `dataSchemas` onto each runtime;
+ * every other package-level field stays on the package declaration.
  */
 export const runtimeManifestInputSchema = z
-  .object({
-    ...runtimeManifestCommonShape,
+  .strictObject({
+    name: z
+      .string()
+      .min(1)
+      .regex(/^[a-z][a-z0-9-]*(?:\/[a-z][a-z0-9-]*)*$/, {
+        message:
+          'name must be lowercase with hyphens, optional slash separators (e.g. "my-runtime" or "my-plugin/sub-runtime")',
+      }),
+    /** The loader folds a locale map to the English string after parse. */
+    description: pluginDescriptionSchema,
+    version: z.string().optional(),
+    runtimeType: z.enum(["agent", "function"]).optional(),
+    handler: z.string().optional(),
+    guard: z.string().optional(),
+    model: z.string().optional(),
+    llm: z
+      .strictObject({
+        reasoningEffort: z
+          .literal("disabled")
+          .describe("`disabled` turns model reasoning off for this runtime.")
+          .optional(),
+        toolChoice: z
+          .union([
+            z.literal("required"),
+            z.strictObject({
+              name: z.string().min(1).describe("Name of the tool to force."),
+            }),
+          ])
+          .describe(
+            "`required` forces a tool call on every step. `{ name }` forces one named tool.",
+          )
+          .optional(),
+      })
+      .describe("Model call options for this runtime.")
+      .optional(),
+    /** Bounded agent prompt history; omitted keeps the shared session view. */
+    history: runtimeHistoryPolicySchema
+      .describe(
+        "Bounds the agent's prompt history. When omitted, the runtime sees the shared session history.",
+      )
+      .optional(),
+    timeoutMs: z.number().int().positive().optional(),
+    /**
+     * Per-runtime cap on the agent tool-call loop. Overrides the framework
+     * default (10). Lower values prevent runaway LLMs that keep calling the
+     * same tool indefinitely after a successful result. Set to 1 or 2 for
+     * single-shot plugins that should call one tool and stop.
+     */
+    maxSteps: z.number().int().positive().optional(),
+    /** Smart retry count on transient LLM failures. Default 1. Set 0 to disable. */
+    maxRetries: z.number().int().min(0).max(5).optional(),
+    /** Total timeout of one non-streaming LLM call (ms). */
+    callTimeoutMs: z.number().int().positive().optional(),
+    /**
+     * Streaming first-token (TTFB) timeout (ms). Default: at most 120000,
+     * shortened so the retries left fit into `timeoutMs`.
+     */
+    firstTokenTimeoutMs: z.number().int().positive().optional(),
+    /** Longest silence of a stream that has started to write (ms). Default 120000. */
+    idleTimeoutMs: z.number().int().positive().optional(),
+    /** Tool-call loop detection threshold. Default 3. Set 0 to disable. */
+    loopDetectionThreshold: z.number().int().min(0).max(20).optional(),
+    /** Retry a bare (no-tool-call) finish once before releasing. Default false. */
+    requireToolUse: z.boolean().optional(),
+    /** Require a completing tool or explicit runtime-done, preserving no-change. */
+    requireExplicitCompletion: z.boolean().optional(),
+    /** Complete after a response batch successfully calls one of these tools. */
+    completeAfterTools: z.array(z.string().min(1)).min(1).optional(),
+    /** Maximum nested ctx.recursiveCall() depth. Default 10. */
+    maxRecursionDepth: z.number().int().min(0).max(50).optional(),
+    pluginType: z.enum(["core-plugin", "plugin"]).optional(),
+    outputKind: outputKindSchema.optional(),
+    concealed: z.boolean().optional(),
+    outputContract: z.string().min(1).optional(),
+    defaultProvider: z.boolean().optional(),
+    /** Coarse scheduling stage: which band this runtime runs in. */
+    stage: stageSchema.optional(),
+    /** Weak ordering dependencies (no gate). */
+    after: z.array(afterRefSchema).optional(),
+    /** Strong dependencies: ordering + gate. */
+    needs: z.array(needsRefSchema).optional(),
+    /** Typed same-execution data bindings, keyed by local binding name. */
+    inputs: inputsBindingMapSchema.optional(),
+    /** Explicit read/write-set override for parallel hazard detection. */
+    effects: effectsDeclSchema.optional(),
+    /** Declared permission upper bounds (currently HTTP origins + methods). */
+    permissions: permissionsDeclSchema.optional(),
+    /**
+     * Execution mode when activated via manual plugin-rpc or as an event
+     * follower (`sync` awaits, `background` queues a durable runtime job and
+     * returns its jobId). Ignored for scheduler-driven runtimes.
+     */
+    execution: z.enum(["sync", "background"]).optional(),
+    /** Scheduler-driven foreground turn-barrier policy. */
+    turnCompletion: turnCompletionConfigSchema.optional(),
+    /**
+     * When true, the session-level event directory (aggregated across all
+     * active runtimes' `events` declarations) is rendered into this
+     * runtime's segment 5 prompt so the LLM knows which topics it may emit
+     * via the builtin `emit-event` tool.
+     */
+    advertiseEvents: z.boolean().optional(),
+    tools: toolsConfigSchema.optional(),
+    input: inputConfigSchema.optional(),
+    output: outputConfigSchema.optional(),
     trigger: triggerConfigSchema.optional(),
+    /** Copied from the package by the loader. */
+    dataSchemas: pluginDataSchemaMapSchema.optional(),
+    /** Copied from the package by the loader. */
+    userSettings: pluginUserSettingsSchema.optional(),
   })
-  .strict()
   .superRefine((m, ctx) => addIrRuleIssues(m, ctx));
-
-/**
- * Strict authoring target — the shape new plugins should be written against.
- * Shares {@link runtimeManifestCommonShape} with the loader schema, and adds
- * every cross-field constraint, including "auto / scheduled runtimes must
- * declare a stage".
- */
-export const runtimeManifestAuthoringSchema = z
-  .object({
-    ...runtimeManifestCommonShape,
-    trigger: authoringTriggerConfigSchema.optional(),
-  })
-  .strict()
-  .superRefine((m, ctx) => addIrRuleIssues(m, ctx, true));

@@ -54,9 +54,10 @@ export function useExecutionRecoveryActions({
       void resumeSessionById(recovery.sessionId).catch(() => {});
       return;
     }
+    const { stalled: _stalled, ...rest } = recovery;
     dispatch({
       type: "SET_EXECUTION_RECOVERY",
-      recovery: { ...recovery, checking: true, error: undefined },
+      recovery: { ...rest, checking: true, error: undefined },
     });
   }, [stateRef, dispatch, resumeSessionById]);
   return { retryInterruptedTurn, refreshExecutionRecovery };

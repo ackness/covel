@@ -6,7 +6,7 @@
  */
 
 import type { ZodError, ZodType } from "zod";
-import { runtimeManifestInputSchema } from "./plugin.js";
+import { pluginManifestSchema } from "./plugin-manifest.js";
 import { worldManifestSchema, worldDimensionsSchema } from "./world.js";
 import {
   dimensionIdSchema,
@@ -54,12 +54,13 @@ function validate<T>(
 // ── Public API ──────────────────────────────────────────────────
 
 /**
- * Validate a PLUGIN.md frontmatter object.
+ * Validate a PLUGIN.md frontmatter object against the package manifest
+ * schema. Static file checks are `pnpm validate:plugin`'s job.
  */
 export function validatePluginManifest(
   data: unknown,
 ): ManifestValidationResult {
-  return validate(runtimeManifestInputSchema, data);
+  return validate(pluginManifestSchema, data);
 }
 
 /**

@@ -1,5 +1,9 @@
 import { appendReasoningStep, reasoningAction } from "./reasoning.js";
-import type { SessionExecutionStatus, SnapshotTraceEvent } from "@covel/shared";
+import {
+  executionMayBeRunning,
+  type SessionExecutionStatus,
+  type SnapshotTraceEvent,
+} from "@covel/shared";
 import {
   mergeExecutionStep,
   foldBackgroundExecutionSteps,
@@ -151,7 +155,7 @@ export function reconcileExecutionSteps(
     )
       return step;
     if (
-      execution.state === "running" &&
+      executionMayBeRunning(execution) &&
       (!execution.turnId || step.turnId === execution.turnId)
     )
       return step;

@@ -29,12 +29,25 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 /**
+ * Whether the record was made from a package of files: a bundled, installed
+ * or generated package that a reload, the startup seed or an update reads
+ * again.
+ */
+export function isPackageWorld(world: WorldRecord): boolean {
+  const { source, packageManaged } = world.metadata ?? {};
+  return (
+    packageManaged === true || source === "file" || source === "generated-file"
+  );
+}
+
+/**
  * The metadata of a world whose authored content was changed in the app.
  *
- * The change is in the store only. For a world that a package manages, the
- * files no longer hold what the record holds, so the record is marked: a
- * package reload or update keeps a marked record instead of replacing it
- * with the files. Every route that changes a world's content saves its
+ * The record is the world; a package is only what it was installed from. The
+ * change is in the store only, so the record of a package world is marked:
+ * a package reload, the startup seed or an update keeps a marked record
+ * instead of replacing it with the files, until the player restores the
+ * package version. Every route that changes a world's content saves its
  * metadata through this.
  */
 export function editedWorldMetadata(
@@ -43,9 +56,7 @@ export function editedWorldMetadata(
 ): Record<string, unknown> {
   return {
     ...metadata,
-    ...(existing.metadata?.packageManaged
-      ? { packageManaged: true, packageModified: true }
-      : {}),
+    ...(isPackageWorld(existing) ? { packageModified: true } : {}),
   };
 }
 
@@ -135,4 +146,34 @@ export function resolveWorldMetadata(
     metadata:
       Object.keys(mergedMetadata).length > 0 ? mergedMetadata : undefined,
   };
+}
+
+/**
+ * Tell the sessions of a world that its dimension declarations changed. Only
+ * a notice: a session keeps the values it has until it syncs.
+ */
+export async function notifyWorldDimensionsChanged(
+  store: DataStore,
+  eventBus: EventBus,
+  worldId: string,
+  changedKeys: readonly string[],
+  now: string,
+): Promise<void> {
+  if (changedKeys.length === 0) return;
+  const sessions = await store.listSessions();
+  for (const session of sessions.filter((s) => s.worldId === worldId)) {
+    eventBus.emit({
+      id: crypto.randomUUID(),
+      type: "event",
+      topic: "system",
+      payload: {
+        _subTopic: "system",
+        _subType: "world.dimensions.changed",
+        worldId,
+        changedKeys: [...changedKeys],
+      },
+      sessionId: session.id,
+      timestamp: now,
+    });
+  }
 }

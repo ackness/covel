@@ -285,11 +285,7 @@ apps/web/src/themes/builtins/
 - `--surface-empty`
 - `--border-subtle`
 
-兼容旧主题的别名：
-
-- `--surface-app`
-- `--surface-panel`
-- `--surface-panel-strong`
+主题只使用上面的 token。自定义主题中的 `--surface-app`、`--surface-panel`、`--surface-panel-strong` 分别改为 `--surface-page`、`--surface-rail`、`--surface-elevated`。明暗切换由 SettingsStore 订阅调用 `applyColorScheme`，不再另设主题 provider 或 `covel:scheme` 存储键。
 
 ### 5.3 规则与强调 token
 

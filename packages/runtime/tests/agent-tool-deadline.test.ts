@@ -1,3 +1,4 @@
+import { throughGateway } from "./helpers/through-gateway.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { tool, z, withPendingProposals } from "@covel/tools";
 import {
@@ -5,10 +6,7 @@ import {
   type RunAgentToolLoopOptions,
 } from "../src/agent-loop/turn-agent-tool-loop.js";
 import { createToolExecutor } from "../src/agent-loop/tool-executor.js";
-import {
-  acquireLLMSlot,
-  setLLMSlotCapForTests,
-} from "../src/retry/llm-slots.js";
+import { acquireLLMSlot, setLLMSlotCapForTests } from "@covel/shared";
 import { executeTurn } from "../src/turn-executor/turn-executor.js";
 import { createHookPipeline } from "../src/hooks/pipeline.js";
 import { resumeSuspendedRuntime } from "../src/resume/turn-resume.js";
@@ -347,7 +345,9 @@ describe("agent tool deadline", () => {
       finishReason: "stop" as const,
       usage: { inputTokens: 1, outputTokens: 1 },
     }));
-    const running = runAgentToolLoop(options({ llm: { generate } }));
+    const running = runAgentToolLoop(
+      options({ llm: throughGateway({ generate }) }),
+    );
     let failure: unknown;
     void running.catch((error) => {
       failure = error;

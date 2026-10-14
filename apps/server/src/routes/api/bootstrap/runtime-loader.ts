@@ -167,6 +167,7 @@ export function createRuntimeLoader(
             },
             // The registry keeps only the runtimes that loaded.
             disabledRuntimes: [],
+            ignoredFields: [],
           },
           Object.fromEntries(
             [...params.pluginRegistry!.getAll().values()].flatMap((e) =>

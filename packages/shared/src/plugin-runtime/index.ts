@@ -53,6 +53,9 @@ export type {
   FunctionHandler,
   AgentGuardResult,
   AgentGuard,
+  PluginSessionView,
+  PluginSetupRuntimeState,
+  PluginExecutionInfo,
 } from "./handler.js";
 export type { LoadedRuntime } from "./loaded-runtime.js";
 export type PluginSource = "builtin" | "community";

@@ -9,6 +9,7 @@ import { createMemorySystem } from "../src/memory-system.js";
 import { createVectorIngestor } from "../src/vector-ingest.js";
 import {
   ARCHIVAL_NAMESPACE,
+  EmbeddingModelChangedError,
   MEMORY_VECTOR_PLUGIN_ID,
   RECALL_NAMESPACE,
   type EmbedFn,
@@ -913,6 +914,106 @@ describe("graceful degradation", () => {
       true,
     );
     expect(archival.some((result) => result.key === "forge")).toBe(true);
+  });
+
+  it("warns once and keeps progress while the embedding model differs from the lock", async () => {
+    const store = createMemoryStore();
+    const sessionId = "sess-model-changed";
+    await lockModel(store, sessionId);
+    order = 0;
+    await addMessage(store, sessionId, "assistant", "the dragon breathed fire");
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      let changed = true;
+      const ingestor = createVectorIngestor({
+        store,
+        embed: async (texts, context) => {
+          if (changed) throw new EmbeddingModelChangedError();
+          return embed(texts, context);
+        },
+      });
+      for (let i = 0; i < 3; i += 1) {
+        await ingestor.ingest(sessionId);
+        await addMessage(store, sessionId, "user", `message ${i}`);
+      }
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(
+        await store.getVectorIndexProgress({
+          sessionId,
+          pluginId: MEMORY_VECTOR_PLUGIN_ID,
+          namespace: "recall-ingest",
+        }),
+      ).toBeNull();
+
+      // The search falls back to keywords without another warning.
+      const system = createMemorySystem({
+        store,
+        embed: async () => {
+          throw new EmbeddingModelChangedError();
+        },
+      });
+      const results = await system.recall.search(sessionId, "dragon", 5);
+      expect(results.some((r) => r.content.includes("dragon"))).toBe(true);
+      expect(warn).toHaveBeenCalledTimes(1);
+
+      // Restoring the model resumes from where the index stopped.
+      changed = false;
+      expect((await ingestor.ingest(sessionId)).recall).toBe(4);
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it("does not write a batch embedded with the model the index was reset away from", async () => {
+    const store = createMemoryStore();
+    const sessionId = "sess-reset-during-sweep";
+    await lockModel(store, sessionId);
+    order = 0;
+    await addMessage(store, sessionId, "assistant", "the dragon breathed fire");
+    const session = (await store.getSession(sessionId))!;
+    const oldTarget = (await store.resolveSessionVectorTarget(sessionId))!;
+    const newTarget = await store.ensureVectorModel({
+      provider: "test",
+      modelName: "other-embed",
+      dim: DIM,
+      modelId: "test/other-embed",
+    });
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      // The index moves to another model while the old one is embedding.
+      await createVectorIngestor({
+        store,
+        embed: async (texts, context) => {
+          await store.resetSessionVectorIndex({
+            sessionId,
+            expectedSessionCreatedAt: session.createdAt,
+            expectedModelRegistryId: oldTarget.modelRegistryId,
+            target: newTarget,
+          });
+          return embed(texts, context);
+        },
+      }).ingest(sessionId);
+    } finally {
+      warn.mockRestore();
+    }
+    expect(
+      await store.searchVectors({
+        sessionId,
+        query: embedText("dragon"),
+        topK: 5,
+      }),
+    ).toEqual([]);
+    expect(
+      await store.getVectorIndexProgress({
+        sessionId,
+        pluginId: MEMORY_VECTOR_PLUGIN_ID,
+        namespace: "recall-ingest",
+      }),
+    ).toBeNull();
+    // The next sweep fills the new index from the start.
+    expect(
+      (await createVectorIngestor({ store, embed }).ingest(sessionId)).recall,
+    ).toBe(1);
   });
 
   it("stays keyword-only (ingest no-op) when no embed function is injected", async () => {

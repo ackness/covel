@@ -5,6 +5,7 @@
 import type {
   LLMAdapter,
   LLMUsageSummary,
+  PluginPack,
   WorldCreationBrief,
   WorldGenerationPart,
 } from "@covel/shared";
@@ -32,6 +33,12 @@ export interface CreateWorldOptions {
   readonly brief?: WorldCreationBrief;
   /** Loaded public data contracts available to generated world records. */
   readonly dataContracts?: readonly WorldGenerationDataContract[];
+  /**
+   * The plugin packs a brief may name (`brief.pack`): the server's catalogue.
+   * The chosen one becomes the world's `pluginPolicy.presetId`, and its
+   * `defaultViewMode` the world's.
+   */
+  readonly packs?: readonly PluginPack[];
   /** Optional abort signal for cancelling slow provider calls. */
   readonly signal?: AbortSignal;
   /**

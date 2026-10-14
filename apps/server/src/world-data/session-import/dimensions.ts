@@ -49,9 +49,23 @@ export function appendDimensionPlan(
   );
   if (providers.length > 1) throw new Error("Conflicting dimension providers");
   if (!providers.length) {
-    if (Object.keys(definitions).length)
-      throw new Error("Dimension provider unavailable");
-    return plan;
+    // The kernel keeps no dimensions of its own: without a provider they are
+    // left out, and the session starts without them.
+    const ids = Object.keys(definitions);
+    if (ids.length === 0) return plan;
+    return {
+      ...plan,
+      skippedDimensions: ids,
+      diagnostics: [
+        ...plan.diagnostics,
+        {
+          level: "warning",
+          code: "dimension-provider-missing",
+          message: `No active plugin provides ${DIMENSION_CONTRACT}, so the world's dimensions (${ids.join(", ")}) are left out of the session`,
+          hint: `Turn on a plugin that provides ${DIMENSION_CONTRACT} to use them.`,
+        },
+      ],
+    };
   }
   const provider = providers[0]![0];
   const source: OrderedWorldDataSource = {

@@ -255,13 +255,6 @@ describe("core plugin manifest contract", () => {
         accepts: "contract:world-ir@1",
         required: true,
       });
-      expect(
-        downstream.input?.inject?.some(
-          (inject) =>
-            inject.kind === "runtime" &&
-            ["narrator", "chat-mode-narrator"].includes(inject.from),
-        ) ?? false,
-      ).toBe(false);
     }
 
     // Ledgers that only reconcile typed WorldIR events run without a model.

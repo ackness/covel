@@ -103,20 +103,16 @@ it.each([
   "binds function text and object calls to session %s with override %s",
   async (locale, override, expected) => {
     vi.stubEnv("COVEL_INSTRUCTION_LOCALE", override);
-    const generateText = vi
-      .fn()
-      .mockResolvedValue({
-        text: "{}",
-        finishReason: "stop",
-        usage: { inputTokens: 1, outputTokens: 1 },
-      });
-    const generateObject = vi
-      .fn()
-      .mockResolvedValue({
-        object: {},
-        finishReason: "stop",
-        usage: { inputTokens: 1, outputTokens: 1 },
-      });
+    const generateText = vi.fn().mockResolvedValue({
+      text: "{}",
+      finishReason: "stop",
+      usage: { inputTokens: 1, outputTokens: 1 },
+    });
+    const generateObject = vi.fn().mockResolvedValue({
+      object: {},
+      finishReason: "stop",
+      usage: { inputTokens: 1, outputTokens: 1 },
+    });
     const gateway = createPluginRuntimeGateway(
       { generateText, generateObject, resolveSlot: () => null },
       { toZodSchema: () => z.object({}) },

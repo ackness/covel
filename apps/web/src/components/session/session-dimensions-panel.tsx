@@ -68,7 +68,17 @@ function DimensionsView({
   onRefresh: () => Promise<void>;
 }) {
   const { t } = useTranslation();
-  const dimensions = dimensionSnapshotSchema.parse(view.dimensions ?? {});
+  const parsedDimensions = dimensionSnapshotSchema.safeParse(
+    view.dimensions ?? {},
+  );
+  if (!parsedDimensions.success) {
+    return (
+      <p role="alert" className="p-3 text-sm text-muted-foreground">
+        {t("world.dimensionError.unavailable")}
+      </p>
+    );
+  }
+  const dimensions = parsedDimensions.data;
   const recovery = view.dimensionRecovery as DimensionRecovery | undefined;
   const provider = view.dimensionProviderPluginId;
   const settlements = (view.dimensionSettlements ??

@@ -69,6 +69,7 @@ it.each(["tool", "service"])(
                 turnId: "t",
                 pluginId: "probe",
                 runtimeId: "probe",
+                random: { int: (min: number) => min },
               },
             )
           : services

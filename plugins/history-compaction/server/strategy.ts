@@ -1,12 +1,13 @@
 import {
   canonicalizeLocale,
   DEFAULT_LOCALE,
+  instructionLocaleFor,
   localeRegistry,
   localeDisplayName,
   resolveI18nText,
   interpolate,
   estimateTokens,
-  type I18nText,
+  type InstructionLocale,
   type SimpleCompletionAdapter,
   type TokenEstimator,
   type HistoryCompactInput as HistoryCompactionInput,
@@ -66,77 +67,47 @@ export function summaryOutputCeiling(maxTokens: number): number {
 }
 
 /**
- * Default focus sections used when the caller does not supply any. The actual
- * text is locale-aware so the summary LLM gets a sensible bullet list to expand
- * on.
+ * Default focus sections used when the caller does not supply any. They are
+ * part of the instructions, so they come in the two instruction languages;
+ * the language rule asks for the summary itself in the session's language.
  */
-const DEFAULT_FOCUS_SECTIONS: readonly I18nText[] = [
-  {
-    "zh-CN": "关键事件",
-    "en-US": "Key events",
-    "ru-RU": "Ключевые события",
-  },
-  {
-    "zh-CN": "人物关系",
-    "en-US": "Character relationships",
-    "ru-RU": "Отношения персонажей",
-  },
-  {
-    "zh-CN": "环境状态",
-    "en-US": "World state",
-    "ru-RU": "Состояние мира",
-  },
-];
+const DEFAULT_FOCUS_SECTIONS: Record<InstructionLocale, readonly string[]> = {
+  zh: ["关键事件", "人物关系", "环境状态"],
+  en: ["Key events", "Character relationships", "World state"],
+};
 
 const COMPACTOR_TEXT = {
   mergeSummary: {
-    "zh-CN":
-      "请把所选连续摘要合并成一份摘要，不能遗漏仍有效的名称、约定、位置、关系、状态和因果。最终摘要不超过约 {{ maxSummaryTokens }} tokens。\n\n<所选历史摘要>\n{{ prior }}\n</所选历史摘要>",
-    "en-US":
-      "Merge only the selected consecutive historical summaries into one summary. Preserve all still-valid names, agreements, locations, relationships, states, and causal links. Keep the final summary under approximately {{ maxSummaryTokens }} tokens.\n\n<selected_history_summaries>\n{{ prior }}\n</selected_history_summaries>",
-    "ru-RU":
-      "Объедини выбранные последовательные исторические резюме в одно резюме. Сохрани все по-прежнему актуальные имена, договорённости, места, отношения, состояния и причинно-следственные связи. Итоговое резюме должно занимать не более примерно {{ maxSummaryTokens }} токенов.\n\n<selected_history_summaries>\n{{ prior }}\n</selected_history_summaries>",
+    zh: "请把所选连续摘要合并成一份摘要，不能遗漏仍有效的名称、约定、位置、关系、状态和因果。最终摘要不超过约 {{ maxSummaryTokens }} tokens。\n\n<所选历史摘要>\n{{ prior }}\n</所选历史摘要>",
+    en: "Merge only the selected consecutive historical summaries into one summary. Preserve all still-valid names, agreements, locations, relationships, states, and causal links. Keep the final summary under approximately {{ maxSummaryTokens }} tokens.\n\n<selected_history_summaries>\n{{ prior }}\n</selected_history_summaries>",
   },
   summarize: {
-    "zh-CN":
-      "请将以下对话历史摘要化，最终摘要不超过约 {{ maxSummaryTokens }} tokens：\n\n{{ messages }}",
-    "en-US":
-      "Please summarize the following conversation history in approximately {{ maxSummaryTokens }} tokens or fewer:\n\n{{ messages }}",
-    "ru-RU":
-      "Кратко изложи следующую историю диалога, уложившись примерно в {{ maxSummaryTokens }} токенов:\n\n{{ messages }}",
+    zh: "请将以下对话历史摘要化，最终摘要不超过约 {{ maxSummaryTokens }} tokens：\n\n{{ messages }}",
+    en: "Please summarize the following conversation history in approximately {{ maxSummaryTokens }} tokens or fewer:\n\n{{ messages }}",
   },
   language: {
-    "zh-CN":
-      "[LANGUAGE] 所有自然语言的摘要内容必须用{{ languageName }}（{{ locale }}）书写。",
-    "en-US":
-      "[LANGUAGE] Write all natural-language summary content in {{ languageName }} ({{ locale }}).",
-    "ru-RU":
-      "[LANGUAGE] Всё содержание резюме на естественном языке пиши на этом языке: {{ languageName }} ({{ locale }}).",
+    zh: "[LANGUAGE] 所有自然语言的摘要内容必须用{{ languageName }}（{{ locale }}）书写。",
+    en: "[LANGUAGE] Write all natural-language summary content in {{ languageName }} ({{ locale }}).",
   },
   truncated: {
-    "zh-CN": "\n[摘要已按上下文预算截断]",
-    "en-US": "\n[Summary truncated to context budget]",
-    "ru-RU": "\n[Резюме обрезано по бюджету контекста]",
+    zh: "\n[摘要已按上下文预算截断]",
+    en: "\n[Summary truncated to context budget]",
   },
-} as const satisfies Record<string, I18nText>;
+} as const satisfies Record<string, Record<InstructionLocale, string>>;
 
 function compactorText(
   key: keyof typeof COMPACTOR_TEXT,
   locale: string,
 ): string {
-  return (
-    resolveI18nText(COMPACTOR_TEXT[key], locale) ??
-    resolveI18nText(COMPACTOR_TEXT[key], "en-US") ??
-    ""
-  );
+  return COMPACTOR_TEXT[key][instructionLocaleFor(locale)];
 }
 
 /**
  * Build the framework system prompt for the summary LLM call.
  *
- * The template lives at `prompts/server/compactor.<locale>.md`, with an English
- * canonical fallback, and is loaded via `loadPrompt()` so prompt edits do not
- * require a rebuild.
+ * The template is `prompts/server/compactor.md` (English) with a Simplified
+ * Chinese `compactor.zh.md`, chosen by the instruction language, and is loaded
+ * via `loadPrompt()` so prompt edits do not require a rebuild.
  *
  * The single template variable is `{{ sections }}`. To preserve the
  * pre-externalization rendering (one section per bullet line), we join the
@@ -151,9 +122,7 @@ async function buildCompactorSystemPrompt(
   const effective =
     focusSections.length > 0
       ? focusSections
-      : DEFAULT_FOCUS_SECTIONS.map(
-          (section) => resolveI18nText(section, locale) ?? "",
-        );
+      : DEFAULT_FOCUS_SECTIONS[instructionLocaleFor(locale)];
   const template = await loader("server", "compactor", locale);
   const canonicalLocale = canonicalizeLocale(locale) ?? DEFAULT_LOCALE;
   const languageName = resolveLocaleLanguageName(canonicalLocale);

@@ -490,10 +490,10 @@ pnpm prompt:prefix data/covel.db --json
 ## 6. 外置模板与本地化
 
 - 共享的 `prompts/server` 保存世界生成和 lore 修复的模板。
-- 历史摘要的模板由 `plugins/history-compaction/prompts/server` 持有，插件通过自己的 `createPromptLoader(root)` 加载。
+- 历史摘要的模板由 `plugins/history-compaction/prompts/server` 持有，插件通过 SDK 的 `createPromptLoader(root)` 加载。它和插件正文一样只有 English 和简体中文两份，见 [i18n](./i18n.md)。
 - 修改 `COVEL_PROMPTS_DIR` 只替换默认的共享 prompt 根目录，不会接管插件自己的目录。
 
-共享加载器依次尝试：完全匹配的 locale、文字系统兼容的主语言、English、不带语言后缀的默认文件。
+共享的框架加载器依次尝试：完全匹配的 locale、文字系统兼容的主语言、English、不带语言后缀的默认文件。
 
 - 非法的 locale 不进入路径查找。
 - `zh-Hant` 不会命中简体的 `zh`。

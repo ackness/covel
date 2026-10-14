@@ -16,10 +16,10 @@ import {
 } from "vitest";
 import {
   maybeCompact as applyCompaction,
-  createPromptLoader,
   type CompactorDeps as BudgetDeps,
   type CompactorOptions,
 } from "@covel/context";
+import { createPromptLoader } from "@covel/plugin-handlers-utils/prompts";
 import {
   compactHistory,
   type CompactionPolicyOptions,
@@ -791,8 +791,11 @@ describe("maybeCompact", () => {
         "en-US",
         /\[LANGUAGE\] Write all natural-language summary content in .+ \(en-US\)\.$/,
       ],
-      ["ru-RU", /\[LANGUAGE\] Всё содержание резюме .+ \(ru-RU\)\.$/],
-      // No instruction set of its own: the English template and rule.
+      // No instruction set of their own: the English template and rule.
+      [
+        "ru-RU",
+        /\[LANGUAGE\] Write all natural-language summary content in .+ \(ru-RU\)\.$/,
+      ],
       [
         "zh-Hant-TW",
         /\[LANGUAGE\] Write all natural-language summary content in .+ \(zh-Hant-TW\)\.$/,
@@ -818,7 +821,7 @@ describe("maybeCompact", () => {
       },
     );
 
-    it("uses ru-RU prompts and localized default focus sections", async () => {
+    it("gives a ru-RU session the English instructions", async () => {
       const messages = makeSimpleHistory(20);
       const deps: CompactorDeps = {
         store,
@@ -840,8 +843,42 @@ describe("maybeCompact", () => {
         systemPrompt: string;
         messages: Array<{ role: string; content: string }>;
       };
-      expect(callArgs.systemPrompt).toContain("Ключевые события");
-      expect(callArgs.messages[0]!.content).toContain("Кратко изложи");
+      expect(callArgs.systemPrompt).toMatch(/summarizer/i);
+      expect(callArgs.systemPrompt).toContain("- Key events");
+      expect(callArgs.messages[0]!.content).toContain("Please summarize");
+      // Only the language rule names the language the summary is written in.
+      const instructions = callArgs.systemPrompt.replace(/\[LANGUAGE\].*$/, "");
+      expect(instructions).not.toMatch(/[А-Яа-я]/);
+      expect(callArgs.messages[0]!.content).not.toMatch(/[А-Яа-я]/);
+    });
+
+    it("follows COVEL_INSTRUCTION_LOCALE for a Chinese session", async () => {
+      vi.stubEnv("COVEL_INSTRUCTION_LOCALE", "en");
+      try {
+        const deps: CompactorDeps = {
+          store,
+          estimator,
+          fastSlotLlm,
+          contextWindow: 1_000,
+        };
+        await maybeCompact("sess-1", "", makeSimpleHistory(20), deps, {
+          locale: "zh-CN",
+        });
+        const callArgs = (fastSlotLlm.complete as ReturnType<typeof vi.fn>).mock
+          .calls[0]![0] as {
+          systemPrompt: string;
+          messages: Array<{ role: string; content: string }>;
+        };
+        expect(callArgs.systemPrompt).toMatch(/summarizer/i);
+        expect(callArgs.systemPrompt).toContain("- Key events");
+        // The summary is still asked for in the session's language.
+        expect(callArgs.systemPrompt).toMatch(
+          /\[LANGUAGE\] Write all natural-language summary content in 简体中文 \(zh-CN\)\.$/,
+        );
+        expect(callArgs.messages[0]!.content).toContain("Please summarize");
+      } finally {
+        vi.unstubAllEnvs();
+      }
     });
   });
 
@@ -857,8 +894,13 @@ describe("maybeCompact", () => {
         "【ZH-FIXTURE】摘要器\n\nsections:\n- {{ sections }}\n",
       );
       await writeFile(
-        path.join(serverDir, "compactor.en.md"),
+        path.join(serverDir, "compactor.md"),
         "<<EN-FIXTURE>> summarizer\n\nsections:\n- {{ sections }}\n",
+      );
+      // Not an instruction language: never read.
+      await writeFile(
+        path.join(serverDir, "compactor.ru.md"),
+        "<<RU-FIXTURE>> summarizer\n\nsections:\n- {{ sections }}\n",
       );
       loadPrompt = createPromptLoader(tmpRoot);
     });
@@ -886,7 +928,7 @@ describe("maybeCompact", () => {
       expect(callArgs.systemPrompt).toContain("【ZH-FIXTURE】");
     });
 
-    it("reads the en-US system prompt from prompts/server/compactor.en.md", async () => {
+    it("reads the en-US system prompt from prompts/server/compactor.md", async () => {
       const messages = makeSimpleHistory(20);
       const deps: CompactorDeps = {
         store,
@@ -904,7 +946,25 @@ describe("maybeCompact", () => {
       expect(callArgs.systemPrompt).toContain("<<EN-FIXTURE>>");
     });
 
-    it("uses the registry English fallback for an unregistered locale", async () => {
+    it("does not read a template in a language with no instruction set", async () => {
+      const deps: CompactorDeps = {
+        store,
+        estimator,
+        fastSlotLlm,
+        contextWindow: 1_000,
+      };
+
+      await maybeCompact("sess-1", "", makeSimpleHistory(20), deps, {
+        locale: "ru-RU",
+      });
+
+      const callArgs = (fastSlotLlm.complete as ReturnType<typeof vi.fn>).mock
+        .calls[0]![0] as { systemPrompt: string };
+      expect(callArgs.systemPrompt).toContain("<<EN-FIXTURE>>");
+      expect(callArgs.systemPrompt).not.toContain("<<RU-FIXTURE>>");
+    });
+
+    it("uses the English template for an unregistered locale", async () => {
       const messages = makeSimpleHistory(20);
       const deps: CompactorDeps = {
         store,

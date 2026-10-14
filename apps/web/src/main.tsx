@@ -1,9 +1,7 @@
-import { storedThemeSelection } from "@/theme-system/selection.js";
 import "@/lib/zod-config";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { RouterProvider, createRouter } from "@tanstack/react-router";
-import { ThemeProvider } from "@/components/theme-provider";
 import { ReloadOverlay } from "@/components/reload-overlay";
 import { SessionProvider } from "@/stores/session-store";
 import {
@@ -60,28 +58,16 @@ async function syncStorageMode(): Promise<void> {
   }
 }
 
-function syncNextThemesStorage(scheme: ColorScheme): void {
-  if (typeof window === "undefined") return;
-  window.localStorage.setItem("covel:scheme", scheme);
-}
-
 const root = createRoot(document.getElementById("root")!);
 let booting = false;
 
 function renderApp(): void {
   root.render(
     <StrictMode>
-      <ThemeProvider
-        defaultTheme={storedThemeSelection(getSettings()).scheme}
-        enableSystem={false}
-        storageKey="covel:scheme"
-        attribute="class"
-      >
-        <SessionProvider>
-          <RouterProvider router={router} />
-        </SessionProvider>
-        <ReloadOverlay />
-      </ThemeProvider>
+      <SessionProvider>
+        <RouterProvider router={router} />
+      </SessionProvider>
+      <ReloadOverlay />
     </StrictMode>,
   );
 }
@@ -121,10 +107,9 @@ async function boot(): Promise<void> {
     try {
       await initSettings();
       const store = getSettings();
+      // The registry applies resolved theme/scheme values through the appearance
+      // helpers, including overrides, without changing the saved preferences.
       syncThemeRegistry(store);
-      // Apply initial appearance / locale ASAP so the first paint matches.
-      const initialScheme = storedThemeSelection(store).scheme;
-      syncNextThemesStorage(initialScheme);
       const initialLocale = store.get<SupportedLocale>("ui.locale");
       if (i18n.language !== initialLocale) {
         await i18n.changeLanguage(initialLocale);
@@ -136,15 +121,12 @@ async function boot(): Promise<void> {
       // no component is currently mounted that reads the underlying setting.
       store.subscribe<Appearance>("ui.appearance", () => {
         syncThemeRegistry(store);
-        syncNextThemesStorage(storedThemeSelection(store).scheme);
       });
       store.subscribe<ColorScheme>(THEME_SCHEME_KEY, () => {
         syncThemeRegistry(store);
-        syncNextThemesStorage(storedThemeSelection(store).scheme);
       });
       store.subscribe(CUSTOM_THEMES_KEY, () => {
         syncThemeRegistry(store);
-        syncNextThemesStorage(storedThemeSelection(store).scheme);
       });
       store.subscribe(APPEARANCE_TOKENS_KEY, () => {
         applyTokenOverrides(store);

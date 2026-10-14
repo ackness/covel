@@ -14,6 +14,7 @@ import {
 import { SuspensionsPanel } from "./suspensions-panel.js";
 import { UnsavedNarratives } from "./unsaved-narratives.js";
 import { ExecutionRecoveryNotice } from "./execution-recovery-notice.js";
+import { MemoryIndexNotice } from "./memory-index-notice.js";
 import { SetupProgressNotice, setupProgress } from "./setup-progress-notice.js";
 import { WorldDataNotices } from "./world-data-notices.js";
 import { SessionPluginNotices } from "./session-plugin-notices.js";
@@ -126,7 +127,7 @@ export function GameView({
   const [immersive, setImmersive] = useState(false);
   // Warm the media cache with known stage art (sprites + scene backdrops)
   // during pre-game, so the opening turn paints them without a download stall.
-  useStageMediaPreload(session.id, sessionPlugins);
+  useStageMediaPreload(session.id);
   // Enter the stage as soon as the player submits the opening (character
   // creation) form, instead of waiting for pre-game to fully complete —
   // the backdrop shows the world hero image until the narrator's first
@@ -443,7 +444,6 @@ export function GameView({
               />
             </ResizablePanel>
             <ResizableHandle
-              withHandle
               orientation={direction}
               className={isLeftCollapsed ? "hidden" : ""}
             />
@@ -550,6 +550,10 @@ export function GameView({
             onRefresh={refreshExecutionRecovery}
             onStop={abortActiveTurn}
           />
+          <MemoryIndexNotice
+            sessionId={session.id}
+            refreshKey={settings.open}
+          />
           <SetupProgressNotice
             progress={setupProgress({
               session,
@@ -653,7 +657,6 @@ export function GameView({
         {!isMobile && (
           <>
             <ResizableHandle
-              withHandle
               orientation={direction}
               className={isRightCollapsed ? "hidden" : ""}
             />

@@ -46,7 +46,7 @@ import {
   getTier,
   tierLabel,
 } from "../tier-metadata.js";
-import { loadPluginMessages } from "@covel/plugin-test-utils";
+import { loadPluginMessages, makeRandom } from "@covel/plugin-test-utils";
 
 // What the host gives a tool as `context.messages` for a Chinese session.
 const messages = await loadPluginMessages(
@@ -114,6 +114,7 @@ describe("update-affinity", () => {
     turnId: "turn-1",
     pluginId: "affinity",
     runtimeId: "affinity",
+    random: makeRandom(),
     locale: "zh-CN",
     messages,
     logicalTurn: 3,
