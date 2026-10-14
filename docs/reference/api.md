@@ -1263,7 +1263,7 @@ fork 和社区插件的授权：
 - 快照绑定的维度 provider 是社区插件时，child 在创建时无法启用它：
   - 快照里有该 provider 的维度数据或结算回执：fork 返回 `409 { "code": "dimension_provider_required" }`，不创建子会话。
   - 快照里没有维度数据：子会话正常创建，但不带这个绑定。
-- 进程重启后，易失的授权同样不会恢复。`GET /api/sessions/:id/plugins` 把缺少当前授权的社区插件显示为未激活，但保留会话里保存的插件选择，方便之后重新授权。
+- 进程重启后，易失的授权同样不会恢复。`GET /api/sessions/:id/plugins` 把缺少当前授权的社区插件显示为未激活（`approvalRequired: true`），但保留会话里保存的插件选择，方便之后重新授权。
 
 ### 角色数据
 
@@ -2799,7 +2799,7 @@ Submission 里的其他键会被丢弃。来源插件、字段定义和模板只
 
 调用插件在 `entry` 里用 `covel.registerRpc` 注册的 handler，或者框架默认 handler（如 `slash-debug`）。
 
-- 插件必须在会话当前启用的插件里。服务端在审批前检查一次，取得会话锁后再检查一次。插件已禁用时返回 `404 plugin_not_active`，不执行 handler，也不新增审批。旧面板迟到的请求同样受这个检查约束。
+- 插件必须在会话当前启用、并且现在能运行的插件里。服务端在审批前检查一次，取得会话锁后再检查一次。插件已禁用时返回 `404 plugin_not_active`，不执行 handler，也不新增审批。玩家确认过、但现在不能运行的插件（见 `unavailable[]`）同样返回这个错误，错误信息写明原因。旧面板迟到的请求同样受这个检查约束。
 - `pluginId: "framework"` 表示框架默认 action。它不属于插件启用集，按各自的准入条件执行。`framework` 是保留 ID，没有插件能用它，所以这样的请求只会执行框架默认 action；写插件 ID 的请求也只会执行该插件自己注册的 action。
 - handler 在会话锁内运行，时限 30 秒。超时后 handler 的 `ctx.signal` 中止，之后它对 `ctx.store` 的调用一律被拒绝。已在进行的存储调用先完成，再返回 `504 handler_timeout` 并放开锁。超时之前已经写入的数据保留，不会回滚。
 
@@ -3603,6 +3603,8 @@ runtime 报告失败时，它的原始错误保留在 `result.runtimeResults` �
 - `items[]`：每项在 `PluginSummary` 的基础上增加 `active`、`locked`、`sessionState`、`serverCodeApproved`，以及可选的 `approvalRequired`、`autoAdded`、`rejection`。
 - `items[].runtimes` 与 `GET /api/plugins` 的形状完全相同。
 - `commands[]`：唯一的可执行命令目录。它按当前启用的插件过滤，再加上框架命令。命令只在顶层列一次，不按插件重复返回。
+- `unavailable[]`：玩家确认的插件里现在不能运行的那些，每项是一个 `rejection`（`pluginId`、`code`、`reason`）。原因可能是没有安装（`unknown-plugin`）、加载失败，或者当前版本缺少提供者、和别的成员冲突。游戏照常进行。
+- 列表、命令和执行器读的是同一个集合：会话保存的 `activePlugins` 按当前安装的版本检查后的结果，不补入新插件。规则见[会话插件选择](./plugins.md#会话插件选择)。这个接口只读，不改写会话。
 
 **响应:**
 

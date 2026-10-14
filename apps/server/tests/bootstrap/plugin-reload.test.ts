@@ -28,6 +28,7 @@ import { createRuntimeLoader } from "../../src/routes/api/bootstrap/runtime-load
 import type { RpcApprovalGate } from "@covel/approval";
 import { buildPluginSummary } from "../../src/lib/plugin-descriptor.js";
 import { discoverAndRegisterPlugins } from "../../src/routes/api/bootstrap/plugin-discovery.js";
+import { resolveSessionPluginSet } from "../../src/routes/api/session/plugins.js";
 const roots: string[] = [];
 const managers: BootstrapPluginEntries[] = [];
 const cleanups: (() => Promise<void>)[] = [];
@@ -83,7 +84,10 @@ async function fixture(withRuntime = false, activateEntry = true) {
     source: "community",
   };
   const definition = await loadPluginDefinition(discovery);
-  const registry = createPluginRegistry();
+  const registry = createPluginRegistry({
+    resolveSessionSet: (confirmed, entries) =>
+      resolveSessionPluginSet(confirmed, entries).active,
+  });
   registry.register({
     id,
     rootPath: root,
@@ -640,7 +644,7 @@ describe("plugin generation reload", () => {
     expect(f.disposed).toEqual([]);
   });
 
-  it("recomputes dependencies before admitting a reloaded generation and preserves the running snapshot", async () => {
+  it("checks a reloaded generation's dependencies without rewriting the confirmed set, and preserves the running snapshot", async () => {
     const f = await fixture(true);
     const started = Promise.withResolvers<void>();
     const finish = Promise.withResolvers<void>();
@@ -664,11 +668,14 @@ describe("plugin generation reload", () => {
     await f.manager.reload(f.id, "session");
     await f.manager.withSnapshot("session", async () => {
       expect(f.registry.getActiveRuntimes("session")).toEqual([]);
-      expect((await f.store.getSession("session"))?.activePlugins).toEqual([]);
+      // The player's confirmed set stays; the plugin only sits out.
+      expect((await f.store.getSession("session"))?.activePlugins).toEqual([
+        f.id,
+      ]);
     });
     finish.resolve();
     await old;
-    // Keep the user's requested selection, so fixing the declaration restores it.
+    // Fixing the declaration brings the confirmed plugin back.
     await fs.writeFile(file, original);
     await f.manager.reload(f.id, "session");
     await f.manager.withSnapshot("session", async () => {

@@ -1662,6 +1662,7 @@
       "allowSelected": "授权所选",
       "notNow": "暂不授权"
     },
+    "unavailable": "本存档有插件现在无法运行：{{plugins}}。游戏照常进行，只是少了它们的功能；打开插件列表可以看到原因。",
     "invokeRuntime": {
       "setupPending": "这个插件还需要初始化。请先继续一个故事回合，并完成出现的初始化表单，再重试此操作。",
       "submitted": "已提交 {{count}} 个后台任务：{{ids}}，等待返回…",

@@ -736,7 +736,16 @@ After a namespace declares `search`, its records enter the framework's memory re
 - A manual change clears the highlight on the pack card. The source of the old pack is still remembered, though, so the next switch does not add the old pack's plugins back. A plugin in a pack that the player re-enables by hand is kept as a manual choice.
 - The resolver still checks the world's `requires` on its own. Do not treat `requested` as a required item that cannot be canceled.
 
-**Discovery and authorization.** The data returned by the plugin discovery API separates `kind`, the host's `hostState`, and the session's `sessionState`. The runtime provides `outputContract`. A community plugin that is not authorized can stay in the request list, but it cannot enter the execution set. An approval is bound to the session identity and to its approval scope.
+**A save keeps the set the player confirmed.**
+
+- When a session is created, or a plugin is enabled or disabled, the result of the resolution is written to the session's `activePlugins`. This is the set the player confirmed.
+- The plugin list, the slash commands and the executor all read it through one function, `resolveConfirmedSessionPlugins`. It starts from `activePlugins`, checks it against the installed versions, and adds no plugin. A plugin installed later, a `kind: core` one included, does not join an old save on its own.
+- A plugin that is not installed, failed to load, lacks a required provider in its installed version, or conflicts with an earlier member sits out for now. The reasons are listed in `unavailable` of `GET /api/sessions/:id/plugins`, and the game screen shows a notice. The other plugins run as usual. `activePlugins` is not rewritten, so the plugin comes back when it is available again.
+- Sitting out means it is off everywhere: its runtimes do not load, its hooks do not fire, its services, actions and form validators refuse calls, its panels do not show, and memory search does not read its data. A direct call to one of its actions returns `404 plugin_not_active`, and the error message gives the reason.
+- Approval does not change this set. A community plugin's code does not run until it is approved; the trust gate checks that per session.
+- To recompute the set from the installed plugins, enable or disable a plugin. Both operations resolve `requested` and `excluded` again and write the result back to `activePlugins`.
+
+**Discovery and authorization.** The data returned by the plugin discovery API separates `kind`, the host's `hostState`, and the session's `sessionState`. The runtime provides `outputContract`. A community plugin that is not authorized can stay in the request list, but its code does not run until it is approved. An approval is bound to the session identity and to its approval scope.
 
 ## Localization and validation
 

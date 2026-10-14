@@ -190,6 +190,7 @@ export function createSubscriptionEventHandler(
                   type: "LOAD_SESSION_PLUGINS",
                   plugins: [...res.items],
                   commands: [...res.commands],
+                  unavailable: res.unavailable,
                 }),
             },
           ).catch(ignoreError("reload session plugins on plugin toggle"));
@@ -305,6 +306,7 @@ export async function rehydrateSessionSideState(
           type: "LOAD_SESSION_PLUGINS",
           plugins: loaded.plugins,
           commands: [...res.commands],
+          unavailable: res.unavailable,
         });
       },
     });
