@@ -409,9 +409,9 @@ async function fetchWithSystemProxy(
   throw lastError;
 }
 
-export function outboundFetch(
+function sendOutbound(
   input: string | URL,
-  init: RequestInit = {},
+  init: RequestInit,
 ): Promise<Response> {
   if (currentConfig.mode === "system" && currentSystemProxyResolver) {
     return fetchWithSystemProxy(input, init, currentSystemProxyResolver);
@@ -421,6 +421,35 @@ export function outboundFetch(
     init,
     proxyDispatcher ?? getDirectDispatcher(),
   );
+}
+
+/**
+ * Framework-owned request (provider, model database, update check, GitHub
+ * install) through the configured proxy mode.
+ *
+ * Undici never follows a redirect here. Nothing checks a `Location`: the
+ * pinned lookup is skipped for an IP literal, and a proxy resolves the hop
+ * itself, so a followed `302 Location: http://169.254.169.254/` would reach a
+ * metadata service. `redirect: "manual"` hands a 3xx back to a caller that
+ * checks each hop itself; any other value, `follow` included, fails on a 3xx.
+ */
+export async function outboundFetch(
+  input: string | URL,
+  init: RequestInit = {},
+): Promise<Response> {
+  const { redirect, ...rest } = init;
+  const response = await sendOutbound(input, { ...rest, redirect: "manual" });
+  if (
+    redirect !== "manual" &&
+    response.status >= 300 &&
+    response.status < 400
+  ) {
+    await response.body?.cancel().catch(() => undefined);
+    throw new Error(
+      `Refusing to follow a redirect (HTTP ${response.status}) from ${String(input)}.`,
+    );
+  }
+  return response;
 }
 
 export async function resetOutboundProxyForTests(): Promise<void> {

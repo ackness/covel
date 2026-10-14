@@ -101,6 +101,21 @@ describe("desktop app update check", () => {
     );
   });
 
+  it("does not follow a redirect from the release endpoint", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(null, {
+        status: 302,
+        headers: { location: "http://169.254.169.254/latest/meta-data/" },
+      }),
+    );
+
+    await expect(fetchLatestCovelRelease()).rejects.toThrow(
+      /redirect \(HTTP 302\)/,
+    );
+    expect(fetchSpy).toHaveBeenCalledOnce();
+    expect(fetchSpy.mock.calls[0]?.[1]).toMatchObject({ redirect: "manual" });
+  });
+
   it("exposes the check only to an authenticated desktop sidecar", async () => {
     process.env.COVEL_DESKTOP_REST = "1";
     process.env.COVEL_DESKTOP_REST_TOKEN = "desktop-token";
