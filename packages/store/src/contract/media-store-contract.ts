@@ -234,6 +234,81 @@ export function runMediaStoreContractTests(
       expect(lookup?.ownerPluginId).toBe("plugin-X");
     });
 
+    it("claimAssets takes ownership where none is held and the session's ref on every asset", async () => {
+      const store = await createStore();
+      const first = await store.put(PNG, "image/png");
+      const second = await store.put(OTHER, "image/png");
+
+      await store.claimAssets([
+        { id: first.id, sessionId: "sess-A", pluginId: "plugin-X" },
+        { id: second.id, sessionId: "sess-A", pluginId: "plugin-X" },
+        { id: "missing-asset", sessionId: "sess-A", pluginId: "plugin-X" },
+      ]);
+      // Idempotent: claiming again changes nothing.
+      await store.claimAssets([
+        { id: first.id, sessionId: "sess-A", pluginId: "plugin-X" },
+      ]);
+      await store.claimAssets([]);
+
+      for (const ref of [first, second]) {
+        const lookup = await store.lookup(ref.id);
+        expect(lookup?.ownerSessionId).toBe("sess-A");
+        expect(lookup?.ownerPluginId).toBe("plugin-X");
+      }
+      expect(
+        (await store.listRefs())
+          .map((row) => [row.mediaId, row.sessionId, row.pluginId])
+          .sort(),
+      ).toEqual(
+        [
+          [first.id, "sess-A", "plugin-X"],
+          [second.id, "sess-A", "plugin-X"],
+        ].sort(),
+      );
+      expect(await store.lookup("missing-asset")).toBeNull();
+    });
+
+    it("claimAssets keeps another session's ownership and existing refs", async () => {
+      const store = await createStore();
+      const shared = await store.put(PNG, "image/png");
+      await store.recordOwnership(shared.id, "sess-A", "plugin-X");
+      await store.addRef(shared.id, "sess-A", "plugin-X");
+      await store.addRef(shared.id, "sess-B", "plugin-first");
+
+      await store.claimAssets([
+        { id: shared.id, sessionId: "sess-B", pluginId: "plugin-second" },
+      ]);
+
+      const lookup = await store.lookup(shared.id);
+      expect(lookup?.ownerSessionId).toBe("sess-A");
+      expect(lookup?.ownerPluginId).toBe("plugin-X");
+      expect(
+        (await store.listRefs())
+          .map((row) => [row.sessionId, row.pluginId])
+          .sort(),
+      ).toEqual([
+        ["sess-A", "plugin-X"],
+        ["sess-B", "plugin-first"],
+      ]);
+    });
+
+    it("claimAssets writes nothing when a later claim of the batch is invalid", async () => {
+      const store = await createStore();
+      const first = await store.put(PNG, "image/png");
+      const second = await store.put(OTHER, "image/png");
+
+      await expect(
+        store.claimAssets([
+          { id: first.id, sessionId: "sess-A" },
+          { id: second.id, sessionId: "sess-\u0000A" },
+        ]),
+      ).rejects.toThrow("U+0000");
+
+      for (const ref of [first, second])
+        expect((await store.lookup(ref.id))?.ownerSessionId).toBeNull();
+      expect(await store.listRefs()).toEqual([]);
+    });
+
     it("addRef + isReferencedBy lets non-owner sessions reach the asset", async () => {
       const store = await createStore();
       const ref = await store.put(PNG, "image/png");

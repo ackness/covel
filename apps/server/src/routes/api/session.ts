@@ -48,6 +48,7 @@ import {
   prepareWorldDataImportForSession,
   type WorldDataImportedMediaRef,
 } from "../../world-data/session-import.js";
+import { worldDataImportNotices } from "../../world-data/receiver-import.js";
 import {
   decorateSessionList,
   withEmbeddingMetadata,
@@ -451,8 +452,10 @@ sessionRoutes.post("/", async (c) => {
         refs: importedMediaRefs,
       });
     } catch (err) {
-      await store.deleteSession(id);
+      // The import pins go whether or not the rollback below holds: a session
+      // row that survives still protects its bytes through the cleanup scan.
       creationCommitted = false;
+      await store.deleteSession(id);
       // This creation owns the session lifecycle lock; release only its claims.
       // Content-addressed bytes may be shared and are reclaimed by media GC.
       await c.get("mediaStore")?.releaseSession(id);
@@ -504,7 +507,7 @@ sessionRoutes.post("/", async (c) => {
         : commitCreation(),
     )
     .finally(async () => {
-      // On a failed rollback, keep pins for the still-durable session rows.
+      // Release this attempt's import pins unless the session was committed.
       if (!creationCommitted)
         await releaseWorldDataMediaRefs({
           mediaStore: c.get("mediaStore"),
@@ -600,6 +603,13 @@ sessionRoutes.post("/", async (c) => {
       ),
   );
 
+  // World data the session started without, such as what only a community
+  // plugin still waiting for approval receives. The player is told; the
+  // data arrives when the plugin is enabled.
+  const worldDataNotices = worldDataImportNotices(
+    preparedWorldData.diagnostics,
+  );
+
   // `ownerToken` is returned exactly once — it is never readable again
   // (only its hash is stored). Clients on hosted tiers must persist it.
   return c.json(
@@ -614,6 +624,7 @@ sessionRoutes.post("/", async (c) => {
       ...(untranslatedPlugins.length > 0
         ? { pluginsWithoutLocale: untranslatedPlugins }
         : {}),
+      ...(worldDataNotices.length > 0 ? { worldDataNotices } : {}),
     },
     201,
   );

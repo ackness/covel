@@ -1482,10 +1482,10 @@ fork 和社区插件的授权：
 
 **校验与 `specVersion`**：
 
-- 聚合时，每个 spec 都做 Zod 校验（结构和 `specVersion`）。
+- 聚合时，每个 spec 都用 `pnpm validate:plugin` 的同一套规则校验（结构、`specVersion`、数据归属、`webview`）。
 - `specVersion` 可以省略，按 v1 处理。声明的版本高于服务端支持的版本（当前 `CURRENT_UI_SPEC_VERSION = 1`）会被拒绝。
 - 一个 spec 校验失败，**不会影响整个响应**：只把它从所在的 slot 里去掉。
-- 失败原因写在顶层的 `diagnostics[]` 里，每项是 `{ pluginId, runtimeId, slot, specIndex, specId?, issues[{ path, message, code }] }`，说明是哪个插件、哪个字段、什么问题。
+- 失败原因写在顶层的 `diagnostics[]` 里，每项是 `{ pluginId, runtimeId, slot, specIndex, specId?, issues[{ path, message, code }] }`，说明是哪个插件、哪个字段、什么问题。文件读不出来（不存在、不是 JSON、指向插件目录以外）也写在这里；`code` 都是 `invalid`。
 - 带 `sessionId` 时，`diagnostics` 只包含该会话已激活的插件。
 
 **开发热重载**：`POST /api/plugins/:id/reload` 重新加载一个社区插件。
@@ -2235,16 +2235,17 @@ Web 设置页根据 `operatorTokenRequired` 决定是否显示“运维访问”
 
 **响应字段**:
 
-| 字段                   | 类型                                   | 说明                                                                                                                               |
-| ---------------------- | -------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| `ownerToken`           | string                                 | 会话的 owner token，**只在这里返回一次**（服务端只存哈希）。什么时候必须携带见下方                                                 |
-| `locale`               | string                                 | 会话实际的内容语言                                                                                                                 |
-| `requestedLocale`      | string（可选）                         | 只在实际语言与请求不同时出现                                                                                                       |
-| `pluginsWithoutLocale` | string[]（可选）                       | 已启用、但没有会话语言文字的插件 ID（只有英文标签，面板显示英文）。只是提示，不影响创建                                            |
-| `status`               | `'active' \| 'paused' \| 'ended'`      | 会话生命周期状态                                                                                                                   |
-| `phase`                | `'setup' \| 'playing'`                 | 会话处在开局准备还是正式游玩。激活集里有 setup runtime 时初始为 `setup`，否则为 `playing`；全部 setup runtime 完成后变成 `playing` |
-| `completedPlayerTurns` | number                                 | 已提交的正式玩家回合数。setup 阶段的交互不计入；同一回合不会被重复计数                                                             |
-| `setupRuntimes`        | `Record<runtimeId, SetupRuntimeState>` | 每个 setup runtime 的状态。见下表                                                                                                  |
+| 字段                   | 类型                                      | 说明                                                                                                                                                                     |
+| ---------------------- | ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `ownerToken`           | string                                    | 会话的 owner token，**只在这里返回一次**（服务端只存哈希）。什么时候必须携带见下方                                                                                       |
+| `locale`               | string                                    | 会话实际的内容语言                                                                                                                                                       |
+| `requestedLocale`      | string（可选）                            | 只在实际语言与请求不同时出现                                                                                                                                             |
+| `pluginsWithoutLocale` | string[]（可选）                          | 已启用、但没有会话语言文字的插件 ID（只有英文标签，面板显示英文）。只是提示，不影响创建                                                                                  |
+| `worldDataNotices`     | `{ level, sourceId?, message }[]`（可选） | 世界数据里没有导入的部分（warning 和 error），例如只有还在等批准的社区插件接收的数据。游戏界面显示给玩家；见[开局后加入的接收插件](./world-data.md#开局后加入的接收插件) |
+| `status`               | `'active' \| 'paused' \| 'ended'`         | 会话生命周期状态                                                                                                                                                         |
+| `phase`                | `'setup' \| 'playing'`                    | 会话处在开局准备还是正式游玩。激活集里有 setup runtime 时初始为 `setup`，否则为 `playing`；全部 setup runtime 完成后变成 `playing`                                       |
+| `completedPlayerTurns` | number                                    | 已提交的正式玩家回合数。setup 阶段的交互不计入；同一回合不会被重复计数                                                                                                   |
+| `setupRuntimes`        | `Record<runtimeId, SetupRuntimeState>`    | 每个 setup runtime 的状态。见下表                                                                                                                                        |
 
 `ownerToken` 什么时候必须携带：
 
@@ -3673,6 +3674,15 @@ runtime 报告失败时，它的原始错误保留在 `result.runtimeResults` �
 ```
 
 响应里还有 `resolution`：本次求解的完整结果。
+
+会话有世界、并且这次有插件新加入启用集合时，服务端为它们补导入一次世界数据（规则见[开局后加入的接收插件](./world-data.md#开局后加入的接收插件)），响应多一个 `worldData`：
+
+| 字段        | 类型                              | 说明                                           |
+| ----------- | --------------------------------- | ---------------------------------------------- |
+| `receivers` | string[]                          | 第一次收到数据的插件                           |
+| `imported`  | number                            | 写入的条数                                     |
+| `conflicts` | number                            | 因为游戏改过而保持原样的条数                   |
+| `notices`   | `{ level, sourceId?, message }[]` | 按现在启用的插件，世界数据里仍然没有导入的部分 |
 
 规则（启用和禁用相同）：
 
@@ -5363,7 +5373,7 @@ Trace 是服务器为每个回合记下的调试事件：哪个 runtime 开始�
 
 它先扫描 `messages`、`plugin_data`、`runtime_outputs`、`trace_events`、`snapshots`、`turn_results`，收集仍被引用的 mediaId，再调用 `MediaStore.cleanup()` 删掉其余的。
 
-每次清理还会释放世界数据导入留下的、创建已满 24 小时的临时引用（`world-data-import:<uuid>`）。演练只在 `expiredRefs` 里列出它们，真正的清理移除它们。更新的临时引用继续保护它的文件。这个时限是固定的，规则见 [媒体存储](./media-store.md#世界数据导入时的临时引用)。
+每次清理还会释放世界数据导入、上传或 runtime 写入留下的、创建已满 24 小时的临时引用（`media-pin:<uuid>`）。演练只在 `expiredRefs` 里列出它们，真正的清理移除它们。更新的临时引用继续保护它的文件。这个时限是固定的，规则见 [媒体存储](./media-store.md#世界数据导入时的临时引用)。
 
 > [!WARNING]
 > 这个端点默认禁用，必须设置 `COVEL_MEDIA_CLEANUP_ENABLED` 才能用。真正删除还要带确认头。
@@ -5396,7 +5406,7 @@ Trace 是服务器为每个回合记下的调试事件：哪个 runtime 开始�
   "policy": {
     "dryRun": true,
     "expireRefs": {
-      "sessionIdPrefix": "world-data-import:",
+      "sessionIdPrefix": "media-pin:",
       "maxAgeMs": 86400000
     },
     "maxBytes": 0
@@ -5414,7 +5424,7 @@ Trace 是服务器为每个回合记下的调试事件：哪个 runtime 开始�
     "expiredRefs": [
       {
         "mediaId": "...",
-        "sessionId": "world-data-import:...",
+        "sessionId": "media-pin:...",
         "pluginId": null,
         "createdAt": "2026-10-01T08:00:00.000Z"
       }

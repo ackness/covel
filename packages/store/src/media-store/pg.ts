@@ -12,6 +12,7 @@ import {
 } from "./cleanup-result.js";
 import type { PgMediaStoreOptions } from "./types.js";
 import {
+  assertMediaClaims,
   filterAssetsByMetadata,
   normalizeBytes,
   sha256,
@@ -223,6 +224,38 @@ export function createPgMediaStoreFromClient(sql: Sql): MediaStore {
           WHERE EXISTS (SELECT 1 FROM media_assets WHERE id = ${id})
           ON CONFLICT (session_id, media_id) DO NOTHING
         `;
+      });
+    },
+
+    async claimAssets(claims) {
+      assertMediaClaims(claims);
+      if (claims.length === 0) return;
+      const ids = [...new Set(claims.map((claim) => claim.id))];
+      const createdAt = new Date().toISOString();
+      await sql.begin(async (tx) => {
+        // The per-asset lock that cleanup takes, acquired in key order so two
+        // batches that share assets cannot wait on each other.
+        const keys = await tx<{ key: number }[]>`
+          SELECT DISTINCT hashtext(id) AS key
+          FROM unnest(${ids}::text[]) AS claimed(id)
+          ORDER BY key
+        `;
+        for (const { key } of keys)
+          await tx`SELECT pg_advisory_xact_lock(1129270860, ${key})`;
+        for (const { id, sessionId, pluginId } of claims) {
+          await tx`
+            UPDATE media_assets
+            SET owner_session_id = ${sessionId}, owner_plugin_id = ${pluginId ?? null}
+            WHERE id = ${id}
+              AND (owner_session_id IS NULL OR owner_session_id = ${sessionId})
+          `;
+          await tx`
+            INSERT INTO media_refs (session_id, media_id, plugin_id, created_at)
+            SELECT ${sessionId}, ${id}, ${pluginId ?? null}, ${createdAt}
+            WHERE EXISTS (SELECT 1 FROM media_assets WHERE id = ${id})
+            ON CONFLICT (session_id, media_id) DO NOTHING
+          `;
+        }
       });
     },
 
