@@ -26,6 +26,7 @@ import {
 import { runTracedCommand } from "./command-trace.js";
 import { errorBody } from "../../../api-error.js";
 import { readLockedSession } from "../session/locked-mutation.js";
+import { sessionPluginIds } from "../session/plugins.js";
 
 /** Action dispatch shares the session commit lock with turns. */
 export async function dispatchPluginAction(
@@ -263,7 +264,6 @@ export async function dispatchPluginAction(
           409,
         );
       }
-      const liveActivePlugins = liveSession.activePlugins ?? [];
       const inactive = inactiveAction(liveSession);
       if (inactive) return inactive;
       let liveCommand = resolvedCommand;
@@ -273,7 +273,7 @@ export async function dispatchPluginAction(
       if (body.kind === "command") {
         liveCommand = resolveSessionCommand(
           body.commandId,
-          liveActivePlugins,
+          sessionPluginIds(liveSession, c.get("pluginRegistry")),
           c.get("pluginRegistry"),
         );
         if (
@@ -304,7 +304,10 @@ export async function dispatchPluginAction(
         }
         liveInvocation = parsed.invocation;
         const pluginRegistry = c.get("pluginRegistry");
-        pluginRegistry.syncSessionActivations(sessionId, liveActivePlugins);
+        pluginRegistry.syncSessionActivations(
+          sessionId,
+          liveSession.activePlugins ?? [],
+        );
         activeRuntimes = pluginRegistry.getActiveRuntimes(sessionId);
       }
       const environment = liveCommand

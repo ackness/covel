@@ -31,6 +31,7 @@ function stateFor(
     sessionPlugins: [],
     sessionCommands: [],
     sessionCommandsLoaded: false,
+    unavailableSessionPlugins: [],
     world: null,
     session: baseSession,
     messages: [],

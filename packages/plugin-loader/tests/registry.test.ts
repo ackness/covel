@@ -611,4 +611,25 @@ describe("PluginRegistry", () => {
       expect(registry.getActiveRuntimes("session-1")).toEqual([]);
     });
   });
+
+  describe("resolveSessionSet", () => {
+    it("passes the confirmed set through the resolver on every read and re-resolves after a registration", () => {
+      const resolve = vi.fn(
+        (confirmed: readonly string[], entries: ReadonlyMap<string, unknown>) =>
+          confirmed.filter((id) => entries.has(id) && id !== "dropped"),
+      );
+      const resolving = createPluginRegistry({ resolveSessionSet: resolve });
+      resolving.register(makeEntry("kept"));
+      resolving.register(makeEntry("dropped"));
+      resolving.syncSessionActivations("s", ["kept", "dropped"]);
+
+      expect(resolving.getActivePlugins("s")).toEqual(["kept"]);
+      expect(resolving.getActivePlugins("s")).toEqual(["kept"]);
+      expect(resolve).toHaveBeenCalledTimes(1);
+
+      resolving.register(makeEntry("other"));
+      expect(resolving.getActivePlugins("s")).toEqual(["kept"]);
+      expect(resolve).toHaveBeenCalledTimes(2);
+    });
+  });
 });

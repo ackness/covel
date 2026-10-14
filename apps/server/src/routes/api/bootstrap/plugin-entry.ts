@@ -51,10 +51,6 @@ import type { DataStore } from "@covel/store";
 import type { ToolRegistry } from "@covel/tools";
 import { buildEntryApi } from "./plugin-entry-api.js";
 import { PluginRegistrationError } from "./plugin-registration-error.js";
-import {
-  readSessionPluginSelection,
-  resolveSessionPluginPlan,
-} from "../session/plugins.js";
 
 /**
  * Validate that `target` is inside `root` after resolving symlinks.
@@ -176,9 +172,7 @@ export async function createBootstrapPluginEntries(
     params.entryActivationTimeoutMs ?? DEFAULT_ENTRY_ACTIVATION_TIMEOUT_MS;
   const retryDelayMs = params.entryRetryDelayMs ?? DEFAULT_ENTRY_RETRY_DELAY_MS;
   const failedAt = new Map<string, number>();
-  let publishedRevision = 0;
   let artifactRevision = 0;
-  const sessionRevisions = new Map<string, number>();
   let operationTail: Promise<unknown> = Promise.resolve();
   const serialize = <T>(fn: () => Promise<T>): Promise<T> => {
     const result = operationTail.then(fn);
@@ -576,7 +570,6 @@ export async function createBootstrapPluginEntries(
           entryDefinitions.set(pluginId, next.entryDefinition);
           params.failedDiscoveryMap?.delete(pluginId);
           artifactRevision += 1;
-          publishedRevision += 1;
         });
         try {
           await params.onReload?.(pluginId);
@@ -644,7 +637,6 @@ export async function createBootstrapPluginEntries(
             sessions.add(approvedSession);
             approvalSessions.set(pluginId, sessions);
             failedAt.delete(pluginId);
-            publishedRevision += 1;
             artifactRevision += 1;
           } catch (error) {
             if (previousEntry) params.pluginRegistry?.register(previousEntry);
@@ -700,47 +692,9 @@ export async function createBootstrapPluginEntries(
         for (;;) {
           const revision = await serialize(async () => {
             if (closed) throw new Error("plugin entries are closed");
-            // Resolve against the same publication as the captured artifacts. A
-            // reload can change requirements or single-provider conflicts without
-            // any plugin-toggle request. Callers hold the session admission lock.
-            if (
-              params.pluginRegistry &&
-              (sessionRevisions.get(sessionId) ?? 0) < publishedRevision
-            ) {
-              const session = await params.store.getSession(sessionId);
-              if (!session)
-                throw new Error("Session not found during plugin admission");
-              const authorized: string[] = [];
-              for (const entry of params.pluginRegistry.getAll().values()) {
-                if (
-                  getPluginTrustInfo(entry.id, entry.source).autoLoad ||
-                  (await isCommunityServerCodeApproved?.(sessionId, entry.id))
-                )
-                  authorized.push(entry.id);
-              }
-              const selection = readSessionPluginSelection(session);
-              const plan = resolveSessionPluginPlan(
-                selection.requested,
-                params.pluginRegistry,
-                {
-                  excluded: selection.excluded,
-                  requiredContracts: selection.requiredContracts,
-                  authorized,
-                },
-              );
-              if (
-                JSON.stringify(plan.active) !==
-                JSON.stringify(session.activePlugins)
-              )
-                await params.store.updateSession(sessionId, {
-                  activePlugins: plan.active,
-                });
-              params.pluginRegistry.syncSessionActivations(
-                sessionId,
-                plan.active,
-              );
-              sessionRevisions.set(sessionId, publishedRevision);
-            }
+            // The session's plugin set needs no repair here: the registry
+            // resolves the confirmed set against whatever publication a read
+            // sees (`resolveSessionSet`), so a reload applies at once.
             return artifactRevision;
           });
           // Runtime loading may activate entries. Keep it outside publication,

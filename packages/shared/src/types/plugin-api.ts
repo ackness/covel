@@ -174,6 +174,12 @@ export interface SessionPlugin extends PluginSummary {
 export interface SessionPluginsResponse {
   readonly items: readonly SessionPlugin[];
   readonly commands: readonly SessionSlashCommand[];
+  /**
+   * Plugins of the session's confirmed set that cannot run now (not
+   * installed, failed to load, or a requirement or conflict of the installed
+   * version). The game goes on without them.
+   */
+  readonly unavailable: readonly import("../plugin-selection.js").PluginResolutionRejection[];
 }
 
 export interface PluginMutationResponse {

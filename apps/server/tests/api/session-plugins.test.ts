@@ -31,6 +31,7 @@ import { createMemoryStore } from "@covel/store/memory";
 import { sessionRoutes } from "../../src/routes/api/session.js";
 import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
 import { sessionApprovalScope } from "../../src/routes/api/session/session-guard.js";
+import { resolveSessionPluginSet } from "../../src/routes/api/session/plugins.js";
 
 // ── Helpers ──────────────────────────────────────────────────────
 
@@ -396,6 +397,86 @@ describe("Session plugin routes (real sessionRoutes)", () => {
       expect(updateSession).not.toHaveBeenCalled();
       expect(applyActivations).not.toHaveBeenCalled();
       expect((await store.getSession(SESSION_ID))?.activePlugins).toEqual([
+        "narrator",
+        "optional-plugin",
+      ]);
+    });
+  });
+
+  describe("the confirmed plugin set", () => {
+    it("lists, offers commands for and runs the same set: a later core plugin stays out and a missing member is reported", async () => {
+      registry.register(
+        makeEntry({
+          id: "late-core",
+          packageManifest: parsePluginMd(
+            `---\n${JSON.stringify({
+              id: "late-core",
+              kind: "core",
+              description: "Installed after the session was confirmed",
+              contributes: {
+                commands: [
+                  { name: "late", description: "Late", action: "late" },
+                ],
+              },
+            })}\n---\n`,
+            "late-core/PLUGIN.md",
+          ),
+          summary: makeSummary({
+            id: "late-core",
+            name: "Late Core",
+            pluginType: "core-plugin",
+          }),
+          source: "builtin",
+        }),
+      );
+      await store.updateSession(SESSION_ID, {
+        activePlugins: ["narrator", "optional-plugin", "uninstalled"],
+      });
+
+      const body = (await (
+        await app.request(`/api/sessions/${SESSION_ID}/plugins`)
+      ).json()) as {
+        items: Array<{ id: string; active: boolean; sessionState: string }>;
+        commands: Array<{ pluginId?: string }>;
+        resolution: { active: string[] };
+        unavailable: Array<{ pluginId: string; code: string }>;
+      };
+
+      for (const id of ["late-core", "pregame"])
+        expect(body.items.find((item) => item.id === id)).toMatchObject({
+          active: false,
+          sessionState: "inactive",
+        });
+      expect(body.resolution.active).toEqual(["narrator"]);
+      expect(body.commands.some((cmd) => cmd.pluginId === "late-core")).toBe(
+        false,
+      );
+      expect(body.unavailable).toEqual([
+        expect.objectContaining({
+          pluginId: "uninstalled",
+          code: "unknown-plugin",
+        }),
+      ]);
+      // Nothing was written back: the player's confirmed set stays.
+      expect((await store.getSession(SESSION_ID))?.activePlugins).toEqual([
+        "narrator",
+        "optional-plugin",
+        "uninstalled",
+      ]);
+
+      // The executor's registry resolves the same set through the same function.
+      const executor = createPluginRegistry({
+        resolveSessionSet: (confirmed, entries) =>
+          resolveSessionPluginSet(confirmed, entries).active,
+      });
+      for (const entry of registry.getAll().values()) executor.register(entry);
+      executor.syncSessionActivations(SESSION_ID, [
+        "narrator",
+        "optional-plugin",
+        "uninstalled",
+      ]);
+      // optional-plugin is a member whose code waits for approval (trust gate).
+      expect(executor.getActivePlugins(SESSION_ID)).toEqual([
         "narrator",
         "optional-plugin",
       ]);

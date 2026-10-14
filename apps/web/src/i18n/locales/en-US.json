@@ -1623,6 +1623,7 @@
       "allowSelected": "Authorize selected",
       "notNow": "Not now"
     },
+    "unavailable": "Some plugins of this session cannot run now: {{plugins}}. The game goes on without them; open the plugin list to see why.",
     "invokeRuntime": {
       "setupPending": "This plugin needs setup first. Continue the story for one turn and complete any setup form, then try again.",
       "submitted": "Submitted {{count}} background job(s): {{ids}}. Waiting for completion…",

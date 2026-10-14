@@ -99,6 +99,7 @@ export function GameView({
     sessionPlugins,
     sessionCommands,
     sessionCommandsLoaded,
+    unavailableSessionPlugins,
     presets,
     llmConfig,
     statePatches,
@@ -517,6 +518,19 @@ export function GameView({
                     {t("plugin.approval.review", { pluginId: plugin.id })}
                   </button>
                 ))}
+            </div>
+          )}
+
+          {unavailableSessionPlugins.length > 0 && (
+            <div
+              role="status"
+              className="relative z-10 border-b border-amber-500/30 bg-amber-500/10 px-4 py-2 text-xs"
+            >
+              {t("plugin.unavailable", {
+                plugins: unavailableSessionPlugins
+                  .map((item) => item.pluginId)
+                  .join(", "),
+              })}
             </div>
           )}
 

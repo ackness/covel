@@ -1258,7 +1258,7 @@ Fork and community plugin grants:
 - When the dimension provider bound in a snapshot is a community plugin, the child cannot enable it when it is created:
   - If the snapshot has dimension data or settlement receipts for that provider: fork returns `409 { "code": "dimension_provider_required" }`, and no child session is created.
   - If the snapshot has no dimension data: the child session is created normally, but without this binding.
-- After a process restart, volatile grants are not restored either. `GET /api/sessions/:id/plugins` shows a community plugin that lacks its current grant as inactive. It keeps the plugin selection saved in the session, so it can be authorized again later.
+- After a process restart, volatile grants are not restored either. `GET /api/sessions/:id/plugins` shows a community plugin that lacks its current grant as inactive (`approvalRequired: true`). It keeps the plugin selection saved in the session, so it can be authorized again later.
 
 ### Character data
 
@@ -3590,6 +3590,8 @@ Lists the plugins this session can see, and the commands the session can run rig
 - `items[]`: each item adds `active`, `locked`, `sessionState`, and `serverCodeApproved` to `PluginSummary`, and can also include `approvalRequired`, `autoAdded`, and `rejection`.
 - `items[].runtimes` has exactly the same shape as in `GET /api/plugins`.
 - `commands[]`: the only executable command catalog. It is filtered by the plugins that are currently enabled, plus the framework commands. Each command is listed once at the top level, and it is not repeated per plugin.
+- `unavailable[]`: the plugins the player confirmed that cannot run now. Each item is a `rejection` (`pluginId`, `code`, `reason`). The cause can be that the plugin is not installed (`unknown-plugin`), failed to load, or that its installed version lacks a provider or conflicts with another member. The game goes on.
+- The list, the commands and the executor read the same set: the session's saved `activePlugins`, checked against the installed versions, with no new plugin added. The rules are in [Session plugin selection](./plugins.md#session-plugin-selection). This endpoint only reads; it does not rewrite the session.
 
 **Response:**
 

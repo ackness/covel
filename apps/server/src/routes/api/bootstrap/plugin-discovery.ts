@@ -1,5 +1,6 @@
 import { applyPendingPackageUpdates } from "../install/package-updates.js";
 import { assertHostVersionInRange } from "../../../lib/app-version.js";
+import { resolveSessionPluginSet } from "../session/plugins.js";
 import { validateRuntimeManifestSemantics } from "@covel/shared";
 import path from "node:path";
 import type { EventBus } from "@covel/events";
@@ -33,7 +34,11 @@ export interface DiscoverAndRegisterPluginsResult {
 export async function discoverAndRegisterPlugins(
   config: DiscoverAndRegisterPluginsConfig,
 ): Promise<DiscoverAndRegisterPluginsResult> {
-  const registry = createPluginRegistry({ eventBus: config.eventBus });
+  const registry = createPluginRegistry({
+    eventBus: config.eventBus,
+    resolveSessionSet: (confirmed, entries) =>
+      resolveSessionPluginSet(confirmed, entries).active,
+  });
   const pluginsDirs =
     config.pluginsDirs && config.pluginsDirs.length > 0
       ? config.pluginsDirs
