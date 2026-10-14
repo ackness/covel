@@ -14,6 +14,7 @@ import {
 import { SuspensionsPanel } from "./suspensions-panel.js";
 import { ExecutionRecoveryNotice } from "./execution-recovery-notice.js";
 import { SetupProgressNotice, setupProgress } from "./setup-progress-notice.js";
+import { WorldDataNotices } from "./world-data-notices.js";
 import {
   ResizableHandle,
   ResizablePanel,
@@ -100,6 +101,7 @@ export function GameView({
     sessionCommands,
     sessionCommandsLoaded,
     unavailableSessionPlugins,
+    worldDataNotices,
     presets,
     llmConfig,
     statePatchRevision,
@@ -533,6 +535,8 @@ export function GameView({
               })}
             </div>
           )}
+
+          <WorldDataNotices notices={worldDataNotices} />
 
           {/* Messages */}
           {stageActive && <SessionDimensionsPanel recoveryOnly />}

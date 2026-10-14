@@ -184,6 +184,23 @@ export async function listStateTables(
   }));
 }
 
+// What each session's creation imported without, read once by the game
+// screen. Local mode creates its server mirror while hydrating, so the
+// creation response does not reach the caller of `createSession` there.
+const createdWorldDataNotices = new Map<
+  string,
+  readonly import("@covel/shared").WorldDataImportNotice[]
+>();
+
+/** The world-data notices of a session's creation; empty once read. */
+export function takeCreatedWorldDataNotices(
+  sessionId: string,
+): readonly import("@covel/shared").WorldDataImportNotice[] {
+  const notices = createdWorldDataNotices.get(sessionId) ?? [];
+  createdWorldDataNotices.delete(sessionId);
+  return notices;
+}
+
 export async function createSession(
   worldId: string,
   id?: string,
@@ -195,9 +212,8 @@ export async function createSession(
   // Open credential storage before creating server state, and capture any
   // previous authority before the HTTP request can overlap another creation.
   const capturedToken = await getSessionToken(id ?? "");
-  const { ownerToken, ...session } = await request<SessionCreateResponse>(
-    "/api/sessions",
-    {
+  const { ownerToken, worldDataNotices, ...session } =
+    await request<SessionCreateResponse>("/api/sessions", {
       method: "POST",
       operatorAuth: true,
       body: JSON.stringify({
@@ -208,14 +224,16 @@ export async function createSession(
         ...(locale ? { locale } : {}),
         ...(loreOverride !== undefined ? { loreOverride } : {}),
       }),
-    },
-  );
+    });
   // Persist the one-time owner token immediately so every follow-up call (which
   // never re-receives it) can present it on hosted tiers.
   if (id !== undefined && session.id !== id)
     throw new Error("Created session does not match the requested identity");
   if (typeof session.incarnation !== "string" || !session.incarnation)
     throw new Error("Created session is missing its incarnation");
+  if (worldDataNotices?.length)
+    createdWorldDataNotices.set(session.id, worldDataNotices);
+  else createdWorldDataNotices.delete(session.id);
   await storeCreatedSessionToken(session.id, ownerToken, capturedToken);
   await verifyCreatedSessionCredential(
     { sessionId: session.id, token: ownerToken },

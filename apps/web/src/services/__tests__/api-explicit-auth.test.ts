@@ -313,3 +313,34 @@ describe("operator auth on hosted administration routes", () => {
     expect(await api.getSessionToken("sess-1")).toBe("owner-secret");
   });
 });
+
+describe("world-data notices of a new session", () => {
+  it("keeps them for the game screen to read once", async () => {
+    const notice = {
+      level: "warning",
+      sourceId: "facts",
+      message: 'No active receiver for data contract "notes@1"; source skipped',
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValueOnce(
+          okJson({
+            id: "sess-notices",
+            ownerToken: "owner-secret",
+            incarnation: "synthetic-incarnation",
+            worldId: "world-1",
+            worldDataNotices: [notice],
+          }),
+        )
+        .mockResolvedValueOnce(
+          okJson({ id: "sess-notices", incarnation: "synthetic-incarnation" }),
+        ),
+    );
+    const session = await api.createSession("world-1", "sess-notices");
+    expect(session).not.toHaveProperty("worldDataNotices");
+    expect(api.takeCreatedWorldDataNotices("sess-notices")).toEqual([notice]);
+    expect(api.takeCreatedWorldDataNotices("sess-notices")).toEqual([]);
+  });
+});

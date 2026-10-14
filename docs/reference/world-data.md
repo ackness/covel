@@ -677,7 +677,7 @@ sources:
 
 - 缺 `key` 是 error。
 - 缺 `indexTo` 时没有地方记录“有哪些图”，这些文件不会被导入。
-- 接收图片索引的插件没有启用时，这个 source 的文件同样不导入。这时是 warning，不影响其他数据。之后启用接收插件，再通过[同步](#preflight-与-sync)补导入。
+- 接收图片索引的插件没有启用时，这个 source 的文件同样不导入。这时是 warning，不影响其他数据。之后在游戏里启用接收插件，它的数据会自动导入一次（见[开局后加入的接收插件](#开局后加入的接收插件)）。
 
 ### 会话之外可见的图片
 
@@ -833,6 +833,16 @@ characterSchema:
 - 媒体 source 用 `to: media` 加契约形式的 `indexTo`。结构化 source 不能把 `to` 写成 `media`。这类组合错误在校验时被拒绝。
 - `world:metadata.<path>` 的路径里不能有 `__proto__` 这类危险的段。`dimensions` 以外的路径目前只被记录下来，不产生效果。
 - 世界数据在创建会话时导入。已有会话要通过 [`sync-data`](#preflight-与-sync) 同步；先调用 `preflight` 可以在写入之前看到诊断。
+- 创建会话的响应在 `worldDataNotices` 里列出没有导入的数据（warning 和 error，例如没有启用的接收插件），游戏界面把它们显示给玩家。
+
+### 开局后加入的接收插件
+
+创建会话时没有启用的插件收不到世界数据，例如开局后才批准的社区插件。在游戏里启用插件（`PUT /api/sessions/:id/plugins/:pluginId`）时，Covel 为这次新加入的插件补跑一次导入：
+
+- 只写新加入、并且导入账本里还没有这个世界记录的插件的数据。其他插件的数据和账本不动；同一个插件关掉再打开，不会覆盖游戏改过的数据。
+- 社区插件的投影代码只在它获得这局游戏的授权后运行。
+- 响应的 `worldData` 写明哪些插件收到了数据、写了多少条，以及按现在的插件还缺哪些数据（`notices`）。游戏界面用它替换之前的提示。
+- 导入失败时插件仍然启用，`notices` 里给出 error。
 
 ### Lorebook 按玩家消息选择性注入
 
@@ -995,7 +1005,7 @@ handler 的返回值：
 - `preflight` 只校验 source、声明、目标和 schema，**不加载也不执行 handler**。投影实际产生哪些 key，只有导入或同步之后才知道。
 - 导入和同步只运行这局游戏已启用插件的匹配声明。单个投影失败只产生 warning，不阻止原始 source 的写入，也不影响其他插件的投影。
 - 每个声明的 output 要么整组成功，要么整组不写。任何一条的 key 或 schema 无效时，这一组保持上一次成功的内容和账本，不会出现新旧混杂。只有 handler 成功返回 `[]` 才表示“确实没有记录”，这时才删除旧记录。
-- 内置插件的 handler 可以直接运行。社区插件的 handler 需要这局游戏明确授权运行服务端代码。会话创建之前没法授权，所以社区投影要这样补跑：建好会话后调用插件 enable（已经启用也可以再调一次）触发 `covel:plugin-server-code` 的会话级授权，再调用 `sync-data`。没有授权时导入只发 warning，不会偷偷执行代码。
+- 内置插件的 handler 可以直接运行。社区插件的 handler 需要这局游戏明确授权运行服务端代码。会话创建之前没法授权，所以创建时社区投影不运行，只发 warning，不会偷偷执行代码。玩家批准并启用这个插件时，投影随[开局后加入的接收插件](#开局后加入的接收插件)的导入运行一次。之后要按新的世界包重跑，调用 `sync-data`。
 - 每次调用在独立的 Worker 里运行，输入是一份结构化克隆：
 
   | 限制                  | 值               |
@@ -1206,7 +1216,7 @@ sources:
 - 媒体单个文件最大 20 MB，一个 source 的目录合计最大 100 MB。
 - 可以导入的扩展名：`.png`、`.jpg`、`.jpeg`、`.webp`、`.mp3`、`.wav`、`.mp4`。
 - 预检要求对应契约的 schema 和接收声明已经注册。`character-blueprint` 的 `assets` 和 `presence` 分别接收 `character.portrait-assets@1` 与 `character.portraits@1`。
-- 把接收插件放进 `pluginPolicy.recommended`，玩家就可以选择它。没有启用时，跳过它的数据和媒体索引，并给出 warning。
+- 把接收插件放进 `pluginPolicy.recommended`，玩家就可以选择它。没有启用时，跳过它的数据和媒体索引，并给出 warning；之后在游戏里启用它，数据补导入一次。
 
 实际例子见 `worlds/mistport` 与 `worlds/haruka-academy`（`data/world.data.yaml` + `media/`）。
 

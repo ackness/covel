@@ -166,6 +166,7 @@ export const initialState: SessionState = {
   sessionCommands: [],
   sessionCommandsLoaded: false,
   unavailableSessionPlugins: [],
+  worldDataNotices: [],
   messageUiSpecs: [],
   pendingInteractionDrafts: [],
   suspensions: [],
@@ -199,6 +200,7 @@ const SESSION_RESET: Partial<SessionState> = {
   sessionCommands: [],
   sessionCommandsLoaded: false,
   unavailableSessionPlugins: [],
+  worldDataNotices: [],
   messageUiSpecs: [],
   pendingInteractionDrafts: [],
   suspensions: [],
@@ -647,6 +649,8 @@ export function reducer(
         unavailableSessionPlugins:
           action.unavailable ?? state.unavailableSessionPlugins,
       };
+    case "SET_WORLD_DATA_NOTICES":
+      return { ...state, worldDataNotices: action.notices };
     case "TOGGLE_SESSION_PLUGIN": {
       const plugin = state.sessionPlugins.find(
         (item) => item.id === action.pluginId,
