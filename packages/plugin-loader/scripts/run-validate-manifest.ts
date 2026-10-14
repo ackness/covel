@@ -104,6 +104,17 @@ export async function runValidateManifest(
       output.stdout.write(
         `  languages: ${describePluginLanguages(definition.languages)}\n`,
       );
+      // A plugin names the role (slot) it wants; the player's settings pick
+      // the model and the endpoint. Nothing reads a plugin's own llm.toml.
+      if (
+        await fs.stat(path.join(rootPath, "llm.toml")).then(
+          () => true,
+          () => false,
+        )
+      )
+        output.stdout.write(
+          "  warning: llm.toml is ignored: a plugin cannot choose a model or an endpoint. Name the role with agent.model / function.model; the player's model settings bind it.\n",
+        );
     } catch (error) {
       output.stderr.write(
         `✗ ${error instanceof Error ? error.message : String(error)}\n`,

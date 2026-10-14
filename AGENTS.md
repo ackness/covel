@@ -516,10 +516,12 @@ Branch, Snapshot, State, Event, Record, Character, PluginData**.
   `docs/internals/storage.md` (it also describes how each SQL backend's files
   are split).
 - `sessions.runtime_model_overrides` stores only `runtimeId → slot` names. An
-  explicit runtime selection (this map included) wins, then the request's UI slot
-  binding, then the plugin's own preference, then the `llm.toml` default; a
-  request-scoped `modelOverride` applies to `story` runtimes only. Full chain:
-  `docs/reference/slots.md`.
+  explicit runtime selection (this map included) wins over the slot the runtime
+  names (`agent.model` / `function.model`); the slot resolves through the
+  request's UI slot binding, then the `llm.toml` default. A plugin names only a
+  slot, never a provider, model or endpoint (a plugin's own `llm.toml` is not
+  read). A request-scoped `modelOverride` applies to `story` runtimes only. Full
+  chain: `docs/reference/slots.md`.
 - `turn_results.commit_status` stays `pending` until the commit owner settles it to
   `committed` / `failed`; a lingering `pending` row is a crash signature.
 - **JSONB writes**: use `sql.json(value as JSONValue)`, never `JSON.stringify()`

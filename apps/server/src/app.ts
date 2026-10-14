@@ -27,7 +27,6 @@ import {
 import {
   createGatewayAdapter,
   createPluginRuntimeGateway,
-  type PluginLlmModelTarget,
 } from "@covel/runtime";
 import { fetchWithRetry, validateBaseUrlForPlugin } from "@covel/ai-provider";
 import { setTranslationsDirectory } from "@covel/plugin-loader";
@@ -253,13 +252,11 @@ async function initializeServer(): Promise<void> {
     // Collect all *_API_KEY env vars dynamically so any provider can be added
     // to llm.toml without requiring code changes here.
     const apiKeys = providerApiKeysFromEnv(process.env);
-    const pluginModelTargets = new Map<string, PluginLlmModelTarget>();
     // Env-derived keys ride the `envApiKeys` channel so the provider registry
     // origin-gates them — the startup paths never carry request-scoped
     // slot overlays today, but the provenance stays honest if that changes.
     const llmAdapter = createGatewayAdapter(ai.gateway, {
       envApiKeys: apiKeys,
-      modelTargets: pluginModelTargets,
     });
     // Function-runtime gateway facade — shares the same preset/provider
     // registry and env apiKeys as the agent-runtime LLM adapter. Plugins
@@ -304,7 +301,6 @@ async function initializeServer(): Promise<void> {
     const perRequestLlm = createPerRequestLlmMiddleware({
       ai,
       envApiKeys: apiKeys,
-      modelTargets: pluginModelTargets,
       defaultLlmAdapter: llmAdapter,
       defaultPluginGateway: pluginGateway,
     });
@@ -316,7 +312,6 @@ async function initializeServer(): Promise<void> {
     const worldsDirs = mergeDirs(bundledWorldsDir, userDirs.worlds);
 
     const api = (resources.api = await bootstrapApi({
-      pluginModelTargets,
       applicationWork,
       pluginsDir: bundledPluginsDir,
       pluginsDirs,
@@ -324,12 +319,7 @@ async function initializeServer(): Promise<void> {
       covelHome: env.covelHome,
       llmAdapter,
       canRunRuntimeJobWithServerServices: ({ model }) =>
-        hasServerRuntimeJobCredentials(
-          ai.gateway,
-          model,
-          apiKeys,
-          pluginModelTargets,
-        ),
+        hasServerRuntimeJobCredentials(ai.gateway, model, apiKeys),
       pluginGateway,
       pluginUtils,
       store,

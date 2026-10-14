@@ -120,10 +120,6 @@ export type {
   ToolExecutorConfig,
 } from "./agent-loop/tool-executor.js";
 
-// ── Model Resolver ──────────────────────────────────────────────
-export type { PluginLlmModelTarget } from "./llm/model-resolver.js";
-export { createModelResolver } from "./llm/model-resolver.js";
-
 // ── Per-Session Runtime Slot Resolver ───────────────────
 
 // ── Public Plugin API (unified `entry` module contract) ────────
@@ -162,10 +158,7 @@ export {
 export type { PreparedInteractionSubmission } from "./interaction/interaction-submission.js";
 
 // ── Gateway Bridge ──────────────────────────────────────────────
-export {
-  createGatewayAdapter,
-  resolveGatewayModelSelection,
-} from "./llm/gateway-llm-adapter.js";
+export { createGatewayAdapter } from "./llm/gateway-llm-adapter.js";
 export type {
   GatewayLike,
   GatewayAdapterConfig,

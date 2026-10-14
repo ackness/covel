@@ -201,6 +201,7 @@ Authors of external plugins should follow the framework's [CHANGELOG](../../CHAN
 - A **function runtime** must declare `function.handler`. That module must default-export a function. It cannot also set `agent`.
 - An **agent runtime** cannot set `function`.
 - `function.model` says which model slot (such as `memory`) the `ctx.gateway` calls in the handler use. Before a detached (background) job is claimed, the system uses this to check whether its credentials are ready. If you do not declare it, the check uses the system default preset. That can miss a slot binding set for a single request, and then the job waits in the queue until `maxQueueMs` runs out.
+- `agent.model` and `function.model` only name a role (slot). A plugin cannot choose a provider, model, address, or protocol: the player's model settings decide them (see [Actual selection priority](./slots.md#actual-selection-priority)). An `llm.toml` in a plugin's directory is not read.
 
 ### Which tools an agent can use
 
@@ -731,6 +732,8 @@ The directory-level command `pnpm validate:plugin <dir>` and the ZIP install sha
 - Each JSON UI spec declares one of `view` and `webview`. Component names in `view` must be in the [component catalogue](./ui-components.md). `repeat.statePath` and `$item` must have a legal form (see [UI panels](./ui-panels.md#json-render-binding-cheat-sheet)). The error gives the spec file and the path of the node.
 - Automatic and scheduled runtimes must have a stage.
 - The built-in tool names and the plugin tool declarations, the runtime references inside the package, and the root contract dependencies must all be consistent.
+
+The directory-level check also warns when the plugin's root has an `llm.toml`: the file is not read, and it does not fail the check.
 
 These checks do not run plugin code, and they cannot replace the registration consistency check at startup.
 

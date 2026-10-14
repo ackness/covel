@@ -59,13 +59,6 @@ export type { PluginRegistry, PluginRegistryOptions } from "./registry.js";
 // ── Trust ────────────────────────────────────────────────────────
 export { getPluginTrustInfo, deriveBuiltinPluginIds } from "./trust.js";
 
-// ── Plugin LLM Config ────────────────────────────────────────────
-export {
-  loadPluginLlmConfig,
-  parsePluginLlmToml,
-} from "./plugin-llm-config.js";
-export type { PluginLlmConfig, PluginLlmSlot } from "./plugin-llm-config.js";
-
 // ── Types ────────────────────────────────────────────────────────
 export type {
   ParsedPluginMd,
