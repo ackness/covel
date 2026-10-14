@@ -10,6 +10,7 @@ Covel 是模块化单体：一个仓库、一起发布，内部分成若干包�
 > 所以构建产物比源码旧的时候（例如拉取了新提交却没有重新 `pnpm install`），导入新名字的插件会加载失败。
 >
 > - 开发服务端每次启动进程时会检查并重新构建（`scripts/ensure-plugin-sdk.mjs`）。
+> - Turbo 会先完成 SDK 构建，再运行它自己的 lint 和测试。SDK 测试经 `shared` 读取自己的 `dist` 声明，所以只有依赖包的 `^build` 顺序还不够。
 > - 单独运行某个包的测试之前，仍然要手动执行 `pnpm --filter @covel/plugin-handlers-utils build`。
 
 其余的库主要由应用和框架在工作区内组合使用。

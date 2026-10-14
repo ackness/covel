@@ -116,6 +116,8 @@ LIVE_LLM_ENABLED=1 pnpm e2e
 
 ### 怎样判断回合结束
 
+点击或输入完成，不代表异步读取或保存已经结束。用 Playwright 的定位器断言或 `expect.poll` 等到最终值；保存后要刷新页面时，先等持久化完成。React 单元测试用 `findBy*` 或 `waitFor` 等待真正要断言的结果；旁边的内容出现，不代表延迟加载的组件也已挂载。不要用固定时长的等待代替这些条件。
+
 **读 `data-executing`，不要用 `input:disabled` 推断。**
 
 - 点击会开始回合的按钮之后，先等 `waitForTurnStarted`，再等 `waitForTurnIdle`。发送前有一段异步准备，状态还没切到“执行中”时，对 `false` 的断言会提前成功。
