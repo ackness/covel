@@ -153,6 +153,53 @@ describe("GitHub plugin installation", () => {
     ).toHaveLength(1);
   });
 
+  it.each(["mts", "cts"])(
+    "flags a package containing .%s code before approval",
+    async (extension) => {
+      archive = await zip({
+        "package.json": fixture["package.json"],
+        "PLUGIN.md":
+          "---\nid: example-note\nkind: plugin\ndescription: Test fixture\n---\n",
+        [`source.${extension}`]: 'throw new Error("Unapproved code executed");',
+      });
+      expect((await preview()).hasServerCode).toBe(true);
+      expect(await readdir(root)).toEqual([]);
+    },
+  );
+
+  it("compiles description translations from package locales into the signed preview", async () => {
+    archive = await zip({
+      ...fixture,
+      "locales/zh-CN.yaml": "PLUGIN.md:\n  description: 中文描述\n",
+      "locales/ja.yml": "PLUGIN.md:\n  description: 日本語の説明\n",
+      "locales/notes.yaml": "PLUGIN.md:\n  description: Not a locale\n",
+    });
+    const item = await preview();
+    expect(item.description).toEqual({
+      en: "Synthetic hook plugin",
+      "zh-CN": "中文描述",
+      ja: "日本語の説明",
+    });
+    expect(
+      (await request("plugin/github", { token: item.token, acceptRisk: true }))
+        .status,
+    ).toBe(201);
+  });
+
+  it("preserves inline locale maps without selecting an English fallback", async () => {
+    archive = await zip({
+      ...fixture,
+      "PLUGIN.md": fixture["PLUGIN.md"].replace(
+        "description: Synthetic hook plugin",
+        "description: { en: English, zh-CN: 中文 }",
+      ),
+    });
+    expect((await preview()).description).toEqual({
+      en: "English",
+      "zh-CN": "中文",
+    });
+  });
+
   it("enables a hook-only installed plugin only after a separate session approval", async () => {
     archive = await zip({
       ...fixture,

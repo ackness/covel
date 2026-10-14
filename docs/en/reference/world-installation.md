@@ -54,6 +54,7 @@ These endpoints are controlled by the "allow install" switch. Writing a world al
 | DELETE | `/api/install/world/github/update/:id`     | Cancels a staged update. Returns `{ok:true}`                                       |
 
 - **The shape of a preview** is the same as the preview for a plugin package: `id`, `version`, `description`, `author`, `source`, `token`, and `expiresAt`. `author` is the author name from the manifest. It is `null` if none is declared.
+- `description` is `I18nText`, including summary translations merged by the loader from `world.<locale>.yaml`. Clients call `resolveI18nText` with the UI language.
 - `hasServerCode` is always `false`. It means "this install path does not load code." It does not mean "there are no script files in this folder."
 - The signatures for install and update are kept apart by "plugin or world" and by "install or update." One cannot be passed off as the other.
 - The ZIP install endpoint `/api/install/world` is still available.
