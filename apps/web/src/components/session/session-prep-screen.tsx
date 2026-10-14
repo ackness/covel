@@ -47,6 +47,7 @@ import { useWorldRecord } from "@/services/world-records.js";
 import { DimensionActions } from "./session-prep/dimension-actions.js";
 import { ModelsCard } from "./session-prep/models-card.js";
 import { PluginSelectionCard } from "./session-prep/plugin-selection-card.js";
+import { SessionPluginNotices } from "./session-plugin-notices.js";
 import type { SessionPrepScreenProps } from "./session-prep/types.js";
 import { worldDisplayText, worldPlayLocale } from "@/lib/world-locale.js";
 import { worldVisual } from "@/lib/world-visuals.js";
@@ -117,6 +118,7 @@ export function SessionPrepScreen({
     pluginPlanError,
     missingPluginIds,
     unmetRequirements,
+    dependentsOff,
     pluginPacks,
     activePluginPack,
     pluginSearch,
@@ -576,6 +578,20 @@ export function SessionPrepScreen({
                 </ul>
               </div>
             </div>
+          )}
+
+          {!pluginPlanUnavailable && (
+            <SessionPluginNotices
+              plugins={plugins.map((plugin) => ({
+                ...plugin,
+                active: selectedPluginIdSet.has(plugin.id),
+              }))}
+              unavailable={dependentsOff}
+              offTitle={t("plugin.dependentsOff")}
+              busy={isStarting}
+              onTurnOn={togglePlugin}
+              variant="card"
+            />
           )}
 
           <div className="grid gap-5 lg:grid-cols-[minmax(0,0.86fr)_minmax(0,1.14fr)] lg:items-start">
