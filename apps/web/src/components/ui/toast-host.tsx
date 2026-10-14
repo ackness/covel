@@ -45,9 +45,8 @@ export function ToastHost() {
   const timersRef = useRef<Map<number, ReturnType<typeof setTimeout>>>(
     new Map(),
   );
-  // Toasts the pointer is currently hovering — their auto-dismiss timer is
-  // paused so the user can finish reading / copying the detail.
-  const pausedRef = useRef<Set<number>>(new Set());
+  // Hover and keyboard focus independently pause auto-dismiss.
+  const pausedRef = useRef<Map<number, Set<"hover" | "focus">>>(new Map());
 
   useEffect(() => {
     const unsub = subscribeToast((event) => {
@@ -73,6 +72,10 @@ export function ToastHost() {
       }, toast.durationMs ?? AUTO_DISMISS_MS[toast.kind]);
       timers.set(toast.id, handle);
     }
+    for (const id of pausedRef.current.keys()) {
+      if (!toasts.some((toast) => toast.id === id))
+        pausedRef.current.delete(id);
+    }
     // Clean up timers whose toasts were dismissed manually.
     for (const id of Array.from(timers.keys())) {
       if (!toasts.some((toast) => toast.id === id)) {
@@ -82,9 +85,11 @@ export function ToastHost() {
     }
   }, [toasts]);
 
-  // Pause auto-dismiss while hovered so the user can read / copy the detail.
-  const pauseDismiss = (id: number) => {
-    pausedRef.current.add(id);
+  // Keep the timer paused until every active interaction has ended.
+  const pauseDismiss = (id: number, reason: "hover" | "focus") => {
+    const reasons = pausedRef.current.get(id) ?? new Set();
+    reasons.add(reason);
+    pausedRef.current.set(id, reasons);
     const handle = timersRef.current.get(id);
     if (handle !== undefined) {
       clearTimeout(handle);
@@ -92,8 +97,11 @@ export function ToastHost() {
     }
   };
 
-  // Resume by re-arming a fresh full-duration timer once the pointer leaves.
-  const resumeDismiss = (id: number) => {
+  // Resume with a full reading interval after both hover and focus leave.
+  const resumeDismiss = (id: number, reason: "hover" | "focus") => {
+    const reasons = pausedRef.current.get(id);
+    reasons?.delete(reason);
+    if (reasons?.size) return;
     pausedRef.current.delete(id);
     const toast = toasts.find((entry) => entry.id === id);
     if (!toast || timersRef.current.has(id)) return;
@@ -157,8 +165,14 @@ export function ToastHost() {
           <div
             key={toast.id}
             role={toast.kind === "error" ? "alert" : "status"}
-            onMouseEnter={() => pauseDismiss(toast.id)}
-            onMouseLeave={() => resumeDismiss(toast.id)}
+            onMouseEnter={() => pauseDismiss(toast.id, "hover")}
+            onMouseLeave={() => resumeDismiss(toast.id, "hover")}
+            onFocus={() => pauseDismiss(toast.id, "focus")}
+            onBlur={(event) => {
+              if (!event.currentTarget.contains(event.relatedTarget)) {
+                resumeDismiss(toast.id, "focus");
+              }
+            }}
             className={cn(
               "pointer-events-auto flex items-start gap-3 rounded-md border px-3 py-2.5 shadow-lg backdrop-blur-md",
               "animate-in slide-in-from-bottom-2 fade-in",

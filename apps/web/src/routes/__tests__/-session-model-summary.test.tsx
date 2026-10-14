@@ -5,6 +5,8 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 const routeMocks = vi.hoisted(() => ({
   component: null as ComponentType | null,
   navigate: vi.fn(),
+  booted: true,
+  sid: undefined as string | undefined,
 }));
 
 const slotMocks = vi.hoisted(() => ({
@@ -14,7 +16,7 @@ const slotMocks = vi.hoisted(() => ({
 vi.mock("@tanstack/react-router", () => ({
   createFileRoute: () => (options: { component: ComponentType }) => {
     routeMocks.component = options.component;
-    return { ...options, useSearch: () => ({}) };
+    return { ...options, useSearch: () => ({ sid: routeMocks.sid }) };
   },
   useNavigate: () => routeMocks.navigate,
 }));
@@ -22,7 +24,7 @@ vi.mock("@tanstack/react-router", () => ({
 vi.mock("@/stores/session-store.js", () => ({
   useSession: () => ({
     state: {
-      booted: true,
+      booted: routeMocks.booted,
       bootError: null,
       session: null,
       world: null,
@@ -36,7 +38,7 @@ vi.mock("@/stores/session-store.js", () => ({
     selectWorld: vi.fn(),
     startGame: vi.fn(),
     resumeSession: vi.fn(),
-    resumeSessionById: vi.fn(),
+    resumeSessionById: vi.fn().mockResolvedValue(undefined),
     deleteSession: vi.fn(),
     backToWorldSelect: vi.fn(),
     updateWorldLocal: vi.fn(),
@@ -86,6 +88,8 @@ beforeAll(async () => {
 
 afterEach(() => {
   cleanup();
+  routeMocks.booted = true;
+  routeMocks.sid = undefined;
   slotMocks.refresh.mockClear();
   routeMocks.navigate.mockClear();
 });
@@ -103,4 +107,13 @@ describe("session route world-select model summary", () => {
     fireEvent.click(screen.getByRole("button", { name: "close settings" }));
     expect(slotMocks.refresh).toHaveBeenCalledTimes(1);
   });
+});
+
+it.each([false, true])("announces session loading when booted=%s", (booted) => {
+  routeMocks.booted = booted;
+  routeMocks.sid = "restoring-session";
+  const SessionPage = routeMocks.component;
+  if (!SessionPage) throw new Error("Session route was not registered");
+  render(<SessionPage />);
+  expect(screen.getByRole("status").textContent).toContain("加载中");
 });
