@@ -179,6 +179,11 @@ export interface SessionPluginsResponse {
 export interface PluginMutationResponse {
   readonly ok: true;
   readonly activePluginIds: readonly string[];
+  /**
+   * Enable only: present when plugins joined a session that has a world. The
+   * world's data for the joined receivers was imported once.
+   */
+  readonly worldData?: import("./world-data.js").WorldDataReceiverImport;
 }
 
 export interface PluginLoadError {
@@ -192,9 +197,16 @@ export interface PluginPack {
   readonly description?: I18nText;
   readonly requested: readonly string[];
   readonly recommended: readonly string[];
+  /** Plugins the pack turns off, core ones included; the player can turn them back on. */
+  readonly excluded?: readonly string[];
   readonly tags: readonly string[];
   readonly reason?: I18nText;
   readonly source: "builtin" | "world";
+  /**
+   * The view a world made for this pack opens new sessions in. The world
+   * generator writes it into the world's `defaultViewMode`.
+   */
+  readonly defaultViewMode?: "stage" | "parsed";
 }
 
 export interface ResolvedWorldPluginPolicy {

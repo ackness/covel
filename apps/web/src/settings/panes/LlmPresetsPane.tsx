@@ -388,7 +388,8 @@ export function LlmPresetsPane() {
           onAddProvider={() => setProviderDialogOpen(true)}
         />
 
-        <main
+        <section
+          aria-label={t("settings.providerConnections")}
           className={`${mobileDetailsOpen ? "block" : "hidden lg:block"} min-w-0 p-3`}
         >
           <Button
@@ -434,7 +435,7 @@ export function LlmPresetsPane() {
               </p>
             </div>
           )}
-        </main>
+        </section>
       </div>
 
       {(importError || saveError) && (

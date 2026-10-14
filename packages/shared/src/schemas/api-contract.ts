@@ -369,9 +369,11 @@ export const pluginPackSchema = z
     description: i18nTextSchema.optional(),
     requested: z.array(z.string()),
     recommended: z.array(z.string()),
+    excluded: z.array(z.string()).optional(),
     tags: z.array(z.string()),
     reason: i18nTextSchema.optional(),
     source: z.enum(["builtin", "world"]),
+    defaultViewMode: z.enum(["stage", "parsed"]).optional(),
   })
   .strict();
 

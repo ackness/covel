@@ -53,6 +53,7 @@ describe("PostgreSQL nonblocking session lock", () => {
     const callback = vi.fn(async () => 42);
     expect(await probe.tryWithLock!("session", callback)).toEqual({
       acquired: false,
+      reason: "busy",
     });
     expect(callback).not.toHaveBeenCalled();
     expect(b.connections[0]!.query).toHaveBeenCalledTimes(1);
@@ -99,6 +100,7 @@ describe("PostgreSQL nonblocking session lock", () => {
       const callback = vi.fn(async () => 42);
       expect(await lock.tryWithLock!("inner", callback)).toEqual({
         acquired: false,
+        reason: "busy",
       });
       expect(callback).not.toHaveBeenCalled();
       release.release();
@@ -123,7 +125,7 @@ describe("PostgreSQL nonblocking session lock", () => {
     );
   });
 
-  it("does not wait for an exhausted pool and releases a late checkout", async () => {
+  it("reports an exhausted pool as unavailable, not busy, and releases a late checkout (F-203)", async () => {
     const backend = pool();
     const connection = await backend.reserve();
     const releaseCheckout = gate();
@@ -131,15 +133,32 @@ describe("PostgreSQL nonblocking session lock", () => {
       await releaseCheckout.promise;
       return connection;
     });
-    const lock = createPgAdvisorySessionLock(backend.sql);
+    const lock = createPgAdvisorySessionLock(backend.sql, {
+      tryReserveTimeoutMs: 20,
+    });
     const callback = vi.fn(async () => 42);
     expect(await lock.tryWithLock!("session", callback)).toEqual({
       acquired: false,
+      reason: "unavailable",
     });
     releaseCheckout.release();
     await vi.waitFor(() => expect(connection.release).toHaveBeenCalledOnce());
     expect(callback).not.toHaveBeenCalled();
     expect(connection).not.toHaveBeenCalled();
+  });
+
+  it("waits briefly for a pool that is opening a connection (F-203)", async () => {
+    const backend = pool();
+    const reserve = backend.reserve.getMockImplementation()!;
+    backend.reserve.mockImplementationOnce(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      return reserve();
+    });
+    const lock = createPgAdvisorySessionLock(backend.sql);
+    expect(await lock.tryWithLock!("session", async () => 42)).toEqual({
+      acquired: true,
+      value: 42,
+    });
   });
 
   it("keeps the probe's connection and key until already-started nested work settles", async () => {

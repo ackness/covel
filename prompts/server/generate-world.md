@@ -45,13 +45,13 @@ defaultLocale: "{{ locale }}"
 supportedLocales: ["{{ locale }}"]
 tags: [<you decide genre tags>]
 pluginPolicy:
-  presetId: traditional-story # MUST match the Creation Brief experience preset
+  presetId: <the presetId of the Creation Brief's plugin pack; omit when none is chosen>
   preferredTags: [] # optional plugin catalogue tags such as mode:dialogue
   requested: [] # selected plugin IDs
   recommended: [] # optional plugin IDs
 
-# Set to stage only for dialogue-mode; omit for traditional-story.
-defaultViewMode: stage
+# Omit defaultViewMode: the plugin pack decides it. A revision keeps the value
+# the current world.yaml has.
 
 # Each key under `dimensions` is an ID that you choose for this world: English
 # words that say what the dimension holds. A key in angle brackets is a

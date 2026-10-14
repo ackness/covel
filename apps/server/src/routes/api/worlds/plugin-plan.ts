@@ -39,12 +39,14 @@ function worldPack(value: unknown): PluginPack | undefined {
   const label = i18nText(value.label) ?? value.id;
   const description = i18nText(value.description);
   const reason = i18nText(value.reason);
+  const excluded = stringArray(value.excluded);
   return {
     id: value.id,
     label,
     ...(description ? { description } : {}),
     requested: stringArray(value.requested),
     recommended: stringArray(value.recommended),
+    ...(excluded.length > 0 ? { excluded } : {}),
     tags: stringArray(value.tags),
     ...(reason ? { reason } : {}),
     source: "world",
@@ -108,6 +110,14 @@ function dropMissingRequests(
     packs: resolved.packs.map((pack) => ({
       ...pack,
       requested: keepInstalled(pack.requested, pack.id),
+      // Turning off a plugin this host lacks changes nothing.
+      ...(pack.excluded
+        ? {
+            excluded: pack.excluded.filter((pluginId) =>
+              installed.has(pluginId),
+            ),
+          }
+        : {}),
     })),
     missing,
   };

@@ -124,6 +124,9 @@ function createMockMediaStore(options: MockMediaStoreOptions = {}): {
     async addRef() {
       // No-op: the test fixture seeds references via the `references` set.
     },
+    async claimAssets() {
+      // No-op: the test fixture sets ownership and references directly.
+    },
     async removeRef() {
       // No-op: the test fixture seeds references via the `references` set.
     },

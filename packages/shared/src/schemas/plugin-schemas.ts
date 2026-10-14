@@ -826,6 +826,8 @@ interface ManifestCrossFieldView {
   readonly trigger?: RuntimeRuleView["trigger"];
   readonly needs?: RuntimeRuleView["needs"];
   readonly output?: RuntimeRuleView["output"];
+  readonly execution?: string;
+  readonly tools?: { readonly builtin?: readonly string[] };
 }
 
 /** Report the shared runtime rules on the flat IR shape, under IR paths. */
@@ -833,9 +835,14 @@ function addIrRuleIssues(
   m: ManifestCrossFieldView,
   ctx: z.RefinementCtx,
 ): void {
-  const { outputKind, turnCompletion, ...rest } = m;
+  const { outputKind, turnCompletion, tools, ...rest } = m;
   for (const issue of runtimeRuleIssues(
-    { ...rest, visibility: outputKind, completion: turnCompletion },
+    {
+      ...rest,
+      visibility: outputKind,
+      completion: turnCompletion,
+      builtinTools: tools?.builtin,
+    },
     IR_RULE_FIELD_PATHS,
   ))
     ctx.addIssue({

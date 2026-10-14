@@ -231,6 +231,7 @@ stateDiagram-v2
 - 它包括两种：被一次执行带起、延后运行的 follower，以及后台模式的 manual 触发。
 - 作为持久的作业排进 `_runtime_jobs`，`origin.activation` 是 `manual` 或 `event`。follower 在触发它的那次执行的提交事务里入队。
 - 作业 worker 认领后，把 handler 跑在会话锁**外**。只有 `processTurnResults`（finalize 事务加自动快照）进锁。作业的终态和它写入的数据在同一个事务里提交。
+- 它不能挂起等玩家：没有玩家在等它。runtime 真的挂起了，作业记为 `failed`，什么也不提交。
 
 为什么这样是安全的：
 
@@ -382,13 +383,21 @@ flowchart LR
 
 **重启之后。**
 
-| 作业的状态                         | 结果                         |
-| ---------------------------------- | ---------------------------- |
-| `queued`，没过排队期限，从未被认领 | 继续执行                     |
-| 排队超时                           | 变为 `timed_out`，不自动重放 |
-| 执行中，租约已过期                 | 变为 `orphaned`，不自动重放  |
+| 作业的状态             | 结果                         |
+| ---------------------- | ---------------------------- |
+| `queued`，没过排队期限 | 继续执行                     |
+| 排队超时               | 变为 `timed_out`，不自动重放 |
+| 执行中，租约已过期     | 变为 `orphaned`，不自动重放  |
 
 玩家明确重试时，创建新的 jobId。
+
+**正常关闭时。**
+
+- 还没进入 `committing` 的作业先被叫停。这次执行返回后，作业放回 `queued`，jobId 不变，下次认领时 `attempt` 加 1。
+- 它什么也没提交，但停下前对外做过的事（比如调用服务商）会在重跑时再做一次。所以后台作业要能安全地重跑。
+- 已经进入 `committing` 的作业照常提交完。
+- 进程在执行返回之前就退出了，作业保留租约，重启后按“租约已过期”处理。
+- 排队期限仍从最初入队时算起。
 
 **提交时的保证。**
 
@@ -950,6 +959,10 @@ turn_messages (canonical 追加式执行日志):
   runtime 行只把 narrativeOutput / content 文本写入 content，并携带表单
   （pendingInput）与 UI 附件。结构化输出保留在 turn_results；既无文本也
   无附件的运行（如 codex 只写结构化条目）不写 runtime 行。
+
+  回合中的插话（steer）是 source `player-interjection`、role `user` 的行，
+  随回合的 finalize 事务写入，排在这一回合的 player 行之后；回合没有提交
+  就不写。它不算玩家回合：玩家消息计数只数 `player` 行。
 
   trigger 台账（kernel 所有的 plugin data，owner `__kernel:triggers`）
   按 runtime 记录已提交的运行次数和最后一次运行时的

@@ -342,7 +342,7 @@ describe("rehydrateSessionSideState", () => {
     });
     expect(dispatch).toHaveBeenCalledWith({
       type: "SET_GAME_STATE",
-      state: expect.objectContaining({ hp: 7 }),
+      state: expect.objectContaining({ tables: { hp: 7 } }),
     });
     expect(dispatch).toHaveBeenCalledWith({
       type: "UPDATE_WORLD",

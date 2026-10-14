@@ -60,6 +60,9 @@ export function mergeSessionPatch(
     ...existing.metadata,
     ...patch.metadata,
   };
+  // A key patched to `undefined` is removed, as JSON storage would drop it.
+  for (const key of Object.keys(metadata))
+    if (metadata[key] === undefined) delete metadata[key];
   return {
     ...existing,
     ...patch,

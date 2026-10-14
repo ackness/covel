@@ -3,6 +3,7 @@ import {
   validateWorldModel,
 } from "@covel/shared";
 import type {
+  PluginPack,
   WorldCreationBrief,
   WorldPackageContentKind,
 } from "@covel/shared";
@@ -340,6 +341,16 @@ export function normalizeGeneratedPackage(
  * the kinds of content its brief asked for; a revised one keeps what it has
  * and what the request added.
  */
+/** The catalogue pack a brief names, if it names one the catalogue has. */
+export function selectedPack(
+  brief: WorldCreationBrief | undefined,
+  packs: readonly PluginPack[],
+): PluginPack | undefined {
+  return brief?.pack === undefined
+    ? undefined
+    : packs.find((pack) => pack.id === brief.pack);
+}
+
 export function briefOfPackage(value: unknown): WorldCreationBrief {
   const root = isRecord(value) ? value : {};
   const content = (["characters", "lorebook", "rules"] as const).filter(
@@ -362,6 +373,7 @@ export function applyCreationBriefToManifest(
   manifest: Record<string, unknown>,
   brief: WorldCreationBrief | undefined,
   dataContracts: readonly WorldGenerationDataContract[] = [],
+  packs: readonly PluginPack[] = [],
 ): { errors: string[]; warnings: string[] } {
   if (!brief) return { errors: [], warnings: [] };
   const errors: string[] = [];
@@ -369,7 +381,13 @@ export function applyCreationBriefToManifest(
   const policy = isRecord(manifest.pluginPolicy)
     ? manifest.pluginPolicy
     : (manifest.pluginPolicy = {});
-  policy.presetId = brief.experienceMode ?? "traditional-story";
+  // The pack is data of the catalogue: its ID seeds the world's plugin
+  // selection, and the view it asks for is the world's.
+  const pack = selectedPack(brief, packs);
+  if (brief.pack !== undefined && !pack)
+    errors.push(`brief names an unknown plugin pack: ${brief.pack}`);
+  if (pack) policy.presetId = pack.id;
+  else delete policy.presetId;
   // Requested content is only used when its receiving plugin is active.
   const receivers = selectedDataContracts(brief, dataContracts)
     .map((item) => item.pluginId)
@@ -378,11 +396,8 @@ export function applyCreationBriefToManifest(
     policy.requested = [
       ...new Set([...(strings(policy.requested) ?? []), ...receivers]),
     ];
-  if (brief.experienceMode === "dialogue-mode") {
-    manifest.defaultViewMode = "stage";
-  } else {
-    delete manifest.defaultViewMode;
-  }
+  if (pack?.defaultViewMode) manifest.defaultViewMode = pack.defaultViewMode;
+  else delete manifest.defaultViewMode;
 
   const requested = requestedKinds(brief);
   if (requested.has("opening-kit")) {

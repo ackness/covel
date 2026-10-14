@@ -18,8 +18,10 @@ import {
 } from "./shared-connection.js";
 
 import type { DataStore, StoreTransaction } from "../types.js";
+import { rejectRootWritesInTransaction } from "../root-write-guard.js";
 import {
   STORE_WRITE_METHODS,
+  TRANSACTIONAL_WRITE_METHODS,
   VECTOR_WRITE_METHODS,
 } from "../store-write-methods.js";
 import type { VectorModelOps, VectorStoreCapability } from "../vector-store.js";
@@ -126,10 +128,16 @@ export function createSqliteStore(
   // rolled back. The transaction scope keeps the UNGATED methods — operations
   // through `tx` belong to that transaction and run inline.
   // Shared per-connection so the mirror media store queues on the same gate.
+  // A root write from inside a transaction callback is refused, as on every
+  // backend (`root-write-guard.ts`), though here it would join the transaction.
   const gate = getConnectionWriteGate(sqlite);
-  const gatedData = gate.gateWrites(
-    data,
-    new Set([...Object.keys(data), ...STORE_WRITE_METHODS]),
+  const gatedData = rejectRootWritesInTransaction(
+    gate.gateWrites(
+      data,
+      new Set([...Object.keys(data), ...STORE_WRITE_METHODS]),
+    ),
+    gate.isInTransaction,
+    TRANSACTIONAL_WRITE_METHODS,
   );
 
   // The transaction scope is the ungated data plus nested savepoints; the

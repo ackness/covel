@@ -376,6 +376,27 @@ const crossFieldRejections: readonly Fixture[] = [
       turnCompletion: { mode: "await", maxQueueMs: 30_000 },
     },
   },
+  {
+    name: "background manual runtime with the suspend tool",
+    zodOnly: true,
+    manifest: {
+      ...base,
+      trigger: { type: "manual" },
+      execution: "background",
+      tools: { builtin: ["suspend"] },
+    },
+  },
+  {
+    name: "detached runtime with the suspend tool",
+    zodOnly: true,
+    manifest: {
+      ...base,
+      stage: "post-turn",
+      trigger: { type: "auto" },
+      turnCompletion: { mode: "detached" },
+      tools: { builtin: ["suspend"] },
+    },
+  },
 ];
 
 // ── Malformed rejections ────────────────────────────────────────────
@@ -530,6 +551,26 @@ describe("runtimeManifestInputSchema (compiled RuntimeManifest)", () => {
     assertRejected({
       name: field,
       manifest: { ...base, stage: "post-turn", [field]: value },
+    });
+  });
+
+  it("accepts the suspend tool on a manual runtime that runs in the foreground", () => {
+    assertAccepted({
+      name: "sync manual runtime with the suspend tool",
+      manifest: {
+        ...base,
+        trigger: { type: "manual" },
+        execution: "sync",
+        tools: { builtin: ["suspend"] },
+      },
+    });
+  });
+
+  it("rejects an empty i18n description map (Zod refine only)", () => {
+    assertRejected({
+      name: "empty i18n description map",
+      zodOnly: true,
+      manifest: { ...base, stage: "post-turn", description: {} },
     });
   });
 

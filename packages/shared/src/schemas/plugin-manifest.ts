@@ -31,9 +31,13 @@ import {
   worldProjectionMapSchema,
 } from "./plugin-schemas.js";
 
-/** `attributes[].id`: field names, `[]` after one that holds a list. */
+/**
+ * `attributes[].id`: field names, `[]` after one that holds a list. `**`
+ * before a field name reaches that field at any depth below (`when.**.dimension`
+ * finds it in a condition however deeply `all` / `any` / `not` nest).
+ */
 const DATA_REFERENCE_PATH =
-  /^[A-Za-z_][A-Za-z0-9_]*(?:\[\])?(?:\.[A-Za-z_][A-Za-z0-9_]*(?:\[\])?)*$/;
+  /^(?:\*\*\.)?[A-Za-z_][A-Za-z0-9_]*(?:\[\])?(?:\.(?:\*\*\.)?[A-Za-z_][A-Za-z0-9_]*(?:\[\])?)*$/;
 
 /**
  * What a world author needs in order to supply one kind of world data. It
@@ -125,34 +129,46 @@ const dataAuthoringSchema = z
       .optional(),
     references: z
       .array(
-        z.strictObject({
-          path: z
-            .string()
-            .regex(DATA_REFERENCE_PATH, {
-              message:
-                "path must be field names joined by `.`, with `[]` after a field that holds a list (`attributes[].id`)",
-            })
-            .meta({
-              description:
-                "Where the referring values are in each record: field names joined by `.`, with `[]` after a field that holds a list.",
-              examples: ["attributes[].id"],
-            }),
-          to: z
-            .enum(["character-attribute"])
-            .describe(
-              "What each value must name. `character-attribute` is the `id` of a top-level attribute of the world's `characterSchema`.",
-            ),
-          type: attributeFieldTypeSchema
-            .describe("Value type the named attribute must have.")
-            .optional(),
-          within: z
-            .array(z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/))
-            .min(1)
-            .describe(
-              "Number fields beside the referring value that must lie inside the `min` and `max` of the named attribute.",
-            )
-            .optional(),
-        }),
+        z
+          .strictObject({
+            path: z
+              .string()
+              .regex(DATA_REFERENCE_PATH, {
+                message:
+                  "path must be field names joined by `.`, with `[]` after a field that holds a list (`attributes[].id`) and `**.` before a field found at any depth (`when.**.dimension`)",
+              })
+              .meta({
+                description:
+                  "Where the referring values are in each record: field names joined by `.`, with `[]` after a field that holds a list. `**.` before a field name finds that field at any depth below.",
+                examples: ["attributes[].id", "when.**.dimension"],
+              }),
+            to: z
+              .enum(["character-attribute", "world-dimension"])
+              .describe(
+                "What each value must name. `character-attribute` is the `id` of a top-level attribute of the world's `characterSchema`; `world-dimension` is the ID of a dimension the world declares.",
+              ),
+            type: attributeFieldTypeSchema
+              .describe(
+                "Value type the named attribute must have. Only with `to: character-attribute`.",
+              )
+              .optional(),
+            within: z
+              .array(z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/))
+              .min(1)
+              .describe(
+                "Fields beside the referring value that must lie inside what it names. For `character-attribute`, number fields inside the attribute's `min` and `max`; for `world-dimension`, a path into the dimension's value (`a.b`, or a list of keys) that its schema allows.",
+              )
+              .optional(),
+          })
+          .refine(
+            (reference) =>
+              reference.type === undefined ||
+              reference.to === "character-attribute",
+            {
+              path: ["type"],
+              message: "type is only for `to: character-attribute`",
+            },
+          ),
       )
       .min(1)
       .describe(
