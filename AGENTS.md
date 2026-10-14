@@ -522,8 +522,12 @@ Branch, Snapshot, State, Event, Record, Character, PluginData**.
   `docs/reference/slots.md`.
 - `turn_results.commit_status` stays `pending` until the commit owner settles it to
   `committed` / `failed`; a lingering `pending` row is a crash signature.
-- **JSONB writes**: use `sql.json(value as JSONValue)`, never `JSON.stringify()`
-  (double serialisation).
+- **JSONB writes**: the PgStore `jsonb` columns in `packages/store/src/postgres/schema.ts`
+  stringify once in their `customType` (drizzle passes the JSON text through), so
+  write the plain value there and never wrap it in `sql.json`. A bare postgres.js
+  client (for example `packages/store/src/media-store/pg.ts`) takes
+  `sql.json(value as JSONValue)` and never a pre-stringified value. Either way, a
+  second serialisation stores a JSON string instead of an object.
 
 ## Security
 
