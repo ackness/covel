@@ -458,6 +458,34 @@ export async function listSettlingRuntimeJobs(
   );
 }
 
+/**
+ * Mark which settling jobs the worker could start now. A queued job that
+ * `canStart` refuses (no usable model credentials, for example) stays queued,
+ * and so does every later job of its runtime, which runs only after it. The
+ * settle barrier does not wait for either.
+ */
+export async function markRunnableSettlingJobs(
+  jobs: readonly RuntimeJobRecord[],
+  canStart: (job: RuntimeJobRecord) => boolean | Promise<boolean>,
+): Promise<readonly (RuntimeJobRecord & { readonly runnable: boolean })[]> {
+  const blockedRuntimes = new Set<string>();
+  const marked: (RuntimeJobRecord & { readonly runnable: boolean })[] = [];
+  for (const job of jobs) {
+    const key = `${job.sessionId}\u0000${job.pluginId}\u0000${job.runtimeId}`;
+    let runnable = job.status !== "queued" || !blockedRuntimes.has(key);
+    if (runnable && job.status === "queued") {
+      try {
+        runnable = await canStart(job);
+      } catch {
+        runnable = false;
+      }
+    }
+    if (!runnable) blockedRuntimes.add(key);
+    marked.push({ ...job, runnable });
+  }
+  return marked;
+}
+
 export async function transitionRuntimeJob(
   store: RuntimeJobStore,
   args: TransitionRuntimeJobArgs,

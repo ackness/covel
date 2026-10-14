@@ -958,6 +958,8 @@ Both endpoints return `{ ok, runtimeId, state }`.
 | PUT    | `/api/sessions/:id/plugins/:pluginId` | Enable a plugin                                                   |
 | DELETE | `/api/sessions/:id/plugins/:pluginId` | Disable a plugin (a required core plugin returns `403`)           |
 
+`GET` only reads the saved session record. It waits neither for a running turn nor for background jobs, so a page refreshed during a turn still gets the plugin panel and the command list at once.
+
 ### Global plugins
 
 | Method | Path                          | Description                                                                                                                                          |
@@ -2791,6 +2793,7 @@ Calls the handler that the plugin registers in `entry` with `covel.registerRpc`,
 
 - The plugin must be one of the session's currently enabled plugins. The server checks once before approval, and again after taking the session lock. If the plugin is disabled, it returns `404 plugin_not_active`. It does not run the handler and does not add a new approval. A late request from an old panel is also subject to this check.
 - `pluginId: "framework"` means a default framework action. It is not part of the plugin set that is enabled, and it runs under its own entry conditions.
+- The handler runs inside the session lock and has 30 seconds. Past that the request returns `504 handler_timeout` and the lock is released at once, so other requests for the session stop waiting for it. The handler's `ctx.signal` aborts, and every later call it makes to `ctx.store` is refused. Data it wrote before the limit is kept, not rolled back.
 
 ##### Runtime level
 
@@ -3182,6 +3185,7 @@ When a runtime reports failure, its original error is kept in `result.runtimeRes
 | 409    | `session_not_active` / `session_deleting` / `session_incarnation_changed` / `approval_scope_changed` / `command_changed` / `retry_source_not_committed` / `dimension-version-conflict`                              |
 | 429    | `queue_full` (the pending-approval queue for community plugins is full) / `background_queue_full` (the session's queued background jobs reached the limit, default 256)                                             |
 | 500    | `turn_commit_failed`; the handler throws an unhandled exception; the handler module fails to load                                                                                                                   |
+| 504    | `handler_timeout` (action level: the handler did not finish within 30 seconds)                                                                                                                                      |
 | 503    | `event_directory_unavailable` (event level: the event directory is not available)                                                                                                                                   |
 
 A few key points:

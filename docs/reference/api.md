@@ -958,6 +958,8 @@ setup runtime 反复失败、用完重试预算（`maxTriggerCount`）后进入 
 | PUT    | `/api/sessions/:id/plugins/:pluginId` | 启用插件                                   |
 | DELETE | `/api/sessions/:id/plugins/:pluginId` | 禁用插件（必需的 core 插件返回 `403`）     |
 
+`GET` 只读已经保存的会话记录，不等正在运行的回合，也不等后台任务。回合进行中刷新页面，插件面板和命令列表照样立刻拿到。
+
 ### 全局插件
 
 | 方法   | 路径                          | 描述                                                                       |
@@ -2791,6 +2793,7 @@ Submission 里的其他键会被丢弃。来源插件、字段定义和模板只
 
 - 插件必须在会话当前启用的插件里。服务端在审批前检查一次，取得会话锁后再检查一次。插件已禁用时返回 `404 plugin_not_active`，不执行 handler，也不新增审批。旧面板迟到的请求同样受这个检查约束。
 - `pluginId: "framework"` 表示框架默认 action。它不属于插件启用集，按各自的准入条件执行。
+- handler 在会话锁内运行，时限 30 秒。超时返回 `504 handler_timeout`，锁随即放开，这个会话的其他请求不再等它。handler 的 `ctx.signal` 随之中止，之后它对 `ctx.store` 的调用一律被拒绝。超时之前已经写入的数据保留，不会回滚。
 
 ##### runtime 级
 
@@ -3182,6 +3185,7 @@ runtime 报告失败时，它的原始错误保留在 `result.runtimeResults` �
 | 409    | `session_not_active` / `session_deleting` / `session_incarnation_changed` / `approval_scope_changed` / `command_changed` / `retry_source_not_committed` / `dimension-version-conflict` |
 | 429    | `queue_full`（社区插件的待批准队列已满）/ `background_queue_full`（会话排队中的后台任务达到上限，默认 256）                                                                            |
 | 500    | `turn_commit_failed`；handler 抛出未处理的异常；handler 模块加载失败                                                                                                                   |
+| 504    | `handler_timeout`（action 级：handler 超过 30 秒没有结束）                                                                                                                             |
 | 503    | `event_directory_unavailable`（event 级：事件目录不可用）                                                                                                                              |
 
 几个要点：

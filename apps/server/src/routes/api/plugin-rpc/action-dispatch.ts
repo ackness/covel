@@ -396,7 +396,12 @@ export async function dispatchPluginAction(
       return c.json(errorBody(err.message), 400);
     }
     if (err instanceof RpcDispatchError && err.code !== "handler-threw") {
-      const httpStatus = err.code === "unknown-action" ? 404 : 500;
+      const httpStatus =
+        err.code === "unknown-action"
+          ? 404
+          : err.code === "handler-timeout"
+            ? 504
+            : 500;
       return c.json(
         errorBody(err.message, { code: err.code.replaceAll("-", "_") }),
         httpStatus,

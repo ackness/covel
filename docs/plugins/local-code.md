@@ -331,6 +331,7 @@ export default function register(covel) {
 
 - 界面传来的 `payload` 是外部输入，使用之前要检查。
 - 动作的写入是立刻生效的。它不属于某个回合，后面的步骤失败了也不会撤销。要“全部成功才保存”，用手动触发的函数 runtime。
+- 动作要很快做完。超过 30 秒这次动作就算失败：`ctx.signal` 中止，之后的 `ctx.store` 调用都会被拒绝。耗时的工作交给 `schedule.manual.execution: background` 的 runtime。
 - 离线运行不支持动作。运行时它会提示 `Unsupported rpc: notebook/inspect-note. Verify with the server.`，这不是错误。动作要在真实的服务端上验证。
 
 ## 写一个函数
