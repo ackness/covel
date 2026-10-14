@@ -219,6 +219,7 @@ describe("model role persistence", () => {
       name: "Temperature",
     }) as HTMLInputElement;
     fireEvent.change(temperature, { target: { value: "0.8" } });
+    fireEvent.blur(temperature);
     await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
     await waitFor(() =>
       expect(
@@ -264,6 +265,119 @@ describe("model role persistence", () => {
       "error",
       i18n.t("settings.saveFailed"),
       "synthetic capability failure",
+    );
+  });
+});
+
+describe("F-037 draft input and queued saves", () => {
+  it("keeps decimal input and slider movement local until commit", async () => {
+    render(<LlmAdvancedPane slotId="story" />);
+    const input = screen.getByRole("spinbutton", {
+      name: "Temperature",
+    }) as HTMLInputElement;
+    input.focus();
+    for (const value of ["", "0", "0.7", "0.75"]) {
+      fireEvent.change(input, { target: { value } });
+      expect(input.value).toBe(value);
+      expect(save).not.toHaveBeenCalled();
+      expect(document.activeElement).toBe(input);
+    }
+    fireEvent.blur(input);
+    await waitFor(() =>
+      expect(mocks.store.get("llm.paramOverrides")).toMatchObject({
+        story: { temperature: 0.75 },
+      }),
+    );
+    expect(save).toHaveBeenCalledTimes(1);
+    const slider = screen.getByRole("slider", { name: "Temperature" });
+    fireEvent.change(slider, { target: { value: "1.1" } });
+    fireEvent.change(slider, { target: { value: "1.3" } });
+    expect(save).toHaveBeenCalledTimes(1);
+    fireEvent.pointerUp(slider);
+    fireEvent.blur(slider);
+    await waitFor(() =>
+      expect(mocks.store.get("llm.paramOverrides")).toMatchObject({
+        story: { temperature: 1.3 },
+      }),
+    );
+    expect(save).toHaveBeenCalledTimes(2);
+  });
+
+  it("preserves focus and all later field edits while persistence is pending", async () => {
+    const pending = deferred();
+    save.mockImplementationOnce(async (next) => {
+      await pending.promise;
+      persisted = structuredClone(next);
+    });
+    render(<LlmAdvancedPane slotId="story" />);
+    const temperature = screen.getByRole("spinbutton", { name: "Temperature" });
+    const topP = screen.getByRole("spinbutton", { name: "Top P" });
+    fireEvent.change(temperature, { target: { value: "0.7" } });
+    fireEvent.blur(temperature);
+    topP.focus();
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
+    expect(topP.matches(":disabled")).toBe(false);
+    expect(document.activeElement).toBe(topP);
+    fireEvent.change(topP, { target: { value: "0.85" } });
+    fireEvent.blur(topP);
+    fireEvent.change(temperature, { target: { value: "0.9" } });
+    fireEvent.blur(temperature);
+    await act(async () => pending.resolve());
+    await waitFor(() =>
+      expect(mocks.store.get("llm.paramOverrides")).toMatchObject({
+        story: { temperature: 0.9, topP: 0.85 },
+      }),
+    );
+    expect(save).toHaveBeenCalledTimes(3);
+  });
+
+  it("queues a second role selection even when it returns to the original binding", async () => {
+    const pending = deferred();
+    save.mockImplementationOnce(async (next) => {
+      await pending.promise;
+      persisted = structuredClone(next);
+    });
+    render(<LlmSlotsPane />);
+    modelPicker().focus();
+    fireEvent.change(modelPicker(), { target: { value: "preset:detailed" } });
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
+    expect(modelPicker().matches(":disabled")).toBe(false);
+    expect(document.activeElement).toBe(modelPicker());
+    fireEvent.change(modelPicker(), { target: { value: "model:quick" } });
+    await act(async () => pending.resolve());
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(2));
+    expect(mocks.store.get("llm.slotConfig")).toEqual(initialSlots);
+  });
+
+  it("merges separately committed prices after a delayed save", async () => {
+    render(<LlmSlotsPane />);
+    const story = within(screen.getByRole("group", { name: "story" }));
+    fireEvent.click(
+      story.getByRole("button", { name: i18n.t("settings.editCapability") }),
+    );
+    const input = story.getByRole("spinbutton", {
+      name: i18n.t("settings.pricingInput"),
+    });
+    const output = story.getByRole("spinbutton", {
+      name: i18n.t("settings.pricingOutput"),
+    });
+    const pending = deferred();
+    save.mockImplementationOnce(async (next) => {
+      await pending.promise;
+      persisted = structuredClone(next);
+    });
+    for (const value of ["0", "0.1", "0.15"])
+      fireEvent.change(input, { target: { value } });
+    expect(save).not.toHaveBeenCalled();
+    fireEvent.blur(input);
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
+    fireEvent.change(output, { target: { value: "0.6" } });
+    fireEvent.blur(output);
+    await act(async () => pending.resolve());
+    await waitFor(() =>
+      expect(mocks.store.get("llm.capabilityOverrides")).toMatchObject({
+        story: { pricing: { inputPerMToken: 0.15, outputPerMToken: 0.6 } },
+      }),
     );
   });
 });
