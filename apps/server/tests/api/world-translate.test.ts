@@ -3,6 +3,7 @@ import {
   mkdir,
   mkdtemp,
   readFile,
+  readdir,
   rename,
   rm,
   writeFile,
@@ -21,6 +22,7 @@ import {
 } from "../../src/lib/session-lock.js";
 import { makeErrorHandler } from "../../src/api-error.js";
 import { worldRoutes } from "../../src/routes/api/worlds.js";
+import * as worldSeed from "../../src/world-seed-loader.js";
 import { loadSingleWorld } from "../../src/world-seed-loader.js";
 
 /**
@@ -255,6 +257,47 @@ describe("POST /api/worlds/:id/translate", () => {
       { type: "error", message: "SYNTHETIC_DEV_DIAGNOSTIC" },
     ]);
   });
+
+  it.each(["write", "read-back", "store"])(
+    "leaves the original package and record unchanged after a %s failure",
+    async (failure) => {
+      const dir = await writeWorld(userWorlds, "rollback-world");
+      if (failure === "write") await mkdir(path.join(dir, "WORLD.ja-JP.md"));
+      const snapshot = async () => {
+        const entries = await readdir(dir, {
+          recursive: true,
+          withFileTypes: true,
+        });
+        return Object.fromEntries(
+          await Promise.all(
+            entries.map(async (entry) => {
+              const file = path.join(entry.parentPath, entry.name);
+              return [
+                path.relative(dir, file),
+                entry.isDirectory() ? null : await readFile(file, "hex"),
+              ];
+            }),
+          ),
+        );
+      };
+      const files = await snapshot();
+      const record = await store.getWorld("rollback-world");
+      if (failure === "read-back")
+        vi.spyOn(worldSeed, "loadSingleWorld").mockResolvedValueOnce(null);
+      if (failure === "store")
+        vi.spyOn(store, "upsertWorld").mockRejectedValueOnce(
+          new Error("store unavailable"),
+        );
+      const events = await readSse(
+        await translate("rollback-world", { locale: "ja-JP" }),
+      );
+      expect(events.some((event) => event.type === "error")).toBe(true);
+      expect(events.some((event) => event.type === "done")).toBe(false);
+      expect(await snapshot()).toEqual(files);
+      expect(await store.getWorld("rollback-world")).toEqual(record);
+      expect(await readdir(userWorlds)).toEqual(["rollback-world"]);
+    },
+  );
 
   it("writes the edition beside the world's files and declares it", async () => {
     const dir = await writeWorld(userWorlds, "ash-harbor");

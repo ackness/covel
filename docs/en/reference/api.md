@@ -1991,7 +1991,8 @@ After that, a session created in this language uses this version.
 **When it writes:**
 
 - While the model is generating, the server does not hold the world operation lock and does not write any language file.
-- The lock is taken only at publish time. Inside the lock, the server checks the world's creation time and the package's real path and directory identity. Then it writes the language files and merges the language metadata. Edits you saved while the model was working are kept.
+- The lock is taken only at publish time. Inside it, the server checks the world's creation time and the package's real path and directory identity, writes language files and `supportedLocales` in a staging copy, then replaces the directory and saves the record after read-back preflight passes. Edits saved while the model was working are kept.
+- A file-write or read-back failure discards the copy; a record-save failure restores the original package. The copy preserves media, authored files, and the generation marker.
 - If the world is being deleted, has been deleted, or has been rebuilt with the same ID, the request receives an SSE `error`. The old request does not write files into the new package, and it does not clean up the new package's files.
 
 **Response:** An SSE event stream.
@@ -3403,6 +3404,7 @@ Returns the list of what can go into a world, for the world creation screen and 
 
 - All of the content comes from the `contributes.data.*.authoring` declarations in plugin manifests. There is no hard-coded plugin list.
 - `pnpm describe:authoring` prints the same data.
+- An unreadable or non-JSON example, or a missing, invalid, or conflicting schema for generatable content, skips only that contract. The optional `diagnostics` array returns `{ pluginId, namespace, message }` for each problem, also logged by the server; other contracts and plugins remain available.
 - The `locale` query parameter sets the language of display text such as `title`. If it is omitted, the server's default language is used.
 
 **Response excerpt:**
@@ -4925,7 +4927,7 @@ Fields of `brief`:
 | `contracts`              | string[] | Plugin content. Contains data contract IDs                                                                                             |
 | `additionalInstructions` | string   | Extra requirements for the world package (up to 2000 characters), such as character relationships, taboos, pacing, or content to avoid |
 
-The allowed values for `contracts` come from the contracts marked with `generate` in `GET /api/framework/authoring`. Any other value returns `400`.
+The allowed values for `contracts` come from the contracts marked with `generate` in `GET /api/framework/authoring`. Any other value returns `400`. Contracts that fail preparation are absent from the choices; generation and revision continue with the remaining content, and `done.warnings` identifies the skipped plugin, namespace, and contract.
 
 Values for `saveTarget`:
 
@@ -4936,7 +4938,7 @@ Values for `saveTarget`:
 | `return-only`  | The SSE response body                                   | The caller saves it            | Browser-local IndexedDB, previewing a generated result, or a public service that should not write to the server's persistent layer |
 
 - The `server-file` directory is chosen in this order: `COVEL_USER_WORLDS_DIR`, `$COVEL_HOME/worlds`, `~/.covel/worlds`. This matches the world package install entry point. `COVEL_WORLDS_DIR` is used only for built-in world packages.
-- `server-store` and `return-only` first write the world package to a temporary directory for validation, and then delete that directory.
+- `server-store` and `return-only` assemble the record from the structured result validated by the generator; they do not write package files.
 - For these two modes, the saved `WorldRecord.metadata` is handled as follows:
   - It removes the file-path fields `worldDataPath`, `worldData`, and `dimensionSources`.
   - It keeps the normalized `metadata.dimensions`.
@@ -5935,7 +5937,8 @@ The three endpoints have the same gate as the install endpoints:
 
 **Generated world files**
 
-- A generated world is first written to a hidden staging directory, and published only after it is fully written.
+- Generated, revised, and translated world files are written into a hidden staging directory. The complete copy passes the same package preflight as ZIP installation before publication: manifest and world-data read-back must have no errors, and local overrides are excluded.
+- This package preflight does not require receiving plugins to be enabled; session preflight still handles session-data contract checks.
 - Existing packages and identities in the database are kept. An ID conflict or an activation failure is reported through one SSE error event.
 - If activation fails, only the package created by this request is deleted.
 
@@ -6109,7 +6112,8 @@ Each snapshot is `{ slot, key?, value, revision }`:
 - When a local validation fails, the correction request carries the previous answer and the validation error.
 - When the output is cut off, or the model stream has no completion event, it reports the error at once. A broken result is not rewritten as if it were a complete package.
 - The final save still runs an atomic conflict check, so a world with the same name that appears during generation is not overwritten.
-- Generation, revision, and translation exclude each other, and the exclusion covers the whole SSE lifetime.
+- Generation, revision, and translation on one server share an admission mark through the entire SSE lifetime and cleanup. A new request receives `429 operation_in_progress` immediately while busy, without calling the model; completion or failure releases the mark.
+- This mark does not block editing or deletion. Saving still takes the world operation lock and rechecks: generation cannot overwrite an existing ID, revision cannot overwrite changes made while the model ran, and translation cannot write into a deleted or replaced package.
 
 **Locale overrides for world data**
 

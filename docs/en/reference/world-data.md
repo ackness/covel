@@ -918,6 +918,8 @@ Other points:
 
 Built-in schemas and schemas local to the world package are checked when the world loads. A contract's schema depends on which plugins are installed, so it is checked when a session is created or during preflight.
 
+ZIP installation and AI file write-back share package preflight, without local overrides. Generation, revision, and translation validate a staging copy before publishing; failures preserve the original package. This does not require enabled receivers or replace session contract preflight.
+
 ## WorldIR and plugin projections
 
 This section is for plugin authors. World authors usually do not need it.
