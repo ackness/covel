@@ -193,6 +193,29 @@ describe("a runtime that can never run", () => {
 /** Rules every entry checks on what the author wrote, under the author's names. */
 const crossField = [
   {
+    name: "a background manual agent with suspend",
+    runtime: {
+      schedule: {
+        trigger: { type: "manual" },
+        manual: { execution: "background" },
+      },
+      agent: { tools: { builtin: ["suspend"] } },
+    },
+    field: "agent.tools.builtin",
+  },
+  {
+    name: "a detached function with suspend",
+    runtime: {
+      type: "function",
+      schedule: { stage: "post-turn", completion: { mode: "detached" } },
+      function: {
+        handler: "../../handler.js",
+        tools: { builtin: ["suspend"] },
+      },
+    },
+    field: "function.tools.builtin",
+  },
+  {
     name: "a stage on an event runtime",
     runtime: {
       schedule: {

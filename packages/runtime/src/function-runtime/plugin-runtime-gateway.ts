@@ -1,3 +1,4 @@
+import { functionRequestBudget } from "./function-request-budget.js";
 /**
  * Bridge adapter: @covel/ai-provider gateway → PluginRuntimeGateway facade.
  *
@@ -27,6 +28,7 @@ import {
   instructionLocaleFor,
   resolveLlmTokenLimits,
   type LLMDiagnostics,
+  type LLMRequestBudget,
   type LLMUsageSummary,
 } from "@covel/shared";
 import type { ZodType } from "zod";
@@ -42,6 +44,7 @@ import type {
  * a structural type so `@covel/runtime` stays decoupled from ai-provider.
  */
 interface FullGatewayOptions {
+  requestBudget?: LLMRequestBudget;
   apiKeys?: Record<string, string>;
   /** Server-env keys — origin-gated by the gateway, unlike apiKeys. */
   envApiKeys?: Record<string, string>;
@@ -253,6 +256,9 @@ export function createPluginRuntimeGateway(
     readonly signal?: AbortSignal;
   }) => ({
     ...commonOptions(),
+    ...(functionRequestBudget.getStore()
+      ? { requestBudget: functionRequestBudget.getStore() }
+      : {}),
     ...(input.maxOutputTokens !== undefined
       ? { parameterOverrides: { maxOutputTokens: input.maxOutputTokens } }
       : {}),
@@ -408,10 +414,7 @@ export function createPluginRuntimeGateway(
           state: input.state,
           questions: input.questions,
         },
-        {
-          ...commonOptions(),
-          ...(input.signal ? { signal: input.signal } : {}),
-        },
+        callOptions(input),
       );
   }
 

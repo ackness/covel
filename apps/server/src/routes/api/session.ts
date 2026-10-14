@@ -275,16 +275,12 @@ sessionRoutes.post("/", async (c) => {
       }),
       400,
     );
-  // A requirement the player turned off, or one awaiting consent, is a choice
-  // and proceeds. A missing or ambiguous provider is a setup problem.
-  const unmet = selection.unmet.find(isBlockingWorldRequirement);
-  if (unmet)
-    return c.json(
-      errorBody(unmetRequirementMessage(unmet), {
-        code: "world_requirement_unmet",
-        details: unmet,
-      }),
-      400,
+  // A contract the world requires without an active provider never stops the
+  // game: the session starts without that part, and the response names it so
+  // the player is told. The prep screen shows the same list before the start.
+  for (const unmet of selection.unmet.filter(isBlockingWorldRequirement))
+    console.warn(
+      `[sessions] world ${rawWorldId}: ${unmetRequirementMessage(unmet)}`,
     );
   const plugins = confirmedPluginIds(
     selection,
@@ -363,8 +359,7 @@ sessionRoutes.post("/", async (c) => {
   // Do that before taking the session lock or opening the DB transaction; the
   // prepared plan is immutable input to the atomic write phase below.
   const preparedWorldData = await prepareWorldDataImportForSession({
-    dimensions: world?.metadata?.dimensions,
-    contractData: world?.metadata?.contractData,
+    world,
     sessionId: id,
     worldId: rawWorldId,
     worldsDirs,
@@ -381,8 +376,15 @@ sessionRoutes.post("/", async (c) => {
   // A file that several active plugins name is left out, and the session
   // starts without it. The log tells the world's author why.
   for (const diagnostic of preparedWorldData.diagnostics)
-    if (diagnostic.code === "convention-collision")
+    if (
+      diagnostic.code === "convention-collision" ||
+      diagnostic.code === "dimension-provider-missing"
+    )
       console.warn(`[sessions] world ${rawWorldId}: ${diagnostic.message}`);
+  // Without an active dimension provider the world's dimensions are left out.
+  const ignoredDimensions = preparedWorldData.imported
+    ? (preparedWorldData.plan.skippedDimensions ?? [])
+    : [];
 
   const sessionLock = c.get("sessionLock");
   // Keep the persistent commit, media finalisation and process-local registry
@@ -452,8 +454,10 @@ sessionRoutes.post("/", async (c) => {
         refs: importedMediaRefs,
       });
     } catch (err) {
-      await store.deleteSession(id);
+      // The import pins go whether or not the rollback below holds: a session
+      // row that survives still protects its bytes through the cleanup scan.
       creationCommitted = false;
+      await store.deleteSession(id);
       // This creation owns the session lifecycle lock; release only its claims.
       // Content-addressed bytes may be shared and are reclaimed by media GC.
       await c.get("mediaStore")?.releaseSession(id);
@@ -505,7 +509,7 @@ sessionRoutes.post("/", async (c) => {
         : commitCreation(),
     )
     .finally(async () => {
-      // On a failed rollback, keep pins for the still-durable session rows.
+      // Release this attempt's import pins unless the session was committed.
       if (!creationCommitted)
         await releaseWorldDataMediaRefs({
           mediaStore: c.get("mediaStore"),
@@ -622,6 +626,12 @@ sessionRoutes.post("/", async (c) => {
       ...(untranslatedPlugins.length > 0
         ? { pluginsWithoutLocale: untranslatedPlugins }
         : {}),
+      // Contracts the world requires that no active plugin provides, and
+      // dimensions no active plugin stores. The session runs without them.
+      ...(selection.unmet.length > 0
+        ? { unmetRequirements: selection.unmet }
+        : {}),
+      ...(ignoredDimensions.length > 0 ? { ignoredDimensions } : {}),
       ...(worldDataNotices.length > 0 ? { worldDataNotices } : {}),
     },
     201,

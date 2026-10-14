@@ -818,6 +818,24 @@ export function registerCoreStoreSuites(getStore: () => DataStore): void {
       );
     });
 
+    it("getMessage reads one message of the session by ID", async () => {
+      const mine = makeMessage({
+        sessionId: "sess-get",
+        metadata: { turnId: "turn-1" },
+      });
+      const foreign = makeMessage({ sessionId: "sess-get-other" });
+      await store.addMessage(mine);
+      await store.addMessage(foreign);
+
+      expect(await store.getMessage("sess-get", mine.id)).toMatchObject({
+        id: mine.id,
+        content: mine.content,
+        metadata: { turnId: "turn-1" },
+      });
+      expect(await store.getMessage("sess-get", foreign.id)).toBeNull();
+      expect(await store.getMessage("sess-get", "never-written")).toBeNull();
+    });
+
     it("listExistingMessageIds names only the stored messages of the session", async () => {
       const mine = makeMessage({ sessionId: "sess-ids" });
       const alsoMine = makeMessage({ sessionId: "sess-ids" });

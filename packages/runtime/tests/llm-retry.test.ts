@@ -1,3 +1,4 @@
+import { throughGateway } from "./helpers/through-gateway.js";
 /**
  * Unit tests for the smart LLM retry helpers.
  *
@@ -350,7 +351,7 @@ describe("callLLMWithRetry", () => {
   it("reports LLM-slot queue waits via onQueueWait", async () => {
     // Arrange — cap 1 with the slot held, so the call must queue.
     const { setLLMSlotCapForTests, acquireLLMSlot } =
-      await import("../src/retry/llm-slots.js");
+      await import("@covel/shared");
     setLLMSlotCapForTests(1);
     const holder = await acquireLLMSlot();
     setTimeout(() => holder.release(), 40);
@@ -364,7 +365,7 @@ describe("callLLMWithRetry", () => {
     // Act
     try {
       const res = await callLLMWithRetry({
-        llm,
+        llm: throughGateway(llm),
         messages: baseMessages,
         policy,
         deadline: Date.now() + 10_000,
@@ -2032,4 +2033,43 @@ it("does not treat empty text deltas as partial output when retrying a stream", 
   });
   expect(result.response.content).toBe("complete");
   expect(llm.attempts).toBe(2);
+});
+
+it("clears every first-token timer when a failed transport queues for its fallback", async () => {
+  vi.useFakeTimers();
+  const attempt = (statusCode: number) =>
+    ({
+      schemaVersion: 1,
+      provider: "fixture",
+      protocol: "openai-chat-v1",
+      transportAttempt: 0,
+      startedAt: new Date().toISOString(),
+      durationMs: 1,
+      statusCode,
+    }) as LLMProviderRequest;
+  const llm: LLMAdapter = {
+    generate: vi.fn(),
+    async *stream(params) {
+      params.onProviderRequest?.(attempt(429));
+      const admitted = params.onQueueStart?.();
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      admitted?.(10);
+      params.onProviderRequest?.(attempt(200));
+      yield { type: "text-delta", textDelta: "done" };
+      yield { type: "done", finishReason: "stop" };
+    },
+  };
+  try {
+    const pending = streamLLMWithRetry({
+      llm,
+      messages: [],
+      policy: buildRetryPolicy({ runtimeTimeoutMs: 10_000, maxRetries: 0 }),
+      deadline: Date.now() + 10_000,
+    });
+    await vi.advanceTimersByTimeAsync(10);
+    expect((await pending).response.content).toBe("done");
+    expect(vi.getTimerCount()).toBe(0);
+  } finally {
+    vi.useRealTimers();
+  }
 });

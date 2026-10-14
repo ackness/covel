@@ -64,6 +64,10 @@ contributes:
           path: data/hidden/story-events.yaml
           key: id
           visibility: hidden
+        references:
+          - path: when.**.dimension
+            to: world-dimension
+            within: [path]
 ---
 
 Deterministic hidden story events. World packages import events through a

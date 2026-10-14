@@ -1,16 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
+import { MEDIA_PIN_REF_PREFIX } from "@covel/shared";
 import type { DataStore, MediaStore } from "@covel/store";
 import { scanSessionMediaIds } from "../../routes/api/media-reference-scan.js";
 import type { PlannedWrite, WorldDataImportedMediaRef } from "./types.js";
 import { isRecord } from "./utils.js";
-
-/**
- * Session-ID prefix of the temporary references an import attempt holds.
- * Colon is excluded from user session IDs, so it never names a session.
- */
-export const WORLD_DATA_IMPORT_REF_PREFIX = "world-data-import:";
 
 export function mediaMime(filePath: string): string {
   switch (path.extname(filePath).toLowerCase()) {
@@ -43,7 +38,7 @@ export async function materializeMediaIndexWrites(options: {
   const out: PlannedWrite[] = [];
   const mediaRefs: WorldDataImportedMediaRef[] = [];
   // Each attempt owns only its claims.
-  const temporarySessionId = `${WORLD_DATA_IMPORT_REF_PREFIX}${randomUUID()}`;
+  const temporarySessionId = `${MEDIA_PIN_REF_PREFIX}${randomUUID()}`;
   try {
     for (const write of options.writes) {
       if (write.kind !== "media-index") {
@@ -120,14 +115,14 @@ export async function finalizeWorldDataMediaRefs(options: {
   refs: readonly WorldDataImportedMediaRef[];
 }): Promise<void> {
   if (!options.mediaStore) return;
-  for (const ref of options.refs) {
-    await options.mediaStore.recordOwnership(
-      ref.id,
-      ref.sessionId,
-      ref.pluginId,
-    );
-    await options.mediaStore.addRef(ref.id, ref.sessionId, ref.pluginId);
-  }
+  // One transaction: a failure part-way leaves none of the files claimed.
+  await options.mediaStore.claimAssets(
+    options.refs.map((ref) => ({
+      id: ref.id,
+      sessionId: ref.sessionId,
+      ...(ref.pluginId === undefined ? {} : { pluginId: ref.pluginId }),
+    })),
+  );
   await releaseWorldDataMediaRefs(options);
 }
 

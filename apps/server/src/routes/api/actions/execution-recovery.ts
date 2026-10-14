@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { SessionExecutionStatus } from "@covel/shared";
 import type { DataStore } from "@covel/store";
 import { getActiveTurn } from "../turn-control.js";
+import { ActionRejectedError } from "./action-rejection.js";
 import type { SessionLock } from "../../../lib/session-lock.js";
 
 const recoveryActionSchema = z.discriminatedUnion("type", [
@@ -174,8 +175,9 @@ export async function assertRecoverableTurn(
         JSON.stringify(status.retry)) ||
     (status.state !== "interrupted" && status.state !== "failed")
   ) {
-    throw new Error(
+    throw new ActionRejectedError(
       "The previous turn is no longer available for recovery. Refresh its status before retrying.",
+      "recovery_unavailable",
     );
   }
   return status;

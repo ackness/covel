@@ -87,13 +87,13 @@
       "detail": "不安装也可以开始，但这些插件为该世界提供的玩法不会生效。可在「设置 → 安装与管理」中安装，安装后重启后端生效。"
     },
     "worldRequirements": {
-      "blockedTitle": "这个世界暂时无法开始",
       "degradedTitle": "这个世界将缺少它依赖的一项能力",
       "missing-provider": "没有已安装的插件提供 {{contract}}。请在「设置 → 安装与管理」中安装一个，安装后重启后端生效。",
       "unavailable": "{{plugins}} 提供 {{contract}}，但在当前选择下无法启用。",
       "ambiguous-provider": "有多个插件提供 {{contract}}：{{plugins}}。请在下方插件列表中启用其中一个。",
       "excluded": "你关闭了提供 {{contract}} 的 {{plugins}}。游戏可以开始，但世界的这部分玩法不会生效。",
-      "approval-required": "{{plugins}} 提供 {{contract}}，开始游戏后会请求你的授权。"
+      "approval-required": "{{plugins}} 提供 {{contract}}，开始游戏后会请求你的授权。",
+      "dimensions": "你开启的插件里没有能保存这个世界维度的（{{contract}}），游戏会在没有维度的情况下开始。开启一个提供它的插件就能用上维度。"
     },
     "history": "历史会话",
     "worldLore": "世界文档",
@@ -212,6 +212,8 @@
     "dimensionsImported": "导入成功",
     "reasonConnectionClosed": "连接结束但后端未上报结束",
     "reasonSessionBusy": "会话繁忙，请稍后重试",
+    "reasonInputAlreadyCommitted": "这条消息已经发送过，它的回合已经保存。刷新即可看到。",
+    "reasonRetryStale": "任务状态已经变了，请先刷新再重试。",
     "reasonExecutionCommitFailed": "本回合未能保存，请重试。",
     "reasonExecutionFailed": "本回合执行失败，请重试。",
     "reasonHistoryRestoreFailed": "消息历史恢复失败。如果内容一直没有更新，请刷新页面。",
@@ -607,6 +609,11 @@
     "revising": "正在修改…",
     "reviseAction": "应用修改",
     "translateTitle": "翻译这个世界",
+    "packageEditedHint": "你在 Covel 里改过这个世界。游玩用的是你改过的版本：它的包文件之后的变化，包括更新，都不再覆盖它。",
+    "restorePackageAction": "恢复为包里的版本",
+    "restorePackageTitle": "恢复为包里的版本？",
+    "restorePackageConfirm": "你对这个世界的修改会被换成包文件现在的内容。已保存的会话数据保留；没有设置会话专用背景的会话，下一回合会读到恢复后的世界背景。",
+    "restorePackageFailed": "没能恢复包里的版本。",
     "translateHint": "这个世界是用{{worldLanguage}}写的，而会话只能使用世界已有的语言。你可以给它加一个{{language}}版本。",
     "translateConfirm": "你的模型会翻译这个世界的全部文字：名称、设定、规则和角色。这会消耗模型调用；机器翻译的人名地名和语气，事后需要看一遍。",
     "translating": "正在翻译…",

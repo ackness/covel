@@ -75,6 +75,7 @@ describe("hosted global operator guard", () => {
     ["PATCH", "/api/worlds/existing", { name: "Changed" }],
     ["DELETE", "/api/worlds/existing", undefined],
     ["POST", "/api/worlds/existing/dimensions/import", { dimensions: {} }],
+    ["POST", "/api/worlds/existing/restore-package", {}],
     ["POST", "/api/ai/generate-world", { prompt: "world" }],
     ["POST", "/api/model-db/refresh", undefined],
   ])(

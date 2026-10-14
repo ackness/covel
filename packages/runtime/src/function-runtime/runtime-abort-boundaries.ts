@@ -1,3 +1,5 @@
+import { createLlmRequestBudget, assertLlmRequestBudget } from "@covel/shared";
+import { functionRequestBudget } from "./function-request-budget.js";
 import type {
   PluginRuntimeGateway,
   PluginRuntimeUtils,
@@ -116,6 +118,18 @@ export function withStalledCallRetry(
   },
 ): PluginRuntimeGateway {
   async function sendTwice<I extends { readonly signal?: AbortSignal }, R>(
+    input: I,
+    send: (input: I) => Promise<R>,
+  ): Promise<R> {
+    const budget = createLlmRequestBudget({
+      timeoutMs: Math.max(1, options.deadline - Date.now()),
+      deadline: options.deadline,
+    });
+    assertLlmRequestBudget(budget, { signal: input.signal });
+    return functionRequestBudget.run(budget, () => sendAttempts(input, send));
+  }
+
+  async function sendAttempts<I extends { readonly signal?: AbortSignal }, R>(
     input: I,
     send: (input: I) => Promise<R>,
   ): Promise<R> {

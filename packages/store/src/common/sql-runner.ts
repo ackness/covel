@@ -142,6 +142,12 @@ export interface SqlRunner {
   delete(table: Table, where?: SQL): Promise<void>;
 
   /**
+   * DELETE rows matching `where` in one statement and return how many were
+   * removed (PG via `RETURNING`, SQLite via `changes`).
+   */
+  deleteReturningCount(table: Table, where: SQL): Promise<number>;
+
+  /**
    * A text column compared byte by byte, for an ORDER BY term or a keyset
    * predicate. SQLite text already is (BINARY); PostgreSQL compares with the
    * database collation unless told otherwise, and that collation puts

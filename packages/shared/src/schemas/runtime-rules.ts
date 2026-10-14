@@ -38,6 +38,7 @@ export interface RuntimeRuleView {
   readonly output?: { readonly schema?: string; readonly recordAs?: string };
   /** `sync` or `background`: how a `manual` / `event` activation runs. */
   readonly execution?: string;
+  readonly builtinTools?: readonly string[];
   /** Names of the inputs read from the same execution (not committed, not kernel). */
   readonly turnInputs?: readonly string[];
 }
@@ -55,7 +56,8 @@ type RuleField =
   | "needs"
   | "output"
   | "execution"
-  | "inputs";
+  | "inputs"
+  | "builtinTools";
 
 /** Where a manifest format writes each field the rules read. */
 export type RuntimeRuleFieldPaths = Readonly<
@@ -77,6 +79,7 @@ export const IR_RULE_FIELD_PATHS: RuntimeRuleFieldPaths = {
   output: ["output"],
   execution: ["execution"],
   inputs: ["inputs"],
+  builtinTools: ["tools", "builtin"],
 };
 
 /** The grouped RUNTIME.md an author writes. */
@@ -94,6 +97,7 @@ export const AUTHORING_RULE_FIELD_PATHS: RuntimeRuleFieldPaths = {
   output: ["io", "output"],
   execution: ["schedule", "manual", "execution"],
   inputs: ["io", "inputs"],
+  builtinTools: ["agent", "tools", "builtin"],
 };
 
 export interface RuntimeRuleIssue {
@@ -224,6 +228,17 @@ export function runtimeRuleIssues(
     add(
       at("completion", "mode"),
       `the detached options of ${name("completion")} require ${name("completion", "mode")} 'detached'`,
+    );
+
+  // Background work cannot wait for player input. Runtime execution also
+  // rejects suspension returned by a handler or a triggered event runtime.
+  if (
+    m.builtinTools?.includes("suspend") &&
+    (m.execution === "background" || completion?.mode === "detached")
+  )
+    add(
+      at("builtinTools"),
+      "a background runtime cannot use the 'suspend' tool",
     );
 
   // `needs(scope: session)` gates on the persistent setup snapshot — the

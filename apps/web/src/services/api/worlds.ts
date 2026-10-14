@@ -146,6 +146,18 @@ export async function updateWorld(
   return mapWorldRecord(raw);
 }
 
+/**
+ * Replace a world edited in the app with what its package files hold now.
+ * The edits are gone; package reloads follow the files again.
+ */
+export async function restoreWorldPackage(id: string): Promise<WorldRecord> {
+  const raw = await request<unknown>(
+    `/api/worlds/${encodeURIComponent(id)}/restore-package`,
+    { method: "POST", body: "{}", operatorAuth: true },
+  );
+  return mapWorldRecord(raw);
+}
+
 export async function deleteWorld(id: string): Promise<void> {
   try {
     await request<unknown>(`/api/worlds/${encodeURIComponent(id)}`, {

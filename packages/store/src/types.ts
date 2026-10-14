@@ -299,6 +299,8 @@ export interface MessageStore {
    * no-ops. Call within the turn finalization transaction.
    */
   commitPlayerInputMessage(record: MessageRecord): Promise<void>;
+  /** One message of this session by ID, or null. */
+  getMessage(sessionId: string, id: string): Promise<MessageRecord | null>;
   listMessages(
     sessionId: string,
     pagination?: PaginationOpts,
@@ -927,7 +929,8 @@ export interface SnapshotStore {
   /**
    * Delete a session's `auto` snapshots older than its newest `keep`, never
    * one that a fork still names as `parentId`. Manual and fork snapshots are
-   * kept. Returns how many snapshots were deleted.
+   * kept. Returns how many snapshots were deleted. The SQL backends do it in
+   * one DELETE statement.
    */
   pruneAutoSnapshots(sessionId: string, keep: number): Promise<number>;
 }
