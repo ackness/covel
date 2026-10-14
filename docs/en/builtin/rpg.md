@@ -125,7 +125,7 @@ When the story clearly gives a commission or an objective, it is logged as a que
 
 ### What you will see
 
-- A "Quest Log" panel on the right. You can search it, or filter by "All", "Active", "Completed" and "Failed". Each quest shows its objective, the person who gave it, and the reward.
+- A "Quest Log" panel on the right. You can search it, or filter by "All", "Active", "Completed" and "Failed". Each quest shows its objective, the person who gave it, and the reward. Status badges use the same localized names as the filter tabs.
 - In a turn where a quest changes, a "Quest Log" block appears in the story text, marked "New", "Progress", "Completed" or "Failed". If nothing changed, it shows "No quest changes this turn."
 - The session summary also includes a short overview of the quests.
 
