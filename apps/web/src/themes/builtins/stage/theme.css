@@ -54,9 +54,6 @@ html[data-theme="stage"].dark {
   /* The story column over the scene. */
   --surface-story: rgb(9 12 17 / 0.78);
 
-  --surface-app: var(--surface-page);
-  --surface-panel: var(--surface-rail);
-  --surface-panel-strong: var(--surface-elevated);
   --surface-empty: color-mix(in oklab, var(--color-muted) 65%, transparent);
   --border-subtle: color-mix(in oklab, var(--color-border) 72%, transparent);
 

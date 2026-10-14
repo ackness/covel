@@ -317,15 +317,15 @@ pnpm validate:plugin ~/.covel/plugins/my-plugin
 
 常用的帮手：
 
-| 需要                     | 用什么                                                                               |
-| ------------------------ | ------------------------------------------------------------------------------------ |
-| 掷骰和其他随机数         | `ctx.random`（工具里是 `context.random`，生成 ID 时必须传给 `shortId` 的第四个参数） |
-| 多语言文本取当前语言     | `resolveI18nText` / `resolveI18nDeep`                                                |
-| 估算一段文字的 token 数  | `estimateTokens`                                                                     |
-| 给自己的文本按相关度排序 | `rankTexts` / `searchTerms` / `searchExcerpt`，不调用模型                            |
-| 给 ID、键、时间戳排序    | `compareText`                                                                        |
-| 加载自己的提示词模板     | `@covel/plugin-handlers-utils/prompts` 的 `createPromptLoader(root)`                 |
-| 表单和角色字段校验       | SDK 里的表单工具和角色字段校验                                                       |
+| 需要                     | 用什么                                                                                                   |
+| ------------------------ | -------------------------------------------------------------------------------------------------------- |
+| 掷骰和其他随机数         | `ctx.random`（工具里是 `context.random`，生成 ID 时必须传给 `shortId` 的第四个参数）                     |
+| 多语言文本取当前语言     | `resolveI18nText` / `resolveI18nDeep`                                                                    |
+| 估算一段文字的 token 数  | `estimateTokens`                                                                                         |
+| 给自己的文本按相关度排序 | `rankTexts` / `searchTerms` / `searchExcerpt`，不调用模型                                                |
+| 给 ID、键、时间戳排序    | `compareText`                                                                                            |
+| 加载自己的提示词模板     | `@covel/plugin-handlers-utils/prompts` 的 `createPromptLoader(root)`，只读 `<name>.md` 和 `<name>.zh.md` |
+| 表单和角色字段校验       | SDK 里的表单工具和角色字段校验                                                                           |
 
 两条和可重复性有关的规则：
 
@@ -352,3 +352,5 @@ pnpm validate:plugin ~/.covel/plugins/my-plugin
 - 写工具和函数：[带本地代码的插件](./local-code.md)
 - 测试：[插件测试](./testing.md)
 - 发给别人：[验证与分发](../ship/index.md)
+
+只使用当前声明的输入和数据形状：投影后的叙事输入是字符串，骰子回执带 `checks` 数组，`pluginData.get()` 直接返回存储值。版本变更见[插件契约](../reference/plugins.md#契约版本策略)，不要为了保留开发数据再加包装或回退分支。

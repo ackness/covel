@@ -1,3 +1,4 @@
+import { getTraceData } from "../-debug-helpers.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   cleanup,
@@ -420,7 +421,7 @@ describe("debug route components", () => {
     },
   );
 
-  it("reads tool input and legacy nested trace payloads", () => {
+  it("reads current tool and model payloads without flattening nested data", () => {
     const { rerender } = render(
       <EventDetailPanel
         event={traceEvent("tool.calling", {
@@ -435,6 +436,7 @@ describe("debug route components", () => {
     rerender(
       <EventDetailPanel
         event={traceEvent("llm.responded", {
+          text: "Current response text",
           data: {
             text: "Legacy response text",
             usage: { inputTokens: 4, outputTokens: 2 },
@@ -443,7 +445,10 @@ describe("debug route components", () => {
         onClose={vi.fn()}
       />,
     );
-    expect(screen.getByText("Legacy response text")).toBeDefined();
+    expect(screen.getByText("Current response text")).toBeDefined();
+    const payload = { data: { text: "nested data" } };
+    expect(getTraceData(payload)).toEqual(payload);
+    expect(getTraceData(payload)).not.toHaveProperty("text");
   });
 
   it("pairs tool input and output by toolCallId", () => {

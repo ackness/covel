@@ -162,16 +162,13 @@ export function SettingsDialog({
       <DialogContent className="flex h-[min(90dvh,56rem)] w-[calc(100%-1rem)] max-w-5xl flex-col gap-0 p-0">
         <DialogHeader className="px-4 sm:px-6 pt-5 pb-4 border-b border-(--rule-color)">
           <DialogTitle className="flex items-baseline gap-3">
-            <span className="ui-meta text-[10px] text-muted-foreground">
-              § SETTINGS
-            </span>
             <span className="ui-title text-base font-semibold tracking-tight">
               {t("settings.title")}
             </span>
             <Settings2 className="w-3.5 h-3.5 ml-auto opacity-50" />
           </DialogTitle>
           <DialogDescription className="sr-only">
-            {t("settings.title")}
+            {t("settings.description")}
           </DialogDescription>
         </DialogHeader>
         <div className="flex-1 flex flex-col sm:flex-row overflow-hidden">

@@ -45,10 +45,6 @@ html[data-theme="paper"] {
   --surface-dialog: oklch(98.5% 0.006 80);
   --surface-player: color-mix(in oklab, var(--color-primary) 8%, transparent);
 
-  /* Legacy aliases */
-  --surface-app: var(--surface-page);
-  --surface-panel: var(--surface-rail);
-  --surface-panel-strong: var(--surface-elevated);
   --surface-empty: color-mix(
     in oklab,
     var(--color-card) 88%,

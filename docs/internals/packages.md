@@ -130,7 +130,7 @@ server 与 `test-runtime` 都使用 `createDefaultToolRegistry({ store, eventDir
 prompt loader 也按实例划分：
 
 - 共享的模板用默认的 `loadPrompt`。
-- 插件自己的目录通过 `createPromptLoader(root)` 注入。
+- 另一个模板目录通过 `createPromptLoader(root)` 注入，查找顺序和 `loadPrompt` 相同。插件不用它：插件的模板用 SDK 里的同名加载器，只读 English 和简体中文两份。
 - 包的公开入口不导出进程级的 `setPromptsRoot`。
 - `buildContext` 统一返回 Promise，调用方不用事先判断走同步还是异步路径。
 
@@ -161,3 +161,5 @@ Covel 还在早期开发，只针对当前的契约。改一个契约时，生�
 > 这些库目前没有跨版本的持久化迁移承诺。store schema 或向量进度表变化时，受影响的开发数据需要重新创建。不要把“旧数据还能读”或“旧入口还能用”当作保证。
 
 `pnpm check:boundaries` 检查生产源码的三件事：工作区的公开入口、依赖声明、包的方向。需要新的跨包依赖时，连同这一页的责任划分一起评审。
+
+网页端通过 appearance 辅助函数应用 SettingsStore 中的主题和明暗设置，不依赖 `next-themes`。

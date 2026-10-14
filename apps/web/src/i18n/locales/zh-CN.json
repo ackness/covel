@@ -924,7 +924,8 @@
       "restartHint": "资源包文件已变更，请重启后端以应用安装或卸载。执行插件仍需会话授权。",
       "restartNow": "立即重启",
       "reloadFailed": "重新加载失败",
-      "uninstallConfirm": "卸载此插件？卸载后需重启才生效，再次使用需要重新安装。"
+      "uninstallConfirm": "卸载此插件？卸载后需重启才生效，再次使用需要重新安装。",
+      "nothingInstalled": "此集合未安装任何扩展包。"
     },
     "desktopDataLocations": "数据位置",
     "desktopProxy": "网络代理",
@@ -955,7 +956,7 @@
     "desktopEditLlm": "编辑 llm.toml",
     "desktopEditKeys": "编辑 keys.env",
     "desktopServer": "后端服务器",
-    "desktopServerPort": "本地 API 服务器运行于端口 ",
+    "desktopServerPort": "本地 API 服务运行在端口 {{port}}。",
     "desktopRestart": "重启服务器",
     "desktopApplyConfigChanges": "应用配置变更",
     "desktopRestartElectronOnly": "此操作仅在 Electron 桌面端可用",
@@ -1281,7 +1282,13 @@
     "desktopProxyMode": "代理模式",
     "desktopProxyUrl": "代理地址",
     "providerIdLabel": "服务商 ID",
-    "themeSchemeLocked": "当前主题只支持一种明暗模式。"
+    "themeSchemeLocked": "当前主题只支持一种明暗模式。",
+    "description": "调整外观、模型、扩展包和本地数据。",
+    "desktopRefreshFailed": "无法刷新桌面信息，请重试。",
+    "providerImportSucceeded": "已导入服务商和模型。",
+    "numberExample": "例如 {{value}}",
+    "pricePerImageValue": "{{price}}/张",
+    "pricePerMillionValue": "{{price}}/百万 token"
   },
   "appearance": {
     "styleTitle": "风格方案",
@@ -1369,11 +1376,11 @@
         "--story-font-weight": {
           "label": "字重",
           "options": {
-            "300": "300 · Light",
-            "400": "400 · Regular",
-            "500": "500 · Medium",
-            "600": "600 · Semibold",
-            "700": "700 · Bold"
+            "300": "300 · 细",
+            "400": "400 · 常规",
+            "500": "500 · 中等",
+            "600": "600 · 半粗",
+            "700": "700 · 粗"
           }
         },
         "--story-letter-spacing": {
@@ -1413,11 +1420,11 @@
         "--title-font-weight": {
           "label": "标题字重",
           "options": {
-            "300": "300 · Light",
-            "400": "400 · Regular",
-            "500": "500 · Medium",
-            "600": "600 · Semibold",
-            "700": "700 · Bold"
+            "300": "300 · 细",
+            "400": "400 · 常规",
+            "500": "500 · 中等",
+            "600": "600 · 半粗",
+            "700": "700 · 粗"
           }
         },
         "--title-letter-spacing": {
@@ -2180,7 +2187,7 @@
     },
     "view": "视图",
     "session": "会话",
-    "tokenCount": "{{count}} tokens",
+    "tokenCount": "{{count}} 个 token",
     "discovery": {
       "manifest": "manifest",
       "triggers": "{{count}} 个触发器",
@@ -2307,7 +2314,8 @@
       "message": "这个链接由「{{package}}」的作者提供，不是 Covel 提供的。Covel 没有审核过这个网站，也不对其内容负责。除非你信任它，否则不要在那里输入密码或支付信息。",
       "site": "网站：{{host}}",
       "confirm": "打开链接"
-    }
+    },
+    "authorLine": "作者：{{author}}"
   },
   "serverStatus": {
     "restarting": "本地服务已停止，正在重启…",

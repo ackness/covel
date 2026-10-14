@@ -40,6 +40,24 @@ describe("dev-home-bootstrap", () => {
   let tmpHome: string;
   const savedEnv: Record<string, string | undefined> = {};
 
+  it("loads only API-key environment names from keys.env", async () => {
+    vi.stubEnv("F073_API_KEY", "");
+    vi.stubEnv("F073_OTHER", "");
+    fs.writeFileSync(
+      path.join(tmpHome, "keys.env"),
+      "F073_API_KEY=synthetic-current\nF073_OTHER=synthetic-ignored\n",
+    );
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      await freshBootstrap();
+      expect(process.env.F073_API_KEY).toBe("synthetic-current");
+      expect(process.env.F073_OTHER).toBe("");
+      expect(warn).toHaveBeenCalled();
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
   beforeEach(() => {
     for (const k of ENV_KEYS) {
       savedEnv[k] = process.env[k];

@@ -246,6 +246,30 @@ describe("config API env and file contracts", () => {
     expect(apiKeys).toEqual({});
   });
 
+  it("does not load or rename bare keys.env entries when saving a key patch", async () => {
+    process.env.COVEL_HOME = tmpHome;
+    process.env.COVEL_DESKTOP_REST = "1";
+    const file = path.join(tmpHome, "keys.env");
+    fs.writeFileSync(
+      file,
+      "deepseek=synthetic-bare\nOTHER_SETTING=synthetic-setting\nOPENAI_API_KEY=synthetic-current\n",
+    );
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const app = buildApp(apiKeys);
+    const response = await app.request("/api/config/keys", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ openai: "synthetic-next" }),
+    });
+    expect(response.status).toBe(200);
+    expect(apiKeys).toEqual({ openai: "synthetic-next" });
+    const saved = fs.readFileSync(file, "utf-8");
+    expect(saved).toContain("deepseek=synthetic-bare\n");
+    expect(saved).toContain("OTHER_SETTING=synthetic-setting\n");
+    expect(saved).not.toContain("DEEPSEEK_API_KEY=");
+    expect(warn).toHaveBeenCalled();
+  });
+
   it("writes keys.env, normalizes provider ids and updates the live apiKeys map", async () => {
     process.env.COVEL_HOME = tmpHome;
     process.env.COVEL_DESKTOP_REST = "1";

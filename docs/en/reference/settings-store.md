@@ -116,6 +116,8 @@ What a setting schema must do: accept its own persisted output, and give the sam
 
 ## Generic setting controls
 
+`widget: custom` is edited in a dedicated interface and does not create a placeholder on the General page. Desktop maintenance, provider imports, and package actions use a common result notice. A new notice cancels the old dismissal timer; refresh failures and empty installation results are also reported.
+
 A registered setting without a purpose-built pane renders through the generic widgets (`apps/web/src/settings/widgets/`). General and each plugin's settings page work this way.
 
 - **When a value is written.** Text, number, slider and secret controls keep a local draft and write on blur or Enter. A draft that is still open when the dialog closes is written too. They do not write on every key press, because that would validate every half-typed value and a number could not be retyped.

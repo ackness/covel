@@ -300,6 +300,42 @@ describe("EventBus transport fan-out (audit R-02)", () => {
     warnSpy.mockRestore();
   });
 
+  it.each([undefined, "", 7])(
+    "rejects transport frames with invalid stream %s",
+    async (stream) => {
+      const hub = createHub();
+      const bus = createEventBus(undefined, { transport: hub.connect() });
+      const received = vi.fn();
+      bus.onEmit(received);
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      try {
+        hub.broadcast(
+          JSON.stringify({
+            origin: "remote",
+            stream,
+            seq: 1,
+            event: {
+              id: "one",
+              sessionId: "session",
+              topic: "state",
+              type: "changed",
+              timestamp: new Date().toISOString(),
+              payload: {},
+            },
+          }),
+        );
+        await Promise.resolve();
+        expect(received).not.toHaveBeenCalled();
+        expect(warn).toHaveBeenCalledWith(
+          "[EventBus] ignoring malformed transport frame",
+        );
+      } finally {
+        warn.mockRestore();
+        await bus.close();
+      }
+    },
+  );
+
   it("order-buffers out-of-order frames by origin seq", async () => {
     const hub = createHub();
     const bus = createEventBus(undefined, { transport: hub.connect() });
@@ -309,6 +345,7 @@ describe("EventBus transport fan-out (audit R-02)", () => {
     const mkFrame = (seq: number): string =>
       JSON.stringify({
         origin: "remote-pod",
+        stream: "boot-1",
         seq,
         event: {
           id: `remote:${seq}`,

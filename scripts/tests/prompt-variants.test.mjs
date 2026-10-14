@@ -54,6 +54,20 @@ test("accepts a recorded English prompt and its Chinese variant", async (t) => {
   assert.deepEqual(plugin.check(), []);
 });
 
+test("rejects a plugin template in a language with no instruction set", async (t) => {
+  const plugin = await fixture(t, { "PLUGIN.md": ENGLISH });
+  const server = path.join(plugin.directory, "prompts/server");
+  await fs.mkdir(server, { recursive: true });
+  for (const name of ["x.md", "x.zh.md", "x.zh-CN.md", "x.ru.md", "x.en.md"])
+    await fs.writeFile(path.join(server, name), "text");
+  assert.deepEqual(
+    plugin
+      .check()
+      .map((problem) => problem.split(":")[0].replace(/^.*prompts\//, "")),
+    ["server/x.en.md", "server/x.ru.md"],
+  );
+});
+
 test("reports a runtime directory without its canonical manifest", async (t) => {
   const plugin = await fixture(t, { "PLUGIN.md": ENGLISH });
   await fs.mkdir(path.join(plugin.directory, "runtimes/missing"), {

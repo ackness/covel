@@ -639,18 +639,17 @@ describe("branch-reply seed path — inputs.narrative binding", () => {
     expect(turn.runtimeId).toBe("narrator");
   });
 
-  it("normalizes a { narrativeOutput } object slot value defensively", async () => {
+  it("skips an object narrative instead of accepting the old unprojected shape", async () => {
     const result = await handler(
       ctx({
-        inputs: narrativeSlot({
-          narrativeOutput: "Object-shaped narrative value.",
-        }),
+        inputs: narrativeSlot({ narrativeOutput: "Old object narrative" }),
       }),
     );
-    const [proposal] = getPendingProposals(result);
-    expect(proposal.payload.items[0].value.candidates[0].text).toBe(
-      "Object-shaped narrative value.",
-    );
+    expect(getToolContent(result)).toMatchObject({
+      outcome: "skipped",
+      skipReason: "no narrative input bound",
+    });
+    expect(getPendingProposals(result)).toHaveLength(0);
   });
 
   it("skips when the bound slot carries no text", async () => {

@@ -218,7 +218,7 @@ export function GithubCollectionInstaller({
                   className={`wrap-break-word ${
                     problem.level === "error"
                       ? "text-destructive"
-                      : "text-amber-600 dark:text-amber-400"
+                      : "text-(--accent-warning)"
                   }`}
                 >
                   {problem.message}
@@ -261,7 +261,7 @@ export function GithubCollectionInstaller({
                     </span>
                     {item.author && (
                       <span className="block text-muted-foreground">
-                        {t("package.author")}: {item.author}
+                        {t("package.authorLine", { author: item.author })}
                       </span>
                     )}
                     {item.description && (

@@ -305,9 +305,8 @@ export default function ({ tool, z, shortIdBatch }) {
       // relation) can hold many versions over a session, of which at most one
       // is open (`invalidAt === undefined`). Re-submitting the same relation
       // with a new strength or a new fact closes the open version and opens a
-      // new one, so a relationship can actually evolve. Rows written before
-      // versioning existed carry no `invalidAt` and therefore read as open —
-      // an old session keeps working and simply gets superseded from here on.
+      // new one, so a relationship can evolve. Missing invalidAt denotes the
+      // current open version; duplicate open versions are invalid data.
       const existingEdgeRows = await readRows("edges");
       /** @type {Map<string, any>} */
       const openEdgeByKey = new Map();
@@ -316,27 +315,12 @@ export default function ({ tool, z, shortIdBatch }) {
         if (!v.source || !v.target || !v.relation) continue;
         if (v.invalidAt !== undefined) continue;
         const key = `${v.source}::${v.target}::${v.relation}`;
-        const prior = openEdgeByKey.get(key);
-        if (!prior) {
-          openEdgeByKey.set(key, v);
-          continue;
+        if (openEdgeByKey.has(key)) {
+          throw new Error(
+            "NPC graph has duplicate open edge versions; recreate this development session's graph data",
+          );
         }
-        // Repair legacy duplicate open versions left by writers without a
-        // pending-write overlay. Keep the newest by validAt as the live
-        // version and close the older one at the current turn.
-        const [live, stale] =
-          (v.validAt ?? -1) >= (prior.validAt ?? -1) ? [v, prior] : [prior, v];
-        openEdgeByKey.set(key, live);
-        pluginDataWrites.push({
-          namespace: "edges",
-          key: stale.id,
-          // Unknown-turn (-1) close must not stamp before the edge's own
-          // validAt, which would invert the version window.
-          value: {
-            ...stale,
-            invalidAt: Math.max(currentTurn, stale.validAt ?? currentTurn),
-          },
-        });
+        openEdgeByKey.set(key, v);
       }
 
       /** @type {Array<{ id: string; source: string; target: string; relation: string; fact: string; skipped?: string; supersedes?: string }>} */

@@ -45,7 +45,7 @@ const FILTER_FROM_SLOT_COUNT = 6;
  * configured) environments fall back to a fixed slot list.
  */
 export function LlmSlotsPane() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const store = useSettingsStore();
   const { state, boot } = useSession();
   const llm = state.llmConfig;
@@ -440,7 +440,9 @@ export function LlmSlotsPane() {
             <div>
               {t("settings.updatedAt", {
                 date: modelDbInfo.updatedAt
-                  ? new Date(modelDbInfo.updatedAt).toLocaleDateString()
+                  ? new Date(modelDbInfo.updatedAt).toLocaleDateString(
+                      i18n.language,
+                    )
                   : "?",
               })}
             </div>

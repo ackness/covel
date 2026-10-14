@@ -100,6 +100,11 @@ describe("SettingsDialog navigation", () => {
   it("uses a compact mobile section picker and full-width content", async () => {
     render(<SettingsDialog open onOpenChange={vi.fn()} />);
 
+    expect(
+      screen.getByRole("dialog", {
+        name: i18n.t("settings.title"),
+      }),
+    ).toBeTruthy();
     const sidebar = screen.getByRole("complementary");
     const sectionPicker = screen.getByRole("combobox", { name: "Settings" });
     const desktopNav = screen.getByRole("navigation", { name: "Settings" });

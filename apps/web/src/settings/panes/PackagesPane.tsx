@@ -1,3 +1,4 @@
+import { PaneNotice, usePaneNotice } from "../pane-notice.js";
 import { requestConfirm } from "@/lib/confirm-channel.js";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -22,11 +23,6 @@ import { PackageCredits } from "@/components/shared/package-credits.js";
 import { GithubCollectionInstaller } from "./GithubCollectionInstaller.js";
 import type { PluginInstallation, PluginSummary } from "@covel/shared";
 
-interface ToastState {
-  message: string;
-  tone: "success" | "error";
-}
-
 /**
  * Drag-and-drop install pane for plugin + world .zip packages.
  *
@@ -37,7 +33,7 @@ export function PackagesPane() {
   const { t } = useTranslation();
   const { boot } = useSessionActions();
   const [busy, setBusy] = useState<UploadKind | null>(null);
-  const [toast, setToast] = useState<ToastState | null>(null);
+  const { notice, show: flash } = usePaneNotice();
   const [lastResult, setLastResult] = useState<InstallResult | null>(null);
   const [installed, setInstalled] = useState<PluginSummary[]>([]);
   const [installations, setInstallations] = useState<
@@ -50,7 +46,6 @@ export function PackagesPane() {
   const [updateBusy, setUpdateBusy] = useState(false);
   const [zipAccepted, setZipAccepted] = useState(false);
   const [removing, setRemoving] = useState<string | null>(null);
-  const toastTimer = useRef<number | null>(null);
 
   const refreshInstalled = useCallback(async () => {
     try {
@@ -71,13 +66,6 @@ export function PackagesPane() {
   useEffect(() => {
     void refreshInstalled();
   }, [refreshInstalled]);
-
-  useEffect(
-    () => () => {
-      if (toastTimer.current !== null) window.clearTimeout(toastTimer.current);
-    },
-    [],
-  );
 
   // Boot fetches the world list again and drops the cached full records, so
   // the home screen and the prep screen show what was just installed.
@@ -110,7 +98,13 @@ export function PackagesPane() {
       if (kind === "collection") {
         const batch = await installCollectionZip(file);
         const shown = showBatch(batch);
-        if (!shown) return;
+        if (!shown) {
+          flash({
+            tone: "success",
+            message: t("settings.packages.nothingInstalled"),
+          });
+          return;
+        }
         // One message for the whole set.
         result = {
           ...shown,
@@ -177,15 +171,6 @@ export function PackagesPane() {
     }
   }
 
-  function flash(state: ToastState) {
-    if (toastTimer.current !== null) window.clearTimeout(toastTimer.current);
-    setToast(state);
-    toastTimer.current = window.setTimeout(() => {
-      setToast(null);
-      toastTimer.current = null;
-    }, 4000);
-  }
-
   const rows =
     installations === null
       ? installed.map((plugin) => ({
@@ -208,30 +193,18 @@ export function PackagesPane() {
         </p>
       </header>
 
-      {toast && (
-        <div
-          role={toast.tone === "error" ? "alert" : "status"}
-          className={
-            "text-xs px-3 py-2 rounded border " +
-            (toast.tone === "success"
-              ? "bg-primary/10 border-primary/20 text-primary"
-              : "bg-destructive/10 border-destructive/20 text-destructive")
-          }
-        >
-          {toast.message}
-        </div>
-      )}
+      <PaneNotice notice={notice} />
 
       {(lastResult?.restartRequired ||
         installations?.some((item) => item.pendingUpdate) ||
         worldInstallations.some((item) => item.pendingUpdate)) && (
-        <div className="flex items-start gap-3 text-xs px-3 py-2.5 rounded border border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300">
+        <div className="flex items-start gap-3 text-xs px-3 py-2.5 rounded border border-(--accent-warning)/30 bg-(--accent-warning)/10 text-(--accent-warning)">
           <div className="flex-1">{t("settings.packages.restartHint")}</div>
           {hasElectronIpc() && (
             <Button
               size="sm"
               variant="outline"
-              className="h-7 text-xs shrink-0 border-amber-500/40 hover:border-amber-500"
+              className="h-7 text-xs shrink-0 border-(--accent-warning)/40 hover:border-(--accent-warning)"
               onClick={() =>
                 reloadServerAndWait({
                   message: t("reload.reloadingServer", "Restarting backend…"),
@@ -406,13 +379,6 @@ export function PackagesPane() {
             ))}
           </ul>
         </section>
-      )}
-
-      {lastResult && (
-        <div className="text-xs font-mono text-muted-foreground border border-border rounded p-2 space-y-0.5">
-          <div>id: {lastResult.id}</div>
-          <div>kind: {lastResult.kind}</div>
-        </div>
       )}
     </div>
   );
