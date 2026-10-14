@@ -113,8 +113,9 @@ export function WorldDimensionsPanel({
             className="space-y-2 rounded border border-amber-500 p-3"
           >
             <p>
-              {t("world.pendingDimensions", "Dimension settlement pending")} ·{" "}
-              {receipt.source.turnNumber}
+              {t("world.pendingDimensionsTurn", {
+                turn: receipt.source.turnNumber,
+              })}
             </p>
             {receipt.error &&
               (allowValueEditing ? (
@@ -193,7 +194,7 @@ export function WorldDimensionsPanel({
             {editing?.id === id ? (
               <div className="space-y-2">
                 <label htmlFor={`dimension-value-${id}`} className="text-sm">
-                  {t("world.currentValue", "Current value")} · {id}
+                  {t("world.currentDimensionValue", { id })}
                 </label>
                 {supportsDimensionFields(entry.schema, entry.value) && (
                   <Button
@@ -225,7 +226,7 @@ export function WorldDimensionsPanel({
                   <DimensionValueEditor
                     schema={entry.schema}
                     value={JSON.parse(draft) as JsonValue}
-                    label={`${t("world.currentValue", "Current value")} · ${id}`}
+                    label={t("world.currentDimensionValue", { id })}
                     onChange={(value) =>
                       setDraft(JSON.stringify(value, null, 2))
                     }

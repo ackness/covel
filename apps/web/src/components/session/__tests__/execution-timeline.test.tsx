@@ -345,3 +345,46 @@ describe("ExecutionTimeline plugin names", () => {
     ).toBeNull();
   });
 });
+
+it("uses Chinese punctuation in named retry controls and active task details", async () => {
+  await i18n.changeLanguage("zh-CN");
+  const view = render(
+    <ExecutionTimeline
+      executing={false}
+      steps={[
+        {
+          runtimeId: "task",
+          pluginId: "provider",
+          status: "failed",
+          detail: "Timeout",
+          turnId: "turn",
+        },
+      ]}
+      onRetryRuntime={vi.fn()}
+    />,
+  );
+  fireEvent.click(screen.getAllByRole("button")[0]!);
+  expect(
+    screen.getByRole("button", {
+      name: i18n.t("session.retryTaskNamed", { label: "provider / task" }),
+    }),
+  ).toBeTruthy();
+  view.unmount();
+  render(
+    <ExecutionTimeline
+      executing
+      steps={[
+        {
+          runtimeId: "task",
+          pluginId: "provider",
+          status: "llm",
+          turnId: "turn",
+        },
+      ]}
+    />,
+  );
+  fireEvent.click(screen.getAllByRole("button")[0]!);
+  expect(
+    screen.getByText(`provider / task：${i18n.t("session.statusLlm")}…`),
+  ).toBeTruthy();
+});

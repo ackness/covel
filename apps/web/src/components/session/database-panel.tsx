@@ -170,7 +170,7 @@ export function DatabasePanel({
         <div className="text-[11px] border border-destructive/40 bg-destructive/5 text-destructive p-2 space-y-1.5">
           <div className="flex items-start justify-between gap-2">
             <span className="italic break-all">
-              {t("session.dbLoadError")}: {error}
+              {t("session.dbLoadErrorDetail", { error })}
             </span>
             <Button
               variant="outline"

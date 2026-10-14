@@ -625,6 +625,8 @@ When a recovery retry happens, the kernel (`packages/runtime/src/commit/plugin-m
 
 ### Form Submission Flow
 
+A form needs a turn ID and an interaction submission handler. If either is missing, the UI asks the player to reopen the session and retry, and keeps the entered values. It does not send the field JSON as a player message or mark the form submitted.
+
 ```
 Player fills in the form → clicks the submit button
   → submitInteraction():

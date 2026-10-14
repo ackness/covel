@@ -84,7 +84,7 @@ markers in source — update it when adding or removing one.
 
 ## Commands
 
-Toolchain versions come from `mise.toml` (Node 26, pnpm 12.6.0, actionlint).
+Toolchain versions come from `mise.toml` (Node 26.10.0, pnpm 12.10.1, actionlint).
 
 ```bash
 pnpm install --frozen-lockfile  # also builds @covel/plugin-handlers-utils (prepare)

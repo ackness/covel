@@ -16,6 +16,9 @@ const mocks = vi.hoisted(() => ({
   plugins: [] as SessionPlugin[],
   specs: { right: [], message: [], left: [] } as UISpecsResponse,
   fetchSpecs: vi.fn(),
+  health: {} as {
+    storage?: { data: { backend: "memory"; frontendMode: "remote" } };
+  },
   upsertInteractionDraft: vi.fn(),
   toast: vi.fn(),
 }));
@@ -30,7 +33,7 @@ vi.mock("@/stores/session-store.js", () => ({
 }));
 vi.mock("@/services/api.js", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/services/api.js")>()),
-  fetchServerHealth: async () => ({}),
+  fetchServerHealth: async () => mocks.health,
   fetchUiSpecs: mocks.fetchSpecs,
   listPluginData: async () => [],
 }));
@@ -109,6 +112,7 @@ const plugin = (id: string): SessionPlugin => ({
   tags: [],
 });
 beforeEach(async () => {
+  mocks.health = {};
   mocks.upsertInteractionDraft.mockReset();
   mocks.toast.mockReset();
   await i18n.changeLanguage("en-US");
@@ -345,4 +349,14 @@ it("keeps navigation intent through a failed spec load and an explicit retry", a
   fireEvent.click(await screen.findByRole("button", { name: /retry/i }));
   expect(await screen.findByText("Mounted panel: provider-b")).toBeTruthy();
   expect(mocks.toast).not.toHaveBeenCalled();
+});
+
+it("translates the memory storage badge", async () => {
+  await i18n.changeLanguage("zh-CN");
+  mocks.health = {
+    storage: { data: { backend: "memory", frontendMode: "remote" } },
+  };
+  render(<RightPanel sessionId="s" world={null} statePatchRevision={0} />);
+  expect(await screen.findByText("内存")).toBeTruthy();
+  expect(screen.queryByText("Memory")).toBeNull();
 });

@@ -29,8 +29,8 @@
   },
   "devDependencies": {
     "@covel/web": "workspace:*",
-    "electron": "44.4.3",
-    "electron-builder": "26.15.6",
+    "electron": "44.6.0",
+    "electron-builder": "26.17.0",
     "esbuild": "^0.28.2",
     "typescript": "^7.0.2"
   }
