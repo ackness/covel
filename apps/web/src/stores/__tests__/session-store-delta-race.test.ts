@@ -173,9 +173,7 @@ describe("sse-handler narrative delta buffer", () => {
     raf.flush(raf.pendingFrameId());
 
     expect(harness.state().messages).toEqual([]);
-    expect(harness.actions.map((action) => action.type)).toEqual([
-      "BACKFILL_TURN_ID",
-    ]);
+    expect(harness.actions.map((action) => action.type)).toEqual([]);
     expect(getStreamingText("stream_turn-1_narrator")).toBeUndefined();
     expect(harness.deps.deltaBufferRef.current.size).toBe(0);
     expect(harness.deps.deltaRafRef.current).toBeNull();
@@ -190,9 +188,7 @@ describe("sse-handler narrative delta buffer", () => {
     raf.flush(raf.pendingFrameId());
 
     expect(harness.state().messages).toEqual([]);
-    expect(harness.actions.map((action) => action.type)).toEqual([
-      "BACKFILL_TURN_ID",
-    ]);
+    expect(harness.actions.map((action) => action.type)).toEqual([]);
     expect(getStreamingText("stream_turn-1_narrator")).toBeUndefined();
     expect(harness.deps.deltaBufferRef.current.size).toBe(0);
     expect(harness.deps.deltaRafRef.current).toBeNull();

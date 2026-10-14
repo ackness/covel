@@ -72,6 +72,7 @@ return { result: execution.result, committed: outcome.status === "committed" };
 - 提交计划里保留了 TurnStart Hook 的否决原因，以及执行期间看到的取消状态。
 - 这样的执行，`commitExecution` 返回失败：在域事务之前停下，不允许宿主的 `extraInTx` 写入，也不产生成功的完成事件或快照。之前已经保存的客户端输入保留。
 - 没有提交的执行结束时，客户端撤下这次执行生成的 assistant 内容，保留玩家的输入。
+- 本地输入回显按动作的 `requestId` 认领 `turnId`。被拒绝的输入不会归到后续动作；回显在权威消息替换之前不参与历史分页游标。
 - 声明了 `output.recordAs` 的成功结果，必须有执行时记下的输出 schema。缺少依赖会让整次提交回滚，不会悄悄跳过导出。已加载的 schema 对单次导出值的校验、媒体的整理和修订冲突的处理，仍然遵循[事务契约](./transactions.md)。
 
 ### 挂起和恢复
