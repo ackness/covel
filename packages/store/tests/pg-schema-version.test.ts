@@ -1,4 +1,4 @@
-import { afterAll } from "vitest";
+import { afterAll, describe, it } from "vitest";
 
 import { runSchemaVersionTests } from "./schema-version-suite.js";
 
@@ -81,4 +81,8 @@ if (pgAvailable) {
       return rows.map((row) => row.column_name);
     },
   }));
+} else {
+  describe("PgStore schema version (skipped)", () => {
+    it.skip("skipped — PostgreSQL not available", () => {});
+  });
 }
