@@ -671,20 +671,25 @@ export class LocalDataService implements DataService {
     const all = [
       ...((await (await this.ready()).getLatestCheckpoint(sessionId))
         ?.messages ?? []),
-    ].sort(
-      (a, b) =>
-        a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id),
-    );
+    ].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
     const before = opts.cursor ? decodePageCursor(opts.cursor) : undefined;
+    const cursorAt = before
+      ? all.findIndex(
+          (row) => row.id === before.id && row.createdAt === before.createdAt,
+        )
+      : -1;
+    // Checkpoint array order is the write position for equal timestamps,
+    // just as for MemoryStore. A missing cursor excludes the whole time group.
     const eligible = before
       ? all.filter(
-          (row) =>
+          (row, index) =>
             row.createdAt < before.createdAt ||
-            (row.createdAt === before.createdAt && row.id < before.id),
+            (row.createdAt === before.createdAt &&
+              cursorAt !== -1 &&
+              index < cursorAt),
         )
       : all;
-    const rows = eligible.slice(-limit);
-    const items = rows.map(toFrontendMessage);
+    const items = eligible.slice(-limit).map(toFrontendMessage);
     // 按契约：拿满一页（可能还有更旧）时游标指向最旧一条，否则到历史开头 → null。
     const oldest = items[0];
     const nextCursor =

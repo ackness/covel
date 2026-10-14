@@ -8,7 +8,7 @@ This is a list of what exists now, not a history of fixed problems. Use this com
 rg -n "ponytail:" apps packages plugins
 ```
 
-The source currently has 13 markers, and each row in the three tables below matches one of them.
+The source currently has 12 markers, and each row in the three tables below matches one of them.
 
 > [!IMPORTANT]
 > When you add or remove a `ponytail:` comment, update this page in the same change.
@@ -37,7 +37,6 @@ The source currently has 13 markers, and each row in the three tables below matc
 | Location                                                               | Accepted limit                                                                            | When to reconsider                                                                                       |
 | ---------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
 | `apps/web/src/components/session/stage/StageSprites.tsx`               | Up to four portraits animate layout properties such as `left` and `width`                 | More characters appear, or they appear more often, so it is worth switching to transform-based animation |
-| `apps/web/src/components/session/stage/stage-selectors.ts`             | The icon/color fields of options currently have no users                                  | A component starts to use these fields                                                                   |
 | `apps/web/src/components/session/chat-messages/message-primitives.tsx` | Markdown soft line breaks are handled by rewriting strings                                | Edge cases of code blocks or other conversions become frequent enough to justify a parser plugin         |
 | `apps/web/src/theme-system/token-schema.ts`                            | The atmosphere background accepts only URLs and gradients. It cannot upload a local image | Upload needs become frequent enough to justify storing images outside the settings data                  |
 

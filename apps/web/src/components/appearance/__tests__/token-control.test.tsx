@@ -126,3 +126,42 @@ describe("appearance control pending edits", () => {
     expect((view.getByRole("textbox") as HTMLInputElement).value).toBe("serif");
   });
 });
+
+it("downloads a remote backdrop before committing or previewing it", async () => {
+  const images = await import("@/lib/import-image.js");
+  const download = vi
+    .spyOn(images, "importCssImages")
+    .mockResolvedValue('url("data:image/png;base64,AQID")');
+  const commit = vi.fn();
+  const view = render(
+    <TokenControl
+      spec={{
+        name: "--ambience-image",
+        label: "Backdrop",
+        control: "css",
+        perScheme: true,
+      }}
+      scheme="dark"
+      themeDefault="none"
+      override={null}
+      onCommit={commit}
+      onReset={() => undefined}
+    />,
+  );
+  try {
+    fireEvent.change(view.getByRole("textbox"), {
+      target: { value: 'url("https://example.com/bg.png")' },
+    });
+    expect(
+      document.documentElement.style.getPropertyValue("--ambience-image"),
+    ).not.toContain("https:");
+    await act(async () => {
+      fireEvent.blur(view.getByRole("textbox"));
+    });
+    expect(download).toHaveBeenCalledWith('url("https://example.com/bg.png")');
+    expect(commit).toHaveBeenCalledWith('url("data:image/png;base64,AQID")');
+  } finally {
+    cleanup();
+    download.mockRestore();
+  }
+});

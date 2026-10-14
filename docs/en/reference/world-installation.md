@@ -57,7 +57,8 @@ These endpoints are controlled by the "allow install" switch. Writing a world al
 - `hasServerCode` is always `false`. It means "this install path does not load code." It does not mean "there are no script files in this folder."
 - The signatures for install and update are kept apart by "plugin or world" and by "install or update." One cannot be passed off as the other.
 - The ZIP install endpoint `/api/install/world` is still available.
-- During an install, a source record named `.covel-install.json` is written into the world folder. Later updates depend on it. A world you put in by hand, or a world with no such record, cannot be checked for updates automatically.
+- During a GitHub install, the installer writes a source record named `.covel-install.json` into the world folder. Later updates depend on it. ZIP and manual installs do not create this record or support automatic update checks.
+- Only the installer writes `.covel-install.json`. A world package that supplies this file returns 400, including variations in filename case. ZIP, GitHub, and collection members share this rule.
 
 **Checks for a ZIP install.** Before the world record is created, the world data is checked for errors:
 
@@ -82,6 +83,12 @@ These endpoints are controlled by the "allow install" switch. Writing a world al
 4. If swapping the files fails partway, the old folder is restored.
 
 Deleting a world also cancels its staged update.
+
+At startup, before applying updates or loading worlds, unfinished `.covel-install-*` staging directories are removed from the user worlds directory and its `.covel-updates/` directory. Queued updates and transaction backups are retained for update recovery.
+
+World deletion first moves the whole package into `.covel-world-delete-*`, then deletes the database record. If the process stops between these steps, the next startup restores the package to a folder named after its world ID in the user worlds directory. It keeps the "deleting" state and allows the player to retry deletion immediately. If the record is already gone, startup only removes the remaining files; it does not recreate the world. If the destination is occupied, identity is unclear, or the database is unavailable, the staged files are retained and a warning is logged. Other packages are never overwritten.
+
+After the record is deleted, the staging directory is renamed to `.covel-uninstall-*` before recursive cleanup. Cleanup failure does not undo deletion; the next startup retries cleanup. A partial package cannot be loaded.
 
 **What blocks an update:**
 

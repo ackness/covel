@@ -1,57 +1,77 @@
 import { act, renderHook } from "@testing-library/react";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
-  __clearDomainEventPreviewsForTest,
-  applyDomainEventPreview,
-  getDomainEventPreview,
-} from "@/stores/domain-event-preview-store.js";
+  applyUiSlotEvent,
+  clearUiSlots,
+  useUiSlots,
+} from "@/stores/ui-slot-store.js";
 import { initialState } from "../reducer.js";
 import { useSessionRuntimeRefs } from "../runtime-refs.js";
 import type { SessionState } from "../types.js";
 
+vi.mock("@/services/api/request.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/services/api/request.js")>()),
+  request: vi.fn(async () => ({ items: [] })),
+}));
 function stateForSession(id: string): SessionState {
-  return {
-    ...initialState,
-    session: { id } as SessionState["session"],
-  };
+  return { ...initialState, session: { id } as SessionState["session"] };
 }
+function preview(id: string) {
+  applyUiSlotEvent(id, "ui.slot.preview", {
+    slot: "stage.backdrop@1",
+    revision: "preview",
+    value: { name: "Temporary" },
+    turnId: "turn",
+  });
+}
+function setup() {
+  return renderHook(
+    ({ state }) => {
+      const refs = useSessionRuntimeRefs(state);
+      const slots = useUiSlots(state.session?.id ?? "");
+      return { refs, slots };
+    },
+    { initialProps: { state: stateForSession("session-a") } },
+  );
+}
+beforeEach(() => clearUiSlots());
 
-describe("useSessionRuntimeRefs", () => {
-  beforeEach(() => __clearDomainEventPreviewsForTest());
-
-  it("clears speculative presentation state when leaving a session", () => {
-    applyDomainEventPreview("session-a", {
-      turnId: "turn-1",
-      topic: "stage.direction",
-      data: { cues: [{ type: "stage.clear" }] },
-    });
-    const { rerender } = renderHook(
-      ({ state }) => useSessionRuntimeRefs(state),
-      { initialProps: { state: stateForSession("session-a") } },
-    );
-
-    expect(getDomainEventPreview("session-a", "stage.direction")).toBeDefined();
-    act(() => rerender({ state: stateForSession("session-b") }));
-
-    expect(
-      getDomainEventPreview("session-a", "stage.direction"),
-    ).toBeUndefined();
+describe("useSessionRuntimeRefs slot ownership", () => {
+  it("clears a departed session's preview before revisiting it", async () => {
+    const { result, rerender } = setup();
+    await act(async () => {});
+    act(() => preview("session-a"));
+    expect(result.current.slots[0]?.previewTurnId).toBe("turn");
+    await act(async () => rerender({ state: stateForSession("session-b") }));
+    await act(async () => rerender({ state: stateForSession("session-a") }));
+    expect(result.current.slots).toEqual([]);
   });
 
-  it("clears previews even when navigation already cleared the active id", () => {
-    const { result, rerender } = renderHook(
-      ({ state }) => useSessionRuntimeRefs(state),
-      { initialProps: { state: stateForSession("session-a") } },
-    );
-    applyDomainEventPreview("session-a", {
-      turnId: "turn-1",
-      topic: "stage.direction",
-      data: { cues: [] },
-    });
-    result.current.sessionIdRef.current = null;
-    act(() => rerender({ state: initialState }));
-    expect(
-      getDomainEventPreview("session-a", "stage.direction"),
-    ).toBeUndefined();
+  it("clears slots even when navigation already cleared the active ID", async () => {
+    const { result, rerender } = setup();
+    await act(async () => {});
+    act(() => preview("session-a"));
+    result.current.refs.sessionIdRef.current = null;
+    await act(async () => rerender({ state: initialState }));
+    await act(async () => rerender({ state: stateForSession("session-a") }));
+    expect(result.current.slots).toEqual([]);
+  });
+
+  it("clears the last session on provider unmount", async () => {
+    const first = setup();
+    await act(async () => {});
+    act(() => preview("session-a"));
+    first.unmount();
+    const second = setup();
+    await act(async () => {});
+    expect(second.result.current.slots).toEqual([]);
+  });
+
+  it("preserves the active turn's preview on a same-session update", async () => {
+    const { result, rerender } = setup();
+    await act(async () => {});
+    act(() => preview("session-a"));
+    await act(async () => rerender({ state: stateForSession("session-a") }));
+    expect(result.current.slots[0]?.previewTurnId).toBe("turn");
   });
 });

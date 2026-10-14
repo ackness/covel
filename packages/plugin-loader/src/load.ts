@@ -380,6 +380,7 @@ export async function loadPluginManifest(
 export async function loadPluginEntryDefinition(
   discovery: PluginDiscoveryResult,
   declarations: readonly ParsedPluginMd[],
+  runtimes: readonly ParsedRuntimeMd[],
 ): Promise<PluginEntryDefinition> {
   const staticPromptVariants: Record<
     string,
@@ -412,6 +413,10 @@ export async function loadPluginEntryDefinition(
           manifest.entry ? [manifest.entry] : [],
         ),
       ),
+    ],
+    httpPermissions: [
+      ...(declarations[0]?.plugin.permissions?.http ?? []),
+      ...runtimes.flatMap(({ manifest }) => manifest.permissions?.http ?? []),
     ],
   };
 }

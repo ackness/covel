@@ -13,6 +13,8 @@ import { CollapsibleCardHeader } from "./collapsible-card-header.js";
 
 interface SessionHistoryCardProps {
   activeSessions: api.SessionRecord[];
+  status?: "loading" | "success" | "error";
+  onRetry?: () => void;
   expanded: boolean;
   onToggle: () => void;
   onResume: (session: api.SessionRecord) => void;
@@ -25,6 +27,8 @@ interface SessionHistoryCardProps {
 
 export function SessionHistoryCard({
   activeSessions,
+  status = "success",
+  onRetry,
   expanded,
   onToggle,
   onResume,
@@ -34,7 +38,7 @@ export function SessionHistoryCard({
 }: SessionHistoryCardProps) {
   const { t, i18n } = useTranslation();
 
-  if (activeSessions.length === 0) return null;
+  if (activeSessions.length === 0 && status === "success") return null;
 
   return (
     <Card>
@@ -42,21 +46,40 @@ export function SessionHistoryCard({
         expanded={expanded}
         onToggle={onToggle}
         contentId="session-history-content"
-        summary={t("session.historySummary", {
-          count: activeSessions.length,
-        })}
+        summary={
+          status === "success"
+            ? t("session.historySummary", { count: activeSessions.length })
+            : undefined
+        }
       >
         <History className="w-4 h-4" />
         {t("session.history", "Previous Sessions")}
-        <Badge variant="secondary" className="text-xs ml-1">
-          {activeSessions.length}
-        </Badge>
+        {status === "success" && (
+          <Badge variant="secondary" className="text-xs ml-1">
+            {activeSessions.length}
+          </Badge>
+        )}
       </CollapsibleCardHeader>
-      {expanded && (
+      {(expanded || status !== "success") && (
         <CardContent
           id="session-history-content"
           className="space-y-2 px-4 pb-4"
         >
+          {status === "loading" && (
+            <p role="status" className="text-sm text-muted-foreground">
+              {t("common.loading")}
+            </p>
+          )}
+          {status === "error" && (
+            <div role="alert" className="space-y-2">
+              <p className="text-sm text-destructive">
+                {t("session.historyLoadFailed")}
+              </p>
+              <Button variant="outline" size="sm" onClick={onRetry}>
+                {t("common.retry")}
+              </Button>
+            </div>
+          )}
           {activeSessions.map((session) => (
             <div
               key={session.id}

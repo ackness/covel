@@ -257,7 +257,7 @@ pnpm test:runtime -- my-plugin \
 1. `tests/runtime-cases.json`
 2. `covel.test.json`
 
-文件可以是 `{ "cases": [...] }` 或直接数组。case 字段来自 `packages/test-runtime/src/cases.ts`：
+文件可以是 `{ "$schema": "…", "cases": [...] }` 或直接数组。严格 schema 位于 `packages/shared/src/schemas/runtime-cases.ts`，编辑器用的 JSON Schema 位于 `packages/shared/schemas/runtime-cases.schema.json`。`name` 和 `runtimeId` 必须非空，`mode` 只接受 `mock`、`live`、`both`。未知的用例、期望和 artifact 字段会带文件名和字段路径报错，不会忽略拼错的断言。
 
 ```json
 {

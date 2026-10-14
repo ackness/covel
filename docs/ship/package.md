@@ -13,7 +13,7 @@
 
 别人需要知道三件事：这是哪个版本，它做什么，它需要哪个版本的 Covel。
 
-在 `PLUGIN.md` 开头写上版本号：
+脚手架已在 `PLUGIN.md` 和 `package.json` 写好 `0.1.0`。发布前检查版本号，升级时同时修改两处：
 
 ```yaml
 id: "tavern-rumors"
@@ -28,7 +28,7 @@ covel: ">=0.0.51"
 两个版本号不一致时，校验会直接告诉你：
 
 ```text
-✗ .../tavern-rumors: PLUGIN.md version 0.1.0 differs from package.json version 0.0.27
+✗ .../tavern-rumors: PLUGIN.md version 0.2.0 differs from package.json version 0.1.0
 ```
 
 然后改 `README.md`，至少写清楚：

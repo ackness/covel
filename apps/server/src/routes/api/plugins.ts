@@ -4,7 +4,7 @@
  */
 
 import path from "node:path";
-import { rm, stat } from "node:fs/promises";
+import { stat } from "node:fs/promises";
 import { Hono } from "hono";
 import type { PluginRegistry } from "@covel/plugin-loader";
 import { resolveUserResourceDirs } from "../../lib/user-resource-dirs.js";
@@ -17,6 +17,10 @@ import { withPackageMutation } from "./install/package-files.js";
 import { cancelPackageUpdate } from "./install/package-updates.js";
 import { errorResponse } from "./install/shared.js";
 import { makeInstallApiGuard } from "../privileged-auth.js";
+import {
+  removePackageStaging,
+  stagePackageRemoval,
+} from "./install/package-staging.js";
 
 type Env = {
   Variables: {
@@ -88,7 +92,8 @@ pluginRoutes.delete("/:id", makeInstallApiGuard(), async (c) => {
   try {
     await withPackageMutation(id, async () => {
       await cancelPackageUpdate(root, id);
-      await rm(finalDir, { recursive: true, force: true });
+      const staged = await stagePackageRemoval(finalDir);
+      await removePackageStaging(staged.directory);
     });
   } catch (error) {
     const { status, body } = errorResponse(error);

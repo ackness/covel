@@ -13,7 +13,7 @@ Many problems only show up this way: a file is missing from the package, data is
 
 Other people need to know three things: which version this is, what it does, and which version of Covel it needs.
 
-At the top of `PLUGIN.md`, write the version number:
+The scaffold starts `PLUGIN.md` and `package.json` at `0.1.0`. Check the version before publishing, and update both when releasing a new version:
 
 ```yaml
 id: "tavern-rumors"
@@ -28,7 +28,7 @@ covel: ">=0.0.51"
 If the two version numbers do not match, validation tells you directly:
 
 ```text
-✗ .../tavern-rumors: PLUGIN.md version 0.1.0 differs from package.json version 0.0.27
+✗ .../tavern-rumors: PLUGIN.md version 0.2.0 differs from package.json version 0.1.0
 ```
 
 Then update `README.md`, and at least make these points clear:

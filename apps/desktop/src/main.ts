@@ -383,11 +383,7 @@ async function startServer(
   const projectRoot = resolveProjectRoot();
   const tsxPath = resolveTsx();
 
-  const configuredEnv = loadChildEnvironment(
-    projectRoot,
-    paths.userKeysEnvPath,
-    process.env,
-  );
+  const configuredEnv = loadChildEnvironment(projectRoot, process.env);
   // Data dir lives at <dataRoot>/; ensure the db's parent (and logs dir) exist.
   fs.mkdirSync(path.dirname(paths.dbPath), { recursive: true });
 

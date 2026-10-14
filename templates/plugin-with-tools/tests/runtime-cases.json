@@ -1,4 +1,5 @@
 {
+  "$schema": "https://raw.githubusercontent.com/AcKnEsS/covel/main/packages/shared/schemas/runtime-cases.schema.json",
   "cases": [
     {
       "name": "agent-records-note-with-local-tool",

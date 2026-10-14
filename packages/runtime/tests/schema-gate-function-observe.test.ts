@@ -341,6 +341,74 @@ describe("function output schema gate", () => {
     },
   );
 
+  it.each([true, false])(
+    "checks a PostRuntime recovery of a failed handler against output.schema and commits none of its buffered writes (valid=%s)",
+    async (valid) => {
+      const sessionId = `sess-recover-${valid}`;
+      const store = createMemoryStore();
+      await store.createSession({
+        locale: "en-US",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+        id: sessionId,
+        status: "active",
+        phase: "playing",
+        completedPlayerTurns: 1,
+        setupRuntimes: {},
+        activePlugins: ["fn-plugin"],
+        createdAt: new Date().toISOString(),
+      });
+      const loaded: LoadedRuntime = {
+        manifest: manifest({ output: { schema: "./output.schema.json" } }),
+        promptTemplate: "",
+        outputSchema: { ...VALUE_SCHEMA },
+        handler: async (ctx) => {
+          await ctx.pluginData!.set("notes", "buffered", { text: "buffered" });
+          return { outcome: "failed" as const, error: "handler gave up" };
+        },
+      };
+      const hookPipeline = createHookPipeline();
+      hookPipeline.register({
+        id: "recover",
+        event: "PostRuntime",
+        handler: async (_context, payload) => ({
+          action: "continue" as const,
+          replace: {
+            result: {
+              ...(payload as { result: Record<string, unknown> }).result,
+              status: "success",
+              output: valid ? { prompt: "recovered" } : { wrong: "shape" },
+            },
+          },
+        }),
+      });
+      const result = await executeTurn(input(sessionId), [loaded.manifest], {
+        ...makeDeps(loaded),
+        store,
+        hookPipeline,
+      });
+      const runtime = result.runtimeResults[0];
+      expect(runtime?.status).toBe(valid ? "success" : "failed");
+      if (!valid) expect(runtime?.error).toContain("output-schema-invalid");
+      expect(runtime?.pendingProposals ?? []).toEqual([]);
+      await finalizeExecution({
+        store,
+        sessionId,
+        runtimes: [loaded.manifest],
+        results: result.runtimeResults,
+        turnIds: [input(sessionId).turnId],
+        executionContext: {
+          executionId: `recover-${valid}`,
+          origin: "manual",
+          countPolicy: "none",
+        },
+        loadOutputSchema: async () => loaded.outputSchema,
+      });
+      expect(
+        await store.getPluginData(sessionId, "fn-plugin", "notes", "buffered"),
+      ).toBeNull();
+    },
+  );
+
   it.each(["schema", "loader", "hostile-loader"])(
     "emits one failed terminal when public contract %s validation throws after PostRuntime",
     async (failure) => {
@@ -395,14 +463,18 @@ describe("function output schema gate", () => {
           loadRuntime,
         },
       );
+      // A recovery from a thrown handler loads the runtime's schemas again:
+      // the output.schema gate meets the failing loader first.
       expect(result.runtimeResults[0]).toMatchObject({
         status: "failed",
         output: null,
-        error: expect.stringContaining("contract-output-invalid"),
+        error:
+          failure === "schema"
+            ? expect.stringContaining(
+                "contract-output-invalid (prompt@1): contract schema could not be loaded or compiled",
+              )
+            : "output-schema-invalid: schema could not be loaded",
       });
-      expect(result.runtimeResults[0]?.error).toContain(
-        "contract schema could not be loaded or compiled",
-      );
       expect(postRuntime).toHaveBeenCalledTimes(1);
       expect(onRuntimeComplete).toHaveBeenCalledTimes(1);
       expect(onRuntimeComplete).toHaveBeenCalledWith(

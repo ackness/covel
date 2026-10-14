@@ -61,7 +61,7 @@ export default function ({ tool }) {
         };
       if (previous && previous.value.tick !== base.tick)
         throw new Error("World time changed since this narrative started");
-      const next = advanceTime(definition, base.tick, request, context.turnId);
+      const next = advanceTime(definition, base.tick, request, context.random);
       const value = {
         schemaVersion: 1,
         definition,

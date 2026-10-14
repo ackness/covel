@@ -17,6 +17,7 @@
     "primary": "Основное"
   },
   "session": {
+    "historyLoadFailed": "Не удалось загрузить предыдущие сессии. Повторите попытку, чтобы увидеть сохранения.",
     "reasoningContent": "Размышление",
     "reasoningContentHint": "Текст размышления или резюме, возвращённые моделью, в порядке вызовов.",
     "config": "Конфигурация студии",
@@ -270,6 +271,10 @@
     "suspensionAgoMinutes": "{{count}}м назад",
     "suspensionAgoHours": "{{count}}ч назад",
     "suspensionAgoDays": "{{count}}дн назад",
+    "suspensionOutdated": "Этот запрос устарел и снят",
+    "suspensionOutdatedMovedOn": "С тех пор история продвинулась дальше.",
+    "suspensionOutdatedPlugin": "Плагин, задавший его, с тех пор обновился.",
+    "suspensionOutdatedSuperseded": "Тот же плагин задал более новый запрос.",
     "memoryUpdateFailed": "Не удалось обновить память истории",
     "memoryUpdateFailedHint": "Ход сохранён. Проверьте модель для памяти и настройки провайдера. Следующая попытка обновления будет после следующего хода.",
     "memoryUpdateErrorDetails": "Сведения об ошибке",

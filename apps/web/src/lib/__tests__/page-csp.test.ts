@@ -14,10 +14,20 @@ describe("injectPageCsp", () => {
     );
   });
 
-  it("blocks eval and plugins and leaves images to the Markdown gate", () => {
+  it("blocks eval, plugins and remote CSS resources", () => {
     expect(PAGE_CSP).not.toContain("unsafe-eval");
     expect(PAGE_CSP).toContain("object-src 'none'");
-    expect(PAGE_CSP).not.toContain("img-src");
+    expect(directive(PAGE_CSP, "img-src")).toEqual([
+      "'self'",
+      "data:",
+      "blob:",
+    ]);
+    expect(directive(PAGE_CSP, "font-src")).toEqual(["'self'", "data:"]);
+    expect(directive(PAGE_CSP, "style-src")).toEqual([
+      "'self'",
+      "'unsafe-inline'",
+    ]);
+    expect(directive(PAGE_CSP, "default-src")).toEqual(["'self'"]);
   });
 });
 
