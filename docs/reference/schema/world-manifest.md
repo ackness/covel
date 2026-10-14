@@ -64,15 +64,16 @@ In the path headings below, `[]` is a list item and `.*` is a map value.
 
 ## `pluginPolicy.packs[]`
 
-| Field         | Type           | Required | Description                                                                     |
-| ------------- | -------------- | -------- | ------------------------------------------------------------------------------- |
-| `id`          | string         | yes      | Stable pack ID: lowercase letters, digits and hyphens. `presetId` refers to it. |
-| `label`       | text           | yes      | Display name of the pack.                                                       |
-| `description` | text           | no       | What the pack offers. Shown to the player.                                      |
-| `requested`   | list of string | no       | Plugin IDs the pack enables.                                                    |
-| `recommended` | list of string | no       | Plugin IDs the pack suggests. They are not enabled automatically.               |
-| `tags`        | list of string | no       | Catalogue tags that describe the pack, such as `mode:traditional-story`.        |
-| `reason`      | text           | no       | Why this pack suits the world. Shown to the player.                             |
+| Field         | Type           | Required | Description                                                                                  |
+| ------------- | -------------- | -------- | -------------------------------------------------------------------------------------------- |
+| `id`          | string         | yes      | Stable pack ID: lowercase letters, digits and hyphens. `presetId` refers to it.              |
+| `label`       | text           | yes      | Display name of the pack.                                                                    |
+| `description` | text           | no       | What the pack offers. Shown to the player.                                                   |
+| `requested`   | list of string | no       | Plugin IDs the pack enables.                                                                 |
+| `recommended` | list of string | no       | Plugin IDs the pack suggests. They are not enabled automatically.                            |
+| `excluded`    | list of string | no       | Plugin IDs the pack turns off, `kind: core` ones included. The player can turn them back on. |
+| `tags`        | list of string | no       | Catalogue tags that describe the pack, such as `mode:traditional-story`.                     |
+| `reason`      | text           | no       | Why this pack suits the world. Shown to the player.                                          |
 
 ## `characterSchema`
 

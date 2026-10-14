@@ -809,6 +809,38 @@ sources:
     ).toEqual([]);
   });
 
+  it.each([
+    ["an array/object union", { type: ["array", "object"] }],
+    ["an unconstrained type", {}],
+  ])("allows dimension array paths through %s", async (_, type) => {
+    const schema = {
+      ...type,
+      items: { type: "string" },
+      properties: { named: { type: "string" } },
+      additionalProperties: false,
+    };
+    const findings = await validate(
+      await makeWorld(
+        {
+          "data/hidden/story-events.yaml": JSON.stringify([
+            {
+              id: "array-event",
+              when: { dimension: "mixed", path: [0], equals: "open" },
+              payload: "The room opens.",
+            },
+          ]),
+        },
+        `${MANIFEST}dimensions:
+  mixed:
+    name: Mixed
+    schema: ${JSON.stringify(schema)}
+    initialValue: [open]
+`,
+      ),
+    );
+    expect(findings.filter((item) => item.level === "error")).toEqual([]);
+  });
+
   it("warns about a record field that no model reads because it looks like a write time", async () => {
     const schema = `${MANIFEST}characterSchema:
   attributes:

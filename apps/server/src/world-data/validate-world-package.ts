@@ -143,6 +143,7 @@ interface WorldManifestView {
       readonly id?: string;
       readonly requested?: readonly string[];
       readonly recommended?: readonly string[];
+      readonly excluded?: readonly string[];
     }[];
   };
   readonly pluginSettings?: Readonly<Record<string, Record<string, unknown>>>;
@@ -411,6 +412,7 @@ function checkPluginReferences(
   manifest.pluginPolicy?.packs?.forEach((pack, index) => {
     collect(pack.requested, `pluginPolicy.packs[${index}].requested`);
     collect(pack.recommended, `pluginPolicy.packs[${index}].recommended`);
+    collect(pack.excluded, `pluginPolicy.packs[${index}].excluded`);
   });
   for (const id of Object.keys(manifest.pluginSettings ?? {}))
     references.push({ id, pointer: `pluginSettings.${id}` });
@@ -790,6 +792,8 @@ function defaultSessionPlugins(
     entries.map((entry) => buildPluginSummary(entry)),
   );
   return resolveSessionPluginPlan(plan.defaultPluginIds, catalogue, {
+    excluded: plan.packs.find((pack) => pack.id === plan.selectedPackId)
+      ?.excluded,
     authorized: entries.map((entry) => entry.id),
     requiredContracts: manifest.pluginPolicy?.requires ?? [],
   }).active;

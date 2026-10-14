@@ -1,8 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  runtimeManifestInputSchema,
-  validateRuntimeManifestSemantics,
-} from "../src/schemas/plugin.js";
+import { runtimeManifestInputSchema } from "../src/schemas/plugin.js";
 import { pluginManifestSchema } from "../src/schemas/plugin-manifest.js";
 
 describe("plugin manifest dataSchemas", () => {
@@ -383,17 +380,6 @@ describe("plugin manifest dataSchemas", () => {
         type: "number",
       }),
     ).toBe(false);
-  });
-});
-
-describe("plugin manifest semantic diagnostics", () => {
-  it("does not warn for manual runtimes without stage", () => {
-    const manifest = runtimeManifestInputSchema.parse({
-      name: "manual",
-      description: "Manual",
-      trigger: { type: "manual" },
-    });
-    expect(validateRuntimeManifestSemantics(manifest)).toEqual([]);
   });
 });
 

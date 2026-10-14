@@ -271,6 +271,11 @@
     "memoryUpdateFailedHint": "This turn was saved. Check the memory model assignment and provider settings; memory will be attempted again after the next turn.",
     "memoryUpdateErrorDetails": "Error details",
     "memoryStoreWarning": "Data lost on restart",
+    "worldDataNotices": {
+      "title": "Some of this world's data is not in this game:",
+      "hint": "Data for a plugin that is off, or waiting for your approval, arrives when you turn that plugin on.",
+      "hide": "Hide"
+    },
     "worldDataPreflight": {
       "title": "World Data",
       "loading": "Checking",
@@ -367,6 +372,8 @@
     "stoppedDetail": "Generated content was not saved. Retry with the original input.",
     "submittedInteraction": "Completed interaction · expand to review",
     "advancedPluginSettings": "Customize plugins and advanced settings",
+    "minimalPluginSet": "Back to the minimal set",
+    "minimalPluginSetHint": "The narrative plugins, the plugin that holds the world's dimensions, and what they and the world need; everything else is turned off.",
     "configureModelBeforeRetry": "Change model / parameters",
     "retryModelSettingsHint": "Change the model or lower its output limit, then retry this task. The retry uses your current settings.",
     "allWorlds": "All worlds ({{total}})",

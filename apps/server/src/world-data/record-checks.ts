@@ -215,9 +215,11 @@ function unreachablePath(
     const at = walked.length ? walked.join(".") : "the value";
     const types = typesOf(node);
     const list = types.includes("array");
-    const object =
-      types.includes("object") || (!types.length && node.properties);
-    if (list && !object) {
+    const object = types.includes("object");
+    // Object keywords alone do not exclude arrays. If both containers are
+    // possible, this conservative check cannot rule out a path through either.
+    if (!types.length || (list && object)) return undefined;
+    if (list) {
       if (!/^\d+$/.test(segment))
         return { at, reason: `${at} is a list, read by index` };
       node = node.items;
