@@ -74,6 +74,24 @@ describe("reconcileSeededWorlds", () => {
     expect(await listWorldIds(store)).toEqual(["mistport"]);
   });
 
+  it("keeps an edited file world when its package disappears and it has no sessions", async () => {
+    const store = createMemoryStore();
+    const lock = createInProcessSessionLock();
+    await store.upsertWorld({
+      id: "edited",
+      description: "",
+      createdAt: NOW,
+      updatedAt: NOW,
+      name: "Player's world",
+      metadata: { source: "file", packageModified: true },
+    });
+    const before = await store.getWorld("edited");
+    const result = await reconcileSeededWorlds(store, new Set(), lock);
+    expect(result.removed).toEqual([]);
+    expect(await store.getWorld("edited")).toEqual(before);
+    await store.close();
+  });
+
   it("keeps worlds that are still present in the live set", async () => {
     const store = createMemoryStore();
     const sessionLock = createInProcessSessionLock();

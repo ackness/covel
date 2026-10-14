@@ -385,7 +385,11 @@ describe("world routes", () => {
       }),
     });
     expect(patch.status).toBe(200);
-    expect((await patch.json()).metadata).toEqual({ source: "file" });
+    // The origin stays; the edit marks the record so a reload keeps it.
+    expect((await patch.json()).metadata).toEqual({
+      source: "file",
+      packageModified: true,
+    });
 
     const remove = await app.request("/api/worlds/built-in-world", {
       method: "DELETE",

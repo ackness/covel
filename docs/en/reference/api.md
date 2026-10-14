@@ -534,6 +534,7 @@ This section lists every endpoint by topic. After each table come the rules that
 | DELETE | `/api/worlds/:id`                       | Delete a world and all of its sessions. The rules are below                                             |
 | GET    | `/api/worlds/:id/dimensions/export`     | Export the world's dimensions (YAML / JSON)                                                             |
 | POST   | `/api/worlds/:id/dimensions/import`     | Import the world's dimensions                                                                           |
+| POST   | `/api/worlds/:id/restore-package`       | Put an edited package world back to the version in its world package                                    |
 | POST   | `/api/worlds/:id/sync-dimensions`       | Authors and tools: sync world dimensions to one specified active session                                |
 | POST   | `/api/worlds/:id/world-data/preflight`  | Dry-run a worldData import, read-only                                                                   |
 | POST   | `/api/worlds/:id/sync-data`             | Authors and tools: sync importer-managed worldData rows; dry-run by default                             |
@@ -1744,6 +1745,7 @@ Exports all the dimension definitions the author wrote (including `schema`, `ini
 Uses the content in the request to **replace** the world's dimension definitions as a whole.
 
 - After the import, active sessions receive a notice that the author source has changed.
+- A world that came from a world package is marked `packageModified`, as with `PATCH`.
 - The current values in a session are not reset automatically. For existing sessions, you must call the sync endpoint explicitly to adopt the new definitions. The sync checks for conflicts.
 - Any valid dimension ID uses the same definition format.
 
@@ -1785,6 +1787,8 @@ Behavior:
 - The top-level `dimensions` are written to `metadata.dimensions`.
 - `metadata` is merged on write. Sibling fields that are not mentioned are kept as they are.
 - Both `dimensions` and `metadata.dimensions` go through world dimension validation.
+- New sessions, preflight and sync use the dimensions and the `characterSchema` of this record. They do not read the world package's files.
+- When the world came from a world package (`metadata.source` is `file` or `generated-file`, or it has `packageManaged`), the record is marked `packageModified: true`. From then on startup loading, file reloads and updates keep this record and do not overwrite it with the package files. The rules are in [World records and world packages](./world-data.md#world-records-and-world-packages).
 
 **Example request body:**
 
@@ -1802,9 +1806,30 @@ Behavior:
 }
 ```
 
+#### `POST /api/worlds/:id/restore-package`
+
+Puts a package world that was edited in the app back to the version in its world package.
+
+- The server reads the world package again, replaces the world record with what it read, and removes `packageModified`. From then on startup loading and file reloads make the record follow the files again.
+- The world's origin (`metadata.source`, `metadata.storage`) and its creation time keep their values.
+- When dimension definitions changed, the sessions of this world receive a `world.dimensions.changed` notice. The values a session already has are not reset.
+- The request body may be an empty object.
+
+**Response:** the restored WorldRecord.
+
+**Errors:**
+
+| Status | `code`                   | When                                                                                      |
+| ------ | ------------------------ | ----------------------------------------------------------------------------------------- |
+| 404    | `world_not_found`        | There is no such world                                                                    |
+| 409    | `world_not_from_package` | The world did not come from a world package (e.g. a generated world kept in the database) |
+| 409    | `world_package_missing`  | The world's package is not in any world directory                                         |
+| 409    | `world_deleting`         | The world is being deleted                                                                |
+| 422    | `world_package_invalid`  | The world package cannot be read; the edited record stays as it is                        |
+
 #### `POST /api/worlds/:id/sync-dimensions`
 
-An API for authors and tools that syncs the world's current dimension definitions to the one active session specified by `sessionId`. The app has no control for players to call it. This endpoint tries to write directly and has no dry-run. To preview first, or use the general sync options, use [`sync-data`](#post-apiworldsidsync-data).
+An API for authors and tools that syncs the current dimension definitions of the world record to the one active session specified by `sessionId`. The app has no control for players to call it. This endpoint tries to write directly and has no dry-run. To preview first, or use the general sync options, use [`sync-data`](#post-apiworldsidsync-data).
 
 It handles only dimensions. It uses the `world_data_import_ledger` ledger and the protected `_dimensions` records. It does not write `entries`, does not write the always-on lorebook, and does not clean up other imported data.
 
@@ -1853,6 +1878,8 @@ The request can be written in two ways:
 
 - Pass `sessionId`: this uses the session's **saved `activePlugins`**. In this case, any `plugins` in the request is ignored.
 - Pass only `plugins`: preflights a certain set of plugin choices before a session is created.
+
+Dimensions and the character schema are read from the world record, as for a new session; other data is read from `data/` of the world package.
 
 Preflight does not load or run the `worldProjections` handlers. So the output of a projection is not counted in `planned` / `targets`. The response carries a warning that says this part is deferred until the real import or sync runs.
 
@@ -1906,7 +1933,7 @@ Updating a world package, hot-reloading files, enabling a plugin or approving it
 
 - Overwriting and deleting existing records only handles rows in `world_data_import_ledger` with `managed=true` that belong to the current world. New records in this plan are also imported and added to the ledger.
 - It uses `valueHash` to check whether a player or a plugin has changed the target data.
-- Dimension definitions are in the same ledger. This includes inline definitions, `dimensionSources`, and the effective definitions of a storage-backed world.
+- Dimension definitions are in the same ledger. Dimensions come from the world record, so dimensions edited in the app are synced too; other worldData comes from `data/` of the world package.
 
 **How conflicts are handled:**
 

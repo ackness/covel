@@ -994,7 +994,19 @@ async function checkWorldData(
     WorldPackageDiagnostic & { locales: string[] }
   >();
   for (const locale of locales) {
+    // A session reads the world's record; installing the package makes that
+    // record from these files, so the check reads them the way install does.
+    // A dimension file that fails is reported once, by the check above.
+    const dimensions = await readEffectiveDimensions({
+      worldRoot: worldDir,
+      manifest,
+      sources: descriptor.sources,
+      locale,
+    }).catch(() => undefined);
     const preflight = await preflightWorldDataForSession({
+      world: {
+        metadata: { dimensions, characterSchema: manifest.characterSchema },
+      },
       sessionId: "validate-world",
       worldId: manifest.id,
       worldsDirs: [path.dirname(worldDir)],

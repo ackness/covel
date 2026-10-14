@@ -9,6 +9,10 @@ import {
   importWorldDataForSession,
   syncWorldDataForSession,
 } from "../../src/world-data/session-import.js";
+import {
+  loadSingleWorld,
+  preserveWorldProvenance,
+} from "../../src/world-seed-loader.js";
 
 const at = "2026-10-01T00:00:00Z";
 const definition = (value: number) => ({
@@ -16,12 +20,40 @@ const definition = (value: number) => ({
   schema: { type: "integer", minimum: 0 },
   initialValue: value,
 });
+// What `world.yaml` needs besides its dimensions to load as a world.
+const manifest = {
+  schemaVersion: "1.0",
+  id: "world",
+  name: "World",
+  summary: "A world for the dimension tests.",
+  defaultLocale: "en-US",
+};
 const roots: string[] = [];
 afterEach(async () => {
   await Promise.all(
     roots.splice(0).map((root) => rm(root, { recursive: true, force: true })),
   );
 });
+/**
+ * Make the world record from its package, as the startup seed and a file
+ * reload do. A session reads the record, never the files themselves.
+ */
+async function loadRecord(
+  store: ReturnType<typeof createMemoryStore>,
+  dir: string,
+) {
+  const record = await loadSingleWorld(dir, {
+    includeWorldDataOverrides: false,
+  });
+  if (!record) throw new Error(`${dir} did not load as a world`);
+  await store.upsertWorld(
+    preserveWorldProvenance(
+      record,
+      (await store.getWorld(record.id)) ?? undefined,
+    ),
+  );
+}
+
 async function fixture() {
   const store = createMemoryStore();
   const registry = createPluginRegistry();
@@ -59,7 +91,7 @@ describe("dynamic dimension author import and sync", () => {
     await writeFile(
       path.join(world, "world.yaml"),
       JSON.stringify({
-        id: "world",
+        ...manifest,
         dimensions: {
           mood: {
             name: { "zh-CN": "气氛", "en-US": "Mood" },
@@ -77,6 +109,7 @@ describe("dynamic dimension author import and sync", () => {
       }),
     );
     const options = { ...args, worldsDirs: [root] };
+    await loadRecord(args.store, world);
     await importWorldDataForSession(options);
     const record = (await args.store.getPluginData(
       "session",
@@ -109,7 +142,7 @@ describe("dynamic dimension author import and sync", () => {
     await writeFile(
       path.join(world, "world.yaml"),
       JSON.stringify({
-        id: "world",
+        ...manifest,
         dimensions: { stamina: definition(1), replaced: definition(1) },
         dimensionSources: { stamina: "data/stamina.yaml" },
         worldData: "data/world.data.yaml",
@@ -138,6 +171,7 @@ describe("dynamic dimension author import and sync", () => {
       JSON.stringify({ stamina: definition(3) }),
     );
     const options = { ...args, worldsDirs: [root] };
+    await loadRecord(args.store, world);
     await importWorldDataForSession(options);
     expect(
       (
@@ -164,6 +198,7 @@ describe("dynamic dimension author import and sync", () => {
       (await syncWorldDataForSession({ ...options, dryRun: false })).conflicts,
     ).toEqual([]);
     await writeFile(path.join(world, "data/dimensions.yaml"), "{}");
+    await loadRecord(args.store, world);
     expect(
       (
         await syncWorldDataForSession({
@@ -328,7 +363,7 @@ describe("dynamic dimension author import and sync", () => {
     await writeFile(
       path.join(world, "world.yaml"),
       JSON.stringify({
-        id: "world",
+        ...manifest,
         dimensions: { stamina: definition(1) },
         dimensionSources: { stamina: "stamina.yaml" },
       }),
@@ -338,6 +373,7 @@ describe("dynamic dimension author import and sync", () => {
       JSON.stringify(definition(2)),
     );
     const options = { ...args, worldsDirs: [root] };
+    await loadRecord(args.store, world);
     await importWorldDataForSession(options);
     expect(
       (await args.store.getPluginData(
@@ -351,6 +387,7 @@ describe("dynamic dimension author import and sync", () => {
       path.join(world, "stamina.yaml"),
       JSON.stringify(definition(3)),
     );
+    await loadRecord(args.store, world);
     await syncWorldDataForSession({ ...options, dryRun: false });
     expect(
       (await args.store.getPluginData(

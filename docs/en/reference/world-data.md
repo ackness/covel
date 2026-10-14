@@ -423,6 +423,16 @@ pluginPolicy:
 - The session-prep screen uses this to show which plugins are missing. The session can still be created, but the gameplay those plugins provide will not work.
 - `recommended` does not take part in the default selection. It is returned as it is.
 
+### World records and world packages
+
+Covel plays the **world record** in the database. The files of a world package are only the format for installing, importing and exporting a world:
+
+- The startup seed, file reloads, installs and updates read the package's files into the world record.
+- New sessions, the world-data preflight and sync use the dimensions and the character schema (`characterSchema`) of the world record. They do not read these from the package files.
+- What the world record does not keep is read from the package: the characters, lorebook entries and plugin data in `data/`, and the images in `media/`. The app has no place to edit them, so there is only one copy of them.
+- Once a player edits a world that came from a world package in the app (the world editor, importing dimensions, or `PATCH /api/worlds/:id`), the record is marked `packageModified`. From then on the seed, file reloads and updates no longer overwrite it with the files, and a new version of the package is not used automatically.
+- To go back to the package's version, click "Restore the package version" on the world's detail page ([`POST /api/worlds/:id/restore-package`](./api.md#post-apiworldsidrestore-package)). The edits are replaced with what the package files hold now, and the record follows the files again. Saved session data is preserved. Sessions without their own lore (`loreOverride`) read the restored world lore on the next turn.
+
 ### Loading at startup and reconciling (seed & reconcile)
 
 When the server starts, each world package in the world directories is written into the database. This step is called seed.
@@ -432,11 +442,11 @@ When the server starts, each world package in the world directories is written i
 1. The built-in directory: `COVEL_WORLDS_DIR`. When running from source, the default is the repository's `worlds/`.
 2. The user directory: `COVEL_USER_WORLDS_DIR`. If it is not set, it is `$COVEL_HOME/worlds`. If `COVEL_HOME` is not set either, it is `~/.covel/worlds`. The desktop app uses `<data_root>/worlds`.
 
-Seed can run again and again. Each world package has one world record. If the record exists, it is updated. If not, it is added, and it is marked with `metadata.source = "file"`. Seed itself never deletes anything.
+Seed can run again and again. Each world package has one world record. If the record exists, it is updated. If not, it is added, and it is marked with `metadata.source = "file"`. A record the player has edited (`packageModified`) is not updated. Seed itself never deletes anything.
 
 **Cleanup (reconcile).** Adding without ever deleting leaves one problem. A world that was once built in, and later removed from the packages, would stay in the database of older users. So after all the directories have been seeded, old records that are "no longer in any world directory" are deleted. Three safeguards make sure only that kind of record is cleaned up, and no user data is deleted by mistake:
 
-1. **Only the source is checked**: only worlds with `metadata.source === "file"` can be cleaned up. AI-generated worlds (`generated` / `generated-file`) and worlds from any other source are never touched, even when they are not in the current world directories.
+1. **Player edits are kept**: only worlds with `metadata.source === "file"` and no `packageModified` marker can be cleaned up. An edited world is kept even if its package is gone and it has no sessions. AI-generated worlds (`generated` / `generated-file`) and worlds from any other source are never touched, even when they are not in the current world directories.
 2. **A world with saved games is kept**: an old world that still has sessions is kept, not deleted, and a `warn` line is written to the log. Deleting a world that has saved games must be an explicit action by a person.
 3. **An incomplete scan means no cleanup**: if any world directory cannot be scanned, if any world package fails to read, parse or validate, or if not a single world loaded successfully, cleanup is skipped as a whole. Healthy worlds are still updated as usual.
 
@@ -477,14 +487,14 @@ For installing and updating from GitHub, see [world catalog and installation](./
 - After a file in a world package changes, Covel waits 500 milliseconds to combine a run of changes, and then reads the package again. Changes to images, audio and editor temporary files do not trigger a reload. Changes to `world.yaml`, `WORLD.md`, language versions, `data/`, `characters/`, `media/*.json` and similar files do trigger one.
 - After reading, Covel finds the world by the manifest's `id`. If anything is different, it updates the world record and writes to the log what was reloaded: the lore, the name and summary, the dimensions, the plugin policy and settings, and the world data and settings.
 - If the manifest or the lore cannot be read, a warning is logged, and the version already loaded keeps being used.
-- A world that a player has edited in the app (`packageModified`) keeps the edited copy. File changes do not overwrite it.
+- A world that a player has edited in the app (`packageModified`) keeps the edited record. File changes do not overwrite it. See [World records and world packages](#world-records-and-world-packages).
 - A reload does not change the world's source or its creation time. An AI-generated world does not turn into a built-in world that cannot be deleted just because it was reloaded.
 
 **What a reload affects:**
 
 | Target                    | Result                                                                                                                                                                                                                                 |
 | ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| New sessions              | Read the latest world package                                                                                                                                                                                                          |
+| New sessions              | Use the reloaded world record, plus the content of `data/` and `media/` in the package                                                                                                                                                 |
 | Lore of existing sessions | The next turn reads the new lore. A session that has its own `loreOverride` keeps using it.                                                                                                                                            |
 | Data of existing sessions | Characters, lorebook entries, dimension values and existing state are not rewritten automatically. Players who want the new starting data need to start a new session. Authors and tools can call the [sync API](#preflight-and-sync). |
 
@@ -506,6 +516,7 @@ For installing and updating from GitHub, see [world catalog and installation](./
 **What stays the same when a world record is edited:**
 
 - The world's `metadata.source` and `metadata.storage` keep their original values through a normal update request (PATCH). Editing or browser sync does not change which files the world belongs to.
+- A world that came from a world package (`metadata.source` is `file` or `generated-file`, or it has `packageManaged`) is marked `packageModified` when it is edited. See [World records and world packages](#world-records-and-world-packages).
 - Dimensions follow `metadata.dimensions`. The top-level `dimensions` is a way to read the same content. When only top-level dimensions are given, they are written to `metadata.dimensions`. When `metadata.dimensions` is replaced or cleared, the top level is updated too. All three database backends behave the same way.
 
 ### Default plugin settings (`pluginSettings`)
