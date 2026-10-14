@@ -83,7 +83,7 @@ export function createSqliteStore(
   // Data methods first; the transaction scope is the same single-connection
   // store, so `withTransaction` hands `fn` these data methods.
   const records = {
-    ...createSqliteSessions(sqlite, db),
+    ...createSqliteSessions(sqlite, db, vectorCapability !== null),
     ...createSqliteRuntimeRecords(db),
     ...createSqliteState(db),
     ...createSqliteSessionRecords(db),

@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import YAML from "yaml";
+import { readPlainYamlFrontmatter } from "../../packages/plugin-loader/src/plain-yaml-frontmatter.ts";
 
 /** Check the canonical package owner's event resources once, without executing code. */
 export function checkPluginEventSchemas(pluginRoot) {
@@ -10,9 +10,7 @@ export function checkPluginEventSchemas(pluginRoot) {
   let parsed;
   try {
     const text = fs.readFileSync(manifestPath, "utf8");
-    const end = text.startsWith("---") ? text.indexOf("\n---", 3) : -1;
-    if (end === -1) throw new Error("missing YAML frontmatter");
-    parsed = YAML.parse(text.slice(3, end));
+    parsed = readPlainYamlFrontmatter(text).data;
   } catch (error) {
     return { checked, errors: [`PLUGIN.md: ${error.message}`] };
   }

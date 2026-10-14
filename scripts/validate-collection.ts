@@ -12,6 +12,7 @@
 import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 import YAML from "yaml";
+import { readPlainYamlFrontmatter } from "../packages/plugin-loader/src/plain-yaml-frontmatter.js";
 import {
   COLLECTION_MANIFEST_FILE,
   checkCollection,
@@ -35,9 +36,7 @@ if (!directory) {
 /** Plain YAML frontmatter only, as the installer accepts it. */
 async function readPluginManifest(pluginDir: string) {
   const text = await readFile(path.join(pluginDir, "PLUGIN.md"), "utf-8");
-  const match = /^﻿?---[ \t]*\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/.exec(text);
-  if (!match) throw new Error("PLUGIN.md requires plain YAML frontmatter");
-  return YAML.parse(match[1]!) as Record<string, unknown>;
+  return readPlainYamlFrontmatter(text).data;
 }
 
 async function bundledPlugins(): Promise<CollectionPluginFacts[]> {

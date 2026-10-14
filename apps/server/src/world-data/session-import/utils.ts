@@ -68,6 +68,7 @@ export async function readWorldManifest(worldRoot: string): Promise<{
   dimensionSources?: unknown;
   characterSchema?: unknown;
   defaultLocale?: string;
+  supportedLocales?: string[];
   themeMusic?: string;
   cover?: string;
 }> {
@@ -81,6 +82,11 @@ export async function readWorldManifest(worldRoot: string): Promise<{
         characterSchema: raw.characterSchema,
         defaultLocale:
           typeof raw.defaultLocale === "string" ? raw.defaultLocale : undefined,
+        supportedLocales: Array.isArray(raw.supportedLocales)
+          ? raw.supportedLocales.filter(
+              (locale): locale is string => typeof locale === "string",
+            )
+          : undefined,
         worldData:
           typeof raw.worldData === "string" ? raw.worldData : undefined,
         themeMusic:

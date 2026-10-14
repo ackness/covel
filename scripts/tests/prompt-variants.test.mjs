@@ -38,6 +38,7 @@ async function fixture(t, files) {
     lockPath: path.join(pluginsDir, "prompt-variants.lock.json"),
   };
   return {
+    directory: pluginDir,
     check: (extra) => checkPromptVariants({ ...options, ...extra }).problems,
     lock: () => checkPromptVariants({ ...options, write: true }).problems,
     write: (name, content) => fs.writeFile(path.join(pluginDir, name), content),
@@ -51,6 +52,37 @@ test("accepts a recorded English prompt and its Chinese variant", async (t) => {
   });
   assert.deepEqual(plugin.lock(), []);
   assert.deepEqual(plugin.check(), []);
+});
+
+test("reports a runtime directory without its canonical manifest", async (t) => {
+  const plugin = await fixture(t, { "PLUGIN.md": ENGLISH });
+  await fs.mkdir(path.join(plugin.directory, "runtimes/missing"), {
+    recursive: true,
+  });
+  assert.match(
+    plugin.check().join("\n"),
+    /missing\/RUNTIME.md: missing runtime manifest/,
+  );
+});
+
+test("accepts BOM and CRLF through the same reader as the loader", async (t) => {
+  const plugin = await fixture(t, {
+    "PLUGIN.md": `\uFEFF${ENGLISH.replaceAll("\n", "\r\n")}`,
+  });
+  assert.deepEqual(plugin.check(), []);
+});
+
+test("rejects engine directives without evaluating them", async (t) => {
+  const plugin = await fixture(t, {
+    "PLUGIN.md":
+      "---js\n(() => { globalThis.__promptEngineProbe = true; return {}; })()\n---\n",
+  });
+  try {
+    assert.throws(() => plugin.check(), /plain YAML frontmatter/);
+    assert.equal(globalThis.__promptEngineProbe, undefined);
+  } finally {
+    delete globalThis.__promptEngineProbe;
+  }
 });
 
 test("accepts a prompt that has no Chinese variant", async (t) => {

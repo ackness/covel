@@ -440,6 +440,8 @@ Seed can run again and again. Each world package has one world record. If the re
 2. **A world with saved games is kept**: an old world that still has sessions is kept, not deleted, and a `warn` line is written to the log. Deleting a world that has saved games must be an explicit action by a person.
 3. **An incomplete scan means no cleanup**: if any world directory cannot be scanned, if any world package fails to read, parse or validate, or if not a single world loaded successfully, cleanup is skipped as a whole. Healthy worlds are still updated as usual.
 
+A user worlds directory that does not exist counts as an empty directory; bundled worlds still refresh. Other directory read errors still make the scan incomplete.
+
 > [!NOTE]
 > To remove a built-in world that **still has saved games**, you must explicitly delete its world record and the sessions linked to it.
 
@@ -491,7 +493,7 @@ For installing and updating from GitHub, see [world catalog and installation](./
 - When the file system does not support watching, a warning is logged at startup. Dimensions can also be imported through `POST /api/worlds/:id/dimensions/import`.
 - The implementation is in `apps/server/src/world-file-watcher.ts`. For the install response, see [API reference](./api.md#installed-resource-storage-and-vector-configuration).
 
-**Every `dimensionSources` file must be readable.** If any one file is missing, cannot be read, has a YAML error, or fails validation, the whole world fails to load this time. The previous complete record is kept, no dimension-change notice is sent, and the old world is not cleaned up. Automatic reloading continues once the file is fixed.
+**Every dimension file must be readable.** Files in `dimensionSources` and worldData sources targeting `world:metadata.dimensions` follow the same rule. If any one file is missing, cannot be read, has a YAML error, or fails validation, the whole world fails to load this time. The previous complete record is kept, no dimension-change notice is sent, and the old world is not cleaned up. Automatic reloading continues once the file is fixed.
 
 **Deleting an AI-generated world that was saved as files (`generated-file`):**
 

@@ -16,6 +16,7 @@ The first time the desktop app starts, it creates `~/.covel/`. The small configu
 
 ~/.covel/data/            data (the location can be changed)
   covel.db                save database
+  media/                  Stored images, audio and other media
   worlds/                 the worlds you installed and created
   logs/                   logs
     desktop.log           logs of the desktop program itself
@@ -35,14 +36,14 @@ data_root = "/Volumes/External/covel-data"
 
 After you pick the new folder in Settings, Covel asks whether to bring your existing data along:
 
-- **Copy my data**: quit and reopen Covel. At startup it copies the save database and `worlds/` to the new location, switches to it only after the copy succeeded, and tells you the result in a dialog.
+- **Copy my data**: quit and reopen Covel. At startup it copies the save database, `worlds/` and `media/` to the new location, switches to it only after the copy succeeded, and tells you the result in a dialog.
 - **Start empty**: after a restart Covel uses the new location without your data.
 - When the new folder already holds Covel data, Covel does not ask and does not copy: after a restart it uses that data as it is and overwrites nothing.
 
 Whichever you choose, nothing in the old folder is moved or deleted. When the copy fails, Covel keeps using the old folder and a dialog says why.
 
 > [!NOTE]
-> Editing `config.toml` by hand copies nothing, and you need to restart Covel afterwards. A new location without data starts empty, and the old saves and worlds stay where they are. To bring them over, quit Covel first, then copy the database and `worlds/` as the "Backup" section below describes.
+> Editing `config.toml` by hand copies nothing, and you need to restart Covel afterwards. A new location without data starts empty, and the old saves and worlds stay where they are. To bring them over, quit Covel first, then copy the database, `worlds/` and `media/` as the "Backup" section below describes.
 
 ## Backup
 
@@ -55,6 +56,9 @@ Quit Covel before you back up. While it runs, the database has two companion fil
 | Plugins you installed        | The whole `~/.covel/plugins/` folder                                                  |
 | Model and interface settings | `settings.json`, `llm.toml`                                                           |
 | Keys                         | `keys.env`. It is in plain text, so keep it somewhere safe                            |
+| Saved images and audio       | The entire `media/` directory under the active data root                              |
+
+Restore the database and `media/` together under the new data root before opening Covel. If an earlier copy left media behind, manually copy `media/` from the old root first; files deleted from that root cannot be recovered without a backup.
 
 If you only want to back up the interface settings, use "Export settings" under **Settings → Data**. It gives you a JSON file. API keys are not included by default.
 

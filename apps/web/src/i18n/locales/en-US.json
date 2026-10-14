@@ -606,7 +606,11 @@
     "listNeedsEntry": "Add at least one entry.",
     "numberTooSmall": "Enter {{minimum}} or more.",
     "wholeNumberNeeded": "Enter a whole number.",
-    "fixMarkedFields": "Fix the marked fields before saving."
+    "fixMarkedFields": "Fix the marked fields before saving.",
+    "discardChangesTitle": "Discard unsaved changes?",
+    "discardChangesMessage": "Your world edits have not been saved. Discard them and leave the editor?",
+    "discardChanges": "Discard changes",
+    "keepEditing": "Keep editing"
   },
   "settings": {
     "loadFailedReadOnly": "Settings could not be loaded. Changes are disabled to protect existing data. Fix the storage error and reload the app.",

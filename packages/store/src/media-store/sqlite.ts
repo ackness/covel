@@ -23,7 +23,7 @@ import {
   rm,
   writeFile,
 } from "node:fs/promises";
-import { dirname, join, resolve } from "node:path";
+import { dirname, isAbsolute, join, resolve } from "node:path";
 import { Readable } from "node:stream";
 import { pathToFileURL } from "node:url";
 import { createTables } from "../sqlite/sqlite-store-mappers.js";
@@ -81,6 +81,18 @@ function initializeSqliteMediaStore(
   );
   mkdirSync(mediaRoot, { recursive: true });
 
+  // Stored paths are portable, relative to mediaRoot; old absolute paths are
+  // not part of the current contract and must never touch the previous root.
+  const filePath = (storedPath: string): string => {
+    if (
+      isAbsolute(storedPath) ||
+      !/^[a-f0-9]{2}\/[a-f0-9]{2}\/[a-f0-9]{64}\.bin$/.test(storedPath)
+    ) {
+      throw new Error("Invalid relative media path; recreate development data");
+    }
+    return join(mediaRoot, storedPath);
+  };
+
   const insertAsset = sqlite.prepare(`
     INSERT INTO media_assets (id, sha256, mime, size, path, meta, created_at)
     VALUES (@id, @sha256, @mime, @size, @path, @meta, @createdAt)
@@ -110,7 +122,7 @@ function initializeSqliteMediaStore(
         const row = select.get(id) as { path: string } | undefined;
         removeRefs.run(id);
         remove.run(id);
-        if (row?.path) rmSync(row.path, { force: true });
+        if (row?.path) rmSync(filePath(row.path), { force: true });
       },
       "immediate",
     );
@@ -126,8 +138,8 @@ function initializeSqliteMediaStore(
         if (!row || row.ownerSessionId !== null) return null;
         if (selectAnyRef.get(id)) return null;
         remove.run(id);
-        rmSync(row.path, { force: true });
-        return row.path;
+        rmSync(filePath(row.path), { force: true });
+        return filePath(row.path);
       },
       "immediate",
     );
@@ -238,7 +250,8 @@ function initializeSqliteMediaStore(
         if (existing) {
           // The row survives when the file was deleted or not restored from
           // a backup; writing the same bytes again repairs it.
-          if (!existsSync(existing.path)) publishFileSync(existing.path, bytes);
+          if (!existsSync(filePath(existing.path)))
+            publishFileSync(filePath(existing.path), bytes);
           claim();
           return {
             id: existing.id,
@@ -266,7 +279,7 @@ function initializeSqliteMediaStore(
           sha256: id,
           mime,
           size: bytes.byteLength,
-          path,
+          path: `${id.slice(0, 2)}/${id.slice(2, 4)}/${id}.bin`,
           meta: meta === undefined ? null : JSON.stringify(meta),
           createdAt: new Date().toISOString(),
         });
@@ -299,27 +312,27 @@ function initializeSqliteMediaStore(
       // A row vouches for its file; without one, a file left by an interrupted
       // earlier write is replaced from the caller's verified content as well.
       if (!known) await publishFile(mediaPath(mediaRoot, id), bytes);
-      else if (!(await isReadable(known.path)))
-        await publishFile(known.path, bytes);
+      else if (!(await isReadable(filePath(known.path))))
+        await publishFile(filePath(known.path), bytes);
       return gatedRecord(bytes, id, mime, cleanMeta, initialRef);
     },
 
     async get(ref) {
       const row = select.get(ref.id) as { path: string } | undefined;
       if (!row) throw new Error(`Media asset not found: ${ref.id}`);
-      return new Uint8Array(await readFile(row.path));
+      return new Uint8Array(await readFile(filePath(row.path)));
     },
 
     async exists(id) {
       const row = select.get(id) as { path: string } | undefined;
-      return row !== undefined && existsSync(row.path);
+      return row !== undefined && existsSync(filePath(row.path));
     },
 
     async resolveUrl(ref) {
       if (ref.url) return ref.url;
       const row = select.get(ref.id) as { path: string } | undefined;
       if (!row) throw new Error(`Media asset not found: ${ref.id}`);
-      return pathToFileURL(row.path).toString();
+      return pathToFileURL(filePath(row.path)).toString();
     },
 
     async delete(id) {
@@ -467,7 +480,7 @@ function initializeSqliteMediaStore(
       const row = select.get(ref.id) as { path: string } | undefined;
       if (!row) throw new Error(`Media asset not found: ${ref.id}`);
       // Node 22+ exposes Readable.toWeb; Covel's engines field requires Node ≥ 22.
-      const nodeStream = createReadStream(row.path);
+      const nodeStream = createReadStream(filePath(row.path));
       return Readable.toWeb(nodeStream) as ReadableStream<Uint8Array>;
     },
 

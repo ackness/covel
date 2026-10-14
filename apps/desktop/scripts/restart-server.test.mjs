@@ -80,7 +80,8 @@ test("restart IPC navigates the native window only after the sidecar is ready", 
   const { handlers, navigation, titleBarColors, window } = await import(
     pathToFileURL(fixture).href
   );
-  const event = { senderFrame: { url: "http://127.0.0.1:9479/session" } };
+  const frame = { url: "http://127.0.0.1:9479/session" };
+  const event = { senderFrame: frame, sender: { mainFrame: frame } };
   const setup = (restartServer, isDev = false) => {
     navigation.length = 0;
     window.destroyed = false;
@@ -161,10 +162,43 @@ test("restart IPC navigates the native window only after the sidecar is ready", 
     const restart = setup(async () => {
       calls++;
     });
-    await restart({ senderFrame: { url: "https://untrusted.example" } });
+    await restart({
+      senderFrame: { url: "https://untrusted.example" },
+      sender: event.sender,
+    });
     assert.equal(calls, 0);
     assert.deepEqual(navigation, []);
   });
+
+  await t.test(
+    "sensitive IPC rejects same-origin child and missing frames",
+    async () => {
+      setup(async () => {
+        throw new Error("must not restart");
+      });
+      for (const senderFrame of [{ ...frame }, null]) {
+        const untrusted = { senderFrame, sender: event.sender };
+        assert.deepEqual(await handlers.get("covel:keys:load")(untrusted), {});
+        assert.deepEqual(
+          await handlers.get("covel:keys:save")(untrusted, { key: "secret" }),
+          { ok: false },
+        );
+        assert.equal(await handlers.get("covel:get-info")(untrusted), null);
+        assert.equal(
+          await handlers.get("covel:settings:load")(untrusted),
+          null,
+        );
+        assert.deepEqual(
+          await handlers.get("covel:settings:save")(untrusted, {
+            entries: {},
+            expectedRevision: 0,
+          }),
+          { ok: false },
+        );
+        await handlers.get("covel:restart-server")(untrusted);
+      }
+    },
+  );
 
   await t.test(
     "window button colours come only from the app, as hex",
@@ -173,7 +207,10 @@ test("restart IPC navigates the native window only after the sidecar is ready", 
       const setColors = handlers.get("covel:title-bar:set-colors");
       const colors = { background: "#f2ece3", foreground: "#1c140e" };
       await setColors(
-        { senderFrame: { url: "https://untrusted.example" } },
+        {
+          senderFrame: { url: "https://untrusted.example" },
+          sender: event.sender,
+        },
         colors,
       );
       await setColors(event, { background: "red", foreground: "#1c140e" });
@@ -313,4 +350,80 @@ test("automatic sidecar recovery owns readiness, navigation, and a finite restar
   manuallyStopped = true;
   discoveredPort.resolve(5011);
   await assert.rejects(starting, /shutting down/);
+});
+
+test("startup errors wait for the splash load and are sent once", async (t) => {
+  const root = await mkdtemp(path.join(tmpdir(), "covel-splash-test-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const output = path.join(root, "windows.mjs");
+  await build({
+    entryPoints: [fileURLToPath(new URL("../src/windows.ts", import.meta.url))],
+    outfile: output,
+    bundle: true,
+    platform: "node",
+    format: "esm",
+    plugins: [
+      {
+        name: "window-services",
+        setup(builder) {
+          builder.onResolve(
+            {
+              filter:
+                /^(electron|\.\/(paths|window-state|splash-screen|logging|main-i18n)\.js)$/,
+            },
+            (args) => ({ path: args.path, namespace: "fixture" }),
+          );
+          builder.onLoad({ filter: /.*/, namespace: "fixture" }, () => ({
+            contents: `
+          export const app = {}, BrowserWindow = {}, dialog = {}, Menu = {}, shell = {};
+          export const nativeTheme = { shouldUseDarkColors: false };
+          export const isDev = false;
+          export const resolvePreloadScript = () => "";
+          export const resolveWindowIconPath = () => "";
+          export const attachWindowStateTracking = () => {};
+          export const resolveInitialWindowOptions = () => ({});
+          export const buildSplashHtml = () => "<html>splash</html>";
+          export const writeLog = () => {};
+          export const t = value => value;
+        `,
+          }));
+        },
+      },
+    ],
+  });
+  const { showStartupError } = await import(pathToFileURL(output).href);
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const messages = [];
+  let destroyed = false;
+  let loaded = Promise.withResolvers();
+  const win = {
+    loadURL: () => loaded.promise,
+    isDestroyed: () => destroyed,
+    setTitleBarOverlay() {},
+    webContents: { send: (...args) => messages.push(args) },
+  };
+  const error = {
+    title: "Failed",
+    detail: "Synthetic failure",
+    logs: "stderr",
+  };
+  const pending = showStartupError(win, error);
+  t.mock.timers.tick(500);
+  await Promise.resolve();
+  assert.deepEqual(messages, []);
+  loaded.resolve();
+  await pending;
+  assert.deepEqual(messages, [["covel:startup:error", error]]);
+  loaded = Promise.withResolvers();
+  const closed = showStartupError(win, error);
+  destroyed = true;
+  loaded.resolve();
+  await closed;
+  assert.equal(messages.length, 1);
+  destroyed = false;
+  loaded = Promise.withResolvers();
+  const failed = showStartupError(win, error);
+  loaded.reject(new Error("load failed"));
+  await assert.rejects(failed, /load failed/);
+  assert.equal(messages.length, 1);
 });
