@@ -309,7 +309,9 @@ The output limit is calculated by the shared `resolveLlmTokenLimits`:
 
 Switching to a fallback model:
 
-- An HTTP 429 (rate limit) allows a switch to a configured fallback model. Other 4xx errors keep their original failure path.
+- An HTTP 429 (rate limit) allows a switch to a configured fallback model.
+- An account failure (no balance left, or a key that is wrong or not allowed to use this model; see `quota` / `auth` below) also allows a switch. It belongs only to the account at this provider, so the fallback target may still work. With no fallback model configured, the call fails and the player is told why.
+- Other 4xx errors keep their original failure path.
 - Once streamed content has been output, switching is not allowed. This prevents mixing the results of two models.
 
 ### Which model is recorded when a call fails
@@ -824,7 +826,11 @@ A model API can fail in more ways than an ordinary URL. Keys, balance, model nam
 | `refused`      | The provider refused to answer                                       | Refusal / content filter                                                                                                         |
 | `config`       | The model config cannot make this call                               | A config error, or the address was rejected by an outbound rule                                                                  |
 
-When a connection fails, `error` gives the underlying cause (for example `connect ECONNREFUSED 127.0.0.1:11434`), not a general `fetch failed`. The classification is done by `classifyProviderFailure` in `@covel/ai-provider`.
+When a connection fails, `error` gives the underlying cause (for example `connect ECONNREFUSED 127.0.0.1:11434`), not a general `fetch failed`. The classification is done by `classifyProviderFailure` in `@covel/ai-provider`; the type of the kinds, `ProviderFailureKind`, is in `@covel/shared`.
+
+A 429 counts as an exhausted quota only by its error code, never by its text: OpenAI's ordinary rate-limit message links the billing page too.
+
+`quota` and `auth` are account failures, as `isAccountFailure` in `@covel/shared` decides. Sending the same request to the same provider again only fails the same way, so neither the HTTP layer nor the runtime sends it again; only a fallback model the player configured is tried.
 
 A connection test picks its probe by model type:
 
@@ -870,9 +876,15 @@ A text stream must carry the end marker of its own protocol:
 | `tool_calls`     | The request calls a tool               |
 | `content_filter` | Blocked or refused by the provider     |
 | `error`          | Failed                                 |
-| `other`          | Something else                         |
+| `other`          | A reason the table does not cover      |
 
 The provider's own words (for example Anthropic's `end_turn` / `max_tokens` / `tool_use`) are kept in `rawFinishReason`. There is only one mapping table, `unifyFinishReason` in `@covel/shared`. The gateway applies it at the exit point, and the runtime and world generation read the same table. The approach is the same as the `unified` / `raw` of the AI SDK. A plugin that gets values through `ctx.gateway` also gets the unified values.
+
+**Only `stop` and `tool_calls` mean the answer is finished** (`isCompleteFinishReason` in `@covel/shared`). `other` is not a normal end: the provider did not say why it stopped (for example Anthropic's `pause_turn` or DeepSeek's `insufficient_system_resource`), and the answer may stop anywhere.
+
+- Story: the text already written is kept. `llm.responded` carries `finishReason: other` and `rawFinishReason`, the app says that this part is not finished, and the player can retry the turn. A story cut at the output limit (`length`) is kept too, with a different notice.
+- Every other answer in the runtime (one with tool calls, one that must be JSON, a runtime that does not keep cut text), world generation and the history summary: the call fails. No half result is saved, and the call is not retried on its own.
+- A function plugin gets `other` as it is through `ctx.gateway` and decides for itself. A background output should fail in the same way.
 
 **Diagnostics.** The text and object return values of the four built-in text protocols, and the `done` event of a stream, can carry `diagnostics`. They include the provider's and request's warnings, URL and document sources, and citation positions. The runtime bridge and the LLM trace keep this information.
 
@@ -881,6 +893,8 @@ The provider's own words (for example Anthropic's `end_turn` / `max_tokens` / `t
 - The `PluginRuntimeGateway` for function plugins also passes through `providerOptions` and the full returned diagnostics. On this path, the `gateway.responded` / `gateway.failed` traces keep the existing privacy rule. They record only the warning types, the counts of sources and citations, and the reason for a refusal, as they appear in `diagnosticsSummary`. They do not record citation text, source URLs, titles, or the full text of a refusal.
 
 **Refusals.** A clear refusal or content filter throws a non-retryable `REFUSAL`. The reason for the refusal is kept in `error.details.diagnostics.refusal`. No fallback model is used.
+
+**A failure still records the tokens it used.** A refusal, `finishReason: error`, an error body, or a stream that reaches EOF without its terminal event: when the provider reported usage before the failure, the error carries it (`error.details.usage`). The runtime writes it into the call's `llm.responded`; a call from a function plugin or an extension provider writes it into `gateway.failed`. The debug page counts it in usage and cost. When the provider reported no usage, `usage` is left out rather than written as 0. Low-level transport exceptions that bypass adapter completion checks may still omit earlier usage.
 
 - Even if ordinary text or tool content already exists, an answer that contains a refusal cannot be recorded as a success.
 - Streamed text may already have been delivered, but it will not produce a successful `done`.
@@ -920,6 +934,7 @@ This section describes how one model request retries at the HTTP layer, how long
 This matches the official OpenAI and Anthropic SDKs and the AI SDK:
 
 - Retries 408, 409, 429, and 5xx.
+- A 429 whose error code says the quota is used up (OpenAI's `insufficient_quota`) is not retried: the body is read first, and the answer goes back to the caller with that body unchanged.
 - A `true` / `false` in the `x-should-retry` header from the provider takes priority over the status code.
 - For the wait time, it reads the more precise `retry-after-ms` first (OpenAI, Azure), and then `Retry-After`.
 - `Retry-After` accepts both whole seconds and an HTTP date. A date in the past retries immediately. An invalid value falls back to the backoff policy.
@@ -986,6 +1001,7 @@ assertLlmRequestBudget(config.requestBudget, {
 
 - When a runtime retries the same target, it first reads the structured provider error's `code`, `statusCode`, and `retriable`.
 - A failed config or schema check is not retried. A keyword in an error message cannot overturn a clear "not retryable" decision.
+- An account failure (`quota` / `auth`) is not retried, even when the status is 429.
 - When the gateway organizes errors, it keeps the "retryable" attribute of a known temporary network failure. Only an unknown third-party exception is judged by its message.
 - A cancellation by the caller, or a stream that already has partial output, is still not allowed to retry. A fallback model switch follows its own separate rules.
 

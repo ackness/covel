@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import type { MediaStore } from "@covel/store";
+import type { DataStore, MediaStore } from "@covel/store";
+import { scanSessionMediaIds } from "../../routes/api/media-reference-scan.js";
 import type { PlannedWrite, WorldDataImportedMediaRef } from "./types.js";
 import { isRecord } from "./utils.js";
 
@@ -128,4 +129,47 @@ export async function finalizeWorldDataMediaRefs(options: {
     await options.mediaStore.addRef(ref.id, ref.sessionId, ref.pluginId);
   }
   await releaseWorldDataMediaRefs(options);
+}
+
+/**
+ * Most rows a sync reads to decide which dropped media the session still
+ * names; the same ceiling as the player's media library.
+ */
+const UNREF_SCAN_LIMIT_PER_SESSION = 200_000;
+
+/**
+ * Withdraw the session's references to media a sync dropped from its world
+ * data, except media the session still names anywhere: another index row
+ * (identical bytes share one ID), a message, a snapshot, a runtime output, a
+ * trace or a turn result. A picture the session has shown stays readable by
+ * the session and by its forks. A scan that cannot finish keeps every
+ * reference. Ownership and bytes are left to lifecycle cleanup.
+ */
+export async function releaseUnusedSessionMediaRefs(options: {
+  store: DataStore;
+  mediaStore: MediaStore;
+  sessionId: string;
+  mediaIds: readonly string[];
+}): Promise<void> {
+  let scanned: Awaited<ReturnType<typeof scanSessionMediaIds>>;
+  try {
+    scanned = await scanSessionMediaIds(
+      options.store,
+      options.sessionId,
+      UNREF_SCAN_LIMIT_PER_SESSION,
+    );
+  } catch {
+    // The sync already committed; keeping a reference is the safe outcome.
+    console.warn("[world-data] failed to scan a session's media references");
+    return;
+  }
+  if (!scanned.complete) return;
+  for (const mediaId of new Set(options.mediaIds)) {
+    if (scanned.ids.has(mediaId)) continue;
+    try {
+      await options.mediaStore.removeRef(mediaId, options.sessionId);
+    } catch {
+      // Continue with the remaining references.
+    }
+  }
 }

@@ -46,6 +46,8 @@ export interface UISlotSpec {
   group?: string;
   groupLabel?: unknown;
   groupOrder?: number;
+  /** Explicit top-level navigation destination, independent of its icon. */
+  navTarget?: "images";
   dataSource?: { namespace: string };
   emptyState?: { message: unknown };
   view?: Record<string, unknown>;

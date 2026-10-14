@@ -76,6 +76,7 @@
 
 - 这个请求只用一次。会话恢复、`GameView` 挂载完成后，页面处理请求并把 `panel` 参数从地址里去掉。
 - 在手机上，请求不会被抽屉吞掉：页面等抽屉和异步加载的 UI spec 都准备好，再选中目标面板。
+- “图像”入口只打开顶层声明 `navTarget: "images"` 的右侧 spec，图标不决定导航归属。多个面板声明时，按 `groupOrder` 和加载顺序选择第一个。没有声明的面板仍可手动打开；社区图像插件要在画廊 spec 上添加此字段。加载成功后仍找不到请求的目标（包括指定插件面板），清除请求并提示“当前会话没有这个面板。”；后续 spec 重载不会重放旧请求。加载失败时保留请求，等玩家重试加载。
 - 会话 ID 变了，会话视图整个重建。这样草稿和面板选择不会和上一个会话混在一起。
 - 调试页按地址里的 `sid` 切换数据。从调试页返回会话时，也以当前查看的 ID 为准。
 
@@ -140,8 +141,8 @@ session 建立 → GET /api/ui-specs?sessionId=<id>
 | core-quest                             | core-quest          | scroll-text        | core-quest    | quests             | 任务日志（进行中含 objectives 勾选清单 / 已完成 / 已失败 分组）                                                                                                        |
 | dice-check                             | dice-check-panel    | dices              | （无）        | checks             | 判定记录（倒序回执列表：骰式 / 成败配色 / critical 强调，`alwaysRender`）                                                                                              |
 | inventory                              | inventory           | backpack           | inventory     | items              | 行囊（已装备分组 + 背包列表，数量徽标 + tags pill，`alwaysRender`）                                                                                                    |
-| dashscope-image-gen · openai-image-gen | `<plugin>-gallery`  | image              | image-studio  | images             | 剧情插图画廊（`ImageGallery`，`alwaysRender`）；两个图像插件各一套，组 ID 都是 `image-studio`；它们都提供单提供者扩展点 `media.image-flow@1`，同一会话只能启用其中一个 |
-| dashscope-image-gen · openai-image-gen | `<plugin>-jobs`     | loader             | image-studio  | \_jobs             | 生成任务视图（`ImageJobs`，`alwaysRender`）                                                                                                                            |
+| dashscope-image-gen · openai-image-gen | `<plugin>-gallery`  | image              | image-studio  | images             | 剧情插图画廊（`MediaGallery`，`alwaysRender`）；两个图像插件各一套，组 ID 都是 `image-studio`；它们都提供单提供者扩展点 `media.image-flow@1`，同一会话只能启用其中一个 |
+| dashscope-image-gen · openai-image-gen | `<plugin>-jobs`     | loader             | image-studio  | \_jobs             | 生成任务视图（`JobList`，`alwaysRender`）                                                                                                                              |
 | dashscope-image-gen · openai-image-gen | `<plugin>-trigger`  | wand               | image-studio  | （无）             | “生成图片”manual 触发入口按钮（`expectsBackgroundFollower`，`alwaysRender`）                                                                                           |
 | mimo-tts                               | mimo-tts-audio-tab  | headphones         | tts-studio    | tracks             | 旁白语音 playlist（`AudioPlayer`，`alwaysRender`）                                                                                                                     |
 | living-world-rules                     | living-world-rules  | book-marked        | world-data    | rules              | 世界规则（长期设定 / 禁忌，只读；随 world-data 导入播种，作为 `world-data` 组的子 Tab）                                                                                |
@@ -368,7 +369,7 @@ messages:
 | `npc-graph-panel.json` | 尚未发现角色或势力关系，继续推进故事后会自动出现…… |
 | `world-schema.json`    | 角色属性定义尚未生成，等待世界初始化……             |
 
-**`alwaysRender: true` 是例外。** 有些面板不靠 namespace 数据渲染。例如 `world-overview.json` 的 `WorldDimensions` 直接读会话上下文，`gallery.json` / `jobs.json` 的 `ImageGallery` / `ImageJobs` 自己处理空的情况。这类 spec 在顶层声明 `"alwaysRender": true`；`view.component` 是 `ImageGallery` / `ImageJobs` 时，框架也会自动这样判断（`specUsesComponent`）。它们**可以不写 `emptyState.message`**，因为 `PluginPanel` 根本不会走到空状态这一步。
+**`alwaysRender: true` 是例外。** 有些面板不靠 namespace 数据渲染。例如 `world-overview.json` 的 `WorldDimensions` 直接读会话上下文；`MediaGallery` 和 `JobList` 可以自己处理空列表。这类 spec 在顶层明确声明 `"alwaysRender": true`，框架只读取这个字段，不按组件名自动开启。它们**可以不写 `emptyState.message`**，因为 `PluginPanel` 不会走到空状态这一步。组件属性见 [UI 组件](./ui-components.md#structured-list-props-and-actions)。
 
 **实现位置**：`apps/web/src/components/session/plugin-panel.tsx` 的 `PluginPanel` 组件（`isEmpty` 判断和 `alwaysRender` 短路）。
 
@@ -530,12 +531,13 @@ directive 可以写在组件 props 的任何动态值位置，也可以写在 `o
 
 **合并规则**：
 
-| 字段                                                | 行为                                                                  |
-| --------------------------------------------------- | --------------------------------------------------------------------- |
-| 相同 `group`                                        | 合并为一个外层 Tab（横向子 Tab 切换）                                 |
-| 不同 `group` 或省略                                 | 独立外层 Tab（兜底 key 为 `${pluginId}::${specId}`）                  |
-| `groupLabel` / `shortLabel` / `icon` / `groupOrder` | 冲突时"**首个声明者赢**"，按 `/api/ui-specs` 返回顺序（插件加载顺序） |
-| `groupOrder`                                        | 外层 Tab 在 activity bar 中的排序（数字小的排前，默认 500）           |
+| 字段                                                | 行为                                                                                                    |
+| --------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| 相同 `group`                                        | 合并为一个外层 Tab（横向子 Tab 切换）                                                                   |
+| 不同 `group` 或省略                                 | 独立外层 Tab（兜底 key 为 `${pluginId}::${specId}`）                                                    |
+| `groupLabel` / `shortLabel` / `icon` / `groupOrder` | 冲突时"**首个声明者赢**"，按 `/api/ui-specs` 返回顺序（插件加载顺序）                                   |
+| `groupOrder`                                        | 外层 Tab 在 activity bar 中的排序（数字小的排前，默认 500）                                             |
+| `navTarget`                                         | 可选，仅支持 `"images"`。由每份 spec 单独声明，指定“图像”导航的目标；省略时不参与此导航，仍可手动选择。 |
 
 **命名约定**：跨插件的 group 名字和 CSS 类名是一个道理，作者自己加命名空间前缀来避免冲突，例如 `core.character`、`myorg.combat`。框架不会自动加前缀。
 
@@ -690,7 +692,7 @@ guide 分析叙事 → `generate-guide` 写入 `plugin_data[message]`
 
 **对白名牌。**
 
-- 名牌读当前回合的 `dialogue/current.paragraphSpeakers`。它由 `stage.direction` 明确给出角色 ID，再解析成 `{ characterId, displayName } | null`。
+- 名牌读 `stage.dialogue@1` 的 `paragraphSpeakers`。每项是显示名字符串或 `null`（旁白），不是角色 ID 或对象。提供者负责把自己的数据转成这个形状，见[舞台槽位值](#舞台槽位值)。
 - 同一回合的实时事件可以先预览。旧的已提交映射不会在同一回合重试的流式阶段被复用。
 - 打字机和署名校验共用 `splitStageParagraphs`：CRLF 转成 LF，三个以上的换行算一个空行分隔。正文结束后，分段的数量必须和映射一致。
 - 以下情况不显示人物名牌：旁白、身份未知、旧消息没有映射、回合对不上。演员的焦点不参与署名。
@@ -849,6 +851,77 @@ catalog 里的组件不够用时，插件可以带一份自己的 HTML。JSON sp
 - 提供者负责把 ID 规范化。宿主为每个 `characterId` 发出一份带键的 `character.visual@1` 快照。
 - 前端按完全相同的键来取，不去猜插件 namespace 或 ID 的后缀。
 - 舞台、头像、立绘画廊和在场角色列表都读这些槽位。
+
+### 舞台槽位值
+
+以下是四个舞台槽位的返回值，定义在 `packages/shared/src/extension-points/ui-slot.ts`。每个提供者返回自己声明的 `slot` 对应的对象，不把四个对象打包在一起。没有改动时返回 `previous`，清空槽位时返回 `null`。
+
+四个槽位对象，以及下列演员、`visual` 和选项对象，只接受列出的字段。输出不合法时跳过该提供者，保留前一个有效值，不会因此拒绝整个会话。`I18nText` 是字符串或 locale 到字符串的映射；`MediaRef` 是[媒体库](./media-store.md)返回的引用，不是路径或裸 URL。
+
+#### `stage.backdrop@1`
+
+所有字段都可省略，`{}` 也是合法值。
+
+| 字段      | 类型                 | 必填 | 含义                                                                    |
+| --------- | -------------------- | ---- | ----------------------------------------------------------------------- |
+| `sceneId` | string               | 否   | 场景标识                                                                |
+| `name`    | string               | 否   | HUD 显示的场景名                                                        |
+| `ref`     | MediaRef             | 否   | 当前背景图；缺省时使用[背景回退链](#背景回退链resolvebackdrop)          |
+| `variant` | `"day"` 或 `"night"` | 否   | 昼夜标记。HUD 只有 `night` 显示月亮，其余情况显示太阳；不能写其他枚举值 |
+| `label`   | I18nText             | 否   | HUD 的补充状态文字，不影响背景回退                                      |
+| `preload` | MediaRef[]           | 否   | 提前加载的图片列表；schema 没有条数上限，客户端跳过非 `image/*` 引用    |
+
+#### `stage.cast@1`
+
+值是 `{ actors, retainWhenEmpty }`，两项都必须写。
+
+| 字段              | 类型                       | 必填 | 含义                                                                                  |
+| ----------------- | -------------------------- | ---- | ------------------------------------------------------------------------------------- |
+| `actors`          | 下表对象的数组，最多 64 项 | 是   | 当前舞台上的演员，空数组合法                                                          |
+| `retainWhenEmpty` | boolean                    | 是   | `actors` 为空时，`true` 保留上一组立绘并取消高亮；`false` 清空立绘。schema 没有默认值 |
+
+每位演员：
+
+| 字段          | 类型                                                                          | 必填 | 含义                                         |
+| ------------- | ----------------------------------------------------------------------------- | ---- | -------------------------------------------- |
+| `characterId` | 非空 string                                                                   | 是   | 角色 ID，用同一个 ID 查 `character.visual@1` |
+| `displayName` | 非空 string                                                                   | 是   | 显示名                                       |
+| `type`        | string                                                                        | 否   | 角色类型                                     |
+| `description` | string                                                                        | 否   | 角色说明                                     |
+| `active`      | boolean                                                                       | 否   | 是否高亮；全部省略时高亮第一位未退场演员     |
+| `exiting`     | boolean                                                                       | 否   | 是否处于退场状态                             |
+| `visual`      | `{ variantId?: string, outfit?: string, expression?: string, pose?: string }` | 否   | 请求的立绘变体；四个字段都可省略             |
+| `position`    | `left` / `center-left` / `center` / `center-right` / `right`                  | 否   | 请求的站位                                   |
+| `transition`  | `none` / `fade` / `slide-left` / `slide-right` / `dissolve`                   | 否   | 立绘过渡方式；省略时客户端用 `fade`          |
+
+#### `stage.dialogue@1`
+
+| 字段                | 类型                             | 必填 | 含义                                                                        |
+| ------------------- | -------------------------------- | ---- | --------------------------------------------------------------------------- |
+| `turnId`            | string                           | 否   | 所署名的故事回合。给当前正文署名时应填写它；匹配当前 story 回合时才显示名牌 |
+| `paragraphSpeakers` | `(string \| null)[]`，最多 80 项 | 是   | 逐段的显示名；`null` 表示旁白或不署名                                       |
+
+例如 `{"turnId":"<story-turn-id>","paragraphSpeakers":["Mio",null,"Rin"]}` 表示三段依次由 Mio、旁白、Rin 署名；`turnId` 填当前故事的回合 ID。正文按空行分段，CRLF 先转 LF，三个以上换行折成两个。正文结束时，段落数必须等于数组长度，否则整份映射不显示名牌。实时映射还必须来自当前回合的预览，不能复用重试前的已提交映射。
+
+#### `stage.choices@1`
+
+| 字段       | 类型                       | 必填 | 含义                                                  |
+| ---------- | -------------------------- | ---- | ----------------------------------------------------- |
+| `turnId`   | string                     | 否   | 有值时选项只用于匹配的 story 回合；省略时不按回合限制 |
+| `scene`    | I18nText                   | 否   | 决策面板的场景文字                                    |
+| `recap`    | I18nText                   | 否   | “当前信息”回顾；省略或为空时不显示                    |
+| `decision` | I18nText                   | 否   | 当前要决定的问题                                      |
+| `choices`  | 下表对象的数组，最多 64 项 | 是   | 选项，空数组合法                                      |
+
+每个选项：
+
+| 字段    | 类型        | 必填 | 含义                                                       |
+| ------- | ----------- | ---- | ---------------------------------------------------------- |
+| `id`    | 非空 string | 是   | 选项标识                                                   |
+| `text`  | string      | 是   | 显示并用于玩家消息的文字；客户端去掉首尾空白，跳过空白选项 |
+| `label` | I18nText    | 否   | 补充说明，不替换 `text`                                    |
+
+回合匹配、决策问题的缺省行为与自由输入见[舞台模式](#舞台模式stage-view)。
 
 ### Stage music
 

@@ -730,16 +730,16 @@ The events below are forwarded by the server through the actions SSE stream. The
 - The server's forwarding allowlist, `FORWARDED_EVENT_TYPES`, is **generated** entirely from this metadata. It is not a hand-written set.
 - The web app's actions handler explicitly does nothing with these types. They drive the `/debug` timeline through the subscription channel. Because they are in the union type, when you add a similar event, the frontend's exhaustiveness check forces you to decide whether to handle it or ignore it.
 
-| Event                                                      | Source                                                                                       | Use                                                                              |
-| ---------------------------------------------------------- | -------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| `runtime.skipped`                                          | `apps/server/src/routes/api/actions.ts`                                                      | A runtime was skipped because of cooldown / startTurn / maxTriggerCount          |
-| `character.upserted`                                       | `packages/runtime/src/commit/session-commit-emitter.ts` (`character.upsert` proposal commit) | Character snapshot event                                                         |
-| `tool.calling` / `tool.completed` / `tool.failed`          | TurnEmitter                                                                                  | LLM tool call trace                                                              |
+| Event                                                      | Source                                                                                       | Use                                                                                                                                                        |
+| ---------------------------------------------------------- | -------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `runtime.skipped`                                          | `apps/server/src/routes/api/actions.ts`                                                      | A runtime was skipped because of cooldown / startTurn / maxTriggerCount                                                                                    |
+| `character.upserted`                                       | `packages/runtime/src/commit/session-commit-emitter.ts` (`character.upsert` proposal commit) | Character snapshot event                                                                                                                                   |
+| `tool.calling` / `tool.completed` / `tool.failed`          | TurnEmitter                                                                                  | LLM tool call trace                                                                                                                                        |
 | `domain-event.previewed`                                   | ToolExecutor (after `emittedEvents` succeeds)                                                | Projected server-side into UI slot previews; not consumed directly by the frontend and not a domain commit |
-| `llm.calling` / `llm.responded` / `message.completed`      | TurnEmitter                                                                                  | LLM call trace                                                                   |
-| `block.emitted` / `state.patch.applied`                    | TurnEmitter                                                                                  | Trace of a block emitted / a state patch applied                                 |
-| `hook.fired` / `hook.aborted`                              | TurnEmitter                                                                                  | Hook behavior trace                                                              |
-| `gateway.calling` / `gateway.responded` / `gateway.failed` | TurnEmitter (`withGatewayTrace`)                                                             | Trace of a function-runtime `ctx.gateway` provider call (equivalent to `llm.*`)  |
+| `llm.calling` / `llm.responded` / `message.completed`      | TurnEmitter                                                                                  | LLM call trace                                                                                                                                             |
+| `block.emitted` / `state.patch.applied`                    | TurnEmitter                                                                                  | Trace of a block emitted / a state patch applied                                                                                                           |
+| `hook.fired` / `hook.aborted`                              | TurnEmitter                                                                                  | Hook behavior trace                                                                                                                                        |
+| `gateway.calling` / `gateway.responded` / `gateway.failed` | TurnEmitter (`withGatewayTrace`)                                                             | Trace of a function-runtime or extension-provider `ctx.gateway` provider call (equivalent to `llm.*`); a failure carries the `usage` the provider reported |
 
 `runtime.skipped` is written into the stream by the actions route itself. Its `forwardToActionStream` in the metadata is `false`.
 
@@ -983,6 +983,8 @@ The client shows the approval one stage at a time, and retries the original requ
 A batch of answers in `submit_interaction` can involve several source plugins, and there is no limit on the number of stages. Only when the server-code authorization for every source is complete are the answers validated and saved atomically.
 
 **Framework default actions:** see the "Framework default actions" section in [api.md](./api.md#post-apisessionsidplugin-rpc).
+
+Resuming a suspended runtime also requests each missing grant. The client releases its session queue while asking for approval. Switching sessions or denying approval stops retries and leaves the suspension pending. See the [resume endpoint](./api.md#post-apisessionsidsuspensionssuspensionidresume).
 
 ### RPC Approval
 

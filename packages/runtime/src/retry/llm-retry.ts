@@ -1,4 +1,4 @@
-import { unifyFinishReason } from "@covel/shared";
+import { isCompleteFinishReason, unifyFinishReason } from "@covel/shared";
 import type { LLMProviderContinuation } from "@covel/shared";
 import type { LLMProviderRequest } from "@covel/shared";
 /**
@@ -120,11 +120,13 @@ const TRUNCATION_RETRIES = 1;
 /**
  * The finish reason of a response that may be used, in the kernel's terms.
  *
- * A response cut at the output limit is an error: a cut tool call has broken
- * arguments, and cut JSON is not the runtime's result. The exception is text
- * the caller asked to keep (`keptText`), with no tool call beside it: a story
- * the player has already read as it streamed stays, and the caller is told by
- * `length` that it is not whole.
+ * Only `stop` and `tool_calls` end a whole answer. A response cut at the
+ * output limit (`length`) or ended for a reason the vocabulary does not know
+ * (`other`, such as Anthropic's `pause_turn`) is an error: a cut tool call has
+ * broken arguments, and cut JSON is not the runtime's result. The exception
+ * is text the caller asked to keep (`keptText`), with no tool call beside it:
+ * a story the player has already read as it streamed stays, and the caller is
+ * told by the reason it returns that it is not whole.
  */
 function requireCompleteOutput(
   reason: string,
@@ -135,9 +137,18 @@ function requireCompleteOutput(
   },
 ): LLMResponse["finishReason"] {
   const unified = unifyFinishReason(reason);
+  if (isCompleteFinishReason(unified)) return unified;
+  if (unified === "error") {
+    throw new Error("PROVIDER_ERROR: model generation ended with an error");
+  }
+  if (
+    (unified === "length" || unified === "other") &&
+    keptText?.allowed &&
+    keptText.toolCalls === 0 &&
+    keptText.text?.trim()
+  )
+    return unified;
   if (unified === "length") {
-    if (keptText?.allowed && keptText.toolCalls === 0 && keptText.text?.trim())
-      return "length";
     throw new AiProviderError({
       code: "PROVIDER_ERROR",
       provider: "runtime",
@@ -147,10 +158,14 @@ function requireCompleteOutput(
       details: { finishReason: "length" },
     });
   }
-  if (unified === "error") {
-    throw new Error("PROVIDER_ERROR: model generation ended with an error");
-  }
-  return unified === "tool_calls" ? "tool_calls" : "stop";
+  // `content_filter` only reaches here from an adapter outside the gateway.
+  throw new AiProviderError({
+    code: unified === "content_filter" ? "REFUSAL" : "PROVIDER_ERROR",
+    provider: "runtime",
+    message: `The model stopped before it finished its answer (finish reason: ${reason}). Retry this task or choose another model.`,
+    retriable: false,
+    details: { finishReason: unified, rawFinishReason: reason },
+  });
 }
 
 export interface CallLLMWithRetryParams {
@@ -358,11 +373,14 @@ export async function callLLMWithRetry(
           );
           responseUsage = response.usage;
           throwIfTurnAborted(params.abortSignal);
-          requireCompleteOutput(response.finishReason, {
-            allowed: params.allowTruncatedText,
-            text: response.content,
-            toolCalls: response.toolCalls.length,
-          });
+          requireCompleteOutput(
+            response.rawFinishReason ?? response.finishReason,
+            {
+              allowed: params.allowTruncatedText,
+              text: response.content,
+              toolCalls: response.toolCalls.length,
+            },
+          );
           await trace.ensureCalling();
           await emitLlmRespondedSuccess(params.emitter, {
             runtimeId: params.runtimeId,
@@ -631,8 +649,8 @@ export async function streamLLMWithRetry(
         let providerContinuation: LLMProviderContinuation | undefined;
         let diagnostics: LLMResponse["diagnostics"];
         let streamedUsage: LLMResponse["usage"] | undefined;
-        let streamFinishReason:
-          "stop" | "tool_calls" | "length" | "error" | undefined;
+        let streamFinishReason: LLMResponse["finishReason"] | undefined;
+        let streamRawFinishReason: string | undefined;
         const attemptMessages = perturbMessages(
           messages,
           attempt,
@@ -703,11 +721,15 @@ export async function streamLLMWithRetry(
               await trace.ensureCalling();
               // Before the completeness check: a rejected response was billed too.
               if (event.usage) streamedUsage = event.usage;
-              streamFinishReason = requireCompleteOutput(event.finishReason, {
-                allowed: params.allowTruncatedText,
-                text: streamedContent,
-                toolCalls: streamedToolCalls.length,
-              });
+              streamFinishReason = requireCompleteOutput(
+                event.rawFinishReason ?? event.finishReason,
+                {
+                  allowed: params.allowTruncatedText,
+                  text: streamedContent,
+                  toolCalls: streamedToolCalls.length,
+                },
+              );
+              streamRawFinishReason = event.rawFinishReason;
               if (event.reasoningContent)
                 streamedReasoningContent = event.reasoningContent;
               if (event.providerContinuation)
@@ -737,6 +759,9 @@ export async function streamLLMWithRetry(
             content: streamedContent || null,
             toolCalls: streamedToolCalls,
             finishReason: streamFinishReason,
+            ...(streamRawFinishReason
+              ? { rawFinishReason: streamRawFinishReason }
+              : {}),
             usage: streamedUsage ?? { inputTokens: 0, outputTokens: 0 },
             ...(diagnostics ? { diagnostics } : {}),
             ...(providerContinuation ? { providerContinuation } : {}),
