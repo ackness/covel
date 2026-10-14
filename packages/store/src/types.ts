@@ -151,6 +151,15 @@ import type {
 export interface SessionStore {
   createSession(session: SessionRecord): Promise<void>;
   getSession(id: string): Promise<SessionRecord | null>;
+  /**
+   * Updates the given fields of an existing session; a missing session is
+   * left alone. `metadata` is merged shallowly into the stored object: each
+   * key replaces its value, a key whose value is `undefined` is removed, and
+   * an empty result is stored as no metadata. The merge is atomic on every
+   * backend, so two concurrent updates of different keys both survive. Two
+   * updates of the same key still race (one wins), and a caller that reads
+   * metadata to decide what to write needs the session lock.
+   */
   updateSession(
     id: string,
     patch: Partial<

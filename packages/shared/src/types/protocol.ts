@@ -611,7 +611,13 @@ export interface CursorPage<T> {
 
 /** Read-only recovery state for the latest foreground action. */
 export interface SessionExecutionStatus {
-  readonly state: "idle" | "running" | "completed" | "failed" | "interrupted";
+  /**
+   * `unknown`: the server could not check (its lock pool had no connection
+   * free). A turn may be running; the client checks again later and neither
+   * retries nor finishes anything until it knows.
+   */
+  readonly state:
+    "idle" | "running" | "completed" | "failed" | "interrupted" | "unknown";
   /** A stopped, uncommitted turn remains retryable through the failed state. */
   readonly abortReason?: string;
   readonly turnId?: string;
@@ -632,6 +638,17 @@ export interface SessionExecutionStatus {
       | "retry_runtime";
     readonly payload: Readonly<Record<string, unknown>>;
   };
+}
+
+/**
+ * True while a turn may still be running: the server saw one (`running`) or
+ * could not check (`unknown`). Neither allows a retry, finishing the turn's
+ * steps or dropping its unsaved text.
+ */
+export function executionMayBeRunning(
+  status: SessionExecutionStatus | null | undefined,
+): boolean {
+  return status?.state === "running" || status?.state === "unknown";
 }
 
 export interface SessionSnapshot {

@@ -173,5 +173,15 @@ export function createPgSqlRunner(getDb: () => PgDb): SqlRunner {
     // an INSERT subquery gives simultaneous writers the same snapshot value.
     nextWriteOrderSeq: () => undefined,
     byteOrder: (column) => sql`${column} collate "C"`,
+    mergeJsonObject: (column, set, remove) => {
+      const kept = sql.join(
+        [
+          sql`coalesce(${column}, '{}'::jsonb)`,
+          ...remove.map((key) => sql`${key}::text`),
+        ],
+        sql` - `,
+      );
+      return sql`nullif((${kept}) || ${JSON.stringify(set)}::jsonb, '{}'::jsonb)`;
+    },
   };
 }

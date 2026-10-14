@@ -824,7 +824,7 @@ When restoring an existing session, if the recent window does not overlap the me
 
 | Field         | Description                                                            |
 | ------------- | ---------------------------------------------------------------------- |
-| `state`       | `idle`, `running`, `completed`, `failed`, or `interrupted`             |
+| `state`       | `idle`, `running`, `completed`, `failed`, `interrupted`, or `unknown`  |
 | `turnId`      | Optional                                                               |
 | `requestId`   | Optional                                                               |
 | `startedAt`   | Optional                                                               |
@@ -832,7 +832,12 @@ When restoring an existing session, if the recent window does not overlap the me
 | `abortReason` | Optional                                                               |
 | `retry`       | Optional, `{ type, payload }`. Used when the player explicitly retries |
 
-This endpoint does not wait for the lock of a long turn. On PostgreSQL it checks with a non-blocking advisory lock. If another process still holds the lock, or a connection cannot be obtained for the moment, it conservatively returns `running`. In that case there may be no turn identifier.
+This endpoint does not wait for the lock of a long turn. On PostgreSQL it checks with a non-blocking advisory lock:
+
+- If another process still holds the lock, it returns `running`. In that case there may be no turn identifier.
+- If the lock connection pool cannot hand out a connection within a short wait (200 ms), it returns `unknown`. The server could not check and does not know whether a turn is running; it never reports `idle` because it found no records.
+
+The client treats `unknown` as a turn that may still be running: it offers no retry, does not move unsaved text away, and does not mark steps as finished. It checks again after a delay that grows each time. After five `unknown` answers in a row it stops checking on its own and asks the player to choose "Check status".
 
 #### Session replaced during the query
 
