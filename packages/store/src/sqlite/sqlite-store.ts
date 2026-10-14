@@ -67,7 +67,13 @@ export function createSqliteStore(
 
   const db = drizzleNodeSqlite(sqlite, schema);
 
-  createTables(sqlite);
+  try {
+    // Refuses a file written with another data schema before any DDL.
+    createTables(sqlite);
+  } catch (error) {
+    releaseSqliteConnection(sqlite);
+    throw error;
+  }
 
   // Attempt to load sqlite-vec. If the optional binary is missing, vector
   // methods are simply absent from the returned store and supportsVector()

@@ -651,10 +651,14 @@ async function productionStartup(
       void clearStaleOriginStorage(serverPort);
     } catch (err) {
       if (quitting) return;
-      const diag = diagnoseStartupError(err);
+      const logs = serverStderrLines.slice(-80).join("\n");
+      const diag = diagnoseStartupError(err, {
+        logs,
+        dataRoot: paths.dataRoot,
+        configTomlPath: paths.configTomlPath,
+      });
       writeLog("error", `Startup failed: ${diag.title}: ${diag.detail}`);
 
-      const logs = serverStderrLines.slice(-80).join("\n");
       // Reset splash back if we already navigated
       loadSplashInto(win);
       // Wait a tick for the splash to mount before sending the error

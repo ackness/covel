@@ -69,6 +69,12 @@ Covel is still in an early stage. Versions can have changes that are not compati
 2. Make a full backup using the method above.
 3. If the changelog says the old database cannot be used any more, create a new save after upgrading. Keep the old backup, so you can go back to the old version.
 
+When Covel starts, it checks which version wrote the save database. When this version cannot open it, the startup screen shows "Data from another Covel version", and Covel leaves the database unchanged. Then:
+
+1. Quit Covel and back up the data directory.
+2. As in [Moving the Data to Another Disk](#moving-the-data-to-another-disk) above, set `data_root` in `config.toml` to a new, empty directory.
+3. Start Covel again; it starts from the empty directory. To keep playing the old saves, go back to the version that wrote them.
+
 When the desktop app starts, it checks whether a new stable version is available. If there is one, a notice appears, and you can choose "Open download page" or "Ignore this version". It does not download or install anything automatically.
 
 ## Logs

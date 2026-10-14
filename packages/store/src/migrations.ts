@@ -7,6 +7,15 @@ import {
 
 export { BROWSER_IDB_DATABASE_NAME };
 
+/**
+ * Version of the SQL data schema (SQLite and PostgreSQL share it). Each boot
+ * records it in the database (SQLite `PRAGMA user_version`, PostgreSQL
+ * `covel_schema_meta`) and refuses a database recorded with another one. Raise
+ * it whenever a column changes in a way an existing database cannot follow;
+ * `tests/schema-version.test.ts` fails when the table shapes change without it.
+ */
+export const DATA_SCHEMA_VERSION = 4;
+
 export type StorageMigrationDomain = "data" | "media" | "vector" | "browser";
 export type StorageMigrationStatus =
   "current" | "managed-by-backend" | "manual-required" | "not-applicable";
@@ -34,19 +43,19 @@ const REGISTRY: readonly StorageMigrationSummary[] = [
     id: "data:sqlite:schema",
     domain: "data",
     backend: "sqlite",
-    version: 4,
+    version: DATA_SCHEMA_VERSION,
     status: "managed-by-backend",
     description:
-      "SQLite creates the current data schema directly; development builds do not upgrade prior schemas.",
+      "SQLite creates the current data schema directly and records its version in PRAGMA user_version; a database written with another version is refused, not upgraded.",
   },
   {
     id: "data:pg:schema",
     domain: "data",
     backend: "pg",
-    version: 4,
+    version: DATA_SCHEMA_VERSION,
     status: "managed-by-backend",
     description:
-      "PostgreSQL creates the current data schema directly; development builds do not upgrade prior schemas.",
+      "PostgreSQL creates the current data schema directly and records its version in covel_schema_meta; a database written with another version is refused, not upgraded.",
   },
   {
     id: "media:idb:store",
