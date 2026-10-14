@@ -3,6 +3,9 @@
  * Fix for 2026-04-12 audit Finding w2.
  */
 
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { describe, it, expect, beforeEach } from "vitest";
 import { type DataStore } from "@covel/store";
 import { createMemoryStore } from "@covel/store/memory";
@@ -11,7 +14,6 @@ import {
   type PluginRegistry,
   type PluginRegistryEntry,
   type PluginSummary,
-  type LoadedRuntime,
   type ParsedPluginMd,
 } from "@covel/plugin-loader";
 import type { Hono } from "hono";
@@ -34,22 +36,12 @@ function makeSummary(overrides: Partial<PluginSummary> = {}): PluginSummary {
   };
 }
 
-function makeLoadedRuntime(args: {
-  name: string;
-  pluginId: string;
-  uiSpecs?: unknown;
-}): LoadedRuntime {
-  return {
-    manifest: {
-      name: args.name,
-      pluginId: args.pluginId,
-      stage: "narrative",
-      trigger: { type: "auto" },
-    },
-    promptTemplate: "",
-    rawFrontmatter: {},
-    uiSpecs: args.uiSpecs,
-  } as unknown as LoadedRuntime;
+/** A plugin root whose `ui/panel.json` holds the spec. */
+function pluginRoot(spec: unknown): string {
+  const root = mkdtempSync(path.join(tmpdir(), "covel-ui-session-"));
+  mkdirSync(path.join(root, "ui"));
+  writeFileSync(path.join(root, "ui", "panel.json"), JSON.stringify(spec));
+  return root;
 }
 
 function makeEntry(
@@ -100,20 +92,11 @@ describe("GET /api/ui-specs session-aware filter", () => {
           name: "Codex",
           pluginType: "core-plugin",
         }),
-        loadedRuntimes: new Map([
-          [
-            "codex",
-            makeLoadedRuntime({
-              name: "codex",
-              pluginId: "codex",
-              uiSpecs: {
-                right: [
-                  { id: "codex", label: "Codex", view: { component: "Stack" } },
-                ],
-              },
-            }),
-          ],
-        ]),
+        rootPath: pluginRoot({
+          id: "codex",
+          label: "Codex",
+          view: { component: "Stack" },
+        }),
         packageManifest: makeManifest("codex", "codex"),
         manifests: [],
       }),
@@ -126,20 +109,11 @@ describe("GET /api/ui-specs session-aware filter", () => {
           name: "Optional",
           pluginType: "plugin",
         }),
-        loadedRuntimes: new Map([
-          [
-            "optional-plugin",
-            makeLoadedRuntime({
-              name: "optional-plugin",
-              pluginId: "optional-plugin",
-              uiSpecs: {
-                right: [
-                  { id: "opt", label: "Opt", view: { component: "Stack" } },
-                ],
-              },
-            }),
-          ],
-        ]),
+        rootPath: pluginRoot({
+          id: "opt",
+          label: "Opt",
+          view: { component: "Stack" },
+        }),
         packageManifest: makeManifest("optional-plugin", "optional-plugin"),
         manifests: [],
       }),
