@@ -116,6 +116,35 @@ beforeEach(async () => {
   };
   mocks.fetchSpecs.mockReset().mockImplementation(async () => mocks.specs);
 });
+it.each(["shared", "chat-mode"])(
+  "uses plugin names for providers in the %s group",
+  async (group) => {
+    mocks.plugins = [
+      { ...plugin("provider-a"), displayName: { en: "First provider" } },
+      { ...plugin("provider-b"), displayName: { en: "Second provider" } },
+    ];
+    mocks.specs.right = mocks.specs.right.map((entry) => ({
+      ...entry,
+      specs: entry.specs.map((panel) => ({
+        ...panel,
+        group,
+        shortLabel: "Panel",
+      })),
+    }));
+    render(
+      <RightPanel sessionId="provider-labels" world={null} statePatches={[]} />,
+    );
+    fireEvent.keyDown(
+      await screen.findByRole("tab", { name: "Shared panels" }),
+      { key: "Enter" },
+    );
+    expect(
+      await screen.findByRole("button", { name: "First provider" }),
+    ).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Second provider" }));
+    expect(await screen.findByText("Mounted panel: provider-b")).toBeTruthy();
+  },
+);
 it("keeps shared panel selection stable across provider changes and resets across sessions", async () => {
   const props = { sessionId: "session-a", world: null, statePatches: [] };
   const view = render(<RightPanel {...props} />);

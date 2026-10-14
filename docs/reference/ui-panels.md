@@ -539,6 +539,8 @@ directive 可以写在组件 props 的任何动态值位置，也可以写在 `o
 
 **命名约定**：跨插件的 group 名字和 CSS 类名是一个道理，作者自己加命名空间前缀来避免冲突，例如 `core.character`、`myorg.combat`。框架不会自动加前缀。
 
+多个插件共用一个组时，提供者切换按钮显示插件的本地化 `displayName`；没有名字时显示插件 ID。所有组名都遵循这条规则，面板的 `label` / `shortLabel` 不改变提供者名字。
+
 **实现位置**：`apps/web/src/lib/plugin-panel-tabs.ts` 的 `aggregateSpecsIntoGroups()`。它是纯函数，可以单独测试（见 Playwright smoke test）。
 
 ### 排序

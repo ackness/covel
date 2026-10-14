@@ -76,6 +76,13 @@ export function WorldRevisePanel({ world, onRevised }: WorldRevisePanelProps) {
   const working =
     phase === "generating" || phase === "validating" || phase === "saving";
 
+  const cancel = useCallback(() => {
+    runRef.current += 1;
+    abortRef.current?.abort();
+    abortRef.current = null;
+    setPhase("idle");
+  }, []);
+
   const revise = useCallback(() => {
     const request = instruction.trim();
     if (!request || working) return;
@@ -166,7 +173,12 @@ export function WorldRevisePanel({ world, onRevised }: WorldRevisePanelProps) {
         aria-label={t("world.reviseRequest", "What to change")}
         className="w-full resize-y rounded-(--radius-control) border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary disabled:opacity-60"
       />
-      <div className="flex justify-end">
+      <div className="flex justify-end gap-2">
+        {working && (
+          <Button size="sm" variant="ghost" onClick={cancel}>
+            {t("common.cancel")}
+          </Button>
+        )}
         <Button
           size="sm"
           disabled={working || !instruction.trim()}
