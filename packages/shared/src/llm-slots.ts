@@ -1,12 +1,10 @@
 /**
  * Process-wide LLM call concurrency gate.
  *
- * A turn's post-turn stage can fan out many agent runtimes at once; firing
- * all their LLM calls concurrently congests slower providers/proxies until
- * every call times out. This FIFO counting semaphore caps in-flight LLM
- * attempts; queued callers report their wait time so the retry loops can
- * extend the runtime deadline by it (queue time is the framework's doing,
- * not the runtime's budget).
+ * Gateway text, object, stream and evaluation attempts share this FIFO
+ * semaphore across every caller and gateway instance. Agent retry timers
+ * pause while queued; their logical request budget still bounds the wait.
+ * Functions retain their fixed runtime deadline.
  *
  * Cap resolution: COVEL_LLM_MAX_CONCURRENT env (0 or negative disables the
  * gate) → default 4.
@@ -43,10 +41,18 @@ function releaseSlot(): void {
   }
 }
 
-export async function acquireLLMSlot(signal?: AbortSignal): Promise<LLMSlot> {
+/** Pause caller-owned attempt timers only while admission is queued. */
+export type LLMQueueStart = () => (waitedMs: number) => void;
+
+export async function acquireLLMSlot(
+  signal?: AbortSignal,
+  onQueueStart?: LLMQueueStart,
+): Promise<LLMSlot> {
   signal?.throwIfAborted();
   const start = Date.now();
   if (active >= resolveCap() || waiters.length > 0) {
+    const onAcquired = onQueueStart?.();
+    signal?.throwIfAborted();
     await new Promise<void>((resolve, reject) => {
       const onAbort = (): void => {
         const index = waiters.indexOf(waiter);
@@ -67,6 +73,12 @@ export async function acquireLLMSlot(signal?: AbortSignal): Promise<LLMSlot> {
     if (signal?.aborted) {
       releaseSlot();
       signal.throwIfAborted();
+    }
+    try {
+      onAcquired?.(Date.now() - start);
+    } catch (error) {
+      releaseSlot();
+      throw error;
     }
   } else {
     active++;

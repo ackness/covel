@@ -35,6 +35,7 @@ export {
 export * from "./types/index.js";
 export * from "./types/llm-diagnostics.js";
 export * from "./llm-request-budget.js";
+export * from "./llm-slots.js";
 export {
   isCompleteFinishReason,
   unifyFinishReason,

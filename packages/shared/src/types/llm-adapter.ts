@@ -1,3 +1,4 @@
+import type { LLMQueueStart } from "../llm-slots.js";
 import type { LLMProviderRequest } from "./llm-provider-request.js";
 import type { LLMDiagnostics } from "./llm-diagnostics.js";
 import type { LLMRequestBudget } from "../llm-request-budget.js";
@@ -210,6 +211,8 @@ export interface LLMAdapter {
    */
   generate(params: {
     readonly requestBudget?: LLMRequestBudget;
+    /** Called only while waiting for process-wide text admission. */
+    readonly onQueueStart?: LLMQueueStart;
     readonly model?: string;
     readonly messages: readonly LLMMessage[];
     readonly tools?: readonly LLMToolDefinition[];
@@ -247,6 +250,8 @@ export interface LLMAdapter {
    */
   stream?(params: {
     readonly requestBudget?: LLMRequestBudget;
+    /** Called only while waiting for process-wide text admission. */
+    readonly onQueueStart?: LLMQueueStart;
     readonly responseFormat?: LLMResponseFormat;
     readonly model?: string;
     readonly messages: readonly LLMMessage[];

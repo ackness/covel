@@ -8,7 +8,7 @@ export const FEATURE_ENV_VARS = [
     status: "active",
     defaultValue: "4",
     description:
-      "Process-wide maximum concurrent LLM calls. Zero or a negative value disables the gate.",
+      "Process-wide maximum concurrent text model calls. Zero or a negative value disables the gate.",
   },
   {
     name: "COVEL_EFFECTS_POLICY",

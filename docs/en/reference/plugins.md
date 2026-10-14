@@ -376,6 +376,7 @@ The budget decides how many retries can actually be used:
 - If there is not enough time left for a second attempt (60 seconds or less remain), the call is sent only once, and `function.timeoutMs` ends it.
 - A request that the provider rejects is still handled by the gateway's transport retries and fallback models. It is not sent again here.
 - A handler whose single call really needs more time should raise `function.timeoutMs`.
+- The host creates a request budget from the remaining time when each logical call starts. HTTP retries, fallback models, and a stalled-call resend share 8 transport attempts. The gateway default of 120 seconds adds no extra ceiling, and the budget cannot extend the runtime deadline.
 
 ### Inputs and outputs
 
