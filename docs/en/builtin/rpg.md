@@ -125,7 +125,7 @@ When the story clearly gives a commission or an objective, it is logged as a que
 
 ### What you will see
 
-- A "Quest Log" panel on the right. You can search it, or filter by "All", "Active", "Completed" and "Failed". Each quest shows its objective, the person who gave it, and the reward.
+- A "Quest Log" panel on the right. You can search it, or filter by "All", "Active", "Completed" and "Failed". Each quest shows its objective, the person who gave it, and the reward. Status badges use the same localized names as the filter tabs.
 - In a turn where a quest changes, a "Quest Log" block appears in the story text, marked "New", "Progress", "Completed" or "Failed". If nothing changed, it shows "No quest changes this turn."
 - The session summary also includes a short overview of the quests.
 
@@ -263,6 +263,8 @@ Turning it on adds model calls. The worlds `lantern-barrow`, `emberback` and `mi
 | Hidden story events | `data/hidden/story-events.yaml` | Each event has a trigger condition `when` and a short hint for the narrative, `payload` |
 
 This data must be imported as hidden data, or players could see it. A condition can check dimensions, world time, whether another event has happened, or the turn number. You can combine them with `all`, `any` and `not`. Write `payload` as a short hint for the narrative, not as finished text. Do not reveal later events in it. For how to import data, see [World data](../reference/world-data.md).
+
+A misspelled dimension ID or path inside a dimension in a condition means the event never fires. `pnpm validate:world` reports them as `dimension-reference` errors.
 
 ## Overview of when they are on
 

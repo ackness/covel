@@ -16,6 +16,7 @@
  *   7. Embedding length mismatch throws
  *   8. session without a locked model returns empty results
  *   9. getVectorPayloads reads stored payloads by key within one namespace
+ *  10. resetSessionVectorIndex drops one session's index and relocks it
  *
  * Note: The old "multiple dimensions coexist" test is removed because
  * Phase 1 locks each session to a single embedding model, so mixing
@@ -976,6 +977,204 @@ export function runVectorStoreContractTests(
       const ids = new Set(models.map((m) => m.modelId));
       expect(ids.has(identityX.modelId)).toBe(true);
       expect(ids.has("ollama/nomic-embed-text")).toBe(true);
+    });
+
+    // ── Moving a session to another embedding model ─────────────
+
+    it("resets a session's index to another model without touching other sessions", async () => {
+      const oldTarget = await setupSessionWithModel(store, "s-reset", 4);
+      await setupSessionWithModel(store, "s-other", 4);
+      const session = (await store.getSession("s-reset"))!;
+      const scope = {
+        sessionId: "s-reset",
+        pluginId: "owner",
+        namespace: "progress",
+      };
+      for (const sessionId of ["s-reset", "s-other"]) {
+        await store.upsertVector({
+          sessionId,
+          pluginId: "owner",
+          namespace: "chunks",
+          key: "k",
+          embedding: seededVector(4, 1),
+          payload: sessionId,
+        });
+      }
+      expect(
+        await store.commitVectorIndexBatch({
+          ...scope,
+          value: "cursor",
+          expectedValue: null,
+          expectedSessionCreatedAt: session.createdAt,
+        }),
+      ).toBe(true);
+      const newTarget = await store.ensureVectorModel({
+        provider: "other",
+        modelName: "wide",
+        dim: 6,
+        modelId: "other/wide",
+      });
+
+      await expect(
+        store.resetSessionVectorIndex({
+          sessionId: "s-reset",
+          expectedSessionCreatedAt: session.createdAt,
+          expectedModelRegistryId: oldTarget.modelRegistryId,
+          target: newTarget,
+        }),
+      ).resolves.toBe(true);
+
+      await expect(
+        store.resolveSessionVectorTarget("s-reset"),
+      ).resolves.toEqual(newTarget);
+      expect(await store.getVectorIndexProgress(scope)).toBeNull();
+      await expect(
+        store.searchVectors({
+          sessionId: "s-reset",
+          query: seededVector(6, 1),
+        }),
+      ).resolves.toEqual([]);
+      await store.upsertVector({
+        sessionId: "s-reset",
+        pluginId: "owner",
+        namespace: "chunks",
+        key: "k",
+        embedding: seededVector(6, 2),
+        payload: "new model",
+      });
+      expect(
+        (
+          await store.searchVectors({
+            sessionId: "s-reset",
+            query: seededVector(6, 2),
+          })
+        ).map((row) => row.payload),
+      ).toEqual(["new model"]);
+      // The old model's table still serves the session that keeps it.
+      expect(
+        (
+          await store.searchVectors({
+            sessionId: "s-other",
+            query: seededVector(4, 1),
+          })
+        ).map((row) => row.payload),
+      ).toEqual(["s-other"]);
+    });
+
+    it("refuses a reset planned against another lock or incarnation", async () => {
+      const target = await setupSessionWithModel(store, "s-cas", 4);
+      const session = (await store.getSession("s-cas"))!;
+      await store.upsertVector({
+        sessionId: "s-cas",
+        pluginId: "owner",
+        namespace: "chunks",
+        key: "k",
+        embedding: seededVector(4, 3),
+      });
+      const other = await store.ensureVectorModel({
+        provider: "other",
+        modelName: "narrow",
+        dim: 4,
+        modelId: "other/narrow",
+      });
+      await expect(
+        store.resetSessionVectorIndex({
+          sessionId: "s-cas",
+          expectedSessionCreatedAt: session.createdAt,
+          expectedModelRegistryId: null,
+          target: other,
+        }),
+      ).resolves.toBe(false);
+      await expect(
+        store.resetSessionVectorIndex({
+          sessionId: "s-cas",
+          expectedSessionCreatedAt: "2030-01-01T00:00:00.000Z",
+          expectedModelRegistryId: target.modelRegistryId,
+          target: other,
+        }),
+      ).rejects.toThrow("incarnation changed");
+      await expect(store.resolveSessionVectorTarget("s-cas")).resolves.toEqual(
+        target,
+      );
+      await expect(
+        store.searchVectors({ sessionId: "s-cas", query: seededVector(4, 3) }),
+      ).resolves.toHaveLength(1);
+    });
+
+    it("clears the lock when reset without a model, and the session can lock again", async () => {
+      const target = await setupSessionWithModel(store, "s-clear", 4);
+      const session = (await store.getSession("s-clear"))!;
+      await store.upsertVector({
+        sessionId: "s-clear",
+        pluginId: "owner",
+        namespace: "chunks",
+        key: "k",
+        embedding: seededVector(4, 4),
+      });
+      await expect(
+        store.resetSessionVectorIndex({
+          sessionId: "s-clear",
+          expectedSessionCreatedAt: session.createdAt,
+          expectedModelRegistryId: target.modelRegistryId,
+          target: null,
+        }),
+      ).resolves.toBe(true);
+      await expect(
+        store.resolveSessionVectorTarget("s-clear"),
+      ).resolves.toBeNull();
+      await store.lockSessionEmbeddingModel("s-clear", target);
+      // The rows of the old index are gone even under the same model.
+      await expect(
+        store.searchVectors({
+          sessionId: "s-clear",
+          query: seededVector(4, 4),
+        }),
+      ).resolves.toEqual([]);
+    });
+
+    it("rejects an index batch embedded with the model the index was reset away from", async () => {
+      const oldTarget = await setupSessionWithModel(store, "s-stale", 4);
+      const session = (await store.getSession("s-stale"))!;
+      const newTarget = await store.ensureVectorModel({
+        provider: "other",
+        modelName: "same-dim",
+        dim: 4,
+        modelId: "other/same-dim",
+      });
+      await store.resetSessionVectorIndex({
+        sessionId: "s-stale",
+        expectedSessionCreatedAt: session.createdAt,
+        expectedModelRegistryId: oldTarget.modelRegistryId,
+        target: newTarget,
+      });
+      const scope = {
+        sessionId: "s-stale",
+        pluginId: "owner",
+        namespace: "progress",
+      };
+      await expect(
+        store.commitVectorIndexBatch({
+          ...scope,
+          value: "late",
+          expectedValue: null,
+          expectedSessionCreatedAt: session.createdAt,
+          expectedModelRegistryId: oldTarget.modelRegistryId,
+          upserts: [
+            {
+              namespace: "chunks",
+              key: "k",
+              embedding: seededVector(4, 5),
+            },
+          ],
+        }),
+      ).rejects.toThrow("embedding model changed");
+      expect(await store.getVectorIndexProgress(scope)).toBeNull();
+      await expect(
+        store.searchVectors({
+          sessionId: "s-stale",
+          query: seededVector(4, 5),
+        }),
+      ).resolves.toEqual([]);
     });
   });
 }

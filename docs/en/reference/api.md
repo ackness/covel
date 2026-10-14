@@ -93,7 +93,7 @@ Details for the PostgreSQL column:
 
 - **Event delivery**: if `LISTEN/NOTIFY` fails to start, the server refuses to start. It does not quietly fall back to broadcasting inside the process.
 - **`steer` / `abort`**: the request must reach the instance that is running that turn. If it reaches another instance, it returns `409`, even when the database shows the turn as running.
-- **Background jobs**: this includes detached stages, and runtimes that run in the background when triggered manually or by an event. Tasks in `claimed` / `running` / `committing` whose lease has expired are marked `orphaned`. Their effects, which already went out, are not replayed automatically.
+- **Background jobs**: this includes detached stages, and runtimes that run in the background when triggered manually or by an event. When an instance shuts down normally, tasks it has not committed go back to the queue and the next worker runs them again. When an instance crashes, tasks in `claimed` / `running` / `committing` whose lease has expired are marked `orphaned`. Their effects, which already went out, are not replayed automatically.
 
 So a deployment that must control the current turn reliably should use a single instance. Or it must make sure that an action and its `steer` / `abort` requests are routed to the same instance. When an instance exits, its execution handle in memory cannot move elsewhere. The database is shared, but that does not mean another instance can take over a turn that is running.
 
@@ -534,9 +534,10 @@ This section lists every endpoint by topic. After each table come the rules that
 | DELETE | `/api/worlds/:id`                       | Delete a world and all of its sessions. The rules are below                                             |
 | GET    | `/api/worlds/:id/dimensions/export`     | Export the world's dimensions (YAML / JSON)                                                             |
 | POST   | `/api/worlds/:id/dimensions/import`     | Import the world's dimensions                                                                           |
-| POST   | `/api/worlds/:id/sync-dimensions`       | Sync the world's dimensions to active sessions                                                          |
+| POST   | `/api/worlds/:id/restore-package`       | Put an edited package world back to the version in its world package                                    |
+| POST   | `/api/worlds/:id/sync-dimensions`       | Authors and tools: sync world dimensions to one specified active session                                |
 | POST   | `/api/worlds/:id/world-data/preflight`  | Dry-run a worldData import, read-only                                                                   |
-| POST   | `/api/worlds/:id/sync-data`             | Sync the worldData rows that the importer manages. Supports dry-run and force                           |
+| POST   | `/api/worlds/:id/sync-data`             | Authors and tools: sync importer-managed worldData rows; dry-run by default                             |
 | POST   | `/api/worlds/:id/translate`             | Use the configured model to add one language version to a world package in the user worlds folder (SSE) |
 | GET    | `/api/worlds/:id/gallery`               | List the images that come with the world package (scenes, portraits)                                    |
 | GET    | `/api/media/library`                    | The player's media library (`self` / desktop app only)                                                  |
@@ -545,7 +546,7 @@ This section lists every endpoint by topic. After each table come the rules that
 
 A few more notes:
 
-- `POST /api/worlds/:id/sync-dimensions` writes the dimensions into the `plugin_data` and lorebook constant entries of active sessions, and removes old keys.
+- `POST /api/worlds/:id/sync-dimensions` handles only the specified session's protected `_dimensions` records and import ledger. It does not write the lorebook. See the endpoint details below.
 - `POST /api/worlds/:id/world-data/preflight` builds the import plan for worldData but does not write it. It returns the diagnostics, the number of planned writes, and a summary of the targets.
 - `POST /api/worlds/:id/sync-data` uses the provenance ledger to decide which rows the importer manages.
 - `GET /api/worlds/:id/gallery` lets the world list and world details show images even when no session exists yet.
@@ -592,13 +593,15 @@ Cascade delete is not one database transaction that covers all sessions:
 
 ### Session management
 
-| Method | Path                | Description                                                |
-| ------ | ------------------- | ---------------------------------------------------------- |
-| GET    | `/api/sessions`     | List all sessions (optional `?worldId=` filter)            |
-| POST   | `/api/sessions`     | Create a new session                                       |
-| GET    | `/api/sessions/:id` | Get session information                                    |
-| PATCH  | `/api/sessions/:id` | Update session fields (`status` / `runtimeModelOverrides`) |
-| DELETE | `/api/sessions/:id` | Delete a session                                           |
+| Method | Path                                     | Description                                                              |
+| ------ | ---------------------------------------- | ------------------------------------------------------------------------ |
+| GET    | `/api/sessions`                          | List all sessions (optional `?worldId=` filter)                          |
+| POST   | `/api/sessions`                          | Create a new session                                                     |
+| GET    | `/api/sessions/:id`                      | Get session information                                                  |
+| PATCH  | `/api/sessions/:id`                      | Update session fields (`status` / `runtimeModelOverrides`)               |
+| DELETE | `/api/sessions/:id`                      | Delete a session                                                         |
+| GET    | `/api/sessions/:id/memory-index`         | The vector model of the memory index, and whether it is still configured |
+| POST   | `/api/sessions/:id/memory-index/rebuild` | Rebuild the memory index with the configured vector model                |
 
 #### Session identity `incarnation`
 
@@ -800,6 +803,7 @@ A few things to know about `GET /api/sessions/:id/view`:
 - **Paging backward.** The view carries an opaque `messagesCursor`. When the front end scrolls up, it passes this value unchanged as `?cursor=` to `GET /api/sessions/:id/messages/page`.
 - **Older turns outside the window** do not render an execution timeline.
 - **Session clock.** The session object embedded in the view carries the same required clock fields as the session API: `phase`, `completedPlayerTurns`, and `setupRuntimes`. Restore and reconnect judge progress only from these fields.
+- **Event cursor.** `eventCursor` is the session's newest subscription event id (`${epoch}:${seq}`) before the view was read. The first subscription uses it to join the view; see [the subscription stream](./protocol.md).
 
 The view's `submittedInteractions` lists the interactions the player has already answered. Its shape is `{ turnId, interactionId, values }[]`. `values` are the values the server saved.
 
@@ -822,7 +826,7 @@ When restoring an existing session, if the recent window does not overlap the me
 
 | Field         | Description                                                            |
 | ------------- | ---------------------------------------------------------------------- |
-| `state`       | `idle`, `running`, `completed`, `failed`, or `interrupted`             |
+| `state`       | `idle`, `running`, `completed`, `failed`, `interrupted`, or `unknown`  |
 | `turnId`      | Optional                                                               |
 | `requestId`   | Optional                                                               |
 | `startedAt`   | Optional                                                               |
@@ -830,7 +834,12 @@ When restoring an existing session, if the recent window does not overlap the me
 | `abortReason` | Optional                                                               |
 | `retry`       | Optional, `{ type, payload }`. Used when the player explicitly retries |
 
-This endpoint does not wait for the lock of a long turn. On PostgreSQL it checks with a non-blocking advisory lock. If another process still holds the lock, or a connection cannot be obtained for the moment, it conservatively returns `running`. In that case there may be no turn identifier.
+This endpoint does not wait for the lock of a long turn. On PostgreSQL it checks with a non-blocking advisory lock:
+
+- If another process still holds the lock, it returns `running`. In that case there may be no turn identifier.
+- If the lock connection pool cannot hand out a connection within a short wait (200 ms), it returns `unknown`. The server could not check and does not know whether a turn is running; it never reports `idle` because it found no records.
+
+The client treats `unknown` as a turn that may still be running: it offers no retry, does not move unsaved text away, and does not mark steps as finished. It checks again after a delay that grows each time. After five `unknown` answers in a row it stops checking on its own and asks the player to choose "Check status".
 
 #### Session replaced during the query
 
@@ -880,16 +889,15 @@ Some runtimes do not need the turn to wait for them to finish. A safe leaf runti
 | Method | Path                      | Description                                                   |
 | ------ | ------------------------- | ------------------------------------------------------------- |
 | POST   | `/api/sessions/:id/steer` | Interject into a turn in progress. Body `{ message: string }` |
-| POST   | `/api/sessions/:id/abort` | Stop a turn in progress. Idempotent                           |
+| POST   | `/api/sessions/:id/abort` | Stop the player's action in progress. Idempotent              |
 
-Both endpoints return `409` when no turn is in progress.
+Both endpoints return `409` when no turn is in progress. `abort` stops the player's action request: once the request's last turn has ended, it also returns `409`.
 
 `steer` (interject):
 
-- The message is merged into the story runtime's next LLM call, and saved to the message history.
+- The message is merged into the story runtime's next LLM call. When the turn commits, it is saved in the same transaction to the conversation history and the chat log; when the turn does not commit, it is not saved.
 - It applies only to runtimes with `outputKind: story`. A plugin runtime runs a structured task and does not accept interjections.
 - When an interjection arrives while the final response is streaming, the story runtime adds one more LLM call before it wraps up, to take it in. This call is limited by maxSteps.
-- If saving the message fails, that item is withdrawn from the queue and the request returns `500`.
 
 `abort` (stop):
 
@@ -897,11 +905,14 @@ Both endpoints return `409` when no turn is in progress.
 - The `execution.completed` payload of that action's SSE carries `abortReason: "aborted-by-player"`.
 - If the stop signal arrives before the commit, this run does not commit its messages, domain state, or turn count. A turn that was already committed is not rolled back.
 - Before a turn starts, and before it commits, if it is waiting for the previous turn's memory update, it also responds to the stop. It cancels the current wait and releases the session execution lock. The memory update for a previous committed turn finishes on its own.
+- A stop before the turn starts (still waiting for the session lock or the memory update, or retrying a dimension settlement the previous turn left pending) means this action does not start: nothing is saved, and the stream holds only one `execution.completed`, with `committed: false` and `abortReason: "aborted-by-player"`.
+- A stop after the setup turn was committed and before the opening continuation started means the opening does not start; see [Opening continuation](#opening-continuation).
 
 Limits that apply to both:
 
 - The control registry for a turn lives inside the process. In a multi-pod (PG) deployment, steer and abort can reach only the turn on the same pod. Checking execution status across processes does not change this.
-- Registration happens after the session lock is obtained. It covers preparation, model execution, commit, and cleanup, and is released only when the action completes. So a refresh does not wrongly report idle while the commit is still unfinished. A queued request also does not overwrite the control registration of the current turn.
+- An action request is registered as soon as it arrives, so it can be stopped while it waits. It becomes the session's current turn only after it obtains the session lock. From then on it covers preparation, model execution, commit, and cleanup, and is released only when the action completes. So a refresh does not wrongly report idle while the commit is still unfinished.
+- While a turn is running, a stop applies only to it, never to a request queued behind it for the lock. A queued request also does not overwrite the control registration of the current turn.
 - A stop signal cannot undo a transaction that has already finished.
 
 ### Setup runtime control (retry / skip)
@@ -1027,6 +1038,9 @@ What each endpoint accepts and returns:
 - `POST /api/install/github/preview`: returns `{ collection, items, problems }`. See [Plugin install](./plugin-installation.md#http-contract).
 - `POST /api/install/github/batch`: returns `201 { ok, installed, restartRequired }`.
 - `POST /api/install/collection`: the response is the same as for batch.
+
+Rollback results for failed batch installations are documented in [Plugin installation](./plugin-installation.md#multi-package-preview-and-batch-install): `details.rolledBack` and `details.retained` list removed and retained packages.
+
 - `GET /api/install/plugins`: the list includes plugins that have not yet been loaded after a restart.
 
 `/api/install/world` checks the worldData diagnostics before it writes the world record:
@@ -1478,10 +1492,10 @@ Each slot is an array. Its elements are `{ pluginId, specs[] }`. Each item in `s
 
 **Validation and `specVersion`**:
 
-- When aggregating, every spec is validated with Zod (its structure and `specVersion`).
+- When aggregating, every spec is validated with the same rules as `pnpm validate:plugin` (structure, `specVersion`, data ownership, `webview`).
 - `specVersion` can be left out, and is treated as v1. A declared version higher than the server supports (currently `CURRENT_UI_SPEC_VERSION = 1`) is rejected.
 - If one spec fails validation, it **does not affect the whole response**. Only that spec is removed from its slot.
-- The reason for failure is written in the top-level `diagnostics[]`. Each item is `{ pluginId, runtimeId, slot, specIndex, specId?, issues[{ path, message, code }] }`. It says which plugin, which field, and what the problem is.
+- The reason for failure is written in the top-level `diagnostics[]`. Each item is `{ pluginId, runtimeId, slot, specIndex, specId?, issues[{ path, message, code }] }`. It says which plugin, which field, and what the problem is. A file that cannot be read (missing, not JSON, or pointing outside the plugin directory) is reported here too; `code` is always `invalid`.
 - With `sessionId`, `diagnostics` includes only the plugins active in that session.
 
 **Development hot reload**: `POST /api/plugins/:id/reload` reloads one community plugin.
@@ -1738,6 +1752,7 @@ Exports all the dimension definitions the author wrote (including `schema`, `ini
 Uses the content in the request to **replace** the world's dimension definitions as a whole.
 
 - After the import, active sessions receive a notice that the author source has changed.
+- A world that came from a world package is marked `packageModified`, as with `PATCH`.
 - The current values in a session are not reset automatically. For existing sessions, you must call the sync endpoint explicitly to adopt the new definitions. The sync checks for conflicts.
 - Any valid dimension ID uses the same definition format.
 
@@ -1779,6 +1794,8 @@ Behavior:
 - The top-level `dimensions` are written to `metadata.dimensions`.
 - `metadata` is merged on write. Sibling fields that are not mentioned are kept as they are.
 - Both `dimensions` and `metadata.dimensions` go through world dimension validation.
+- New sessions, preflight and sync use the dimensions and the `characterSchema` of this record. They do not read the world package's files.
+- When the world came from a world package (`metadata.source` is `file` or `generated-file`, or it has `packageManaged`), the record is marked `packageModified: true`. From then on startup loading, file reloads and updates keep this record and do not overwrite it with the package files. The rules are in [World records and world packages](./world-data.md#world-records-and-world-packages).
 
 **Example request body:**
 
@@ -1796,9 +1813,30 @@ Behavior:
 }
 ```
 
+#### `POST /api/worlds/:id/restore-package`
+
+Puts a package world that was edited in the app back to the version in its world package.
+
+- The server reads the world package again, replaces the world record with what it read, and removes `packageModified`. From then on startup loading and file reloads make the record follow the files again.
+- The world's origin (`metadata.source`, `metadata.storage`) and its creation time keep their values.
+- When dimension definitions changed, the sessions of this world receive a `world.dimensions.changed` notice. The values a session already has are not reset.
+- The request body may be an empty object.
+
+**Response:** the restored WorldRecord.
+
+**Errors:**
+
+| Status | `code`                   | When                                                                                      |
+| ------ | ------------------------ | ----------------------------------------------------------------------------------------- |
+| 404    | `world_not_found`        | There is no such world                                                                    |
+| 409    | `world_not_from_package` | The world did not come from a world package (e.g. a generated world kept in the database) |
+| 409    | `world_package_missing`  | The world's package is not in any world directory                                         |
+| 409    | `world_deleting`         | The world is being deleted                                                                |
+| 422    | `world_package_invalid`  | The world package cannot be read; the edited record stays as it is                        |
+
 #### `POST /api/worlds/:id/sync-dimensions`
 
-Syncs the world's current dimension definitions to one given session. This endpoint tries to write directly. If you want to preview first, or need the general sync options, use `sync-data`.
+An API for authors and tools that syncs the current dimension definitions of the world record to the one active session specified by `sessionId`. The app has no control for players to call it. This endpoint tries to write directly and has no dry-run. To preview first, or use the general sync options, use [`sync-data`](#post-apiworldsidsync-data).
 
 It handles only dimensions. It uses the `world_data_import_ledger` ledger and the protected `_dimensions` records. It does not write `entries`, does not write the always-on lorebook, and does not clean up other imported data.
 
@@ -1848,7 +1886,11 @@ The request can be written in two ways:
 - Pass `sessionId`: this uses the session's **saved `activePlugins`**. In this case, any `plugins` in the request is ignored.
 - Pass only `plugins`: preflights a certain set of plugin choices before a session is created.
 
+Dimensions and the character schema are read from the world record, as for a new session; other data is read from `data/` of the world package.
+
 Preflight does not load or run the `worldProjections` handlers. So the output of a projection is not counted in `planned` / `targets`. The response carries a warning that says this part is deferred until the real import or sync runs.
+
+When the world declares dimensions and none of these plugins provides `world.dimensions@1`, the response carries a warning with `code: "dimension-provider-missing"`: these dimensions will not be imported. The session-prep screen uses it to tell the player.
 
 **Request body:**
 
@@ -1884,7 +1926,9 @@ or:
 
 #### `POST /api/worlds/:id/sync-data`
 
-Sync the updated worldData from a world package into an existing session. **It only previews by default (dry-run).** Send `dryRun: false` to write.
+An API for authors and tools that syncs updated worldData from a world package into the one existing session specified by `sessionId`. The app currently has no sync control for players. **It only previews by default (dry-run).** Send `dryRun: false` to write. Actual writes require the session to be `active`.
+
+Updating a world package, hot-reloading files, enabling a plugin or approving its server code does not call this endpoint automatically. It uses the session's saved `activePlugins`. It does not enable plugins, rerun setup or rewrite past story messages. Players who want the new starting data should start a new session. Lore still follows the rules under "Automatic reload after a file change" in [World data](./world-data.md).
 
 **Request fields:**
 
@@ -1896,9 +1940,9 @@ Sync the updated worldData from a world package into an existing session. **It o
 
 **What gets synced:**
 
-- Only rows in the ledger `world_data_import_ledger` with `managed=true` are handled.
+- Overwriting and deleting existing records only handles rows in `world_data_import_ledger` with `managed=true` that belong to the current world. New records in this plan are also imported and added to the ledger.
 - It uses `valueHash` to check whether a player or a plugin has changed the target data.
-- Dimension definitions are in the same ledger. This includes inline definitions, `dimensionSources`, and the effective definitions of a storage-backed world.
+- Dimension definitions are in the same ledger. Dimensions come from the world record, so dimensions edited in the app are synced too; other worldData comes from `data/` of the world package.
 
 **How conflicts are handled:**
 
@@ -1907,6 +1951,7 @@ Sync the updated worldData from a world package into an existing session. **It o
 - If the source of a dimension has not changed, its progress is not reset.
 - The report shows a conflict when the author changed or removed a dimension, and the value in the session has already evolved, was edited by hand, or still has a pending receipt.
 - `force: true` does not lift these dimension protections. It does not trigger a structure migration and does not force a reset.
+- When no plugin that provides `world.dimensions@1` is turned on in the session now, dimensions take no part in the sync: the existing dimension records stay as they are, and the response carries a `dimension-provider-missing` warning.
 
 **Concurrency:**
 
@@ -2199,8 +2244,9 @@ Notes:
 - `pluginPolicy.requires`:
   - When the session is created, the world takes part in resolution as a dependent. If a contract has only one provider, that provider is added automatically.
   - These requirements are saved with the session in `metadata.pluginSelection.requiredContracts`. Later starts, stops, and reloads use this list and do not read the world again.
-  - If no provider is installed, or there are several providers and the request does not pick one, the response is `400 { "code": "world_requirement_unmet", "details": { contract, code, candidates? } }`.
-  - If the player turned a provider off on purpose, or the provider is a community plugin that is still waiting for approval, the session is still created.
+  - When a requirement is not met, the session is still created: no provider is installed, there are several providers and the request does not pick one, the player turned a provider off on purpose, or the provider is a community plugin that is still waiting for approval. The response lists each one in `unmetRequirements` as `{ contract, code, candidates? }`, where `code` is `missing-provider`, `ambiguous-provider`, `excluded`, or `approval-required`. The first two also write a warning to the server log.
+- When the world declares dimensions and none of the plugins turned on for this session provides `world.dimensions@1`, the dimensions are not imported and the session is still created. The response's `ignoredDimensions` lists these dimension IDs; the session runs without dimensions.
+- A plugin with a missing dependency: when no provider gives a contract it depends on (say the player turned the provider off), the session is still created and the plugin is turned off automatically. Such plugins that the player asked for, or that are `kind: core`, are still written into `activePlugins`; `GET /api/sessions/:id/plugins` lists them in `unavailable`, and they come back on their own once the dependency is back. Rules: [Session plugin selection](./plugins.md#session-plugin-selection).
 - `metadata.characterSchema`: when a local session is created in Web private mode, the same schema is written. If the preset is not valid, the session is not created.
 - `metadata.embeddedCharacters`: these are not a plugin's character cards. They do not make a copy of plugin data.
 - `metadata.embeddedLorebook`: AI-generated worlds with `server-store` / `return-only` use it to carry their material and rules.
@@ -2228,16 +2274,19 @@ The response is the session record, plus a one-time `ownerToken`.
 
 **Response fields**:
 
-| Field                  | Type                                   | Description                                                                                                                                                                                       |
-| ---------------------- | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ownerToken`           | string                                 | The session's owner token. It is **returned only here** (the server stores only a hash). When it must be sent is explained below                                                                  |
-| `locale`               | string                                 | The session's actual content language                                                                                                                                                             |
-| `requestedLocale`      | string (optional)                      | Appears only when the actual language differs from the requested one                                                                                                                              |
-| `pluginsWithoutLocale` | string[] (optional)                    | IDs of enabled plugins that have no text in the session's language (they have only English labels, so the panel shows English). This is only a hint and does not stop creation                    |
-| `status`               | `'active' \| 'paused' \| 'ended'`      | The session lifecycle status                                                                                                                                                                      |
-| `phase`                | `'setup' \| 'playing'`                 | Whether the session is in opening setup or in normal play. It starts as `setup` if the active set has a setup runtime, otherwise `playing`. It becomes `playing` once all setup runtimes are done |
-| `completedPlayerTurns` | number                                 | The number of committed player turns in normal play. Interaction during setup is not counted. The same turn is never counted twice                                                                |
-| `setupRuntimes`        | `Record<runtimeId, SetupRuntimeState>` | The state of each setup runtime. See the table below                                                                                                                                              |
+| Field                  | Type                                           | Description                                                                                                                                                                                                                                                                               |
+| ---------------------- | ---------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ownerToken`           | string                                         | The session's owner token. It is **returned only here** (the server stores only a hash). When it must be sent is explained below                                                                                                                                                          |
+| `locale`               | string                                         | The session's actual content language                                                                                                                                                                                                                                                     |
+| `requestedLocale`      | string (optional)                              | Appears only when the actual language differs from the requested one                                                                                                                                                                                                                      |
+| `pluginsWithoutLocale` | string[] (optional)                            | IDs of enabled plugins that have no text in the session's language (they have only English labels, so the panel shows English). This is only a hint and does not stop creation                                                                                                            |
+| `unmetRequirements`    | `{ contract, code, candidates? }[]` (optional) | Contracts the world requires that have no provider turned on in this session. The session runs without this part. This is only a hint and does not stop creation                                                                                                                          |
+| `ignoredDimensions`    | string[] (optional)                            | IDs of dimensions the world declares that no turned-on plugin can store. They were not imported. This is only a hint and does not stop creation                                                                                                                                           |
+| `worldDataNotices`     | `{ level, sourceId?, message }[]` (optional)   | World data that was not imported (warnings and errors), such as data that only a community plugin still waiting for approval receives. The game screen shows it to the player; see [Receivers that join after the game starts](./world-data.md#receivers-that-join-after-the-game-starts) |
+| `status`               | `'active' \| 'paused' \| 'ended'`              | The session lifecycle status                                                                                                                                                                                                                                                              |
+| `phase`                | `'setup' \| 'playing'`                         | Whether the session is in opening setup or in normal play. It starts as `setup` if the active set has a setup runtime, otherwise `playing`. It becomes `playing` once all setup runtimes are done                                                                                         |
+| `completedPlayerTurns` | number                                         | The number of committed player turns in normal play. Interaction during setup is not counted. The same turn is never counted twice                                                                                                                                                        |
+| `setupRuntimes`        | `Record<runtimeId, SetupRuntimeState>`         | The state of each setup runtime. See the table below                                                                                                                                                                                                                                      |
 
 When `ownerToken` must be sent:
 
@@ -2259,13 +2308,13 @@ When `ownerToken` must be sent:
 
 **Errors:**
 
-| Status | `code`                    | When                                                                                               |
-| ------ | ------------------------- | -------------------------------------------------------------------------------------------------- |
-| 400    | `world_requirement_unmet` | A contract the world requires has no provider, or has several providers and none is picked         |
-| 401    | `operator_token_required` | On a hosted deployment (`demo` / `commercial`), the session was created without the operator token |
-| 404    | `world_not_found`         | A `worldId` was given, but the world does not exist                                                |
-| 409    | `world_deleting`          | The world is being deleted                                                                         |
-| 409    | `session_already_exists`  | The `id` chosen by the client already exists                                                       |
+| Status | `code`                    | When                                                                                                                                   |
+| ------ | ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| 400    | `plugin_rejected`         | A plugin the player asked for is rejected for a reason other than a missing dependency, such as a conflict; `details` is the rejection |
+| 401    | `operator_token_required` | On a hosted deployment (`demo` / `commercial`), the session was created without the operator token                                     |
+| 404    | `world_not_found`         | A `worldId` was given, but the world does not exist                                                                                    |
+| 409    | `world_deleting`          | The world is being deleted                                                                                                             |
+| 409    | `session_already_exists`  | The `id` chosen by the client already exists                                                                                           |
 
 - When `id` already exists, the response body is `{ "error": "Session already exists: <id>", "code": "session_already_exists" }`. Creating does not overwrite the existing session, and it does not treat the old session's child records as data for the new session.
 - The server checks the world once before preparing resources and once more when the session is committed. Preparing does not attach media to the session. If it fails, any leftover bytes that nothing refers to are cleaned up by media GC. It does not force-delete content that another session might be using.
@@ -2449,6 +2498,57 @@ An old background job fails when it checks the session scope and state at the en
 
 **Sessions created earlier:** A session without a private identity marker can still be deleted. In the request isolation check, the server uses its existing owner hash or the saved `(id, createdAt)` as its identity. A newly created session always has a random identity marker, so recreating it with the same ID does not inherit the old identity.
 
+#### `GET /api/sessions/:id/memory-index`
+
+The first time a session's memory is indexed, it is locked to the vector (embedding) model configured at that time. This endpoint returns the locked model and the model the configuration selects now. Send the same `X-Slot-Config` as a turn, so the check uses the model settings the player would use this time.
+
+**Response 200:**
+
+```json
+{
+  "available": true,
+  "locked": {
+    "provider": "openai",
+    "modelName": "text-embedding-3-small",
+    "dim": 1536,
+    "lockedAt": "2025-01-15T10:00:00.000Z"
+  },
+  "configured": { "provider": "ollama", "modelName": "nomic-embed-text" },
+  "stale": true
+}
+```
+
+| Field        | Description                                                                                                                                                                      |
+| ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `available`  | Whether the server keeps a vector index. `false` without vector support or with `VECTOR_BACKEND=none`; the other fields are then empty                                           |
+| `locked`     | The model the index was built with. `null` before the session is first indexed; `lockedAt` is `null` when no lock time was recorded                                              |
+| `configured` | The vector model the configuration selects now. `null` when none is configured                                                                                                   |
+| `stale`      | `true` when `configured` is not the model in `locked`. Memory search then matches keywords only, and nothing new is indexed, until the index is rebuilt or the old model is back |
+
+When `stale` is `true`, the web client shows a notice in the session with a "Rebuild index" button; with no vector model configured, the button is "Clear index".
+
+#### `POST /api/sessions/:id/memory-index/rebuild`
+
+Rebuilds the session's memory index with the vector model configured now. Send the same `X-Provider-Keys` and `X-Slot-Config` as a turn.
+
+1. One vector request goes to the configured model to measure its dimension. When it fails, the response is `502` and the old index is left as it was.
+2. Index writes in progress for this session finish first.
+3. One transaction deletes every vector and all index progress the session has under the old model, and locks the session to the new model. With no vector model configured, the session is left unlocked; once a model is configured, the next turn locks it again.
+4. The index is built again in the background, from the first message on. Until it is complete, keyword matches fill in memory search.
+
+The old vectors are deleted by the rebuild and take no more space. Other sessions on the same old model are not affected.
+
+**Response 200:** the same as `GET /api/sessions/:id/memory-index`, after the rebuild.
+
+**Errors:**
+
+| Status | `code`                        | When                                                                                         |
+| ------ | ----------------------------- | -------------------------------------------------------------------------------------------- |
+| 409    | `memory_index_unavailable`    | The server keeps no vector index                                                             |
+| 502    | `embedding_unavailable`       | The configured vector model did not answer. `details.reason` says why; the old index stays   |
+| 409    | `memory_index_changed`        | Another request changed the session's locked model during the rebuild. Read the status again |
+| 409    | `session_incarnation_changed` | While the request waited, the session was deleted and recreated with the same ID             |
+
 ### Turn execution
 
 A turn is the basic unit of interaction in the game. Each message the player sends starts one turn. The server runs all the active runtimes, collects the model output, and returns it.
@@ -2557,13 +2657,14 @@ Retries a job that has already failed and ended.
 - On success, it returns the new job object directly with `202`.
 - If the job cannot be retried, it returns `409` with `code: "runtime_job_not_retryable"`.
 
-The framework does not automatically re-run jobs that failed. This avoids calling a paid provider again when its result was not saved. A normal `queued` job that no one has claimed keeps running after a restart.
+The framework does not automatically re-run jobs that failed. This avoids calling a paid provider again when its result was not saved. A `queued` job keeps running after a restart, including one that a normal shutdown put back in the queue.
 
 **How a job runs:**
 
 - The worker claims the job first and holds a lease that can be renewed. The default concurrency is 4. Jobs for the same `(session, plugin, runtime)` run one after another.
 - `maxQueueMs` limits how long a job can wait in the queue.
 - `maxExecutionMs` limits the time from `running` until the runtime execution returns. The time spent afterward waiting for the session lock to commit is not counted.
+- At a normal shutdown, a job that has not reached `committing` goes back to `queued` once that execution returns, with the same jobId. A job already in `committing` finishes its commit.
 - After a restart, valid `queued` jobs are claimed again. A job that has waited past its queue time is marked `timed_out`. An in-flight job whose lease has expired is marked `orphaned`.
 - The check runs once more before commit: whether the session is still `active`, whether its identity is unchanged, the plugin's approval scope and version, and the actual proposal effects.
 
@@ -3179,7 +3280,8 @@ When a runtime reports failure, its original error is kept in `result.runtimeRes
 **Restarts and credentials:**
 
 - Job rows are persisted. A job that is still `queued` after a server restart keeps running when credentials are available. The next request that carries provider keys hands the credentials over again, or the server's own credentials satisfy the readiness check.
-- A job that was interrupted halfway is marked `orphaned` after its lease expires. The framework does not re-run it automatically, to avoid charging again for an image or speech generation.
+- When the server shuts down normally, a job that is halfway through goes back to the queue and runs again after the restart. A provider it called before it stopped is called again, so a job must be safe to run again.
+- When the process crashes, a job that was halfway through is marked `orphaned` after its lease expires. The framework does not re-run it automatically, to avoid charging again for an image or speech generation.
 - A failed or cancelled job can be retried with `POST /api/sessions/:id/runtime-jobs/:jobId/retry`. The retry uses a new `turnId`.
 
 ##### Errors
@@ -3410,6 +3512,7 @@ Other rules:
 Returns the list of what can go into a world, for the world creation screen and for development agents. It reflects the plugins the server has loaded right now.
 
 - All of the content comes from the `contributes.data.*.authoring` declarations in plugin manifests. There is no hard-coded plugin list.
+- `packs` lists every gameplay pack of the server's pack catalogue (`packs/builtin.yaml`): `id`, `label`, `description`, `tags`, `requested`, `recommended`, and `defaultViewMode` when the pack has one. A world writes one of these `id`s in `pluginPolicy.presetId`; AI world creation offers them as choices.
 - `pnpm describe:authoring` prints the same data.
 - An unreadable or non-JSON example, or a missing, invalid, or conflicting schema for generatable content, skips only that contract. The optional `diagnostics` array returns `{ pluginId, namespace, message }` for each problem, also logged by the server; other contracts and plugins remain available.
 - The `locale` query parameter sets the language of display text such as `title`. If it is omitted, the server's default language is used.
@@ -3472,6 +3575,22 @@ Returns the list of what can go into a world, for the world creation screen and 
       "requires": [],
       "settings": []
     }
+  ],
+  "packs": [
+    {
+      "id": "dialogue-mode",
+      "label": "Dialogue Mode",
+      "description": "Dialogue-first narration, scene cast state, quick replies, and character profiles.",
+      "tags": ["mode:dialogue"],
+      "requested": [
+        "pregame",
+        "world-init",
+        "char-creator",
+        "chat-mode-narrator"
+      ],
+      "recommended": ["memory", "npc-graph"],
+      "defaultViewMode": "stage"
+    }
   ]
 }
 ```
@@ -3483,6 +3602,7 @@ Returns the list of what can go into a world, for the world creation screen and 
 | `contracts`    | Each data contract that a plugin receives: the receiving plugin, the title, writing hints, the entries that can go directly into `world.data.yaml`, and an example |
 | `generate`     | Appears only when the in-app generator can produce this content: `offer` lists it as an option, and `default` lists it and selects it by default                   |
 | `plugins`      | The plugin catalog: ID, name, description, the contracts it provides and requires, and the settings that can be preset with `pluginSettings`                       |
+| `packs`        | The gameplay pack catalogue: the packs a world can write in `pluginPolicy.presetId`, and `defaultViewMode` when the pack has one                                   |
 
 #### `GET /api/framework/capabilities`
 
@@ -3563,7 +3683,7 @@ Field notes:
 - `eventTopics`: when a session resolves its plugin set, it uses this to make sure a topic has only one declaring plugin.
 - `languages.text`: the languages the plugin has text in. This covers labels, interface text, text in code, and translations in the translation catalog. `languages.instructions`: the languages it has instructions (prompt body) in. Both always include at least `en`.
 - `author.about` and the `label` of links can be maps split by language.
-- Each runtime summary includes `id`, `runtimeType`, `trigger`, `execution`, the effective `turnCompletion`, `outputKind`, and optionally `outputContract`.
+- Each runtime summary includes `id`, `runtimeType`, `trigger`, `execution`, the effective `turnCompletion`, `outputKind`, and optionally `outputContract`. `tags` belongs to the package summary; runtime summaries do not repeat it.
 
 `hostState` says whether the server has loaded this plugin. It does not say whether a session has enabled it. These are two different states, and the list does not show the first as a session's active state.
 
@@ -3591,6 +3711,7 @@ Returns the full description of one plugin, `PluginDetail`. If the plugin does n
 Notes:
 
 - `runtimes[].after` / `needs` / `inputs` / `effects` / `turnCompletion` are compiled execution descriptions. They explain execution order, input conditions, and detached behavior. Authors write something different: they declare package-level `contributes` in `PLUGIN.md`, and they declare execution settings in the `schedule` / `io` / `agent` / `function` groups of `RUNTIME.md`. Do not submit this internal structure as a manifest.
+- UI declarations belong to the package-level `ui` field, not to `runtimes[]`. Runtime entries in `GET /api/plugin-flows` also omit `uiSlots`; read plugin details or `/api/ui-specs` for UI declarations.
 - Dynamic keys are not listed in the manifest. Read them with a plugin-data query for the current session or with the `_index` endpoint.
 - Services, tools, actions, slash commands, and extensions are different kinds of registration, and each must be declared separately.
 
@@ -3665,6 +3786,15 @@ Turns on a plugin in this session. The server recalculates the session's active 
 ```
 
 The response also has `resolution`, which is the full result of this solve.
+
+When the session has a world and plugins newly join its active set, the server imports the world's data once for them (rules: [Receivers that join after the game starts](./world-data.md#receivers-that-join-after-the-game-starts)), and the response has a `worldData`:
+
+| Field       | Type                              | Meaning                                                        |
+| ----------- | --------------------------------- | -------------------------------------------------------------- |
+| `receivers` | string[]                          | The plugins that received data for the first time              |
+| `imported`  | number                            | The rows written                                               |
+| `conflicts` | number                            | The rows left as they were because the game changed them       |
+| `notices`   | `{ level, sourceId?, message }[]` | World data still not imported with the plugins that are on now |
 
 Rules (enabling and disabling are the same):
 
@@ -4002,7 +4132,8 @@ Resume a suspended runtime with the data the player submitted.
 | ------ | ------ | -------- | ---------------------------------------------------------------------------- |
 | `data` | object | Yes      | Data the player submitted. It must match the suspended item's `resumeSchema` |
 
-- The server checks `data` against `resumeSchema` with full JSON Schema validation (Ajv). This covers `enum`, nested objects, `min` / `max`, `minLength` / `maxLength`, `pattern`, array `items`, `oneOf` / `anyOf`, and more. If the data does not match, the server returns `400`.
+- If a community plugin lacks execution grants, the server first returns `202 approval-required`, asking for `covel:plugin-server-code` and then `runtime:<runtimeId>`. Only the resumed runtime needs approval; the server rechecks the grants under the session lock. The client approves each request and retries the original submission. Denying approval leaves the suspension pending. Hosted deployments also require an operator credential.
+- The server checks `data` against `resumeSchema` with full JSON Schema validation (Ajv). This covers `enum`, nested objects, `min` / `max`, `minLength` / `maxLength`, `pattern`, array `items`, `oneOf` / `anyOf`, and more. If the data does not match, the server returns `400 resume_data_invalid`. If the schema is not an object or cannot compile, it returns `400 resume_schema_invalid` without claiming the suspension or running the plugin. The author must correct the schema produced by the plugin and create a new suspension. The player can abandon the original item.
 - A browser client can send an `X-Provider-Keys` header to give model keys for this request. The desktop app and self-hosted clients can leave it out, and the server then uses the keys it was started with. The server never returns keys through this endpoint.
 
 **Response**
@@ -4013,14 +4144,18 @@ Resume a suspended runtime with the data the player submitted.
 
 **Errors**
 
-| Status | `code`                | When                                                                                                                                     |
-| ------ | --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| 400    | —                     | The request body is not valid JSON or has the wrong structure, or `data` fails `resumeSchema` validation                                 |
-| 404    | —                     | The session or the suspended item does not exist, or the matching runtime cannot be found                                                |
-| 409    | —                     | The suspended item has already been handled. If two resume requests arrive at the same time, the later one gets this result              |
-| 409    | `suspension_outdated` | The suspended item is out of date and the server voided it; see "Out-of-date suspended items" below                                      |
-| 500    | —                     | The runtime failed or the commit failed (`error` gives the reason). In production, an unknown exception shows as `Internal server error` |
-| 503    | `session_busy`        | Waiting for the session lock timed out. The fixed message is `Session is busy, please retry`                                             |
+| Status | `code`                    | When                                                                                                                                     |
+| ------ | ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| 400    | —                         | The request body is not valid JSON or has the wrong structure                                                                            |
+| 400    | `resume_data_invalid`     | `data` fails `resumeSchema` validation                                                                                                   |
+| 400    | `resume_schema_invalid`   | `resumeSchema` is not an object or cannot compile; the suspension remains pending                                                        |
+| 401    | `operator_token_required` | A hosted deployment requires the operator credential to run a community plugin                                                           |
+| 429    | `approval_queue_full`     | The pending approval queue is full; resolve existing approvals first                                                                     |
+| 404    | —                         | The session or the suspended item does not exist, or the matching runtime cannot be found                                                |
+| 409    | —                         | The suspended item has already been handled. If two resume requests arrive at the same time, the later one gets this result              |
+| 409    | `suspension_outdated`     | The suspended item is out of date and the server voided it; see "Out-of-date suspended items" below                                      |
+| 500    | —                         | The runtime failed or the commit failed (`error` gives the reason). In production, an unknown exception shows as `Internal server error` |
+| 503    | `session_busy`            | Waiting for the session lock timed out. The fixed message is `Session is busy, please retry`                                             |
 
 Rules for failed responses:
 
@@ -4287,9 +4422,12 @@ Returns `201 Created`.
   "sessionId": "mistport-<new-uuid8>",
   "parentSessionId": "mistport-a1b2c3d4",
   "fromSnapshotId": "<parent-snapshot-id>",
-  "forkSnapshotId": "<child-fork-snapshot-id>"
+  "forkSnapshotId": "<child-fork-snapshot-id>",
+  "missingMediaCount": 0
 }
 ```
+
+`missingMediaCount` is the number of files the fork uses that are no longer in the media store, each file counted once. The interface shows a "media unavailable" placeholder in their place.
 
 **What the server does**
 
@@ -4335,7 +4473,8 @@ The chat history shown in the interface is copied separately, using `payload.dis
 Media handling:
 
 - Creates the child session's own references to the media in the copied messages.
-- All media used in messages, state, and runtime exports must already be authorized for the parent session. Otherwise the whole fork fails with `403 media_reference_forbidden`. Knowing a media ID does not give you access to it.
+- All media used in messages, state, and runtime exports that still exists must already be authorized for the parent session. Otherwise the whole fork fails with `403 media_reference_forbidden`. Knowing a media ID does not give you access to it.
+- Media that no longer exists (for example, deleted in the media library) does not stop the fork. The child session is created as usual and keeps the original messages and data, but gets no reference to that file. It shows a placeholder in the child as it does in the parent, and is counted in `missingMediaCount`.
 
 Runtime export handling:
 
@@ -4729,6 +4868,25 @@ After the player submits the opening form, the opening narrative appears on its 
   - The execution was aborted (`abortReason`);
   - The commit failed;
   - Setup still has unfinished items (an opening interaction comes next).
+- **The player stopped before the continuation started**: The setup turn is saved as usual, and the opening does not start. `execution.completed` carries the continuation turn's `turnId`, `committed: false`, and `abortReason: "aborted-by-player"`. The continuation turn that never started is recorded: the execution status (`GET /api/sessions/:id/execution`) shows `state: "failed"`, `origin: "continuation"`, and `retry` is `retry_turn`. Recovering with it (with `recoverFromTurnId`) runs the opening as a continuation turn, without adding a player turn.
+- **Wrapping up after the turn is saved**: When steps such as announcing background jobs or writing the `turn.completed` debug record fail, they are only logged. The stream still ends with `execution.completed`, and the opening continuation still runs.
+
+##### Rejections in the stream
+
+After the SSE stream opens, an action can still be refused before it starts. The stream then holds only one `error.occurred`, with `message` and `code`. Nothing is saved, and the message is the original text in production too. Refusals from the session guards (such as `session_not_active` and `approval_required`) keep the code they have in the JSON endpoints. The others:
+
+| `code`                       | Meaning                                                                       |
+| ---------------------------- | ----------------------------------------------------------------------------- |
+| `input_already_committed`    | This input (`inputMessageId`) was already saved with a turn; do not resend it |
+| `retry_source_not_found`     | The turn named by `retryFromTurnId` is not in this session                    |
+| `retry_source_not_committed` | The source turn was not committed; recover the original action first          |
+| `retry_source_not_original`  | It names a retry, not the original turn                                       |
+| `retry_source_stale`         | The story has moved on past the source turn                                   |
+| `retry_target_not_active`    | A retry target is no longer active in the session                             |
+| `retry_target_not_failed`    | A retry target is no longer failed                                            |
+| `recovery_unavailable`       | The turn named by `recoverFromTurnId` can no longer be recovered              |
+
+`retry_*` and `recovery_unavailable` all mean the task statuses the client sees are out of date: refresh first, then decide whether to retry.
 
 ##### Request headers (optional)
 
@@ -4910,7 +5068,7 @@ The response is SSE. First come progress frames, and the generated world comes l
   "saveTarget": "server-file",
   "idleTimeoutMs": 300000,
   "brief": {
-    "experienceMode": "traditional-story",
+    "pack": "traditional-story",
     "content": ["characters", "lorebook", "rules", "opening-kit"],
     "contracts": ["memory.blocks@1"],
     "additionalInstructions": "让三个主要角色共同隐瞒一次失败的远征。"
@@ -4931,14 +5089,14 @@ If `idleTimeoutMs` is out of range, the server returns `400`. The app's own sett
 
 Fields of `brief`:
 
-| Field                    | Type     | Description                                                                                                                            |
-| ------------------------ | -------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| `experienceMode`         | string   | `traditional-story` or `dialogue-mode`. The latter also generates `defaultViewMode: stage`                                             |
-| `content`                | string[] | Kernel content. Allowed values: `characters`, `lorebook`, `rules`, `opening-kit`                                                       |
-| `contracts`              | string[] | Plugin content. Contains data contract IDs                                                                                             |
-| `additionalInstructions` | string   | Extra requirements for the world package (up to 2000 characters), such as character relationships, taboos, pacing, or content to avoid |
+| Field                    | Type     | Description                                                                                                                                                                                                                                                                                                                                     |
+| ------------------------ | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pack`                   | string   | The gameplay pack the world is made for: an ID of the server's pack catalogue (`packs/builtin.yaml`); the choices are `packs` in [`GET /api/framework/authoring`](#get-apiframeworkauthoring). It is written into the world's `pluginPolicy.presetId`; when the pack has `defaultViewMode`, the world gets it too. Leave it out to name no pack |
+| `content`                | string[] | Kernel content. Allowed values: `characters`, `lorebook`, `rules`, `opening-kit`                                                                                                                                                                                                                                                                |
+| `contracts`              | string[] | Plugin content. Contains data contract IDs                                                                                                                                                                                                                                                                                                      |
+| `additionalInstructions` | string   | Extra requirements for the world package (up to 2000 characters), such as character relationships, taboos, pacing, or content to avoid                                                                                                                                                                                                          |
 
-The allowed values for `contracts` come from the contracts marked with `generate` in `GET /api/framework/authoring`. Any other value returns `400`. Contracts that fail preparation are absent from the choices; generation and revision continue with the remaining content, and `done.warnings` identifies the skipped plugin, namespace, and contract.
+A `pack` that is not in the catalogue returns `400`. The allowed values for `contracts` come from the contracts marked with `generate` in `GET /api/framework/authoring`. Any other value returns `400`. Contracts that fail preparation are absent from the choices; generation and revision continue with the remaining content, and `done.warnings` identifies the skipped plugin, namespace, and contract.
 
 Values for `saveTarget`:
 
@@ -5348,7 +5506,7 @@ Deletes media that is no longer referenced. This is a destructive maintenance en
 
 It first scans `messages`, `plugin_data`, `runtime_outputs`, `trace_events`, `snapshots`, and `turn_results`. It collects the mediaIds that are still referenced. Then it calls `MediaStore.cleanup()` to delete the rest.
 
-Every cleanup also releases the temporary references (`world-data-import:<uuid>`) that a world-data import left behind and that were created 24 hours ago or earlier. A dry run only lists them in `expiredRefs`, and a real run removes them. A younger temporary reference keeps protecting its file. The limit is fixed. The rule is in [Media store](./media-store.md#temporary-references-during-world-data-import).
+Every cleanup also releases the temporary references (`media-pin:<uuid>`) that a world-data import, upload or runtime write left behind and that were created 24 hours ago or earlier. A dry run only lists them in `expiredRefs`, and a real run removes them. A younger temporary reference keeps protecting its file. The limit is fixed. The rule is in [Media store](./media-store.md#temporary-references-during-world-data-import).
 
 > [!WARNING]
 > This endpoint is disabled by default. You must set `COVEL_MEDIA_CLEANUP_ENABLED` to use it. Actual deletion also requires a confirmation header.
@@ -5381,7 +5539,7 @@ Every cleanup also releases the temporary references (`world-data-import:<uuid>`
   "policy": {
     "dryRun": true,
     "expireRefs": {
-      "sessionIdPrefix": "world-data-import:",
+      "sessionIdPrefix": "media-pin:",
       "maxAgeMs": 86400000
     },
     "maxBytes": 0
@@ -5399,7 +5557,7 @@ Every cleanup also releases the temporary references (`world-data-import:<uuid>`
     "expiredRefs": [
       {
         "mediaId": "...",
-        "sessionId": "world-data-import:...",
+        "sessionId": "media-pin:...",
         "pluginId": null,
         "createdAt": "2026-10-01T08:00:00.000Z"
       }

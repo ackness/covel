@@ -94,6 +94,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     deltaBufferRef: refs.deltaBufferRef,
     deltaRafRef: refs.deltaRafRef,
     sessionGenerationRef: refs.sessionGenerationRef,
+    initialEventCursor: state.initialEventCursor,
   });
 
   // Two providers: the actions value is referentially stable across streaming

@@ -3,7 +3,8 @@ import { describe, expect, it } from "vitest";
 import {
   discoverPlugins,
   loadPluginManifest,
-  loadPluginUi,
+  loadPluginDefinition,
+  loadPluginUiSpecs,
   loadRuntime,
 } from "@covel/plugin-loader";
 
@@ -50,8 +51,14 @@ describe("character-blueprint manifest and UI loading", () => {
   });
 
   it("loads the preset and portrait panels", async () => {
-    const ui = await loadPluginUi(await discover());
-    const [blueprints, portraits] = ui.uiSpecs?.right ?? [];
+    const discovery = await discover();
+    const ui = await loadPluginUiSpecs(
+      discovery.rootPath,
+      discovery.id,
+      (await loadPluginDefinition(discovery)).packageManifest.manifest.ui,
+    );
+    expect(ui.diagnostics).toEqual([]);
+    const [blueprints, portraits] = ui.slots.right ?? [];
 
     // Read-only display panel (no editing): relies on emptyState rather than
     // alwaysRender, so a world without preset characters shows the empty hint.

@@ -20,6 +20,7 @@ import type { RecallSearchResult, RecallSearcher } from "./types.js";
 import {
   distanceToScore,
   type EmbedFn,
+  isEmbeddingModelChanged,
   MEMORY_VECTOR_PLUGIN_ID,
   RECALL_NAMESPACE,
 } from "./vector-common.js";
@@ -70,12 +71,16 @@ export function createVectorRecallSearcher(deps: {
         });
       } catch (err) {
         // Embedding outage / KNN failure must never break a turn — fall back.
-        // eslint-disable-next-line no-console
-        console.warn(
-          `[memory] vector recall failed for ${sessionId}, falling back to keyword: ${
-            err instanceof Error ? err.message : String(err)
-          }`,
-        );
+        // A changed embedding model is reported once by ingestion and shown
+        // to the player; every search would only repeat it.
+        if (!isEmbeddingModelChanged(err)) {
+          // eslint-disable-next-line no-console
+          console.warn(
+            `[memory] vector recall failed for ${sessionId}, falling back to keyword: ${
+              err instanceof Error ? err.message : String(err)
+            }`,
+          );
+        }
         return fallback.search(sessionId, query, limit);
       }
 

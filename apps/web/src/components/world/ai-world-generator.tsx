@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type {
-  WorldExperienceMode,
   WorldGenerationPart,
   WorldPackageContentKind,
 } from "@covel/shared";
@@ -63,8 +62,10 @@ export function AiWorldGenerator({
 }: AiWorldGeneratorProps) {
   const { t, i18n } = useTranslation();
   const [prompt, setPrompt] = useState("");
-  const [experienceMode, setExperienceMode] =
-    useState<WorldExperienceMode>("traditional-story");
+  // The pack the world is made for; the first one the server offers until
+  // the player picks another.
+  const [packs, setPacks] = useState<readonly api.WorldGenerationPack[]>([]);
+  const [pack, setPack] = useState<string | undefined>();
   const [content, setContent] = useState<ReadonlySet<WorldPackageContentKind>>(
     () => new Set(DEFAULT_CONTENT),
   );
@@ -91,11 +92,11 @@ export function AiWorldGenerator({
   // press of Esc or of the close control must not cost what the player wrote.
   const resetForm = useCallback(() => {
     setPrompt("");
-    setExperienceMode("traditional-story");
+    setPack(packs[0]?.id);
     setContent(new Set(DEFAULT_CONTENT));
     setContracts(defaultContracts(pluginContent));
     setAdditionalInstructions("");
-  }, [pluginContent]);
+  }, [packs, pluginContent]);
 
   useEffect(
     () => () => {
@@ -106,18 +107,25 @@ export function AiWorldGenerator({
     [],
   );
 
-  // The offered plugin content depends on which plugins the server loaded, so
-  // it is asked for each time the dialog opens. Without it the dialog still
-  // works with the kernel-owned content. Only a contract offered for the
-  // first time takes its default; the others keep what the player chose.
+  // The offered plugin content and packs depend on what the server loaded,
+  // so they are asked for each time the dialog opens. Without them the dialog
+  // still works with the kernel-owned content. Only a contract offered for
+  // the first time takes its default; the others keep what the player chose.
+  // A chosen pack is kept while the server still offers it.
   useEffect(() => {
     if (!open) return;
     let cancelled = false;
     void api
-      .listGeneratableWorldContent(i18n.language)
-      .catch(() => [] as api.GeneratableWorldContent[])
-      .then((offered) => {
+      .listWorldGenerationChoices(i18n.language)
+      .catch((): api.WorldGenerationChoices => ({ content: [], packs: [] }))
+      .then(({ content: offered, packs: offeredPacks }) => {
         if (cancelled) return;
+        setPacks(offeredPacks);
+        setPack((current) =>
+          offeredPacks.some((item) => item.id === current)
+            ? current
+            : offeredPacks[0]?.id,
+        );
         const known = offeredRef.current;
         offeredRef.current = new Set(offered.map((item) => item.contract));
         setPluginContent(offered);
@@ -229,7 +237,7 @@ export function AiWorldGenerator({
             storageModeForServerStorage(health.storage),
           ),
           brief: {
-            experienceMode,
+            ...(pack ? { pack } : {}),
             content: [...content],
             ...(contracts.size > 0 ? { contracts: [...contracts] } : {}),
             ...(additionalInstructions.trim()
@@ -247,10 +255,10 @@ export function AiWorldGenerator({
     additionalInstructions,
     content,
     contracts,
-    experienceMode,
     i18n.language,
     onOpenChange,
     onWorldCreated,
+    pack,
     pluginContent,
     prompt,
     resetForm,
@@ -450,13 +458,14 @@ export function AiWorldGenerator({
 
             <WorldCreationOptions
               t={t}
-              experienceMode={experienceMode}
+              packs={packs}
+              pack={pack}
               content={content}
               pluginContent={pluginContent}
               contracts={contracts}
               additionalInstructions={additionalInstructions}
               disabled={isWorking || phase === "done"}
-              onExperienceModeChange={setExperienceMode}
+              onPackChange={setPack}
               onToggleContent={toggleContent}
               onToggleContract={toggleContract}
               onAdditionalInstructionsChange={setAdditionalInstructions}

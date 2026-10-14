@@ -16,15 +16,16 @@ import type {
 const api = vi.hoisted(() => ({
   fetchServerHealth: vi.fn<() => Promise<ServerHealth>>(),
   generateWorld: vi.fn(),
-  listGeneratableWorldContent: vi.fn(
-    async (): Promise<
-      {
+  listWorldGenerationChoices: vi.fn(
+    async (): Promise<{
+      content: {
         contract: string;
         title: string;
         description?: string;
         selectedByDefault: boolean;
-      }[]
-    > => [],
+      }[];
+      packs: { id: string; label: string; description?: string }[];
+    }> => ({ content: [], packs: [] }),
   ),
 }));
 const dataService = vi.hoisted(() => ({
@@ -60,7 +61,7 @@ function deferredHealth() {
 beforeEach(() => {
   vi.resetAllMocks();
   api.fetchServerHealth.mockResolvedValue(healthFor("local"));
-  api.listGeneratableWorldContent.mockResolvedValue([]);
+  api.listWorldGenerationChoices.mockResolvedValue({ content: [], packs: [] });
 });
 
 afterEach(() => {
@@ -196,19 +197,22 @@ describe("AiWorldGenerator", () => {
   });
 
   it("offers the plugin content the server lists and sends the selection", async () => {
-    api.listGeneratableWorldContent.mockResolvedValue([
-      {
-        contract: "memory.blocks@1",
-        title: "Memory blocks",
-        description: "World-defined memory blocks.",
-        selectedByDefault: true,
-      },
-      {
-        contract: "world.time-definition@1",
-        title: "World time definition",
-        selectedByDefault: false,
-      },
-    ]);
+    api.listWorldGenerationChoices.mockResolvedValue({
+      content: [
+        {
+          contract: "memory.blocks@1",
+          title: "Memory blocks",
+          description: "World-defined memory blocks.",
+          selectedByDefault: true,
+        },
+        {
+          contract: "world.time-definition@1",
+          title: "World time definition",
+          selectedByDefault: false,
+        },
+      ],
+      packs: [],
+    });
     api.generateWorld.mockReturnValue(new AbortController());
 
     render(
@@ -234,6 +238,60 @@ describe("AiWorldGenerator", () => {
     };
     expect(options.brief.contracts).toEqual(["world.time-definition@1"]);
     expect(options.brief.content).not.toContain("memory");
+  });
+
+  it("offers the packs the server lists and sends the one chosen", async () => {
+    api.listWorldGenerationChoices.mockResolvedValue({
+      content: [],
+      packs: [
+        { id: "quiet-tea", label: "Quiet Tea", description: "Slow scenes." },
+        { id: "low-cost", label: "Low Cost" },
+        { id: "narrative-only", label: "Narrative Only" },
+      ],
+    });
+    api.generateWorld.mockReturnValue(new AbortController());
+
+    render(
+      <AiWorldGenerator open onOpenChange={vi.fn()} onWorldCreated={vi.fn()} />,
+    );
+    // Whatever the catalogue holds, in its order; the first is chosen.
+    const first = await screen.findByRole("button", { name: /Quiet Tea/ });
+    expect(first.getAttribute("aria-pressed")).toBe("true");
+    expect(first.textContent).toContain("Slow scenes.");
+    const narrative = screen.getByRole("button", { name: /Narrative Only/ });
+    expect(narrative.getAttribute("aria-pressed")).toBe("false");
+
+    fireEvent.click(narrative);
+    expect(narrative.getAttribute("aria-pressed")).toBe("true");
+    fireEvent.change(screen.getByLabelText("核心创意"), {
+      target: { value: "A harbor that keeps time by the tide" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "开始构筑" }));
+
+    await waitFor(() => expect(api.generateWorld).toHaveBeenCalledOnce());
+    const options = api.generateWorld.mock.calls[0]![5] as {
+      brief: { pack?: string };
+    };
+    expect(options.brief.pack).toBe("narrative-only");
+  });
+
+  it("sends no pack when the server offers none", async () => {
+    api.generateWorld.mockReturnValue(new AbortController());
+    render(
+      <AiWorldGenerator open onOpenChange={vi.fn()} onWorldCreated={vi.fn()} />,
+    );
+    await waitFor(() =>
+      expect(api.listWorldGenerationChoices).toHaveBeenCalled(),
+    );
+    expect(screen.queryByText("玩家体验")).toBeNull();
+    fireEvent.change(screen.getByLabelText("核心创意"), {
+      target: { value: "A harbor that keeps time by the tide" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "开始构筑" }));
+    await waitFor(() => expect(api.generateWorld).toHaveBeenCalledOnce());
+    expect(api.generateWorld.mock.calls[0]![5]).not.toHaveProperty(
+      "brief.pack",
+    );
   });
 
   /** Start a generation and return the function that feeds server events. */

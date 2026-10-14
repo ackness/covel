@@ -248,7 +248,7 @@ export function RawConfigPane() {
   return (
     <div className="space-y-3">
       <div
-        role="tablist"
+        role="group"
         aria-label={t("settings.rawConfigNavLabel")}
         className="flex w-fit max-w-full flex-wrap overflow-hidden rounded-(--radius-control) border border-(--rule-color)"
       >
@@ -256,8 +256,7 @@ export function RawConfigPane() {
           <button
             key={tab.id}
             type="button"
-            role="tab"
-            aria-selected={source === tab.id}
+            aria-pressed={source === tab.id}
             disabled={saving}
             onClick={() => setSource(tab.id)}
             className={

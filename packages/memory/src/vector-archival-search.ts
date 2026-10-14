@@ -25,6 +25,7 @@ import {
   ARCHIVAL_NAMESPACE,
   distanceToScore,
   type EmbedFn,
+  isEmbeddingModelChanged,
   MEMORY_VECTOR_PLUGIN_ID,
 } from "./vector-common.js";
 
@@ -82,12 +83,15 @@ export function createVectorArchivalSearcher(deps: {
           );
         }
       } catch (err) {
-        // eslint-disable-next-line no-console
-        console.warn(
-          `[memory] vector archival failed for ${sessionId}, falling back to keyword: ${
-            err instanceof Error ? err.message : String(err)
-          }`,
-        );
+        // A changed embedding model is reported once by ingestion.
+        if (!isEmbeddingModelChanged(err)) {
+          // eslint-disable-next-line no-console
+          console.warn(
+            `[memory] vector archival failed for ${sessionId}, falling back to keyword: ${
+              err instanceof Error ? err.message : String(err)
+            }`,
+          );
+        }
         return fallback.search(sessionId, query, limit);
       }
 

@@ -1,0 +1,4 @@
+### Fixed
+
+- **On PostgreSQL, a busy lock pool no longer shows an idle session as running.** When the server cannot get a lock connection within 200 ms, `GET /api/sessions/:id/execution` (and the `execution` field of `/view`) now answers `unknown` instead of `running`; a lock held by another process still answers `running`. The client shows that it is checking, checks again less often each time, and after five `unknown` answers stops and asks the player to choose "Check status". An `unknown` status never offers a retry, moves unsaved text away or finishes a turn's steps. Rules: `docs/reference/api.md`.
+- **Concurrent session metadata updates of different keys no longer lose one another on PostgreSQL.** `updateSession` merges `metadata` inside one UPDATE there, and a key set to `undefined` is removed on every backend. Two updates of the same key still have one winner. Rules: `docs/internals/storage.md`.

@@ -16,6 +16,7 @@ import {
   recoverExpiredRuntimeJobs,
   renewRuntimeJobLease,
   transitionRuntimeJob,
+  type RuntimeJobRecord,
 } from "../../src/routes/api/plugin-rpc/jobs.js";
 import {
   RuntimeJobNoLongerCurrentError,
@@ -651,7 +652,7 @@ describe.each([
     }
   });
 
-  it("cancels uncommitted work on close and waits for the runner to release resources", async () => {
+  it("hands uncommitted work back to the queue on close, once its runner returned", async () => {
     await createRuntimeJob(store, job());
     await createRuntimeJob(store, job("session-a", "queued-after-close"));
     let release!: () => void;
@@ -682,16 +683,22 @@ describe.each([
     void closing.then(() => {
       closed = true;
     });
-    await vi.waitFor(() => expect(worker.activeCount).toBe(0));
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    // The job is not queued again while its stopped run is still unwinding.
     expect(closed).toBe(false);
+    await expect(getRuntimeJob(store, job())).resolves.toMatchObject({
+      status: "running",
+    });
     release();
     await closing;
+    expect(worker.activeCount).toBe(0);
     worker.wake();
     expect(execute).toHaveBeenCalledOnce();
-    await expect(getRuntimeJob(store, job())).resolves.toMatchObject({
-      status: "cancelled",
-      reason: "worker-shutdown",
-    });
+    const requeued = await getRuntimeJob(store, job());
+    expect(requeued).toMatchObject({ status: "queued", attempt: 1 });
+    expect(requeued?.ownerId).toBeUndefined();
+    expect(requeued?.leaseExpiresAt).toBeUndefined();
+    expect(requeued?.startedAt).toBeUndefined();
     await expect(
       getRuntimeJob(store, job("session-a", "queued-after-close")),
     ).resolves.toMatchObject({ status: "queued" });
@@ -706,6 +713,59 @@ describe.each([
     expect(read).not.toHaveBeenCalled();
     read.mockRestore();
     await eventBus.close();
+  });
+
+  it("runs a job handed back at shutdown again after a restart", async () => {
+    await createRuntimeJob(store, job());
+    const stopped = vi.fn(
+      (_job: RuntimeJobRecord, control: RuntimeJobExecutionControl) =>
+        new Promise<void>((_resolve, reject) => {
+          control.signal.addEventListener("abort", () =>
+            reject(control.signal.reason),
+          );
+        }),
+    );
+    const first = createRuntimeJobWorker({
+      tryWithCommitLock,
+      store,
+      eventBus: createEventBus(),
+      execute: stopped,
+      concurrency: 1,
+    });
+    first.wake();
+    await vi.waitFor(() => expect(stopped).toHaveBeenCalledOnce());
+    await first.close();
+    await expect(getRuntimeJob(store, job())).resolves.toMatchObject({
+      status: "queued",
+      attempt: 1,
+    });
+
+    const attempts: number[] = [];
+    const second = createRuntimeJobWorker({
+      tryWithCommitLock,
+      store,
+      eventBus: createEventBus(),
+      execute: async (claimed, control) => {
+        attempts.push(claimed.attempt);
+        await control.beforeCommit({
+          backgroundTurnId: "turn-after-restart",
+          backgroundExecutionId: "execution-after-restart",
+        });
+        await store.withTransaction((tx) => control.completeInTx(tx, {}));
+      },
+      concurrency: 1,
+    });
+    try {
+      second.wake();
+      await vi.waitFor(async () =>
+        expect(await getRuntimeJob(store, job())).toMatchObject({
+          status: "succeeded",
+        }),
+      );
+      expect(attempts).toEqual([2]);
+    } finally {
+      await second.close();
+    }
   });
 
   it("lets a job already inside the commit barrier finish before close resolves", async () => {
@@ -917,8 +977,7 @@ describe.each([
     expect(execute).not.toHaveBeenCalled();
     expect(worker.activeCount).toBe(0);
     await expect(getRuntimeJob(store, job())).resolves.toMatchObject({
-      status: "cancelled",
-      reason: "worker-shutdown",
+      status: "queued",
     });
     intercepted.mockRestore();
   });

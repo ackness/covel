@@ -288,7 +288,7 @@ describe("media library", () => {
 
   it("does not call media unused while something that is not a session claims it", async () => {
     const pinned = await put(mediaStore, "image/png");
-    await mediaStore.addRef(pinned.id, "world-data-import:attempt");
+    await mediaStore.addRef(pinned.id, "media-pin:attempt");
 
     const listing = await list(app);
     expect(listing.items[0]).toMatchObject({ usage: "held", usedBy: [] });

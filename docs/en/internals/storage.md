@@ -52,7 +52,7 @@ There is no `STORE_BACKEND=idb`, and no `createStore({ backend: "idb" })`. If yo
 
 When you add a table or a query, put it in the module for its feature area, add it to both backends, and do not put it in the factory.
 
-**The media backend is chosen separately.** `MEDIA_BACKEND` does not depend on the data backend. `mirror` means it follows the current server data backend. An explicitly chosen browser IDB is only an implementation for media and caches. It is not a business `DataStore`.
+**The media backend is chosen separately.** `MEDIA_BACKEND` does not depend on the data backend. `mirror` means it follows the current server data backend. When the media backend is `pg` (chosen or followed) and `DATABASE_URL` is missing, the server refuses to start instead of quietly turning media off; to run without media, set `MEDIA_BACKEND=none`. The web app's media display cache lives in the browser and is not a `MediaStore` backend.
 
 **PostgreSQL does not mean automatic failover.** PostgreSQL lets multiple processes coordinate database writes, session locks and EventBus event dispatch. But the "steer" and "cancel" of a turn still depend on the in-process execution handle, so a request must reach the instance that is running that turn. The guarantees after a restart also differ for legacy background jobs and for persisted staged jobs. These limits are recorded in [API multi-instance boundaries](../reference/api.md#limits-of-running-several-instances).
 
@@ -81,6 +81,8 @@ When you add a table or a query, put it in the module for its feature area, add 
 - When progress is written, the previously serialized value is compared. The session's "incarnation" is also checked inside the backend's write boundary. (If the same ID is deleted and then recreated, it counts as a different incarnation.)
 - Deleting or replacing a session clears both the progress and the vectors. A transaction rollback restores the progress. See [session deletion](#server-world-and-session-deletion) for the exception when SQLite's vector extension is unavailable.
 - Business snapshots, forks and browser checkpoints do not copy it, so each of them rebuilds its own index.
+- When the vector model changes (the player rebuilds the index in the session), `resetSessionVectorIndex` deletes, in one transaction, every vector the session has in the old model's table and all of its progress, then locks the session to the new model or leaves it unlocked. It first compares the model the session is locked to with the one the caller saw, and changes nothing when they differ. The same contract tests hold all three backends to it.
+- A progress write also names the model the batch was embedded with (`expectedModelRegistryId`). When the session has moved to another model, the whole batch is refused, so vectors computed with the old model never land in the new index.
 
 > [!IMPORTANT]
 > This changes the development-time storage contract. Development databases and browser checkpoints that contain the old layout, where the index was written into `plugin_data`, must be rebuilt. There is no compatibility for reading, migrating or filtering old data.
@@ -150,7 +152,7 @@ One action runs under one Web Lock, and the lock key is the vault database name 
 2. `PUT /api/sessions/:id/browser-checkpoint` uses the latest full checkpoint to fill a temporary `MemoryStore` workspace on the server. If the server already has a validated workspace that holds persisted background jobs, it keeps the state owned by those jobs, and accepts only new player messages, session state and model settings, plus authorized world edits. When the response contains `reconcileRequired`, a `hydrate:<revision>` commit must be downloaded before continuing. Unsupported checkpoint changes return `409`.
 3. Record the pending `actionId`, then run the normal action endpoint or the plugin-RPC endpoint against this workspace.
 4. `POST /api/sessions/:id/browser-commit` exports the workspace result as a `SessionCommit` checked by revision number.
-5. Dexie applies this commit atomically, and then clears the pending action. Replaying with the same `actionId` has no effect, including recovery after a crash between these two writes. A stale revision number, or a header with the same revision number but different content, is rejected.
+5. Dexie applies this commit and clears the pending action in the same transaction (only that `actionId`; an action recorded later is kept). Replaying with the same `actionId` has no effect. A replay is recognised by the checkpoint the server sent: the browser puts its own world in before writing, and that world may be edited later. A stale revision number, or a header with the same revision number but different content, is rejected.
 
 **When it is persisted.**
 
@@ -306,7 +308,6 @@ The display history of state changes is a read-through cache on IndexedDB. It is
 - When a version change notice arrives, the handle is closed and released so that a delete or an upgrade can proceed. It does not delete data, and it does not replay failed operations automatically.
 - A blocked open fails immediately and does not wait forever. While the native request is still blocked, later calls reuse this failure instead of queuing a new open. An upgrade that is later abandoned is aborted, or its handle is closed.
 - On error, the app KV reports the error. The render cache falls back to an authorized network response.
-- IndexedDbMediaStore's explicit backend connection has its own lifecycle.
 - A failure to persist a patch is returned to the caller. The SSE consumer reports it as a "best-effort display cache failure", and it does not change the committed game result.
 
 ### Render Blob Cache
@@ -412,6 +413,12 @@ When a column of an existing table changes in a way an old database cannot follo
 - `commitPlayerInputMessage` is a separate idempotent "accept input" path. Its semantics do not apply to a plain insert.
 - The browser checkpoint validation rejects duplicate IDs in `checkpoint.messages` before it opens the replacement transaction. The same ID being used by another record domain is still valid.
 
+**Lists have a complete order.** Rows with the same time are ordered by the bytes of their ID on every backend, so MemoryStore, SQLite and PostgreSQL return the same order, and a `limit` cuts at the same row:
+
+- `listEvents`, `listStateChanges`, `listSnapshots`, `listSuspensions`, `listExpiredSuspensions`: `(createdAt, id)`;
+- `listInteractionRecords`: `(timestamp, id)`, newest first;
+- `listStateSchemas`: `(tableName, id)`. Updating a row does not move it.
+
 **Display message order.** Full lists, cursor pages and forks are ordered by `createdAt`, preserving write order within a timestamp. Checkpoint arrays preserve this order for timestamp ties. After filtering by the snapshot boundary, a fork keeps the parent’s order and assigns new message IDs. Browser pagination uses the cursor row’s position in the checkpoint array. If no row matches both the cursor ID and timestamp, only earlier timestamps are returned.
 
 **Updates do not change rows.** An update changes what a row holds. It does not replace it with another row:
@@ -422,12 +429,28 @@ When a column of an existing table changes in a way an old database cannot follo
 
 Memory, SQLite and PostgreSQL agree on this, and the shared contract tests check it.
 
+**Merging session metadata.** `updateSession` merges the patch's `metadata` shallowly into the stored object: each key replaces its value, a key set to `undefined` is removed (`null` is kept), and an empty result is stored as no metadata. A session that does not exist is left alone.
+
+- The merge is atomic on every backend. PostgreSQL merges inside one UPDATE; SQLite and memory read and then write inside their serialized write boundary. So when two concurrent updates change different keys, both survive.
+- Two concurrent updates of the same key still have one winner. A caller that reads metadata to decide what to write must hold the session lock.
+
+The shared contract tests check this.
+
 **Suspensions.** A pending suspension stores the whole request it will continue: the messages up to the suspension point, the buffered tool calls and proposals, and the frozen input. On resume this record is sent out as it is, so none of it can be rebuilt from the session's later state.
 
 - After the resume is committed, `markSuspensionResolved` keeps the row (duplicate resume requests and the session's suspension list still need to find it), and it discards what the resume has already consumed. A resolved row keeps only the execution identity, the language and the turn number (`settledSuspensionContinuation`).
 - Snapshots copy only pending suspensions. So a resolved suspension never carries its prompts into snapshots, forks, exports or browser checkpoints.
 
-**Append position.** When SQLite queries the append position of turn results, it uses the covering index `(session_id, created_at, seq)`. The startup DDL derives this index from the Drizzle schema. It keeps the existing sequence assignment and ordering. It does not limit how many execution artifacts are retained, and it is not a latency guarantee for production.
+**Append position.** When SQLite queries the append position of turn results, it uses the covering index `(session_id, created_at, seq)`. The startup DDL derives this index from the Drizzle schema. It keeps the existing sequence assignment and ordering. It does not limit how many execution artifacts are retained, and it is not a latency guarantee for production. PostgreSQL has the same index, for reading turn results in write order.
+
+**History and snapshot indexes.** Each of the reads made on every turn has an index that is already in its order, so a long session does not sort its whole history on every turn:
+
+- Turn messages are indexed on `(session_id, created_at, order, id)`: the full history, its last few messages and the compaction tags are read through it.
+- Messages not yet compacted have a partial index on the same columns (`compacted_at_turn_id IS NULL`). Each turn's prompt history reads only this part, so the read grows with the uncompacted tail, not with the length of the session. It still returns all uncompacted content; the compaction budget decides how long that part is.
+- The player-message count is answered from a `(session_id, source_type)` index.
+- Snapshots are indexed on `(session_id, created_at, id)`, and `parent_id` has a partial index (`parent_id IS NOT NULL`). Pruning old auto snapshots is one DELETE: it removes those older than the newest `keep`, except any that a fork in any session names as its parent.
+
+Both backends declare the same indexes (PostgreSQL's names carry a `pg_` prefix), and a test compares them. A partial index's condition is written in the Drizzle schema, and the startup DDL is generated with it. An existing database gets the new indexes at its next start.
 
 **Text cleanup.** Before persisting, every backend strips U+0000 from text and JSON content, including nested values. A record identifier that contains U+0000 is rejected, and so is a JSON key that would collide after cleanup. The insertion order of decimal values in lorebooks is kept. Ties in text ordering are broken by byte order. Dialogue rows with the same timestamp keep their insertion order.
 

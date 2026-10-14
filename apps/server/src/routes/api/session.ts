@@ -21,6 +21,7 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import {
   isBlockingWorldRequirement,
+  isDependencyRejection,
   isSetupRuntime,
   pluginHasTextIn,
   readRuntimeEnv,
@@ -47,6 +48,7 @@ import {
   prepareWorldDataImportForSession,
   type WorldDataImportedMediaRef,
 } from "../../world-data/session-import.js";
+import { worldDataImportNotices } from "../../world-data/receiver-import.js";
 import {
   decorateSessionList,
   withEmbeddingMetadata,
@@ -68,6 +70,7 @@ import {
 } from "./session/session-guard.js";
 import {
   resolveSessionPluginPlan,
+  confirmedPluginIds,
   storedPluginSelection,
   unknownPluginIds,
   unmetRequirementMessage,
@@ -83,6 +86,7 @@ import { registerSessionPluginRoutes } from "./session/plugin-routes.js";
 import type { SessionRouteEnv } from "./session/route-env.js";
 import { registerSessionViewRoute } from "./session/view-route.js";
 import { registerSessionDeleteRoute } from "./session/delete-route.js";
+import { registerSessionMemoryIndexRoutes } from "./session/memory-index-route.js";
 import {
   fireSessionEnd,
   lifecycleLeaseIsFresh,
@@ -96,6 +100,7 @@ registerSessionMediaTokenRoute(sessionRoutes);
 registerSessionPluginRoutes(sessionRoutes);
 registerSessionViewRoute(sessionRoutes);
 registerSessionDeleteRoute(sessionRoutes);
+registerSessionMemoryIndexRoutes(sessionRoutes);
 
 /**
  * Whether any plugin in the set declares a setup-stage runtime. Discovered by
@@ -249,25 +254,41 @@ sessionRoutes.post("/", async (c) => {
     pluginRegistry,
     { excluded: parsedCreate.excludedPlugins, requiredContracts },
   );
+  // A plugin whose dependency is missing is turned off, not a reason to
+  // refuse the session: it is confirmed with the rest, stays off, and the
+  // player is told why (`unavailable` of the plugin list). A dependency the
+  // resolver could not add (say it lost a conflict) only does that to its
+  // dependents; only a plugin the player asked for can refuse the session.
   const failure = selection.rejected.find(
     (item) =>
       !["approval-required", "excluded", "default-replaced"].includes(
         item.code,
-      ),
+      ) &&
+      !isDependencyRejection(item) &&
+      (parsedCreate.requestedPlugins.includes(item.pluginId) ||
+        pluginRegistry.get(item.pluginId)?.packageManifest?.plugin?.kind ===
+          "core"),
   );
-  if (failure) return c.json(errorBody(failure.reason), 400);
-  // A requirement the player turned off, or one awaiting consent, is a choice
-  // and proceeds. A missing or ambiguous provider is a setup problem.
-  const unmet = selection.unmet.find(isBlockingWorldRequirement);
-  if (unmet)
+  if (failure)
     return c.json(
-      errorBody(unmetRequirementMessage(unmet), {
-        code: "world_requirement_unmet",
-        details: unmet,
+      errorBody(`Plugin ${failure.pluginId}: ${failure.reason}`, {
+        code: "plugin_rejected",
+        details: failure,
       }),
       400,
     );
-  const plugins = selection.active;
+  // A contract the world requires without an active provider never stops the
+  // game: the session starts without that part, and the response names it so
+  // the player is told. The prep screen shows the same list before the start.
+  for (const unmet of selection.unmet.filter(isBlockingWorldRequirement))
+    console.warn(
+      `[sessions] world ${rawWorldId}: ${unmetRequirementMessage(unmet)}`,
+    );
+  const plugins = confirmedPluginIds(
+    selection,
+    parsedCreate.requestedPlugins,
+    pluginRegistry,
+  );
 
   if (rawWorldId) {
     const worldAccess = await withWritableWorld(
@@ -286,7 +307,7 @@ sessionRoutes.post("/", async (c) => {
   // A session whose active set declares a setup runtime starts in `setup`;
   // otherwise it goes straight to `playing`.
   const phase: "setup" | "playing" = sessionHasSetupRuntime(
-    plugins.filter((p): p is string => typeof p === "string"),
+    selection.active,
     pluginRegistry,
   )
     ? "setup"
@@ -340,8 +361,7 @@ sessionRoutes.post("/", async (c) => {
   // Do that before taking the session lock or opening the DB transaction; the
   // prepared plan is immutable input to the atomic write phase below.
   const preparedWorldData = await prepareWorldDataImportForSession({
-    dimensions: world?.metadata?.dimensions,
-    contractData: world?.metadata?.contractData,
+    world,
     sessionId: id,
     worldId: rawWorldId,
     worldsDirs,
@@ -349,16 +369,24 @@ sessionRoutes.post("/", async (c) => {
     mediaStore: c.get("mediaStore"),
     now,
     locale: session.locale,
+    // Only plugins that run take part: a projection is plugin code.
     preflight: {
-      activePlugins: plugins,
+      activePlugins: selection.active,
       registry: pluginRegistry,
     },
   });
   // A file that several active plugins name is left out, and the session
   // starts without it. The log tells the world's author why.
   for (const diagnostic of preparedWorldData.diagnostics)
-    if (diagnostic.code === "convention-collision")
+    if (
+      diagnostic.code === "convention-collision" ||
+      diagnostic.code === "dimension-provider-missing"
+    )
       console.warn(`[sessions] world ${rawWorldId}: ${diagnostic.message}`);
+  // Without an active dimension provider the world's dimensions are left out.
+  const ignoredDimensions = preparedWorldData.imported
+    ? (preparedWorldData.plan.skippedDimensions ?? [])
+    : [];
 
   const sessionLock = c.get("sessionLock");
   // Keep the persistent commit, media finalisation and process-local registry
@@ -428,8 +456,10 @@ sessionRoutes.post("/", async (c) => {
         refs: importedMediaRefs,
       });
     } catch (err) {
-      await store.deleteSession(id);
+      // The import pins go whether or not the rollback below holds: a session
+      // row that survives still protects its bytes through the cleanup scan.
       creationCommitted = false;
+      await store.deleteSession(id);
       // This creation owns the session lifecycle lock; release only its claims.
       // Content-addressed bytes may be shared and are reclaimed by media GC.
       await c.get("mediaStore")?.releaseSession(id);
@@ -481,7 +511,7 @@ sessionRoutes.post("/", async (c) => {
         : commitCreation(),
     )
     .finally(async () => {
-      // On a failed rollback, keep pins for the still-durable session rows.
+      // Release this attempt's import pins unless the session was committed.
       if (!creationCommitted)
         await releaseWorldDataMediaRefs({
           mediaStore: c.get("mediaStore"),
@@ -569,12 +599,19 @@ sessionRoutes.post("/", async (c) => {
   });
   if (responseSession instanceof Response) return responseSession;
 
-  const untranslatedPlugins = plugins.filter(
+  const untranslatedPlugins = selection.active.filter(
     (pluginId) =>
       !pluginHasTextIn(
         pluginRegistry.get(pluginId)?.languages,
         contentLocale.locale,
       ),
+  );
+
+  // World data the session started without, such as what only a community
+  // plugin still waiting for approval receives. The player is told; the
+  // data arrives when the plugin is enabled.
+  const worldDataNotices = worldDataImportNotices(
+    preparedWorldData.diagnostics,
   );
 
   // `ownerToken` is returned exactly once — it is never readable again
@@ -591,6 +628,13 @@ sessionRoutes.post("/", async (c) => {
       ...(untranslatedPlugins.length > 0
         ? { pluginsWithoutLocale: untranslatedPlugins }
         : {}),
+      // Contracts the world requires that no active plugin provides, and
+      // dimensions no active plugin stores. The session runs without them.
+      ...(selection.unmet.length > 0
+        ? { unmetRequirements: selection.unmet }
+        : {}),
+      ...(ignoredDimensions.length > 0 ? { ignoredDimensions } : {}),
+      ...(worldDataNotices.length > 0 ? { worldDataNotices } : {}),
     },
     201,
   );

@@ -146,7 +146,7 @@ type DimensionSnapshot = Readonly<Record<string, DimensionSnapshotEntry>>;
 
 - 读到的每一项不包含 `initialValue`、`updateRule`，也不包含它上次是按哪个回合更新的。
 - 值是原始 JSON。显示和查询时，只翻译 schema 明确标了 `x-i18n` 的节点。
-- 没有插件负责维度，或者维度还没初始化时，快照可以是空的。
+- 没有插件负责维度，或者维度还没初始化时，快照可以是空的。创建会话时没有启用负责维度的插件，世界声明的维度就不导入，会话照常开始，见[会话 API](./api.md#post-apisessions)。内核自己不保存维度。
 - 已经有插件负责维度、但它不可用或读取失败时，必须报错。不能改用世界包的初值，也不能假装是空的。
 
 ### 属主与写入

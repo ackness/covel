@@ -729,6 +729,37 @@ describe("Session lifecycle hooks", () => {
     expect(await store.getSession(id)).toBeNull();
   });
 
+  it("keeps the session's media readable when the database delete fails (F-170)", async () => {
+    const { app, store, mediaStore } = await build();
+    const id = await createSession(app);
+    const media = await mediaStore.put(new Uint8Array([7, 8, 9]), "image/png");
+    await mediaStore.recordOwnership(media.id, id, "community-plugin");
+    await mediaStore.addRef(media.id, id, "community-plugin");
+    vi.spyOn(store, "deleteSession").mockRejectedValueOnce(
+      new Error("database unavailable"),
+    );
+    const errorLog = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    try {
+      expect(
+        (await app.request(`/api/sessions/${id}`, { method: "DELETE" })).status,
+      ).toBe(500);
+    } finally {
+      errorLog.mockRestore();
+    }
+
+    // The session survived, so it still owns and may read its media.
+    expect(await store.getSession(id)).not.toBeNull();
+    expect(await mediaStore.isReferencedBy(media.id, id)).toBe(true);
+    expect((await mediaStore.lookup(media.id))?.ownerSessionId).toBe(id);
+
+    expect(
+      (await app.request(`/api/sessions/${id}`, { method: "DELETE" })).status,
+    ).toBe(200);
+    expect(await mediaStore.isReferencedBy(media.id, id)).toBe(false);
+    expect(await mediaStore.listRefs()).toEqual([]);
+  });
+
   it("makes a drain-lock failure immediately retryable without firing SessionEnd twice", async () => {
     const { app, hookPipeline, sessionLock, store } = await build();
     const endHandler = vi.fn().mockResolvedValue({ action: "continue" });

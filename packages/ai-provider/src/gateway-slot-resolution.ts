@@ -1,3 +1,4 @@
+import type { LLMQueueStart } from "@covel/shared";
 import {
   defaultModelRoleTag,
   protocolOutputModalities,
@@ -114,6 +115,8 @@ export function resolveGatewayEmbeddingTarget(
 export interface GatewayOptions {
   /** Shared transport count and deadline for one logical call, including fallback. */
   requestBudget?: LLMRequestBudget;
+  /** Host notification for suspending attempt timers during admission. */
+  onQueueStart?: LLMQueueStart;
   onProviderRequest?: (request: LLMProviderRequest) => void;
   /**
    * Request-supplied API keys (X-Provider-Keys header). Applied to any

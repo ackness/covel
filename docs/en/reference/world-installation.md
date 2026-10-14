@@ -67,6 +67,8 @@ These endpoints are controlled by the "allow install" switch. Writing a world al
 - A warning does not block the install.
 - The check does not use local overrides, and it does not run scripts in the package or the code of community plugins.
 
+When a collection fails, rollback of an activated world uses the same deletion lifecycle and retains worlds with sessions. See the [batch installation contract](./plugin-installation.md#multi-package-preview-and-batch-install) for rollback result lists.
+
 ## Updates and data protection
 
 **Checking for updates:**
@@ -94,9 +96,9 @@ After the record is deleted, the staging directory is renamed to `.covel-uninsta
 **What blocks an update:**
 
 - You have added, deleted, or changed files of this world locally.
-- You have edited this world, which was installed from GitHub, in the Covel editor. In that case the world record is marked `packageModified`. Later updates no longer overwrite it, and startup loading and file watching do not overwrite it either. You can keep using and exporting this customized version.
+- You have edited this world in Covel. In that case the world record is marked `packageModified`. Later updates no longer overwrite it, and startup loading and file watching do not overwrite it either. You can keep using this edited version.
 
-To follow the original package again, first deal with your changes yourself, and then install it again.
+To follow the original package again, click "Restore the package version" on the world's detail page, then check for updates. Your edits are replaced with what the package files hold now. The rules are in [World records and world packages](./world-data.md#world-records-and-world-packages).
 
 > [!CAUTION]
 > Deleting a world affects the sessions that were started with it. Do not treat "delete and reinstall" as an update that keeps your data.

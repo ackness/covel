@@ -1,3 +1,4 @@
+import { acquireLLMSlot, type LLMSlot } from "@covel/shared";
 import { withTextRequestDefaults } from "./adapters/request-defaults.js";
 import { objectResponseFormat } from "./adapters/structured-output.js";
 import {
@@ -493,8 +494,10 @@ export function createGateway(deps: GatewayDependencies) {
 
       let emittedDelta = false;
       const startTime = Date.now();
+      let slot: LLMSlot | undefined;
 
       try {
+        slot = await acquireLLMSlot(options.signal, options.onQueueStart);
         if (options?.requestBudget)
           assertLlmRequestBudget(options.requestBudget, {
             signal: options.signal,
@@ -604,6 +607,8 @@ export function createGateway(deps: GatewayDependencies) {
           canFallback: !emittedDelta && index < targets.length - 1,
           previous: lastError,
         });
+      } finally {
+        slot?.release();
       }
     }
 

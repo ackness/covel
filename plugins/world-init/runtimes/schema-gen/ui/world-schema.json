@@ -5,7 +5,7 @@
   "shortLabel": "Details",
   "label": "Character Traits",
   "icon": "sliders-horizontal",
-  "dataSource": { "namespace": "schema" },
+  "dataSource": { "source": "session.characterSchema" },
   "emptyState": {
     "message": "Character traits are not ready yet. Waiting for the world to finish preparing…"
   },

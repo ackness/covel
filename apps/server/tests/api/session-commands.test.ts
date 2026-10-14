@@ -12,10 +12,23 @@ import {
   mergePluginCommands,
 } from "../../src/routes/api/session/commands.js";
 
-function manifest(
-  runtimeId: string,
-  commandDescription = "Inspect",
-): RuntimeManifest {
+function commands(description = "Inspect") {
+  return [
+    {
+      name: "inspect",
+      aliases: ["i"],
+      description,
+      action: "inspect-state",
+      context: [
+        "session" as const,
+        "active-runtimes" as const,
+        "models" as const,
+      ],
+    },
+  ];
+}
+
+function manifest(runtimeId: string): RuntimeManifest {
   return {
     name: runtimeId,
     pluginId: "inspector",
@@ -23,15 +36,6 @@ function manifest(
     outputKind: "story",
     model: "story",
     outputContract: "narrative@1",
-    commands: [
-      {
-        name: "inspect",
-        aliases: ["i"],
-        description: commandDescription,
-        action: "inspect-state",
-        context: ["session", "active-runtimes", "models"],
-      },
-    ],
   };
 }
 
@@ -44,14 +48,7 @@ function entry(manifests: readonly RuntimeManifest[]): PluginRegistryEntry {
         kind: "plugin",
         description: "Inspector",
         contributes: {
-          // The manifest schema's command type is mutable; copy to match it.
-          commands: (manifests[0]?.commands ?? []).map((command) => ({
-            name: command.name,
-            ...(command.aliases ? { aliases: [...command.aliases] } : {}),
-            description: command.description,
-            action: command.action,
-            ...(command.context ? { context: [...command.context] } : {}),
-          })),
+          commands: commands(),
         },
       },
       manifest: {
@@ -59,7 +56,7 @@ function entry(manifests: readonly RuntimeManifest[]): PluginRegistryEntry {
         pluginId: "inspector",
         description: "Inspector",
         pluginType: "plugin",
-        commands: manifests[0]?.commands,
+        commands: commands(),
       },
       promptTemplate: "",
       rawFrontmatter: {},
@@ -101,11 +98,9 @@ describe("session slash command directory", () => {
   it("reads commands only from the root contribution", () => {
     const item = entry([
       manifest("inspector/story"),
-      manifest("inspector/other", "Other"),
+      manifest("inspector/other"),
     ]);
-    expect(mergePluginCommands(item)).toEqual(
-      manifest("inspector/story").commands,
-    );
+    expect(mergePluginCommands(item)).toEqual(commands());
     expect(
       mergePluginCommands({ ...item, packageManifest: undefined }),
     ).toEqual([]);

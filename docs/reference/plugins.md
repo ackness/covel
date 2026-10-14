@@ -295,7 +295,7 @@ setup runtime 的完成状态按根 `PLUGIN.md` 的 `version` 记录。发布新
 触发类型有 `auto`、`scheduled`、`manual` 和 `event`。
 
 - 自动进入主循环的 runtime 应声明 stage。`manual` 和 `event` 按请求或事件单独触发。
-- `schedule.manual.execution: background` 让手动运行在后台执行。
+- `schedule.manual.execution: background` 让手动运行在后台执行。这样的手动或事件 runtime 没有同一次执行的上游，所以不能读 `scope: turn` 的输入；改用 `scope: committed` 或内核输入。
 - `schedule.completion` 控制回合是否等它结束。具体限制由清单校验和运行时准入检查执行。
 
 ### 历史窗口（`agent.history`）
@@ -376,6 +376,7 @@ Agent 的超时、重试和步数都在 `agent.loop` 里。
 - 剩余时间不够放第二次（不超过 60 秒）时只发一次，由 `function.timeoutMs` 结束。
 - 被服务商拒绝的请求仍由网关的传输层重试和后备模型处理，不在这里重发。
 - 单次调用确实需要更久的 handler 应该调大 `function.timeoutMs`。
+- 宿主在每次逻辑调用开始时按剩余时间建立请求预算，HTTP 重试、备用模型和停滞重发共用 8 次传输额度。该预算不再额外受网关默认 120 秒限制，也不能延长 runtime 的截止时间。
 
 ### 输入和输出
 
@@ -394,7 +395,6 @@ io:
       required: false
     digest:
       from: { kernel: turn-digest@1 }
-      required: false
   selfData:
     - namespace: facts
       as: <known-facts>
@@ -410,6 +410,7 @@ io:
 
 - 普通输入读同一次执行里已完成的上游结果。`select` 是结果值上的 JSON Pointer。
 - 要读更早的执行留下的结果，用 `scope: committed` 加 `recordAs`。
+- 内核输入（`from: { kernel: turn-digest@1 }`）只写 `from`。它总有值，也不按 schema 检查，所以写 `scope`、`select`、`required`、`accepts` 或 `recordAs` 会被拒绝。
 - schema 可以是本地路径，也可以写 `contract:<contractId>`。跨提供者的契约 schema 在加载时解析。
 - 在提示词里，一个输入位于 `runtime-inputs.<binding>.value`。不要依赖旧的注入标签。
 - 叙事之后运行的 agent 如果绑定的是本回合的故事正文，这个 `value` 是一句指向对话里那条正文消息的话，正文本身不重复（见 [Prompt 结构](./prompt-structure.md#本回合正文)）。
@@ -519,6 +520,8 @@ Agent 的副作用只来自工具：模型能写什么，以 `agent.tools` 白�
 | `completedPlayerTurns` | 已提交的主循环玩家回合数；setup 和开场不算                                                                                                                                                       |
 | `locale`               | 这一局的内容语言                                                                                                                                                                                 |
 | `setupRuntimes`        | 每个 setup runtime 的进度，键是 runtime ID：`{ state: "pending", lastError? }`、`{ state: "done", resolution: "completed" \| "waived", warning? }` 或 `{ state: "blocked", reason, lastError? }` |
+
+会话已不存在时，`getSession()` 抛错，当前执行不能继续。缺少插件或可选能力的正常降级不改变这个边界。
 
 #### 随机数（`ctx.random`）
 
@@ -674,7 +677,7 @@ namespace 接收某个契约，就说明了这个契约的记录长什么样。�
 - `pnpm describe:authoring` 汇总所有已扫描插件的声明；加 `--check` 会按 namespace 的 schema 校验每份 `example`。
 - 字段见 [Plugin manifest 字段表](./schema/plugin-manifest.md)。
 
-记录里有些值写的是世界角色属性的 `id`。用 `references` 把它们声明出来，`pnpm validate:world` 就会在开局之前检查这些值：
+记录里有些值写的是世界里别的东西的名字：角色属性的 `id`，或者维度的 ID。用 `references` 把它们声明出来，`pnpm validate:world` 就会在开局之前检查这些值：
 
 ```yaml
 authoring:
@@ -685,12 +688,21 @@ authoring:
       within: [base, max]
 ```
 
-- `path`：值在每条记录里的位置。字段名用 `.` 连接，字段是列表时在后面加 `[]`。
-- `to`：值指向什么。目前只有 `character-attribute`，即世界 `characterSchema` 顶层属性的 `id`。
-- `type`（可选）：被指向的属性必须是这个类型。
-- `within`（可选）：和这个值同级的数字字段，必须落在该属性的 `min` 和 `max` 之内。
+- `path`：值在每条记录里的位置。字段名用 `.` 连接，字段是列表时在后面加 `[]`。字段名前面写 `**.`，表示在下面任意深度找这个字段。
+- `to`：值指向什么。`character-attribute` 是世界 `characterSchema` 顶层属性的 `id`；`world-dimension` 是世界声明的一个维度的 ID。
+- `type`（可选，只用于 `character-attribute`）：被指向的属性必须是这个类型。
+- `within`（可选）：和这个值同级、必须落在它所指的东西之内的字段。对 `character-attribute`，是必须落在该属性 `min` 和 `max` 之内的数字字段；对 `world-dimension`，是指向维度值内部某个位置的路径（`a.b`，或者一个键的列表），这个位置必须是维度的 `schema` 允许的。
 
-不符合的值报为 `attribute-reference` 错误。世界没有写 `characterSchema` 时不检查，因为属性要到开局时才生成。只声明插件运行时确实会拒绝的规则，否则合法的世界会被误报。
+内置的 story-events 这样声明事件条件里的维度。条件可以用 `all` / `any` / `not` 嵌套任意多层，所以路径里用了 `**`：
+
+```yaml
+references:
+  - path: when.**.dimension
+    to: world-dimension
+    within: [path]
+```
+
+不符合的值报为 `attribute-reference` 或 `dimension-reference` 错误。世界没有写 `characterSchema` 时不检查属性，没有声明任何维度时不检查维度，因为它们要到开局时才生成。只声明插件运行时确实找不到或会拒绝的东西，否则合法的世界会被误报。
 
 世界数据的 source 写 `to: contract:example.facts@1`（省略 `schema` 时就是目标契约的 schema）。框架找到已激活、并声明接受这个契约的 namespace，验证 schema 后把数据分发过去。框架里不识别具体的插件 ID。`contracts` 和接收 namespace 的 schema 必须一致。完整结构见 [World Data](./world-data.md)。
 
@@ -743,13 +755,17 @@ namespace 声明 `search` 之后，它的记录进入框架的记忆检索（[`m
 - 有明确的提供者被激活时，默认提供者退出。
 - 必需的契约会自动补入提供者。缺失、歧义、冲突和授权不足都会返回原因。
 - 一个事件 topic 在一个会话里只有一个声明者。两个活动插件的 `contributes.events` 含同一个 topic 时，后被接受的那个以 `event-topic-conflict` 被拒绝，原因里写出 topic 和两个插件的 ID（显式请求先于自动依赖，其余按请求顺序）。topic 是会话内全局的名字，发出者和订阅者往往属于别的插件，所以它只能对应一份 payload schema。两个插件可以同时安装，只是不能进同一个会话。给自己的 topic 加上和插件相关的前缀可以避免撞名。
-- 失去必需提供者的插件，以及没人再需要的自动依赖，会被移除。
+- 失去必需提供者的插件，以及没人再需要的自动依赖，会被移除。这类拒绝的 `code` 是 `missing-provider` 或 `ambiguous-provider`，`contract` 写出等的是哪个契约。
+- 被依赖的插件缺了，依赖它的插件自动停用，不挡开局。创建会话和启用、停用插件时，玩家要的（`requested`）和 `kind: core` 的插件里因此停用的那些，仍写进 `activePlugins`：它们暂时不运行，列在 `unavailable` 里，依赖回来后自动恢复。只有玩家要的插件因冲突等别的原因被拒，创建才返回 `400 plugin_rejected`，正文写出插件 ID 和原因。
+- 准备页在开局前列出会因此停用的插件、它缺的契约和能提供它的已安装插件，并给出“打开”按钮。游戏界面对 `unavailable` 做同样的提示。
+- 开启的插件里没有叙事 runtime（`io.visibility: story`）时，回合不会产生故事。准备页和游戏界面都会说明这一点，列出可以打开的叙事插件；一个都没有安装时，提示去“设置 → 安装与管理”安装。
 - `requested` 和计算出的 `active` 分开保存。自动依赖不会变成玩家的显式选择。
-- 世界的 `pluginPolicy.requires` 作为 `requiredContracts` 传入。世界和插件一样是依赖方：唯一的提供者自动加入，而且不会被当作没人需要的依赖移除。无法满足的需求在 `unmet` 里返回，原因是 `missing-provider`、`ambiguous-provider`、`approval-required` 或 `excluded`。前两种阻止创建会话；后两种是玩家的选择，不阻止。
+- 世界的 `pluginPolicy.requires` 作为 `requiredContracts` 传入。世界和插件一样是依赖方：唯一的提供者自动加入，而且不会被当作没人需要的依赖移除。无法满足的需求在 `unmet` 里返回，原因是 `missing-provider`、`ambiguous-provider`、`approval-required` 或 `excluded`。四种都不阻止创建会话：会话少了这部分照常开始，准备页和创建会话的响应（`unmetRequirements`）告诉玩家缺了什么。前两种是安装问题，后两种是玩家的选择。
 
 **世界和玩法包怎样给出初始请求。**
 
 - 世界的 `pluginPolicy` 使用 `presetId/preferredTags/avoidedTags/requested/recommended/packs`。玩法包使用 `requested/recommended`。
+- 内置玩法包（`packs/builtin.yaml`）还可以写 `defaultViewMode`（`stage` 或 `parsed`）。AI 创建世界时选了这个玩法包，生成的世界就带上这个 `defaultViewMode`。框架不按玩法包的 ID 做判断：AI 创建世界的选项就是这份目录里的全部玩法包，见 [`GET /api/framework/authoring`](./api.md#get-apiframeworkauthoring) 的 `packs`。
 - 推荐项不自动启用，也不会覆盖玩家的显式排除。
 - `GET /api/worlds/:id/plugin-plan` 的 `defaultPluginIds` 是初始的显式请求。准备页和创建端再用同一个解析器计算活动集合。
 - 这个接口返回的各 `requested` 和 `defaultPluginIds` 只含已安装的插件。世界或玩法包请求了但没有安装的插件列在 `missing` 里，由准备页提示，不进入创建请求。
@@ -761,6 +777,8 @@ namespace 声明 `search` 之后，它的记录进入框架的记忆检索（[`m
 - 其他初始默认请求、世界的 `requested` 和玩家手动添加的请求保留。显式排除继续优先。
 - 手动修改会清除包卡片的高亮，但旧包的来源仍然记着，下一次切换不会把旧包累加进来。手动重新启用的包内插件作为手选保留。
 - 世界的 `requires` 仍由解析器独立校验。不能把 `requested` 当作不可取消的必需项。
+- 玩法包可以带 `excluded`：选中这个包时关掉其中的插件，`kind: core` 的也一样，玩家可以再打开。切换到下一个包时只撤销上一个包加的排除，玩家自己的排除保留。世界初始选中的包，它的排除从一开始就生效。没有安装的插件不出现在 `excluded` 里。
+- “回到最小集合”按钮只留叙事插件（已选的；一个都没选时用 core 里的）、提供 `world.dimensions@1` 的插件，以及它们和世界的 `requires` 拉进来的插件。其余的 core 插件和世界 `requested` 的插件都被排除，玩法包的高亮清除。
 
 **存档固定玩家确认的那一组。**
 
@@ -781,8 +799,17 @@ namespace 声明 `search` 之后，它的记录进入框架的记忆检索（[`m
 
 - 引用的 entry、handler、guard、JSON Schema 和 UI 文件必须在包里。
 - 每份 JSON UI spec 声明 `view` 或 `webview` 中的一个；`view` 里的组件名必须在[组件目录](./ui-components.md)里；`repeat.statePath` 和 `$item` 的写法必须合法（见 [UI 面板](./ui-panels.md#json-render-绑定速查)）。报错给出 spec 文件和节点的路径。
-- 自动和定时的 runtime 必须有 stage。
 - 内置工具名和插件工具声明、包内的 runtime 引用，以及根契约依赖必须一致。
+- 跨字段的规则（例如 `schedule.completion.mode: detached` 只能用在 `post-turn` 或 `audit`）报错时给出文件路径和你写的字段路径，例如 `runtimes/note/RUNTIME.md: schedule.stage: …`。
+
+加载、`pnpm validate:plugin` 和安装用同一份清单规则（`@covel/shared` 的 schema），UI spec 也一样：校验通过的面板，游戏里不会因为格式被去掉。
+
+有的错误只让一个 runtime 永远不能运行，而不影响包的其余部分：
+
+- 自动或定时的 runtime 没有写 `schedule.stage`。框架不猜默认的 stage。
+- 后台执行的手动或事件 runtime 读同一次执行的输入（见[触发方式](#触发方式)）。
+
+手动放进插件目录的包遇到这类错误时，加载器只去掉这个 runtime，在服务端日志里写明文件、字段和原因，包的其他 runtime、工具和面板照常加载；它的输出契约也不再算这个包提供。`pnpm validate:plugin` 和安装把它报为错误。
 
 目录级检查还会在插件根目录有 `llm.toml` 时给出提醒：这个文件不会被读取，不影响通过。
 

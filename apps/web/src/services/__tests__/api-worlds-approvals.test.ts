@@ -131,7 +131,7 @@ describe("world API mapping", () => {
       {
         saveTarget: "return-only",
         brief: {
-          experienceMode: "dialogue-mode",
+          pack: "dialogue-mode",
           content: ["characters", "rules"],
           additionalInstructions: "Keep the cast morally ambiguous.",
         },
@@ -151,7 +151,7 @@ describe("world API mapping", () => {
       locale: "zh-CN",
       saveTarget: "return-only",
       brief: {
-        experienceMode: "dialogue-mode",
+        pack: "dialogue-mode",
         content: ["characters", "rules"],
       },
     });

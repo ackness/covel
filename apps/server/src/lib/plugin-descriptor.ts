@@ -54,7 +54,6 @@ function runtimeSummary(manifest: RuntimeManifest): PluginRuntimeSummary {
     ...(manifest.outputContract
       ? { outputContract: manifest.outputContract }
       : {}),
-    tags: [...(manifest.tags ?? [])],
   };
 }
 
@@ -91,9 +90,6 @@ export function buildPluginSummary(
   isEntryPublished?: (pluginId: string) => boolean,
 ): PluginSummary {
   const manifests = pluginManifestRecords(entry).map(
-    ({ manifest }) => manifest,
-  );
-  const declarations = pluginDeclarations(entry).map(
     ({ manifest }) => manifest,
   );
   const runtimes = manifests.map(runtimeSummary);
@@ -143,10 +139,7 @@ export function buildPluginSummary(
     conflicts: facts.conflicts,
     extensions: facts.extensions,
     eventTopics: facts.eventTopics,
-    tags: uniqueSorted([
-      ...(entry.summary.tags ?? []),
-      ...declarations.flatMap((manifest) => manifest.tags ?? []),
-    ]),
+    tags: uniqueSorted(entry.summary.tags ?? []),
     runtimes,
     tools,
     userSettings: [...(plugin?.contributes?.settings ?? [])],
@@ -190,11 +183,6 @@ function runtimeContract(manifest: RuntimeManifest): RuntimePluginContract {
       ...injectedNamespaces,
     ]),
     readablePluginDataNamespaces: uniqueSorted(injectedNamespaces),
-    ui: {
-      right: [...(manifest.ui?.right ?? [])],
-      message: [...(manifest.ui?.message ?? [])],
-      left: [...(manifest.ui?.left ?? [])],
-    },
     userSettings: [...(manifest.userSettings ?? [])],
   };
 }

@@ -531,7 +531,7 @@ it.each(["restore", "reconnect"])(
       characterSchema: null,
       dimensions: {},
       dimensionSettlements: [],
-      ...currentView.gameState,
+      tables: currentView.gameState,
       characters: [],
     });
     await act(async () => {
@@ -545,7 +545,7 @@ it.each(["restore", "reconnect"])(
       characterSchema: null,
       dimensions: {},
       dimensionSettlements: [],
-      ...currentView.gameState,
+      tables: currentView.gameState,
       characters: [],
     });
     expect(api.getSessionView).toHaveBeenCalledTimes(3);
@@ -571,6 +571,7 @@ it("accepts an empty authoritative initial view after committed state was delete
     await restoring;
   });
   expect(stateRef.current.gameState).toEqual({
+    tables: {},
     characterSchema: null,
     dimensions: {},
     dimensionSettlements: [],
@@ -619,16 +620,40 @@ it("keeps newer contents for a shared message ID and adopts the initial history 
   expect(stateRef.current.olderMessagesCursor).toBe("older-edge");
 });
 
+it("keeps the view's event cursor for the first subscription, and a new visit drops it", async () => {
+  api.getSessionView.mockResolvedValueOnce({
+    session,
+    messages: [],
+    characters: [],
+    gameState: {},
+    executionSteps: [],
+    submittedInteractions: [],
+    eventCursor: "epoch:5",
+  });
+  const { restore, stateRef } = setup();
+  await act(async () => {
+    await restore();
+  });
+  expect(stateRef.current.initialEventCursor).toBe("epoch:5");
+
+  // The next visit's view has no cursor (the default mock): nothing stale stays.
+  await act(async () => {
+    await restore();
+  });
+  expect(stateRef.current.initialEventCursor).toBeNull();
+});
+
 it("projects committed state changes with the same table/field shape as session views", () => {
   const { stateRef, send } = setup();
   stateRef.current = {
     ...stateRef.current,
-    gameState: { stats: { hp: 1, mp: 3 }, weather: { sky: "clear" } },
+    gameState: {
+      tables: { stats: { hp: 1, mp: 3 }, weather: { sky: "clear" } },
+    },
   };
   send("action", "state.changed", { table: "stats", field: "hp", value: 9 });
   expect(stateRef.current.gameState).toEqual({
-    stats: { hp: 9, mp: 3 },
-    weather: { sky: "clear" },
+    tables: { stats: { hp: 9, mp: 3 }, weather: { sky: "clear" } },
   });
 });
 
@@ -660,7 +685,9 @@ it("keeps live state patches when the local fallback returns an older history", 
     ]);
     await restoring;
   });
-  expect(stateRef.current.gameState).toEqual({ stats: { hp: 9, mp: 3 } });
+  expect(stateRef.current.gameState).toEqual({
+    tables: { stats: { hp: 9, mp: 3 } },
+  });
   expect(stateRef.current.statePatches).toHaveLength(2);
   expect(stateRef.current.hasGameStateSnapshot).toBe(false);
 });
@@ -688,6 +715,7 @@ it("does not rebuild deleted fields from cached patches after an authoritative e
     await restoring;
   });
   expect(stateRef.current.gameState).toEqual({
+    tables: {},
     characterSchema: null,
     dimensions: {},
     dimensionSettlements: [],

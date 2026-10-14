@@ -7,12 +7,28 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createMemoryStore } from "@covel/store/memory";
 import type { GithubCollectionPreview } from "@covel/shared";
 import { installRoutes } from "../../src/routes/api/install.js";
+import { LIMITS } from "../../src/routes/api/install/shared.js";
+import {
+  worldOperationLockId,
+  readWorldDeletion,
+} from "../../src/world-lifecycle.js";
 import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
 
 const repo = "https://github.com/example/pack";
 const sha = "a".repeat(40);
 const otherSha = "b".repeat(40);
 const lock = createInProcessSessionLock();
+const defaultCollectionBudget = LIMITS.maxCollectionUncompressedBytes;
+const setCollectionBudget = (bytes: number) =>
+  Object.defineProperty(LIMITS, "maxCollectionUncompressedBytes", {
+    value: bytes,
+    configurable: true,
+  });
+const byteSize = (files: Record<string, string>) =>
+  Object.values(files).reduce(
+    (sum, content) => sum + Buffer.byteLength(content),
+    0,
+  );
 
 function pluginFiles(id: string, directory = `plugins/${id}`) {
   return {
@@ -138,6 +154,8 @@ beforeEach(async () => {
   );
 });
 afterEach(async () => {
+  setCollectionBudget(defaultCollectionBudget);
+  vi.restoreAllMocks();
   vi.unstubAllGlobals();
   vi.unstubAllEnvs();
   await rm(pluginRoot, { recursive: true, force: true });
@@ -242,6 +260,190 @@ describe("mixed GitHub previews and batch installs", () => {
 
     expect(response.status).toBe(409);
     expect(await exists(path.join(pluginRoot, "barrow-dice"))).toBe(false);
+  });
+});
+
+describe("collection rollback", () => {
+  it.each(["unused", "session", "delete failure"])(
+    "rolls back through world lifecycle (%s)",
+    async (scenario) => {
+      archives[`example/pack@${sha}`] = await zip(
+        {
+          ...pluginFiles("barrow-dice"),
+          ...worldFiles("first"),
+          ...worldFiles("second"),
+        },
+        "pack-commit",
+      );
+      const result = await preview();
+      const create = store.createWorld.bind(store);
+      vi.spyOn(store, "createWorld").mockImplementation(async (world) => {
+        if (world.id === "second") {
+          if (scenario === "session")
+            await lock.withLock(worldOperationLockId("first"), () =>
+              store.createSession({
+                id: "concurrent-session",
+                worldId: "first",
+                status: "active",
+                phase: "playing",
+                completedPlayerTurns: 0,
+                setupRuntimes: {},
+                activePlugins: [],
+                locale: "en-US",
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+                metadata: {},
+              }),
+            );
+          throw new Error("Second world activation failed");
+        }
+        return create(world);
+      });
+      const remove = store.deleteWorld.bind(store);
+      const deletion = vi
+        .spyOn(store, "deleteWorld")
+        .mockImplementation(async (id) => {
+          expect(readWorldDeletion((await store.getWorld(id))!)).toBeDefined();
+          if (scenario === "delete failure")
+            throw new Error("Deletion unavailable");
+          return remove(id);
+        });
+      const response = await request("github/batch", {
+        tokens: result.items.map((item) => item.token),
+        acceptRisk: true,
+      });
+      expect(response.status).toBe(500);
+      const body = await response.json();
+      expect(body.details.rolledBack).toContainEqual({
+        kind: "plugin",
+        id: "barrow-dice",
+      });
+      expect(await exists(path.join(pluginRoot, "barrow-dice"))).toBe(false);
+      expect(await store.getWorld("second")).toBeNull();
+      expect(await exists(path.join(worldRoot, "second"))).toBe(false);
+      if (scenario === "unused") {
+        expect(deletion).toHaveBeenCalledWith("first");
+        expect(body.details.retained).toEqual([]);
+        expect(body.details.rolledBack).toContainEqual({
+          kind: "world",
+          id: "first",
+        });
+        expect(await store.getWorld("first")).toBeNull();
+        expect(await exists(path.join(worldRoot, "first"))).toBe(false);
+      } else {
+        expect(body.error).toContain("rollback retained: world first");
+        expect(body.details.retained).toEqual([{ kind: "world", id: "first" }]);
+        expect(await store.getWorld("first")).not.toBeNull();
+        expect(await exists(path.join(worldRoot, "first", "world.yaml"))).toBe(
+          true,
+        );
+        if (scenario === "session") {
+          expect(deletion).not.toHaveBeenCalled();
+          expect(await store.getSession("concurrent-session")).toMatchObject({
+            worldId: "first",
+          });
+          expect(
+            readWorldDeletion((await store.getWorld("first"))!),
+          ).toBeUndefined();
+        } else
+          expect(
+            readWorldDeletion((await store.getWorld("first"))!),
+          ).toMatchObject({ retryable: true });
+      }
+    },
+  );
+});
+
+describe("collection extraction budget", () => {
+  const externalFiles = (id: string) =>
+    Object.fromEntries(
+      Object.entries(pluginFiles(id)).map(([name, content]) => [
+        name.replace(`plugins/${id}/`, ""),
+        content,
+      ]),
+    );
+  async function externalCollection() {
+    const root = collection({
+      plugins: ["one", "two", "three"].map((id) => ({
+        repository: `example/${id}`,
+        commit: otherSha,
+      })),
+    });
+    archives[`example/pack@${sha}`] = await zip(root, "pack-commit");
+    for (const id of ["one", "two", "three"])
+      archives[`example/${id}@${otherSha}`] = await zip(
+        externalFiles(id),
+        `${id}-commit`,
+      );
+    return byteSize(root);
+  }
+
+  it.each(["preview", "batch"])(
+    "stops fetching external members when %s exceeds its shared budget",
+    async (route) => {
+      const rootBytes = await externalCollection();
+      const result = route === "batch" ? await preview() : undefined;
+      vi.mocked(fetch).mockClear();
+      setCollectionBudget(
+        (route === "preview" ? rootBytes : 0) +
+          byteSize(externalFiles("one")) +
+          byteSize(externalFiles("two")) -
+          1,
+      );
+      const response =
+        route === "preview"
+          ? await request("github/preview", { url: repo })
+          : await request("github/batch", {
+              tokens: result!.items.map((item) => item.token),
+              acceptRisk: true,
+            });
+      expect(response.status).toBe(413);
+      expect(await response.text()).toContain(
+        "Collection uncompressed size exceeds",
+      );
+      const urls = vi.mocked(fetch).mock.calls.map(([url]) => String(url));
+      expect(urls).toContain(
+        `https://codeload.github.com/example/two/zip/${otherSha}`,
+      );
+      expect(urls).not.toContain(
+        `https://codeload.github.com/example/three/zip/${otherSha}`,
+      );
+      expect(await exists(path.join(pluginRoot, "one"))).toBe(false);
+    },
+  );
+
+  it("charges an archive once even when the root is also an external member source", async () => {
+    const files = {
+      ...collection({
+        plugins: [
+          { path: "plugins/one" },
+          { repository: "example/pack", commit: sha, path: "plugins/two" },
+        ],
+      }),
+      ...pluginFiles("one"),
+      ...pluginFiles("two"),
+    };
+    archives[`example/pack@${sha}`] = await zip(files, "pack-commit");
+    setCollectionBudget(byteSize(files));
+    const result = await preview();
+    expect(result.items).toHaveLength(2);
+    expect(
+      vi
+        .mocked(fetch)
+        .mock.calls.filter(([url]) =>
+          String(url).startsWith("https://codeload"),
+        ),
+    ).toHaveLength(1);
+    vi.mocked(fetch).mockClear();
+    expect(
+      (
+        await request("github/batch", {
+          tokens: result.items.map((item) => item.token),
+          acceptRisk: true,
+        })
+      ).status,
+    ).toBe(201);
+    expect(vi.mocked(fetch).mock.calls).toHaveLength(1);
   });
 });
 
@@ -379,6 +581,20 @@ describe("collection ZIP import", () => {
       expect(await store.getWorld("barrow")).toBeNull();
     },
   );
+
+  it("applies the collection extraction budget to offline ZIPs before writing", async () => {
+    const files = {
+      ...collection({ plugins: [{ path: "plugins/barrow-dice" }] }),
+      ...pluginFiles("barrow-dice"),
+    };
+    setCollectionBudget(byteSize(files) - 1);
+    const response = await upload(files);
+    expect(response.status).toBe(413);
+    expect(await response.text()).toContain(
+      "Collection uncompressed size exceeds",
+    );
+    expect(await exists(path.join(pluginRoot, "barrow-dice"))).toBe(false);
+  });
 
   it("installs a packed collection as a unit", async () => {
     const response = await upload({

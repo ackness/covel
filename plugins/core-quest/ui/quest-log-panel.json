@@ -5,20 +5,27 @@
   "shortLabel": "Quests",
   "icon": "scroll-text",
   "groupOrder": 720,
-  "dataSource": { "namespace": "quests" },
+  "dataSource": {
+    "namespace": "quests"
+  },
   "emptyState": {
     "message": "No quests yet. They will appear when the narrative introduces explicit commissions or goals…"
   },
   "view": {
     "component": "FilterContainer",
     "props": {
-      "items": { "$state": "/entries" },
+      "items": {
+        "$state": "/entries"
+      },
       "searchPlaceholder": "Search quests…",
       "searchFields": ["value/name", "value/description", "value/giver"],
       "filterField": "value/status",
       "showCounts": true,
       "filterTabs": [
-        { "value": "all", "label": "All" },
+        {
+          "value": "all",
+          "label": "All"
+        },
         {
           "value": "active",
           "label": "Active",
@@ -49,7 +56,27 @@
       },
       "itemLiteralProps": {
         "collapsible": true,
-        "defaultExpanded": true
+        "defaultExpanded": true,
+        "categoryOptions": [
+          {
+            "value": "active",
+            "label": "Active",
+            "icon": "compass",
+            "color": "blue"
+          },
+          {
+            "value": "completed",
+            "label": "Completed",
+            "icon": "check-circle-2",
+            "color": "green"
+          },
+          {
+            "value": "failed",
+            "label": "Failed",
+            "icon": "x-circle",
+            "color": "red"
+          }
+        ]
       },
       "footer": "{{count}} quests tracked",
       "emptyMessage": "No matching quests"

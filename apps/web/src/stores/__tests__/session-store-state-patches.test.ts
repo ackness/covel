@@ -17,7 +17,7 @@ it("keeps only the latest field value while every change refreshes the panel", (
   }
   expect(state.statePatches).toHaveLength(1);
   expect(state.statePatchRevision).toBe(1000);
-  expect(state.gameState).toEqual({ stats: { hp: 999 } });
+  expect(state.gameState).toEqual({ tables: { stats: { hp: 999 } } });
   const duplicate = reducer(state, {
     type: "ADD_STATE_PATCH",
     patch: {
@@ -45,7 +45,7 @@ it("bounds retained fields and event identities without discarding current game 
   }
   expect(state.statePatches.length).toBeLessThanOrEqual(256);
   expect(state.recentStatePatchIds.length).toBeLessThanOrEqual(256);
-  expect(state.gameState.stats).toHaveProperty("field-0", 0);
+  expect(state.gameState.tables).toHaveProperty("stats.field-0", 0);
   expect(state.statePatches.at(-1)?.data).toEqual({
     stats: { "field-999": 999 },
   });
@@ -68,6 +68,6 @@ it("restores all compacted fields from the same event and keeps a live value", (
       { ...patch, data: { stats: { mp: 3 } } },
     ],
   });
-  expect(state.gameState).toEqual({ stats: { hp: 9, mp: 3 } });
+  expect(state.gameState).toEqual({ tables: { stats: { hp: 9, mp: 3 } } });
   expect(state.statePatches).toHaveLength(2);
 });

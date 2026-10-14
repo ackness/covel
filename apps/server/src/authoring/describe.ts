@@ -21,6 +21,7 @@ import {
   resolveWorldContractSchema,
 } from "../world-data/schema-registry.js";
 import { sourceItems } from "../world-data/session-import/utils.js";
+import { BUILTIN_PLUGIN_PACKS } from "../config/plugin-packs.js";
 
 type PluginCatalogue = Pick<PluginRegistry, "get" | "getAll">;
 
@@ -74,6 +75,21 @@ export interface AuthoringPlugin {
   }[];
 }
 
+/**
+ * A plugin pack of the server's catalogue. A world names one in
+ * `pluginPolicy.presetId`; the world generator offers them as choices.
+ */
+export interface AuthoringPack {
+  readonly id: string;
+  readonly label: string;
+  readonly description?: string;
+  readonly tags: readonly string[];
+  readonly requested: readonly string[];
+  readonly recommended: readonly string[];
+  /** The view a world made for this pack opens new sessions in. */
+  readonly defaultViewMode?: "stage" | "parsed";
+}
+
 /** Destinations the kernel owns; no plugin has to be active for them. */
 export interface AuthoringDestination {
   readonly title: string;
@@ -94,6 +110,7 @@ export interface AuthoringSurface {
   readonly destinations: readonly AuthoringDestination[];
   readonly contracts: readonly AuthoringContract[];
   readonly plugins: readonly AuthoringPlugin[];
+  readonly packs: readonly AuthoringPack[];
 }
 
 const WORLD_FILES: AuthoringSurface["files"] = [
@@ -267,6 +284,19 @@ export async function describeAuthoringSurface(
     destinations: KERNEL_DESTINATIONS,
     contracts,
     plugins,
+    packs: BUILTIN_PLUGIN_PACKS.map((pack) => ({
+      id: pack.id,
+      label: text(pack.label, locale) || pack.id,
+      ...(pack.description
+        ? { description: text(pack.description, locale) }
+        : {}),
+      tags: pack.tags,
+      requested: pack.requested,
+      recommended: pack.recommended,
+      ...(pack.defaultViewMode
+        ? { defaultViewMode: pack.defaultViewMode }
+        : {}),
+    })),
   };
 }
 

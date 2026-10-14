@@ -397,11 +397,7 @@ describe("main-loop dependency-cycle SCC", () => {
     });
 
     const inject = (from: string): Partial<RuntimeManifest> => ({
-      input: {
-        inject: [
-          { kind: "runtime", from, field: "narrativeOutput", as: "<x>" },
-        ],
-      },
+      inputs: { x: { from: { runtime: from } } },
     });
     const main = (
       name: string,

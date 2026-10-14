@@ -74,6 +74,10 @@ const save = () =>
 it("shows the stored settings and writes only what the edit changes", async () => {
   render(<RawConfigPane />);
   const area = await editor("Settings (JSON)");
+  expect(
+    screen.getByRole("button", { name: "Settings (JSON)", pressed: true }),
+  ).toBeTruthy();
+  expect(screen.queryByRole("tablist")).toBeNull();
   expect(JSON.parse(area.value)).toEqual({ "ui.scheme": "dark", extra: 1 });
 
   // One value changed, one key deleted, one key added.
@@ -128,7 +132,7 @@ it("saves a file against the digest it was read with and reloads the model roles
     reload: { ok: true, slots: ["plot"] },
   });
   render(<RawConfigPane />);
-  fireEvent.click(await screen.findByRole("tab", { name: "llm.toml" }));
+  fireEvent.click(await screen.findByRole("button", { name: "llm.toml" }));
   const area = await editor("llm.toml");
   await waitFor(() => expect(area.value).toBe("[covel.story]\n"));
 
@@ -166,9 +170,9 @@ it("keeps a late file read from replacing the newly selected file", async () => 
   );
   render(<RawConfigPane />);
   await editor("Settings (JSON)");
-  fireEvent.click(await screen.findByRole("tab", { name: "llm.toml" }));
+  fireEvent.click(await screen.findByRole("button", { name: "llm.toml" }));
   await waitFor(() => expect(mocks.read).toHaveBeenCalledWith("llm.toml"));
-  fireEvent.click(screen.getByRole("tab", { name: "config.toml" }));
+  fireEvent.click(screen.getByRole("button", { name: "config.toml" }));
   const area = await editor("config.toml");
   expect(area.value).toBe("[desktop]");
   await act(async () => {
@@ -233,7 +237,7 @@ it("preserves a conflicting file draft and its baseline until explicitly reloade
     ),
   );
   render(<RawConfigPane />);
-  fireEvent.click(await screen.findByRole("tab", { name: "llm.toml" }));
+  fireEvent.click(await screen.findByRole("button", { name: "llm.toml" }));
   const area = await editor("llm.toml");
   fireEvent.change(area, { target: { value: "[covel.plot]" } });
   save();

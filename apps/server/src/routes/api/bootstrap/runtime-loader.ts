@@ -165,6 +165,8 @@ export function createRuntimeLoader(
               text: ["en"],
               instructions: ["en"],
             },
+            // The registry keeps only the runtimes that loaded.
+            disabledRuntimes: [],
           },
           Object.fromEntries(
             [...params.pluginRegistry!.getAll().values()].flatMap((e) =>

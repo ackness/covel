@@ -110,74 +110,36 @@ describe("deriveEffects — builtin tool mapping table", () => {
     expect(asSet(r.reads)).toEqual(["unknown:*"]);
   });
 
-  it("maps emit-event to one event key per declared topic; event:* when none declared", () => {
-    const withTopics = deriveEffects(
-      manifest({
-        tools: { builtin: ["emit-event"] },
-        events: [
-          {
-            topic: "scene.set",
-            schema: "./a.json",
-            description: "",
-            advertise: true,
-          },
-          {
-            topic: "dice.rolled",
-            schema: "./b.json",
-            description: "",
-            advertise: true,
-          },
-        ],
-      }),
-    );
-    expect(asSet(withTopics.writes)).toEqual([
-      "event:dice.rolled",
-      "event:scene.set",
-    ]);
-
-    const noTopics = deriveEffects(
+  it("maps emit-event to event:*; effects.writes adds exact topics", () => {
+    const emitter = deriveEffects(
       manifest({ tools: { builtin: ["emit-event"] } }),
     );
-    expect(asSet(noTopics.writes)).toEqual(["event:*"]);
+    expect(asSet(emitter.writes)).toEqual(["event:*"]);
+
+    const declared = deriveEffects(
+      manifest({
+        tools: { builtin: ["emit-event"] },
+        effects: { writes: ["event:scene.set"] },
+      }),
+    );
+    expect(asSet(declared.writes)).toEqual(["event:*", "event:scene.set"]);
   });
 
-  it("derives narrative:* from outputKind story and one key per declared ui slot", () => {
-    const e = deriveEffects(
-      manifest({ outputKind: "story", ui: { right: "./ui.json" } as never }),
-    );
-    expect(asSet(e.writes)).toEqual(["narrative:*", "ui:right"]);
+  it("derives narrative:* from outputKind story", () => {
+    const e = deriveEffects(manifest({ outputKind: "story" }));
+    expect(asSet(e.writes)).toEqual(["narrative:*"]);
   });
 
-  it("keeps ui slots apart so different surfaces do not hazard", () => {
-    // Observed as noise in production: a right-panel plugin and two
-    // message-block plugins were reported as a same-layer hazard every turn
-    // purely because each declared *some* UI. They cannot overwrite one
-    // another — different surfaces entirely.
-    const panel = deriveEffects(
-      manifest({ ui: { right: "./panel.json" } as never }),
-    );
-    const block = deriveEffects(
-      manifest({ ui: { message: "./block.json" } as never }),
-    );
-    const otherBlock = deriveEffects(
-      manifest({ ui: { message: "./other.json" } as never }),
-    );
-
-    expect(effectsHazard(panel, block)).toBe(false);
-    // Same surface still hazards — the signal that is worth keeping.
-    expect(effectsHazard(block, otherBlock)).toBe(true);
-  });
-
-  it("allows independent message projections to opt out of the UI W/W false positive", () => {
+  it("lets two UI writers opt out of the W/W false positive", () => {
     const first = deriveEffects(
       manifest({
-        ui: { message: "./first.json" } as never,
+        tools: { builtin: ["render-ui"] },
         effects: { parallelSafe: true },
       }),
     );
     const second = deriveEffects(
       manifest({
-        ui: { message: "./second.json" } as never,
+        tools: { builtin: ["render-ui"] },
         effects: { parallelSafe: true },
       }),
     );
@@ -185,14 +147,14 @@ describe("deriveEffects — builtin tool mapping table", () => {
     expect(effectsHazard(first, second)).toBe(false);
   });
 
-  it("an explicit ui:* declaration still covers every slot", () => {
-    const wildcard = deriveEffects(
-      manifest({ effects: { writes: ["ui:*"] } } as never),
+  it("an explicit ui slot write hazards with a render-ui writer", () => {
+    const slot = deriveEffects(
+      manifest({ effects: { writes: ["ui:right"] } } as never),
     );
-    const block = deriveEffects(
-      manifest({ ui: { message: "./block.json" } as never }),
+    const renderer = deriveEffects(
+      manifest({ tools: { builtin: ["render-ui"] } }),
     );
-    expect(effectsHazard(wildcard, block)).toBe(true);
+    expect(effectsHazard(slot, renderer)).toBe(true);
   });
 
   it("derives an empty set for an agent with no declared surfaces (no unknown:* injected)", () => {

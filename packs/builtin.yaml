@@ -39,6 +39,8 @@
   tags:
     - mode:dialogue
   source: builtin
+  # A world generated for this pack opens new sessions on the stage.
+  defaultViewMode: stage
   requested:
     - pregame
     - world-init
@@ -74,3 +76,30 @@
     - living-world-rules
   recommended:
     - memory
+- id: narrative-only
+  label:
+    zh-CN: 只要叙事
+    en-US: Narrative Only
+    ru-RU: Только повествование
+  description:
+    zh-CN: 主叙事器，加上保存世界状态的世界维度。没有开局表单、角色创建、世界时间和长期记忆，模型调用最少。
+    en-US: The narrator, plus World Dimensions to hold the world's state. No
+      opening form, character creation, world time or long-term memory, and the
+      fewest model calls.
+    ru-RU: Рассказчик и измерения мира, которые хранят его состояние. Без
+      вступительной формы, создания персонажа, мирового времени и долгой
+      памяти, с наименьшим числом вызовов модели.
+  tags:
+    - mode:traditional-story
+  source: builtin
+  requested:
+    - narrator
+    # A world that declares dimensions cannot start without their provider.
+    - world-init
+  excluded:
+    - pregame
+    - char-creator
+    - world-time
+    - memory
+    - history-compaction
+  recommended: []

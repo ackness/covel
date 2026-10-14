@@ -93,7 +93,7 @@ PostgreSQL 一列的细节：
 
 - **事件投递**：`LISTEN/NOTIFY` 初始化失败时，服务器拒绝启动，不会悄悄退回进程内广播。
 - **`steer` / `abort`**：请求必须到达正在执行那个回合的实例。到了别的实例，就算数据库显示回合在执行，也返回 `409`。
-- **后台任务**：包括 detached 的 stage，以及在后台运行的手动或事件触发的 runtime。租约过期的 `claimed` / `running` / `committing` 任务会标成 `orphaned`，不会自动重放已经对外产生的效果。
+- **后台任务**：包括 detached 的 stage，以及在后台运行的手动或事件触发的 runtime。实例正常关闭时，还没提交的任务放回队列，由下一个 worker 重跑。实例崩溃时，租约过期的 `claimed` / `running` / `committing` 任务会标成 `orphaned`，不会自动重放已经对外产生的效果。
 
 所以，需要可靠地控制当前回合的部署，应当用单实例，或者保证一个动作和它的 `steer` / `abort` 请求被路由到同一个实例。实例退出后，内存里的执行句柄不能搬到别处；数据库共享，不代表另一个实例能接手正在跑的回合。
 
@@ -534,9 +534,10 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 | DELETE | `/api/worlds/:id`                       | 删除世界及其全部会话，规则见下文                               |
 | GET    | `/api/worlds/:id/dimensions/export`     | 导出世界维度（YAML / JSON）                                    |
 | POST   | `/api/worlds/:id/dimensions/import`     | 导入世界维度                                                   |
-| POST   | `/api/worlds/:id/sync-dimensions`       | 把世界维度同步到活跃会话                                       |
+| POST   | `/api/worlds/:id/restore-package`       | 把改过的包世界换回世界包里的版本                               |
+| POST   | `/api/worlds/:id/sync-dimensions`       | 作者和工具：把世界维度同步到指定的一个活跃会话                 |
 | POST   | `/api/worlds/:id/world-data/preflight`  | 只读地预演 worldData 导入                                      |
-| POST   | `/api/worlds/:id/sync-data`             | 同步由导入器管理的 worldData 行，支持 dry-run 与 force         |
+| POST   | `/api/worlds/:id/sync-data`             | 作者和工具：同步由导入器管理的 worldData 行，默认 dry-run      |
 | POST   | `/api/worlds/:id/translate`             | 用配置的模型为用户世界目录里的世界包增加一种语言版本（SSE）    |
 | GET    | `/api/worlds/:id/gallery`               | 列出世界包自带的图片（场景、立绘）                             |
 | GET    | `/api/media/library`                    | 玩家的媒体库（仅 `self` / 桌面端）                             |
@@ -545,7 +546,7 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 
 几条补充：
 
-- `POST /api/worlds/:id/sync-dimensions` 把维度写入活跃会话的 `plugin_data` 和 lorebook 常量词条，并清理旧 key。
+- `POST /api/worlds/:id/sync-dimensions` 只处理指定会话受保护的 `_dimensions` 记录和导入账本，不写 lorebook；见下文的端点说明。
 - `POST /api/worlds/:id/world-data/preflight` 构建 worldData 的导入计划但不写入，返回 diagnostics、计划写入的数量和目标摘要。
 - `POST /api/worlds/:id/sync-data` 依据来源账本（provenance ledger）判断哪些行归导入器管理。
 - `GET /api/worlds/:id/gallery` 让世界列表和世界详情在还没有会话时也能展示图片。
@@ -592,13 +593,15 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 
 ### 会话管理
 
-| 方法   | 路径                | 描述                                               |
-| ------ | ------------------- | -------------------------------------------------- |
-| GET    | `/api/sessions`     | 列出所有会话（可选 `?worldId=` 过滤）              |
-| POST   | `/api/sessions`     | 创建新会话                                         |
-| GET    | `/api/sessions/:id` | 获取会话信息                                       |
-| PATCH  | `/api/sessions/:id` | 更新会话字段（`status` / `runtimeModelOverrides`） |
-| DELETE | `/api/sessions/:id` | 删除会话                                           |
+| 方法   | 路径                                     | 描述                                               |
+| ------ | ---------------------------------------- | -------------------------------------------------- |
+| GET    | `/api/sessions`                          | 列出所有会话（可选 `?worldId=` 过滤）              |
+| POST   | `/api/sessions`                          | 创建新会话                                         |
+| GET    | `/api/sessions/:id`                      | 获取会话信息                                       |
+| PATCH  | `/api/sessions/:id`                      | 更新会话字段（`status` / `runtimeModelOverrides`） |
+| DELETE | `/api/sessions/:id`                      | 删除会话                                           |
+| GET    | `/api/sessions/:id/memory-index`         | 记忆索引用的向量模型，以及它是否还是当前配置的模型 |
+| POST   | `/api/sessions/:id/memory-index/rebuild` | 用当前配置的向量模型重建记忆索引                   |
 
 #### 会话身份 `incarnation`
 
@@ -800,6 +803,7 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 - **向上翻页。** 视图带一个不透明的 `messagesCursor`。前端向上滚动时，把它原样作为 `?cursor=` 传给 `GET /api/sessions/:id/messages/page`。
 - **窗口外的旧回合**不渲染执行时间线。
 - **会话时钟。** 视图内嵌的 session 对象带有和会话 API 相同的必填时钟：`phase`、`completedPlayerTurns`、`setupRuntimes`。恢复和重连只以这些字段判断进度。
+- **事件游标。** `eventCursor` 是读视图之前这个会话最新的订阅事件 id（`${epoch}:${seq}`）。第一次订阅用它接上视图，见[订阅流的连接过程](./protocol.md)。
 
 视图的 `submittedInteractions` 列出玩家已经回答过的交互，形状是 `{ turnId, interactionId, values }[]`。`values` 是服务端保存的值。
 
@@ -820,17 +824,22 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 
 `GET /api/sessions/:id/execution` 返回 `SessionExecutionStatus`，说明这个会话现在有没有回合在跑。它使用和其他会话端点相同的归属校验。`GET /api/sessions/:id/view` 的可选字段 `execution` 给出同一份状态。
 
-| 字段          | 说明                                                      |
-| ------------- | --------------------------------------------------------- |
-| `state`       | `idle`、`running`、`completed`、`failed` 或 `interrupted` |
-| `turnId`      | 可选                                                      |
-| `requestId`   | 可选                                                      |
-| `startedAt`   | 可选                                                      |
-| `origin`      | 可选                                                      |
-| `abortReason` | 可选                                                      |
-| `retry`       | 可选，`{ type, payload }`，玩家显式重试时使用             |
+| 字段          | 说明                                                                 |
+| ------------- | -------------------------------------------------------------------- |
+| `state`       | `idle`、`running`、`completed`、`failed`、`interrupted` 或 `unknown` |
+| `turnId`      | 可选                                                                 |
+| `requestId`   | 可选                                                                 |
+| `startedAt`   | 可选                                                                 |
+| `origin`      | 可选                                                                 |
+| `abortReason` | 可选                                                                 |
+| `retry`       | 可选，`{ type, payload }`，玩家显式重试时使用                        |
 
-这个接口不会去等长回合的锁。PostgreSQL 下用非阻塞的 advisory lock 探测；另一个进程还持有锁，或暂时拿不到连接时，保守地返回 `running`，这时可能没有回合标识。
+这个接口不会去等长回合的锁。PostgreSQL 下用非阻塞的 advisory lock 探测：
+
+- 另一个进程还持有锁时，返回 `running`，这时可能没有回合标识。
+- 锁连接池在很短的等待（200 毫秒）里给不出连接时，返回 `unknown`。这表示服务端没能检查，不知道有没有回合在跑；它不会因为没查到记录就报 `idle`。
+
+客户端把 `unknown` 当成回合可能还在跑：不提供重试，不移走未保存的文字，也不把步骤标成结束。它隔一段时间再查，间隔逐次加长；连续五次都是 `unknown`，就停止自动检查，提示玩家点“检查状态”再查。
 
 #### 会话在查询期间被替换
 
@@ -880,16 +889,15 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 | 方法 | 路径                      | 描述                                           |
 | ---- | ------------------------- | ---------------------------------------------- |
 | POST | `/api/sessions/:id/steer` | 向进行中的回合插话。body `{ message: string }` |
-| POST | `/api/sessions/:id/abort` | 中止进行中的回合。幂等                         |
+| POST | `/api/sessions/:id/abort` | 停止玩家进行中的动作。幂等                     |
 
-两个端点在没有进行中的回合时都返回 `409`。
+两个端点在没有进行中的回合时都返回 `409`。`abort` 停止的是玩家的这次动作请求：请求的最后一个回合结束以后，它也返回 `409`。
 
 `steer`（插话）：
 
-- 消息并入 story runtime 的下一次 LLM 调用，并保存到消息历史。
+- 消息并入 story runtime 的下一次 LLM 调用。回合提交时，它和回合在同一个事务里保存到对话历史和聊天记录；回合没有提交，就不保存。
 - 只对 `outputKind: story` 的 runtime 生效。plugin runtime 执行的是结构化任务，不接受插话。
 - 插话在最终响应流式输出期间到达时，story runtime 在收尾前追加一步 LLM 调用来消化它（受 maxSteps 约束）。
-- 消息保存失败时，撤回队列里的这一项并返回 `500`。
 
 `abort`（中止）：
 
@@ -897,11 +905,14 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 - 当次 action SSE 的 `execution.completed` 载荷带 `abortReason: "aborted-by-player"`。
 - 提交前收到停止信号时，本次执行不提交消息、领域状态和回合计数。已经提交的回合不回滚。
 - 回合开始前和提交前，如果正在等上一轮的记忆更新，也会响应停止：取消当前的等待并释放会话执行锁。上一轮已提交回合的记忆更新会独立完成。
+- 回合还没开始就停止（还在等会话锁、等记忆更新，或者在自动重试上一轮没结算的维度），这次动作不再开始：什么都不保存，流里只有一个 `execution.completed`，带 `committed: false` 和 `abortReason: "aborted-by-player"`。
+- setup 回合已经提交、开场接力还没开始时停止，开场不再开始，见[开场接力](#开场接力opening-continuation)。
 
 两者共同的限制：
 
 - 回合的控制注册表在进程内。多 pod（PG）部署下，steer / abort 只能到达同一个 pod 上的回合。跨进程的执行状态探测不改变这一点。
-- 注册发生在拿到会话锁之后，覆盖准备、模型执行、提交和收尾，直到 action 完成才释放。所以刷新时不会在提交还没完成时误判为空闲；排队的请求也不会覆盖当前回合的控制注册。
+- 动作请求一进来就登记，所以等待中也能被停止。拿到会话锁之后，它才成为会话当前的回合：覆盖准备、模型执行、提交和收尾，直到 action 完成才释放。所以刷新时不会在提交还没完成时误判为空闲。
+- 有回合正在执行时，停止只作用于它，不会落到排在后面等锁的请求上；排队的请求也不会覆盖当前回合的控制注册。
 - 停止信号不能撤回已经完成的事务。
 
 ### Setup runtime 控制（重试 / 跳过）
@@ -1027,6 +1038,9 @@ setup runtime 反复失败、用完重试预算（`maxTriggerCount`）后进入 
 - `POST /api/install/github/preview`：返回 `{ collection, items, problems }`，见[插件安装](./plugin-installation.md#http-契约)。
 - `POST /api/install/github/batch`：返回 `201 { ok, installed, restartRequired }`。
 - `POST /api/install/collection`：响应和 batch 相同。
+
+批量安装失败的撤回结果见[插件安装](./plugin-installation.md#多包预览和批量安装)：`details.rolledBack` 和 `details.retained` 分别列出已撤回和保留的包。
+
 - `GET /api/install/plugins`：列表里包含还没有重启加载的插件。
 
 `/api/install/world` 在写入世界记录之前检查 worldData 的 diagnostics：
@@ -1478,10 +1492,10 @@ fork 和社区插件的授权：
 
 **校验与 `specVersion`**：
 
-- 聚合时，每个 spec 都做 Zod 校验（结构和 `specVersion`）。
+- 聚合时，每个 spec 都用 `pnpm validate:plugin` 的同一套规则校验（结构、`specVersion`、数据归属、`webview`）。
 - `specVersion` 可以省略，按 v1 处理。声明的版本高于服务端支持的版本（当前 `CURRENT_UI_SPEC_VERSION = 1`）会被拒绝。
 - 一个 spec 校验失败，**不会影响整个响应**：只把它从所在的 slot 里去掉。
-- 失败原因写在顶层的 `diagnostics[]` 里，每项是 `{ pluginId, runtimeId, slot, specIndex, specId?, issues[{ path, message, code }] }`，说明是哪个插件、哪个字段、什么问题。
+- 失败原因写在顶层的 `diagnostics[]` 里，每项是 `{ pluginId, runtimeId, slot, specIndex, specId?, issues[{ path, message, code }] }`，说明是哪个插件、哪个字段、什么问题。文件读不出来（不存在、不是 JSON、指向插件目录以外）也写在这里；`code` 都是 `invalid`。
 - 带 `sessionId` 时，`diagnostics` 只包含该会话已激活的插件。
 
 **开发热重载**：`POST /api/plugins/:id/reload` 重新加载一个社区插件。
@@ -1738,6 +1752,7 @@ Web 设置页根据 `operatorTokenRequired` 决定是否显示“运维访问”
 用请求里的内容**整体替换**世界的维度定义。
 
 - 导入后，活跃的会话会收到“作者源已变化”的通知。
+- 来自世界包的世界被标上 `packageModified`，和 `PATCH` 一样。
 - 会话里的当前值不会自动重置。已有会话要显式调用同步端点来采用新定义，同步时会检查冲突。
 - 任何合法的维度 ID 都用同一种定义格式。
 
@@ -1779,6 +1794,8 @@ Web 设置页根据 `operatorTokenRequired` 决定是否显示“运维访问”
 - 顶层 `dimensions` 会写入 `metadata.dimensions`。
 - `metadata` 是合并写入：没提到的同级字段保留原样。
 - `dimensions` 与 `metadata.dimensions` 都会经过世界维度校验。
+- 新会话、预检和同步用这条记录里的维度和 `characterSchema`，不读世界包里的文件。
+- 世界来自世界包（`metadata.source` 是 `file` 或 `generated-file`，或者带 `packageManaged`）时，记录被标上 `packageModified: true`。之后启动加载、文件重载和更新都保留这条记录，不用包文件覆盖它。规则见[世界记录和世界包](./world-data.md#世界记录和世界包)。
 
 **请求体示例:**
 
@@ -1796,9 +1813,30 @@ Web 设置页根据 `operatorTokenRequired` 决定是否显示“运维访问”
 }
 ```
 
+#### `POST /api/worlds/:id/restore-package`
+
+把一个在应用里改过的包世界换回世界包里的版本。
+
+- 服务端重新读取世界包，用读到的内容替换世界记录，并去掉 `packageModified`。之后启动加载和文件重载重新让记录跟随文件。
+- 世界的来源（`metadata.source`、`metadata.storage`）和创建时间保持原值。
+- 维度定义变了时，使用这个世界的会话收到 `world.dimensions.changed` 通知。会话里已有的值不会被重置。
+- 请求体可以是空对象。
+
+**响应:** 恢复后的 WorldRecord。
+
+**错误:**
+
+| 状态码 | `code`                   | 什么时候                                               |
+| ------ | ------------------------ | ------------------------------------------------------ |
+| 404    | `world_not_found`        | 没有这个世界                                           |
+| 409    | `world_not_from_package` | 这个世界不是从世界包来的（例如存在数据库里的生成世界） |
+| 409    | `world_package_missing`  | 世界目录里找不到这个世界的包                           |
+| 409    | `world_deleting`         | 世界正在删除                                           |
+| 422    | `world_package_invalid`  | 世界包读不出来；改过的记录保持原样                     |
+
 #### `POST /api/worlds/:id/sync-dimensions`
 
-把世界当前的维度定义同步到指定的一个会话。这个端点直接尝试写入；想先预览，或者需要通用的同步选项，用 `sync-data`。
+作者和工具用的接口，把世界记录里当前的维度定义同步到 `sessionId` 指定的一个活跃会话。应用没有供玩家操作的入口。这个端点直接尝试写入，不支持 dry-run；想先预览，或者需要通用的同步选项，用 [`sync-data`](#post-apiworldsidsync-data)。
 
 它只处理维度：使用 `world_data_import_ledger` 账本和受保护的 `_dimensions` 记录，不写 `entries`，也不写常驻 lorebook，也不清理其他导入的数据。
 
@@ -1848,7 +1886,11 @@ Web 设置页根据 `operatorTokenRequired` 决定是否显示“运维访问”
 - 传 `sessionId`：使用这个会话**已保存的 `activePlugins`**。这时请求里的 `plugins` 会被忽略。
 - 只传 `plugins`：在创建会话之前，预检某一组插件选择。
 
+维度和角色 schema 读世界记录，和创建会话一样；其他数据读世界包的 `data/`。
+
 预检不会加载也不会执行 `worldProjections` handler，所以 projection 的输出不计入 `planned` / `targets`。响应会带一条 warning，说明这部分推迟到真正导入或同步时执行。
+
+世界声明了维度，而这组插件里没有提供 `world.dimensions@1` 的，响应带一条 `code: "dimension-provider-missing"` 的 warning：这些维度不会导入。准备页据此提示玩家。
 
 **请求体:**
 
@@ -1884,7 +1926,9 @@ Web 设置页根据 `operatorTokenRequired` 决定是否显示“运维访问”
 
 #### `POST /api/worlds/:id/sync-data`
 
-把世界包里更新过的 worldData 同步到一个已有的会话。**默认只预览（dry-run）**，传 `dryRun: false` 才写入。
+作者和工具用的接口，把世界包里更新过的 worldData 同步到 `sessionId` 指定的一个已有会话。应用目前没有供玩家操作的同步入口。**默认只预览（dry-run）**，传 `dryRun: false` 才写入；实际写入要求会话为 `active`。
+
+更新世界包、文件热更新、启用插件和批准插件运行服务端代码都不会自动调用它。接口使用会话已保存的 `activePlugins`，不启用插件，不重新运行开局流程，也不重写历史故事。玩家要使用新的开局数据，请新开会话；正文仍按[世界数据](./world-data.md)中“改文件后自动重载”的规则更新。
 
 **请求字段:**
 
@@ -1896,9 +1940,9 @@ Web 设置页根据 `operatorTokenRequired` 决定是否显示“运维访问”
 
 **同步哪些数据:**
 
-- 只处理账本 `world_data_import_ledger` 里 `managed=true` 的 row。
+- 已有记录的覆盖和删除，只处理账本 `world_data_import_ledger` 里 `managed=true`、属于当前世界的 row；本次计划里的新记录也会导入并记入账本。
 - 用 `valueHash` 判断玩家或插件有没有改过目标数据。
-- 维度定义也在同一本账里，包括 inline 定义、`dimensionSources`，以及存储型世界的有效定义。
+- 维度定义也在同一本账里。维度来自世界记录，所以在应用里改过的维度也会同步；其他 worldData 来自世界包的 `data/`。
 
 **冲突怎么处理:**
 
@@ -1907,6 +1951,7 @@ Web 设置页根据 `operatorTokenRequired` 决定是否显示“运维访问”
 - 维度的源没变时，不重置进度。
 - 作者修改或移除了维度，而会话里的值已演化、被手改，或还有待结算的回执时，报告冲突。
 - `force: true` 不解除这些维度保护，不触发结构迁移，也不强制重置。
+- 会话现在没有启用提供 `world.dimensions@1` 的插件时，维度不参与同步：已有的维度记录原样保留，响应带一条 `dimension-provider-missing` warning。
 
 **并发:**
 
@@ -2199,8 +2244,9 @@ Web 设置页根据 `operatorTokenRequired` 决定是否显示“运维访问”
 - `pluginPolicy.requires`：
   - 创建时，世界作为一个依赖方参与解析。某个契约只有一个提供者时，它会被自动加入。
   - 这些需求随会话保存在 `metadata.pluginSelection.requiredContracts`。之后的启停与重载沿用它，不再读取世界。
-  - 没有已安装的提供者，或有多个提供者而请求里没有指定，返回 `400 { "code": "world_requirement_unmet", "details": { contract, code, candidates? } }`。
-  - 玩家显式停用了提供者，或提供者是还在等授权的社区插件时，会话照常创建。
+  - 有需求没满足时会话照常创建：没有已安装的提供者，有多个提供者而请求里没有指定，玩家显式停用了提供者，或提供者是还在等授权的社区插件。响应在 `unmetRequirements` 里列出每一项 `{ contract, code, candidates? }`，`code` 是 `missing-provider`、`ambiguous-provider`、`excluded` 或 `approval-required`。前两种还会在服务端日志里记一条 warning。
+- 世界声明了维度，而本次启用的插件里没有提供 `world.dimensions@1` 的，维度不导入，会话照常创建。响应的 `ignoredDimensions` 列出这些维度 ID；会话在没有维度的情况下运行。
+- 依赖缺失的插件：它依赖的契约没有提供者（例如玩家关掉了提供者）时，会话照常创建，这个插件自动停用。玩家要的和 `kind: core` 的这类插件仍写进 `activePlugins`，`GET /api/sessions/:id/plugins` 把它们列在 `unavailable`，依赖回来后自动恢复。规则见[会话插件选择](./plugins.md#会话插件选择)。
 - `metadata.characterSchema`：Web 私有模式创建本地会话时写入同样的 schema。预设不合法时，会话不创建。
 - `metadata.embeddedCharacters`：它不是插件的角色卡，不会产生插件数据的副本。
 - `metadata.embeddedLorebook`：AI 生成的 `server-store` / `return-only` 世界用它携带资料与规则。
@@ -2228,16 +2274,19 @@ Web 设置页根据 `operatorTokenRequired` 决定是否显示“运维访问”
 
 **响应字段**:
 
-| 字段                   | 类型                                   | 说明                                                                                                                               |
-| ---------------------- | -------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| `ownerToken`           | string                                 | 会话的 owner token，**只在这里返回一次**（服务端只存哈希）。什么时候必须携带见下方                                                 |
-| `locale`               | string                                 | 会话实际的内容语言                                                                                                                 |
-| `requestedLocale`      | string（可选）                         | 只在实际语言与请求不同时出现                                                                                                       |
-| `pluginsWithoutLocale` | string[]（可选）                       | 已启用、但没有会话语言文字的插件 ID（只有英文标签，面板显示英文）。只是提示，不影响创建                                            |
-| `status`               | `'active' \| 'paused' \| 'ended'`      | 会话生命周期状态                                                                                                                   |
-| `phase`                | `'setup' \| 'playing'`                 | 会话处在开局准备还是正式游玩。激活集里有 setup runtime 时初始为 `setup`，否则为 `playing`；全部 setup runtime 完成后变成 `playing` |
-| `completedPlayerTurns` | number                                 | 已提交的正式玩家回合数。setup 阶段的交互不计入；同一回合不会被重复计数                                                             |
-| `setupRuntimes`        | `Record<runtimeId, SetupRuntimeState>` | 每个 setup runtime 的状态。见下表                                                                                                  |
+| 字段                   | 类型                                        | 说明                                                                                                                                                                     |
+| ---------------------- | ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `ownerToken`           | string                                      | 会话的 owner token，**只在这里返回一次**（服务端只存哈希）。什么时候必须携带见下方                                                                                       |
+| `locale`               | string                                      | 会话实际的内容语言                                                                                                                                                       |
+| `requestedLocale`      | string（可选）                              | 只在实际语言与请求不同时出现                                                                                                                                             |
+| `pluginsWithoutLocale` | string[]（可选）                            | 已启用、但没有会话语言文字的插件 ID（只有英文标签，面板显示英文）。只是提示，不影响创建                                                                                  |
+| `unmetRequirements`    | `{ contract, code, candidates? }[]`（可选） | 世界必需、但本会话没有启用提供者的契约。会话少了这部分照常运行。只是提示，不影响创建                                                                                     |
+| `ignoredDimensions`    | string[]（可选）                            | 世界声明了、但没有启用的插件能保存的维度 ID。它们没有导入。只是提示，不影响创建                                                                                          |
+| `worldDataNotices`     | `{ level, sourceId?, message }[]`（可选）   | 世界数据里没有导入的部分（warning 和 error），例如只有还在等批准的社区插件接收的数据。游戏界面显示给玩家；见[开局后加入的接收插件](./world-data.md#开局后加入的接收插件) |
+| `status`               | `'active' \| 'paused' \| 'ended'`           | 会话生命周期状态                                                                                                                                                         |
+| `phase`                | `'setup' \| 'playing'`                      | 会话处在开局准备还是正式游玩。激活集里有 setup runtime 时初始为 `setup`，否则为 `playing`；全部 setup runtime 完成后变成 `playing`                                       |
+| `completedPlayerTurns` | number                                      | 已提交的正式玩家回合数。setup 阶段的交互不计入；同一回合不会被重复计数                                                                                                   |
+| `setupRuntimes`        | `Record<runtimeId, SetupRuntimeState>`      | 每个 setup runtime 的状态。见下表                                                                                                                                        |
 
 `ownerToken` 什么时候必须携带：
 
@@ -2259,13 +2308,13 @@ Web 设置页根据 `operatorTokenRequired` 决定是否显示“运维访问”
 
 **错误:**
 
-| 状态码 | `code`                    | 什么时候                                                    |
-| ------ | ------------------------- | ----------------------------------------------------------- |
-| 400    | `world_requirement_unmet` | 世界必需的契约没有提供者，或有多个提供者而没有指定          |
-| 401    | `operator_token_required` | 托管部署（`demo` / `commercial`）下创建会话没有带运维 token |
-| 404    | `world_not_found`         | 提供了 `worldId`，但世界不存在                              |
-| 409    | `world_deleting`          | 世界正在删除                                                |
-| 409    | `session_already_exists`  | 客户端自定义的 `id` 已存在                                  |
+| 状态码 | `code`                    | 什么时候                                                             |
+| ------ | ------------------------- | -------------------------------------------------------------------- |
+| 400    | `plugin_rejected`         | 玩家要的插件因冲突等原因被拒（不包括依赖缺失）；`details` 是这条拒绝 |
+| 401    | `operator_token_required` | 托管部署（`demo` / `commercial`）下创建会话没有带运维 token          |
+| 404    | `world_not_found`         | 提供了 `worldId`，但世界不存在                                       |
+| 409    | `world_deleting`          | 世界正在删除                                                         |
+| 409    | `session_already_exists`  | 客户端自定义的 `id` 已存在                                           |
 
 - `id` 已存在时的响应体是 `{ "error": "Session already exists: <id>", "code": "session_already_exists" }`。创建不会覆盖原会话，也不会把原会话的子记录当成新会话的数据。
 - 服务端在准备资源之前和提交会话时各检查一次世界。准备阶段不建立媒体归属；失败后留下的无引用字节由媒体 GC 回收，不会强删可能被其他会话使用的内容。
@@ -2449,6 +2498,57 @@ Web 设置页根据 `operatorTokenRequired` 决定是否显示“运维访问”
 
 **较早创建的会话:** 没有私有身份标记的会话仍然可以删除。服务端只在请求隔离检查里，用它已有的 owner 哈希或持久化的 `(id, createdAt)` 作为它的身份。新建的会话总是带随机的身份标记，用同一个 ID 重建不会继承旧身份。
 
+#### `GET /api/sessions/:id/memory-index`
+
+会话的记忆第一次建索引时，锁定当时配置的向量（embedding）模型。这个端点返回锁定的模型和当前配置选中的模型。请求带上和回合相同的 `X-Slot-Config`，判断才按玩家这次会用的模型设置来做。
+
+**响应 200:**
+
+```json
+{
+  "available": true,
+  "locked": {
+    "provider": "openai",
+    "modelName": "text-embedding-3-small",
+    "dim": 1536,
+    "lockedAt": "2025-01-15T10:00:00.000Z"
+  },
+  "configured": { "provider": "ollama", "modelName": "nomic-embed-text" },
+  "stale": true
+}
+```
+
+| 字段         | 说明                                                                                                                     |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------ |
+| `available`  | 服务端有没有向量索引。没有向量能力或 `VECTOR_BACKEND=none` 时为 `false`，其余字段为空                                    |
+| `locked`     | 索引用的模型。会话还没建过索引时为 `null`；没有记录锁定时间时 `lockedAt` 为 `null`                                       |
+| `configured` | 当前配置选中的向量模型。没有配置时为 `null`                                                                              |
+| `stale`      | `configured` 不是 `locked` 的模型时为 `true`。这时记忆检索只按关键词匹配，新内容也不进索引，直到重建索引或换回原来的模型 |
+
+`stale` 为 `true` 时，Web 客户端在会话里显示提示和“重建索引”按钮；没有配置向量模型时，按钮是“清除索引”。
+
+#### `POST /api/sessions/:id/memory-index/rebuild`
+
+用当前配置的向量模型重建会话的记忆索引。请求带上和回合相同的 `X-Provider-Keys` 与 `X-Slot-Config`。
+
+1. 先向当前配置的模型发一次向量请求，测出维度。请求失败时返回 `502`，原来的索引不动。
+2. 等这个会话正在进行的索引写入结束。
+3. 在一个事务里删掉会话在旧模型下的全部向量和索引进度，把会话锁到新模型。没有配置向量模型时，会话改为未锁定；以后配置了模型，下一个回合会重新锁定。
+4. 在后台从第一条消息开始重新建索引。建好之前，记忆检索用关键词补足。
+
+旧向量随重建删除，不再占空间。用同一个旧模型的其他会话不受影响。
+
+**响应 200:** 与 `GET /api/sessions/:id/memory-index` 相同，是重建之后的状态。
+
+**错误:**
+
+| 状态码 | `code`                        | 什么时候                                                                |
+| ------ | ----------------------------- | ----------------------------------------------------------------------- |
+| 409    | `memory_index_unavailable`    | 服务端没有向量索引                                                      |
+| 502    | `embedding_unavailable`       | 当前配置的向量模型没有回答。`details.reason` 是原因，原来的索引保持不变 |
+| 409    | `memory_index_changed`        | 重建期间，会话锁定的模型被另一个请求改了。重新读取状态后再试            |
+| 409    | `session_incarnation_changed` | 请求等待期间，会话被删除后用同一个 ID 重建了                            |
+
 ### Turn 执行
 
 回合（Turn）是游戏的基本交互单元。玩家每发一次言就触发一个回合：服务器调度所有活跃的 runtime，收集模型输出并返回。
@@ -2557,13 +2657,14 @@ Web 设置页根据 `operatorTokenRequired` 决定是否显示“运维访问”
 - 成功时以 `202` 直接返回新作业对象。
 - 不可重试时返回 `409`，`code: "runtime_job_not_retryable"`。
 
-框架不会自动重跑失败类的作业，以免重复调用已经计费、但结果没有存下来的 provider。没被认领的普通 `queued` 作业在重启后会继续执行。
+框架不会自动重跑失败类的作业，以免重复调用已经计费、但结果没有存下来的 provider。`queued` 作业在重启后会继续执行，包括正常关闭时放回队列的作业。
 
 **作业是怎么执行的:**
 
 - worker 先认领作业并持有一个可续期的租约。默认并发为 4；同一个 `(session, plugin, runtime)` 的作业串行执行。
 - `maxQueueMs` 限制排队时间。
 - `maxExecutionMs` 限制从 `running` 到 runtime 执行返回的时间。之后等会话锁来提交的时间不计入。
+- 正常关闭时，还没进入 `committing` 的作业等这次执行返回后放回 `queued`，jobId 不变。已经进入 `committing` 的作业照常提交完。
 - 重启后继续认领合法的 `queued` 作业。排队超时的作业标为 `timed_out`，租约过期的在途作业标为 `orphaned`。
 - 提交之前再检查一次：会话是否仍 `active`、身份是否没变，插件的审批范围和版本，以及实际的 proposal effects。
 
@@ -3179,7 +3280,8 @@ runtime 报告失败时，它的原始错误保留在 `result.runtimeResults` �
 **重启与凭证**：
 
 - 任务行是持久化的。服务重启后仍为 `queued` 的任务，会在凭证可用时继续执行：下一次带 provider key 的请求会重新交出凭证，或者服务端自己的凭证满足就绪检查。
-- 执行到一半被打断的任务，在租约过期后标为 `orphaned`。框架不会自动重跑，避免图像或语音被二次计费。
+- 服务正常关闭时，执行到一半的任务放回队列，重启后重跑。它停下前调用过的服务商会再被调用一次，所以作业要能安全地重跑。
+- 进程崩溃时执行到一半的任务，在租约过期后标为 `orphaned`。框架不会自动重跑，避免图像或语音被二次计费。
 - 失败或取消的任务可以用 `POST /api/sessions/:id/runtime-jobs/:jobId/retry` 重试，重试使用新的 `turnId`。
 
 ##### 错误
@@ -3410,6 +3512,7 @@ runtime 报告失败时，它的原始错误保留在 `result.runtimeResults` �
 返回“写一个世界可以填哪些内容”的清单，供世界创建界面和开发 Agent 使用。它反映服务端当前已加载的插件。
 
 - 内容全部来自插件清单的 `contributes.data.*.authoring` 声明，没有写死的插件列表。
+- `packs` 列出服务端玩法包目录（`packs/builtin.yaml`）里的全部玩法包：`id`、`label`、`description`、`tags`、`requested`、`recommended`，以及包写了的 `defaultViewMode`。世界在 `pluginPolicy.presetId` 里写其中一个 `id`；AI 创建世界把它们作为选项。
 - `pnpm describe:authoring` 输出的是同一份数据。
 - 示例无法读取、不是 JSON，或可生成契约的 schema 缺失、无效或冲突时，只略过对应契约。可选的 `diagnostics` 数组逐项返回 `{ pluginId, namespace, message }`，服务端也记录警告；其他契约和插件仍可用。
 - 查询参数 `locale` 决定 `title` 等展示文本的语言，省略时用服务端默认语言。
@@ -3472,6 +3575,22 @@ runtime 报告失败时，它的原始错误保留在 `result.runtimeResults` �
       "requires": [],
       "settings": []
     }
+  ],
+  "packs": [
+    {
+      "id": "dialogue-mode",
+      "label": "对话模式",
+      "description": "对话优先叙事、场景演员、快速短句和角色资料。",
+      "tags": ["mode:dialogue"],
+      "requested": [
+        "pregame",
+        "world-init",
+        "char-creator",
+        "chat-mode-narrator"
+      ],
+      "recommended": ["memory", "npc-graph"],
+      "defaultViewMode": "stage"
+    }
   ]
 }
 ```
@@ -3483,6 +3602,7 @@ runtime 报告失败时，它的原始错误保留在 `result.runtimeResults` �
 | `contracts`    | 每个有插件接收的数据契约：接收插件、标题、写作提示、可直接写进 `world.data.yaml` 的条目、示例 |
 | `generate`     | 只在应用内生成器能生成这份内容时出现：`offer` 表示列为可选项，`default` 表示列出并默认选中    |
 | `plugins`      | 插件目录：ID、名称、简介、提供和依赖的契约、可以用 `pluginSettings` 预置的设置项              |
+| `packs`        | 玩法包目录：世界可以在 `pluginPolicy.presetId` 里写的玩法包，以及包写了的 `defaultViewMode`   |
 
 #### `GET /api/framework/capabilities`
 
@@ -3563,7 +3683,7 @@ runtime 报告失败时，它的原始错误保留在 `result.runtimeResults` �
 - `eventTopics`：会话解析插件集合时用它保证一个 topic 只有一个声明者。
 - `languages.text`：插件有文字的语言，包括标签、界面文字、代码里的文字，以及翻译目录里的译文。`languages.instructions`：有指令（prompt 正文）的语言。两者都至少包含 `en`。
 - `author.about` 和链接的 `label` 可能是按语言分的 map。
-- 每个 runtime 摘要包含 `id`、`runtimeType`、`trigger`、`execution`、生效的 `turnCompletion`、`outputKind`、可选的 `outputContract` 等字段。
+- 每个 runtime 摘要包含 `id`、`runtimeType`、`trigger`、`execution`、生效的 `turnCompletion`、`outputKind`、可选的 `outputContract` 等字段。 `tags` 属于包摘要，runtime 摘要不重复提供。
 
 `hostState` 说的是服务端有没有加载这个插件，不是某个会话有没有启用它。这是两种状态，列表不会把前者写成某个会话的 active。
 
@@ -3591,6 +3711,7 @@ runtime 报告失败时，它的原始错误保留在 `result.runtimeResults` �
 注意：
 
 - `runtimes[].after` / `needs` / `inputs` / `effects` / `turnCompletion` 是编译后的执行描述，用来解释执行顺序、输入条件和 detached 行为。作者写的是另一种格式：在 `PLUGIN.md` 里声明包级 `contributes`，在 `RUNTIME.md` 的 `schedule` / `io` / `agent` / `function` 分组里声明执行配置。不要把这里的内部结构当作清单提交。
+- UI 声明在包级 `ui` 字段中，`runtimes[]` 不提供 UI。`GET /api/plugin-flows` 的 runtime 项也不提供 `uiSlots`；UI 声明从插件详情或 `/api/ui-specs` 读取。
 - 动态 key 不在清单里列举。用当前会话的 plugin-data 查询或 `_index` 端点读取。
 - 服务、工具、action、slash command 和 extension 是不同的注册种类，必须分别声明。
 
@@ -3665,6 +3786,15 @@ runtime 报告失败时，它的原始错误保留在 `result.runtimeResults` �
 ```
 
 响应里还有 `resolution`：本次求解的完整结果。
+
+会话有世界、并且这次有插件新加入启用集合时，服务端为它们补导入一次世界数据（规则见[开局后加入的接收插件](./world-data.md#开局后加入的接收插件)），响应多一个 `worldData`：
+
+| 字段        | 类型                              | 说明                                           |
+| ----------- | --------------------------------- | ---------------------------------------------- |
+| `receivers` | string[]                          | 第一次收到数据的插件                           |
+| `imported`  | number                            | 写入的条数                                     |
+| `conflicts` | number                            | 因为游戏改过而保持原样的条数                   |
+| `notices`   | `{ level, sourceId?, message }[]` | 按现在启用的插件，世界数据里仍然没有导入的部分 |
 
 规则（启用和禁用相同）：
 
@@ -4002,7 +4132,8 @@ runtime 可以中途停下来等玩家提供数据，这叫挂起。本节的端
 | ------ | ------ | ---- | ----------------------------------------------- |
 | `data` | object | 是   | 玩家提交的数据，必须符合挂起项的 `resumeSchema` |
 
-- 服务端用 `resumeSchema` 对 `data` 做完整的 JSON Schema 校验（Ajv）：`enum`、嵌套对象、`min` / `max`、`minLength` / `maxLength`、`pattern`、数组 `items`、`oneOf` / `anyOf` 等都会检查。不符合返回 `400`。
+- 缺少社区插件的运行授权时，先返回 `202 approval-required`，依次请求 `covel:plugin-server-code` 和 `runtime:<runtimeId>`。授权只针对这次恢复的 runtime；持有会话锁后还会重查。客户端逐项审批并重试原请求，拒绝审批则保留挂起项。托管部署还要求运营者凭据。
+- 服务端用 `resumeSchema` 对 `data` 做完整的 JSON Schema 校验（Ajv）：`enum`、嵌套对象、`min` / `max`、`minLength` / `maxLength`、`pattern`、数组 `items`、`oneOf` / `anyOf` 等都会检查。不符合返回 `400 resume_data_invalid`。schema 不是对象或无法编译时，返回 `400 resume_schema_invalid`；不会占用挂起项或运行插件，作者需修正插件产生的 schema，再发起新的挂起请求；玩家可以放弃原挂起项。
 - 浏览器客户端可以带 `X-Provider-Keys` 请求头，为这次请求提供模型密钥。桌面版和自部署客户端可以省略，沿用服务端启动时配置的密钥。服务端不会通过这个接口回传密钥。
 
 **响应**
@@ -4013,14 +4144,18 @@ runtime 可以中途停下来等玩家提供数据，这叫挂起。本节的端
 
 **错误**
 
-| 状态码 | `code`                | 什么时候                                                                                     |
-| ------ | --------------------- | -------------------------------------------------------------------------------------------- |
-| 400    | —                     | 请求体不是合法 JSON、结构不对，或 `data` 没通过 `resumeSchema` 校验                          |
-| 404    | —                     | 会话或挂起项不存在，或找不到对应的 runtime                                                   |
-| 409    | —                     | 挂起项已经处理过（两个请求同时恢复时，后到的一方也是这个结果）                               |
-| 409    | `suspension_outdated` | 挂起项已经过时，服务端把它作废了，见下面的“过时的挂起项”                                     |
-| 500    | —                     | runtime 执行失败或提交失败（`error` 说明原因）；未知异常在生产环境是 `Internal server error` |
-| 503    | `session_busy`        | 等会话锁超时，固定消息 `Session is busy, please retry`                                       |
+| 状态码 | `code`                    | 什么时候                                                                                     |
+| ------ | ------------------------- | -------------------------------------------------------------------------------------------- |
+| 400    | —                         | 请求体不是合法 JSON 或结构不对                                                               |
+| 400    | `resume_data_invalid`     | `data` 没通过 `resumeSchema` 校验                                                            |
+| 400    | `resume_schema_invalid`   | `resumeSchema` 不是对象或无法编译；挂起项保持未处理                                          |
+| 401    | `operator_token_required` | 托管部署缺少运行社区插件所需的运营者凭据                                                     |
+| 429    | `approval_queue_full`     | 待审批队列已满，先处理已有审批                                                               |
+| 404    | —                         | 会话或挂起项不存在，或找不到对应的 runtime                                                   |
+| 409    | —                         | 挂起项已经处理过（两个请求同时恢复时，后到的一方也是这个结果）                               |
+| 409    | `suspension_outdated`     | 挂起项已经过时，服务端把它作废了，见下面的“过时的挂起项”                                     |
+| 500    | —                         | runtime 执行失败或提交失败（`error` 说明原因）；未知异常在生产环境是 `Internal server error` |
+| 503    | `session_busy`            | 等会话锁超时，固定消息 `Session is busy, please retry`                                       |
 
 失败响应的规则：
 
@@ -4285,9 +4420,12 @@ runtime 可以中途停下来等玩家提供数据，这叫挂起。本节的端
   "sessionId": "mistport-<new-uuid8>",
   "parentSessionId": "mistport-a1b2c3d4",
   "fromSnapshotId": "<parent-snapshot-id>",
-  "forkSnapshotId": "<child-fork-snapshot-id>"
+  "forkSnapshotId": "<child-fork-snapshot-id>",
+  "missingMediaCount": 0
 }
 ```
+
+`missingMediaCount` 是分叉用到、但已经不在媒体存储里的文件数，同一个文件只算一次。界面在这些位置显示“媒体不可用”的占位。
 
 **服务端做了什么**
 
@@ -4333,7 +4471,8 @@ runtime 可以中途停下来等玩家提供数据，这叫挂起。本节的端
 媒体的处理：
 
 - 为拷贝过来的消息里的媒体建立子会话自己的引用。
-- 消息、状态和 runtime 导出里用到的所有媒体，都必须已经授权给父会话，否则整个分叉以 `403 media_reference_forbidden` 失败。只知道媒体 ID 不能获得访问权。
+- 消息、状态和 runtime 导出里用到的、还存在的媒体，都必须已经授权给父会话，否则整个分叉以 `403 media_reference_forbidden` 失败。只知道媒体 ID 不能获得访问权。
+- 已经不存在的媒体（例如在媒体库里删掉了）不阻止分叉。子会话照常创建，保留原来的消息和数据，但不得到这个文件的引用。它在子会话里和在父会话里一样显示占位，并计入 `missingMediaCount`。
 
 runtime 导出的处理：
 
@@ -4727,6 +4866,25 @@ id: example-epoch:2
   - 执行被中止（`abortReason`）；
   - 提交失败；
   - setup 还有没完成的项（后面还有开局交互）。
+- **接力开始前玩家点了停止**：setup 回合照常保存，开场不再开始。`execution.completed` 带接力回合的 `turnId`、`committed: false` 和 `abortReason: "aborted-by-player"`。这个没开始的接力回合会记下来：执行状态（`GET /api/sessions/:id/execution`）显示 `state: "failed"`、`origin: "continuation"`，`retry` 是 `retry_turn`。用它恢复（带 `recoverFromTurnId`）时，开场照常以接力回合运行，不增加玩家回合数。
+- **回合保存之后的收尾**：宣布后台作业、写 `turn.completed` 调试记录这些步骤失败时只记日志。流仍然以 `execution.completed` 结束，开场接力照常进行。
+
+##### 流里的拒绝
+
+SSE 流已经打开之后，动作仍可能在开始前被拒绝。这时流里只有一个 `error.occurred`，带 `message` 和 `code`，什么都没有保存，生产环境也给出原文。会话守卫的拒绝（比如 `session_not_active`、`approval_required`）保留它们在 JSON 接口里的 code。另外几种：
+
+| `code`                       | 含义                                                       |
+| ---------------------------- | ---------------------------------------------------------- |
+| `input_already_committed`    | 这条输入（`inputMessageId`）已经随一个回合保存过，不要重发 |
+| `retry_source_not_found`     | `retryFromTurnId` 指的回合不在这个会话里                   |
+| `retry_source_not_committed` | 来源回合没有提交，先恢复原来的动作                         |
+| `retry_source_not_original`  | 指的是一次重试，不是原回合                                 |
+| `retry_source_stale`         | 来源回合之后故事已经往前走了                               |
+| `retry_target_not_active`    | 重试目标在会话里已经停用                                   |
+| `retry_target_not_failed`    | 重试目标已经不再是失败状态                                 |
+| `recovery_unavailable`       | `recoverFromTurnId` 指的回合已经不能恢复                   |
+
+`retry_*` 和 `recovery_unavailable` 都说明客户端看到的任务状态过时了：先刷新，再决定是否重试。
 
 ##### 请求头（可选）
 
@@ -4908,7 +5066,7 @@ interface SseEnvelope {
   "saveTarget": "server-file",
   "idleTimeoutMs": 300000,
   "brief": {
-    "experienceMode": "traditional-story",
+    "pack": "traditional-story",
     "content": ["characters", "lorebook", "rules", "opening-kit"],
     "contracts": ["memory.blocks@1"],
     "additionalInstructions": "让三个主要角色共同隐瞒一次失败的远征。"
@@ -4929,14 +5087,14 @@ interface SseEnvelope {
 
 `brief` 的字段：
 
-| 字段                     | 类型     | 说明                                                                          |
-| ------------------------ | -------- | ----------------------------------------------------------------------------- |
-| `experienceMode`         | string   | `traditional-story` 或 `dialogue-mode`；后者同时生成 `defaultViewMode: stage` |
-| `content`                | string[] | 内核内容：可选 `characters`、`lorebook`、`rules`、`opening-kit`               |
-| `contracts`              | string[] | 插件内容，写数据契约 ID                                                       |
-| `additionalInstructions` | string   | 对世界包的补充要求（最多 2000 字符），如角色关系、禁忌、节奏或要避开的内容    |
+| 字段                     | 类型     | 说明                                                                                                                                                                                                                                                             |
+| ------------------------ | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pack`                   | string   | 世界为哪个玩法包而做：服务端玩法包目录（`packs/builtin.yaml`）里的 ID，可选值见 [`GET /api/framework/authoring`](#get-apiframeworkauthoring) 的 `packs`。它写进世界的 `pluginPolicy.presetId`；玩法包写了 `defaultViewMode` 时，世界也带上它。不写就不指定玩法包 |
+| `content`                | string[] | 内核内容：可选 `characters`、`lorebook`、`rules`、`opening-kit`                                                                                                                                                                                                  |
+| `contracts`              | string[] | 插件内容，写数据契约 ID                                                                                                                                                                                                                                          |
+| `additionalInstructions` | string   | 对世界包的补充要求（最多 2000 字符），如角色关系、禁忌、节奏或要避开的内容                                                                                                                                                                                       |
 
-`contracts` 的可选值来自 `GET /api/framework/authoring` 里带 `generate` 的契约，传其他值返回 `400`。准备失败的契约不会出现在可选列表里；生成和修订继续处理其余内容，`done.warnings` 说明略过了哪个插件、namespace 和契约。
+`pack` 不在目录里返回 `400`。`contracts` 的可选值来自 `GET /api/framework/authoring` 里带 `generate` 的契约，传其他值返回 `400`。准备失败的契约不会出现在可选列表里；生成和修订继续处理其余内容，`done.warnings` 说明略过了哪个插件、namespace 和契约。
 
 `saveTarget` 的取值：
 
@@ -5346,7 +5504,7 @@ Trace 是服务器为每个回合记下的调试事件：哪个 runtime 开始�
 
 它先扫描 `messages`、`plugin_data`、`runtime_outputs`、`trace_events`、`snapshots`、`turn_results`，收集仍被引用的 mediaId，再调用 `MediaStore.cleanup()` 删掉其余的。
 
-每次清理还会释放世界数据导入留下的、创建已满 24 小时的临时引用（`world-data-import:<uuid>`）。演练只在 `expiredRefs` 里列出它们，真正的清理移除它们。更新的临时引用继续保护它的文件。这个时限是固定的，规则见 [媒体存储](./media-store.md#世界数据导入时的临时引用)。
+每次清理还会释放世界数据导入、上传或 runtime 写入留下的、创建已满 24 小时的临时引用（`media-pin:<uuid>`）。演练只在 `expiredRefs` 里列出它们，真正的清理移除它们。更新的临时引用继续保护它的文件。这个时限是固定的，规则见 [媒体存储](./media-store.md#世界数据导入时的临时引用)。
 
 > [!WARNING]
 > 这个端点默认禁用，必须设置 `COVEL_MEDIA_CLEANUP_ENABLED` 才能用。真正删除还要带确认头。
@@ -5379,7 +5537,7 @@ Trace 是服务器为每个回合记下的调试事件：哪个 runtime 开始�
   "policy": {
     "dryRun": true,
     "expireRefs": {
-      "sessionIdPrefix": "world-data-import:",
+      "sessionIdPrefix": "media-pin:",
       "maxAgeMs": 86400000
     },
     "maxBytes": 0
@@ -5397,7 +5555,7 @@ Trace 是服务器为每个回合记下的调试事件：哪个 runtime 开始�
     "expiredRefs": [
       {
         "mediaId": "...",
-        "sessionId": "world-data-import:...",
+        "sessionId": "media-pin:...",
         "pluginId": null,
         "createdAt": "2026-10-01T08:00:00.000Z"
       }
