@@ -201,7 +201,8 @@ function SessionScreen() {
   // Loading (boot or auto-resume in progress)
   if (!state.booted && !state.bootError) {
     return (
-      <div className="flex items-center justify-center h-full">
+      <div role="status" className="flex items-center justify-center h-full">
+        <span className="sr-only">{t("common.loading")}</span>
         <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
       </div>
     );
@@ -244,7 +245,8 @@ function SessionScreen() {
   }
   if (state.booted && sid && state.session?.id !== sid) {
     return (
-      <div className="flex items-center justify-center h-full">
+      <div role="status" className="flex items-center justify-center h-full">
+        <span className="sr-only">{t("common.loading")}</span>
         <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
       </div>
     );
@@ -291,7 +293,11 @@ function SessionScreen() {
     return (
       <Suspense
         fallback={
-          <div className="flex items-center justify-center h-full">
+          <div
+            role="status"
+            className="flex items-center justify-center h-full"
+          >
+            <span className="sr-only">{t("common.loading")}</span>
             <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
           </div>
         }

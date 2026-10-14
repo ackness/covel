@@ -344,7 +344,7 @@ dimensionSources:
 - 一个契约的记录写进接收插件声明的文件（`authoring.source` 的 `path` 与 `kind`，例如 `data/memory-blocks.json`、`data/time.yaml`）。一条记录就是文件内容，多条写成数组。
 - 下面两种情况，记录改写成 `data/contract-<n>.json`，并由 `data/world.data.yaml` 这个 descriptor 列出全部 source：
   - 接收插件没有声明路径；
-  - 声明的路径不能当作约定：已安装的插件里另有契约声明了同一个路径，或者它是世界包自己的文件（`world.yaml`、`WORLD.md`、内核的数据文件）。
+  - 声明的路径不能当作约定：已安装的插件里另有契约声明了同一个路径。
 - 接收方声明了 lorebook 投影时，目标写成 `contract:<id>+lorebook`。
 
 **`@covel/create` 的接口：**
@@ -606,9 +606,10 @@ Put the file at `data/quests.yaml`: it is imported without a descriptor. The sam
 
 - 导入顺序是：维度，然后媒体，然后其余契约数据，最后是 `characters`。
 - 内置世界 `worlds/emberback` 就是这样读的：它没有 descriptor，13 个 source 全部来自约定路径。
-- 没有 descriptor 时，按**已安装**插件的约定读取。有 descriptor 时，只读取它列出的 source。
+- 没有 descriptor 时，按这个会话**启用**的插件的约定读取。没启用的插件和加载失败的插件不影响读取。有 descriptor 时，只读取它列出的 source。
+- 同一个会话启用的两个契约声明了同一个路径时，这个路径不算约定，这个文件不导入，世界包要用 descriptor 说明给谁。会话照常开始。服务端日志记一条 `[sessions]` 警告，世界数据预检返回一条 `convention-collision` 警告，`pnpm validate:world` 也会报出来（见[静态校验](#静态校验pnpm-validateworld)）。
 
-给插件作者：`path` 是相对世界包根目录的路径，只能由 ASCII 字母、数字和 `_`、`.`、`/`、`-` 组成，不能以 `/` 开头，也不能含 `..`。不符合的插件清单在加载时校验失败。两个契约声明了同一个路径时，这个路径不算约定，世界包要用 descriptor 说明给谁。
+给插件作者：`path` 是相对世界包根目录的路径，只能由 ASCII 字母、数字和 `_`、`.`、`/`、`-` 组成，不能以 `/` 开头，也不能含 `..`。它也不能是内核或世界包自己的路径：`world.yaml`、`WORLD.md`、`data/world.data.yaml`、`data/dimensions.yaml`、`data/lorebook.yaml`、`characters/characters.json`、`media/gallery.json`、`media/portraits.json`、`media/scenes.json`、`media/gallery/` 目录，以及它们的语言版本（如 `world.zh-CN.yaml`），比较时不分大小写。不符合的插件清单在加载时校验失败。
 
 **什么时候仍然写 descriptor：**
 
@@ -1618,6 +1619,8 @@ pnpm validate:world --strict --plugins ~/.covel/plugins ~/.covel/worlds/my-world
 | `invalid-setting`       | error            | `pluginSettings` 的值不符合该设置项声明的类型、范围或选项                                                                       |
 | `unprovided-contract`   | error 或 warning | `pluginPolicy.requires` 的契约没有提供者                                                                                        |
 | `unresolved-contract`   | error 或 warning | source 使用的数据契约没有任何已扫描插件接收                                                                                     |
+| `unrequested-receiver`  | warning          | 新开会话默认启用的插件里没有这个 source 的接收方；玩家手动开启接收插件之前，这个 source 不导入                                  |
+| `convention-collision`  | error 或 warning | 世界没有 descriptor，而某个文件所在的路径有不止一个插件声明；同时启用这些插件的会话不导入它                                     |
 | `world-data`            | 与预检一致       | descriptor、source 顺序、文件读取、target、隐藏数据规则，以及按契约 schema 逐条校验的记录                                       |
 | `locale-file-name`      | error            | 语言文件的文件名只写了语言（`.en.`），没有写成世界声明的 locale（`.en-US.`）；这个文件不会被读取                                |
 | `locale-overlay`        | warning          | 语言文件里有一条译文无处安放（主文件没有这个 key 或 id，或它改了非文本的值），这条被忽略                                        |
@@ -1631,7 +1634,9 @@ pnpm validate:world --strict --plugins ~/.covel/plugins ~/.covel/worlds/my-world
 | `theme-music`           | error            | `themeMusic` 指向的文件世界列表无法播放                                                                                         |
 | `prompt-size`           | warning          | 内容占用的提示词偏大，见下                                                                                                      |
 
-标为“error 或 warning”的三项：拼写接近某个已知 ID 时是 error，并提示 “Did you mean”。否则默认是 warning，因为提供者可能是没被扫描的社区插件。加 `--strict` 后一律是 error。`pnpm release:preflight` 对内置世界使用 `--strict`。
+`unknown-plugin`、`unprovided-contract`、`unresolved-contract` 三项：拼写接近某个已知 ID 时是 error，并提示 “Did you mean”。否则默认是 warning，因为提供者可能是没被扫描的社区插件。加 `--strict` 后一律是 error。`pnpm release:preflight` 对内置世界使用 `--strict`。
+
+**新开会话默认启用的插件**，就是开局准备页默认勾选的插件：`pluginPolicy.requested`、`presetId` 选中的组合包里的 `requested`、带 `preferredTags` 标签的插件，再加上 core 插件和 `requires` 自动带上的依赖。已扫描的社区插件当作已经同意。`unrequested-receiver` 和 `convention-collision` 按这个集合判断：`convention-collision` 的声明者里有两个在这个集合里时是 error，否则是 warning。记录仍然按所有已扫描插件的 schema 校验，所以玩家手动开启的插件，它的数据也会检查。
 
 **`prompt-size` 的三种情况**，都不阻止使用：
 

@@ -196,7 +196,7 @@ export function RuntimeChip({
       )}
       {rt.detail === "[cached]" && (
         <span className="text-[10px] text-muted-foreground/60 italic">
-          cached
+          {t("session.cached")}
         </span>
       )}
       {rt.durationMs != null && (
@@ -210,7 +210,9 @@ export function RuntimeChip({
             e.stopPropagation();
             onRetry(rt.runtimeId);
           }}
-          className="opacity-0 group-hover:opacity-100 transition-opacity ml-0.5 p-0.5 hover:text-primary"
+          className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:opacity-100 transition-opacity ml-0.5 p-0.5 hover:text-primary"
+          type="button"
+          aria-label={retryFromLabel}
           title={retryFromLabel}
         >
           <RotateCw className="w-2.5 h-2.5" />
