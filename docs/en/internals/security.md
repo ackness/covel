@@ -202,6 +202,8 @@ If the hosted tiers lack an operator token, a media key, or CORS origins, `valid
 
 The import of community server code (`entry`, handlers, hooks, wires, runtime JavaScript) is guarded by two-step approval: first `covel:plugin-server-code` is granted, then the specific operations.
 
+Sensitive desktop configuration reads and writes require the launch token when one is configured, including `GET /api/config/keys`, which returns only provider names. Public hosted model catalogs (`/api/presets`, `/api/llm-config`) omit `baseUrl` to avoid exposing private gateway addresses and credentials in URLs; operator-token holders can still read the addresses.
+
 ### Server settings
 
 A few player settings must be enforced by the server (for example, how long traces are kept). So the server stores them in its own database, and the browser writes them through `PUT /api/config/server-settings`.

@@ -315,7 +315,7 @@ CORS 只能阻止网页读取响应，所以另有一道写入来源检查：
 
 **托管层级（`demo` / `commercial`）的差别**
 
-- 公开的 `GET /api/llm-config` 仍然返回客户端启动要用的模型目录，但不含 `source` 和加载 `error`。带运维 token 才能看到这两项诊断。
+- 公开的 `GET /api/llm-config` 仍然返回客户端启动要用的模型目录，但不含 `source`、`envKeyOverrides`、加载 `error` 和槽位的 `baseUrl`。`GET /api/presets` 也不返回 `baseUrl`。带运维 token 才能看到这些字段。
 - 公开的 `GET /api/config/info` 返回 `isDesktop: false`、`requiresAuth: true`，路径字段都是 `null`。带运维 token 的请求能拿到完整的部署路径。
 - 本机 `self` 和桌面端的响应不受影响。
 
@@ -1417,13 +1417,17 @@ fork 和社区插件的授权：
 > [!NOTE]
 > 给服务器代码的作者：底层 `prepareOutboundProxy()` 提供 `commit()` / `dispose()`，没有提交的传输由调用者释放；`configureOutboundProxy()` 用于立即应用。
 
+#### GET /api/config/keys
+
+`GET /api/config/keys` 和写入接口一样：设置了 `COVEL_DESKTOP_REST_TOKEN` 时，必须携带匹配的 Bearer token，否则返回 `401`。
+
 #### PUT /api/config/keys
 
 仅桌面可用。把 provider 密钥写入 `<covelHome>/keys.env`。
 
 - body 是 `{ provider: string | null }`。空字符串或 `null` 表示删除这个密钥。
 - 整批输入先校验。值里有换行，或者是其它类型时，返回 `400`，文件和运行时都保持原状。
-- 文件原子写入成功后，运行时的密钥才更新。
+- 文件原子写入成功后，运行时的密钥才更新，立即对回合、连接测试和模型列表生效。外部环境（shell、`.env`、`.env.llm`）的密钥始终优先；删除或替换本地密钥只改变保存的副本，不清除或覆盖外部密钥。
 
 桌面应用（Electron）保存密钥时的行为：
 

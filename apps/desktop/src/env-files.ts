@@ -30,14 +30,9 @@ export function loadKeysEnv(keysFile: string): Record<string, string> {
   return normalizeProviderKeyMap(result);
 }
 
-function loadKeysEnvForChild(keysFile: string): Record<string, string> {
-  return toApiKeyEnvMap(loadKeysEnv(keysFile));
-}
-
-/** Match source-server precedence: shell > .env.llm > .env > keys.env. */
+/** Shell > .env.llm > .env. The sidecar loads saved keys separately. */
 export function loadChildEnvironment(
   baseDir: string,
-  keysFile: string,
   inherited: NodeJS.ProcessEnv,
 ): Record<string, string> {
   const shell = Object.fromEntries(
@@ -46,7 +41,6 @@ export function loadChildEnvironment(
     ),
   );
   return {
-    ...loadKeysEnvForChild(keysFile),
     ...loadEnvFiles(baseDir),
     ...shell,
   };

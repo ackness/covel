@@ -3,18 +3,8 @@ import { join } from "node:path";
 import { normalizeProviderKeyMap, providerApiKeysFromEnv } from "@covel/shared";
 import { parseEnvLines } from "./env-file.js";
 
-/**
- * Which provider keys the process environment decides instead of the key the
- * player saved in Settings.
- *
- * The environment (shell, `.env`, `.env.llm`) outranks `keys.env`, and the
- * server cannot tell where a value in `process.env` came from once the files
- * are merged. It can tell whether the value is what `keys.env` held when the
- * process started: if not, the environment supplied it and wins again at the
- * next start, whatever the player saves meanwhile.
- */
-let bootEnvKeys: Record<string, string> = {};
-let bootSavedKeys: Record<string, string> = {};
+/** External keys are captured before saved keys are merged into process.env. */
+let bootEnvKeys: Readonly<Record<string, string>> = {};
 let bootCaptured = false;
 
 function readSavedKeys(covelHome: string): Record<string, string> {
@@ -31,9 +21,10 @@ function readSavedKeys(covelHome: string): Record<string, string> {
 }
 
 /** Call once at start, before the player can save a key. */
-export function captureBootKeySources(covelHome: string | null): void {
-  bootEnvKeys = providerApiKeysFromEnv();
-  bootSavedKeys = covelHome ? readSavedKeys(covelHome) : {};
+export function captureBootKeySources(
+  externalApiKeys: Readonly<Record<string, string>> = providerApiKeysFromEnv(),
+): void {
+  bootEnvKeys = { ...externalApiKeys };
   bootCaptured = true;
 }
 
@@ -48,9 +39,7 @@ export function envOverriddenProviders(covelHome: string | null): string[] {
   return Object.entries(bootEnvKeys)
     .filter(
       ([provider, value]) =>
-        value !== bootSavedKeys[provider] &&
-        saved[provider] !== undefined &&
-        saved[provider] !== value,
+        saved[provider] !== undefined && saved[provider] !== value,
     )
     .map(([provider]) => provider)
     .sort();

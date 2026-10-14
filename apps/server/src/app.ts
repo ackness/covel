@@ -194,9 +194,9 @@ app.use("*", createOriginGuardMiddleware(isAllowedOrigin));
 // createAiStack(). ai-setup reads llm.toml which does `${ENV}`
 // interpolation — if keys.env loaded after, a slot spec like
 // `apiKey = "${DEEPSEEK_API_KEY}"` sees `undefined` and silently falls
-// back to the built-in default. Desktop shells already pre-merge this
-// into the child env; this keeps parity for `pnpm dev:server` / CI /
-// docker where the server is spawned directly.
+// back to the built-in default. Capture external keys first so saved-key
+// edits cannot remove or replace shell/.env credentials, even if equal.
+const externalApiKeys = providerApiKeysFromEnv(process.env);
 loadKeysEnvInto(process.env);
 
 const resources: ServerResources = { applicationWork, worldWatchers: [] };
@@ -366,7 +366,7 @@ async function initializeServer(): Promise<void> {
     app.route("/", api.app);
     app.route("/", createModelDbRoutes(ai));
     app.route("/", createMiscApiRoutes(ai, api.registry, store, apiKeys));
-    app.route("/", createConfigApiRoutes({ apiKeys }));
+    app.route("/", createConfigApiRoutes({ apiKeys, externalApiKeys }));
     app.route("/", createRawConfigApiRoutes({ ai }));
     app.route("/", createAppUpdateRoutes());
 

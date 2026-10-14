@@ -18,6 +18,14 @@ describe.each(["demo", "commercial"])(
       const ai = createAiStack();
       ai.lastLoadError =
         "Synthetic parse failure at /private/synthetic-host/llm.toml";
+      const privateBaseUrl = "https://user:secret@gw.example/v1/acct-123";
+      ai.presetRegistry.reconfigure({
+        profiles: ai.presetRegistry.listProfiles(),
+        presets: ai.presetRegistry.listPresets().map((preset) => ({
+          ...preset,
+          baseUrl: privateBaseUrl,
+        })),
+      });
       const store = createMemoryStore();
       const misc = createMiscApiRoutes(ai, createPluginRegistry(), store);
       const config = createConfigApiRoutes({ apiKeys: {} });
@@ -41,11 +49,24 @@ describe.each(["demo", "commercial"])(
           const body = await publicLlm.json();
           expect(body).toMatchObject({ configured: true });
           expect(Object.keys(body.slots).length).toBeGreaterThan(0);
+          for (const endpoint of ["/api/presets", "/api/llm-config"]) {
+            const catalog = await (
+              await misc.request(endpoint, { headers })
+            ).text();
+            expect(catalog).not.toContain("baseUrl");
+            expect(catalog).not.toContain("secret");
+            expect(catalog).not.toContain("acct-123");
+          }
           expect(body).not.toHaveProperty("source");
           expect(body).not.toHaveProperty("error");
           expect(JSON.stringify(body)).not.toContain("/private/synthetic-host");
         }
         const headers = { Authorization: "Bearer synthetic-operator" };
+        for (const endpoint of ["/api/presets", "/api/llm-config"]) {
+          expect(
+            await (await misc.request(endpoint, { headers })).text(),
+          ).toContain(privateBaseUrl);
+        }
         expect(
           await (await config.request("/api/config/info", { headers })).json(),
         ).toMatchObject({ dbPath: "/private/synthetic-host/covel.db" });
