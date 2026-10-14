@@ -11,6 +11,7 @@ import {
 } from "@/lib/plugin-panel-tabs.js";
 import { useSession } from "@/stores/session-store.js";
 import { type RightPanelRequest } from "@/lib/nav-events.js";
+import { emitToast } from "@/lib/toast-channel.js";
 import { ignoreError } from "@/lib/ignore-error.js";
 import type { PluginPanelStateCache } from "./plugin-panel.js";
 
@@ -56,7 +57,7 @@ export function useRightPanelState(
   sessionId: string,
   panelRequest?: RightPanelRequest | null,
 ): RightPanelState {
-  const { i18n } = useTranslation();
+  const { i18n, t } = useTranslation();
   const { state: sessionState } = useSession();
   const panelStateCacheRef = useRef<PluginPanelStateCache>(new Map());
   const [storageData, setStorageData] = useState<StorageStatusData | null>(
@@ -69,6 +70,7 @@ export function useRightPanelState(
   const [specsStatus, setSpecsStatus] = useState<PanelSpecsStatus>("loading");
   const [specsError, setSpecsError] = useState<string | null>(null);
   const [specsAttempt, setSpecsAttempt] = useState(0);
+  const [loadedSpecsKey, setLoadedSpecsKey] = useState<string | null>(null);
   const [activePluginSubTab, setActivePluginSubTab] = useState<
     Record<string, string>
   >({});
@@ -84,6 +86,13 @@ export function useRightPanelState(
         .join("\u001f"),
     [sessionState.sessionPlugins],
   );
+
+  const specsKey = JSON.stringify([
+    sessionId,
+    activePluginKey,
+    i18n.language,
+    specsAttempt,
+  ]);
 
   useEffect(() => {
     fetchServerHealth()
@@ -106,14 +115,17 @@ export function useRightPanelState(
       setPendingPanelRequest(null);
       return;
     }
+    // Only a successful load for the current inputs can prove a panel missing.
+    // Keep the intent through lazy loading and explicit retries after errors.
+    if (specsStatus !== "ready" || loadedSpecsKey !== specsKey) return;
     const imageGroup =
       event === "open-images"
         ? pluginTabGroups.find((group) =>
-            group.subPanels.some((sub) => sub.icon === "image"),
+            group.subPanels.some((sub) => sub.navTarget === "images"),
           )
         : undefined;
     const imagePanel = imageGroup?.subPanels.find(
-      (sub) => sub.icon === "image",
+      (sub) => sub.navTarget === "images",
     );
     const target =
       typeof event === "object"
@@ -128,7 +140,11 @@ export function useRightPanelState(
               subPanelIndex: imageGroup.subPanels.indexOf(imagePanel),
             }
           : null;
-    if (!target) return;
+    if (!target) {
+      setPendingPanelRequest(null);
+      emitToast("info", t("session.panelUnavailable"));
+      return;
+    }
     const group = pluginTabGroups.find((item) => item.id === target.groupId)!;
     setActivePluginSubTab((previous) => ({
       ...previous,
@@ -136,7 +152,14 @@ export function useRightPanelState(
     }));
     setActiveTab(`plugin-${target.groupId}`);
     setPendingPanelRequest(null);
-  }, [pendingPanelRequest, pluginTabGroups]);
+  }, [
+    pendingPanelRequest,
+    pluginTabGroups,
+    specsStatus,
+    loadedSpecsKey,
+    specsKey,
+    t,
+  ]);
 
   // Load localized panel definitions; the session provider owns data hydration.
   useEffect(() => {
@@ -175,6 +198,7 @@ export function useRightPanelState(
             },
           }),
         );
+        setLoadedSpecsKey(specsKey);
         setSpecsStatus("ready");
       })
       .catch((error: unknown) => {
@@ -188,7 +212,7 @@ export function useRightPanelState(
     return () => {
       cancelled = true;
     };
-  }, [sessionId, activePluginKey, i18n.language, specsAttempt]);
+  }, [sessionId, activePluginKey, i18n.language, specsAttempt, specsKey]);
 
   const selectPluginSubTab = useCallback(
     (groupId: string, panelKey: string) =>

@@ -6,6 +6,7 @@ import {
   LIMITS,
   readAllEntries,
   type ExtractedEntry,
+  type ExtractionBudget,
 } from "./shared.js";
 
 export interface GithubLocation {
@@ -153,6 +154,7 @@ export async function downloadGithubEntries(
   location: Pick<GithubLocation, "owner" | "repo">,
   commit: string,
   signal?: AbortSignal,
+  budget?: ExtractionBudget,
 ): Promise<ExtractedEntry[]> {
   const buffer = await download(
     `https://codeload.github.com/${location.owner}/${location.repo}/zip/${commit}`,
@@ -162,6 +164,7 @@ export async function downloadGithubEntries(
   const entries = await readAllEntries(
     buffer,
     "/covel-github-install-sentinel",
+    budget,
   );
   const roots = new Set(entries.map((e) => e.relativePath.split("/")[0]));
   if (roots.size !== 1 || entries.some((e) => !e.relativePath.includes("/")))

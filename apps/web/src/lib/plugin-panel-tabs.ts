@@ -8,6 +8,7 @@ export interface PluginPanelSubPanel {
   readonly shortLabel?: string;
   readonly icon: string;
   readonly spec: Record<string, unknown>;
+  readonly navTarget?: "images";
 }
 
 export interface PluginPanelTabGroup {
@@ -138,6 +139,7 @@ export function aggregateSpecsIntoGroups(
         label: resolveI18n(spec.label, locale),
         shortLabel: subShort,
         icon: spec.icon ?? "layout",
+        navTarget: spec.navTarget,
         spec: spec as unknown as Record<string, unknown>,
       };
 
