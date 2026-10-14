@@ -8,6 +8,7 @@ import { getPluginTrustInfo } from "@covel/plugin-loader";
 import { errorBody, okBody } from "../../../api-error.js";
 import {
   buildSessionPluginView,
+  confirmedPluginIds,
   readSessionPluginSelection,
   resolveSessionPluginPlan,
   storedPluginSelection,
@@ -203,25 +204,31 @@ export function registerSessionPluginRoutes(
       const droppedProvider = droppedDimensionProvider(session, active);
       if (droppedProvider)
         return c.json(dimensionProviderRequired(droppedProvider), 409);
+      // Dependents turned off for a missing dependency stay confirmed.
+      const confirmed = confirmedPluginIds(plan, requested, pluginRegistry);
       // Single mutation point: persist the authoritative activePlugins set
       // first; the registry mirror only reconciles after the store write
       // succeeds (a rejected write leaves memory untouched).
-      await pluginRegistry.applyPersistedActivations(id, active, async () => {
-        await store.updateSession(id, {
-          activePlugins: active,
-          metadata: {
-            ...session.metadata,
-            pluginSelection: storedPluginSelection({
-              requested,
-              excluded,
-              requiredContracts,
-            }),
-          },
-          updatedAt: new Date().toISOString(),
-        });
-      });
+      await pluginRegistry.applyPersistedActivations(
+        id,
+        confirmed,
+        async () => {
+          await store.updateSession(id, {
+            activePlugins: confirmed,
+            metadata: {
+              ...session.metadata,
+              pluginSelection: storedPluginSelection({
+                requested,
+                excluded,
+                requiredContracts,
+              }),
+            },
+            updatedAt: new Date().toISOString(),
+          });
+        },
+      );
       for (const previousPluginId of session.activePlugins) {
-        if (!active.includes(previousPluginId)) {
+        if (!confirmed.includes(previousPluginId)) {
           c.get("rpcApprovalGate").revoke(id, previousPluginId);
         }
       }
@@ -281,22 +288,29 @@ export function registerSessionPluginRoutes(
       const droppedProvider = droppedDimensionProvider(session, active);
       if (droppedProvider)
         return c.json(dimensionProviderRequired(droppedProvider), 409);
+      // Plugins that need the disabled one stay confirmed but off, and the
+      // plugin list tells the player why.
+      const confirmed = confirmedPluginIds(plan, requested, pluginRegistry);
       // Single mutation point: the scope rotation and activePlugins write
       // land durably before the registry mirror drops the plugin.
-      await pluginRegistry.applyPersistedActivations(id, active, async () => {
-        await store.updateSession(id, {
-          activePlugins: active,
-          metadata: {
-            ...rotateSessionApprovalScope(session, pluginId),
-            pluginSelection: storedPluginSelection({
-              requested,
-              excluded,
-              requiredContracts,
-            }),
-          },
-          updatedAt: new Date().toISOString(),
-        });
-      });
+      await pluginRegistry.applyPersistedActivations(
+        id,
+        confirmed,
+        async () => {
+          await store.updateSession(id, {
+            activePlugins: confirmed,
+            metadata: {
+              ...rotateSessionApprovalScope(session, pluginId),
+              pluginSelection: storedPluginSelection({
+                requested,
+                excluded,
+                requiredContracts,
+              }),
+            },
+            updatedAt: new Date().toISOString(),
+          });
+        },
+      );
       c.get("rpcApprovalGate").revoke(id, pluginId);
       c.get("uiSlots")?.invalidateSession(id);
       return c.json(okBody({ activePluginIds: active, resolution: plan }));
