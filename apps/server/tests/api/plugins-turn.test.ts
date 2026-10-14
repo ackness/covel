@@ -69,9 +69,15 @@ function makeParsedManifest(
 
 // ── App factory ──────────────────────────────────────────────────
 
+// Stands in for the registry's builtin names that bootstrap sets on every
+// request. Deliberately not the old hand-written list (F-110): the route must
+// advertise whatever the registry holds, nothing else.
+const BUILTIN_TOOLS = ["search-tools", "plugin-data-get", "render-ui"];
+
 type AppVariables = {
   pluginRegistry: PluginRegistry;
   store: DataStore;
+  builtinToolNames: readonly string[];
 };
 
 function createTestApp(vars: AppVariables): Hono {
@@ -81,6 +87,7 @@ function createTestApp(vars: AppVariables): Hono {
   app.use("*", async (c, next) => {
     c.set("pluginRegistry" as never, vars.pluginRegistry);
     c.set("store" as never, vars.store);
+    c.set("builtinToolNames", vars.builtinToolNames);
     await next();
   });
 
@@ -99,7 +106,11 @@ describe("Plugin Routes", () => {
   beforeEach(() => {
     registry = createPluginRegistry();
     store = createMemoryStore();
-    app = createTestApp({ pluginRegistry: registry, store });
+    app = createTestApp({
+      pluginRegistry: registry,
+      store,
+      builtinToolNames: BUILTIN_TOOLS,
+    });
   });
 
   describe("GET /api/plugins", () => {
@@ -334,6 +345,8 @@ describe("Plugin Routes", () => {
       expect(body.framework.worldData.targetUris).toContain(
         "contract:<contractId>",
       );
+      // F-110: the builtin list is the registry's, not a hand-written fallback.
+      expect(body.framework.tools.builtin).toEqual([...BUILTIN_TOOLS].sort());
       expect(body.framework.worldData.effects).toContain("projections");
       expect(body.framework.worldData.schemaUris).toContain(
         "contract:<contractId>",

@@ -137,7 +137,8 @@ declare module "hono" {
      * `/api/sessions/:id/media-token`, and runtime `ctx.media`.
      */
     mediaStore?: MediaStore;
-    builtinToolNames?: readonly string[];
+    /** The registry's builtin tool names, set by bootstrap on every request. */
+    builtinToolNames: readonly string[];
     worldsDirs?: readonly string[];
     covelHome?: string;
     ensureEmbeddingLock?: EnsureEmbeddingLockFn;

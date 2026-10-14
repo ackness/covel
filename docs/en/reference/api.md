@@ -1387,7 +1387,7 @@ In the table below, "hosted deployment" means `DEPLOYMENT_TIER` is `demo` or `co
 
 Notes on each endpoint:
 
-- `GET /api/plugins`: the data comes from a snapshot of the registry. Plugins that failed to load are also returned, as an item with `status: "error"`.
+- `GET /api/plugins`: the data comes from a snapshot of the registry. Plugins that failed to load are also returned, as an item with `status: "error"`. In that `error` text the server's absolute plugin-directory path is written as `<plugin>` (for example `<plugin>/PLUGIN.md: …`); the full original message goes only to the server log.
 - `GET /api/worlds/:id/plugin-plan`: the server resolves the world's plugin policy, the packs, and the default selection.
   - Each `requested` and `defaultPluginIds` list contains only installed plugins.
   - A plugin the world requests but the host does not have is listed in `missing: [{ pluginId, packId? }]`.
