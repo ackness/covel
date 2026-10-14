@@ -50,9 +50,11 @@ Where:
 - The `ui.appearance` setting stores the theme package ID, and it is written as `data-theme`. The default value is `stage` (Stage). A theme choice that is already saved stays the same.
 - After the theme package's `layout` is resolved, it is written as `data-layout` and as one attribute for each option (see §3.1). There is no separate layout setting: the layout changes along with the theme package.
 - `ui.scheme` stores the color scheme (light / dark), and it is written as `data-scheme` and as the `.dark` class that Tailwind expects.
-- The theme package's `schemes` decides which color schemes it supports. A theme that supports only one scheme changes `ui.scheme` to that value automatically.
+- A theme’s `schemes` determines its display mode. A single-scheme theme displays its supported mode without writing `ui.scheme`. Missing themes display the default, with an explanation in Settings; saved preferences remain until the player chooses again.
 
 ## 2. Supported import formats
+
+An imported ID cannot match a builtin theme. Validation failures are displayed in the current UI language. Top-level rules must stay within their theme scope; commas inside `:is()`, `:where()`, brackets, and strings do not split selectors.
 
 A theme package can be a CSS file or a JSON file.
 
@@ -234,27 +236,19 @@ The structure of `manifest.json`:
 ```json
 {
   "id": "paper",
-  "label": {
-    "zh-CN": "纸本",
-    "en-US": "Paper"
-  },
   "source": "builtin",
   "schemes": ["light", "dark"],
-  "description": {
-    "zh-CN": "温暖、偏叙事阅读器的纸本风格。",
-    "en-US": "A warm editorial reading style."
-  },
-  "group": "classic",
-  "groupLabel": {
-    "zh-CN": "经典",
-    "en-US": "Classic"
-  }
+  "group": "classic"
 }
 ```
 
 A built-in theme with a layout has one more `layout` field in its manifest, for example `"layout": { "preset": "book" }`.
 
 ## 5. Shared token contract
+
+Importing and saving a theme checks text and secondary text against the background, and button text against its fill, in every declared mode. Recommended ratios are at least 4.5:1 for text and buttons and 3:1 for secondary text. Low contrast is advisory and never blocks activation; missing or unsupported colours are reported as unmeasurable. These solid-token checks do not certify images, transparent layers, or visual effects.
+
+Builtin themes have regression checks for these fixed colour pairs. Their names, descriptions, and group labels come from `appearance.builtinThemes.<id>` in the Web catalogs and follow the UI language.
 
 The main job of a theme package is to override the semantic tokens. The full list of tokens is below, grouped by category.
 
@@ -292,11 +286,7 @@ The main job of a theme package is to override the semantic tokens. The full lis
 - `--surface-empty`
 - `--border-subtle`
 
-Aliases kept for older themes:
-
-- `--surface-app`
-- `--surface-panel`
-- `--surface-panel-strong`
+Use only the token names above. Replace `--surface-app`, `--surface-panel`, and `--surface-panel-strong` in custom themes with `--surface-page`, `--surface-rail`, and `--surface-elevated` respectively. Color scheme changes are applied by the SettingsStore subscriber through `applyColorScheme`; there is no second theme provider or `covel:scheme` storage key.
 
 ### 5.3 Rule and accent tokens
 
@@ -539,7 +529,7 @@ When a theme is imported, the runtime does these steps in this order:
 4. Save to local settings
 5. Inject `<style data-theme-style="theme-id">`
 6. Register again with `ui.appearance`
-7. Correct `ui.scheme` according to `schemes`
+7. Resolve the display mode from `schemes` without writing settings
 8. Show it in the settings panel and the theme library
 
 ## 8. Persistence behavior
@@ -588,7 +578,7 @@ Players can change the look without writing any CSS. "Settings → Appearance" g
 - Animation definitions, `animation` / `animation-name`, and the custom properties that refer to them all switch to the new theme's own animation names.
 - When you save as again, only the generated snapshot at the end is replaced. Source rules and animation name prefixes do not pile up each time.
 - Both the source CSS and the final output must pass import validation. The output does not depend on the original theme's ID: you can export it as described in §8, delete the original theme, and then import it again.
-- `slugifyThemeId()` / `ensureThemeId()` generate theme IDs that do not conflict.
+- `slugifyThemeId()` / `ensureThemeId()` derive the ID from the name and avoid builtin IDs. If the final ID already belongs to a custom theme, saving asks before replacing it. Cancelling preserves the name, selection, and overrides. A theme changed during confirmation is preserved and saving asks the player to review it again.
 
 **When saving fails.** Fine-tuning the appearance and resetting both wait for the real persisted result:
 

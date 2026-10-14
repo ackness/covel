@@ -76,7 +76,8 @@ export function EconomyTab({ dimensions, onChange, t, problems }: TabProps) {
           <div key={ci} className="border border-border p-4 space-y-3">
             <div className="flex items-center justify-between">
               <span className="text-sm font-medium">
-                {text(cur.name) || `${t("world.currencies")} #${ci + 1}`}
+                {text(cur.name) ||
+                  t("world.unnamedCurrency", { number: ci + 1 })}
               </span>
               <Button
                 variant="ghost"
@@ -147,7 +148,7 @@ export function EconomyTab({ dimensions, onChange, t, problems }: TabProps) {
           <div key={ri} className="flex items-center gap-2">
             <div className="min-w-0 flex-1 space-y-1">
               <input
-                aria-label={`${t("world.resources")} ${ri + 1}`}
+                aria-label={t("world.numberedResource", { number: ri + 1 })}
                 className={inputCls}
                 value={text(res)}
                 onChange={(e) => updateResource(ri, e.target.value)}

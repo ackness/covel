@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createMemoryStore } from "@covel/store/memory";
 import {
-  createTrustedHandlerStore,
   createFunctionStoreView,
   createPluginDataWriter,
   createRpcHandlerStoreView,
@@ -25,17 +24,6 @@ const row = (key: string, value: unknown, sessionId = ctx.sessionId) => ({
   createdAt: now,
   updatedAt: now,
 });
-const character = (sessionId = ctx.sessionId) => ({
-  id: "hero",
-  sessionId,
-  name: "Hero",
-  type: "player" as const,
-  fields: { hp: 1 },
-  version: 1,
-  createdAt: now,
-  updatedAt: now,
-});
-
 async function fixture() {
   const store = createMemoryStore();
   await store.createSession({
@@ -50,73 +38,75 @@ async function fixture() {
     createdAt: now,
   });
   const buffer = createExecutionWriteBuffer();
-  const trusted = createTrustedHandlerStore(store, ctx, buffer);
   const scoped = createFunctionStoreView(store, ctx, buffer);
   const writer = createPluginDataWriter(store, ctx, buffer);
-  return { store, buffer, trusted, scoped, writer };
+  return { store, buffer, scoped, writer };
 }
 
 describe("handler store ownership", () => {
   it("cannot mutate session lifecycle through methods or retained MemoryStore records", async () => {
-    const { store, buffer, trusted, scoped } = await fixture();
+    const { store, buffer, scoped } = await fixture();
     const rpc = createRpcHandlerStoreView(store, ctx);
-    for (const handle of [trusted, scoped, rpc]) {
+    for (const handle of [scoped, rpc]) {
       for (const name of [
         "updateSession",
         "deleteSession",
         "withTransaction",
         "close",
         "compareAndSetPluginData",
+        "upsertCharacter",
+        "listCharacters",
+        "getWorld",
       ]) {
         expect(Reflect.get(handle, name)).toBeUndefined();
       }
     }
     const readSession = (value: unknown) =>
-      value as { status: string; activePlugins: string[] };
-    for (const session of [
-      await trusted.getSession(),
-      await scoped.getSession(),
-      await rpc.getSession(),
-    ]) {
-      readSession(session).status = "ended";
-      readSession(session).activePlugins.length = 0;
+      value as { phase: string; setupRuntimes: Record<string, unknown> };
+    for (const session of [await scoped.getSession(), await rpc.getSession()]) {
+      expect(session).not.toHaveProperty("status");
+      expect(session).not.toHaveProperty("activePlugins");
+      expect(session).not.toHaveProperty("id");
+      readSession(session).phase = "setup";
+      readSession(session).setupRuntimes["plugin/setup"] = { state: "pending" };
     }
     expect(await store.getSession(ctx.sessionId)).toMatchObject({
       status: "active",
       activePlugins: [ctx.pluginId],
+      phase: "playing",
+      setupRuntimes: {},
     });
     expect(buffer).toHaveLength(0);
   });
 
+  it("rejects session reads after the session is deleted", async () => {
+    const { store, scoped } = await fixture();
+    const rpc = createRpcHandlerStoreView(store, ctx);
+    await store.deleteSession(ctx.sessionId);
+    for (const view of [scoped, rpc]) {
+      await expect(view.getSession()).rejects.toThrow(
+        "The session no longer exists",
+      );
+    }
+  });
+
   it("owns buffered inputs and every returned domain value", async () => {
-    const { store, trusted, scoped, writer } = await fixture();
+    const { store, scoped, writer } = await fixture();
     const single = { count: 1 };
-    const batch = { count: 2 };
-    const hero = character();
-    await trusted.setPluginData(row("single", single));
-    await trusted.setPluginDataBatch([row("batch", batch)]);
-    await trusted.upsertCharacter(hero);
+    await writer.set("items", "single", single);
     single.count = 99;
-    batch.count = 99;
-    hero.fields.hp = 99;
     const change = (value: unknown) => {
       (value as { count: number }).count = 42;
     };
     change(await writer.get("items", "single"));
     change((await scoped.getPluginData("items", "single"))!.value);
     change((await writer.list("items"))[0]!.value);
-    change((await trusted.listPluginData())[0]!.value);
-    ((await trusted.listCharacters())[0]!.fields as { hp: number }).hp = 42;
+    change((await scoped.listPluginData("items"))[0]!.value);
     expect(await writer.get("items", "single")).toEqual({ count: 1 });
-    expect(await writer.get("items", "batch")).toEqual({ count: 2 });
-    expect((await trusted.listCharacters())[0]!.fields).toEqual({
-      hp: 1,
-    });
     expect(await store.listPluginData(ctx.sessionId, ctx.pluginId)).toEqual([]);
-    expect(await store.listCharacters(ctx.sessionId)).toEqual([]);
 
     await store.setPluginData(row("persisted", { count: 3 }));
-    change((await trusted.getPluginData("items", "persisted"))!.value);
+    change((await scoped.getPluginData("items", "persisted"))!.value);
     expect(
       (await store.getPluginData(
         ctx.sessionId,
@@ -127,67 +117,32 @@ describe("handler store ownership", () => {
     ).toEqual({ count: 3 });
   });
 
-  it("overlays only the execution session and paginates after deletes and appends", async () => {
-    const { store, trusted, scoped, writer } = await fixture();
+  it("overlays only the execution session", async () => {
+    const { store, scoped, writer } = await fixture();
     await store.setPluginDataBatch([
       row("a", 1),
       row("b", 2),
       row("a", "other", "other"),
     ]);
-    await store.upsertCharacter(character("other"));
     await writer.delete("items", "a");
     await writer.set("items", "c", 3);
-    await trusted.upsertCharacter({ ...character(), name: "Buffered" });
     expect(await scoped.getPluginData("items", "a")).toBeNull();
     expect((await scoped.listPluginData("items")).map((r) => r.key)).toEqual([
       "b",
       "c",
     ]);
-    expect(
-      (
-        await trusted.listPluginData("items", {
-          limit: 1,
-        })
-      ).map((r) => r.key),
-    ).toEqual(["b"]);
-    expect(
-      (
-        await trusted.listPluginData("items", {
-          offset: 1,
-          limit: 1,
-        })
-      ).map((r) => r.key),
-    ).toEqual(["c"]);
     // Extra forged identity arguments cannot alter the bound store authority.
     expect(
-      await Reflect.apply(trusted.getPluginData, trusted, [
+      await Reflect.apply(scoped.getPluginData, scoped, [
         "other",
         ctx.pluginId,
         "items",
         "a",
       ]),
     ).toBeNull();
-    for (const records of [
-      await Reflect.apply(trusted.listCharacters, trusted, ["other"]),
-      await trusted.listCharacters(),
-    ]) {
-      // Overlay reads derive updatedAt independently; authority must stay bound.
-      expect(records).toEqual([
-        { ...character(), name: "Buffered", updatedAt: expect.any(String) },
-      ]);
-    }
-    expect(Reflect.get(trusted, "listPluginDataSessionScope")).toBeUndefined();
     expect(
       (await store.getPluginData(ctx.sessionId, ctx.pluginId, "items", "a"))!
         .value,
     ).toBe(1);
-
-    // A stored null is a value; a delete removes the row entirely.
-    await trusted.setPluginData(row("null", null));
-    expect(await scoped.getPluginData("items", "null")).toMatchObject({
-      value: null,
-    });
-    await writer.delete("items", "null");
-    expect(await scoped.getPluginData("items", "null")).toBeNull();
   });
 });

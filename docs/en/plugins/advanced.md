@@ -178,7 +178,7 @@ PLUGIN.md:
           title: 已知事实
 ```
 
-The world package puts the file where `source.path` says, and it is imported. No other configuration is needed. When two plugins declare the same `path`, that path no longer counts as an agreed location. So choose a path that no other plugin uses.
+The world package puts the file where `source.path` says, and it is imported. No other configuration is needed. When two plugins enabled in the same session declare the same `path`, that path no longer counts as an agreed location. So choose a path that no other plugin uses. The kernel's and the world package's own paths (such as `data/dimensions.yaml` and `world.yaml`) cannot be declared; the list is in [World data](../reference/world-data.md).
 
 `generate` takes two values. `offer` lists this kind of content as an option on the authoring screen. `default` lists it and selects it by default. It requires an `example`. Its `source` must be public, not media, and use `id` as the `key`. When a player selects it, the generator writes the schema, the hint, and the example into its prompt. It also adds this plugin to the plugins the world enables. Declare it only for content whose generation quality has been checked with a real model.
 
@@ -291,6 +291,8 @@ When you do not write `firstTokenTimeoutMs`, the time each attempt waits for the
 ### Capabilities that are not tools
 
 A function has several things it calls directly. These do not go through the tool list or the authorization flow: `ctx.gateway` (calls a model), `ctx.images`, `ctx.speech`, and `ctx.music` (generate media), `ctx.media` (saves media), and `ctx.utils` (network requests).
+
+They are all in the `PluginFunctionContext` type. The host gives them only when it has a model and media storage set up, so check before use: `if (!ctx.images) return …`.
 
 To generate an image, call `ctx.images.generate(...)` directly in the function. Do not make a "generate image" tool for the model to call, and do not write your own request to an image provider. For details, see [Image generation](../reference/image-generation.md) and [Media store](../reference/media-store.md).
 

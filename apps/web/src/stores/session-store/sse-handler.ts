@@ -47,6 +47,20 @@ interface DeltaBufferEntry {
   flushSessionId: string | null;
 }
 
+/** `error.occurred` codes shown in the player's language, not the server text. */
+const STALE_RETRY = "session.reasonRetryStale";
+const ERROR_CODE_REASONS: ReadonlyMap<string, string> = new Map([
+  ["session_busy", "session.reasonSessionBusy"],
+  ["input_already_committed", "session.reasonInputAlreadyCommitted"],
+  ["retry_source_not_found", STALE_RETRY],
+  ["retry_source_not_committed", STALE_RETRY],
+  ["retry_source_not_original", STALE_RETRY],
+  ["retry_source_stale", STALE_RETRY],
+  ["retry_target_not_active", STALE_RETRY],
+  ["retry_target_not_failed", STALE_RETRY],
+  ["recovery_unavailable", STALE_RETRY],
+]);
+
 export type DeltaBufferRef = MutableRef<Map<string, DeltaBufferEntry>>;
 export type DeltaRafRef = MutableRef<number | null>;
 
@@ -256,7 +270,6 @@ export function createSseEventHandler(
     // `assertNeverEvent` (warn — never silently dropped).
     if (turnId && turnId !== deps.lastBackfilledTurnIdRef.current) {
       deps.lastBackfilledTurnIdRef.current = turnId;
-      deps.dispatch({ type: "BACKFILL_TURN_ID", turnId });
     }
 
     // Compat boundary: rollout can deliver the new event before the web app's
@@ -279,14 +292,29 @@ export function createSseEventHandler(
     switch (eventType) {
       case "llm.responded":
       case "gateway.responded": {
-        // Only a story is kept when it is cut at the model's output limit;
-        // the text stays on screen, so say that it is not whole.
+        // Only a story is kept when it is cut at the model's output limit or
+        // ended for a reason the provider did not explain; the text stays on
+        // screen, so say that it is not whole.
         if (eventType === "llm.responded" && payload.finishReason === "length")
           emitToast(
             "info",
             i18n.t("session.outputTruncated", {
               defaultValue:
                 "The story reached the model's output limit and may stop mid-sentence. Raise the maximum output tokens or choose another model to avoid this.",
+            }),
+            undefined,
+            { durationMs: 12_000 },
+          );
+        if (eventType === "llm.responded" && payload.finishReason === "other")
+          emitToast(
+            "info",
+            i18n.t("session.outputInterrupted", {
+              reason:
+                typeof payload.rawFinishReason === "string"
+                  ? payload.rawFinishReason
+                  : "other",
+              defaultValue:
+                "The model stopped the story before it finished ({{reason}}), so it may end mid-sentence. Retry this turn to have it written again.",
             }),
             undefined,
             { durationMs: 12_000 },
@@ -656,13 +684,15 @@ export function createSseEventHandler(
             turnId,
             status: "failed",
           });
+        const code =
+          typeof payload.code === "string" ? payload.code : undefined;
+        const reason = code ? ERROR_CODE_REASONS.get(code) : undefined;
         deps.dispatch({
           type: "SET_EXECUTION_ERROR",
-          error:
-            payload.code === "session_busy"
-              ? "__i18n:session.reasonSessionBusy__"
-              : ((payload.message as string) ??
-                "__i18n:session.reasonExecutionFailed__"),
+          error: reason
+            ? `__i18n:${reason}__`
+            : ((payload.message as string) ??
+              "__i18n:session.reasonExecutionFailed__"),
         });
         deps.dispatch({ type: "SET_EXECUTING", value: false });
         deps.dispatch({

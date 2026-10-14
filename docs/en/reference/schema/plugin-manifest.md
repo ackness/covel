@@ -188,23 +188,23 @@ In the path headings below, `[]` is a list item and `.*` is a map value.
 
 ## `contributes.data.*.authoring.source`
 
-| Field             | Type                              | Required | Description                                                                                                                                                         |
-| ----------------- | --------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `kind`            | `"yaml"` or `"json"` or `"media"` | yes      | Reader type of the source. `media` is a directory whose index this namespace receives.                                                                              |
-| `path`            | string                            | yes      | Conventional path of the source inside a world package. Example: `"data/quests.yaml"`.                                                                              |
-| `key`             | string                            | no       | Field that gives each record a stable key. Media sources use `filename`.                                                                                            |
-| `localeArrayKeys` | list of string                    | no       | Additional stable identity fields for nested object lists in locale overlays, after the source key and id. Translations retain these keys when lists are reordered. |
-| `visibility`      | `"public"` or `"hidden"`          | no       | `hidden` for content the player must not see before the plugin reveals it. Defaults to `public`.                                                                    |
-| `lorebook`        | boolean                           | no       | `true` also projects each record into the lorebook (`+lorebook`).                                                                                                   |
+| Field             | Type                              | Required | Description                                                                                                                                                                                                                                                                                                                                                                                      |
+| ----------------- | --------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `kind`            | `"yaml"` or `"json"` or `"media"` | yes      | Reader type of the source. `media` is a directory whose index this namespace receives.                                                                                                                                                                                                                                                                                                           |
+| `path`            | string                            | yes      | Conventional path of the source inside a world package. It may not name a path the kernel or the package itself owns: `world.yaml`, `WORLD.md`, `data/world.data.yaml`, `data/dimensions.yaml`, `data/lorebook.yaml`, `characters/characters.json`, `media/gallery.json`, `media/portraits.json`, `media/scenes.json` or `media/gallery/`, nor an edition of one. Example: `"data/quests.yaml"`. |
+| `key`             | string                            | no       | Field that gives each record a stable key. Media sources use `filename`.                                                                                                                                                                                                                                                                                                                         |
+| `localeArrayKeys` | list of string                    | no       | Additional stable identity fields for nested object lists in locale overlays, after the source key and id. Translations retain these keys when lists are reordered.                                                                                                                                                                                                                              |
+| `visibility`      | `"public"` or `"hidden"`          | no       | `hidden` for content the player must not see before the plugin reveals it. Defaults to `public`.                                                                                                                                                                                                                                                                                                 |
+| `lorebook`        | boolean                           | no       | `true` also projects each record into the lorebook (`+lorebook`).                                                                                                                                                                                                                                                                                                                                |
 
 ## `contributes.data.*.authoring.references[]`
 
-| Field    | Type                                                                                      | Required | Description                                                                                                                                        |
-| -------- | ----------------------------------------------------------------------------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `path`   | string                                                                                    | yes      | Where the referring values are in each record: field names joined by `.`, with `[]` after a field that holds a list. Example: `"attributes[].id"`. |
-| `to`     | `"character-attribute"`                                                                   | yes      | What each value must name. `character-attribute` is the `id` of a top-level attribute of the world's `characterSchema`.                            |
-| `type`   | `"string"` or `"number"` or `"boolean"` or `"enum"` or `"array"` or `"object"` or `"map"` | no       | Value type the named attribute must have.                                                                                                          |
-| `within` | list of string                                                                            | no       | Number fields beside the referring value that must lie inside the `min` and `max` of the named attribute.                                          |
+| Field    | Type                                                                                      | Required | Description                                                                                                                                                                                                                                                        |
+| -------- | ----------------------------------------------------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `path`   | string                                                                                    | yes      | Where the referring values are in each record: field names joined by `.`, with `[]` after a field that holds a list. `**.` before a field name finds that field at any depth below. Example: `"attributes[].id"`, `"when.**.dimension"`.                           |
+| `to`     | `"character-attribute"` or `"world-dimension"`                                            | yes      | What each value must name. `character-attribute` is the `id` of a top-level attribute of the world's `characterSchema`; `world-dimension` is the ID of a dimension the world declares.                                                                             |
+| `type`   | `"string"` or `"number"` or `"boolean"` or `"enum"` or `"array"` or `"object"` or `"map"` | no       | Value type the named attribute must have. Only with `to: character-attribute`.                                                                                                                                                                                     |
+| `within` | list of string                                                                            | no       | Fields beside the referring value that must lie inside what it names. For `character-attribute`, number fields inside the attribute's `min` and `max`; for `world-dimension`, a path into the dimension's value (`a.b`, or a list of keys) that its schema allows. |
 
 ## `contributes.data.*.search`
 
@@ -309,10 +309,10 @@ In the path headings below, `[]` is a list item and `.*` is a map value.
 
 ## `runtime.schedule.after[]` (form 2 of 2)
 
-| Field         | Type               | Required | Description                                                               |
-| ------------- | ------------------ | -------- | ------------------------------------------------------------------------- |
-| `contract`    | string             | yes      | Contract ID. It must be listed in the package's `requires` or `optional`. |
-| `cardinality` | `"one"` or `"all"` | no       | `one` takes a single provider; `all` takes every provider.                |
+| Field         | Type               | Required | Description                                                                                                                                |
+| ------------- | ------------------ | -------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `contract`    | string             | yes      | Contract ID. This runtime runs after the contract's active providers; the contract does not have to be listed in `requires` or `optional`. |
+| `cardinality` | `"one"` or `"all"` | no       | `one` takes a single provider; `all` takes every provider.                                                                                 |
 
 ## `runtime.schedule.completion`
 
@@ -347,7 +347,7 @@ In the path headings below, `[]` is a list item and `.*` is a map value.
 
 | Field      | Type                      | Required | Description                                                                                                                                                                   |
 | ---------- | ------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `from`     | object                    | yes      | Producer of the value: a runtime in this package, a contract, or a kernel input.                                                                                              |
+| `from`     | object                    | yes      | Producer of the value: a runtime in this package, a contract, or a kernel input. A kernel input takes no other field.                                                         |
 | `scope`    | `"turn"` or `"committed"` | no       | `turn` reads the same execution's upstream result. `committed` reads the latest committed export and needs `recordAs`. Defaults to `turn`.                                    |
 | `select`   | string                    | no       | JSON Pointer applied to the upstream value. Declaring `select` with `scope: committed` is rejected; committed inputs read the complete export. Example: `"/narrativeOutput"`. |
 | `required` | boolean                   | no       | `true` stops this runtime when the upstream value is missing or failed.                                                                                                       |
@@ -445,10 +445,10 @@ In the path headings below, `[]` is a list item and `.*` is a map value.
 
 ## `runtime.agent.loop.completion`
 
-| Field        | Type                         | Required | Description                                                                                                                                           |
-| ------------ | ---------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `require`    | `"explicit"` or `"tool-use"` | no       | `explicit` needs a completing tool or `runtime-done`. `tool-use` needs a valid business tool call, so "no change" is also submitted through the tool. |
-| `afterTools` | list of string               | no       | The runtime completes after a successful call to one of these tools.                                                                                  |
+| Field        | Type                         | Required | Description                                                                                                                                                                                                               |
+| ------------ | ---------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `require`    | `"explicit"` or `"tool-use"` | no       | `explicit` needs a completing tool or `runtime-done`. `tool-use` needs a successful tool named in `afterTools`, or any successful business tool when `afterTools` is empty. Failed calls and `runtime-done` do not count. |
+| `afterTools` | list of string               | no       | The runtime completes after a successful call to one of these tools.                                                                                                                                                      |
 
 ## `runtime.function`
 

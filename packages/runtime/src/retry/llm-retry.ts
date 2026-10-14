@@ -1,4 +1,4 @@
-import { unifyFinishReason } from "@covel/shared";
+import { isCompleteFinishReason, unifyFinishReason } from "@covel/shared";
 import type { LLMProviderContinuation } from "@covel/shared";
 import type { LLMProviderRequest } from "@covel/shared";
 /**
@@ -17,7 +17,7 @@ import type { LLMProviderRequest } from "@covel/shared";
  *     120s by default, shortened so the retries left still fit into the
  *     runtime's time) — provider socket alive but model stuck.
  *   - call-timeout: whole call exceeded `callTimeoutMs` (derived from the
- *     runtime budget + retry count) — uses AbortSignal.timeout.
+ *     runtime budget + retry count), paused during gateway admission.
  *   - transient-error: AbortError / timeout / network / 5xx / RATE_LIMITED /
  *     PROVIDER_ERROR bubbling from the adapter.
  *   - tool-loop-detected: the caller reports `N` consecutive tool calls with
@@ -59,7 +59,6 @@ import {
   type LLMRequestBudget,
 } from "@covel/shared";
 import { TurnAbortedError } from "../turn-executor/turn-control.js";
-import { acquireLLMSlot } from "./llm-slots.js";
 import {
   LLMRetryError,
   assertDeadlineNotReached,
@@ -120,11 +119,13 @@ const TRUNCATION_RETRIES = 1;
 /**
  * The finish reason of a response that may be used, in the kernel's terms.
  *
- * A response cut at the output limit is an error: a cut tool call has broken
- * arguments, and cut JSON is not the runtime's result. The exception is text
- * the caller asked to keep (`keptText`), with no tool call beside it: a story
- * the player has already read as it streamed stays, and the caller is told by
- * `length` that it is not whole.
+ * Only `stop` and `tool_calls` end a whole answer. A response cut at the
+ * output limit (`length`) or ended for a reason the vocabulary does not know
+ * (`other`, such as Anthropic's `pause_turn`) is an error: a cut tool call has
+ * broken arguments, and cut JSON is not the runtime's result. The exception
+ * is text the caller asked to keep (`keptText`), with no tool call beside it:
+ * a story the player has already read as it streamed stays, and the caller is
+ * told by the reason it returns that it is not whole.
  */
 function requireCompleteOutput(
   reason: string,
@@ -135,9 +136,18 @@ function requireCompleteOutput(
   },
 ): LLMResponse["finishReason"] {
   const unified = unifyFinishReason(reason);
+  if (isCompleteFinishReason(unified)) return unified;
+  if (unified === "error") {
+    throw new Error("PROVIDER_ERROR: model generation ended with an error");
+  }
+  if (
+    (unified === "length" || unified === "other") &&
+    keptText?.allowed &&
+    keptText.toolCalls === 0 &&
+    keptText.text?.trim()
+  )
+    return unified;
   if (unified === "length") {
-    if (keptText?.allowed && keptText.toolCalls === 0 && keptText.text?.trim())
-      return "length";
     throw new AiProviderError({
       code: "PROVIDER_ERROR",
       provider: "runtime",
@@ -147,10 +157,14 @@ function requireCompleteOutput(
       details: { finishReason: "length" },
     });
   }
-  if (unified === "error") {
-    throw new Error("PROVIDER_ERROR: model generation ended with an error");
-  }
-  return unified === "tool_calls" ? "tool_calls" : "stop";
+  // `content_filter` only reaches here from an adapter outside the gateway.
+  throw new AiProviderError({
+    code: unified === "content_filter" ? "REFUSAL" : "PROVIDER_ERROR",
+    provider: "runtime",
+    message: `The model stopped before it finished its answer (finish reason: ${reason}). Retry this task or choose another model.`,
+    retriable: false,
+    details: { finishReason: unified, rawFinishReason: reason },
+  });
 }
 
 export interface CallLLMWithRetryParams {
@@ -224,7 +238,7 @@ function createAttemptTrace(
   attempt: number,
   startedAt: string,
   streaming = false,
-  queueWaitMs?: number,
+  queueWaitMs?: () => number,
 ): {
   readonly onTargetAttempt: (target: LLMTargetIdentity) => void;
   readonly onProviderRequest: (request: LLMProviderRequest) => void;
@@ -260,7 +274,7 @@ function createAttemptTrace(
         providerRequests,
         tools: params.tools,
         attempt,
-        queueWaitMs,
+        queueWaitMs: queueWaitMs?.(),
         startedAt,
         ...(streaming ? { streaming: true } : {}),
       });
@@ -291,27 +305,44 @@ export async function callLLMWithRetry(
         requireAttempt: true,
       });
       assertDeadlineNotReached(effectiveDeadline, attempt, lastError);
-      // Queue before arming per-attempt timers. Queue time credits the runtime
-      // deadline, while the logical request deadline remains a hard ceiling.
-      const slot = await acquireLLMSlot(requestScope.signal).catch(
-        (error: unknown) => {
-          throwIfTurnAborted(params.abortSignal);
-          throw error;
-        },
-      );
-      if (params.abortSignal?.aborted) {
-        slot.release();
-        throwIfTurnAborted(params.abortSignal);
-      }
+      let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
       try {
-        effectiveDeadline += slot.waitedMs;
-        if (slot.waitedMs > 0) params.onQueueWait?.(slot.waitedMs);
-
-        const budget = computeAttemptBudget(
-          policy,
-          Math.min(effectiveDeadline, requestScope.budget.deadline),
-        );
-        const timeoutSignal = AbortSignal.timeout(budget);
+        let queueWaitMs = 0;
+        const timeoutAborter = new AbortController();
+        const timeoutSignal = timeoutAborter.signal;
+        let attemptDeadline =
+          Date.now() +
+          computeAttemptBudget(
+            policy,
+            Math.min(effectiveDeadline, requestScope.budget.deadline),
+          );
+        const armTimeout = () => {
+          timeoutHandle = setTimeout(
+            () =>
+              timeoutAborter.abort(
+                new DOMException(
+                  "The operation was aborted due to timeout",
+                  "TimeoutError",
+                ),
+              ),
+            Math.max(
+              0,
+              Math.min(attemptDeadline, requestScope.budget.deadline) -
+                Date.now(),
+            ),
+          );
+        };
+        armTimeout();
+        const onQueueStart = () => {
+          clearTimeout(timeoutHandle);
+          return (waitedMs: number) => {
+            queueWaitMs += waitedMs;
+            effectiveDeadline += waitedMs;
+            attemptDeadline += waitedMs;
+            if (waitedMs > 0) params.onQueueWait?.(waitedMs);
+            armTimeout();
+          };
+        };
         const signal = AbortSignal.any([timeoutSignal, requestScope.signal]);
         const attemptMessages = perturbMessages(
           messages,
@@ -327,7 +358,7 @@ export async function callLLMWithRetry(
           attempt,
           new Date(callStart).toISOString(),
           false,
-          slot.waitedMs,
+          () => queueWaitMs,
         );
         // Tokens the provider reported, kept when the response is rejected.
         let responseUsage: LLMResponse["usage"] | undefined;
@@ -348,6 +379,7 @@ export async function callLLMWithRetry(
                 ? { promptCacheKey: params.promptCacheKey }
                 : {}),
               signal,
+              onQueueStart,
               requestBudget: requestScope.budget,
               onTargetAttempt: trace.onTargetAttempt,
               ...(params.emitter
@@ -358,11 +390,14 @@ export async function callLLMWithRetry(
           );
           responseUsage = response.usage;
           throwIfTurnAborted(params.abortSignal);
-          requireCompleteOutput(response.finishReason, {
-            allowed: params.allowTruncatedText,
-            text: response.content,
-            toolCalls: response.toolCalls.length,
-          });
+          requireCompleteOutput(
+            response.rawFinishReason ?? response.finishReason,
+            {
+              allowed: params.allowTruncatedText,
+              text: response.content,
+              toolCalls: response.toolCalls.length,
+            },
+          );
           await trace.ensureCalling();
           await emitLlmRespondedSuccess(params.emitter, {
             runtimeId: params.runtimeId,
@@ -413,7 +448,7 @@ export async function callLLMWithRetry(
           onRetry?.({ attempt: attempt + 1, reason: lastReason, error: err });
         }
       } finally {
-        slot.release();
+        clearTimeout(timeoutHandle);
       }
     }
 
@@ -524,22 +559,8 @@ export async function streamLLMWithRetry(
         requireAttempt: true,
       });
       assertDeadlineNotReached(effectiveDeadline, attempt, lastError);
-      // Queue before arming per-attempt timers. Queue time credits the runtime
-      // deadline, while the logical request deadline remains a hard ceiling.
-      const slot = await acquireLLMSlot(requestScope.signal).catch(
-        (error: unknown) => {
-          throwIfTurnAborted(params.abortSignal);
-          throw error;
-        },
-      );
-      if (params.abortSignal?.aborted) {
-        slot.release();
-        throwIfTurnAborted(params.abortSignal);
-      }
-      try {
-        effectiveDeadline += slot.waitedMs;
-        if (slot.waitedMs > 0) params.onQueueWait?.(slot.waitedMs);
-
+      {
+        let queueWaitMs = 0;
         // `callTimeoutMs` is the total limit of a non-streaming call. A stream
         // reports its progress, so the first-token guard bounds the wait for
         // its first output, and the runtime deadline bounds the attempt.
@@ -547,7 +568,6 @@ export async function streamLLMWithRetry(
           computeDeadlineBudget(
             Math.min(effectiveDeadline, requestScope.budget.deadline),
           );
-        const budget = remainingMs();
         const attemptsLeft = policy.maxRetries - attempt + 1;
         // Compose four abort sources into one per-attempt signal:
         //   1. runtime deadline — armed on attempt start, disarmed on first output
@@ -561,11 +581,13 @@ export async function streamLLMWithRetry(
         requestScope.signal.addEventListener("abort", onExternalAbort, {
           once: true,
         });
-        const callTimeoutHandle = setTimeout(() => {
-          callAborter.abort(
-            new StreamAttemptTimeoutError("call", "call timeout"),
-          );
-        }, budget);
+        const armCallGuard = () =>
+          setTimeout(() => {
+            callAborter.abort(
+              new StreamAttemptTimeoutError("call", "call timeout"),
+            );
+          }, remainingMs());
+        let callTimeoutHandle = armCallGuard();
         const armFirstTokenGuard = () =>
           setTimeout(
             () => {
@@ -581,6 +603,19 @@ export async function streamLLMWithRetry(
             firstTokenWaitMs(policy, attemptsLeft, remainingMs()),
           );
         let ttfbHandle = armFirstTokenGuard();
+        const onQueueStart = () => {
+          clearTimeout(callTimeoutHandle);
+          clearTimeout(ttfbHandle);
+          return (waitedMs: number) => {
+            queueWaitMs += waitedMs;
+            effectiveDeadline += waitedMs;
+            if (waitedMs > 0) params.onQueueWait?.(waitedMs);
+            callTimeoutHandle = armCallGuard();
+            firstTokenGuardPaused = false;
+            ttfbHandle = armFirstTokenGuard();
+          };
+        };
+
         // A rate-limited or failed transport attempt is followed by a backoff
         // the provider asked for (`retry-after`); the model has not been asked
         // yet, so the guard pauses and restarts when a later attempt is
@@ -631,8 +666,8 @@ export async function streamLLMWithRetry(
         let providerContinuation: LLMProviderContinuation | undefined;
         let diagnostics: LLMResponse["diagnostics"];
         let streamedUsage: LLMResponse["usage"] | undefined;
-        let streamFinishReason:
-          "stop" | "tool_calls" | "length" | "error" | undefined;
+        let streamFinishReason: LLMResponse["finishReason"] | undefined;
+        let streamRawFinishReason: string | undefined;
         const attemptMessages = perturbMessages(
           messages,
           attempt,
@@ -647,7 +682,7 @@ export async function streamLLMWithRetry(
           attempt,
           new Date(streamStart).toISOString(),
           true,
-          slot.waitedMs,
+          () => queueWaitMs,
         );
 
         try {
@@ -668,6 +703,7 @@ export async function streamLLMWithRetry(
                 ? { promptCacheKey: params.promptCacheKey }
                 : {}),
               signal: callAborter.signal,
+              onQueueStart,
               requestBudget: requestScope.budget,
               onTargetAttempt: trace.onTargetAttempt,
               onProviderRequest,
@@ -703,11 +739,15 @@ export async function streamLLMWithRetry(
               await trace.ensureCalling();
               // Before the completeness check: a rejected response was billed too.
               if (event.usage) streamedUsage = event.usage;
-              streamFinishReason = requireCompleteOutput(event.finishReason, {
-                allowed: params.allowTruncatedText,
-                text: streamedContent,
-                toolCalls: streamedToolCalls.length,
-              });
+              streamFinishReason = requireCompleteOutput(
+                event.rawFinishReason ?? event.finishReason,
+                {
+                  allowed: params.allowTruncatedText,
+                  text: streamedContent,
+                  toolCalls: streamedToolCalls.length,
+                },
+              );
+              streamRawFinishReason = event.rawFinishReason;
               if (event.reasoningContent)
                 streamedReasoningContent = event.reasoningContent;
               if (event.providerContinuation)
@@ -737,6 +777,9 @@ export async function streamLLMWithRetry(
             content: streamedContent || null,
             toolCalls: streamedToolCalls,
             finishReason: streamFinishReason,
+            ...(streamRawFinishReason
+              ? { rawFinishReason: streamRawFinishReason }
+              : {}),
             usage: streamedUsage ?? { inputTokens: 0, outputTokens: 0 },
             ...(diagnostics ? { diagnostics } : {}),
             ...(providerContinuation ? { providerContinuation } : {}),
@@ -830,8 +873,6 @@ export async function streamLLMWithRetry(
           });
           onRetry?.({ attempt: attempt + 1, reason: lastReason, error: err });
         }
-      } finally {
-        slot.release();
       }
     }
 

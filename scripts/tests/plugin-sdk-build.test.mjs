@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import {
   mkdirSync,
   mkdtempSync,
@@ -10,6 +11,7 @@ import {
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
+import { fileURLToPath } from "node:url";
 
 import {
   ensurePluginSdkBuild,
@@ -20,6 +22,46 @@ const SOURCES_WRITTEN = new Date("2026-01-01T00:00:00Z");
 const BUILT = new Date("2026-01-01T00:01:00Z");
 const AFTER_BUILD = new Date("2026-01-01T00:02:00Z");
 const NOW = new Date("2026-01-02T00:00:00Z").getTime();
+
+test("the SDK's own lint and tests wait for its emitted exports", () => {
+  // SDK tests import shared types, which re-export the SDK's dist declarations.
+  // ^build alone orders consumers, but leaves the SDK's own readers racing.
+  // Ask Turbo for its effective graph without compiling or restoring artifacts.
+  const graph = JSON.parse(
+    execFileSync(
+      process.execPath,
+      [
+        fileURLToPath(import.meta.resolve("turbo")),
+        "run",
+        "lint",
+        "test",
+        "--filter=@covel/plugin-handlers-utils",
+        "--dry=json",
+      ],
+      {
+        cwd: fileURLToPath(new URL("../../", import.meta.url)),
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "pipe"],
+      },
+    ),
+  );
+  const tasks = new Map(graph.tasks.map((task) => [task.taskId, task]));
+  const build = "@covel/plugin-handlers-utils#build";
+  for (const name of ["lint", "test"]) {
+    const id = `@covel/plugin-handlers-utils#${name}`;
+    assert.ok(tasks.has(id), `${id} must be scheduled`);
+    const ancestors = new Set();
+    const visit = (taskId) => {
+      for (const dependency of tasks.get(taskId)?.dependencies ?? []) {
+        if (ancestors.has(dependency)) continue;
+        ancestors.add(dependency);
+        visit(dependency);
+      }
+    };
+    visit(id);
+    assert.ok(ancestors.has(build), `${id} must wait for ${build}`);
+  }
+});
 
 /** A package directory with its sources written first and its build after. */
 function fixture(t, { built = true } = {}) {

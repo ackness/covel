@@ -144,8 +144,17 @@ const LEGAL_RUNTIME_JOB_TRANSITIONS: Readonly<
   Record<RuntimeJobStatus, ReadonlySet<RuntimeJobStatus>>
 > = {
   queued: new Set(["claimed", "failed", "timed_out", "cancelled"]),
-  claimed: new Set(["running", "failed", "timed_out", "cancelled", "orphaned"]),
+  // `→ queued`: a normal shutdown hands unfinished work back to the queue.
+  claimed: new Set([
+    "queued",
+    "running",
+    "failed",
+    "timed_out",
+    "cancelled",
+    "orphaned",
+  ]),
   running: new Set([
+    "queued",
     "committing",
     "succeeded",
     "failed",
@@ -155,6 +164,7 @@ const LEGAL_RUNTIME_JOB_TRANSITIONS: Readonly<
     "orphaned",
   ]),
   committing: new Set([
+    "queued",
     "succeeded",
     "failed",
     "timed_out",
@@ -458,6 +468,51 @@ export async function listSettlingRuntimeJobs(
   );
 }
 
+/**
+ * Mark which settling jobs the worker could start now. A queued job that
+ * `canStart` refuses (no usable model credentials, for example) stays queued,
+ * and so does every later job of its runtime, which runs only after it. The
+ * settle barrier does not wait for either.
+ */
+export async function markRunnableSettlingJobs(
+  jobs: readonly RuntimeJobRecord[],
+  canStart: (job: RuntimeJobRecord) => boolean | Promise<boolean>,
+): Promise<readonly (RuntimeJobRecord & { readonly runnable: boolean })[]> {
+  const blockedRuntimes = new Set<string>();
+  const marked: (RuntimeJobRecord & { readonly runnable: boolean })[] = [];
+  for (const job of jobs) {
+    const key = `${job.sessionId}\u0000${job.pluginId}\u0000${job.runtimeId}`;
+    let runnable = job.status !== "queued" || !blockedRuntimes.has(key);
+    if (runnable && job.status === "queued") {
+      try {
+        runnable = await canStart(job);
+      } catch {
+        runnable = false;
+      }
+    }
+    if (!runnable) blockedRuntimes.add(key);
+    marked.push({ ...job, runnable });
+  }
+  return marked;
+}
+
+function withoutRun(job: RuntimeJobRecord): RuntimeJobRecord {
+  const {
+    ownerId: _ownerId,
+    leaseExpiresAt: _leaseExpiresAt,
+    claimedAt: _claimedAt,
+    startedAt: _startedAt,
+    committingAt: _committingAt,
+    backgroundTurnId: _backgroundTurnId,
+    backgroundExecutionId: _backgroundExecutionId,
+    result: _result,
+    error: _error,
+    reason: _reason,
+    ...queued
+  } = job;
+  return queued;
+}
+
 export async function transitionRuntimeJob(
   store: RuntimeJobStore,
   args: TransitionRuntimeJobArgs,
@@ -482,7 +537,9 @@ export async function transitionRuntimeJob(
   const updatedAt = nextRevision(existing.updatedAt, suppliedNow);
   const terminal = TERMINAL_RUNTIME_JOB_STATUSES.has(args.to);
   const next: RuntimeJobRecord = {
-    ...existing,
+    // A requeued job is a queued job again: no owner, lease or run of its
+    // own. `attempt` stays, so the next claim counts one more.
+    ...(args.to === "queued" ? withoutRun(existing) : existing),
     status: args.to,
     updatedAt,
     ...(args.to === "running" && !existing.startedAt

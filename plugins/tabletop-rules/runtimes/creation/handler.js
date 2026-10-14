@@ -1,8 +1,5 @@
-import {
-  creationRules,
-  validateAllocation,
-  translate,
-} from "../../lib/rules.js";
+import { translate } from "@covel/plugin-handlers-utils";
+import { creationRules, validateAllocation } from "../../lib/rules.js";
 
 export default async function (ctx) {
   const session = await ctx.store.getSession();
@@ -15,9 +12,9 @@ export default async function (ctx) {
   );
   const playerId = player?.id;
 
-  // Derive and freeze the rules as soon as they are available — the
-  // world-data provider's same-turn schema output first, then the committed
-  // schema. Rules serve later checks independently of the player; the player
+  // Derive and freeze the rules from ctx.world.characterSchema: the
+  // execution view includes committed schema and successful upstream schema
+  // proposals. Rules serve later checks independently of the player; the player
   // only gates the form and its application.
   const rules =
     storedRules ??

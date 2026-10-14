@@ -1,7 +1,4 @@
-import {
-  appendDimensionPlan,
-  readEffectiveDimensions,
-} from "./session-import/dimensions.js";
+import { appendDimensionPlan } from "./session-import/dimensions.js";
 import {
   DIMENSION_DATA_NAMESPACE,
   DIMENSION_SETTLEMENT_NAMESPACE,
@@ -11,7 +8,10 @@ import {
 } from "@covel/shared";
 import { portableContractSources } from "./portable-contract-data.js";
 import type { WorldDataImportLedgerRecord } from "@covel/store";
+import type { WorldDataDiagnostic } from "./types.js";
 import {
+  conventionCollisionDiagnostics,
+  conventionCollisions,
   conventionsOfPlugins,
   worldHasData,
   type ConventionalSource,
@@ -20,6 +20,7 @@ import { loadWorldDataDescriptor } from "./descriptor.js";
 import {
   finalizeWorldDataMediaRefs,
   materializeMediaIndexWrites,
+  releaseUnusedSessionMediaRefs,
   releaseWorldDataMediaRefs,
 } from "./session-import/media-handling.js";
 import { buildImportPlan } from "./session-import/planning.js";
@@ -46,6 +47,7 @@ import type {
   SyncWorldDataForSessionResult,
   WorldDataImportedMediaRef,
   WorldDataImportPreflightDeps,
+  WorldDataImportRecord,
 } from "./session-import/types.js";
 
 function deferredProjectionLedgerKey(
@@ -61,13 +63,31 @@ function deferredProjectionLedgerKey(
 
 /**
  * The conventions of the plugins this import runs with. A caller that gives
- * a registry gets the paths of that registry; without one the list of the
- * process applies.
+ * a registry gets the paths of its plugins, only the session's active ones
+ * when it names them; without a registry the list of the process applies.
  */
 function conventionsFor(
   deps: WorldDataImportPreflightDeps | undefined,
 ): readonly ConventionalSource[] | undefined {
-  return deps?.registry ? conventionsOfPlugins(deps.registry) : undefined;
+  return deps?.registry
+    ? conventionsOfPlugins(deps.registry, deps.activePlugins)
+    : undefined;
+}
+
+/**
+ * Warnings for the package's files at a path that more than one of these
+ * plugins names: without a descriptor such a file is read for none of them.
+ */
+async function collisionsFor(
+  worldRoot: string,
+  manifest: { readonly worldData?: string },
+  deps: WorldDataImportPreflightDeps | undefined,
+): Promise<WorldDataDiagnostic[]> {
+  if (manifest.worldData || !deps?.registry) return [];
+  return conventionCollisionDiagnostics(
+    worldRoot,
+    conventionCollisions(deps.registry, deps.activePlugins),
+  );
 }
 
 export { finalizeWorldDataMediaRefs, releaseWorldDataMediaRefs };
@@ -81,21 +101,36 @@ export type {
   WorldDataImportedMediaRef,
 };
 
+/**
+ * What a session imports from the world record. The package files are not
+ * read for these: an edit in the app changes the record, and the record is
+ * what a session plays.
+ */
+function recordContent(world: WorldDataImportRecord | null | undefined): {
+  dimensions: unknown;
+  characterSchema: unknown;
+  contractData: unknown;
+} {
+  return {
+    dimensions: world?.metadata?.dimensions,
+    characterSchema: world?.metadata?.characterSchema,
+    contractData: world?.metadata?.contractData,
+  };
+}
+
 export async function prepareWorldDataImportForSession(
   options: PrepareWorldDataImportForSessionOptions,
 ): Promise<PreparedWorldDataImport> {
   if (!options.worldId) return { imported: false, diagnostics: [] };
+  const record = recordContent(options.world);
   const worldRoot = options.worldsDirs?.length
     ? await resolveWorldRoot(options.worldId, options.worldsDirs)
     : null;
   const manifest = worldRoot ? await readWorldManifest(worldRoot) : null;
-  const effectiveDimensions = worldRoot
-    ? await readEffectiveDimensions({
-        worldRoot,
-        manifest: manifest!,
-        locale: options.locale,
-      })
-    : options.dimensions;
+  const collisions =
+    worldRoot && manifest
+      ? await collisionsFor(worldRoot, manifest, options.preflight)
+      : [];
   if (
     !worldRoot ||
     !manifest ||
@@ -105,28 +140,28 @@ export async function prepareWorldDataImportForSession(
       conventionsFor(options.preflight),
     ))
   ) {
-    const sources = portableContractSources(options.contractData);
-    if (options.contractData === undefined && effectiveDimensions === undefined)
-      return { imported: false, diagnostics: [] };
+    const sources = portableContractSources(record.contractData);
+    if (record.contractData === undefined && record.dimensions === undefined)
+      return { imported: false, diagnostics: collisions };
     const basePlan = await buildImportPlan({
       sessionId: options.sessionId,
       worldId: options.worldId,
       sources,
-      characterSchema: manifest?.characterSchema,
+      characterSchema: record.characterSchema,
       deps: options.preflight,
       now: options.now,
       locale: options.locale,
     });
     const plan = appendDimensionPlan(
       basePlan,
-      effectiveDimensions,
+      record.dimensions,
       options.preflight,
       options.locale,
     );
     return {
       imported: true,
       portableOnly: true,
-      diagnostics: [...plan.diagnostics, ...plan.mergeEvents],
+      diagnostics: [...collisions, ...plan.diagnostics, ...plan.mergeEvents],
       plan,
       mediaRefs: [],
     };
@@ -154,20 +189,14 @@ export async function prepareWorldDataImportForSession(
     sessionId: options.sessionId,
     worldId: options.worldId,
     sources: descriptor.sources,
-    characterSchema: manifest.characterSchema,
+    characterSchema: record.characterSchema,
     deps: options.preflight,
     now: options.now,
     locale: options.locale,
   });
-  const resolvedDimensions = await readEffectiveDimensions({
-    worldRoot,
-    manifest: manifest!,
-    sources: descriptor.sources,
-    locale: options.locale,
-  });
   const plan = appendDimensionPlan(
     basePlan,
-    resolvedDimensions,
+    record.dimensions,
     options.preflight,
     options.locale,
   );
@@ -185,6 +214,7 @@ export async function prepareWorldDataImportForSession(
   return {
     imported: true,
     diagnostics: [
+      ...collisions,
       ...descriptor.diagnostics,
       ...plan.diagnostics,
       ...plan.mergeEvents,
@@ -254,12 +284,10 @@ export async function importWorldDataForSession(
     options.store.getSession
       ? await options.store.getSession(options.sessionId)
       : null;
-  const worldMetadata = options.worldId
-    ? (await options.store.getWorld(options.worldId))?.metadata
-    : undefined;
   const prepared = await prepareWorldDataImportForSession({
-    dimensions: worldMetadata?.dimensions,
-    contractData: worldMetadata?.contractData,
+    world: options.worldId
+      ? await options.store.getWorld(options.worldId)
+      : undefined,
     sessionId: options.sessionId,
     worldId: options.worldId,
     worldsDirs: options.worldsDirs,
@@ -321,6 +349,11 @@ export async function preflightWorldDataForSession(
         };
   }
   const manifest = await readWorldManifest(worldRoot);
+  const collisions = await collisionsFor(
+    worldRoot,
+    manifest,
+    options.preflight,
+  );
   if (
     !(await worldHasData(
       worldRoot,
@@ -333,14 +366,10 @@ export async function preflightWorldDataForSession(
       worldsDirs: [],
       preflight: { ...options.preflight, executeProjectionHandlers: false },
     });
+    const diagnostics = [...collisions, ...prepared.diagnostics];
     return prepared.imported
-      ? preflightPlanResult(prepared.plan, prepared.diagnostics)
-      : {
-          imported: false,
-          diagnostics: prepared.diagnostics,
-          planned: 0,
-          targets: [],
-        };
+      ? preflightPlanResult(prepared.plan, diagnostics)
+      : { imported: false, diagnostics, planned: 0, targets: [] };
   }
 
   const descriptor = await loadWorldDataDescriptor({
@@ -355,17 +384,18 @@ export async function preflightWorldDataForSession(
   ) {
     return {
       imported: true,
-      diagnostics: descriptor.diagnostics,
+      diagnostics: [...collisions, ...descriptor.diagnostics],
       planned: 0,
       targets: [],
     };
   }
 
+  const record = recordContent(options.world);
   const basePlan = await buildImportPlan({
     sessionId: options.sessionId,
     worldId: options.worldId,
     sources: descriptor.sources,
-    characterSchema: manifest.characterSchema,
+    characterSchema: record.characterSchema,
     deps: {
       ...options.preflight,
       // A preflight endpoint is observational: importing arbitrary plugin
@@ -380,16 +410,12 @@ export async function preflightWorldDataForSession(
     ? basePlan
     : appendDimensionPlan(
         basePlan,
-        await readEffectiveDimensions({
-          worldRoot,
-          manifest,
-          sources: descriptor.sources,
-          locale: options.locale,
-        }),
+        record.dimensions,
         options.preflight,
         options.locale,
       );
   return preflightPlanResult(plan, [
+    ...collisions,
     ...descriptor.diagnostics,
     ...plan.diagnostics,
     ...plan.mergeEvents,
@@ -457,6 +483,14 @@ export async function prepareWorldDataSyncForSession(
     return preparePortableWorldDataSync(options);
   }
   const manifest = await readWorldManifest(worldRoot);
+  const collisions = await collisionsFor(
+    worldRoot,
+    manifest,
+    options.preflight,
+  );
+  // The world's dimensions and character schema are the record's: a sync
+  // brings a session to the world as the player has it, edits included.
+  const record = recordContent(await options.store.getWorld(options.worldId));
   if (
     !(await worldHasData(
       worldRoot,
@@ -465,14 +499,9 @@ export async function prepareWorldDataSyncForSession(
     ))
   ) {
     const session = await options.store.getSession(options.sessionId);
-    const definitions = await readEffectiveDimensions({
-      worldRoot,
-      manifest,
-      locale: options.locale ?? session?.locale,
-    });
     const plan = appendDimensionPlan(
       emptyImportPlan(),
-      definitions,
+      record.dimensions,
       {
         ...options.preflight,
         activePlugins:
@@ -485,7 +514,7 @@ export async function prepareWorldDataSyncForSession(
     return {
       imported: true,
       dimensionOnly: true,
-      diagnostics: [...plan.diagnostics, ...plan.mergeEvents],
+      diagnostics: [...collisions, ...plan.diagnostics, ...plan.mergeEvents],
       plan,
     };
   }
@@ -502,22 +531,16 @@ export async function prepareWorldDataSyncForSession(
   ) {
     return {
       imported: true,
-      diagnostics: descriptor.diagnostics,
+      diagnostics: [...collisions, ...descriptor.diagnostics],
       plan: emptyImportPlan(),
     };
   }
 
   if (options.dimensionOnly) {
     const session = await options.store.getSession(options.sessionId);
-    const definitions = await readEffectiveDimensions({
-      worldRoot,
-      manifest,
-      sources: descriptor.sources,
-      locale: options.locale ?? session?.locale,
-    });
     const plan = appendDimensionPlan(
       emptyImportPlan(),
-      definitions,
+      record.dimensions,
       {
         ...options.preflight,
         activePlugins:
@@ -529,6 +552,7 @@ export async function prepareWorldDataSyncForSession(
       imported: true,
       dimensionOnly: true,
       diagnostics: [
+        ...collisions,
         ...descriptor.diagnostics,
         ...plan.diagnostics,
         ...plan.mergeEvents,
@@ -546,7 +570,7 @@ export async function prepareWorldDataSyncForSession(
     sessionId: options.sessionId,
     worldId: options.worldId,
     sources: descriptor.sources,
-    characterSchema: manifest.characterSchema,
+    characterSchema: record.characterSchema,
     deps: {
       ...options.preflight,
       activePlugins: options.preflight?.activePlugins ?? session?.activePlugins,
@@ -554,15 +578,9 @@ export async function prepareWorldDataSyncForSession(
     now: options.now,
     locale: options.locale ?? session?.locale,
   });
-  const effectiveDimensions = await readEffectiveDimensions({
-    worldRoot,
-    manifest,
-    sources: descriptor.sources,
-    locale: options.locale ?? session?.locale,
-  });
   const plan = appendDimensionPlan(
     basePlan,
-    effectiveDimensions,
+    record.dimensions,
     {
       ...options.preflight,
       activePlugins: options.preflight?.activePlugins ?? session?.activePlugins,
@@ -572,6 +590,7 @@ export async function prepareWorldDataSyncForSession(
   return {
     imported: true,
     diagnostics: [
+      ...collisions,
       ...descriptor.diagnostics,
       ...plan.diagnostics,
       ...plan.mergeEvents,
@@ -592,11 +611,8 @@ async function preparePortableWorldDataSync(
     worldId: options.worldId,
     now: options.now,
     locale: options.locale ?? session?.locale,
-    dimensions: options.worldId
-      ? (await options.store.getWorld(options.worldId))?.metadata?.dimensions
-      : undefined,
-    contractData: options.worldId
-      ? (await options.store.getWorld(options.worldId))?.metadata?.contractData
+    world: options.worldId
+      ? await options.store.getWorld(options.worldId)
       : undefined,
     preflight: {
       ...options.preflight,
@@ -618,7 +634,20 @@ export async function syncWorldDataForSession(
   const dryRun = options.dryRun === true;
   const prepared =
     options.prepared ?? (await prepareWorldDataSyncForSession(options));
-  const { diagnostics, plan } = prepared;
+  const { diagnostics } = prepared;
+  // A sync for some receivers touches only their rows and ledger entries;
+  // everything else in the session is left as it is.
+  const receivers = options.receivers;
+  const forReceivers = (pluginId: string | undefined) =>
+    !receivers || (pluginId !== undefined && receivers.includes(pluginId));
+  const plan = receivers
+    ? {
+        ...prepared.plan,
+        writes: prepared.plan.writes.filter((write) =>
+          forReceivers("pluginId" in write ? write.pluginId : undefined),
+        ),
+      }
+    : prepared.plan;
   if (
     !prepared.imported ||
     !options.worldId ||
@@ -653,7 +682,13 @@ export async function syncWorldDataForSession(
     (ledger) =>
       ledger.managed &&
       ledger.sourceWorldId === worldId &&
-      (!dimensionOnly || ledger.namespace === DIMENSION_DATA_NAMESPACE),
+      forReceivers(ledger.pluginId) &&
+      (!dimensionOnly || ledger.namespace === DIMENSION_DATA_NAMESPACE) &&
+      // Without a provider the world's dimensions are left out, not removed:
+      // the session keeps the records it has.
+      !(
+        plan.skippedDimensions && ledger.namespace === DIMENSION_DATA_NAMESPACE
+      ),
   );
   const ledgerByKey = new Map(
     ledgers.map((ledger) => [ledgerKey(ledger), ledger]),
@@ -699,6 +734,9 @@ export async function syncWorldDataForSession(
         `${output.sourceId}\u0000${output.pluginId}/${output.projectionId}\u0000${output.outputId}`,
     ),
   );
+  const deferredSources = new Map(
+    plan.deferredSources?.map((source) => [source.sourceId, source.scope]),
+  );
   const conflicts: Array<SyncWorldDataForSessionResult["conflicts"][number]> =
     [];
   let unchanged = 0;
@@ -710,7 +748,12 @@ export async function syncWorldDataForSession(
   for (const ledger of ledgers) {
     if (writesByKey.has(ledgerKey(ledger))) continue;
     const deferredKey = deferredProjectionLedgerKey(ledger);
-    if (deferredKey && deferredProjectionKeys.has(deferredKey)) {
+    const deferredSourceScope = deferredSources.get(ledger.sourceId);
+    if (
+      deferredSourceScope === "all" ||
+      (deferredSourceScope === "primary" && !deferredKey) ||
+      (deferredKey && deferredProjectionKeys.has(deferredKey))
+    ) {
       // Missing writes are non-authoritative while their producer is
       // deferred. Preserve both the target and ledger; a later successful
       // empty output is what authorizes deletion.
@@ -967,13 +1010,12 @@ export async function syncWorldDataForSession(
     // Release references after commit. Ownership/bytes remain for lifecycle GC;
     // content-addressed media can be claimed by another session concurrently.
     if (options.mediaStore && pendingMediaUnrefs.length > 0) {
-      for (const mediaId of pendingMediaUnrefs) {
-        try {
-          await options.mediaStore.removeRef(mediaId, options.sessionId);
-        } catch {
-          // Continue finalizing the remaining unrefs.
-        }
-      }
+      await releaseUnusedSessionMediaRefs({
+        store: options.store,
+        mediaStore: options.mediaStore,
+        sessionId: options.sessionId,
+        mediaIds: pendingMediaUnrefs,
+      });
     }
 
     if (mediaRefs.length > 0) {

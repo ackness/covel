@@ -50,3 +50,12 @@ describe("world visuals", () => {
     expect(worldVisual(world).accent).toMatch(/^oklch\(/);
   });
 });
+
+it.each(["#202020", "oklch(25% 0.12 75)", "#ffffff"])(
+  "F-070 uses a readable fallback for out-of-range accent %s",
+  (accentColor) => {
+    expect(
+      worldVisual(makeWorld({ metadata: { accentColor } })).accent,
+    ).toMatch(/^oklch\(72%/);
+  },
+);

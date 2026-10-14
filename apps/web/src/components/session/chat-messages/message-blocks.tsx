@@ -168,7 +168,6 @@ export function MessageBlockRenderer({
   executing,
   onSubmitInteraction,
   onSendMessage,
-  onSubmitBlock,
 }: {
   msg: StreamMessage;
   block: Record<string, unknown>;
@@ -311,9 +310,7 @@ export function MessageBlockRenderer({
           );
           if (result) setIssues(result.rejected);
         } else {
-          // Fallback: no interaction to answer -> stringified payload
-          onSubmitBlock(msg.id);
-          onSendMessage(JSON.stringify(formValues));
+          emitToast("error", t("form.missingInteraction"));
         }
       },
       selectChoice: async (params: Record<string, unknown>) => {
@@ -369,7 +366,6 @@ export function MessageBlockRenderer({
       msg.turnId,
       onSubmitInteraction,
       onSendMessage,
-      onSubmitBlock,
       upsertInteractionDraft,
       initialFormState,
     ],
@@ -379,7 +375,7 @@ export function MessageBlockRenderer({
     return (
       <div key={msg.id} className="flex flex-col gap-1.5">
         <span className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">
-          {t("session.blockLabel", "Block")}: {block.type as string}
+          {t("session.blockType", { type: block.type as string })}
         </span>
         <RawJsonBlock content={JSON.stringify(block, null, 2)} />
       </div>

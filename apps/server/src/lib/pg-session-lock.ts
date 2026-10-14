@@ -74,6 +74,13 @@ export interface PgAdvisorySessionLockOptions {
    */
   readonly acquireTimeoutMs?: number;
   /**
+   * How long `tryWithLock` waits for a lock connection before it answers
+   * `unavailable`. Default 200ms: long enough to open a connection in an
+   * idle pool, short enough that a status read never waits behind turns
+   * that hold every connection.
+   */
+  readonly tryReserveTimeoutMs?: number;
+  /**
    * Poll interval when `pg_try_advisory_lock` returns false. Default 50ms.
    * Lower values shave latency at high contention; higher values reduce
    * query rate. 50ms is a reasonable middle ground.
@@ -96,6 +103,7 @@ export function createPgAdvisorySessionLock(
 ): SessionLock {
   const acquireTimeoutMs = opts.acquireTimeoutMs ?? 30_000;
   const pollIntervalMs = opts.pollIntervalMs ?? 50;
+  const tryReserveTimeoutMs = opts.tryReserveTimeoutMs ?? 200;
   const lockContext = new AsyncLocalStorage<PgLockBranch>();
 
   const beginNested = (state: PgLockState): void => {
@@ -137,7 +145,9 @@ export function createPgAdvisorySessionLock(
     lockIds: readonly string[],
     fn: () => Promise<T>,
   ): Promise<T> => {
-    const orderedIds = [...new Set(lockIds)];
+    // One global order (see SessionLock.withLocks) keeps overlapping key
+    // sets from deadlocking, whatever order the caller listed them in.
+    const orderedIds = [...new Set(lockIds)].sort();
     if (orderedIds.length === 0) return fn();
     // postgres.js's `Serializable` type does not include `bigint`, even
     // though the driver serialises bigint parameters correctly at
@@ -260,7 +270,7 @@ export function createPgAdvisorySessionLock(
     const rows = await state.reserved<{ locked: boolean }[]>`
       SELECT pg_try_advisory_lock(${entry.keyLiteral}::bigint) AS locked
     `;
-    if (!rows[0]?.locked) return { acquired: false };
+    if (!rows[0]?.locked) return { acquired: false, reason: "busy" };
     try {
       return {
         acquired: true,
@@ -296,7 +306,9 @@ export function createPgAdvisorySessionLock(
           entry.keyLiteral,
           () => probeReserved(parent.state, entry, parent.heldKeys, fn),
         );
-        return nested.acquired ? nested.value : { acquired: false };
+        return nested.acquired
+          ? nested.value
+          : { acquired: false, reason: nested.reason };
       } finally {
         endNested(parent.state);
       }
@@ -304,11 +316,19 @@ export function createPgAdvisorySessionLock(
 
     let reserved: ReservedConnection;
     try {
-      // A status probe must not queue behind turns exhausting the lock pool.
-      // Late checkouts are released by reserveWithDeadline without running fn.
-      reserved = await reserveWithDeadline(sql, Date.now(), 0, sessionId);
+      // A status probe must not queue behind turns exhausting the lock pool,
+      // but it waits briefly so a pool that is only opening a connection (a
+      // fresh start, a recycled connection) still answers. Late checkouts are
+      // released by reserveWithDeadline without running fn.
+      reserved = await reserveWithDeadline(
+        sql,
+        Date.now() + tryReserveTimeoutMs,
+        tryReserveTimeoutMs,
+        sessionId,
+      );
     } catch (error) {
-      if (error instanceof SessionLockTimeoutError) return { acquired: false };
+      if (error instanceof SessionLockTimeoutError)
+        return { acquired: false, reason: "unavailable" };
       throw error;
     }
     const state: PgLockState = {

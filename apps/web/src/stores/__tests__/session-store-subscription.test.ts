@@ -102,6 +102,7 @@ describe("rehydrateSessionSideState", () => {
     vi.clearAllMocks();
     vi.mocked(api.listSessionPlugins).mockResolvedValue({
       commands: [],
+      unavailable: [],
       items: [sessionPlugin("p1", true), sessionPlugin("off", false)],
     });
     vi.mocked(api.listSessionPluginData).mockResolvedValue([
@@ -341,7 +342,7 @@ describe("rehydrateSessionSideState", () => {
     });
     expect(dispatch).toHaveBeenCalledWith({
       type: "SET_GAME_STATE",
-      state: expect.objectContaining({ hp: 7 }),
+      state: expect.objectContaining({ tables: { hp: 7 } }),
     });
     expect(dispatch).toHaveBeenCalledWith({
       type: "UPDATE_WORLD",

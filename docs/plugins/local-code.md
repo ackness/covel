@@ -331,6 +331,7 @@ export default function register(covel) {
 
 - 界面传来的 `payload` 是外部输入，使用之前要检查。
 - 动作的写入是立刻生效的。它不属于某个回合，后面的步骤失败了也不会撤销。要“全部成功才保存”，用手动触发的函数 runtime。
+- 动作要很快做完。超过 30 秒这次动作就算失败：`ctx.signal` 中止，之后的 `ctx.store` 调用都会被拒绝。耗时的工作交给 `schedule.manual.execution: background` 的 runtime。
 - 离线运行不支持动作。运行时它会提示 `Unsupported rpc: notebook/inspect-note. Verify with the server.`，这不是错误。动作要在真实的服务端上验证。
 
 ## 写一个函数
@@ -396,7 +397,11 @@ export default async function handler(ctx) {
 | `ctx.logger`                                                                  | 写插件日志                                                                               |
 | `ctx.signal`                                                                  | 运行被取消时得到通知                                                                     |
 | `ctx.recursiveCall({ playerMessage, manualTrigger: { runtimeId, payload } })` | 在这一回合里再运行一个手动 runtime。只认这两个字段，会话、语言、设置和模型都沿用本次运行 |
+| `ctx.recursionDepth`                                                          | 被 `recursiveCall` 嵌套运行时大于 0。只该在顶层做的事，先判断它                          |
+| `ctx.execution?.sourceTurnId`                                                 | 重试旧回合时是那个回合的 ID。掷骰、揭示用它做键，重试就不会重新抽                        |
+| `ctx.store.getSession()`                                                      | 这一局的阶段、回合数、语言和开局步骤的进度（只读）                                       |
 
+- 上面每个字段都写在 `PluginFunctionContext` 类型里，开头那行类型注释就能让编辑器提示和检查它们。
 - 函数能调用的工具写在 `function.tools` 里。函数的时限是 `function.timeoutMs`。这两项不要写进 `agent` 里：函数 runtime 不能有 `agent` 配置。
 - 想让下一回合或别的运行读到这次的结果，在这边声明 `io.output.recordAs`，在读的那边声明 `scope: committed` 和同一个 `recordAs`。
 - 函数没有组装好的对话。这一回合的内容从 `ctx.playerMessage`、你声明的输入，或者 Covel 提供的 `turn-digest@1` 输入（含 `playerMessage` 和 `narrativeText`）里读。
@@ -433,6 +438,7 @@ await ctx.pluginData.set("progress", "cursor", after ?? null);
 - `limit` 默认 100，最大 500。
 - `cursor` 是一个不用理解的字符串，指向最后读到的消息。这一页是空的时候，它原样返回你传入的 `after`。
 - `hasMore` 为 `false` 表示已经读到末尾。
+- 消息按保存的先后返回。后台执行的消息可能比它前面的消息时间更早，但它保存得晚，所以仍然排在你存下的位置之后，不会漏掉。
 - 它只返回已保存的消息，不包含正在运行的这一回合。
 
 ## 向玩家要输入：表单

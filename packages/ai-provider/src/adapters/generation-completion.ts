@@ -1,11 +1,51 @@
 import { unifyFinishReason, type LLMFinishReason } from "@covel/shared";
 import { AiProviderError } from "../errors.js";
+import type { UsageSummary } from "../types.js";
 import { providerErrorKind } from "./provider-error-kind.js";
+
+/**
+ * `details.usage` for a failed generation: the tokens the provider had
+ * already reported. A failed answer may be billed, and traces count it from
+ * here. No usage, or a usage of nothing, is left out rather than written as
+ * zero: the provider did not say.
+ */
+export function failureUsageDetails(
+  usage: UsageSummary | undefined,
+): { usage: UsageSummary } | Record<string, never> {
+  return usage && usage.inputTokens + usage.outputTokens > 0 ? { usage } : {};
+}
+
+/**
+ * Give a failure from a generation the usage the provider had reported
+ * before it, unless the failure already carries one. Other errors pass
+ * through unchanged.
+ */
+export function withFailureUsage(
+  error: unknown,
+  usage: UsageSummary | undefined,
+): unknown {
+  if (!(error instanceof AiProviderError) || error.details?.usage) return error;
+  const known = failureUsageDetails(usage);
+  if (!("usage" in known)) return error;
+  const withUsage = new AiProviderError({
+    code: error.code,
+    message: error.message,
+    provider: error.provider,
+    ...(error.model !== undefined ? { model: error.model } : {}),
+    retriable: error.retriable,
+    ...(error.statusCode !== undefined ? { statusCode: error.statusCode } : {}),
+    details: { ...error.details, ...known },
+    ...(error.cause !== undefined ? { cause: error.cause } : {}),
+  });
+  if (error.stack) withUsage.stack = error.stack;
+  return withUsage;
+}
 
 /** HTTP 200 does not imply that a generation completed successfully. */
 export function assertGenerationPayload(
   payload: Record<string, unknown>,
   provider: string,
+  usage?: UsageSummary,
 ): void {
   if (
     payload.error ||
@@ -38,6 +78,7 @@ export function assertGenerationPayload(
       provider,
       retriable: !permanent && payload.status !== "cancelled",
       details: {
+        ...failureUsageDetails(usage),
         ...(providerCode ? { providerCode } : {}),
         ...(providerType ? { providerType } : {}),
         ...(refusal
@@ -55,13 +96,16 @@ export function assertGenerationPayload(
 export function assertStreamCompleted(
   completed: boolean,
   provider: string,
+  usage?: UsageSummary,
 ): void {
   if (!completed) {
+    const known = failureUsageDetails(usage);
     throw new AiProviderError({
       code: "PROVIDER_ERROR",
       message: `${provider} stream ended before its terminal event`,
       provider,
       retriable: true,
+      ...("usage" in known ? { details: known } : {}),
     });
   }
 }
@@ -70,6 +114,7 @@ export function assertStreamCompleted(
 export function assertSuccessfulFinishReason(
   finishReason: string,
   provider: string,
+  usage?: UsageSummary,
 ): void {
   const unified = unifyFinishReason(finishReason);
   if (unified === "content_filter") {
@@ -79,6 +124,7 @@ export function assertSuccessfulFinishReason(
       provider,
       retriable: false,
       details: {
+        ...failureUsageDetails(usage),
         diagnostics: {
           refusal: {
             reason: finishReason === "refusal" ? "refusal" : "content-filter",
@@ -90,9 +136,10 @@ export function assertSuccessfulFinishReason(
   if (unified === "error") {
     throw new AiProviderError({
       code: "PROVIDER_ERROR",
-      message: `${provider} reported an error finish reason`,
+      message: `${provider} reported an error finish reason (${finishReason})`,
       provider,
       retriable: true,
+      details: { ...failureUsageDetails(usage), rawFinishReason: finishReason },
     });
   }
 }

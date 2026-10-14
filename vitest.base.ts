@@ -2,6 +2,7 @@ import { mkdtempSync, readdirSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { isHostModule } from "./packages/plugin-loader/src/host-modules.js";
 
 const RUN_DIR_MARKER = "COVEL_TEST_TEMP_DIR";
 
@@ -53,7 +54,41 @@ useRunTempDir();
 // in a test run and nowhere else.
 Reflect.set(globalThis, Symbol.for("covel.test.outbound-global-fetch"), true);
 
+const repoRoot = path.dirname(fileURLToPath(import.meta.url));
+const hostModulesParent = path.join(
+  repoRoot,
+  "packages/plugin-loader/src/host-modules.ts",
+);
+
+/**
+ * Vitest loads modules through Vite, where the server's Node resolve hook
+ * (`provideHostModules`) does not run. This applies the same rule inside a
+ * test: a plugin installed outside the workspace imports the plugin SDK and
+ * zod from the host.
+ */
+const hostModulesOutsideWorkspace = {
+  name: "covel-host-modules",
+  enforce: "pre" as const,
+  async resolveId(
+    this: {
+      resolve(
+        source: string,
+        importer: string,
+        options: { skipSelf: boolean },
+      ): Promise<unknown>;
+    },
+    source: string,
+    importer: string | undefined,
+  ) {
+    if (!importer || !isHostModule(source)) return null;
+    const rel = path.relative(repoRoot, importer.split("?")[0]!);
+    if (!rel.startsWith("..") && !path.isAbsolute(rel)) return null;
+    return this.resolve(source, hostModulesParent, { skipSelf: true });
+  },
+};
+
 export default {
+  plugins: [hostModulesOutsideWorkspace],
   test: {
     setupFiles: [fileURLToPath(import.meta.url)],
     include: ["tests/**/*.test.ts"],

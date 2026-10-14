@@ -28,6 +28,7 @@ import {
   uniqueIndex,
   customType,
 } from "drizzle-orm/pg-core";
+import { isNotNull, isNull } from "drizzle-orm";
 
 const bytea = customType<{ data: Buffer | null }>({
   dataType() {
@@ -118,6 +119,13 @@ export const turnResults = pgTable(
   (table) => [
     index("pg_turn_results_session_id_idx").on(table.sessionId),
     index("pg_turn_results_turn_id_idx").on(table.turnId),
+    // The write order `queryTurnResults` and `listTurnResults` read in, as on
+    // SQLite (where the same index also locates the next `seq`).
+    index("pg_turn_results_session_created_seq_idx").on(
+      table.sessionId,
+      table.createdAt,
+      table.seq,
+    ),
   ],
 );
 
@@ -454,10 +462,34 @@ export const turnMessages = pgTable(
     order: integer("order").notNull(),
     createdAt: text("created_at").notNull(),
     compactedAtTurnId: text("compacted_at_turn_id"), // summaryId — null = not compacted
+    // Save order within the session, set by the `turn_messages_write_seq`
+    // trigger from `session_write_counters`; see `pg-schema-ddl.ts`.
+    writeSeq: bigint("write_seq", { mode: "number" }).notNull().default(0),
   },
   (table) => [
     index("pg_turn_messages_session_id_idx").on(table.sessionId),
     index("pg_turn_messages_turn_id_idx").on(table.sessionId, table.turnId),
+    index("pg_turn_messages_write_seq_idx").on(table.sessionId, table.writeSeq),
+    // The history order (`turnMessageOrder`): the full list, its tail
+    // (`listRecentTurnMessages`) and the compacted tags walk the session's
+    // rows in index order instead of sorting all of them.
+    index("pg_turn_messages_session_order_idx").on(
+      table.sessionId,
+      table.createdAt,
+      table.order,
+      table.id,
+    ),
+    // The same order over the rows not compacted yet: the prompt history every
+    // turn reads (`listUncompactedTurnMessages`). It stays the size of the
+    // uncompacted tail however long the session grows.
+    index("pg_turn_messages_uncompacted_idx")
+      .on(table.sessionId, table.createdAt, table.order, table.id)
+      .where(isNull(table.compactedAtTurnId)),
+    // The player-message count of `getTurnMessageStats`, answered from the index.
+    index("pg_turn_messages_source_type_idx").on(
+      table.sessionId,
+      table.sourceType,
+    ),
   ],
 );
 
@@ -530,7 +562,19 @@ export const stateSnapshots = pgTable(
     payload: jsonb("payload").notNull(), // SnapshotPayload
     createdAt: text("created_at").notNull(),
   },
-  (table) => [index("pg_state_snapshots_session_id_idx").on(table.sessionId)],
+  (table) => [
+    index("pg_state_snapshots_session_id_idx").on(table.sessionId),
+    // The keyset page and the auto-snapshot prune: `(created_at, id)`.
+    index("pg_state_snapshots_session_created_idx").on(
+      table.sessionId,
+      table.createdAt,
+      table.id,
+    ),
+    // The prune keeps any snapshot a fork names as its parent, in any session.
+    index("pg_state_snapshots_parent_id_idx")
+      .on(table.parentId)
+      .where(isNotNull(table.parentId)),
+  ],
 );
 
 // ── Media Assets ───────────────────────────────────────────────
@@ -739,7 +783,7 @@ export const vectorModels = pgTable(
   ],
 );
 
-/** Derived vector-index cursors/hashes; cascaded with the physical session index. */
+/** Derived vector-index cursors; cascaded with the physical session index. */
 export const vectorIndexProgress = pgTable(
   "vector_index_progress",
   {
@@ -750,5 +794,49 @@ export const vectorIndexProgress = pgTable(
   },
   (table) => [
     primaryKey({ columns: [table.sessionId, table.pluginId, table.namespace] }),
+  ],
+);
+
+// ── Write order (triggers in `pg-schema-ddl.ts`) ───────────────
+
+/**
+ * The last write number handed out in each session. Triggers take the next one
+ * for every turn message and every change to a lorebook entry, character or
+ * plugin data row. Taking a number locks the session's row until the
+ * transaction ends, so the numbers of one session follow commit order: a reader
+ * that sees number N has already been able to see every number below it.
+ */
+export const sessionWriteCounters = pgTable("session_write_counters", {
+  sessionId: text("session_id").primaryKey(),
+  value: bigint("value", { mode: "number" }).notNull(),
+});
+
+/**
+ * The latest change of each lorebook entry, character and plugin data row of a
+ * session, deletions included: one row per record, renumbered on every write.
+ * `kind` is `lorebook` (`namespace` holds the owner key), `character` or
+ * `plugin_data`; unused identity columns are empty strings.
+ */
+export const recordChanges = pgTable(
+  "record_changes",
+  {
+    sessionId: text("session_id").notNull(),
+    kind: text("kind").notNull(),
+    pluginId: text("plugin_id").notNull(),
+    namespace: text("namespace").notNull(),
+    key: text("key").notNull(),
+    seq: bigint("seq", { mode: "number" }).notNull(),
+  },
+  (table) => [
+    primaryKey({
+      columns: [
+        table.sessionId,
+        table.kind,
+        table.pluginId,
+        table.namespace,
+        table.key,
+      ],
+    }),
+    index("pg_record_changes_seq_idx").on(table.sessionId, table.seq),
   ],
 );

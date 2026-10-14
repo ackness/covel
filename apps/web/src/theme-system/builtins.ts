@@ -1,3 +1,4 @@
+import i18n from "@/i18n";
 import type { ThemeDefinition, ThemeManifest } from "./types.js";
 import modernManifest from "@/themes/builtins/modern/manifest.json";
 import modernCss from "@/themes/builtins/modern/theme.css?raw";
@@ -14,25 +15,46 @@ import stageCss from "@/themes/builtins/stage/theme.css?raw";
 import panelManifest from "@/themes/builtins/panel/manifest.json";
 import panelCss from "@/themes/builtins/panel/theme.css?raw";
 
+type BuiltinThemeManifest = Omit<
+  ThemeManifest,
+  "label" | "description" | "groupLabel"
+>;
+
+export function localizeBuiltinTheme(theme: ThemeDefinition): ThemeDefinition {
+  if (theme.source !== "builtin") return theme;
+  const prefix = `appearance.builtinThemes.${theme.id}`;
+  return {
+    ...theme,
+    label: i18n.t(`${prefix}.label`),
+    description: i18n.t(`${prefix}.description`),
+    groupLabel: i18n.t(`${prefix}.groupLabel`),
+  };
+}
+
 function toThemeDefinition(
-  manifest: ThemeManifest,
+  manifest: BuiltinThemeManifest,
   cssText: string,
 ): ThemeDefinition {
-  return {
+  return localizeBuiltinTheme({
     ...manifest,
+    label: manifest.id,
     source: "builtin",
     cssText,
-  };
+  });
 }
 
 export function getBuiltinThemes(): ThemeDefinition[] {
   return [
-    toThemeDefinition(panelManifest as ThemeManifest, panelCss),
-    toThemeDefinition(bookManifest as ThemeManifest, bookCss),
-    toThemeDefinition(stageManifest as ThemeManifest, stageCss),
-    toThemeDefinition(paperManifest as ThemeManifest, paperCss),
-    toThemeDefinition(modernManifest as ThemeManifest, modernCss),
-    toThemeDefinition(abyssManifest as ThemeManifest, abyssCss),
-    toThemeDefinition(auroraManifest as ThemeManifest, auroraCss),
+    toThemeDefinition(panelManifest as BuiltinThemeManifest, panelCss),
+    toThemeDefinition(bookManifest as BuiltinThemeManifest, bookCss),
+    toThemeDefinition(stageManifest as BuiltinThemeManifest, stageCss),
+    toThemeDefinition(paperManifest as BuiltinThemeManifest, paperCss),
+    toThemeDefinition(modernManifest as BuiltinThemeManifest, modernCss),
+    toThemeDefinition(abyssManifest as BuiltinThemeManifest, abyssCss),
+    toThemeDefinition(auroraManifest as BuiltinThemeManifest, auroraCss),
   ];
 }
+
+export const BUILTIN_THEME_IDS: ReadonlySet<string> = new Set(
+  getBuiltinThemes().map((theme) => theme.id),
+);

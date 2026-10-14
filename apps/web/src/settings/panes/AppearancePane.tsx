@@ -1,3 +1,15 @@
+import {
+  checkThemeContrast,
+  type ThemeContrastResult,
+} from "@/theme-system/contrast.js";
+import { ContrastNotice } from "@/components/appearance/ContrastNotice.js";
+import { storedThemeSelection } from "@/theme-system/selection.js";
+import { requestConfirm } from "@/lib/confirm-channel.js";
+import { themeImportErrorText } from "@/theme-system/import-error.js";
+import {
+  CUSTOM_THEMES_KEY,
+  loadStoredCustomThemes,
+} from "@/theme-system/storage.js";
 import { useSettingsWritable } from "../use-settings-save.js";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -43,10 +55,12 @@ export function AppearancePane() {
   const writable = useSettingsWritable();
   const fileRef = useRef<HTMLInputElement>(null);
   const [error, setError] = useState<string | null>(null);
+  const [contrast, setContrast] = useState<ThemeContrastResult[]>([]);
 
   const [rawOverrides] = useSetting<unknown>(APPEARANCE_TOKENS_KEY);
   const [appearance] = useSetting<string>("ui.appearance");
   const [scheme] = useSetting<ThemeScheme>(THEME_SCHEME_KEY);
+  const [customThemes] = useSetting<unknown>(CUSTOM_THEMES_KEY);
 
   const overrides = useMemo<AppearanceOverrides>(
     () => loadOverrides(store),
@@ -58,10 +72,11 @@ export function AppearancePane() {
   const [defaults, setDefaults] = useState<Record<string, string>>({});
   useEffect(() => {
     setDefaults(readTokenDefaults());
-  }, [appearance, scheme]);
+  }, [appearance, scheme, customThemes]);
 
   const customCount = countOverrides(overrides);
-  const activeScheme: ThemeScheme = scheme === "light" ? "light" : "dark";
+  const selection = storedThemeSelection(store);
+  const activeScheme = selection.scheme;
   const localizedTokenGroups = useMemo(
     () => localizeTokenGroups(TOKEN_GROUPS, i18n.language, t),
     [i18n.language, t],
@@ -87,9 +102,23 @@ export function AppearancePane() {
         .filter((theme) => theme.source === "builtin")
         .map((theme) => theme.id);
       const id = ensureThemeId(slugifyThemeId(label), builtinIds);
+      const existing =
+        loadStoredCustomThemes(store).find((theme) => theme.id === id) ?? null;
+      if (
+        existing &&
+        !(await requestConfirm({
+          title: t("appearance.replaceThemeTitle"),
+          message: t("appearance.replaceThemeConfirm"),
+          subject: resolveI18nText(existing.label, i18n.language) ?? id,
+          confirmLabel: t("appearance.replaceTheme"),
+          cancelLabel: t("common.cancel"),
+          destructive: true,
+        }))
+      )
+        return;
       // Carry the source theme's scheme support: a dark-only theme must not
       // come out of the snapshot labelled light-only.
-      const sourceTheme = registered.find((theme) => theme.id === appearance);
+      const sourceTheme = registered.find((theme) => theme.id === selection.id);
       const snapshot = buildThemeCss(
         store,
         id,
@@ -97,26 +126,30 @@ export function AppearancePane() {
         sourceTheme,
       );
 
-      await saveCustomTheme(store, {
-        id,
-        label,
-        source: "custom",
-        schemes: snapshot.schemes,
-        // A snapshot keeps the structure it was tuned on, not just the tokens,
-        // and joins that style in the picker as one more colourway.
-        layout: sourceTheme?.layout,
-        group: sourceTheme ? themeGroupId(sourceTheme) : undefined,
-        groupLabel: sourceTheme?.groupLabel ?? sourceTheme?.label,
-        cssText: snapshot.cssText,
-      });
+      setContrast(checkThemeContrast({ id, ...snapshot }));
+      await saveCustomTheme(
+        store,
+        {
+          id,
+          label,
+          source: "custom",
+          schemes: snapshot.schemes,
+          // A snapshot keeps the structure it was tuned on, not just the tokens,
+          // and joins that style in the picker as one more colourway.
+          layout: sourceTheme?.layout,
+          group: sourceTheme ? themeGroupId(sourceTheme) : undefined,
+          groupLabel: sourceTheme?.groupLabel ?? sourceTheme?.label,
+          cssText: snapshot.cssText,
+        },
+        undefined,
+        existing,
+      );
       await store.set("ui.appearance", id);
       await clearOverrides(store);
       setThemeName("");
     } catch (nextError) {
       setError(
-        nextError instanceof Error
-          ? nextError.message
-          : t("appearance.saveThemeFailed"),
+        themeImportErrorText(nextError, t, "appearance.saveThemeFailed"),
       );
     } finally {
       setSaving(false);
@@ -165,11 +198,7 @@ export function AppearancePane() {
       // hand-edited or hostile file can only ever set real tokens.
       await replaceOverrides(store, parsed as AppearanceOverrides);
     } catch (nextError) {
-      setError(
-        nextError instanceof Error
-          ? nextError.message
-          : t("appearance.importInvalid"),
-      );
+      setError(themeImportErrorText(nextError, t, "appearance.importInvalid"));
     } finally {
       if (fileRef.current) fileRef.current.value = "";
     }
@@ -177,6 +206,17 @@ export function AppearancePane() {
 
   return (
     <div className="space-y-5">
+      <ContrastNotice results={contrast} />
+      {selection.corrected && (
+        <p role="status" className="text-xs text-(--accent-warning)">
+          {t("settings.themeSelectionAdjusted", {
+            name:
+              resolveI18nText(selection.theme?.label, i18n.language) ??
+              selection.id,
+            scheme: t(`settings.themeScheme.${selection.scheme}`),
+          })}
+        </p>
+      )}
       <fieldset disabled={!writable} className="min-w-0">
         <StylePicker />
       </fieldset>
@@ -284,7 +324,7 @@ export function AppearancePane() {
           onChange={(event) => void handleImport(event)}
         />
         {error && (
-          <div className="ui-band text-xs" data-tone="danger">
+          <div role="alert" className="ui-band text-xs" data-tone="danger">
             <span className="text-(--accent-danger)">{error}</span>
           </div>
         )}

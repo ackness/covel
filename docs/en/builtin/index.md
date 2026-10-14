@@ -14,15 +14,18 @@ Covel comes with a set of plugins and four worlds. This chapter tells you what e
 
 ## Gameplay packs: pick a set of plugins at once
 
-When you start a game, you do not need to choose plugins one by one. A **gameplay pack** is a ready-made set of plugins. Pick one on the session-prep screen. There are three built in:
+When you start a game, you do not need to choose plugins one by one. A **gameplay pack** is a ready-made set of plugins. Pick one on the session-prep screen. There are four built in:
 
-| Gameplay pack                         | Good for                          | Plugins it includes                                                                                 |
-| ------------------------------------- | --------------------------------- | --------------------------------------------------------------------------------------------------- |
-| Traditional Story `traditional-story` | Long exploration, reading a story | Narrator, Action Suggestions, Codex, Relationship Graph, World Rules                                |
-| Dialogue Mode `dialogue-mode`         | Character dialogue, visual novel  | Dialogue Narrator, Scene Stage, Action Suggestions, Character Profiles, World Rules, Reply Variants |
-| Low Cost `low-cost`                   | Keeping model costs down          | Narrator, World Rules                                                                               |
+| Gameplay pack                         | Good for                                   | Plugins it includes                                                                                 |
+| ------------------------------------- | ------------------------------------------ | --------------------------------------------------------------------------------------------------- |
+| Traditional Story `traditional-story` | Long exploration, reading a story          | Narrator, Action Suggestions, Codex, Relationship Graph, World Rules                                |
+| Dialogue Mode `dialogue-mode`         | Character dialogue, visual novel           | Dialogue Narrator, Scene Stage, Action Suggestions, Character Profiles, World Rules, Reply Variants |
+| Low Cost `low-cost`                   | Keeping model costs down                   | Narrator, World Rules                                                                               |
+| Narrative Only `narrative-only`       | Just reading the story, at the lowest cost | Narrator                                                                                            |
 
-All three packs also include Pre-Game Setup, World Dimensions and Character Creator, and they recommend turning on Story Memory.
+The first three packs also include Pre-Game Setup, World Dimensions and Character Creator, and they recommend turning on Story Memory. Narrative Only turns the other always-on plugins off: there is no opening form, character creation or world dimensions, and no world time, Story Memory or history compaction. The world's declared dimensions are not imported, and the session starts as usual.
+
+The "Back to the minimal set" button on the session-prep screen gets you to such a set in one click: only the narrative plugins and the plugins that they and the world require.
 
 A world can have its own gameplay pack. For example, "Lantern Barrow" (提灯古冢) has a "Classic Tabletop" pack. It builds on Traditional Story and adds Tabletop Rules, Dice Check, Quest Log, Inventory and Affinity. After you pick a pack, you can still add or remove plugins under "Customize plugins and advanced settings" on the session-prep screen.
 
@@ -47,24 +50,24 @@ A world can have its own gameplay pack. For example, "Lantern Barrow" (提灯古
 | ---------------------------------------------- | --------------------------------------------------------------------------------- | --------- |
 | [Dice Check](./rpg.md) `dice-check`            | Risky actions are decided by dice that are rolled in advance                      |           |
 | [Tabletop Rules](./rpg.md) `tabletop-rules`    | Assigns attribute points at the start, and lets the player start attribute checks |           |
-| [Quest Log](./rpg.md) `core-quest`             | Records quests and objectives, and moves them forward as the story goes           |           |
+| [Quest Log](./rpg.md) `core-quest`             | Records quests and objectives, with localized status badges                       |           |
 | [Inventory](./rpg.md) `inventory`              | Records what the player character carries; items can be used and dropped          |           |
 | [Affinity](./rpg.md) `affinity`                | Records each character's attitude toward the player character                     |           |
 | [Hidden Story Events](./rpg.md) `story-events` | Story events that only happen when their conditions are met                       |           |
 
 ### Characters and world
 
-| Plugin                                                 | What it does                                                            | Always on |
-| ------------------------------------------------------ | ----------------------------------------------------------------------- | --------- |
-| [Pre-Game Setup](./world.md) `pregame`                 | Collects the player's choices when a game starts                        | Yes       |
-| [Character Creator](./world.md) `char-creator`         | Creates the player character, and updates characters during play        | Yes       |
-| [Character Profiles](./world.md) `character-blueprint` | Holds the characters and portraits the world provides                   |           |
-| [World Dimensions](./world.md) `world-init`            | Prepares and updates the world state that changes over time             | Yes       |
-| [World Time](./world.md) `world-time`                  | Time passing, and day and night                                         | Yes       |
-| [World Rules](./world.md) `living-world-rules`         | Brings the world's rules into every turn                                |           |
-| [Codex](./world.md) `codex`                            | Records people, places and things that appear in the story as entries   |           |
-| [Relationship Graph](./world.md) `npc-graph`           | Records the relationships between characters, and draws them as a graph |           |
-| [World Fact Extraction](./world.md) `world-ir`         | Sorts out what happened in each turn, for other plugins to use          |           |
+| Plugin                                                 | What it does                                                              | Always on |
+| ------------------------------------------------------ | ------------------------------------------------------------------------- | --------- |
+| [Pre-Game Setup](./world.md) `pregame`                 | Collects the player's choices when a game starts                          | Yes       |
+| [Character Creator](./world.md) `char-creator`         | Creates the player character, and updates characters during play          | Yes       |
+| [Character Profiles](./world.md) `character-blueprint` | Holds the characters and portraits the world provides                     |           |
+| [World Dimensions](./world.md) `world-init`            | Prepares character attributes and dimensions, and updates dimension state | Yes       |
+| [World Time](./world.md) `world-time`                  | Time passing, and day and night                                           | Yes       |
+| [World Rules](./world.md) `living-world-rules`         | Brings the world's rules into every turn, with localized category badges  |           |
+| [Codex](./world.md) `codex`                            | Records people, places and things, with localized category badges         |           |
+| [Relationship Graph](./world.md) `npc-graph`           | Records a graph of relationships between people, groups and factions      |           |
+| [World Fact Extraction](./world.md) `world-ir`         | Sorts out what happened in each turn, for other plugins to use            |           |
 
 ### Stage and sound
 

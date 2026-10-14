@@ -9,22 +9,35 @@ import { hostVersionRangeSchema } from "../utils/host-version-range.js";
 import { packageCreditFields } from "./package-info.js";
 import { attributeFieldTypeSchema } from "./world.js";
 import {
+  RESERVED_WORLD_PACKAGE_PATHS,
+  isReservedWorldPackagePath,
+} from "../world-package-paths.js";
+import {
   contractIdSchema,
   runtimeAuthoringManifestSchema,
 } from "./runtime-manifest.js";
 import {
-  runtimeManifestInputSchema,
   extensionDeclarationSchema,
   hookDeclarationSchema,
   permissionsDeclSchema,
+  pluginCommandsSchema,
   pluginDataSchemaDeclSchema,
+  pluginDescriptionSchema,
+  pluginDisplayNameSchema,
+  pluginEntryPathSchema,
+  pluginEventsSchema,
+  pluginUiPathsSchema,
+  pluginUserSettingsSchema,
   worldProjectionMapSchema,
 } from "./plugin-schemas.js";
-const shape = runtimeManifestInputSchema.shape;
 
-/** `attributes[].id`: field names, `[]` after one that holds a list. */
+/**
+ * `attributes[].id`: field names, `[]` after one that holds a list. `**`
+ * before a field name reaches that field at any depth below (`when.**.dimension`
+ * finds it in a condition however deeply `all` / `any` / `not` nest).
+ */
 const DATA_REFERENCE_PATH =
-  /^[A-Za-z_][A-Za-z0-9_]*(?:\[\])?(?:\.[A-Za-z_][A-Za-z0-9_]*(?:\[\])?)*$/;
+  /^(?:\*\*\.)?[A-Za-z_][A-Za-z0-9_]*(?:\[\])?(?:\.(?:\*\*\.)?[A-Za-z_][A-Za-z0-9_]*(?:\[\])?)*$/;
 
 /**
  * What a world author needs in order to supply one kind of world data. It
@@ -75,9 +88,12 @@ const dataAuthoringSchema = z
             message:
               "source path must be a world-package-relative path (no leading `/`, no `..` segments)",
           })
+          .refine((path) => !isReservedWorldPackagePath(path), {
+            message: `source path must not name a file the kernel or the world package owns (${RESERVED_WORLD_PACKAGE_PATHS.join(", ")})`,
+          })
           .meta({
             description:
-              "Conventional path of the source inside a world package.",
+              "Conventional path of the source inside a world package. It may not name a path the kernel or the package itself owns: `world.yaml`, `WORLD.md`, `data/world.data.yaml`, `data/dimensions.yaml`, `data/lorebook.yaml`, `characters/characters.json`, `media/gallery.json`, `media/portraits.json`, `media/scenes.json` or `media/gallery/`, nor an edition of one.",
             examples: ["data/quests.yaml"],
           }),
         key: z
@@ -113,34 +129,46 @@ const dataAuthoringSchema = z
       .optional(),
     references: z
       .array(
-        z.strictObject({
-          path: z
-            .string()
-            .regex(DATA_REFERENCE_PATH, {
-              message:
-                "path must be field names joined by `.`, with `[]` after a field that holds a list (`attributes[].id`)",
-            })
-            .meta({
-              description:
-                "Where the referring values are in each record: field names joined by `.`, with `[]` after a field that holds a list.",
-              examples: ["attributes[].id"],
-            }),
-          to: z
-            .enum(["character-attribute"])
-            .describe(
-              "What each value must name. `character-attribute` is the `id` of a top-level attribute of the world's `characterSchema`.",
-            ),
-          type: attributeFieldTypeSchema
-            .describe("Value type the named attribute must have.")
-            .optional(),
-          within: z
-            .array(z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/))
-            .min(1)
-            .describe(
-              "Number fields beside the referring value that must lie inside the `min` and `max` of the named attribute.",
-            )
-            .optional(),
-        }),
+        z
+          .strictObject({
+            path: z
+              .string()
+              .regex(DATA_REFERENCE_PATH, {
+                message:
+                  "path must be field names joined by `.`, with `[]` after a field that holds a list (`attributes[].id`) and `**.` before a field found at any depth (`when.**.dimension`)",
+              })
+              .meta({
+                description:
+                  "Where the referring values are in each record: field names joined by `.`, with `[]` after a field that holds a list. `**.` before a field name finds that field at any depth below.",
+                examples: ["attributes[].id", "when.**.dimension"],
+              }),
+            to: z
+              .enum(["character-attribute", "world-dimension"])
+              .describe(
+                "What each value must name. `character-attribute` is the `id` of a top-level attribute of the world's `characterSchema`; `world-dimension` is the ID of a dimension the world declares.",
+              ),
+            type: attributeFieldTypeSchema
+              .describe(
+                "Value type the named attribute must have. Only with `to: character-attribute`.",
+              )
+              .optional(),
+            within: z
+              .array(z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/))
+              .min(1)
+              .describe(
+                "Fields beside the referring value that must lie inside what it names. For `character-attribute`, number fields inside the attribute's `min` and `max`; for `world-dimension`, a path into the dimension's value (`a.b`, or a list of keys) that its schema allows.",
+              )
+              .optional(),
+          })
+          .refine(
+            (reference) =>
+              reference.type === undefined ||
+              reference.to === "character-attribute",
+            {
+              path: ["type"],
+              message: "type is only for `to: character-attribute`",
+            },
+          ),
       )
       .min(1)
       .describe(
@@ -203,8 +231,8 @@ export const pluginManifestSchema = z.strictObject({
       examples: [">=0.0.45"],
     })
     .optional(),
-  displayName: shape.displayName,
-  description: shape.description,
+  displayName: pluginDisplayNameSchema.optional(),
+  description: pluginDescriptionSchema,
   tags: z
     .array(
       z
@@ -281,7 +309,7 @@ export const pluginManifestSchema = z.strictObject({
       "Public schema of each contract this package publishes or accepts, keyed by contract ID. A contract that a `contributes.data` namespace accepts needs no entry here: its schema is the one of that namespace.",
     )
     .optional(),
-  entry: shape.entry,
+  entry: pluginEntryPathSchema.optional(),
   permissions: permissionsDeclSchema
     .describe(
       "Upper bounds of the package's own code. `http` lists the origins and methods the entry module of a community package may reach through `covel.http`, in addition to those its runtimes declare.",
@@ -299,7 +327,7 @@ export const pluginManifestSchema = z.strictObject({
           "Names of RPC actions the entry registers with `registerRpc`.",
         )
         .optional(),
-      commands: shape.commands,
+      commands: pluginCommandsSchema.optional(),
       services: z
         .array(contractIdSchema)
         .describe(
@@ -322,8 +350,8 @@ export const pluginManifestSchema = z.strictObject({
         .array(z.string().min(1))
         .describe("IDs of forms the entry registers.")
         .optional(),
-      events: shape.events,
-      settings: shape.userSettings,
+      events: pluginEventsSchema.optional(),
+      settings: pluginUserSettingsSchema.optional(),
       data: z
         .record(
           z.string(),
@@ -372,7 +400,11 @@ export const pluginManifestSchema = z.strictObject({
         )
         .describe("Own plugin data namespaces, keyed by namespace.")
         .optional(),
-      ui: shape.ui,
+      ui: pluginUiPathsSchema
+        .describe(
+          "Package-relative paths of declarative UI specs, by placement.",
+        )
+        .optional(),
       worldProjections: worldProjectionMapSchema
         .describe(
           "Pure projections from world data into own namespaces, keyed by projection ID.",

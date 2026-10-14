@@ -117,7 +117,8 @@ In development mode, after adding a missing root `PLUGIN.md`, or changing a sub-
 - It uses a canonical plugin ID, and it cannot overwrite the ID of a built-in plugin.
 - A manifest and its language variants accept only plain YAML frontmatter, and they reject executable language markers.
 - The installer does not run scripts, package managers, compilers, or plugin modules.
-- A GitHub installation requires the runtime files to be self-contained: `package.json` must not declare `dependencies`, `optionalDependencies`, or `peerDependencies`. Development dependencies are not subject to this rule.
+- Every plugin installation path (GitHub, ZIP, offline collection) and update requires self-contained runtime files: `dependencies`, `optionalDependencies`, and `peerDependencies` in `package.json` must be absent or empty. `devDependencies` are allowed. The host provides `@covel/plugin-handlers-utils` and `zod` to every plugin, so a plugin does not declare them as runtime dependencies; bundled plugins list them only under `devDependencies` too.
+- Declared runtime dependencies return 400, naming the nonempty fields, before any package is written. Authors must bundle dependencies into the release files, then remove these declarations or leave them empty.
 - A plugin that needs a build step should have its author provide built, self-contained files in a separate release directory.
 
 Checks before installing: both kinds of input scope, inline runtimes and sub-runtimes, are checked for the local `accepts` files, and for whether the package's producer exists.
@@ -138,6 +139,7 @@ The outer directory layer that a GitHub source archive carries is removed, and t
 | Expansion ratio      | 100     |
 
 - These limits apply to the whole GitHub archive. For a large monorepo, use a trimmed release repository, or a local ZIP.
+- All archives in a collection preview or batch installation share a 200 MiB extraction budget, including the manifest archive. The same repository and commit count once. Exceeding the budget returns 413 and stops reading later members. Offline collection ZIPs use the same budget.
 - Symbolic links, paths that escape the directory, and duplicate file paths that differ only in letter case are all rejected.
 
 ## HTTP contract
@@ -160,7 +162,8 @@ The Zod schemas for requests and responses are in the `plugin-install` export of
 - `collection`: `{ id, name, version }` when the directory has a manifest, otherwise `null`.
 - `problems` is `{ level: "error" | "warning", message, packageId? }[]`.
 - A batch accepts 1–20 tokens. It first downloads and checks each one's digest and identity. Writing starts only when all of them pass and none of the targets already exists.
-- If any target already exists, it returns 409 and changes nothing. If a failure happens during the writing stage, the packages written in this call are rolled back.
+- If any target already exists, the request returns 409 without changes. A write failure rolls back packages installed by that request. World rollback uses the normal deletion lifecycle: the world lock, a deletion marker, and recoverable package files if record deletion fails.
+- If a world acquired sessions during installation, rollback retains the world and its sessions. Packages whose deletion fails are also retained for retry. The error response’s `details` contains `rolledBack` and `retained`, each a `{ kind, id }[]` list. The `error` message also names retained packages so partial rollback is visible.
 - `/collection` accepts a ZIP produced by `pnpm pack:collection` (the manifest is at the top level, and it contains all the members). It has no preview step, so integrity check errors are returned directly as 400.
 
 ### Host version range
@@ -177,7 +180,8 @@ The preview includes the ID, package version, description, author name (`author`
 
 - The source is `{ repository, commit, path, digest, tracking }`.
 - `tracking` is `{ kind: "default-branch" }`, `{ kind: "branch", ref }`, or `{ kind: "pinned", ref }`. A repository root link tracks the default branch. A tree link first tries to resolve to an explicit branch. Anything else, such as a tag or a commit, stays locked.
-- `hasServerCode` is a conservative hint from scanning files and the manifest. It is not a full code audit. Test or build sources can also trigger this hint.
+- `description` is `I18nText`, retaining description translations for `PLUGIN.md` from `locales/<locale>.yaml` (`.yml` also works). Clients call `resolveI18nText` with the UI language.
+- `hasServerCode` uses the loader’s module-path enumeration: entry, function handler, guard, and world projection handler. It also scans code files, including `.mts` and `.cts`. ZIP installation returns the same field. This is a conservative hint, not a complete code audit; test or build sources can also trigger it.
 - The compatible host version is declared by the author in the manifest's `covel` field, in the directory, and in the README. The installer checks only the manifest format and this range. It does not judge whether the runtime is really compatible.
 
 ### Signing and download

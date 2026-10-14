@@ -4,6 +4,7 @@ import { type DataStore, type EventRecord } from "@covel/store";
 import { createMemoryStore } from "@covel/store/memory";
 import {
   createEventBus,
+  OUTBOX_PENDING_MAX,
   RECEIVE_GAP_FLUSH_MS,
   RECEIVE_STATES_MAX,
   type EventBusTransport,
@@ -299,6 +300,42 @@ describe("EventBus transport fan-out (audit R-02)", () => {
     warnSpy.mockRestore();
   });
 
+  it.each([undefined, "", 7])(
+    "rejects transport frames with invalid stream %s",
+    async (stream) => {
+      const hub = createHub();
+      const bus = createEventBus(undefined, { transport: hub.connect() });
+      const received = vi.fn();
+      bus.onEmit(received);
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      try {
+        hub.broadcast(
+          JSON.stringify({
+            origin: "remote",
+            stream,
+            seq: 1,
+            event: {
+              id: "one",
+              sessionId: "session",
+              topic: "state",
+              type: "changed",
+              timestamp: new Date().toISOString(),
+              payload: {},
+            },
+          }),
+        );
+        await Promise.resolve();
+        expect(received).not.toHaveBeenCalled();
+        expect(warn).toHaveBeenCalledWith(
+          "[EventBus] ignoring malformed transport frame",
+        );
+      } finally {
+        warn.mockRestore();
+        await bus.close();
+      }
+    },
+  );
+
   it("order-buffers out-of-order frames by origin seq", async () => {
     const hub = createHub();
     const bus = createEventBus(undefined, { transport: hub.connect() });
@@ -308,6 +345,7 @@ describe("EventBus transport fan-out (audit R-02)", () => {
     const mkFrame = (seq: number): string =>
       JSON.stringify({
         origin: "remote-pod",
+        stream: "boot-1",
         seq,
         event: {
           id: `remote:${seq}`,
@@ -433,22 +471,22 @@ describe("EventBus transport fan-out (audit R-02)", () => {
       });
       bus.onReset?.((reset) => resets.push(reset));
 
-      const frame = (stream: string, seq: number, type: string): string =>
+      const frame = (sessionId: string, seq: number, type: string): string =>
         JSON.stringify({
           origin: "remote-state-pressure",
-          stream,
+          stream: "boot-1",
           seq,
           event: {
-            id: `${stream}:${seq}`,
+            id: `${sessionId}:${seq}`,
             topic: "state",
             type,
-            sessionId: "sess-state-pressure",
+            sessionId,
             timestamp: new Date().toISOString(),
             payload: {},
           },
         });
 
-      hub.broadcast(frame("evicted-stream", 1, "target-1"));
+      hub.broadcast(frame("sess-state-pressure", 1, "target-1"));
       for (let i = 0; i < RECEIVE_STATES_MAX; i += 1) {
         hub.broadcast(frame(`filler-${i}`, 1, `filler-${i}`));
       }
@@ -457,7 +495,7 @@ describe("EventBus transport fan-out (audit R-02)", () => {
 
       // The stream's old receive state is gone. Its next observed frame must
       // re-establish continuity from seq 1; accepting seq 2 would hide a gap.
-      hub.broadcast(frame("evicted-stream", 2, "target-2"));
+      hub.broadcast(frame("sess-state-pressure", 2, "target-2"));
       await vi.advanceTimersByTimeAsync(0);
       expect(targetEvents.map((event) => event.type)).toEqual(["target-1"]);
       expect(resets).toEqual([]);
@@ -469,6 +507,208 @@ describe("EventBus transport fan-out (audit R-02)", () => {
       expect(targetEvents.map((event) => event.type)).toEqual([
         "target-1",
         "target-2",
+      ]);
+    } finally {
+      warnSpy.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+
+  it("evicts receive states least recently used first", async () => {
+    vi.useFakeTimers();
+    try {
+      const hub = createHub();
+      const bus = createEventBus(undefined, { transport: hub.connect() });
+      const targetTypes: string[] = [];
+      const resets: Array<{ sessionId: string; reason: string }> = [];
+      bus.onEmit((event) => {
+        if (event.sessionId === "sess-busy") targetTypes.push(event.type);
+      });
+      bus.onReset?.((reset) => resets.push(reset));
+
+      const frame = (sessionId: string, seq: number): string =>
+        JSON.stringify({
+          origin: "remote-lru",
+          stream: "boot-1",
+          seq,
+          event: {
+            id: `${sessionId}:${seq}`,
+            topic: "state",
+            type: `t${seq}`,
+            sessionId,
+            timestamp: new Date().toISOString(),
+            payload: {},
+          },
+        });
+
+      // The busy stream is the oldest state but keeps receiving frames.
+      hub.broadcast(frame("sess-busy", 1));
+      for (let i = 0; i < RECEIVE_STATES_MAX - 1; i += 1) {
+        hub.broadcast(frame(`idle-${i}`, 1));
+      }
+      hub.broadcast(frame("sess-busy", 2));
+      hub.broadcast(frame("idle-new", 1)); // over the cap: evicts idle-0
+      hub.broadcast(frame("sess-busy", 3));
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(targetTypes).toEqual(["t1", "t2", "t3"]);
+      expect(resets).toEqual([]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("delivers parked frames and resets replay before evicting their state", async () => {
+    vi.useFakeTimers();
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const hub = createHub();
+      const bus = createEventBus(undefined, { transport: hub.connect() });
+      const targetTypes: string[] = [];
+      const resets: Array<{ sessionId: string; reason: string }> = [];
+      bus.onEmit((event) => {
+        if (event.sessionId === "sess-parked") targetTypes.push(event.type);
+      });
+      bus.onReset?.((reset) => resets.push(reset));
+
+      const frame = (sessionId: string, seq: number): string =>
+        JSON.stringify({
+          origin: "remote-parked",
+          stream: "boot-1",
+          seq,
+          event: {
+            id: `${sessionId}:${seq}`,
+            topic: "state",
+            type: `t${seq}`,
+            sessionId,
+            timestamp: new Date().toISOString(),
+            payload: {},
+          },
+        });
+
+      // Every state parks a frame, so the least recently used one must go.
+      hub.broadcast(frame("sess-parked", 2));
+      for (let i = 0; i < RECEIVE_STATES_MAX; i += 1) {
+        hub.broadcast(frame(`other-${i}`, 2));
+      }
+      await vi.advanceTimersByTimeAsync(0);
+
+      // Without waiting for the gap timer: the parked frame is delivered and
+      // its session told to reset instead of being dropped silently.
+      expect(targetTypes).toEqual(["t2"]);
+      expect(resets).toContainEqual({
+        sessionId: "sess-parked",
+        reason: "transport-gap",
+      });
+    } finally {
+      warnSpy.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+
+  it("retires a stream's receive state when the sender starts a new stream", async () => {
+    vi.useFakeTimers();
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const hub = createHub();
+      const bus = createEventBus(undefined, { transport: hub.connect() });
+      const types: string[] = [];
+      const resets: Array<{ sessionId: string; reason: string }> = [];
+      bus.onEmit((event) => types.push(`${event.sessionId}/${event.type}`));
+      bus.onReset?.((reset) => resets.push(reset));
+
+      const frame = (sessionId: string, stream: string, seq: number) =>
+        JSON.stringify({
+          origin: "remote-restreams",
+          stream,
+          seq,
+          event: {
+            id: `${stream}:${seq}`,
+            topic: "state",
+            type: `${stream}-${seq}`,
+            sessionId,
+            timestamp: new Date().toISOString(),
+            payload: {},
+          },
+        });
+
+      // A parked frame of the old stream is delivered, with a reset for the
+      // hole before it, before the new stream's first frame.
+      hub.broadcast(frame("sess-restream", "old", 1));
+      hub.broadcast(frame("sess-restream", "old", 3));
+      hub.broadcast(frame("sess-restream", "new", 1));
+      await vi.advanceTimersByTimeAsync(0);
+      expect(types).toEqual([
+        "sess-restream/old-1",
+        "sess-restream/old-3",
+        "sess-restream/new-1",
+      ]);
+      expect(resets).toEqual([
+        { sessionId: "sess-restream", reason: "transport-gap" },
+      ]);
+
+      // Ended streams hold no state: more streams than the cap for one
+      // session never push another session's state out.
+      hub.broadcast(frame("sess-steady", "boot-1", 1));
+      for (let i = 0; i < RECEIVE_STATES_MAX; i += 1) {
+        hub.broadcast(frame("sess-restream", `gen-${i}`, 1));
+      }
+      hub.broadcast(frame("sess-steady", "boot-1", 2));
+      await vi.advanceTimersByTimeAsync(0);
+      expect(types.filter((type) => type.startsWith("sess-steady/"))).toEqual([
+        "sess-steady/boot-1-1",
+        "sess-steady/boot-1-2",
+      ]);
+      expect(resets).toHaveLength(1);
+    } finally {
+      warnSpy.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+
+  it("caps a session's outbox while publish hangs and leaves a hole receivers reset on", async () => {
+    vi.useFakeTimers();
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const hub = createHub();
+      let release!: () => void;
+      const stuck = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      let publishCalls = 0;
+      const slow: EventBusTransport = {
+        publish: async (payload) => {
+          publishCalls += 1;
+          await stuck;
+          hub.broadcast(payload);
+        },
+        subscribe: () => undefined,
+      };
+      const sender = createEventBus(undefined, { transport: slow });
+      const receiver = createEventBus(undefined, { transport: hub.connect() });
+      const resets: Array<{ sessionId: string; reason: string }> = [];
+      receiver.onReset?.((reset) => resets.push(reset));
+
+      for (let i = 0; i < OUTBOX_PENDING_MAX + 5; i += 1) {
+        sender.emit(makeMessage({ sessionId: "sess-stuck" }));
+      }
+      await vi.advanceTimersByTimeAsync(0);
+      expect(publishCalls).toBe(1);
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining("transport outbox full"),
+      );
+
+      release();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(publishCalls).toBe(OUTBOX_PENDING_MAX);
+
+      // The next frame lands after the dropped seqs: the receiver sees the
+      // hole and resets its clients.
+      sender.emit(makeMessage({ sessionId: "sess-stuck" }));
+      await vi.advanceTimersByTimeAsync(RECEIVE_GAP_FLUSH_MS);
+      expect(publishCalls).toBe(OUTBOX_PENDING_MAX + 1);
+      expect(resets).toEqual([
+        { sessionId: "sess-stuck", reason: "transport-gap" },
       ]);
     } finally {
       warnSpy.mockRestore();

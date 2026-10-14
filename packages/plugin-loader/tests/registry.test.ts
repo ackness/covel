@@ -7,6 +7,7 @@ import type {
   ParsedRuntimeMd,
   RegistryChangeEvent,
   ParsedPluginMd,
+  PackageManifest,
 } from "../src/types.js";
 import { createPluginRegistry, type PluginRegistry } from "../src/registry.js";
 
@@ -65,7 +66,7 @@ function makeParsedRuntimeMd(
 function makePackageManifest(
   name: string,
   priority: number,
-  overrides?: Partial<RuntimeManifest>,
+  overrides?: Partial<PackageManifest>,
 ): ParsedPluginMd {
   return {
     manifest: {
@@ -228,12 +229,8 @@ describe("PluginRegistry", () => {
           },
         },
         manifests: [
-          makeParsedRuntimeMd("world-projector/setup", 50, {
-            worldProjections: { characters },
-          }),
-          makeParsedRuntimeMd("world-projector/audit", 1_100, {
-            worldProjections: { characters },
-          }),
+          makeParsedRuntimeMd("world-projector/setup", 50),
+          makeParsedRuntimeMd("world-projector/audit", 1_100),
         ],
       });
 
@@ -265,25 +262,6 @@ describe("PluginRegistry", () => {
         /targets undeclared dataSchemas namespace "facts"/,
       );
       expect(registry.get("world-projector")).toBeUndefined();
-    });
-
-    it("does not collect projection declarations from child execution records", () => {
-      registry.register(
-        makeEntry("world-projector", {
-          manifests: [
-            makeParsedRuntimeMd("world-projector/setup", 50, {
-              worldProjections: {
-                facts: {
-                  from: "contract:world@1",
-                  handler: "./project.js",
-                  outputs: { facts: { namespace: "facts", key: "id" } },
-                },
-              },
-            }),
-          ],
-        }),
-      );
-      expect(registry.get("world-projector")?.worldProjections).toBeUndefined();
     });
   });
 
@@ -630,6 +608,27 @@ describe("PluginRegistry", () => {
       // Not activated for session-1
 
       expect(registry.getActiveRuntimes("session-1")).toEqual([]);
+    });
+  });
+
+  describe("resolveSessionSet", () => {
+    it("passes the confirmed set through the resolver on every read and re-resolves after a registration", () => {
+      const resolve = vi.fn(
+        (confirmed: readonly string[], entries: ReadonlyMap<string, unknown>) =>
+          confirmed.filter((id) => entries.has(id) && id !== "dropped"),
+      );
+      const resolving = createPluginRegistry({ resolveSessionSet: resolve });
+      resolving.register(makeEntry("kept"));
+      resolving.register(makeEntry("dropped"));
+      resolving.syncSessionActivations("s", ["kept", "dropped"]);
+
+      expect(resolving.getActivePlugins("s")).toEqual(["kept"]);
+      expect(resolving.getActivePlugins("s")).toEqual(["kept"]);
+      expect(resolve).toHaveBeenCalledTimes(1);
+
+      resolving.register(makeEntry("other"));
+      expect(resolving.getActivePlugins("s")).toEqual(["kept"]);
+      expect(resolve).toHaveBeenCalledTimes(2);
     });
   });
 });

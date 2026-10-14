@@ -1,6 +1,5 @@
 /**
- * Shared core for event-follower image-generation handlers
- * (dashscope-image-gen / openai-image-gen).
+ * Shared core for event-follower image-generation handlers.
  *
  * The whole trunk is provider-agnostic: extract the prompt from the trigger
  * event (manualPayload fallback), check the named model before writing a
@@ -13,18 +12,19 @@
 
 import { abortSignalWithTimeout, optionalString } from "./index.js";
 import type { ImageGenerationResult, JsonValue } from "./types.js";
+import type { PluginImageGenerateInput } from "./media.js";
 
-/** The slice of FunctionHandlerContext this trunk reads. */
+/** The slice of `PluginFunctionContext` this trunk reads. */
 export interface ImageGenerationHandlerContext {
   readonly turnId?: string;
   readonly triggerEvent?: unknown;
   readonly manualPayload?: unknown;
   readonly userSettings?: unknown;
   readonly signal?: AbortSignal;
-  readonly random?: import("./function-runtime.js").PluginRandom;
+  readonly random: import("./function-runtime.js").PluginRandom;
   readonly images?: {
     isAvailable(presetId?: string): boolean;
-    generate(request: Record<string, unknown>): Promise<{
+    generate(request: PluginImageGenerateInput): Promise<{
       refs: ReadonlyArray<{ id: string; mime: string; size: number }>;
       warnings: readonly string[];
       cached: boolean;
@@ -205,11 +205,9 @@ export async function runImageGeneration(
   }
 
   const suffix = ctx.random
-    ? ctx.random
-        .int(0, 36 ** 6)
-        .toString(36)
-        .padStart(6, "0")
-    : Math.random().toString(36).slice(2, 8);
+    .int(0, 36 ** 6)
+    .toString(36)
+    .padStart(6, "0");
   const imageId = `img-${Date.now().toString(36)}-${suffix}`;
   const startedAt = new Date().toISOString();
   const baseRecord: ImageBaseRecord = {

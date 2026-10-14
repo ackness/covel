@@ -1,3 +1,7 @@
+import { CUSTOM_THEMES_KEY } from "@/theme-system/storage.js";
+import { DEFAULT_APPEARANCE } from "@/lib/appearance.js";
+import { resolveThemeSelection } from "@/theme-system/selection.js";
+import { useId } from "react";
 import { Moon, Sun } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
@@ -11,10 +15,18 @@ import { useSetting } from "@/settings/use-settings.js";
 
 export function ThemeToggle() {
   const [appearance] = useSetting<string>("ui.appearance");
+  useSetting<unknown>(CUSTOM_THEMES_KEY);
   const [scheme, setScheme] = useSetting<ThemeScheme>(THEME_SCHEME_KEY);
   const { t } = useTranslation();
-  const nextScheme = scheme === "light" ? "dark" : "light";
-  const theme = getThemeDefinition(appearance);
+  const hintId = useId();
+  const theme =
+    getThemeDefinition(appearance) ?? getThemeDefinition(DEFAULT_APPEARANCE);
+  const displayed = resolveThemeSelection(
+    theme ? [theme] : [],
+    appearance,
+    scheme,
+  ).scheme;
+  const nextScheme = displayed === "light" ? "dark" : "light";
   const canToggle = theme ? theme.schemes.includes(nextScheme) : true;
 
   return (
@@ -24,6 +36,10 @@ export function ThemeToggle() {
       className="h-10 w-10 text-muted-foreground hover:text-primary hover:bg-muted/40 rounded-(--radius-control) lg:h-9 lg:w-9"
       disabled={!canToggle}
       aria-disabled={!canToggle}
+      aria-label={t("common.darkMode")}
+      aria-pressed={displayed === "dark"}
+      aria-describedby={!canToggle ? hintId : undefined}
+      title={!canToggle ? t("settings.themeSchemeLocked") : undefined}
       onClick={() => {
         if (!canToggle) return;
         void setScheme(nextScheme);
@@ -31,7 +47,12 @@ export function ThemeToggle() {
     >
       <Sun className="h-4 w-4 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
       <Moon className="absolute h-4 w-4 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
-      <span className="sr-only">{t("common.toggleTheme", "Toggle theme")}</span>
+      <span className="sr-only">{t("common.darkMode")}</span>
+      {!canToggle && (
+        <span id={hintId} className="sr-only">
+          {t("settings.themeSchemeLocked")}
+        </span>
+      )}
     </Button>
   );
 }

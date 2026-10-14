@@ -124,6 +124,49 @@ describe("postJson retry wrapper", () => {
     expect(rateLimited.bodyDrained).toBe(true);
   });
 
+  it("does not send a 429 for an empty account again, and keeps its body", async () => {
+    const body = JSON.stringify({
+      error: {
+        code: "insufficient_quota",
+        type: "insufficient_quota",
+        message: "You exceeded your current quota",
+      },
+    });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(makeMockResponse({ status: 429, body }))
+      .mockResolvedValueOnce(makeMockResponse({ status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const promise = postJson(CONFIG, "/chat/completions", { a: 1 });
+    await vi.runAllTimersAsync();
+    const result = await promise;
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(result.status).toBe(429);
+    expect(await result.text()).toBe(body);
+  });
+
+  it("sends a 429 rate limit again after reading its body", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        makeMockResponse({
+          status: 429,
+          body: JSON.stringify({
+            error: { code: "rate_limit_exceeded", message: "see billing" },
+          }),
+        }),
+      )
+      .mockResolvedValueOnce(makeMockResponse({ status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const promise = postJson(CONFIG, "/chat/completions", { a: 1 });
+    await vi.runAllTimersAsync();
+    expect((await promise).status).toBe(200);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
   it("retries on 500 500 then succeeds (3 attempts)", async () => {
     const failA = makeMockResponse({ status: 500 });
     const failB = makeMockResponse({ status: 500 });

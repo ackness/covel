@@ -6,7 +6,6 @@ import {
   writeFile,
   cp,
   rm,
-  symlink,
 } from "node:fs/promises";
 import { parse as parseYaml } from "yaml";
 import { tmpdir } from "node:os";
@@ -199,27 +198,27 @@ describe("tabletop package installed as a third-party ZIP", () => {
       [
         "create",
         "schedule:\n  stage: setup\n  trigger: {type: auto}\nio:\n  output: {contract: character-creation@1}",
-        `export default async function (ctx) {
-  const characters = await ctx.store.listCharacters(ctx.sessionId);
-  const existing = Array.isArray(characters)
-    ? characters.find((character) => character.type === "player")
-    : undefined;
+        `import { makeProposal, withPendingProposals } from "@covel/plugin-handlers-utils";
+export default async function (ctx) {
+  const existing = ctx.world.characters.find((character) => character.type === "player");
   if (existing) {
     return { outcome: "success", completion: "done", value: { playerId: existing.id } };
   }
   const now = new Date().toISOString();
-  await ctx.store.upsertCharacter({
-    id: "fixture-player",
-    sessionId: ctx.sessionId,
-    name: "Lin",
-    type: "player",
-    description: "Fixture default creator player",
-    fields: { tideReading: 1, stealth: 1, diplomacy: 1, combat: 1 },
-    version: 1,
-    createdAt: now,
-    updatedAt: now,
-  });
-  return { outcome: "success", completion: "done", value: { playerId: "fixture-player" } };
+  return withPendingProposals(
+    { outcome: "success", completion: "done", value: { playerId: "fixture-player" } },
+    [
+      makeProposal(ctx, now, "character.upsert", {
+        id: "fixture-player",
+        name: "Lin",
+        type: "player",
+        description: "Fixture default creator player",
+        fields: { tideReading: 1, stealth: 1, diplomacy: 1, combat: 1 },
+        version: 1,
+        createdAt: now,
+      }),
+    ],
+  );
 }
 `,
       ],
@@ -266,23 +265,11 @@ describe("tabletop package installed as a third-party ZIP", () => {
       path.join(root, "builtin/narrator"),
       { recursive: true, filter: (source) => !source.includes("node_modules") },
     );
-    // Builtin plugin dependencies are staged by the desktop/server distribution.
-    // Junction: directory symlinks need Windows symlink privileges, junctions
-    // do not (the type flag is ignored on POSIX).
-    await symlink(
-      path.join(project, "plugins/narrator/node_modules"),
-      path.join(root, "builtin/narrator/node_modules"),
-      "junction",
-    );
+    // No node_modules: the host resolves the plugin SDK for every plugin.
     await cp(
       path.join(project, "plugins/dice-check"),
       path.join(root, "builtin/dice-check"),
       { recursive: true, filter: (source) => !source.includes("node_modules") },
-    );
-    await symlink(
-      path.join(project, "plugins/dice-check/node_modules"),
-      path.join(root, "builtin/dice-check/node_modules"),
-      "junction",
     );
     vi.stubEnv("COVEL_USER_PLUGINS_DIR", path.join(root, "user"));
     vi.stubEnv("COVEL_DESKTOP_REST_TOKEN", "synthetic-tabletop-token");

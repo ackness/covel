@@ -80,9 +80,9 @@ export const WRITE_METHOD_TOUCHES: Readonly<Record<string, Touched>> = {
   deleteEventsBefore: ["events"],
   addMessage: ["messages", "messagePositions"],
   commitPlayerInputMessage: ["messages", "messagePositions"],
-  upsertCharacter: ["characters"],
+  upsertCharacter: ["characters", "recordChanges"],
   upsertCharacterSchema: ["characterSchemas"],
-  deleteCharacter: ["characters"],
+  deleteCharacter: ["characters", "recordChanges"],
   addTraceEvent: ["traceEvents"],
   deleteTraceEventsBefore: ["traceEvents"],
   saveRuntimeOutput: ["runtimeOutputs"],
@@ -94,16 +94,16 @@ export const WRITE_METHOD_TOUCHES: Readonly<Record<string, Touched>> = {
   saveSessionSummary: ["sessionSummaries"],
   deleteSessionSummaries: ["sessionSummaries"],
   // plugin data
-  setPluginData: ["pluginData"],
-  setPluginDataBatch: ["pluginData"],
-  compareAndSetPluginData: ["pluginData"],
-  compareAndSetPluginDataBatch: ["pluginData"],
-  deletePluginData: ["pluginData"],
+  setPluginData: ["pluginData", "recordChanges"],
+  setPluginDataBatch: ["pluginData", "recordChanges"],
+  compareAndSetPluginData: ["pluginData", "recordChanges"],
+  compareAndSetPluginDataBatch: ["pluginData", "recordChanges"],
+  deletePluginData: ["pluginData", "recordChanges"],
   // working memory / ledger / lorebook
   saveWorldDataImportLedgerBatch: ["worldDataImportLedger"],
   deleteWorldDataImportLedger: ["worldDataImportLedger"],
-  upsertLorebookEntries: ["lorebookEntries"],
-  deleteLorebookEntry: ["lorebookEntries"],
+  upsertLorebookEntries: ["lorebookEntries", "recordChanges"],
+  deleteLorebookEntry: ["lorebookEntries", "recordChanges"],
   // suspensions + snapshots
   saveSuspension: ["suspensions"],
   claimSuspension: ["suspensions"],
@@ -131,16 +131,26 @@ export const WRITE_METHOD_TOUCHES: Readonly<Record<string, Touched>> = {
   upsertVector: ["vectorRows"],
   deleteVectors: ["vectorRows"],
   lockSessionEmbeddingModel: ["sessionVectorTargets"],
+  resetSessionVectorIndex: [
+    "vectorRows",
+    "vectorIndexProgress",
+    "sessionVectorTargets",
+  ],
   // The shared model registry is independent of session lifecycle; resolving
   // an existing target does not mutate state.
   ensureVectorModel: [],
   resolveSessionVectorTarget: [],
 };
 
-/** Method-name prefixes that never mutate MemoryState. */
-const READ_METHOD_PREFIXES = ["get", "list", "search"] as const;
+/**
+ * Method-name prefixes that never mutate MemoryState. Every other store method
+ * must be a key of {@link WRITE_METHOD_TOUCHES};
+ * `tests/memory-transaction-rollback.test.ts` checks that each one is exactly
+ * one of the two, so a read never falls into the capture-everything fallback.
+ */
+const READ_METHOD_PREFIXES = ["get", "list", "search", "query"] as const;
 
-function isReadMethod(name: string): boolean {
+export function isReadMethod(name: string): boolean {
   return READ_METHOD_PREFIXES.some((p) => name.startsWith(p));
 }
 

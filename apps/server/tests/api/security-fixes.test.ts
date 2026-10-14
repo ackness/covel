@@ -699,7 +699,7 @@ sources:
     const mediaStore = createMemoryMediaStore();
     const failingMediaStore = new Proxy(mediaStore, {
       get(target, prop, receiver) {
-        if (prop === "addRef") {
+        if (prop === "claimAssets") {
           return async () => {
             throw new Error("simulated media ref failure");
           };

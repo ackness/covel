@@ -1,5 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
+import { readFileSync, readdirSync } from "node:fs";
 import { deriveThemeCss } from "../theme-css-derive.js";
 
 describe("theme CSS derivation", () => {
@@ -116,7 +117,7 @@ html[data-theme="source"] {
         "source",
         "saved",
       ),
-    ).toThrow(/must be scoped/);
+    ).toThrow(/escapes-scope/);
   });
 
   it("handles CSS escapes and priorities without requiring whitespace", () => {
@@ -138,4 +139,16 @@ html[data-theme="source"] {
     );
     expect(result).toContain("--motion: covel-saved-0 1s !important;");
   });
+});
+
+it("ships only current surface token names", () => {
+  const root = new URL("../../themes/builtins/", import.meta.url);
+  const styles = [
+    new URL("../../index.css", import.meta.url),
+    ...readdirSync(root).map((id) => new URL(`${id}/theme.css`, root)),
+  ];
+  for (const file of styles)
+    expect(readFileSync(file, "utf-8")).not.toMatch(
+      /--surface-(?:app|panel|panel-strong)\s*:/,
+    );
 });

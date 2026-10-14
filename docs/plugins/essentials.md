@@ -97,6 +97,7 @@ Write one observation grounded in runtime-inputs.narrative.value.
 | `covel.provideExtension(...)`          | `extensions`            |
 | `covel.on(event, ...)`                 | `hooks`                 |
 | `covel.registerFormValidator(name, …)` | `forms`                 |
+| `covel.registerWires(...)`             | `wires`                 |
 
 另外三项只需要声明，不需要代码：
 
@@ -141,10 +142,12 @@ agent:
 - 模型只能调用这里列出的工具。没列出的，它看不到。
 - 插件只有一个 runtime（写在 `runtime:` 里）并且没有写 `agent.tools.plugin` 时，这个 runtime 得到 `contributes.tools` 里的全部工具，不用再列一遍。
 - 写了 `plugin` 就以写的为准。`plugin: []` 表示一个自己的工具都不给。
-- 有多个 runtime 的插件里，每个 runtime 各自列出要用的工具。
+- 有多个 runtime 的插件里，每个 runtime 各自列出要用的工具。没有 runtime 使用的内部 helpers 不要注册成工具，也不要列进 `contributes.tools`。
 - 工具名只在自己的插件里唯一。一个插件调用不了另一个插件的工具，要用服务，见[插件扩展与通信](../reference/plugin-extensions.md)。
 
 内置工具的清单见[工具参考](../reference/tools.md)。
+
+Agent 的完成条件见[插件参考](../reference/plugins.md)：`completion.require: tool-use` 配合 `afterTools` 时，查询工具不能代替声明的完成工具。
 
 ## 怎样用别的插件的结果
 
@@ -310,19 +313,19 @@ pnpm validate:plugin ~/.covel/plugins/my-plugin
 插件的代码只依赖公开的 SDK `@covel/plugin-handlers-utils`，不要引用 Covel 内部的包、数据库表或前端组件。
 
 > [!IMPORTANT]
-> 这个 SDK 没有发布到 npm，安装插件时也不会执行 `npm install`。放在用户目录里的插件必须自己能运行：需要的东西要么来自 Covel 传进来的参数（`ctx`、`covel.toolkit`），要么打包进插件。仓库 `plugins/` 下的内置插件可以直接 `import` 它。
+> 这个 SDK 没有发布到 npm，安装插件时也不会执行 `npm install`。Covel 给每个插件提供 SDK（包括 `/dimensions`、`/prompts` 子入口）和 `zod`，插件代码直接 `import` 就行，内置插件和装在用户目录里的插件一样。开发时要装它们，就写进 `package.json` 的 `devDependencies`：安装器拒绝非空的 `dependencies`。用到的其他库要打包进插件。
 
 常用的帮手：
 
-| 需要                     | 用什么                                                                         |
-| ------------------------ | ------------------------------------------------------------------------------ |
-| 掷骰和其他随机数         | `ctx.random`（工具里是 `context.random`，生成 ID 时是 `shortId` 的第四个参数） |
-| 多语言文本取当前语言     | `resolveI18nText` / `resolveI18nDeep`                                          |
-| 估算一段文字的 token 数  | `estimateTokens`                                                               |
-| 给自己的文本按相关度排序 | `rankTexts` / `searchTerms` / `searchExcerpt`，不调用模型                      |
-| 给 ID、键、时间戳排序    | `compareText`                                                                  |
-| 加载自己的提示词模板     | `@covel/plugin-handlers-utils/prompts` 的 `createPromptLoader(root)`           |
-| 表单和角色字段校验       | SDK 里的表单工具和角色字段校验                                                 |
+| 需要                     | 用什么                                                                                                   |
+| ------------------------ | -------------------------------------------------------------------------------------------------------- |
+| 掷骰和其他随机数         | `ctx.random`（工具里是 `context.random`，生成 ID 时必须传给 `shortId` 的第四个参数）                     |
+| 多语言文本取当前语言     | `resolveI18nText` / `resolveI18nDeep`                                                                    |
+| 估算一段文字的 token 数  | `estimateTokens`                                                                                         |
+| 给自己的文本按相关度排序 | `rankTexts` / `searchTerms` / `searchExcerpt`，不调用模型                                                |
+| 给 ID、键、时间戳排序    | `compareText`                                                                                            |
+| 加载自己的提示词模板     | `@covel/plugin-handlers-utils/prompts` 的 `createPromptLoader(root)`，只读 `<name>.md` 和 `<name>.zh.md` |
+| 表单和角色字段校验       | SDK 里的表单工具和角色字段校验                                                                           |
 
 两条和可重复性有关的规则：
 
@@ -349,3 +352,5 @@ pnpm validate:plugin ~/.covel/plugins/my-plugin
 - 写工具和函数：[带本地代码的插件](./local-code.md)
 - 测试：[插件测试](./testing.md)
 - 发给别人：[验证与分发](../ship/index.md)
+
+只使用当前声明的输入和数据形状：投影后的叙事输入是字符串，骰子回执带 `checks` 数组，`pluginData.get()` 直接返回存储值。版本变更见[插件契约](../reference/plugins.md#契约版本策略)，不要为了保留开发数据再加包装或回退分支。

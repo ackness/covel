@@ -53,6 +53,8 @@ When `needs` points to a contract that has only one provider, a result that the 
 
 When several records must succeed or fail together, use `invokeRuntime`. This function handler does not need a model. A manual trigger does not run a narrative runtime by itself. Any event downstream that the runtime declares still runs under the scheduling rules.
 
+An RPC action handler receives `ctx.signal`, which aborts at its time limit. The RPC channel below defines when store calls close and already-started writes settle.
+
 See [RPC channel](./api.md#post-apisessionsidplugin-rpc) and [handler write contract](./plugins.md#inputs-and-outputs).
 
 ### Tools do not cross plugins
@@ -321,7 +323,7 @@ When a plugin needs to call a model, or connect a new provider, choose the appro
 
 ### Use the model features that already exist
 
-- Text, images, speech, and music: use `ctx.gateway`, `ctx.images`, `ctx.speech`, and `ctx.music`.
+- Text, images, speech, and music: use `ctx.gateway`, `ctx.images`, `ctx.speech`, and `ctx.music`. Their types (`PluginServiceGateway`, `PluginImages`, `PluginSpeech`, `PluginMusic`, `PluginMedia`) are exported by `@covel/plugin-handlers-utils`, and the host implements exactly these types.
 - Evaluation: `ctx.gateway.evaluate({ presetId, state, questions, signal })`. It supports three kinds of questions: Boolean, Choice, and Score.
 
 ### Budget when you build a long prompt yourself
@@ -423,6 +425,7 @@ What you must implement:
 
 - You must implement `generateText` and `streamText`. For the types, see `PluginTextWire` in `@covel/plugin-handlers-utils`.
 - `params` includes `model`, `messages` (with tool calls and tool results), `tools`, `responseFormat`, and `providerRequestMetadata`.
+- Message text and text blocks contain no internal prompt-cache markers. `instructionLocale` is the host-selected instruction language (`en` or `zh`). The fallback for structured output uses it too.
 - The last event in a stream must be `done`.
 - `finishReason` can return the provider's own word directly. The gateway converts it to a common value such as `stop`, `length`, or `tool_calls` (see the notes on finish reasons in [slots.md](./slots.md#connection-tests-and-failure-reasons)).
 - You do not need to implement structured output on its own. The gateway puts the JSON Schema into `responseFormat`, adds it to the messages as an instruction, calls `generateText`, and then parses and validates the result.

@@ -780,7 +780,7 @@
                         "type": "string",
                         "minLength": 1,
                         "pattern": "^(?!\\/)(?!.*(?:^|\\/)\\.\\.(?:\\/|$))[a-z0-9_./-]+$",
-                        "description": "Conventional path of the source inside a world package.",
+                        "description": "Conventional path of the source inside a world package. It may not name a path the kernel or the package itself owns: `world.yaml`, `WORLD.md`, `data/world.data.yaml`, `data/dimensions.yaml`, `data/lorebook.yaml`, `characters/characters.json`, `media/gallery.json`, `media/portraits.json`, `media/scenes.json` or `media/gallery/`, nor an edition of one.",
                         "examples": ["data/quests.yaml"]
                       },
                       "key": {
@@ -819,14 +819,14 @@
                       "properties": {
                         "path": {
                           "type": "string",
-                          "pattern": "^[A-Za-z_][A-Za-z0-9_]*(?:\\[\\])?(?:\\.[A-Za-z_][A-Za-z0-9_]*(?:\\[\\])?)*$",
-                          "description": "Where the referring values are in each record: field names joined by `.`, with `[]` after a field that holds a list.",
-                          "examples": ["attributes[].id"]
+                          "pattern": "^(?:\\*\\*\\.)?[A-Za-z_][A-Za-z0-9_]*(?:\\[\\])?(?:\\.(?:\\*\\*\\.)?[A-Za-z_][A-Za-z0-9_]*(?:\\[\\])?)*$",
+                          "description": "Where the referring values are in each record: field names joined by `.`, with `[]` after a field that holds a list. `**.` before a field name finds that field at any depth below.",
+                          "examples": ["attributes[].id", "when.**.dimension"]
                         },
                         "to": {
                           "type": "string",
-                          "enum": ["character-attribute"],
-                          "description": "What each value must name. `character-attribute` is the `id` of a top-level attribute of the world's `characterSchema`."
+                          "enum": ["character-attribute", "world-dimension"],
+                          "description": "What each value must name. `character-attribute` is the `id` of a top-level attribute of the world's `characterSchema`; `world-dimension` is the ID of a dimension the world declares."
                         },
                         "type": {
                           "type": "string",
@@ -839,7 +839,7 @@
                             "object",
                             "map"
                           ],
-                          "description": "Value type the named attribute must have."
+                          "description": "Value type the named attribute must have. Only with `to: character-attribute`."
                         },
                         "within": {
                           "minItems": 1,
@@ -848,7 +848,7 @@
                             "type": "string",
                             "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
                           },
-                          "description": "Number fields beside the referring value that must lie inside the `min` and `max` of the named attribute."
+                          "description": "Fields beside the referring value that must lie inside what it names. For `character-attribute`, number fields inside the attribute's `min` and `max`; for `world-dimension`, a path into the dimension's value (`a.b`, or a list of keys) that its schema allows."
                         }
                       },
                       "required": ["path", "to"],
@@ -1181,7 +1181,7 @@
                           "contract": {
                             "type": "string",
                             "pattern": "^[a-z][a-z0-9.-]*@[1-9][0-9]*$",
-                            "description": "Contract ID. It must be listed in the package's `requires` or `optional`."
+                            "description": "Contract ID. This runtime runs after the contract's active providers; the contract does not have to be listed in `requires` or `optional`."
                           },
                           "cardinality": {
                             "type": "string",
@@ -1320,7 +1320,7 @@
                         "additionalProperties": false
                       }
                     ],
-                    "description": "Producer of the value: a runtime in this package, a contract, or a kernel input."
+                    "description": "Producer of the value: a runtime in this package, a contract, or a kernel input. A kernel input takes no other field."
                   },
                   "scope": {
                     "type": "string",
@@ -1580,7 +1580,7 @@
                     "require": {
                       "type": "string",
                       "enum": ["explicit", "tool-use"],
-                      "description": "`explicit` needs a completing tool or `runtime-done`. `tool-use` needs a valid business tool call, so \"no change\" is also submitted through the tool."
+                      "description": "`explicit` needs a completing tool or `runtime-done`. `tool-use` needs a successful tool named in `afterTools`, or any successful business tool when `afterTools` is empty. Failed calls and `runtime-done` do not count."
                     },
                     "afterTools": {
                       "type": "array",

@@ -21,6 +21,7 @@ import {
 import { createRpcApprovalGate, type RpcApprovalGate } from "@covel/approval";
 import {
   createPluginRegistry,
+  parsePluginMd,
   type PluginRegistry,
   type PluginRegistryEntry,
   type PluginSummary,
@@ -54,7 +55,7 @@ type Env = {
   };
 };
 
-function setup(): {
+function setup(options: { readonly handlerTimeoutMs?: number } = {}): {
   app: Hono<Env>;
   store: DataStore;
   registry: PluginRpcRegistry;
@@ -68,7 +69,7 @@ function setup(): {
   registry.registerFrameworkDefault("echo", async (payload) => ({
     echoed: payload,
   }));
-  const executor = createRpcExecutor({ registry });
+  const executor = createRpcExecutor({ registry, ...options });
   const gate = createRpcApprovalGate();
   const pluginRegistry = createPluginRegistry();
   const sessionLock = createInProcessSessionLock();
@@ -102,6 +103,26 @@ function setup(): {
     pluginRegistry,
     sessionLock,
   };
+}
+
+/** Install a package with no runtimes, as an action fixture's plugin. */
+function installPackage(
+  pluginRegistry: PluginRegistry,
+  id: string,
+  options: { requires?: string[]; source?: PluginSource } = {},
+): void {
+  pluginRegistry.register({
+    id,
+    packageManifest: parsePluginMd(
+      `---\n${JSON.stringify({ id, kind: "plugin", description: id, requires: options.requires })}\n---\n`,
+      `${id}/PLUGIN.md`,
+    ),
+    manifests: [],
+    summary: makeSummary(id),
+    loadedRuntimes: new Map(),
+    status: "registered",
+    source: options.source ?? "builtin",
+  });
 }
 
 let nextClient = 0;
@@ -304,6 +325,18 @@ describe("POST /api/sessions/:id/plugin-rpc", () => {
   });
 
   it("resolves a command server-side and returns refreshed scoped context", async () => {
+    const commands = [
+      {
+        name: "inspect",
+        aliases: ["i"],
+        description: "Inspect the session",
+        arguments: [
+          { name: "depth", type: "integer" as const, required: true },
+        ],
+        action: "inspect-state",
+        context: ["models" as const],
+      },
+    ];
     const runtime: RuntimeManifest = {
       name: "inspector/story",
       pluginId: "inspector",
@@ -312,16 +345,6 @@ describe("POST /api/sessions/:id/plugin-rpc", () => {
       outputKind: "story",
       model: "story",
       outputContract: "narrative@1",
-      commands: [
-        {
-          name: "inspect",
-          aliases: ["i"],
-          description: "Inspect the session",
-          arguments: [{ name: "depth", type: "integer", required: true }],
-          action: "inspect-state",
-          context: ["models"],
-        },
-      ],
     };
     const parsed = {
       runtime: { type: runtime.runtimeType ?? ("agent" as const) },
@@ -333,11 +356,18 @@ describe("POST /api/sessions/:id/plugin-rpc", () => {
       id: "inspector",
       packageManifest: {
         ...parsed,
+        manifest: {
+          name: "inspector",
+          pluginId: "inspector",
+          description: "Inspector",
+          pluginType: "plugin",
+          commands,
+        },
         plugin: {
           id: "inspector",
           kind: "plugin",
           description: "Inspector",
-          contributes: { commands: runtime.commands },
+          contributes: { commands },
         },
       },
       summary: {
@@ -545,6 +575,7 @@ describe("POST /api/sessions/:id/plugin-rpc", () => {
   });
 
   it("gives builtin plugin actions scoped immediate writes without host store authority", async () => {
+    installPackage(pluginRegistry, "codex");
     await store.updateSession("sess-rpc-1", { activePlugins: ["codex"] });
     let exposed: string[] = [];
     const createdAt = "2026-01-01T00:00:00.000Z";
@@ -643,8 +674,31 @@ describe("POST /api/sessions/:id/plugin-rpc", () => {
     },
   );
 
+  it("rejects actions from a confirmed plugin whose requirement is missing", async () => {
+    installPackage(pluginRegistry, "fixture", { requires: ["missing@1"] });
+    await store.updateSession("sess-rpc-1", { activePlugins: ["fixture"] });
+    const handler = vi.fn(async () => ({ updated: true }));
+    registry.registerPluginHandler("fixture", "update", handler, {}, "builtin");
+    const response = await app.request("/api/sessions/sess-rpc-1/plugin-rpc", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        kind: "action",
+        pluginId: "fixture",
+        action: "update",
+      }),
+    });
+    expect(response.status).toBe(404);
+    const body = (await response.json()) as { code: string; error: string };
+    expect(body.code).toBe("plugin_not_active");
+    // The player is told why the plugin is off.
+    expect(body.error).toContain("missing@1");
+    expect(handler).not.toHaveBeenCalled();
+  });
+
   it("rechecks action activation after waiting for the session lock", async () => {
-    const { app, store, registry, sessionLock, gate } = setup();
+    const { app, store, registry, sessionLock, gate, pluginRegistry } = setup();
+    installPackage(pluginRegistry, "fixture");
     await seedSession(store);
     await store.updateSession("sess-rpc-1", { activePlugins: ["fixture"] });
     const handler = vi.fn(async () => ({ updated: true }));
@@ -682,6 +736,7 @@ describe("POST /api/sessions/:id/plugin-rpc", () => {
   });
 
   it("dispatches an entry-registered plugin action", async () => {
+    installPackage(pluginRegistry, "codex");
     await store.updateSession("sess-rpc-1", { activePlugins: ["codex"] });
     registry.registerPluginHandler(
       "codex",
@@ -705,6 +760,42 @@ describe("POST /api/sessions/:id/plugin-rpc", () => {
     const body = (await res.json()) as { status: string; result: unknown };
     expect(body.status).toBe("ok");
     expect(body.result).toEqual({ pluginEcho: { card: "shrine" } });
+  });
+
+  it("fails an action that passes its time limit and frees the session", async () => {
+    const limited = setup({ handlerTimeoutMs: 50 });
+    installPackage(limited.pluginRegistry, "codex");
+    await seedSession(limited.store);
+    await limited.store.updateSession("sess-rpc-1", {
+      activePlugins: ["codex"],
+    });
+    limited.registry.registerPluginHandler(
+      "codex",
+      "hang",
+      async () => new Promise(() => {}),
+      {},
+      "builtin",
+    );
+
+    const res = await limited.app.request(
+      "/api/sessions/sess-rpc-1/plugin-rpc",
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          kind: "action",
+          pluginId: "codex",
+          action: "hang",
+          payload: null,
+        }),
+      },
+    );
+    expect(res.status).toBe(504);
+    expect(await res.json()).toMatchObject({ code: "handler_timeout" });
+    // Deleting or playing the session no longer waits on the stuck handler.
+    await expect(
+      limited.sessionLock.tryWithLock!("sess-rpc-1", async () => "free"),
+    ).resolves.toEqual({ acquired: true, value: "free" });
   });
 
   it('returns 404 with code "unknown_action" when action not registered', async () => {
@@ -806,13 +897,16 @@ describe("POST /api/sessions/:id/plugin-rpc — deferred community entry (H2)", 
     const hasPendingEntry = (pluginId: string): boolean =>
       pluginId === PLUGIN_ID && !activated;
 
+    const pluginRegistry = createPluginRegistry();
+    installPackage(pluginRegistry, PLUGIN_ID, { source: "community" });
+
     const app = new Hono();
     app.use("*", async (c, next) => {
       c.set("store", store);
       c.set("rpcExecutor", executor);
       c.set("rpcRegistry", registry);
       c.set("rpcApprovalGate", gate);
-      c.set("pluginRegistry", createPluginRegistry());
+      c.set("pluginRegistry", pluginRegistry);
       c.set("hasPendingPluginEntry", hasPendingEntry);
       c.set("activatePluginServerCode", activate);
       await next();

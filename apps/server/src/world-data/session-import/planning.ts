@@ -29,7 +29,10 @@ import {
   sameSourceDuplicateIdentity,
 } from "./identity.js";
 import { mediaMime } from "./media-handling.js";
-import { executeWorldProjections } from "./projections.js";
+import {
+  executeWorldProjections,
+  hasActiveWorldProjections,
+} from "./projections.js";
 import type {
   ImportPlan,
   MergeEvent,
@@ -328,6 +331,9 @@ export async function buildImportPlan(options: {
 }): Promise<ImportPlan> {
   const writes: PlannedWrite[] = [];
   const diagnostics: WorldDataDiagnostic[] = [];
+  const unreceivedSources = new Set<string>();
+  const deferredSources: NonNullable<ImportPlan["deferredSources"]>[number][] =
+    [];
   let characterSchema: CharacterSchemaRecord | null = null;
   if (options.characterSchema !== undefined) {
     const parsed = characterSchemaSetPayloadSchema.safeParse(
@@ -398,6 +404,24 @@ export async function buildImportPlan(options: {
           diagnostics,
         ).filter(isPluginTarget)
       : [];
+    // Direct receivers and projection consumers are independent. Only skip
+    // schema/file reads when neither can consume this source; author validation
+    // checks sources separately. Sync must distinguish this from an empty source.
+    if (
+      (parsedTarget.kind === "contract-data" && targets.length === 0) ||
+      (parsedIndex && indexTargets.length === 0)
+    ) {
+      unreceivedSources.add(source.id);
+      const hasProjections = hasActiveWorldProjections({
+        source,
+        deps: options.deps,
+      });
+      deferredSources.push({
+        sourceId: source.id,
+        scope: hasProjections ? "primary" : "all",
+      });
+      if (!hasProjections) continue;
+    }
     const preflightedTargets = new Set<string>();
     for (const pluginTarget of [
       ...targets.filter(isPluginTarget),
@@ -554,6 +578,7 @@ export async function buildImportPlan(options: {
     if (parseWorldDataTarget(source.descriptor.to)?.kind === "world-metadata")
       continue;
     if (
+      unreceivedSources.has(source.id) ||
       writes.some((write) => write.source.id === source.id) ||
       deferredProjectionOutputs.some(
         (output) => output.sourceId === source.id,
@@ -687,5 +712,6 @@ export async function buildImportPlan(options: {
     diagnostics,
     mergeEvents,
     deferredProjectionOutputs,
+    deferredSources,
   };
 }

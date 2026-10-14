@@ -77,7 +77,7 @@ describe("createInProcessSessionLock", () => {
       await lock.tryWithLock("probe", async () => {
         ran = true;
       }),
-    ).toEqual({ acquired: false });
+    ).toEqual({ acquired: false, reason: "busy" });
     expect(ran).toBe(false);
     release();
     expect(await owner).toEqual({ acquired: true, value: undefined });
@@ -123,7 +123,7 @@ describe("createInProcessSessionLock", () => {
     });
     const owner = lock.withLock("probe", () => ownerGate);
     startProbe();
-    expect(await probe).toEqual({ acquired: false });
+    expect(await probe).toEqual({ acquired: false, reason: "busy" });
     releaseOwner();
     await owner;
   });
@@ -239,6 +239,27 @@ describe("createInProcessSessionLock", () => {
     } finally {
       warn.mockRestore();
     }
+  });
+
+  it("orders overlapping key sets itself, so callers cannot deadlock", async () => {
+    const lock = createInProcessSessionLock();
+    const entered: string[] = [];
+    const both = Promise.all([
+      lock.withLocks(["b", "a"], async () => {
+        entered.push("first");
+      }),
+      lock.withLocks(["a", "b"], async () => {
+        entered.push("second");
+      }),
+    ]);
+    const outcome = await Promise.race([
+      both.then(() => "done" as const),
+      new Promise<"deadlocked">((resolve) =>
+        setTimeout(() => resolve("deadlocked"), 500),
+      ),
+    ]);
+    expect(outcome).toBe("done");
+    expect(entered).toEqual(["first", "second"]);
   });
 
   it("propagates fn return value to the caller", async () => {

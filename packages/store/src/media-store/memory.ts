@@ -1,9 +1,15 @@
-import type { MediaRef, MediaRefRecord, MediaStore } from "@covel/shared";
+import type {
+  MediaAssetRecord,
+  MediaRef,
+  MediaRefRecord,
+  MediaStore,
+} from "@covel/shared";
 import {
   finalizeMediaCleanupResult,
   planMediaCleanup,
 } from "./cleanup-result.js";
 import {
+  assertMediaClaims,
   bytesToReadableStream,
   filterAssetsByMetadata,
   sha256,
@@ -52,6 +58,21 @@ export function createMemoryMediaStore(): MediaStore {
         createdAt: new Date().toISOString(),
       });
     }
+  }
+
+  function toAssetRecord(asset: StoredMedia): MediaAssetRecord {
+    const owner = owners.get(asset.ref.id);
+    return {
+      id: asset.ref.id,
+      mime: asset.ref.mime,
+      size: asset.ref.size,
+      ownerSessionId: owner?.sessionId ?? null,
+      ownerPluginId: owner?.pluginId ?? null,
+      createdAt: asset.createdAt,
+      ...(asset.ref.meta === undefined
+        ? {}
+        : { meta: structuredClone(asset.ref.meta) }),
+    };
   }
 
   return {
@@ -139,6 +160,19 @@ export function createMemoryMediaStore(): MediaStore {
       recordRef(id, sessionId, pluginId);
     },
 
+    // Synchronous between the first and the last write, so no other call
+    // sees a part of the batch.
+    async claimAssets(claims) {
+      assertMediaClaims(claims);
+      for (const { id, sessionId, pluginId } of claims) {
+        if (!assets.has(id)) continue;
+        const existing = owners.get(id);
+        if (!existing || existing.sessionId === sessionId)
+          owners.set(id, { sessionId, pluginId: pluginId ?? null });
+        recordRef(id, sessionId, pluginId);
+      }
+    },
+
     async removeRef(id, sessionId) {
       refs.get(sessionId)?.delete(id);
       refRows.delete(`${sessionId}\u0000${id}`);
@@ -161,20 +195,7 @@ export function createMemoryMediaStore(): MediaStore {
     },
 
     async listAssets() {
-      return [...assets.values()].map((asset) => {
-        const owner = owners.get(asset.ref.id);
-        return {
-          id: asset.ref.id,
-          mime: asset.ref.mime,
-          size: asset.ref.size,
-          ownerSessionId: owner?.sessionId ?? null,
-          ownerPluginId: owner?.pluginId ?? null,
-          createdAt: asset.createdAt,
-          ...(asset.ref.meta === undefined
-            ? {}
-            : { meta: structuredClone(asset.ref.meta) }),
-        };
-      });
+      return [...assets.values()].map(toAssetRecord);
     },
 
     async listRefs() {
@@ -182,7 +203,13 @@ export function createMemoryMediaStore(): MediaStore {
     },
 
     async listByMetadata(sessionId, filter) {
-      return filterAssetsByMetadata(await this.listAssets(), sessionId, filter);
+      const owned: MediaAssetRecord[] = [];
+      for (const [id, owner] of owners) {
+        const asset = assets.get(id);
+        if (asset && owner.sessionId === sessionId)
+          owned.push(toAssetRecord(asset));
+      }
+      return filterAssetsByMetadata(owned, sessionId, filter);
     },
 
     async cleanup(protectedIds, policy) {

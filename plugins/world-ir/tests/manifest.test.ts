@@ -5,6 +5,7 @@ import {
   loadPluginDefinition,
   loadRuntime,
 } from "@covel/plugin-loader";
+import { characterHandles } from "../tools/character-handles.js";
 import { validateWorldIRV1 } from "../schemas/world-ir.js";
 
 describe("world-ir plugin contract", () => {
@@ -59,4 +60,15 @@ describe("world-ir plugin contract", () => {
       }),
     );
   });
+});
+
+it("uses the same short character handles for imported and generated IDs", () => {
+  const imported = { id: "cast:watcher", name: "North Watcher" };
+  const generated = {
+    id: "e6ae27a1-41da-46d8-b52a-88d26a6c155e",
+    name: "South Watcher",
+  };
+  const handles = characterHandles([generated, imported]);
+  expect(handles.get("north-watcher")).toBe(imported);
+  expect(handles.get("south-watcher")).toBe(generated);
 });

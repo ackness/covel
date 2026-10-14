@@ -1,3 +1,9 @@
+import { storedThemeSelection } from "@/theme-system/selection.js";
+import {
+  checkThemeContrast,
+  type ThemeContrastResult,
+} from "@/theme-system/contrast.js";
+import { ContrastNotice } from "@/components/appearance/ContrastNotice.js";
 import { importCssImages } from "@/lib/import-image.js";
 import { useSettingsWritable } from "@/settings/use-settings-save.js";
 import { requestConfirm } from "@/lib/confirm-channel.js";
@@ -17,14 +23,7 @@ import {
   loadStoredCustomThemes,
 } from "@/theme-system/storage.js";
 import { parseImportedThemeFile } from "@/theme-system/validate.js";
-import type { StoredCustomTheme } from "@/theme-system/types.js";
-
-function isCustomTheme(
-  themeId: string,
-  customThemes: StoredCustomTheme[],
-): boolean {
-  return customThemes.some((theme) => theme.id === themeId);
-}
+import { themeImportErrorText } from "@/theme-system/import-error.js";
 
 function labelToString(
   label: string | Record<string, string>,
@@ -37,11 +36,12 @@ export function ThemeManagerWidget() {
   const { t, i18n } = useTranslation();
   const store = useSettingsStore();
   const writable = useSettingsWritable();
-  const [appearance] = useSetting<string>("ui.appearance");
+  useSetting<string>("ui.appearance");
   const [customThemes] = useSetting<unknown>(CUSTOM_THEMES_KEY);
   const fileRef = useRef<HTMLInputElement>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [contrast, setContrast] = useState<ThemeContrastResult[]>([]);
   const [busy, setBusy] = useState(false);
 
   const customThemeList = useMemo(
@@ -49,6 +49,7 @@ export function ThemeManagerWidget() {
     [store, customThemes],
   );
   const themes = getRegisteredThemes();
+  const appearance = storedThemeSelection(store).id;
 
   function flash(message: string) {
     setNotice(message);
@@ -64,10 +65,12 @@ export function ThemeManagerWidget() {
     setBusy(true);
     setError(null);
     setNotice(null);
+    setContrast([]);
 
     try {
       const text = await file.text();
       const payload = parseImportedThemeFile(text, file.name);
+      setContrast(checkThemeContrast(payload.theme));
       await saveCustomTheme(
         store,
         {
@@ -84,9 +87,7 @@ export function ThemeManagerWidget() {
       );
     } catch (nextError) {
       setError(
-        nextError instanceof Error
-          ? nextError.message
-          : t("settings.themeImportInvalid"),
+        themeImportErrorText(nextError, t, "settings.themeImportInvalid"),
       );
     } finally {
       setBusy(false);
@@ -95,6 +96,7 @@ export function ThemeManagerWidget() {
   }
 
   async function handleApply(themeId: string): Promise<void> {
+    setContrast([]);
     setBusy(true);
     setError(null);
     setNotice(null);
@@ -156,8 +158,13 @@ export function ThemeManagerWidget() {
 
   return (
     <div className="space-y-4">
+      <ContrastNotice results={contrast} />
       {(notice || error) && (
-        <div className="ui-band text-xs" data-tone={error ? "danger" : "info"}>
+        <div
+          role={error ? "alert" : "status"}
+          className="ui-band text-xs"
+          data-tone={error ? "danger" : "info"}
+        >
           <span
             className={
               error ? "text-(--accent-danger)" : "text-(--accent-secondary)"
@@ -222,7 +229,7 @@ html[data-theme="my-theme"].dark {
       <div className="space-y-0">
         {themes.map((theme) => {
           const selected = appearance === theme.id;
-          const custom = isCustomTheme(theme.id, customThemeList);
+          const custom = theme.source === "custom";
           return (
             <div
               key={theme.id}

@@ -53,6 +53,8 @@ runtime 发出的事件在同一回合的事件链里逐层匹配订阅者。
 
 多条记录必须一起成功或一起失败时，用 `invokeRuntime`。这个函数 handler 不需要模型。手动触发本身不会运行叙事 runtime；它声明的事件下游仍按调度规则执行。
 
+RPC action 的 handler 收到 `ctx.signal`，到达时限时中止；存储调用的关闭与已开始写入的结算见下方 RPC 通道。
+
 参见 [RPC 通道](./api.md#post-apisessionsidplugin-rpc)与 [handler 写入契约](./plugins.md#输入和输出)。
 
 ### 工具不跨插件
@@ -321,7 +323,7 @@ const value = await ctx.services.call(
 
 ### 用已有的模型能力
 
-- 文本、图片、语音、音乐：用 `ctx.gateway`、`ctx.images`、`ctx.speech`、`ctx.music`。
+- 文本、图片、语音、音乐：用 `ctx.gateway`、`ctx.images`、`ctx.speech`、`ctx.music`。它们的类型（`PluginServiceGateway`、`PluginImages`、`PluginSpeech`、`PluginMusic`、`PluginMedia`）由 `@covel/plugin-handlers-utils` 导出，宿主实现的就是这些类型。
 - 评估：`ctx.gateway.evaluate({ presetId, state, questions, signal })`，支持 Boolean、Choice、Score 三种问题。
 
 ### 自己拼长提示词时的预算
@@ -423,6 +425,7 @@ export default function register(covel) {
 
 - 必须实现 `generateText` 和 `streamText`。类型见 `@covel/plugin-handlers-utils` 的 `PluginTextWire`。
 - `params` 带 `model`、`messages`（含工具调用与工具结果）、`tools`、`responseFormat` 和 `providerRequestMetadata`。
+- 消息文字和 text 块不含内部缓存断点标记。`instructionLocale` 是宿主按会话选出的指令语言（`en` 或 `zh`），结构化输出的补充指令也使用它。
 - 流的最后一个事件必须是 `done`。
 - `finishReason` 可以直接返回服务商自己的词，网关会统一成 `stop` / `length` / `tool_calls` 等（见 [slots.md](./slots.md#连接测试与失败原因) 的结束原因说明）。
 - 结构化输出不用单独实现：网关把 JSON Schema 放进 `responseFormat` 并作为指令加入消息，调用 `generateText`，再解析和校验结果。

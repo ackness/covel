@@ -12,8 +12,10 @@
  *
  * Phase 1: Per embedding model, vectors have a fixed dimension. Each
  * embedding model gets its own physical table (`vec_mem_m{id}`), isolated
- * via the `vector_models` registry. Sessions lock to one embedding model at
- * creation time; that lock is immutable for the session's lifetime.
+ * via the `vector_models` registry. A session locks to one embedding model the
+ * first time it is indexed. The lock changes only through
+ * `resetSessionVectorIndex`, which discards the index built with the old model
+ * in the same transaction.
  *
  * Metadata filtering uses the same quadruple as `plugin_data`:
  *   `(sessionId, pluginId, namespace, key)`
@@ -112,6 +114,14 @@ export interface VectorSearchResult {
   readonly payload: string | null;
 }
 
+/** Point read of stored vectors by key, within one plugin namespace. */
+export interface GetVectorPayloadsInput {
+  readonly sessionId: string;
+  readonly pluginId: string;
+  readonly namespace: string;
+  readonly keys: readonly string[];
+}
+
 /** Scope for bulk deletion. Omit fields to widen the scope. */
 export interface DeleteVectorsInput {
   readonly sessionId: string;
@@ -136,11 +146,28 @@ export interface CommitVectorIndexBatchInput extends VectorIndexProgressScope {
   readonly value: string;
   readonly expectedValue: string | null;
   readonly expectedSessionCreatedAt: string;
+  /**
+   * The model registry id the batch was embedded with. When present, the
+   * backend rejects the batch (throws) unless the session is still locked to
+   * it, so vectors from a model the index was reset away from never land.
+   */
+  readonly expectedModelRegistryId?: number;
   readonly upserts?: readonly Pick<
     UpsertVectorInput,
     "namespace" | "key" | "embedding" | "payload"
   >[];
   readonly deletes?: readonly Pick<UpsertVectorInput, "namespace" | "key">[];
+}
+
+/** Move a session's vector index to another embedding model. */
+export interface ResetSessionVectorIndexInput {
+  readonly sessionId: string;
+  /** Reject a reset planned against an older incarnation of the session id. */
+  readonly expectedSessionCreatedAt: string;
+  /** The model registry id the caller saw locked; null when it saw none. */
+  readonly expectedModelRegistryId: number | null;
+  /** The model to lock the session to; null leaves the session unlocked. */
+  readonly target: VectorTarget | null;
 }
 
 // ── Capability interfaces ────────────────────────────────────────
@@ -164,6 +191,14 @@ export interface VectorStoreCapability {
   upsertVector(input: UpsertVectorInput): Promise<void>;
   /** Top-k nearest neighbours for a query within the session's vector space. */
   searchVectors(input: SearchVectorsInput): Promise<VectorSearchResult[]>;
+  /**
+   * The payloads of the stored vectors among `keys`, keyed by key. A key with
+   * no vector is absent. Lets an indexer skip a record whose text it already
+   * embedded without keeping its own copy of what the index holds.
+   */
+  getVectorPayloads(
+    input: GetVectorPayloadsInput,
+  ): Promise<Map<string, string | null>>;
   /** Bulk delete by scope. */
   deleteVectors(input: DeleteVectorsInput): Promise<void>;
 }
@@ -185,6 +220,18 @@ export interface VectorModelOps {
     sessionId: string,
     target: VectorTarget,
   ): Promise<void>;
+
+  /**
+   * Discard a session's vector index and lock it to another model, in one
+   * transaction: every vector the session has under its current model and all
+   * of its index progress are deleted, then the lock is set to `target` (or
+   * cleared when `target` is null). Returns false and changes nothing when the
+   * session is no longer locked to `expectedModelRegistryId`. Throws when the
+   * session is missing or is another incarnation.
+   */
+  resetSessionVectorIndex(
+    input: ResetSessionVectorIndexInput,
+  ): Promise<boolean>;
 
   /**
    * Resolve the vector routing target for a session.
@@ -219,10 +266,12 @@ export function supportsVector<T extends object>(
   return (
     typeof candidate.upsertVector === "function" &&
     typeof candidate.searchVectors === "function" &&
+    typeof candidate.getVectorPayloads === "function" &&
     typeof candidate.deleteVectors === "function" &&
     typeof candidate.getVectorIndexProgress === "function" &&
     typeof candidate.commitVectorIndexBatch === "function" &&
     typeof candidate.lockSessionEmbeddingModel === "function" &&
+    typeof candidate.resetSessionVectorIndex === "function" &&
     typeof candidate.ensureVectorModel === "function" &&
     typeof candidate.resolveSessionVectorTarget === "function" &&
     typeof candidate.listVectorModels === "function"

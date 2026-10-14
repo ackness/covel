@@ -109,6 +109,12 @@ async function restoreServerSnapshot(
             type: "SET_OLDER_MESSAGES_CURSOR",
             cursor: snapshot.messagesCursor ?? null,
           });
+          // The subscription replays from this point, or reads again when its
+          // stream opened after the view was read.
+          dispatch({
+            type: "SET_INITIAL_EVENT_CURSOR",
+            cursor: snapshot.eventCursor ?? null,
+          });
 
           publishSessionGameState(
             dispatch,
@@ -275,6 +281,7 @@ function refreshSessionSideData(
         type: "LOAD_SESSION_PLUGINS",
         plugins: [...res.items],
         commands: [...res.commands],
+        unavailable: res.unavailable,
       }),
   }).catch(ignoreError("list session plugins on restore"));
 

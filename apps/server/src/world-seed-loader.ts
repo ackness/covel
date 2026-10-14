@@ -25,6 +25,7 @@ import path from "node:path";
 import { parse as parseYaml } from "yaml";
 import {
   validateWorldManifest,
+  worldAccentColorSchema,
   validateDimensionData,
   formatValidationErrors,
   dimensionIdSchema,
@@ -215,7 +216,21 @@ export async function loadSingleWorld(
     console.warn(
       `[world-seed] ${path.basename(worldDir)}: ${issue.file}: ${issue.path} ${issue.message}`,
     );
-  const raw = source.raw as Record<string, unknown>;
+  let raw = source.raw as Record<string, unknown>;
+  // Optional presentation metadata must not prevent the world from loading.
+  // Keep authoring validation strict; only the loader discards a bad accent.
+  if (raw?.accentColor !== undefined) {
+    const accent = worldAccentColorSchema.safeParse(raw.accentColor);
+    if (!accent.success) {
+      const world =
+        typeof raw.id === "string" ? raw.id : path.basename(worldDir);
+      console.warn(
+        `[world-seed] ${world}: world.yaml: accentColor ignored: ${accent.error.issues.map((issue) => issue.message).join("; ")} Using the default accent colour.`,
+      );
+      raw = { ...raw };
+      delete raw.accentColor;
+    }
+  }
 
   const validation = validateWorldManifest(raw);
   if (!validation.valid) {
@@ -470,9 +485,9 @@ export function preserveWorldProvenance(
   existing: WorldRecord | undefined,
 ): WorldRecord {
   if (!existing) return record;
-  // Editor changes live in the store; a package refresh must not erase them.
-  if (existing.metadata?.packageManaged && existing.metadata.packageModified)
-    return existing;
+  // The record is the world. Once the player edits it in the app, a package
+  // refresh must not replace it; only an explicit restore does.
+  if (existing.metadata?.packageModified) return existing;
   const { source, storage } = existing.metadata ?? {};
   return {
     ...record,
@@ -500,7 +515,7 @@ export interface WorldReconcileResult {
  * user's DB and keeps showing up in the world list. This drops those stragglers.
  *
  * Safety rails — this only ever removes data it is certain is a dead seed:
- *  1. **Origin gate** — only `metadata.source === "file"` worlds are eligible.
+ *  1. **Origin gate** — only unedited `metadata.source === "file"` worlds are eligible.
  *     AI-generated worlds (`generated` / `generated-file`) and any other origin
  *     are never touched, even when absent from `liveWorldIds`.
  *  2. **Save protection** — a stale world that still has saved sessions is KEPT
@@ -522,7 +537,12 @@ export async function reconcileSeededWorlds(
     if (liveWorldIds.has(world.id)) continue;
     await sessionLock.withLock(worldOperationLockId(world.id), async () => {
       const live = await store.getWorld(world.id);
-      if (!live || live.metadata?.source !== "file" || isWorldDeleting(live))
+      if (
+        !live ||
+        live.metadata?.source !== "file" ||
+        live.metadata.packageModified ||
+        isWorldDeleting(live)
+      )
         return;
       const sessions = await store.listSessions();
       if (sessions.some((session) => session.worldId === world.id)) {

@@ -37,7 +37,7 @@ type Keyed = { readonly createdAt: string; readonly id: string };
 
 /**
  * Total order on `(createdAt, id)` — the JS mirror of the SQL keyset order
- * (`cursorPageOrder` / `cursorAfterOrder`).
+ * (`cursorPageOrder`).
  *
  * The `id` tie-break is {@link compareByteOrder}, the order the SQL backends
  * give it (`SqlRunner.byteOrder`). `localeCompare` would order e.g. `"alpha"`
@@ -73,29 +73,6 @@ export function applyCursorPage<T extends Keyed>(
       )
     : rowsAscending;
   return older.slice(-opts.limit);
-}
-
-/**
- * Forward keyset read over rows already sorted ascending by `(createdAt, id)`:
- * the first `limit` rows strictly after `after` (all rows from the start when
- * `after` is null). The MemoryStore counterpart to `cursorAfterWhere`.
- * `limit <= 0` ⇒ `[]`.
- */
-export function applyCursorAfter<T extends Keyed>(
-  rowsAscending: readonly T[],
-  after: { readonly createdAt: string; readonly id: string } | null,
-  limit: number,
-): T[] {
-  if (limit <= 0) return [];
-  const newer = after
-    ? rowsAscending.filter(
-        (r) =>
-          r.createdAt > after.createdAt ||
-          (r.createdAt === after.createdAt &&
-            compareByteOrder(r.id, after.id) > 0),
-      )
-    : rowsAscending;
-  return newer.slice(0, limit);
 }
 
 /**

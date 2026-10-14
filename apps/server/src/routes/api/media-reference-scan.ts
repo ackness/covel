@@ -58,6 +58,65 @@ export interface MediaReferenceScan {
   readonly limitExceededRowCount?: number;
 }
 
+export interface SessionMediaIds {
+  /** Media IDs the session names in the rows read so far. */
+  readonly ids: ReadonlySet<string>;
+  /** False when the session had more rows than the ceiling; `ids` is partial. */
+  readonly complete: boolean;
+  readonly rowCount: number;
+}
+
+/**
+ * The media IDs one session names in its messages, plugin data, runtime
+ * outputs, trace events, snapshots or turn results. Claims are not included.
+ */
+export async function scanSessionMediaIds(
+  store: DataStore,
+  sessionId: string,
+  maxRows: number = DEFAULT_SCAN_LIMIT_PER_SESSION,
+): Promise<SessionMediaIds> {
+  const pageSize = Math.max(1, Math.min(SCAN_PAGE_SIZE, maxRows));
+  const ids = new Set<string>();
+  let rowCount = 0;
+  /** Returns false when the session exceeds its row ceiling. */
+  const scanRows = (rows: readonly unknown[]): boolean => {
+    rowCount += rows.length;
+    if (rowCount > maxRows) return false;
+    collectMediaRefIds(rows, ids);
+    return true;
+  };
+  const scanPaged = async (
+    loader: (pagination: {
+      readonly limit: number;
+      readonly offset: number;
+    }) => Promise<readonly unknown[]>,
+  ): Promise<boolean> => {
+    for (let offset = 0; ; offset += pageSize) {
+      const rows = await loader({ limit: pageSize, offset });
+      if (!scanRows(rows)) return false;
+      if (rows.length < pageSize) return true;
+    }
+  };
+
+  const complete =
+    (await scanPaged((pagination) =>
+      store.listMessages(sessionId, pagination),
+    )) &&
+    (await scanPaged((pagination) =>
+      store.listPluginDataSessionScope(sessionId, pagination),
+    )) &&
+    (await scanPaged((pagination) =>
+      store.listRuntimeOutputs(sessionId, pagination),
+    )) &&
+    (await scanPaged((pagination) =>
+      store.listTraceEvents(sessionId, pagination),
+    )) &&
+    scanRows(await store.listSnapshots(sessionId)) &&
+    // Each turn row embeds that execution's full runtime results.
+    scanRows(await store.listTurnResults(sessionId));
+  return { ids, complete, rowCount };
+}
+
 export async function scanMediaReferences(
   store: DataStore,
   mediaStore: MediaStore,
@@ -91,7 +150,6 @@ export async function scanMediaReferences(
 
   const maxRowsPerSession =
     options.maxScanRowsPerSession ?? DEFAULT_SCAN_LIMIT_PER_SESSION;
-  const pageSize = Math.max(1, Math.min(SCAN_PAGE_SIZE, maxRowsPerSession));
   const totalSessions = sessions.length;
   const shouldBatch = totalSessions > LARGE_SESSION_INSTALL;
 
@@ -121,45 +179,14 @@ export async function scanMediaReferences(
   ) {
     const batch = sessions.slice(batchStart, batchStart + SESSION_BATCH_SIZE);
     for (const session of batch) {
-      let rowsForSession = 0;
-      /** Returns false when the session exceeds its row ceiling. */
-      const scanRows = (rows: readonly unknown[]): boolean => {
-        rowsForSession += rows.length;
-        if (rowsForSession > maxRowsPerSession) return false;
-        for (const id of collectMediaRefIds(rows)) use(id, session.id);
-        return true;
-      };
-      const scanPaged = async (
-        loader: (pagination: {
-          readonly limit: number;
-          readonly offset: number;
-        }) => Promise<readonly unknown[]>,
-      ): Promise<boolean> => {
-        for (let offset = 0; ; offset += pageSize) {
-          const rows = await loader({ limit: pageSize, offset });
-          if (!scanRows(rows)) return false;
-          if (rows.length < pageSize) return true;
-        }
-      };
-
-      const complete =
-        (await scanPaged((pagination) =>
-          store.listMessages(session.id, pagination),
-        )) &&
-        (await scanPaged((pagination) =>
-          store.listPluginDataSessionScope(session.id, pagination),
-        )) &&
-        (await scanPaged((pagination) =>
-          store.listRuntimeOutputs(session.id, pagination),
-        )) &&
-        (await scanPaged((pagination) =>
-          store.listTraceEvents(session.id, pagination),
-        )) &&
-        scanRows(await store.listSnapshots(session.id)) &&
-        // Each turn row embeds that execution's full runtime results.
-        scanRows(await store.listTurnResults(session.id));
-      if (!complete) {
-        return result({ sessionId: session.id, rowCount: rowsForSession });
+      const scanned = await scanSessionMediaIds(
+        store,
+        session.id,
+        maxRowsPerSession,
+      );
+      for (const id of scanned.ids) use(id, session.id);
+      if (!scanned.complete) {
+        return result({ sessionId: session.id, rowCount: scanned.rowCount });
       }
 
       scannedSessions += 1;

@@ -1,18 +1,6 @@
 {
   "id": "abyss",
-  "label": {
-    "zh-CN": "深渊",
-    "en-US": "Abyss"
-  },
   "source": "builtin",
   "schemes": ["dark"],
-  "description": {
-    "zh-CN": "深色 codex 风格 — 深紫蓝 + 衬线 italic，专为沉浸阅读而设。",
-    "en-US": "A dim codex style — deep indigo + violet markers + serif italic, tuned for immersive reading."
-  },
-  "group": "classic",
-  "groupLabel": {
-    "zh-CN": "经典",
-    "en-US": "Classic"
-  }
+  "group": "classic"
 }

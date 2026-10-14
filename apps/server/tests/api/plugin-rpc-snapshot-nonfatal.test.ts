@@ -103,7 +103,7 @@ describe("auto-snapshot failure is non-fatal to a committed turn", () => {
     ["manual", false],
     ["background", true],
   ] as const)(
-    "persists a %s suspension without completing the turn",
+    "handles a %s suspension without completing the turn",
     async (_mode, detached) => {
       const store = createMemoryStore();
       const now = new Date().toISOString();
@@ -157,12 +157,27 @@ describe("auto-snapshot failure is non-fatal to a committed turn", () => {
         >[0]["deps"],
       });
 
-      const summary = await runner.runManualTurn({
+      const run = runner.runManualTurn({
         turnId: `turn-suspended-${_mode}`,
         runtimeId: RUNTIME_ID,
         ...(detached ? { detached: true } : {}),
       });
 
+      if (detached) {
+        await expect(run).rejects.toThrow(
+          "background runtimes cannot suspend for input",
+        );
+        expect(await store.listSuspensions(SESSION_ID)).toHaveLength(0);
+        expect(
+          await store.queryTurnResults(SESSION_ID, {
+            commitStatus: "committed",
+          }),
+        ).toHaveLength(0);
+        expect(eventTypes).not.toContain("turn.suspended");
+        expect(eventTypes).not.toContain("turn.completed");
+        return;
+      }
+      const summary = await run;
       expect(summary.commit.committed).toBe(true);
       expect(await store.listSuspensions(SESSION_ID)).toHaveLength(1);
       expect(eventTypes).toContain("turn.suspended");

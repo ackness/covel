@@ -43,15 +43,12 @@ There are two kinds of tool:
 | create-character-form | local | char-creator | auto-allow | Create the opening character form. It collects only the character name and the declared string and enum attributes. Numeric and composite attributes keep their defaults |
 | update-affinity | local | affinity | auto-allow | Apply this turn's affinity changes between the player and NPCs in one batch. An unknown name starts at 0. Scores add up across turns and are limited to [-100, 100] |
 | advance-world-time | local | world-time | auto-allow | Settle the world time that passes in this turn's narrative. Submits a duration, not calendar math. In random mode the amount is left out. Submitted together with the story |
-| set-world-schema | local | world-init | auto-allow | The internal schema write primitive for `initialize-world` |
-| set-world-dimensions | local | world-init | auto-allow | Adopt the dimension declarations without resetting session progress |
 | dimension-rule-get | local | world-init | auto-allow | During maintenance, read private rules or value schemas with paging |
 | update-dimensions | local | world-init | auto-allow | Bind to this turn's narrative. Update the whole batch with compare-and-swap (CAS), or explicitly settle that nothing changed |
 | submit-world-facts | local | world-ir | auto-allow | Submit and validate a complete `contract:world-ir@1` as function calling arguments |
 | sync-codex-entries | local | codex | auto-allow | Submit this turn's codex changes at once. Creates or adds to entries by title |
 | generate-guide | local | guide | auto-allow | Write a plot summary, the current decisions, and quick replies in the player's voice, atomically |
 | upsert-npc-graph | local | npc-graph | auto-allow | Write NPC nodes and relationship edges in one batch. Refers to nodes by name. The tool removes duplicates and assigns short IDs |
-| list-npc-graph | local | npc-graph | auto-allow | A compatibility read tool. The current extractor already injects the graph through the prompt, so it is not declared to the model |
 | plan-story-events | local | story-events | auto-allow | Validate the hidden future story events the plot plans (up to 2 per call). Can withdraw planned events that have not happened yet |
 | submit-dashscope-text-prompt | local | dashscope-image-gen | auto-allow | Submit a text scene prompt and emit the fixed DashScope image event |
 | submit-dashscope-structured-prompt | local | dashscope-image-gen | auto-allow | Submit a structured scene prompt and emit the fixed DashScope image event |
@@ -155,6 +152,8 @@ Two related points:
 #### Malformed argument JSON from the model
 
 The argument JSON a model writes often has a few typos that come up again and again. Each one has only one reasonable meaning. The framework fixes them while it parses, which saves a round where the model has to resend. The fixed content must still pass the tool's schema.
+
+Repaired arguments are written back to model history as valid JSON, including tool names and arguments rewritten by `PreToolUse`. An unrepairable call still returns `INVALID_ARGS`; history preserves its original text as a JSON string rather than an empty object that appears to have been executed. The original response and tool-call traces retain diagnostic evidence. The framework does not resend an unchanged request after the provider rejects history arguments.
 
 | Typo                                                   | Example                                                | How it is fixed                                                                                                                                                                                                                                                                                                                                                    |
 | ------------------------------------------------------ | ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -459,9 +458,8 @@ This rule is enforced in one place, by `reservedPluginDataNamespaceError()` (`pa
 
 - REST `PUT /api/sessions/:id/plugin-data/...`
 - Commit of `plugin.data` / `plugin.data.batch`, including proposals normalized from a function runtime's output
-- `ctx.pluginData` in a function runtime
+- `ctx.pluginData` in a function runtime or an agent guard
 - The store view of an RPC handler. Every plugin's RPC action, including those of bundled plugins, gets an immediate write capability bound to the session and the plugin through `createRpcHandlerStoreView()`
-- The explicit proposal write capability that bundled function runtimes and agent guards get through `createTrustedHandlerStore()`
 
 Neither kind of plugin handle exposes the host's transaction, session lifecycle, or store-closing methods. The framework's own privileged writers (the background job runner and the runtime log) call the store directly and do not use these entry points.
 
@@ -529,6 +527,8 @@ Reads and merges match the full `(namespace, key)` pair of strings exactly. They
 
 ### runtime-done
 
+Only a successful `runtime-done` call returning its sentinel ends the loop. The same field in another tool’s result is ordinary data.
+
 An agent uses it to tell the framework "I am done." Call it after all the business tools have been called. The runtime then ends, and the model does not have to write a closing message.
 
 | Argument | Type   | Required | Description                 |
@@ -550,7 +550,7 @@ Search the session's memory. It looks in two sources:
 | scope    | enum   |          | `recall` / `archival` / `all`, default `all`                      |
 | limit    | number |          | Maximum number of results, 1–20, default 5                        |
 
-Each result's content is at most 500 characters. An archival result's `key` is a readable source identifier. When a lorebook entry has no first keyword, it may use a readable entry ID, but never a UUID. UUID keywords and plugin data keys are also omitted: the result keeps its content without a `key`. The search rules are in the next section.
+Both keyword and vector search return an excerpt around a query term: up to 500 source characters, plus ellipses and the recall role prefix. A semantic hit without a literal query term returns a prefix excerpt. The tool preserves the excerpt without truncating its ending. An archival result's `key` is a readable source identifier. When a lorebook entry has no first keyword, it may use a readable entry ID, but never a UUID. UUID keywords and plugin data keys are also omitted: the result keeps its content without a `key`. The next section describes retrieval.
 
 ### Plugin memory and vector search
 
@@ -562,7 +562,7 @@ This section explains how `memory-search` searches, and how plugin data gets int
 - A word that appears in only a few texts (a person's name, an item's name) gets a high weight. A word that appears in almost every text gets a weight close to zero. A long text is not penalized just for being long.
 - It matches only literal text, not paraphrases. So the tool description asks the caller to put the names involved in the query, and it can take several wordings at once.
 
-When an embedding slot is configured and the store supports vectors, the search uses vector retrieval instead. If that fails, it falls back to BM25.
+When an embedding slot is configured and the store supports vectors, the search uses vector retrieval instead. If that fails, it falls back to BM25. When vector recall has too few results, keyword hits fill the remaining places and are deduplicated by message ID. Distinct messages with identical text in the same turn remain separate hits. Message IDs are internal and are not returned to the model by the tool.
 
 **The recall scope** is the latest 500 messages, plus all the history summaries (the summary segments written by `history.compact@2`, whose result `role` is `summary`). So earlier turns can still be found through the summaries.
 
@@ -731,6 +731,8 @@ JSON Schema can check the shape of fields, but it cannot check "does this result
 
 ### suspend
 
+Only a successful `suspend` call returning its sentinel suspends the runtime. A `_covelSuspend` field from another tool is ordinary data; an agent that needs suspension must declare and call `suspend`.
+
 Pause the current runtime until the player gives input, then continue. It is declared in `packages/tools/src/builtin/suspend.ts`.
 
 | Argument     | Type   | Required | Description                                                                                                                                                                             |
@@ -754,10 +756,11 @@ When one of the model's replies has several tool calls, the `suspend` call first
 - `resumeSchema` must be serializable with `JSON.stringify`, because the state is written to storage.
 - Only a runtime's newest suspension can resume. When the same runtime suspended again later, the player played another turn, or the plugin changed version, the old suspended item is voided on resume; see [Out-of-date suspended items](./api.md#out-of-date-suspended-items). The resume endpoint looks it up by the suspended item's ID.
 - `createDefaultToolRegistry` in `@covel/tools` registers it as a builtin tool. An agent still has to list `suspend` in `agent.tools.builtin` before it can call it.
+- A runtime that runs in the background cannot suspend, because no player is waiting on it. A runtime that declares `schedule.manual.execution: background` or `schedule.completion.mode: detached` and lists `suspend` in `agent.tools.builtin` is rejected at load. If a runtime in a background job suspends anyway (a function handler returns a suspension, or an event runtime triggered by the background run calls `suspend`), the job is recorded as `failed` and nothing is committed.
 - Resuming continues the execution that was suspended:
   - `ctx.locale`, `ctx.logicalTurn`, and `ctx.turnNumber` keep the values from the time of suspension. They do not change with the turn count of the session afterwards.
   - `ctx.world` is the World Model committed at resume time, with the writes buffered in the state added on top.
-- `completion.require: tool-use` after resuming counts only the business tool calls that **succeeded** before the suspension. A tool that failed before the suspension, and was not cancelled out by a successful call of the same name, still counts as not completed. After resuming, it must be completed again.
+- `completion.require: tool-use` uses the same rule after resuming: with `afterTools`, only successful calls from that list count; without a list, successful business tool calls count. A tool that failed before the suspension, and was not cancelled out by a successful call of the same name, still counts as not completed. After resuming, it must be completed again.
 
 ### search-tools (injected by the framework, deferred tool loading)
 
@@ -1083,6 +1086,9 @@ These are the tools that plugins bring with them. The implementation files are u
 - A persistent write returns `withPendingProposals(...)`, so the commit flow saves it to the database.
 - Use plugin tools to wrap the plugin's own data schema and batch write logic.
 
+<a id="set-world-schema"></a>
+<a id="set-world-dimensions"></a>
+
 ### initialize-world
 
 **Owner**: world-init (`plugins/world-init/tools/initialize-world.js`)
@@ -1094,30 +1100,6 @@ At the start of a game, it does two things at once: it sets the character attrib
 | `types`       | string[]        |          | Default `["npc", "companion"]`                                                                                        |
 | `attributes`  | AttributeDef[]  | ✓        | At least 15 items, covering `stats` / `bio` / `abilities` / `equipment` / `social`                                    |
 | `definitions` | WorldDimensions |          | A generated definition map can be given when the author declared none. It is not used when the world has declarations |
-
-**Output**: `{success, attributeCount, dimensionCount, worldSchema, preGameDone:true}`
-
-Whose dimension definitions are used:
-
-- When the world's author has declared dimensions, the author's definitions are used. The `definitions` the model also gives are not used, and the call still succeeds. The reason it does not reject them: the prompt cannot tell the model whether the world has declarations, so rejecting would only add one extra model call at the start of every game.
-- Only a world that has setting text and no declarations uses the definitions the model generates.
-- The tool does not turn resource structures into character fields, and it does not turn them into constant lorebook entries.
-
-`worldSchema` is also the runtime output of `world-init/schema-gen`. It is passed to `char-creator/player-init` in the same setup execution. This way, the downstream runtime does not have to read storage that has not been committed yet.
-
-This runtime declares `agent.loop.completion: {require: tool-use, afterTools: [initialize-world]}` and `io.output.schema`. So the model needs to generate the tool arguments only once. After the tool succeeds, the framework checks the result directly against the output schema and ends.
-
-**Used by**: `world-init/schema-gen`
-
-### set-world-schema
-
-**Owner**: world-init (`plugins/world-init/tools/set-world-schema.js`)
-
-Define the character types and attributes of the world. It returns one `character.schema.set` proposal, which is written to the session's World Model. The payload is `{types,attributes}`, and the kernel increments the version. It does not write to the plugin's private schema namespace.
-
-| Argument   | Type           | Required | Description                                           |
-| ---------- | -------------- | -------- | ----------------------------------------------------- |
-| attributes | AttributeDef[] | ✓        | Array of character attribute definitions (at least 1) |
 
 **AttributeDef**:
 
@@ -1135,20 +1117,19 @@ Define the character types and attributes of the world. It returns one `characte
 | valueType    | enum           |          | Value type of a `map` (`string` / `number` / `boolean`)               |
 | description  | I18nText       |          | Description of the attribute (a string, or a locale → string record)  |
 
-**Output**: `{ success, attributeCount, categories, worldSchema }`
+**Output**: `{success, attributeCount, dimensionCount, worldSchema, preGameDone:true}`
 
-**Current use**: `initialize-world` uses it internally to compose. The bundled `world-init/schema-gen` does not declare it to the model directly.
+Whose dimension definitions are used:
 
-### set-world-dimensions
+- When the world's author has declared dimensions, the author's definitions are used. The `definitions` the model also gives are not used, and the call still succeeds. The reason it does not reject them: the prompt cannot tell the model whether the world has declarations, so rejecting would only add one extra model call at the start of every game.
+- Only a world that has setting text and no declarations uses the definitions the model generates.
+- The tool does not turn resource structures into character fields, and it does not turn them into constant lorebook entries.
 
-**Owner**: world-init (`plugins/world-init/tools/set-world-dimensions.js`)
+`worldSchema` is also the runtime output of `world-init/schema-gen`. It is passed to `char-creator/player-init` in the same setup execution. This way, the downstream runtime does not have to read storage that has not been committed yet.
 
-Adopt dimension declarations. The argument `{definitions}` uses an [open definition map](./world-data.md#declaration-format). It returns `{success, dimensionCount}` and one `dimension.initialize` proposal.
+This runtime declares `agent.loop.completion: {require: tool-use, afterTools: [initialize-world]}` and `io.output.schema`. So the model needs to generate the tool arguments only once. After the tool succeeds, the framework checks the result directly against the output schema and ends.
 
-- Missing records are created.
-- Initializing again with the same definitions does not reset the current values.
-- If an adopted definition differs from this one, it counts as a conflict.
-- Changes to declarations are handled through world sync. Do not use this tool to overwrite game progress.
+**Used by**: `world-init/schema-gen`
 
 ### dimension-rule-get
 
@@ -1368,7 +1349,7 @@ There are two ways to generate them, both from `@covel/plugin-handlers-utils`:
 
 The nodes of `codex` and `npc-graph`, and player characters, use `wordId`.
 
-The fourth argument of `shortId` takes the context's `random`, so the random string comes from the host's random source (see [`ctx.random`](./plugins.md#inputs-and-outputs)).
+The fourth argument of `shortId` must be the context's `random`; the random string comes from the host's random source (see [`ctx.random`](./plugins.md#random-numbers-ctxrandom)).
 
 ```js
 export default function ({ tool, z, shortId, shortIdBatch }) {
@@ -1408,7 +1389,7 @@ This section is mainly for host developers who embed the kernel. Plugin authors 
 
 The tool allow-list controls two things: which tools the model can see, and which tools can actually run.
 
-- The agent loop passes the exact authorized set of the current runtime to the executor, in `ToolCallContext.authorizedToolNames`. The set includes every name declared by `tools.*`, and `runtime-done` for runtimes that are not schema runtimes.
+- The agent loop passes the exact authorized set of the current runtime to the executor, in `ToolCallContext.authorizedToolNames`. The set includes every name declared by `tools.*`, plus `runtime-done` for runtimes whose completion contract uses it and for story runtimes. Runtimes that must finish through a completing tool no longer receive automatic authorization for it.
 - Tools on the `defer` list are also in the authorized set. Deferring affects only whether the model can see the tool at the start. It does not affect authorization.
 - Before resolving the tool and running approval, the executor first checks whether the final tool name is in the authorized set. "Final" means the name after session overrides and `PreToolUse` replacement. If it is not in the set, the executor returns the structured error `UNAUTHORIZED`.
 - `search-tools` is intercepted inside the loop, so it never reaches the executor.
@@ -1483,7 +1464,7 @@ What this means in practice:
 What tools and guards can get:
 
 - The toolkit for every entry factory provides only pure helper functions, and it does not inject a store. A tool reads the state of the current session and plugin through `context.store` in `execute(params, context)`. RPC and function runtimes each use their own scoped store.
-- A community plugin's agent guard gets only a read-only store and pure inputs. Capabilities with side effects, such as `pluginData`, logger, gateway, utils, media, and assetProgress, are not injected, and `recursiveCall` is refused. Writes go into the proposals or `pluginData[]` that the runtime handler returns.
+- An agent guard gets the same context as a function handler: the read-only store, `ctx.world`, `ctx.inputs`, `pluginData`, logger, gateway, utils, media, and `recursiveCall`. Bundled and community plugins get the same, except that a community plugin's `utils` reaches only the addresses its `permissions.http` declares. Once the guard returns or times out, all of these stop working.
 
 **Which language the text in a tool uses.** `context.locale` is the session's content language, and `context.messages` holds the translations in this plugin's `locales/` directory.
 
@@ -1630,10 +1611,10 @@ export default function ({ tool, z, shortId }) {
 
 Production hosts and `test-runtime` inject `context.store` on every tool call. Its interface is the same as `FunctionStoreView`:
 
-| Method                                                           | What it reads                                                                                                                                                                                   |
-| ---------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `getPluginData(namespace, key)` / `listPluginData(namespace)`    | The data of the current session and the current plugin. The existing set, batch, and delete proposals from the same execution are merged in, in order.                                          |
-| `getSession()`, `listPlayerInputs()`, `listTurnMessages(limit?)` | Read-only access to the current session. When a limit is given, it reads the latest messages. Messages include only committed turns; a turn that is running appears only after it is committed. |
+| Method                                                           | What it reads                                                                                                                                                                                                                                                                             |
+| ---------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `getPluginData(namespace, key)` / `listPluginData(namespace)`    | The data of the current session and the current plugin. The existing set, batch, and delete proposals from the same execution are merged in, in order.                                                                                                                                    |
+| `getSession()`, `listPlayerInputs()`, `listTurnMessages(limit?)` | Read-only access to the current session. `getSession()` returns the [session view](./plugins.md#the-session-view-storegetsession). When a limit is given, it reads the latest messages. Messages include only committed turns; a turn that is running appears only after it is committed. |
 
 Rules:
 
@@ -1749,7 +1730,15 @@ Types registered so far:
 - `dimension.initialize`, `dimension.update`
 - `lorebook.upsert`
 
-Each type is defined in one place: `ProposalPayloadMap`. `ProposalType`, the registry of commit handlers (`satisfies CommitHandlerMap`), and the public list (`PROPOSAL_TYPES`) are all aligned with it at compile time. To add a proposal type, change only `ProposalPayloadMap`. If a handler is left unregistered, compilation fails.
+Each type is defined in one place: `ProposalPayloadMap`. `ProposalType`, the registry of commit handlers (`satisfies CommitHandlerMap`), the payload schema of each type (`proposalPayloadSchemas`, in `@covel/shared`), and the public list (`PROPOSAL_TYPES`) are all aligned with it at compile time. To add a proposal type, change `ProposalPayloadMap`, then add its handler and its schema. If either is missing, compilation fails.
+
+**The check before commit.** Every proposal passes the same check before its handler runs, whether it comes from a tool, a handler or a runtime's output:
+
+- The payload must match the schema of its type and be writable as JSON. What is committed afterwards is its JSON copy: fields whose value is `undefined` are dropped, and a `Date` becomes an ISO string, so every store backend keeps the same value. A value JSON cannot hold, such as a BigInt or a circular reference, is rejected here.
+- Every `MediaRef` in the payload is checked against this session (see [Media store](./media-store.md#checking-references-at-commit)).
+- The handler then applies its own rules (reserved namespaces, size limits, character names, dimension providers, and so on).
+
+A proposal that fails is not committed. Its error code is `proposal-invalid` or the rejection reason of the media check. It takes the commit-failure path: an optional runtime next to a committed story loses only its own writes, and an execution with no story (manual, background, setup) commits nothing. Never only part of the proposals lands.
 
 **The difference between `state.patch` and `plugin.data`.** The state table that `state.patch` writes to is shared by the whole session:
 

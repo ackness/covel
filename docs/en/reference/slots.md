@@ -258,7 +258,7 @@ This rule applies to calls that already supported fallback chains: text, structu
 A call finds its model in these steps:
 
 1. **Request binding.** `X-Slot-Config.slotBindings` comes first. It tells a local `modelRef` apart from a server `presetId`. A local model must be declared in this request. Keys are given through `X-Provider-Keys`, and they are not written into a plugin or a world package.
-2. **Match by name.** The name is resolved as a preset ID or a role name. An image call needs an exact name match, and the target must be able to output images. A wrong name, a missing config, or a text model picked for an image all return `CONFIG_ERROR`, and no provider is called.
+2. **Match by name.** The name is resolved as a preset ID or a role name. An image call needs an exact name match, and the target must be able to output images. A wrong name, a missing config, or a text model picked for an image all return `CONFIG_ERROR`, and no provider is called. Every explicit target must support the requested operation, including speech, transcription and music. An incompatible target returns `CONFIG_ERROR` before any provider call.
 3. **No name given.** `generateImage` and `resolveSlot({ fallbackTag: "image" })` both use `image`. The system does not pick a different image role on its own, and it does not use the default text model. Speech and transcription use their own default names, `speech` and `transcription`, and keep the existing same-tag resolution.
 4. **Same-tag fallback (not for images).** If a text call does not find its name, it can fall back to a role with the same `tag`. It never falls back across tags.
 5. **Task role choice.** For an agent, `runtimeModelOverrides` takes priority over `manifest.model`. For an image task in a function, the plugin's `modelPresetId` setting picks the role. Both end up using the same request-level model binding.
@@ -311,7 +311,9 @@ The output limit is calculated by the shared `resolveLlmTokenLimits`:
 
 Switching to a fallback model:
 
-- An HTTP 429 (rate limit) allows a switch to a configured fallback model. Other 4xx errors keep their original failure path.
+- An HTTP 429 (rate limit) allows a switch to a configured fallback model.
+- An account failure (no balance left, or a key that is wrong or not allowed to use this model; see `quota` / `auth` below) also allows a switch. It belongs only to the account at this provider, so the fallback target may still work. With no fallback model configured, the call fails and the player is told why.
+- Other 4xx errors keep their original failure path.
 - Once streamed content has been output, switching is not allowed. This prevents mixing the results of two models.
 
 ### Which model is recorded when a call fails
@@ -826,7 +828,11 @@ A model API can fail in more ways than an ordinary URL. Keys, balance, model nam
 | `refused`      | The provider refused to answer                                       | Refusal / content filter                                                                                                         |
 | `config`       | The model config cannot make this call                               | A config error, or the address was rejected by an outbound rule                                                                  |
 
-When a connection fails, `error` gives the underlying cause (for example `connect ECONNREFUSED 127.0.0.1:11434`), not a general `fetch failed`. The classification is done by `classifyProviderFailure` in `@covel/ai-provider`.
+When a connection fails, `error` gives the underlying cause (for example `connect ECONNREFUSED 127.0.0.1:11434`), not a general `fetch failed`. The classification is done by `classifyProviderFailure` in `@covel/ai-provider`; the type of the kinds, `ProviderFailureKind`, is in `@covel/shared`.
+
+A 429 counts as an exhausted quota only by its error code, never by its text: OpenAI's ordinary rate-limit message links the billing page too.
+
+`quota` and `auth` are account failures, as `isAccountFailure` in `@covel/shared` decides. Sending the same request to the same provider again only fails the same way, so neither the HTTP layer nor the runtime sends it again; only a fallback model the player configured is tried.
 
 A connection test picks its probe by model type:
 
@@ -872,9 +878,15 @@ A text stream must carry the end marker of its own protocol:
 | `tool_calls`     | The request calls a tool               |
 | `content_filter` | Blocked or refused by the provider     |
 | `error`          | Failed                                 |
-| `other`          | Something else                         |
+| `other`          | A reason the table does not cover      |
 
 The provider's own words (for example Anthropic's `end_turn` / `max_tokens` / `tool_use`) are kept in `rawFinishReason`. There is only one mapping table, `unifyFinishReason` in `@covel/shared`. The gateway applies it at the exit point, and the runtime and world generation read the same table. The approach is the same as the `unified` / `raw` of the AI SDK. A plugin that gets values through `ctx.gateway` also gets the unified values.
+
+**Only `stop` and `tool_calls` mean the answer is finished** (`isCompleteFinishReason` in `@covel/shared`). `other` is not a normal end: the provider did not say why it stopped (for example Anthropic's `pause_turn` or DeepSeek's `insufficient_system_resource`), and the answer may stop anywhere.
+
+- Story: the text already written is kept. `llm.responded` carries `finishReason: other` and `rawFinishReason`, the app says that this part is not finished, and the player can retry the turn. A story cut at the output limit (`length`) is kept too, with a different notice.
+- Every other answer in the runtime (one with tool calls, one that must be JSON, a runtime that does not keep cut text), world generation and the history summary: the call fails. No half result is saved, and the call is not retried on its own.
+- A function plugin gets `other` as it is through `ctx.gateway` and decides for itself. A background output should fail in the same way.
 
 **Diagnostics.** The text and object return values of the four built-in text protocols, and the `done` event of a stream, can carry `diagnostics`. They include the provider's and request's warnings, URL and document sources, and citation positions. The runtime bridge and the LLM trace keep this information.
 
@@ -883,6 +895,8 @@ The provider's own words (for example Anthropic's `end_turn` / `max_tokens` / `t
 - The `PluginRuntimeGateway` for function plugins also passes through `providerOptions` and the full returned diagnostics. On this path, the `gateway.responded` / `gateway.failed` traces keep the existing privacy rule. They record only the warning types, the counts of sources and citations, and the reason for a refusal, as they appear in `diagnosticsSummary`. They do not record citation text, source URLs, titles, or the full text of a refusal.
 
 **Refusals.** A clear refusal or content filter throws a non-retryable `REFUSAL`. The reason for the refusal is kept in `error.details.diagnostics.refusal`. No fallback model is used.
+
+**A failure still records the tokens it used.** A refusal, `finishReason: error`, an error body, or a stream that reaches EOF without its terminal event: when the provider reported usage before the failure, the error carries it (`error.details.usage`). The runtime writes it into the call's `llm.responded`; a call from a function plugin or an extension provider writes it into `gateway.failed`. The debug page counts it in usage and cost. When the provider reported no usage, `usage` is left out rather than written as 0. Low-level transport exceptions that bypass adapter completion checks may still omit earlier usage.
 
 - Even if ordinary text or tool content already exists, an answer that contains a refusal cannot be recorded as a success.
 - Streamed text may already have been delivered, but it will not produce a successful `done`.
@@ -897,10 +911,12 @@ An embedding call can pass `expectedModelId` (`provider/model`) and `expectedCon
 - The identity the server locks to a session is `provider/model#hash`. The hash covers the effective address, the protocol, and the embedding format. It does not include the key. The dimension cache is also isolated by this identity.
 - The request-level model and key apply to embedding too, including the asynchronous ingestion that the request starts. They are not written to the session or to the shared credential config.
 - Memory's `EmbedFn(texts, { sessionId, modelId })` must use the model identity locked to the session.
-- Changing the current config cannot write another model of the same dimension into an old index. When the identity does not match, a query falls back to keyword search, and ingestion does not advance. After the original model config is restored, backfilling can continue.
+- Changing the current config cannot write another model of the same dimension into an old index. When the identity does not match, a query falls back to keyword search, ingestion does not advance, and the server log notes it once per session. After the original model config is restored, backfilling can continue.
+- After the vector model changes, the session shows "Memory search is matching keywords only" with a "Rebuild index" button ("Clear index" when no vector model is configured). A rebuild first sends one request to the new model to measure its dimension and changes nothing when that fails. When it succeeds, one transaction deletes the old model's vectors and progress and locks the session to the new model, and the index is then built again in the background. See [`POST /api/sessions/:id/memory-index/rebuild`](./api.md#post-apisessionsidmemory-indexrebuild).
+- When the index is written, the store checks the model the session is locked to now. Vectors computed with the old model before a rebuild are never written into the new index.
 
-> [!WARNING]
-> When you switch the vector model, you must rebuild the development sessions and indexes. The system does not migrate them automatically. Data that already has wrong vectors mixed in must also be rebuilt.
+> [!NOTE]
+> Changing the model does not migrate the old index by itself: a rebuild sends the session's history to the vector model again, so the player decides when to do it. An index that already has wrong vectors mixed in is repaired by a rebuild too.
 
 ## Audio requests
 
@@ -922,6 +938,7 @@ This section describes how one model request retries at the HTTP layer, how long
 This matches the official OpenAI and Anthropic SDKs and the AI SDK:
 
 - Retries 408, 409, 429, and 5xx.
+- A 429 whose error code says the quota is used up (OpenAI's `insufficient_quota`) is not retried: the body is read first, and the answer goes back to the caller with that body unchanged.
 - A `true` / `false` in the `x-should-retry` header from the provider takes priority over the status code.
 - For the wait time, it reads the more precise `retry-after-ms` first (OpenAI, Azure), and then `Retry-After`.
 - `Retry-After` accepts both whole seconds and an HTTP date. A date in the past retries immediately. An invalid value falls back to the backoff policy.
@@ -931,7 +948,7 @@ A refused connection, or one dropped before any answer (`ECONNREFUSED` / `ECONNR
 
 **Request budget**
 
-Gateway calls for text, objects, streams, evaluation, and embedding share one budget by default: at most 8 actual HTTP requests, and a 120-second total time limit.
+Each logical gateway call for text, objects, streams, evaluation, or embedding has one default budget: at most 8 actual HTTP requests, with 120 seconds to the first output.
 
 - One logical call of a runtime creates only one budget. HTTP retries, fallback targets, and runtime retries all pass the same `requestBudget`.
 - The execution budget of the runtime is still calculated by the existing policy. Queued concurrency keeps its existing quota compensation.
@@ -957,6 +974,12 @@ One model call of an agent runtime uses `max(120 seconds, the runtime's remainin
 - Before the first output, a streamed call is bound by `firstTokenTimeoutMs` and the runtime's time limit.
 - After that, it is bound only by `idleTimeoutMs`. The time spent on output does not count toward the runtime's `timeoutMs`.
 - `callTimeoutMs` applies only to non-streaming calls.
+
+For each function runtime `generateText`, `generateObject`, or `evaluate` call, the host creates a fixed budget from the remaining `function.timeoutMs`, capped at the runtime deadline. HTTP retries, fallback targets, and a stalled-call resend share that budget and its 8 transport attempts; the next logical call recalculates the remaining time. Queuing spends the function’s remaining time, and player cancellation stops waiting immediately.
+
+**Text call concurrency**
+
+`COVEL_LLM_MAX_CONCURRENT` admits each text target attempt at the gateway, covering text, objects, streams, and evaluation from agents, functions, background jobs, and direct callers. Gateway instances share one process-wide queue. A stream holds its slot until completion, cancellation, or the consumer stops reading; failures and fallback switches release it. Queue notifications pause an agent’s call/first-token timers and credit its runtime deadline for the wait; the logical request budget still includes queuing. Embedding and media do not occupy this text slot.
 
 **Media and embedding**
 
@@ -988,6 +1011,7 @@ assertLlmRequestBudget(config.requestBudget, {
 
 - When a runtime retries the same target, it first reads the structured provider error's `code`, `statusCode`, and `retriable`.
 - A failed config or schema check is not retried. A keyword in an error message cannot overturn a clear "not retryable" decision.
+- An account failure (`quota` / `auth`) is not retried, even when the status is 429.
 - When the gateway organizes errors, it keeps the "retryable" attribute of a known temporary network failure. Only an unknown third-party exception is judged by its message.
 - A cancellation by the caller, or a stream that already has partial output, is still not allowed to retry. A fallback model switch follows its own separate rules.
 

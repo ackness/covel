@@ -243,6 +243,14 @@
                 },
                 "description": "Plugin IDs the pack suggests. They are not enabled automatically."
               },
+              "excluded": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "description": "Plugin IDs the pack turns off, `kind: core` ones included. The player can turn them back on."
+              },
               "tags": {
                 "type": "array",
                 "items": {
@@ -469,7 +477,7 @@
     "accentColor": {
       "type": "string",
       "pattern": "^(?:#[0-9a-fA-F]{6}|oklch\\(\\s*\\d+(?:\\.\\d+)?%?\\s+\\d+(?:\\.\\d+)?\\s+\\d+(?:\\.\\d+)?\\s*\\))$",
-      "description": "Accent colour of the world's cards and headings: a hex colour (`#rrggbb`) or an `oklch(L C H)` colour. Without it the app derives one from the world ID.",
+      "description": "Accent colour of the world's cards and headings: a hex colour (`#rrggbb`) or an `oklch(L C H)` colour, with Oklab lightness from 55% to 90%. World loading discards invalid values and logs a warning; authoring validation reports them as errors. Without a valid value the app derives one from the world ID.",
       "examples": ["#c9a24b", "oklch(72% 0.12 75)"]
     },
     "themeMusic": {

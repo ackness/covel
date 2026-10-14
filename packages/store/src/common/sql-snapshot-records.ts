@@ -15,7 +15,7 @@
  * `changes`).
  */
 
-import { and, asc, eq, gte, inArray, isNull, lt, sql } from "drizzle-orm";
+import { and, asc, eq, gte, isNull, lt, sql } from "drizzle-orm";
 import type { Column, Table } from "drizzle-orm";
 
 import { cursorPageOrder, cursorPageWhere } from "./cursor.js";
@@ -133,7 +133,10 @@ export function createSqlSnapshotRecords(
     async listSnapshots(sessionId: string): Promise<readonly SnapshotRecord[]> {
       const rows = await runner.select<SnapshotRow>(stateSnapshots, {
         where: eq(stateSnapshots.sessionId, sessionId),
-        orderBy: [asc(stateSnapshots.createdAt)],
+        orderBy: [
+          asc(stateSnapshots.createdAt),
+          asc(byteOrder(stateSnapshots.id)),
+        ],
       });
       return rows.map((row) => toSnapshotRecord(row, json));
     },
@@ -179,28 +182,25 @@ export function createSqlSnapshotRecords(
     },
 
     async pruneAutoSnapshots(sessionId: string, keep: number): Promise<number> {
-      const autos = await runner.select<{ id: string }>(stateSnapshots, {
-        columns: { id: stateSnapshots.id },
-        where: and(
+      // One DELETE: the session's auto snapshots older than the newest `keep`
+      // (the session/time index), except those a fork in any session names as
+      // its parent (the partial `parent_id` index). Inside the subqueries an
+      // unaliased `state_snapshots` column names the subquery's own row; once
+      // aliased (`child`), the name refers to the row being deleted.
+      const newestKept = sql`select ${stateSnapshots.id} from ${stateSnapshots} where ${and(
+        eq(stateSnapshots.sessionId, sessionId),
+        eq(stateSnapshots.kind, "auto"),
+      )} order by ${sql.join(cursorPageOrder(stateSnapshots, byteOrder), sql`, `)} limit ${Math.max(0, keep)}`;
+      const parentColumn = sql.identifier(stateSnapshots.parentId.name);
+      return runner.deleteReturningCount(
+        stateSnapshots,
+        and(
           eq(stateSnapshots.sessionId, sessionId),
           eq(stateSnapshots.kind, "auto"),
-        ),
-        orderBy: cursorPageOrder(stateSnapshots, byteOrder),
-      });
-      const candidates = autos.slice(Math.max(0, keep)).map((row) => row.id);
-      if (candidates.length === 0) return 0;
-      const referenced = new Set(
-        (
-          await runner.select<{ parentId: string | null }>(stateSnapshots, {
-            columns: { parentId: stateSnapshots.parentId },
-            where: inArray(stateSnapshots.parentId, candidates),
-          })
-        ).flatMap((row) => (row.parentId != null ? [row.parentId] : [])),
+          sql`${stateSnapshots.id} not in (${newestKept})`,
+          sql`not exists (select 1 from ${stateSnapshots} as child where child.${parentColumn} = ${stateSnapshots.id})`,
+        )!,
       );
-      const doomed = candidates.filter((id) => !referenced.has(id));
-      if (doomed.length === 0) return 0;
-      await runner.delete(stateSnapshots, inArray(stateSnapshots.id, doomed));
-      return doomed.length;
     },
 
     // ── Suspensions ──────────────────────────────────────────────
@@ -268,7 +268,7 @@ export function createSqlSnapshotRecords(
     ): Promise<readonly SuspensionRecord[]> {
       const rows = await runner.select<SuspensionRow>(suspensions, {
         where: eq(suspensions.sessionId, sessionId),
-        orderBy: [asc(suspensions.createdAt)],
+        orderBy: [asc(suspensions.createdAt), asc(byteOrder(suspensions.id))],
       });
       return rows.map((row) => toSuspensionRecord(row, json));
     },
@@ -288,7 +288,7 @@ export function createSqlSnapshotRecords(
           isNull(suspensions.resolvedAt),
           lt(suspensions.createdAt, olderThanIso),
         ),
-        orderBy: [asc(suspensions.createdAt)],
+        orderBy: [asc(suspensions.createdAt), asc(byteOrder(suspensions.id))],
       });
       return rows.map((row) => toSuspensionRecord(row, json));
     },

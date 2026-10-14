@@ -128,6 +128,14 @@ for (const workspace of workspaces) {
         !(
           workspace.name === "test-runtime" &&
           workspace.manifest.devDependencies?.[name]
+        ) &&
+        // The host provides the SDK to every plugin at run time
+        // (`HOST_MODULES` in plugin-loader); an installable plugin declares
+        // no runtime dependency, so a development one is enough.
+        !(
+          workspace.group === "plugins" &&
+          name === "@covel/plugin-handlers-utils" &&
+          workspace.manifest.devDependencies?.[name]
         )
       )
         fail("production source requires a declared production dependency");

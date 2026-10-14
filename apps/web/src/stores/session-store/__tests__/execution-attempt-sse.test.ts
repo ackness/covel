@@ -68,6 +68,8 @@ function harness(retrying = true) {
 describe("a story cut at the output limit", () => {
   it.each([
     { finishReason: "length", notices: 1 },
+    // Ended for a reason the provider did not explain: kept, but not whole.
+    { finishReason: "other", notices: 1 },
     { finishReason: "stop", notices: 0 },
   ])(
     "shows $notices notice(s) for a response that finished with $finishReason",
@@ -266,6 +268,26 @@ describe("SSE retry commit settlement", () => {
     expect(h.getState().executionError).toBe(
       "__i18n:session.reasonSessionBusy__",
     );
+  });
+
+  it.each([
+    ["input_already_committed", "session.reasonInputAlreadyCommitted"],
+    ["retry_source_stale", "session.reasonRetryStale"],
+    ["retry_target_not_failed", "session.reasonRetryStale"],
+    ["recovery_unavailable", "session.reasonRetryStale"],
+  ])("maps the refusal code %s to the player's language", (code, key) => {
+    const h = harness();
+    h.send("error.occurred", { message: "Server text", code });
+    expect(h.getState().executionError).toBe(`__i18n:${key}__`);
+  });
+
+  it("keeps the raw message for a code it does not know", () => {
+    const h = harness();
+    h.send("error.occurred", {
+      message: "Unable to save",
+      code: "constructor",
+    });
+    expect(h.getState().executionError).toBe("Unable to save");
   });
 
   it("keeps the raw message when error.occurred carries no code", () => {

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import i18n from "i18next";
-import type { SessionPlugin } from "@covel/shared";
+import type { PluginMutationResponse, SessionPlugin } from "@covel/shared";
 import * as api from "@/services/api";
 import { ignoreError } from "@/lib/ignore-error.js";
 import { requestChoices, requestConfirm } from "@/lib/confirm-channel.js";
@@ -586,6 +586,7 @@ export function useBuildSessionActions({
             type: "LOAD_SESSION_PLUGINS",
             plugins: [...res.items],
             commands: [...res.commands],
+            unavailable: res.unavailable,
           }),
       });
     } catch {
@@ -608,6 +609,13 @@ export function useBuildSessionActions({
           dispatch({ type: "TOGGLE_SESSION_PLUGIN", pluginId, active: enable });
         }
       };
+      const applyWorldData = (result: PluginMutationResponse) => {
+        if (isCurrent() && result.worldData)
+          dispatch({
+            type: "SET_WORLD_DATA_NOTICES",
+            notices: result.worldData.notices,
+          });
+      };
       try {
         if (!enable) {
           await workspace.run(
@@ -627,7 +635,10 @@ export function useBuildSessionActions({
           `plugin-enable:${crypto.randomUUID()}`,
           async () => {
             const result = await api.enableSessionPlugin(sid, pluginId);
-            if (!("status" in result)) applyActive();
+            if (!("status" in result)) {
+              applyActive();
+              applyWorldData(result);
+            }
             return result;
           },
         );
@@ -682,6 +693,7 @@ export function useBuildSessionActions({
               throw new Error(i18n.t("plugin.approval.unexpectedRequired"));
             }
             applyActive();
+            applyWorldData(enabled);
           },
         );
       } catch (error) {
@@ -752,16 +764,21 @@ export function useBuildSessionActions({
             async () => {
               // Navigation may happen while this job waits for the workspace.
               if (!isCurrent()) return;
-              const activate = () => {
-                if (isCurrent())
+              const activate = (result: PluginMutationResponse) => {
+                if (!isCurrent()) return;
+                dispatch({
+                  type: "TOGGLE_SESSION_PLUGIN",
+                  pluginId: plugin.id,
+                  active: true,
+                });
+                if (result.worldData)
                   dispatch({
-                    type: "TOGGLE_SESSION_PLUGIN",
-                    pluginId: plugin.id,
-                    active: true,
+                    type: "SET_WORLD_DATA_NOTICES",
+                    notices: result.worldData.notices,
                   });
               };
               const first = await api.enableSessionPlugin(sid, plugin.id);
-              if (!("status" in first)) return activate();
+              if (!("status" in first)) return activate(first);
               if (first.status !== "approval-required")
                 throw new Error(i18n.t("plugin.approval.unexpectedRequired"));
               // The player consented to this plugin by name. A request about
@@ -784,7 +801,7 @@ export function useBuildSessionActions({
               const enabled = await api.enableSessionPlugin(sid, plugin.id);
               if ("status" in enabled)
                 throw new Error(i18n.t("plugin.approval.unexpectedRequired"));
-              activate();
+              activate(enabled);
             },
           );
         } catch (error) {

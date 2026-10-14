@@ -32,6 +32,7 @@ export function PortraitGalleryPanel({
   const [preview, setPreview] = useState<MediaRef | null>(null);
   const [uploadingKey, setUploadingKey] = useState<string | null>(null);
   const uploading = useRef(false);
+  const inputsRef = useRef(new Map<string, HTMLInputElement>());
 
   const entries = useMemo<PresenceEntry[]>(
     () =>
@@ -83,7 +84,7 @@ export function PortraitGalleryPanel({
       <p className="text-[11px] text-muted-foreground">
         {t(
           "characterPresence.hint",
-          "Click a portrait to enlarge, or hover and pick an image to replace it.",
+          "Click a portrait to enlarge it, or choose Replace to upload an image.",
         )}
       </p>
       <div className="grid grid-cols-3 gap-2">
@@ -122,16 +123,27 @@ export function PortraitGalleryPanel({
                   )}
                 </button>
                 {replaceAction && (
-                  <label className="absolute inset-x-0 bottom-0 flex cursor-pointer items-center justify-center gap-1 bg-black/60 py-1 text-[10px] text-white opacity-0 transition-opacity group-hover:opacity-100">
-                    {busy ? (
-                      <Loader2 className="h-3 w-3 animate-spin" />
-                    ) : (
-                      <Upload className="h-3 w-3" />
-                    )}
-                    {busy
-                      ? t("characterPresence.uploading", "Uploading…")
-                      : t("characterPresence.replace", "Replace")}
+                  <>
+                    <button
+                      type="button"
+                      disabled={uploadingKey !== null || !sessionId}
+                      onClick={() => inputsRef.current.get(entry.key)?.click()}
+                      className="absolute inset-x-0 bottom-0 flex cursor-pointer items-center justify-center gap-1 bg-black/60 py-1 text-[10px] text-white opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:opacity-100"
+                    >
+                      {busy ? (
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                      ) : (
+                        <Upload className="h-3 w-3" />
+                      )}
+                      {busy
+                        ? t("characterPresence.uploading", "Uploading…")
+                        : t("characterPresence.replace", "Replace")}
+                    </button>
                     <input
+                      ref={(input) => {
+                        if (input) inputsRef.current.set(entry.key, input);
+                        else inputsRef.current.delete(entry.key);
+                      }}
                       type="file"
                       accept="image/*"
                       className="hidden"
@@ -142,7 +154,7 @@ export function PortraitGalleryPanel({
                         if (file) void replacePortrait(entry, file);
                       }}
                     />
-                  </label>
+                  </>
                 )}
               </div>
               <span className="block truncate text-xs text-muted-foreground">

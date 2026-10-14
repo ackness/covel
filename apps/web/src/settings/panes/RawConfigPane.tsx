@@ -1,3 +1,4 @@
+import { SettingsRevisionConflictError } from "@covel/settings";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { RotateCw, Save, Undo2 } from "lucide-react";
@@ -197,7 +198,8 @@ export function RawConfigPane() {
       if (saved.reload) await boot();
     } catch (err) {
       setError(
-        err instanceof ApiError && err.code === "config_file_changed"
+        err instanceof SettingsRevisionConflictError ||
+          (err instanceof ApiError && err.code === "config_file_changed")
           ? t("settings.rawConfigChanged")
           : err instanceof ApiError
             ? (err.response?.error ?? err.message)
@@ -248,7 +250,7 @@ export function RawConfigPane() {
   return (
     <div className="space-y-3">
       <div
-        role="tablist"
+        role="group"
         aria-label={t("settings.rawConfigNavLabel")}
         className="flex w-fit max-w-full flex-wrap overflow-hidden rounded-(--radius-control) border border-(--rule-color)"
       >
@@ -256,8 +258,7 @@ export function RawConfigPane() {
           <button
             key={tab.id}
             type="button"
-            role="tab"
-            aria-selected={source === tab.id}
+            aria-pressed={source === tab.id}
             disabled={saving}
             onClick={() => setSource(tab.id)}
             className={

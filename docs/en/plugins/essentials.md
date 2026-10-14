@@ -97,6 +97,7 @@ The code is in the entry file. `PLUGIN.md` points to it with `entry`:
 | `covel.provideExtension(...)`          | `extensions`                   |
 | `covel.on(event, ...)`                 | `hooks`                        |
 | `covel.registerFormValidator(name, …)` | `forms`                        |
+| `covel.registerWires(...)`             | `wires`                        |
 
 Three more items only need a declaration, with no code:
 
@@ -141,10 +142,12 @@ Rules:
 - The model can call only the tools listed here. A tool that is not listed is not visible to it.
 - When the plugin has one runtime (written in `runtime:`) and does not write `agent.tools.plugin`, that runtime gets all the tools in `contributes.tools`. You do not need to list them again.
 - When you write `plugin`, what you write is what counts. `plugin: []` means no tools of its own are given.
-- In a plugin with several runtimes, each runtime lists the tools it uses.
+- In a plugin with several runtimes, each runtime lists the tools it uses. Keep internal helpers that no runtime calls out of the tool registry and `contributes.tools`.
 - A tool name is unique only within its own plugin. One plugin cannot call another plugin's tool. Use a service instead. See [plugin extensions and communication](../reference/plugin-extensions.md).
 
 For the list of built-in tools, see the [tools reference](../reference/tools.md).
+
+For agent completion rules, see the [plugin reference](../reference/plugins.md). With `completion.require: tool-use` and `afterTools`, a read tool cannot substitute for a declared completing tool.
 
 ## How to use another plugin's results
 
@@ -310,19 +313,19 @@ Write `version`, `author`, `license` and `homepage` in `PLUGIN.md`. The author n
 A plugin's code depends only on the public SDK `@covel/plugin-handlers-utils`. Do not import Covel's internal packages, database tables or front-end components.
 
 > [!IMPORTANT]
-> This SDK is not published to npm, and installing a plugin does not run `npm install`. A plugin in the user directory must be able to run by itself. What it needs must either come from the arguments Covel passes in (`ctx`, `covel.toolkit`), or be bundled into the plugin. Built-in plugins under the repository's `plugins/` can `import` it directly.
+> This SDK is not published to npm, and installing a plugin does not run `npm install`. Covel provides the SDK (including the `/dimensions` and `/prompts` subpaths) and `zod` to every plugin, so plugin code can `import` them directly, the same for built-in plugins and plugins in the user directory. If you need them while developing, list them under `devDependencies` in `package.json`: the installer rejects nonempty `dependencies`. Bundle any other library you use into the plugin.
 
 Helpers you will often use:
 
-| Need                                          | Use                                                                                                          |
-| --------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| Dice rolls and other random numbers           | `ctx.random` (in a tool it is `context.random`; when generating IDs, it is the fourth argument of `shortId`) |
-| Get the current language of multilingual text | `resolveI18nText` / `resolveI18nDeep`                                                                        |
-| Estimate the token count of a piece of text   | `estimateTokens`                                                                                             |
-| Sort your own text by relevance               | `rankTexts` / `searchTerms` / `searchExcerpt`. These do not call a model.                                    |
-| Sort IDs, keys and timestamps                 | `compareText`                                                                                                |
-| Load your own prompt template                 | `createPromptLoader(root)` from `@covel/plugin-handlers-utils/prompts`                                       |
-| Validate forms and character fields           | The form tools and character field validation in the SDK                                                     |
+| Need                                          | Use                                                                                                                  |
+| --------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| Dice rolls and other random numbers           | `ctx.random` (in a tool it is `context.random`; when generating IDs, pass it as the fourth argument of `shortId`)    |
+| Get the current language of multilingual text | `resolveI18nText` / `resolveI18nDeep`                                                                                |
+| Estimate the token count of a piece of text   | `estimateTokens`                                                                                                     |
+| Sort your own text by relevance               | `rankTexts` / `searchTerms` / `searchExcerpt`. These do not call a model.                                            |
+| Sort IDs, keys and timestamps                 | `compareText`                                                                                                        |
+| Load your own prompt template                 | `createPromptLoader(root)` from `@covel/plugin-handlers-utils/prompts`; it reads only `<name>.md` and `<name>.zh.md` |
+| Validate forms and character fields           | The form tools and character field validation in the SDK                                                             |
 
 Two rules about repeatability:
 
@@ -349,3 +352,5 @@ Do not give the model bookkeeping fields: session IDs, record UUIDs and timestam
 - Write tools and functions: [plugins with local code](./local-code.md)
 - Testing: [plugin testing](./testing.md)
 - Share with others: [verify and distribute](../ship/index.md)
+
+Use the current declared input and data shapes. A projected narrative input is a string, dice receipts carry a `checks` array, and `pluginData.get()` returns the stored value directly. See the [plugin contract](../reference/plugins.md#contract-version-policy) for version changes; do not add wrappers or fallbacks to retain development data.

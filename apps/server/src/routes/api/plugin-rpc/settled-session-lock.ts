@@ -5,11 +5,21 @@ import type { SessionLock } from "../../../lib/session-lock.js";
 export interface SettlingJob {
   readonly jobId: string;
   readonly maxSettleWaitMs?: number;
+  /**
+   * False when the worker cannot start the job now, for example because no
+   * usable model credentials can serve it. The barrier does not wait for it.
+   */
+  readonly runnable?: boolean;
 }
 
 export interface SettleTimeout {
   readonly pendingJobIds: readonly string[];
   readonly waitedMs: number;
+}
+
+export interface SettleSkipped {
+  /** Unfinished settling jobs the execution did not wait for. */
+  readonly skippedJobIds: readonly string[];
 }
 
 /** Reused when an entry point must release other locks and retry admission. */
@@ -25,6 +35,8 @@ export interface SettledSessionLockOptions {
     jobs: readonly SettlingJob[],
   ) => void | Promise<void>;
   readonly onTimeout?: (timeout: SettleTimeout) => void | Promise<void>;
+  /** Called once, under the lock, when unrunnable jobs were not waited for. */
+  readonly onSkipped?: (skipped: SettleSkipped) => void | Promise<void>;
 }
 
 export interface SettledSessionLock {
@@ -57,7 +69,7 @@ function wait(ms: number, signal?: AbortSignal): Promise<void> {
 }
 
 /** Cancel acquisition promptly, but never detach a callback that already began. */
-function acquire<T>(
+export function withAbortableLock<T>(
   lock: SessionLock,
   sessionId: string,
   signal: AbortSignal | undefined,
@@ -137,10 +149,14 @@ export function createSettledSessionLock(args: {
           );
         }
       };
+      // A job the worker cannot start would only hold every later execution
+      // to its full settle wait, so only runnable jobs are waited for.
+      const runnable = (jobs: readonly SettlingJob[]) =>
+        jobs.filter((job) => job.runnable !== false);
       let pollDelay = pollIntervalMs;
       for (;;) {
         options.signal?.throwIfAborted();
-        const pending = await args.listPendingJobs(sessionId);
+        const pending = runnable(await args.listPendingJobs(sessionId));
         options.signal?.throwIfAborted();
         constrainDeadline(pending);
         if (pending.length > 0) {
@@ -157,14 +173,15 @@ export function createSettledSessionLock(args: {
             continue;
           }
         }
-        const result = await acquire(
+        const result = await withAbortableLock(
           args.sessionLock,
           sessionId,
           options.signal,
           async () => {
             options.signal?.throwIfAborted();
-            const live = await args.listPendingJobs(sessionId);
+            const listed = await args.listPendingJobs(sessionId);
             options.signal?.throwIfAborted();
+            const live = runnable(listed);
             constrainDeadline(live);
             if (live.length > 0 && performance.now() < budget.deadline)
               return RETRY;
@@ -172,6 +189,12 @@ export function createSettledSessionLock(args: {
               await options.onTimeout?.({
                 pendingJobIds: live.map((job) => job.jobId),
                 waitedMs: Math.max(0, performance.now() - startedAt),
+              });
+            }
+            const skipped = listed.filter((job) => job.runnable === false);
+            if (skipped.length > 0) {
+              await options.onSkipped?.({
+                skippedJobIds: skipped.map((job) => job.jobId),
               });
             }
             options.signal?.throwIfAborted();

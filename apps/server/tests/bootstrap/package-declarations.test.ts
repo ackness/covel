@@ -1,5 +1,12 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { createEventBus } from "@covel/events";
@@ -86,7 +93,7 @@ schedule:
 
 async function seed(
   withRuntime: boolean,
-  options: { hooks?: string; entry?: string } = {},
+  options: { hooks?: string; entry?: string; child?: string } = {},
 ) {
   await write(
     "PLUGIN.md",
@@ -115,7 +122,7 @@ async function seed(
     }),
   );
   if (withRuntime) {
-    await write("runtimes/implementation/RUNTIME.md", child);
+    await write("runtimes/implementation/RUNTIME.md", options.child ?? child);
     await write(
       "runtimes/implementation/handler.mjs",
       "export default async ctx => ({ effects: [], data: ctx.userSettings });",
@@ -383,36 +390,52 @@ describe("package declarations across framework consumers", () => {
     );
   });
 
-  it("rejects conflicting package contributions at install and discovery before publishing capabilities", async () => {
-    const conflict = child.replace(
+  it("leaves out package contributions written on a child runtime at install and discovery", async () => {
+    const divergent = child.replace(
       "---\n",
       "---\nuserSettings:\n  - key: mode\n    type: text\n    label: Mode\n    default: divergent\n",
     );
-    const bundle = [
-      {
-        relativePath: "package.json",
-        content: Buffer.from('{"name":"@covel/plugin-inspector"}'),
-      },
-      { relativePath: "PLUGIN.md", content: Buffer.from(root) },
-      {
-        relativePath: "runtimes/implementation/RUNTIME.md",
-        content: Buffer.from(conflict),
-      },
-    ];
-    expect(() => validatePluginBundle(bundle, new Set())).toThrow(
-      /userSettings|Unrecognized/,
-    );
-    await write("PLUGIN.md", root);
-    await write("runtimes/implementation/RUNTIME.md", conflict);
-    const store = createMemoryStore();
-    const { registry, discoveryMap, manifestCache } =
-      await discoverAndRegisterPlugins({
-        pluginsDir: dir,
-        eventBus: createEventBus(store),
-      });
-    expect(registry.get("inspector")?.status).toBe("error");
-    expect(discoveryMap.has("inspector")).toBe(false);
-    expect(manifestCache.has("inspector")).toBe(false);
-    await store.close();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { registry, store } = await seed(true, { child: divergent });
+    try {
+      expect(registry.get("inspector")?.status).toBe("registered");
+      expect(warn.mock.calls.flat().join("\n")).toContain(
+        "runtimes/implementation/RUNTIME.md: userSettings: unknown field",
+      );
+      await registry.applyPersistedActivations(
+        "s1",
+        ["inspector"],
+        async () => {},
+      );
+      expect(
+        registry.getActiveRuntimes("s1")[0]!.userSettings?.[0]?.default,
+      ).toBe("shared");
+      const packageDir = path.join(dir, "inspector");
+      const files = await readdir(packageDir, { recursive: true });
+      const bundle = [
+        {
+          relativePath: "package.json",
+          content: Buffer.from(
+            '{"name":"@covel/plugin-inspector","version":"1.2.3","type":"module"}',
+          ),
+        },
+        {
+          relativePath: "project.mjs",
+          content: Buffer.from("export default () => ({});"),
+        },
+      ];
+      for (const file of files)
+        if (/\.(md|mjs|json)$/.test(file))
+          bundle.push({
+            relativePath: file.split(path.sep).join("/"),
+            content: await readFile(path.join(packageDir, file)),
+          });
+      expect(validatePluginBundle(bundle, new Set()).pluginId).toBe(
+        "inspector",
+      );
+    } finally {
+      warn.mockRestore();
+      await store.close();
+    }
   });
 });

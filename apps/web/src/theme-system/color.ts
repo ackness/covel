@@ -91,3 +91,30 @@ export function flattenToHex(...layers: readonly string[]): string | null {
 export function isValidCssColor(input: string): boolean {
   return normalizeCssColor(input) !== null;
 }
+
+/** Relative luminance of an opaque sRGB hex colour (WCAG contrast formula). */
+export function relativeLuminance(hex: string): number {
+  const linear = [1, 3, 5].map((offset) => {
+    const value = Number.parseInt(hex.slice(offset, offset + 2), 16) / 255;
+    return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+  });
+  return 0.2126 * linear[0]! + 0.7152 * linear[1]! + 0.0722 * linear[2]!;
+}
+
+/** Null means a transparent, missing, or unsupported background cannot be assessed. */
+export function contrastRatio(
+  foreground: string,
+  background: string,
+): number | null {
+  const bg = /^#[\da-f]{6}$/i.test(background)
+    ? background
+    : flattenToHex(background);
+  if (!bg) return null;
+  const fg = /^#[\da-f]{6}$/i.test(foreground)
+    ? foreground
+    : flattenToHex(bg, foreground);
+  if (!fg) return null;
+  const a = relativeLuminance(fg);
+  const b = relativeLuminance(bg);
+  return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+}

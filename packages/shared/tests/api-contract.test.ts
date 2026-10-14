@@ -10,7 +10,7 @@ import {
   worldPluginPlanSchema,
   worldWireRecordSchema,
 } from "../src/schemas/api-contract.js";
-import { runtimeManifestAuthoringSchema } from "../src/schemas/plugin-schemas.js";
+import { runtimeAuthoringManifestSchema } from "../src/schemas/runtime-manifest.js";
 
 const plugin = {
   id: "memory",
@@ -36,7 +36,6 @@ const plugin = {
       turnCompletion: { mode: "await" },
       outputKind: "plugin",
       outputContract: "memory@1",
-      tags: [],
     },
   ],
   tools: [],
@@ -181,11 +180,11 @@ describe("shared API contracts", () => {
   ])(
     "accepts authored trigger declarations in discovery: $trigger.type",
     (input) => {
-      const manifest = runtimeManifestAuthoringSchema.parse({
-        name: "memory",
+      const manifest = runtimeAuthoringManifestSchema.parse({
+        type: "agent",
         description: "Memory plugin",
-        ...input,
-      });
+        schedule: input,
+      }).schedule;
       const response = {
         items: [
           {
@@ -193,8 +192,8 @@ describe("shared API contracts", () => {
             runtimes: [
               {
                 ...plugin.runtimes[0],
-                stage: manifest.stage,
-                trigger: manifest.trigger,
+                stage: manifest?.stage,
+                trigger: manifest?.trigger,
               },
             ],
           },
@@ -210,11 +209,10 @@ describe("shared API contracts", () => {
   it("rejects a zero startTurn in both authoring and discovery", () => {
     const trigger = { type: "scheduled", startTurn: 0 };
     expect(
-      runtimeManifestAuthoringSchema.safeParse({
-        name: "memory",
+      runtimeAuthoringManifestSchema.safeParse({
+        type: "agent",
         description: "Memory plugin",
-        stage: "pre-turn",
-        trigger,
+        schedule: { stage: "pre-turn", trigger },
       }).success,
     ).toBe(false);
     expect(

@@ -178,7 +178,7 @@ PLUGIN.md:
           title: 已知事实
 ```
 
-世界包把文件放在 `source.path` 写的位置，它就会被导入，不需要再写别的配置。两个插件声明了同一个 `path` 时，这个路径不再算约定位置，所以选一个别的插件不会用的路径。
+世界包把文件放在 `source.path` 写的位置，它就会被导入，不需要再写别的配置。同一个会话启用的两个插件声明了同一个 `path` 时，这个路径不再算约定位置，所以选一个别的插件不会用的路径。内核和世界包自己的路径（如 `data/dimensions.yaml`、`world.yaml`）不能声明，列表见[世界数据](../reference/world-data.md)。
 
 `generate` 有两个取值：`offer` 把这类内容列为创作界面里的可选项，`default` 列出并默认选中。它要求有 `example`，并且 `source` 是公开的、不是媒体、以 `id` 为 `key`。玩家选中后，生成器会把 schema、提示和示例写进它的提示词，并把这个插件加进世界要启用的插件里。只给在真实模型上验证过生成质量的内容声明它。
 
@@ -291,6 +291,8 @@ function:
 ### 不是工具的能力
 
 函数里有几样东西是直接调用的，不经过工具清单和授权流程：`ctx.gateway`（调用模型）、`ctx.images` / `ctx.speech` / `ctx.music`（生成媒体）、`ctx.media`（保存媒体）、`ctx.utils`（网络请求）。
+
+它们都写在 `PluginFunctionContext` 类型里。宿主配好了模型和媒体存储才会给，用之前先判断有没有：`if (!ctx.images) return …`。
 
 生成图片时，在函数里直接调用 `ctx.images.generate(...)`。不要做一个让模型调用的“生成图片”工具，也不要自己写请求去调用图片服务商。细节见[图片生成](../reference/image-generation.md)和[媒体存储](../reference/media-store.md)。
 

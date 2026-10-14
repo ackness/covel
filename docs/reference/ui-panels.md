@@ -76,6 +76,7 @@
 
 - 这个请求只用一次。会话恢复、`GameView` 挂载完成后，页面处理请求并把 `panel` 参数从地址里去掉。
 - 在手机上，请求不会被抽屉吞掉：页面等抽屉和异步加载的 UI spec 都准备好，再选中目标面板。
+- “图像”入口只打开顶层声明 `navTarget: "images"` 的右侧 spec，图标不决定导航归属。多个面板声明时，按 `groupOrder` 和加载顺序选择第一个。没有声明的面板仍可手动打开；社区图像插件要在画廊 spec 上添加此字段。加载成功后仍找不到请求的目标（包括指定插件面板），清除请求并提示“当前会话没有这个面板。”；后续 spec 重载不会重放旧请求。加载失败时保留请求，等玩家重试加载。
 - 会话 ID 变了，会话视图整个重建。这样草稿和面板选择不会和上一个会话混在一起。
 - 调试页按地址里的 `sid` 切换数据。从调试页返回会话时，也以当前查看的 ID 为准。
 
@@ -141,8 +142,8 @@ session 建立 → GET /api/ui-specs?sessionId=<id>
 | core-quest | core-quest | scroll-text | core-quest | quests | 任务日志（进行中含 objectives 勾选清单 / 已完成 / 已失败 分组） |
 | dice-check | dice-check-panel | dices | （无） | checks | 判定记录（倒序回执列表：骰式 / 成败配色 / critical 强调，`alwaysRender`） |
 | inventory | inventory | backpack | inventory | items | 行囊（已装备分组 + 背包列表，数量徽标 + tags pill，`alwaysRender`） |
-| dashscope-image-gen · openai-image-gen | `<plugin>-gallery` | image | image-studio | images | 剧情插图画廊（`ImageGallery`，`alwaysRender`）；两个图像插件各一套，组 ID 都是 `image-studio`；它们都提供单提供者扩展点 `media.image-flow@1`，同一会话只能启用其中一个 |
-| dashscope-image-gen · openai-image-gen | `<plugin>-jobs` | loader | image-studio | \_jobs | 生成任务视图（`ImageJobs`，`alwaysRender`） |
+| dashscope-image-gen · openai-image-gen | `<plugin>-gallery` | image | image-studio | images | 剧情插图画廊（`MediaGallery`，`alwaysRender`）；两个图像插件各一套，组 ID 都是 `image-studio`；它们都提供单提供者扩展点 `media.image-flow@1`，同一会话只能启用其中一个 |
+| dashscope-image-gen · openai-image-gen | `<plugin>-jobs` | loader | image-studio | \_jobs | 生成任务视图（`JobList`，`alwaysRender`） |
 | dashscope-image-gen · openai-image-gen | `<plugin>-trigger` | wand | image-studio | （无） | “生成图片”manual 触发入口按钮（`expectsBackgroundFollower`，`alwaysRender`） |
 | mimo-tts | mimo-tts-audio-tab | headphones | tts-studio | tracks | 旁白语音 playlist（`AudioPlayer`，`alwaysRender`） |
 | living-world-rules | living-world-rules | book-marked | world-data | rules | 世界规则（长期设定 / 禁忌，只读；随 world-data 导入播种，作为 `world-data` 组的子 Tab） |
@@ -152,7 +153,7 @@ session 建立 → GET /api/ui-specs?sessionId=<id>
 | scene-stage | scene-cast | users-round | scene-stage | active-cast | 当前场景在场角色（只读，仅 name + role；内部选择信号留在 plugin_data，`alwaysRender`） |
 | tabletop-rules | tabletop-rules | dices | （无） | checks | 属性检定入口按钮（调用 `tabletop-rules/check` 打开检定表单，`alwaysRender`） |
 | world-init | world-overview | map | world-data | session.dimensions | 任意维度当前值、版本（游玩中只读）及待结算恢复（`alwaysRender`） |
-| world-init | world-schema | sliders-horizontal | world-data | schema | 角色属性 schema |
+| world-init | world-schema | sliders-horizontal | world-data | session.characterSchema | 角色属性 schema |
 | world-time | world-time | calendar-days | （无） | clock | 当前世界时间（`/current/display` + 变化原因） |
 | world-time | time-definition | calendar-days | （无） | definitions | 时间规则（当前日历定义，只读；无定义时说明默认日历） |
 
@@ -249,19 +250,22 @@ contributes:
 
 关键字段：
 
-| 字段                   | 说明                                                                                                                                               |
-| ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `specVersion`          | UI spec 的版本。可以省略，省略时按 v1 处理。写得比服务端支持的版本高会被拒绝，见 [Spec 校验与版本](#spec-校验与版本)                               |
-| `id`                   | 面板的唯一标识                                                                                                                                     |
-| `group`                | `group` 相同的面板合并成一个外层页签                                                                                                               |
-| `groupLabel`           | 合并后外层页签的名字。可选，省略时用第一份 spec 的 `label`                                                                                         |
-| `label`                | 面板自己的名字，显示在子页签上                                                                                                                     |
-| `shortLabel`           | 页签条上用的短名字。可选，见 [activity-bar 短标签](#activity-bar-短标签)                                                                           |
-| `icon`                 | 图标名（Lucide，kebab-case）。只能用框架允许的那些，完整列表见[组件目录 / Display](./ui-components.md#display)                                     |
-| `dataSource.namespace` | 面板读哪份数据：`pluginData[pluginId][namespace]`。`_jobs` 是特殊值，见下                                                                          |
-| `dataSource.bindings`  | 可选。再接入最多 8 个自己的 namespace，见下                                                                                                        |
-| `emptyState.message`   | 数据为空时显示的提示，见[空状态渲染](#空状态渲染)                                                                                                  |
-| `view`                 | 界面本身：一棵用 catalog 组件搭成的树。Web 界面只执行这种声明式的 spec；`.tsx`、`.js` 等不是 JSON 的界面声明不受支持，API 会给出诊断并把这一项去掉 |
+| 字段                   | 说明                                                                                                                                                                      |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `specVersion`          | UI spec 的版本。可以省略，省略时按 v1 处理。写得比服务端支持的版本高会被拒绝，见 [Spec 校验与版本](#spec-校验与版本)                                                      |
+| `id`                   | 面板的唯一标识                                                                                                                                                            |
+| `group`                | `group` 相同的面板合并成一个外层页签                                                                                                                                      |
+| `groupLabel`           | 合并后外层页签的名字。可选，省略时用第一份 spec 的 `label`                                                                                                                |
+| `label`                | 面板自己的名字，显示在子页签上                                                                                                                                            |
+| `shortLabel`           | 页签条上用的短名字。可选，见 [activity-bar 短标签](#activity-bar-短标签)                                                                                                  |
+| `icon`                 | 图标名（Lucide，kebab-case）。只能用框架允许的那些，完整列表见[组件目录 / Display](./ui-components.md#display)                                                            |
+| `dataSource.source`    | 通用只读会话来源：`session.characters`（以角色 ID 为键）或 `session.characterSchema`（schema 本身，属性列表在 `/attributes`）。指定后优先于 `namespace`；缺失时为空对象。 |
+| `dataSource.namespace` | 面板读哪份数据：`pluginData[pluginId][namespace]`。`_jobs` 是特殊值，见下                                                                                                 |
+| `dataSource.bindings`  | 可选。再接入最多 8 个自己的 namespace，见下                                                                                                                               |
+| `emptyState.message`   | 数据为空时显示的提示，见[空状态渲染](#空状态渲染)                                                                                                                         |
+| `view`                 | 界面本身：一棵用 catalog 组件搭成的树。Web 界面只执行这种声明式的 spec；`.tsx`、`.js` 等不是 JSON 的界面声明不受支持，API 会给出诊断并把这一项去掉                        |
+
+会话来源随完整快照和已提交的角色/schema 事件更新，不要求插件镜像数据。插件的状态表只放在前端 `gameState.tables`；角色、角色 schema 和维度等 World Model 字段独立保留在顶层。维度快照不合规时，面板显示局部提示；开场画面仍显示世界名和标签。
 
 **`_jobs`：后台任务的虚拟数据源。** 把 `dataSource.namespace` 写成 `_jobs`，面板拿到的是这个插件的后台手动任务和事件任务（由 `_runtime_jobs` 映射而来）。它以 jobId 为键，值里有：
 
@@ -284,12 +288,14 @@ contributes:
 
 ### Spec 校验与版本
 
-UI spec 是**不可信的插件输入**。`/api/ui-specs` 汇总时，对每份 spec 做 Zod 校验（外层结构和 `specVersion`）。
+UI spec 是**不可信的插件输入**。它的规则只有一份：`@covel/shared` 的 `pluginUiSpecIssues`（`packages/shared/src/schemas/ui-spec.ts`）。`pnpm validate:plugin`、ZIP 安装和 `/api/ui-specs` 加载面板时都用它，所以校验通过的 spec 在游戏里不会因为格式被去掉。
 
-- **版本。** `specVersion` 可以省略，按 v1 处理。写得比服务端支持的版本高（当前 `CURRENT_UI_SPEC_VERSION = 1`，在 `apps/server/src/routes/misc-api/ui-spec-schema.ts`）会被拒绝。这样旧服务端遇到新插件包时会明确报错，而不是画出一个坏面板。
+- **版本。** `specVersion` 可以省略，按 v1 处理。写得比宿主支持的版本高（当前 `CURRENT_UI_SPEC_VERSION = 1`）会被拒绝。这样旧宿主遇到新插件包时会明确报错，而不是画出一个坏面板。
+- **`webview`。** `entry` 指向包里的一份 `.html`，不超过 512 KiB；`height` 是 80 到 800 之间的整数。`surfaces` 只能是 `panel` 和 `stage`。
+- **数据归属。** `pluginId`、`sourcePlugin`、`sourcePluginId` 只能写本插件的 ID；`dataSource.bindings` 只能是写死的本插件 namespace，最多 8 个。
 - **`view` 或 `webview`，二选一。** 每份 spec 必须声明 `view`（对象）或 `webview`（HTML 文档）。两个都写或都不写，校验失败。
 - **`view` 递归校验。** 检查的内容有 `component` / `type`、`children`、命名的 `slots`、`repeat`，以及 `on` / `watch` 的 action 绑定结构。组件名必须在共享的 `PLUGIN_UI_COMPONENT_NAMES` 里；不认识的组件在服务端就产生带路径的诊断。`props` 和 directive 表达式不做限制，由组件和 json-render 在运行时解析，这样插件可以扩展数据的形状。
-- **不是 JSON 的声明。** 加载器用 `_componentPath` 记下这类声明的位置，好让 API 给出具体的诊断。它不是有效的 UI spec，也不是让 Web 执行插件代码的入口。带这个字段的 spec 会被去掉，即使同时写了 `view`。同一个插件的其他合法 JSON spec 照常显示。
+- **不是 JSON 的声明。** `contributes.ui` 只接受 `.json` 文件。`pnpm validate:plugin` 和安装拒绝别的文件；加载时这一项给出诊断，同一个插件的其他合法 JSON spec 照常显示。浏览器不会执行插件的组件文件。
 - **需要自定义组件时。** 声明 `webview.entry` 并提供一份独立的 HTML；或者组合 catalog 组件，绑定框架的 action。浏览器不会直接导入插件的 `.tsx` / `.js` 模块。
 - **一份坏 spec 不拖累整个响应。** 校验失败的 spec 从它所在的位置去掉，响应顶层的 `diagnostics[]` 给出具体诊断：
 
@@ -303,7 +309,7 @@ UI spec 是**不可信的插件输入**。`/api/ui-specs` 汇总时，对每份 
 
 UI 声明来自启动时的注册表快照。静态资源按需加载，并按快照缓存。GET 请求只做读取和按会话激活集过滤，不扫描插件目录，也不把 UI 定义写进 `plugin_data`（详见 [api.md](./api.md#get-apiui-specs)）。
 
-读取静态资源时，会检查符号链接解析之后的真实路径：指向插件根目录以内的链接可以，指向根目录以外的文件或目录会被拒绝。某个资源加载失败时，只跳过对应 runtime 的界面，不影响其他 runtime 的面板。
+读取静态资源时，会检查符号链接解析之后的真实路径：指向插件根目录以内的链接可以，指向根目录以外的文件或目录会被拒绝。某份 spec 读不出来或不合规则时，只去掉这一份，并在 `diagnostics[]` 和服务端日志里说明；同一个插件的其他面板照常显示。
 
 ### activity-bar 短标签
 
@@ -369,7 +375,7 @@ messages:
 | `npc-graph-panel.json` | 尚未发现角色或势力关系，继续推进故事后会自动出现…… |
 | `world-schema.json`    | 角色属性定义尚未生成，等待世界初始化……             |
 
-**`alwaysRender: true` 是例外。** 有些面板不靠 namespace 数据渲染。例如 `world-overview.json` 的 `WorldDimensions` 直接读会话上下文，`gallery.json` / `jobs.json` 的 `ImageGallery` / `ImageJobs` 自己处理空的情况。这类 spec 在顶层声明 `"alwaysRender": true`；`view.component` 是 `ImageGallery` / `ImageJobs` 时，框架也会自动这样判断（`specUsesComponent`）。它们**可以不写 `emptyState.message`**，因为 `PluginPanel` 根本不会走到空状态这一步。
+**`alwaysRender: true` 是例外。** 有些面板不靠 namespace 数据渲染。例如 `world-overview.json` 的 `WorldDimensions` 直接读会话上下文；`MediaGallery` 和 `JobList` 可以自己处理空列表。这类 spec 在顶层明确声明 `"alwaysRender": true`，框架只读取这个字段，不按组件名自动开启。它们**可以不写 `emptyState.message`**，因为 `PluginPanel` 不会走到空状态这一步。组件属性见 [UI 组件](./ui-components.md#structured-list-props-and-actions)。
 
 **实现位置**：`apps/web/src/components/session/plugin-panel.tsx` 的 `PluginPanel` 组件（`isEmpty` 判断和 `alwaysRender` 短路）。
 
@@ -531,12 +537,13 @@ directive 可以写在组件 props 的任何动态值位置，也可以写在 `o
 
 **合并规则**：
 
-| 字段                                                | 行为                                                                  |
-| --------------------------------------------------- | --------------------------------------------------------------------- |
-| 相同 `group`                                        | 合并为一个外层 Tab（横向子 Tab 切换）                                 |
-| 不同 `group` 或省略                                 | 独立外层 Tab（兜底 key 为 `${pluginId}::${specId}`）                  |
-| `groupLabel` / `shortLabel` / `icon` / `groupOrder` | 冲突时"**首个声明者赢**"，按 `/api/ui-specs` 返回顺序（插件加载顺序） |
-| `groupOrder`                                        | 外层 Tab 在 activity bar 中的排序（数字小的排前，默认 500）           |
+| 字段                                                | 行为                                                                                                    |
+| --------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| 相同 `group`                                        | 合并为一个外层 Tab（横向子 Tab 切换）                                                                   |
+| 不同 `group` 或省略                                 | 独立外层 Tab（兜底 key 为 `${pluginId}::${specId}`）                                                    |
+| `groupLabel` / `shortLabel` / `icon` / `groupOrder` | 冲突时"**首个声明者赢**"，按 `/api/ui-specs` 返回顺序（插件加载顺序）                                   |
+| `groupOrder`                                        | 外层 Tab 在 activity bar 中的排序（数字小的排前，默认 500）                                             |
+| `navTarget`                                         | 可选，仅支持 `"images"`。由每份 spec 单独声明，指定“图像”导航的目标；省略时不参与此导航，仍可手动选择。 |
 
 **命名约定**：跨插件的 group 名字和 CSS 类名是一个道理，作者自己加命名空间前缀来避免冲突，例如 `core.character`、`myorg.combat`。框架不会自动加前缀。
 
@@ -570,7 +577,7 @@ directive 可以写在组件 props 的任何动态值位置，也可以写在 `o
 
 - 会被折叠的：`ui.render`、`ui-spec`，以及 level 为 info / success 的通知，例如图鉴发现、成就和状态变更。
 - 不折叠的：表单、选项、确认、图片，以及警告和错误通知。
-- 建议块（`plugin_message`）在当前回合保持展开。出现更新的玩家消息后，它折叠成“历史建议”。
+- 插件消息面（`plugin_message`）在当前回合保持展开。出现更新的玩家消息后，折叠标题显示提供者的本地化名称和“展开查看”；提供者没有名称时显示“插件内容”。判定、任务变更和建议都遵循同一规则。
 - 玩家可以在设置的“通用”里打开“展开本回合更新”（`ui.expandTurnUpdates`），改成默认展开。
 - `detailed` / `raw` 视图不折叠。
 - 主题包的 `layout.turnNotes` 决定这条更新放在哪：`fold` 是上面说的默认行为；`inline` 让最新一回合默认展开；`margin` 在会话区够宽时把它放到正文旁的页边栏。
@@ -624,6 +631,8 @@ contributes:
 
 ### 表单提交流程
 
+表单必须带有回合 ID，并通过交互提交处理器发送。缺少任一项时，界面提示重新打开会话后重试，保留填写内容；不会把字段 JSON 当作玩家发言，也不会标成已提交。
+
 ```
 玩家填写表单 → 点击提交按钮
   → submitInteraction():
@@ -670,6 +679,7 @@ guide 分析叙事 → `generate-guide` 写入 `plugin_data[message]`
 
 - “流式中”沿用内核的约定：没有 streaming 布尔值，判断条件是 `executing && story 消息 id 以 stream_ 开头`。
 - 新叙事由 `StageDialog` 逐字显示，每一段停下来等玩家点击。最后一段读完同样停一次，等收尾的点击。自动播放按停顿时间自动往下走；正文末尾的空段落不产生空白的停顿。
+- 正文独立于“点击继续对话”按钮，读屏可以读取。逐字显示时暂停实时朗读，段落显示完再朗读；Tab 可聚焦推进按钮，Enter 或空格继续。
 - 打字追上流的结尾时，不会自动跳到决策面板。
 - 读完，并且回合执行结束后，同一个位置换成统一的决策面板。它依次显示：场景、“当前信息”摘要、“现在需要决定”的问题、分组的选项、行内的自由输入。
 - 提交后立刻隐藏整个旧的决策面板，包括插件扩展的区域。等新叙事时显示“生成中”，不重播已经读过的旧叙事。
@@ -688,7 +698,7 @@ guide 分析叙事 → `generate-guide` 写入 `plugin_data[message]`
 
 **对白名牌。**
 
-- 名牌读当前回合的 `dialogue/current.paragraphSpeakers`。它由 `stage.direction` 明确给出角色 ID，再解析成 `{ characterId, displayName } | null`。
+- 名牌读 `stage.dialogue@1` 的 `paragraphSpeakers`。每项是显示名字符串或 `null`（旁白），不是角色 ID 或对象。提供者负责把自己的数据转成这个形状，见[舞台槽位值](#舞台槽位值)。
 - 同一回合的实时事件可以先预览。旧的已提交映射不会在同一回合重试的流式阶段被复用。
 - 打字机和署名校验共用 `splitStageParagraphs`：CRLF 转成 LF，三个以上的换行算一个空行分隔。正文结束后，分段的数量必须和映射一致。
 - 以下情况不显示人物名牌：旁白、身份未知、旧消息没有映射、回合对不上。演员的焦点不参与署名。
@@ -848,6 +858,77 @@ catalog 里的组件不够用时，插件可以带一份自己的 HTML。JSON sp
 - 前端按完全相同的键来取，不去猜插件 namespace 或 ID 的后缀。
 - 舞台、头像、立绘画廊和在场角色列表都读这些槽位。
 
+### 舞台槽位值
+
+以下是四个舞台槽位的返回值，定义在 `packages/shared/src/extension-points/ui-slot.ts`。每个提供者返回自己声明的 `slot` 对应的对象，不把四个对象打包在一起。没有改动时返回 `previous`，清空槽位时返回 `null`。
+
+四个槽位对象，以及下列演员、`visual` 和选项对象，只接受列出的字段。输出不合法时跳过该提供者，保留前一个有效值，不会因此拒绝整个会话。`I18nText` 是字符串或 locale 到字符串的映射；`MediaRef` 是[媒体库](./media-store.md)返回的引用，不是路径或裸 URL。
+
+#### `stage.backdrop@1`
+
+所有字段都可省略，`{}` 也是合法值。
+
+| 字段      | 类型                 | 必填 | 含义                                                                    |
+| --------- | -------------------- | ---- | ----------------------------------------------------------------------- |
+| `sceneId` | string               | 否   | 场景标识                                                                |
+| `name`    | string               | 否   | HUD 显示的场景名                                                        |
+| `ref`     | MediaRef             | 否   | 当前背景图；缺省时使用[背景回退链](#背景回退链resolvebackdrop)          |
+| `variant` | `"day"` 或 `"night"` | 否   | 昼夜标记。HUD 只有 `night` 显示月亮，其余情况显示太阳；不能写其他枚举值 |
+| `label`   | I18nText             | 否   | HUD 的补充状态文字，不影响背景回退                                      |
+| `preload` | MediaRef[]           | 否   | 提前加载的图片列表；schema 没有条数上限，客户端跳过非 `image/*` 引用    |
+
+#### `stage.cast@1`
+
+值是 `{ actors, retainWhenEmpty }`，两项都必须写。
+
+| 字段              | 类型                       | 必填 | 含义                                                                                  |
+| ----------------- | -------------------------- | ---- | ------------------------------------------------------------------------------------- |
+| `actors`          | 下表对象的数组，最多 64 项 | 是   | 当前舞台上的演员，空数组合法                                                          |
+| `retainWhenEmpty` | boolean                    | 是   | `actors` 为空时，`true` 保留上一组立绘并取消高亮；`false` 清空立绘。schema 没有默认值 |
+
+每位演员：
+
+| 字段          | 类型                                                                          | 必填 | 含义                                         |
+| ------------- | ----------------------------------------------------------------------------- | ---- | -------------------------------------------- |
+| `characterId` | 非空 string                                                                   | 是   | 角色 ID，用同一个 ID 查 `character.visual@1` |
+| `displayName` | 非空 string                                                                   | 是   | 显示名                                       |
+| `type`        | string                                                                        | 否   | 角色类型                                     |
+| `description` | string                                                                        | 否   | 角色说明                                     |
+| `active`      | boolean                                                                       | 否   | 是否高亮；全部省略时高亮第一位未退场演员     |
+| `exiting`     | boolean                                                                       | 否   | 是否处于退场状态                             |
+| `visual`      | `{ variantId?: string, outfit?: string, expression?: string, pose?: string }` | 否   | 请求的立绘变体；四个字段都可省略             |
+| `position`    | `left` / `center-left` / `center` / `center-right` / `right`                  | 否   | 请求的站位                                   |
+| `transition`  | `none` / `fade` / `slide-left` / `slide-right` / `dissolve`                   | 否   | 立绘过渡方式；省略时客户端用 `fade`          |
+
+#### `stage.dialogue@1`
+
+| 字段                | 类型                             | 必填 | 含义                                                                        |
+| ------------------- | -------------------------------- | ---- | --------------------------------------------------------------------------- |
+| `turnId`            | string                           | 否   | 所署名的故事回合。给当前正文署名时应填写它；匹配当前 story 回合时才显示名牌 |
+| `paragraphSpeakers` | `(string \| null)[]`，最多 80 项 | 是   | 逐段的显示名；`null` 表示旁白或不署名                                       |
+
+例如 `{"turnId":"<story-turn-id>","paragraphSpeakers":["Mio",null,"Rin"]}` 表示三段依次由 Mio、旁白、Rin 署名；`turnId` 填当前故事的回合 ID。正文按空行分段，CRLF 先转 LF，三个以上换行折成两个。正文结束时，段落数必须等于数组长度，否则整份映射不显示名牌。实时映射还必须来自当前回合的预览，不能复用重试前的已提交映射。
+
+#### `stage.choices@1`
+
+| 字段       | 类型                       | 必填 | 含义                                                  |
+| ---------- | -------------------------- | ---- | ----------------------------------------------------- |
+| `turnId`   | string                     | 否   | 有值时选项只用于匹配的 story 回合；省略时不按回合限制 |
+| `scene`    | I18nText                   | 否   | 决策面板的场景文字                                    |
+| `recap`    | I18nText                   | 否   | “当前信息”回顾；省略或为空时不显示                    |
+| `decision` | I18nText                   | 否   | 当前要决定的问题                                      |
+| `choices`  | 下表对象的数组，最多 64 项 | 是   | 选项，空数组合法                                      |
+
+每个选项：
+
+| 字段    | 类型        | 必填 | 含义                                                       |
+| ------- | ----------- | ---- | ---------------------------------------------------------- |
+| `id`    | 非空 string | 是   | 选项标识                                                   |
+| `text`  | string      | 是   | 显示并用于玩家消息的文字；客户端去掉首尾空白，跳过空白选项 |
+| `label` | I18nText    | 否   | 补充说明，不替换 `text`                                    |
+
+回合匹配、决策问题的缺省行为与自由输入见[舞台模式](#舞台模式stage-view)。
+
 ### Stage music
 
 `stage.music@1` 保存的是“会话背后现在应该放什么音乐”：
@@ -933,7 +1014,7 @@ export default function (covel) {
 
 - 面板的数据绑定和 action 的 `pluginId` 字段只能指向面板所属的插件。加载器拒绝指向别的插件、或者动态算出来的目标。
 - 插件之间要共享数据，用内核槽位或 World Model。
-- 一个组件在自己的 namespace 还没有记录时就要读内核数据，必须设置 `alwaysRender: true`。
+- 一个组件在自己的 namespace 还没有记录时就要读内核数据，可以用 `dataSource.source` 绑定会话来源。若组件自行读会话上下文，必须设置 `alwaysRender: true`。
 - 历史消息里的面板按保存下来的 `stateOverride` 渲染。它不订阅实时的 namespace、任务或整个会话上下文。折叠起来的历史卡片不挂载。
 - 实时的插件 namespace 在前端只有一个权威来源：外部的 plugin-data store。会话 reducer 只保留构建历史消息卡片快照所需的 `message` namespace，以及派生出来的持久任务执行步骤。无关 namespace 的更新不会替换会话上下文的值。
 

@@ -1,6 +1,5 @@
 import { compareText } from "@covel/shared";
 import {
-  applyCursorAfter,
   applyPagination,
   applyWriteOrderPage,
   compareByteOrder,
@@ -16,24 +15,44 @@ import {
 } from "../common/player-input-message.js";
 import type { SessionSummaryRecord } from "../types.js";
 import { settleFailedRuntimeResults } from "../records/runtime-records.js";
-import { replaceArrayContents } from "./collection-helpers.js";
-import type { MemoryState, MemoryStoreMethods } from "./memory-types.js";
+import {
+  appendUniqueRow,
+  assertNewRowId,
+  removeRowAt,
+  replaceArrayContents,
+} from "./collection-helpers.js";
+import type {
+  MemoryState,
+  MemoryStoreMethods,
+  MemoryTurnMessage,
+} from "./memory-types.js";
+import { nextSessionWrite, recordChange } from "./write-order.js";
 
 /** The JS mirror of `turnMessageOrder` in `common/sql-session-journal-records.ts`. */
 function sortTurnMessages(
-  rows: readonly TurnMessageRecord[],
+  rows: readonly MemoryTurnMessage[],
 ): TurnMessageRecord[] {
-  return [...rows].sort((a, b) => {
-    if (a.createdAt !== b.createdAt) return a.createdAt < b.createdAt ? -1 : 1;
-    if (a.order !== b.order) return a.order - b.order;
-    return compareByteOrder(a.id, b.id);
-  });
+  return [...rows]
+    .sort((a, b) => {
+      if (a.createdAt !== b.createdAt)
+        return a.createdAt < b.createdAt ? -1 : 1;
+      if (a.order !== b.order) return a.order - b.order;
+      return compareByteOrder(a.id, b.id);
+    })
+    .map(withoutWriteSeq);
+}
+
+/** A stored message as the SQL backends return it: `writeSeq` is not part of a record. */
+function withoutWriteSeq(row: MemoryTurnMessage): TurnMessageRecord {
+  const { writeSeq, ...record } = row;
+  void writeSeq;
+  return record;
 }
 
 export function createRuntimeMethods(state: MemoryState): MemoryStoreMethods {
   return {
     async saveTurnResult(record) {
-      state.turnResults.push(record);
+      appendUniqueRow(state.turnResults, record, "Turn result");
     },
 
     async setTurnResultCommitStatus(
@@ -84,7 +103,7 @@ export function createRuntimeMethods(state: MemoryState): MemoryStoreMethods {
     },
 
     async saveToolCall(record) {
-      state.toolCalls.push(record);
+      appendUniqueRow(state.toolCalls, record, "Tool call");
     },
 
     async listToolCalls(sessionId, turnId?) {
@@ -98,7 +117,7 @@ export function createRuntimeMethods(state: MemoryState): MemoryStoreMethods {
     },
 
     async saveRuntimeOutput(record) {
-      state.runtimeOutputs.push(record);
+      appendUniqueRow(state.runtimeOutputs, record, "Runtime output");
     },
 
     async getRuntimeOutput(sessionId, id) {
@@ -136,7 +155,7 @@ export function createRuntimeMethods(state: MemoryState): MemoryStoreMethods {
     },
 
     async saveInteractionRecord(record) {
-      state.interactionRecords.push(record);
+      appendUniqueRow(state.interactionRecords, record, "Interaction record");
     },
 
     async listInteractionRecords(sessionId, filters) {
@@ -152,7 +171,10 @@ export function createRuntimeMethods(state: MemoryState): MemoryStoreMethods {
       if (filters?.targetPluginId) {
         rows = rows.filter((r) => r.targetPluginId === filters.targetPluginId);
       }
-      rows = [...rows].sort((a, b) => compareText(b.timestamp, a.timestamp));
+      rows = [...rows].sort(
+        (a, b) =>
+          compareText(b.timestamp, a.timestamp) || compareByteOrder(b.id, a.id),
+      );
       if (filters?.limit !== undefined) {
         rows = rows.slice(0, filters.limit);
       }
@@ -175,7 +197,13 @@ export function createRuntimeMethods(state: MemoryState): MemoryStoreMethods {
     },
 
     async listStateSchemas(sessionId) {
-      return state.stateSchemas.filter((r) => r.sessionId === sessionId);
+      return state.stateSchemas
+        .filter((r) => r.sessionId === sessionId)
+        .sort(
+          (a, b) =>
+            compareByteOrder(a.tableName, b.tableName) ||
+            compareByteOrder(a.id, b.id),
+        );
     },
 
     async deleteStateSchema(sessionId, tableName) {
@@ -217,22 +245,22 @@ export function createRuntimeMethods(state: MemoryState): MemoryStoreMethods {
     },
 
     async addStateChange(record) {
-      state.stateChanges.push(record);
+      appendUniqueRow(state.stateChanges, record, "State change");
     },
 
     async listStateChanges(sessionId, tableName, fieldName) {
-      return state.stateChanges
-        .filter(
+      return sortByCursorAsc(
+        state.stateChanges.filter(
           (r) =>
             r.sessionId === sessionId &&
             r.tableName === tableName &&
             r.fieldName === fieldName,
-        )
-        .sort((a, b) => compareText(a.createdAt, b.createdAt));
+        ),
+      );
     },
 
     async saveEvent(record) {
-      state.events.push(record);
+      appendUniqueRow(state.events, record, "Event");
     },
 
     async listEvents(sessionId, options?) {
@@ -240,6 +268,7 @@ export function createRuntimeMethods(state: MemoryState): MemoryStoreMethods {
       if (options?.topic !== undefined) {
         filtered = filtered.filter((r) => r.topic === options.topic);
       }
+      filtered = sortByCursorAsc(filtered);
       if (options?.limit !== undefined) {
         filtered = filtered.slice(0, options.limit);
       }
@@ -300,6 +329,12 @@ export function createRuntimeMethods(state: MemoryState): MemoryStoreMethods {
       return applyWriteOrderPage(sorted, opts);
     },
 
+    async getMessage(sessionId, id) {
+      const index = state.messagePositions.get(id);
+      const record = index === undefined ? undefined : state.messages[index];
+      return record?.sessionId === sessionId ? record : null;
+    },
+
     async listExistingMessageIds(sessionId, ids) {
       return [...new Set(ids)].filter((id) => {
         const index = state.messagePositions.get(id);
@@ -322,6 +357,14 @@ export function createRuntimeMethods(state: MemoryState): MemoryStoreMethods {
         ...record,
         fields: record.fields ?? undefined,
       });
+      recordChange(state, record.sessionId, {
+        kind: "character",
+        id: record.id,
+      });
+    },
+
+    async getCharacter(sessionId, id) {
+      return state.characters.get(characterKey(sessionId, id)) ?? null;
     },
 
     async listCharacters(sessionId) {
@@ -337,11 +380,12 @@ export function createRuntimeMethods(state: MemoryState): MemoryStoreMethods {
     },
 
     async deleteCharacter(sessionId, id) {
-      state.characters.delete(characterKey(sessionId, id));
+      if (state.characters.delete(characterKey(sessionId, id)))
+        recordChange(state, sessionId, { kind: "character", id });
     },
 
     async addTraceEvent(record) {
-      state.traceEvents.push(record);
+      appendUniqueRow(state.traceEvents, record, "Trace event");
     },
 
     async listTraceEvents(sessionId, pagination?) {
@@ -393,11 +437,14 @@ export function createRuntimeMethods(state: MemoryState): MemoryStoreMethods {
     },
 
     async appendTurnMessage(record) {
-      // Match the SQL turn_messages primary key: a duplicate id is an error.
-      if (state.turnMessages.some((r) => r.id === record.id)) {
-        throw new Error(`Turn message already exists: ${record.id}`);
-      }
-      state.turnMessages.push(record);
+      // Match the SQL turn_messages primary key: a duplicate id is an error,
+      // checked before the session's write number is taken.
+      assertNewRowId(state.turnMessages, record.id, "Turn message");
+      appendUniqueRow(
+        state.turnMessages,
+        { ...record, writeSeq: nextSessionWrite(state, record.sessionId) },
+        "Turn message",
+      );
     },
 
     async listTurnMessages(sessionId, options?) {
@@ -426,10 +473,14 @@ export function createRuntimeMethods(state: MemoryState): MemoryStoreMethods {
     },
 
     async listTurnMessagesAfter(sessionId, after, limit) {
-      const sorted = sortByCursorAsc(
-        state.turnMessages.filter((r) => r.sessionId === sessionId),
-      );
-      return applyCursorAfter(sorted, after, limit);
+      if (limit <= 0) return [];
+      return state.turnMessages
+        .filter(
+          (r) =>
+            r.sessionId === sessionId && (after === null || r.writeSeq > after),
+        )
+        .sort((a, b) => a.writeSeq - b.writeSeq)
+        .slice(0, limit);
     },
 
     async listRecentTurnMessages(sessionId, limit) {
@@ -451,7 +502,7 @@ export function createRuntimeMethods(state: MemoryState): MemoryStoreMethods {
     },
 
     async savePlayerInput(record) {
-      state.playerInputs.push(record);
+      appendUniqueRow(state.playerInputs, record, "Player input");
     },
 
     async getLatestPlayerInput(sessionId) {
@@ -476,7 +527,7 @@ export function createRuntimeMethods(state: MemoryState): MemoryStoreMethods {
     },
 
     async saveSessionSummary(record: SessionSummaryRecord): Promise<void> {
-      state.sessionSummaries.push(record);
+      appendUniqueRow(state.sessionSummaries, record, "Session summary");
     },
 
     async listSessionSummaries(
@@ -498,7 +549,7 @@ export function createRuntimeMethods(state: MemoryState): MemoryStoreMethods {
           summary.sessionId === sessionId &&
           (!selected || selected.has(summary.id))
         ) {
-          state.sessionSummaries.splice(i, 1);
+          removeRowAt(state.sessionSummaries, i);
         }
       }
     },

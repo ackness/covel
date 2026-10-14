@@ -31,6 +31,10 @@ import { createMemoryStore } from "@covel/store/memory";
 import { sessionRoutes } from "../../src/routes/api/session.js";
 import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
 import { sessionApprovalScope } from "../../src/routes/api/session/session-guard.js";
+import {
+  resolveSessionPluginSet,
+  runnablePluginIds,
+} from "../../src/routes/api/session/plugins.js";
 
 // ── Helpers ──────────────────────────────────────────────────────
 
@@ -81,9 +85,9 @@ function createTestApp(
   activatePluginServerCode: (
     pluginId: string,
   ) => Promise<void> = async () => {},
+  sessionLock = createInProcessSessionLock(),
 ): Hono {
   const app = new Hono();
-  const sessionLock = createInProcessSessionLock();
   app.use("*", async (c, next) => {
     c.set("store", store);
     c.set("pluginRegistry", registry);
@@ -400,6 +404,123 @@ describe("Session plugin routes (real sessionRoutes)", () => {
         "optional-plugin",
       ]);
     });
+
+    it("answers while a turn holds the session lock", async () => {
+      const sessionLock = createInProcessSessionLock();
+      const lockedApp = createTestApp(
+        registry,
+        store,
+        rpcApprovalGate,
+        undefined,
+        sessionLock,
+      );
+      let release!: () => void;
+      const held = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      let entered!: () => void;
+      const ownerEntered = new Promise<void>((resolve) => {
+        entered = resolve;
+      });
+      const turn = sessionLock.withLock(SESSION_ID, async () => {
+        entered();
+        await held;
+      });
+      await ownerEntered;
+      try {
+        const response = await Promise.race([
+          lockedApp.request(`/api/sessions/${SESSION_ID}/plugins`),
+          new Promise<"waited">((resolve) =>
+            setTimeout(() => resolve("waited"), 500),
+          ),
+        ]);
+        expect(response).not.toBe("waited");
+        expect((response as Response).status).toBe(200);
+      } finally {
+        release();
+        await turn;
+      }
+    });
+  });
+
+  describe("the confirmed plugin set", () => {
+    it("lists, offers commands for and runs the same set: a later core plugin stays out and a missing member is reported", async () => {
+      registry.register(
+        makeEntry({
+          id: "late-core",
+          packageManifest: parsePluginMd(
+            `---\n${JSON.stringify({
+              id: "late-core",
+              kind: "core",
+              description: "Installed after the session was confirmed",
+              contributes: {
+                commands: [
+                  { name: "late", description: "Late", action: "late" },
+                ],
+              },
+            })}\n---\n`,
+            "late-core/PLUGIN.md",
+          ),
+          summary: makeSummary({
+            id: "late-core",
+            name: "Late Core",
+            pluginType: "core-plugin",
+          }),
+          source: "builtin",
+        }),
+      );
+      await store.updateSession(SESSION_ID, {
+        activePlugins: ["narrator", "optional-plugin", "uninstalled"],
+      });
+
+      const body = (await (
+        await app.request(`/api/sessions/${SESSION_ID}/plugins`)
+      ).json()) as {
+        items: Array<{ id: string; active: boolean; sessionState: string }>;
+        commands: Array<{ pluginId?: string }>;
+        resolution: { active: string[] };
+        unavailable: Array<{ pluginId: string; code: string }>;
+      };
+
+      for (const id of ["late-core", "pregame"])
+        expect(body.items.find((item) => item.id === id)).toMatchObject({
+          active: false,
+          sessionState: "inactive",
+        });
+      expect(body.resolution.active).toEqual(["narrator"]);
+      expect(body.commands.some((cmd) => cmd.pluginId === "late-core")).toBe(
+        false,
+      );
+      expect(body.unavailable).toEqual([
+        expect.objectContaining({
+          pluginId: "uninstalled",
+          code: "unknown-plugin",
+        }),
+      ]);
+      // Nothing was written back: the player's confirmed set stays.
+      expect((await store.getSession(SESSION_ID))?.activePlugins).toEqual([
+        "narrator",
+        "optional-plugin",
+        "uninstalled",
+      ]);
+
+      // The executor's registry resolves the same set through the same function.
+      const executor = createPluginRegistry({
+        resolveSessionSet: (confirmed, entries) =>
+          resolveSessionPluginSet(confirmed, entries).active,
+      });
+      for (const entry of registry.getAll().values()) executor.register(entry);
+      executor.syncSessionActivations(SESSION_ID, [
+        "narrator",
+        "optional-plugin",
+        "uninstalled",
+      ]);
+      // optional-plugin is a member whose code waits for approval (trust gate).
+      expect(executor.getActivePlugins(SESSION_ID)).toEqual([
+        "narrator",
+        "optional-plugin",
+      ]);
+    });
   });
 
   describe("explicit plugin selection and core defaults", () => {
@@ -621,7 +742,7 @@ describe("Session plugin routes (real sessionRoutes)", () => {
       expect(body.activePlugins).not.toContain("unsafe-community");
     });
 
-    it("rejects creation when conflicts make a requested dependency unavailable", async () => {
+    it("turns off a requested plugin whose dependency lost a conflict, and says why", async () => {
       registry.register(
         makeEntry({
           id: "dependent-plugin",
@@ -664,11 +785,89 @@ describe("Session plugin routes (real sessionRoutes)", () => {
         }),
       });
 
-      expect(res.status).toBe(400);
+      expect(res.status, await res.clone().text()).toBe(201);
+      const session = (await store.getSession(
+        "sess-unsatisfied-requires-create",
+      ))!;
+      // Confirmed, so it comes back with its dependency; off until then.
+      expect(session.activePlugins).toContain("dependent-plugin");
+      expect(session.activePlugins).not.toContain("required-plugin");
+      const view = (await (
+        await app.request(
+          "/api/sessions/sess-unsatisfied-requires-create/plugins",
+        )
+      ).json()) as { unavailable: unknown[] };
+      expect(view.unavailable).toEqual([
+        expect.objectContaining({
+          pluginId: "dependent-plugin",
+          code: "missing-provider",
+          contract: "required-plugin@1",
+        }),
+      ]);
+    });
+
+    it("turns off a core plugin whose provider the player turned off, and brings it back with it", async () => {
+      registry.register(
+        makeEntry({
+          id: "opening-reader",
+          summary: makeSummary({
+            id: "opening-reader",
+            name: "Opening Reader",
+            pluginType: "core-plugin",
+            requires: ["pregame@1"],
+          }),
+          source: "builtin",
+        }),
+      );
+      const create = await app.request("/api/sessions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: "sess-dependent-off",
+          plugins: [],
+          excludedPlugins: ["pregame"],
+        }),
+      });
+      expect(create.status, await create.clone().text()).toBe(201);
+      const unavailable = async () =>
+        (
+          (await (
+            await app.request("/api/sessions/sess-dependent-off/plugins")
+          ).json()) as { unavailable: { pluginId: string }[] }
+        ).unavailable;
+      expect(await unavailable()).toEqual([
+        expect.objectContaining({
+          pluginId: "opening-reader",
+          code: "missing-provider",
+          contract: "pregame@1",
+        }),
+      ]);
       expect(
-        await store.getSession("sess-unsatisfied-requires-create"),
-      ).toBeNull();
-      expect(await res.text()).toContain("Conflicts");
+        runnablePluginIds(
+          (await store.getSession("sess-dependent-off"))!.activePlugins,
+          registry,
+        ),
+      ).not.toContain("opening-reader");
+
+      const enable = await app.request(
+        "/api/sessions/sess-dependent-off/plugins/pregame",
+        { method: "PUT" },
+      );
+      expect(enable.status).toBe(200);
+      expect(await unavailable()).toEqual([]);
+
+      // Turning the provider off in game keeps the dependent confirmed.
+      const disable = await app.request(
+        "/api/sessions/sess-dependent-off/plugins/pregame",
+        { method: "DELETE" },
+      );
+      expect(disable.status).toBe(200);
+      expect(
+        (await store.getSession("sess-dependent-off"))?.activePlugins,
+      ).toContain("opening-reader");
+      expect(await unavailable()).toEqual([
+        expect.objectContaining({ pluginId: "opening-reader" }),
+      ]);
     });
 
     it("treats a world's required contracts as a requirer on create and on later toggles", async () => {
@@ -724,7 +923,7 @@ describe("Session plugin routes (real sessionRoutes)", () => {
       });
     });
 
-    it("refuses creation when no installed plugin provides a world-required contract", async () => {
+    it("starts a world whose required contract has no provider, and names it", async () => {
       await store.upsertWorld({
         id: "unplayable-world",
         name: "Unplayable World",
@@ -743,12 +942,54 @@ describe("Session plugin routes (real sessionRoutes)", () => {
         }),
       });
 
-      expect(res.status).toBe(400);
+      // A missing piece never stops the game; the player is told what it is.
+      expect(res.status).toBe(201);
       expect(await res.json()).toMatchObject({
-        code: "world_requirement_unmet",
-        details: { contract: "absent-check@1", code: "missing-provider" },
+        unmetRequirements: [
+          { contract: "absent-check@1", code: "missing-provider" },
+        ],
       });
-      expect(await store.getSession("sess-unmet-world")).toBeNull();
+      expect(await store.getSession("sess-unmet-world")).toMatchObject({
+        metadata: {
+          pluginSelection: { requiredContracts: ["absent-check@1"] },
+        },
+      });
+    });
+
+    it("starts a world with dimensions no active plugin keeps, without them", async () => {
+      await store.upsertWorld({
+        id: "dimension-world",
+        name: "Dimension World",
+        description: "Test world",
+        metadata: {
+          dimensions: {
+            stamina: {
+              name: "Stamina",
+              schema: { type: "integer", minimum: 0 },
+              initialValue: 3,
+            },
+          },
+        },
+        createdAt: "2026-10-15T00:00:00.000Z",
+      });
+
+      const res = await app.request("/api/sessions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: "sess-no-dimension-provider",
+          worldId: "dimension-world",
+          plugins: [],
+        }),
+      });
+
+      expect(res.status).toBe(201);
+      expect(await res.json()).toMatchObject({
+        ignoredDimensions: ["stamina"],
+      });
+      expect(
+        await store.listWorldDataImportLedger("sess-no-dimension-provider"),
+      ).toEqual([]);
     });
 
     it("creates the session in a language the world has an edition for", async () => {

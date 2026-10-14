@@ -32,7 +32,7 @@ export default async function handler(ctx) {
     // Flat shape — matches the world seed (media/presence.json), the schema,
     // and every frontend read site (stage-selectors, portrait-gallery-panel,
     // character-avatar-renderer). Records are keyed by characterId and fully
-    // overwritten each RPC, so any legacy wrapped record self-heals on rewrite.
+    // overwritten each RPC.
     value: {
       ...presence,
       updatedAt: now,
@@ -307,7 +307,7 @@ async function replacementPayload(ctx, payload) {
     rows.find(
       (row) =>
         typeof row.value?.characterId === "string" &&
-        characterId.endsWith(`-${row.value.characterId}`),
+        characterId === `npc-${row.value.characterId}`,
     );
   if (!row) throw new Error("Character portrait is unavailable");
   const presence = row.value;

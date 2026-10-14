@@ -84,7 +84,7 @@ markers in source — update it when adding or removing one.
 
 ## Commands
 
-Toolchain versions come from `mise.toml` (Node 26, pnpm 12.6.0, actionlint).
+Toolchain versions come from `mise.toml` (Node 26.10.0, pnpm 12.10.1, actionlint).
 
 ```bash
 pnpm install --frozen-lockfile  # also builds @covel/plugin-handlers-utils (prepare)
@@ -179,6 +179,7 @@ bundled `worlds/` and `plugins/`.
   its pages are `docs/`, and it is published under `docs/` of the showcase
   site).
   The desktop shell validates persisted window geometry with its direct Zod dependency.
+  Web theme and color scheme changes come from SettingsStore through the appearance helpers; there is no separate theme provider.
 - `packages/` — framework libraries; responsibilities and consumers are in
   `docs/internals/packages.md`. In brief:
   - `plugin-handlers-utils` — the public plugin-author SDK (`PluginAPI`, handler,
@@ -230,11 +231,14 @@ relative imports**. Workspace packages export TS source directly
 as the standalone author SDK: `pnpm install` and Turbo's `^build` edge rebuild it,
 and so does the dev server at every start of its process when the build is older
 than the source (`scripts/ensure-plugin-sdk.mjs`, preloaded by the server's `dev`
-scripts; a change to the SDK source restarts the server). After editing its
+scripts; a change to the SDK source restarts the server). The SDK's own Turbo
+lint/test tasks also wait for its build: their test imports reach its `dist`
+through `shared`. After editing its
 source a direct `pnpm --filter <pkg> test` still needs
-`pnpm --filter @covel/plugin-handlers-utils build` first. It is not on npm, so
-nothing outside this workspace can depend on it by version — a standalone plugin
-ships self-contained and bundles the helpers it uses.
+`pnpm --filter @covel/plugin-handlers-utils build` first. It is not on npm; the
+host resolves it and `zod` for the modules of every plugin, bundled or installed
+(`provideHostModules` in `plugin-loader`), so a standalone plugin imports them
+directly and bundles only its other dependencies.
 
 `plugin-handlers-utils` is the root of the dependency graph and depends on no
 workspace package; `shared` sits directly above it, and `@covel/server` composes

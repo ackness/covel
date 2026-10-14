@@ -76,6 +76,7 @@ Another page can jump into a session with a parameter and ask for a panel to be 
 
 - This request is used only once. After the session is restored and `GameView` has mounted, the page handles the request and removes the `panel` parameter from the address.
 - On a phone, the request is not swallowed by the drawer: the page waits until the drawer and the asynchronously loaded UI specs are both ready, and only then selects the target panel.
+- The Images entry opens only a right-panel spec declaring top-level `navTarget: "images"`; icons do not assign navigation destinations. If several panels declare it, the first by `groupOrder` and load order wins. Undeclared panels remain manually accessible; community image plugins must add this field to their gallery spec. After a successful load, a missing target (including an explicitly requested plugin panel) clears the request and shows “This panel is not available in this session.” Later spec reloads do not replay it. A failed load retains the request until the player retries loading.
 - When the session ID changes, the session view is rebuilt as a whole. This keeps drafts and panel selections from mixing with the previous session.
 - The debug page switches its data by the `sid` in the address. When you return to the session from the debug page, the ID currently being viewed also takes priority.
 
@@ -141,8 +142,8 @@ The second column is the panel ID, which is the `id` in the UI spec. Every right
 | core-quest | core-quest | scroll-text | core-quest | quests | Quest log (in progress, with a checklist of objectives / completed / failed groups) |
 | dice-check | dice-check-panel | dices | (none) | checks | Check records (a reverse-order list of receipts: dice formula / success or failure colors / critical emphasis, `alwaysRender`) |
 | inventory | inventory | backpack | inventory | items | Inventory (equipped group + backpack list, quantity badge + tags pill, `alwaysRender`) |
-| dashscope-image-gen · openai-image-gen | `<plugin>-gallery` | image | image-studio | images | Story illustration gallery (`ImageGallery`, `alwaysRender`); each of the two image plugins has its own, and both group IDs are `image-studio`. Both provide the single-provider extension point `media.image-flow@1`, so only one of them can be enabled in the same session |
-| dashscope-image-gen · openai-image-gen | `<plugin>-jobs` | loader | image-studio | \_jobs | Generation job view (`ImageJobs`, `alwaysRender`) |
+| dashscope-image-gen · openai-image-gen | `<plugin>-gallery` | image | image-studio | images | Story illustration gallery (`MediaGallery`, `alwaysRender`); each of the two image plugins has its own, and both group IDs are `image-studio`. Both provide the single-provider extension point `media.image-flow@1`, so only one of them can be enabled in the same session |
+| dashscope-image-gen · openai-image-gen | `<plugin>-jobs` | loader | image-studio | \_jobs | Generation job view (`JobList`, `alwaysRender`) |
 | dashscope-image-gen · openai-image-gen | `<plugin>-trigger` | wand | image-studio | (none) | "Generate image" manual trigger button (`expectsBackgroundFollower`, `alwaysRender`) |
 | mimo-tts | mimo-tts-audio-tab | headphones | tts-studio | tracks | Narration voice playlist (`AudioPlayer`, `alwaysRender`) |
 | living-world-rules | living-world-rules | book-marked | world-data | rules | World rules (long-term settings / taboos, read-only; seeded by the world-data import, a sub-tab of the `world-data` group) |
@@ -152,7 +153,7 @@ The second column is the panel ID, which is the `id` in the UI spec. Every right
 | scene-stage | scene-cast | users-round | scene-stage | active-cast | Characters on stage in the current scene (read-only, only name + role; the internal selection signal stays in plugin_data, `alwaysRender`) |
 | tabletop-rules | tabletop-rules | dices | (none) | checks | Attribute check entry button (calls `tabletop-rules/check` to open the check form, `alwaysRender`) |
 | world-init | world-overview | map | world-data | session.dimensions | Current value and version of any dimension (read-only during play), plus pending settlement recovery (`alwaysRender`) |
-| world-init | world-schema | sliders-horizontal | world-data | schema | Character attribute schema |
+| world-init | world-schema | sliders-horizontal | world-data | session.characterSchema | Character attribute schema |
 | world-time | world-time | calendar-days | (none) | clock | Current world time (`/current/display` + reason for the change) |
 | world-time | time-definition | calendar-days | (none) | definitions | Time rules (the current calendar definition, read-only; when there is no definition, it explains the default calendar) |
 
@@ -258,10 +259,13 @@ Key fields:
 | `label`                | The panel's own name, shown on its sub-tab                                                                                                                                                                                                                    |
 | `shortLabel`           | The short name used on the tab bar. Optional. See [activity-bar short labels](#activity-bar-short-labels)                                                                                                                                                     |
 | `icon`                 | The icon name (Lucide, kebab-case). Only the icons the framework allows can be used. For the full list, see [Component catalogue / Display](./ui-components.md#display)                                                                                       |
+| `dataSource.source`    | Generic read-only session source: `session.characters` (keyed by character ID) or `session.characterSchema` (the schema itself, with attributes at `/attributes`). Takes precedence over `namespace`; missing data is an empty object.                        |
 | `dataSource.namespace` | Which data the panel reads: `pluginData[pluginId][namespace]`. `_jobs` is a special value, see below                                                                                                                                                          |
 | `dataSource.bindings`  | Optional. Connects up to 8 more of the plugin's own namespaces, see below                                                                                                                                                                                     |
 | `emptyState.message`   | The hint shown when the data is empty. See [Empty state rendering](#empty-state-rendering)                                                                                                                                                                    |
 | `view`                 | The interface itself: a tree built from catalog components. The web interface runs only this declarative kind of spec. Interface declarations that are not JSON, such as `.tsx` or `.js`, are not supported. The API gives a diagnostic and removes that item |
+
+Session sources update from complete snapshots and committed character/schema events without a plugin-owned copy. Plugin state tables live only under front-end `gameState.tables`; World Model fields such as characters, character schema and dimensions remain separate at the top level. Invalid dimension snapshots show a local panel notice; the opening scene still shows the world name and tags.
 
 **`_jobs`: a virtual data source for background jobs.** When `dataSource.namespace` is set to `_jobs`, the panel receives this plugin's background manual jobs and event jobs (mapped from `_runtime_jobs`). They are keyed by jobId, and each value contains:
 
@@ -284,12 +288,14 @@ Key fields:
 
 ### Spec Validation and Versions
 
-A UI spec is **untrusted plugin input**. When `/api/ui-specs` assembles the response, it validates each spec with Zod (the outer structure and `specVersion`).
+A UI spec is **untrusted plugin input**. Its rules exist once: `pluginUiSpecIssues` in `@covel/shared` (`packages/shared/src/schemas/ui-spec.ts`). `pnpm validate:plugin`, the ZIP install and `/api/ui-specs` all use it when they load a panel, so a spec that passes the check is not dropped in the game for its format.
 
-- **Versions.** `specVersion` can be left out, and then it is treated as v1. A version higher than the server supports (currently `CURRENT_UI_SPEC_VERSION = 1`, in `apps/server/src/routes/misc-api/ui-spec-schema.ts`) is rejected. This way, an old server that meets a new plugin package reports a clear error instead of drawing a broken panel.
+- **Versions.** `specVersion` can be left out, and then it is treated as v1. A version higher than the host supports (currently `CURRENT_UI_SPEC_VERSION = 1`) is rejected. This way, an old host that meets a new plugin package reports a clear error instead of drawing a broken panel.
+- **`webview`.** `entry` points to an `.html` file in the package of at most 512 KiB; `height` is an integer from 80 to 800. `surfaces` can only be `panel` and `stage`.
+- **Data ownership.** `pluginId`, `sourcePlugin` and `sourcePluginId` can only name this plugin's ID; `dataSource.bindings` can only be fixed namespaces of this plugin, at most 8.
 - **Either `view` or `webview`, not both.** Each spec must declare `view` (an object) or `webview` (an HTML document). If both are present or both are missing, validation fails.
 - **Recursive validation of `view`.** The checks cover `component` / `type`, `children`, named `slots`, `repeat`, and the structure of the action bindings in `on` / `watch`. Component names must be in the shared `PLUGIN_UI_COMPONENT_NAMES`. An unknown component produces a diagnostic with its path on the server. `props` and directive expressions are not restricted. They are parsed at runtime by the components and json-render, so plugins can extend the shape of their data.
-- **Declarations that are not JSON.** The loader records where such a declaration is with `_componentPath`, so the API can give a specific diagnostic. It is not a valid UI spec, and it is not a way to let the web app run plugin code. A spec with this field is removed, even if it also has `view`. Other valid JSON specs from the same plugin are still shown.
+- **Declarations that are not JSON.** `contributes.ui` accepts only `.json` files. `pnpm validate:plugin` and installation reject any other file; at load such an entry gets a diagnostic, and the other valid JSON specs from the same plugin are still shown. The browser never runs a plugin's component file.
 - **When a custom component is needed.** Declare `webview.entry` and provide a separate HTML file. Or compose catalog components and bind the framework's actions. The browser does not import a plugin's `.tsx` / `.js` modules directly.
 - **One bad spec does not break the whole response.** A spec that fails validation is removed from where it sits, and the top-level `diagnostics[]` of the response gives the specific diagnostic:
 
@@ -303,7 +309,7 @@ A UI spec is **untrusted plugin input**. When `/api/ui-specs` assembles the resp
 
 UI declarations come from the registry snapshot taken at startup. Static assets are loaded on demand and cached by snapshot. A GET request only reads and filters by the session's active set. It does not scan the plugin directory, and it does not write UI definitions into `plugin_data` (see [api.md](./api.md#get-apiui-specs) for details).
 
-When static assets are read, the real path is checked after symbolic links are resolved. A link that points inside the plugin root is allowed. A link that points to a file or directory outside the root is rejected. When one asset fails to load, only the interface of that runtime is skipped. The panels of other runtimes are not affected.
+When static assets are read, the real path is checked after symbolic links are resolved. A link that points inside the plugin root is allowed. A link that points to a file or directory outside the root is rejected. When a spec cannot be read or breaks a rule, only that spec is removed, with an explanation in `diagnostics[]` and in the server log; the plugin's other panels are still shown.
 
 ### Activity-Bar Short Labels
 
@@ -369,7 +375,7 @@ When a panel's namespace has no data (`Object.keys(data).length === 0`), `Plugin
 | `npc-graph-panel.json` | No characters or faction relations found yet. They appear as the story goes on…                |
 | `world-schema.json`    | The character attribute schema is not generated yet. It appears once the world is initialized… |
 
-**`alwaysRender: true` is the exception.** Some panels do not render from namespace data. For example, the `WorldDimensions` in `world-overview.json` reads the session context directly, and `ImageGallery` / `ImageJobs` in `gallery.json` / `jobs.json` handle an empty state themselves. Such a spec declares `"alwaysRender": true` at the top level. When `view.component` is `ImageGallery` / `ImageJobs`, the framework also detects this automatically (`specUsesComponent`). These specs **may leave out `emptyState.message`**, because `PluginPanel` never reaches the empty-state step.
+**`alwaysRender: true` is the exception.** Some panels do not render from namespace data. For example, the `WorldDimensions` in `world-overview.json` reads the session context directly. `MediaGallery` and `JobList` can handle empty lists themselves. Such a spec explicitly declares `"alwaysRender": true` at the top level. The framework only reads that field; it does not enable it automatically by component name. These specs **may leave out `emptyState.message`**, because `PluginPanel` never reaches the empty-state step. See [UI components](./ui-components.md#structured-list-props-and-actions) for component props.
 
 **Implementation**: the `PluginPanel` component in `apps/web/src/components/session/plugin-panel.tsx` (the `isEmpty` check and the `alwaysRender` short-circuit).
 
@@ -531,12 +537,13 @@ The original keys can still be read directly with `$state: "/someKey"`. Both way
 
 **Merge rules**:
 
-| Field                                               | Behavior                                                                                                    |
-| --------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| Same `group`                                        | Merged into one outer tab (switched with horizontal sub-tabs)                                               |
-| Different `group` or omitted                        | Separate outer tab (fallback key is `${pluginId}::${specId}`)                                               |
-| `groupLabel` / `shortLabel` / `icon` / `groupOrder` | On conflict, the **first declarer wins**, in the order `/api/ui-specs` returns them (the plugin load order) |
-| `groupOrder`                                        | Sort order of the outer tab in the activity bar (smaller numbers first, default 500)                        |
+| Field                                               | Behavior                                                                                                                                      |
+| --------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| Same `group`                                        | Merged into one outer tab (switched with horizontal sub-tabs)                                                                                 |
+| Different `group` or omitted                        | Separate outer tab (fallback key is `${pluginId}::${specId}`)                                                                                 |
+| `groupLabel` / `shortLabel` / `icon` / `groupOrder` | On conflict, the **first declarer wins**, in the order `/api/ui-specs` returns them (the plugin load order)                                   |
+| `groupOrder`                                        | Sort order of the outer tab in the activity bar (smaller numbers first, default 500)                                                          |
+| `navTarget`                                         | Optional; only `"images"` is supported. Each spec declares its own destination for Images navigation. Omitted specs stay manually selectable. |
 
 **Naming convention**: a group name shared across plugins works like a CSS class name. Authors add their own namespace prefix to avoid conflicts, for example `core.character` or `myorg.combat`. The framework does not add prefixes automatically.
 
@@ -570,7 +577,7 @@ The message area has two paths that run side by side. They use the same json-ren
 
 - Folded: `ui.render`, `ui-spec`, and notifications at level info / success, such as codex discoveries, achievements and status changes.
 - Not folded: forms, options, confirmations, images, and warning and error notifications.
-- Suggestion blocks (`plugin_message`) stay expanded in the current turn. After a new player message with updates appears, the block folds into "Earlier suggestions".
+- Plugin message surfaces (`plugin_message`) stay expanded in the current turn. After a later player message, the disclosure shows the provider’s localized name and “expand to review”, falling back to “Plugin content” when no name is available. Checks, quest updates and suggestions follow the same rule.
 - Players can turn on "Expand turn updates" (`ui.expandTurnUpdates`) under "General" in Settings, so they are expanded by default.
 - The `detailed` and `raw` views do not fold.
 - The theme package's `layout.turnNotes` decides where these updates go: `fold` is the default behavior described above; `inline` expands the latest turn by default; `margin` puts them in a side margin next to the story text when the session area is wide enough.
@@ -624,6 +631,8 @@ When a recovery retry happens, the kernel (`packages/runtime/src/commit/plugin-m
 
 ### Form Submission Flow
 
+A form needs a turn ID and an interaction submission handler. If either is missing, the UI asks the player to reopen the session and retry, and keeps the entered values. It does not send the field JSON as a player message or mark the form submitted.
+
 ```
 Player fills in the form → clicks the submit button
   → submitInteraction():
@@ -672,6 +681,7 @@ The stage reads the server's `ui.slot@1` projection. Each provider builds the ge
 
 - "Streaming" follows the kernel's convention: there is no streaming boolean. The condition is `executing` together with a story message ID that starts with `stream_`.
 - New narrative is shown character by character by `StageDialog`, and each paragraph stops and waits for the player to click. The last paragraph also pauses once, waiting for a closing click. Auto-play moves on by itself according to the pause time. An empty paragraph at the end of the text does not produce an empty pause.
+- Narrative text is separate from the “Continue the dialogue” button so screen readers can read it. Live announcements wait until typing finishes for the paragraph. Tab focuses the advance button; Enter or Space continues.
 - When typing catches up with the end of the stream, it does not jump to the decision panel automatically.
 - After the text has been read, and the turn execution has ended, the same spot is replaced by the unified decision panel. It shows, in order: the scene, a "Current context" summary, the "Decision" question, grouped options, and an inline free text input.
 - Right after submitting, the whole old decision panel is hidden, including areas added by plugins. While the new narrative is coming, "Generating" is shown. Narrative that was already read is not replayed.
@@ -690,7 +700,7 @@ The stage reads the server's `ui.slot@1` projection. Each provider builds the ge
 
 **Speaker name tags.**
 
-- The name tag reads `dialogue/current.paragraphSpeakers` for the current turn. `stage.direction` gives the character ID explicitly, and it is then resolved to `{ characterId, displayName } | null`.
+- The name tag reads `paragraphSpeakers` from `stage.dialogue@1`. Each entry is a display-name string or `null` (narration), not a character ID or an object. The provider converts its own data into this shape. See [Stage slot values](#stage-slot-values).
 - Live events of the same turn can be previewed first. An old committed mapping is not reused during the streaming phase of a retry of the same turn.
 - The typewriter and the speaker check share `splitStageParagraphs`. CRLF is turned into LF, and three or more line breaks count as one blank line separator. After the text ends, the number of paragraphs must match the mapping.
 - A character name tag is not shown for narration, for an unknown speaker, for an old message with no mapping, or when the turn does not match. An actor's focus does not take part in speaker attribution.
@@ -850,6 +860,77 @@ Kernel UI slots are a few fixed positions on the screen, such as the stage backg
 - The front end looks them up with exactly the same key. It does not guess the plugin namespace or the suffix of an ID.
 - The stage, avatars, the portrait gallery and the list of characters on stage all read these slots.
 
+### Stage Slot Values
+
+These are the return values for the four stage slots, defined in `packages/shared/src/extension-points/ui-slot.ts`. Each provider returns the object for its declared `slot`, without bundling the four objects together. Return `previous` when there is no change, or `null` to clear the slot.
+
+The four slot objects, and the actor, `visual` and choice objects below, accept only the listed fields. An invalid output skips that provider and keeps the previous valid value; it does not reject the whole session. `I18nText` is a string or a map from locale to string. `MediaRef` is a reference returned by the [media store](./media-store.md), not a path or a bare URL.
+
+#### `stage.backdrop@1`
+
+Every field is optional. `{}` is also valid.
+
+| Field     | Type                 | Required | Meaning                                                                                                                |
+| --------- | -------------------- | -------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `sceneId` | string               | No       | Scene identifier                                                                                                       |
+| `name`    | string               | No       | Scene name shown in the HUD                                                                                            |
+| `ref`     | MediaRef             | No       | Current background image; when absent, use the [background fallback chain](#background-fallback-chain-resolvebackdrop) |
+| `variant` | `"day"` or `"night"` | No       | Day/night marker. The HUD shows a moon only for `night`, otherwise a sun. Other enum values are not accepted           |
+| `label`   | I18nText             | No       | Extra status text in the HUD; does not affect background fallback                                                      |
+| `preload` | MediaRef[]           | No       | Images to preload; the schema has no item limit, and the client skips references whose MIME type is not `image/*`      |
+
+#### `stage.cast@1`
+
+The value is `{ actors, retainWhenEmpty }`. Both fields are required.
+
+| Field             | Type                                   | Required | Meaning                                                                                                                        |
+| ----------------- | -------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `actors`          | Array of the objects below, at most 64 | Yes      | Actors currently on stage; an empty array is valid                                                                             |
+| `retainWhenEmpty` | boolean                                | Yes      | When `actors` is empty, `true` keeps the previous portraits without highlights; `false` clears them. The schema has no default |
+
+Each actor:
+
+| Field         | Type                                                                          | Required | Meaning                                                                                              |
+| ------------- | ----------------------------------------------------------------------------- | -------- | ---------------------------------------------------------------------------------------------------- |
+| `characterId` | Non-empty string                                                              | Yes      | Character ID; uses the same ID to read `character.visual@1`                                          |
+| `displayName` | Non-empty string                                                              | Yes      | Display name                                                                                         |
+| `type`        | string                                                                        | No       | Character type                                                                                       |
+| `description` | string                                                                        | No       | Character description                                                                                |
+| `active`      | boolean                                                                       | No       | Whether to highlight this actor; if all actors omit it, highlight the first actor who is not exiting |
+| `exiting`     | boolean                                                                       | No       | Whether the actor is exiting                                                                         |
+| `visual`      | `{ variantId?: string, outfit?: string, expression?: string, pose?: string }` | No       | Requested portrait variant; all four fields are optional                                             |
+| `position`    | `left` / `center-left` / `center` / `center-right` / `right`                  | No       | Requested position                                                                                   |
+| `transition`  | `none` / `fade` / `slide-left` / `slide-right` / `dissolve`                   | No       | Portrait transition; the client uses `fade` when omitted                                             |
+
+#### `stage.dialogue@1`
+
+| Field               | Type                             | Required | Meaning                                                                                                                                 |
+| ------------------- | -------------------------------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `turnId`            | string                           | No       | The story turn being attributed. Set it when attributing the current text; name tags appear only when it matches the current story turn |
+| `paragraphSpeakers` | `(string \| null)[]`, at most 80 | Yes      | Display name for each paragraph; `null` means narration or no attribution                                                               |
+
+For example, `{"turnId":"<story-turn-id>","paragraphSpeakers":["Mio",null,"Rin"]}` attributes three paragraphs to Mio, narration and Rin. Set `turnId` to the current story's turn ID. The text is split on blank lines after CRLF is converted to LF and three or more line breaks are reduced to two. When the text ends, the paragraph count must equal the array length; otherwise no name tags from the mapping are shown. A live mapping must also come from the current turn's preview. A committed mapping from before a retry cannot be reused.
+
+#### `stage.choices@1`
+
+| Field      | Type                                   | Required | Meaning                                                                                       |
+| ---------- | -------------------------------------- | -------- | --------------------------------------------------------------------------------------------- |
+| `turnId`   | string                                 | No       | When set, the choices apply only to the matching story turn; omitting it leaves them unscoped |
+| `scene`    | I18nText                               | No       | Scene text in the decision panel                                                              |
+| `recap`    | I18nText                               | No       | "Current context" recap; hidden when omitted or empty                                         |
+| `decision` | I18nText                               | No       | The question to decide now                                                                    |
+| `choices`  | Array of the objects below, at most 64 | Yes      | Choices; an empty array is valid                                                              |
+
+Each choice:
+
+| Field   | Type             | Required | Meaning                                                                                       |
+| ------- | ---------------- | -------- | --------------------------------------------------------------------------------------------- |
+| `id`    | Non-empty string | Yes      | Choice identifier                                                                             |
+| `text`  | string           | Yes      | Text displayed and used for the player's message; the client trims it and skips blank choices |
+| `label` | I18nText         | No       | Extra description; does not replace `text`                                                    |
+
+See [Stage mode](#stage-mode-stage-view) for turn matching, the default decision question and free input.
+
 ### Stage Music
 
 `stage.music@1` stores "what music should be playing behind the session right now":
@@ -935,7 +1016,7 @@ The built-in `world-time` (current time), `core-quest` (the next unfinished obje
 
 - A panel's data binding and the `pluginId` field of an action can point only to the plugin that owns the panel. The loader rejects targets that point to another plugin or that are computed at runtime.
 - To share data between plugins, use a kernel slot or the World Model.
-- A component that needs kernel data before its own namespace has any records must set `alwaysRender: true`.
+- A component that needs kernel data before its own namespace has records can bind a session source with `dataSource.source`. A component that reads session context itself must set `alwaysRender: true`.
 - Panels in past messages render from their saved `stateOverride`. They do not subscribe to live namespaces, tasks or the whole session context. A collapsed past card is not mounted.
 - Live plugin namespaces have only one source of truth on the front end: the external plugin-data store. The session reducer keeps only the `message` namespace needed to build snapshots of past message cards, along with the derived persistent task execution steps. Updates to unrelated namespaces do not replace the session context's values.
 

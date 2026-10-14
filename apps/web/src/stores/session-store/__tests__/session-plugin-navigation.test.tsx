@@ -377,6 +377,48 @@ it("activates the selected community plugin after explicit approval on entry", a
   });
 });
 
+it("replaces the world-data notices with what enabling the plugin imported", async () => {
+  const { result } = setup();
+  const notice = {
+    level: "warning" as const,
+    sourceId: "facts",
+    message: 'No active receiver for data contract "notes@1"; source skipped',
+  };
+  api.enableSessionPlugin
+    .mockResolvedValueOnce(approval)
+    .mockResolvedValueOnce({
+      ...enabled,
+      worldData: {
+        receivers: [plugin.id],
+        imported: 2,
+        conflicts: 0,
+        notices: [],
+      },
+    });
+  await act(async () => {
+    result.current.dispatch({
+      type: "SET_WORLD_DATA_NOTICES",
+      notices: [notice],
+    });
+    result.current.dispatch({
+      type: "LOAD_SESSION_PLUGINS",
+      plugins: [{ ...plugin, active: false, approvalRequired: true }],
+    });
+  });
+  expect(result.current.state.sessionPlugins[0]?.active).toBe(true);
+  expect(result.current.state.worldDataNotices).toEqual([]);
+
+  // A toggle that imports nothing leaves the notices as they are.
+  await act(async () => {
+    result.current.dispatch({
+      type: "SET_WORLD_DATA_NOTICES",
+      notices: [notice],
+    });
+    await result.current.actions.toggleSessionPlugin(plugin.id, true);
+  });
+  expect(result.current.state.worldDataNotices).toEqual([notice]);
+});
+
 describe("authorizing several paused plugins on entry", () => {
   const second: SessionPlugin = {
     ...plugin,
@@ -491,6 +533,7 @@ describe("authorizing several paused plugins on entry", () => {
 const catalog = (name: string) => ({
   items: [{ ...plugin, displayName: name }],
   commands: [{ id: name, label: name, pluginId: plugin.id }],
+  unavailable: [],
 });
 
 it("ignores a plugin GET from an earlier visit to the same session", async () => {

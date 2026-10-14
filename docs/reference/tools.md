@@ -43,15 +43,12 @@
 | create-character-form | local | char-creator | auto-allow | 创建开场角色表单：只收集角色名与声明过的字符串/枚举属性，数值与复合属性保留默认值 |
 | update-affinity | local | affinity | auto-allow | 批量应用本回合玩家对 NPC 的好感度变化；未知名字按 0 分新建，分数跨回合累计并限制在 [-100, 100] |
 | advance-world-time | local | world-time | auto-allow | 结算本回合叙事经过的世界时间：提交时长而非日历算术，随机模式省略数量，随故事一并提交 |
-| set-world-schema | local | world-init | auto-allow | `initialize-world` 的内部 schema 写入原语 |
-| set-world-dimensions | local | world-init | auto-allow | 采纳维度声明，不重置会话进度 |
 | dimension-rule-get | local | world-init | auto-allow | 维护时分页读取私有规则或值 schema |
 | update-dimensions | local | world-init | auto-allow | 绑定本轮叙事，整批 CAS 更新或明确结算无变化 |
 | submit-world-facts | local | world-ir | auto-allow | 以 Function Calling 参数提交并校验完整 `contract:world-ir@1` |
 | sync-codex-entries | local | codex | auto-allow | 一次提交本轮图鉴变化，按标题新建或补充条目 |
 | generate-guide | local | guide | auto-allow | 原子写入前情摘要、当前决策与玩家口吻快捷回复 |
 | upsert-npc-graph | local | npc-graph | auto-allow | 批量写入 NPC 节点与关系边（按 name 引用，工具内部去重并分配短 ID） |
-| list-npc-graph | local | npc-graph | auto-allow | 兼容读取工具；当前 extractor 已通过 prompt 注入读取图，不向模型声明 |
 | plan-story-events | local | story-events | auto-allow | 校验剧情策划的后续隐藏事件（≤2/次，可撤回未发生的计划） |
 | submit-dashscope-text-prompt | local | dashscope-image-gen | auto-allow | 提交文本画面提示并发射固定 DashScope 出图事件 |
 | submit-dashscope-structured-prompt | local | dashscope-image-gen | auto-allow | 提交结构化画面提示并发射固定 DashScope 出图事件 |
@@ -155,6 +152,8 @@ export default function (covel) {
 #### 模型写错的参数 JSON
 
 模型写出的参数 JSON 有几种反复出现的笔误，而且每种只有一个合理的意思。框架在解析时直接改正它们，省掉让模型重交的一轮。改正后的内容仍然要通过工具的 schema。
+
+修正后的参数会以合法 JSON 写回模型历史，`PreToolUse` 改写的工具名和参数也会同步。无法修正时仍返回 `INVALID_ARGS`，历史把原文保留为 JSON 字符串，不伪装成已执行的空对象。原始响应和工具调用 trace 保留诊断依据。框架不会在服务商拒绝历史参数后原样重发请求。
 
 | 笔误                           | 例子                                                   | 怎么改                                                                                                                                                                                                                               |
 | ------------------------------ | ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -459,9 +458,8 @@ interface UIRenderPart {
 
 - REST `PUT /api/sessions/:id/plugin-data/...`
 - `plugin.data` / `plugin.data.batch` 的提交，包括由函数 runtime 的输出规范化出来的 proposal
-- 函数 runtime 的 `ctx.pluginData`
+- 函数 runtime 和 agent guard 的 `ctx.pluginData`
 - RPC handler 的 store view。所有插件的 RPC action（包括内置插件的）都通过 `createRpcHandlerStoreView()` 得到一个绑定了会话和插件的即时写入能力
-- 内置函数 runtime 和 agent guard 通过 `createTrustedHandlerStore()` 得到的显式提案写入能力
 
 两类插件句柄都不暴露宿主的事务、会话生命周期或关闭存储的方法。框架自己的特权写入者（后台任务运行器、runtime 日志）直接调用 store，不走这些入口。
 
@@ -529,7 +527,7 @@ interface UIRenderPart {
 
 ### runtime-done
 
-agent 用它告诉框架“我做完了”。业务工具都调用完之后调用它，这个 runtime 就结束，不用再让模型写一段收尾的话。
+agent 用它告诉框架“我做完了”。业务工具都调用完之后调用它，这个 runtime 就结束，不用再让模型写一段收尾的话。只有成功的 `runtime-done` 调用返回结束哨兵才会结束循环；其他工具返回同名字段只是普通数据。
 
 | 参数   | 类型   | 必需 | 描述              |
 | ------ | ------ | ---- | ----------------- |
@@ -550,7 +548,7 @@ agent 用它告诉框架“我做完了”。业务工具都调用完之后调�
 | scope | enum   |      | `recall` / `archival` / `all`，默认 `all` |
 | limit | number |      | 最多返回几条，1–20，默认 5                |
 
-每条结果的内容最多 500 个字符。archival 结果的 `key` 是可读的来源标识；lorebook 的首个关键词为空时可用可读的条目 ID，但不会回退到 UUID。UUID 形式的关键词或插件数据 key 也不返回，结果省略 `key`，仍保留正文。检索的规则见下一节。
+关键词和向量检索都返回查询词附近的摘录：正文最多 500 个字符，省略号和 recall 的角色前缀另计。语义命中没有出现查询词时，返回开头的摘录。工具保留检索器的摘录，不再截掉末尾。archival 结果的 `key` 是可读的来源标识；lorebook 的首个关键词为空时可用可读的条目 ID，但不会回退到 UUID。UUID 形式的关键词或插件数据 key 也不返回，结果省略 `key`，仍保留正文。检索的规则见下一节。
 
 ### 插件记忆与向量搜索
 
@@ -562,7 +560,7 @@ agent 用它告诉框架“我做完了”。业务工具都调用完之后调�
 - 只在少数文本里出现的词（人名、物品名）权重高。几乎每段都有的词权重接近零。长文本不会因为长而吃亏。
 - 它只认字面，不认同义改写。所以工具说明要求调用方在查询里写上涉及的名字，并可以同时给出几种说法。
 
-配置了 embedding slot，并且存储支持向量时，改走向量检索；失败时回退到 BM25。
+配置了 embedding slot，并且存储支持向量时，改走向量检索；失败时回退到 BM25。向量 recall 结果不足时，用关键词结果补齐，按消息 ID 去重；同一回合中正文相同的不同消息仍各算一条。消息 ID 只供内部去重，不进入工具返回的模型正文。
 
 **recall 的范围**是最近 500 条消息，加上全部历史摘要（`history.compact@2` 写入的摘要段，结果的 `role` 为 `summary`）。所以更早的回合仍然能通过摘要查到。
 
@@ -731,6 +729,8 @@ JSON Schema 只能检查字段的形状，检查不了“这个结果和骰子�
 
 ### suspend
 
+只有成功的 `suspend` 工具调用返回挂起哨兵才会挂起。其他工具返回 `_covelSuspend` 字段只是普通数据；需要挂起的 agent 必须声明并调用 `suspend`。
+
 让当前 runtime 停下来，等玩家给出输入后再继续。声明在 `packages/tools/src/builtin/suspend.ts`。
 
 | 参数         | 类型   | 必需 | 描述                                                                                                                                             |
@@ -754,10 +754,11 @@ JSON Schema 只能检查字段的形状，检查不了“这个结果和骰子�
 - `resumeSchema` 必须能被 `JSON.stringify`，因为现场要写进存储。
 - 一个 runtime 只有最新的那次挂起能恢复。同一个 runtime 之后又挂起过、玩家之后又玩了回合，或者插件换了版本，旧的挂起项在恢复时被作废，见[过时的挂起项](./api.md#过时的挂起项)。恢复接口按挂起项的 ID 查找。
 - `@covel/tools` 的 `createDefaultToolRegistry` 把它注册为内置工具。agent 仍要在 `agent.tools.builtin` 里列出 `suspend` 才能调用。
+- 后台运行的 runtime 不能挂起，因为没有玩家在等它。声明了 `schedule.manual.execution: background` 或 `schedule.completion.mode: detached` 的 runtime 在 `agent.tools.builtin` 里列出 `suspend`，加载时被拒绝。后台作业里的 runtime 真的挂起了（function handler 返回挂起，或者后台运行触发的事件 runtime 调用了 `suspend`），作业记为 `failed`，什么也不提交。
 - 恢复是接着被挂起的那次执行继续：
   - `ctx.locale`、`ctx.logicalTurn`、`ctx.turnNumber` 取挂起时的值，不随会话之后的回合计数变化。
   - `ctx.world` 是恢复时已提交的 World Model，再叠加现场里缓冲的写入。
-- `completion.require: tool-use` 在恢复后只承认挂起前**成功**的业务工具调用。挂起前失败、又没有被同名的成功调用抵消的工具仍算没完成，恢复后必须重新完成。
+- `completion.require: tool-use` 在恢复后沿用同一完成规则：声明了 `afterTools` 时，只承认列表中的成功调用；没有列表时，承认成功的业务工具调用。挂起前失败、又没有被同名的成功调用抵消的工具仍算没完成，恢复后必须重新完成。
 
 ### search-tools（框架注入，延迟工具加载）
 
@@ -1083,6 +1084,9 @@ Attributes:
 - 持久化写入返回 `withPendingProposals(...)`，让提交流程负责落库。
 - 用 plugin 工具封装插件自己的数据 schema 和批量写入逻辑。
 
+<a id="set-world-schema"></a>
+<a id="set-world-dimensions"></a>
+
 ### initialize-world
 
 **所属**: world-init (`plugins/world-init/tools/initialize-world.js`)
@@ -1094,30 +1098,6 @@ Attributes:
 | `types`       | string[]        |      | 默认 `["npc", "companion"]`                                             |
 | `attributes`  | AttributeDef[]  | ✓    | 至少 15 项，覆盖 `stats` / `bio` / `abilities` / `equipment` / `social` |
 | `definitions` | WorldDimensions |      | 没有作者声明时可提供生成的 definition map；世界有声明时不被采用         |
-
-**输出**: `{success, attributeCount, dimensionCount, worldSchema, preGameDone:true}`
-
-维度定义用谁的：
-
-- 世界的作者已经声明了维度时，用作者的定义。模型同时给出的 `definitions` 不被采用，调用照常成功。不拒绝的原因：提示词没法告诉模型这个世界有没有声明，拒绝只会让每局开头多一次模型调用。
-- 没有声明的、只有设定文本的世界，才使用模型生成的 definitions。
-- 工具不把资源结构变成角色字段，也不变成 constant lorebook。
-
-`worldSchema` 同时是 `world-init/schema-gen` 的 runtime 输出，交给同一次 setup 执行里的 `char-creator/player-init`。这样下游不用去读还没提交的存储。
-
-这个 runtime 声明了 `agent.loop.completion: {require: tool-use, afterTools: [initialize-world]}` 和 `io.output.schema`。所以模型只需要生成一次工具参数：工具成功后，框架直接用输出 schema 检查结果并结束。
-
-**使用者**: `world-init/schema-gen`
-
-### set-world-schema
-
-**所属**: world-init (`plugins/world-init/tools/set-world-schema.js`)
-
-定义世界的角色类型和属性。它返回一条 `character.schema.set` proposal，写入会话的 World Model。payload 是 `{types,attributes}`，版本由内核递增。它不写插件私有的 schema namespace。
-
-| 参数       | 类型           | 必需 | 描述                          |
-| ---------- | -------------- | ---- | ----------------------------- |
-| attributes | AttributeDef[] | ✓    | 角色属性定义数组（至少 1 个） |
 
 **AttributeDef**:
 
@@ -1135,20 +1115,19 @@ Attributes:
 | valueType    | enum           |      | `map` 的值类型（`string` / `number` / `boolean`）                     |
 | description  | I18nText       |      | 属性说明（字符串或 locale → string 记录）                             |
 
-**输出**: `{ success, attributeCount, categories, worldSchema }`
+**输出**: `{success, attributeCount, dimensionCount, worldSchema, preGameDone:true}`
 
-**当前用途**: `initialize-world` 内部用它来组合。内置的 `world-init/schema-gen` 不直接向模型声明它。
+维度定义用谁的：
 
-### set-world-dimensions
+- 世界的作者已经声明了维度时，用作者的定义。模型同时给出的 `definitions` 不被采用，调用照常成功。不拒绝的原因：提示词没法告诉模型这个世界有没有声明，拒绝只会让每局开头多一次模型调用。
+- 没有声明的、只有设定文本的世界，才使用模型生成的 definitions。
+- 工具不把资源结构变成角色字段，也不变成 constant lorebook。
 
-**所属**: world-init (`plugins/world-init/tools/set-world-dimensions.js`)
+`worldSchema` 同时是 `world-init/schema-gen` 的 runtime 输出，交给同一次 setup 执行里的 `char-creator/player-init`。这样下游不用去读还没提交的存储。
 
-采用维度声明。参数 `{definitions}` 使用[开放 definition map](./world-data.md#声明格式)。返回 `{success, dimensionCount}` 和一条 `dimension.initialize` proposal。
+这个 runtime 声明了 `agent.loop.completion: {require: tool-use, afterTools: [initialize-world]}` 和 `io.output.schema`。所以模型只需要生成一次工具参数：工具成功后，框架直接用输出 schema 检查结果并结束。
 
-- 缺少的记录被创建。
-- 用同样的定义重复初始化，不会重置当前值。
-- 已采用的定义和这次不同，算冲突。
-- 声明的变更通过 world sync 处理。不要用这个工具覆盖游戏进度。
+**使用者**: `world-init/schema-gen`
 
 ### dimension-rule-get
 
@@ -1368,7 +1347,7 @@ schema 里带 `x-derive` 的字段由 `world-init/dimension-clock` 按时钟计�
 
 `codex`、`npc-graph` 的节点和玩家角色用的是 `wordId`。
 
-`shortId` 的第四个参数传上下文的 `random`，随机串就取自宿主的随机源（见 [`ctx.random`](./plugins.md#输入和输出)）。
+`shortId` 的第四个参数必须传上下文的 `random`，随机串取自宿主的随机源（见 [`ctx.random`](./plugins.md#随机数ctxrandom)）。
 
 ```js
 export default function ({ tool, z, shortId, shortIdBatch }) {
@@ -1408,7 +1387,7 @@ export default function ({ tool, z, shortId, shortIdBatch }) {
 
 工具白名单管两件事：模型看得到哪些工具，以及实际能执行哪些工具。
 
-- agent 循环把当前 runtime 的精确授权集合放在 `ToolCallContext.authorizedToolNames` 里传给执行器。集合包括 `tools.*` 声明的全部名字，以及非 schema runtime 的 `runtime-done`。
+- agent 循环把当前 runtime 的精确授权集合放在 `ToolCallContext.authorizedToolNames` 里传给执行器。集合包括 `tools.*` 声明的全部名字，以及完成契约使用 `runtime-done` 的 runtime 和故事 runtime 的 `runtime-done`。必须通过完成工具结束的 runtime 不再自动获得它的授权。
 - `defer` 名单里的工具也在授权集合里：延迟只影响模型一开始看不看得到，不影响授权。
 - 执行器在解析工具和审批**之前**，先检查最终的工具名是否在授权集合里。“最终”指会话覆盖和 `PreToolUse` 替换之后的名字。不在集合里时返回结构化错误 `UNAUTHORIZED`。
 - `search-tools` 在循环内被拦下，到不了执行器。
@@ -1483,7 +1462,7 @@ export default function ({ tool, z, shortId, shortIdBatch }) {
 工具和 guard 能拿到什么：
 
 - 所有 entry 工厂的 toolkit 都只提供纯辅助函数，不注入 store。工具通过 `execute(params, context)` 的 `context.store` 读取当前会话和插件的状态。RPC 和函数 runtime 各用自己限定范围的 store。
-- 社区插件的 agent guard 只拿到只读的 store 和纯输入。`pluginData`、logger、gateway、utils、media、assetProgress 这些会产生副作用的能力不注入，`recursiveCall` 会被拒绝。写入要放在 runtime handler 返回的 proposal 或 `pluginData[]` 里。
+- agent guard 和函数 handler 拿到同样的上下文：只读的 store、`ctx.world`、`ctx.inputs`、`pluginData`、logger、gateway、utils、媒体和 `recursiveCall`。内置插件和社区插件拿到的一样，只是社区插件的 `utils` 只能访问 `permissions.http` 声明的地址。guard 返回或超时之后，这些能力全部失效。
 
 **工具里的文字用哪种语言。** `context.locale` 是会话的内容语言，`context.messages` 是本插件 `locales/` 里的译文。
 
@@ -1630,10 +1609,10 @@ export default function ({ tool, z, shortId }) {
 
 生产宿主和 `test-runtime` 在每次工具调用时注入 `context.store`。它的接口和 `FunctionStoreView` 相同：
 
-| 方法                                                             | 读到什么                                                                                          |
-| ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
-| `getPluginData(namespace, key)` / `listPluginData(namespace)`    | 当前会话、当前插件的数据。按顺序合并了同一次执行里已有的 set、batch 和 delete 提案。              |
-| `getSession()`、`listPlayerInputs()`、`listTurnMessages(limit?)` | 只读当前会话。给了 limit 时读最近的消息。消息只含已提交的回合；正在执行的回合要到提交之后才出现。 |
+| 方法                                                             | 读到什么                                                                                                                                                               |
+| ---------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `getPluginData(namespace, key)` / `listPluginData(namespace)`    | 当前会话、当前插件的数据。按顺序合并了同一次执行里已有的 set、batch 和 delete 提案。                                                                                   |
+| `getSession()`、`listPlayerInputs()`、`listTurnMessages(limit?)` | 只读当前会话。`getSession()` 返回[会话视图](./plugins.md#会话视图storegetsession)。给了 limit 时读最近的消息。消息只含已提交的回合；正在执行的回合要到提交之后才出现。 |
 
 规则：
 
@@ -1749,7 +1728,15 @@ agent:
 - `dimension.initialize`、`dimension.update`
 - `lorebook.upsert`
 
-类型只在一处定义：`ProposalPayloadMap`。`ProposalType`、提交处理器的注册表（`satisfies CommitHandlerMap`）和对外公布的列表（`PROPOSAL_TYPES`）都在编译期和它对齐。新增一种 proposal 只改 `ProposalPayloadMap` 一处；漏注册处理器时编译失败。
+类型只在一处定义：`ProposalPayloadMap`。`ProposalType`、提交处理器的注册表（`satisfies CommitHandlerMap`）、每种类型的 payload schema（`proposalPayloadSchemas`，在 `@covel/shared`）和对外公布的列表（`PROPOSAL_TYPES`）都在编译期和它对齐。新增一种 proposal 时改 `ProposalPayloadMap`，再补上它的处理器和 schema；漏了哪一个都编译失败。
+
+**提交前的检查。** 每条 proposal 在它的处理器运行之前都要通过同一道检查，不论它来自工具、handler 还是 runtime 的输出：
+
+- payload 必须符合它那种类型的 schema，并且能写成 JSON。之后提交的是它的 JSON 副本：值为 `undefined` 的字段被去掉，`Date` 变成 ISO 字符串，每个存储后端存下的都一样。BigInt、循环引用这类 JSON 存不下的值在这里被拒绝。
+- payload 里的每个 `MediaRef` 都对照本会话检查（见[媒体存储](./media-store.md#提交时检查引用)）。
+- 处理器之后还按自己的规则检查（保留命名空间、大小上限、角色名字、维度的提供者等）。
+
+没通过的 proposal 不提交，错误码是 `proposal-invalid` 或媒体检查的拒绝原因。它走的是提交失败的路径：跟在一段已提交故事旁边的可选 runtime，只丢掉它自己的写入；没有故事的执行（手动、后台、setup）整次不提交。不会只落下一部分 proposal。
 
 **`state.patch` 和 `plugin.data` 的区别。** `state.patch` 写入的状态表是全会话共享的：
 

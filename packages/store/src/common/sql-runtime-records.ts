@@ -65,6 +65,7 @@ type RuntimeOutputsTable = Table & {
   timestamp: Column;
 };
 type InteractionRecordsTable = Table & {
+  id: Column;
   sessionId: Column;
   type: Column;
   source: Column;
@@ -287,7 +288,10 @@ export function createSqlRuntimeRecords(
       }
       const rows = await runner.select<InteractionRow>(interactionRecords, {
         where: and(...conditions),
-        orderBy: [desc(interactionRecords.timestamp)],
+        orderBy: [
+          desc(interactionRecords.timestamp),
+          desc(byteOrder(interactionRecords.id)),
+        ],
         limit: filters?.limit,
       });
       return rows.map((row) => toInteractionRecordRow(row, json));

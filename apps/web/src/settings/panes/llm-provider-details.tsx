@@ -482,7 +482,7 @@ function ModelCapabilitySummary({
   protocol: string;
   baseCapability?: ModelCapabilityInfo;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const result = useModelCapability(modelId, provider, protocol);
   const capability = resolveDisplayCapability(result, baseCapability);
 
@@ -508,7 +508,10 @@ function ModelCapabilitySummary({
         <span>{t("settings.modalInImage", "Image Input")}</span>
       )}
       {capability?.contextWindow && (
-        <span>{capability.contextWindow.toLocaleString()} ctx</span>
+        <span>
+          {capability.contextWindow.toLocaleString(i18n.language)}{" "}
+          {t("settings.contextWindowShort")}
+        </span>
       )}
     </div>
   );

@@ -54,7 +54,34 @@ function runtimeSummary(manifest: RuntimeManifest): PluginRuntimeSummary {
     ...(manifest.outputContract
       ? { outputContract: manifest.outputContract }
       : {}),
-    tags: [...(manifest.tags ?? [])],
+  };
+}
+
+/** What session plugin resolution reads from one entry. */
+export function pluginContractFacts(entry: PluginRegistryEntry) {
+  const plugin = entry.packageManifest?.plugin;
+  const declarations = pluginDeclarations(entry).map(
+    ({ manifest }) => manifest,
+  );
+  return {
+    id: entry.id,
+    kind: plugin?.kind ?? ("plugin" as const),
+    source: getPluginTrustInfo(entry.id, entry.source).source,
+    provides: plugin?.provides ?? [],
+    requires: plugin?.requires ?? [],
+    optional: plugin?.optional ?? [],
+    conflicts: plugin?.conflicts ?? [],
+    extensions: [
+      ...(plugin?.contributes?.extensions ?? []),
+      ...(plugin?.contributes?.prompt?.length
+        ? [{ point: "prompt.segment@1", id: "static-prompt" }]
+        : []),
+    ],
+    eventTopics: uniqueSorted(
+      declarations.flatMap((manifest) =>
+        (manifest.events ?? []).map((event) => event.topic),
+      ),
+    ),
   };
 }
 
@@ -65,11 +92,9 @@ export function buildPluginSummary(
   const manifests = pluginManifestRecords(entry).map(
     ({ manifest }) => manifest,
   );
-  const declarations = pluginDeclarations(entry).map(
-    ({ manifest }) => manifest,
-  );
   const runtimes = manifests.map(runtimeSummary);
-  const source = getPluginTrustInfo(entry.id, entry.source).source;
+  const facts = pluginContractFacts(entry);
+  const { source } = facts;
   const plugin = entry.packageManifest?.plugin;
   const tools = manifests.flatMap((manifest) => [
     ...(manifest.tools?.builtin ?? []).map((id) => ({
@@ -88,7 +113,7 @@ export function buildPluginSummary(
     id: entry.id,
     displayName: entry.summary.displayName ?? entry.summary.name ?? entry.id,
     description: entry.summary.description,
-    kind: plugin?.kind ?? "plugin",
+    kind: facts.kind,
     source,
     hostState: isEntryPublished?.(entry.id)
       ? "loaded"
@@ -108,25 +133,13 @@ export function buildPluginSummary(
     ...(plugin?.author ? { author: plugin.author } : {}),
     ...(plugin?.license ? { license: plugin.license } : {}),
     ...(plugin?.homepage ? { homepage: plugin.homepage } : {}),
-    provides: plugin?.provides ?? [],
-    requires: plugin?.requires ?? [],
-    optional: plugin?.optional ?? [],
-    conflicts: plugin?.conflicts ?? [],
-    extensions: [
-      ...(plugin?.contributes?.extensions ?? []),
-      ...(plugin?.contributes?.prompt?.length
-        ? [{ point: "prompt.segment@1", id: "static-prompt" }]
-        : []),
-    ],
-    eventTopics: uniqueSorted(
-      declarations.flatMap((manifest) =>
-        (manifest.events ?? []).map((event) => event.topic),
-      ),
-    ),
-    tags: uniqueSorted([
-      ...(entry.summary.tags ?? []),
-      ...declarations.flatMap((manifest) => manifest.tags ?? []),
-    ]),
+    provides: facts.provides,
+    requires: facts.requires,
+    optional: facts.optional,
+    conflicts: facts.conflicts,
+    extensions: facts.extensions,
+    eventTopics: facts.eventTopics,
+    tags: uniqueSorted(entry.summary.tags ?? []),
     runtimes,
     tools,
     userSettings: [...(plugin?.contributes?.settings ?? [])],
@@ -170,11 +183,6 @@ function runtimeContract(manifest: RuntimeManifest): RuntimePluginContract {
       ...injectedNamespaces,
     ]),
     readablePluginDataNamespaces: uniqueSorted(injectedNamespaces),
-    ui: {
-      right: [...(manifest.ui?.right ?? [])],
-      message: [...(manifest.ui?.message ?? [])],
-      left: [...(manifest.ui?.left ?? [])],
-    },
     userSettings: [...(manifest.userSettings ?? [])],
   };
 }

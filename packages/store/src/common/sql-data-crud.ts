@@ -1,5 +1,5 @@
 import type { LorebookOwner } from "@covel/shared";
-import { lorebookOwnerKey } from "./lorebook-owner.js";
+import { lorebookOwnerKey, parseLorebookOwnerKey } from "./lorebook-owner.js";
 /**
  * Backend-agnostic plugin-data / working-memory / world-data-ledger / lorebook
  * queries, shared by the PostgreSQL and SQLite backends.
@@ -12,7 +12,17 @@ import { lorebookOwnerKey } from "./lorebook-owner.js";
  * the single source of truth for the data-CRUD surface.
  */
 
-import { and, asc, desc, eq, inArray, notInArray, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  gt,
+  inArray,
+  lte,
+  notInArray,
+  sql,
+} from "drizzle-orm";
 import type { Column, Table } from "drizzle-orm";
 
 import type { InsertValueBuilders } from "./insert-values.js";
@@ -34,6 +44,7 @@ import type {
   LorebookEntryRecord,
   PaginationOpts,
   PluginDataRecord,
+  RecordChange,
   WorldDataImportLedgerRecord,
 } from "../types.js";
 
@@ -59,10 +70,54 @@ type LorebookEntriesTable = Table & {
   id: Column;
 };
 
+type RecordChangesTable = Table & {
+  sessionId: Column;
+  kind: Column;
+  pluginId: Column;
+  namespace: Column;
+  key: Column;
+  seq: Column;
+};
+
+interface RecordChangeRow {
+  kind: string;
+  pluginId: string;
+  namespace: string;
+  key: string;
+  seq: number | string;
+}
+
+/** A `record_changes` row as the store reports it; see `common/write-order-ddl.ts`. */
+function toRecordChange(row: RecordChangeRow): RecordChange {
+  const seq = Number(row.seq);
+  switch (row.kind) {
+    case "lorebook":
+      return {
+        kind: "lorebook",
+        owner: parseLorebookOwnerKey(row.namespace),
+        id: row.key,
+        seq,
+      };
+    case "character":
+      return { kind: "character", id: row.key, seq };
+    case "plugin_data":
+      return {
+        kind: "plugin_data",
+        pluginId: row.pluginId,
+        namespace: row.namespace,
+        key: row.key,
+        seq,
+      };
+    default:
+      throw new Error(`Unknown record change kind: ${row.kind}`);
+  }
+}
+
 export interface SqlDataCrudTables {
   readonly pluginData: PluginDataTable;
   readonly worldDataImportLedger: WorldDataLedgerTable;
   readonly lorebookEntries: LorebookEntriesTable;
+  readonly recordChanges: RecordChangesTable;
 }
 
 export interface SqlDataCrudDeps {
@@ -99,11 +154,13 @@ export type SqlDataCrud = Pick<
   | "listSessionLorebookEntries"
   | "getLorebookEntry"
   | "deleteLorebookEntry"
+  | "listRecordChanges"
 >;
 
 export function createSqlDataCrud(deps: SqlDataCrudDeps): SqlDataCrud {
   const { runner, tables, json, values } = deps;
-  const { pluginData, worldDataImportLedger, lorebookEntries } = tables;
+  const { pluginData, worldDataImportLedger, lorebookEntries, recordChanges } =
+    tables;
   const { byteOrder } = runner;
   // One order for every plugin-data list. The key breaks a tie between rows
   // written in the same millisecond: it is unique within a session, and it is
@@ -116,6 +173,37 @@ export function createSqlDataCrud(deps: SqlDataCrudDeps): SqlDataCrud {
   ];
 
   return {
+    async listRecordChanges(sessionId, query) {
+      if (query.limit <= 0) return [];
+      // The rows are written by triggers (`common/write-order-ddl.ts`).
+      const rows = await runner.select<RecordChangeRow>(recordChanges, {
+        columns: {
+          kind: recordChanges.kind,
+          pluginId: recordChanges.pluginId,
+          namespace: recordChanges.namespace,
+          key: recordChanges.key,
+          seq: recordChanges.seq,
+        },
+        where: and(
+          eq(recordChanges.sessionId, sessionId),
+          query.after === null ? undefined : gt(recordChanges.seq, query.after),
+          query.through === undefined
+            ? undefined
+            : lte(recordChanges.seq, query.through),
+          query.pluginData === undefined
+            ? undefined
+            : and(
+                eq(recordChanges.kind, "plugin_data"),
+                eq(recordChanges.pluginId, query.pluginData.pluginId),
+                eq(recordChanges.namespace, query.pluginData.namespace),
+              ),
+        ),
+        orderBy: [asc(recordChanges.seq)],
+        limit: query.limit,
+      });
+      return rows.map(toRecordChange);
+    },
+
     async getPluginDataPromptWindow(
       sessionId,
       pluginId,
@@ -400,24 +488,21 @@ export function createSqlDataCrud(deps: SqlDataCrudDeps): SqlDataCrud {
     async upsertLorebookEntries(
       records: readonly LorebookEntryRecord[],
     ): Promise<void> {
-      // Per-entry upsert without a wrapping transaction — matching the legacy
-      // backends, which both looped one row at a time (PG without an explicit
-      // tx, SQLite relying on per-statement commits). Volumes are tiny (a
-      // handful of entries per world).
-      for (const record of records) {
-        await runner.insert(
-          lorebookEntries,
-          values.lorebookEntryInsert(record),
-          {
-            target: [
-              lorebookEntries.sessionId,
-              lorebookEntries.owner,
-              lorebookEntries.id,
-            ],
-            set: values.lorebookEntryUpdate(record),
-          },
-        );
-      }
+      // The whole batch or nothing: every row's values are built (and its
+      // identifiers checked) before the first write, and the writes share one
+      // transaction (a savepoint inside an open one).
+      const target = [
+        lorebookEntries.sessionId,
+        lorebookEntries.owner,
+        lorebookEntries.id,
+      ];
+      await runner.insertManyAtomic(
+        lorebookEntries,
+        records.map((record) => ({
+          values: values.lorebookEntryInsert(record),
+          conflict: { target, set: values.lorebookEntryUpdate(record) },
+        })),
+      );
     },
 
     async listSessionLorebookEntries(

@@ -19,9 +19,9 @@
  * per-execution only; cross-runtime same-turn reads are not merged.
  */
 
-import type { CharacterRecord, PluginDataRecord } from "@covel/store";
+import type { PluginDataRecord } from "@covel/store";
 import type { Proposal } from "@covel/shared";
-import { overlayCharacters, overlayPluginDataRows } from "@covel/tools";
+import { overlayPluginDataRows } from "@covel/tools";
 import type { HandlerHelperContext } from "./plugin-handler-helpers.js";
 
 /** A mutable per-execution proposal buffer. */
@@ -54,29 +54,6 @@ export function bufferPluginData(
   });
 }
 
-/** Buffer a batch plugin-data write. */
-export function bufferPluginDataBatch(
-  buffer: ExecutionWriteBuffer,
-  ctx: HandlerHelperContext,
-  items: readonly { namespace: string; key: string; value: unknown }[],
-): void {
-  buffer.push({
-    id: crypto.randomUUID(),
-    type: "plugin.data.batch",
-    source: proposalSource(ctx),
-    turnId: ctx.turnId,
-    sessionId: ctx.sessionId,
-    payload: {
-      items: items.map((i) => ({
-        namespace: i.namespace,
-        key: i.key,
-        value: structuredClone(i.value),
-      })),
-    },
-    timestamp: new Date().toISOString(),
-  });
-}
-
 /** Buffer a plugin-data delete. */
 export function bufferPluginDataDelete(
   buffer: ExecutionWriteBuffer,
@@ -91,35 +68,6 @@ export function bufferPluginDataDelete(
     turnId: ctx.turnId,
     sessionId: ctx.sessionId,
     payload: { namespace, key },
-    timestamp: new Date().toISOString(),
-  });
-}
-
-/** Buffer a character write for the kernel commit boundary. */
-export function bufferCharacterUpsert(
-  buffer: ExecutionWriteBuffer,
-  ctx: HandlerHelperContext,
-  record: CharacterRecord,
-): void {
-  buffer.push({
-    id: crypto.randomUUID(),
-    type: "character.upsert",
-    source: proposalSource(ctx),
-    turnId: ctx.turnId,
-    sessionId: ctx.sessionId,
-    payload: {
-      id: record.id,
-      name: record.name,
-      type: record.type,
-      ...(record.description !== undefined
-        ? { description: record.description }
-        : {}),
-      ...(record.fields !== undefined
-        ? { fields: structuredClone(record.fields) }
-        : {}),
-      version: record.version,
-      createdAt: record.createdAt,
-    },
     timestamp: new Date().toISOString(),
   });
 }
@@ -166,11 +114,3 @@ export function mergePluginDataRows(
   return structuredClone([...byKey.values()]);
 }
 
-/** Merge committed characters with buffered `character.upsert` writes. */
-export function mergeCharacterRecords(
-  stored: readonly CharacterRecord[],
-  buffer: ExecutionWriteBuffer,
-  sessionId: string,
-): CharacterRecord[] {
-  return [...overlayCharacters(buffer, stored, sessionId).values()];
-}

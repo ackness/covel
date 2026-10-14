@@ -1,3 +1,4 @@
+import { functionRequestBudget } from "./function-request-budget.js";
 /**
  * Bridge adapter: @covel/ai-provider gateway → PluginRuntimeGateway facade.
  *
@@ -24,8 +25,10 @@ import type {
   EvaluationResult,
 } from "@covel/shared/plugin-runtime";
 import {
+  instructionLocaleFor,
   resolveLlmTokenLimits,
   type LLMDiagnostics,
+  type LLMRequestBudget,
   type LLMUsageSummary,
 } from "@covel/shared";
 import type { ZodType } from "zod";
@@ -41,6 +44,7 @@ import type {
  * a structural type so `@covel/runtime` stays decoupled from ai-provider.
  */
 interface FullGatewayOptions {
+  requestBudget?: LLMRequestBudget;
   apiKeys?: Record<string, string>;
   /** Server-env keys — origin-gated by the gateway, unlike apiKeys. */
   envApiKeys?: Record<string, string>;
@@ -65,6 +69,7 @@ export interface FullGatewayLike {
   generateText(
     input: {
       presetId?: string;
+      instructionLocale?: "en" | "zh";
       messages: Array<{ role: string; content: string | null }>;
       defaults?: import("@covel/shared").LLMRequestDefaults;
       responseFormat?: import("@covel/shared").LLMResponseFormat;
@@ -88,6 +93,7 @@ export interface FullGatewayLike {
   generateObject<T>(
     input: {
       presetId?: string;
+      instructionLocale?: "en" | "zh";
       schema: ZodType<T>;
       messages: Array<{ role: string; content: string | null }>;
       defaults?: import("@covel/shared").LLMRequestDefaults;
@@ -250,6 +256,9 @@ export function createPluginRuntimeGateway(
     readonly signal?: AbortSignal;
   }) => ({
     ...commonOptions(),
+    ...(functionRequestBudget.getStore()
+      ? { requestBudget: functionRequestBudget.getStore() }
+      : {}),
     ...(input.maxOutputTokens !== undefined
       ? { parameterOverrides: { maxOutputTokens: input.maxOutputTokens } }
       : {}),
@@ -268,6 +277,7 @@ export function createPluginRuntimeGateway(
         {
           ...(input.presetId ? { presetId: input.presetId } : {}),
           messages,
+          instructionLocale: input.instructionLocale,
           ...(input.defaults ? { defaults: input.defaults } : {}),
           ...(input.responseFormat
             ? { responseFormat: input.responseFormat }
@@ -300,6 +310,7 @@ export function createPluginRuntimeGateway(
     async generateObject<T>(input: {
       readonly defaults?: import("@covel/shared").LLMRequestDefaults;
       readonly presetId?: string;
+      readonly instructionLocale?: "en" | "zh";
       readonly schema: Readonly<Record<string, unknown>>;
       readonly prompt?: string;
       readonly system?: string;
@@ -343,6 +354,7 @@ export function createPluginRuntimeGateway(
           ...(input.presetId ? { presetId: input.presetId } : {}),
           schema: zodSchema as ZodType<T>,
           messages,
+          instructionLocale: input.instructionLocale,
           ...(input.defaults ? { defaults: input.defaults } : {}),
           ...(input.providerOptions
             ? { providerOptions: input.providerOptions }
@@ -402,10 +414,7 @@ export function createPluginRuntimeGateway(
           state: input.state,
           questions: input.questions,
         },
-        {
-          ...commonOptions(),
-          ...(input.signal ? { signal: input.signal } : {}),
-        },
+        callOptions(input),
       );
   }
 
@@ -564,4 +573,19 @@ function toMessages(opts: { system?: string; prompt?: string }): Array<{
     );
   }
   return messages;
+}
+
+/** Bind both text operations to this execution's session instruction language. */
+export function withInstructionLocale(
+  gateway: PluginRuntimeGateway,
+  locale: string | undefined,
+): PluginRuntimeGateway {
+  const instructionLocale = instructionLocaleFor(locale);
+  return {
+    ...gateway,
+    generateText: (input) =>
+      gateway.generateText({ ...input, instructionLocale }),
+    generateObject: (input) =>
+      gateway.generateObject({ ...input, instructionLocale }),
+  };
 }

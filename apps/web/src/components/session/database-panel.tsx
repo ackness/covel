@@ -11,7 +11,7 @@
  *
  * Data source: GET /api/sessions/:id/state
  * Auto-refreshes whenever a new `state.changed` SSE event bumps `refreshKey`
- * from the parent (session store exposes statePatches).
+ * from the parent (session store exposes statePatchRevision).
  */
 
 import { useEffect, useMemo, useState } from "react";
@@ -95,7 +95,7 @@ interface DatabasePanelProps {
   sessionId: string;
   /**
    * Monotonic counter driven by state SSE events — when it changes the
-   * panel refetches the snapshot. Parent passes `statePatches.length` or
+   * panel refetches the snapshot. Parent passes `statePatchRevision` or
    * similar so we stay fresh without subscribing to the event bus here.
    */
   refreshKey?: number;
@@ -170,7 +170,7 @@ export function DatabasePanel({
         <div className="text-[11px] border border-destructive/40 bg-destructive/5 text-destructive p-2 space-y-1.5">
           <div className="flex items-start justify-between gap-2">
             <span className="italic break-all">
-              {t("session.dbLoadError")}: {error}
+              {t("session.dbLoadErrorDetail", { error })}
             </span>
             <Button
               variant="outline"

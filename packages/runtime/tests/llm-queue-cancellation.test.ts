@@ -1,8 +1,6 @@
+import { throughGateway } from "./helpers/through-gateway.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import {
-  acquireLLMSlot,
-  setLLMSlotCapForTests,
-} from "../src/retry/llm-slots.js";
+import { acquireLLMSlot, setLLMSlotCapForTests } from "@covel/shared";
 import {
   buildRetryPolicy,
   callLLMWithRetry,
@@ -23,7 +21,7 @@ describe("cancel queued model attempts", () => {
       const stream = vi.fn();
       const llm: LLMAdapter = { generate, stream };
       const params = {
-        llm,
+        llm: throughGateway(llm),
         messages: [],
         abortSignal: controller.signal,
         policy: buildRetryPolicy({ runtimeTimeoutMs: 1000 }),

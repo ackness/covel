@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { resolveI18nText } from "@covel/shared";
 import type {
   GithubBatchInstallResult,
   GithubCollectionPreview,
@@ -217,7 +218,7 @@ export function GithubCollectionInstaller({
                   className={`wrap-break-word ${
                     problem.level === "error"
                       ? "text-destructive"
-                      : "text-amber-600 dark:text-amber-400"
+                      : "text-(--accent-warning)"
                   }`}
                 >
                   {problem.message}
@@ -260,11 +261,13 @@ export function GithubCollectionInstaller({
                     </span>
                     {item.author && (
                       <span className="block text-muted-foreground">
-                        {t("package.author")}: {item.author}
+                        {t("package.authorLine", { author: item.author })}
                       </span>
                     )}
                     {item.description && (
-                      <span className="block">{item.description}</span>
+                      <span className="block">
+                        {resolveI18nText(item.description, i18n.language)}
+                      </span>
                     )}
                     <a
                       href={`${item.source.repository}/tree/${item.source.commit}/${item.source.path}`}

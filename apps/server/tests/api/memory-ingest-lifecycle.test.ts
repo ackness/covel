@@ -269,7 +269,8 @@ it("waits for delayed ingestion before replacing a checkpoint, then rebuilds onl
     pluginId: MEMORY_VECTOR_PLUGIN_ID,
     namespace: "recall-ingest",
   });
-  expect(JSON.parse(progress!)).toEqual({ id: "replacement", createdAt: now });
+  // The replaced session numbers its messages from the start again.
+  expect(JSON.parse(progress!)).toEqual({ writeSeq: 1 });
 });
 
 it("drains delayed ingestion before delete and leaves same-id recreation without old progress", async () => {

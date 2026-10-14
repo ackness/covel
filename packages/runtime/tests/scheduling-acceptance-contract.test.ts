@@ -27,7 +27,6 @@ import { describe, it, expect } from "vitest";
 import { type DataStore } from "@covel/store";
 import { createMemoryStore } from "@covel/store/memory";
 import {
-  authoringTriggerConfigSchema,
   isSetupSatisfied,
   mirrorSetupDone,
   retrySetup,
@@ -244,22 +243,7 @@ describe("setup frozen snapshot (cross-execution read of committed setup data)",
           if (m.name === "p/schema-gen") {
             // Buffered domain write → flushed onto the result as a plugin.data
             // proposal (NOT a direct store write), committed by finalize below.
-            // The kernel hands a function runtime a buffering store; its write
-            // surface is wider than the read-only `FunctionStoreView` type.
-            const buffered = ctx.store as unknown as Pick<
-              DataStore,
-              "setPluginData"
-            >;
-            await buffered.setPluginData({
-              id: `${sessionId}:p:world:schema`,
-              sessionId,
-              pluginId: "p",
-              namespace: "world",
-              key: "schema",
-              value: SCHEMA,
-              createdAt: new Date().toISOString(),
-              updatedAt: new Date().toISOString(),
-            });
+            await ctx.pluginData!.set("world", "schema", SCHEMA);
             return {
               outcome: "success",
               value: {},
@@ -1279,19 +1263,15 @@ describe("logical-turn counting & ledger", () => {
 });
 
 describe("reserved trigger rejection (Step 6)", () => {
-  it("scenario 15: 兼容输入 schema 与 authoring schema 均拒绝 conditional/error-retry（枚举收窄到四值）", () => {
+  it("scenario 15: trigger schema 拒绝 conditional/error-retry（枚举收窄到四值）", () => {
     // The trigger enum carries only the four production types — a manifest
-    // declaring the historical `conditional` / `error-retry` FAILS to load on
-    // BOTH the compat and authoring schemas (they never fired, so a load
-    // failure surfaces the dead declaration instead of silently dropping).
+    // declaring the historical `conditional` / `error-retry` FAILS to load
+    // (they never fired, so a load failure surfaces the dead declaration
+    // instead of silently dropping).
     for (const type of ["conditional", "error-retry"] as const) {
       expect(
         triggerConfigSchema.safeParse({ type }).success,
-        `compat rejects ${type}`,
-      ).toBe(false);
-      expect(
-        authoringTriggerConfigSchema.safeParse({ type }).success,
-        `authoring rejects ${type}`,
+        `rejects ${type}`,
       ).toBe(false);
     }
   });

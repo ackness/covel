@@ -64,6 +64,17 @@ IETF 分配的、确实全球可达的特定地址段仍然放行。这些特殊
 
 没有环境变量能关掉这个分发器。测试运行会替换全局 `fetch` 来冒充供应商；只有当这次运行自己的启动代码（`vitest.base.ts`）在 `globalThis` 上设了标记（`outbound-network.ts` 里的 `OUTBOUND_TEST_FETCH_HOOK`），传输层才把请求交给那个替身。用 `NODE_ENV=test` 启动的服务端没有这个标记，仍然走钉住地址的传输。
 
+### Redirects
+
+框架自己发的请求都不跟随重定向：核心供应商请求、模型数据库下载、版本检查、从 GitHub 安装插件。它们都走 `outboundFetch`（`packages/ai-provider/src/outbound-network.ts`），它总是让 Undici 用 `redirect: "manual"`。
+
+- 调用方传 `redirect: "manual"`，就拿到原样的 3xx 响应，由它自己检查每一跳。
+- 其他情况（不传、`error`、`follow`）遇到 3xx 直接失败，不发第二个请求。
+
+原因是没有任何检查会看 `Location`：字符串检查只看第一个 URL；IP 字面量不经过钉住地址的 DNS 查询；代理模式下由代理解析下一跳。跟随一个 `302 Location: http://169.254.169.254/` 就会打到云平台的元数据服务。
+
+插件的 `fetchWithRetry` 也一样不跟随；`ctx.media.ingestUrl` 自己跟随，并对每一跳重新做字符串检查。
+
 ### Response size ceiling
 
 回答供应商请求的端点可能是玩家自己填的，所以服务端不会对方发多少就缓冲多少。

@@ -17,6 +17,7 @@
     "primary": "主导航"
   },
   "session": {
+    "cached": "已缓存",
     "historyLoadFailed": "无法读取历史存档，请重试。",
     "reasoningContent": "思考内容",
     "reasoningContentHint": "模型返回的思考文本或摘要，按调用顺序展示。",
@@ -86,13 +87,13 @@
       "detail": "不安装也可以开始，但这些插件为该世界提供的玩法不会生效。可在「设置 → 安装与管理」中安装，安装后重启后端生效。"
     },
     "worldRequirements": {
-      "blockedTitle": "这个世界暂时无法开始",
       "degradedTitle": "这个世界将缺少它依赖的一项能力",
       "missing-provider": "没有已安装的插件提供 {{contract}}。请在「设置 → 安装与管理」中安装一个，安装后重启后端生效。",
       "unavailable": "{{plugins}} 提供 {{contract}}，但在当前选择下无法启用。",
       "ambiguous-provider": "有多个插件提供 {{contract}}：{{plugins}}。请在下方插件列表中启用其中一个。",
       "excluded": "你关闭了提供 {{contract}} 的 {{plugins}}。游戏可以开始，但世界的这部分玩法不会生效。",
-      "approval-required": "{{plugins}} 提供 {{contract}}，开始游戏后会请求你的授权。"
+      "approval-required": "{{plugins}} 提供 {{contract}}，开始游戏后会请求你的授权。",
+      "dimensions": "你开启的插件里没有能保存这个世界维度的（{{contract}}），游戏会在没有维度的情况下开始。开启一个提供它的插件就能用上维度。"
     },
     "history": "历史会话",
     "worldLore": "世界文档",
@@ -198,14 +199,7 @@
     "pluginsSelected": "个插件已选择",
     "searchPlugins": "搜索插件、标签、能力",
     "pluginGroups": {
-      "core": "核心",
-      "setup": "开局准备",
-      "traditional": "传统故事",
-      "dialogue": "对话模式",
-      "characters": "角色",
-      "memory": "记忆与检索",
-      "guidance": "引导",
-      "utility": "工具"
+      "untagged": "无标签"
     },
     "recommendationReasons": {
       "requiredByWorld": "世界必需",
@@ -218,6 +212,8 @@
     "dimensionsImported": "导入成功",
     "reasonConnectionClosed": "连接结束但后端未上报结束",
     "reasonSessionBusy": "会话繁忙，请稍后重试",
+    "reasonInputAlreadyCommitted": "这条消息已经发送过，它的回合已经保存。刷新即可看到。",
+    "reasonRetryStale": "任务状态已经变了，请先刷新再重试。",
     "reasonExecutionCommitFailed": "本回合未能保存，请重试。",
     "reasonExecutionFailed": "本回合执行失败，请重试。",
     "reasonHistoryRestoreFailed": "消息历史恢复失败。如果内容一直没有更新，请刷新页面。",
@@ -277,6 +273,11 @@
     "memoryUpdateFailedHint": "本轮剧情已保存。请检查用途分配中的记忆模型和服务商配置；下一回合会再次尝试更新。",
     "memoryUpdateErrorDetails": "错误详情",
     "memoryStoreWarning": "重启后数据将丢失",
+    "worldDataNotices": {
+      "title": "这个世界的部分数据没有进入这局游戏：",
+      "hint": "给已关闭或正在等你批准的插件的数据，会在打开那个插件时导入。",
+      "hide": "隐藏"
+    },
     "worldDataPreflight": {
       "title": "世界数据",
       "loading": "检查中",
@@ -307,7 +308,8 @@
       "serverBackend": "服务端 {{backend}}",
       "builtIn": "内置",
       "serverStore": "服务端存储",
-      "server": "服务端"
+      "server": "服务端",
+      "memory": "内存"
     },
     "jumpToLatest": "跳到最新",
     "loadOlderFailed": "无法加载更早的消息。",
@@ -332,8 +334,13 @@
     "recoveryFailed": "此回合未能完成",
     "recoveryHydrating": "正在恢复存档",
     "recoveryUnknownDetail": "暂时无法确认执行结果，正在重新连接。这里只检查原任务，不会重复发起回合。",
+    "recoveryUnavailableDetail": "服务器暂时无法确认是否有回合在执行，稍后会自动再查。确认之前不会重试，也不会发起新回合。",
+    "recoveryUnconfirmed": "无法确认回合状态",
+    "recoveryUnconfirmedDetail": "检查了几次，服务器仍无法确认，已停止自动检查。点“检查状态”再查一次。",
     "recoveryRunningDetail": "服务端仍在继续原任务，完成后会自动恢复结果。你可以等待，也可以停止任务。",
     "recoveryInterruptedDetail": "未完成的任务已停止运行，已保存的进度会保留。只有点击重试，才会发起新的尝试。",
+    "unsavedNarrative": "未保存",
+    "unsavedNarrativeDetail": "这段文字没有保存，离开会话后会消失。",
     "recoveryHydratingDetail": "正在取回最新保存的结果，随后即可继续游玩。",
     "recoveryRetry": "重试未完成回合",
     "recoveryRefresh": "检查状态",
@@ -346,6 +353,15 @@
     "setupUnfinishedDetail": "故事还在准备中。点击继续，会用你已填写的内容运行剩下的步骤。",
     "setupContinue": "继续开局准备",
     "setupRetryFailed": "无法重新开始准备，请检查网络后再试。",
+    "memoryIndex": {
+      "staleTitle": "记忆检索现在只按关键词匹配",
+      "staleDetail": "这个会话的记忆是用 {{locked}} 建的索引，现在配置的向量模型是 {{configured}}。重建索引后才能用新模型检索；重建会把会话的历史重新发给向量模型。",
+      "noModelDetail": "这个会话的记忆是用 {{locked}} 建的索引，现在没有配置向量模型。清除索引可以释放它占的空间；以后配置了向量模型，会话会用它重新建索引。",
+      "rebuild": "重建索引",
+      "clear": "清除索引",
+      "rebuilding": "正在重建…",
+      "failed": "没有重建，原来的索引保持不变：{{reason}}"
+    },
     "reasonInterrupted": "此任务在完成前已中断，没有提交结果。此处保留当时的执行记录。",
     "retryTask": "重试此任务",
     "executionHistory": "历史记录",
@@ -369,8 +385,9 @@
     },
     "stoppedDetail": "本轮生成内容未写入存档，可使用原输入重新尝试。",
     "submittedInteraction": "已完成的交互 · 展开查看",
-    "previousSuggestions": "历史建议 · 展开查看",
     "advancedPluginSettings": "自定义插件与高级设置",
+    "minimalPluginSet": "回到最小集合",
+    "minimalPluginSetHint": "只留叙事插件，以及它们和世界必需的插件，其余全部关闭。",
     "configureModelBeforeRetry": "更换模型 / 调整参数",
     "retryModelSettingsHint": "可先更换模型或调低输出限制，再重试此任务；重试使用当前设置。",
     "allWorlds": "全部世界（{{total}}）",
@@ -382,7 +399,31 @@
     "panelLoadFailed": "插件面板加载失败。",
     "modelCredentialsMissing": "开始前请先在服务商设置中填写 API 密钥。",
     "steerNotTaken": "本回合未接收这条消息，已放回输入框，可作为下一条消息发送。",
-    "outputTruncated": "这段正文达到了模型的输出上限，可能停在半句。调大最大输出 token 或换用其他模型可以避免。"
+    "outputTruncated": "这段正文达到了模型的输出上限，可能停在半句。调大最大输出 token 或换用其他模型可以避免。",
+    "outputInterrupted": "模型没写完就停下了这段正文（{{reason}}），可能停在半句。重试这一回合可以让它重新写。",
+    "canvasEyebrow": "§ 故事开场",
+    "blockType": "内容块：{{type}}",
+    "dbLoadErrorDetail": "加载数据库失败：{{error}}",
+    "retryTaskNamed": "重试此任务：{{label}}",
+    "activeTaskDetail": "{{label}}：{{detail}}…",
+    "jobStatus": {
+      "pending": "等待中",
+      "queued": "排队中",
+      "running": "进行中",
+      "done": "已完成",
+      "completed": "已完成",
+      "failed": "失败",
+      "cancelled": "已取消",
+      "suspended": "已暂停",
+      "progress": "进行中",
+      "waiting-input": "等待输入",
+      "succeeded": "已完成"
+    },
+    "retryScopeLimited": "只重试选中的失败任务，正文和其他已完成结果会保留。每批最多 {{count}} 个任务，完成后可继续重试其余任务。",
+    "activeTask": "{{label}}…",
+    "panelUnavailable": "当前会话没有这个面板。",
+    "previousPluginContent": "{{title}} · 展开查看",
+    "pluginContent": "插件内容"
   },
   "blocks": {
     "actionPlaceholder": "或输入自定义行动...",
@@ -532,10 +573,6 @@
     "aiPackageDesc": "选择 Agent 需要创作并长期保持一致的内容。",
     "aiPackageCount": "已选 {{count}} 项",
     "aiExperienceLabel": "玩家体验",
-    "aiExperienceStory": "传统叙事",
-    "aiExperienceStoryDesc": "侧重行动、探索与连续剧情。",
-    "aiExperienceDialogue": "角色对话",
-    "aiExperienceDialogueDesc": "侧重人物互动与舞台式呈现。",
     "aiContentLabel": "世界包补充",
     "aiContentCharacters": "主要角色",
     "aiContentCharactersDesc": "生成 3–5 名相互关联、带动机与秘密的角色。",
@@ -584,6 +621,11 @@
     "revising": "正在修改…",
     "reviseAction": "应用修改",
     "translateTitle": "翻译这个世界",
+    "packageEditedHint": "你在 Covel 里改过这个世界。游玩用的是你改过的版本：它的包文件之后的变化，包括更新，都不再覆盖它。",
+    "restorePackageAction": "恢复为包里的版本",
+    "restorePackageTitle": "恢复为包里的版本？",
+    "restorePackageConfirm": "你对这个世界的修改会被换成包文件现在的内容。已保存的会话数据保留；没有设置会话专用背景的会话，下一回合会读到恢复后的世界背景。",
+    "restorePackageFailed": "没能恢复包里的版本。",
     "translateHint": "这个世界是用{{worldLanguage}}写的，而会话只能使用世界已有的语言。你可以给它加一个{{language}}版本。",
     "translateConfirm": "你的模型会翻译这个世界的全部文字：名称、设定、规则和角色。这会消耗模型调用；机器翻译的人名地名和语气，事后需要看一遍。",
     "translating": "正在翻译…",
@@ -612,6 +654,12 @@
     "numberTooSmall": "请输入不小于 {{minimum}} 的数值。",
     "wholeNumberNeeded": "请输入整数。",
     "fixMarkedFields": "请修正标记的字段后再保存。",
+    "unnamedCurrency": "货币 {{number}}",
+    "numberedResource": "资源 {{number}}",
+    "unnamedFaction": "势力 {{number}}",
+    "unnamedHistory": "历史事件 {{number}}",
+    "pendingDimensionsTurn": "维度待结算 · 第 {{turn}} 回合",
+    "currentDimensionValue": "当前值：{{id}}",
     "discardChangesTitle": "放弃未保存的修改？",
     "discardChangesMessage": "世界的修改尚未保存。要放弃这些修改并退出编辑器吗？",
     "discardChanges": "放弃修改",
@@ -876,7 +924,8 @@
       "restartHint": "资源包文件已变更，请重启后端以应用安装或卸载。执行插件仍需会话授权。",
       "restartNow": "立即重启",
       "reloadFailed": "重新加载失败",
-      "uninstallConfirm": "卸载此插件？卸载后需重启才生效，再次使用需要重新安装。"
+      "uninstallConfirm": "卸载此插件？卸载后需重启才生效，再次使用需要重新安装。",
+      "nothingInstalled": "此集合未安装任何扩展包。"
     },
     "desktopDataLocations": "数据位置",
     "desktopProxy": "网络代理",
@@ -907,7 +956,7 @@
     "desktopEditLlm": "编辑 llm.toml",
     "desktopEditKeys": "编辑 keys.env",
     "desktopServer": "后端服务器",
-    "desktopServerPort": "本地 API 服务器运行于端口 ",
+    "desktopServerPort": "本地 API 服务运行在端口 {{port}}。",
     "desktopRestart": "重启服务器",
     "desktopApplyConfigChanges": "应用配置变更",
     "desktopRestartElectronOnly": "此操作仅在 Electron 桌面端可用",
@@ -1220,7 +1269,7 @@
     },
     "worldGithub": {
       "risk": "世界包包含第三方提示词、设置与媒体。开始游戏前请检查内容及所需插件。安装世界不会自动安装或授权插件，也不会执行仓库脚本。",
-      "updateRisk": "更新将在后端重启时应用，本地编辑过的世界不会被覆盖。已有存档不会自动同步，请另行使用世界数据同步功能。",
+      "updateRisk": "更新将在后端重启时应用，本地编辑过的世界不会被覆盖。更新不会改写已有游戏导入的数据；想使用新的开局数据，请新开一局。",
       "installed": "已安装的世界包"
     },
     "deleteProviderTitle": "删除服务商？",
@@ -1229,7 +1278,30 @@
     "deleteModelConfirm": "同时移除指向此模型配置的角色绑定。服务商的 API 密钥会保留。",
     "deleteThemeTitle": "删除主题？",
     "deleteThemeConfirm": "此自定义主题将被删除。再次使用需要重新导入。",
-    "exportReadOnlyHint": "设置尚未成功加载，导出仅包含当前可读取的值，可能不完整；原始备份可在下方查看和下载。"
+    "exportReadOnlyHint": "设置尚未成功加载，导出仅包含当前可读取的值，可能不完整；原始备份可在下方查看和下载。",
+    "desktopProxyMode": "代理模式",
+    "desktopProxyUrl": "代理地址",
+    "providerIdLabel": "服务商 ID",
+    "themeSchemeLocked": "当前主题只支持一种明暗模式。",
+    "description": "调整外观、模型、扩展包和本地数据。",
+    "desktopRefreshFailed": "无法刷新桌面信息，请重试。",
+    "providerImportSucceeded": "已导入服务商和模型。",
+    "numberExample": "例如 {{value}}",
+    "pricePerImageValue": "{{price}}/张",
+    "pricePerMillionValue": "{{price}}/百万 token",
+    "themeImportErrors": {
+      "missing-scope": "主题 CSS 必须包含 html[data-theme=\"your-theme\"] 这样的选择器。",
+      "multiple-ids": "一个主题文件只能声明一个主题 ID。",
+      "id-mismatch": "CSS 选择器必须使用主题 ID {{id}}。",
+      "escapes-scope": "每条规则都必须限定在 [data-theme=\"{{id}}\"] 内。未限定的选择器：{{selector}}",
+      "import-rule": "主题 CSS 不能使用 @import。",
+      "builtin-id": "{{id}} 是内置主题 ID，请使用其他 ID。",
+      "invalid-id": "主题 ID 必须为 2–48 个小写字母、数字或连字符。",
+      "invalid-json": "此主题文件不是有效的 JSON。",
+      "invalid-manifest": "主题字段不符合主题包格式。",
+      "theme-changed": "保存期间主题 {{id}} 已发生变化，请检查后重试。"
+    },
+    "themeSelectionAdjusted": "当前显示 {{name}}（{{scheme}}）。已保存的偏好保持不变，重新选择主题可更新偏好。"
   },
   "appearance": {
     "styleTitle": "风格方案",
@@ -1317,11 +1389,11 @@
         "--story-font-weight": {
           "label": "字重",
           "options": {
-            "300": "300 · Light",
-            "400": "400 · Regular",
-            "500": "500 · Medium",
-            "600": "600 · Semibold",
-            "700": "700 · Bold"
+            "300": "300 · 细",
+            "400": "400 · 常规",
+            "500": "500 · 中等",
+            "600": "600 · 半粗",
+            "700": "700 · 粗"
           }
         },
         "--story-letter-spacing": {
@@ -1361,11 +1433,11 @@
         "--title-font-weight": {
           "label": "标题字重",
           "options": {
-            "300": "300 · Light",
-            "400": "400 · Regular",
-            "500": "500 · Medium",
-            "600": "600 · Semibold",
-            "700": "700 · Bold"
+            "300": "300 · 细",
+            "400": "400 · 常规",
+            "500": "500 · 中等",
+            "600": "600 · 半粗",
+            "700": "700 · 粗"
           }
         },
         "--title-letter-spacing": {
@@ -1530,6 +1602,54 @@
           "label": "面板纵向留白"
         }
       }
+    },
+    "replaceThemeTitle": "替换已有主题？",
+    "replaceThemeConfirm": "此名称生成的主题 ID 已存在。替换会覆盖该自定义主题。",
+    "replaceTheme": "替换主题",
+    "builtinThemes": {
+      "paper": {
+        "label": "纸本",
+        "description": "温暖、偏叙事阅读器的纸本风格。",
+        "groupLabel": "经典"
+      },
+      "panel": {
+        "label": "面板",
+        "description": "现代应用风格：左侧图标导航、对话流正文、卡片式信息栏。",
+        "groupLabel": "面板"
+      },
+      "aurora": {
+        "label": "极光",
+        "description": "玻璃拟态 + 流动极光 — 演示动画、模糊、发光与状态驱动特效，可直接当模板抄。",
+        "groupLabel": "经典"
+      },
+      "book": {
+        "label": "书卷",
+        "description": "阅读优先：纸面底色、宋体正文、首行缩进，像一本会回应你的小说。",
+        "groupLabel": "书卷"
+      },
+      "stage": {
+        "label": "舞台",
+        "description": "场景沉浸：世界美术铺满全屏，故事在半透明侧栏里展开。",
+        "groupLabel": "舞台"
+      },
+      "modern": {
+        "label": "现代",
+        "description": "利落、偏工具化的工作台风格。",
+        "groupLabel": "经典"
+      },
+      "abyss": {
+        "label": "深渊",
+        "description": "深色 codex 风格 — 深紫蓝 + 衬线 italic，专为沉浸阅读而设。",
+        "groupLabel": "经典"
+      }
+    },
+    "contrast": {
+      "advisory": "以下是对比度建议，你仍可继续使用此主题。检查仅覆盖纯色 token，不评估图片或视觉效果。",
+      "body": "正文",
+      "muted": "次要文字",
+      "button": "按钮文字",
+      "low": "{{scheme}} · {{pair}}：{{ratio}}:1（建议至少 {{minimum}}:1）。",
+      "unknown": "{{scheme}} · {{pair}}：无法测量对比度。"
     }
   },
   "plugin": {
@@ -1540,8 +1660,9 @@
     "triggerInterval": "间隔",
     "triggerManual": "手动",
     "triggerEvent": "事件触发",
-    "locked": "核心插件 — 不可关闭",
-    "core": "核心",
+    "locked": "此插件已锁定",
+    "defaultEnabled": "默认启用",
+    "defaultEnabledHint": "默认启用，可以关闭",
     "enable": "开启插件",
     "disable": "关闭插件",
     "emptyPlaceholder": "{{label}} 暂无数据，等待游戏推进……",
@@ -1611,8 +1732,8 @@
     },
     "source": {
       "builtin": {
-        "label": "核心",
-        "tooltip": "Covel 框架内置的核心插件"
+        "label": "内置",
+        "tooltip": "随 Covel 提供的插件"
       },
       "official": {
         "label": "官方",
@@ -1640,6 +1761,7 @@
       "allowSelected": "授权所选",
       "notNow": "暂不授权"
     },
+    "unavailable": "本存档有插件没有运行，游戏照常进行：",
     "invokeRuntime": {
       "setupPending": "这个插件还需要初始化。请先继续一个故事回合，并完成出现的初始化表单，再重试此操作。",
       "submitted": "已提交 {{count}} 个后台任务：{{ids}}，等待返回…",
@@ -1661,7 +1783,26 @@
     },
     "runtimeModelMissing": "模型用途 {{slot}} 不可用，请选择已配置的用途或前往用途分配补齐。",
     "untranslated": "未翻译",
-    "untranslatedHint": "这个插件没有当前语言的文字，它的面板显示英文。"
+    "untranslatedHint": "这个插件没有当前语言的文字，它的面板显示英文。",
+    "invalidPanelSpecDetail": "面板定义无效：{{label}}（{{reason}}）",
+    "rpc": {
+      "failed": "插件任务失败，请重试。"
+    },
+    "off": {
+      "needsProvider": "{{plugin}} 已停用：它需要 {{contract}}。打开 {{providers}} 就能用。",
+      "noProvider": "{{plugin}} 已停用：它需要 {{contract}}，但没有已安装的插件提供它。请在「设置 → 安装与管理」中安装一个，安装后重启后端生效。",
+      "notInstalled": "{{plugin}} 没有安装，或者加载失败。",
+      "conflict": "{{plugin}} 和本存档的另一个插件冲突。",
+      "other": "{{plugin}} 现在无法运行，打开插件列表可以看到原因。",
+      "turnOn": "打开 {{plugin}}"
+    },
+    "noStory": {
+      "title": "没有开启叙事插件",
+      "detail": "回合不会产生故事：开启的插件里没有负责叙事的。",
+      "enable": "打开 {{plugins}} 就能得到故事。",
+      "install": "请在「设置 → 安装与管理」中安装一个叙事插件，安装后重启后端生效。"
+    },
+    "dependentsOff": "下面这些插件需要的东西被关掉了，开局后它们会停用："
   },
   "pluginJob": {
     "runtimesNotLoaded": "{{plugin}} 已授权，但它有 {{count}} 个任务无法加载，不会运行。",
@@ -1710,7 +1851,10 @@
       "zh": "中文（推荐 DashScope）",
       "en": "英文（推荐 GPT/Gemini）"
     },
-    "generationFailed": "图像生成失败"
+    "generationFailed": "图像生成失败",
+    "approvalAction": "生成图像",
+    "sessionUnavailable": "当前会话不可用，请重新打开会话后重试。",
+    "mediaUnavailable": "图片不可用，请重新加载后重试。"
   },
   "onboarding": {
     "language": "语言",
@@ -1786,6 +1930,14 @@
       "empty": "暂无任务。",
       "copy": "复制",
       "rerun": "重新运行"
+    },
+    "candidateList": {
+      "draft": "草稿",
+      "send": "发送",
+      "accept": "采纳",
+      "regenerate": "重新生成",
+      "title": "候选",
+      "regenerateHint": "重新生成一组候选。"
     }
   },
   "graph": {
@@ -1808,7 +1960,8 @@
     "submittedHint": "已选择",
     "selectPrefix": "选择{{label}}",
     "selectPlaceholder": "请选择...",
-    "requiredMissing": "请填写必填字段"
+    "requiredMissing": "请填写必填字段",
+    "missingInteraction": "无法提交此表单，请重新打开会话后重试。"
   },
   "interaction": {
     "playerSelected": "你的选择：",
@@ -1840,7 +1993,20 @@
       "showDetail": "查看详情",
       "hideDetail": "收起详情",
       "copyDetail": "复制详情",
-      "copied": "已复制"
+      "copied": "已复制",
+      "badge": {
+        "auth": "认证",
+        "forbidden": "权限",
+        "not-found": "未找到",
+        "rate-limited": "请求受限",
+        "server": "服务异常",
+        "timeout": "超时",
+        "network": "网络",
+        "invalid-output": "输出格式",
+        "incomplete": "未完成",
+        "error": "错误",
+        "unknown": "未知错误"
+      }
     },
     "plugin": {
       "loadFailed": "插件加载失败"
@@ -1864,7 +2030,7 @@
     }
   },
   "characterPresence": {
-    "hint": "点击立绘可放大，鼠标悬停可替换成你自己的图片。",
+    "hint": "点击立绘可放大，选择“替换”可上传新图片。",
     "empty": "本世界暂未提供角色立绘。",
     "replace": "替换",
     "uploading": "上传中…",
@@ -1925,7 +2091,8 @@
     "active": "生效中",
     "retry": "重试",
     "add": "添加",
-    "remove": "移除"
+    "remove": "移除",
+    "darkMode": "深色模式"
   },
   "debugger": {
     "title": "追踪检查器",
@@ -1993,7 +2160,7 @@
       "estCost": "预估结算（USD）",
       "unknownModel": "（未知模型）",
       "noPrice": "无价格",
-      "note": "Token 用量来自 llm.responded / gateway.responded。预估结算按模型参考价乘以服务商价格倍率；无法识别模型或价格的用量不计入，因此结果可能是下限值。",
+      "note": "Token 用量来自 llm.responded / gateway.responded，失败的调用报告过用量时也计入 gateway.failed。预估结算按模型参考价乘以服务商价格倍率；无法识别模型或价格的用量不计入，因此结果可能是下限值。",
       "cacheNote": "缓存读写 token 已计入输入合计；在取得服务商缓存单价前，不计入 USD 预估。",
       "noData": "本会话暂无 token 用量记录。",
       "windowTitle": "已加载窗口",
@@ -2081,7 +2248,7 @@
     },
     "view": "视图",
     "session": "会话",
-    "tokenCount": "{{count}} tokens",
+    "tokenCount": "{{count}} 个 token",
     "discovery": {
       "manifest": "manifest",
       "triggers": "{{count}} 个触发器",
@@ -2193,17 +2360,6 @@
     "deleted": "已删除 {{count}} 项 · 释放 {{size}}",
     "skipped": "有 {{count}} 项现在正被会话使用，已保留"
   },
-  "branchReply": {
-    "replyCandidates": "回复候选",
-    "draft": "草稿",
-    "send": "发送",
-    "accept": "采纳",
-    "regenerate": "重新生成",
-    "regenerateHint": "点「重新生成」获取这条回复的其他说法。",
-    "jobSubmitted": "已提交 branch-reply 任务: {{jobId}}",
-    "approvalRequired": "Branch reply 操作需要授权。",
-    "actionFailed": "Branch reply 操作失败"
-  },
   "characterBlueprint": {
     "empty": "暂无角色蓝图",
     "instantiated": "已生成角色",
@@ -2219,7 +2375,8 @@
       "message": "这个链接由「{{package}}」的作者提供，不是 Covel 提供的。Covel 没有审核过这个网站，也不对其内容负责。除非你信任它，否则不要在那里输入密码或支付信息。",
       "site": "网站：{{host}}",
       "confirm": "打开链接"
-    }
+    },
+    "authorLine": "作者：{{author}}"
   },
   "serverStatus": {
     "restarting": "本地服务已停止，正在重启…",

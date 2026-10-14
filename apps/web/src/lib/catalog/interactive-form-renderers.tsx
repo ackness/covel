@@ -102,12 +102,12 @@ export const Tabs: ComponentRenderer = ({ element, bindings }) => {
 //   "component": "FilterContainer",
 //   "props": {
 //     "items": { "$state": "/entries" },
-//     "searchPlaceholder": { "zh": "搜索…", "en": "Search…" },
+//     "searchPlaceholder": "Search…",
 //     "searchFields": ["value/title", "value/content", "value/tags"],
 //     "filterField": "value/category",
 //     "filterTabs": [
-//       { "value": "all", "label": { "zh": "全部" } },
-//       { "value": "monster", "label": { "zh": "怪物" }, "icon": "skull", "color": "red" }
+//       { "value": "all", "label": "All" },
+//       { "value": "monster", "label": "Monsters", "icon": "skull", "color": "red" }
 //     ],
 //     "itemComponent": "EntryCard",
 //     "itemPropMap": {

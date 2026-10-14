@@ -35,6 +35,23 @@ export class SessionRecordScopeConflictError extends Error {
 }
 
 /**
+ * Raised when a write goes through the root store from inside one of its
+ * `withTransaction` callbacks. Inside a transaction only `tx` writes: a root
+ * write would commit on its own on PostgreSQL but join the transaction on
+ * SQLite, so every backend refuses it instead.
+ */
+export class RootStoreWriteInTransactionError extends Error {
+  readonly code = "root_store_write_in_transaction";
+
+  constructor(readonly method: string) {
+    super(
+      `${method} was called on the root store inside a withTransaction callback; write through the callback's tx instead`,
+    );
+    this.name = "RootStoreWriteInTransactionError";
+  }
+}
+
+/**
  * Raised at startup when an SQL database was written by a Covel build with
  * another data schema. Covel does not migrate stored data, so it refuses to
  * open the database instead of failing later on a missing column. `found` is

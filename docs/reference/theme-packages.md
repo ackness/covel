@@ -50,11 +50,11 @@
 - `ui.appearance` 这个设置保存主题包的 ID，并写成 `data-theme`。默认值是 `stage`（舞台）。已经保存的主题选择保持不变。
 - 主题包的 `layout` 解析之后，写成 `data-layout` 和各个选项属性（见 §3.1）。没有单独的布局设置项：布局跟着主题包切换。
 - `ui.scheme` 保存颜色模式（明 / 暗），并写成 `data-scheme` 和 Tailwind 兼容的 `.dark` 类。
-- 主题包的 `schemes` 决定它支持哪些颜色模式。只支持一种模式的主题会自动把 `ui.scheme` 改成它支持的那个值。
+- 主题包的 `schemes` 决定它支持哪些颜色模式。只支持一种模式的主题按支持的模式显示，不回写 `ui.scheme`。主题不存在时显示默认主题，设置页会说明当前回退；已保存的偏好保留到玩家重新选择。
 
 ## 2. 支持的导入格式
 
-主题包可以是一个 CSS 文件，也可以是一个 JSON 文件。
+主题包可以是一个 CSS 文件，也可以是一个 JSON 文件。ID 不能与内置主题相同；校验失败时，界面按当前语言显示原因。
 
 ### 2.1 CSS 文件
 
@@ -74,6 +74,7 @@ html[data-theme="ember"].dark {
 
 - 至少要出现一个 `html[data-theme="..."]` 选择器。
 - 一个 CSS 文件只能声明一个主题 ID。
+- 每条顶层规则都必须限定在该主题的 `data-theme` 作用域内。支持 `:is()`、`:where()` 和属性值里的逗号，只有括号和字符串外的逗号才分隔规则。
 - 只有这个主题 ID 的选择器带了 `.dark`，运行时才认为它的 `schemes` 是 `["light", "dark"]`。
 - 其他的 `.dark` 选择器不影响颜色模式的推断。
 
@@ -234,27 +235,19 @@ apps/web/src/themes/builtins/
 ```json
 {
   "id": "paper",
-  "label": {
-    "zh-CN": "纸本",
-    "en-US": "Paper"
-  },
   "source": "builtin",
   "schemes": ["light", "dark"],
-  "description": {
-    "zh-CN": "温暖、偏叙事阅读器的纸本风格。",
-    "en-US": "A warm editorial reading style."
-  },
-  "group": "classic",
-  "groupLabel": {
-    "zh-CN": "经典",
-    "en-US": "Classic"
-  }
+  "group": "classic"
 }
 ```
 
 带布局的内置主题在 manifest 里多一个 `layout` 字段，例如 `"layout": { "preset": "book" }`。
 
 ## 5. 共享 token 契约
+
+导入和另存为主题时，界面检查各个声明模式的正文、次要文字与背景，以及按钮文字与按钮底色。正文和按钮建议至少 4.5:1，次要文字至少 3:1。低于建议值只提示，不拒绝启用；缺失或无法解析的颜色显示“无法测量”。这只是纯色 token 检查，不代表图片、透明叠层和视觉效果都已通过可读性验证。
+
+内置主题的这些固定色对有回归测试；名称、说明和分组名来自 Web catalog 的 `appearance.builtinThemes.<id>`，随界面语言变化。
 
 主题包最核心的工作是覆盖语义 token。下面按类别列出全部 token。
 
@@ -292,11 +285,7 @@ apps/web/src/themes/builtins/
 - `--surface-empty`
 - `--border-subtle`
 
-兼容旧主题的别名：
-
-- `--surface-app`
-- `--surface-panel`
-- `--surface-panel-strong`
+主题只使用上面的 token。自定义主题中的 `--surface-app`、`--surface-panel`、`--surface-panel-strong` 分别改为 `--surface-page`、`--surface-rail`、`--surface-elevated`。明暗切换由 SettingsStore 订阅调用 `applyColorScheme`，不再另设主题 provider 或 `covel:scheme` 存储键。
 
 ### 5.3 规则与强调 token
 
@@ -539,7 +528,7 @@ html[data-theme="my-theme"][data-turn="executing"] .ui-composer-input {
 4. 保存到本地设置
 5. 注入 `<style data-theme-style="theme-id">`
 6. 重新注册到 `ui.appearance`
-7. 根据 `schemes` 校正 `ui.scheme`
+7. 根据 `schemes` 解析显示模式，不回写设置
 8. 在设置面板和主题库中显示
 
 ## 8. 持久化行为
@@ -588,7 +577,7 @@ html[data-theme="my-theme"][data-turn="executing"] .ui-composer-input {
 - 动画定义、`animation` / `animation-name`，以及引用它们的自定义属性，一起改用新主题自己的动画名。
 - 再次另存时，只替换末尾那份生成的快照，不会越存越多地累积源规则或动画名前缀。
 - 源 CSS 和最终产物都要通过导入校验。产物不依赖原主题的 ID：可以按 §8 导出，删掉原主题后重新导入。
-- `slugifyThemeId()` / `ensureThemeId()` 生成不冲突的主题 ID。
+- `slugifyThemeId()` / `ensureThemeId()` 从名称生成主题 ID，并避开内置 ID。最终 ID 与已有自定义主题相同时，先确认覆盖；取消后保留名称、选择和覆盖值。确认期间该主题发生变化时，保存失败并提示重新检查。
 
 **保存失败时。** 外观微调和重置都等待真实的持久化结果：
 

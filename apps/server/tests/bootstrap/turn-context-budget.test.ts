@@ -123,7 +123,18 @@ describe("createBootstrapCompactorRunner", () => {
       payload: {
         outcome: "success",
         extension: { point: "history.compact@2" },
-        seq: 1,
+        // The summary call itself is traced first: gateway.calling, gateway.responded.
+        seq: 3,
+      },
+    });
+    // The provider's model call is traced under it, so its tokens are counted.
+    expect(
+      traces.find((trace) => trace.type === "gateway.responded"),
+    ).toMatchObject({
+      turnId: "current-turn",
+      payload: {
+        pluginId: "history-compaction",
+        usage: { inputTokens: 1, outputTokens: 1 },
       },
     });
     expect(
@@ -134,7 +145,7 @@ describe("createBootstrapCompactorRunner", () => {
             trace.type === "plugin.service.completed",
         )
         .map((trace) => (trace.payload as { seq: number }).seq),
-    ).toEqual([0, 1, 2]);
+    ).toEqual([0, 3, 4]);
     await store.close();
   });
 

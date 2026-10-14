@@ -4,6 +4,7 @@ import type {
   PluginMutationResponse,
   RuntimeResult,
   SessionEvent,
+  SessionMemoryIndexStatus,
   SessionPluginsResponse,
   SuspensionSummary,
 } from "@covel/shared";
@@ -15,7 +16,9 @@ import {
 } from "@covel/store/browser-sync";
 import i18n from "@/i18n";
 import { emitToast } from "@/lib/toast-channel";
-import { isNotFound, request } from "./request.js";
+import { actionApprovalSchema, type ActionApproval } from "./actions.js";
+import { buildSlotConfigHeaderInternal } from "./model-settings.js";
+import { isNotFound, request, requestResponse } from "./request.js";
 import { ignoreError } from "../../lib/ignore-error.js";
 import { verifyCreatedSessionCredential } from "./session-credential-cleanup.js";
 import {
@@ -94,6 +97,31 @@ export async function waiveSetupRuntime(sessionId: string, runtimeId: string) {
   return request<{ ok: boolean; runtimeId: string; state: SetupRuntimeState }>(
     `/api/sessions/${encodeURIComponent(sessionId)}/setup/${encodeURIComponent(runtimeId)}/waive`,
     { method: "POST", body: JSON.stringify({ confirm: true }) },
+  );
+}
+
+// -- Memory index ------------------------------------------------
+
+/**
+ * The embedding model this session's memory index was built with, and whether
+ * the model settings a turn would send still select it.
+ */
+export async function getSessionMemoryIndex(
+  sessionId: string,
+): Promise<SessionMemoryIndexStatus> {
+  return request<SessionMemoryIndexStatus>(
+    `/api/sessions/${encodeURIComponent(sessionId)}/memory-index`,
+    { headers: buildSlotConfigHeaderInternal(), silentErrors: true },
+  );
+}
+
+/** Discard the session's memory index and index it again with the configured model. */
+export async function rebuildSessionMemoryIndex(
+  sessionId: string,
+): Promise<SessionMemoryIndexStatus> {
+  return request<SessionMemoryIndexStatus>(
+    `/api/sessions/${encodeURIComponent(sessionId)}/memory-index/rebuild`,
+    { method: "POST", silentErrors: true },
   );
 }
 
@@ -184,6 +212,23 @@ export async function listStateTables(
   }));
 }
 
+// What each session's creation imported without, read once by the game
+// screen. Local mode creates its server mirror while hydrating, so the
+// creation response does not reach the caller of `createSession` there.
+const createdWorldDataNotices = new Map<
+  string,
+  readonly import("@covel/shared").WorldDataImportNotice[]
+>();
+
+/** The world-data notices of a session's creation; empty once read. */
+export function takeCreatedWorldDataNotices(
+  sessionId: string,
+): readonly import("@covel/shared").WorldDataImportNotice[] {
+  const notices = createdWorldDataNotices.get(sessionId) ?? [];
+  createdWorldDataNotices.delete(sessionId);
+  return notices;
+}
+
 export async function createSession(
   worldId: string,
   id?: string,
@@ -195,9 +240,8 @@ export async function createSession(
   // Open credential storage before creating server state, and capture any
   // previous authority before the HTTP request can overlap another creation.
   const capturedToken = await getSessionToken(id ?? "");
-  const { ownerToken, ...session } = await request<SessionCreateResponse>(
-    "/api/sessions",
-    {
+  const { ownerToken, worldDataNotices, ...session } =
+    await request<SessionCreateResponse>("/api/sessions", {
       method: "POST",
       operatorAuth: true,
       body: JSON.stringify({
@@ -208,14 +252,16 @@ export async function createSession(
         ...(locale ? { locale } : {}),
         ...(loreOverride !== undefined ? { loreOverride } : {}),
       }),
-    },
-  );
+    });
   // Persist the one-time owner token immediately so every follow-up call (which
   // never re-receives it) can present it on hosted tiers.
   if (id !== undefined && session.id !== id)
     throw new Error("Created session does not match the requested identity");
   if (typeof session.incarnation !== "string" || !session.incarnation)
     throw new Error("Created session is missing its incarnation");
+  if (worldDataNotices?.length)
+    createdWorldDataNotices.set(session.id, worldDataNotices);
+  else createdWorldDataNotices.delete(session.id);
   await storeCreatedSessionToken(session.id, ownerToken, capturedToken);
   await verifyCreatedSessionCredential(
     { sessionId: session.id, token: ownerToken },
@@ -405,14 +451,20 @@ export async function resumeSuspension(
   sessionId: string,
   suspensionId: string,
   data: unknown,
-): Promise<ResumeSuspensionResponse> {
-  return request<ResumeSuspensionResponse>(
+): Promise<ResumeSuspensionResponse | ActionApproval> {
+  const response = await requestResponse(
     `/api/sessions/${encodeURIComponent(sessionId)}/suspensions/${encodeURIComponent(suspensionId)}/resume`,
     {
       method: "POST",
       body: JSON.stringify({ data }),
+      sessionId,
+      operatorAuth: true,
     },
   );
+  const body: unknown = await response.json();
+  return response.status === 202
+    ? actionApprovalSchema.parse(body)
+    : (body as ResumeSuspensionResponse);
 }
 
 export async function cancelSuspension(

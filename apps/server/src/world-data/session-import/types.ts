@@ -79,6 +79,21 @@ export interface ImportPlan {
   readonly diagnostics: readonly WorldDataDiagnostic[];
   readonly mergeEvents: readonly MergeEvent[];
   readonly deferredProjectionOutputs: readonly DeferredProjectionOutput[];
+  /**
+   * Missing receivers make these writes non-authoritative during sync.
+   * `primary` preserves direct writes and their kernel effects while active
+   * projections still reconcile independently; `all` preserves the whole source.
+   */
+  readonly deferredSources?: readonly {
+    readonly sourceId: string;
+    readonly scope: "primary" | "all";
+  }[];
+  /**
+   * Dimensions the world declares that no active plugin can store. They are
+   * left out: the session starts without them, and a sync leaves the
+   * session's dimension records alone.
+   */
+  readonly skippedDimensions?: readonly string[];
 }
 
 /** Read-only sync plan prepared before entering the session mutation lock. */
@@ -98,6 +113,7 @@ export interface WorldDataImportedMediaRef {
 }
 
 export interface WorldDataImportPreflightDeps {
+  /** Session receiver selection; omit only when validating the full author catalogue. */
   readonly activePlugins?: readonly string[];
   readonly registry?: Pick<PluginRegistry, "get" | "getAll">;
   /**
@@ -158,9 +174,19 @@ export type PreparedWorldDataImport =
       readonly mediaRefs: readonly WorldDataImportedMediaRef[];
     };
 
+/**
+ * The part of the world record an import reads. The record is the world: its
+ * dimensions, character schema and portable contract data are used as they
+ * are, whatever the package files hold now. A package adds only the data the
+ * record does not keep (its `data/` sources and media).
+ */
+export interface WorldDataImportRecord {
+  readonly metadata?: Readonly<Record<string, unknown>>;
+}
+
 export interface PrepareWorldDataImportForSessionOptions {
-  readonly contractData?: unknown;
-  readonly dimensions?: unknown;
+  /** The world's record; without one the world has no dimensions. */
+  readonly world?: WorldDataImportRecord | null;
   readonly sessionId: string;
   readonly worldId: string | undefined;
   readonly worldsDirs?: readonly string[];
@@ -182,8 +208,8 @@ export interface ApplyPreparedWorldDataImportForSessionOptions {
 }
 
 export interface PreflightWorldDataForSessionOptions {
-  readonly contractData?: unknown;
-  readonly dimensions?: unknown;
+  /** The world's record, as for {@link PrepareWorldDataImportForSessionOptions}. */
+  readonly world?: WorldDataImportRecord | null;
   readonly sessionId: string;
   readonly worldId: string | undefined;
   readonly worldsDirs?: readonly string[];
@@ -224,6 +250,12 @@ export interface SyncWorldDataForSessionOptions {
   readonly deferMediaFinalize?: boolean;
   /** Session locale — selects `<name>.<lang>.<ext>` source variants when present. */
   readonly locale?: string;
+  /**
+   * Sync only the rows of these plugins: their planned writes and their
+   * ledger entries. A receiver that joins a running session gets its data
+   * without touching what the others hold.
+   */
+  readonly receivers?: readonly string[];
 }
 
 export interface SyncWorldDataForSessionResult {

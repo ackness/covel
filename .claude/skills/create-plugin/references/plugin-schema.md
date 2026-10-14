@@ -1,6 +1,6 @@
 # Current plugin authoring contract
 
-Root `PLUGIN.md` and child `RUNTIME.md` use strict YAML frontmatter. The main checkout's `pluginManifestSchema` and `runtimeAuthoringManifestSchema` are authoritative. Old flat fields are rejected; do not add compatibility readers.
+Root `PLUGIN.md` and child `RUNTIME.md` use strict YAML frontmatter. The main checkout's `pluginManifestSchema` and `runtimeAuthoringManifestSchema` are authoritative. `pnpm validate:plugin` rejects old flat fields and any other unknown field; loading leaves an unknown whole field out with a warning (rules: [`docs/reference/plugins.md`](../../../../docs/reference/plugins.md#静态检查查什么)). Do not add compatibility readers.
 
 ## Package manifest
 
@@ -67,7 +67,7 @@ function:
 
 `type` is `agent` or `function`. Stage runtimes (`auto`/`scheduled`) declare `schedule.stage`: `setup`, `pre-turn`, `narrative`, `post-turn`, or `audit`. Manual/event runtimes omit stage and may use `schedule.manual.execution: background`. Stage background work uses `schedule.completion` with a detached mode and bounded queue/execution deadlines. Dependencies belong in `schedule.needs` (success gating) and `schedule.after` (ordering only).
 
-`io.inputs` binds named inputs from `{runtime: local-id}` or `{contract: name@1}`. Use relative local runtime IDs within the package. Required turn inputs imply a success dependency; optional inputs allow absence. `select` is a JSON Pointer into the successful upstream value. Function code reads `ctx.inputs.<name>.value`; agent prompts receive the `runtime-inputs` block. Committed outputs use `scope: committed` plus `recordAs`. A detached kernel digest uses `from: {kernel: turn-digest@1}`. Always-detached manual/event runtimes cannot bind same-execution turn outputs.
+`io.inputs` binds named inputs from `{runtime: sample-notes/extract}` or `{contract: name@1}`. Within a multi-runtime package, write the complete `<pluginId>/<runtimeId>`; an inline runtime uses its package ID. See [reference scope](../../../../docs/reference/plugins.md#依赖和引用的范围). Required turn inputs imply a success dependency; optional inputs allow absence. `select` is a JSON Pointer into the successful upstream value. Function code reads `ctx.inputs.<name>.value`; agent prompts receive the `runtime-inputs` block. Committed outputs use `scope: committed` plus `recordAs`. A detached kernel digest uses `from: {kernel: turn-digest@1}`. Always-detached manual/event runtimes cannot bind same-execution turn outputs.
 
 `io.selfData` contains own-plugin namespace injections, without a `kind` field. `io.payloadSchema` validates invocation payloads. `io.output` supports `contract`, `schema`, and `recordAs`. `io.visibility` is `story`, `plugin`, or `system`.
 

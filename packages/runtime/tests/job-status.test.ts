@@ -313,6 +313,8 @@ describe("ctx.progress full chain", () => {
         throw new Error("not configured");
       },
       recursionDepth: 0,
+      session: { lastPlayerInput: null },
+      random: { int: (min: number) => min },
       progress: reporter,
     } satisfies FunctionHandlerContext;
 

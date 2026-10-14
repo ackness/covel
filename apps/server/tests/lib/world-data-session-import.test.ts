@@ -1,8 +1,16 @@
 import { createHash } from "node:crypto";
-import { mkdtemp, mkdir, readFile, symlink, writeFile } from "node:fs/promises";
+import {
+  mkdtemp,
+  mkdir,
+  readFile,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
+import { Hono } from "hono";
 import { Ajv2020 } from "ajv/dist/2020.js";
 import {
   createPluginRegistry,
@@ -21,12 +29,18 @@ import {
   preflightWorldDataForSession,
   syncWorldDataForSession,
 } from "../../src/world-data/session-import.js";
+import { BUILTIN_PLUGIN_PACKS } from "../../src/config/plugin-packs.js";
+import { resolveSessionPluginPlan } from "../../src/routes/api/session/plugins.js";
+import { sessionRoutes } from "../../src/routes/api/session.js";
+import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
+import { loadSingleWorld } from "../../src/world-seed-loader.js";
 import { conventionsOfPlugins } from "../../src/world-data/conventions.js";
 import { loadWorldDataDescriptor } from "../../src/world-data/descriptor.js";
 import { collectMediaSourceFiles } from "../../src/world-data/media.js";
 
 import {
   makePackageManifest,
+  makePlugin,
   registry as registryEntries,
 } from "./world-data-projection-fixtures.js";
 import type { PluginRegistryEntry } from "@covel/plugin-loader";
@@ -202,7 +216,7 @@ async function builtinPluginRegistry() {
         runtimeCount: manifests.length,
       },
       rootPath: discovery.rootPath,
-
+      source: "builtin",
       manifests,
       packageManifest,
       loadedRuntimes: new Map(),
@@ -287,6 +301,83 @@ describe("world data session importer", () => {
     });
   });
 
+  it.each(["emberback", "haruka-academy", "lantern-barrow", "mistport"])(
+    "starts %s with the narrative-only pack and only the narrator active",
+    async (worldId) => {
+      const registry = await builtinPluginRegistry();
+      const pack = BUILTIN_PLUGIN_PACKS.find(
+        (item) => item.id === "narrative-only",
+      )!;
+      const activePlugins = resolveSessionPluginPlan(pack.requested, registry, {
+        excluded: pack.excluded,
+        authorized: [...registry.getAll().keys()],
+      }).active;
+      expect(pack.requested).toEqual(["narrator"]);
+      expect(pack.excluded).toContain("world-init");
+      expect(activePlugins).toEqual(["narrator"]);
+      const worldsDir = path.resolve(import.meta.dirname, "../../../../worlds");
+      const world = await loadSingleWorld(path.join(worldsDir, worldId));
+      if (!world) throw new Error(`Bundled world ${worldId} is missing`);
+      const result = await preflightWorldDataForSession({
+        world,
+        sessionId: "preview",
+        worldId,
+        worldsDirs: [worldsDir],
+        now: NOW,
+        preflight: { registry, activePlugins },
+      });
+      expect(
+        result.diagnostics.filter((item) => item.level === "error"),
+      ).toEqual([]);
+      expect(result.diagnostics).toContainEqual(
+        expect.objectContaining({
+          level: "warning",
+          code: "dimension-provider-missing",
+        }),
+      );
+
+      // Exercise session creation too. Explicitly turn off world dependencies
+      // as well, so even a world that requires dice starts with narration only.
+      const store = createMemoryStore();
+      await store.createWorld(world);
+      const sessionLock = createInProcessSessionLock();
+      const mediaStore = createMemoryMediaStore();
+      const app = new Hono();
+      app.use("*", async (c, next) => {
+        c.set("store", store);
+        c.set("pluginRegistry", registry);
+        c.set("sessionLock", sessionLock);
+        c.set("worldsDirs", [worldsDir]);
+        c.set("mediaStore", mediaStore);
+        await next();
+      });
+      app.route("/api/sessions", sessionRoutes);
+      const response = await app.request("/api/sessions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: "narrative-only",
+          worldId,
+          plugins: pack.requested,
+          excludedPlugins: [...registry.getAll().keys()].filter(
+            (id) => !pack.requested.includes(id),
+          ),
+        }),
+      });
+      expect(response.status, await response.clone().text()).toBe(201);
+      expect(await response.json()).toMatchObject({
+        activePlugins: ["narrator"],
+        phase: "playing",
+        setupRuntimes: {},
+        ignoredDimensions: expect.arrayContaining([expect.any(String)]),
+      });
+      expect((await store.getSession("narrative-only"))?.activePlugins).toEqual(
+        ["narrator"],
+      );
+      await store.close();
+    },
+  );
+
   it("skips time data with a warning when its receiver is disabled", async () => {
     const registry = await builtinPluginRegistry();
     const result = await preflightWorldDataForSession({
@@ -303,7 +394,7 @@ describe("world data session importer", () => {
       expect.objectContaining({
         level: "warning",
         message:
-          'No active receiver for data contract "world.time-definition@1"; source skipped',
+          'No active receiver for data contract "world.time-definition@1"; contract writes skipped',
       }),
     );
     expect(
@@ -699,34 +790,277 @@ sources:
     expect(await contentFor({}, overlay)).toBe("safe");
   });
 
-  it("rejects missing plugin schemas during preflight", async () => {
-    const { worldsDir, worldId } = await makeWorld({
-      descriptor: `schemaVersion: 1
+  it.each(["preflight", "import", "sync"])(
+    "skips uninstalled receivers and their explicit schema during %s",
+    async (operation) => {
+      const { worldsDir, worldId } = await makeWorld({
+        descriptor: `schemaVersion: 1
 sources:
   facts:
     kind: json
     path: data/fact.json
+    schema: contract:missing-plugin.facts@1
     to: contract:missing-plugin.facts@1
     key: id
+  characters:
+    kind: json
+    path: characters/characters.json
+    to: characters
+    key: id
 `,
-      files: { "data/fact.json": JSON.stringify({ id: "one" }) },
-    });
-    const store = await makeStore(["missing-plugin"]);
-
-    await expect(
-      importWorldDataForSession({
+        files: {
+          "data/fact.json": JSON.stringify({ id: "one" }),
+          "characters/characters.json": JSON.stringify([
+            { id: "guide", name: "Guide", type: "npc" },
+          ]),
+        },
+      });
+      const store = await makeStore([]);
+      const options = {
         store,
         sessionId: "sess-1",
         worldId,
         worldsDirs: [worldsDir],
         now: NOW,
         preflight: {
-          activePlugins: ["missing-plugin"],
+          activePlugins: [],
           registry: registry({}),
         },
-      }),
-    ).rejects.toThrow(/No registered receiver/);
-  });
+      };
+      const result =
+        operation === "preflight"
+          ? await preflightWorldDataForSession(options)
+          : operation === "import"
+            ? await importWorldDataForSession(options)
+            : await syncWorldDataForSession({ ...options, dryRun: false });
+      expect(result).toMatchObject({ imported: true, planned: 1 });
+      expect(result.diagnostics).toEqual([
+        {
+          level: "warning",
+          sourceId: "facts",
+          message:
+            'No registered receiver for data contract "missing-plugin.facts@1"; contract writes skipped',
+        },
+      ]);
+      expect(await store.listCharacters("sess-1")).toEqual(
+        operation === "preflight"
+          ? []
+          : [expect.objectContaining({ id: "guide", name: "Guide" })],
+      );
+      expect(await store.listWorldDataImportLedger("sess-1")).toHaveLength(
+        operation === "preflight" ? 0 : 1,
+      );
+    },
+  );
+
+  it.each(["uninstalled", "inactive"])(
+    "preserves previously imported data when its receiver is %s during sync",
+    async (receiverState) => {
+      const { worldsDir, worldId, worldRoot } = await makeWorld({
+        descriptor: `schemaVersion: 1
+sources:
+  facts:
+    kind: json
+    path: data/fact.json
+    to: contract:world-notes.facts@1
+    key: id
+`,
+        files: { "data/fact.json": JSON.stringify({ id: "one" }) },
+      });
+      const store = await makeStore(["world-notes"]);
+      const options = {
+        store,
+        sessionId: "sess-1",
+        worldId,
+        worldsDirs: [worldsDir],
+        now: NOW,
+      };
+      await importWorldDataForSession({
+        ...options,
+        preflight: {
+          activePlugins: ["world-notes"],
+          registry: registry({ "world-notes": ["facts"] }),
+        },
+      });
+      const originalData = await store.listPluginData(
+        "sess-1",
+        "world-notes",
+        "facts",
+      );
+      const originalLedger = await store.listWorldDataImportLedger("sess-1");
+      expect(originalData).toHaveLength(1);
+      expect(originalLedger).toHaveLength(1);
+      const skipped = await syncWorldDataForSession({
+        ...options,
+        force: true,
+        preflight: {
+          activePlugins: [],
+          registry: registry(
+            receiverState === "uninstalled" ? {} : { "world-notes": ["facts"] },
+          ),
+        },
+      });
+      expect(skipped).toMatchObject({ planned: 0, deleted: 0 });
+      expect(
+        await store.listPluginData("sess-1", "world-notes", "facts"),
+      ).toEqual(originalData);
+      expect(await store.listWorldDataImportLedger("sess-1")).toEqual(
+        originalLedger,
+      );
+
+      // Once the receiver returns, an actual empty source still deletes its
+      // managed records. Skipping a source is different from reading no rows.
+      await writeFile(path.join(worldRoot, "data/fact.json"), "[]");
+      const emptied = await syncWorldDataForSession({
+        ...options,
+        preflight: {
+          activePlugins: ["world-notes"],
+          registry: registry({ "world-notes": ["facts"] }),
+        },
+      });
+      expect(emptied.deleted).toBe(1);
+      expect(
+        await store.listPluginData("sess-1", "world-notes", "facts"),
+      ).toEqual([]);
+      expect(await store.listWorldDataImportLedger("sess-1")).toEqual([]);
+    },
+  );
+
+  it.each(["uninstalled", "inactive"])(
+    "syncs active projections independently while the primary receiver is %s",
+    async (receiverState) => {
+      const sourceSchema = "schemas/fact.schema.json";
+      const { worldsDir, worldId, worldRoot } = await makeWorld({
+        descriptor: `schemaVersion: 1
+sources:
+  facts:
+    kind: json
+    path: data/fact.json
+    schema: ${sourceSchema}
+    to: contract:world-notes.facts@1+lorebook
+    key: id
+    effects: [characters, projections]
+`,
+        files: {
+          "data/fact.json": JSON.stringify({
+            id: "one",
+            name: "One",
+            content: "Original",
+          }),
+          [sourceSchema]: JSON.stringify({ type: "object", required: ["id"] }),
+        },
+      });
+      const projector = await makePlugin({
+        root: await mkdtemp(path.join(tmpdir(), "covel-receiver-projection-")),
+        id: "projector",
+        namespaces: ["facts"],
+        handlers: {
+          "main.mjs": `export default ({ value }) => ({ facts: Array.isArray(value) ? value : [value] });`,
+        },
+        projections: {
+          main: {
+            from: sourceSchema,
+            handler: "./handlers/main.mjs",
+            outputs: { facts: { namespace: "facts", key: "id" } },
+          },
+        },
+      });
+      const primaryRegistry = registry({ "world-notes": ["facts"] });
+      const allEntries = [...primaryRegistry.getAll().values(), projector];
+      const store = await makeStore(["world-notes", "projector"]);
+      const options = {
+        store,
+        sessionId: "sess-1",
+        worldId,
+        worldsDirs: [worldsDir],
+        now: NOW,
+      };
+      const allReceivers = {
+        activePlugins: ["world-notes", "projector"],
+        registry: registryEntries(allEntries),
+      };
+      expect(
+        await importWorldDataForSession({
+          ...options,
+          preflight: allReceivers,
+        }),
+      ).toMatchObject({ written: 4 });
+      const originalLedger = await store.listWorldDataImportLedger("sess-1");
+      const originalData = await store.listPluginData(
+        "sess-1",
+        "world-notes",
+        "facts",
+      );
+      const originalCharacters = await store.listCharacters("sess-1");
+      const originalLorebook = await store.listSessionLorebookEntries("sess-1");
+      const availableRegistry = registryEntries(
+        receiverState === "uninstalled" ? [projector] : allEntries,
+      );
+
+      // No consumers: even previously projected rows remain managed and intact.
+      expect(
+        await syncWorldDataForSession({
+          ...options,
+          force: true,
+          preflight: { activePlugins: [], registry: availableRegistry },
+        }),
+      ).toMatchObject({ planned: 0, deleted: 0, unchanged: 4 });
+      expect(await store.listWorldDataImportLedger("sess-1")).toEqual(
+        originalLedger,
+      );
+
+      const projectionOnly = {
+        activePlugins: ["projector"],
+        registry: availableRegistry,
+      };
+      await writeFile(
+        path.join(worldRoot, "data/fact.json"),
+        JSON.stringify({ id: "one", name: "One", content: "Updated" }),
+      );
+      expect(
+        await syncWorldDataForSession({
+          ...options,
+          preflight: projectionOnly,
+        }),
+      ).toMatchObject({ planned: 1, upserted: 1, deleted: 0, unchanged: 3 });
+      expect(
+        await store.getPluginData("sess-1", "projector", "facts", "one"),
+      ).toMatchObject({ value: { content: "Updated" } });
+
+      // A successful empty projection may delete only its own records.
+      await writeFile(path.join(worldRoot, "data/fact.json"), "[]");
+      expect(
+        await syncWorldDataForSession({
+          ...options,
+          force: true,
+          preflight: projectionOnly,
+        }),
+      ).toMatchObject({ planned: 0, deleted: 1, unchanged: 3 });
+      expect(
+        await store.listPluginData("sess-1", "projector", "facts"),
+      ).toEqual([]);
+      expect(
+        await store.listPluginData("sess-1", "world-notes", "facts"),
+      ).toEqual(originalData);
+      expect(await store.listCharacters("sess-1")).toEqual(originalCharacters);
+      expect(await store.listSessionLorebookEntries("sess-1")).toEqual(
+        originalLorebook,
+      );
+      expect(await store.listWorldDataImportLedger("sess-1")).toEqual(
+        originalLedger.filter((row) => row.pluginId !== "projector"),
+      );
+
+      expect(
+        await syncWorldDataForSession({ ...options, preflight: allReceivers }),
+      ).toMatchObject({ deleted: 3 });
+      expect(await store.listWorldDataImportLedger("sess-1")).toEqual([]);
+      expect(
+        await store.listPluginData("sess-1", "world-notes", "facts"),
+      ).toEqual([]);
+      expect(await store.listCharacters("sess-1")).toEqual([]);
+      expect(await store.listSessionLorebookEntries("sess-1")).toEqual([]);
+    },
+  );
 
   it("skips sources targeting plugins outside final activePlugins (warning, not a session-blocking error)", async () => {
     const { worldsDir, worldId } = await makeWorld({
@@ -1919,6 +2253,83 @@ sources:
     ).toEqual([]);
   });
 
+  it.each(["uninstalled", "inactive"])(
+    "preserves managed media and its references while the index receiver is %s",
+    async (receiverState) => {
+      const { worldsDir, worldRoot, worldId } = await makeWorld({
+        descriptor: `schemaVersion: 1
+sources:
+  portraits:
+    kind: media
+    path: media/portraits
+    to: media
+    indexTo: contract:character.portrait-assets@1
+    key: filename
+`,
+        files: { "media/portraits/mio.png": "png-ish" },
+      });
+      const store = await makeStore(["character-presence"]);
+      const mediaStore = createMemoryMediaStore();
+      const options = {
+        store,
+        mediaStore,
+        sessionId: "sess-1",
+        worldId,
+        worldsDirs: [worldsDir],
+        now: NOW,
+      };
+      const preflight = {
+        activePlugins: ["character-presence"],
+        registry: registry({ "character-presence": ["assets"] }),
+      };
+      expect(
+        await importWorldDataForSession({ ...options, preflight }),
+      ).toMatchObject({ written: 1 });
+      const data = await store.listPluginData(
+        "sess-1",
+        "character-presence",
+        "assets",
+      );
+      const ledger = await store.listWorldDataImportLedger("sess-1");
+      const refs = await mediaStore.listRefs();
+      const assets = await mediaStore.listAssets();
+      expect(refs).toHaveLength(1);
+      expect(assets).toHaveLength(1);
+      await rm(path.join(worldRoot, "media/portraits/mio.png"));
+      for (const dryRun of [true, false]) {
+        expect(
+          await syncWorldDataForSession({
+            ...options,
+            dryRun,
+            force: true,
+            preflight: {
+              activePlugins: [],
+              registry:
+                receiverState === "uninstalled"
+                  ? registry({})
+                  : preflight.registry,
+            },
+          }),
+        ).toMatchObject({ planned: 0, deleted: 0, unchanged: 1 });
+        expect(
+          await store.listPluginData("sess-1", "character-presence", "assets"),
+        ).toEqual(data);
+        expect(await store.listWorldDataImportLedger("sess-1")).toEqual(ledger);
+        expect(await mediaStore.listRefs()).toEqual(refs);
+        expect(await mediaStore.listAssets()).toEqual(assets);
+      }
+
+      expect(
+        await syncWorldDataForSession({ ...options, preflight }),
+      ).toMatchObject({ deleted: 1 });
+      expect(
+        await store.listPluginData("sess-1", "character-presence", "assets"),
+      ).toEqual([]);
+      expect(await store.listWorldDataImportLedger("sess-1")).toEqual([]);
+      expect(await mediaStore.listRefs()).toEqual([]);
+    },
+  );
+
   it("sync deletion removes only the current session ref for shared imported media", async () => {
     const { worldsDir, worldRoot, worldId } = await makeWorld({
       descriptor: `schemaVersion: 1
@@ -2016,6 +2427,174 @@ sources: {}
     expect(
       (await mediaStore.listRefs()).filter((ref) => ref.mediaId === mediaId),
     ).not.toContainEqual(expect.objectContaining({ sessionId: "sess-a" }));
+  });
+
+  it("sync keeps the reference of a picture the session's history still shows (F-165)", async () => {
+    const { worldsDir, worldRoot, worldId } = await makeWorld({
+      descriptor: `schemaVersion: 1
+sources:
+  portraits:
+    kind: media
+    path: media/portraits
+    to: media
+    indexTo: contract:character.portrait-assets@1
+    key: filename
+`,
+      files: { "media/portraits/mio.png": "png-ish" },
+    });
+    const store = createMemoryStore();
+    await addSession(store, "sess-a", ["character-presence"], worldId);
+    await addSession(store, "sess-b", ["character-presence"], worldId);
+    const mediaStore = createMemoryMediaStore();
+    const preflight = {
+      activePlugins: ["character-presence"],
+      registry: registry({ "character-presence": ["assets"] }),
+    };
+    for (const sessionId of ["sess-a", "sess-b"]) {
+      await importWorldDataForSession({
+        store,
+        mediaStore,
+        sessionId,
+        worldId,
+        worldsDirs: [worldsDir],
+        now: NOW,
+        preflight,
+      });
+    }
+    const row = await store.getPluginData(
+      "sess-b",
+      "character-presence",
+      "assets",
+      "mio.png",
+    );
+    if (!row) throw new Error("expected the imported portrait row");
+    const ref = (
+      row.value as { ref: { id: string; mime: string; size: number } }
+    ).ref;
+    // sess-b only references the asset (sess-a owns it) and showed it once.
+    await store.addMessage({
+      id: "shown-portrait",
+      sessionId: "sess-b",
+      role: "assistant",
+      content: "Mio waves.",
+      metadata: { block: { image: ref } },
+      createdAt: NOW,
+    });
+    await writeFile(
+      path.join(worldRoot, "data/world.data.yaml"),
+      `schemaVersion: 1
+sources: {}
+`,
+    );
+
+    const sync = await syncWorldDataForSession({
+      store,
+      mediaStore,
+      sessionId: "sess-b",
+      worldId,
+      worldsDirs: [worldsDir],
+      now: NOW,
+      dryRun: false,
+      preflight,
+    });
+
+    expect(sync).toMatchObject({ imported: true, deleted: 1 });
+    expect(
+      await store.getPluginData(
+        "sess-b",
+        "character-presence",
+        "assets",
+        "mio.png",
+      ),
+    ).toBeNull();
+    expect((await mediaStore.lookup(ref.id))?.ownerSessionId).toBe("sess-a");
+    expect(await mediaStore.isReferencedBy(ref.id, "sess-b")).toBe(true);
+  });
+
+  it("sync keeps the reference another index row with identical bytes still needs (F-165)", async () => {
+    const { worldsDir, worldRoot, worldId } = await makeWorld({
+      descriptor: `schemaVersion: 1
+sources:
+  portraits:
+    kind: media
+    path: media/portraits
+    to: media
+    indexTo: contract:character.portrait-assets@1
+    key: filename
+  extras:
+    kind: media
+    path: media/extras
+    to: media
+    indexTo: contract:character.portrait-assets@1
+    key: filename
+`,
+      files: {
+        "media/portraits/mio.png": "same-bytes",
+        "media/extras/mio-copy.png": "same-bytes",
+      },
+    });
+    const store = createMemoryStore();
+    await addSession(store, "sess-a", ["character-presence"], worldId);
+    await addSession(store, "sess-b", ["character-presence"], worldId);
+    const mediaStore = createMemoryMediaStore();
+    const preflight = {
+      activePlugins: ["character-presence"],
+      registry: registry({ "character-presence": ["assets"] }),
+    };
+    for (const sessionId of ["sess-a", "sess-b"]) {
+      await importWorldDataForSession({
+        store,
+        mediaStore,
+        sessionId,
+        worldId,
+        worldsDirs: [worldsDir],
+        now: NOW,
+        preflight,
+      });
+    }
+    const kept = await store.getPluginData(
+      "sess-b",
+      "character-presence",
+      "assets",
+      "mio.png",
+    );
+    if (!kept) throw new Error("expected the imported portrait row");
+    const mediaId = (kept.value as { ref: { id: string } }).ref.id;
+    // A later version drops the second source; its file had the same bytes.
+    await writeFile(
+      path.join(worldRoot, "data/world.data.yaml"),
+      `schemaVersion: 1
+sources:
+  portraits:
+    kind: media
+    path: media/portraits
+    to: media
+    indexTo: contract:character.portrait-assets@1
+    key: filename
+`,
+    );
+
+    const sync = await syncWorldDataForSession({
+      store,
+      mediaStore,
+      sessionId: "sess-b",
+      worldId,
+      worldsDirs: [worldsDir],
+      now: NOW,
+      dryRun: false,
+      preflight,
+    });
+
+    expect(sync).toMatchObject({ imported: true, deleted: 1, upserted: 0 });
+    expect(
+      await store.getPluginData(
+        "sess-b",
+        "character-presence",
+        "assets",
+        "mio.png",
+      ),
+    ).toBeTruthy();
+    expect(await mediaStore.isReferencedBy(mediaId, "sess-b")).toBe(true);
   });
 
   it("keeps media undeleted when a delete-sync transaction aborts", async () => {

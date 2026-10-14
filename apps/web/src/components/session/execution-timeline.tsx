@@ -105,7 +105,7 @@ function RuntimeFailureNotice({
               onClick={() => onRetry(rt.runtimeId)}
               className="inline-flex shrink-0 items-center gap-1.5 rounded-(--radius-control) border border-border px-3 py-2 text-xs text-foreground transition-colors hover:bg-muted"
               title={retryFromLabel}
-              aria-label={`${t("session.retryTask")}: ${rt.label}`}
+              aria-label={t("session.retryTaskNamed", { label: rt.label })}
             >
               <RotateCw className="h-3 w-3" />
               {t("session.retryTask")}
@@ -342,9 +342,9 @@ export function ExecutionTimeline({
               )}
             {!isCollapsed && canRetry && retryableFailures.length > 0 && (
               <p className="text-xs leading-relaxed text-muted-foreground">
-                {t("session.retryScopeHint")}
-                {retryableFailures.length > retryBatch.length &&
-                  ` ${t("session.retryBatchLimit", { count: retryBatch.length })}`}
+                {retryableFailures.length > retryBatch.length
+                  ? t("session.retryScopeLimited", { count: retryBatch.length })
+                  : t("session.retryScopeHint")}
               </p>
             )}
 
@@ -406,14 +406,21 @@ export function ExecutionTimeline({
               <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground animate-pulse">
                 <Loader2 className="w-3 h-3 animate-spin shrink-0" />
                 <span className="truncate">
-                  {active.label}
-                  {active.status === "llm" && ` — ${t("session.statusLlm")}`}
-                  {active.status === "tool" &&
-                    active.toolName &&
-                    ` — ${active.toolName}`}
-                  {active.status === "running" &&
-                    ` — ${active.detail?.startsWith(I18N_SENTINEL_PREFIX) ? resolveI18nSentinel(active.detail, t) : t("session.statusPreparing")}`}
-                  ...
+                  {active.status === "deferred" ||
+                  (active.status === "tool" && !active.toolName)
+                    ? t("session.activeTask", { label: active.label })
+                    : t("session.activeTaskDetail", {
+                        label: active.label,
+                        detail:
+                          active.status === "llm"
+                            ? t("session.statusLlm")
+                            : active.status === "tool"
+                              ? (active.toolName ??
+                                t("session.statusPreparing"))
+                              : active.detail?.startsWith(I18N_SENTINEL_PREFIX)
+                                ? resolveI18nSentinel(active.detail, t)
+                                : t("session.statusPreparing"),
+                      })}
                 </span>
               </div>
             )}

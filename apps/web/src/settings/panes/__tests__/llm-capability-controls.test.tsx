@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import i18n from "@/i18n";
 import type { ModelCapabilityInfo } from "@/services/api.js";
@@ -84,6 +84,27 @@ describe("llm capability controls", () => {
       />,
     );
 
+    expect(
+      screen.getByRole("group", { name: i18n.t("settings.inputModalities") }),
+    ).toBeTruthy();
+    expect(
+      screen
+        .getByRole("button", { name: "Image Input", pressed: true })
+        .querySelector("svg"),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Audio Input", pressed: false }),
+    ).toBeTruthy();
+    expect(
+      within(
+        screen.getByRole("group", {
+          name: i18n.t("settings.outputModalities"),
+        }),
+      ).getByRole("button", { name: "text", pressed: true }),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Streaming", pressed: true }),
+    ).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Image Input" }));
     expect(onUpdate).toHaveBeenLastCalledWith({ input: ["text"] });
 
@@ -183,4 +204,26 @@ describe("llm capability controls", () => {
       pricing: { outputPerMToken: undefined },
     });
   });
+});
+
+it("F-080/F-096 localizes compact numbers and image price units", async () => {
+  await i18n.changeLanguage("zh-CN");
+  expect(formatTokenCount(100_000)).toBe(
+    new Intl.NumberFormat("zh-CN", {
+      notation: "compact",
+      maximumFractionDigits: 1,
+    }).format(100_000),
+  );
+  render(
+    <CapabilityTags
+      capability={{
+        input: ["text"],
+        output: ["image"],
+        pricing: { perImage: 0.04 },
+      }}
+    />,
+  );
+  expect(
+    screen.getByTitle(i18n.t("settings.pricePerImage")).textContent,
+  ).toContain("/张");
 });

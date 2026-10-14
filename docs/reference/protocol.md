@@ -72,6 +72,7 @@ return { result: execution.result, committed: outcome.status === "committed" };
 - 提交计划里保留了 TurnStart Hook 的否决原因，以及执行期间看到的取消状态。
 - 这样的执行，`commitExecution` 返回失败：在域事务之前停下，不允许宿主的 `extraInTx` 写入，也不产生成功的完成事件或快照。之前已经保存的客户端输入保留。
 - 没有提交的执行结束时，客户端撤下这次执行生成的 assistant 内容，保留玩家的输入。
+- 本地输入回显按动作的 `requestId` 认领 `turnId`。被拒绝的输入不会归到后续动作；回显在权威消息替换之前不参与历史分页游标。
 - 声明了 `output.recordAs` 的成功结果，必须有执行时记下的输出 schema。缺少依赖会让整次提交回滚，不会悄悄跳过导出。已加载的 schema 对单次导出值的校验、媒体的整理和修订冲突的处理，仍然遵循[事务契约](./transactions.md)。
 
 ### 挂起和恢复
@@ -171,7 +172,7 @@ return { result: execution.result, committed: outcome.status === "committed" };
 | `resync`      | 只在 `committed: true`、并且这一回合提交之后有一部分事件没发出去时为 `true`。数据已经保存，客户端应该去读已保存的状态，不要等那些事件。订阅流同时会收到 `system.reset`，`reason: "publish-failed"` |
 
 > [!NOTE]
-> **开场接力。** 一次玩家动作完成了最后一个 setup runtime 时，`POST /api/actions` 的同一条 SSE 流会自动接着跑一个主循环回合（见 [api.md § POST /api/actions](./api.md)）。这时流里会出现**两轮** `execution.started` 和 runtime 生命周期事件，它们外层的 `turnId` 不同（setup 回合和接力回合）。但只有**一个** `execution.completed` 收尾。前端靠它结束“执行中”的状态，并按 `committed` 处理先行显示的内容。setup 提交失败时不会启动接力，直接以 `committed: false` 结束。
+> **开场接力。** 一次玩家动作完成了最后一个 setup runtime 时，`POST /api/actions` 的同一条 SSE 流会自动接着跑一个主循环回合（见 [api.md § POST /api/actions](./api.md)）。这时流里会出现**两轮** `execution.started` 和 runtime 生命周期事件，它们外层的 `turnId` 不同（setup 回合和接力回合）。但只有**一个** `execution.completed` 收尾。前端靠它结束“执行中”的状态，并按 `committed` 处理先行显示的内容。setup 提交失败时不会启动接力，直接以 `committed: false` 结束。玩家在接力开始前停止时，接力不再开始，`execution.completed` 带接力回合的 `turnId` 和 `abortReason: "aborted-by-player"`。
 
 **`runtime.deferred` 是“移交公告”**
 
@@ -187,11 +188,12 @@ return { result: execution.result, committed: outcome.status === "committed" };
 
 - 消息进入服务端里这个会话的队列。story runtime 在下一次调用模型之前，把队列里的内容并进实时的对话记录。
 - 如果插话在最终回答的流式输出期间才到，story runtime 会在收尾之前多做一步模型调用来处理它（受 maxSteps 限制）。
-- 插话同时保存成一条 user 消息，之后的回合历史里自然包含它。保存失败时撤回队列里的那一项，并返回 500，保证队列和历史一致。
+- 插话跟着回合一起保存。回合提交时，它在同一个事务里写进对话历史（排在玩家这一回合的消息之后），也写进聊天记录，之后的回合能读到它。插话不算一个新的玩家回合。回合被停止、失败或回滚时，两边都不留它。
 - 客户端自己在本地显示这条插话就行，没有新增的 SSE 事件。
 
 **abort：玩家停止这一回合**（`POST /api/sessions/:id/abort`）
 
+- 停止作用于玩家的这次动作请求，不只是当前的一个回合。请求还在等会话锁或等记忆更新时停止，回合不再开始，流里只有一个带 `abortReason` 的 `execution.completed`。
 - 它触发回合级的取消信号。重试层立刻切断正在进行的模型调用和流。玩家停止不会自动重试，也不会把半截叙事当成结果提交。
 - executor 停止调度后面的 runtime 组，并跳过事件链。
 - 被中止的 runtime 以失败上报（`runtime.failed`），它的提案不产出。最终提交时会检查玩家的取消信号：提交之前收到取消，整个回合都不提交。
@@ -215,7 +217,7 @@ return { result: execution.result, committed: outcome.status === "committed" };
 | ---------------- | ---- | -------- | ------------------------------ |
 | `error.occurred` | S→C  | 执行错误 | `{ message, code?, details? }` |
 
-- `code` 是可选的、稳定的错误码（如 `"session_busy"`）。客户端可以据此做翻译和重试。没有 `code` 时按 `message` 显示。
+- `code` 是可选的、稳定的错误码（如 `"session_busy"`）。客户端可以据此做翻译和重试。没有 `code` 时按 `message` 显示。动作开始前被拒绝的 code 见 [api.md § 流里的拒绝](./api.md#流里的拒绝)。
 - `details` 只随 `code: "form_rejected"` 出现，见[交互响应](#交互响应)。
 
 世界翻译接口使用另一种独立的 SSE 事件 `{ type: "error", message }`，没有 `code` 字段：
@@ -365,7 +367,7 @@ staged detached worker 也用这个事件报告持久状态：
 
 | durable status        | 语义                                                                                                                                                                                                                    |
 | --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `queued`              | 已随原始回合提交，等待 worker；超过 `maxQueueMs` 转 `timed_out`                                                                                                                                                         |
+| `queued`              | 已随原始回合提交，等待 worker；超过 `maxQueueMs` 转 `timed_out`。正常关闭时还没进入 `committing` 的作业也回到这里                                                                                                       |
 | `claimed` / `running` | worker 已取得 CAS lease / 正在执行；同一 session/plugin/runtime 保持串行                                                                                                                                                |
 | `committing`          | 已通过 owner CAS，正在 session lock 内做 stale/effect guard 和领域提交                                                                                                                                                  |
 | `succeeded`           | 后台 proposal 已提交，`result` 保存 background turn/execution/runtime 摘要                                                                                                                                              |
@@ -375,9 +377,10 @@ staged detached worker 也用这个事件报告持久状态：
 | `stale`               | session inactive、session/plugin incarnation 或版本已变化；提交屏障以 `reason: commit-barrier-rejected` 拒绝结果                                                                                                        |
 | `orphaned`            | 在途 owner 停止续租且 lease 过期；owner 自己连续续租失败直到 lease 过期时，会立即中止正在进行的执行并落此状态                                                                                                           |
 
-**启动时的恢复**
+**关闭和启动时的恢复**
 
-- 还没过排队期限、并且从来没被领取过的 `queued` 作业，继续执行。
+- 正常关闭时，还没进入 `committing` 的作业等这次执行返回后放回 `queued`，jobId 不变，下次认领时 `attempt` 加 1。停下前对外做过的事会在重跑时再做一次。已经进入 `committing` 的作业照常提交完。
+- 还没过排队期限的 `queued` 作业，继续执行。排队期限从最初入队时算起。
 - 排队超时的，结束为 `timed_out`。
 - 租约已经过期的 `claimed` / `running` / `committing` 作业，结束为 `orphaned`。
 - 这些终态**不会自动重放**。原因：服务商可能已经计费，只是回答没保存下来；重放会重复扣费。
@@ -606,6 +609,11 @@ Gemini 原生的思考强度、`providerOptions.google.thinkingConfig`、`cached
 - 还没有游标的客户端把它记成 `lastEventId`。这样即使这条连接上一个事件都没收到，下次连接（例如一次 action 结束之后恢复订阅）也能补上这期间错过的事件。
 - 已经有游标的客户端忽略它。
 
+**第一次连接接上恢复的视图。** 打开会话时，订阅流和 `GET /api/sessions/:id/view` 几乎同时发出，服务端先处理哪个没有保证。视图的 `eventCursor` 是读视图之前这个会话最新的事件 id，客户端用它把两者接上：
+
+- 第一次连接还没发出时，客户端把 `eventCursor` 当作 `lastEventId`，服务端补发读视图之后的事件。
+- 第一次连接已经不带游标发出了，客户端拿它的 `system.connected` 里的 `cursor` 和 `eventCursor` 比：前者更新，或 epoch 不同，说明订阅在读视图之后才登记，中间的事件两边都没有，客户端重新读整个会话（和收到 `system.reset` 一样）。不比它新就什么都不做。
+
 **订阅哪些 topic**
 
 - `/api/events/stream` 接受的 topic 由 `@covel/shared` 的 `SUBSCRIPTION_TOPICS` 定义：`runtime / state / game / plugin / session / store / system / trace / hooks / job`。`subscribe.ts` 的 `VALID_TOPICS` 从它生成。
@@ -648,6 +656,7 @@ Gemini 原生的思考强度、`providerOptions.google.thinkingConfig`、`cached
 
 - 网页端收到 reset 或重连之后，带着 revision 检查重新拉取：会话快照、插件列表、所有启用插件的数据、没解决的 suspension 和世界。这期间到达的实时事件先缓冲，之后再重放。
 - 只有访问代次和执行所有权仍然对得上时，才用同一个 `turnId/runtimeId` 的已保存终态叙事替换流式占位，并移除这个占位的外部文本和待刷新的片段。一条新的、健康的 POST 流仍然拥有自己现场的输出。
+- 出错或断流后，只有恢复确认回合失败或中断、且没有对应的已保存故事时，才把已显示的文字移到“未保存”区域，清除占位和流式缓存。文字只保留到离开会话，不进入故事历史、舞台或插件数据；有可恢复动作时，旁边提供重试。未知网络状态不开放重试，已保存故事仍按上面的规则替换。玩家主动中止和正常 `committed: false` 的撤回规则不变。
 - 恢复快照的最近窗口如果和已加载的历史接不上，客户端先通过现有的消息分页接口只读地补到旧的锚点，再合并发布。它不删除旧窗口，也不重新发送动作。
 
 **给嵌入 `@covel/events` 的宿主**
@@ -657,6 +666,8 @@ Gemini 原生的思考强度、`providerOptions.google.thinkingConfig`、`cached
 - 记录类型 `EventStoreRecord` 随包导出。现有的 DataStore 可以直接传入；独立的宿主不用实现其他数据库方法。
 - 持久化是一条有上限的、尽力而为的审计队列。`flush()` 等队列排空，但不保证 transport 已经送达。
 - 特别大的 transport 帧，在保存成功之后只发送一个引用，接收方通过同一个存储读出内容。
+
+进程间的 transport 帧必须带非空 `stream`，标识发送端的这一代状态；缺少它的帧会被拒绝。发布端应一起升级并重启。追踪事件按扁平 payload 读取：嵌套的 `data` 是普通数据，不会合并到顶层。旧的嵌套追踪需重新生成，才能按当前调试界面查看。
 
 #### 事件 id 形态：`${epoch}:${seq}`（H-05/H-06）
 
@@ -708,6 +719,9 @@ data: {
 
 - 每个 `(origin, session, stream)` 从 `seq=1` 开始校验。新 stream 的第一帧大于 `1`，或者接收状态被淘汰之后第一帧大于 `1`，都会按缺口处理。
 - 出问题的那一帧之前的事件交付完、之后的事件交付之前，本地的补发缓存被清空并换 epoch。所有已连接的客户端收到 reset 之后断线重连。
+- 接收端给每个 `(origin, session)` 只留当前 stream 的状态。发送方换了 stream，旧 stream 的状态就收回；旧 stream 还有等着前一帧的事件时，先交付它们并 reset。
+- 接收状态最多 1024 个，满了先淘汰最久没收到帧、也没有等待中事件的状态。都在等待时，淘汰最久没收到帧的那个，先交付它等着的事件并 reset。
+- 发送方每个会话最多有 256 帧等着发出。transport 一直不返回、超过这个数时，新帧直接丢掉并告警。接收方等到之后的帧时会发现缺了一段，按缺口 reset。
 
 `publish-failed` 的细节：
 
@@ -726,16 +740,16 @@ data: {
 - 服务端的转发白名单 `FORWARDED_EVENT_TYPES` 完全从这份元数据**生成**，不是手写的集合。
 - 网页端的 actions 处理器对这些类型明确地什么都不做，它们通过订阅通道驱动 `/debug` 的时间线。因为它们在联合类型里，新增同类事件时，前端的穷尽检查会强制你决定“处理还是忽略”。
 
-| 事件                                                       | 来源                                                                                          | 用途                                                                  |
-| ---------------------------------------------------------- | --------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
-| `runtime.skipped`                                          | `apps/server/src/routes/api/actions.ts`                                                       | runtime 因 cooldown / startTurn / maxTriggerCount 被跳过              |
-| `character.upserted`                                       | `packages/runtime/src/commit/session-commit-emitter.ts`（`character.upsert` proposal commit） | 角色快照事件                                                          |
-| `tool.calling` / `tool.completed` / `tool.failed`          | TurnEmitter                                                                                   | LLM 工具调用 trace                                                    |
-| `domain-event.previewed`                                   | ToolExecutor（`emittedEvents` 成功后）                                                        | 服务端投影成 UI slot 预览；前端不直接消费，不代表领域提交             |
-| `llm.calling` / `llm.responded` / `message.completed`      | TurnEmitter                                                                                   | LLM 调用 trace                                                        |
-| `block.emitted` / `state.patch.applied`                    | TurnEmitter                                                                                   | 块发出 / state patch 应用 trace                                       |
-| `hook.fired` / `hook.aborted`                              | TurnEmitter                                                                                   | Hook 行为 trace                                                       |
-| `gateway.calling` / `gateway.responded` / `gateway.failed` | TurnEmitter（`withGatewayTrace`）                                                             | function-runtime `ctx.gateway` provider 调用 trace（与 `llm.*` 对等） |
+| 事件                                                       | 来源                                                                                          | 用途                                                                                                                   |
+| ---------------------------------------------------------- | --------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `runtime.skipped`                                          | `apps/server/src/routes/api/actions.ts`                                                       | runtime 因 cooldown / startTurn / maxTriggerCount 被跳过                                                               |
+| `character.upserted`                                       | `packages/runtime/src/commit/session-commit-emitter.ts`（`character.upsert` proposal commit） | 角色快照事件                                                                                                           |
+| `tool.calling` / `tool.completed` / `tool.failed`          | TurnEmitter                                                                                   | LLM 工具调用 trace                                                                                                     |
+| `domain-event.previewed`                                   | ToolExecutor（`emittedEvents` 成功后）                                                        | 服务端投影成 UI slot 预览；前端不直接消费，不代表领域提交                                                              |
+| `llm.calling` / `llm.responded` / `message.completed`      | TurnEmitter                                                                                   | LLM 调用 trace                                                                                                         |
+| `block.emitted` / `state.patch.applied`                    | TurnEmitter                                                                                   | 块发出 / state patch 应用 trace                                                                                        |
+| `hook.fired` / `hook.aborted`                              | TurnEmitter                                                                                   | Hook 行为 trace                                                                                                        |
+| `gateway.calling` / `gateway.responded` / `gateway.failed` | TurnEmitter（`withGatewayTrace`）                                                             | function-runtime 和扩展点提供方的 `ctx.gateway` provider 调用 trace（与 `llm.*` 对等）；失败时带服务商已报告的 `usage` |
 
 `runtime.skipped` 是 actions 路由自己写进流里的，它在元数据里的 `forwardToActionStream` 是 `false`。
 
@@ -980,6 +994,8 @@ data: {
 
 **框架默认 action：** 见 [api.md](./api.md#post-apisessionsidplugin-rpc) 的“框架默认 action”小节。
 
+恢复挂起的 runtime 也逐项请求缺少的授权。审批期间释放客户端的会话队列；切换会话或拒绝审批会停止重试并保留挂起项。见 [恢复接口](./api.md#post-apisessionsidsuspensionssuspensionidresume)。
+
 ### RPC Approval
 
 社区插件的 RPC 调用需要玩家明确批准。框架返回 202 之后，前端通过下面的接口读取待批准的项，并提交决定。
@@ -1057,7 +1073,7 @@ interface SseEnvelope {
 narrative.delta       → messages (streaming buffer)
 narrative.completed   → messages (completed)
 interaction.requested → messages (block)
-state.changed         → gameState (deep merge) + statePatches
+state.changed         → gameState.tables (deep merge) + statePatches
 event.emitted         → gameState.events
 interaction.submitted → handled by the caller that submitted the form: SUBMIT_BLOCK + player bubble (not through handleSseEvent)
 execution.started     → executionSteps
@@ -1191,6 +1207,8 @@ error.occurred        → executionError
 | `command.invoked` | `{ invocationId, commandId, command, pluginId, action, source, canonical, raw, argv, args }`。输入框和 JSON-RENDER 使用同一个结构 |
 | `command.completed` | `command.invoked` 的字段 + `{ durationMs, resultOk? }` |
 | `command.failed` | `command.invoked` 的字段 + `{ durationMs, error }` |
+
+`tool.completed` 表示执行器已接受工具结果，不表示 proposal 已提交。接受前取消只报 `tool.failed`；接受后的取消不再为同一调用发失败事件。工具 trace 或领域事件预览发送失败只告警，不把工具成功改为失败。
 
 叙事的片段继续通过 `narrative.delta` 实时发给界面。为了让 `trace_events` 保持精简，只保存 `message.completed`。
 

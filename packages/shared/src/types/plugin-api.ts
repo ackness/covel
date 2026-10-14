@@ -34,7 +34,6 @@ export interface PluginRuntimeSummary {
   readonly model?: string;
   readonly outputKind: "story" | "plugin" | "system";
   readonly outputContract?: string;
-  readonly tags: readonly string[];
 }
 
 export interface PluginToolSummary {
@@ -110,11 +109,6 @@ export interface RuntimePluginContract extends PluginRuntimeSummary {
   readonly dataSchemas: readonly string[];
   readonly writablePluginDataNamespaces: readonly string[];
   readonly readablePluginDataNamespaces: readonly string[];
-  readonly ui: {
-    readonly right: readonly string[];
-    readonly message: readonly string[];
-    readonly left: readonly string[];
-  };
   readonly userSettings: readonly PluginUserSettingSpec[];
 }
 
@@ -174,11 +168,22 @@ export interface SessionPlugin extends PluginSummary {
 export interface SessionPluginsResponse {
   readonly items: readonly SessionPlugin[];
   readonly commands: readonly SessionSlashCommand[];
+  /**
+   * Plugins of the session's confirmed set that cannot run now (not
+   * installed, failed to load, or a requirement or conflict of the installed
+   * version). The game goes on without them.
+   */
+  readonly unavailable: readonly import("../plugin-selection.js").PluginResolutionRejection[];
 }
 
 export interface PluginMutationResponse {
   readonly ok: true;
   readonly activePluginIds: readonly string[];
+  /**
+   * Enable only: present when plugins joined a session that has a world. The
+   * world's data for the joined receivers was imported once.
+   */
+  readonly worldData?: import("./world-data.js").WorldDataReceiverImport;
 }
 
 export interface PluginLoadError {
@@ -192,9 +197,16 @@ export interface PluginPack {
   readonly description?: I18nText;
   readonly requested: readonly string[];
   readonly recommended: readonly string[];
+  /** Plugins the pack turns off, core ones included; the player can turn them back on. */
+  readonly excluded?: readonly string[];
   readonly tags: readonly string[];
   readonly reason?: I18nText;
   readonly source: "builtin" | "world";
+  /**
+   * The view a world made for this pack opens new sessions in. The world
+   * generator writes it into the world's `defaultViewMode`.
+   */
+  readonly defaultViewMode?: "stage" | "parsed";
 }
 
 export interface ResolvedWorldPluginPolicy {

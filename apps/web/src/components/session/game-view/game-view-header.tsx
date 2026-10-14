@@ -258,7 +258,6 @@ export function GameViewHeader({
           <Link
             to="/debug"
             search={{ sid: sessionId }}
-            role="menuitem"
             className="ui-menu-item flex h-9 w-full items-center gap-2.5 rounded-(--radius-control) px-2.5 text-left text-[13px] hover:bg-muted/60"
           >
             <Bug className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
@@ -294,6 +293,7 @@ function HeaderMenu({
 }) {
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -301,7 +301,10 @@ function HeaderMenu({
       if (!containerRef.current?.contains(event.target as Node)) setOpen(false);
     };
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setOpen(false);
+      if (event.key === "Escape") {
+        setOpen(false);
+        triggerRef.current?.focus();
+      }
     };
     document.addEventListener("pointerdown", onPointerDown);
     document.addEventListener("keydown", onKeyDown);
@@ -312,13 +315,19 @@ function HeaderMenu({
   }, [open]);
 
   return (
-    <div ref={containerRef} className="relative">
+    <div
+      ref={containerRef}
+      className="relative"
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget)) setOpen(false);
+      }}
+    >
       <Button
+        ref={triggerRef}
         variant="ghost"
         size="icon"
         className={`ui-session-action h-10 w-10 shrink-0 md:h-8 md:w-8 ${(open || active) && "bg-accent text-accent-foreground"}`}
         onClick={() => setOpen((value) => !value)}
-        aria-haspopup="menu"
         aria-expanded={open}
         aria-label={label}
         title={label}
@@ -327,11 +336,14 @@ function HeaderMenu({
       </Button>
       {open && (
         <div
-          role="menu"
+          role="group"
           aria-label={label}
           className="ui-dialog-shell absolute right-0 top-full z-30 mt-1.5 min-w-48 p-1"
           // Any choice closes the menu; the items handle their own action.
-          onClick={() => setOpen(false)}
+          onClick={() => {
+            setOpen(false);
+            triggerRef.current?.focus();
+          }}
         >
           {children}
         </div>
@@ -356,8 +368,7 @@ function MenuItem({
   return (
     <button
       type="button"
-      role={checked === undefined ? "menuitem" : "menuitemcheckbox"}
-      aria-checked={checked}
+      aria-pressed={checked}
       disabled={disabled}
       onClick={onSelect}
       className={`ui-menu-item flex h-9 w-full items-center gap-2.5 rounded-(--radius-control) px-2.5 text-left text-[13px] hover:bg-muted/60 disabled:pointer-events-none disabled:opacity-50 ${

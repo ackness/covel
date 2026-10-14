@@ -2,7 +2,6 @@ import "@/lib/zod-config";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { RouterProvider, createRouter } from "@tanstack/react-router";
-import { ThemeProvider } from "@/components/theme-provider";
 import { ReloadOverlay } from "@/components/reload-overlay";
 import { SessionProvider } from "@/stores/session-store";
 import {
@@ -11,12 +10,7 @@ import {
 } from "@/services/data-service";
 import { fetchServerHealth } from "@/services/api";
 import { probeDesktopMode } from "@/lib/desktop-bridge";
-import {
-  applyAppearance,
-  applyColorScheme,
-  type Appearance,
-  type ColorScheme,
-} from "@/lib/appearance";
+import { type Appearance, type ColorScheme } from "@/lib/appearance";
 import { getSettings, initSettings } from "@/settings/store";
 import { configureMessagesWindowCap } from "@/stores/session-store/reducer";
 import { CUSTOM_THEMES_KEY } from "@/theme-system/storage.js";
@@ -64,28 +58,16 @@ async function syncStorageMode(): Promise<void> {
   }
 }
 
-function syncNextThemesStorage(scheme: ColorScheme): void {
-  if (typeof window === "undefined") return;
-  window.localStorage.setItem("covel:scheme", scheme);
-}
-
 const root = createRoot(document.getElementById("root")!);
 let booting = false;
 
 function renderApp(): void {
   root.render(
     <StrictMode>
-      <ThemeProvider
-        defaultTheme={getSettings().get<ColorScheme>(THEME_SCHEME_KEY)}
-        enableSystem={false}
-        storageKey="covel:scheme"
-        attribute="class"
-      >
-        <SessionProvider>
-          <RouterProvider router={router} />
-        </SessionProvider>
-        <ReloadOverlay />
-      </ThemeProvider>
+      <SessionProvider>
+        <RouterProvider router={router} />
+      </SessionProvider>
+      <ReloadOverlay />
     </StrictMode>,
   );
 }
@@ -125,12 +107,9 @@ async function boot(): Promise<void> {
     try {
       await initSettings();
       const store = getSettings();
+      // The registry applies resolved theme/scheme values through the appearance
+      // helpers, including overrides, without changing the saved preferences.
       syncThemeRegistry(store);
-      // Apply initial appearance / locale ASAP so the first paint matches.
-      applyAppearance(store.get<Appearance>("ui.appearance"));
-      const initialScheme = store.get<ColorScheme>(THEME_SCHEME_KEY);
-      applyColorScheme(initialScheme);
-      syncNextThemesStorage(initialScheme);
       const initialLocale = store.get<SupportedLocale>("ui.locale");
       if (i18n.language !== initialLocale) {
         await i18n.changeLanguage(initialLocale);
@@ -140,13 +119,10 @@ async function boot(): Promise<void> {
       }
       // Global subscribers so changes from the Settings UI propagate even when
       // no component is currently mounted that reads the underlying setting.
-      store.subscribe<Appearance>("ui.appearance", (next) => {
-        applyAppearance(next);
+      store.subscribe<Appearance>("ui.appearance", () => {
         syncThemeRegistry(store);
       });
-      store.subscribe<ColorScheme>(THEME_SCHEME_KEY, (next) => {
-        applyColorScheme(next);
-        syncNextThemesStorage(next);
+      store.subscribe<ColorScheme>(THEME_SCHEME_KEY, () => {
         syncThemeRegistry(store);
       });
       store.subscribe(CUSTOM_THEMES_KEY, () => {

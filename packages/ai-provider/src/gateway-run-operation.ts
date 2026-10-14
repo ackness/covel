@@ -33,6 +33,8 @@
 
 import { AiProviderError } from "./errors.js";
 import {
+  acquireLLMSlot,
+  type LLMSlot,
   assertLlmRequestBudget,
   awaitLlmRequest,
   createLlmRequestScope,
@@ -193,7 +195,13 @@ export function createRunOperation(
 
         const startTime = Date.now();
 
+        let slot: LLMSlot | undefined;
         try {
+          if (["text", "object", "evaluate"].includes(spec.mode))
+            slot = await acquireLLMSlot(
+              scope?.signal ?? options?.signal,
+              options?.onQueueStart,
+            );
           if (scope)
             assertLlmRequestBudget(scope.budget, {
               signal: scope.signal,
@@ -237,6 +245,8 @@ export function createRunOperation(
             canFallback: index < targets.length - 1,
             previous: lastError,
           });
+        } finally {
+          slot?.release();
         }
       }
 

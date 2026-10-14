@@ -22,13 +22,14 @@ export function SessionCanvasHero({
   beginLabel,
   hintLabel,
 }: SessionCanvasHeroProps) {
-  const { i18n } = useTranslation();
+  const { t, i18n } = useTranslation();
   const locale = i18n.language;
 
   const worldName = world ? resolveI18n(world.name, locale) : "";
-  const entry = dimensionSnapshotSchema.parse(
-    dimensions ?? {},
-  ).startingConditions;
+  const parsedDimensions = dimensionSnapshotSchema.safeParse(dimensions ?? {});
+  const entry = parsedDimensions.success
+    ? parsedDimensions.data.startingConditions
+    : undefined;
   const parsed = z
     .object({
       openingHook: z.string().optional(),
@@ -85,7 +86,9 @@ export function SessionCanvasHero({
 
       <div className="relative z-10 flex min-h-90 flex-col justify-between p-5 text-white md:min-h-105 md:p-7">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="ui-eyebrow text-white/62">§ SESSION CANVAS</span>
+          <span className="ui-eyebrow text-white/62">
+            {t("session.canvasEyebrow")}
+          </span>
           {chips.map((chip, i) => (
             <span
               key={`${chip}-${i}`}

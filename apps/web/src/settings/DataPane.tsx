@@ -149,7 +149,10 @@ export function DataPane() {
         </p>
       )}
       {toast && (
-        <div className="text-xs px-3 py-2 rounded bg-primary/10 border border-primary/20 text-primary">
+        <div
+          role="status"
+          className="text-xs px-3 py-2 rounded bg-primary/10 border border-primary/20 text-primary"
+        >
           {toast}
         </div>
       )}

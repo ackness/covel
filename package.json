@@ -45,7 +45,7 @@
     "check:i18n": "pnpm --filter @covel/web check:i18n && pnpm run check:plugins",
     "check:plugins": "node --import tsx ./scripts/check-plugin-i18n.mjs && node ./scripts/check-plugin-readmes.mjs",
     "test": "turbo test",
-    "test:docs": "pnpm --filter @covel/plugin-loader exec vitest run tests/authoring-guide-examples.test.ts && pnpm --filter @covel/server exec vitest run tests/lib/authoring-describe.test.ts && pnpm --filter @covel/server exec vitest run tests/lib/reference-tables.test.ts && pnpm --filter @covel/shared exec vitest run tests/env-registry-docs.test.ts && pnpm --filter @covel/runtime exec vitest run tests/hooks-reference-doc.test.ts && node --test scripts/tests/doc-references.test.mjs",
+    "test:docs": "pnpm --filter @covel/plugin-loader exec vitest run tests/authoring-guide-examples.test.ts && pnpm --filter @covel/server exec vitest run tests/lib/authoring-describe.test.ts && pnpm --filter @covel/server exec vitest run tests/lib/reference-tables.test.ts && pnpm --filter @covel/shared exec vitest run tests/env-registry-docs.test.ts && pnpm --filter @covel/runtime exec vitest run tests/hooks-reference-doc.test.ts && pnpm --filter @covel/plugin-handlers-utils exec vitest run tests/readme.test.ts && node --test scripts/tests/doc-references.test.mjs",
     "test:pg": "node --env-file-if-exists=.env scripts/test-postgres.mjs",
     "test:plugin-lifecycle": "pnpm --filter @covel/server exec vitest run tests/api/third-party-plugin-lifecycle.test.ts tests/api/third-party-runtime-contracts.test.ts",
     "test:tabletop-plugin": "pnpm --filter @covel/server exec vitest run tests/api/third-party-tabletop.test.ts",
@@ -81,26 +81,25 @@
     "preinstall": "node ./scripts/require-pnpm.mjs",
     "check:boundaries": "node --test scripts/tests/package-imports.test.mjs && node scripts/check-package-boundaries.mjs"
   },
-  "packageManager": "pnpm@12.6.0",
+  "packageManager": "pnpm@12.10.1",
   "engines": {
     "node": ">=26 <27"
   },
   "devDependencies": {
     "@copilotkit/aimock": "1.43.0",
     "@playwright/test": "^1.63.0",
-    "@types/node": "^26.6.2",
-    "@vitest/coverage-v8": "^5.0.1",
+    "@types/node": "^26.6.4",
+    "@vitest/coverage-v8": "^5.0.3",
     "cross-spawn": "^7.0.6",
-    "fallow": "3.28.0",
-    "oxlint": "1.86.0",
+    "fallow": "3.32.0",
+    "oxlint": "1.87.0",
     "playwright": "^1.63.0",
-    "prettier": "3.9.8",
-    "sqlite-vec": "^0.1.9",
+    "prettier": "3.9.9",
     "tsx": "4.23.15",
-    "turbo": "2.11.2",
+    "turbo": "2.11.7",
     "yaml": "^2.9.1",
     "@covel/ai-provider": "workspace:*",
     "@covel/shared": "workspace:*",
-    "oxc-parser": "0.151.0"
+    "oxc-parser": "0.153.0"
   }
 }

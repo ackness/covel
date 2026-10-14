@@ -35,8 +35,14 @@ export {
 export * from "./types/index.js";
 export * from "./types/llm-diagnostics.js";
 export * from "./llm-request-budget.js";
-export { unifyFinishReason } from "./llm-finish-reason.js";
+export * from "./llm-slots.js";
+export {
+  isCompleteFinishReason,
+  unifyFinishReason,
+} from "./llm-finish-reason.js";
 export type { LLMFinishReason } from "./llm-finish-reason.js";
+export { isAccountFailure } from "./llm-failure-kind.js";
+export type { ProviderFailureKind } from "./llm-failure-kind.js";
 export type {
   EvaluationJson,
   EvaluationValue,
@@ -71,6 +77,11 @@ export type {
 } from "./provider-protocols.js";
 export type { CharacterRecord } from "./types/character-record.js";
 export { materializeCharacterUpsert } from "./proposals/character-upsert.js";
+export {
+  checkProposalPayload,
+  proposalPayloadSchemas,
+  type ProposalPayloadCheck,
+} from "./proposals/payload-schemas.js";
 export {
   materializeWorldModel,
   validateWorldModel,
@@ -219,6 +230,7 @@ export {
 export {
   apiKeyEnvNameToProviderId,
   normalizeProviderKeyMap,
+  parseProviderKeysEnv,
   providerIdToApiKeyEnvName,
   providerKeyToId,
   toApiKeyEnvMap,
@@ -274,21 +286,25 @@ export {
   toolsConfigSchema,
   hookDeclarationSchema,
   runtimeManifestInputSchema,
-  runtimeManifestAuthoringSchema,
-  authoringTriggerConfigSchema,
   stageSchema,
   turnCompletionConfigSchema,
   MAX_SETTLE_WAIT_MS,
   effectsDeclSchema,
   permissionsDeclSchema,
-  validateRuntimeManifestSemantics,
 } from "./schemas/plugin.js";
+export {
+  isRuntimeDisablingIssue,
+  type RuntimeRuleIssue,
+} from "./schemas/runtime-rules.js";
+export {
+  CURRENT_UI_SPEC_VERSION,
+  MAX_UI_WEBVIEW_BYTES,
+  pluginUiSpecIssues,
+  pluginUiSpecSchema,
+  type PluginUiSpecIssue,
+} from "./schemas/ui-spec.js";
 
-export type {
-  RuntimeManifestInput,
-  RuntimeManifestSemanticDiagnostic,
-  RuntimeManifestSemanticDiagnosticCode,
-} from "./schemas/plugin.js";
+export type { RuntimeManifestInput } from "./schemas/plugin.js";
 
 // ── World Schemas ───────────────────────────────────────────────
 export {
@@ -297,6 +313,7 @@ export {
   characterSchemaSchema,
   worldManifestSchema,
   WORLD_ACCENT_PATTERN,
+  worldAccentColorSchema,
   worldDimensionsSchema,
   worldGeographySchema,
   worldFactionSchema,
@@ -455,7 +472,10 @@ export type {
 } from "./proposals/asset-generate.js";
 export {
   resolveSessionPlugins,
+  resolveConfirmedSessionPlugins,
   isBlockingWorldRequirement,
+  isDependencyRejection,
+  disabledDependents,
   providedContracts,
 } from "./plugin-selection.js";
 export {
@@ -550,6 +570,7 @@ export { FRAMEWORK_TOOL_NAMES } from "@covel/plugin-handlers-utils";
 export { isValidPluginSetting } from "./plugin-settings.js";
 
 export * from "./world-data-target.js";
+export * from "./world-package-paths.js";
 export * from "./plugin-frame.js";
 
 export {

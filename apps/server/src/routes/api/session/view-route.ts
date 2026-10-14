@@ -7,7 +7,7 @@ import {
   resolveSessionParam,
   SESSION_NOT_FOUND_CODE,
 } from "./session-guard.js";
-import { buildSnapshotPluginList } from "./plugins.js";
+import { buildSnapshotPluginList, runnablePluginIds } from "./plugins.js";
 import type { SessionRouteEnv } from "./route-env.js";
 import { getSessionExecutionStatus } from "../actions/execution-recovery.js";
 
@@ -19,6 +19,9 @@ export function registerSessionViewRoute(routes: Hono<SessionRouteEnv>): void {
     const guard = await resolveSessionParam(c);
     if (!guard.ok) return guard.response;
 
+    // Read before the snapshot: an event published while the snapshot is read
+    // is then both in the snapshot and after the cursor, never in neither.
+    const eventCursor = c.get("eventBus").headCursor(id);
     const execution = await getSessionExecutionStatus(
       store,
       id,
@@ -42,6 +45,10 @@ export function registerSessionViewRoute(routes: Hono<SessionRouteEnv>): void {
         404,
       );
     }
+    const runnable = runnablePluginIds(
+      currentSession.activePlugins,
+      pluginRegistry,
+    );
 
     const extensionHost = c.get("pluginExtensions");
     const context =
@@ -53,7 +60,7 @@ export function registerSessionViewRoute(routes: Hono<SessionRouteEnv>): void {
               signal: c.req.raw.signal,
               runtimeIdentities: [...pluginRegistry.getAll()].flatMap(
                 ([pluginId, entry]) =>
-                  currentSession.activePlugins.includes(pluginId)
+                  runnable.includes(pluginId)
                     ? pluginRuntimeManifests(entry).map(
                         (parsed) => parsed.manifest,
                       )
@@ -76,10 +83,8 @@ export function registerSessionViewRoute(routes: Hono<SessionRouteEnv>): void {
         ? { dimensionRecovery: context.dimensionRecovery }
         : {}),
       execution,
-      plugins: buildSnapshotPluginList(
-        pluginRegistry,
-        new Set(currentSession.activePlugins),
-      ),
+      eventCursor,
+      plugins: buildSnapshotPluginList(pluginRegistry, new Set(runnable)),
     };
     return c.json({
       ...view,

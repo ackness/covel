@@ -17,6 +17,8 @@ export function mergeRecoveredMessages(
   for (const [index, message] of recovered.entries()) {
     const existing = messages.findIndex((row) => row.id === message.id);
     if (existing >= 0) {
+      // A durable same-ID row replaces the client timestamp and echo marker.
+      if (messages[existing]?.requestId) messages[existing] = message;
       // A later live completion may have arrived while the snapshot was read.
       previous = existing;
       continue;

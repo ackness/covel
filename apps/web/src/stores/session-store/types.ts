@@ -12,6 +12,8 @@ export interface StreamMessage {
   content: string;
   timestamp: string;
   turnId?: string;
+  /** Local echo ownership; removed when a durable server message replaces it. */
+  requestId?: string;
   /** Source runtime ID for retry tracking. */
   runtimeId?: string;
   /** Runtime kind (e.g. "story", "plugin") — controls main chat visibility. */
@@ -161,6 +163,13 @@ export interface SessionState {
   sessionCommands: import("@covel/shared").SessionSlashCommand[];
   /** False until this session's command directory has been read once. */
   sessionCommandsLoaded: boolean;
+  /** Confirmed plugins of this session that cannot run now. */
+  unavailableSessionPlugins: readonly import("@covel/shared").PluginResolutionRejection[];
+  /**
+   * World data this session is without, from its creation or from the last
+   * import for a plugin that joined it.
+   */
+  worldDataNotices: readonly import("@covel/shared").WorldDataImportNotice[];
 
   // Active session
   world: api.WorldSummary | null;
@@ -176,6 +185,14 @@ export interface SessionState {
    */
   olderMessagesCursor: PageCursor | null;
 
+  /**
+   * Subscription cursor of the session view this visit restored from
+   * (`SessionSnapshot.eventCursor`). The subscription replays from it, or
+   * reads the session again when its first stream opened later than the view
+   * was read. `null` until the view has been applied.
+   */
+  initialEventCursor: string | null;
+
   /** All sessions for the current world (for switching). */
   worldSessions: api.SessionRecord[];
 
@@ -185,6 +202,8 @@ export interface SessionState {
   /** Real-time execution progress steps from kernel. */
   executionSteps: ExecutionStep[];
   executionRecovery?: ExecutionRecovery | null;
+  /** Local unsaved prose; never part of history, stage or plugin state. */
+  unsavedNarratives?: StreamMessage[];
   /** Browser action generation; rejects recovery reads from an older POST. */
   actionGeneration?: number;
 
@@ -197,7 +216,11 @@ export interface SessionState {
    */
   suspensions: SuspensionSummary[];
 
-  // State patches from kernel
+  /** Refreshes consumers even when a field replaces a cached value. */
+  statePatchRevision: number;
+  recentStatePatchIds: string[];
+
+  // Latest bounded field patches from kernel
   statePatches: Array<{
     id: string;
     summary: string;
@@ -261,6 +284,11 @@ export interface ExecutionRecovery {
   hydrating: boolean;
   checking: boolean;
   error?: string;
+  /**
+   * The server kept answering `unknown` and automatic checks have stopped;
+   * the player checks again from the notice.
+   */
+  stalled?: boolean;
 }
 
 export type SessionAction =
@@ -303,6 +331,7 @@ export type SessionAction =
       sessionId: string;
       status?: SessionExecutionStatus;
       error?: string;
+      stalled?: boolean;
     }
   // Player abort terminal state: drop the uncommitted streaming placeholder
   // message(s) — the server never commits partial narrative on abort, so
@@ -321,6 +350,7 @@ export type SessionAction =
       type: "MERGE_RECOVERED_MESSAGES";
       messages: StreamMessage[];
       terminalTurnId?: string;
+      unsavedNarratives?: StreamMessage[];
       actionGeneration?: number;
     }
   | {
@@ -331,6 +361,7 @@ export type SessionAction =
       cursor: PageCursor | null;
     }
   | { type: "SET_OLDER_MESSAGES_CURSOR"; cursor: PageCursor | null }
+  | { type: "SET_INITIAL_EVENT_CURSOR"; cursor: string | null }
   | {
       type: "MERGE_INITIAL_STATE_PATCHES";
       patches: Array<{
@@ -376,9 +407,14 @@ export type SessionAction =
       type: "LOAD_SESSION_PLUGINS";
       plugins: api.SessionPlugin[];
       commands?: import("@covel/shared").SessionSlashCommand[];
+      unavailable?: readonly import("@covel/shared").PluginResolutionRejection[];
     }
   | { type: "TOGGLE_SESSION_PLUGIN"; pluginId: string; active: boolean }
-  | { type: "BACKFILL_TURN_ID"; turnId: string }
+  | {
+      type: "SET_WORLD_DATA_NOTICES";
+      notices: readonly import("@covel/shared").WorldDataImportNotice[];
+    }
+  | { type: "BACKFILL_TURN_ID"; turnId: string; requestId: string }
   | {
       type: "PLUGIN_DATA_CHANGED";
       pluginId: string;

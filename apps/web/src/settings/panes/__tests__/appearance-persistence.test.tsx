@@ -17,6 +17,7 @@ import {
   primeThemeRegistry,
   syncThemeRegistry,
   saveCustomTheme,
+  deleteCustomTheme,
 } from "@/theme-system/registry.js";
 import { CUSTOM_THEMES_KEY } from "@/theme-system/storage.js";
 import {
@@ -194,13 +195,14 @@ describe("AppearancePane truthful persistence", () => {
       }),
     );
     await settle();
+    expect(view.getByRole("alert")).toBeTruthy();
     expect(store.get("ui.appearance")).toBe("stage");
     expect(loadOverrides(store)).toEqual(initialOverrides);
     expect(adapter.bundle.entries[APPEARANCE_TOKENS_KEY]).toEqual(
       initialOverrides,
     );
     expect(name).toHaveProperty("value", "Synthetic theme");
-    expect(view.getByText("synthetic persistence failure")).toBeTruthy();
+    expect(view.getByText(i18n.t("appearance.saveThemeFailed"))).toBeTruthy();
     expect(store.get<unknown[]>(CUSTOM_THEMES_KEY)).toHaveLength(1);
     expect(adapter.attempts).toHaveLength(2);
   });
@@ -249,6 +251,8 @@ describe("AppearancePane truthful persistence", () => {
     expect(loadOverrides(store)).toEqual({ shared: {}, light: {}, dark: {} });
     expect(name).toHaveProperty("value", "");
     expect(adapter.attempts).toHaveLength(3);
+    // jsdom cannot measure the source colours; save-as reports unknown rather than skipping the check.
+    expect(view.getByText(i18n.t("appearance.contrast.advisory"))).toBeTruthy();
   });
 
   it("does not announce full import success after a saved theme fails to apply", async () => {
@@ -285,7 +289,7 @@ describe("AppearancePane truthful persistence", () => {
         i18n.t("settings.themeImported", { name: "Synthetic import" }),
       ),
     ).toBeNull();
-    expect(view.getByText("synthetic persistence failure")).toBeTruthy();
+    expect(view.getByText(i18n.t("settings.themeImportInvalid"))).toBeTruthy();
     expect(store.get<unknown[]>(CUSTOM_THEMES_KEY)).toHaveLength(1);
   });
 });
@@ -624,4 +628,159 @@ it("F-199 keeps theme export available while disabling writes", async () => {
       .getAllByRole("button", { name: i18n.t("settings.themeApply") })
       .every((button) => button.matches(":disabled")),
   ).toBe(true);
+});
+
+it("F-198 confirms final-ID collisions and preserves edits when cancelled", async () => {
+  const { store } = await setup();
+  await saveCustomTheme(store, {
+    id: "my-theme",
+    label: "Imported original",
+    source: "custom",
+    schemes: ["dark"],
+    cssText: 'html[data-theme="my-theme"] { --story-color: #fff; }',
+  });
+  const before = structuredClone(store.get(CUSTOM_THEMES_KEY));
+  vi.mocked(requestConfirm).mockResolvedValueOnce(false);
+  const view = render(<AppearancePane />);
+  const name = view.getByRole("textbox", {
+    name: i18n.t("appearance.saveAsThemeTitle"),
+  });
+  fireEvent.change(name, { target: { value: "My! Theme" } });
+  fireEvent.click(
+    view.getByRole("button", { name: i18n.t("appearance.saveAsTheme") }),
+  );
+  await settle();
+  expect(requestConfirm).toHaveBeenCalledWith(
+    expect.objectContaining({ subject: "Imported original" }),
+  );
+  expect(store.get(CUSTOM_THEMES_KEY)).toEqual(before);
+  expect(store.get("ui.appearance")).toBe("stage");
+  expect(loadOverrides(store)).toEqual(initialOverrides);
+  expect(name).toHaveProperty("value", "My! Theme");
+  fireEvent.click(
+    view.getByRole("button", { name: i18n.t("appearance.saveAsTheme") }),
+  );
+  await settle();
+  expect(store.get("ui.appearance")).toBe("my-theme");
+  expect(store.get<{ label: string }[]>(CUSTOM_THEMES_KEY)[0]?.label).toBe(
+    "My! Theme",
+  );
+});
+
+it("F-198 does not overwrite a theme changed during confirmation", async () => {
+  const { store } = await setup();
+  const original = {
+    id: "my-theme",
+    label: "Original",
+    source: "custom" as const,
+    schemes: ["dark" as const],
+    cssText: 'html[data-theme="my-theme"] { --story-color: #fff; }',
+  };
+  await saveCustomTheme(store, original);
+  vi.mocked(requestConfirm).mockImplementationOnce(async () => {
+    await saveCustomTheme(store, { ...original, label: "Changed elsewhere" });
+    return true;
+  });
+  const view = render(<AppearancePane />);
+  fireEvent.change(
+    view.getByRole("textbox", { name: i18n.t("appearance.saveAsThemeTitle") }),
+    { target: { value: "My Theme" } },
+  );
+  fireEvent.click(
+    view.getByRole("button", { name: i18n.t("appearance.saveAsTheme") }),
+  );
+  await settle();
+  expect(view.getByRole("alert").textContent).toBe(
+    i18n.t("settings.themeImportErrors.theme-changed", { id: "my-theme" }),
+  );
+  expect(store.get<{ label: string }[]>(CUSTOM_THEMES_KEY)[0]?.label).toBe(
+    "Changed elsewhere",
+  );
+  expect(store.get("ui.appearance")).toBe("stage");
+});
+
+it("F-082/F-083 keeps builtin rows builtin and localizes import errors", async () => {
+  const { store } = await setup();
+  await store.set(CUSTOM_THEMES_KEY, [
+    {
+      id: "paper",
+      label: "Spoofed paper",
+      cssText: 'html[data-theme="paper"] {}',
+      schemes: ["light"],
+    },
+  ]);
+  syncThemeRegistry(store);
+  await i18n.changeLanguage("zh-CN");
+  const view = render(<ThemeManagerWidget />);
+  expect(
+    view.queryByRole("button", { name: i18n.t("common.delete") }),
+  ).toBeNull();
+  fireEvent.change(view.container.querySelector('input[type="file"]')!, {
+    target: {
+      files: [
+        {
+          name: "paper.css",
+          text: async () => 'html[data-theme="paper"] { color: red; }',
+        },
+      ],
+    },
+  });
+  await settle();
+  expect(view.getByRole("alert").textContent).toBe(
+    i18n.t("settings.themeImportErrors.builtin-id", { id: "paper" }),
+  );
+});
+
+it("F-200 warns about low imported contrast without rejecting the theme", async () => {
+  const { store } = await setup();
+  const view = render(<ThemeManagerWidget />);
+  fireEvent.change(view.container.querySelector('input[type="file"]')!, {
+    target: {
+      files: [
+        {
+          name: "low.css",
+          text: async () =>
+            'html[data-theme="low"] { --color-background: #ffffff; --color-foreground: #eeeeee; }',
+        },
+      ],
+    },
+  });
+  await settle();
+  expect(store.get("ui.appearance")).toBe("low");
+  expect(view.getByText(i18n.t("appearance.contrast.advisory"))).toBeTruthy();
+  expect(view.getByText(/recommended at least 4.5/)).toBeTruthy();
+});
+
+it("F-036 shows the effective selection without changing saved preferences", async () => {
+  const { store } = await setup();
+  await store.setMany({ "ui.appearance": "missing", "ui.scheme": "light" });
+  const view = render(<AppearancePane />);
+  expect(view.getByRole("status").textContent).toContain(
+    "Your saved preference is unchanged",
+  );
+  expect(store.get("ui.appearance")).toBe("missing");
+  expect(store.get("ui.scheme")).toBe("light");
+});
+
+it("F-036 updates the correction notice when the active custom theme is removed", async () => {
+  const { store } = await setup(false);
+  await saveCustomTheme(store, {
+    id: "removed-theme",
+    label: "Removed theme",
+    source: "custom",
+    schemes: ["light", "dark"],
+    cssText: 'html[data-theme="removed-theme"] { --story-color: #eeeeee; }',
+  });
+  await store.set("ui.appearance", "removed-theme");
+  const view = render(<AppearancePane />);
+  const explanation = i18n.t("settings.themeSelectionAdjusted", {
+    name: i18n.t("appearance.builtinThemes.stage.label"),
+    scheme: i18n.t("settings.themeScheme.dark"),
+  });
+  expect(view.queryByText(explanation)).toBeNull();
+  await act(async () => {
+    await deleteCustomTheme(store, "removed-theme");
+  });
+  expect(view.getByText(explanation)).toBeTruthy();
+  expect(store.get("ui.appearance")).toBe("removed-theme");
 });

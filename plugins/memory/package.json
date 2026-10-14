@@ -6,11 +6,9 @@
   "scripts": {
     "test": "vitest run"
   },
-  "dependencies": {
-    "@covel/plugin-handlers-utils": "workspace:*"
-  },
   "devDependencies": {
-    "vitest": "^5.0.1",
+    "@covel/plugin-handlers-utils": "workspace:*",
+    "vitest": "^5.0.3",
     "zod": "^4.6.5"
   }
 }

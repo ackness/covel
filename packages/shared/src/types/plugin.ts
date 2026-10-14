@@ -92,24 +92,6 @@ export interface TurnCompletionConfig {
 // ── Input declarations ───────────────────────────────────────────
 
 /**
- * Inject a field from a completed upstream runtime's output.
- *
- * Not produced by the PLUGIN.md compiler — authored manifests express the same
- * edge with typed `inputs` bindings. It remains for manifests built in code
- * (tests and direct `executeTurn` embedders); the DAG still treats it as a
- * hard same-pass edge.
- */
-export interface RuntimeInjectDecl {
-  readonly kind: "runtime";
-  /** Runtime name: `pluginId/runtimeId` or short `pluginId`. */
-  readonly from: string;
-  /** Field name to extract from source output. */
-  readonly field: string;
-  /** XML tag wrap, e.g. `"<narrator-output>"`. */
-  readonly as: string;
-}
-
-/**
  * Inject a summary of the current runtime's OWN plugin-data namespace into
  * the prompt. The framework calls `store.listPluginData(sessionId, pluginId,
  * namespace)` before building the system prompt and inlines a deterministic,
@@ -168,7 +150,6 @@ export interface KernelInjectDecl {
 }
 
 export type InputInjectDecl =
-  | RuntimeInjectDecl
   | PluginDataInjectDecl
   | RuntimeExportInjectDecl
   | KernelInjectDecl;
@@ -450,62 +431,7 @@ export interface SlashCommandInvocation {
 // ── Plugin-scoped manifest fields ────────────────────────────────
 
 /** Root-owned contribution fields in the compiled execution record. */
-export interface PluginScopedManifestFields {
-  readonly extensions?: readonly import("../extension-points/index.js").ExtensionDeclaration[];
-  /**
-   * Friendly, player-facing name (I18nText). Distinct from `name` (the runtime
-   * id). Surfaced via `PluginSummary.displayName` for plugin-list UIs so a
-   * non-Chinese player sees e.g. "Action Guide" instead of the id "guide".
-   * Only the root PLUGIN.md's value is read.
-   */
-  readonly displayName?: import("./world.js").I18nText;
-  /**
-   * Plugin-root-relative path to a unified server entry module. Default
-   * export: `function (covel: PluginAPI) { ... }` (sync or async) that
-   * registers the plugin's server-side capabilities imperatively —
-   * `covel.registerTool()`, `covel.on(event, handler)`,
-   * `covel.registerRpc()`, `covel.registerWires()`. Conventionally
-   * declared once, on the root PLUGIN.md — but every declared path executes
-   * (the root's included, and the set dedupes), all against the same
-   * `pluginId`. Trust-gated like local tools (builtin at boot,
-   * community on activation).
-   */
-  readonly entry?: string;
-  /**
-   * User-facing catalogue tags for filtering and scenario matching.
-   * These complement versioned contracts: contracts drive machine discovery,
-   * tags are faceted metadata for players and pack resolution.
-   * Unioned across the plugin's runtimes.
-   */
-  readonly tags?: readonly PluginTag[];
-  /**
-   * Optional dependency/conflict/provided-feature metadata used by plugin
-   * selection UIs and future resolvers. Runtime execution semantics still
-   * come from triggers, input.inject, and the scheduling declarations below.
-   * Session-level resolution unions every runtime's declaration.
-   */
-  /** Plugin-data schemas, merged on namespace — a divergent one throws. */
-  readonly dataSchemas?: Readonly<Record<string, PluginDataSchemaDecl>>;
-  /** World projections, merged on projection id — a divergent one throws. */
-  readonly worldProjections?: Readonly<Record<string, WorldProjectionDecl>>;
-  /** Domain events this plugin's runtime may emit via `emit-event`. */
-  readonly events?: readonly PluginEventDecl[];
-  /**
-   * User-facing settings the plugin exposes in the Settings UI.
-   * Each entry is auto-registered under `plugin.<pluginId>.<key>` in the
-   * unified SettingsStore and rendered as a form field in the Plugins tab.
-   *
-   * See `PluginUserSettingSpec` for the allowed shape. Plugins read values
-   * through their runtime context; the framework handles persistence. Because
-   * the storage key is plugin-scoped, two runtimes declaring one key share a
-   * single value and must declare it identically.
-   */
-  readonly userSettings?: readonly PluginUserSettingSpec[];
-  /** Player-facing slash commands contributed by this plugin. */
-  readonly commands?: readonly SlashCommandSpec[];
-}
-
-export interface RuntimeManifest extends PluginScopedManifestFields {
+export interface RuntimeManifest {
   readonly name: string;
   /**
    * Plugin ID this runtime belongs to.
@@ -595,13 +521,11 @@ export interface RuntimeManifest extends PluginScopedManifestFields {
    */
   readonly loopDetectionThreshold?: number;
   /**
-   * Agent runtimes only. When `true`, a loop that finishes without ever
-   * successfully executing a tool (LLM returned prose with no tool call) is
-   * given one corrective retry — a system message telling it to call its
-   * declared tool first — before being allowed to finish. Guards against
-   * models that drift into free-form narration and skip their sole tool.
-   * `maxSteps` still bounds the loop, so a second bare finish is released
-   * (with a warn) rather than looping forever. Default `false`.
+   * Agent runtimes only. Requires a successful completeAfterTools call;
+   * without that list, any successful business tool counts. Failed calls and
+   * runtime-done do not count. A text finish without this evidence gets one
+   * corrective retry, then fails. The same rule applies after resume and at
+   * every loop exit. Default false.
    */
   readonly requireToolUse?: boolean;
   /**
@@ -722,6 +646,11 @@ export interface RuntimeManifest extends PluginScopedManifestFields {
   readonly tools?: ToolsConfig;
   readonly input?: InputConfig;
   readonly output?: OutputConfig;
-  readonly i18n?: Readonly<Record<string, string>>;
-  readonly ui?: UISpec;
+  /**
+   * The package's player settings, copied onto each runtime by the loader so
+   * `ctx.userSettings` resolves without the package declaration.
+   */
+  readonly userSettings?: readonly PluginUserSettingSpec[];
+  /** The package's plugin-data schemas, copied onto each runtime by the loader. */
+  readonly dataSchemas?: Readonly<Record<string, PluginDataSchemaDecl>>;
 }

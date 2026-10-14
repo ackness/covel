@@ -5,9 +5,9 @@ import { lint } from "tailwind-lint/dist/linter.cjs";
 
 const cwd = process.cwd();
 
-// tailwind-lint 0.12.1 treats ordinary TypeScript identifiers such as
-// "block" and "sticky" as CSS classes. Its --fix path can then delete those
-// identifiers, so this integration stays read-only and filters that noise.
+// Earlier tailwind-lint releases treated TypeScript identifiers such as
+// "block" and "sticky" as CSS classes and rewrote them with --fix. Keep this
+// integration read-only and filter cssConflict diagnostics.
 const result = await lint({
   cwd,
   patterns: [],

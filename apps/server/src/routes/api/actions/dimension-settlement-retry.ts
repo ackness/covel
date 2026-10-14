@@ -19,6 +19,7 @@ import { resolveMediaImageFlow } from "../media-image-flow.js";
 import { withSettledSessionLock } from "../plugin-rpc/settled-request.js";
 import { createPluginRpcRuntimeTurnRunner } from "../plugin-rpc/runtime-turn.js";
 import { sessionApprovalScope } from "../session/session-guard.js";
+import { runnablePluginIds } from "../session/plugins.js";
 import { buildTurnExecutorDeps } from "../turn-execution-deps.js";
 
 /**
@@ -41,9 +42,11 @@ export async function retryPendingDimensionSettlements(
     readonly session: SessionRecord;
     /** The player's settings from the request, before world defaults. */
     readonly playerSettings: TurnInput["userSettings"];
+    /** The player stopping the action stops this retry too. */
+    readonly signal?: AbortSignal;
   },
 ): Promise<void> {
-  const { session } = args;
+  const { session, signal } = args;
   const sessionId = session.id;
   if (session.status !== "active" || session.phase !== "playing") return;
   const store = c.get("store");
@@ -60,6 +63,8 @@ export async function retryPendingDimensionSettlements(
         );
         return pluginRegistry.getActiveRuntimes(sessionId);
       },
+      undefined,
+      signal,
     );
     const pending = await pendingDimensionSettlements({
       store,
@@ -79,6 +84,7 @@ export async function retryPendingDimensionSettlements(
       return;
     const extensionHost = c.get("pluginExtensions");
     if (!extensionHost) return;
+    const runnable = runnablePluginIds(session.activePlugins, pluginRegistry);
     const context = await extensionHost
       .createExecution({
         sessionId,
@@ -86,7 +92,7 @@ export async function retryPendingDimensionSettlements(
         signal: c.req.raw.signal,
         runtimeIdentities: [...pluginRegistry.getAll()].flatMap(
           ([pluginId, entry]) =>
-            session.activePlugins.includes(pluginId)
+            runnable.includes(pluginId)
               ? pluginRuntimeManifests(entry).map((parsed) => parsed.manifest)
               : [],
         ),
@@ -116,7 +122,7 @@ export async function retryPendingDimensionSettlements(
           )
         )?.assetRuntimeIds,
       withSettledLock: (fn, waitBudget) =>
-        withSettledSessionLock(c, sessionId, fn, waitBudget),
+        withSettledSessionLock(c, sessionId, fn, waitBudget, signal),
       withSnapshot: (fn, beforeCapture) =>
         c.get("withPluginSnapshot")?.(sessionId, fn, beforeCapture) ??
         sessionLock.withLock(sessionId, async () => beforeCapture?.()).then(fn),
@@ -143,6 +149,7 @@ export async function retryPendingDimensionSettlements(
       args.playerSettings,
     );
     for (const receipt of pending.receipts) {
+      if (signal?.aborted) return;
       const [source] = await store.queryTurnResults(sessionId, {
         turnId: receipt.sourceTurnId,
         limit: 1,
@@ -156,6 +163,7 @@ export async function retryPendingDimensionSettlements(
           ? source.runtimeResults
           : []) as RuntimeResult[],
         sourceTurnId: receipt.sourceTurnId,
+        ...(signal ? { executionSignal: signal } : {}),
         ...(userSettings
           ? { userSettings: snapshotUserSettings(userSettings) }
           : {}),
@@ -173,6 +181,8 @@ export async function retryPendingDimensionSettlements(
       );
     }
   } catch (error) {
+    // Stopped by the player: the receipt stays as it was, nothing to report.
+    if (signal?.aborted) return;
     console.warn(
       `[dimension-settlement] automatic retry in session ${sessionId} failed: ` +
         (error instanceof Error

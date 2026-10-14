@@ -25,7 +25,10 @@ export function ModelTokenLimits({
           "settings.contextWindowHint",
           "Total context budget, including input and reserved output. Leave blank to use the model configuration.",
         )}
-        placeholder={capability?.contextWindow?.toString() ?? "e.g. 131072"}
+        placeholder={
+          capability?.contextWindow?.toString() ??
+          t("settings.numberExample", { value: "131072" })
+        }
         value={override?.contextWindow}
         max={10_000_000}
         onChange={(contextWindow) => onUpdate({ contextWindow })}
@@ -39,7 +42,10 @@ export function ModelTokenLimits({
           "settings.modelMaxOutputTokensHint",
           "The provider's output ceiling, not the amount requested each time. Override incorrect catalog limits here.",
         )}
-        placeholder={capability?.maxOutputTokens?.toString() ?? "e.g. 8192"}
+        placeholder={
+          capability?.maxOutputTokens?.toString() ??
+          t("settings.numberExample", { value: "8192" })
+        }
         value={override?.maxOutputTokens}
         max={1_000_000}
         onChange={(maxOutputTokens) => onUpdate({ maxOutputTokens })}
@@ -64,7 +70,7 @@ function TokenLimit({
   onChange: (value: number | undefined) => Promise<boolean> | void;
 }) {
   const id = useId();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { draft, setDraft, conflict, reset } = useSettingDraft(
     String(value ?? ""),
   );
@@ -108,7 +114,7 @@ function TokenLimit({
       {!valid && (
         <p id={`${id}-error`} role="alert" className="text-xs text-destructive">
           {t("settings.tokenLimitInvalid", {
-            max: max.toLocaleString(),
+            max: max.toLocaleString(i18n.language),
             defaultValue: "Enter a whole number between 1 and {{max}}.",
           })}
         </p>

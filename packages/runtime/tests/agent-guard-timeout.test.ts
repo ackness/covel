@@ -17,7 +17,6 @@ import { type DataStore } from "@covel/store";
 import { createMemoryStore } from "@covel/store/memory";
 import { executeTurn } from "../src/turn-executor/turn-executor.js";
 import type { TurnExecutorDeps } from "../src/turn-executor/turn-executor.js";
-import type { TrustedHandlerStore } from "../src/index.js";
 
 function makeAgentManifest(
   overrides?: Partial<RuntimeManifest>,
@@ -90,13 +89,17 @@ describe("agent guard deadline (R-12)", () => {
     // The guard now receives a COMBINED signal (player turn abort OR
     // the guard's own deadline), so identity with turnControl.signal is no
     // longer expected — abort propagation is.
+    // The signal also aborts once the guard completes, as a function
+    // handler's does, so the propagation is observed while the guard runs.
     const controller = new AbortController();
-    let seenSignal: AbortSignal | undefined;
+    const seen: boolean[] = [];
     const loaded: LoadedRuntime = {
       manifest: makeAgentManifest(),
       promptTemplate: "prompt",
       guard: async (ctx) => {
-        seenSignal = ctx.signal;
+        seen.push(ctx.signal!.aborted);
+        controller.abort();
+        seen.push(ctx.signal!.aborted);
         return { skip: true, reason: "test" };
       },
     };
@@ -107,10 +110,7 @@ describe("agent guard deadline (R-12)", () => {
       makeDeps(loaded, { turnControl: { signal: controller.signal } }),
     );
 
-    expect(seenSignal).toBeDefined();
-    expect(seenSignal!.aborted).toBe(false);
-    controller.abort();
-    expect(seenSignal!.aborted).toBe(true);
+    expect(seen).toEqual([false, true]);
   });
 
   it("revokes a timed-out guard's write capabilities and aborts its signal", async () => {
@@ -136,15 +136,8 @@ describe("agent guard deadline (R-12)", () => {
         await new Promise((resolve) => setTimeout(resolve, 90));
         observed.signalAborted = ctx.signal?.aborted;
         try {
-          // Probe revocation through ctx.store (the revocable trusted-store
-          // write surface). ctx.pluginData was removed — it had no plugin
-          // callers — so the trusted store is the guard's write capability now.
-          // A builtin plugin's store is the trusted one, which can write.
-          await (ctx.store as TrustedHandlerStore | undefined)?.setPluginData({
-            namespace: "ns",
-            key: "late",
-            value: { v: 1 },
-          });
+          // Probe revocation through the guard's write capability.
+          await ctx.pluginData?.set("ns", "late", { v: 1 });
         } catch (err) {
           observed.writeError =
             err instanceof Error ? err.message : String(err);
@@ -171,8 +164,8 @@ describe("agent guard deadline (R-12)", () => {
     // every late mutation was rejected and nothing reached the store.
     await guardFinished;
     expect(observed.signalAborted).toBe(true);
-    expect(observed.writeError).toContain("write capability revoked");
-    expect(observed.recursiveError).toContain("write capability revoked");
+    expect(observed.writeError).toContain('"pluginData.set" is revoked');
+    expect(observed.recursiveError).toContain('"recursiveCall" is revoked');
     expect(setPluginData).not.toHaveBeenCalled();
   });
 
@@ -220,7 +213,7 @@ describe("agent guard deadline (R-12)", () => {
     continueGuard();
     await turn;
 
-    expect(utilityError).toContain("write capability revoked");
+    expect(utilityError).toContain('"utils.fetchWithRetry" is revoked');
     expect(fetchWithRetry).not.toHaveBeenCalled();
   });
 });

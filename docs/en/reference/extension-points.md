@@ -119,6 +119,7 @@ When several plugins use the same `order`, the order is decided by `providerPlug
 ## Where the other extension points are described
 
 - `ui.slot@1`: the provider also declares a `slot`, and may declare `order`, `watch`, or `preview`. The server handles projection, validation, and caching. The front end uses generic slots and does not read a plugin's namespace. See [UI slots](./ui-panels.md#kernel-ui-slots).
+- The four stage data slots are `stage.backdrop@1`, `stage.cast@1`, `stage.dialogue@1` and `stage.choices@1`. The handler returns the selected slot's value or `null`, or returns `previous` when no change is needed. See [Stage slot values](./ui-panels.md#stage-slot-values) for fields, required values, enums and limits. Each output is validated against the selected slot. An invalid output skips only that provider and keeps the previous valid value.
 - To show a plugin's state on the player's status bar or on the scene HUD, provide `session.summary@1`. See [Session summary](./ui-panels.md#session-summary).
 - To give a session background music, provide `stage.music@1`. See [Background music](./ui-panels.md#stage-music).
 - For where world context, history transforms, and compression sit in the flow, see [Plugin contracts](./plugins.md#prompt-and-memory-extensions).
@@ -216,13 +217,13 @@ Plugins outside this repository must follow the contract upgrades in the main re
 
 Plugin code depends only on the SDK (`@covel/plugin-handlers-utils`). It does not need to import the host's internal packages for the items below. The host uses the same implementations.
 
-| Need                                          | Where to get it                                                                                                                                  |
-| --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Estimate the number of tokens                 | `estimateTokens`                                                                                                                                 |
-| The list of built-in tool names               | `FRAMEWORK_TOOL_NAMES`                                                                                                                           |
-| Resolve multilingual text                     | `resolveI18nText` / `resolveI18nDeep`, and the locale registry                                                                                   |
-| Form tools, character field validation        | The SDK root entry point                                                                                                                         |
-| Types used by a `world.dimensions@1` provider | The schema and materializer from `@covel/plugin-handlers-utils/dimensions`                                                                       |
-| Load the plugin's own prompt templates (Node) | `createPromptLoader(root)` from `@covel/plugin-handlers-utils/prompts`. This sub-entry point is not part of the root module used in the browser. |
+| Need                                          | Where to get it                                                                                                                                                                                                                      |
+| --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Estimate the number of tokens                 | `estimateTokens`                                                                                                                                                                                                                     |
+| The list of built-in tool names               | `FRAMEWORK_TOOL_NAMES`                                                                                                                                                                                                               |
+| Resolve multilingual text                     | `resolveI18nText` / `resolveI18nDeep`, and the locale registry                                                                                                                                                                       |
+| Form tools, character field validation        | The SDK root entry point                                                                                                                                                                                                             |
+| Types used by a `world.dimensions@1` provider | The schema and materializer from `@covel/plugin-handlers-utils/dimensions`                                                                                                                                                           |
+| Load the plugin's own prompt templates (Node) | `createPromptLoader(root)` from `@covel/plugin-handlers-utils/prompts`, which reads only the English `<name>.md` and the Simplified Chinese `<name>.zh.md`. This sub-entry point is not part of the root module used in the browser. |
 
 For the return rules of hooks, see [Hooks](./hooks.md#how-an-event-runs). No return value means continue. On an event that can be intercepted, a handler that fails counts as a rejection. On other events, a handler that fails is skipped, and rewrites that succeeded before it are kept.

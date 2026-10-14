@@ -12,8 +12,12 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog.js";
 import { SuspensionsPanel } from "./suspensions-panel.js";
+import { UnsavedNarratives } from "./unsaved-narratives.js";
 import { ExecutionRecoveryNotice } from "./execution-recovery-notice.js";
+import { MemoryIndexNotice } from "./memory-index-notice.js";
 import { SetupProgressNotice, setupProgress } from "./setup-progress-notice.js";
+import { WorldDataNotices } from "./world-data-notices.js";
+import { SessionPluginNotices } from "./session-plugin-notices.js";
 import {
   ResizableHandle,
   ResizablePanel,
@@ -99,9 +103,11 @@ export function GameView({
     sessionPlugins,
     sessionCommands,
     sessionCommandsLoaded,
+    unavailableSessionPlugins,
+    worldDataNotices,
     presets,
     llmConfig,
-    statePatches,
+    statePatchRevision,
     executionSteps,
     worldSessions,
     submittedBlockIds,
@@ -121,7 +127,7 @@ export function GameView({
   const [immersive, setImmersive] = useState(false);
   // Warm the media cache with known stage art (sprites + scene backdrops)
   // during pre-game, so the opening turn paints them without a download stall.
-  useStageMediaPreload(session.id, sessionPlugins);
+  useStageMediaPreload(session.id);
   // Enter the stage as soon as the player submits the opening (character
   // creation) form, instead of waiting for pre-game to fully complete —
   // the backdrop shows the world hero image until the narrator's first
@@ -388,7 +394,7 @@ export function GameView({
             panelState={rightPanelState}
             sessionId={session.id}
             world={world}
-            statePatches={statePatches}
+            statePatchRevision={statePatchRevision}
           />
         </DialogContent>
       </Dialog>
@@ -438,7 +444,6 @@ export function GameView({
               />
             </ResizablePanel>
             <ResizableHandle
-              withHandle
               orientation={direction}
               className={isLeftCollapsed ? "hidden" : ""}
             />
@@ -520,13 +525,34 @@ export function GameView({
             </div>
           )}
 
+          <SessionPluginNotices
+            plugins={sessionPlugins}
+            unavailable={unavailableSessionPlugins}
+            offTitle={t("plugin.unavailable")}
+            variant="bar"
+            busy={executing}
+            onTurnOn={(pluginId) => void onTogglePlugin(pluginId, true)}
+          />
+
+          <WorldDataNotices notices={worldDataNotices} />
+
           {/* Messages */}
           {stageActive && <SessionDimensionsPanel recoveryOnly />}
+          <UnsavedNarratives
+            messages={state.unsavedNarratives ?? []}
+            recovery={state.executionRecovery}
+            executing={state.executing}
+            onRetry={retryInterruptedTurn}
+          />
           <ExecutionRecoveryNotice
             recovery={state.executionRecovery}
             onRetry={retryInterruptedTurn}
             onRefresh={refreshExecutionRecovery}
             onStop={abortActiveTurn}
+          />
+          <MemoryIndexNotice
+            sessionId={session.id}
+            refreshKey={settings.open}
           />
           <SetupProgressNotice
             progress={setupProgress({
@@ -631,7 +657,6 @@ export function GameView({
         {!isMobile && (
           <>
             <ResizableHandle
-              withHandle
               orientation={direction}
               className={isRightCollapsed ? "hidden" : ""}
             />
@@ -650,7 +675,7 @@ export function GameView({
                 panelState={rightPanelState}
                 sessionId={session.id}
                 world={world}
-                statePatches={statePatches}
+                statePatchRevision={statePatchRevision}
               />
             </ResizablePanel>
           </>

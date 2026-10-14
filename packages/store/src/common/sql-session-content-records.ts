@@ -96,6 +96,7 @@ export type SqlSessionContentRecords = Pick<
   | "getEventById"
   | "addMessage"
   | "commitPlayerInputMessage"
+  | "getMessage"
   | "listMessages"
   | "listMessagesPage"
   | "listExistingMessageIds"
@@ -103,6 +104,7 @@ export type SqlSessionContentRecords = Pick<
   | "upsertCharacterSchema"
   | "upsertCharacter"
   | "listCharacters"
+  | "getCharacter"
   | "deleteCharacter"
 >;
 
@@ -141,7 +143,7 @@ export function createSqlSessionContentRecords(
       }
       const rows = await runner.select<EventRow>(events, {
         where: and(...conditions),
-        orderBy: [asc(events.createdAt)],
+        orderBy: [asc(events.createdAt), asc(byteOrder(events.id))],
         limit: options?.limit,
       });
       return rows.map((row) => toEventRecord(row, json));
@@ -207,6 +209,16 @@ export function createSqlSessionContentRecords(
         }
         throw new Error("Player input changed before commit");
       }
+    },
+
+    async getMessage(
+      sessionId: string,
+      id: string,
+    ): Promise<MessageRecord | null> {
+      const row = await runner.selectFirst<MessageRow>(messages, {
+        where: and(eq(messages.id, id), eq(messages.sessionId, sessionId)),
+      });
+      return row ? toMessageRecord(row, json) : null;
     },
 
     async listMessages(
@@ -307,6 +319,16 @@ export function createSqlSessionContentRecords(
         orderBy: [asc(characters.createdAt), asc(byteOrder(characters.id))],
       });
       return rows.map((row) => toCharacterRecord(row, json));
+    },
+
+    async getCharacter(
+      sessionId: string,
+      id: string,
+    ): Promise<CharacterRecord | null> {
+      const row = await runner.selectFirst<CharacterRow>(characters, {
+        where: and(eq(characters.sessionId, sessionId), eq(characters.id, id)),
+      });
+      return row ? toCharacterRecord(row, json) : null;
     },
 
     async deleteCharacter(sessionId: string, id: string): Promise<void> {

@@ -10,6 +10,7 @@ Covel is a modular monolith: one repository, released together, with its code sp
 > So when the build output is older than the source (for example, you pulled new commits but did not run `pnpm install` again), a plugin that imports a new name will fail to load.
 >
 > - The development server checks and rebuilds it every time its process starts (`scripts/ensure-plugin-sdk.mjs`).
+> - Turbo finishes the SDK build before running its own lint and tests. SDK tests read their own `dist` declarations through `shared`, so dependency-only `^build` ordering is not enough.
 > - Before you run the tests of a single package on their own, you still have to run `pnpm --filter @covel/plugin-handlers-utils build` by hand.
 
 The other libraries are mainly combined inside the workspace by the applications and the framework.
@@ -27,6 +28,7 @@ The SDK for plugin authors and the implementation for the host are kept apart:
 - `plugin-handlers-utils` does not depend on any private workspace package.
 - `shared` holds the DTOs and schemas that the framework's layers share.
 - `tools` implements the tool protocol that the SDK describes.
+- `plugin-loader` depends on the SDK and `zod`. Before it imports a plugin's entry, handlers or guards, it registers the plugin directory (`provideHostModules`); a module in that directory that imports either package gets the host's copy. Bundled and installed plugins take the same path, and a plugin does not ship these two packages.
 
 For details, see the [plugin contract](../reference/plugins.md) and [tools](../reference/tools.md).
 
@@ -55,7 +57,7 @@ The small packages `approval`, `context`, `events`, `create`, and `settings` eac
 - Do not merge a package into `runtime` just because it is small or only used during development.
 - Also do not add a package that only forwards calls just to look generic.
 
-**Dependency direction.** `plugin-handlers-utils` is the root of the dependency graph, and it does not depend on any workspace package. `shared` sits directly above it. `@covel/server` composes all feature packages. The exact dependency edges are written in each package's `package.json`. `pnpm check:boundaries` checks the public entry points and the dependency direction.
+**Dependency direction.** `plugin-handlers-utils` is the root of the dependency graph, and it does not depend on any workspace package. `shared` sits directly above it. `@covel/server` composes all feature packages. The exact dependency edges are written in each package's `package.json`. `pnpm check:boundaries` checks the public entry points and the dependency direction. The `store` package declares the SQLite vector extension `sqlite-vec` directly; the root package does not duplicate it.
 
 ## Key boundaries when the host combines packages
 
@@ -65,6 +67,7 @@ The host is an application that assembles these packages and runs them: the serv
 
 - The official website `apps/site` is a separate static site. It does not depend on any workspace package, and it is not part of the Web or desktop build.
 - The docs site `apps/docs` is also separate. It uses VitePress to build the pages of `docs/` into a static site, which is published under the `docs/` path of the official website.
+- Documentation diagrams use Mermaid 12 and require an ES2024 browser (Safari 17.4+). Mermaid belongs only to the documentation site and is not bundled into the Web or desktop app.
 - The application's own `/` goes straight to the world list.
 
 ### Desktop shell
@@ -128,7 +131,7 @@ For details, see [transactions](../reference/transactions.md) and [world data](.
 The prompt loader is also split by instance:
 
 - The shared templates use the default `loadPrompt`.
-- A plugin's own directory is injected through `createPromptLoader(root)`.
+- Another template directory is injected through `createPromptLoader(root)`, with the same lookup order as `loadPrompt`. Plugins do not use it: a plugin's templates use the loader of the same name in the SDK, which reads only the English and Simplified Chinese files.
 - The public entry of the package does not export the process-wide `setPromptsRoot`.
 - `buildContext` always returns a Promise. The caller does not need to decide in advance whether a synchronous or asynchronous path is used.
 
@@ -159,3 +162,5 @@ Covel is still in early development, and it targets only the current contracts. 
 > These libraries currently make no promise of a persistence migration across versions. When the store schema or the vector progress table changes, the affected development data must be created again. Do not treat "old data can still be read" or "old entry points still work" as a guarantee.
 
 `pnpm check:boundaries` checks three things in the production source: the public entry points of the workspace, the dependency declarations, and the direction of the packages. When a new cross-package dependency is needed, review it together with the responsibility split on this page.
+
+The web app reads theme and color scheme preferences from SettingsStore, resolves the displayed selection, and applies it through its appearance helpers. Display fallbacks leave saved preferences unchanged.

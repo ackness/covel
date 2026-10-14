@@ -5,7 +5,11 @@ import type {
   LLMTextPart,
 } from "@covel/shared";
 import type { LLMProviderRequest } from "@covel/shared";
-import type { LLMDiagnostics, LLMRequestBudget } from "@covel/shared";
+import type {
+  LLMDiagnostics,
+  LLMRequestBudget,
+  LLMQueueStart,
+} from "@covel/shared";
 /**
  * Bridge adapter: @covel/ai-provider gateway → LLMAdapter interface.
  *
@@ -118,6 +122,7 @@ export interface GatewayLike {
   generateText(
     input: {
       presetId?: string;
+      instructionLocale?: "en" | "zh";
       messages: Array<{
         role: string;
         content: string | readonly (LLMTextPart | LLMImagePart)[] | null;
@@ -145,6 +150,7 @@ export interface GatewayLike {
       traceId?: string;
       signal?: AbortSignal;
       requestBudget?: LLMRequestBudget;
+      onQueueStart?: LLMQueueStart;
       slotOverrides?: SlotOverridesInput;
       capabilityOverridePolicy?: CapabilityOverridePolicy;
       /** Request-hard generation limit; gateway applies it after metadata. */
@@ -155,6 +161,7 @@ export interface GatewayLike {
   ): Promise<{
     text: string;
     finishReason: string;
+    rawFinishReason?: string;
     usage: LLMUsageSummary;
     toolCalls?: Array<{ id: string; name: string; arguments: string }>;
     reasoningContent?: string;
@@ -165,6 +172,7 @@ export interface GatewayLike {
   streamText?(
     input: {
       presetId?: string;
+      instructionLocale?: "en" | "zh";
       messages: Array<{
         role: string;
         content: string | readonly (LLMTextPart | LLMImagePart)[] | null;
@@ -192,6 +200,7 @@ export interface GatewayLike {
       traceId?: string;
       signal?: AbortSignal;
       requestBudget?: LLMRequestBudget;
+      onQueueStart?: LLMQueueStart;
       slotOverrides?: SlotOverridesInput;
       capabilityOverridePolicy?: CapabilityOverridePolicy;
       /** @see generateText options.parameterOverrides */
@@ -204,6 +213,7 @@ export interface GatewayLike {
     textDelta?: string;
     reasoningDelta?: string;
     finishReason?: string;
+    rawFinishReason?: string;
     id?: string;
     name?: string;
     arguments?: string;
@@ -304,6 +314,7 @@ export function createGatewayAdapter(
       const result = await gateway.generateText(
         {
           presetId: params.model ?? undefined,
+          instructionLocale: instructionLocaleFor(params.locale),
           ...(params.defaults ? { defaults: params.defaults } : {}),
           messages,
           tools: tools && tools.length > 0 ? tools : undefined,
@@ -330,6 +341,7 @@ export function createGatewayAdapter(
               }
             : {}),
           ...(params.signal ? { signal: params.signal } : {}),
+          ...(params.onQueueStart ? { onQueueStart: params.onQueueStart } : {}),
           ...(params.requestBudget
             ? { requestBudget: params.requestBudget }
             : {}),
@@ -350,7 +362,10 @@ export function createGatewayAdapter(
           name: tc.name,
           arguments: tc.arguments,
         })),
-        finishReason: completedFinishReason(result.finishReason),
+        finishReason: unifyFinishReason(result.finishReason),
+        ...(result.rawFinishReason
+          ? { rawFinishReason: result.rawFinishReason }
+          : {}),
         usage: result.usage,
         ...(result.providerContinuation
           ? { providerContinuation: result.providerContinuation }
@@ -378,6 +393,7 @@ export function createGatewayAdapter(
       for await (const event of gateway.streamText(
         {
           presetId: params.model ?? undefined,
+          instructionLocale: instructionLocaleFor(params.locale),
           ...(params.defaults ? { defaults: params.defaults } : {}),
           messages,
           tools: tools && tools.length > 0 ? tools : undefined,
@@ -404,6 +420,7 @@ export function createGatewayAdapter(
               }
             : {}),
           ...(params.signal ? { signal: params.signal } : {}),
+          ...(params.onQueueStart ? { onQueueStart: params.onQueueStart } : {}),
           ...(params.requestBudget
             ? { requestBudget: params.requestBudget }
             : {}),
@@ -442,6 +459,9 @@ export function createGatewayAdapter(
             type: "done" as const,
             ...(event.diagnostics ? { diagnostics: event.diagnostics } : {}),
             finishReason: event.finishReason ?? "stop",
+            ...(event.rawFinishReason
+              ? { rawFinishReason: event.rawFinishReason }
+              : {}),
             ...(event.providerContinuation
               ? { providerContinuation: event.providerContinuation }
               : {}),
@@ -528,12 +548,4 @@ function toGatewayTool(tool: LLMToolDefinition) {
       parameters: tool.parameters,
     },
   };
-}
-
-/** A gateway of another origin may still answer in a provider's own word. */
-function completedFinishReason(
-  reason: string,
-): "stop" | "tool_calls" | "length" {
-  const unified = unifyFinishReason(reason);
-  return unified === "tool_calls" || unified === "length" ? unified : "stop";
 }

@@ -209,7 +209,7 @@ export function LlmKeysPane({
             </div>
             <SettingWidget entry={entry} />
             {hasKey && envOverrides.includes(providerId) && (
-              <p className="text-[10px] text-amber-600 dark:text-amber-500">
+              <p className="text-[10px] text-(--accent-warning)">
                 {t("settings.keyOverriddenByEnv")}
               </p>
             )}
@@ -316,6 +316,7 @@ function ProviderPriceMultiplierField({
 }
 
 function PresetPingRow({ preset }: { preset: PresetRow }) {
+  const { t } = useTranslation();
   return (
     <div className="flex items-start gap-2 text-xs">
       <PingButton target={{ kind: "preset", presetId: preset.id }} />
@@ -327,7 +328,7 @@ function PresetPingRow({ preset }: { preset: PresetRow }) {
           </span>
           {preset.isCustom && (
             <Badge variant="outline" className="text-[9px] px-1 py-0 h-auto">
-              custom
+              {t("settings.presetCustom")}
             </Badge>
           )}
         </div>

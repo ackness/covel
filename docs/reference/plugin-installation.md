@@ -117,7 +117,8 @@
 - 使用规范的插件 ID，不能覆盖内置插件的 ID。
 - 清单和语言变体只接受普通的 YAML frontmatter，拒绝可执行的语言标记。
 - 安装器不执行脚本、包管理器、编译器或插件模块。
-- GitHub 安装要求运行文件自包含：`package.json` 不声明 `dependencies`、`optionalDependencies`、`peerDependencies`。开发依赖不受这条限制。
+- 所有插件安装入口（GitHub、ZIP、离线合集）和更新都要求运行文件自包含：`package.json` 的 `dependencies`、`optionalDependencies`、`peerDependencies` 必须省略或为空。`devDependencies` 不受这条限制。宿主给每个插件提供 `@covel/plugin-handlers-utils` 和 `zod`，插件不用声明它们为运行依赖；内置插件也只在 `devDependencies` 里写它们。
+- 声明了运行时依赖时，安装器返回 400，指出非空的字段，不写入包。作者应把依赖打进发布文件，再删除这些声明或留空。
 - 需要构建的插件，作者应该在独立的发布目录里提供已构建、自包含的文件。
 
 安装前的输入检查：内联 runtime 和子 runtime 的两种输入 scope 都检查本地 `accepts` 文件，以及包内 producer 是否存在。
@@ -138,6 +139,7 @@ GitHub 源码归档带的一层外目录会被去掉，再提取指定的插件�
 | 膨胀比       | 100     |
 
 - 这些限制作用于整个 GitHub 归档。大型 monorepo 请使用精简的发布仓库，或者本地 ZIP。
+- 合集预览和批量安装的所有归档共用 200 MiB 解压预算，包括清单所在的归档。相同仓库、相同 commit 的归档只计一次；超过预算返回 413，停止读取后续成员。离线合集 ZIP 使用同一个预算。
 - 符号链接、逃出目录的路径、只有大小写不同的重复文件路径都会被拒绝。
 
 ## HTTP 契约
@@ -160,7 +162,8 @@ GitHub 源码归档带的一层外目录会被去掉，再提取指定的插件�
 - `collection`：目录里有清单时为 `{ id, name, version }`，否则为 `null`。
 - `problems` 是 `{ level: "error" | "warning", message, packageId? }[]`。
 - batch 接受 1–20 个 token。它先下载并逐个核对摘要和身份；全部通过，并且目标都不存在，才开始写入。
-- 任何一个目标已经存在时返回 409，不做任何修改。写入阶段失败时，回滚本次已经写入的包。
+- 任何一个目标已经存在时返回 409，不做任何修改。写入阶段失败时，回滚本次已经写入的包。世界回滚走正常删除生命周期：持有世界锁、写删除标记，并保证记录删除失败时包文件可恢复。
+- 如果世界在安装期间已有会话，回滚会保留世界及会话。删除失败的包也会保留供重试。错误响应的 `details` 含 `rolledBack` 和 `retained` 两个 `{ kind, id }[]` 清单；`error` 同时列出未撤回的包，避免把部分失败当成全部撤回。
 - `/collection` 接受 `pnpm pack:collection` 生成的 ZIP（清单在顶层，包含全部成员）。它没有预览这一步，完整性检查的错误直接返回 400。
 
 ### 宿主版本范围
@@ -177,7 +180,8 @@ GitHub 源码归档带的一层外目录会被去掉，再提取指定的插件�
 
 - 来源为 `{ repository, commit, path, digest, tracking }`。
 - `tracking` 为 `{ kind: "default-branch" }`、`{ kind: "branch", ref }` 或 `{ kind: "pinned", ref }`。仓库根链接跟踪默认分支；tree 链接先尝试解析为明确的分支；其余的 tag 和 commit 保持锁定。
-- `hasServerCode` 是保守的文件和清单扫描提示，不是完整的代码审计。测试或构建源码也可能触发这个提示。
+- `description` 返回 `I18nText`，保留 `locales/<locale>.yaml`（也支持 `.yml`）为 `PLUGIN.md` 提供的描述翻译。客户端按界面语言调用 `resolveI18nText`。
+- `hasServerCode` 使用加载器的模块路径枚举：entry、function handler、guard、世界投影 handler；也扫描代码文件（包括 `.mts`、`.cts`）。ZIP 安装响应返回同一字段。这是保守提示，不是完整的代码审计；测试或构建源码也可能触发它。
 - 适配的宿主版本由作者在清单的 `covel`、目录和 README 里声明。安装器只验证清单格式和这个范围，不判断 runtime 是否真的兼容。
 
 ### 签名和下载

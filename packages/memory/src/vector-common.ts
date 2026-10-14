@@ -22,6 +22,28 @@ export type EmbedFn = (
 ) => Promise<readonly Float32Array[]>;
 
 /**
+ * Thrown by an {@link EmbedFn} when the embedding model configured now is not
+ * the one the session's index was built with. Nothing can be indexed or
+ * searched by vector until the configuration is restored or the index is
+ * rebuilt; memory search falls back to keywords meanwhile.
+ */
+export class EmbeddingModelChangedError extends Error {
+  readonly code = "embedding_model_changed";
+  constructor(message = "The embedding model changed for this session") {
+    super(message);
+    this.name = "EmbeddingModelChangedError";
+  }
+}
+
+/** True for {@link EmbeddingModelChangedError}, also across module copies. */
+export function isEmbeddingModelChanged(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    (error as { code?: unknown }).code === "embedding_model_changed"
+  );
+}
+
+/**
  * Reserved, framework-internal "plugin id" used to partition memory's own
  * vectors inside the shared per-session vector table.
  *
@@ -35,7 +57,7 @@ export const MEMORY_VECTOR_PLUGIN_ID = "__kernel:vector";
 /** Namespace for embedded conversation-history (recall) vectors. */
 export const RECALL_NAMESPACE = "recall";
 
-/** Namespace for embedded archival (lorebook + character) vectors. */
+/** Namespace for embedded archival (lorebook, character and plugin data) vectors. */
 export const ARCHIVAL_NAMESPACE = "archival";
 
 /**
@@ -53,18 +75,3 @@ export function distanceToScore(distance: number): number {
 
 /** Cap on items embedded per ingestion sweep — bounds a cold-start backfill burst. */
 export const MAX_INGEST_BATCH = 128;
-
-/**
- * Stable, cheap content fingerprint (FNV-1a 32-bit, hex). Used to detect when a
- * mutable archival record (lorebook entry / character) changed and must be
- * re-embedded. Not cryptographic — collisions only cost a missed re-embed,
- * never corruption.
- */
-export function contentHash(text: string): string {
-  let h = 0x811c9dc5;
-  for (let i = 0; i < text.length; i += 1) {
-    h ^= text.charCodeAt(i);
-    h = Math.imul(h, 0x01000193);
-  }
-  return (h >>> 0).toString(16);
-}

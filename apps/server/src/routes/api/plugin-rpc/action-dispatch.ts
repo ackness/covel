@@ -26,6 +26,10 @@ import {
 import { runTracedCommand } from "./command-trace.js";
 import { errorBody } from "../../../api-error.js";
 import { readLockedSession } from "../session/locked-mutation.js";
+import {
+  resolveSessionPluginSet,
+  sessionPluginIds,
+} from "../session/plugins.js";
 
 /** Action dispatch shares the session commit lock with turns. */
 export async function dispatchPluginAction(
@@ -61,19 +65,27 @@ export async function dispatchPluginAction(
     body.kind === "command" ? resolvedCommand!.action : body.action;
   const pluginId =
     body.kind === "command" ? resolvedCommand!.pluginId : body.pluginId;
+  // A confirmed member that cannot run now (a requirement is gone, it
+  // conflicts or failed to load) is as inactive as one never chosen.
   const inactiveAction = (current: SessionRecord): Response | undefined => {
-    if (
-      body.kind === "action" &&
-      pluginId !== FRAMEWORK_PLUGIN_ID &&
-      !(current.activePlugins ?? []).includes(pluginId)
-    ) {
-      return c.json(
-        errorBody(`plugin "${pluginId}" is not active in this session`, {
-          code: "plugin_not_active",
-        }),
-        404,
-      );
-    }
+    if (body.kind !== "action" || pluginId === FRAMEWORK_PLUGIN_ID) return;
+    const set = resolveSessionPluginSet(
+      current.activePlugins ?? [],
+      c.get("pluginRegistry").getAll(),
+    );
+    if (set.active.includes(pluginId)) return;
+    const reason = set.rejected.find(
+      (item) => item.pluginId === pluginId,
+    )?.reason;
+    return c.json(
+      errorBody(
+        reason
+          ? `plugin "${pluginId}" is unavailable in this session: ${reason}`
+          : `plugin "${pluginId}" is not active in this session`,
+        { code: "plugin_not_active" },
+      ),
+      404,
+    );
   };
   const actionPayload =
     body.kind === "command" ? commandInvocation : body.payload;
@@ -261,7 +273,6 @@ export async function dispatchPluginAction(
           409,
         );
       }
-      const liveActivePlugins = liveSession.activePlugins ?? [];
       const inactive = inactiveAction(liveSession);
       if (inactive) return inactive;
       let liveCommand = resolvedCommand;
@@ -271,7 +282,7 @@ export async function dispatchPluginAction(
       if (body.kind === "command") {
         liveCommand = resolveSessionCommand(
           body.commandId,
-          liveActivePlugins,
+          sessionPluginIds(liveSession, c.get("pluginRegistry")),
           c.get("pluginRegistry"),
         );
         if (
@@ -302,7 +313,10 @@ export async function dispatchPluginAction(
         }
         liveInvocation = parsed.invocation;
         const pluginRegistry = c.get("pluginRegistry");
-        pluginRegistry.syncSessionActivations(sessionId, liveActivePlugins);
+        pluginRegistry.syncSessionActivations(
+          sessionId,
+          liveSession.activePlugins ?? [],
+        );
         activeRuntimes = pluginRegistry.getActiveRuntimes(sessionId);
       }
       const environment = liveCommand
@@ -394,7 +408,12 @@ export async function dispatchPluginAction(
       return c.json(errorBody(err.message), 400);
     }
     if (err instanceof RpcDispatchError && err.code !== "handler-threw") {
-      const httpStatus = err.code === "unknown-action" ? 404 : 500;
+      const httpStatus =
+        err.code === "unknown-action"
+          ? 404
+          : err.code === "handler-timeout"
+            ? 504
+            : 500;
       return c.json(
         errorBody(err.message, { code: err.code.replaceAll("-", "_") }),
         httpStatus,

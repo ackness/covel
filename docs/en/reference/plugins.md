@@ -103,7 +103,7 @@ Extract facts supported by runtime-inputs.narrative.value, then call save-facts.
 | Root field | Meaning |
 | --- | --- |
 | `id`, `kind` | Package identity. `kind` is `core` or `plugin`. |
-| `version`, `displayName`, `description`, `tags` | Metadata. `role:*` tags do not drive any business logic. |
+| `version`, `displayName`, `description`, `tags` | Metadata. Tags group and filter plugins in session prep; they do not determine runtime scheduling. |
 | `covel` | The range of host versions the package works with, such as `">=0.0.45"`. A host outside that range does not install or load the package. |
 | `author`, `license`, `homepage` | Author information, shown only for display. See [Author information](#author-information). |
 | `provides` | Versioned contract strings, or `{contract, default: true}`. |
@@ -122,6 +122,8 @@ A contract is a versioned name, such as `narrative-engine@1`. Plugins find each 
 - Different packages can provide the same contract. A consumer says whether it wants one provider or all of them, using `cardinality: one` or `all`.
 - Only an extension point that allows one provider, and an explicit `conflicts` entry, get a separate mutual-exclusion check.
 - `conflicts` can name only plugin contracts. If you write a kernel extension point or a UI slot, you get `invalid-conflict`, and the error points to the position of the `conflicts` field. How kernel extension points combine is decided by their mode.
+
+Session prep groups each plugin by its first declared tag, using the tag text as the heading. Plugins with no tags appear under “Untagged”. Each plugin appears once; all tags remain available for filtering. The `kind: core` badge says “Enabled by default” and does not indicate a lock. “Builtin” in the session list describes the source only.
 
 ### contributes fields
 
@@ -177,6 +179,8 @@ homepage: https://example.com/tidefall
 - **Translation:** a plugin translates `author.about` and the `label` of each `author.links` entry in the `PLUGIN.md` section of `locales/<locale>.yaml`. Links are matched by position. A world translates the same two items in `world.<locale>.yaml`. Author names and licenses are not translated, and `pnpm i18n` does not count them as text to translate.
 - **Version number:** the list shows the `version` from the manifest. When a plugin also has a `package.json`, the two versions must be the same. `pnpm validate:plugin` checks this. The install preview reads `package.json`, while the host reads `PLUGIN.md`. A change to `version` makes existing sessions run the plugin's setup runtimes again, so the setup guard or handler must return a skip for work that is already done.
 
+Bundled plugins follow the same current data contracts as external packages. Dice receipts carry a `checks` array, and `pluginData.get()` returns the stored value directly. A narrative binding projected with `select: /narrativeOutput` carries a string. World rules use flat records with `schemaVersion`, `id`, and `content`, without a `{ rule, ... }` wrapper. NPC edge history permits one open version per relation; duplicate open versions are rejected without automatic repair. Portrait replacement matches an exact character ID or the current `npc-<blueprintId>` projection, never an arbitrary session prefix.
+
 ### Contract version policy
 
 The `@N` in a contract ID is its version marker, such as `narrative-engine@1`. The kernel supports only the current version (current-only). It does not negotiate versions, it does not support several versions at once, and it has no cross-version compatible reads or dual-write migration.
@@ -231,6 +235,12 @@ An agent's guard runs before the model is called.
 
 When the runtime needs to give up its work for this turn, return the smallest output the contract allows. For example, when `story-events/plot` is off, return an empty plan, `{ skip: true, events: [] }`.
 
+A guard gets the same `ctx` as a function handler, and a bundled plugin gets the same as a community one:
+
+- It has `ctx.inputs` (this execution's input bindings), `ctx.world`, `ctx.store`, `ctx.pluginData`, `ctx.recursiveCall`, and the other helpers.
+- Write through `ctx.pluginData`, or attach proposals to the skip result with `withPendingProposals`. These writes commit only when the guard skips; otherwise they are dropped, and the model's run decides what to write.
+- Once the guard returns or times out, `ctx.signal` is aborted and all of these stop working.
+
 ### Runtimes that hide content (`io.concealed`)
 
 Use `io.concealed: true` for runtimes that handle hidden content, such as an agent that plans hidden events in the story.
@@ -245,7 +255,7 @@ Use `io.concealed: true` for runtimes that handle hidden content, such as an age
 
 ### Scope of dependencies and references
 
-The runtime IDs written in `schedule.needs`, `schedule.after`, and `io.inputs.*.from.runtime` must belong to this package. Write the full `<pluginId>/<runtimeId>`. In a package with a single runtime, write the package ID. A dependency given as a string without a prefix is held to the same rule.
+The runtime IDs written in `schedule.needs`, `schedule.after`, and `io.inputs.*.from.runtime` must belong to this package. Write the full `<pluginId>/<runtimeId>`. In a package with a single runtime, write the package ID. An unprefixed string dependency is rejected with a suggestion to write `<pluginId>/<runtimeId>`. Only a complete runtime ID from another package receives the advice to use a contract.
 
 **Limits on references to runtimes in other packages:**
 
@@ -295,7 +305,7 @@ So the guard of a setup runtime must return `{ skip: true }` for work that is al
 The trigger types are `auto`, `scheduled`, `manual`, and `event`.
 
 - A runtime that enters the main loop automatically should declare a stage. `manual` and `event` runtimes are triggered separately, by a request or by an event.
-- `schedule.manual.execution: background` makes a manual run execute in the background.
+- `schedule.manual.execution: background` makes a manual run execute in the background. Such a manual or event runtime has no upstream in the same execution, so it cannot read a `scope: turn` input; use `scope: committed` or a kernel input instead.
 - `schedule.completion` controls whether the turn waits for the runtime to finish. The manifest validation and the runtime admission check enforce the specific limits.
 
 ### History window (`agent.history`)
@@ -337,6 +347,8 @@ So when a provider accepts the request but never produces any text, there is sti
 - The call fails only if it is cut off again. The error message suggests raising the output limit. If the limit is really too small, the second attempt will not finish either.
 - The one exception: a runtime with `io.visibility: story` produced only story text and no tool calls. In that case the text is kept and committed, and the player sees a notice that it may have stopped mid-sentence.
 
+**The provider did not say why it stopped (`finishReason: other`).** The reply may stop anywhere. As with a cut-off reply, a runtime with `io.visibility: story` that produced only story text and no tool calls keeps and commits the text, and the player sees a notice that it is not finished and the turn can be retried. Anything else fails and is not retried. See [slots.md](./slots.md#finish-reasons-diagnostics-and-refusals).
+
 **A streaming call is interrupted after it has already produced output** (the connection drops, or it goes silent for longer than `idleTimeoutMs`).
 
 - A runtime with `io.visibility: story` is not retried, because the player has already read that text.
@@ -361,7 +373,7 @@ The budget decides how many retries can actually be used:
 **Completion conditions.**
 
 - `completion.afterTools`: the run finishes once the named tools succeed.
-- `completion.require: tool-use`: requires a valid tool call, meaning at least one successful business tool call. A failed call does not count.
+- `completion.require: tool-use`: with a nonempty `afterTools` list, at least one listed completing tool must succeed. Without that list, any successful business tool counts. Failed calls and `runtime-done` do not count.
 - If the model returns only plain text, or calls `runtime-done` while no such call has been made yet, the framework first injects a correction prompt. Only if the run is still not complete is it marked as failed. So even when "nothing changed", submit an empty result through a business tool.
 - The request right after a correction requires the model to call a tool (`toolChoice: "required"`, with any tool named in the manifest kept as it is). After the model calls a tool, the choice goes back to automatic. When the model is in thinking mode, the provider does not accept a forced choice, so the model keeps choosing on its own.
 - This check runs in one place, where the loop returns. It applies to every way a normal run or a resume can end: a text answer, `runtime-done`, automatic completion through `afterTools`, a `PostToolUse` hook that stops the run, and running out of steps.
@@ -374,6 +386,7 @@ The budget decides how many retries can actually be used:
 - If there is not enough time left for a second attempt (60 seconds or less remain), the call is sent only once, and `function.timeoutMs` ends it.
 - A request that the provider rejects is still handled by the gateway's transport retries and fallback models. It is not sent again here.
 - A handler whose single call really needs more time should raise `function.timeoutMs`.
+- The host creates a request budget from the remaining time when each logical call starts. HTTP retries, fallback models, and a stalled-call resend share 8 transport attempts. The gateway default of 120 seconds adds no extra ceiling, and the budget cannot extend the runtime deadline.
 
 ### Inputs and outputs
 
@@ -392,7 +405,6 @@ io:
       required: false
     digest:
       from: { kernel: turn-digest@1 }
-      required: false
   selfData:
     - namespace: facts
       as: <known-facts>
@@ -408,6 +420,7 @@ io:
 
 - A normal input reads the result of an upstream runtime that has already finished in the same execution. `select` is a JSON Pointer into the result value.
 - To read a result left by an earlier execution, use `scope: committed` with `recordAs`.
+- A kernel input (`from: { kernel: turn-digest@1 }`) has only `from`. It always has a value and is not checked against a schema, so writing `scope`, `select`, `required`, `accepts` or `recordAs` is rejected.
 - A schema can be a local path, or it can be written as `contract:<contractId>`. A contract schema from another provider is resolved when the package loads.
 - In the prompt, an input is at `runtime-inputs.<binding>.value`. Do not rely on the old injection tags.
 - If an agent runs after the narrative and it is bound to this turn's story text, that `value` is a sentence that points to the story message in the conversation. The story text itself is not repeated (see [Prompt structure](./prompt-structure.md#this-turns-story-text)).
@@ -501,17 +514,33 @@ An agent's side effects come only from its tools. What the model can write is de
 | `ctx.logicalTurn`                | The scheduler's logical turn: the number of committed main-loop player turns, plus one. It is in the context of function handlers and plugin tools. Setup, the opening continuation, and the first player message are all turn 1. `startTurn` and `interval` also count by it. |
 | `turnNumber` in the tool context | The number of player messages recorded in the session, including the form submission during setup                                                                                                                                                                              |
 | `ctx.session.lastPlayerInput`    | The most recent `PlayerInputSubmission \| null` when the source execution starts. It includes `id/sessionId/turnId/formId/values/createdAt`.                                                                                                                                   |
+| `ctx.execution.origin`           | Why this execution runs: `player`, `continuation`, `manual`, `background`, `recursive`, or `resume`                                                                                                                                                                            |
+| `ctx.execution.sourceTurnId`     | When a committed turn is retried, the ID of that turn. Use it as a key so a retry reuses the earlier rolls and reveals instead of drawing again                                                                                                                                |
+| `ctx.recursionDepth`             | `0` for a top-level execution, one more for each level of `ctx.recursiveCall`                                                                                                                                                                                                  |
 
 `ctx.session.lastPlayerInput` may come from an earlier turn. Having this record does not mean that a form was submitted in this turn.
 
+#### The session view (`store.getSession()`)
+
+`ctx.store.getSession()` (`context.store.getSession()` in a tool or an action) returns `PluginSessionView`, a read-only view of the current session, not the session record itself:
+
+| Field                  | Meaning                                                                                                                                                                                                        |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `phase`                | `setup` or `playing`                                                                                                                                                                                           |
+| `completedPlayerTurns` | Committed main-loop player turns; setup and the opening do not count                                                                                                                                           |
+| `locale`               | The content language of this game                                                                                                                                                                              |
+| `setupRuntimes`        | The progress of each setup runtime, keyed by runtime ID: `{ state: "pending", lastError? }`, `{ state: "done", resolution: "completed" \| "waived", warning? }`, or `{ state: "blocked", reason, lastError? }` |
+
+When the session no longer exists, `getSession()` throws and the current execution cannot continue. Normal degradation for missing plugins or optional capabilities does not change this boundary.
+
 #### Random numbers (`ctx.random`)
 
-`ctx.random` is a random source provided by the host. It is in the context of function handlers, agent guards, plugin tools, and RPC actions.
+`ctx.random` is a random source provided by the host. The context of every function handler, agent guard, plugin tool, and RPC action has it, and its type marks it as always present.
 
 - Use `ctx.random.int(min, max)` for dice and any other random draws in the game. It returns an integer with `min <= n < max`. It is the same as `randomInt` from `node:crypto`.
 - Do not use `node:crypto` or `Math.random` directly.
 - Normally it is just `randomInt`. When the test server is started with `COVEL_RANDOM_SEED`, the nth number drawn by the same runtime (or the same RPC action) is the same on every run. A scripted session can therefore be repeated (see [Environment variables](./env-registry.md#runtime-contract) and [Recording and replay](../ship/real-model.md#recording-and-replay)).
-- `shortId` and `shortIdBatch` accept it as their fourth argument. The random part of an ID can then also be repeated.
+- `shortId` and `shortIdBatch` must get it as their fourth argument. The random part of an ID can then also be repeated. The SDK has no other random source to fall back on.
 
 #### Bookkeeping fields the model cannot see
 
@@ -542,7 +571,17 @@ The records that code reads do not change: the return values of `ctx.inputs`, `c
 
 #### The kernel input `turn-digest@1`
 
-The kernel input `turn-digest@1` freezes the same `lastPlayerInput` snapshot, along with `runtimeResults`.
+The kernel input `turn-digest@1` freezes the facts of the source turn. A foreground runtime and a background job read the same value. Its type in the SDK is `PluginTurnDigest`:
+
+| Field               | Meaning                                                                       |
+| ------------------- | ----------------------------------------------------------------------------- |
+| `turnId`            | The ID of the source turn                                                     |
+| `playerMessage`     | The player's input for that turn                                              |
+| `lastPlayerInput`   | The same snapshot as `ctx.session.lastPlayerInput`, or `null`                 |
+| `narrativeText`     | The story text of the turn's successful story runtimes, joined by blank lines |
+| `toolCallSummaries` | One short line per successful, visible tool call                              |
+| `runtimeResults`    | The runtimes that finished: `{ runtimeId, status }`                           |
+| `locale`            | The content language of this game (only sometimes present)                    |
 
 - `runtimeResults` holds the final states already observed, as `{runtimeId, status}`. `status` is `success`, `failed`, `skipped`, or `suspended`. A runtime that has not finished is not predicted to succeed.
 - A background (detached) worker reads the snapshot of the source execution. It does not query the latest form or turn state again.
@@ -575,7 +614,7 @@ The rules are in [Aliases and name resolution](./world-model.md#aliases-and-name
 
 **The plugin's own data.**
 
-- Persistent data owned by a plugin is accessed through the bound `ctx.store.getPluginData(namespace, key)` and `listPluginData(namespace?)`.
+- Persistent data owned by a plugin is accessed through the bound `ctx.store.getPluginData(namespace, key)` and `listPluginData(namespace)`.
 - A plugin cannot specify an arbitrary sessionId or pluginId to read another plugin's private data.
 - To share data publicly across plugins, use a contract, a service, or an extension. Do not scan the other plugin's namespace.
 
@@ -648,7 +687,7 @@ If reading an example or preparing a generatable contract schema fails during a 
 - `pnpm describe:authoring` summarizes the declarations of all scanned plugins. Adding `--check` validates each `example` against its namespace's schema.
 - For the fields, see the [Plugin manifest field table](./schema/plugin-manifest.md).
 
-Some values in a record are the `id` of a character attribute of the world. Declare them with `references`, and `pnpm validate:world` checks those values before a session starts:
+Some values in a record name something else in the world: the `id` of a character attribute, or the ID of a dimension. Declare them with `references`, and `pnpm validate:world` checks those values before a session starts:
 
 ```yaml
 authoring:
@@ -659,12 +698,21 @@ authoring:
       within: [base, max]
 ```
 
-- `path`: where the value is in each record. Field names are joined by `.`, with `[]` after a field that holds a list.
-- `to`: what the value names. For now only `character-attribute`, the `id` of a top-level attribute of the world's `characterSchema`.
-- `type` (optional): the named attribute must have this type.
-- `within` (optional): number fields beside the value. Each must lie inside the `min` and `max` of that attribute.
+- `path`: where the value is in each record. Field names are joined by `.`, with `[]` after a field that holds a list. `**.` before a field name finds that field at any depth below.
+- `to`: what the value names. `character-attribute` is the `id` of a top-level attribute of the world's `characterSchema`; `world-dimension` is the ID of a dimension the world declares.
+- `type` (optional, only for `character-attribute`): the named attribute must have this type.
+- `within` (optional): fields beside the value that must lie inside what it names. For `character-attribute`, number fields that must lie inside the `min` and `max` of that attribute. For `world-dimension`, a path into the dimension's value (`a.b`, or a list of keys); the dimension's `schema` must allow that place.
 
-A value that does not fit is reported as an `attribute-reference` error. A world without a `characterSchema` is not checked, because its attributes are only generated when a session starts. Declare only rules that the plugin really refuses at run time. Otherwise a valid world is reported by mistake.
+The bundled story-events declares the dimensions in its event conditions like this. A condition can nest `all` / `any` / `not` to any depth, so the path uses `**`:
+
+```yaml
+references:
+  - path: when.**.dimension
+    to: world-dimension
+    within: [path]
+```
+
+A value that does not fit is reported as an `attribute-reference` or `dimension-reference` error. Attributes are not checked in a world without a `characterSchema`, and dimensions are not checked in a world that declares none, because they are only generated when a session starts. Declare only what the plugin really cannot find or refuses at run time. Otherwise a valid world is reported by mistake.
 
 A world data source writes `to: contract:example.facts@1`. If you leave out `schema`, the schema of the target contract is used. The framework finds the active namespaces that declare that they accept this contract, validates the schema, and then delivers the data to them. The framework does not recognize any specific plugin ID. The `contracts` and the schema of the receiving namespace must match. For the full structure, see [World Data](./world-data.md).
 
@@ -717,13 +765,17 @@ After a namespace declares `search`, its records enter the framework's memory re
 - When a provider is activated explicitly, the default provider steps aside.
 - A required contract automatically brings in a provider. When a contract is missing, ambiguous, in conflict, or not authorized enough, the result gives the reason.
 - An event topic has only one declarer in a session. When two active plugins both declare the same topic in `contributes.events`, the one accepted second is rejected with `event-topic-conflict`. The reason names the topic and the two plugin IDs. Explicit requests come before automatic dependencies, and the rest follow request order. A topic is a name that is global to the session. The sender and the subscribers often belong to other plugins, so a topic can match only one payload schema. Two plugins can be installed at the same time, but they cannot both be in the same session. To avoid name clashes, add a prefix tied to your plugin to your own topics.
-- A plugin that loses its required provider, and an automatic dependency that nothing needs anymore, are removed.
+- A plugin that loses its required provider, and an automatic dependency that nothing needs anymore, are removed. Such a rejection has the `code` `missing-provider` or `ambiguous-provider`, and `contract` names the contract it waits for.
+- When a plugin that others depend on is missing, the plugins that depend on it are turned off automatically, and the game still starts. When a session is created, or a plugin is turned on or off, the requested plugins (`requested`) and the `kind: core` plugins turned off this way are still written into `activePlugins`. They do not run for now, they are listed in `unavailable`, and they come back on their own once the dependency is back. Creation returns `400 plugin_rejected` only when a plugin the player asked for is rejected for another reason, such as a conflict; the message names the plugin and the reason.
+- Before the game starts, the session prep screen lists the plugins this will turn off, the contract each one lacks, and the installed plugins that provide it, with a button to turn one on. The game screen does the same for `unavailable`.
+- When none of the enabled plugins has a narrative runtime (`io.visibility: story`), turns do not tell a story. The session prep screen and the game screen both say so and list the narrative plugins that can be turned on. When none is installed, they point to Settings → Install & manage.
 - `requested` and the computed `active` set are stored separately. An automatic dependency does not become the player's explicit choice.
-- The world's `pluginPolicy.requires` is passed in as `requiredContracts`. A world is a dependent, just like a plugin. A single provider is added automatically, and it is not removed as an unneeded dependency. A need that cannot be met is returned in `unmet`, with the reason `missing-provider`, `ambiguous-provider`, `approval-required`, or `excluded`. The first two block session creation. The last two are the player's choice, and they do not block it.
+- The world's `pluginPolicy.requires` is passed in as `requiredContracts`. A world is a dependent, just like a plugin. A single provider is added automatically, and it is not removed as an unneeded dependency. A need that cannot be met is returned in `unmet`, with the reason `missing-provider`, `ambiguous-provider`, `approval-required`, or `excluded`. None of the four blocks session creation: the session starts without this part, and the session-prep screen and the response that creates the session (`unmetRequirements`) tell the player what is missing. The first two are an install problem. The last two are the player's choice.
 
 **How a world and a gameplay pack give the initial request.**
 
 - A world's `pluginPolicy` uses `presetId`, `preferredTags`, `avoidedTags`, `requested`, `recommended`, and `packs`. A gameplay pack uses `requested` and `recommended`.
+- A built-in gameplay pack (`packs/builtin.yaml`) can also have `defaultViewMode` (`stage` or `parsed`). When a world is created with AI for this pack, the generated world gets this `defaultViewMode`. The framework makes no decision by pack ID: the choices of AI world creation are all the packs of this catalogue; see `packs` in [`GET /api/framework/authoring`](./api.md#get-apiframeworkauthoring).
 - A recommendation is not enabled automatically, and it does not override the player's explicit exclusion.
 - `defaultPluginIds` from `GET /api/worlds/:id/plugin-plan` is the initial set of explicit requests. The session-prep screen and the create endpoint then use the same resolver to compute the active set.
 - Each `requested` list and `defaultPluginIds` returned by this endpoint contains only installed plugins. A plugin that a world or pack requests but that is not installed is listed in `missing`. The session-prep screen shows it as a notice, and it is not sent in the create request.
@@ -735,8 +787,19 @@ After a namespace declares `search`, its records enter the framework's memory re
 - The other initial default requests, the world's `requested` list, and the requests the player added by hand are kept. An explicit exclusion still wins.
 - A manual change clears the highlight on the pack card. The source of the old pack is still remembered, though, so the next switch does not add the old pack's plugins back. A plugin in a pack that the player re-enables by hand is kept as a manual choice.
 - The resolver still checks the world's `requires` on its own. Do not treat `requested` as a required item that cannot be canceled.
+- A gameplay pack can have `excluded`: choosing the pack turns those plugins off, `kind: core` ones included, and the player can turn them back on. Switching to the next pack lifts only the exclusions the previous pack added; the player's own exclusions stay. The exclusions of the pack the world selects at the start apply from the beginning. A plugin that is not installed does not appear in `excluded`.
+- The "Back to the minimal set" button keeps only the narrative plugins (the selected ones, or the core ones when none is selected) and the plugins that these and the world's `requires` pull in. It adds no extra requirement for a `world.dimensions@1` provider. Every other core plugin and every plugin the world `requested` is excluded, and the pack highlight is cleared.
 
-**Discovery and authorization.** The data returned by the plugin discovery API separates `kind`, the host's `hostState`, and the session's `sessionState`. The runtime provides `outputContract`. A community plugin that is not authorized can stay in the request list, but it cannot enter the execution set. An approval is bound to the session identity and to its approval scope.
+**A save keeps the set the player confirmed.**
+
+- When a session is created, or a plugin is enabled or disabled, the result of the resolution is written to the session's `activePlugins`. This is the set the player confirmed.
+- The plugin list, the slash commands and the executor all read it through one function, `resolveConfirmedSessionPlugins`. It starts from `activePlugins`, checks it against the installed versions, and adds no plugin. A plugin installed later, a `kind: core` one included, does not join an old save on its own.
+- A plugin that is not installed, failed to load, lacks a required provider in its installed version, or conflicts with an earlier member sits out for now. The reasons are listed in `unavailable` of `GET /api/sessions/:id/plugins`, and the game screen shows a notice. The other plugins run as usual. `activePlugins` is not rewritten, so the plugin comes back when it is available again.
+- Sitting out means it is off everywhere: its runtimes do not load, its hooks do not fire, its services, actions and form validators refuse calls, its panels do not show, and memory search does not read its data. A direct call to one of its actions returns `404 plugin_not_active`, and the error message gives the reason.
+- Approval does not change this set. A community plugin's code does not run until it is approved; the trust gate checks that per session.
+- To recompute the set from the installed plugins, enable or disable a plugin. Both operations resolve `requested` and `excluded` again and write the result back to `activePlugins`.
+
+**Discovery and authorization.** The data returned by the plugin discovery API separates `kind`, the host's `hostState`, and the session's `sessionState`. The runtime provides `outputContract`. A community plugin that is not authorized can stay in the request list, but its code does not run until it is approved. An approval is bound to the session identity and to its approval scope.
 
 ## Localization and validation
 
@@ -746,8 +809,24 @@ The directory-level command `pnpm validate:plugin <dir>` and the ZIP install sha
 
 - The referenced entry, handler, guard, JSON Schema, and UI files must be inside the package.
 - Each JSON UI spec declares one of `view` and `webview`. Component names in `view` must be in the [component catalogue](./ui-components.md). `repeat.statePath` and `$item` must have a legal form (see [UI panels](./ui-panels.md#json-render-binding-cheat-sheet)). The error gives the spec file and the path of the node.
-- Automatic and scheduled runtimes must have a stage.
 - The built-in tool names and the plugin tool declarations, the runtime references inside the package, and the root contract dependencies must all be consistent.
+- An error from a cross-field rule (for example, `schedule.completion.mode: detached` is only allowed on `post-turn` or `audit`) gives the file path and the field path you wrote, for example `runtimes/note/RUNTIME.md: schedule.stage: …`.
+
+Loading, `pnpm validate:plugin` and installation use one copy of the manifest rules (the schemas in `@covel/shared`), and the same holds for UI specs: a panel that passes the check is not dropped in the game for its format.
+
+Some errors stop one runtime from ever running and leave the rest of the package unaffected:
+
+- An automatic or scheduled runtime has no `schedule.stage`. The framework does not guess a default stage.
+- A manual or event runtime that runs in the background reads an input from the same execution (see [Triggers](#triggers)).
+
+When a package placed in the plugin directory by hand has such an error, the loader leaves out only that runtime and writes the file, the field and the reason to the server log. The package's other runtimes, tools and panels load as usual, and its output contract no longer counts as provided by the package. `pnpm validate:plugin` and installation report it as an error.
+
+When a manifest has a field the host does not know (for example an old field that was removed, or a field written for a newer host), the loader leaves out that field and writes the file and the field to the server log. The package loads as usual, and installation goes ahead. `pnpm validate:plugin` reports it as an error: remove it, or change it to the field name this page gives.
+
+Only a whole field is left out: a field at the top of `PLUGIN.md`, an entry under `contributes`, or a field at the top of the inline `runtime` or of a `RUNTIME.md`. Two cases still make the load fail:
+
+- An unknown key inside a known field, for example `permissions.fs`, `io.conceal` or `schedule.priority`. The host does not run a declaration it only half understands.
+- A field that looks like a misspelled field that limits or identifies the package, for example `permision`, `gaurd` or `covle`. These fields are `id`, `kind`, `version`, `covel`, `provides`, `requires`, `optional`, `conflicts`, `permissions`, `entry` and `runtime` at the root, and `type`, `guard`, `permissions`, `effects`, `schedule`, `io` and `function` on a runtime. The error says which field it looks like.
 
 The directory-level check also warns when the plugin's root has an `llm.toml`: the file is not read, and it does not fail the check.
 

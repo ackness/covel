@@ -1,8 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  runtimeManifestInputSchema,
-  runtimeManifestAuthoringSchema,
-} from "../src/schemas/plugin.js";
+import { runtimeManifestInputSchema } from "../src/schemas/plugin.js";
 
 const manifest = {
   name: "external-extractor",
@@ -15,7 +12,7 @@ const manifest = {
   completeAfterTools: ["save-facts"],
 };
 
-describe.each([runtimeManifestInputSchema, runtimeManifestAuthoringSchema])(
+describe.each([runtimeManifestInputSchema])(
   "explicit completion manifest contract",
   (schema) => {
     it("accepts a third-party extractor with a legitimate no-change path", () => {

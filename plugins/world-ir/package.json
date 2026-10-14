@@ -7,12 +7,10 @@
     "test": "vitest run",
     "test:watch": "vitest"
   },
-  "dependencies": {
-    "@covel/plugin-handlers-utils": "workspace:*",
-    "zod": "^4.6.5"
-  },
   "devDependencies": {
+    "@covel/plugin-handlers-utils": "workspace:*",
     "@covel/plugin-loader": "workspace:*",
-    "vitest": "^5.0.1"
+    "vitest": "^5.0.3",
+    "zod": "^4.6.5"
   }
 }

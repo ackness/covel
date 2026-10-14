@@ -176,7 +176,7 @@ function withPortablePatterns(schema: unknown): unknown {
  *
  * @example
  * ```typescript
- * import { tool } from '@covel/tools';
+ * import { tool } from '@covel/plugin-handlers-utils';
  * import { z } from 'zod';
  *
  * export default tool({

@@ -18,7 +18,6 @@ import { buildContextSync, needsAsyncBuild } from "../src/context-builder.js";
 import {
   PROMPT_CACHE_BREAKPOINT_MARKER,
   type RuntimeManifest,
-  type RuntimeResult,
   type TurnInput,
 } from "@covel/shared";
 import type { DataStore, PluginDataRecord } from "@covel/store";
@@ -43,20 +42,6 @@ function makeTurnInput(overrides?: Partial<TurnInput>): TurnInput {
     playerMessage: "探索",
     origin: "player",
     ...overrides,
-  };
-}
-
-function makeRuntimeResult(output: Record<string, unknown>): RuntimeResult {
-  return {
-    pluginId: "narrator",
-    runtimeId: "narrator",
-    runId: "run-1",
-    turnId: "turn-1",
-    status: "success",
-    output,
-    toolCalls: [],
-    durationMs: 100,
-    timestamp: new Date().toISOString(),
   };
 }
 
@@ -106,17 +91,10 @@ describe("needsAsyncBuild", () => {
     expect(needsAsyncBuild({ manifest })).toBe(false);
   });
 
-  it("returns false when all injects are runtime kind", () => {
+  it("returns false when no inject is plugin-data kind", () => {
     const manifest = makeManifest({
       input: {
-        inject: [
-          {
-            kind: "runtime",
-            from: "narrator",
-            field: "narrativeOutput",
-            as: "<narrator-output>",
-          },
-        ],
+        inject: [{ kind: "kernel", from: "turn-digest@1", name: "digest" }],
       },
     });
     expect(needsAsyncBuild({ manifest })).toBe(false);
@@ -126,12 +104,7 @@ describe("needsAsyncBuild", () => {
     const manifest = makeManifest({
       input: {
         inject: [
-          {
-            kind: "runtime",
-            from: "narrator",
-            field: "narrativeOutput",
-            as: "<narrator-output>",
-          },
+          { kind: "kernel", from: "turn-digest@1", name: "digest" },
           {
             kind: "plugin-data",
             namespace: "entries",
@@ -146,31 +119,26 @@ describe("needsAsyncBuild", () => {
   });
 });
 
-// ── buildContext — runtime inject regression ─────────────────────
+// ── buildContext — sync and async paths agree ───────────────────
 
-describe("buildContext — runtime inject regression", () => {
-  it("resolves runtime injects identically to the sync path", async () => {
-    const manifest = makeManifest({
-      input: {
-        inject: [
-          {
-            kind: "runtime",
-            from: "narrator",
-            field: "narrativeOutput",
-            as: "<narrator-output>",
-          },
-        ],
-      },
-    });
-    const results = new Map<string, RuntimeResult>([
-      ["narrator", makeRuntimeResult({ narrativeOutput: "你走到了山脚下。" })],
-    ]);
-
+describe("buildContext — sync and async paths", () => {
+  it("render same-execution inputs identically", async () => {
     const params: ContextBuildParams = {
       promptTemplate: "You are the codex keeper.",
-      manifest,
+      manifest: makeManifest(),
       turnInput: makeTurnInput(),
-      completedResults: results,
+      completedResults: new Map(),
+      inputSlots: {
+        narrative: {
+          cardinality: "one",
+          value: "你走到了山脚下。",
+          source: {
+            pluginId: "narrator",
+            runtimeId: "narrator",
+            resultId: "r1",
+          },
+        },
+      },
     };
 
     const sync = buildContextSync(params);
@@ -178,9 +146,7 @@ describe("buildContext — runtime inject regression", () => {
 
     expect(asyncResult.systemPrompt).toBe(sync.systemPrompt);
     expect(asyncResult.messages).toEqual(sync.messages);
-    expect(asyncResult.turnContext).toBe(
-      "<narrator-output>你走到了山脚下。</narrator-output>",
-    );
+    expect(asyncResult.turnContext).toContain("你走到了山脚下。");
   });
 
   it("sync path silently skips plugin-data injects (does not throw)", () => {

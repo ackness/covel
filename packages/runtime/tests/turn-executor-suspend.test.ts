@@ -857,7 +857,7 @@ describe("TurnExecutor — function runtime suspend", () => {
     expect(capturedStore).toHaveProperty("listTurnMessages");
   });
 
-  it("community agent guard gets scoped store helpers", async () => {
+  it("community agent guard gets the scoped helpers a function handler gets", async () => {
     const manifest = makeManifest({ pluginType: "core-plugin" });
     let capturedStore: unknown;
     let capturedPluginData: unknown;
@@ -898,7 +898,7 @@ describe("TurnExecutor — function runtime suspend", () => {
         .canWriteDirectly,
     ).toBe(false);
     expect(capturedStore).toHaveProperty("getPluginData");
-    expect(capturedPluginData).toBeUndefined();
+    expect(capturedPluginData).toHaveProperty("set");
   });
 });
 
@@ -1574,12 +1574,7 @@ describe("resumeSuspendedRuntime", () => {
       | {
           resumeData?: unknown;
           resumedFromSuspensionId?: string;
-          execution?: {
-            executionId: string;
-            origin: string;
-            logicalTurnId?: string;
-            countPolicy: string;
-          };
+          execution?: { origin: string; sourceTurnId?: string };
         }
       | undefined;
     const llm: LLMAdapter = {
@@ -1630,13 +1625,9 @@ describe("resumeSuspendedRuntime", () => {
       session: { lastPlayerInput: submittedForm },
       resumeData: { answer: "yes" },
       resumedFromSuspensionId: id,
-      execution: {
-        executionId: result.runId,
-        origin: "resume",
-        logicalTurnId: "logical-turn-1",
-        countPolicy: "complete-player-turn",
-      },
     });
+    // Plugin code sees the public execution identity, not the kernel's ledger keys.
+    expect(receivedContext?.execution).toEqual({ origin: "resume" });
   });
 
   it("should return failed result if runtime cannot be loaded", async () => {

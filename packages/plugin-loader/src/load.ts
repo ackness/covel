@@ -1,6 +1,9 @@
-import { validateRuntimeDeclarations } from "./static-validation.js";
+import { provideHostModules } from "./host-modules.js";
+import {
+  pluginImportReferences,
+  validateRuntimeDeclarations,
+} from "./static-validation.js";
 import { resolvePluginDeclarations } from "./declarations.js";
-import { loadPluginUiSpec } from "./ui-spec.js";
 import { readMessageCatalogs } from "./locale-messages.js";
 import { pluginLanguages } from "./plugin-languages.js";
 import { readManifestLabels, type ManifestLabels } from "./locale-labels.js";
@@ -24,13 +27,14 @@ import type {
   RuntimeManifest,
 } from "@covel/shared";
 import type {
+  DisabledRuntime,
+  IgnoredField,
   PluginDiscoveryResult,
   PluginSummary,
   PluginEntryDefinition,
   LoadedRuntime,
   ParsedPluginMd,
   ParsedRuntimeMd,
-  PackageManifest,
   FunctionHandler,
   AgentGuard,
 } from "./types.js";
@@ -38,6 +42,7 @@ import {
   parsePluginMd,
   parseRuntimeMd,
   compileInlineRuntime,
+  RuntimeDisabledError,
 } from "./parse-plugin-md.js";
 import {
   resolvePluginRuntimeManifest,
@@ -182,13 +187,18 @@ async function parsePluginMdForLocale(
     undefined,
     labels,
   );
-  return localizedPath === basePath
-    ? canonical
-    : parse(
-        await fs.readFile(localizedPath, "utf-8"),
-        localizedPath,
-        canonical.rawFrontmatter,
-      );
+  if (localizedPath === basePath) return canonical;
+  const localized = parse(
+    await fs.readFile(localizedPath, "utf-8"),
+    localizedPath,
+    canonical.rawFrontmatter,
+  );
+  // The variant inherits the canonical fields; an unknown one is reported
+  // where the author wrote it.
+  const { ignoredFields: _variant, ...rest } = localized;
+  return canonical.ignoredFields
+    ? { ...rest, ignoredFields: canonical.ignoredFields }
+    : rest;
 }
 
 /**
@@ -280,6 +290,43 @@ export interface PluginDefinition {
   readonly messages: readonly PluginMessageCatalog[];
   /** The languages the package has text in. */
   readonly languages: PluginLanguages;
+  /**
+   * Runtimes left out because their manifest can never run. The rest of the
+   * package loads; `pnpm validate:plugin` reports each one as an error.
+   */
+  readonly disabledRuntimes: readonly DisabledRuntime[];
+  /**
+   * Unknown whole fields left out of the manifests. The package loads
+   * without them; `pnpm validate:plugin` reports each one as an error.
+   */
+  readonly ignoredFields: readonly IgnoredField[];
+}
+
+/**
+ * The package without what its left-out runtimes would have provided, so
+ * session plugin selection never counts on an output that cannot appear.
+ */
+function withoutDisabledOutputs(
+  parsed: ParsedPluginMd,
+  disabled: readonly DisabledRuntime[],
+): ParsedPluginMd {
+  const contracts = new Set(
+    disabled.flatMap(({ outputContract }) =>
+      outputContract ? [outputContract] : [],
+    ),
+  );
+  const provides = parsed.plugin.provides;
+  if (!contracts.size || !provides) return parsed;
+  return {
+    ...parsed,
+    plugin: {
+      ...parsed.plugin,
+      provides: provides.filter(
+        (entry) =>
+          !contracts.has(typeof entry === "string" ? entry : entry.contract),
+      ),
+    },
+  };
 }
 
 async function readSchemaFile(
@@ -336,24 +383,51 @@ export async function loadPluginDefinition(
         );
     }
   }
-  const packageManifest = { ...parsedPackage, contractSchemas };
-  const plugin = packageManifest.plugin;
-  if (plugin.id !== discovery.id)
+  if (parsedPackage.plugin.id !== discovery.id)
     throw new Error(
       `${rootPath}: id must match plugin directory ${discovery.id}`,
     );
-  if (discovery.isMultiRuntime && plugin.runtime)
+  if (
+    discovery.isMultiRuntime &&
+    (parsedPackage.plugin.runtime || parsedPackage.disabledRuntime)
+  )
     throw new Error(`${rootPath}: inline runtime and runtimes/ cannot coexist`);
+  const disabledRuntimes: DisabledRuntime[] = parsedPackage.disabledRuntime
+    ? [parsedPackage.disabledRuntime]
+    : [];
   const manifests: ParsedRuntimeMd[] = [];
   if (discovery.isMultiRuntime) {
     for (const mdPath of discovery.pluginMdPaths)
-      manifests.push(
-        await parsePluginMdForLocale(path.dirname(mdPath), locale, plugin),
-      );
+      try {
+        manifests.push(
+          await parsePluginMdForLocale(
+            path.dirname(mdPath),
+            locale,
+            parsedPackage.plugin,
+          ),
+        );
+      } catch (error) {
+        if (!(error instanceof RuntimeDisabledError)) throw error;
+        disabledRuntimes.push(error.disabled);
+      }
   } else {
-    const runtime = compileInlineRuntime(packageManifest);
+    const runtime = compileInlineRuntime(parsedPackage);
     if (runtime) manifests.push(runtime);
   }
+  for (const disabled of disabledRuntimes)
+    console.warn(`[plugin-loader] ${disabled.message}`);
+  const ignoredFields = [parsedPackage, ...manifests].flatMap(
+    (parsed) => parsed.ignoredFields ?? [],
+  );
+  for (const ignored of ignoredFields)
+    console.warn(
+      `[plugin-loader] ${ignored.message}; this host does not know it and loads the package without it`,
+    );
+  const packageManifest = {
+    ...withoutDisabledOutputs(parsedPackage, disabledRuntimes),
+    contractSchemas,
+  };
+  const plugin = packageManifest.plugin;
   validateRuntimeDeclarations(packageManifest, manifests);
   const definition = {
     packageManifest,
@@ -364,6 +438,8 @@ export async function loadPluginDefinition(
     ),
     messages: await readMessageCatalogs(discovery.rootPath),
     languages: await pluginLanguages(discovery.rootPath),
+    disabledRuntimes,
+    ignoredFields,
   };
   validatePluginDeclarations(packageManifest);
   return definition;
@@ -409,8 +485,10 @@ export async function loadPluginEntryDefinition(
     pluginRoot: discovery.rootPath,
     entryPaths: [
       ...new Set(
-        declarations.flatMap(({ manifest }) =>
-          manifest.entry ? [manifest.entry] : [],
+        declarations.flatMap((declaration) =>
+          pluginImportReferences(declaration, [])
+            .filter(({ field }) => field === "entry")
+            .map(({ reference }) => reference),
         ),
       ),
     ],
@@ -441,51 +519,6 @@ async function resolveRuntimeDir(
     "Runtime manifest",
   );
   return path.dirname(record.sourcePath);
-}
-
-/**
- * Load UI spec JSON files declared in manifest.ui.
- * Validates paths to prevent traversal outside the plugin root.
- */
-async function loadUiSpecs(
-  runtimeDir: string,
-  pluginRoot: string,
-  pluginId: string,
-  ui:
-    | {
-        right?: readonly string[];
-        message?: readonly string[];
-        left?: readonly string[];
-      }
-    | undefined,
-): Promise<LoadedRuntime["uiSpecs"]> {
-  if (!ui) return undefined;
-
-  const loadSlot = async (
-    paths: readonly string[] | undefined,
-  ): Promise<readonly Readonly<Record<string, unknown>>[] | undefined> => {
-    if (!paths || paths.length === 0) return undefined;
-    const specs: Readonly<Record<string, unknown>>[] = [];
-    for (const relPath of paths) {
-      const fullPath = path.resolve(runtimeDir, relPath);
-      await assertInsideRoot(pluginRoot, fullPath, "UI spec");
-      if (fullPath.endsWith(".json")) {
-        specs.push(await loadPluginUiSpec(pluginRoot, fullPath, pluginId));
-      } else {
-        // Preserve unsupported declarations for per-spec API diagnostics.
-        // The Web client does not dynamically load plugin component files.
-        specs.push({ _componentPath: relPath });
-      }
-    }
-    return specs;
-  };
-
-  const right = await loadSlot(ui.right);
-  const message = await loadSlot(ui.message);
-  const left = await loadSlot(ui.left);
-
-  if (!right && !message && !left) return undefined;
-  return { right, message, left };
 }
 
 /**
@@ -627,32 +660,6 @@ async function loadExportAcceptsSchemas(
 }
 
 /**
- * Load the package declaration and its UI specs — no handler / guard
- * imports. UI specs are data (JSON files, or a recorded component path), so
- * this path never executes plugin JS and is safe for untrusted (community)
- * plugins whose code must not run before approval.
- */
-export async function loadPluginUi(
-  discovery: PluginDiscoveryResult,
-  locale?: string,
-  definition?: PluginDefinition,
-): Promise<{
-  readonly manifest: PackageManifest;
-  readonly uiSpecs: LoadedRuntime["uiSpecs"];
-}> {
-  const snapshot =
-    definition ?? (await loadPluginDefinition(discovery, locale));
-  const manifest = snapshot.packageManifest.manifest;
-  const uiSpecs = await loadUiSpecs(
-    discovery.rootPath,
-    discovery.rootPath,
-    discovery.id,
-    manifest.ui,
-  );
-  return { manifest, uiSpecs };
-}
-
-/**
  * Level 2: Fully load a runtime for execution.
  * Reads prompt template, output schema.
  *
@@ -746,6 +753,7 @@ export async function loadRuntime(
   if (parsed.manifest.runtimeType === "function" && parsed.manifest.handler) {
     const handlerPath = path.resolve(runtimeDir, parsed.manifest.handler);
     await assertInsideRoot(discovery.rootPath, handlerPath, "Handler");
+    provideHostModules(discovery.rootPath);
     const url = pathToFileURL(handlerPath);
     if (generation) url.searchParams.set("generation", generation);
     const mod = await import(url.href);
@@ -762,6 +770,7 @@ export async function loadRuntime(
   if (parsed.manifest.guard) {
     const guardPath = path.resolve(runtimeDir, parsed.manifest.guard);
     await assertInsideRoot(discovery.rootPath, guardPath, "Guard");
+    provideHostModules(discovery.rootPath);
     const url = pathToFileURL(guardPath);
     if (generation) url.searchParams.set("generation", generation);
     const mod = await import(url.href);

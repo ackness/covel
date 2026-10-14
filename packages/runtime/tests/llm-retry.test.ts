@@ -1,3 +1,4 @@
+import { throughGateway } from "./helpers/through-gateway.js";
 /**
  * Unit tests for the smart LLM retry helpers.
  *
@@ -12,6 +13,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { AiProviderError } from "@covel/ai-provider";
 import {
   buildRetryPolicy,
   callLLMWithRetry,
@@ -25,8 +27,6 @@ import {
   DEFAULT_FIRST_TOKEN_TIMEOUT_MS,
 } from "../src/retry/llm-retry.js";
 import { computeAttemptBudget } from "../src/retry/retry-common.js";
-import { shouldRetryMalformedToolArguments } from "../src/turn-executor/turn-output-helpers.js";
-import { AiProviderError, MALFORMED_TOOL_ARGUMENTS } from "@covel/ai-provider";
 import type {
   LLMAdapter,
   LLMMessage,
@@ -203,6 +203,35 @@ describe("isTransientError", () => {
     );
   });
 
+  it("does not retry an empty account or a refused key at the same provider", () => {
+    const failed = (
+      statusCode: number,
+      code: "RATE_LIMITED" | "PROVIDER_ERROR",
+      details?: Record<string, unknown>,
+    ) =>
+      new AiProviderError({
+        code,
+        message: "failed",
+        provider: "fixture",
+        // An adapter outside the built-in HTTP layer may still call it a rate limit.
+        retriable: true,
+        statusCode,
+        ...(details ? { details } : {}),
+      });
+    expect(
+      isTransientError(
+        failed(429, "RATE_LIMITED", { providerCode: "insufficient_quota" }),
+      ),
+    ).toBe(false);
+    expect(isTransientError(failed(402, "PROVIDER_ERROR"))).toBe(false);
+    expect(isTransientError(failed(401, "PROVIDER_ERROR"))).toBe(false);
+    expect(
+      isTransientError(
+        failed(429, "RATE_LIMITED", { providerCode: "rate_limit_exceeded" }),
+      ),
+    ).toBe(true);
+  });
+
   it("does not retry schema / client errors", () => {
     expect(isTransientError(new Error("HTTP 400 Bad Request"))).toBe(false);
     expect(isTransientError(new Error("invalid tool arguments"))).toBe(false);
@@ -227,39 +256,6 @@ describe("isTransientError", () => {
     );
     expect(isTransientError(new DOMException("stopped", "TimeoutError"))).toBe(
       true,
-    );
-  });
-});
-
-describe("shouldRetryMalformedToolArguments", () => {
-  const gatewayError = (details?: Record<string, unknown>) =>
-    new AiProviderError({
-      code: "PROVIDER_ERROR",
-      provider: "openai-chat",
-      retriable: false,
-      statusCode: 400,
-      message:
-        '[openai-chat] HTTP 400 — The "function.arguments" parameter must be in JSON format.',
-      details,
-    });
-
-  it("follows the gateway's mark, not the message, for a gateway error", () => {
-    expect(
-      shouldRetryMalformedToolArguments(
-        gatewayError({ requestFault: MALFORMED_TOOL_ARGUMENTS }),
-      ),
-    ).toBe(true);
-    expect(shouldRetryMalformedToolArguments(gatewayError())).toBe(false);
-  });
-
-  it("falls back to the text for an error with no type", () => {
-    expect(
-      shouldRetryMalformedToolArguments(
-        new Error('"function.arguments" must be in JSON format'),
-      ),
-    ).toBe(true);
-    expect(shouldRetryMalformedToolArguments(new Error("HTTP 400"))).toBe(
-      false,
     );
   });
 });
@@ -355,10 +351,10 @@ describe("callLLMWithRetry", () => {
   it("reports LLM-slot queue waits via onQueueWait", async () => {
     // Arrange — cap 1 with the slot held, so the call must queue.
     const { setLLMSlotCapForTests, acquireLLMSlot } =
-      await import("../src/retry/llm-slots.js");
+      await import("@covel/shared");
+    vi.useFakeTimers();
     setLLMSlotCapForTests(1);
     const holder = await acquireLLMSlot();
-    setTimeout(() => holder.release(), 40);
     const llm = createScriptedLLM([
       { kind: "ok", response: okResponse("hello") },
     ]);
@@ -368,25 +364,33 @@ describe("callLLMWithRetry", () => {
 
     // Act
     try {
-      const res = await callLLMWithRetry({
-        llm,
+      const pending = callLLMWithRetry({
+        llm: throughGateway(llm),
         messages: baseMessages,
         policy,
         deadline: Date.now() + 10_000,
         onQueueWait: (ms) => waits.push(ms),
         emitter,
       });
+      // Flush admission before advancing the clock, so gateway setup time
+      // cannot consume part of a real timer's intended queue wait.
+      await vi.advanceTimersByTimeAsync(0);
+      expect(llm.calls).toHaveLength(0);
+      await vi.advanceTimersByTimeAsync(40);
+      holder.release();
+      const res = await pending;
 
       // Assert — the queued call succeeded and reported its wait upward.
       expect(res.content).toBe("hello");
-      expect(waits).toHaveLength(1);
-      expect(waits[0]).toBeGreaterThanOrEqual(30);
+      expect(waits).toEqual([40]);
       expect(
         emitter.events.find((event) => event.type === "llm.calling")?.payload
           .queueWaitMs,
       ).toBe(waits[0]);
     } finally {
+      holder.release();
       setLLMSlotCapForTests(undefined);
+      vi.useRealTimers();
     }
   });
 
@@ -1749,6 +1753,96 @@ describe("provider failure terminals", () => {
     });
   });
 
+  it("keeps a story the provider ended for an unknown reason, marked as not whole", async () => {
+    const generated = await callLLMWithRetry({
+      llm: createScriptedLLM([
+        {
+          kind: "ok",
+          response: {
+            ...okResponse("The gate"),
+            finishReason: "other",
+            rawFinishReason: "insufficient_system_resource",
+          },
+        },
+      ]),
+      messages: [],
+      policy,
+      deadline: Date.now() + 10_000,
+      allowTruncatedText: true,
+    });
+    expect(generated).toMatchObject({
+      content: "The gate",
+      finishReason: "other",
+      rawFinishReason: "insufficient_system_resource",
+    });
+
+    const streamed = await streamLLMWithRetry({
+      llm: createScriptedStreamLLM([
+        {
+          events: [
+            { type: "text-delta", textDelta: "The gate" },
+            {
+              type: "done",
+              finishReason: "other",
+              rawFinishReason: "pause_turn",
+            },
+          ],
+        },
+      ]),
+      messages: [],
+      policy,
+      deadline: Date.now() + 10_000,
+      allowTruncatedText: true,
+    });
+    expect(streamed.response).toMatchObject({
+      content: "The gate",
+      finishReason: "other",
+      rawFinishReason: "pause_turn",
+    });
+  });
+
+  it("rejects an answer ended for an unknown reason when it must be whole", async () => {
+    const llm = createScriptedLLM([
+      {
+        kind: "ok",
+        response: {
+          ...okResponse('{"summary":"half'),
+          finishReason: "other",
+          rawFinishReason: "insufficient_system_resource",
+        },
+      },
+    ]);
+    await expect(
+      callLLMWithRetry({
+        llm,
+        messages: [],
+        policy,
+        deadline: Date.now() + 10_000,
+      }),
+    ).rejects.toThrow(
+      /stopped before it finished.*insufficient_system_resource/,
+    );
+    // Not sent again: the same request may stop the same way.
+    expect(llm.calls).toHaveLength(1);
+
+    const stream = createScriptedStreamLLM([
+      {
+        events: [
+          { type: "text-delta", textDelta: "The gate" },
+          { type: "done", finishReason: "pause_turn" },
+        ],
+      },
+    ]);
+    await expect(
+      streamLLMWithRetry({
+        llm: stream,
+        messages: [],
+        policy,
+        deadline: Date.now() + 10_000,
+      }),
+    ).rejects.toThrow(/stopped before it finished.*pause_turn/);
+  });
+
   it.each([
     { name: "a tool call", content: "The gate", toolCalls: 1 },
     { name: "no text", content: "", toolCalls: 0 },
@@ -1947,4 +2041,43 @@ it("does not treat empty text deltas as partial output when retrying a stream", 
   });
   expect(result.response.content).toBe("complete");
   expect(llm.attempts).toBe(2);
+});
+
+it("clears every first-token timer when a failed transport queues for its fallback", async () => {
+  vi.useFakeTimers();
+  const attempt = (statusCode: number) =>
+    ({
+      schemaVersion: 1,
+      provider: "fixture",
+      protocol: "openai-chat-v1",
+      transportAttempt: 0,
+      startedAt: new Date().toISOString(),
+      durationMs: 1,
+      statusCode,
+    }) as LLMProviderRequest;
+  const llm: LLMAdapter = {
+    generate: vi.fn(),
+    async *stream(params) {
+      params.onProviderRequest?.(attempt(429));
+      const admitted = params.onQueueStart?.();
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      admitted?.(10);
+      params.onProviderRequest?.(attempt(200));
+      yield { type: "text-delta", textDelta: "done" };
+      yield { type: "done", finishReason: "stop" };
+    },
+  };
+  try {
+    const pending = streamLLMWithRetry({
+      llm,
+      messages: [],
+      policy: buildRetryPolicy({ runtimeTimeoutMs: 10_000, maxRetries: 0 }),
+      deadline: Date.now() + 10_000,
+    });
+    await vi.advanceTimersByTimeAsync(10);
+    expect((await pending).response.content).toBe("done");
+    expect(vi.getTimerCount()).toBe(0);
+  } finally {
+    vi.useRealTimers();
+  }
 });

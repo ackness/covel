@@ -41,6 +41,8 @@ async function createStore(scheme: "light" | "dark" = "dark") {
   const store = new SettingsStore(new MemorySettingsAdapter());
   await store.init();
   primeThemeRegistry(store);
+  // These tests switch modes, so select a theme that supports both.
+  await store.set("ui.appearance", "book");
   await store.set(THEME_SCHEME_KEY, scheme);
   return store;
 }
@@ -59,6 +61,15 @@ describe("appearance token overrides", () => {
     expect(overrides.dark["--surface-page"]).toBe("#101014");
     expect(overrides.light["--surface-page"]).toBeUndefined();
     expect(overrides.shared["--surface-page"]).toBeUndefined();
+  });
+
+  it("F-036 writes edits to the displayed mode without changing the preferred mode", async () => {
+    const store = await createStore("light");
+    await store.set("ui.appearance", "stage");
+    await setTokenOverride(store, "--story-color", "#eeeeee");
+    expect(store.get(THEME_SCHEME_KEY)).toBe("light");
+    expect(loadOverrides(store).dark["--story-color"]).toBe("#eeeeee");
+    expect(loadOverrides(store).light["--story-color"]).toBeUndefined();
   });
 
   it("routes size and font tokens into the shared bucket", async () => {

@@ -226,10 +226,14 @@ describe("gateway target output budgets", () => {
     expect(calls).toEqual([{ model: "primary", output: 4096 }]);
   });
 
-  it.each(["generate", "stream"] as const)(
-    "%s falls back on 429",
-    async (mode) => {
-      const { gateway, calls } = setup(429);
+  it.each(
+    (["generate", "stream"] as const).flatMap((mode) =>
+      [429, 401, 403, 402].map((status) => ({ mode, status })),
+    ),
+  )(
+    "$mode falls back on HTTP $status",
+    async ({ mode, status }) => {
+      const { gateway, calls } = setup(status);
       const input = { messages: [{ role: "user" as const, content: "hi" }] };
       if (mode === "generate") await gateway.generateText(input);
       else
@@ -240,7 +244,7 @@ describe("gateway target output budgets", () => {
     },
   );
 
-  it.each([400, 401, 403])(
+  it.each([400])(
     "preserves terminal HTTP %s failures",
     async (status) => {
       const { gateway, calls } = setup(status);

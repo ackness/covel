@@ -44,8 +44,10 @@ import type {
   SearchVectorsInput,
   VectorSearchResult,
   DeleteVectorsInput,
+  GetVectorPayloadsInput,
   VectorIndexProgressScope,
   CommitVectorIndexBatchInput,
+  ResetSessionVectorIndexInput,
 } from "../vector-store.js";
 import { normalizeVectorTopK } from "../vector-store.js";
 import { assertStoreIdentifiers, withoutNul } from "../common/without-nul.js";
@@ -212,6 +214,52 @@ export function createPgVectorCapability(
     throw new Error(
       `pg-vector lockSessionEmbeddingModel: session ${sessionId} is already locked to model ${current.embedding_model_id}`,
     );
+  }
+
+  async function resetSessionVectorIndex(
+    input: ResetSessionVectorIndexInput,
+  ): Promise<boolean> {
+    return client.begin(async (tx) => {
+      // FOR UPDATE waits for every vector write holding FOR KEY SHARE on the
+      // row, and holds off later ones until the new lock is committed.
+      const sessions = await tx<
+        Array<{ created_at: string; embedding_model_id: number | null }>
+      >`
+        SELECT created_at, embedding_model_id FROM sessions WHERE id = ${input.sessionId} FOR UPDATE
+      `;
+      const session = sessions[0];
+      if (!session || session.created_at !== input.expectedSessionCreatedAt) {
+        throw new Error("Vector index reset: session incarnation changed");
+      }
+      const current = session.embedding_model_id ?? null;
+      if (current !== input.expectedModelRegistryId) return false;
+      if (current !== null) {
+        const models = await tx<Array<{ id: number; table_name: string }>>`
+          SELECT id, table_name FROM vector_models WHERE id = ${current}
+        `;
+        if (!models[0]) {
+          throw new Error(
+            `pg-vector: session ${input.sessionId} references unknown vector_models.id ${current}`,
+          );
+        }
+        const tname = requireCurrentTableName(
+          models[0].id,
+          models[0].table_name,
+        );
+        await tx.unsafe(`DELETE FROM ${tname} WHERE session_id = $1`, [
+          input.sessionId,
+        ]);
+      }
+      await tx`DELETE FROM vector_index_progress WHERE session_id = ${input.sessionId}`;
+      const lockedAt = input.target ? new Date().toISOString() : null;
+      await tx`
+        UPDATE sessions
+           SET embedding_model_id = ${input.target?.modelRegistryId ?? null},
+               embedding_locked_at = ${lockedAt}
+         WHERE id = ${input.sessionId}
+      `;
+      return true;
+    });
   }
 
   async function resolveSessionVectorTarget(
@@ -477,6 +525,25 @@ export function createPgVectorCapability(
     }));
   }
 
+  async function getVectorPayloads(
+    input: GetVectorPayloadsInput,
+  ): Promise<Map<string, string | null>> {
+    const payloads = new Map<string, string | null>();
+    if (input.keys.length === 0) return payloads;
+    const target = await resolveSessionVectorTarget(input.sessionId);
+    if (!target) return payloads;
+    const keys = [...new Set(input.keys)];
+    const placeholders = keys.map((_, i) => `$${i + 4}`).join(", ");
+    const rows = (await client.unsafe(
+      `SELECT key, payload FROM ${physicalTableName(target.modelRegistryId)}
+        WHERE session_id = $1 AND plugin_id = $2 AND namespace = $3
+          AND key IN (${placeholders})`,
+      [input.sessionId, input.pluginId, input.namespace, ...keys],
+    )) as Array<{ key: string; payload: string | null }>;
+    for (const row of rows) payloads.set(row.key, row.payload);
+    return payloads;
+  }
+
   async function getVectorIndexProgress(
     scope: VectorIndexProgressScope,
   ): Promise<string | null> {
@@ -502,6 +569,12 @@ export function createPgVectorCapability(
         sessions[0].created_at !== input.expectedSessionCreatedAt
       ) {
         throw new Error("Vector index progress: session incarnation changed");
+      }
+      if (
+        input.expectedModelRegistryId !== undefined &&
+        sessions[0].embedding_model_id !== input.expectedModelRegistryId
+      ) {
+        throw new Error("Vector index progress: embedding model changed");
       }
       // Claim progress first. PostgreSQL rechecks the predicate after waiting
       // for a competing writer; the loser never reaches vector mutations.
@@ -598,9 +671,11 @@ export function createPgVectorCapability(
     commitVectorIndexBatch,
     upsertVector,
     searchVectors,
+    getVectorPayloads,
     deleteVectors,
     ensureVectorModel,
     lockSessionEmbeddingModel,
+    resetSessionVectorIndex,
     resolveSessionVectorTarget,
     listVectorModels,
   };

@@ -10,6 +10,7 @@ Covel 是模块化单体：一个仓库、一起发布，内部分成若干包�
 > 所以构建产物比源码旧的时候（例如拉取了新提交却没有重新 `pnpm install`），导入新名字的插件会加载失败。
 >
 > - 开发服务端每次启动进程时会检查并重新构建（`scripts/ensure-plugin-sdk.mjs`）。
+> - Turbo 会先完成 SDK 构建，再运行它自己的 lint 和测试。SDK 测试经 `shared` 读取自己的 `dist` 声明，所以只有依赖包的 `^build` 顺序还不够。
 > - 单独运行某个包的测试之前，仍然要手动执行 `pnpm --filter @covel/plugin-handlers-utils build`。
 
 其余的库主要由应用和框架在工作区内组合使用。
@@ -27,6 +28,7 @@ Covel 是模块化单体：一个仓库、一起发布，内部分成若干包�
 - `plugin-handlers-utils` 不依赖任何私有的工作区包。
 - `shared` 保存框架各层共用的 DTO 和 schema。
 - `tools` 实现 SDK 所描述的工具协议。
+- `plugin-loader` 依赖 SDK 和 `zod`。导入插件的 entry、handler 或 guard 之前，它先登记插件目录（`provideHostModules`）；这个目录里的模块 `import` 这两个包时，解析到宿主的那份。内置插件和安装的插件走同一条路，插件不用自带这两个包。
 
 详见[插件契约](../reference/plugins.md)和[工具](../reference/tools.md)。
 
@@ -55,7 +57,7 @@ Covel 是模块化单体：一个仓库、一起发布，内部分成若干包�
 - 不要因为一个包体量小或只在开发时用，就把它并进 `runtime`。
 - 也不要为了“看起来通用”而增加只做转发的包。
 
-**依赖方向。** `plugin-handlers-utils` 是依赖图的根，不依赖任何工作区包。`shared` 紧挨在它上面。`@covel/server` 组合所有功能包。精确的依赖边写在各包的 `package.json` 里，`pnpm check:boundaries` 检查公开入口和依赖方向。
+**依赖方向。** `plugin-handlers-utils` 是依赖图的根，不依赖任何工作区包。`shared` 紧挨在它上面。`@covel/server` 组合所有功能包。精确的依赖边写在各包的 `package.json` 里，`pnpm check:boundaries` 检查公开入口和依赖方向。 SQLite 向量扩展 `sqlite-vec` 由 `store` 直接声明，根包不重复提供。
 
 ## 宿主组合的关键边界
 
@@ -65,6 +67,7 @@ Covel 是模块化单体：一个仓库、一起发布，内部分成若干包�
 
 - 官网 `apps/site` 是独立的静态站点。它不依赖任何工作区包，也不进入 Web 或桌面的构建。
 - 文档站 `apps/docs` 同样独立。它用 VitePress 把 `docs/` 的页面构建成静态站点，发布在官网的 `docs/` 路径下。
+- 文档图表使用 Mermaid 12，需要支持 ES2024 的浏览器（Safari 17.4+）。Mermaid 只属于文档站，不进入 Web 或桌面应用。
 - 应用自己的 `/` 直接跳到世界列表。
 
 ### 桌面壳
@@ -128,7 +131,7 @@ server 与 `test-runtime` 都使用 `createDefaultToolRegistry({ store, eventDir
 prompt loader 也按实例划分：
 
 - 共享的模板用默认的 `loadPrompt`。
-- 插件自己的目录通过 `createPromptLoader(root)` 注入。
+- 另一个模板目录通过 `createPromptLoader(root)` 注入，查找顺序和 `loadPrompt` 相同。插件不用它：插件的模板用 SDK 里的同名加载器，只读 English 和简体中文两份。
 - 包的公开入口不导出进程级的 `setPromptsRoot`。
 - `buildContext` 统一返回 Promise，调用方不用事先判断走同步还是异步路径。
 
@@ -159,3 +162,5 @@ Covel 还在早期开发，只针对当前的契约。改一个契约时，生�
 > 这些库目前没有跨版本的持久化迁移承诺。store schema 或向量进度表变化时，受影响的开发数据需要重新创建。不要把“旧数据还能读”或“旧入口还能用”当作保证。
 
 `pnpm check:boundaries` 检查生产源码的三件事：工作区的公开入口、依赖声明、包的方向。需要新的跨包依赖时，连同这一页的责任划分一起评审。
+
+网页端从 SettingsStore 读取主题和明暗偏好，经主题解析后，通过 appearance 辅助函数应用实际显示值。回退显示不改写已保存的偏好。

@@ -1,5 +1,6 @@
 import { Worker } from "node:worker_threads";
 import { pathToFileURL } from "node:url";
+import { HOST_MODULE_PARENT_URL, HOST_MODULES } from "@covel/plugin-loader";
 import type { WorldProjectionDecl } from "@covel/shared";
 import {
   getPluginTrustInfo,
@@ -62,6 +63,18 @@ type ProjectionWorkerMessage =
 // sessions. JSON serialization inside the worker is the output trust boundary.
 const PROJECTION_WORKER_SOURCE = `
 const { parentPort, workerData } = require("node:worker_threads");
+const { registerHooks } = require("node:module");
+// The plugin SDK and zod resolve to the host's copies, as for entry modules.
+registerHooks({
+  resolve(specifier, context, nextResolve) {
+    const host = workerData.hostModules.some(
+      (name) => specifier === name || specifier.startsWith(name + "/"),
+    );
+    return host
+      ? nextResolve(specifier, { ...context, parentURL: workerData.hostModuleParent })
+      : nextResolve(specifier, context);
+  },
+});
 (async () => {
   const mod = await import(workerData.handlerUrl);
   if (typeof mod.default !== "function") {
@@ -115,6 +128,17 @@ function activeWorldProjections(options: {
     }
   }
   return projections;
+}
+
+export function hasActiveWorldProjections(options: {
+  readonly source: OrderedWorldDataSource;
+  readonly deps?: WorldDataImportPreflightDeps;
+}): boolean {
+  return (
+    options.source.descriptor.visibility !== "hidden" &&
+    options.source.descriptor.kind !== "media" &&
+    activeWorldProjections(options).length > 0
+  );
 }
 
 function projectionLabel(projection: ActiveWorldProjection): string {
@@ -220,6 +244,8 @@ async function runProjectionHandler(
       eval: true,
       workerData: {
         handlerUrl: handler.url,
+        hostModules: HOST_MODULES,
+        hostModuleParent: HOST_MODULE_PARENT_URL,
         input,
         maxOutputBytes: MAX_PROJECTION_OUTPUT_BYTES,
       },

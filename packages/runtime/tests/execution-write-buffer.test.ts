@@ -10,10 +10,11 @@ import { describe, it, expect } from "vitest";
 import { createMemoryStore } from "@covel/store/memory";
 import type { Proposal, CharacterUpsertPayload } from "@covel/shared";
 import {
+  createFunctionStoreView,
   createPluginDataWriter,
-  createTrustedHandlerStore,
 } from "../src/function-runtime/plugin-handler-helpers.js";
 import { createExecutionWriteBuffer } from "../src/function-runtime/execution-write-buffer.js";
+import { createWorldModelView } from "../src/function-runtime/world-model-view.js";
 import { createHookPipeline } from "../src/hooks/pipeline.js";
 import {
   prepareRuntimeProposals,
@@ -43,7 +44,7 @@ function pluginDataProposal(): Proposal {
   };
 }
 
-describe("createTrustedHandlerStore with a write buffer", () => {
+describe("buffered writes as a handler reads them", () => {
   it.each(["patch", "replace", "null", "array"] as const)(
     "materializes pending character %s with the same semantics as the real commit",
     async (operation) => {
@@ -120,8 +121,8 @@ describe("createTrustedHandlerStore with a write buffer", () => {
           description: "",
         });
       }
-      const trusted = createTrustedHandlerStore(store, CTX, buffer);
-      const before = (await trusted.listCharacters())[0]!;
+      const world = await createWorldModelView(store, CTX.sessionId, [], buffer);
+      const before = world.characters[0]!;
       expect(await store.listCharacters(CTX.sessionId)).toEqual([initial]);
       const result = await processRuntimeResult(
         {
@@ -170,99 +171,30 @@ describe("createTrustedHandlerStore with a write buffer", () => {
     },
   );
 
-  it("buffers plugin-data writes, deletes, and character upserts", async () => {
+  it("overlays buffered plugin-data writes on the store view", async () => {
     const store = createMemoryStore();
     const buffer = createExecutionWriteBuffer();
-    const trusted = createTrustedHandlerStore(store, CTX, buffer);
-    const now = new Date().toISOString();
+    const writer = createPluginDataWriter(store, CTX, buffer);
+    const view = createFunctionStoreView(store, CTX, buffer);
 
-    await trusted.setPluginData({
-      namespace: "schema",
-      key: "character-attributes",
-      value: { version: 1 },
-    });
-    await trusted.setPluginDataBatch([
-      {
-        namespace: "entries",
-        key: "geo",
-        value: { a: 1 },
-      },
-    ]);
-    await trusted.upsertCharacter({
-      id: "char-1",
-      name: "Player",
-      type: "player",
-      version: 1,
-      createdAt: now,
-      updatedAt: now,
-    });
-    await trusted.deletePluginData("schema", "obsolete");
+    await writer.set("schema", "k", { hi: true });
 
-    // Nothing landed in the store.
     expect(
-      await store.getPluginData(
-        CTX.sessionId,
-        CTX.pluginId,
-        "schema",
-        "character-attributes",
-      ),
+      await store.getPluginData(CTX.sessionId, CTX.pluginId, "schema", "k"),
     ).toBeNull();
-    expect(await store.listCharacters(CTX.sessionId)).toHaveLength(0);
-
-    // The buffer holds four proposals, source-bound to the runtime. The delete
-    // cannot use the caller-supplied session/plugin ids to escape its scope.
-    expect(buffer.map((p) => p.type)).toEqual([
-      "plugin.data",
-      "plugin.data.batch",
-      "character.upsert",
-      "plugin.data.delete",
+    expect((await view.getPluginData("schema", "k"))?.value).toEqual({
+      hi: true,
+    });
+    expect((await view.listPluginData("schema")).map((r) => r.key)).toEqual([
+      "k",
     ]);
-    expect(buffer.every((p) => p.source.pluginId === CTX.pluginId)).toBe(true);
-    expect(buffer.every((p) => p.sessionId === CTX.sessionId)).toBe(true);
-  });
-
-  it("overlays buffered writes on getPluginData / listPluginData / listCharacters", async () => {
-    const store = createMemoryStore();
-    const buffer = createExecutionWriteBuffer();
-    const trusted = createTrustedHandlerStore(store, CTX, buffer);
-    const now = new Date().toISOString();
-
-    await trusted.setPluginData({
-      namespace: "schema",
-      key: "k",
-      value: { hi: true },
-    });
-    await trusted.upsertCharacter({
-      id: "char-1",
-      name: "Player",
-      type: "player",
-      version: 1,
-      createdAt: now,
-      updatedAt: now,
-    });
-
-    const row = await trusted.getPluginData("schema", "k");
-    expect(row?.value).toEqual({ hi: true });
-
-    const list = await trusted.listPluginData("schema");
-    expect(list.map((r) => r.key)).toContain("k");
-
-    const chars = await trusted.listCharacters();
-    expect(chars.map((c) => c.id)).toContain("char-1");
-  });
-
-  it("rejects missing execution ownership instead of falling back to immediate writes", () => {
-    expect(() =>
-      Reflect.apply(createTrustedHandlerStore, undefined, [
-        createMemoryStore(),
-      ]),
-    ).toThrow(/execution context and write buffer/);
   });
 
   it("keeps buffered and committed delimiter-containing plugin-data tuples distinct", async () => {
     const store = createMemoryStore();
     const buffer = createExecutionWriteBuffer();
-    const trusted = createTrustedHandlerStore(store, CTX, buffer);
+    const writer = createPluginDataWriter(store, CTX, buffer);
+    const view = createFunctionStoreView(store, CTX, buffer);
     const now = new Date().toISOString();
     const rows = [
       { namespace: "a", key: "b:c", value: "first" },
@@ -276,15 +208,19 @@ describe("createTrustedHandlerStore with a write buffer", () => {
       updatedAt: now,
     }));
 
-    await trusted.setPluginDataBatch(rows);
-    expect(await trusted.listPluginData()).toMatchObject(
-      rows.map(({ namespace, key, value }) => ({ namespace, key, value })),
-    );
+    for (const row of rows) await writer.set(row.namespace, row.key, row.value);
+    expect(await view.listPluginData("a")).toMatchObject([
+      { namespace: "a", key: "b:c", value: "first" },
+    ]);
+    expect(await view.listPluginData("a:b")).toMatchObject([
+      { namespace: "a:b", key: "c", value: "second" },
+    ]);
 
     await store.setPluginDataBatch(rows);
     buffer.length = 0;
-    await trusted.deletePluginData("a:b", "c");
-    expect(await trusted.listPluginData()).toEqual([rows[0]]);
+    await writer.delete("a:b", "c");
+    expect(await view.listPluginData("a:b")).toEqual([]);
+    expect(await view.listPluginData("a")).toEqual([rows[0]]);
     expect(await store.listPluginData(CTX.sessionId, CTX.pluginId)).toEqual(
       rows,
     );

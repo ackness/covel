@@ -1,3 +1,4 @@
+import { throughGateway } from "./helpers/through-gateway.js";
 import {
   AiProviderError,
   createGateway,
@@ -20,11 +21,7 @@ import {
   requestLLMResponse,
   type RequestLLMResponseOptions,
 } from "../src/agent-loop/tool-loop-handler.js";
-import { TurnAbortedError } from "../src/turn-executor/turn-control.js";
-import {
-  acquireLLMSlot,
-  setLLMSlotCapForTests,
-} from "../src/retry/llm-slots.js";
+import { acquireLLMSlot, setLLMSlotCapForTests } from "@covel/shared";
 
 const messages = [{ role: "user" as const, content: "Hello" }];
 const policy = buildRetryPolicy({ runtimeTimeoutMs: 120_000, maxRetries: 3 });
@@ -223,64 +220,30 @@ describe("agent request recovery budgets", () => {
     expect(generate).not.toHaveBeenCalled();
   });
 
-  it("shares the budget with malformed-tool-arguments recovery", async () => {
-    const fetch = vi
-      .fn()
-      .mockResolvedValueOnce(
-        new Response('{"error":{"message":"function.arguments JSON format"}}', {
-          status: 400,
-        }),
-      )
-      .mockResolvedValueOnce(
-        new Response(
-          '{"choices":[{"message":{"content":"recovered"},"finish_reason":"stop"}],"usage":{}}',
-        ),
-      );
-    vi.stubGlobal("fetch", fetch);
-    const llm = gatewayAdapter();
-    const generate = vi.spyOn(llm, "generate");
-    expect((await request(llm, false)).content).toBe("recovered");
-    expect(generate).toHaveBeenCalledTimes(2);
-    const budget = generate.mock.calls[0]![0].requestBudget;
-    expect(budget).toBeDefined();
-    expect(generate.mock.calls[1]![0].requestBudget).toBe(budget);
-    expect(budget?.attempts).toBe(2);
-    expect(vi.getTimerCount()).toBe(0);
-  });
-
-  it("cancels a hanging malformed-arguments recovery and preserves paired traces", async () => {
-    const aborter = new AbortController();
-    const events: string[] = [];
-    const generate = vi
-      .fn<LLMAdapter["generate"]>()
-      .mockRejectedValueOnce(new Error("function.arguments JSON format"))
-      .mockImplementationOnce(() => new Promise<never>(() => {}));
-    const pending = request({ generate }, false, {
-      turnControl: { signal: aborter.signal },
-      emitter: {
-        sessionId: "fixture",
-        turnId: "turn",
-        emit: async (type) => {
-          events.push(type);
+  it.each([false, true])(
+    "does not recover a malformed history rejection (stream: %s)",
+    async (streaming) => {
+      const error = new AiProviderError({
+        code: "PROVIDER_ERROR",
+        provider: "fixture",
+        statusCode: 400,
+        retriable: false,
+        message: "function.arguments JSON format",
+      });
+      const generate = vi.fn<LLMAdapter["generate"]>().mockRejectedValue(error);
+      const stream = vi.fn<NonNullable<LLMAdapter["stream"]>>(
+        async function* () {
+          throw error;
         },
-      },
-    });
-    const rejected = expect(pending).rejects.toBeInstanceOf(TurnAbortedError);
-    await vi.advanceTimersByTimeAsync(0);
-    expect(generate).toHaveBeenCalledTimes(2);
-    const started = Date.now();
-    aborter.abort(new Error("caller cancelled"));
-    await rejected;
-    expect(Date.now()).toBe(started);
-    expect(generate.mock.calls[1]![0].signal?.aborted).toBe(true);
-    expect(events).toEqual([
-      "llm.calling",
-      "llm.responded",
-      "llm.calling",
-      "llm.responded",
-    ]);
-    expect(vi.getTimerCount()).toBe(0);
-  });
+      );
+      await expect(
+        request({ generate, ...(streaming ? { stream } : {}) }, streaming),
+      ).rejects.toThrow();
+      expect(generate).toHaveBeenCalledTimes(streaming ? 0 : 1);
+      expect(stream).toHaveBeenCalledTimes(streaming ? 1 : 0);
+      expect(vi.getTimerCount()).toBe(0);
+    },
+  );
 });
 
 describe.each(["generate", "stream"] as const)(
@@ -376,7 +339,7 @@ describe.each(["generate", "stream"] as const)(
         await new Promise<never>(() => {});
       });
       const pending = run({
-        llm: { generate, stream },
+        llm: throughGateway({ generate, stream }),
         messages,
         policy,
         requestBudget: createLlmRequestBudget({ timeoutMs: 25 }),
@@ -399,7 +362,7 @@ describe.each(["generate", "stream"] as const)(
       const stream = vi.fn<NonNullable<LLMAdapter["stream"]>>();
       try {
         const pending = run({
-          llm: { generate, stream },
+          llm: throughGateway({ generate, stream }),
           messages,
           policy,
           deadline: Date.now() + 120_000,
@@ -434,7 +397,7 @@ describe.each(["generate", "stream"] as const)(
       try {
         let settled = false;
         const pending = run({
-          llm: { generate, stream },
+          llm: throughGateway({ generate, stream }),
           messages,
           policy,
           deadline: Date.now() + 100,

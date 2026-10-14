@@ -103,7 +103,7 @@ Extract facts supported by runtime-inputs.narrative.value, then call save-facts.
 | 根字段 | 含义 |
 | --- | --- |
 | `id`, `kind` | 包身份；`kind` 为 `core` 或 `plugin` |
-| `version`, `displayName`, `description`, `tags` | 元数据；`role:*` 标签不驱动任何业务 |
+| `version`, `displayName`, `description`, `tags` | 元数据；标签用于准备页的分组和筛选，不决定运行时调度 |
 | `covel` | 适配的宿主版本范围，如 `">=0.0.45"`；范围之外的宿主不安装也不加载该包 |
 | `author`, `license`, `homepage` | 作者信息，只用于展示；见[作者信息](#作者信息) |
 | `provides` | 版本化契约字符串，或 `{contract, default: true}` |
@@ -122,6 +122,8 @@ Extract facts supported by runtime-inputs.narrative.value, then call save-facts.
 - 不同的包可以提供同一个契约。消费者用 `cardinality: one` 或 `all` 说明要一个还是全部。
 - 只允许一个提供者的扩展点，以及显式写出的 `conflicts`，另外做互斥检查。
 - `conflicts` 只能写插件契约。写内核扩展点或 UI 槽位会得到 `invalid-conflict`，并指出 `conflicts` 字段的位置。内核扩展点怎样组合由它的 mode 决定。
+
+准备页按插件声明的第一个标签分组，组名直接显示标签原文；没有标签的插件放入“无标签”。每个插件只出现一次，后续标签仍可用于筛选。`kind: core` 的徽章显示“默认启用”，不表示锁定；会话列表的“内置”只表示来源。
 
 ### contributes 字段
 
@@ -177,6 +179,8 @@ homepage: https://example.com/tidefall
 - **翻译**：插件在 `locales/<locale>.yaml` 的 `PLUGIN.md` 一节翻译 `author.about` 和 `author.links` 的 `label`（链接按顺序对应）。世界在 `world.<locale>.yaml` 里翻译同样两处。作者名和许可证不翻译，`pnpm i18n` 不把它们算作待翻译文本。
 - **版本号**：列表显示清单里的 `version`。插件同时带 `package.json` 时两处的版本必须相同，`pnpm validate:plugin` 会检查：安装预览读的是 `package.json`，宿主读的是 `PLUGIN.md`。`version` 变化会让已有会话重跑该插件的 setup runtime，所以 setup 的 guard 或 handler 必须对已完成的工作返回跳过。
 
+内置插件也只读当前数据契约。骰子回执必须带 `checks` 数组，`pluginData.get()` 直接返回保存的值。经过 `select: /narrativeOutput` 投影的叙事输入是字符串。世界规则是带 `schemaVersion`、`id`、`content` 的扁平记录，不接受 `{ rule, ... }` 包装。NPC 关系的每个事实只能有一个开放版本；遇到重复开放版本会拒绝写入，不自动修复。立绘替换只匹配完整角色 ID 或当前的 `npc-<blueprintId>` 投影，不匹配任意会话前缀。
+
 ### 契约版本策略
 
 契约 ID 中的 `@N` 是版本标识（如 `narrative-engine@1`）。内核只承载当前版本（current-only）：不做版本协商，不同时支持多个版本，也不提供跨版本的兼容读取或双写迁移。
@@ -231,6 +235,12 @@ Agent 的 guard 在调用模型之前执行。
 
 需要在本轮放弃工作时，返回契约允许的最小输出。例如 `story-events/plot` 关闭时返回空计划 `{ skip: true, events: [] }`。
 
+guard 拿到的 `ctx` 和函数 handler 的一样，内置插件和社区插件也一样：
+
+- 有 `ctx.inputs`（本次执行的输入绑定）、`ctx.world`、`ctx.store`、`ctx.pluginData`、`ctx.recursiveCall` 和其他帮手。
+- 写入用 `ctx.pluginData`，或者用 `withPendingProposals` 把 proposal 挂在跳过的结果上。这些写入只在 guard 跳过时提交；不跳过就丢弃，由模型这次运行决定写什么。
+- guard 返回或超时之后，`ctx.signal` 被中止，这些能力全部失效。
+
 ### 隐藏内容的 runtime（`io.concealed`）
 
 `io.concealed: true` 用于处理隐藏内容的 runtime，例如在剧情中策划隐藏事件的 agent。
@@ -245,7 +255,7 @@ Agent 的 guard 在调用模型之前执行。
 
 ### 依赖和引用的范围
 
-`schedule.needs`、`schedule.after` 和 `io.inputs.*.from.runtime` 里写的 runtime ID 只能属于本包：写完整的 `<pluginId>/<runtimeId>`，单 runtime 的包写包 ID。不带前缀的字符串依赖同样受这条限制。
+`schedule.needs`、`schedule.after` 和 `io.inputs.*.from.runtime` 里写的 runtime ID 只能属于本包：写完整的 `<pluginId>/<runtimeId>`，单 runtime 的包写包 ID。不带前缀的字符串依赖会被拒绝，诊断会建议补全为 `<pluginId>/<runtimeId>`；只有其他包的完整 runtime ID 才建议改用契约。
 
 **跨包 runtime 引用边界**：
 
@@ -295,7 +305,7 @@ setup runtime 的完成状态按根 `PLUGIN.md` 的 `version` 记录。发布新
 触发类型有 `auto`、`scheduled`、`manual` 和 `event`。
 
 - 自动进入主循环的 runtime 应声明 stage。`manual` 和 `event` 按请求或事件单独触发。
-- `schedule.manual.execution: background` 让手动运行在后台执行。
+- `schedule.manual.execution: background` 让手动运行在后台执行。这样的手动或事件 runtime 没有同一次执行的上游，所以不能读 `scope: turn` 的输入；改用 `scope: committed` 或内核输入。
 - `schedule.completion` 控制回合是否等它结束。具体限制由清单校验和运行时准入检查执行。
 
 ### 历史窗口（`agent.history`）
@@ -337,6 +347,8 @@ Agent 的超时、重试和步数都在 `agent.loop` 里。
 - 再次被截断才判为失败，错误信息提示调大输出上限。额度真的太小时，第二次也写不完。
 - 唯一的例外：`io.visibility: story` 的 runtime 只输出了正文、没有工具调用。这时正文保留并提交，玩家看到一条“可能停在半句”的提示。
 
+**服务商没说清为什么停（`finishReason: other`）。** 回复可能停在任何地方。和截断一样，`io.visibility: story` 的 runtime 只输出了正文、没有工具调用时，正文保留并提交，玩家会看到提示：这段没写完，可以重试这一回合。其他情况判为失败，不重试。详见 [slots.md](./slots.md#结束原因诊断与拒绝)。
+
 **流式调用在已有输出之后中断**（连接断开，或静默超过 `idleTimeoutMs`）。
 
 - `io.visibility: story` 的 runtime 不重试，因为玩家已经读到那段文字。
@@ -361,7 +373,7 @@ Agent 的超时、重试和步数都在 `agent.loop` 里。
 **完成条件。**
 
 - `completion.afterTools`：指定的工具成功后就结束。
-- `completion.require: tool-use`：要求有效的工具调用，也就是至少一次执行成功的业务工具调用。失败的调用不算。
+- `completion.require: tool-use`：声明了非空的 `afterTools` 时，至少一个列出的完成工具必须成功。没有列表时，任意成功的业务工具调用都算。失败的调用和 `runtime-done` 不算。
 - 模型只回了纯文本，或者调用了 `runtime-done`，而这时还没有这样的调用：框架先注入一次纠正提示，仍未完成才判为失败。所以“无变化”也要通过业务工具提交一个空结果。
 - 纠正之后的那次请求要求模型必须调用工具（`toolChoice: "required"`，清单指名的工具保持不变）。模型调用工具后恢复自选。模型处于思考模式时服务商不接受强制选择，这时仍由模型自选。
 - 这个判定在循环返回处统一进行，普通执行和 resume 的所有结束方式都适用：文本回答、`runtime-done`、`afterTools` 自动完成、`PostToolUse` Hook 终止，以及步数用尽。
@@ -374,6 +386,7 @@ Agent 的超时、重试和步数都在 `agent.loop` 里。
 - 剩余时间不够放第二次（不超过 60 秒）时只发一次，由 `function.timeoutMs` 结束。
 - 被服务商拒绝的请求仍由网关的传输层重试和后备模型处理，不在这里重发。
 - 单次调用确实需要更久的 handler 应该调大 `function.timeoutMs`。
+- 宿主在每次逻辑调用开始时按剩余时间建立请求预算，HTTP 重试、备用模型和停滞重发共用 8 次传输额度。该预算不再额外受网关默认 120 秒限制，也不能延长 runtime 的截止时间。
 
 ### 输入和输出
 
@@ -392,7 +405,6 @@ io:
       required: false
     digest:
       from: { kernel: turn-digest@1 }
-      required: false
   selfData:
     - namespace: facts
       as: <known-facts>
@@ -408,6 +420,7 @@ io:
 
 - 普通输入读同一次执行里已完成的上游结果。`select` 是结果值上的 JSON Pointer。
 - 要读更早的执行留下的结果，用 `scope: committed` 加 `recordAs`。
+- 内核输入（`from: { kernel: turn-digest@1 }`）只写 `from`。它总有值，也不按 schema 检查，所以写 `scope`、`select`、`required`、`accepts` 或 `recordAs` 会被拒绝。
 - schema 可以是本地路径，也可以写 `contract:<contractId>`。跨提供者的契约 schema 在加载时解析。
 - 在提示词里，一个输入位于 `runtime-inputs.<binding>.value`。不要依赖旧的注入标签。
 - 叙事之后运行的 agent 如果绑定的是本回合的故事正文，这个 `value` 是一句指向对话里那条正文消息的话，正文本身不重复（见 [Prompt 结构](./prompt-structure.md#本回合正文)）。
@@ -501,17 +514,33 @@ Agent 的副作用只来自工具：模型能写什么，以 `agent.tools` 白�
 | `ctx.logicalTurn`             | 调度器的逻辑回合：已提交的主循环玩家回合数加一。函数 handler 和插件工具的上下文里都有。setup、开场续写和第一条玩家消息同为第 1 回合，`startTurn` / `interval` 也按它计数 |
 | 工具上下文的 `turnNumber`     | 会话里已记录的玩家消息数，包括 setup 的表单提交                                                                                                                          |
 | `ctx.session.lastPlayerInput` | 源执行开始时最近的一条 `PlayerInputSubmission \| null`，包含 `id/sessionId/turnId/formId/values/createdAt`                                                               |
+| `ctx.execution.origin`        | 这次执行因何而起：`player`、`continuation`、`manual`、`background`、`recursive` 或 `resume`                                                                              |
+| `ctx.execution.sourceTurnId`  | 重试一个已提交的回合时，是那个回合的 ID。用它做键，重试时复用上次的掷骰和揭示，不重新抽                                                                                  |
+| `ctx.recursionDepth`          | 顶层执行是 `0`，`ctx.recursiveCall` 每嵌套一层加一                                                                                                                       |
 
 `ctx.session.lastPlayerInput` 可能来自更早的回合。有这条记录不等于本回合提交了表单。
 
+#### 会话视图（`store.getSession()`）
+
+`ctx.store.getSession()`（工具里是 `context.store.getSession()`，action 里是 `context.store.getSession()`）返回当前会话的只读视图 `PluginSessionView`，不是会话记录本身：
+
+| 字段                   | 含义                                                                                                                                                                                             |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `phase`                | `setup` 或 `playing`                                                                                                                                                                             |
+| `completedPlayerTurns` | 已提交的主循环玩家回合数；setup 和开场不算                                                                                                                                                       |
+| `locale`               | 这一局的内容语言                                                                                                                                                                                 |
+| `setupRuntimes`        | 每个 setup runtime 的进度，键是 runtime ID：`{ state: "pending", lastError? }`、`{ state: "done", resolution: "completed" \| "waived", warning? }` 或 `{ state: "blocked", reason, lastError? }` |
+
+会话已不存在时，`getSession()` 抛错，当前执行不能继续。缺少插件或可选能力的正常降级不改变这个边界。
+
 #### 随机数（`ctx.random`）
 
-`ctx.random` 是宿主提供的随机源。函数 handler、agent guard、插件工具和 RPC action 的上下文里都有。
+`ctx.random` 是宿主提供的随机源。函数 handler、agent guard、插件工具和 RPC action 的上下文里一定有它，类型上也是必有的字段。
 
 - 骰子和其他游戏内的随机取数用 `ctx.random.int(min, max)`。它返回 `min <= n < max` 的整数，和 `node:crypto` 的 `randomInt` 相同。
 - 不要直接用 `node:crypto` 或 `Math.random`。
 - 平时它就是 `randomInt`。测试服务端设置 `COVEL_RANDOM_SEED` 后，同一个 runtime（或同一个 RPC action）取的第 n 个数每次运行都相同，脚本会话因此可以重复（见[环境变量](./env-registry.md#runtime-contract)和[录制与回放](../ship/real-model.md#录制与回放)）。
-- `shortId` / `shortIdBatch` 的第四个参数接受它，ID 的随机部分也随之可以重复。
+- `shortId` / `shortIdBatch` 的第四个参数必须传它，ID 的随机部分也随之可以重复。SDK 里没有别的随机来源可以退回。
 
 #### 模型看不到的簿记字段
 
@@ -542,7 +571,17 @@ Agent 的副作用只来自工具：模型能写什么，以 `agent.tools` 白�
 
 #### 内核输入 `turn-digest@1`
 
-内核输入 `turn-digest@1` 冻结同一份 `lastPlayerInput` 快照，以及 `runtimeResults`。
+内核输入 `turn-digest@1` 冻结源回合的事实。前台 runtime 和后台作业读到同一个值，SDK 里的类型是 `PluginTurnDigest`：
+
+| 字段                | 含义                                                   |
+| ------------------- | ------------------------------------------------------ |
+| `turnId`            | 源回合的 ID                                            |
+| `playerMessage`     | 玩家这一回合的输入                                     |
+| `lastPlayerInput`   | 和 `ctx.session.lastPlayerInput` 同一份快照，或 `null` |
+| `narrativeText`     | 这一回合成功的 story runtime 写的正文，用空行连接      |
+| `toolCallSummaries` | 成功、可见的工具调用，每次一行简短摘要                 |
+| `runtimeResults`    | 已结束的 runtime：`{ runtimeId, status }`              |
+| `locale`            | 这一局的内容语言（有时才有）                           |
 
 - `runtimeResults` 是已经观察到的终态 `{runtimeId, status}`，`status` 为 `success/failed/skipped/suspended`。还没结束的 runtime 不会被预测为成功。
 - 后台（detached）worker 读的是源执行的快照，不重新查询最新的表单或回合状态。
@@ -575,7 +614,7 @@ Agent 的副作用只来自工具：模型能写什么，以 `agent.tools` 白�
 
 **插件自己的数据。**
 
-- 插件自有的持久数据经绑定的 `ctx.store.getPluginData(namespace, key)` 和 `listPluginData(namespace?)` 访问。
+- 插件自有的持久数据经绑定的 `ctx.store.getPluginData(namespace, key)` 和 `listPluginData(namespace)` 访问。
 - 插件不能指定任意的 sessionId 或 pluginId 去读其他插件的私有数据。
 - 要跨插件公开数据，用契约、服务或扩展，不要扫描对方的 namespace。
 
@@ -648,7 +687,7 @@ namespace 接收某个契约，就说明了这个契约的记录长什么样。�
 - `pnpm describe:authoring` 汇总所有已扫描插件的声明；加 `--check` 会按 namespace 的 schema 校验每份 `example`。
 - 字段见 [Plugin manifest 字段表](./schema/plugin-manifest.md)。
 
-记录里有些值写的是世界角色属性的 `id`。用 `references` 把它们声明出来，`pnpm validate:world` 就会在开局之前检查这些值：
+记录里有些值写的是世界里别的东西的名字：角色属性的 `id`，或者维度的 ID。用 `references` 把它们声明出来，`pnpm validate:world` 就会在开局之前检查这些值：
 
 ```yaml
 authoring:
@@ -659,12 +698,21 @@ authoring:
       within: [base, max]
 ```
 
-- `path`：值在每条记录里的位置。字段名用 `.` 连接，字段是列表时在后面加 `[]`。
-- `to`：值指向什么。目前只有 `character-attribute`，即世界 `characterSchema` 顶层属性的 `id`。
-- `type`（可选）：被指向的属性必须是这个类型。
-- `within`（可选）：和这个值同级的数字字段，必须落在该属性的 `min` 和 `max` 之内。
+- `path`：值在每条记录里的位置。字段名用 `.` 连接，字段是列表时在后面加 `[]`。字段名前面写 `**.`，表示在下面任意深度找这个字段。
+- `to`：值指向什么。`character-attribute` 是世界 `characterSchema` 顶层属性的 `id`；`world-dimension` 是世界声明的一个维度的 ID。
+- `type`（可选，只用于 `character-attribute`）：被指向的属性必须是这个类型。
+- `within`（可选）：和这个值同级、必须落在它所指的东西之内的字段。对 `character-attribute`，是必须落在该属性 `min` 和 `max` 之内的数字字段；对 `world-dimension`，是指向维度值内部某个位置的路径（`a.b`，或者一个键的列表），这个位置必须是维度的 `schema` 允许的。
 
-不符合的值报为 `attribute-reference` 错误。世界没有写 `characterSchema` 时不检查，因为属性要到开局时才生成。只声明插件运行时确实会拒绝的规则，否则合法的世界会被误报。
+内置的 story-events 这样声明事件条件里的维度。条件可以用 `all` / `any` / `not` 嵌套任意多层，所以路径里用了 `**`：
+
+```yaml
+references:
+  - path: when.**.dimension
+    to: world-dimension
+    within: [path]
+```
+
+不符合的值报为 `attribute-reference` 或 `dimension-reference` 错误。世界没有写 `characterSchema` 时不检查属性，没有声明任何维度时不检查维度，因为它们要到开局时才生成。只声明插件运行时确实找不到或会拒绝的东西，否则合法的世界会被误报。
 
 世界数据的 source 写 `to: contract:example.facts@1`（省略 `schema` 时就是目标契约的 schema）。框架找到已激活、并声明接受这个契约的 namespace，验证 schema 后把数据分发过去。框架里不识别具体的插件 ID。`contracts` 和接收 namespace 的 schema 必须一致。完整结构见 [World Data](./world-data.md)。
 
@@ -717,13 +765,17 @@ namespace 声明 `search` 之后，它的记录进入框架的记忆检索（[`m
 - 有明确的提供者被激活时，默认提供者退出。
 - 必需的契约会自动补入提供者。缺失、歧义、冲突和授权不足都会返回原因。
 - 一个事件 topic 在一个会话里只有一个声明者。两个活动插件的 `contributes.events` 含同一个 topic 时，后被接受的那个以 `event-topic-conflict` 被拒绝，原因里写出 topic 和两个插件的 ID（显式请求先于自动依赖，其余按请求顺序）。topic 是会话内全局的名字，发出者和订阅者往往属于别的插件，所以它只能对应一份 payload schema。两个插件可以同时安装，只是不能进同一个会话。给自己的 topic 加上和插件相关的前缀可以避免撞名。
-- 失去必需提供者的插件，以及没人再需要的自动依赖，会被移除。
+- 失去必需提供者的插件，以及没人再需要的自动依赖，会被移除。这类拒绝的 `code` 是 `missing-provider` 或 `ambiguous-provider`，`contract` 写出等的是哪个契约。
+- 被依赖的插件缺了，依赖它的插件自动停用，不挡开局。创建会话和启用、停用插件时，玩家要的（`requested`）和 `kind: core` 的插件里因此停用的那些，仍写进 `activePlugins`：它们暂时不运行，列在 `unavailable` 里，依赖回来后自动恢复。只有玩家要的插件因冲突等别的原因被拒，创建才返回 `400 plugin_rejected`，正文写出插件 ID 和原因。
+- 准备页在开局前列出会因此停用的插件、它缺的契约和能提供它的已安装插件，并给出“打开”按钮。游戏界面对 `unavailable` 做同样的提示。
+- 开启的插件里没有叙事 runtime（`io.visibility: story`）时，回合不会产生故事。准备页和游戏界面都会说明这一点，列出可以打开的叙事插件；一个都没有安装时，提示去“设置 → 安装与管理”安装。
 - `requested` 和计算出的 `active` 分开保存。自动依赖不会变成玩家的显式选择。
-- 世界的 `pluginPolicy.requires` 作为 `requiredContracts` 传入。世界和插件一样是依赖方：唯一的提供者自动加入，而且不会被当作没人需要的依赖移除。无法满足的需求在 `unmet` 里返回，原因是 `missing-provider`、`ambiguous-provider`、`approval-required` 或 `excluded`。前两种阻止创建会话；后两种是玩家的选择，不阻止。
+- 世界的 `pluginPolicy.requires` 作为 `requiredContracts` 传入。世界和插件一样是依赖方：唯一的提供者自动加入，而且不会被当作没人需要的依赖移除。无法满足的需求在 `unmet` 里返回，原因是 `missing-provider`、`ambiguous-provider`、`approval-required` 或 `excluded`。四种都不阻止创建会话：会话少了这部分照常开始，准备页和创建会话的响应（`unmetRequirements`）告诉玩家缺了什么。前两种是安装问题，后两种是玩家的选择。
 
 **世界和玩法包怎样给出初始请求。**
 
 - 世界的 `pluginPolicy` 使用 `presetId/preferredTags/avoidedTags/requested/recommended/packs`。玩法包使用 `requested/recommended`。
+- 内置玩法包（`packs/builtin.yaml`）还可以写 `defaultViewMode`（`stage` 或 `parsed`）。AI 创建世界时选了这个玩法包，生成的世界就带上这个 `defaultViewMode`。框架不按玩法包的 ID 做判断：AI 创建世界的选项就是这份目录里的全部玩法包，见 [`GET /api/framework/authoring`](./api.md#get-apiframeworkauthoring) 的 `packs`。
 - 推荐项不自动启用，也不会覆盖玩家的显式排除。
 - `GET /api/worlds/:id/plugin-plan` 的 `defaultPluginIds` 是初始的显式请求。准备页和创建端再用同一个解析器计算活动集合。
 - 这个接口返回的各 `requested` 和 `defaultPluginIds` 只含已安装的插件。世界或玩法包请求了但没有安装的插件列在 `missing` 里，由准备页提示，不进入创建请求。
@@ -735,8 +787,19 @@ namespace 声明 `search` 之后，它的记录进入框架的记忆检索（[`m
 - 其他初始默认请求、世界的 `requested` 和玩家手动添加的请求保留。显式排除继续优先。
 - 手动修改会清除包卡片的高亮，但旧包的来源仍然记着，下一次切换不会把旧包累加进来。手动重新启用的包内插件作为手选保留。
 - 世界的 `requires` 仍由解析器独立校验。不能把 `requested` 当作不可取消的必需项。
+- 玩法包可以带 `excluded`：选中这个包时关掉其中的插件，`kind: core` 的也一样，玩家可以再打开。切换到下一个包时只撤销上一个包加的排除，玩家自己的排除保留。世界初始选中的包，它的排除从一开始就生效。没有安装的插件不出现在 `excluded` 里。
+- “回到最小集合”按钮只留叙事插件（已选的；一个都没选时用 core 里的），以及它们和世界的 `requires` 拉进来的插件。不会额外要求 `world.dimensions@1` 的提供者；其余的 core 插件和世界 `requested` 的插件都被排除，玩法包的高亮清除。
 
-**发现和授权。** 插件发现接口返回的数据区分 `kind`、宿主的 `hostState` 和会话的 `sessionState`，运行时提供 `outputContract`。没有授权的社区插件可以留在请求列表里，但不能进入执行集合。许可绑定会话身份和审批范围。
+**存档固定玩家确认的那一组。**
+
+- 创建会话、启用或停用插件时，解析结果写进会话的 `activePlugins`。这就是玩家确认的集合。
+- 插件列表、斜杠命令和执行器都用同一个函数 `resolveConfirmedSessionPlugins` 读它：从 `activePlugins` 出发，用当前安装的版本检查，不补入任何插件。后来新装的插件，`kind: core` 的也一样，不会自己加进旧存档。
+- 没有安装、加载失败、当前版本缺少必需的提供者，或者和前面的成员冲突的插件，暂时不运行。原因列在 `GET /api/sessions/:id/plugins` 的 `unavailable` 里，游戏界面给出提示。其他插件照常运行。`activePlugins` 不被改写，插件恢复后它也跟着恢复。
+- 不运行就是处处等于停用：不加载它的 runtime，不触发它的钩子，不接受它的服务调用、动作和表单校验，不显示它的面板，记忆检索也不读它的数据。直接调用它的动作返回 `404 plugin_not_active`，错误信息写明原因。
+- 授权不影响这个集合。社区插件的代码在获准前不运行，由信任门禁按会话单独检查。
+- 想按当前安装的插件重新计算，启用或停用一个插件即可。这两个操作按 `requested` 和 `excluded` 重新解析，再写回 `activePlugins`。
+
+**发现和授权。** 插件发现接口返回的数据区分 `kind`、宿主的 `hostState` 和会话的 `sessionState`，运行时提供 `outputContract`。没有授权的社区插件可以留在请求列表里，但获准前它的代码不运行。许可绑定会话身份和审批范围。
 
 ## 本地化与验证
 
@@ -746,8 +809,24 @@ namespace 声明 `search` 之后，它的记录进入框架的记忆检索（[`m
 
 - 引用的 entry、handler、guard、JSON Schema 和 UI 文件必须在包里。
 - 每份 JSON UI spec 声明 `view` 或 `webview` 中的一个；`view` 里的组件名必须在[组件目录](./ui-components.md)里；`repeat.statePath` 和 `$item` 的写法必须合法（见 [UI 面板](./ui-panels.md#json-render-绑定速查)）。报错给出 spec 文件和节点的路径。
-- 自动和定时的 runtime 必须有 stage。
 - 内置工具名和插件工具声明、包内的 runtime 引用，以及根契约依赖必须一致。
+- 跨字段的规则（例如 `schedule.completion.mode: detached` 只能用在 `post-turn` 或 `audit`）报错时给出文件路径和你写的字段路径，例如 `runtimes/note/RUNTIME.md: schedule.stage: …`。
+
+加载、`pnpm validate:plugin` 和安装用同一份清单规则（`@covel/shared` 的 schema），UI spec 也一样：校验通过的面板，游戏里不会因为格式被去掉。
+
+有的错误只让一个 runtime 永远不能运行，而不影响包的其余部分：
+
+- 自动或定时的 runtime 没有写 `schedule.stage`。框架不猜默认的 stage。
+- 后台执行的手动或事件 runtime 读同一次执行的输入（见[触发方式](#触发方式)）。
+
+手动放进插件目录的包遇到这类错误时，加载器只去掉这个 runtime，在服务端日志里写明文件、字段和原因，包的其他 runtime、工具和面板照常加载；它的输出契约也不再算这个包提供。`pnpm validate:plugin` 和安装把它报为错误。
+
+清单里写了宿主不认识的字段（例如已经删掉的旧字段，或给新版宿主写的字段）时，加载器去掉这个字段，在服务端日志里写明文件和字段，包照常加载，安装也照常进行。`pnpm validate:plugin` 把它报为错误：删掉它，或改成本页写的字段名。
+
+只有整个字段会被去掉：`PLUGIN.md` 顶层的字段、`contributes` 下的一项、内联 `runtime` 或 `RUNTIME.md` 顶层的字段。下面两种情况仍然让加载失败：
+
+- 已知字段里面的未知键，例如 `permissions.fs`、`io.conceal`、`schedule.priority`。宿主不运行一个只看懂一半的声明。
+- 像是限制或标识包的字段写错了，例如 `permision`、`gaurd`、`covle`。这些字段是根上的 `id`、`kind`、`version`、`covel`、`provides`、`requires`、`optional`、`conflicts`、`permissions`、`entry`、`runtime`，以及 runtime 的 `type`、`guard`、`permissions`、`effects`、`schedule`、`io`、`function`。报错会说它像哪个字段。
 
 目录级检查还会在插件根目录有 `llm.toml` 时给出提醒：这个文件不会被读取，不影响通过。
 

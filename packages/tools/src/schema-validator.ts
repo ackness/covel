@@ -226,7 +226,7 @@ function formatWarnings(
       `⚠ schema warning: unknown keys ${JSON.stringify(unknownKeys)} — ` +
         `declared attribute ids are [${knownIds}]. ` +
         `The values were saved but won't appear in the schema-aware UI. ` +
-        `Either fold them into an existing id, or add a new attribute via set-world-schema.`,
+        `Use the declared attribute ids; the schema has no such attribute.`,
     );
   }
   if (typeMismatches.length > 0) {

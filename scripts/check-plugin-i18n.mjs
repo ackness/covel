@@ -175,6 +175,9 @@ const FRAMEWORK_CHINESE_LINES = {
   "packages/runtime/src/interaction/interaction-submission.ts": 18,
   "packages/plugin-handlers-utils/src/locale-registry.ts": 4,
   // Chinese variants of framework instructions, each beside its English text.
+  // Adapter instructions use the host-selected session instruction language.
+  "packages/ai-provider/src/adapters/structured-output.ts": 1,
+  "packages/ai-provider/src/adapters/http/anthropic-readers.ts": 1,
   "packages/context/src/message-insertion.ts": 3,
   "packages/context/src/prompt-assembler.ts": 2,
   "packages/context/src/prompt-internals.ts": 20,
@@ -183,7 +186,7 @@ const FRAMEWORK_CHINESE_LINES = {
   "packages/plugin-handlers-utils/src/narrative-review.ts": 13,
   "packages/runtime/src/agent-loop/request-context-budget.ts": 2,
   "packages/runtime/src/agent-loop/response-review.ts": 1,
-  "packages/runtime/src/agent-loop/runtime-completion.ts": 3,
+  "packages/runtime/src/agent-loop/runtime-completion.ts": 4,
   "packages/runtime/src/agent-loop/turn-agent-tool-loop.ts": 1,
   "packages/runtime/src/commit/commit-ui.ts": 2,
   "packages/runtime/src/llm/gateway-llm-adapter.ts": 1,
@@ -196,9 +199,8 @@ const FRAMEWORK_CHINESE_LINES = {
   "packages/create/src/validation-helpers.ts": 7,
   "packages/runtime/src/turn-executor/turn-output-helpers.ts": 1,
   "packages/tools/src/builtin/tool-search.ts": 2,
-  // Example input for tests and the CLI.
+  // Example input for tests.
   "packages/plugin-test-utils/src/factories.ts": 1,
-  "packages/test-runtime/src/run-cli.ts": 1,
 };
 
 function frameworkRoots() {

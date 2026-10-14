@@ -91,8 +91,7 @@ describe("enrichGameStateFromSnapshot", () => {
     });
 
     expect(enriched).toEqual({
-      location: "dock",
-      mood: "calm",
+      tables: { location: "dock", mood: "calm" },
       characters,
       characterSchema,
       dimensions: {},
@@ -110,7 +109,7 @@ describe("enrichGameStateFromSnapshot", () => {
     });
 
     expect(enriched).toEqual({
-      turn: 3,
+      tables: { turn: 3 },
       characters: [],
       characterSchema: null,
       dimensions: {},
@@ -125,6 +124,7 @@ describe("enrichGameStateFromSnapshot", () => {
     const enriched = enrichGameStateFromSnapshot({ characters });
 
     expect(enriched).toEqual({
+      tables: {},
       characters,
       characterSchema: null,
       dimensions: {},
@@ -144,3 +144,86 @@ it.each(["RESET_SESSION", "RESET_TO_WORLD_SELECT"] as const)(
     expect(reducer(observed, { type }).hasGameStateSnapshot).toBe(false);
   },
 );
+
+it("isolates every plugin table from framework fields in snapshots, live patches and cached history", () => {
+  const tables = {
+    dimensions: { hp: 5 },
+    characterSchema: { bogus: true },
+    characters: { custom: 1 },
+    dimensionProviderPluginId: { custom: 2 },
+    tables: { nested: 3 },
+  };
+  const snapshot = enrichGameStateFromSnapshot({
+    gameState: tables,
+    characters: [],
+    characterSchema: null,
+    dimensions: {},
+  });
+  const patch = {
+    id: "collision",
+    summary: "Plugin tables",
+    packageName: "probe",
+    data: tables,
+  };
+  for (const state of [
+    reducer(initialState, { type: "SET_GAME_STATE", state: snapshot }),
+    reducer(
+      { ...initialState, gameState: snapshot },
+      { type: "ADD_STATE_PATCH", patch },
+    ),
+    reducer(
+      {
+        ...initialState,
+        gameState: {
+          characters: [],
+          characterSchema: null,
+          dimensions: {},
+          dimensionSettlements: [],
+        },
+      },
+      { type: "MERGE_INITIAL_STATE_PATCHES", patches: [patch] },
+    ),
+  ]) {
+    expect(state.gameState).toEqual({
+      tables,
+      characters: [],
+      characterSchema: null,
+      dimensions: {},
+      dimensionSettlements: [],
+    });
+  }
+});
+
+it("can receive a valid dimension commit after a malformed snapshot without throwing", () => {
+  const state = reducer(
+    {
+      ...initialState,
+      gameState: {
+        dimensions: { hp: 5 },
+        dimensionProviderPluginId: "provider",
+      },
+    },
+    {
+      type: "MERGE_COMMITTED_DIMENSIONS",
+      payload: {
+        providerPluginId: "provider",
+        dimensions: {
+          weather: {
+            name: "Weather",
+            schema: { type: "string" },
+            value: "rain",
+            version: 1,
+          },
+        },
+      },
+    },
+  );
+  expect(state.gameState.dimensions).toEqual({
+    weather: {
+      name: "Weather",
+      schema: { type: "string" },
+      value: "rain",
+      version: 1,
+    },
+  });
+});

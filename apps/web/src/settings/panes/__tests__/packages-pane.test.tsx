@@ -149,6 +149,35 @@ describe("PackagesPane installed plugin management", () => {
     });
 
     await waitFor(() => expect(boot).toHaveBeenCalledTimes(1));
-    expect(await screen.findByText("Installed new-world")).toBeTruthy();
+    await waitFor(() =>
+      expect(screen.getByRole("status").textContent).toBe(
+        "Installed new-world",
+      ),
+    );
   });
+});
+
+it("F-090 announces a collection ZIP that installs no packages", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string) => {
+      if (url === "/api/install/collection")
+        return Response.json({
+          ok: true,
+          installed: [],
+          restartRequired: false,
+        });
+      return Response.json({ items: [] });
+    }),
+  );
+  render(<PackagesPane />);
+  fireEvent.click(screen.getByRole("checkbox"));
+  fireEvent.change(screen.getByTestId("install-collection-file-input"), {
+    target: {
+      files: [new File(["zip"], "empty.zip", { type: "application/zip" })],
+    },
+  });
+  expect((await screen.findByRole("status")).textContent).toBe(
+    i18n.t("settings.packages.nothingInstalled"),
+  );
 });

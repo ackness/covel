@@ -142,6 +142,8 @@ declare module "hono" {
     worldsDirs?: readonly string[];
     covelHome?: string;
     ensureEmbeddingLock?: EnsureEmbeddingLockFn;
+    /** Embedding configuration for the memory index routes; absent when `VECTOR_BACKEND=none`. */
+    memoryIndex?: import("./embedding-lock.js").MemoryIndexControl;
     hookPipeline?: HookPipeline;
     /**
      * Refresh per-session tool override cache. Action handlers should call

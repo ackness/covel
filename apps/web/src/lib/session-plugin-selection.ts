@@ -63,50 +63,25 @@ export function collectPluginTags(plugins: readonly PluginSummary[]): string[] {
   );
 }
 
-function groupIdForPackage(pkg: PluginSummary): string {
-  const tags = new Set(pkg.tags ?? []);
-  if (tags.has("mode:dialogue")) return "dialogue";
-  if (tags.has("mode:traditional-story")) return "traditional";
-  if (tags.has("role:pre-game")) return "setup";
-  if (tags.has("role:character")) return "characters";
-  if (tags.has("role:memory") || tags.has("role:retrieval")) return "memory";
-  if (tags.has("role:guide") || tags.has("role:quick-reply")) return "guidance";
-  if (pkg.kind === "core") return "core";
-  return "utility";
-}
-
-const GROUP_ORDER = [
-  "core",
-  "setup",
-  "traditional",
-  "dialogue",
-  "characters",
-  "memory",
-  "guidance",
-  "utility",
-];
-
 export function groupPlugins(
   plugins: readonly PluginSummary[],
   labelForGroup: (groupId: string) => string,
 ): PluginGroup[] {
   const grouped = new Map<string, PluginSummary[]>();
   for (const plugin of plugins) {
-    const groupId = groupIdForPackage(plugin);
+    const tag = plugin.tags?.[0];
+    const groupId = tag === undefined ? "untagged" : `tag:${tag}`;
     const list = grouped.get(groupId) ?? [];
     list.push(plugin);
     grouped.set(groupId, list);
   }
   return [...grouped.entries()]
-    .sort(
-      ([a], [b]) =>
-        (GROUP_ORDER.indexOf(a) === -1 ? 99 : GROUP_ORDER.indexOf(a)) -
-          (GROUP_ORDER.indexOf(b) === -1 ? 99 : GROUP_ORDER.indexOf(b)) ||
-        a.localeCompare(b),
+    .sort(([a], [b]) =>
+      a === "untagged" ? 1 : b === "untagged" ? -1 : a.localeCompare(b),
     )
     .map(([id, groupPlugins]) => ({
       id,
-      label: labelForGroup(id),
+      label: id === "untagged" ? labelForGroup(id) : id.slice(4),
       plugins: groupPlugins.slice().sort((a, b) => a.id.localeCompare(b.id)),
     }));
 }

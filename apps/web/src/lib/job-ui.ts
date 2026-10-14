@@ -38,3 +38,26 @@ export function jobStatusBadgeVariant(
   if (status === "pending" || status === "running") return "secondary";
   return "outline";
 }
+
+/** Known host job states are translated; plugin-defined state labels stay authored. */
+export function jobStatusLabel(
+  status: string,
+  t: (key: string) => string,
+): string {
+  switch (status) {
+    case "pending":
+    case "queued":
+    case "running":
+    case "done":
+    case "completed":
+    case "failed":
+    case "cancelled":
+    case "suspended":
+    case "progress":
+    case "waiting-input":
+    case "succeeded":
+      return t(`session.jobStatus.${status}`);
+    default:
+      return status;
+  }
+}

@@ -77,7 +77,7 @@ At the start, it prepares the character attributes and the "dimensions" of this 
 
 **What you will see**
 
-- "Overview" and "Character Traits" in the "World Details" tab on the right.
+- "Overview" and "Character Traits" in the "World Details" tab on the right. Character Traits reads the current session character schema, so a save with an existing schema shows it immediately.
 - The current value of each dimension is shown in the panel, and you can change it by hand. If a turn's settlement fails, the panel tells you. You can retry, mark it as handled manually, or skip it explicitly. Before your next action, the system automatically retries once.
 
 **When it is on**: a basic feature, on by default. All three built-in packs include it.
@@ -115,7 +115,7 @@ Gives the world its own calendar. After each turn of the story ends, it judges f
 
 Shows the rules that hold for the whole world over time: customs, taboos, laws, and special settings. These rules go into the prompt, so the story does not contradict itself.
 
-**What you will see**: "World Rules" in the "World Details" tab on the right. It is read-only. During play you cannot add or change rules.
+**What you will see**: "World Rules" in the "World Details" tab on the right. It is read-only. During play you cannot add or change rules. Category badges follow the UI language.
 
 **When it is on**: optional. All three built-in packs include it.
 
@@ -125,7 +125,7 @@ Shows the rules that hold for the whole world over time: customs, taboos, laws, 
 
 When a named place, person, item, skill, legend or monster first appears in the story, it is recorded in the codex automatically, and you can look it up any time. If the same name appears again, it only adds to the existing entry. It does not create a duplicate.
 
-**What you will see**: the "Codex" tab on the right. You can search it, and filter entries by Characters, Locations, Items, Skills, Lore and Monsters. At the bottom it shows "N entries collected". Below each turn there is also a "Found this turn" card.
+**What you will see**: the "Codex" tab on the right. You can search it, and filter entries by Characters, Locations, Items, Skills, Lore and Monsters. At the bottom it shows "N entries collected". Below each turn there is also a "Found this turn" card. Entry badges use the same localized names as the category tabs; the codex panel declares its rarity colors.
 
 **When it is on**: optional. The Traditional Story pack includes it. It needs "World Fact Extraction", which is turned on together with it.
 
@@ -137,7 +137,9 @@ When a named place, person, item, skill, legend or monster first appears in the 
 
 ## Relationship Graph (`npc-graph`)
 
-Records relationships between people, groups and factions. When the story mentions them again, the narrative recalls these relationships, so it is less likely to contradict itself.
+A development save with duplicate open versions of one relation is refused instead of repaired during play. Recreate the affected graph data or start a new session. Current relations without `invalidAt` remain valid open versions.
+
+Records relationships between people, groups and factions. It checks existing nodes and relationships when recording new ones. When the story mentions them again, the narrative recalls these relationships, so it is less likely to contradict itself.
 
 **What you will see**: the "Relationship Graph" tab on the right. Nodes are people or factions. Green lines are positive relationships, red lines are negative ones, and gray lines are neutral. Click a node to see its profile.
 

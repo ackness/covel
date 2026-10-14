@@ -1,6 +1,6 @@
 import { applyPendingPackageUpdates } from "../install/package-updates.js";
 import { assertHostVersionInRange } from "../../../lib/app-version.js";
-import { validateRuntimeManifestSemantics } from "@covel/shared";
+import { resolveSessionPluginSet } from "../session/plugins.js";
 import path from "node:path";
 import type { EventBus } from "@covel/events";
 import {
@@ -44,7 +44,11 @@ export function publicPluginError(message: string, rootPath: string): string {
 export async function discoverAndRegisterPlugins(
   config: DiscoverAndRegisterPluginsConfig,
 ): Promise<DiscoverAndRegisterPluginsResult> {
-  const registry = createPluginRegistry({ eventBus: config.eventBus });
+  const registry = createPluginRegistry({
+    eventBus: config.eventBus,
+    resolveSessionSet: (confirmed, entries) =>
+      resolveSessionPluginSet(confirmed, entries).active,
+  });
   const pluginsDirs =
     config.pluginsDirs && config.pluginsDirs.length > 0
       ? config.pluginsDirs
@@ -90,11 +94,6 @@ export async function discoverAndRegisterPlugins(
       };
 
       for (const parsed of manifests) {
-        for (const diagnostic of validateRuntimeManifestSemantics(
-          parsed.manifest,
-        )) {
-          console.warn(`[bootstrap] ${diagnostic.message}`);
-        }
         // Tool access and plugin-data are keyed by the directory name
         // (discovery.id), but findTool, the store, proposals, hooks and trust
         // checks all use the frontmatter-derived manifest.pluginId. A
@@ -131,9 +130,10 @@ export async function discoverAndRegisterPlugins(
         summary,
         rootPath: discovery.rootPath,
         runtimeManifestPaths: Object.fromEntries(
-          manifests.map((parsed, index) => [
+          // A runtime left out at load has no record, so pair by source path.
+          manifests.map((parsed) => [
             parsed.manifest.name,
-            path.resolve(discovery.pluginMdPaths[index]!),
+            path.resolve(parsed.sourcePath!),
           ]),
         ),
 

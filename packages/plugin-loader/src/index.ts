@@ -1,10 +1,12 @@
-export { loadPluginUiSpec } from "./ui-spec.js";
+export { loadPluginUiSpec, loadPluginUiSpecs } from "./ui-spec.js";
+export type { PluginUiSpecDiagnostic, PluginUiSpecs } from "./ui-spec.js";
 // ── Parsers ──────────────────────────────────────────────────────
 export {
   parsePluginMd,
   parseRuntimeMd,
   compileInlineRuntime,
   normalizePackageManifest,
+  RuntimeDisabledError,
 } from "./parse-plugin-md.js";
 
 // ── Discovery & Loading ──────────────────────────────────────────
@@ -22,14 +24,23 @@ export {
   loadPluginEntryDefinition,
   loadRuntime,
   resolveRuntimePrompt,
-  loadPluginUi,
 } from "./load.js";
 export {
   reloadGenerationUrl,
   trackReloadGeneration,
 } from "./reload-generation.js";
+export {
+  HOST_MODULE_PARENT_URL,
+  HOST_MODULES,
+  isHostModule,
+  provideHostModules,
+} from "./host-modules.js";
 export type { PluginDefinition } from "./load.js";
-export { validatePluginLabels } from "./locale-labels.js";
+export {
+  compileManifestLabels,
+  validatePluginLabels,
+} from "./locale-labels.js";
+export { parseLocaleFile } from "./locale-files.js";
 export { readMessageCatalogs } from "./locale-messages.js";
 export {
   lockPluginLabels,
@@ -64,6 +75,8 @@ export { getPluginTrustInfo, deriveBuiltinPluginIds } from "./trust.js";
 
 // ── Types ────────────────────────────────────────────────────────
 export type {
+  DisabledRuntime,
+  IgnoredField,
   ParsedPluginMd,
   ParsedRuntimeMd,
   PackageManifest,
@@ -108,6 +121,7 @@ export { compileRuntimeManifest } from "./compile-manifest.js";
 
 export {
   packageModuleTypeProblem,
+  pluginImportReferences,
   validatePluginFiles,
   validateRuntimeDeclarations,
 } from "./static-validation.js";

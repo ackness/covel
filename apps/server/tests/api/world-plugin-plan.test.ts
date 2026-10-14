@@ -158,6 +158,53 @@ describe("GET /api/worlds/:id/plugin-plan", () => {
       ),
     ).toEqual([]);
   });
+  it("hands out a pack's exclusions of installed plugins, core ones included", async () => {
+    const result = await plan({
+      presetId: "lean",
+      packs: [
+        {
+          id: "lean",
+          label: "Lean",
+          requested: ["traditional"],
+          excluded: ["core", "absent-excluded"],
+        },
+      ],
+    });
+    const lean = result.packs.find((pack) => pack.id === "lean");
+    expect(lean?.excluded).toEqual(["core"]);
+    // Excluding a plugin this host lacks changes nothing, so it is no miss.
+    expect(result.missing).not.toContainEqual(
+      expect.objectContaining({ pluginId: "absent-excluded" }),
+    );
+    expect(
+      resolveSessionPluginPlan(result.defaultPluginIds, registry, {
+        excluded: lean?.excluded,
+      }).active,
+    ).toEqual(["traditional"]);
+    // The builtin narrative-only pack turns the other core plugins off.
+    const narrativeOnly = result.packs.find(
+      (pack) => pack.id === "narrative-only",
+    );
+    expect(narrativeOnly?.source).toBe("builtin");
+  });
+
+  it("offers only the narrator and excludes installed world-init in Narrative Only", async () => {
+    registry.register(entry("narrator", { kind: "core" }));
+    registry.register(
+      entry("world-init", { kind: "core", provides: ["world.dimensions@1"] }),
+    );
+    const result = await plan({ presetId: "narrative-only" });
+    const pack = result.packs.find((item) => item.id === "narrative-only");
+    expect(result.defaultPluginIds).toEqual(["narrator"]);
+    expect(pack?.requested).toEqual(["narrator"]);
+    expect(pack?.excluded).toContain("world-init");
+    expect(
+      resolveSessionPluginPlan(result.defaultPluginIds, registry, {
+        excluded: pack?.excluded,
+      }).active,
+    ).not.toContain("world-init");
+  });
+
   it("activates one of two plugins that declare the same event topic", () => {
     const events = (file: string) => ({
       contributes: {

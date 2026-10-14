@@ -1,6 +1,15 @@
+import {
+  compactStatePatches,
+  rememberStatePatchIds,
+} from "@/services/state-patch-cache.js";
 import { appendReasoningStep } from "./reasoning.js";
 import type { AssetGenerateView } from "@covel/shared";
-import { deepMerge, encodePageCursor, summarizeWorld } from "@covel/shared";
+import {
+  deepMerge,
+  encodePageCursor,
+  executionMayBeRunning,
+  summarizeWorld,
+} from "@covel/shared";
 import {
   mergeGameStateForReplacement,
   rebuildGameStateFromPatches,
@@ -99,15 +108,36 @@ function capLiveMessages(
     return { messages };
   }
   const kept = messages.slice(dropCount);
-  const edge = kept[0];
+  const edge = kept.find(
+    (message) =>
+      !message.requestId &&
+      !message.id.startsWith(STREAM_ID_PREFIX) &&
+      message.kind !== "plugin-message",
+  );
+  // Retain an authoritative anchor until a durable message can bound paging.
+  if (!edge) return { messages };
+  const keptTurns = new Set(kept.map((message) => message.turnId));
+  const removedTurns = new Set(
+    dropped
+      .map((message) => message.turnId)
+      .filter((turnId) => turnId && !keptTurns.has(turnId)),
+  );
+  const assetsByTurn = new Map(state.assetsByTurn);
+  const assetProgressByTurn = new Map(state.assetProgressByTurn);
+  for (const turnId of removedTurns) {
+    if (!turnId) continue;
+    assetsByTurn.delete(turnId);
+    assetProgressByTurn.delete(turnId);
+  }
   return {
     messages: kept,
-    // Boundary rows this deep in the window are server-authoritative
-    // (timestamp = server createdAt); stream placeholders with client wall
-    // clocks never reach the front of a full window.
-    olderMessagesCursor: edge
-      ? encodePageCursor({ createdAt: edge.timestamp, id: edge.id })
-      : state.olderMessagesCursor,
+    assetsByTurn,
+    assetProgressByTurn,
+    // Only server timestamps can bound server history.
+    olderMessagesCursor: encodePageCursor({
+      createdAt: edge.timestamp,
+      id: edge.id,
+    }),
   };
 }
 
@@ -122,7 +152,9 @@ export const initialState: SessionState = {
   world: null,
   session: null,
   messages: [],
+  unsavedNarratives: [],
   olderMessagesCursor: null,
+  initialEventCursor: null,
   worldSessions: [],
   executing: false,
   executionError: null,
@@ -130,6 +162,8 @@ export const initialState: SessionState = {
   executionRecovery: null,
   actionGeneration: 0,
   statePatches: [],
+  statePatchRevision: 0,
+  recentStatePatchIds: [],
   gameState: {},
   hasGameStateSnapshot: false,
   pluginMessageData: {},
@@ -138,6 +172,8 @@ export const initialState: SessionState = {
   sessionPlugins: [],
   sessionCommands: [],
   sessionCommandsLoaded: false,
+  unavailableSessionPlugins: [],
+  worldDataNotices: [],
   messageUiSpecs: [],
   pendingInteractionDrafts: [],
   suspensions: [],
@@ -153,8 +189,12 @@ export const initialState: SessionState = {
 const SESSION_RESET: Partial<SessionState> = {
   session: null,
   messages: [],
+  unsavedNarratives: [],
   olderMessagesCursor: null,
+  initialEventCursor: null,
   statePatches: [],
+  statePatchRevision: 0,
+  recentStatePatchIds: [],
   gameState: {},
   hasGameStateSnapshot: false,
   pluginMessageData: {},
@@ -168,6 +208,8 @@ const SESSION_RESET: Partial<SessionState> = {
   sessionPlugins: [],
   sessionCommands: [],
   sessionCommandsLoaded: false,
+  unavailableSessionPlugins: [],
+  worldDataNotices: [],
   messageUiSpecs: [],
   pendingInteractionDrafts: [],
   suspensions: [],
@@ -200,14 +242,14 @@ export function reducer(
               executing:
                 action.recovery.hydrating ||
                 action.recovery.checking ||
-                action.recovery.status?.state === "running",
+                executionMayBeRunning(action.recovery.status),
             }
           : {}),
       };
     case "OBSERVE_EXECUTION_STATUS": {
       const current = state.executionRecovery;
       if (current?.sessionId !== action.sessionId) return state;
-      const { error: previousError, ...rest } = current;
+      const { error: previousError, stalled: _stalled, ...rest } = current;
       const error =
         action.error ?? (current.hydrating ? previousError : undefined);
       const recovery = {
@@ -215,6 +257,7 @@ export function reducer(
         status: action.status ?? current.status,
         checking: !action.status,
         ...(error ? { error } : {}),
+        ...(action.stalled ? { stalled: true } : {}),
       };
       return {
         ...state,
@@ -222,7 +265,7 @@ export function reducer(
         executing:
           recovery.hydrating ||
           recovery.checking ||
-          recovery.status?.state === "running",
+          executionMayBeRunning(recovery.status),
       };
     }
     case "BOOT_SUCCESS":
@@ -379,7 +422,7 @@ export function reducer(
             state.executionRecovery &&
             (state.executionRecovery.hydrating ||
               state.executionRecovery.checking ||
-              state.executionRecovery.status?.state === "running")
+              executionMayBeRunning(state.executionRecovery.status))
           ),
       };
     case "DISCARD_TURN_STREAMS": {
@@ -396,24 +439,42 @@ export function reducer(
     case "SET_EXECUTION_ERROR":
       return { ...state, executionError: action.error };
     case "ADD_STATE_PATCH": {
-      if (state.statePatches.some((patch) => patch.id === action.patch.id))
-        return state;
+      if (state.recentStatePatchIds.includes(action.patch.id)) return state;
       const patchData = action.patch.data as
         Record<string, unknown> | undefined;
       const newGameState = patchData
-        ? deepMerge(state.gameState, patchData)
+        ? deepMerge(state.gameState, { tables: patchData })
         : state.gameState;
       return {
         ...state,
-        statePatches: [...state.statePatches, action.patch],
+        statePatches: compactStatePatches([
+          ...state.statePatches,
+          action.patch,
+        ]),
+        statePatchRevision: state.statePatchRevision + 1,
+        recentStatePatchIds: rememberStatePatchIds([
+          ...state.recentStatePatchIds,
+          action.patch.id,
+        ]),
         gameState: newGameState,
       };
     }
-    case "MERGE_RECOVERED_MESSAGES":
+    case "MERGE_RECOVERED_MESSAGES": {
+      const drafts =
+        action.actionGeneration === (state.actionGeneration ?? 0)
+          ? (action.unsavedNarratives ?? [])
+          : [];
+      const draftIds = new Set(drafts.map((row) => row.id));
       return {
         ...state,
+        unsavedNarratives: [
+          ...(state.unsavedNarratives ?? []).filter(
+            (row) => !draftIds.has(row.id),
+          ),
+          ...drafts,
+        ],
         messages: mergeRecoveredMessages(
-          state.messages,
+          state.messages.filter((row) => !draftIds.has(row.id)),
           action.messages,
           state.executing,
           action.actionGeneration === (state.actionGeneration ?? 0)
@@ -421,6 +482,7 @@ export function reducer(
             : undefined,
         ),
       };
+    }
     case "PREPEND_MESSAGES": {
       // 把更旧的一批消息合并到前部。已有消息（含流式占位/本地追加）优先保留，
       // 仅补入尚未出现的历史条目（按 id 去重）。整体覆盖会丢失历史。
@@ -442,20 +504,23 @@ export function reducer(
     }
     case "SET_OLDER_MESSAGES_CURSOR":
       return { ...state, olderMessagesCursor: action.cursor };
+    case "SET_INITIAL_EVENT_CURSOR":
+      return { ...state, initialEventCursor: action.cursor };
     case "MERGE_INITIAL_STATE_PATCHES": {
-      const currentIds = new Set(state.statePatches.map((patch) => patch.id));
-      const historical = new Map(
-        action.patches.map((patch) => [patch.id, patch]),
-      );
-      const patches = [
-        ...[...historical.values()].filter(
-          (patch) => !currentIds.has(patch.id),
-        ),
+      const currentIds = new Set(state.recentStatePatchIds);
+      const historical = action.patches;
+      const patches = compactStatePatches([
+        ...historical.filter((patch) => !currentIds.has(patch.id)),
         ...state.statePatches,
-      ];
+      ]);
       return {
         ...state,
         statePatches: patches,
+        statePatchRevision: state.statePatchRevision + 1,
+        recentStatePatchIds: rememberStatePatchIds([
+          ...historical.map((patch) => patch.id),
+          ...state.recentStatePatchIds,
+        ]),
         // Live increments win over cached history. Once a full snapshot was
         // published, even its empty state is authoritative for deleted fields.
         gameState: state.hasGameStateSnapshot
@@ -605,7 +670,11 @@ export function reducer(
         sessionCommands: action.commands ?? state.sessionCommands,
         sessionCommandsLoaded:
           state.sessionCommandsLoaded || action.commands !== undefined,
+        unavailableSessionPlugins:
+          action.unavailable ?? state.unavailableSessionPlugins,
       };
+    case "SET_WORLD_DATA_NOTICES":
+      return { ...state, worldDataNotices: action.notices };
     case "TOGGLE_SESSION_PLUGIN": {
       const plugin = state.sessionPlugins.find(
         (item) => item.id === action.pluginId,
@@ -625,23 +694,17 @@ export function reducer(
       };
     }
     case "BACKFILL_TURN_ID": {
-      // Assign turnId to the last user message that has no turnId.
-      // This links the player's input to the server-generated turnId so the
-      // execution timeline can be inserted inline after the player message.
-      const msgs = state.messages;
-      let targetIdx = -1;
-      for (let i = msgs.length - 1; i >= 0; i--) {
-        const message = msgs[i]!;
-        if (message.role === "user" && !message.turnId) {
-          targetIdx = i;
-          break;
-        }
-      }
-      if (targetIdx < 0) return state;
+      const target = state.messages.find(
+        (message) =>
+          message.role === "user" &&
+          !message.turnId &&
+          message.requestId === action.requestId,
+      );
+      if (!target) return state;
       return {
         ...state,
-        messages: msgs.map((m, i) =>
-          i === targetIdx ? { ...m, turnId: action.turnId } : m,
+        messages: state.messages.map((message) =>
+          message === target ? { ...message, turnId: action.turnId } : message,
         ),
       };
     }
@@ -828,7 +891,22 @@ export function reducer(
     case "ASSET_PROGRESS": {
       const existing = state.assetProgressByTurn.get(action.turnId) ?? [];
       const nextMap = new Map(state.assetProgressByTurn);
-      nextMap.set(action.turnId, [...existing, action.progress]);
+      const key = (progress: AssetProgressEvent) =>
+        JSON.stringify([
+          progress.assetId,
+          progress.assetId ? undefined : progress.runtimeId,
+          progress.assetId ? undefined : progress.pluginId,
+          progress.phase,
+        ]);
+      const next = existing.filter(
+        (progress) => key(progress) !== key(action.progress),
+      );
+      nextMap.set(action.turnId, [...next, action.progress].slice(-256));
+      while (nextMap.size > 256) {
+        const oldest = nextMap.keys().next().value;
+        if (oldest === undefined) break;
+        nextMap.delete(oldest);
+      }
       return { ...state, assetProgressByTurn: nextMap };
     }
     default:

@@ -24,7 +24,11 @@ export type ConfirmPluginRpcApproval = (
   params: PluginRpcConfirmRequest,
 ) => Promise<boolean>;
 
-export function getPluginRpcFailureMessage(res: PluginRpcResponse): string {
+export function getPluginRpcFailureMessage(
+  res: PluginRpcResponse,
+  t: Translate,
+  fallback?: string,
+): string {
   if (res.status !== "ok") return "";
   const runtimeFailure = res.runtimeResults?.find(
     (r) =>
@@ -32,7 +36,7 @@ export function getPluginRpcFailureMessage(res: PluginRpcResponse): string {
       (typeof r.error === "string" && r.error.length > 0),
   );
   if (runtimeFailure)
-    return runtimeFailure.error || `Runtime ${runtimeFailure.runtimeId} failed`;
+    return runtimeFailure.error || fallback || t("plugin.rpc.failed");
   return res.abortReason ?? "";
 }
 
@@ -85,12 +89,13 @@ export function emitPluginRpcRuntimeResponse(params: {
   }
   if (response.status !== "ok") return;
 
-  const failureMessage = getPluginRpcFailureMessage(response);
+  const failureMessage = getPluginRpcFailureMessage(
+    response,
+    t,
+    params.fallbackFailureMessage,
+  );
   if (failureMessage) {
-    emitToast(
-      "error",
-      failureMessage || params.fallbackFailureMessage || "Plugin RPC failed",
-    );
+    emitToast("error", failureMessage);
     return;
   }
   const target = response.runtimeResults?.find(
