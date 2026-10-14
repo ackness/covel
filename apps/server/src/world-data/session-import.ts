@@ -1,7 +1,4 @@
-import {
-  appendDimensionPlan,
-  readEffectiveDimensions,
-} from "./session-import/dimensions.js";
+import { appendDimensionPlan } from "./session-import/dimensions.js";
 import {
   DIMENSION_DATA_NAMESPACE,
   DIMENSION_SETTLEMENT_NAMESPACE,
@@ -49,6 +46,7 @@ import type {
   SyncWorldDataForSessionResult,
   WorldDataImportedMediaRef,
   WorldDataImportPreflightDeps,
+  WorldDataImportRecord,
 } from "./session-import/types.js";
 
 function deferredProjectionLedgerKey(
@@ -102,10 +100,28 @@ export type {
   WorldDataImportedMediaRef,
 };
 
+/**
+ * What a session imports from the world record. The package files are not
+ * read for these: an edit in the app changes the record, and the record is
+ * what a session plays.
+ */
+function recordContent(world: WorldDataImportRecord | null | undefined): {
+  dimensions: unknown;
+  characterSchema: unknown;
+  contractData: unknown;
+} {
+  return {
+    dimensions: world?.metadata?.dimensions,
+    characterSchema: world?.metadata?.characterSchema,
+    contractData: world?.metadata?.contractData,
+  };
+}
+
 export async function prepareWorldDataImportForSession(
   options: PrepareWorldDataImportForSessionOptions,
 ): Promise<PreparedWorldDataImport> {
   if (!options.worldId) return { imported: false, diagnostics: [] };
+  const record = recordContent(options.world);
   const worldRoot = options.worldsDirs?.length
     ? await resolveWorldRoot(options.worldId, options.worldsDirs)
     : null;
@@ -114,13 +130,6 @@ export async function prepareWorldDataImportForSession(
     worldRoot && manifest
       ? await collisionsFor(worldRoot, manifest, options.preflight)
       : [];
-  const effectiveDimensions = worldRoot
-    ? await readEffectiveDimensions({
-        worldRoot,
-        manifest: manifest!,
-        locale: options.locale,
-      })
-    : options.dimensions;
   if (
     !worldRoot ||
     !manifest ||
@@ -130,21 +139,21 @@ export async function prepareWorldDataImportForSession(
       conventionsFor(options.preflight),
     ))
   ) {
-    const sources = portableContractSources(options.contractData);
-    if (options.contractData === undefined && effectiveDimensions === undefined)
+    const sources = portableContractSources(record.contractData);
+    if (record.contractData === undefined && record.dimensions === undefined)
       return { imported: false, diagnostics: collisions };
     const basePlan = await buildImportPlan({
       sessionId: options.sessionId,
       worldId: options.worldId,
       sources,
-      characterSchema: manifest?.characterSchema,
+      characterSchema: record.characterSchema,
       deps: options.preflight,
       now: options.now,
       locale: options.locale,
     });
     const plan = appendDimensionPlan(
       basePlan,
-      effectiveDimensions,
+      record.dimensions,
       options.preflight,
       options.locale,
     );
@@ -179,20 +188,14 @@ export async function prepareWorldDataImportForSession(
     sessionId: options.sessionId,
     worldId: options.worldId,
     sources: descriptor.sources,
-    characterSchema: manifest.characterSchema,
+    characterSchema: record.characterSchema,
     deps: options.preflight,
     now: options.now,
     locale: options.locale,
   });
-  const resolvedDimensions = await readEffectiveDimensions({
-    worldRoot,
-    manifest: manifest!,
-    sources: descriptor.sources,
-    locale: options.locale,
-  });
   const plan = appendDimensionPlan(
     basePlan,
-    resolvedDimensions,
+    record.dimensions,
     options.preflight,
     options.locale,
   );
@@ -280,12 +283,10 @@ export async function importWorldDataForSession(
     options.store.getSession
       ? await options.store.getSession(options.sessionId)
       : null;
-  const worldMetadata = options.worldId
-    ? (await options.store.getWorld(options.worldId))?.metadata
-    : undefined;
   const prepared = await prepareWorldDataImportForSession({
-    dimensions: worldMetadata?.dimensions,
-    contractData: worldMetadata?.contractData,
+    world: options.worldId
+      ? await options.store.getWorld(options.worldId)
+      : undefined,
     sessionId: options.sessionId,
     worldId: options.worldId,
     worldsDirs: options.worldsDirs,
@@ -388,11 +389,12 @@ export async function preflightWorldDataForSession(
     };
   }
 
+  const record = recordContent(options.world);
   const basePlan = await buildImportPlan({
     sessionId: options.sessionId,
     worldId: options.worldId,
     sources: descriptor.sources,
-    characterSchema: manifest.characterSchema,
+    characterSchema: record.characterSchema,
     deps: {
       ...options.preflight,
       // A preflight endpoint is observational: importing arbitrary plugin
@@ -407,12 +409,7 @@ export async function preflightWorldDataForSession(
     ? basePlan
     : appendDimensionPlan(
         basePlan,
-        await readEffectiveDimensions({
-          worldRoot,
-          manifest,
-          sources: descriptor.sources,
-          locale: options.locale,
-        }),
+        record.dimensions,
         options.preflight,
         options.locale,
       );
@@ -490,6 +487,9 @@ export async function prepareWorldDataSyncForSession(
     manifest,
     options.preflight,
   );
+  // The world's dimensions and character schema are the record's: a sync
+  // brings a session to the world as the player has it, edits included.
+  const record = recordContent(await options.store.getWorld(options.worldId));
   if (
     !(await worldHasData(
       worldRoot,
@@ -498,14 +498,9 @@ export async function prepareWorldDataSyncForSession(
     ))
   ) {
     const session = await options.store.getSession(options.sessionId);
-    const definitions = await readEffectiveDimensions({
-      worldRoot,
-      manifest,
-      locale: options.locale ?? session?.locale,
-    });
     const plan = appendDimensionPlan(
       emptyImportPlan(),
-      definitions,
+      record.dimensions,
       {
         ...options.preflight,
         activePlugins:
@@ -542,15 +537,9 @@ export async function prepareWorldDataSyncForSession(
 
   if (options.dimensionOnly) {
     const session = await options.store.getSession(options.sessionId);
-    const definitions = await readEffectiveDimensions({
-      worldRoot,
-      manifest,
-      sources: descriptor.sources,
-      locale: options.locale ?? session?.locale,
-    });
     const plan = appendDimensionPlan(
       emptyImportPlan(),
-      definitions,
+      record.dimensions,
       {
         ...options.preflight,
         activePlugins:
@@ -580,7 +569,7 @@ export async function prepareWorldDataSyncForSession(
     sessionId: options.sessionId,
     worldId: options.worldId,
     sources: descriptor.sources,
-    characterSchema: manifest.characterSchema,
+    characterSchema: record.characterSchema,
     deps: {
       ...options.preflight,
       activePlugins: options.preflight?.activePlugins ?? session?.activePlugins,
@@ -588,15 +577,9 @@ export async function prepareWorldDataSyncForSession(
     now: options.now,
     locale: options.locale ?? session?.locale,
   });
-  const effectiveDimensions = await readEffectiveDimensions({
-    worldRoot,
-    manifest,
-    sources: descriptor.sources,
-    locale: options.locale ?? session?.locale,
-  });
   const plan = appendDimensionPlan(
     basePlan,
-    effectiveDimensions,
+    record.dimensions,
     {
       ...options.preflight,
       activePlugins: options.preflight?.activePlugins ?? session?.activePlugins,
@@ -627,11 +610,8 @@ async function preparePortableWorldDataSync(
     worldId: options.worldId,
     now: options.now,
     locale: options.locale ?? session?.locale,
-    dimensions: options.worldId
-      ? (await options.store.getWorld(options.worldId))?.metadata?.dimensions
-      : undefined,
-    contractData: options.worldId
-      ? (await options.store.getWorld(options.worldId))?.metadata?.contractData
+    world: options.worldId
+      ? await options.store.getWorld(options.worldId)
       : undefined,
     preflight: {
       ...options.preflight,

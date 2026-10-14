@@ -470,9 +470,9 @@ export function preserveWorldProvenance(
   existing: WorldRecord | undefined,
 ): WorldRecord {
   if (!existing) return record;
-  // Editor changes live in the store; a package refresh must not erase them.
-  if (existing.metadata?.packageManaged && existing.metadata.packageModified)
-    return existing;
+  // The record is the world. Once the player edits it in the app, a package
+  // refresh must not replace it; only an explicit restore does.
+  if (existing.metadata?.packageModified) return existing;
   const { source, storage } = existing.metadata ?? {};
   return {
     ...record,

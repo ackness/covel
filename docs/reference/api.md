@@ -534,6 +534,7 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 | DELETE | `/api/worlds/:id`                       | 删除世界及其全部会话，规则见下文                               |
 | GET    | `/api/worlds/:id/dimensions/export`     | 导出世界维度（YAML / JSON）                                    |
 | POST   | `/api/worlds/:id/dimensions/import`     | 导入世界维度                                                   |
+| POST   | `/api/worlds/:id/restore-package`       | 把改过的包世界换回世界包里的版本                               |
 | POST   | `/api/worlds/:id/sync-dimensions`       | 把世界维度同步到活跃会话                                       |
 | POST   | `/api/worlds/:id/world-data/preflight`  | 只读地预演 worldData 导入                                      |
 | POST   | `/api/worlds/:id/sync-data`             | 同步由导入器管理的 worldData 行，支持 dry-run 与 force         |
@@ -1029,6 +1030,7 @@ setup runtime 反复失败、用完重试预算（`maxTriggerCount`）后进入 
 - `POST /api/install/collection`：响应和 batch 相同。
 
 批量安装失败的撤回结果见[插件安装](./plugin-installation.md#多包预览和批量安装)：`details.rolledBack` 和 `details.retained` 分别列出已撤回和保留的包。
+
 - `GET /api/install/plugins`：列表里包含还没有重启加载的插件。
 
 `/api/install/world` 在写入世界记录之前检查 worldData 的 diagnostics：
@@ -1740,6 +1742,7 @@ Web 设置页根据 `operatorTokenRequired` 决定是否显示“运维访问”
 用请求里的内容**整体替换**世界的维度定义。
 
 - 导入后，活跃的会话会收到“作者源已变化”的通知。
+- 来自世界包的世界被标上 `packageModified`，和 `PATCH` 一样。
 - 会话里的当前值不会自动重置。已有会话要显式调用同步端点来采用新定义，同步时会检查冲突。
 - 任何合法的维度 ID 都用同一种定义格式。
 
@@ -1781,6 +1784,8 @@ Web 设置页根据 `operatorTokenRequired` 决定是否显示“运维访问”
 - 顶层 `dimensions` 会写入 `metadata.dimensions`。
 - `metadata` 是合并写入：没提到的同级字段保留原样。
 - `dimensions` 与 `metadata.dimensions` 都会经过世界维度校验。
+- 新会话、预检和同步用这条记录里的维度和 `characterSchema`，不读世界包里的文件。
+- 世界来自世界包（`metadata.source` 是 `file` 或 `generated-file`，或者带 `packageManaged`）时，记录被标上 `packageModified: true`。之后启动加载、文件重载和更新都保留这条记录，不用包文件覆盖它。规则见[世界记录和世界包](./world-data.md#世界记录和世界包)。
 
 **请求体示例:**
 
@@ -1798,9 +1803,30 @@ Web 设置页根据 `operatorTokenRequired` 决定是否显示“运维访问”
 }
 ```
 
+#### `POST /api/worlds/:id/restore-package`
+
+把一个在应用里改过的包世界换回世界包里的版本。
+
+- 服务端重新读取世界包，用读到的内容替换世界记录，并去掉 `packageModified`。之后启动加载和文件重载重新让记录跟随文件。
+- 世界的来源（`metadata.source`、`metadata.storage`）和创建时间保持原值。
+- 维度定义变了时，使用这个世界的会话收到 `world.dimensions.changed` 通知。会话里已有的值不会被重置，需要时走同步。
+- 请求体可以是空对象。
+
+**响应:** 恢复后的 WorldRecord。
+
+**错误:**
+
+| 状态码 | `code`                   | 什么时候                                               |
+| ------ | ------------------------ | ------------------------------------------------------ |
+| 404    | `world_not_found`        | 没有这个世界                                           |
+| 409    | `world_not_from_package` | 这个世界不是从世界包来的（例如存在数据库里的生成世界） |
+| 409    | `world_package_missing`  | 世界目录里找不到这个世界的包                           |
+| 409    | `world_deleting`         | 世界正在删除                                           |
+| 422    | `world_package_invalid`  | 世界包读不出来；改过的记录保持原样                     |
+
 #### `POST /api/worlds/:id/sync-dimensions`
 
-把世界当前的维度定义同步到指定的一个会话。这个端点直接尝试写入；想先预览，或者需要通用的同步选项，用 `sync-data`。
+把世界记录里当前的维度定义同步到指定的一个会话。这个端点直接尝试写入；想先预览，或者需要通用的同步选项，用 `sync-data`。
 
 它只处理维度：使用 `world_data_import_ledger` 账本和受保护的 `_dimensions` 记录，不写 `entries`，也不写常驻 lorebook，也不清理其他导入的数据。
 
@@ -1849,6 +1875,8 @@ Web 设置页根据 `operatorTokenRequired` 决定是否显示“运维访问”
 
 - 传 `sessionId`：使用这个会话**已保存的 `activePlugins`**。这时请求里的 `plugins` 会被忽略。
 - 只传 `plugins`：在创建会话之前，预检某一组插件选择。
+
+维度和角色 schema 读世界记录，和创建会话一样；其他数据读世界包的 `data/`。
 
 预检不会加载也不会执行 `worldProjections` handler，所以 projection 的输出不计入 `planned` / `targets`。响应会带一条 warning，说明这部分推迟到真正导入或同步时执行。
 
@@ -1900,7 +1928,7 @@ Web 设置页根据 `operatorTokenRequired` 决定是否显示“运维访问”
 
 - 只处理账本 `world_data_import_ledger` 里 `managed=true` 的 row。
 - 用 `valueHash` 判断玩家或插件有没有改过目标数据。
-- 维度定义也在同一本账里，包括 inline 定义、`dimensionSources`，以及存储型世界的有效定义。
+- 维度定义也在同一本账里。维度来自世界记录，所以在应用里改过的维度也会同步；其他 worldData 来自世界包的 `data/`。
 
 **冲突怎么处理:**
 

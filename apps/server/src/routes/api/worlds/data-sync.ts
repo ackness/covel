@@ -71,7 +71,7 @@ worldDataSyncRoutes.post("/:id/world-data/preflight", async (c) => {
       : [];
 
   const result = await preflightWorldDataForSession({
-    contractData: (await store.getWorld(worldId))?.metadata?.contractData,
+    world: await store.getWorld(worldId),
     sessionId,
     worldId,
     worldsDirs,
@@ -276,10 +276,10 @@ worldDataSyncRoutes.post("/:id/sync-dimensions", async (c) => {
   const worldsDirs = c.get("worldsDirs");
   const covelHome = c.get("covelHome");
 
-  // Resolve the EFFECTIVE dimension declaration (inline + external
-  // dimensionSources + worldData descriptor) through the same path the normal
-  // worldData sync uses — not the pre-merged `metadata.dimensions`, which
-  // would make the import ledger hash permanently mismatch the authored source.
+  // The dimensions are the world record's, as for a new session: an edit in
+  // the app is what the session syncs to. The ledger compares each resolved
+  // definition, so a record loaded from unchanged files matches what the
+  // session imported from them.
   const syncOptions = (liveSession: typeof session) => ({
     store,
     sessionId,

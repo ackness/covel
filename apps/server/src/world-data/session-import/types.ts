@@ -158,9 +158,19 @@ export type PreparedWorldDataImport =
       readonly mediaRefs: readonly WorldDataImportedMediaRef[];
     };
 
+/**
+ * The part of the world record an import reads. The record is the world: its
+ * dimensions, character schema and portable contract data are used as they
+ * are, whatever the package files hold now. A package adds only the data the
+ * record does not keep (its `data/` sources and media).
+ */
+export interface WorldDataImportRecord {
+  readonly metadata?: Readonly<Record<string, unknown>>;
+}
+
 export interface PrepareWorldDataImportForSessionOptions {
-  readonly contractData?: unknown;
-  readonly dimensions?: unknown;
+  /** The world's record; without one the world has no dimensions. */
+  readonly world?: WorldDataImportRecord | null;
   readonly sessionId: string;
   readonly worldId: string | undefined;
   readonly worldsDirs?: readonly string[];
@@ -182,8 +192,8 @@ export interface ApplyPreparedWorldDataImportForSessionOptions {
 }
 
 export interface PreflightWorldDataForSessionOptions {
-  readonly contractData?: unknown;
-  readonly dimensions?: unknown;
+  /** The world's record, as for {@link PrepareWorldDataImportForSessionOptions}. */
+  readonly world?: WorldDataImportRecord | null;
   readonly sessionId: string;
   readonly worldId: string | undefined;
   readonly worldsDirs?: readonly string[];

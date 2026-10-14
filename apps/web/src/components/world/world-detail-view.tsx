@@ -30,6 +30,10 @@ import {
   WorldTranslatePanel,
   isWorldTranslatable,
 } from "./world-translate-panel.js";
+import {
+  WorldPackageRestore,
+  isWorldPackageEdited,
+} from "./world-package-restore.js";
 export interface WorldDetailViewProps {
   /** The list's summary: it paints the header while the full record loads. */
   world: WorldSummary;
@@ -204,6 +208,9 @@ export function WorldDetailView({
           t={t}
         />
 
+        {full && onRevised && isWorldPackageEdited(full) && (
+          <WorldPackageRestore world={full} onRestored={onRevised} />
+        )}
         {full && onRevised && isWorldTranslatable(full, interfaceLocale) && (
           <WorldTranslatePanel
             world={full}
