@@ -1440,21 +1440,23 @@ Plugin authors use `covel.toolkit.tool()` in `entry`. The common context, the re
 
 ## Approval policy
 
-Every tool call goes through the approval check in `ApprovalPipeline`. The current rules are built by `createDefaultToolApprovalPipeline()` from `@covel/approval`, which the server and `test-runtime` share:
+The host resolves a tool before `ApprovalPipeline` checks the static rules. The default rules are built by `createDefaultToolApprovalPipeline()` from `@covel/approval`, which the server and `test-runtime` share:
 
-| Source category | Rule      | Notes                                                |
-| --------------- | --------- | ---------------------------------------------------- |
-| `builtin:*`     | **allow** | Built-in framework tools, always allowed             |
-| `local:*`       | **allow** | Discovered local plugin tools, allowed automatically |
-| `third-party:*` | **deny**  | Tools from an unknown source, refused                |
+| Source category | Rule      | Notes                                                                                       |
+| --------------- | --------- | ------------------------------------------------------------------------------------------- |
+| `builtin:*`     | **allow** | Registered framework tools                                                                  |
+| `local:*`       | **allow** | Registered plugin tools callable in the current session, including approved community tools |
+
+A host can supply custom rules. The first matching rule wins, and exact tool-name rules apply regardless of source. To deny a tool, place its `deny` rule before the source wildcard. When no rule matches, the default is allow.
 
 ### How the source category is decided
 
-It is classified automatically at startup:
+After the executor resolves a tool, `ToolRegistry.source()` classifies it by registration:
 
-- Tools registered with `registerBuiltin` (including `builtinUITools`) → `builtin`
-- Every other tool, that is, a plugin tool that its `entry` registered successfully with `registerTool()` → `local`
-- No tool is given `third-party` today: the classification only produces `builtin` and `local`
+- Framework tools registered with `registerBuiltin()` (including `builtinUITools`) → `builtin`
+- Tools that a plugin's `entry` registered successfully with `registerTool()` → `local`
+
+These are the only two sources. Missing tools and another plugin's private tools return `NOT_FOUND` before the source check. Source categories do not represent plugin trust levels. The authorization flow below decides whether community code may run.
 
 ### The approval boundary for third-party plugin server code and plugin tools
 

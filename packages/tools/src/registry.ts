@@ -91,7 +91,11 @@ export class ToolRegistry {
     );
   }
 
-  /** Called only after successful resolution by the executor. */
+  /**
+   * Called only after successful resolution by the executor. All registered
+   * plugin tools are local, including admitted community tools; session trust
+   * is enforced before resolution, not represented by a third source category.
+   */
   source(name: string): ToolSource {
     return this.builtinTools.has(name) ? "builtin" : "local";
   }
