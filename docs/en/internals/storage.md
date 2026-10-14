@@ -150,7 +150,7 @@ One action runs under one Web Lock, and the lock key is the vault database name 
 2. `PUT /api/sessions/:id/browser-checkpoint` uses the latest full checkpoint to fill a temporary `MemoryStore` workspace on the server. If the server already has a validated workspace that holds persisted background jobs, it keeps the state owned by those jobs, and accepts only new player messages, session state and model settings, plus authorized world edits. When the response contains `reconcileRequired`, a `hydrate:<revision>` commit must be downloaded before continuing. Unsupported checkpoint changes return `409`.
 3. Record the pending `actionId`, then run the normal action endpoint or the plugin-RPC endpoint against this workspace.
 4. `POST /api/sessions/:id/browser-commit` exports the workspace result as a `SessionCommit` checked by revision number.
-5. Dexie applies this commit atomically, and then clears the pending action. Replaying with the same `actionId` has no effect, including recovery after a crash between these two writes. A stale revision number, or a header with the same revision number but different content, is rejected.
+5. Dexie applies this commit and clears the pending action in the same transaction (only that `actionId`; an action recorded later is kept). Replaying with the same `actionId` has no effect. A replay is recognised by the checkpoint the server sent: the browser puts its own world in before writing, and that world may be edited later. A stale revision number, or a header with the same revision number but different content, is rejected.
 
 **When it is persisted.**
 
