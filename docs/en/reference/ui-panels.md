@@ -539,6 +539,8 @@ The original keys can still be read directly with `$state: "/someKey"`. Both way
 
 **Naming convention**: a group name shared across plugins works like a CSS class name. Authors add their own namespace prefix to avoid conflicts, for example `core.character` or `myorg.combat`. The framework does not add prefixes automatically.
 
+When several plugins share a group, provider switch buttons show each plugin's localized `displayName`, falling back to its ID when no name is available. Every group name follows this rule; a panel's `label` / `shortLabel` does not change the provider name.
+
 **Implementation**: `aggregateSpecsIntoGroups()` in `apps/web/src/lib/plugin-panel-tabs.ts`. It is a pure function and can be tested on its own (see the Playwright smoke test).
 
 ### Ordering

@@ -24,6 +24,10 @@ On the world selection page, click "AI Create World". Write a "Core Direction", 
 
 Generation uses model calls. If the model produces no output for a long time, you can increase "World authoring: wait for the model (seconds)" in the settings.
 
+Worlds generated in the app can be revised in "Revise this world" on their detail page. Write your request and click "Apply the change". While a revision runs, you can click "Cancel". Your request stays in the box so you can edit it and retry.
+
+When the world dimension editor has unsaved changes, clicking "Cancel" asks whether to discard them. Choose "Keep editing" to retain the drafts; the browser prompts before reloading or closing the page. This also protects incomplete form input and unapplied JSON. For JSON edits, click "Apply definitions" before saving.
+
 ## Session-prep screen: choose plugins and gameplay packs
 
 After you choose a world and click "Enter", you reach the session-prep screen ("Session Setup"). Here you decide which plugins are on for this game.

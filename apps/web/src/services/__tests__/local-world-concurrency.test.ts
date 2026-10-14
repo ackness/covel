@@ -95,6 +95,29 @@ it("merges different world fields across service instances", async () => {
   });
 });
 
+it("preserves arbitrary metadata without interpreting removed manifest fields", async () => {
+  const generated = {
+    id: "metadata-probe",
+    name: "Metadata probe",
+    description: "A generated world",
+    createdAt: "2026-01-01",
+    metadata: {
+      generated: true,
+      characterBlueprintSources: { custom: "opaque metadata" },
+      worldDataPath: "server-only.yaml",
+      worldData: { serverOnly: true },
+    },
+  };
+  const saved = await service.saveGeneratedWorld(generated);
+  expect(saved.metadata?.characterBlueprintSources).toEqual({
+    custom: "opaque metadata",
+  });
+  expect(saved.metadata).not.toHaveProperty("worldDataPath");
+  expect(saved.metadata).not.toHaveProperty("worldData");
+  expect((await second.getWorld(saved.id))?.metadata).toEqual(saved.metadata);
+  expect(generated.metadata.worldDataPath).toBe("server-only.yaml");
+});
+
 it.each(["edited", "deleted", "replaced"] as const)(
   "rejects a generated revision after another vault %s the world",
   async (change) => {
