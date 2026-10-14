@@ -203,6 +203,8 @@ export interface PluginPack {
   readonly description?: I18nText;
   readonly requested: readonly string[];
   readonly recommended: readonly string[];
+  /** Plugins the pack turns off, core ones included; the player can turn them back on. */
+  readonly excluded?: readonly string[];
   readonly tags: readonly string[];
   readonly reason?: I18nText;
   readonly source: "builtin" | "world";

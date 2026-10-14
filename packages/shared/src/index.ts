@@ -462,6 +462,8 @@ export {
   resolveSessionPlugins,
   resolveConfirmedSessionPlugins,
   isBlockingWorldRequirement,
+  isDependencyRejection,
+  disabledDependents,
   providedContracts,
 } from "./plugin-selection.js";
 export {

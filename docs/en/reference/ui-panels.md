@@ -571,7 +571,7 @@ The message area has two paths that run side by side. They use the same json-ren
 
 - Folded: `ui.render`, `ui-spec`, and notifications at level info / success, such as codex discoveries, achievements and status changes.
 - Not folded: forms, options, confirmations, images, and warning and error notifications.
-- Suggestion blocks (`plugin_message`) stay expanded in the current turn. After a new player message with updates appears, the block folds into "Earlier suggestions".
+- Plugin message surfaces (`plugin_message`) stay expanded in the current turn. After a later player message, the disclosure shows the provider’s localized name and “expand to review”, falling back to “Plugin content” when no name is available. Checks, quest updates and suggestions follow the same rule.
 - Players can turn on "Expand turn updates" (`ui.expandTurnUpdates`) under "General" in Settings, so they are expanded by default.
 - The `detailed` and `raw` views do not fold.
 - The theme package's `layout.turnNotes` decides where these updates go: `fold` is the default behavior described above; `inline` expands the latest turn by default; `margin` puts them in a side margin next to the story text when the session area is wide enough.

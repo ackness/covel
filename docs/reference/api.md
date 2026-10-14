@@ -2206,6 +2206,7 @@ Web 设置页根据 `operatorTokenRequired` 决定是否显示“运维访问”
   - 这些需求随会话保存在 `metadata.pluginSelection.requiredContracts`。之后的启停与重载沿用它，不再读取世界。
   - 没有已安装的提供者，或有多个提供者而请求里没有指定，返回 `400 { "code": "world_requirement_unmet", "details": { contract, code, candidates? } }`。
   - 玩家显式停用了提供者，或提供者是还在等授权的社区插件时，会话照常创建。
+- 依赖缺失的插件：它依赖的契约没有提供者（例如玩家关掉了提供者）时，会话照常创建，这个插件自动停用。玩家要的和 `kind: core` 的这类插件仍写进 `activePlugins`，`GET /api/sessions/:id/plugins` 把它们列在 `unavailable`，依赖回来后自动恢复。规则见[会话插件选择](./plugins.md#会话插件选择)。
 - `metadata.characterSchema`：Web 私有模式创建本地会话时写入同样的 schema。预设不合法时，会话不创建。
 - `metadata.embeddedCharacters`：它不是插件的角色卡，不会产生插件数据的副本。
 - `metadata.embeddedLorebook`：AI 生成的 `server-store` / `return-only` 世界用它携带资料与规则。
@@ -2265,13 +2266,14 @@ Web 设置页根据 `operatorTokenRequired` 决定是否显示“运维访问”
 
 **错误:**
 
-| 状态码 | `code`                    | 什么时候                                                    |
-| ------ | ------------------------- | ----------------------------------------------------------- |
-| 400    | `world_requirement_unmet` | 世界必需的契约没有提供者，或有多个提供者而没有指定          |
-| 401    | `operator_token_required` | 托管部署（`demo` / `commercial`）下创建会话没有带运维 token |
-| 404    | `world_not_found`         | 提供了 `worldId`，但世界不存在                              |
-| 409    | `world_deleting`          | 世界正在删除                                                |
-| 409    | `session_already_exists`  | 客户端自定义的 `id` 已存在                                  |
+| 状态码 | `code`                    | 什么时候                                                             |
+| ------ | ------------------------- | -------------------------------------------------------------------- |
+| 400    | `plugin_rejected`         | 玩家要的插件因冲突等原因被拒（不包括依赖缺失）；`details` 是这条拒绝 |
+| 400    | `world_requirement_unmet` | 世界必需的契约没有提供者，或有多个提供者而没有指定                   |
+| 401    | `operator_token_required` | 托管部署（`demo` / `commercial`）下创建会话没有带运维 token          |
+| 404    | `world_not_found`         | 提供了 `worldId`，但世界不存在                                       |
+| 409    | `world_deleting`          | 世界正在删除                                                         |
+| 409    | `session_already_exists`  | 客户端自定义的 `id` 已存在                                           |
 
 - `id` 已存在时的响应体是 `{ "error": "Session already exists: <id>", "code": "session_already_exists" }`。创建不会覆盖原会话，也不会把原会话的子记录当成新会话的数据。
 - 服务端在准备资源之前和提交会话时各检查一次世界。准备阶段不建立媒体归属；失败后留下的无引用字节由媒体 GC 回收，不会强删可能被其他会话使用的内容。

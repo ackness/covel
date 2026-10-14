@@ -12,9 +12,11 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog.js";
 import { SuspensionsPanel } from "./suspensions-panel.js";
+import { UnsavedNarratives } from "./unsaved-narratives.js";
 import { ExecutionRecoveryNotice } from "./execution-recovery-notice.js";
 import { SetupProgressNotice, setupProgress } from "./setup-progress-notice.js";
 import { WorldDataNotices } from "./world-data-notices.js";
+import { SessionPluginNotices } from "./session-plugin-notices.js";
 import {
   ResizableHandle,
   ResizablePanel,
@@ -523,23 +525,25 @@ export function GameView({
             </div>
           )}
 
-          {unavailableSessionPlugins.length > 0 && (
-            <div
-              role="status"
-              className="relative z-10 border-b border-amber-500/30 bg-amber-500/10 px-4 py-2 text-xs"
-            >
-              {t("plugin.unavailable", {
-                plugins: unavailableSessionPlugins
-                  .map((item) => item.pluginId)
-                  .join(", "),
-              })}
-            </div>
-          )}
+          <SessionPluginNotices
+            plugins={sessionPlugins}
+            unavailable={unavailableSessionPlugins}
+            offTitle={t("plugin.unavailable")}
+            variant="bar"
+            busy={executing}
+            onTurnOn={(pluginId) => void onTogglePlugin(pluginId, true)}
+          />
 
           <WorldDataNotices notices={worldDataNotices} />
 
           {/* Messages */}
           {stageActive && <SessionDimensionsPanel recoveryOnly />}
+          <UnsavedNarratives
+            messages={state.unsavedNarratives ?? []}
+            recovery={state.executionRecovery}
+            executing={state.executing}
+            onRetry={retryInterruptedTurn}
+          />
           <ExecutionRecoveryNotice
             recovery={state.executionRecovery}
             onRetry={retryInterruptedTurn}
