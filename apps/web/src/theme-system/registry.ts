@@ -1,7 +1,9 @@
+import { sameSettingValue } from "@covel/settings";
+import { ThemeImportError } from "./import-error.js";
 import { z } from "zod";
 import { resolveI18nText, type I18nText } from "@covel/shared";
 import type { SettingOption, SettingsStoreApi } from "@covel/settings";
-import { getBuiltinThemes } from "./builtins.js";
+import { getBuiltinThemes, BUILTIN_THEME_IDS } from "./builtins.js";
 import {
   applyAppearance,
   applyColorScheme,
@@ -29,7 +31,6 @@ import type {
 } from "./types.js";
 
 const builtinThemes = getBuiltinThemes();
-const BUILTIN_THEME_IDS = new Set(builtinThemes.map((theme) => theme.id));
 let themeRegistry = new Map<string, ThemeDefinition>();
 const BUILTIN_THEME_ORDER = [
   "panel",
@@ -259,8 +260,21 @@ export async function saveCustomTheme(
   store: SettingsStoreApi,
   theme: ThemeDefinition,
   fileName?: string,
+  expected?: StoredCustomTheme | null,
 ): Promise<void> {
-  const nextStoredThemes = loadStoredCustomThemes(store)
+  if (BUILTIN_THEME_IDS.has(theme.id))
+    throw new ThemeImportError("builtin-id", { id: theme.id });
+  const stored = loadStoredCustomThemes(store);
+  if (
+    expected !== undefined &&
+    !sameSettingValue(
+      stored.find((entry) => entry.id === theme.id) ?? null,
+      expected,
+    )
+  ) {
+    throw new ThemeImportError("theme-changed", { id: theme.id });
+  }
+  const nextStoredThemes = stored
     .filter((entry) => entry.id !== theme.id)
     .concat(toStoredTheme(theme, fileName));
 

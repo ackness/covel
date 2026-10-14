@@ -174,7 +174,9 @@ export async function executeAgentGuard({
       if (!guardAbort.signal.aborted) {
         guardAbort.abort(new Error(`agent guard "${manifest.name}" completed`));
       }
-      await runtimeContext.drain();
+      // Invocation work already propagates tool failures. Cleanup must settle
+      // outstanding calls without replacing the original timeout or error.
+      await runtimeContext.drain().catch(() => undefined);
     }
 
     const guardOutput = getToolContent(rawGuardOutput);

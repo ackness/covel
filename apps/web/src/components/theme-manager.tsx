@@ -17,14 +17,7 @@ import {
   loadStoredCustomThemes,
 } from "@/theme-system/storage.js";
 import { parseImportedThemeFile } from "@/theme-system/validate.js";
-import type { StoredCustomTheme } from "@/theme-system/types.js";
-
-function isCustomTheme(
-  themeId: string,
-  customThemes: StoredCustomTheme[],
-): boolean {
-  return customThemes.some((theme) => theme.id === themeId);
-}
+import { themeImportErrorText } from "@/theme-system/import-error.js";
 
 function labelToString(
   label: string | Record<string, string>,
@@ -84,9 +77,7 @@ export function ThemeManagerWidget() {
       );
     } catch (nextError) {
       setError(
-        nextError instanceof Error
-          ? nextError.message
-          : t("settings.themeImportInvalid"),
+        themeImportErrorText(nextError, t, "settings.themeImportInvalid"),
       );
     } finally {
       setBusy(false);
@@ -226,7 +217,7 @@ html[data-theme="my-theme"].dark {
       <div className="space-y-0">
         {themes.map((theme) => {
           const selected = appearance === theme.id;
-          const custom = isCustomTheme(theme.id, customThemeList);
+          const custom = theme.source === "custom";
           return (
             <div
               key={theme.id}

@@ -1340,7 +1340,19 @@
     "addModelsCount_one": "Add {{count}} model",
     "addModelsCount_other": "Add {{count}} models",
     "importInvalidEntries_one": "{{count}} entry does not match the current settings schema and will be skipped.",
-    "importInvalidEntries_other": "{{count}} entries do not match the current settings schema and will be skipped."
+    "importInvalidEntries_other": "{{count}} entries do not match the current settings schema and will be skipped.",
+    "themeImportErrors": {
+      "missing-scope": "Theme CSS must include a selector such as html[data-theme=\"your-theme\"].",
+      "multiple-ids": "A theme file must declare exactly one theme ID.",
+      "id-mismatch": "CSS selectors must use the theme ID {{id}}.",
+      "escapes-scope": "Scope every rule to [data-theme=\"{{id}}\"]. Unscoped selector: {{selector}}",
+      "import-rule": "Theme CSS cannot use @import.",
+      "builtin-id": "{{id}} is a built-in theme ID. Choose another ID.",
+      "invalid-id": "Use 2–48 lowercase letters, numbers, or hyphens for the theme ID.",
+      "invalid-json": "This theme file is not valid JSON.",
+      "invalid-manifest": "The theme fields do not match the theme package format.",
+      "theme-changed": "Theme {{id}} changed while you were saving. Review it and try again."
+    }
   },
   "appearance": {
     "styleTitle": "Style",
@@ -1641,7 +1653,10 @@
           "label": "Panel padding Y"
         }
       }
-    }
+    },
+    "replaceThemeTitle": "Replace existing theme?",
+    "replaceThemeConfirm": "This name produces an existing theme ID. Replacing it will overwrite that custom theme.",
+    "replaceTheme": "Replace theme"
   },
   "plugin": {
     "runtimes": "Runtimes",

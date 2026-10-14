@@ -258,7 +258,9 @@ export async function executeFunctionRuntime({
         new Error(`function runtime "${manifest.name}" completed`),
       );
     }
-    await runtimeContext.drain();
+    // Invocation work already propagates tool failures. Cleanup must settle
+    // outstanding calls without replacing the original timeout or error.
+    await runtimeContext.drain().catch(() => undefined);
   }
 
   const { outcome: handlerOutcome, diagnostics } = normalizeHandlerResult(

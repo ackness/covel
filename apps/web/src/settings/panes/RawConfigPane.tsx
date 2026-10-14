@@ -1,3 +1,4 @@
+import { SettingsRevisionConflictError } from "@covel/settings";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { RotateCw, Save, Undo2 } from "lucide-react";
@@ -197,7 +198,8 @@ export function RawConfigPane() {
       if (saved.reload) await boot();
     } catch (err) {
       setError(
-        err instanceof ApiError && err.code === "config_file_changed"
+        err instanceof SettingsRevisionConflictError ||
+          (err instanceof ApiError && err.code === "config_file_changed")
           ? t("settings.rawConfigChanged")
           : err instanceof ApiError
             ? (err.response?.error ?? err.message)
