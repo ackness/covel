@@ -201,7 +201,11 @@ stateDiagram-v2
 
 要记住的细节：
 
-- **唯一的例外**是准备 runtime 的尝试次数。它在事务之后更新 `setupRuntimes` 里的计数，回滚的尝试也消耗次数，但它不切换 `phase`。
+- 有几处写入在这个事务之外，它们都不切换 `phase`：
+  - 准备 runtime 的尝试次数。它在事务之后更新 `setupRuntimes` 里的计数，回滚的尝试也消耗次数。
+  - `needs(scope: session)` 成环的准备 runtime。执行器在执行之前就把它们标为 `blocked`。
+  - 玩家在界面上重试或放弃一个准备 runtime。
+  - 执行记录。`turn_results` 和各 runtime 的输出在提交之前写入，`turn_results` 先记为 `pending`，提交之后再结算成 `committed` 或 `failed`。
 - `turn.suspended` 只在提交之后发出。
 - 自动快照在全部提案提交后才拍，保证对话位置、角色、状态和插件数据属于同一个已提交的回合。
 - `execution.completed.committed` 是客户端的终态信号：前端据此确认或撤回它先显示出来的内容。
