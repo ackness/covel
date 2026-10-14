@@ -110,23 +110,33 @@ describe("GET /api/ui-specs — one bad runtime must not 500 the whole response"
   });
 
   it("returns 200 with the healthy plugin and skips + logs the broken one", async () => {
-    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
 
     const res = await app.request(`/api/ui-specs?sessionId=${sessionId}`);
 
     expect(res.status).toBe(200); // NOT 500
     const body = (await res.json()) as {
       right: Array<{ pluginId: string }>;
+      diagnostics: Array<{ pluginId: string; issues: { message: string }[] }>;
     };
     const ids = body.right.map((e) => e.pluginId);
     expect(ids).toContain("good-plugin");
     expect(ids).not.toContain("broken-plugin");
 
-    // The failure was logged with the offending plugin/runtime for triage.
-    expect(errSpy).toHaveBeenCalledWith(
+    // The failure is reported with the offending plugin for triage.
+    expect(body.diagnostics).toEqual([
+      expect.objectContaining({
+        pluginId: "broken-plugin",
+        issues: [
+          expect.objectContaining({
+            message: expect.stringContaining("is not valid JSON"),
+          }),
+        ],
+      }),
+    ]);
+    expect(warnSpy).toHaveBeenCalledWith(
       expect.stringContaining("broken-plugin"),
-      expect.anything(),
     );
-    errSpy.mockRestore();
+    warnSpy.mockRestore();
   });
 });
