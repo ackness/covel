@@ -160,7 +160,7 @@ describe("store factory env wiring", () => {
     );
   });
 
-  it("returns no media store for pg without DATABASE_URL", async () => {
+  it("refuses a pg media store without DATABASE_URL instead of turning media off", async () => {
     withEnv({
       STORE_BACKEND: "pg",
       SQLITE_PATH: undefined,
@@ -169,6 +169,8 @@ describe("store factory env wiring", () => {
       MEDIA_ROOT: undefined,
     });
 
-    await expect(createMediaStoreFromEnv()).resolves.toBeUndefined();
+    await expect(createMediaStoreFromEnv()).rejects.toThrow(
+      "The pg media store needs DATABASE_URL",
+    );
   });
 });
