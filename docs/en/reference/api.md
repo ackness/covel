@@ -25,27 +25,28 @@ This page lists every endpoint, request field, response, and error code. Use it 
 
 **Find an endpoint by task**
 
-| I want to...                                         | Endpoint                                                 | Section                                                        |
-| ---------------------------------------------------- | -------------------------------------------------------- | -------------------------------------------------------------- |
-| Check that the server is running                     | `GET /api/health`                                        | [Health check](#health-check)                                  |
-| List, create, or change worlds                       | `GET` / `POST /api/worlds`, `PATCH /api/worlds/:id`      | [World management](#world-management)                          |
-| Create, list, or delete a session                    | `POST` / `GET /api/sessions`, `DELETE /api/sessions/:id` | [Session management](#session-management)                      |
-| Start a game, send a message, submit a choice        | `POST /api/actions`                                      | [Turn execution](#turn-execution)                              |
-| Interrupt or steer a turn that is running            | `POST /api/sessions/:id/abort`, `/steer`                 | "Mid-turn control (W4)" in the endpoint list                   |
-| Answer a form or choice shown during a turn          | `POST /api/actions` (`submit_interaction`)               | [Player interaction](#player-interaction)                      |
-| Read the chat history                                | `GET /api/sessions/:id/messages`                         | [Message history](#message-history)                            |
-| Read state tables and characters                     | `GET /api/sessions/:id/state`, `/characters`             | [State query](#state-query), [Character data](#character-data) |
-| Turn plugins on or off for a session                 | `PUT` / `DELETE /api/sessions/:id/plugins/:pluginId`     | [Session plugin management](#session-plugin-management)        |
-| Call a plugin's manual feature                       | `POST /api/sessions/:id/plugin-rpc`                      | [Plugin RPC channel](#plugin-rpc-channel)                      |
-| Approve or reject a plugin's request                 | `POST /api/approvals/:approvalId/decision`               | [RPC approval flow](#rpc-approval-flow)                        |
-| Read and write a plugin's own data                   | `/api/sessions/:id/plugin-data/...`                      | "Plugin Data" in the endpoint list                             |
-| Save a game, branch a game                           | `POST /api/sessions/:id/snapshots`, `/fork`              | "Snapshot / Fork" in the endpoint list                         |
-| Subscribe to live events for a session               | `GET /api/events/stream?sessionId=...`                   | [Event system](#event-system)                                  |
-| Test a model connection, or have AI generate a world | `POST /api/ai/ping`, `/api/ai/generate-world`            | [AI generation](#ai-generation)                                |
-| See what happened in a turn                          | `GET /api/traces/:sessionId`                             | [Trace debugging](#trace-debugging)                            |
-| Manage images and other media                        | `/api/media/...`                                         | [Media management](#media-management)                          |
-| Install a plugin or a world                          | `/api/install/...`                                       | "Plugin and world install" in the endpoint list                |
-| View or change configuration                         | `/api/config/...`, `/api/llm-config`                     | [Configuration info](#configuration-info)                      |
+<!-- prettier-ignore -->
+| I want to... | Endpoint | Section |
+| --- | --- | --- |
+| Check that the server is running | `GET /api/health` | [Health check](#health-check) |
+| List, create, or change worlds | `GET` / `POST /api/worlds`, `PATCH /api/worlds/:id` | [World management](#world-management) |
+| Create, list, or delete a session | `POST` / `GET /api/sessions`, `DELETE /api/sessions/:id` | [Session management](#session-management) |
+| Start a game, send a message, submit a choice | `POST /api/actions` | [Turn execution](#turn-execution) |
+| Interrupt or steer a turn that is running | `POST /api/sessions/:id/abort`, `/steer` | "Mid-turn control (W4)" in the endpoint list |
+| Answer a form or choice shown during a turn | `POST /api/actions` (`submit_interaction`) | [Player interaction](#player-interaction) |
+| Read the chat history | `GET /api/sessions/:id/messages` | [Message history](#message-history) |
+| Read state tables and characters | `GET /api/sessions/:id/state`, `/characters` | [State query](#state-query), [Character data](#character-data) |
+| Turn plugins on or off for a session | `PUT` / `DELETE /api/sessions/:id/plugins/:pluginId` | [Session plugin management](#session-plugin-management) |
+| Call a plugin's manual feature | `POST /api/sessions/:id/plugin-rpc` | [Plugin RPC channel](#plugin-rpc-channel) |
+| Approve or reject a plugin's request | `POST /api/approvals/:approvalId/decision` | [RPC approval flow](#rpc-approval-flow) |
+| Read and write a plugin's own data | `/api/sessions/:id/plugin-data/...` | "Plugin Data" in the endpoint list |
+| Save a game, branch a game | `POST /api/sessions/:id/snapshots`, `/fork` | "Snapshot / Fork" in the endpoint list |
+| Subscribe to live events for a session | `GET /api/events/stream?sessionId=...` | [Event system](#event-system) |
+| Test a model connection, or have AI generate a world | `POST /api/ai/ping`, `/api/ai/generate-world` | [AI generation](#ai-generation) |
+| See what happened in a turn | `GET /api/traces/:sessionId` | [Trace debugging](#trace-debugging) |
+| Manage images and other media | `/api/media/...` | [Media management](#media-management) |
+| Install a plugin or a world | `/api/install/...` | "Plugin and world install" in the endpoint list |
+| View or change configuration | `/api/config/...`, `/api/llm-config` | [Configuration info](#configuration-info) |
 
 **Basic checks on the request body**
 
@@ -525,23 +526,24 @@ This section lists every endpoint by topic. After each table come the rules that
 
 ### World management
 
-| Method | Path                                    | Description                                                                                             |
-| ------ | --------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| GET    | `/api/worlds`                           | List a summary of every world (without `lore` / `dimensions`)                                           |
-| GET    | `/api/worlds/:id`                       | Get the full record of a world                                                                          |
-| POST   | `/api/worlds`                           | Create a world. If the ID already exists, returns `409 world_already_exists`                            |
-| PATCH  | `/api/worlds/:id`                       | Partly update a world (supports top-level `dimensions`; `metadata` is merged with existing values)      |
-| DELETE | `/api/worlds/:id`                       | Delete a world and all of its sessions. The rules are below                                             |
-| GET    | `/api/worlds/:id/dimensions/export`     | Export the world's dimensions (YAML / JSON)                                                             |
-| POST   | `/api/worlds/:id/dimensions/import`     | Import the world's dimensions                                                                           |
-| POST   | `/api/worlds/:id/sync-dimensions`       | Sync the world's dimensions to active sessions                                                          |
-| POST   | `/api/worlds/:id/world-data/preflight`  | Dry-run a worldData import, read-only                                                                   |
-| POST   | `/api/worlds/:id/sync-data`             | Sync the worldData rows that the importer manages. Supports dry-run and force                           |
-| POST   | `/api/worlds/:id/translate`             | Use the configured model to add one language version to a world package in the user worlds folder (SSE) |
-| GET    | `/api/worlds/:id/gallery`               | List the images that come with the world package (scenes, portraits)                                    |
-| GET    | `/api/media/library`                    | The player's media library (`self` / desktop app only)                                                  |
-| POST   | `/api/media/library/delete`             | Delete media the player selected, or all media that no session uses                                     |
-| GET    | `/api/worlds/:id/gallery/:source/:file` | Read one image from the gallery list                                                                    |
+<!-- prettier-ignore -->
+| Method | Path | Description |
+| --- | --- | --- |
+| GET | `/api/worlds` | List a summary of every world (without `lore` / `dimensions`) |
+| GET | `/api/worlds/:id` | Get the full record of a world |
+| POST | `/api/worlds` | Create a world. If the ID already exists, returns `409 world_already_exists` |
+| PATCH | `/api/worlds/:id` | Partly update a world (supports top-level `dimensions`; `metadata` is merged with existing values) |
+| DELETE | `/api/worlds/:id` | Delete a world and all of its sessions. The rules are below |
+| GET | `/api/worlds/:id/dimensions/export` | Export the world's dimensions (YAML / JSON) |
+| POST | `/api/worlds/:id/dimensions/import` | Import the world's dimensions |
+| POST | `/api/worlds/:id/sync-dimensions` | Sync the world's dimensions to active sessions |
+| POST | `/api/worlds/:id/world-data/preflight` | Dry-run a worldData import, read-only |
+| POST | `/api/worlds/:id/sync-data` | Sync the worldData rows that the importer manages. Supports dry-run and force |
+| POST | `/api/worlds/:id/translate` | Use the configured model to add one language version to a world package in the user worlds folder (SSE) |
+| GET | `/api/worlds/:id/gallery` | List the images that come with the world package (scenes, portraits) |
+| GET | `/api/media/library` | The player's media library (`self` / desktop app only) |
+| POST | `/api/media/library/delete` | Delete media the player selected, or all media that no session uses |
+| GET | `/api/worlds/:id/gallery/:source/:file` | Read one image from the gallery list |
 
 A few more notes:
 
@@ -999,21 +1001,22 @@ Authentication:
 - On the `demo` / `commercial` tiers, every install management interface must hold the operator token. Turning on the install API does not bypass this check.
 - World installs must also meet the authentication for global world writes: production MemoryStore (including `self`) and hosted tiers must hold the operator token. Turning on the install API does not bypass this either.
 
-| Method | Path                                                | Request                        | Description                                                                                            |
-| ------ | --------------------------------------------------- | ------------------------------ | ------------------------------------------------------------------------------------------------------ |
-| POST   | `/api/install/plugin`                               | multipart field `file`         | Unzip a plugin `.zip` into the user plugins folder                                                     |
-| POST   | `/api/install/world`                                | multipart field `file`         | Unzip a world `.zip` into the user worlds folder                                                       |
-| POST   | `/api/install/plugin/github/preview`                | `{ url }`                      | Parse a public GitHub repository or subfolder and return a preview. Does not install or run the plugin |
-| POST   | `/api/install/plugin/github`                        | `{ token, acceptRisk: true }`  | Validate the confirmed preview and install                                                             |
-| POST   | `/api/install/world/github/preview`                 | `{ url }`                      | Same as above, for a world package                                                                     |
-| POST   | `/api/install/world/github`                         | `{ token, acceptRisk: true }`  | Validate the confirmed preview and install the world                                                   |
-| POST   | `/api/install/{plugin,world}/github/update/preview` | `{ id, url? }`                 | Check whether a package installed from GitHub has an update                                            |
-| POST   | `/api/install/{plugin,world}/github/update`         | `{ token, acceptRisk: true }`  | Apply a previewed update                                                                               |
-| DELETE | `/api/install/{plugin,world}/github/update/:id`     | —                              | Cancel an update that has not been applied yet. Returns `{ ok: true }`                                 |
-| POST   | `/api/install/github/preview`                       | `{ url }`                      | Preview the plugin, world, or collection members under one link                                        |
-| POST   | `/api/install/github/batch`                         | `{ tokens, acceptRisk: true }` | Install the previewed packages as one unit. On failure, roll back this run's writes                    |
-| POST   | `/api/install/collection`                           | multipart field `file`         | Import a packaged collection ZIP                                                                       |
-| GET    | `/api/install/plugins`                              | —                              | List the packages in the user plugins folder, with their available source records                      |
+<!-- prettier-ignore -->
+| Method | Path | Request | Description |
+| --- | --- | --- | --- |
+| POST | `/api/install/plugin` | multipart field `file` | Unzip a plugin `.zip` into the user plugins folder |
+| POST | `/api/install/world` | multipart field `file` | Unzip a world `.zip` into the user worlds folder |
+| POST | `/api/install/plugin/github/preview` | `{ url }` | Parse a public GitHub repository or subfolder and return a preview. Does not install or run the plugin |
+| POST | `/api/install/plugin/github` | `{ token, acceptRisk: true }` | Validate the confirmed preview and install |
+| POST | `/api/install/world/github/preview` | `{ url }` | Same as above, for a world package |
+| POST | `/api/install/world/github` | `{ token, acceptRisk: true }` | Validate the confirmed preview and install the world |
+| POST | `/api/install/{plugin,world}/github/update/preview` | `{ id, url? }` | Check whether a package installed from GitHub has an update |
+| POST | `/api/install/{plugin,world}/github/update` | `{ token, acceptRisk: true }` | Apply a previewed update |
+| DELETE | `/api/install/{plugin,world}/github/update/:id` | — | Cancel an update that has not been applied yet. Returns `{ ok: true }` |
+| POST | `/api/install/github/preview` | `{ url }` | Preview the plugin, world, or collection members under one link |
+| POST | `/api/install/github/batch` | `{ tokens, acceptRisk: true }` | Install the previewed packages as one unit. On failure, roll back this run's writes |
+| POST | `/api/install/collection` | multipart field `file` | Import a packaged collection ZIP |
+| GET | `/api/install/plugins` | — | List the packages in the user plugins folder, with their available source records |
 
 What each endpoint accepts and returns:
 
@@ -1363,30 +1366,31 @@ In the table below, "hosted deployment" means `DEPLOYMENT_TIER` is `demo` or `co
 
 ### Configuration info
 
-| Method | Path                           | Description                                                                                 |
-| ------ | ------------------------------ | ------------------------------------------------------------------------------------------- |
-| GET    | `/api/presets`                 | List the configured model presets (`{ items }`)                                             |
-| GET    | `/api/plugins`                 | List plugins (`PluginSummary`)                                                              |
-| GET    | `/api/worlds/:id/plugin-plan`  | Return the plugin plan `WorldPluginPlan` for a world                                        |
-| GET    | `/api/ui-specs?sessionId=<id>` | List plugins' UI declarations, grouped by slot                                              |
-| GET    | `/api/llm-config`              | Return slot configuration and capability information                                        |
-| POST   | `/api/llm-config/reload`       | Read `llm.toml` again and apply it, with no restart needed                                  |
-| GET    | `/api/provider-keys`           | Return which providers have a key configured, without the key contents                      |
-| GET    | `/api/config/info`             | Return the current deployment information (`isDesktop`, `covelHome`, `dataRoot`, and so on) |
-| GET    | `/api/config/server-settings`  | All tiers: return the effective value, source, and whether each server setting can be set   |
-| PUT    | `/api/config/server-settings`  | `self` tier only: save server settings                                                      |
-| GET    | `/api/config/keys`             | Desktop only: list the configured providers as `{ items: string[] }` (no values returned)   |
-| PUT    | `/api/config/keys`             | Desktop only: write `<covelHome>/keys.env`. Body `{ provider: value }`                      |
-| GET    | `/api/config/settings`         | Desktop only: read `<covelHome>/settings.json` (the unified SettingsStore)                  |
-| PUT    | `/api/config/settings`         | Desktop only: write `settings.json` atomically. Body `{ entries: Record<string, unknown> }` |
-| GET    | `/api/config/proxy`            | Desktop only: read the proxy mode for outbound requests and its effective status            |
-| PUT    | `/api/config/proxy`            | Desktop only: write the proxy and apply it immediately                                      |
-| GET    | `/api/app-update/latest`       | Desktop only: query the latest stable Release on GitHub                                     |
-| PUT    | `/api/config/data-root`        | Desktop only: rewrite the `data_root` line in `config.toml`. Needs a server restart         |
-| POST   | `/api/config/open-folder`      | Desktop only: open the config, data, or logs folder, or `llm.toml` / `keys.env`             |
-| GET    | `/api/config/raw`              | List the config files that can be edited as text in the app                                 |
-| GET    | `/api/config/raw/:name`        | Read the text and `digest` of one config file                                               |
-| PUT    | `/api/config/raw/:name`        | Validate and save the text. Body `{ content, baseDigest }`                                  |
+<!-- prettier-ignore -->
+| Method | Path | Description |
+| --- | --- | --- |
+| GET | `/api/presets` | List the configured model presets (`{ items }`) |
+| GET | `/api/plugins` | List plugins (`PluginSummary`) |
+| GET | `/api/worlds/:id/plugin-plan` | Return the plugin plan `WorldPluginPlan` for a world |
+| GET | `/api/ui-specs?sessionId=<id>` | List plugins' UI declarations, grouped by slot |
+| GET | `/api/llm-config` | Return slot configuration and capability information |
+| POST | `/api/llm-config/reload` | Read `llm.toml` again and apply it, with no restart needed |
+| GET | `/api/provider-keys` | Return which providers have a key configured, without the key contents |
+| GET | `/api/config/info` | Return the current deployment information (`isDesktop`, `covelHome`, `dataRoot`, and so on) |
+| GET | `/api/config/server-settings` | All tiers: return the effective value, source, and whether each server setting can be set |
+| PUT | `/api/config/server-settings` | `self` tier only: save server settings |
+| GET | `/api/config/keys` | Desktop only: list the configured providers as `{ items: string[] }` (no values returned) |
+| PUT | `/api/config/keys` | Desktop only: write `<covelHome>/keys.env`. Body `{ provider: value }` |
+| GET | `/api/config/settings` | Desktop only: read `<covelHome>/settings.json` (the unified SettingsStore) |
+| PUT | `/api/config/settings` | Desktop only: write `settings.json` atomically. Body `{ entries: Record<string, unknown> }` |
+| GET | `/api/config/proxy` | Desktop only: read the proxy mode for outbound requests and its effective status |
+| PUT | `/api/config/proxy` | Desktop only: write the proxy and apply it immediately |
+| GET | `/api/app-update/latest` | Desktop only: query the latest stable Release on GitHub |
+| PUT | `/api/config/data-root` | Desktop only: rewrite the `data_root` line in `config.toml`. Needs a server restart |
+| POST | `/api/config/open-folder` | Desktop only: open the config, data, or logs folder, or `llm.toml` / `keys.env` |
+| GET | `/api/config/raw` | List the config files that can be edited as text in the app |
+| GET | `/api/config/raw/:name` | Read the text and `digest` of one config file |
+| PUT | `/api/config/raw/:name` | Validate and save the text. Body `{ content, baseDigest }` |
 
 Notes on each endpoint:
 
@@ -4339,22 +4343,23 @@ Runtime export handling:
 
 **Errors**
 
-| Status | `code`                        | When                                                                                                |
-| ------ | ----------------------------- | --------------------------------------------------------------------------------------------------- |
-| 400    | —                             | `fromSnapshotId` is missing                                                                         |
-| 403    | `media_reference_forbidden`   | Media that is used has not been authorized for the parent session                                   |
-| 404    | `session_not_found`           | The parent session does not exist                                                                   |
-| 404    | `not_found`                   | The snapshot does not exist, or does not belong to this session                                     |
-| 404    | `world_not_found`             | The world linked to the session no longer exists                                                    |
-| 409    | `cursor_missing`              | The message that `messagesCursor` or the chat boundary points to is no longer in the parent session |
-| 409    | `snapshot_schema_missing`     | A state record cannot find its matching table structure                                             |
-| 409    | `dimension_provider_required` | The snapshot's dimension data belongs to a community plugin, and the child session cannot enable it |
-| 409    | `world_deleting`              | The world linked to the session is being deleted                                                    |
-| 429    | `rate_limit_exceeded`         | The fork rate limit was exceeded. Includes `Retry-After`                                            |
-| 500    | `fork_media_reference_failed` | Writing a media reference failed                                                                    |
-| 500    | `fork_failed`                 | The server cannot create a valid ID for the child session, so no child session is created           |
-| 500    | —                             | Another internal write failure                                                                      |
-| 503    | `session_busy`                | On a PostgreSQL deployment, waiting for the session lock timed out                                  |
+<!-- prettier-ignore -->
+| Status | `code` | When |
+| --- | --- | --- |
+| 400 | — | `fromSnapshotId` is missing |
+| 403 | `media_reference_forbidden` | Media that is used has not been authorized for the parent session |
+| 404 | `session_not_found` | The parent session does not exist |
+| 404 | `not_found` | The snapshot does not exist, or does not belong to this session |
+| 404 | `world_not_found` | The world linked to the session no longer exists |
+| 409 | `cursor_missing` | The message that `messagesCursor` or the chat boundary points to is no longer in the parent session |
+| 409 | `snapshot_schema_missing` | A state record cannot find its matching table structure |
+| 409 | `dimension_provider_required` | The snapshot's dimension data belongs to a community plugin, and the child session cannot enable it |
+| 409 | `world_deleting` | The world linked to the session is being deleted |
+| 429 | `rate_limit_exceeded` | The fork rate limit was exceeded. Includes `Retry-After` |
+| 500 | `fork_media_reference_failed` | Writing a media reference failed |
+| 500 | `fork_failed` | The server cannot create a valid ID for the child session, so no child session is created |
+| 500 | — | Another internal write failure |
+| 503 | `session_busy` | On a PostgreSQL deployment, waiting for the session lock timed out |
 
 Other rules:
 
@@ -5637,37 +5642,38 @@ Whether an event is forwarded to the `/api/actions` stream is decided by `COVEL_
 
 For the full classification table, see [protocol.md § 1. Event types](./protocol.md#1-event-types-covelevent).
 
-| Type                            | Category            | Description                                                                                                                                                            |
-| ------------------------------- | ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `narrative.delta`               | Narrative           | Increment of narrative text (streamed token by token)                                                                                                                  |
-| `narrative.completed`           | Narrative           | Narrative text is complete                                                                                                                                             |
-| `interaction.requested`         | Interaction         | Asks the player for input (form, choice, or confirmation)                                                                                                              |
-| `ui.rendered`                   | UI                  | Sent after a `ui.render` proposal is submitted                                                                                                                         |
-| `ui.part.update`                | UI                  | Status update for a UI part (one per part)                                                                                                                             |
-| `state.changed`                 | State               | Game state changed                                                                                                                                                     |
-| `state.snapshot.created`        | State               | Sent after a snapshot is written, by automatic, manual, or fork                                                                                                        |
-| `session.forked`                | Session             | Sent after `POST /api/sessions/:id/fork` creates the child session                                                                                                     |
-| `execution.started`             | Execution lifecycle | A turn starts running                                                                                                                                                  |
-| `runtime.started`               | Execution lifecycle | A single runtime starts running                                                                                                                                        |
-| `runtime.deferred`              | Execution lifecycle | A staged runtime was submitted with its original turn and moved to the background; the payload has `jobId/sourceTurnId`                                                |
-| `runtime.completed`             | Execution lifecycle | A single runtime finishes running                                                                                                                                      |
-| `runtime.failed`                | Execution lifecycle | A runtime fails                                                                                                                                                        |
-| `execution.completed`           | Execution lifecycle | A turn finishes running                                                                                                                                                |
-| `event.emitted`                 | Session lifecycle   | An event is emitted                                                                                                                                                    |
-| `asset.progress`                | Asset               | Progress of multimodal generation (`0..100`)                                                                                                                           |
-| `asset.generated`               | Asset               | Sent after an `asset.generate` proposal is submitted                                                                                                                   |
-| `world.dimensions.changed`      | World               | The author's dimension declaration changed (hot update); does not reset the session's current values                                                                   |
-| `dimensions.changed`            | State               | A committed current value changed; the payload has the provider, the public snapshot subset, and an optional settlement summary                                        |
-| `dimensions.settlement.changed` | State               | A pending receipt or a receipt with no value change; the payload has no rules or initial values                                                                        |
-| `plugin-data.changed`           | Plugin data         | Sent by every write path: `plugin-data-set`, DELETE, batch, and so on                                                                                                  |
-| `turn.suspended`                | Flow control        | Sent after `finalizeExecution` successfully commits a suspension record                                                                                                |
-| `turn.resumed`                  | Flow control        | Sent when `POST /api/sessions/:id/suspensions/:suspensionId/resume` restarts a runtime                                                                                 |
-| `proposal.failed`               | Flow control        | One proposal failed to submit. It is reported clearly and never dropped quietly; the submitter writes it straight to the action stream                                 |
-| `job-status.updated`            | Flow control        | A background function runtime reports progress through `ctx.progress`; append-only, forwarded to the action stream                                                     |
-| `context.pruned`                | System              | The prompt went over the slot budget and the history was cut hard; only goes to the trace (used by `/debug`), not the action stream                                    |
-| `context.compaction.failed`     | System              | History compaction failed, with the reason; only goes to the trace (used by `/debug`)                                                                                  |
-| `commit.fanout.failed`          | System              | The turn was committed, but some events sent after the commit could not be published; only goes to the trace, and the subscription stream also receives `system.reset` |
-| `error.occurred`                | System              | An execution error                                                                                                                                                     |
+<!-- prettier-ignore -->
+| Type | Category | Description |
+| --- | --- | --- |
+| `narrative.delta` | Narrative | Increment of narrative text (streamed token by token) |
+| `narrative.completed` | Narrative | Narrative text is complete |
+| `interaction.requested` | Interaction | Asks the player for input (form, choice, or confirmation) |
+| `ui.rendered` | UI | Sent after a `ui.render` proposal is submitted |
+| `ui.part.update` | UI | Status update for a UI part (one per part) |
+| `state.changed` | State | Game state changed |
+| `state.snapshot.created` | State | Sent after a snapshot is written, by automatic, manual, or fork |
+| `session.forked` | Session | Sent after `POST /api/sessions/:id/fork` creates the child session |
+| `execution.started` | Execution lifecycle | A turn starts running |
+| `runtime.started` | Execution lifecycle | A single runtime starts running |
+| `runtime.deferred` | Execution lifecycle | A staged runtime was submitted with its original turn and moved to the background; the payload has `jobId/sourceTurnId` |
+| `runtime.completed` | Execution lifecycle | A single runtime finishes running |
+| `runtime.failed` | Execution lifecycle | A runtime fails |
+| `execution.completed` | Execution lifecycle | A turn finishes running |
+| `event.emitted` | Session lifecycle | An event is emitted |
+| `asset.progress` | Asset | Progress of multimodal generation (`0..100`) |
+| `asset.generated` | Asset | Sent after an `asset.generate` proposal is submitted |
+| `world.dimensions.changed` | World | The author's dimension declaration changed (hot update); does not reset the session's current values |
+| `dimensions.changed` | State | A committed current value changed; the payload has the provider, the public snapshot subset, and an optional settlement summary |
+| `dimensions.settlement.changed` | State | A pending receipt or a receipt with no value change; the payload has no rules or initial values |
+| `plugin-data.changed` | Plugin data | Sent by every write path: `plugin-data-set`, DELETE, batch, and so on |
+| `turn.suspended` | Flow control | Sent after `finalizeExecution` successfully commits a suspension record |
+| `turn.resumed` | Flow control | Sent when `POST /api/sessions/:id/suspensions/:suspensionId/resume` restarts a runtime |
+| `proposal.failed` | Flow control | One proposal failed to submit. It is reported clearly and never dropped quietly; the submitter writes it straight to the action stream |
+| `job-status.updated` | Flow control | A background function runtime reports progress through `ctx.progress`; append-only, forwarded to the action stream |
+| `context.pruned` | System | The prompt went over the slot budget and the history was cut hard; only goes to the trace (used by `/debug`), not the action stream |
+| `context.compaction.failed` | System | History compaction failed, with the reason; only goes to the trace (used by `/debug`) |
+| `commit.fanout.failed` | System | The turn was committed, but some events sent after the commit could not be published; only goes to the trace, and the subscription stream also receives `system.reset` |
+| `error.occurred` | System | An execution error |
 
 ### Forwarded internal runtime events (included in `CovelEventType`)
 

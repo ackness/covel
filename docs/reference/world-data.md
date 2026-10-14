@@ -1606,30 +1606,31 @@ pnpm validate:world --strict --plugins ~/.covel/plugins ~/.covel/worlds/my-world
 
 **诊断一览：**
 
-| 诊断 code               | 级别             | 含义                                                                                                                            |
-| ----------------------- | ---------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| `manifest-invalid`      | error            | `world.yaml` 无法解析或不符合 schema                                                                                            |
-| `lore-missing`          | error            | 某个声明的语言（`defaultLocale` / `supportedLocales`）找不到正文文件                                                            |
-| `lore-fallback-missing` | warning          | 没有 `WORLD.md`，未声明语言的会话会拿到空的正文                                                                                 |
-| `lore-narrator-only`    | warning          | [narrator-only 标记](#只给叙事者的正文narrator-only)没有结束、没有开始、嵌套或写错；后面的正文会对玩家隐藏                      |
-| `unknown-plugin`        | error 或 warning | `pluginPolicy` / `pluginSettings` 引用的插件 ID 不在已扫描目录中                                                                |
-| `unknown-preset`        | error            | `pluginPolicy.presetId` 不是内置组合包，也不是这个世界 `packs` 里的 ID                                                          |
-| `unknown-setting`       | warning          | `pluginSettings` 的 key 不是该插件声明的设置项，值会被忽略                                                                      |
-| `invalid-setting`       | error            | `pluginSettings` 的值不符合该设置项声明的类型、范围或选项                                                                       |
-| `unprovided-contract`   | error 或 warning | `pluginPolicy.requires` 的契约没有提供者                                                                                        |
-| `unresolved-contract`   | error 或 warning | source 使用的数据契约没有任何已扫描插件接收                                                                                     |
-| `world-data`            | 与预检一致       | descriptor、source 顺序、文件读取、target、隐藏数据规则，以及按契约 schema 逐条校验的记录                                       |
-| `locale-file-name`      | error            | 语言文件的文件名只写了语言（`.en.`），没有写成世界声明的 locale（`.en-US.`）；这个文件不会被读取                                |
-| `locale-overlay`        | warning          | 语言文件里有一条译文无处安放（主文件没有这个 key 或 id，或它改了非文本的值），这条被忽略                                        |
-| `locale-script`         | warning          | 非中日韩语言的语言文件里留有中日韩文字：没翻译的文本，或从主文件照抄的触发词                                                    |
-| `edition-incomplete`    | warning          | `supportedLocales` 声明了某种语言，但该语言的版本缺少若干条译文；用这种语言开的会话会读到世界默认语言的原文                     |
-| `inline-locale-map`     | error            | 主文件里把文本写成了多语言对照；主文件只写一种语言，译文放进语言文件                                                            |
-| `data-file-unused`      | warning          | `data/`、`characters/` 或 `media/` 中的文件未被 source 或框架功能使用                                                           |
-| `attribute-reference`   | error            | 记录里指向角色属性的值（由接收插件的 `authoring.references` 声明）在世界的 `characterSchema` 里不存在、类型不对或超出范围       |
-| `model-hidden-field`    | warning          | 记录里有模型读不到的字段：名字以 `At` 结尾或叫 `timestamp`、取值是 ISO 时间；或者名字是 `id` / 以 `Id`、`Ids` 结尾、取值是 UUID |
-| `cover`                 | error            | `cover` 指向的文件应用无法显示                                                                                                  |
-| `theme-music`           | error            | `themeMusic` 指向的文件世界列表无法播放                                                                                         |
-| `prompt-size`           | warning          | 内容占用的提示词偏大，见下                                                                                                      |
+<!-- prettier-ignore -->
+| 诊断 code | 级别 | 含义 |
+| --- | --- | --- |
+| `manifest-invalid` | error | `world.yaml` 无法解析或不符合 schema |
+| `lore-missing` | error | 某个声明的语言（`defaultLocale` / `supportedLocales`）找不到正文文件 |
+| `lore-fallback-missing` | warning | 没有 `WORLD.md`，未声明语言的会话会拿到空的正文 |
+| `lore-narrator-only` | warning | [narrator-only 标记](#只给叙事者的正文narrator-only)没有结束、没有开始、嵌套或写错；后面的正文会对玩家隐藏 |
+| `unknown-plugin` | error 或 warning | `pluginPolicy` / `pluginSettings` 引用的插件 ID 不在已扫描目录中 |
+| `unknown-preset` | error | `pluginPolicy.presetId` 不是内置组合包，也不是这个世界 `packs` 里的 ID |
+| `unknown-setting` | warning | `pluginSettings` 的 key 不是该插件声明的设置项，值会被忽略 |
+| `invalid-setting` | error | `pluginSettings` 的值不符合该设置项声明的类型、范围或选项 |
+| `unprovided-contract` | error 或 warning | `pluginPolicy.requires` 的契约没有提供者 |
+| `unresolved-contract` | error 或 warning | source 使用的数据契约没有任何已扫描插件接收 |
+| `world-data` | 与预检一致 | descriptor、source 顺序、文件读取、target、隐藏数据规则，以及按契约 schema 逐条校验的记录 |
+| `locale-file-name` | error | 语言文件的文件名只写了语言（`.en.`），没有写成世界声明的 locale（`.en-US.`）；这个文件不会被读取 |
+| `locale-overlay` | warning | 语言文件里有一条译文无处安放（主文件没有这个 key 或 id，或它改了非文本的值），这条被忽略 |
+| `locale-script` | warning | 非中日韩语言的语言文件里留有中日韩文字：没翻译的文本，或从主文件照抄的触发词 |
+| `edition-incomplete` | warning | `supportedLocales` 声明了某种语言，但该语言的版本缺少若干条译文；用这种语言开的会话会读到世界默认语言的原文 |
+| `inline-locale-map` | error | 主文件里把文本写成了多语言对照；主文件只写一种语言，译文放进语言文件 |
+| `data-file-unused` | warning | `data/`、`characters/` 或 `media/` 中的文件未被 source 或框架功能使用 |
+| `attribute-reference` | error | 记录里指向角色属性的值（由接收插件的 `authoring.references` 声明）在世界的 `characterSchema` 里不存在、类型不对或超出范围 |
+| `model-hidden-field` | warning | 记录里有模型读不到的字段：名字以 `At` 结尾或叫 `timestamp`、取值是 ISO 时间；或者名字是 `id` / 以 `Id`、`Ids` 结尾、取值是 UUID |
+| `cover` | error | `cover` 指向的文件应用无法显示 |
+| `theme-music` | error | `themeMusic` 指向的文件世界列表无法播放 |
+| `prompt-size` | warning | 内容占用的提示词偏大，见下 |
 
 标为“error 或 warning”的三项：拼写接近某个已知 ID 时是 error，并提示 “Did you mean”。否则默认是 warning，因为提供者可能是没被扫描的社区插件。加 `--strict` 后一律是 error。`pnpm release:preflight` 对内置世界使用 `--strict`。
 

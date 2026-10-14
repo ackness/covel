@@ -40,6 +40,11 @@ reader-facing documentation, built into the documentation site by `apps/docs`
 
 ## Links and format
 
+- For long, frequently edited tables, put `<!-- prettier-ignore -->` immediately
+  above the header in both languages. Use one space around each cell, `---` in
+  separator cells (keep alignment colons), and no column padding. Keep existing
+  ignore comments so changing or adding a row changes only that row. Generated
+  tables under `reference/schema/` stay owned by the generator.
 - Link to another page of the site with a relative path ending in `.md`. Link to a page
   outside `docs/` with a relative path too: the site turns it into a link to
   the same file on GitHub, so the Markdown works in both places.

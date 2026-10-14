@@ -55,22 +55,23 @@ In an environment without a DeepSeek key (for example, cloud tests), set these t
 
 Schema: `packages/ai-provider/src/config/llm-schema.ts`.
 
-| Field                               | Required | Description                                                                                                                                                                                                                                                                     |
-| ----------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `provider`                          | ✅       | Provider name. It matches `{PROVIDER}_API_KEY` in `.env.llm` or `keys.env`. Roles that use the same `provider` share one key                                                                                                                                                    |
-| `model`                             | ✅       | Model ID. It is sent to the provider as written. An ID with a `/` is not changed                                                                                                                                                                                                |
-| `baseUrl`                           | —        | API address. You can leave it out for [built-in providers](#built-in-providers-and-protocols). Other providers must set it. A remote address must use https. A local address is allowed only in a `self` deployment, and it can use http                                        |
-| `protocol`                          | —        | API protocol. The values are listed in [Built-in providers and protocols](#built-in-providers-and-protocols). If you leave it out, a built-in provider uses its own protocol. Other providers use `openai-chat-v1`                                                              |
-| `tag`                               | —        | Capability tag: `text` / `image` / `embedding` / `speech` / `transcription` / `music` / `evaluation`. If you leave it out, the tag is inferred from `output` (`audio` becomes `speech`). A music role must set `music`                                                          |
-| `fallback`                          | —        | Name of the role to use when a call fails. The target role must have the same capability, and its key must already be set. Fallbacks cannot form a loop                                                                                                                         |
-| `input` / `output`                  | —        | Types of content that the model accepts and produces. If you leave them out, they are detected automatically (see [Where model capabilities come from](#where-model-capabilities-come-from)). `output` can be `text` / `image` / `audio` / `video` / `embedding` / `evaluation` |
-| `features`                          | —        | Model features (`function_calling`, `reasoning`, `vision`, and so on)                                                                                                                                                                                                           |
-| `contextWindow` / `maxOutputTokens` | —        | Overrides the context window and the maximum output in tokens                                                                                                                                                                                                                   |
-| `pricing`                           | —        | Price information. It is used only by the cost panel in `/debug`                                                                                                                                                                                                                |
-| `reasoningEffort`                   | —        | Thinking level (for example `disabled`, which turns thinking off). It is the default for this model. When Covel sends the request, it becomes each provider's own field. See [Thinking strength](#thinking-strength)                                                            |
-| `embeddingFormat`                   | —        | Request format for vector roles: `openai` (default) or `nemotron-multimodal`                                                                                                                                                                                                    |
-| `providerRequestMetadata`           | —        | Free-form key-value pairs sent with generation requests. A value given for a single call takes priority. Evaluation requests do not use it. The keys that choose the image and speech protocols also go here. See the section "Media wire routing keys" below                   |
-| `providerOptions`                   | —        | Native parameters grouped by provider or protocol. They are used only for text, object, and streaming calls. See [Provider parameters](#provider-parameters)                                                                                                                    |
+<!-- prettier-ignore -->
+| Field | Required | Description |
+| --- | --- | --- |
+| `provider` | ✅ | Provider name. It matches `{PROVIDER}_API_KEY` in `.env.llm` or `keys.env`. Roles that use the same `provider` share one key |
+| `model` | ✅ | Model ID. It is sent to the provider as written. An ID with a `/` is not changed |
+| `baseUrl` | — | API address. You can leave it out for [built-in providers](#built-in-providers-and-protocols). Other providers must set it. A remote address must use https. A local address is allowed only in a `self` deployment, and it can use http |
+| `protocol` | — | API protocol. The values are listed in [Built-in providers and protocols](#built-in-providers-and-protocols). If you leave it out, a built-in provider uses its own protocol. Other providers use `openai-chat-v1` |
+| `tag` | — | Capability tag: `text` / `image` / `embedding` / `speech` / `transcription` / `music` / `evaluation`. If you leave it out, the tag is inferred from `output` (`audio` becomes `speech`). A music role must set `music` |
+| `fallback` | — | Name of the role to use when a call fails. The target role must have the same capability, and its key must already be set. Fallbacks cannot form a loop |
+| `input` / `output` | — | Types of content that the model accepts and produces. If you leave them out, they are detected automatically (see [Where model capabilities come from](#where-model-capabilities-come-from)). `output` can be `text` / `image` / `audio` / `video` / `embedding` / `evaluation` |
+| `features` | — | Model features (`function_calling`, `reasoning`, `vision`, and so on) |
+| `contextWindow` / `maxOutputTokens` | — | Overrides the context window and the maximum output in tokens |
+| `pricing` | — | Price information. It is used only by the cost panel in `/debug` |
+| `reasoningEffort` | — | Thinking level (for example `disabled`, which turns thinking off). It is the default for this model. When Covel sends the request, it becomes each provider's own field. See [Thinking strength](#thinking-strength) |
+| `embeddingFormat` | — | Request format for vector roles: `openai` (default) or `nemotron-multimodal` |
+| `providerRequestMetadata` | — | Free-form key-value pairs sent with generation requests. A value given for a single call takes priority. Evaluation requests do not use it. The keys that choose the image and speech protocols also go here. See the section "Media wire routing keys" below |
+| `providerOptions` | — | Native parameters grouped by provider or protocol. They are used only for text, object, and streaming calls. See [Provider parameters](#provider-parameters) |
 
 Values such as `baseUrl` can read an environment variable, for example `baseUrl = "${MY_API_BASE}"`. When the file cannot be read, the error gives the line, the column and the key, never the value of an environment variable. The old fields `reasoning_effort` and `thinking` are no longer accepted. If you write them, loading fails with an error. Use `reasoningEffort` or `providerOptions` instead.
 
@@ -94,30 +95,31 @@ A provider and a protocol are two different things:
 
 Built-in providers come with their official address and default protocol. In `llm.toml`, you only need to write `provider` and `model`. In the settings screen, you can pick them from a list:
 
-| `provider`    | Name                     | Endpoint                                            | Protocol                  |
-| ------------- | ------------------------ | --------------------------------------------------- | ------------------------- |
-| `openai`      | OpenAI                   | `https://api.openai.com/v1`                         | `openai-chat-v1`          |
-| `anthropic`   | Anthropic                | `https://api.anthropic.com`                         | `anthropic-messages-v1`   |
-| `google`      | Google Gemini            | `https://generativelanguage.googleapis.com/v1beta`  | `google-generative-ai-v1` |
-| `deepseek`    | DeepSeek                 | `https://api.deepseek.com`                          | `openai-chat-v1`          |
-| `dashscope`   | Alibaba DashScope (Qwen) | `https://dashscope.aliyuncs.com/compatible-mode/v1` | `openai-chat-v1`          |
-| `xai`         | xAI                      | `https://api.x.ai/v1`                               | `openai-chat-v1`          |
-| `mistral`     | Mistral AI               | `https://api.mistral.ai/v1`                         | `openai-chat-v1`          |
-| `groq`        | Groq                     | `https://api.groq.com/openai/v1`                    | `openai-chat-v1`          |
-| `together`    | Together AI              | `https://api.together.xyz/v1`                       | `openai-chat-v1`          |
-| `fireworks`   | Fireworks AI             | `https://api.fireworks.ai/inference/v1`             | `openai-chat-v1`          |
-| `moonshot`    | Moonshot AI (Kimi)       | `https://api.moonshot.cn/v1`                        | `openai-chat-v1`          |
-| `zhipu`       | Zhipu AI (GLM)           | `https://open.bigmodel.cn/api/paas/v4`              | `openai-chat-v1`          |
-| `siliconflow` | SiliconFlow              | `https://api.siliconflow.cn/v1`                     | `openai-chat-v1`          |
-| `volcengine`  | Volcengine Ark (Doubao)  | `https://ark.cn-beijing.volces.com/api/v3`          | `openai-chat-v1`          |
-| `openrouter`  | OpenRouter               | `https://openrouter.ai/api/v1`                      | `openai-chat-v1`          |
-| `vercel`      | Vercel AI Gateway        | `https://ai-gateway.vercel.sh/v1`                   | `openai-chat-v1`          |
-| `typesafe`    | TypeSafe                 | `https://api.typesafe.ai/v1`                        | `typesafe-systemone-v1`   |
-| `ollama`      | Ollama (local)           | `http://localhost:11434/v1`                         | `openai-chat-v1`          |
-| `lmstudio`    | LM Studio (local)        | `http://localhost:1234/v1`                          | `openai-chat-v1`          |
-| `llamacpp`    | llama.cpp server (local) | `http://localhost:8080/v1`                          | `openai-chat-v1`          |
-| `vllm`        | vLLM (local)             | `http://localhost:8000/v1`                          | `openai-chat-v1`          |
-| `litellm`     | LiteLLM Proxy (local)    | `http://localhost:4000/v1`                          | `openai-chat-v1`          |
+<!-- prettier-ignore -->
+| `provider` | Name | Endpoint | Protocol |
+| --- | --- | --- | --- |
+| `openai` | OpenAI | `https://api.openai.com/v1` | `openai-chat-v1` |
+| `anthropic` | Anthropic | `https://api.anthropic.com` | `anthropic-messages-v1` |
+| `google` | Google Gemini | `https://generativelanguage.googleapis.com/v1beta` | `google-generative-ai-v1` |
+| `deepseek` | DeepSeek | `https://api.deepseek.com` | `openai-chat-v1` |
+| `dashscope` | Alibaba DashScope (Qwen) | `https://dashscope.aliyuncs.com/compatible-mode/v1` | `openai-chat-v1` |
+| `xai` | xAI | `https://api.x.ai/v1` | `openai-chat-v1` |
+| `mistral` | Mistral AI | `https://api.mistral.ai/v1` | `openai-chat-v1` |
+| `groq` | Groq | `https://api.groq.com/openai/v1` | `openai-chat-v1` |
+| `together` | Together AI | `https://api.together.xyz/v1` | `openai-chat-v1` |
+| `fireworks` | Fireworks AI | `https://api.fireworks.ai/inference/v1` | `openai-chat-v1` |
+| `moonshot` | Moonshot AI (Kimi) | `https://api.moonshot.cn/v1` | `openai-chat-v1` |
+| `zhipu` | Zhipu AI (GLM) | `https://open.bigmodel.cn/api/paas/v4` | `openai-chat-v1` |
+| `siliconflow` | SiliconFlow | `https://api.siliconflow.cn/v1` | `openai-chat-v1` |
+| `volcengine` | Volcengine Ark (Doubao) | `https://ark.cn-beijing.volces.com/api/v3` | `openai-chat-v1` |
+| `openrouter` | OpenRouter | `https://openrouter.ai/api/v1` | `openai-chat-v1` |
+| `vercel` | Vercel AI Gateway | `https://ai-gateway.vercel.sh/v1` | `openai-chat-v1` |
+| `typesafe` | TypeSafe | `https://api.typesafe.ai/v1` | `typesafe-systemone-v1` |
+| `ollama` | Ollama (local) | `http://localhost:11434/v1` | `openai-chat-v1` |
+| `lmstudio` | LM Studio (local) | `http://localhost:1234/v1` | `openai-chat-v1` |
+| `llamacpp` | llama.cpp server (local) | `http://localhost:8080/v1` | `openai-chat-v1` |
+| `vllm` | vLLM (local) | `http://localhost:8000/v1` | `openai-chat-v1` |
+| `litellm` | LiteLLM Proxy (local) | `http://localhost:4000/v1` | `openai-chat-v1` |
 
 ```toml
 [covel.story]

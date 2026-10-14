@@ -99,20 +99,21 @@ runtime:
 Extract facts supported by runtime-inputs.narrative.value, then call save-facts.
 ```
 
-| Root field                                      | Meaning                                                                                                                                                          |
-| ----------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `id`, `kind`                                    | Package identity. `kind` is `core` or `plugin`.                                                                                                                  |
-| `version`, `displayName`, `description`, `tags` | Metadata. `role:*` tags do not drive any business logic.                                                                                                         |
-| `covel`                                         | The range of host versions the package works with, such as `">=0.0.45"`. A host outside that range does not install or load the package.                         |
-| `author`, `license`, `homepage`                 | Author information, shown only for display. See [Author information](#author-information).                                                                       |
-| `provides`                                      | Versioned contract strings, or `{contract, default: true}`.                                                                                                      |
-| `requires`                                      | Required contracts. The resolver adds a provider for each one.                                                                                                   |
-| `optional`                                      | Optional contracts. They do not force a provider to be activated.                                                                                                |
-| `conflicts`                                     | Makes the package mutually exclusive with other plugins that provide these contracts.                                                                            |
-| `contracts`                                     | Schema declarations for contracts, as `{contractId: {schema: ./path.json}}`. Contracts received by a `contributes.data` namespace do not need to be listed here. |
-| `entry`                                         | The path, relative to the package root, of the module that does the registration.                                                                                |
-| `contributes`                                   | Package-level contributions. See [contributes fields](#contributes-fields).                                                                                      |
-| `runtime`                                       | An optional declaration of a single runtime.                                                                                                                     |
+<!-- prettier-ignore -->
+| Root field | Meaning |
+| --- | --- |
+| `id`, `kind` | Package identity. `kind` is `core` or `plugin`. |
+| `version`, `displayName`, `description`, `tags` | Metadata. `role:*` tags do not drive any business logic. |
+| `covel` | The range of host versions the package works with, such as `">=0.0.45"`. A host outside that range does not install or load the package. |
+| `author`, `license`, `homepage` | Author information, shown only for display. See [Author information](#author-information). |
+| `provides` | Versioned contract strings, or `{contract, default: true}`. |
+| `requires` | Required contracts. The resolver adds a provider for each one. |
+| `optional` | Optional contracts. They do not force a provider to be activated. |
+| `conflicts` | Makes the package mutually exclusive with other plugins that provide these contracts. |
+| `contracts` | Schema declarations for contracts, as `{contractId: {schema: ./path.json}}`. Contracts received by a `contributes.data` namespace do not need to be listed here. |
+| `entry` | The path, relative to the package root, of the module that does the registration. |
+| `contributes` | Package-level contributions. See [contributes fields](#contributes-fields). |
+| `runtime` | An optional declaration of a single runtime. |
 
 A contract is a versioned name, such as `narrative-engine@1`. Plugins find each other through it, not through plugin IDs. A few rules:
 
@@ -124,21 +125,22 @@ A contract is a versioned name, such as `narrative-engine@1`. Plugins find each 
 
 ### contributes fields
 
-| `contributes` field | Registration or resource it maps to                                                |
-| ------------------- | ---------------------------------------------------------------------------------- |
-| `tools`             | Tool names passed to `registerTool`                                                |
-| `actions`           | Action names passed to `registerRpc`                                               |
-| `commands`          | Player command metadata. Its `action` must be listed in `actions`.                 |
-| `services`          | Contract IDs passed to `registerService`                                           |
-| `extensions`        | `{point, id}` pairs passed to `provideExtension`                                   |
-| `hooks`             | `{event, enforce}` declarations for hooks. See [Hooks](./hooks.md).                |
-| `wires`, `forms`    | The matching registration IDs                                                      |
-| `events`            | Plugin event contracts                                                             |
-| `settings`          | Player settings. The runtime reads them through `ctx.userSettings`.                |
-| `data`              | The schema, version, accepts, and search settings for this plugin's data namespace |
-| `ui`                | Paths, relative to the package root, of the `right/message/left` UI spec files     |
-| `worldProjections`  | Declarations of world data projections                                             |
-| `prompt`            | Static prompt sections                                                             |
+<!-- prettier-ignore -->
+| `contributes` field | Registration or resource it maps to |
+| --- | --- |
+| `tools` | Tool names passed to `registerTool` |
+| `actions` | Action names passed to `registerRpc` |
+| `commands` | Player command metadata. Its `action` must be listed in `actions`. |
+| `services` | Contract IDs passed to `registerService` |
+| `extensions` | `{point, id}` pairs passed to `provideExtension` |
+| `hooks` | `{event, enforce}` declarations for hooks. See [Hooks](./hooks.md). |
+| `wires`, `forms` | The matching registration IDs |
+| `events` | Plugin event contracts |
+| `settings` | Player settings. The runtime reads them through `ctx.userSettings`. |
+| `data` | The schema, version, accepts, and search settings for this plugin's data namespace |
+| `ui` | Paths, relative to the package root, of the `right/message/left` UI spec files |
+| `worldProjections` | Declarations of world data projections |
+| `prompt` | Static prompt sections |
 
 Registrations in `entry` and declarations in the manifest are checked in both directions. If something is registered but not declared, or declared but not implemented, loading fails. Package-level contributions belong only to the root file. They are not merged with the fields of a child runtime.
 
@@ -807,31 +809,32 @@ Output of the first command:
 
 Below are all the plugins that ship with Covel from [plugins/](../../../plugins/), excluding `_archive/`. `core` is basic functionality, and `plugin` is an optional gameplay feature. In the "runtime" column, "inline" means there is only the one runtime in the root file, and "none" means the plugin has only an entry, extensions, or UI.
 
-| ID                                                                    | Name                  | `kind`   | Contracts provided                                   | runtime                                                                                      | What it does                                                                                                                                      |
-| --------------------------------------------------------------------- | --------------------- | -------- | ---------------------------------------------------- | -------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [affinity](../../../plugins/affinity/README.md)                       | Affinity              | `plugin` | none                                                 | inline                                                                                       | Tracks numeric affinity between the player and NPCs. The right panel shows the score, the tier, and changes.                                      |
-| [branch-reply](../../../plugins/branch-reply/README.md)               | Reply Variants        | `plugin` | `branch-reply@1`                                     | inline                                                                                       | Offers several replies the player can switch between.                                                                                             |
-| [char-creator](../../../plugins/char-creator/README.md)               | Character Creator     | `core`   | `character-creation@1` (default provider)            | `player-init`, `character-tracker`                                                           | Creates the protagonist, and records important changes to characters in the story.                                                                |
-| [character-blueprint](../../../plugins/character-blueprint/README.md) | Character Profiles    | `plugin` | `character-blueprint@1`, `character-presence@1`      | `presence`                                                                                   | Stores the character profiles a world presets, along with avatars, portraits, and voices.                                                         |
-| [chat-mode-narrator](../../../plugins/chat-mode-narrator/README.md)   | Dialogue Narrator     | `plugin` | `narrative-engine@1`                                 | inline                                                                                       | Makes the story read more like a conversation between characters.                                                                                 |
-| [codex](../../../plugins/codex/README.md)                             | Codex                 | `plugin` | none                                                 | inline                                                                                       | Organizes newly found places, people, items, and rumors.                                                                                          |
-| [core-quest](../../../plugins/core-quest/README.md)                   | Quest Log             | `plugin` | `world-ir.vocabulary@1`                              | `log`, `vocabulary`                                                                          | Registers quests from the narrative and moves them forward.                                                                                       |
-| [dice-check](../../../plugins/dice-check/README.md)                   | Dice Check            | `plugin` | `action-check@1`                                     | `roller`, `recorder`                                                                         | Rolls dice for actions that carry a risk of failure.                                                                                              |
-| [guide](../../../plugins/guide/README.md)                             | Action Suggestions    | `plugin` | `scene-prompts@1`                                    | inline                                                                                       | After each story turn, reviews what has happened so far and offers short actions the player can use as they are.                                  |
-| [history-compaction](../../../plugins/history-compaction/README.md)   | History Compaction    | `core`   | `history.compact@2` (default provider)               | none                                                                                         | Organizes earlier conversation into segmented summaries.                                                                                          |
-| [inventory](../../../plugins/inventory/README.md)                     | Inventory             | `plugin` | `world-ir.vocabulary@1`                              | `ledger`, `vocabulary`                                                                       | Records items gained and lost, and changes of equipment.                                                                                          |
-| [living-world-rules](../../../plugins/living-world-rules/README.md)   | World Rules           | `plugin` | `living-world-rules@1`, `world-info@1`               | none                                                                                         | Shows the rules in a world package that apply over the long term, and keeps the narrative to them.                                                |
-| [memory](../../../plugins/memory/README.md)                           | Story Memory          | `core`   | none                                                 | `extract`                                                                                    | Remembers the plot, scenes, character relationships, and the protagonist's state.                                                                 |
-| [narrator](../../../plugins/narrator/README.md)                       | Narrator              | `core`   | `narrative-engine@1` (default provider)              | inline                                                                                       | Advances the story based on the player's actions.                                                                                                 |
-| [npc-graph](../../../plugins/npc-graph/README.md)                     | Relationship Graph    | `plugin` | `npc-graph@1`, `graph-rag@1`                         | `extractor`, `rag-retriever`                                                                 | Records the relationships between people.                                                                                                         |
-| [pregame](../../../plugins/pregame/README.md)                         | Pre-Game Setup        | `core`   | `session.opening@1`                                  | inline                                                                                       | Reads the world material at the start and prepares the first adventure.                                                                           |
-| [scene-stage](../../../plugins/scene-stage/README.md)                 | Scene Stage           | `plugin` | `stage-direction@1`, `scene-stage@1`, `scene-cast@1` | `seed`, `direction`, `resolver`, `cast`                                                      | Tracks the current scene, day and night, and the characters present, for use by the stage background and portraits.                               |
-| [soundtrack](../../../plugins/soundtrack/README.md)                   | Soundtrack            | `plugin` | none                                                 | `scene`, `cue`                                                                               | Plays the background music a world includes, and switches it with the scene and mood.                                                             |
-| [story-events](../../../plugins/story-events/README.md)               | Hidden Story Events   | `plugin` | `story-event-cue@1`, `story-event.plan@1`            | `intake`, `evaluate`, `plot`                                                                 | Hides story events that a world package declares until their conditions are met. When they are met, hands them to the narrative to be played out. |
-| [tabletop-rules](../../../plugins/tabletop-rules/README.md)           | Tabletop Rules        | `plugin` | `tabletop-check@1`                                   | `creation`, `check`                                                                          | Assigns attribute points at the start, and settles attribute checks with code.                                                                    |
-| [world-init](../../../plugins/world-init/README.md)                   | World Dimensions      | `core`   | `world-data-provider@1`, `world.dimensions@1`        | `schema-gen`, `dimension-context`, `dimension-tracker`, `dimension-clock`, `edit-dimensions` | Initializes character attributes and world dimensions, and keeps maintaining them.                                                                |
-| [world-ir](../../../plugins/world-ir/README.md)                       | World Fact Extraction | `plugin` | `world-ir-provider@1`                                | inline                                                                                       | Extracts characters, relationships, events, and clues from this turn's story, for other plugins to reuse.                                         |
-| [world-time](../../../plugins/world-time/README.md)                   | World Time            | `core`   | `world-time-evolution@1`, `world-time-context@1`     | `context`, `advance`                                                                         | Keeps the date, the time of day, and the direction time flows, and settles time changes from this turn's story.                                   |
+<!-- prettier-ignore -->
+| ID | Name | `kind` | Contracts provided | runtime | What it does |
+| --- | --- | --- | --- | --- | --- |
+| [affinity](../../../plugins/affinity/README.md) | Affinity | `plugin` | none | inline | Tracks numeric affinity between the player and NPCs. The right panel shows the score, the tier, and changes. |
+| [branch-reply](../../../plugins/branch-reply/README.md) | Reply Variants | `plugin` | `branch-reply@1` | inline | Offers several replies the player can switch between. |
+| [char-creator](../../../plugins/char-creator/README.md) | Character Creator | `core` | `character-creation@1` (default provider) | `player-init`, `character-tracker` | Creates the protagonist, and records important changes to characters in the story. |
+| [character-blueprint](../../../plugins/character-blueprint/README.md) | Character Profiles | `plugin` | `character-blueprint@1`, `character-presence@1` | `presence` | Stores the character profiles a world presets, along with avatars, portraits, and voices. |
+| [chat-mode-narrator](../../../plugins/chat-mode-narrator/README.md) | Dialogue Narrator | `plugin` | `narrative-engine@1` | inline | Makes the story read more like a conversation between characters. |
+| [codex](../../../plugins/codex/README.md) | Codex | `plugin` | none | inline | Organizes newly found places, people, items, and rumors. |
+| [core-quest](../../../plugins/core-quest/README.md) | Quest Log | `plugin` | `world-ir.vocabulary@1` | `log`, `vocabulary` | Registers quests from the narrative and moves them forward. |
+| [dice-check](../../../plugins/dice-check/README.md) | Dice Check | `plugin` | `action-check@1` | `roller`, `recorder` | Rolls dice for actions that carry a risk of failure. |
+| [guide](../../../plugins/guide/README.md) | Action Suggestions | `plugin` | `scene-prompts@1` | inline | After each story turn, reviews what has happened so far and offers short actions the player can use as they are. |
+| [history-compaction](../../../plugins/history-compaction/README.md) | History Compaction | `core` | `history.compact@2` (default provider) | none | Organizes earlier conversation into segmented summaries. |
+| [inventory](../../../plugins/inventory/README.md) | Inventory | `plugin` | `world-ir.vocabulary@1` | `ledger`, `vocabulary` | Records items gained and lost, and changes of equipment. |
+| [living-world-rules](../../../plugins/living-world-rules/README.md) | World Rules | `plugin` | `living-world-rules@1`, `world-info@1` | none | Shows the rules in a world package that apply over the long term, and keeps the narrative to them. |
+| [memory](../../../plugins/memory/README.md) | Story Memory | `core` | none | `extract` | Remembers the plot, scenes, character relationships, and the protagonist's state. |
+| [narrator](../../../plugins/narrator/README.md) | Narrator | `core` | `narrative-engine@1` (default provider) | inline | Advances the story based on the player's actions. |
+| [npc-graph](../../../plugins/npc-graph/README.md) | Relationship Graph | `plugin` | `npc-graph@1`, `graph-rag@1` | `extractor`, `rag-retriever` | Records the relationships between people. |
+| [pregame](../../../plugins/pregame/README.md) | Pre-Game Setup | `core` | `session.opening@1` | inline | Reads the world material at the start and prepares the first adventure. |
+| [scene-stage](../../../plugins/scene-stage/README.md) | Scene Stage | `plugin` | `stage-direction@1`, `scene-stage@1`, `scene-cast@1` | `seed`, `direction`, `resolver`, `cast` | Tracks the current scene, day and night, and the characters present, for use by the stage background and portraits. |
+| [soundtrack](../../../plugins/soundtrack/README.md) | Soundtrack | `plugin` | none | `scene`, `cue` | Plays the background music a world includes, and switches it with the scene and mood. |
+| [story-events](../../../plugins/story-events/README.md) | Hidden Story Events | `plugin` | `story-event-cue@1`, `story-event.plan@1` | `intake`, `evaluate`, `plot` | Hides story events that a world package declares until their conditions are met. When they are met, hands them to the narrative to be played out. |
+| [tabletop-rules](../../../plugins/tabletop-rules/README.md) | Tabletop Rules | `plugin` | `tabletop-check@1` | `creation`, `check` | Assigns attribute points at the start, and settles attribute checks with code. |
+| [world-init](../../../plugins/world-init/README.md) | World Dimensions | `core` | `world-data-provider@1`, `world.dimensions@1` | `schema-gen`, `dimension-context`, `dimension-tracker`, `dimension-clock`, `edit-dimensions` | Initializes character attributes and world dimensions, and keeps maintaining them. |
+| [world-ir](../../../plugins/world-ir/README.md) | World Fact Extraction | `plugin` | `world-ir-provider@1` | inline | Extracts characters, relationships, events, and clues from this turn's story, for other plugins to reuse. |
+| [world-time](../../../plugins/world-time/README.md) | World Time | `core` | `world-time-evolution@1`, `world-time-context@1` | `context`, `advance` | Keeps the date, the time of day, and the direction time flows, and settles time changes from this turn's story. |
 
 The details of each plugin are in its own `PLUGIN.md` and README.
 
@@ -839,21 +842,22 @@ The details of each plugin are in its own `PLUGIN.md` and README.
 
 To see a real example of a given pattern, look here:
 
-| Need                                     | Built-in example                                                      |
-| ---------------------------------------- | --------------------------------------------------------------------- |
-| Narrative provider and user settings     | [narrator](../../../plugins/narrator/PLUGIN.md)                       |
-| Local tools and UI messages              | [guide](../../../plugins/guide/PLUGIN.md)                             |
-| World Model initialization               | [world-init](../../../plugins/world-init/PLUGIN.md)                   |
-| Character creation and tracking          | [char-creator](../../../plugins/char-creator/PLUGIN.md)               |
-| Function runtime and public output       | [world-time](../../../plugins/world-time/PLUGIN.md)                   |
-| History transform extension              | [branch-reply](../../../plugins/branch-reply/PLUGIN.md)               |
-| State summary slot                       | [core-quest](../../../plugins/core-quest/PLUGIN.md)                   |
-| Memory definitions and extraction        | [memory](../../../plugins/memory/PLUGIN.md)                           |
-| History compaction extension             | [history-compaction](../../../plugins/history-compaction/PLUGIN.md)   |
-| Stage and media records                  | [scene-stage](../../../plugins/scene-stage/PLUGIN.md)                 |
-| Background music scheduling              | [soundtrack](../../../plugins/soundtrack/PLUGIN.md)                   |
+<!-- prettier-ignore -->
+| Need | Built-in example |
+| --- | --- |
+| Narrative provider and user settings | [narrator](../../../plugins/narrator/PLUGIN.md) |
+| Local tools and UI messages | [guide](../../../plugins/guide/PLUGIN.md) |
+| World Model initialization | [world-init](../../../plugins/world-init/PLUGIN.md) |
+| Character creation and tracking | [char-creator](../../../plugins/char-creator/PLUGIN.md) |
+| Function runtime and public output | [world-time](../../../plugins/world-time/PLUGIN.md) |
+| History transform extension | [branch-reply](../../../plugins/branch-reply/PLUGIN.md) |
+| State summary slot | [core-quest](../../../plugins/core-quest/PLUGIN.md) |
+| Memory definitions and extraction | [memory](../../../plugins/memory/PLUGIN.md) |
+| History compaction extension | [history-compaction](../../../plugins/history-compaction/PLUGIN.md) |
+| Stage and media records | [scene-stage](../../../plugins/scene-stage/PLUGIN.md) |
+| Background music scheduling | [soundtrack](../../../plugins/soundtrack/PLUGIN.md) |
 | World data entering the narrative prompt | [character-blueprint](../../../plugins/character-blueprint/PLUGIN.md) |
-| Hidden world data and planning           | [story-events](../../../plugins/story-events/PLUGIN.md)               |
+| Hidden world data and planning | [story-events](../../../plugins/story-events/PLUGIN.md) |
 
 ### Reserved data namespaces
 

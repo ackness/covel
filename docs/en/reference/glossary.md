@@ -8,56 +8,58 @@ Entries are in English alphabetical order. Each entry first says what the term i
 
 Each English term has only one Chinese term. The Chinese docs, the UI text, and the Chinese prompts (`*.zh.md`) all use the terms in this table.
 
-| Term                  | Chinese      | Notes                                                                                                              |
-| --------------------- | ------------ | ------------------------------------------------------------------------------------------------------------------ |
-| Alias                 | 别名         | Another name for the same character (`aliases`). It is not a compatibility name for a field or ID.                 |
-| Binding               | 绑定         |                                                                                                                    |
-| Capability            | 能力标签     | The `tag` of a model route (`text`, `image`, and so on). Plugins are found by **Contract**, not by capability tag. |
-| Collection            | 合集         |                                                                                                                    |
-| Contract              | 契约         | A versioned ID, for example `narrative-engine@1`.                                                                  |
-| Credits               | 作者信息     | The `author`, `license`, and `homepage` fields of a package.                                                       |
-| Kernel                | 内核         |                                                                                                                    |
-| Pack                  | 玩法包       |                                                                                                                    |
-| PluginType            | 插件类型     |                                                                                                                    |
-| Preset                | 预设         |                                                                                                                    |
-| Proposal              | 提案         |                                                                                                                    |
-| Provider              | 提供商       |                                                                                                                    |
-| Runtime               | runtime      | Kept in English. It means one execution unit in a manifest, not the general word "runtime".                        |
-| Runtime manifest      | runtime 清单 |                                                                                                                    |
-| Segment               | 提示词段     |                                                                                                                    |
-| Server-scoped setting | 服务端设置   | A setting with `scope: "server"`. All other settings are per-device settings.                                      |
-| Session               | 会话         |                                                                                                                    |
-| Slot                  | 槽位         | In the settings UI it is called "model role".                                                                      |
-| Trigger mode          | 触发模式     |                                                                                                                    |
-| Turn                  | 回合         | "This turn" is 本回合 in Chinese.                                                                                  |
-| World                 | 世界         | A world's installation package is called a "world package".                                                        |
+<!-- prettier-ignore -->
+| Term | Chinese | Notes |
+| --- | --- | --- |
+| Alias | 别名 | Another name for the same character (`aliases`). It is not a compatibility name for a field or ID. |
+| Binding | 绑定 |  |
+| Capability | 能力标签 | The `tag` of a model route (`text`, `image`, and so on). Plugins are found by **Contract**, not by capability tag. |
+| Collection | 合集 |  |
+| Contract | 契约 | A versioned ID, for example `narrative-engine@1`. |
+| Credits | 作者信息 | The `author`, `license`, and `homepage` fields of a package. |
+| Kernel | 内核 |  |
+| Pack | 玩法包 |  |
+| PluginType | 插件类型 |  |
+| Preset | 预设 |  |
+| Proposal | 提案 |  |
+| Provider | 提供商 |  |
+| Runtime | runtime | Kept in English. It means one execution unit in a manifest, not the general word "runtime". |
+| Runtime manifest | runtime 清单 |  |
+| Segment | 提示词段 |  |
+| Server-scoped setting | 服务端设置 | A setting with `scope: "server"`. All other settings are per-device settings. |
+| Session | 会话 |  |
+| Slot | 槽位 | In the settings UI it is called "model role". |
+| Trigger mode | 触发模式 |  |
+| Turn | 回合 | "This turn" is 本回合 in Chinese. |
+| World | 世界 | A world's installation package is called a "world package". |
 
 ## Prompt vocabulary
 
 These are the words used in prompt bodies to describe what a runtime reads and writes. Use one word for each thing: once you use `turn`, do not write `round`, and once you use `record`, do not write `row`. For how to write prompts, see [prompt style](../plugins/prompt-style.md).
 
-| Term             | Chinese  | Meaning                                                                       | Do not use these words for it                |
-| ---------------- | -------- | ----------------------------------------------------------------------------- | -------------------------------------------- |
-| turn             | 回合     | One message from the player, and everything each runtime does for it          | round                                        |
-| narrative        | 叙事     | The story text that the narrative runtime writes in this turn                 | story text, prose, the output                |
-| player           | 玩家     | The person who plays the game                                                 | user                                         |
-| player character | 玩家角色 | The character the player controls                                             | protagonist, hero, PC                        |
-| NPC              | NPC      | A character that the player does not control                                  |                                              |
-| character        | 角色     | A player character or an NPC                                                  |                                              |
-| tool             | 工具     | A function that a runtime can call                                            | function, API                                |
-| call             | 调用     | Use a tool once                                                               | invoke, run, trigger                         |
-| record           | 记录     | One item stored in plugin data                                                | row, object                                  |
-| entry            | 条目     | An item in a list that the player reads, for example a codex entry            | item (item means an object in the inventory) |
-| item             | 物品     | Something a character carries                                                 |                                              |
-| dimension        | 维度     | A piece of world state that the world defines and that changes with the story | attribute (attribute is for characters)      |
-| attribute        | 属性     | A numeric or text field of a character                                        | stat                                         |
-| world rule       | 世界规则 | A world rule included in the prompt                                           | lore entry                                   |
-| quest            | 任务     | A goal that the story gives the player                                        | mission, task                                |
-| event            | 事件     | Something that happens in the narrative, or a signal passed between runtimes  |                                              |
-| check            | 判定     | Roll dice against a difficulty                                                | test, roll (roll means throwing one die)     |
-| scene            | 场景     | The place and time where the narrative is now                                 |                                              |
-| inject           | 注入     | The framework puts a piece of data into the prompt                            | insert, provide                              |
-| block            | 区块     | A tagged section of the prompt, for example `<existing-quests>`               | section (section means a heading subsection) |
+<!-- prettier-ignore -->
+| Term | Chinese | Meaning | Do not use these words for it |
+| --- | --- | --- | --- |
+| turn | 回合 | One message from the player, and everything each runtime does for it | round |
+| narrative | 叙事 | The story text that the narrative runtime writes in this turn | story text, prose, the output |
+| player | 玩家 | The person who plays the game | user |
+| player character | 玩家角色 | The character the player controls | protagonist, hero, PC |
+| NPC | NPC | A character that the player does not control |  |
+| character | 角色 | A player character or an NPC |  |
+| tool | 工具 | A function that a runtime can call | function, API |
+| call | 调用 | Use a tool once | invoke, run, trigger |
+| record | 记录 | One item stored in plugin data | row, object |
+| entry | 条目 | An item in a list that the player reads, for example a codex entry | item (item means an object in the inventory) |
+| item | 物品 | Something a character carries |  |
+| dimension | 维度 | A piece of world state that the world defines and that changes with the story | attribute (attribute is for characters) |
+| attribute | 属性 | A numeric or text field of a character | stat |
+| world rule | 世界规则 | A world rule included in the prompt | lore entry |
+| quest | 任务 | A goal that the story gives the player | mission, task |
+| event | 事件 | Something that happens in the narrative, or a signal passed between runtimes |  |
+| check | 判定 | Roll dice against a difficulty | test, roll (roll means throwing one die) |
+| scene | 场景 | The place and time where the narrative is now |  |
+| inject | 注入 | The framework puts a piece of data into the prompt | insert, provide |
+| block | 区块 | A tagged section of the prompt, for example `<existing-quests>` | section (section means a heading subsection) |
 
 ## Alias
 

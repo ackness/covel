@@ -130,30 +130,31 @@ session 建立 → GET /api/ui-specs?sessionId=<id>
 
 第二列是面板 ID，也就是 UI spec 里的 `id`。内置插件的每个右侧和左侧面板都必须列在这张表里（有测试检查）。
 
-| 插件/runtime                           | 面板 ID             | 图标               | group         | 数据 namespace     | 描述                                                                                                                                                                   |
-| -------------------------------------- | ------------------- | ------------------ | ------------- | ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| affinity                               | affinity            | heart              | affinity      | affinity           | 好感度面板（玩家↔NPC score 双向条 + tier 徽标 + 最近变化原因）                                                                                                         |
-| char-creator                           | character           | users              | character     | session.characters | 角色列表（类型由当前角色 schema 定义）                                                                                                                                 |
-| character-blueprint                    | character-blueprint | id-card            | character     | blueprints         | 预设角色（世界作者预置的登场角色模板，只读；作为 `character` 组的子 Tab）                                                                                              |
-| character-blueprint                    | character-presence  | image              | character-art | presence           | 角色立绘画廊（`PortraitGallery`，只读展示 + 玩家可上传替换头像，`alwaysRender`）                                                                                       |
-| codex                                  | codex               | book-open          | codex         | entries            | 知识图鉴                                                                                                                                                               |
-| core-quest                             | core-quest          | scroll-text        | core-quest    | quests             | 任务日志（进行中含 objectives 勾选清单 / 已完成 / 已失败 分组）                                                                                                        |
-| dice-check                             | dice-check-panel    | dices              | （无）        | checks             | 判定记录（倒序回执列表：骰式 / 成败配色 / critical 强调，`alwaysRender`）                                                                                              |
-| inventory                              | inventory           | backpack           | inventory     | items              | 行囊（已装备分组 + 背包列表，数量徽标 + tags pill，`alwaysRender`）                                                                                                    |
-| dashscope-image-gen · openai-image-gen | `<plugin>-gallery`  | image              | image-studio  | images             | 剧情插图画廊（`ImageGallery`，`alwaysRender`）；两个图像插件各一套，组 ID 都是 `image-studio`；它们都提供单提供者扩展点 `media.image-flow@1`，同一会话只能启用其中一个 |
-| dashscope-image-gen · openai-image-gen | `<plugin>-jobs`     | loader             | image-studio  | \_jobs             | 生成任务视图（`ImageJobs`，`alwaysRender`）                                                                                                                            |
-| dashscope-image-gen · openai-image-gen | `<plugin>-trigger`  | wand               | image-studio  | （无）             | “生成图片”manual 触发入口按钮（`expectsBackgroundFollower`，`alwaysRender`）                                                                                           |
-| mimo-tts                               | mimo-tts-audio-tab  | headphones         | tts-studio    | tracks             | 旁白语音 playlist（`AudioPlayer`，`alwaysRender`）                                                                                                                     |
-| living-world-rules                     | living-world-rules  | book-marked        | world-data    | rules              | 世界规则（长期设定 / 禁忌，只读；随 world-data 导入播种，作为 `world-data` 组的子 Tab）                                                                                |
-| memory                                 | memory              | brain              | （无）        | blocks             | 记忆块。记忆插件在回合之后的后台任务里更新自己的记忆块，面板把它们展示出来                                                                                             |
-| npc-graph                              | npc-graph           | network            | npc-graph     | nodes + edges      | NPC 关系图（force-directed 可视化）                                                                                                                                    |
-| scene-stage                            | scene-stage         | image              | scene-stage   | stage              | 当前场景舞台（只读）：场景名 + 昼夜徽标 + `sourceLabel` 状态文案（未命中注册表时显示“无背景”）                                                                         |
-| scene-stage                            | scene-cast          | users-round        | scene-stage   | active-cast        | 当前场景在场角色（只读，仅 name + role；内部选择信号留在 plugin_data，`alwaysRender`）                                                                                 |
-| tabletop-rules                         | tabletop-rules      | dices              | （无）        | checks             | 属性检定入口按钮（调用 `tabletop-rules/check` 打开检定表单，`alwaysRender`）                                                                                           |
-| world-init                             | world-overview      | map                | world-data    | session.dimensions | 任意维度当前值、版本（游玩中只读）及待结算恢复（`alwaysRender`）                                                                                                       |
-| world-init                             | world-schema        | sliders-horizontal | world-data    | schema             | 角色属性 schema                                                                                                                                                        |
-| world-time                             | world-time          | calendar-days      | （无）        | clock              | 当前世界时间（`/current/display` + 变化原因）                                                                                                                          |
-| world-time                             | time-definition     | calendar-days      | （无）        | definitions        | 时间规则（当前日历定义，只读；无定义时说明默认日历）                                                                                                                   |
+<!-- prettier-ignore -->
+| 插件/runtime | 面板 ID | 图标 | group | 数据 namespace | 描述 |
+| --- | --- | --- | --- | --- | --- |
+| affinity | affinity | heart | affinity | affinity | 好感度面板（玩家↔NPC score 双向条 + tier 徽标 + 最近变化原因） |
+| char-creator | character | users | character | session.characters | 角色列表（类型由当前角色 schema 定义） |
+| character-blueprint | character-blueprint | id-card | character | blueprints | 预设角色（世界作者预置的登场角色模板，只读；作为 `character` 组的子 Tab） |
+| character-blueprint | character-presence | image | character-art | presence | 角色立绘画廊（`PortraitGallery`，只读展示 + 玩家可上传替换头像，`alwaysRender`） |
+| codex | codex | book-open | codex | entries | 知识图鉴 |
+| core-quest | core-quest | scroll-text | core-quest | quests | 任务日志（进行中含 objectives 勾选清单 / 已完成 / 已失败 分组） |
+| dice-check | dice-check-panel | dices | （无） | checks | 判定记录（倒序回执列表：骰式 / 成败配色 / critical 强调，`alwaysRender`） |
+| inventory | inventory | backpack | inventory | items | 行囊（已装备分组 + 背包列表，数量徽标 + tags pill，`alwaysRender`） |
+| dashscope-image-gen · openai-image-gen | `<plugin>-gallery` | image | image-studio | images | 剧情插图画廊（`ImageGallery`，`alwaysRender`）；两个图像插件各一套，组 ID 都是 `image-studio`；它们都提供单提供者扩展点 `media.image-flow@1`，同一会话只能启用其中一个 |
+| dashscope-image-gen · openai-image-gen | `<plugin>-jobs` | loader | image-studio | \_jobs | 生成任务视图（`ImageJobs`，`alwaysRender`） |
+| dashscope-image-gen · openai-image-gen | `<plugin>-trigger` | wand | image-studio | （无） | “生成图片”manual 触发入口按钮（`expectsBackgroundFollower`，`alwaysRender`） |
+| mimo-tts | mimo-tts-audio-tab | headphones | tts-studio | tracks | 旁白语音 playlist（`AudioPlayer`，`alwaysRender`） |
+| living-world-rules | living-world-rules | book-marked | world-data | rules | 世界规则（长期设定 / 禁忌，只读；随 world-data 导入播种，作为 `world-data` 组的子 Tab） |
+| memory | memory | brain | （无） | blocks | 记忆块。记忆插件在回合之后的后台任务里更新自己的记忆块，面板把它们展示出来 |
+| npc-graph | npc-graph | network | npc-graph | nodes + edges | NPC 关系图（force-directed 可视化） |
+| scene-stage | scene-stage | image | scene-stage | stage | 当前场景舞台（只读）：场景名 + 昼夜徽标 + `sourceLabel` 状态文案（未命中注册表时显示“无背景”） |
+| scene-stage | scene-cast | users-round | scene-stage | active-cast | 当前场景在场角色（只读，仅 name + role；内部选择信号留在 plugin_data，`alwaysRender`） |
+| tabletop-rules | tabletop-rules | dices | （无） | checks | 属性检定入口按钮（调用 `tabletop-rules/check` 打开检定表单，`alwaysRender`） |
+| world-init | world-overview | map | world-data | session.dimensions | 任意维度当前值、版本（游玩中只读）及待结算恢复（`alwaysRender`） |
+| world-init | world-schema | sliders-horizontal | world-data | schema | 角色属性 schema |
+| world-time | world-time | calendar-days | （无） | clock | 当前世界时间（`/current/display` + 变化原因） |
+| world-time | time-definition | calendar-days | （无） | definitions | 时间规则（当前日历定义，只读；无定义时说明默认日历） |
 
 几个分组的说明：
 

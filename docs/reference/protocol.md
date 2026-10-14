@@ -731,7 +731,7 @@ data: {
 | `runtime.skipped`                                          | `apps/server/src/routes/api/actions.ts`                                                       | runtime 因 cooldown / startTurn / maxTriggerCount 被跳过              |
 | `character.upserted`                                       | `packages/runtime/src/commit/session-commit-emitter.ts`（`character.upsert` proposal commit） | 角色快照事件                                                          |
 | `tool.calling` / `tool.completed` / `tool.failed`          | TurnEmitter                                                                                   | LLM 工具调用 trace                                                    |
-| `domain-event.previewed`                                   | ToolExecutor（`emittedEvents` 成功后）                                                        | 服务端投影成 UI slot 预览；前端不直接消费，不代表领域提交                                  |
+| `domain-event.previewed`                                   | ToolExecutor（`emittedEvents` 成功后）                                                        | 服务端投影成 UI slot 预览；前端不直接消费，不代表领域提交             |
 | `llm.calling` / `llm.responded` / `message.completed`      | TurnEmitter                                                                                   | LLM 调用 trace                                                        |
 | `block.emitted` / `state.patch.applied`                    | TurnEmitter                                                                                   | 块发出 / state patch 应用 trace                                       |
 | `hook.fired` / `hook.aborted`                              | TurnEmitter                                                                                   | Hook 行为 trace                                                       |
@@ -1011,22 +1011,23 @@ data: {
 
 只读的数据获取，普通的 REST GET 回答：
 
-| 查询     | 端点                                              | 响应                                                                                                                       |
-| -------- | ------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| 会话列表 | `GET /api/sessions?worldId=`                      | `{ items: SessionRecord[] }`                                                                                               |
-| 会话详情 | `GET /api/sessions/:id`                           | `SessionRecord`                                                                                                            |
-| 会话视图 | `GET /api/sessions/:id/view`                      | `SessionSnapshot`（messages/steps 为最近窗口 + 不透明 `messagesCursor`；`submittedInteractions` 为窗口内回合已回答的交互） |
-| 消息列表 | `GET /api/sessions/:id/messages`                  | `FlatMessage[]`（全量）                                                                                                    |
-| 消息分页 | `GET /api/sessions/:id/messages/page`             | `CursorPage<FlatMessage>`（游标）                                                                                          |
-| 角色列表 | `GET /api/sessions/:id/characters`                | `{ items: CharacterRecord[] }`                                                                                             |
-| 插件列表 | `GET /api/sessions/:id/plugins`                   | `{ active[], available[] }`                                                                                                |
-| 状态查询 | `GET /api/sessions/:id/state`                     | `{ tables }`                                                                                                               |
-| 状态补丁 | `GET /api/sessions/:id/state-patches`             | `Patch[]`                                                                                                                  |
-| 插件数据 | `GET /api/sessions/:id/plugin-data/:pluginId/:ns` | `{ items[] }`                                                                                                              |
-| 世界列表 | `GET /api/worlds`                                 | `{ items: WorldRecord[] }`                                                                                                 |
-| 执行追踪 | `GET /api/traces/:sessionId`                      | `{ events[], nextCursor }`（最近 5000 条，游标读更早的）                                                                   |
-| 追踪分页 | `GET /api/traces/:sessionId/turns/page`           | `{ turns[], nextCursor }`（游标）                                                                                          |
-| 服务健康 | `GET /api/health`                                 | `{ status, version, bootId, timestamp, storage, vector }`                                                                  |
+<!-- prettier-ignore -->
+| 查询 | 端点 | 响应 |
+| --- | --- | --- |
+| 会话列表 | `GET /api/sessions?worldId=` | `{ items: SessionRecord[] }` |
+| 会话详情 | `GET /api/sessions/:id` | `SessionRecord` |
+| 会话视图 | `GET /api/sessions/:id/view` | `SessionSnapshot`（messages/steps 为最近窗口 + 不透明 `messagesCursor`；`submittedInteractions` 为窗口内回合已回答的交互） |
+| 消息列表 | `GET /api/sessions/:id/messages` | `FlatMessage[]`（全量） |
+| 消息分页 | `GET /api/sessions/:id/messages/page` | `CursorPage<FlatMessage>`（游标） |
+| 角色列表 | `GET /api/sessions/:id/characters` | `{ items: CharacterRecord[] }` |
+| 插件列表 | `GET /api/sessions/:id/plugins` | `{ active[], available[] }` |
+| 状态查询 | `GET /api/sessions/:id/state` | `{ tables }` |
+| 状态补丁 | `GET /api/sessions/:id/state-patches` | `Patch[]` |
+| 插件数据 | `GET /api/sessions/:id/plugin-data/:pluginId/:ns` | `{ items[] }` |
+| 世界列表 | `GET /api/worlds` | `{ items: WorldRecord[] }` |
+| 执行追踪 | `GET /api/traces/:sessionId` | `{ events[], nextCursor }`（最近 5000 条，游标读更早的） |
+| 追踪分页 | `GET /api/traces/:sessionId/turns/page` | `{ turns[], nextCursor }`（游标） |
+| 服务健康 | `GET /api/health` | `{ status, version, bootId, timestamp, storage, vector }` |
 
 ## 四、SSE 信封格式
 
@@ -1170,25 +1171,26 @@ error.occurred        → executionError
 - `trace_events`，供 `/api/traces` 读取接口和 `/debug` 检查器使用。
 - 全局的 `EventBus`。`/api/actions` 的 SSE 路由再按 `FORWARDED_EVENT_TYPES`（由 `COVEL_EVENT_META[type].forwardToActionStream` 生成的集合）转发它们。
 
-| Type                     | Payload                                                                                                                                                                                                                                                                                                                                                                                                                     |
-| ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `tool.calling`           | `{ runtimeId, pluginId, toolName, toolCallId, label, arguments, source, approvalStatus }`                                                                                                                                                                                                                                                                                                                                   |
-| `tool.completed`         | `{ runtimeId, pluginId, toolName, toolCallId, label, result, parsedResult, durationMs, approvalStatus, success: true }`                                                                                                                                                                                                                                                                                                     |
-| `tool.failed`            | `{ runtimeId, pluginId, toolName, toolCallId, label, code, error, details?, durationMs, approvalStatus, success: false }`                                                                                                                                                                                                                                                                                                   |
-| `domain-event.previewed` | `{ runtimeId, pluginId, toolCallId, topic, data }`。`emit-event` 校验成功后的临时显示信号；持久的业务状态仍然由正常的事件链提交                                                                                                                                                                                                                                                                                             |
-| `llm.calling`            | `{ runtimeId, pluginId, slot, model, provider?: string \| null, messages, tools, attempt, startedAt, queueWaitMs?, streaming? }`。`slot` 是 runtime 请求的用途；生产环境的 gateway 在调用之前把它解析成 `model` / `provider`。不支持用途解析的自定义 adapter 可以不给 `provider`                                                                                                                                            |
-| `llm.responded`          | `{ runtimeId, pluginId, text?, reasoningContent?, toolCalls?, usage, finishReason, durationMs, attempt, error? }`。`usage` 是 `{ inputTokens, outputTokens, cachedInputTokens?, cacheWriteInputTokens? }`，其中 `inputTokens` 是包含缓存读写的总输入，后两项是服务商报告的子集。`finishReason` 为 `length` 只出现在 story runtime：正文在输出上限处被截断，但已经保留，客户端据此提示玩家；其他情况下被截断的调用按失败上报 |
-| `gateway.responded`      | function-runtime gateway 的成功结果。文本和对象调用带 `{ runtimeId, pluginId, method, finishReason, usage, reasoningContent?, model?, provider?, durationMs }`，`model/provider` 是回退之后实际命中的目标。转写调用同样带可用的 `usage/model/provider`。旧的 trace，或者不支持这些元数据的自定义 gateway，可以没有它们                                                                                                      |
-| `message.completed`      | `{ runtimeId, pluginId, content, len, deltaCount }`。`deltaCount` 是这个 runtime 产生的 `narrative.delta` 事件数，是保存下来的权威计数。前端汇总实时片段时用的是另一个合成字段 `_aggregated`，两者不能互换                                                                                                                                                                                                                  |
-| `block.emitted`          | `{ runtimeId, pluginId, proposalId, source, block }`                                                                                                                                                                                                                                                                                                                                                                        |
-| `ui.rendered`            | `{ runtimeId, pluginId, proposalId, source, render, block? }`。`/actions` SSE 会转发它，这样聊天区能实时显示已提交的 `ui.render` 块。较旧的、只进 trace 的负载可能没有 `block`，这时客户端从 `render` 合成它                                                                                                                                                                                                                |
-| `state.patch.applied`    | `{ runtimeId, pluginId, proposalId, patch: { packageName, summary, ops } }`                                                                                                                                                                                                                                                                                                                                                 |
-| `hook.fired`             | `{ event, hookName, pluginId, runtimeId?, targetId?, targetType, proposalType? }`                                                                                                                                                                                                                                                                                                                                           |
-| `hook.rewrote`           | `{ event, hookName, pluginId, runtimeId?, targetId?, diff?, proposalType? }`                                                                                                                                                                                                                                                                                                                                                |
-| `hook.aborted`           | `{ event, hookName, pluginId, runtimeId?, targetId?, reason, proposalType? }`                                                                                                                                                                                                                                                                                                                                               |
-| `command.invoked`        | `{ invocationId, commandId, command, pluginId, action, source, canonical, raw, argv, args }`。输入框和 JSON-RENDER 使用同一个结构                                                                                                                                                                                                                                                                                           |
-| `command.completed`      | `command.invoked` 的字段 + `{ durationMs, resultOk? }`                                                                                                                                                                                                                                                                                                                                                                      |
-| `command.failed`         | `command.invoked` 的字段 + `{ durationMs, error }`                                                                                                                                                                                                                                                                                                                                                                          |
+<!-- prettier-ignore -->
+| Type | Payload |
+| --- | --- |
+| `tool.calling` | `{ runtimeId, pluginId, toolName, toolCallId, label, arguments, source, approvalStatus }` |
+| `tool.completed` | `{ runtimeId, pluginId, toolName, toolCallId, label, result, parsedResult, durationMs, approvalStatus, success: true }` |
+| `tool.failed` | `{ runtimeId, pluginId, toolName, toolCallId, label, code, error, details?, durationMs, approvalStatus, success: false }` |
+| `domain-event.previewed` | `{ runtimeId, pluginId, toolCallId, topic, data }`。`emit-event` 校验成功后的临时显示信号；持久的业务状态仍然由正常的事件链提交 |
+| `llm.calling` | `{ runtimeId, pluginId, slot, model, provider?: string \| null, messages, tools, attempt, startedAt, queueWaitMs?, streaming? }`。`slot` 是 runtime 请求的用途；生产环境的 gateway 在调用之前把它解析成 `model` / `provider`。不支持用途解析的自定义 adapter 可以不给 `provider` |
+| `llm.responded` | `{ runtimeId, pluginId, text?, reasoningContent?, toolCalls?, usage, finishReason, durationMs, attempt, error? }`。`usage` 是 `{ inputTokens, outputTokens, cachedInputTokens?, cacheWriteInputTokens? }`，其中 `inputTokens` 是包含缓存读写的总输入，后两项是服务商报告的子集。`finishReason` 为 `length` 只出现在 story runtime：正文在输出上限处被截断，但已经保留，客户端据此提示玩家；其他情况下被截断的调用按失败上报 |
+| `gateway.responded` | function-runtime gateway 的成功结果。文本和对象调用带 `{ runtimeId, pluginId, method, finishReason, usage, reasoningContent?, model?, provider?, durationMs }`，`model/provider` 是回退之后实际命中的目标。转写调用同样带可用的 `usage/model/provider`。旧的 trace，或者不支持这些元数据的自定义 gateway，可以没有它们 |
+| `message.completed` | `{ runtimeId, pluginId, content, len, deltaCount }`。`deltaCount` 是这个 runtime 产生的 `narrative.delta` 事件数，是保存下来的权威计数。前端汇总实时片段时用的是另一个合成字段 `_aggregated`，两者不能互换 |
+| `block.emitted` | `{ runtimeId, pluginId, proposalId, source, block }` |
+| `ui.rendered` | `{ runtimeId, pluginId, proposalId, source, render, block? }`。`/actions` SSE 会转发它，这样聊天区能实时显示已提交的 `ui.render` 块。较旧的、只进 trace 的负载可能没有 `block`，这时客户端从 `render` 合成它 |
+| `state.patch.applied` | `{ runtimeId, pluginId, proposalId, patch: { packageName, summary, ops } }` |
+| `hook.fired` | `{ event, hookName, pluginId, runtimeId?, targetId?, targetType, proposalType? }` |
+| `hook.rewrote` | `{ event, hookName, pluginId, runtimeId?, targetId?, diff?, proposalType? }` |
+| `hook.aborted` | `{ event, hookName, pluginId, runtimeId?, targetId?, reason, proposalType? }` |
+| `command.invoked` | `{ invocationId, commandId, command, pluginId, action, source, canonical, raw, argv, args }`。输入框和 JSON-RENDER 使用同一个结构 |
+| `command.completed` | `command.invoked` 的字段 + `{ durationMs, resultOk? }` |
+| `command.failed` | `command.invoked` 的字段 + `{ durationMs, error }` |
 
 叙事的片段继续通过 `narrative.delta` 实时发给界面。为了让 `trace_events` 保持精简，只保存 `message.completed`。
 

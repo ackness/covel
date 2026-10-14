@@ -99,20 +99,21 @@ runtime:
 Extract facts supported by runtime-inputs.narrative.value, then call save-facts.
 ```
 
-| 根字段                                          | 含义                                                                                                        |
-| ----------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| `id`, `kind`                                    | 包身份；`kind` 为 `core` 或 `plugin`                                                                        |
-| `version`, `displayName`, `description`, `tags` | 元数据；`role:*` 标签不驱动任何业务                                                                         |
-| `covel`                                         | 适配的宿主版本范围，如 `">=0.0.45"`；范围之外的宿主不安装也不加载该包                                       |
-| `author`, `license`, `homepage`                 | 作者信息，只用于展示；见[作者信息](#作者信息)                                                               |
-| `provides`                                      | 版本化契约字符串，或 `{contract, default: true}`                                                            |
-| `requires`                                      | 必需契约，解析器补入提供者                                                                                  |
-| `optional`                                      | 可选契约，不强制激活提供者                                                                                  |
-| `conflicts`                                     | 与提供这些契约的其他插件互斥                                                                                |
-| `contracts`                                     | `{contractId: {schema: ./path.json}}` 契约 schema 声明；被 `contributes.data` 的 namespace 接收的契约不用写 |
-| `entry`                                         | 包根相对的注册模块路径                                                                                      |
-| `contributes`                                   | 包级贡献，见 [contributes 字段](#contributes-字段)                                                          |
-| `runtime`                                       | 可选的单 runtime 声明                                                                                       |
+<!-- prettier-ignore -->
+| 根字段 | 含义 |
+| --- | --- |
+| `id`, `kind` | 包身份；`kind` 为 `core` 或 `plugin` |
+| `version`, `displayName`, `description`, `tags` | 元数据；`role:*` 标签不驱动任何业务 |
+| `covel` | 适配的宿主版本范围，如 `">=0.0.45"`；范围之外的宿主不安装也不加载该包 |
+| `author`, `license`, `homepage` | 作者信息，只用于展示；见[作者信息](#作者信息) |
+| `provides` | 版本化契约字符串，或 `{contract, default: true}` |
+| `requires` | 必需契约，解析器补入提供者 |
+| `optional` | 可选契约，不强制激活提供者 |
+| `conflicts` | 与提供这些契约的其他插件互斥 |
+| `contracts` | `{contractId: {schema: ./path.json}}` 契约 schema 声明；被 `contributes.data` 的 namespace 接收的契约不用写 |
+| `entry` | 包根相对的注册模块路径 |
+| `contributes` | 包级贡献，见 [contributes 字段](#contributes-字段) |
+| `runtime` | 可选的单 runtime 声明 |
 
 契约是一个带版本的名字，形如 `narrative-engine@1`。插件之间靠它互相找到对方，而不是靠插件 ID。几条规则：
 
@@ -124,21 +125,22 @@ Extract facts supported by runtime-inputs.narrative.value, then call save-facts.
 
 ### contributes 字段
 
-| `contributes` 字段 | 对应注册或资源                                           |
-| ------------------ | -------------------------------------------------------- |
-| `tools`            | `registerTool` 的工具名                                  |
-| `actions`          | `registerRpc` 的 action 名                               |
-| `commands`         | 玩家命令元数据；`action` 必须列入 `actions`              |
-| `services`         | `registerService` 的契约 ID                              |
-| `extensions`       | `provideExtension` 的 `{point, id}`                      |
-| `hooks`            | hook 的 `{event, enforce}` 声明，见 [Hooks](./hooks.md)  |
-| `wires`, `forms`   | 对应注册 ID                                              |
-| `events`           | 插件事件契约                                             |
-| `settings`         | 玩家配置项，运行时通过 `ctx.userSettings` 读取           |
-| `data`             | 本插件数据 namespace 的 schema、version、accepts、search |
-| `ui`               | 包根相对的 `right/message/left` UI spec 路径             |
-| `worldProjections` | 世界数据投影声明                                         |
-| `prompt`           | 静态提示词段                                             |
+<!-- prettier-ignore -->
+| `contributes` 字段 | 对应注册或资源 |
+| --- | --- |
+| `tools` | `registerTool` 的工具名 |
+| `actions` | `registerRpc` 的 action 名 |
+| `commands` | 玩家命令元数据；`action` 必须列入 `actions` |
+| `services` | `registerService` 的契约 ID |
+| `extensions` | `provideExtension` 的 `{point, id}` |
+| `hooks` | hook 的 `{event, enforce}` 声明，见 [Hooks](./hooks.md) |
+| `wires`, `forms` | 对应注册 ID |
+| `events` | 插件事件契约 |
+| `settings` | 玩家配置项，运行时通过 `ctx.userSettings` 读取 |
+| `data` | 本插件数据 namespace 的 schema、version、accepts、search |
+| `ui` | 包根相对的 `right/message/left` UI spec 路径 |
+| `worldProjections` | 世界数据投影声明 |
+| `prompt` | 静态提示词段 |
 
 entry 里的注册和清单里的声明双向核对：注册了却没声明，或者声明了却没实现，加载都会失败。包级贡献只属于根文件，不会合并子 runtime 的字段。
 
@@ -807,31 +809,32 @@ pnpm lint
 
 下面是 [plugins/](../../plugins/) 里随 Covel 内置的全部插件（不含 `_archive/`）。`core` 是基础功能，`plugin` 是可选玩法。“runtime”一列里，“内联”表示只有根文件里的一个 runtime，“无”表示只有 entry、扩展或界面。
 
-| ID                                                                 | 名称         | `kind`   | 提供的契约                                           | runtime                                                                                      | 做什么                                                    |
-| ------------------------------------------------------------------ | ------------ | -------- | ---------------------------------------------------- | -------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
-| [affinity](../../plugins/affinity/README.md)                       | 好感度       | `plugin` | 无                                                   | 内联                                                                                         | 追踪玩家和 NPC 之间的数值好感度，右栏显示分数、档位和变化 |
-| [branch-reply](../../plugins/branch-reply/README.md)               | 回复变体     | `plugin` | `branch-reply@1`                                     | 内联                                                                                         | 提供多条可切换的回复                                      |
-| [char-creator](../../plugins/char-creator/README.md)               | 角色创建     | `core`   | `character-creation@1`（默认提供者）                 | `player-init`、`character-tracker`                                                           | 创建主角，并在故事中记录重要角色的变化                    |
-| [character-blueprint](../../plugins/character-blueprint/README.md) | 角色资料     | `plugin` | `character-blueprint@1`、`character-presence@1`      | `presence`                                                                                   | 保存世界预设的人物资料，以及头像、立绘和声音              |
-| [chat-mode-narrator](../../plugins/chat-mode-narrator/README.md)   | 对话叙事     | `plugin` | `narrative-engine@1`                                 | 内联                                                                                         | 让故事更像角色对话                                        |
-| [codex](../../plugins/codex/README.md)                             | 设定图鉴     | `plugin` | 无                                                   | 内联                                                                                         | 整理新发现的地点、人物、物品和传闻                        |
-| [core-quest](../../plugins/core-quest/README.md)                   | 任务日志     | `plugin` | `world-ir.vocabulary@1`                              | `log`、`vocabulary`                                                                          | 从叙事中登记和推进任务                                    |
-| [dice-check](../../plugins/dice-check/README.md)                   | 骰子判定     | `plugin` | `action-check@1`                                     | `roller`、`recorder`                                                                         | 为有失败风险的行动做骰子判定                              |
-| [guide](../../plugins/guide/README.md)                             | 行动建议     | `plugin` | `scene-prompts@1`                                    | 内联                                                                                         | 每轮故事后回顾前情，给出可直接采用的行动短句              |
-| [history-compaction](../../plugins/history-compaction/README.md)   | 历史压缩     | `core`   | `history.compact@2`（默认提供者）                    | 无                                                                                           | 把较早的对话整理成分段摘要                                |
-| [inventory](../../plugins/inventory/README.md)                     | 行囊         | `plugin` | `world-ir.vocabulary@1`                              | `ledger`、`vocabulary`                                                                       | 记录物品得失和装备变化                                    |
-| [living-world-rules](../../plugins/living-world-rules/README.md)   | 世界规则     | `plugin` | `living-world-rules@1`、`world-info@1`               | 无                                                                                           | 展示世界包里长期生效的规则，并让叙事遵守                  |
-| [memory](../../plugins/memory/README.md)                           | 故事记忆     | `core`   | 无                                                   | `extract`                                                                                    | 记住剧情、场景、人物关系和主角状态                        |
-| [narrator](../../plugins/narrator/README.md)                       | 叙事         | `core`   | `narrative-engine@1`（默认提供者）                   | 内联                                                                                         | 根据玩家的行动推进故事                                    |
-| [npc-graph](../../plugins/npc-graph/README.md)                     | 关系图谱     | `plugin` | `npc-graph@1`、`graph-rag@1`                         | `extractor`、`rag-retriever`                                                                 | 记录人物之间的关系                                        |
-| [pregame](../../plugins/pregame/README.md)                         | 开局准备     | `core`   | `session.opening@1`                                  | 内联                                                                                         | 开局时读取世界资料，准备第一段冒险                        |
-| [scene-stage](../../plugins/scene-stage/README.md)                 | 场景舞台     | `plugin` | `stage-direction@1`、`scene-stage@1`、`scene-cast@1` | `seed`、`direction`、`resolver`、`cast`                                                      | 跟踪当前场景、昼夜和在场角色，供舞台背景和立绘使用        |
-| [soundtrack](../../plugins/soundtrack/README.md)                   | 配乐         | `plugin` | 无                                                   | `scene`、`cue`                                                                               | 播放世界自带的背景音乐，随场景和情绪切换                  |
-| [story-events](../../plugins/story-events/README.md)               | 隐藏事件     | `plugin` | `story-event-cue@1`、`story-event.plan@1`            | `intake`、`evaluate`、`plot`                                                                 | 条件满足前隐藏世界包声明的剧情，满足时交给叙事演出        |
-| [tabletop-rules](../../plugins/tabletop-rules/README.md)           | 跑团规则     | `plugin` | `tabletop-check@1`                                   | `creation`、`check`                                                                          | 开局配点，并用程序结算属性检定                            |
-| [world-init](../../plugins/world-init/README.md)                   | 世界维度     | `core`   | `world-data-provider@1`、`world.dimensions@1`        | `schema-gen`、`dimension-context`、`dimension-tracker`、`dimension-clock`、`edit-dimensions` | 初始化角色属性和世界维度，并持续维护                      |
-| [world-ir](../../plugins/world-ir/README.md)                       | 世界事实提取 | `plugin` | `world-ir-provider@1`                                | 内联                                                                                         | 从本轮故事里提取人物、关系、事件和线索，供其他插件复用    |
-| [world-time](../../plugins/world-time/README.md)                   | 世界时间     | `core`   | `world-time-evolution@1`、`world-time-context@1`     | `context`、`advance`                                                                         | 维护日期、时段和时间流向，按本轮故事结算时间变化          |
+<!-- prettier-ignore -->
+| ID | 名称 | `kind` | 提供的契约 | runtime | 做什么 |
+| --- | --- | --- | --- | --- | --- |
+| [affinity](../../plugins/affinity/README.md) | 好感度 | `plugin` | 无 | 内联 | 追踪玩家和 NPC 之间的数值好感度，右栏显示分数、档位和变化 |
+| [branch-reply](../../plugins/branch-reply/README.md) | 回复变体 | `plugin` | `branch-reply@1` | 内联 | 提供多条可切换的回复 |
+| [char-creator](../../plugins/char-creator/README.md) | 角色创建 | `core` | `character-creation@1`（默认提供者） | `player-init`、`character-tracker` | 创建主角，并在故事中记录重要角色的变化 |
+| [character-blueprint](../../plugins/character-blueprint/README.md) | 角色资料 | `plugin` | `character-blueprint@1`、`character-presence@1` | `presence` | 保存世界预设的人物资料，以及头像、立绘和声音 |
+| [chat-mode-narrator](../../plugins/chat-mode-narrator/README.md) | 对话叙事 | `plugin` | `narrative-engine@1` | 内联 | 让故事更像角色对话 |
+| [codex](../../plugins/codex/README.md) | 设定图鉴 | `plugin` | 无 | 内联 | 整理新发现的地点、人物、物品和传闻 |
+| [core-quest](../../plugins/core-quest/README.md) | 任务日志 | `plugin` | `world-ir.vocabulary@1` | `log`、`vocabulary` | 从叙事中登记和推进任务 |
+| [dice-check](../../plugins/dice-check/README.md) | 骰子判定 | `plugin` | `action-check@1` | `roller`、`recorder` | 为有失败风险的行动做骰子判定 |
+| [guide](../../plugins/guide/README.md) | 行动建议 | `plugin` | `scene-prompts@1` | 内联 | 每轮故事后回顾前情，给出可直接采用的行动短句 |
+| [history-compaction](../../plugins/history-compaction/README.md) | 历史压缩 | `core` | `history.compact@2`（默认提供者） | 无 | 把较早的对话整理成分段摘要 |
+| [inventory](../../plugins/inventory/README.md) | 行囊 | `plugin` | `world-ir.vocabulary@1` | `ledger`、`vocabulary` | 记录物品得失和装备变化 |
+| [living-world-rules](../../plugins/living-world-rules/README.md) | 世界规则 | `plugin` | `living-world-rules@1`、`world-info@1` | 无 | 展示世界包里长期生效的规则，并让叙事遵守 |
+| [memory](../../plugins/memory/README.md) | 故事记忆 | `core` | 无 | `extract` | 记住剧情、场景、人物关系和主角状态 |
+| [narrator](../../plugins/narrator/README.md) | 叙事 | `core` | `narrative-engine@1`（默认提供者） | 内联 | 根据玩家的行动推进故事 |
+| [npc-graph](../../plugins/npc-graph/README.md) | 关系图谱 | `plugin` | `npc-graph@1`、`graph-rag@1` | `extractor`、`rag-retriever` | 记录人物之间的关系 |
+| [pregame](../../plugins/pregame/README.md) | 开局准备 | `core` | `session.opening@1` | 内联 | 开局时读取世界资料，准备第一段冒险 |
+| [scene-stage](../../plugins/scene-stage/README.md) | 场景舞台 | `plugin` | `stage-direction@1`、`scene-stage@1`、`scene-cast@1` | `seed`、`direction`、`resolver`、`cast` | 跟踪当前场景、昼夜和在场角色，供舞台背景和立绘使用 |
+| [soundtrack](../../plugins/soundtrack/README.md) | 配乐 | `plugin` | 无 | `scene`、`cue` | 播放世界自带的背景音乐，随场景和情绪切换 |
+| [story-events](../../plugins/story-events/README.md) | 隐藏事件 | `plugin` | `story-event-cue@1`、`story-event.plan@1` | `intake`、`evaluate`、`plot` | 条件满足前隐藏世界包声明的剧情，满足时交给叙事演出 |
+| [tabletop-rules](../../plugins/tabletop-rules/README.md) | 跑团规则 | `plugin` | `tabletop-check@1` | `creation`、`check` | 开局配点，并用程序结算属性检定 |
+| [world-init](../../plugins/world-init/README.md) | 世界维度 | `core` | `world-data-provider@1`、`world.dimensions@1` | `schema-gen`、`dimension-context`、`dimension-tracker`、`dimension-clock`、`edit-dimensions` | 初始化角色属性和世界维度，并持续维护 |
+| [world-ir](../../plugins/world-ir/README.md) | 世界事实提取 | `plugin` | `world-ir-provider@1` | 内联 | 从本轮故事里提取人物、关系、事件和线索，供其他插件复用 |
+| [world-time](../../plugins/world-time/README.md) | 世界时间 | `core` | `world-time-evolution@1`、`world-time-context@1` | `context`、`advance` | 维护日期、时段和时间流向，按本轮故事结算时间变化 |
 
 每个插件的细节以它自己的 `PLUGIN.md` 和 README 为准。
 
@@ -839,21 +842,22 @@ pnpm lint
 
 想看某种写法的真实例子，从这里找：
 
-| 需求                 | 内置示例                                                           |
-| -------------------- | ------------------------------------------------------------------ |
-| 叙事提供者与用户设置 | [narrator](../../plugins/narrator/PLUGIN.md)                       |
-| 本地工具和 UI 消息   | [guide](../../plugins/guide/PLUGIN.md)                             |
-| World Model 初始化   | [world-init](../../plugins/world-init/PLUGIN.md)                   |
-| 角色创建与跟踪       | [char-creator](../../plugins/char-creator/PLUGIN.md)               |
-| 函数运行时与公开输出 | [world-time](../../plugins/world-time/PLUGIN.md)                   |
-| 历史变换扩展         | [branch-reply](../../plugins/branch-reply/PLUGIN.md)               |
-| 状态摘要槽位         | [core-quest](../../plugins/core-quest/PLUGIN.md)                   |
-| 记忆定义与提取       | [memory](../../plugins/memory/PLUGIN.md)                           |
-| 历史压缩扩展         | [history-compaction](../../plugins/history-compaction/PLUGIN.md)   |
-| 舞台与媒体记录       | [scene-stage](../../plugins/scene-stage/PLUGIN.md)                 |
-| 背景音乐调度         | [soundtrack](../../plugins/soundtrack/PLUGIN.md)                   |
+<!-- prettier-ignore -->
+| 需求 | 内置示例 |
+| --- | --- |
+| 叙事提供者与用户设置 | [narrator](../../plugins/narrator/PLUGIN.md) |
+| 本地工具和 UI 消息 | [guide](../../plugins/guide/PLUGIN.md) |
+| World Model 初始化 | [world-init](../../plugins/world-init/PLUGIN.md) |
+| 角色创建与跟踪 | [char-creator](../../plugins/char-creator/PLUGIN.md) |
+| 函数运行时与公开输出 | [world-time](../../plugins/world-time/PLUGIN.md) |
+| 历史变换扩展 | [branch-reply](../../plugins/branch-reply/PLUGIN.md) |
+| 状态摘要槽位 | [core-quest](../../plugins/core-quest/PLUGIN.md) |
+| 记忆定义与提取 | [memory](../../plugins/memory/PLUGIN.md) |
+| 历史压缩扩展 | [history-compaction](../../plugins/history-compaction/PLUGIN.md) |
+| 舞台与媒体记录 | [scene-stage](../../plugins/scene-stage/PLUGIN.md) |
+| 背景音乐调度 | [soundtrack](../../plugins/soundtrack/PLUGIN.md) |
 | 世界数据进入叙事提示 | [character-blueprint](../../plugins/character-blueprint/PLUGIN.md) |
-| 隐藏世界数据与策划   | [story-events](../../plugins/story-events/PLUGIN.md)               |
+| 隐藏世界数据与策划 | [story-events](../../plugins/story-events/PLUGIN.md) |
 
 ### 保留的数据命名空间
 

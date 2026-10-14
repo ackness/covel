@@ -8,56 +8,58 @@
 
 一个英文术语只对应一个中文说法。中文文档、界面文字和中文提示词（`*.zh.md`）都用这张表里的说法。
 
-| Term                  | 中文         | 说明                                                                                  |
-| --------------------- | ------------ | ------------------------------------------------------------------------------------- |
-| Alias                 | 别名         | 同一个角色的另一个名字（`aliases`）。不是字段或 ID 的兼容名。                         |
-| Binding               | 绑定         |                                                                                       |
-| Capability            | 能力标签     | 一条模型路由的 `tag`（`text`、`image` 等）。找插件靠的是 **Contract**，不是能力标签。 |
-| Collection            | 合集         |                                                                                       |
-| Contract              | 契约         | 带版本号的 ID，例如 `narrative-engine@1`。                                            |
-| Credits               | 作者信息     | 一个包的 `author`、`license` 和 `homepage` 字段。                                     |
-| Kernel                | 内核         |                                                                                       |
-| Pack                  | 玩法包       |                                                                                       |
-| PluginType            | 插件类型     |                                                                                       |
-| Preset                | 预设         |                                                                                       |
-| Proposal              | 提案         |                                                                                       |
-| Provider              | 提供商       |                                                                                       |
-| Runtime               | runtime      | 保留英文：它指清单里的一个运行单元，不是泛指“运行时”。                                |
-| Runtime manifest      | runtime 清单 |                                                                                       |
-| Segment               | 提示词段     |                                                                                       |
-| Server-scoped setting | 服务端设置   | `scope: "server"` 的设置；其余的是本设备设置。                                        |
-| Session               | 会话         |                                                                                       |
-| Slot                  | 槽位         | 设置界面里叫“模型用途”。                                                              |
-| Trigger mode          | 触发模式     |                                                                                       |
-| Turn                  | 回合         | “This turn” 是“本回合”。                                                              |
-| World                 | 世界         | 世界的安装包叫“世界包”。                                                              |
+<!-- prettier-ignore -->
+| Term | 中文 | 说明 |
+| --- | --- | --- |
+| Alias | 别名 | 同一个角色的另一个名字（`aliases`）。不是字段或 ID 的兼容名。 |
+| Binding | 绑定 |  |
+| Capability | 能力标签 | 一条模型路由的 `tag`（`text`、`image` 等）。找插件靠的是 **Contract**，不是能力标签。 |
+| Collection | 合集 |  |
+| Contract | 契约 | 带版本号的 ID，例如 `narrative-engine@1`。 |
+| Credits | 作者信息 | 一个包的 `author`、`license` 和 `homepage` 字段。 |
+| Kernel | 内核 |  |
+| Pack | 玩法包 |  |
+| PluginType | 插件类型 |  |
+| Preset | 预设 |  |
+| Proposal | 提案 |  |
+| Provider | 提供商 |  |
+| Runtime | runtime | 保留英文：它指清单里的一个运行单元，不是泛指“运行时”。 |
+| Runtime manifest | runtime 清单 |  |
+| Segment | 提示词段 |  |
+| Server-scoped setting | 服务端设置 | `scope: "server"` 的设置；其余的是本设备设置。 |
+| Session | 会话 |  |
+| Slot | 槽位 | 设置界面里叫“模型用途”。 |
+| Trigger mode | 触发模式 |  |
+| Turn | 回合 | “This turn” 是“本回合”。 |
+| World | 世界 | 世界的安装包叫“世界包”。 |
 
 ## Prompt vocabulary
 
 提示词正文里，描述 runtime 读什么、写什么时用的词。一个东西只用一个词：用了 `turn` 就不再写 `round`，用了 `record` 就不再写 `row`。写法见[提示词写法](../plugins/prompt-style.md)。
 
-| Term             | 中文     | 意思                                                | 不要用这些词来指它                |
-| ---------------- | -------- | --------------------------------------------------- | --------------------------------- |
-| turn             | 回合     | 玩家的一条消息，以及各个 runtime 为它做的全部事情   | round                             |
-| narrative        | 叙事     | 叙事 runtime 在本回合写出的故事正文                 | story text, prose, the output     |
-| player           | 玩家     | 玩游戏的人                                          | user                              |
-| player character | 玩家角色 | 玩家控制的角色                                      | protagonist, hero, PC             |
-| NPC              | NPC      | 不由玩家控制的角色                                  |                                   |
-| character        | 角色     | 玩家角色或 NPC                                      |                                   |
-| tool             | 工具     | runtime 可以调用的一个函数                          | function, API                     |
-| call             | 调用     | 使用一次工具                                        | invoke, run, trigger              |
-| record           | 记录     | 插件数据里存下的一项                                | row, object                       |
-| entry            | 条目     | 玩家读到的列表里的一项，例如图鉴条目                | item（item 指行囊里的物品）       |
-| item             | 物品     | 角色随身带的东西                                    |                                   |
-| dimension        | 维度     | 由世界定义、随故事变化的一项世界状态                | attribute（attribute 是角色的）   |
-| attribute        | 属性     | 角色的一个数字或文字字段                            | stat                              |
-| world rule       | 世界规则 | 提示词里带着的一条世界规则                          | lore entry                        |
-| quest            | 任务     | 故事交给玩家的一个目标                              | mission, task                     |
-| event            | 事件     | 叙事里发生的一件事，或者 runtime 之间传递的一个信号 |                                   |
-| check            | 判定     | 用骰子对抗一个难度                                  | test, roll（roll 指掷一颗骰子）   |
-| scene            | 场景     | 叙事此刻所在的地点和时间                            |                                   |
-| inject           | 注入     | 框架把一块数据放进提示词                            | insert, provide                   |
-| block            | 区块     | 提示词里带标签的一段，例如 `<existing-quests>`      | section（section 指一个标题小节） |
+<!-- prettier-ignore -->
+| Term | 中文 | 意思 | 不要用这些词来指它 |
+| --- | --- | --- | --- |
+| turn | 回合 | 玩家的一条消息，以及各个 runtime 为它做的全部事情 | round |
+| narrative | 叙事 | 叙事 runtime 在本回合写出的故事正文 | story text, prose, the output |
+| player | 玩家 | 玩游戏的人 | user |
+| player character | 玩家角色 | 玩家控制的角色 | protagonist, hero, PC |
+| NPC | NPC | 不由玩家控制的角色 |  |
+| character | 角色 | 玩家角色或 NPC |  |
+| tool | 工具 | runtime 可以调用的一个函数 | function, API |
+| call | 调用 | 使用一次工具 | invoke, run, trigger |
+| record | 记录 | 插件数据里存下的一项 | row, object |
+| entry | 条目 | 玩家读到的列表里的一项，例如图鉴条目 | item（item 指行囊里的物品） |
+| item | 物品 | 角色随身带的东西 |  |
+| dimension | 维度 | 由世界定义、随故事变化的一项世界状态 | attribute（attribute 是角色的） |
+| attribute | 属性 | 角色的一个数字或文字字段 | stat |
+| world rule | 世界规则 | 提示词里带着的一条世界规则 | lore entry |
+| quest | 任务 | 故事交给玩家的一个目标 | mission, task |
+| event | 事件 | 叙事里发生的一件事，或者 runtime 之间传递的一个信号 |  |
+| check | 判定 | 用骰子对抗一个难度 | test, roll（roll 指掷一颗骰子） |
+| scene | 场景 | 叙事此刻所在的地点和时间 |  |
+| inject | 注入 | 框架把一块数据放进提示词 | insert, provide |
+| block | 区块 | 提示词里带标签的一段，例如 `<existing-quests>` | section（section 指一个标题小节） |
 
 ## Alias
 
