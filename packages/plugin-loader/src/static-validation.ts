@@ -3,6 +3,35 @@ import path from "node:path";
 import type { ParsedPluginMd, ParsedRuntimeMd } from "./types.js";
 import { validateUiSpecStructure } from "./ui-spec.js";
 
+/** Every declared server module, relative to the manifest that owns it. */
+export function pluginImportReferences(
+  packageManifest: ParsedPluginMd,
+  manifests: readonly ParsedRuntimeMd[],
+): { source: string | undefined; field: string; reference: string }[] {
+  const references: ReturnType<typeof pluginImportReferences> = [];
+  const add = (
+    source: string | undefined,
+    field: string,
+    reference?: string,
+  ) => {
+    if (reference) references.push({ source, field, reference });
+  };
+  add(packageManifest.sourcePath, "entry", packageManifest.plugin.entry);
+  for (const [id, projection] of Object.entries(
+    packageManifest.plugin.contributes?.worldProjections ?? {},
+  ))
+    add(
+      packageManifest.sourcePath,
+      `contributes.worldProjections.${id}.handler`,
+      projection.handler,
+    );
+  for (const parsed of manifests) {
+    add(parsed.sourcePath, "function.handler", parsed.manifest.handler);
+    add(parsed.sourcePath, "guard", parsed.manifest.guard);
+  }
+  return references;
+}
+
 /** Shared by discovery, author validation and installation; no code is imported. */
 export function validateRuntimeDeclarations(
   packageManifest: ParsedPluginMd,
@@ -142,7 +171,11 @@ export function validatePluginFiles(
     }
   };
   const plugin = packageManifest.plugin;
-  file(packageManifest.sourcePath, "entry", plugin.entry);
+  for (const { source, field, reference } of pluginImportReferences(
+    packageManifest,
+    manifests,
+  ))
+    file(source, field, reference);
   for (const [contract, declaration] of Object.entries(plugin.contracts ?? {}))
     file(
       packageManifest.sourcePath,
@@ -180,8 +213,6 @@ export function validatePluginFiles(
       throw new Error(
         `${parsed.sourcePath}: schedule.stage is required for ${type}; choose setup, pre-turn, narrative, post-turn or audit`,
       );
-    file(parsed.sourcePath, "function.handler", runtime.handler);
-    file(parsed.sourcePath, "guard", runtime.guard);
     file(parsed.sourcePath, "io.output.schema", runtime.output?.schema, true);
     file(parsed.sourcePath, "io.payloadSchema", runtime.input?.schema, true);
     // Committed bindings compile into input.inject, not runtime.inputs.

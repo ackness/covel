@@ -162,6 +162,21 @@ export function createVectorMethods(state: MemoryState): MemoryStoreMethods {
       }));
     },
 
+    async getVectorPayloads(input) {
+      const wanted = new Set(input.keys);
+      const payloads = new Map<string, string | null>();
+      for (const row of state.vectorRows.values()) {
+        if (
+          row.sessionId === input.sessionId &&
+          row.pluginId === input.pluginId &&
+          row.namespace === input.namespace &&
+          wanted.has(row.key)
+        )
+          payloads.set(row.key, row.payload);
+      }
+      return payloads;
+    },
+
     async deleteVectors(input: DeleteVectorsInput) {
       if (
         input.expectedSessionCreatedAt !== undefined &&

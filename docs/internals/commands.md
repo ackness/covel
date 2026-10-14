@@ -197,6 +197,6 @@ CI（`.github/workflows/ci.yml`）跑全部内容：`pnpm check`、每一组测�
 检查 Tailwind 类名时，通过 `apps/web/scripts/check-tailwind-canonical.mjs` 运行。
 
 > [!WARNING]
-> 不要给 `tailwind-lint` 加 `--fix`。v0.12.1 会把普通的 TypeScript 标识符当成类名改掉，把代码改坏。只用它来读结果。
+> 不要给 `tailwind-lint` 加 `--fix`。早期版本曾把普通的 TypeScript 标识符当成类名改掉，把代码改坏。脚本保持只读，并过滤 `cssConflict` 诊断。
 
 Tailwind 里带数字的标准工具类依赖默认的 `--spacing` 刻度。想全局覆盖这个变量之前，先检查那些尺寸写死的布局会不会跟着变。

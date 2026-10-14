@@ -1037,59 +1037,60 @@ export function registerRuntimeRecordStoreSuites(
       expect(stats).toEqual({ playerMessageCount: 2 });
     });
 
-    it("listTurnMessagesAfter walks the log forward from a (createdAt, id) cursor", async () => {
-      // ts() is Date.now()-relative, so capture each timestamp once — the
-      // cursor must equal the stored createdAt byte-for-byte.
-      const t10 = ts(10);
-      const t20 = ts(20);
-      const t30 = ts(30);
-      // Two rows share a createdAt so the id tie-break is exercised — the
-      // cursor must pick the same boundary rows on every backend.
-      const m1 = makeTurnMessage({
-        id: "after-a",
+    it("listTurnMessagesAfter walks the log in save order, not createdAt order", async () => {
+      // A background execution takes its timestamps while it runs and can be
+      // saved after a later turn: m-old is saved last with the oldest time.
+      const later = makeTurnMessage({
+        id: "after-later",
         sessionId: "sess-after",
-        createdAt: t10,
+        createdAt: ts(30),
       });
-      const m2 = makeTurnMessage({
-        id: "after-b",
+      const middle = makeTurnMessage({
+        id: "after-middle",
         sessionId: "sess-after",
-        createdAt: t10,
+        createdAt: ts(20),
       });
-      const m3 = makeTurnMessage({
-        id: "after-c",
+      const old = makeTurnMessage({
+        id: "after-old",
         sessionId: "sess-after",
-        createdAt: t20,
+        createdAt: ts(10),
       });
-      const m4 = makeTurnMessage({
-        id: "after-d",
-        sessionId: "sess-after",
-        createdAt: t30,
-      });
-      await store.appendTurnMessage(m3);
-      await store.appendTurnMessage(m1);
-      await store.appendTurnMessage(m4);
-      await store.appendTurnMessage(m2);
+      await store.appendTurnMessage(later);
+      await store.appendTurnMessage(middle);
+      await store.appendTurnMessage(
+        makeTurnMessage({ sessionId: "sess-other" }),
+      );
 
       // Null cursor ⇒ from the start, capped at limit.
-      const first = await store.listTurnMessagesAfter("sess-after", null, 2);
-      expect(first.map((m) => m.id)).toEqual(["after-a", "after-b"]);
+      const first = await store.listTurnMessagesAfter("sess-after", null, 1);
+      expect(first).toEqual([{ ...later, writeSeq: 1 }]);
+      const read = await store.listTurnMessagesAfter("sess-after", null, 10);
+      expect(read.map((m) => [m.id, m.writeSeq])).toEqual([
+        ["after-later", 1],
+        ["after-middle", 2],
+      ]);
 
-      // Resume strictly after the same-createdAt boundary row.
-      const rest = await store.listTurnMessagesAfter(
-        "sess-after",
-        { createdAt: t10, id: "after-a" },
-        10,
-      );
-      expect(rest.map((m) => m.id)).toEqual(["after-b", "after-c", "after-d"]);
+      // Saved after a reader reached the tail: still past its cursor.
+      await store.appendTurnMessage(old);
+      expect(
+        (await store.listTurnMessagesAfter("sess-after", 2, 10)).map((m) => [
+          m.id,
+          m.writeSeq,
+        ]),
+      ).toEqual([["after-old", 3]]);
+      // The timeline itself stays in createdAt order, without the save order.
+      const timeline = await store.listTurnMessages("sess-after");
+      expect(timeline.map((m) => m.id)).toEqual([
+        "after-old",
+        "after-middle",
+        "after-later",
+      ]);
+      expect(timeline[0]).toEqual(old);
 
       // Cursor at the tail ⇒ empty; limit <= 0 ⇒ empty.
-      expect(
-        await store.listTurnMessagesAfter(
-          "sess-after",
-          { createdAt: t30, id: "after-d" },
-          10,
-        ),
-      ).toEqual([]);
+      expect(await store.listTurnMessagesAfter("sess-after", 3, 10)).toEqual(
+        [],
+      );
       expect(await store.listTurnMessagesAfter("sess-after", null, 0)).toEqual(
         [],
       );

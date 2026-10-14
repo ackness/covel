@@ -29,7 +29,11 @@ export {
   trackReloadGeneration,
 } from "./reload-generation.js";
 export type { PluginDefinition } from "./load.js";
-export { validatePluginLabels } from "./locale-labels.js";
+export {
+  compileManifestLabels,
+  validatePluginLabels,
+} from "./locale-labels.js";
+export { parseLocaleFile } from "./locale-files.js";
 export { readMessageCatalogs } from "./locale-messages.js";
 export {
   lockPluginLabels,
@@ -108,6 +112,7 @@ export { compileRuntimeManifest } from "./compile-manifest.js";
 
 export {
   packageModuleTypeProblem,
+  pluginImportReferences,
   validatePluginFiles,
   validateRuntimeDeclarations,
 } from "./static-validation.js";

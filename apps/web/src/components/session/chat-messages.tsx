@@ -1,20 +1,13 @@
 import { ActionableErrorNotice } from "@/components/shared/actionable-error-notice.js";
 import type { InteractionSubmitResult } from "@/stores/session-store/types.js";
 import { resolveI18nSentinel } from "./execution-runtime-status.js";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { AlertCircle, ArrowDown, Loader2, MessageSquare } from "lucide-react";
 import { Button } from "@/components/ui/button.js";
 import { useAutoScroll } from "@/hooks/use-auto-scroll.js";
 import { useChoiceHotkeys } from "@/hooks/use-choice-hotkeys.js";
 import { ChapterBanner } from "./chapter-banner.js";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog.js";
 import type { StreamMessage, ExecutionStep } from "@/stores/session-store.js";
 import { useSession } from "@/stores/session-store.js";
 import { useSetting } from "@/settings/use-settings.js";
@@ -27,7 +20,6 @@ import { useImageGeneration } from "./chat-messages/use-image-generation.js";
 import { useLoadOlderMessages } from "./chat-messages/use-load-older-messages.js";
 import { useMessageGrouping } from "./chat-messages/use-message-grouping.js";
 import { isPreGameSession } from "@/stores/session-store/selectors.js";
-import type { PluginRpcConfirmRequest } from "./plugin-rpc-ui.js";
 import type {
   WorldRecord,
   PluginSummary,
@@ -66,10 +58,6 @@ export interface ChatMessagesProps {
   ) => void;
   onBeginAdventure: () => void;
   messagesEndRef: React.RefObject<HTMLDivElement | null>;
-}
-
-interface ConfirmRequest extends PluginRpcConfirmRequest {
-  readonly resolve: (value: boolean) => void;
 }
 
 // ── Component ────────────────────────────────────────────────────
@@ -134,32 +122,8 @@ export function ChatMessages({
   const isPlaying = session.status === "active" && session.phase === "playing";
   const isEnded = session.status === "ended";
 
-  // Confirmation dialog state. The in-flight request carries its own `resolve`.
-  // A ref mirrors the latest request so `handleConfirmResult` can resolve it
-  // *outside* the state updater — resolving inside a `setState` updater is a
-  // React anti-pattern (StrictMode invokes updaters twice, double-resolving the
-  // promise). Mirrors the ref pattern used in PluginPanel.
-  const [confirmRequest, setConfirmRequest] = useState<ConfirmRequest | null>(
-    null,
-  );
-  const confirmRequestRef = useRef<ConfirmRequest | null>(null);
-  confirmRequestRef.current = confirmRequest;
-  const confirmAsync = useCallback(
-    (params: PluginRpcConfirmRequest) =>
-      new Promise<boolean>((resolve) => {
-        setConfirmRequest({ ...params, resolve });
-      }),
-    [],
-  );
-  const handleConfirmResult = useCallback((value: boolean) => {
-    const current = confirmRequestRef.current;
-    if (!current) return;
-    current.resolve(value);
-    setConfirmRequest(null);
-  }, []);
-
   const { isImageGenActive, generatingImage, handleGenerateImage } =
-    useImageGeneration({ sessionPlugins, sessionId, confirm: confirmAsync, t });
+    useImageGeneration({ sessionPlugins, sessionId, t });
 
   // Precompute the index of the last user message once (O(n)). An interactive
   // block is "locked" iff a later user message exists, i.e. its index is below
@@ -350,33 +314,6 @@ export function ChatMessages({
           </Button>
         )}
       </div>
-      <Dialog
-        open={confirmRequest !== null}
-        onOpenChange={(open) => {
-          if (!open) handleConfirmResult(false);
-        }}
-      >
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>{confirmRequest?.title}</DialogTitle>
-            <DialogDescription className="whitespace-pre-line pt-1">
-              {confirmRequest?.message}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="flex justify-end gap-2 pt-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => handleConfirmResult(false)}
-            >
-              {confirmRequest?.cancelLabel}
-            </Button>
-            <Button size="sm" onClick={() => handleConfirmResult(true)}>
-              {confirmRequest?.confirmLabel}
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
     </>
   );
 }

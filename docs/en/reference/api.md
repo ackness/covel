@@ -1019,7 +1019,7 @@ Authentication:
 
 What each endpoint accepts and returns:
 
-- `POST /api/install/plugin`: accepts a `.zip` with `PLUGIN.md` and `package.json` at the root, or a `.zip` with a multi-runtime layout. Returns `201 { ok, kind: "plugin", id, restartRequired: true }`.
+- `POST /api/install/plugin`: accepts a `.zip` with `PLUGIN.md` and `package.json` at the root, or a `.zip` with a multi-runtime layout. Returns `201 { ok, kind: "plugin", id, restartRequired: true, hasServerCode }`.
 - `POST /api/install/world`: accepts a `.zip` with `world.yaml` and `WORLD.md` at the root. Returns `201 { ok, kind: "world", id, restartRequired: false }`.
 - `POST /api/install/plugin/github/preview`: returns the fixed commit, the summary, and the signed preview.
 - `.../github/update/preview`: returns `{ status: "current" }`, `{ status: "pinned" }`, or `{ status: "available", ... }` plus a preview. The full contract of the update endpoints is in [Plugin install](./plugin-installation.md#http-contract) and [World install](./world-installation.md).
