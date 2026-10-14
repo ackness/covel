@@ -1,6 +1,6 @@
 ### Fixed
 
-- **Connection tests and model lists use newly saved keys immediately.** Replacing or deleting a desktop key updates the same live key map used by turns (F-033).
+- **Connection tests and model lists use newly saved keys immediately.** Replacing or deleting a desktop key updates the same live key map used by turns, while preserving external environment keys and their precedence (F-033).
 
 ### Security
 

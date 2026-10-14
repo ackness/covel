@@ -38,6 +38,7 @@ import {
 } from "@covel/shared/desktop-config/node";
 import {
   normalizeProviderKeyMap,
+  providerApiKeysFromEnv,
   providerKeyToId,
   readRuntimeEnv,
   toApiKeyEnvMap,
@@ -70,13 +71,18 @@ import { captureBootKeySources } from "../lib/env-key-overrides.js";
 export interface ConfigApiDeps {
   /** Mutable map shared with the gateway adapter. PUT handlers mutate in-place. */
   apiKeys: Record<string, string>;
+  /** Captured before keys.env is merged; saved-key edits cannot change these. */
+  externalApiKeys?: Readonly<Record<string, string>>;
 }
 
 export function createConfigApiRoutes(deps: ConfigApiDeps): Hono {
   const app = new Hono();
   const requireToken = makeDesktopRestTokenGuard();
   const initialCovelHome = resolveCovelHome();
-  captureBootKeySources(initialCovelHome);
+  const externalApiKeys = {
+    ...(deps.externalApiKeys ?? providerApiKeysFromEnv()),
+  };
+  captureBootKeySources(externalApiKeys);
   const systemProxyUrl = readRuntimeEnv().systemProxyUrl;
   const resolveSystemProxy = getDesktopSystemProxyResolver();
   try {
@@ -229,9 +235,11 @@ export function createConfigApiRoutes(deps: ConfigApiDeps): Hono {
 
     writeKeysEnv(file, entries);
     // Publish only after the atomic file replacement succeeds. Leave keys
-    // supplied exclusively by the process environment untouched.
+    // supplied by the external environment in precedence over saved copies.
     for (const [providerId, value] of updates) {
-      if (value === null) delete deps.apiKeys[providerId];
+      const externalKey = externalApiKeys[providerId];
+      if (externalKey !== undefined) deps.apiKeys[providerId] = externalKey;
+      else if (value === null) delete deps.apiKeys[providerId];
       else deps.apiKeys[providerId] = value;
     }
     return c.json({ ok: true });

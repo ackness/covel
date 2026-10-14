@@ -115,6 +115,8 @@ max_files   = 10
 
 ## `~/.covel/keys.env`
 
+外部环境的密钥优先于本地保存的副本，即使两个值相同。删除本地副本不会删除外部密钥。后端启动时先记录外部密钥，再加载 `keys.env`，因此保存操作不会混淆两种来源。
+
 ```env
 # 一行一个 KEY=VALUE，# 开头是注释
 DEEPSEEK_API_KEY=sk-xxxxxxxxxxxx

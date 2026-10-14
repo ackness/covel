@@ -1427,7 +1427,7 @@ Desktop only. It writes provider keys to `<covelHome>/keys.env`.
 
 - The body is `{ provider: string | null }`. An empty string or `null` means delete that key.
 - The whole batch of input is validated first. If a value contains a newline, or is of another type, it returns `400`, and the file and the runtime both stay as they were.
-- The runtime's keys are updated only after the file is written atomically and successfully. Turns, connection tests, and model lists use the new keys immediately.
+- The runtime's keys are updated only after the file is written atomically and successfully. Turns, connection tests, and model lists use the new keys immediately. External keys (shell, `.env`, `.env.llm`) retain precedence; deleting or replacing a local key changes only the saved copy, without clearing or overriding the external key.
 
 How the desktop app (Electron) behaves when it saves keys:
 

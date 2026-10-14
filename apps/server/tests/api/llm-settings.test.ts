@@ -1,4 +1,4 @@
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createConfigApiRoutes } from "../../src/routes/config-api.js";
@@ -697,7 +697,7 @@ it("uses saved key replacements and deletions immediately in both probes", async
   vi.stubEnv("OPENAI_API_KEY", "stale-boot-key");
   const apiKeys: Record<string, string> = { openai: "stale-boot-key" };
   const { app, gateway } = setup({ apiKeys });
-  app.route("/", createConfigApiRoutes({ apiKeys }));
+  app.route("/", createConfigApiRoutes({ apiKeys, externalApiKeys: {} }));
   const stream = vi.spyOn(gateway, "streamText");
   const fetchMock = vi
     .fn()
@@ -734,3 +734,61 @@ it("uses saved key replacements and deletions immediately in both probes", async
     );
   }
 });
+
+it.each(["saved-key", "external-key"])(
+  "preserves external keys when replacing or deleting a saved copy (%s)",
+  async (externalKey) => {
+    vi.stubEnv("DEPLOYMENT_TIER", "self");
+    vi.stubEnv("COVEL_DESKTOP_REST", "1");
+    vi.stubEnv("COVEL_DESKTOP_REST_TOKEN", "");
+    const home = mkdtempSync(join(tmpdir(), "external-probe-keys-"));
+    vi.stubEnv("COVEL_HOME", home);
+    vi.stubEnv("OPENAI_API_KEY", externalKey);
+    writeFileSync(join(home, "keys.env"), "OPENAI_API_KEY=saved-key\n");
+    const apiKeys = { openai: externalKey };
+    const { app, gateway } = setup({ apiKeys });
+    app.route(
+      "/",
+      createConfigApiRoutes({
+        apiKeys,
+        externalApiKeys: { openai: externalKey },
+      }),
+    );
+    const stream = vi.spyOn(gateway, "streamText");
+    const fetchMock = vi
+      .fn()
+      .mockImplementation(async () => Response.json({ data: [] }));
+    vi.stubGlobal("fetch", fetchMock);
+    for (const savedKey of ["replacement", null]) {
+      const saved = await app.request("/api/config/keys", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ openai: savedKey }),
+      });
+      expect(saved.status).toBe(200);
+      const file = readFileSync(join(home, "keys.env"), "utf8");
+      if (savedKey) expect(file).toContain("OPENAI_API_KEY=replacement");
+      else expect(file).not.toMatch(/^OPENAI_API_KEY=/m);
+      expect(apiKeys).toEqual({ openai: externalKey });
+      expect(process.env.OPENAI_API_KEY).toBe(externalKey);
+      await app.request("/api/ai/models", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ provider: "openai" }),
+      });
+      expect(
+        new Headers(fetchMock.mock.calls.at(-1)?.[1].headers).get(
+          "authorization",
+        ),
+      ).toBe(`Bearer ${externalKey}`);
+      await app.request("/api/ai/ping", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ presetId: "slot-story" }),
+      });
+      expect(stream.mock.calls.at(-1)?.[1]?.envApiKeys).toEqual({
+        openai: externalKey,
+      });
+    }
+  },
+);

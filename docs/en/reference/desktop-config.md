@@ -116,6 +116,8 @@ A packaged desktop app queries the latest stable GitHub Release through `GET /ap
 
 ## `~/.covel/keys.env`
 
+External environment keys take precedence over saved copies, even when their values match. Deleting a local copy does not delete an external key. At startup, the sidecar records external keys before loading `keys.env`, so saves keep the two sources separate.
+
 ```env
 # One KEY=VALUE per line; # starts a comment.
 DEEPSEEK_API_KEY=sk-xxxxxxxxxxxx
