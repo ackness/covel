@@ -2209,6 +2209,7 @@ Notes:
   - These requirements are saved with the session in `metadata.pluginSelection.requiredContracts`. Later starts, stops, and reloads use this list and do not read the world again.
   - When a requirement is not met, the session is still created: no provider is installed, there are several providers and the request does not pick one, the player turned a provider off on purpose, or the provider is a community plugin that is still waiting for approval. The response lists each one in `unmetRequirements` as `{ contract, code, candidates? }`, where `code` is `missing-provider`, `ambiguous-provider`, `excluded`, or `approval-required`. The first two also write a warning to the server log.
 - When the world declares dimensions and none of the plugins turned on for this session provides `world.dimensions@1`, the dimensions are not imported and the session is still created. The response's `ignoredDimensions` lists these dimension IDs; the session runs without dimensions.
+- A plugin with a missing dependency: when no provider gives a contract it depends on (say the player turned the provider off), the session is still created and the plugin is turned off automatically. Such plugins that the player asked for, or that are `kind: core`, are still written into `activePlugins`; `GET /api/sessions/:id/plugins` lists them in `unavailable`, and they come back on their own once the dependency is back. Rules: [Session plugin selection](./plugins.md#session-plugin-selection).
 - `metadata.characterSchema`: when a local session is created in Web private mode, the same schema is written. If the preset is not valid, the session is not created.
 - `metadata.embeddedCharacters`: these are not a plugin's character cards. They do not make a copy of plugin data.
 - `metadata.embeddedLorebook`: AI-generated worlds with `server-store` / `return-only` use it to carry their material and rules.
@@ -2269,12 +2270,13 @@ When `ownerToken` must be sent:
 
 **Errors:**
 
-| Status | `code`                    | When                                                                                               |
-| ------ | ------------------------- | -------------------------------------------------------------------------------------------------- |
-| 401    | `operator_token_required` | On a hosted deployment (`demo` / `commercial`), the session was created without the operator token |
-| 404    | `world_not_found`         | A `worldId` was given, but the world does not exist                                                |
-| 409    | `world_deleting`          | The world is being deleted                                                                         |
-| 409    | `session_already_exists`  | The `id` chosen by the client already exists                                                       |
+| Status | `code`                    | When                                                                                                                                   |
+| ------ | ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| 400    | `plugin_rejected`         | A plugin the player asked for is rejected for a reason other than a missing dependency, such as a conflict; `details` is the rejection |
+| 401    | `operator_token_required` | On a hosted deployment (`demo` / `commercial`), the session was created without the operator token                                     |
+| 404    | `world_not_found`         | A `worldId` was given, but the world does not exist                                                                                    |
+| 409    | `world_deleting`          | The world is being deleted                                                                                                             |
+| 409    | `session_already_exists`  | The `id` chosen by the client already exists                                                                                           |
 
 - When `id` already exists, the response body is `{ "error": "Session already exists: <id>", "code": "session_already_exists" }`. Creating does not overwrite the existing session, and it does not treat the old session's child records as data for the new session.
 - The server checks the world once before preparing resources and once more when the session is committed. Preparing does not attach media to the session. If it fails, any leftover bytes that nothing refers to are cleaned up by media GC. It does not force-delete content that another session might be using.
