@@ -295,7 +295,7 @@ setup runtime 的完成状态按根 `PLUGIN.md` 的 `version` 记录。发布新
 触发类型有 `auto`、`scheduled`、`manual` 和 `event`。
 
 - 自动进入主循环的 runtime 应声明 stage。`manual` 和 `event` 按请求或事件单独触发。
-- `schedule.manual.execution: background` 让手动运行在后台执行。
+- `schedule.manual.execution: background` 让手动运行在后台执行。这样的手动或事件 runtime 没有同一次执行的上游，所以不能读 `scope: turn` 的输入；改用 `scope: committed` 或内核输入。
 - `schedule.completion` 控制回合是否等它结束。具体限制由清单校验和运行时准入检查执行。
 
 ### 历史窗口（`agent.history`）
@@ -394,7 +394,6 @@ io:
       required: false
     digest:
       from: { kernel: turn-digest@1 }
-      required: false
   selfData:
     - namespace: facts
       as: <known-facts>
@@ -410,6 +409,7 @@ io:
 
 - 普通输入读同一次执行里已完成的上游结果。`select` 是结果值上的 JSON Pointer。
 - 要读更早的执行留下的结果，用 `scope: committed` 加 `recordAs`。
+- 内核输入（`from: { kernel: turn-digest@1 }`）只写 `from`。它总有值，也不按 schema 检查，所以写 `scope`、`select`、`required`、`accepts` 或 `recordAs` 会被拒绝。
 - schema 可以是本地路径，也可以写 `contract:<contractId>`。跨提供者的契约 schema 在加载时解析。
 - 在提示词里，一个输入位于 `runtime-inputs.<binding>.value`。不要依赖旧的注入标签。
 - 叙事之后运行的 agent 如果绑定的是本回合的故事正文，这个 `value` 是一句指向对话里那条正文消息的话，正文本身不重复（见 [Prompt 结构](./prompt-structure.md#本回合正文)）。
@@ -741,6 +741,8 @@ namespace 声明 `search` 之后，它的记录进入框架的记忆检索（[`m
 - 其他初始默认请求、世界的 `requested` 和玩家手动添加的请求保留。显式排除继续优先。
 - 手动修改会清除包卡片的高亮，但旧包的来源仍然记着，下一次切换不会把旧包累加进来。手动重新启用的包内插件作为手选保留。
 - 世界的 `requires` 仍由解析器独立校验。不能把 `requested` 当作不可取消的必需项。
+- 玩法包可以带 `excluded`：选中这个包时关掉其中的插件，`kind: core` 的也一样，玩家可以再打开。切换到下一个包时只撤销上一个包加的排除，玩家自己的排除保留。世界初始选中的包，它的排除从一开始就生效。没有安装的插件不出现在 `excluded` 里。
+- “回到最小集合”按钮只留叙事插件（已选的；一个都没选时用 core 里的）、提供 `world.dimensions@1` 的插件，以及它们和世界的 `requires` 拉进来的插件。其余的 core 插件和世界 `requested` 的插件都被排除，玩法包的高亮清除。
 
 **存档固定玩家确认的那一组。**
 
@@ -761,8 +763,17 @@ namespace 声明 `search` 之后，它的记录进入框架的记忆检索（[`m
 
 - 引用的 entry、handler、guard、JSON Schema 和 UI 文件必须在包里。
 - 每份 JSON UI spec 声明 `view` 或 `webview` 中的一个；`view` 里的组件名必须在[组件目录](./ui-components.md)里；`repeat.statePath` 和 `$item` 的写法必须合法（见 [UI 面板](./ui-panels.md#json-render-绑定速查)）。报错给出 spec 文件和节点的路径。
-- 自动和定时的 runtime 必须有 stage。
 - 内置工具名和插件工具声明、包内的 runtime 引用，以及根契约依赖必须一致。
+- 跨字段的规则（例如 `schedule.completion.mode: detached` 只能用在 `post-turn` 或 `audit`）报错时给出文件路径和你写的字段路径，例如 `runtimes/note/RUNTIME.md: schedule.stage: …`。
+
+加载、`pnpm validate:plugin` 和安装用同一份清单规则（`@covel/shared` 的 schema），UI spec 也一样：校验通过的面板，游戏里不会因为格式被去掉。
+
+有的错误只让一个 runtime 永远不能运行，而不影响包的其余部分：
+
+- 自动或定时的 runtime 没有写 `schedule.stage`。框架不猜默认的 stage。
+- 后台执行的手动或事件 runtime 读同一次执行的输入（见[触发方式](#触发方式)）。
+
+手动放进插件目录的包遇到这类错误时，加载器只去掉这个 runtime，在服务端日志里写明文件、字段和原因，包的其他 runtime、工具和面板照常加载；它的输出契约也不再算这个包提供。`pnpm validate:plugin` 和安装把它报为错误。
 
 目录级检查还会在插件根目录有 `llm.toml` 时给出提醒：这个文件不会被读取，不影响通过。
 

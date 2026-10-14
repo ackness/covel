@@ -11,10 +11,12 @@ import {
   confirmedPluginIds,
   readSessionPluginSelection,
   resolveSessionPluginPlan,
+  runnablePluginIds,
   storedPluginSelection,
   authorizedSessionPluginIds,
 } from "./plugins.js";
 import { buildSessionCommandList } from "./commands.js";
+import { importWorldDataForJoinedPlugins } from "../../../world-data/receiver-import.js";
 import {
   checkHostedOperator,
   resolveSessionParam,
@@ -201,6 +203,9 @@ export function registerSessionPluginRoutes(
       if (rejected)
         return c.json(errorBody(rejected.reason, { code: rejected.code }), 409);
       const active = plan.active;
+      const previouslyActive = new Set(
+        runnablePluginIds(session.activePlugins, pluginRegistry),
+      );
       const droppedProvider = droppedDimensionProvider(session, active);
       if (droppedProvider)
         return c.json(dimensionProviderRequired(droppedProvider), 409);
@@ -233,7 +238,62 @@ export function registerSessionPluginRoutes(
         }
       }
       c.get("uiSlots")?.invalidateSession(id);
-      return c.json(okBody({ activePluginIds: active, resolution: plan }));
+      // Creation skipped the world data of plugins that were not active then,
+      // such as a community plugin approved after the game started. Import it
+      // once for them now, still under the session lock, so no turn sees the
+      // plugin without its data. The plugin stays enabled if this fails; the
+      // player is told what is missing.
+      const joined = active.filter(
+        (activeId) => !previouslyActive.has(activeId),
+      );
+      let worldData;
+      try {
+        worldData = await importWorldDataForJoinedPlugins({
+          store,
+          mediaStore: c.get("mediaStore"),
+          session,
+          joined,
+          worldsDirs: c.get("worldsDirs"),
+          covelHome: c.get("covelHome"),
+          now: new Date().toISOString(),
+          preflight: {
+            activePlugins: active,
+            registry: pluginRegistry,
+            canExecuteProjection: (projectionPluginId: string) =>
+              c
+                .get("rpcApprovalGate")
+                .hasGrant(
+                  id,
+                  projectionPluginId,
+                  COMMUNITY_SERVER_CODE_ACTION,
+                  sessionApprovalScope(session, projectionPluginId),
+                ),
+          },
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        console.warn(
+          `[sessions] world-data import for ${joined.join(", ")} failed: ${message}`,
+        );
+        worldData = {
+          receivers: [],
+          imported: 0,
+          conflicts: 0,
+          notices: [
+            {
+              level: "error" as const,
+              message: `World data import failed: ${message}`,
+            },
+          ],
+        };
+      }
+      return c.json(
+        okBody({
+          activePluginIds: active,
+          resolution: plan,
+          ...(worldData ? { worldData } : {}),
+        }),
+      );
     });
   });
 

@@ -271,6 +271,11 @@
     "memoryUpdateFailedHint": "本轮剧情已保存。请检查用途分配中的记忆模型和服务商配置；下一回合会再次尝试更新。",
     "memoryUpdateErrorDetails": "错误详情",
     "memoryStoreWarning": "重启后数据将丢失",
+    "worldDataNotices": {
+      "title": "这个世界的部分数据没有进入这局游戏：",
+      "hint": "给已关闭或正在等你批准的插件的数据，会在打开那个插件时导入。",
+      "hide": "隐藏"
+    },
     "worldDataPreflight": {
       "title": "世界数据",
       "loading": "检查中",
@@ -367,6 +372,8 @@
     "stoppedDetail": "本轮生成内容未写入存档，可使用原输入重新尝试。",
     "submittedInteraction": "已完成的交互 · 展开查看",
     "advancedPluginSettings": "自定义插件与高级设置",
+    "minimalPluginSet": "回到最小集合",
+    "minimalPluginSetHint": "只留叙事插件、保存世界维度的插件，以及它们和世界必需的插件，其余全部关闭。",
     "configureModelBeforeRetry": "更换模型 / 调整参数",
     "retryModelSettingsHint": "可先更换模型或调低输出限制，再重试此任务；重试使用当前设置。",
     "allWorlds": "全部世界（{{total}}）",

@@ -48,6 +48,7 @@ import {
   prepareWorldDataImportForSession,
   type WorldDataImportedMediaRef,
 } from "../../world-data/session-import.js";
+import { worldDataImportNotices } from "../../world-data/receiver-import.js";
 import {
   decorateSessionList,
   withEmbeddingMetadata,
@@ -600,6 +601,13 @@ sessionRoutes.post("/", async (c) => {
       ),
   );
 
+  // World data the session started without, such as what only a community
+  // plugin still waiting for approval receives. The player is told; the
+  // data arrives when the plugin is enabled.
+  const worldDataNotices = worldDataImportNotices(
+    preparedWorldData.diagnostics,
+  );
+
   // `ownerToken` is returned exactly once — it is never readable again
   // (only its hash is stored). Clients on hosted tiers must persist it.
   return c.json(
@@ -614,6 +622,7 @@ sessionRoutes.post("/", async (c) => {
       ...(untranslatedPlugins.length > 0
         ? { pluginsWithoutLocale: untranslatedPlugins }
         : {}),
+      ...(worldDataNotices.length > 0 ? { worldDataNotices } : {}),
     },
     201,
   );
