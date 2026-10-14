@@ -1,5 +1,5 @@
 /**
- * One preview and one atomic install for everything under a GitHub URL.
+ * One preview and one batch install for everything under a GitHub URL.
  *
  * A directory holding `covel-collection.yaml` installs exactly the packages the
  * manifest lists, including ones pinned in other repositories. Any other
@@ -34,6 +34,7 @@ import {
 import { resolveUserResourceDirs } from "../../../lib/user-resource-dirs.js";
 import { buildPluginSummary } from "../../../lib/plugin-descriptor.js";
 import { APP_VERSION } from "../../../lib/app-version.js";
+import { rollbackWorldWithLifecycle } from "../worlds/delete-route.js";
 import { checkWorldWriteAccess } from "../worlds/world-write-guard.js";
 import {
   inspectBundle,
@@ -59,6 +60,7 @@ import {
 } from "./plugin-bundle.js";
 import {
   collectUpload,
+  createCollectionExtractionBudget,
   errorResponse,
   httpError,
   isBlobLike,
@@ -151,9 +153,9 @@ interface PreparedPackage {
 
 /**
  * Install validated packages as a unit. Nothing is written when a target
- * already exists. Plugins are promoted first, then worlds; any failure removes
- * what this call promoted. That is safe because plugin code is not loaded
- * before the restart, and a world activated a moment ago has no sessions.
+ * already exists. Plugins are promoted first, then worlds. On failure, world
+ * rollback uses the deletion lifecycle and retains worlds that acquired saves.
+ * Every completed and incomplete rollback is reported to the caller.
  */
 async function installPrepared(
   c: Context,
@@ -190,19 +192,47 @@ async function installPrepared(
         done.push({ kind, id: item.id });
       }
   } catch (error) {
+    console.error("[install] collection installation failed", error);
+    const rolledBack: typeof done = [];
+    const retained: typeof done = [];
     for (const item of [...done].reverse()) {
-      const root = item.kind === "world" ? dirs.worlds : dirs.plugins;
       try {
-        if (item.kind === "world") await c.get("store").deleteWorld(item.id);
-        await rm(path.join(root, item.id), { recursive: true, force: true });
+        if (item.kind === "world") {
+          const response = await rollbackWorldWithLifecycle(c, item.id);
+          if (!response.ok && response.status !== 404)
+            throw new Error(`World rollback refused (${response.status})`);
+        } else {
+          await withPackageMutation(
+            item.id,
+            () =>
+              rm(path.join(dirs.plugins, item.id), {
+                recursive: true,
+                force: true,
+              }),
+            dirs.plugins,
+          );
+        }
+        rolledBack.push(item);
       } catch (rollbackError) {
+        retained.push(item);
         console.error(
-          `[install] ${c.req.method} ${c.req.url}: could not roll back ${item.kind} ${item.id}`,
+          `[install] could not roll back ${item.kind} ${item.id}`,
           rollbackError,
         );
       }
     }
-    throw error;
+    const failure =
+      error instanceof Error && "httpStatus" in error
+        ? (error as HttpError)
+        : httpError(500, "Collection installation failed");
+    throw httpError(
+      failure.httpStatus,
+      failure.message +
+        (retained.length
+          ? `; rollback retained: ${retained.map((item) => `${item.kind} ${item.id}`).join(", ")}`
+          : ""),
+      { rolledBack, retained },
+    );
   }
   return {
     ok: true as const,
@@ -221,7 +251,13 @@ githubCollectionRoutes.post("/github/preview", async (c) => {
     const signal = c.req.raw.signal;
     const location = parseGithubUrl(url);
     const { commit, tracking } = await resolveGithubRevision(location, signal);
-    const archive = await downloadGithubEntries(location, commit, signal);
+    const budget = createCollectionExtractionBudget();
+    const archive = await downloadGithubEntries(
+      location,
+      commit,
+      signal,
+      budget,
+    );
     const problems: CollectionProblem[] = [];
     const worldsAllowed = !checkWorldWriteAccess(c);
 
@@ -234,7 +270,12 @@ githubCollectionRoutes.post("/github/preview", async (c) => {
     if (manifestEntry) {
       manifest = parseCollectionManifest(manifestEntry);
       // One download per pinned repository, however many members it holds.
-      const external = new Map<string, Promise<ExtractedEntry[]>>();
+      const external = new Map<string, Promise<ExtractedEntry[]>>([
+        [
+          `${location.owner}/${location.repo}@${commit}`,
+          Promise.resolve(archive),
+        ],
+      ]);
       const resolveMember = async (
         kind: Kind,
         member: CollectionMember,
@@ -255,7 +296,7 @@ githubCollectionRoutes.post("/github/preview", async (c) => {
         if (!external.has(key))
           external.set(
             key,
-            downloadGithubEntries(other, member.commit, signal),
+            downloadGithubEntries(other, member.commit, signal, budget),
           );
         return {
           kind,
@@ -394,6 +435,7 @@ githubCollectionRoutes.post("/github/batch", async (c) => {
     // Phase 1 writes nothing: every package is downloaded, matched against the
     // digest the user reviewed, and validated before the first file lands.
     const archives = new Map<string, Promise<ExtractedEntry[]>>();
+    const budget = createCollectionExtractionBudget();
     const prepared: PreparedPackage[] = [];
     for (const token of new Set(tokens)) {
       const signed = verifyPreview(token);
@@ -413,6 +455,7 @@ githubCollectionRoutes.post("/github/batch", async (c) => {
             parseGithubUrl(preview.source.repository),
             preview.source.commit,
             signal,
+            budget,
           ),
         );
       const entries = selectPackageEntries(
@@ -463,6 +506,7 @@ githubCollectionRoutes.post("/collection", async (c) => {
     const entries = await readAllEntries(
       await collectUpload(file),
       "/covel-collection-install-sentinel",
+      createCollectionExtractionBudget(),
     );
     const manifestEntry = entries.find(
       (entry) => entry.relativePath === COLLECTION_MANIFEST_FILE,
