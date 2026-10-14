@@ -7,6 +7,10 @@
 
 - **Every plugin can import the plugin SDK and `zod` without shipping them.** The host resolves `@covel/plugin-handlers-utils` (with its `/dimensions` and `/prompts` subpaths) and `zod` to its own copies for the entry, handlers, guards and world projections of every plugin, bundled or installed. A plugin copied out of the repository loads as it does inside it; any other library it uses must still be bundled. `docs/plugins/essentials.md`, `docs/ship/package.md`.
 
+### Changed
+
+- **Bundled plugins declare the SDK and `zod` only as development dependencies.** Their `package.json` files no longer list runtime `dependencies`, so each bundled plugin passes the same package check the installer applies to a ZIP, GitHub or collection install. Plugin authors list these two packages under `devDependencies` too: `docs/ship/publish.md`.
+
 ### Fixed
 
 - **An agent guard reads its runtime's input bindings.** `ctx.inputs` was missing in a guard, so a guard could not see the upstream values its runtime declares in `io.inputs`.

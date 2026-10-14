@@ -313,7 +313,7 @@ pnpm validate:plugin ~/.covel/plugins/my-plugin
 插件的代码只依赖公开的 SDK `@covel/plugin-handlers-utils`，不要引用 Covel 内部的包、数据库表或前端组件。
 
 > [!IMPORTANT]
-> 这个 SDK 没有发布到 npm，安装插件时也不会执行 `npm install`。Covel 给每个插件提供 SDK（包括 `/dimensions`、`/prompts` 子入口）和 `zod`，插件代码直接 `import` 就行，内置插件和装在用户目录里的插件一样。用到的其他库要打包进插件。
+> 这个 SDK 没有发布到 npm，安装插件时也不会执行 `npm install`。Covel 给每个插件提供 SDK（包括 `/dimensions`、`/prompts` 子入口）和 `zod`，插件代码直接 `import` 就行，内置插件和装在用户目录里的插件一样。开发时要装它们，就写进 `package.json` 的 `devDependencies`：安装器拒绝非空的 `dependencies`。用到的其他库要打包进插件。
 
 常用的帮手：
 

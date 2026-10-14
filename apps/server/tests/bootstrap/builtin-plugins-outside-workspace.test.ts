@@ -1,10 +1,11 @@
 /**
  * A bundled plugin uses nothing an installed one cannot. Every bundled plugin
  * is copied, without its `node_modules`, to a directory outside the
- * workspace, discovered there as a community package, and loaded the way an
- * approved installed package is: its entry runs and every handler and guard
- * imports. Bare imports of the plugin SDK and zod resolve to the host's
- * copies; anything else a plugin imports it must ship.
+ * workspace. Each copy must pass the installer's package check, and is then
+ * discovered there as a community package and loaded the way an approved
+ * installed package is: its entry runs and every handler and guard imports.
+ * Bare imports of the plugin SDK and zod resolve to the host's copies;
+ * anything else a plugin imports it must ship.
  *
  * Vitest resolves dynamic imports itself, where Node's module hooks do not
  * run, so the loading happens in a plain Node process with tsx, as the server
@@ -17,12 +18,33 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 import { afterAll, expect, it } from "vitest";
+import { validatePluginBundle } from "../../src/routes/api/install/plugin-bundle.js";
+import type { ExtractedEntry } from "../../src/routes/api/install/shared.js";
 
 const run = promisify(execFile);
 const serverRoot = path.resolve(import.meta.dirname, "../..");
 const pluginsRoot = path.resolve(serverRoot, "../../plugins");
 const source = (file: string) =>
   JSON.stringify(pathToFileURL(path.join(serverRoot, file)).href);
+
+/** The files of a plugin directory as the installer sees an unpacked ZIP. */
+async function bundleEntries(root: string): Promise<ExtractedEntry[]> {
+  const files = await fs.readdir(root, {
+    recursive: true,
+    withFileTypes: true,
+  });
+  return Promise.all(
+    files
+      .filter((file) => file.isFile())
+      .map(async (file) => {
+        const absolute = path.join(file.parentPath, file.name);
+        return {
+          relativePath: path.relative(root, absolute).split(path.sep).join("/"),
+          content: await fs.readFile(absolute),
+        };
+      }),
+  );
+}
 
 let temp: string | undefined;
 afterAll(async () => {
@@ -145,8 +167,21 @@ it("loads every bundled plugin from a directory outside the workspace", async ()
   for (const name of bundled)
     await fs.cp(path.join(pluginsRoot, name), path.join(installed, name), {
       recursive: true,
-      filter: (file) => !["node_modules", "tests"].includes(path.basename(file)),
+      filter: (file) =>
+        !["node_modules", "tests"].includes(path.basename(file)),
     });
+  const rejected: Record<string, string> = {};
+  for (const name of bundled) {
+    try {
+      validatePluginBundle(
+        await bundleEntries(path.join(installed, name)),
+        new Set(),
+      );
+    } catch (error) {
+      rejected[name] = error instanceof Error ? error.message : String(error);
+    }
+  }
+  expect(rejected).toEqual({});
   const runner = path.join(serverRoot, `.outside-workspace-${process.pid}.mts`);
   await fs.writeFile(runner, RUNNER);
   try {

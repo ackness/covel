@@ -117,7 +117,7 @@
 - 使用规范的插件 ID，不能覆盖内置插件的 ID。
 - 清单和语言变体只接受普通的 YAML frontmatter，拒绝可执行的语言标记。
 - 安装器不执行脚本、包管理器、编译器或插件模块。
-- 所有插件安装入口（GitHub、ZIP、离线合集）和更新都要求运行文件自包含：`package.json` 的 `dependencies`、`optionalDependencies`、`peerDependencies` 必须省略或为空。`devDependencies` 不受这条限制。
+- 所有插件安装入口（GitHub、ZIP、离线合集）和更新都要求运行文件自包含：`package.json` 的 `dependencies`、`optionalDependencies`、`peerDependencies` 必须省略或为空。`devDependencies` 不受这条限制。宿主给每个插件提供 `@covel/plugin-handlers-utils` 和 `zod`，插件不用声明它们为运行依赖；内置插件也只在 `devDependencies` 里写它们。
 - 声明了运行时依赖时，安装器返回 400，指出非空的字段，不写入包。作者应把依赖打进发布文件，再删除这些声明或留空。
 - 需要构建的插件，作者应该在独立的发布目录里提供已构建、自包含的文件。
 
