@@ -15,6 +15,7 @@ import { SuspensionsPanel } from "./suspensions-panel.js";
 import { UnsavedNarratives } from "./unsaved-narratives.js";
 import { ExecutionRecoveryNotice } from "./execution-recovery-notice.js";
 import { SetupProgressNotice, setupProgress } from "./setup-progress-notice.js";
+import { WorldDataNotices } from "./world-data-notices.js";
 import { SessionPluginNotices } from "./session-plugin-notices.js";
 import {
   ResizableHandle,
@@ -102,6 +103,7 @@ export function GameView({
     sessionCommands,
     sessionCommandsLoaded,
     unavailableSessionPlugins,
+    worldDataNotices,
     presets,
     llmConfig,
     statePatchRevision,
@@ -531,6 +533,8 @@ export function GameView({
             busy={executing}
             onTurnOn={(pluginId) => void onTogglePlugin(pluginId, true)}
           />
+
+          <WorldDataNotices notices={worldDataNotices} />
 
           {/* Messages */}
           {stageActive && <SessionDimensionsPanel recoveryOnly />}

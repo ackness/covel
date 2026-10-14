@@ -677,7 +677,7 @@ For a field-by-field explanation, see the generated [World data descriptor field
 
 - A missing `key` is an error.
 - Without `indexTo`, nothing records which images exist, so these files are not imported.
-- When the plugin that receives the image index is not enabled, the files of this source are not imported either. This is a warning, and it does not affect other data. Enabling the receiving plugin later in an existing session does not import them automatically. Authors and tools can call the [sync API](#preflight-and-sync). Players who want this starting data should enable the receiving plugin when starting a new session.
+- When the plugin that receives the image index is not enabled, the files of this source are not imported either. This is a warning, and it does not affect other data. When the receiving plugin is enabled later in the game, its data is imported once on its own (see [Receivers that join after the game starts](#receivers-that-join-after-the-game-starts)).
 
 ### Images visible before a session
 
@@ -833,6 +833,16 @@ For plugin authors: the merge rule is `applyLocaleOverlay` in `@covel/shared`. T
 - A media source uses `to: media` with `indexTo` in contract form. A structured source cannot set `to` to `media`. This kind of wrong combination is rejected during validation.
 - A path in `world:metadata.<path>` cannot contain dangerous segments such as `__proto__`. Paths other than `dimensions` are only recorded for now, and they have no effect.
 - World data is imported when a session is created. Authors and tools can update existing sessions through [`sync-data`](#preflight-and-sync). Calling `preflight` first lets you see the diagnostics before anything is written. The app has no sync control for players.
+- The create-session response lists the data that was not imported in `worldDataNotices` (warnings and errors, such as a receiving plugin that is not enabled), and the game screen shows them to the player.
+
+### Receivers that join after the game starts
+
+A plugin that is not enabled when the session is created gets no world data, for example a community plugin approved after the game starts. When a plugin is enabled in the game (`PUT /api/sessions/:id/plugins/:pluginId`), Covel imports once for the plugins that just joined:
+
+- It writes data only for joined plugins that have no import ledger rows for this world yet. Other plugins' data and ledger rows stay as they are; turning the same plugin off and on again does not overwrite what the game changed.
+- A community plugin's projection code runs only after it is approved for this game.
+- The response's `worldData` says which plugins received data, how many rows were written, and which data is still missing with the current plugins (`notices`). The game screen replaces its earlier notice with it.
+- If the import fails, the plugin stays enabled and `notices` carries an error.
 
 ### Lorebook entries injected by player message
 
@@ -995,7 +1005,7 @@ Execution limits:
 - `preflight` checks only the source, the declarations, the target and the schema. **It does not load or run any handler.** Which keys a projection actually produces is known only after an import or a sync.
 - Import and sync run only the matching declarations of the plugins enabled in this game. When one projection fails, it only produces a warning. It does not stop the original source from being written, and it does not affect other plugins' projections.
 - Each declared output either succeeds as a whole group or is not written at all. If any record has an invalid key or schema, the group keeps the last successful content and ledger, and old and new content are never mixed. Only when the handler successfully returns `[]` does it mean "there really are no records". Only then are the old records deleted.
-- A built-in plugin's handler can run directly. A community plugin's handler needs this game to explicitly allow it to run server code. Permission cannot be given before the session is created, so authors and tools must use the HTTP API to run a community projection afterward: after the session is created, call the plugin enable (you can call it again even when the plugin is already enabled). This triggers the session-level permission for `covel:plugin-server-code`. Then call `sync-data`. Enabling or approving the plugin does not run the projection by itself. Without permission, an import only emits a warning and does not run the code in secret.
+- A built-in plugin's handler can run directly. A community plugin's handler needs this game to explicitly allow it to run server code. Permission cannot be given before the session is created, so at creation a community projection does not run: the import only emits a warning and does not run the code in secret. When the player approves and enables the plugin, the projection runs once with the import for [receivers that join after the game starts](#receivers-that-join-after-the-game-starts). To run it again for a newer world package, authors and tools call `sync-data`; the app has no sync control for players.
 - Each call runs in its own Worker. Its input is a structured clone:
 
   | Limit                          | Value                      |
@@ -1206,7 +1216,7 @@ sources:
 - A single media file can be at most 20 MB. The total of one source's directory can be at most 100 MB.
 - The extensions that can be imported are `.png`, `.jpg`, `.jpeg`, `.webp`, `.mp3`, `.wav` and `.mp4`.
 - The preflight check requires that the schema of the matching contract and the receiving declaration are registered. The `assets` and `presence` of `character-blueprint` receive `character.portrait-assets@1` and `character.portraits@1` respectively.
-- Put the receiving plugin in `pluginPolicy.recommended`, and the player can choose it. When it is not enabled, its data and media index are skipped, and a warning is given.
+- Put the receiving plugin in `pluginPolicy.recommended`, and the player can choose it. When it is not enabled, its data and media index are skipped, and a warning is given; when it is enabled later in the game, its data is imported once.
 
 For real examples, see `worlds/mistport` and `worlds/haruka-academy` (`data/world.data.yaml` + `media/`).
 
@@ -1483,7 +1493,7 @@ POST /api/worlds/<world-id>/world-data/preflight
 
 **Sync (sync):** an HTTP API for authors and tools that applies later data changes in a world package to one specified existing session. The app currently has no sync control for players.
 
-Updating a world package, hot-reloading files, enabling a plugin or approving its server code does not call sync automatically. Players who want the new starting data should start a new session. Existing sessions keep their own data and progress. Lore still follows this page's rules under "Automatic reload after a file change."
+Updating a world package, hot-reloading files or approving a plugin's server code does not call sync automatically. Enabling a plugin imports once only for the plugins that just joined and have not received this world's data yet (see [Receivers that join after the game starts](#receivers-that-join-after-the-game-starts)); it updates nothing else. Players who want the new starting data should start a new session. Existing sessions keep their own data and progress. Lore still follows this page's rules under "Automatic reload after a file change."
 
 ```http
 POST /api/worlds/<world-id>/sync-data

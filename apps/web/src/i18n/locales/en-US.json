@@ -271,6 +271,11 @@
     "memoryUpdateFailedHint": "This turn was saved. Check the memory model assignment and provider settings; memory will be attempted again after the next turn.",
     "memoryUpdateErrorDetails": "Error details",
     "memoryStoreWarning": "Data lost on restart",
+    "worldDataNotices": {
+      "title": "Some of this world's data is not in this game:",
+      "hint": "Data for a plugin that is off, or waiting for your approval, arrives when you turn that plugin on.",
+      "hide": "Hide"
+    },
     "worldDataPreflight": {
       "title": "World Data",
       "loading": "Checking",

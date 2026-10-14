@@ -185,6 +185,11 @@ export interface SessionPluginsResponse {
 export interface PluginMutationResponse {
   readonly ok: true;
   readonly activePluginIds: readonly string[];
+  /**
+   * Enable only: present when plugins joined a session that has a world. The
+   * world's data for the joined receivers was imported once.
+   */
+  readonly worldData?: import("./world-data.js").WorldDataReceiverImport;
 }
 
 export interface PluginLoadError {

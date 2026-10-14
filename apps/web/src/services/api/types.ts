@@ -67,6 +67,8 @@ export interface SessionRecord extends Omit<
 export interface SessionCreateResponse extends SessionRecord {
   ownerToken: string;
   readonly incarnation: string;
+  /** World data the session started without, such as a pending plugin's. */
+  readonly worldDataNotices?: readonly import("@covel/shared").WorldDataImportNotice[];
 }
 
 export interface MessageRecord {
