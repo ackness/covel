@@ -155,6 +155,8 @@ Two related points:
 
 The argument JSON a model writes often has a few typos that come up again and again. Each one has only one reasonable meaning. The framework fixes them while it parses, which saves a round where the model has to resend. The fixed content must still pass the tool's schema.
 
+Repaired arguments are written back to model history as valid JSON, including tool names and arguments rewritten by `PreToolUse`. An unrepairable call still returns `INVALID_ARGS`; history preserves its original text as a JSON string rather than an empty object that appears to have been executed. The original response and tool-call traces retain diagnostic evidence. The framework does not resend an unchanged request after the provider rejects history arguments.
+
 | Typo                                                   | Example                                                | How it is fixed                                                                                                                                                                                                                                                                                                                                                    |
 | ------------------------------------------------------ | ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | Extra closing brackets at the end                      | `{"updates":[{"id":1}]}]}`                             | When up to four extra `]` or `}` follow one complete JSON value, they are removed. The value before the brackets is complete, so removing the extra brackets changes none of its content.                                                                                                                                                                          |
@@ -528,6 +530,8 @@ Reads and merges match the full `(namespace, key)` pair of strings exactly. They
 
 ### runtime-done
 
+Only a successful `runtime-done` call returning its sentinel ends the loop. The same field in another tool’s result is ordinary data.
+
 An agent uses it to tell the framework "I am done." Call it after all the business tools have been called. The runtime then ends, and the model does not have to write a closing message.
 
 | Argument | Type   | Required | Description                 |
@@ -730,6 +734,8 @@ JSON Schema can check the shape of fields, but it cannot check "does this result
 
 ### suspend
 
+Only a successful `suspend` call returning its sentinel suspends the runtime. A `_covelSuspend` field from another tool is ordinary data; an agent that needs suspension must declare and call `suspend`.
+
 Pause the current runtime until the player gives input, then continue. It is declared in `packages/tools/src/builtin/suspend.ts`.
 
 | Argument     | Type   | Required | Description                                                                                                                                                                             |
@@ -756,7 +762,7 @@ When one of the model's replies has several tool calls, the `suspend` call first
 - Resuming continues the execution that was suspended:
   - `ctx.locale`, `ctx.logicalTurn`, and `ctx.turnNumber` keep the values from the time of suspension. They do not change with the turn count of the session afterwards.
   - `ctx.world` is the World Model committed at resume time, with the writes buffered in the state added on top.
-- `completion.require: tool-use` after resuming counts only the business tool calls that **succeeded** before the suspension. A tool that failed before the suspension, and was not cancelled out by a successful call of the same name, still counts as not completed. After resuming, it must be completed again.
+- `completion.require: tool-use` uses the same rule after resuming: with `afterTools`, only successful calls from that list count; without a list, successful business tool calls count. A tool that failed before the suspension, and was not cancelled out by a successful call of the same name, still counts as not completed. After resuming, it must be completed again.
 
 ### search-tools (injected by the framework, deferred tool loading)
 
@@ -1407,7 +1413,7 @@ This section is mainly for host developers who embed the kernel. Plugin authors 
 
 The tool allow-list controls two things: which tools the model can see, and which tools can actually run.
 
-- The agent loop passes the exact authorized set of the current runtime to the executor, in `ToolCallContext.authorizedToolNames`. The set includes every name declared by `tools.*`, and `runtime-done` for runtimes that are not schema runtimes.
+- The agent loop passes the exact authorized set of the current runtime to the executor, in `ToolCallContext.authorizedToolNames`. The set includes every name declared by `tools.*`, plus `runtime-done` for runtimes whose completion contract uses it and for story runtimes. Runtimes that must finish through a completing tool no longer receive automatic authorization for it.
 - Tools on the `defer` list are also in the authorized set. Deferring affects only whether the model can see the tool at the start. It does not affect authorization.
 - Before resolving the tool and running approval, the executor first checks whether the final tool name is in the authorized set. "Final" means the name after session overrides and `PreToolUse` replacement. If it is not in the set, the executor returns the structured error `UNAUTHORIZED`.
 - `search-tools` is intercepted inside the loop, so it never reaches the executor.

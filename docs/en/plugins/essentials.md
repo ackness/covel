@@ -146,6 +146,8 @@ Rules:
 
 For the list of built-in tools, see the [tools reference](../reference/tools.md).
 
+For agent completion rules, see the [plugin reference](../reference/plugins.md). With `completion.require: tool-use` and `afterTools`, a read tool cannot substitute for a declared completing tool.
+
 ## How to use another plugin's results
 
 Find a plugin by capability, not by name. A capability has a versioned name, such as `narrative-engine@1`. To read the output of "the plugin that writes the story" for this turn, write three things:

@@ -1190,6 +1190,8 @@ These events use the standard SSE envelope, and they are saved to `trace_events`
 | `command.completed`      | The fields of `command.invoked` + `{ durationMs, resultOk? }`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | `command.failed`         | The fields of `command.invoked` + `{ durationMs, error }`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 
+`tool.completed` means the executor accepted the tool result; it does not mean its proposals were committed. Cancellation before acceptance emits only `tool.failed`; cancellation after acceptance does not emit a failure for the same call. Tool trace or domain-event preview delivery failures only warn and do not turn a successful tool result into a failure.
+
 Narrative fragments are still sent live to the interface through `narrative.delta`. To keep `trace_events` lean, only `message.completed` is saved.
 
 **`command.*`**

@@ -359,7 +359,7 @@ Agent 的超时、重试和步数都在 `agent.loop` 里。
 **完成条件。**
 
 - `completion.afterTools`：指定的工具成功后就结束。
-- `completion.require: tool-use`：要求有效的工具调用，也就是至少一次执行成功的业务工具调用。失败的调用不算。
+- `completion.require: tool-use`：声明了非空的 `afterTools` 时，至少一个列出的完成工具必须成功。没有列表时，任意成功的业务工具调用都算。失败的调用和 `runtime-done` 不算。
 - 模型只回了纯文本，或者调用了 `runtime-done`，而这时还没有这样的调用：框架先注入一次纠正提示，仍未完成才判为失败。所以“无变化”也要通过业务工具提交一个空结果。
 - 纠正之后的那次请求要求模型必须调用工具（`toolChoice: "required"`，清单指名的工具保持不变）。模型调用工具后恢复自选。模型处于思考模式时服务商不接受强制选择，这时仍由模型自选。
 - 这个判定在循环返回处统一进行，普通执行和 resume 的所有结束方式都适用：文本回答、`runtime-done`、`afterTools` 自动完成、`PostToolUse` Hook 终止，以及步数用尽。
