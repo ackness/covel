@@ -1,3 +1,6 @@
+import { CUSTOM_THEMES_KEY } from "@/theme-system/storage.js";
+import { DEFAULT_APPEARANCE } from "@/lib/appearance.js";
+import { resolveThemeSelection } from "@/theme-system/selection.js";
 import { useId } from "react";
 import { Moon, Sun } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -12,11 +15,18 @@ import { useSetting } from "@/settings/use-settings.js";
 
 export function ThemeToggle() {
   const [appearance] = useSetting<string>("ui.appearance");
+  useSetting<unknown>(CUSTOM_THEMES_KEY);
   const [scheme, setScheme] = useSetting<ThemeScheme>(THEME_SCHEME_KEY);
   const { t } = useTranslation();
   const hintId = useId();
-  const nextScheme = scheme === "light" ? "dark" : "light";
-  const theme = getThemeDefinition(appearance);
+  const theme =
+    getThemeDefinition(appearance) ?? getThemeDefinition(DEFAULT_APPEARANCE);
+  const displayed = resolveThemeSelection(
+    theme ? [theme] : [],
+    appearance,
+    scheme,
+  ).scheme;
+  const nextScheme = displayed === "light" ? "dark" : "light";
   const canToggle = theme ? theme.schemes.includes(nextScheme) : true;
 
   return (
@@ -27,7 +37,7 @@ export function ThemeToggle() {
       disabled={!canToggle}
       aria-disabled={!canToggle}
       aria-label={t("common.darkMode")}
-      aria-pressed={scheme === "dark"}
+      aria-pressed={displayed === "dark"}
       aria-describedby={!canToggle ? hintId : undefined}
       title={!canToggle ? t("settings.themeSchemeLocked") : undefined}
       onClick={() => {

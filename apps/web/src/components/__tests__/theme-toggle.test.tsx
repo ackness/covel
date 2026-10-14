@@ -42,3 +42,15 @@ it("announces the dark-mode state and its locked reason", () => {
       ?.textContent,
   ).toBe("This theme supports only one color mode.");
 });
+
+it("F-036 exposes the displayed dark-only mode while retaining a light preference", () => {
+  settings.scheme = "light";
+  settings.schemes = ["dark"];
+  render(<ThemeToggle />);
+  const toggle = screen.getByRole("button", {
+    name: i18n.t("common.darkMode"),
+  });
+  expect(toggle.getAttribute("aria-pressed")).toBe("true");
+  expect((toggle as HTMLButtonElement).disabled).toBe(true);
+  expect(settings.set).not.toHaveBeenCalled();
+});

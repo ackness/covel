@@ -1,9 +1,14 @@
+import { storedThemeSelection } from "./selection.js";
 import { sameSettingValue } from "@covel/settings";
 import { ThemeImportError } from "./import-error.js";
 import { z } from "zod";
 import { resolveI18nText, type I18nText } from "@covel/shared";
 import type { SettingOption, SettingsStoreApi } from "@covel/settings";
-import { getBuiltinThemes, BUILTIN_THEME_IDS } from "./builtins.js";
+import {
+  getBuiltinThemes,
+  BUILTIN_THEME_IDS,
+  localizeBuiltinTheme,
+} from "./builtins.js";
 import {
   applyAppearance,
   applyColorScheme,
@@ -25,7 +30,6 @@ import {
 } from "./storage.js";
 import type {
   StoredCustomTheme,
-  ThemeScheme,
   ThemeDefinition,
   ThemeManifest,
 } from "./types.js";
@@ -141,47 +145,16 @@ function toStoredTheme(
   };
 }
 
-function normalizeScheme(value: unknown): ThemeScheme {
-  return value === "light" || value === "dark" ? value : DEFAULT_COLOR_SCHEME;
-}
-
-function resolveThemeScheme(
-  theme: ThemeDefinition | null,
-  preferred: unknown,
-): ThemeScheme {
-  const selected = normalizeScheme(preferred);
-  const schemes = theme?.schemes ?? [DEFAULT_COLOR_SCHEME];
-  if (schemes.includes(selected)) return selected;
-  return schemes[0] ?? DEFAULT_COLOR_SCHEME;
-}
-
 function applyThemeSelection(store: SettingsStoreApi): void {
-  const selected = store.get<string>("ui.appearance");
-  const resolvedTheme = themeRegistry.has(selected)
-    ? selected
-    : DEFAULT_APPEARANCE;
-  const theme =
-    themeRegistry.get(resolvedTheme) ??
-    themeRegistry.values().next().value ??
-    null;
-  const selectedScheme = store.get<ThemeScheme>(THEME_SCHEME_KEY);
-  const resolvedScheme = resolveThemeScheme(theme, selectedScheme);
-
+  const {
+    theme,
+    id: resolvedTheme,
+    scheme: resolvedScheme,
+  } = storedThemeSelection(store);
   applyThemeLayout(resolveThemeLayout(theme?.layout));
 
-  if (selected !== resolvedTheme) {
-    applyAppearance(resolvedTheme);
-    void store.set("ui.appearance", resolvedTheme);
-  } else {
-    applyAppearance(resolvedTheme);
-  }
-
-  if (selectedScheme !== resolvedScheme) {
-    applyColorScheme(resolvedScheme);
-    void store.set(THEME_SCHEME_KEY, resolvedScheme);
-  } else {
-    applyColorScheme(resolvedScheme);
-  }
+  applyAppearance(resolvedTheme);
+  applyColorScheme(resolvedScheme);
 
   // Re-point the player's token overrides last: they layer on whatever theme
   // and scheme just resolved, and the colour half of them is scheme-specific.
@@ -189,11 +162,12 @@ function applyThemeSelection(store: SettingsStoreApi): void {
 }
 
 export function getRegisteredThemes(): ThemeDefinition[] {
-  return sortThemes([...themeRegistry.values()]);
+  return sortThemes([...themeRegistry.values()].map(localizeBuiltinTheme));
 }
 
 export function getThemeDefinition(id: string): ThemeDefinition | null {
-  return themeRegistry.get(id) ?? null;
+  const theme = themeRegistry.get(id);
+  return theme ? localizeBuiltinTheme(theme) : null;
 }
 
 /**

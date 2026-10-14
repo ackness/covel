@@ -1,4 +1,4 @@
-import { WORLD_ACCENT_PATTERN } from "@covel/shared";
+import { worldAccentColorSchema } from "@covel/shared";
 import type { WorldRecord } from "@/services/api.js";
 
 export interface WorldVisual {
@@ -48,7 +48,8 @@ export function worldVisual(
 ): WorldVisual {
   const declared = world?.metadata?.accentColor;
   const accent =
-    typeof declared === "string" && WORLD_ACCENT_PATTERN.test(declared)
+    typeof declared === "string" &&
+    worldAccentColorSchema.safeParse(declared).success
       ? declared
       : world
         ? accentFromId(world.id)

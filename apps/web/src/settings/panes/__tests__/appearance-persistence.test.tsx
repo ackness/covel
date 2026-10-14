@@ -17,6 +17,7 @@ import {
   primeThemeRegistry,
   syncThemeRegistry,
   saveCustomTheme,
+  deleteCustomTheme,
 } from "@/theme-system/registry.js";
 import { CUSTOM_THEMES_KEY } from "@/theme-system/storage.js";
 import {
@@ -250,6 +251,8 @@ describe("AppearancePane truthful persistence", () => {
     expect(loadOverrides(store)).toEqual({ shared: {}, light: {}, dark: {} });
     expect(name).toHaveProperty("value", "");
     expect(adapter.attempts).toHaveLength(3);
+    // jsdom cannot measure the source colours; save-as reports unknown rather than skipping the check.
+    expect(view.getByText(i18n.t("appearance.contrast.advisory"))).toBeTruthy();
   });
 
   it("does not announce full import success after a saved theme fails to apply", async () => {
@@ -726,4 +729,58 @@ it("F-082/F-083 keeps builtin rows builtin and localizes import errors", async (
   expect(view.getByRole("alert").textContent).toBe(
     i18n.t("settings.themeImportErrors.builtin-id", { id: "paper" }),
   );
+});
+
+it("F-200 warns about low imported contrast without rejecting the theme", async () => {
+  const { store } = await setup();
+  const view = render(<ThemeManagerWidget />);
+  fireEvent.change(view.container.querySelector('input[type="file"]')!, {
+    target: {
+      files: [
+        {
+          name: "low.css",
+          text: async () =>
+            'html[data-theme="low"] { --color-background: #ffffff; --color-foreground: #eeeeee; }',
+        },
+      ],
+    },
+  });
+  await settle();
+  expect(store.get("ui.appearance")).toBe("low");
+  expect(view.getByText(i18n.t("appearance.contrast.advisory"))).toBeTruthy();
+  expect(view.getByText(/recommended at least 4.5/)).toBeTruthy();
+});
+
+it("F-036 shows the effective selection without changing saved preferences", async () => {
+  const { store } = await setup();
+  await store.setMany({ "ui.appearance": "missing", "ui.scheme": "light" });
+  const view = render(<AppearancePane />);
+  expect(view.getByRole("status").textContent).toContain(
+    "Your saved preference is unchanged",
+  );
+  expect(store.get("ui.appearance")).toBe("missing");
+  expect(store.get("ui.scheme")).toBe("light");
+});
+
+it("F-036 updates the correction notice when the active custom theme is removed", async () => {
+  const { store } = await setup(false);
+  await saveCustomTheme(store, {
+    id: "removed-theme",
+    label: "Removed theme",
+    source: "custom",
+    schemes: ["light", "dark"],
+    cssText: 'html[data-theme="removed-theme"] { --story-color: #eeeeee; }',
+  });
+  await store.set("ui.appearance", "removed-theme");
+  const view = render(<AppearancePane />);
+  const explanation = i18n.t("settings.themeSelectionAdjusted", {
+    name: i18n.t("appearance.builtinThemes.stage.label"),
+    scheme: i18n.t("settings.themeScheme.dark"),
+  });
+  expect(view.queryByText(explanation)).toBeNull();
+  await act(async () => {
+    await deleteCustomTheme(store, "removed-theme");
+  });
+  expect(view.getByText(explanation)).toBeTruthy();
+  expect(store.get("ui.appearance")).toBe("removed-theme");
 });

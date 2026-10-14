@@ -84,7 +84,7 @@ describe("validateWorldPackage", () => {
     const ok = await validate(
       await makeWorld(
         { "media/art/front.png": png },
-        `${MANIFEST}cover: media/art/front.png\naccentColor: "#336699"\n`,
+        `${MANIFEST}cover: media/art/front.png\naccentColor: "#c9a24b"\n`,
       ),
     );
     expect(ok.filter((item) => item.level === "error")).toEqual([]);

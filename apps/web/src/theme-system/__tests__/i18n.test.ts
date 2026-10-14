@@ -1,3 +1,4 @@
+import { getBuiltinThemes } from "../builtins.js";
 // @vitest-environment node
 import type { TFunction } from "i18next";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -129,3 +130,17 @@ describe("appearance token catalog", () => {
     }
   });
 });
+
+it.each(["en-US", "zh-CN", "ru-RU"])(
+  "F-093 has native catalog text for every builtin in %s",
+  async (locale) => {
+    await i18n.changeLanguage(locale);
+    for (const theme of getBuiltinThemes()) {
+      for (const field of ["label", "description", "groupLabel"] as const) {
+        const key = `appearance.builtinThemes.${theme.id}.${field}`;
+        expect(i18n.getResource(locale, "translation", key)).toBeTruthy();
+        expect(theme[field]).toBe(i18n.t(key));
+      }
+    }
+  },
+);

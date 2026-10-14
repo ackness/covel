@@ -313,6 +313,7 @@ export {
   characterSchemaSchema,
   worldManifestSchema,
   WORLD_ACCENT_PATTERN,
+  worldAccentColorSchema,
   worldDimensionsSchema,
   worldGeographySchema,
   worldFactionSchema,

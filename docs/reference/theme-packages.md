@@ -50,7 +50,7 @@
 - `ui.appearance` 这个设置保存主题包的 ID，并写成 `data-theme`。默认值是 `stage`（舞台）。已经保存的主题选择保持不变。
 - 主题包的 `layout` 解析之后，写成 `data-layout` 和各个选项属性（见 §3.1）。没有单独的布局设置项：布局跟着主题包切换。
 - `ui.scheme` 保存颜色模式（明 / 暗），并写成 `data-scheme` 和 Tailwind 兼容的 `.dark` 类。
-- 主题包的 `schemes` 决定它支持哪些颜色模式。只支持一种模式的主题会自动把 `ui.scheme` 改成它支持的那个值。
+- 主题包的 `schemes` 决定它支持哪些颜色模式。只支持一种模式的主题按支持的模式显示，不回写 `ui.scheme`。主题不存在时显示默认主题，设置页会说明当前回退；已保存的偏好保留到玩家重新选择。
 
 ## 2. 支持的导入格式
 
@@ -235,27 +235,19 @@ apps/web/src/themes/builtins/
 ```json
 {
   "id": "paper",
-  "label": {
-    "zh-CN": "纸本",
-    "en-US": "Paper"
-  },
   "source": "builtin",
   "schemes": ["light", "dark"],
-  "description": {
-    "zh-CN": "温暖、偏叙事阅读器的纸本风格。",
-    "en-US": "A warm editorial reading style."
-  },
-  "group": "classic",
-  "groupLabel": {
-    "zh-CN": "经典",
-    "en-US": "Classic"
-  }
+  "group": "classic"
 }
 ```
 
 带布局的内置主题在 manifest 里多一个 `layout` 字段，例如 `"layout": { "preset": "book" }`。
 
 ## 5. 共享 token 契约
+
+导入和另存为主题时，界面检查各个声明模式的正文、次要文字与背景，以及按钮文字与按钮底色。正文和按钮建议至少 4.5:1，次要文字至少 3:1。低于建议值只提示，不拒绝启用；缺失或无法解析的颜色显示“无法测量”。这只是纯色 token 检查，不代表图片、透明叠层和视觉效果都已通过可读性验证。
+
+内置主题的这些固定色对有回归测试；名称、说明和分组名来自 Web catalog 的 `appearance.builtinThemes.<id>`，随界面语言变化。
 
 主题包最核心的工作是覆盖语义 token。下面按类别列出全部 token。
 
@@ -536,7 +528,7 @@ html[data-theme="my-theme"][data-turn="executing"] .ui-composer-input {
 4. 保存到本地设置
 5. 注入 `<style data-theme-style="theme-id">`
 6. 重新注册到 `ui.appearance`
-7. 根据 `schemes` 校正 `ui.scheme`
+7. 根据 `schemes` 解析显示模式，不回写设置
 8. 在设置面板和主题库中显示
 
 ## 8. 持久化行为

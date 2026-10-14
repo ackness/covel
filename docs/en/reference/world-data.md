@@ -1369,7 +1369,8 @@ sources:
 
 - The cover does not have to be listed in `media/gallery.json`. If it is listed, the world detail gallery does not show it a second time.
 - `themeMusic` is usually the same file as the one marked `theme: true` in the track list.
-- `pnpm validate:world` checks that the cover can be shown (`cover`) and that the music can be played (`theme-music`). A wrong color format is reported by the schema.
+- `accentColor` accepts six-digit hex (`#rrggbb`) or `oklch(L C H)` with Oklab lightness from 55% to 90%; hex is converted from sRGB first. Loading discards colours with an invalid format or lightness outside this range. The world still loads, and the interface derives its default accent from the world ID. The server logs a warning with the world, field and reason.
+- `pnpm validate:world` checks that the cover can be shown (`cover`) and that the music can be played (`theme-music`). An invalid `accentColor` is still an error, with a message that explains the allowed formats and lightness range.
 - AI-generated worlds have no pictures, so they have no `cover` and no `accentColor`.
 
 ## Third-party extensions

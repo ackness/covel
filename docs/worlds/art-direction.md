@@ -135,6 +135,8 @@ cover: media/gallery/world-cover.webp
 accentColor: "oklch(72% 0.15 350)"
 ```
 
+`accentColor` 的格式和亮度范围见[世界数据参考](../reference/world-data.md#background-music)。加载时，无效颜色会被丢弃，世界照常加载，界面按世界 ID 生成默认强调色。`pnpm validate:world` 仍会把它报为错误，供作者修正。界面遇到不可用的已存颜色时也使用默认强调色。
+
 - `cover` 是一张图片的路径，必须在 `media/` 下的某一个文件夹里。界面直接显示这张图。世界包里的人物图更新了，封面不会自动跟着换。
 - 不写 `cover` 时，界面用默认的背景。
 - 封面和玩法相符、质量合格，就可以一直用。
