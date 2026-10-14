@@ -549,7 +549,7 @@ agent 用它告诉框架“我做完了”。业务工具都调用完之后调�
 | scope | enum   |      | `recall` / `archival` / `all`，默认 `all` |
 | limit | number |      | 最多返回几条，1–20，默认 5                |
 
-每条结果的内容最多 500 个字符。检索的规则见下一节。
+每条结果的内容最多 500 个字符。archival 结果的 `key` 是可读的来源标识；lorebook 的首个关键词为空时可用可读的条目 ID，但不会回退到 UUID。UUID 形式的关键词或插件数据 key 也不返回，结果省略 `key`，仍保留正文。检索的规则见下一节。
 
 ### 插件记忆与向量搜索
 
@@ -605,6 +605,8 @@ agent 用它告诉框架“我做完了”。业务工具都调用完之后调�
 - 不读提供者的私有 namespace。
 - 不叠加调用方自己还没提交的写入。
 - 不回退到世界的初值。
+
+模型读取的 `_text` 先用 `modelFacingJson` 投影维度值，再按路径查询和分页。因此直接查询簿记字段也不会读到它；代码读取的 `results` 仍保留完整值。
 
 | 参数      | 类型                                       | 必需 | 描述                  |
 | --------- | ------------------------------------------ | ---- | --------------------- |
@@ -1025,6 +1027,7 @@ Characters in session (3 total, sorted by frequency then recency):
 读取会话的角色属性 schema。参数为 `{}`，返回 `{ schema: CharacterSchemaRecord | null, _text }`。
 
 - schema 属于会话的 World Model，包含 `version` / `types` / `attributes`。不存在时返回 `null`。
+- 模型读取的 `_text` 经过 `modelFacingJson`，不含会话 ID 和写入时间。代码读取的 `schema` 保留完整记录。
 - 读取包括已验证的待提交领域 proposal。它不根据插件私有的 `schema` 数据推断。
 - 这个工具不写数据，也不接受其他会话或插件的 ID。
 

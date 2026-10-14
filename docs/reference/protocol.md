@@ -1307,7 +1307,7 @@ runtime 的终态：
 `turn-digest@1` 包含 `turnId/playerMessage/locale/narrativeText/toolCallSummaries/lastPlayerInput/runtimeResults`：
 
 - `runtimeResults` 只列出记录那一刻、来源回合已经看到的 `runtimeId` 和状态（`success/failed/skipped/suspended`）。它不包含还没运行的使用者，也不包含其他回合的重试种子。
-- 只有成功的故事和已接受的工具调用进入文本摘要。
+- 只有成功的故事和已接受的工具调用进入文本摘要。声明 `io.concealed: true` 的 runtime，其工具调用不进入 `toolCallSummaries`；`runtimeResults` 仍保留它的 ID 和状态。
 
 快照怎样保存：
 

@@ -3,7 +3,90 @@ import { createMemoryStore } from "@covel/store/memory";
 import type { LorebookEntryRecord } from "@covel/store";
 import { createKeywordRecallSearcher } from "../src/recall-search.js";
 import { createKeywordArchivalSearcher } from "../src/archival-search.js";
-import { characterItems } from "../src/archival-items.js";
+import { characterItems, collectArchivalItems } from "../src/archival-items.js";
+
+it("keeps UUID storage keys private while retaining readable archival keys", async () => {
+  const uuid = "0b6f6a2e-3c1d-4f5a-9b7e-1a2b3c4d5e6f";
+  const now = "2026-10-14T08:00:00.000Z";
+  const store = createMemoryStore();
+  await store.upsertLorebookEntries([
+    {
+      id: uuid,
+      keys: [],
+      content: "gate secret",
+      sessionId: "session",
+      owner: { kind: "world" },
+      strategy: "constant",
+      position: "before",
+      insertionOrder: 0,
+      enabled: true,
+      createdAt: now,
+      updatedAt: now,
+    },
+    {
+      id: "gate-lore",
+      keys: [],
+      content: "gate history",
+      sessionId: "session",
+      owner: { kind: "world" },
+      strategy: "constant",
+      position: "before",
+      insertionOrder: 0,
+      enabled: true,
+      createdAt: now,
+      updatedAt: now,
+    },
+    {
+      id: "gate-rumor",
+      keys: ["gate keeper"],
+      content: "gate rumor",
+      sessionId: "session",
+      owner: { kind: "world" },
+      strategy: "constant",
+      position: "before",
+      insertionOrder: 0,
+      enabled: true,
+      createdAt: now,
+      updatedAt: now,
+    },
+  ]);
+  await store.setPluginData({
+    id: uuid,
+    sessionId: "session",
+    pluginId: "journal",
+    namespace: "facts",
+    key: uuid,
+    value: { text: "gate fact" },
+    createdAt: now,
+    updatedAt: now,
+  });
+  const declared = async () => [
+    { pluginId: "journal", namespace: "facts", textField: "text" },
+  ];
+  try {
+    const hits = await createKeywordArchivalSearcher(store, declared).search(
+      "session",
+      "gate",
+    );
+    expect(hits).toHaveLength(4);
+    expect(
+      hits.find((hit) => hit.content === "gate secret"),
+    ).not.toHaveProperty("key");
+    expect(hits.find((hit) => hit.content === "gate fact")).not.toHaveProperty(
+      "key",
+    );
+    expect(hits.map((hit) => hit.key)).toEqual(
+      expect.arrayContaining(["gate-lore", "gate keeper"]),
+    );
+    expect(JSON.stringify(hits)).not.toContain(uuid);
+    // The vector ingestor uses these same items: storage identity stays internal.
+    const items = await collectArchivalItems(store, "session", declared);
+    expect(items.some((item) => item.vecKey.includes(uuid))).toBe(true);
+    expect(items.map((item) => item.displayKey)).not.toContain(uuid);
+  } finally {
+    await store.close();
+  }
+});
 
 it("finds reordered Chinese phrases and returns the matching passage beyond the prefix", async () => {
   const content =

@@ -505,7 +505,7 @@ An agent's side effects come only from its tools. What the model can write is de
 When the kernel writes records into the prompt, it removes these fields:
 
 - Each row of `io.selfData` is `- <key> | <JSON of the value>` (the `summary` format is cut to 200 characters). An `updatedAt` on the row is not included, and an `id` in the value that is the same as the key is not repeated.
-- The following are passed through the same projection before they reach the model: the values in `<runtime-inputs>` and `<runtime-exports>`, the fields of `{{ world.schema }}` and `{{ characters.npcs }}`, the player sheet and NPC fields of the SDK's `characterSheetSegments()`, and tool results that have no `_text`.
+- The following are passed through the same projection before they reach the model: the values in `<runtime-inputs>` and `<runtime-exports>`, the payload in `<runtime-activation>`, the fields of `{{ world.schema }}` and `{{ characters.npcs }}`, the player sheet and NPC fields of the SDK's `characterSheetSegments()`, and tool results that have no `_text`.
 
 A property is removed only when both its name and its value match:
 
@@ -520,7 +520,7 @@ A property is removed only when both its name and its value match:
 > [!WARNING]
 > This check looks only at the name and the shape of the value. It cannot tell story time apart from other times. If a moment in the story is stored as `diedAt: "1943-06-01T08:00:00Z"` (the name ends in `At` or is `timestamp`, and the value is an ISO time), the model cannot see it either, and no error is reported at run time. For story time that the model should see, use a different name (`date`, `diedOn`), or do not write it as an ISO time (for example, `"1943 年 6 月 1 日清晨"`, meaning early morning of June 1, 1943). This applies to data in a world package and to data the plugin stores itself. For such a field in a world package, `pnpm validate:world` gives a `model-hidden-field` warning. Data that a plugin stores while it runs is not checked.
 
-The records that code reads do not change: the return values of `ctx.inputs`, `ctx.pluginData`, and `ctx.tools.call` are all complete.
+The records that code reads do not change: the return values of `ctx.inputs`, `ctx.activation`, `ctx.pluginData`, and `ctx.tools.call` are all complete.
 
 - When a plugin builds its own prompt (for example, by calling `ctx.gateway` directly), it does the same thing with `modelFacingJson(value)`, which is exported from `@covel/plugin-handlers-utils`.
 - When a tool must give the model an opaque handle, put it in `_text`.

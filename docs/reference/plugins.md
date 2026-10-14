@@ -505,7 +505,7 @@ Agent 的副作用只来自工具：模型能写什么，以 `agent.tools` 白�
 内核把记录写进提示词时会去掉它们：
 
 - `io.selfData` 的每一行是 `- <key> | <值的 JSON>`（`summary` 格式截断到 200 字符）。不带行的 `updatedAt`，值里和 key 相同的 `id` 也不重复。
-- 下面这些内容在交给模型之前经过同一个投影：`<runtime-inputs>` / `<runtime-exports>` 的值、`{{ world.schema }}`、`{{ characters.npcs }}` 的 fields、SDK `characterSheetSegments()` 的玩家表和 NPC fields，以及没有 `_text` 的工具结果。
+- 下面这些内容在交给模型之前经过同一个投影：`<runtime-inputs>` / `<runtime-exports>` 的值、`<runtime-activation>` 的载荷、`{{ world.schema }}`、`{{ characters.npcs }}` 的 fields、SDK `characterSheetSegments()` 的玩家表和 NPC fields，以及没有 `_text` 的工具结果。
 
 属性名和取值都符合才会被去掉：
 
@@ -520,7 +520,7 @@ Agent 的副作用只来自工具：模型能写什么，以 `agent.tools` 白�
 > [!WARNING]
 > 这个判断只看名字和取值的形状，分不出剧情里的时间。故事内的时刻如果存成 `diedAt: "1943-06-01T08:00:00Z"`（名字以 `At` 结尾或叫 `timestamp`，取值是 ISO 时间），模型同样看不到它，运行时也没有任何报错。要给模型看的剧情时间请换一个名字（`date`、`diedOn`），或者不写成 ISO 时间（`"1943 年 6 月 1 日清晨"`）。世界包里的数据和插件自己存的数据都适用。世界包里的这类字段，`pnpm validate:world` 会给出 `model-hidden-field` 提醒；插件运行时自己存的数据不在检查范围内。
 
-代码读到的记录不变：`ctx.inputs`、`ctx.pluginData`、`ctx.tools.call` 的返回值都是完整的。
+代码读到的记录不变：`ctx.inputs`、`ctx.activation`、`ctx.pluginData`、`ctx.tools.call` 的返回值都是完整的。
 
 - 插件自己拼提示词（例如直接调用 `ctx.gateway`）时，用 `@covel/plugin-handlers-utils` 导出的 `modelFacingJson(value)` 做同样的事。
 - 工具要把一个不透明的句柄交给模型时，写在 `_text` 里。
