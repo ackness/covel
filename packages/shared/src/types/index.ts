@@ -40,6 +40,8 @@ export type {
   WorldDataSourceDescriptor,
   WorldDataDescriptor,
   WorldDataDiagnosticCounts,
+  WorldDataImportNotice,
+  WorldDataReceiverImport,
   WorldDataSourceSummary,
   WorldDataMetadataSummary,
 } from "./world-data.js";

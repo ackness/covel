@@ -261,3 +261,31 @@ it("keeps the old index when the new model does not answer", async () => {
   expect(await store.resolveSessionVectorTarget("s")).toEqual(before);
   expect(await indexed("s", 2)).toHaveLength(1);
 });
+
+it("keeps the old index when the selected model cannot serve the embedding role", async () => {
+  const before = await store.resolveSessionVectorTarget("s");
+  const response = await app.request("/api/sessions/s/memory-index/rebuild", {
+    method: "POST",
+    headers: {
+      "X-Slot-Config": header({
+        slotBindings: { embed: { modelRef: "text-only" } },
+        customPresets: [
+          {
+            id: "text-only",
+            name: "Text only",
+            provider: "test",
+            model: "text-model",
+            protocol: "openai-chat-v1",
+          },
+        ],
+        capabilityOverrides: { embed: { output: ["text"] } },
+      }),
+    },
+  });
+  expect(response.status).toBe(502);
+  expect(await response.json()).toMatchObject({
+    code: "embedding_unavailable",
+  });
+  expect(await store.resolveSessionVectorTarget("s")).toEqual(before);
+  expect(await indexed("s", 2)).toHaveLength(1);
+});

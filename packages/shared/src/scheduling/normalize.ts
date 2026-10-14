@@ -87,9 +87,9 @@ function normalizeTurnCompletionPolicy(
  * Normalize one runtime manifest into the loader-level IR node.
  *
  * Stage resolution: `stage` is taken as declared. `event` / `manual` runtimes
- * declare none (fan-out orders them by name), and an `auto` / `scheduled`
- * runtime without one is not schedulable — the authoring schema rejects that
- * combination, and the loader warns for the compat schema.
+ * declare none (fan-out orders them by name). An authored `auto` /
+ * `scheduled` runtime without one never reaches the IR: the loader leaves it
+ * out of its package and reports why.
  */
 export function normalizeRuntimeManifest(
   manifest: RuntimeManifest,

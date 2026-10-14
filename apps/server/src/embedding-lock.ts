@@ -122,7 +122,9 @@ export function createMemoryIndexControl(opts: {
     async configuredTarget() {
       if (!supportsVector(store)) return null;
       const options = embeddingOptions(apiKeys);
-      const target = resolveConfigured(options);
+      // Invalid explicit configuration is an error, not a request to clear
+      // the index. Only an actually absent model resolves to null.
+      const target = resolveEmbedding(ai, options);
       if (!target) return null;
       const dim = await probeDimension(ai, options, target);
       return store.ensureVectorModel({

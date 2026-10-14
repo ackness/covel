@@ -1483,10 +1483,10 @@ fork 和社区插件的授权：
 
 **校验与 `specVersion`**：
 
-- 聚合时，每个 spec 都做 Zod 校验（结构和 `specVersion`）。
+- 聚合时，每个 spec 都用 `pnpm validate:plugin` 的同一套规则校验（结构、`specVersion`、数据归属、`webview`）。
 - `specVersion` 可以省略，按 v1 处理。声明的版本高于服务端支持的版本（当前 `CURRENT_UI_SPEC_VERSION = 1`）会被拒绝。
 - 一个 spec 校验失败，**不会影响整个响应**：只把它从所在的 slot 里去掉。
-- 失败原因写在顶层的 `diagnostics[]` 里，每项是 `{ pluginId, runtimeId, slot, specIndex, specId?, issues[{ path, message, code }] }`，说明是哪个插件、哪个字段、什么问题。
+- 失败原因写在顶层的 `diagnostics[]` 里，每项是 `{ pluginId, runtimeId, slot, specIndex, specId?, issues[{ path, message, code }] }`，说明是哪个插件、哪个字段、什么问题。文件读不出来（不存在、不是 JSON、指向插件目录以外）也写在这里；`code` 都是 `invalid`。
 - 带 `sessionId` 时，`diagnostics` 只包含该会话已激活的插件。
 
 **开发热重载**：`POST /api/plugins/:id/reload` 重新加载一个社区插件。
@@ -2208,6 +2208,7 @@ Web 设置页根据 `operatorTokenRequired` 决定是否显示“运维访问”
   - 这些需求随会话保存在 `metadata.pluginSelection.requiredContracts`。之后的启停与重载沿用它，不再读取世界。
   - 没有已安装的提供者，或有多个提供者而请求里没有指定，返回 `400 { "code": "world_requirement_unmet", "details": { contract, code, candidates? } }`。
   - 玩家显式停用了提供者，或提供者是还在等授权的社区插件时，会话照常创建。
+- 依赖缺失的插件：它依赖的契约没有提供者（例如玩家关掉了提供者）时，会话照常创建，这个插件自动停用。玩家要的和 `kind: core` 的这类插件仍写进 `activePlugins`，`GET /api/sessions/:id/plugins` 把它们列在 `unavailable`，依赖回来后自动恢复。规则见[会话插件选择](./plugins.md#会话插件选择)。
 - `metadata.characterSchema`：Web 私有模式创建本地会话时写入同样的 schema。预设不合法时，会话不创建。
 - `metadata.embeddedCharacters`：它不是插件的角色卡，不会产生插件数据的副本。
 - `metadata.embeddedLorebook`：AI 生成的 `server-store` / `return-only` 世界用它携带资料与规则。
@@ -2235,16 +2236,17 @@ Web 设置页根据 `operatorTokenRequired` 决定是否显示“运维访问”
 
 **响应字段**:
 
-| 字段                   | 类型                                   | 说明                                                                                                                               |
-| ---------------------- | -------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| `ownerToken`           | string                                 | 会话的 owner token，**只在这里返回一次**（服务端只存哈希）。什么时候必须携带见下方                                                 |
-| `locale`               | string                                 | 会话实际的内容语言                                                                                                                 |
-| `requestedLocale`      | string（可选）                         | 只在实际语言与请求不同时出现                                                                                                       |
-| `pluginsWithoutLocale` | string[]（可选）                       | 已启用、但没有会话语言文字的插件 ID（只有英文标签，面板显示英文）。只是提示，不影响创建                                            |
-| `status`               | `'active' \| 'paused' \| 'ended'`      | 会话生命周期状态                                                                                                                   |
-| `phase`                | `'setup' \| 'playing'`                 | 会话处在开局准备还是正式游玩。激活集里有 setup runtime 时初始为 `setup`，否则为 `playing`；全部 setup runtime 完成后变成 `playing` |
-| `completedPlayerTurns` | number                                 | 已提交的正式玩家回合数。setup 阶段的交互不计入；同一回合不会被重复计数                                                             |
-| `setupRuntimes`        | `Record<runtimeId, SetupRuntimeState>` | 每个 setup runtime 的状态。见下表                                                                                                  |
+| 字段                   | 类型                                      | 说明                                                                                                                                                                     |
+| ---------------------- | ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `ownerToken`           | string                                    | 会话的 owner token，**只在这里返回一次**（服务端只存哈希）。什么时候必须携带见下方                                                                                       |
+| `locale`               | string                                    | 会话实际的内容语言                                                                                                                                                       |
+| `requestedLocale`      | string（可选）                            | 只在实际语言与请求不同时出现                                                                                                                                             |
+| `pluginsWithoutLocale` | string[]（可选）                          | 已启用、但没有会话语言文字的插件 ID（只有英文标签，面板显示英文）。只是提示，不影响创建                                                                                  |
+| `worldDataNotices`     | `{ level, sourceId?, message }[]`（可选） | 世界数据里没有导入的部分（warning 和 error），例如只有还在等批准的社区插件接收的数据。游戏界面显示给玩家；见[开局后加入的接收插件](./world-data.md#开局后加入的接收插件) |
+| `status`               | `'active' \| 'paused' \| 'ended'`         | 会话生命周期状态                                                                                                                                                         |
+| `phase`                | `'setup' \| 'playing'`                    | 会话处在开局准备还是正式游玩。激活集里有 setup runtime 时初始为 `setup`，否则为 `playing`；全部 setup runtime 完成后变成 `playing`                                       |
+| `completedPlayerTurns` | number                                    | 已提交的正式玩家回合数。setup 阶段的交互不计入；同一回合不会被重复计数                                                                                                   |
+| `setupRuntimes`        | `Record<runtimeId, SetupRuntimeState>`    | 每个 setup runtime 的状态。见下表                                                                                                                                        |
 
 `ownerToken` 什么时候必须携带：
 
@@ -2266,13 +2268,14 @@ Web 设置页根据 `operatorTokenRequired` 决定是否显示“运维访问”
 
 **错误:**
 
-| 状态码 | `code`                    | 什么时候                                                    |
-| ------ | ------------------------- | ----------------------------------------------------------- |
-| 400    | `world_requirement_unmet` | 世界必需的契约没有提供者，或有多个提供者而没有指定          |
-| 401    | `operator_token_required` | 托管部署（`demo` / `commercial`）下创建会话没有带运维 token |
-| 404    | `world_not_found`         | 提供了 `worldId`，但世界不存在                              |
-| 409    | `world_deleting`          | 世界正在删除                                                |
-| 409    | `session_already_exists`  | 客户端自定义的 `id` 已存在                                  |
+| 状态码 | `code`                    | 什么时候                                                             |
+| ------ | ------------------------- | -------------------------------------------------------------------- |
+| 400    | `plugin_rejected`         | 玩家要的插件因冲突等原因被拒（不包括依赖缺失）；`details` 是这条拒绝 |
+| 400    | `world_requirement_unmet` | 世界必需的契约没有提供者，或有多个提供者而没有指定                   |
+| 401    | `operator_token_required` | 托管部署（`demo` / `commercial`）下创建会话没有带运维 token          |
+| 404    | `world_not_found`         | 提供了 `worldId`，但世界不存在                                       |
+| 409    | `world_deleting`          | 世界正在删除                                                         |
+| 409    | `session_already_exists`  | 客户端自定义的 `id` 已存在                                           |
 
 - `id` 已存在时的响应体是 `{ "error": "Session already exists: <id>", "code": "session_already_exists" }`。创建不会覆盖原会话，也不会把原会话的子记录当成新会话的数据。
 - 服务端在准备资源之前和提交会话时各检查一次世界。准备阶段不建立媒体归属；失败后留下的无引用字节由媒体 GC 回收，不会强删可能被其他会话使用的内容。
@@ -3723,6 +3726,15 @@ runtime 报告失败时，它的原始错误保留在 `result.runtimeResults` �
 ```
 
 响应里还有 `resolution`：本次求解的完整结果。
+
+会话有世界、并且这次有插件新加入启用集合时，服务端为它们补导入一次世界数据（规则见[开局后加入的接收插件](./world-data.md#开局后加入的接收插件)），响应多一个 `worldData`：
+
+| 字段        | 类型                              | 说明                                           |
+| ----------- | --------------------------------- | ---------------------------------------------- |
+| `receivers` | string[]                          | 第一次收到数据的插件                           |
+| `imported`  | number                            | 写入的条数                                     |
+| `conflicts` | number                            | 因为游戏改过而保持原样的条数                   |
+| `notices`   | `{ level, sourceId?, message }[]` | 按现在启用的插件，世界数据里仍然没有导入的部分 |
 
 规则（启用和禁用相同）：
 
