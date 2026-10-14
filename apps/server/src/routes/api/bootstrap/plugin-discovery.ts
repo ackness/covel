@@ -30,6 +30,17 @@ export interface DiscoverAndRegisterPluginsResult {
   readonly manifestCache: Map<string, readonly ParsedRuntimeMd[]>;
 }
 
+/**
+ * The loader's messages name files by absolute path. The public registry
+ * entry shows the package-relative form instead (`<plugin>/PLUGIN.md`), so
+ * `GET /api/plugins` never reveals the server's install directory. The full
+ * message still goes to the server log.
+ */
+export function publicPluginError(message: string, rootPath: string): string {
+  if (!rootPath) return message;
+  return message.split(rootPath).join("<plugin>");
+}
+
 export async function discoverAndRegisterPlugins(
   config: DiscoverAndRegisterPluginsConfig,
 ): Promise<DiscoverAndRegisterPluginsResult> {
@@ -161,7 +172,7 @@ export async function discoverAndRegisterPlugins(
         },
         loadedRuntimes: new Map(),
         status: "error",
-        error: message,
+        error: publicPluginError(message, discovery.rootPath),
         ...(discovery.source ? { source: discovery.source } : {}),
       });
     }

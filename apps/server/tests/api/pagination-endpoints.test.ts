@@ -16,12 +16,13 @@ import { decodePageCursor } from "@covel/shared";
 import { messageRoutes } from "../../src/routes/api/messages.js";
 import { traceRoutes } from "../../src/routes/api/traces.js";
 
-type Env = { Variables: { store: DataStore } };
+type Env = { Variables: { store: DataStore; builtinToolNames: readonly string[] } };
 
 function buildApp(store: DataStore): Hono<Env> {
   const app = new Hono<Env>();
   app.use("*", async (c, next) => {
     c.set("store", store);
+    c.set("builtinToolNames", []);
     await next();
   });
   app.route("/api/sessions", messageRoutes);
