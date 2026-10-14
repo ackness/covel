@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import { resolveSessionPlugins } from "@covel/shared";
+import { disabledDependents, resolveSessionPlugins } from "@covel/shared";
 import {
   collectPluginTags,
   defaultSelectedPluginIds,
@@ -29,6 +29,11 @@ export interface UsePluginSelectionResult {
   missingPluginIds: string[];
   /** Contracts the world requires that the current selection leaves unprovided. */
   unmetRequirements: readonly import("@covel/shared").UnmetWorldRequirement[];
+  /**
+   * Selected plugins the session will keep off because something they need
+   * is off or missing; the session starts without them.
+   */
+  dependentsOff: readonly import("@covel/shared").PluginResolutionRejection[];
   pluginPacks: readonly import("@covel/shared").PluginPack[];
   activePluginPack: import("@covel/shared").PluginPack | null;
   pluginSearch: string;
@@ -176,6 +181,14 @@ export function usePluginSelection(
     ],
     [resolution, selectedPlugins],
   );
+  const dependentsOff = useMemo(
+    () =>
+      disabledDependents(resolution, {
+        requested: [...selectedPlugins, ...worldRequiredPluginIds],
+        plugins: candidates,
+      }),
+    [resolution, selectedPlugins, worldRequiredPluginIds, candidates],
+  );
   const selectedPluginIdSet = useMemo(
     () => new Set(selectedPluginIds),
     [selectedPluginIds],
@@ -314,6 +327,7 @@ export function usePluginSelection(
     pluginPlanError,
     missingPluginIds,
     unmetRequirements: resolution.unmet,
+    dependentsOff,
     pluginPacks,
     activePluginPack,
     pluginSearch,
