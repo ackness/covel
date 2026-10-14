@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { PluginSummary } from "@covel/shared";
 import i18n from "@/i18n";
 import { PluginListPanel } from "../plugin-list-panel.js";
-import { isLockedCorePackage } from "../session-prep-screen.js";
+import { isBuiltinDefaultPackage } from "../session-prep-screen.js";
 import { worldStorageLabel } from "../world-select-screen.js";
 import type { WorldRecord } from "@/services/api.js";
 
@@ -46,12 +46,12 @@ function plugin(
 }
 
 describe("session plugin metadata UI", () => {
-  it("locks only builtin core plugins during session prep", () => {
-    expect(isLockedCorePackage({ kind: "core", source: "builtin" })).toBe(true);
-    expect(isLockedCorePackage({ kind: "core", source: "community" })).toBe(
+  it("seeds builtin core defaults before the session plan loads", () => {
+    expect(isBuiltinDefaultPackage({ kind: "core", source: "builtin" })).toBe(true);
+    expect(isBuiltinDefaultPackage({ kind: "core", source: "community" })).toBe(
       false,
     );
-    expect(isLockedCorePackage({ kind: "plugin", source: "builtin" })).toBe(
+    expect(isBuiltinDefaultPackage({ kind: "plugin", source: "builtin" })).toBe(
       false,
     );
   });

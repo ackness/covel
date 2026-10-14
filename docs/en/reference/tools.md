@@ -550,7 +550,7 @@ Search the session's memory. It looks in two sources:
 | scope    | enum   |          | `recall` / `archival` / `all`, default `all`                      |
 | limit    | number |          | Maximum number of results, 1–20, default 5                        |
 
-Each result's content is at most 500 characters. An archival result's `key` is a readable source identifier. When a lorebook entry has no first keyword, it may use a readable entry ID, but never a UUID. UUID keywords and plugin data keys are also omitted: the result keeps its content without a `key`. The search rules are in the next section.
+Both keyword and vector search return an excerpt around a query term: up to 500 source characters, plus ellipses and the recall role prefix. A semantic hit without a literal query term returns a prefix excerpt. The tool preserves the excerpt without truncating its ending. An archival result's `key` is a readable source identifier. When a lorebook entry has no first keyword, it may use a readable entry ID, but never a UUID. UUID keywords and plugin data keys are also omitted: the result keeps its content without a `key`. The next section describes retrieval.
 
 ### Plugin memory and vector search
 
@@ -562,7 +562,7 @@ This section explains how `memory-search` searches, and how plugin data gets int
 - A word that appears in only a few texts (a person's name, an item's name) gets a high weight. A word that appears in almost every text gets a weight close to zero. A long text is not penalized just for being long.
 - It matches only literal text, not paraphrases. So the tool description asks the caller to put the names involved in the query, and it can take several wordings at once.
 
-When an embedding slot is configured and the store supports vectors, the search uses vector retrieval instead. If that fails, it falls back to BM25.
+When an embedding slot is configured and the store supports vectors, the search uses vector retrieval instead. If that fails, it falls back to BM25. When vector recall has too few results, keyword hits fill the remaining places and are deduplicated by message ID. Distinct messages with identical text in the same turn remain separate hits. Message IDs are internal and are not returned to the model by the tool.
 
 **The recall scope** is the latest 500 messages, plus all the history summaries (the summary segments written by `history.compact@2`, whose result `role` is `summary`). So earlier turns can still be found through the summaries.
 

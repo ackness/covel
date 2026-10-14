@@ -35,7 +35,7 @@ export const MEMORY_VECTOR_PLUGIN_ID = "__kernel:vector";
 /** Namespace for embedded conversation-history (recall) vectors. */
 export const RECALL_NAMESPACE = "recall";
 
-/** Namespace for embedded archival (lorebook + character) vectors. */
+/** Namespace for embedded archival (lorebook, character and plugin data) vectors. */
 export const ARCHIVAL_NAMESPACE = "archival";
 
 /**
@@ -53,18 +53,3 @@ export function distanceToScore(distance: number): number {
 
 /** Cap on items embedded per ingestion sweep — bounds a cold-start backfill burst. */
 export const MAX_INGEST_BATCH = 128;
-
-/**
- * Stable, cheap content fingerprint (FNV-1a 32-bit, hex). Used to detect when a
- * mutable archival record (lorebook entry / character) changed and must be
- * re-embedded. Not cryptographic — collisions only cost a missed re-embed,
- * never corruption.
- */
-export function contentHash(text: string): string {
-  let h = 0x811c9dc5;
-  for (let i = 0; i < text.length; i += 1) {
-    h ^= text.charCodeAt(i);
-    h = Math.imul(h, 0x01000193);
-  }
-  return (h >>> 0).toString(16);
-}

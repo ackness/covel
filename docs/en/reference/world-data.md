@@ -344,7 +344,7 @@ The "AI create world" feature in the app and a world package written by hand use
 - The records of a contract are written to the file that the receiving plugin declares (the `path` and `kind` of `authoring.source`, for example `data/memory-blocks.json` or `data/time.yaml`). One record is the file content. Several records are written as an array.
 - In the two cases below, the records are rewritten to `data/contract-<n>.json`, and the descriptor `data/world.data.yaml` lists every source:
   - The receiving plugin does not declare a path.
-  - The declared path cannot be used as a convention. Either another contract in an installed plugin declares the same path, or the path is one of the world package's own files (`world.yaml`, `WORLD.md`, or the kernel's data files).
+  - The declared path cannot be used as a convention: another contract in an installed plugin declares the same path.
 - When the receiver declares a lorebook projection, the target is written as `contract:<id>+lorebook`.
 
 **The `@covel/create` interface:**
@@ -606,9 +606,10 @@ Rules:
 
 - The import order is: dimensions, then media, then the other contract data, and last `characters`.
 - The built-in world `worlds/emberback` is read this way. It has no descriptor, and all 13 of its sources come from convention paths.
-- With no descriptor, the conventions of the **installed** plugins are used. With a descriptor, only the sources it lists are read.
+- With no descriptor, the conventions of the plugins **enabled** in this session are used. A plugin that is not enabled, or that failed to load, does not affect what is read. With a descriptor, only the sources it lists are read.
+- When two contracts enabled in the same session declare the same path, that path is not a convention, the file is not imported, and the world package must use a descriptor to say which one it is for. The session still starts. The server log records a `[sessions]` warning, the world data preflight returns a `convention-collision` warning, and `pnpm validate:world` reports it too (see [Static validation](#static-validation-pnpm-validateworld)).
 
-For plugin authors: `path` is a path relative to the world package root. It can contain only ASCII letters, digits, `_`, `.`, `/` and `-`. It cannot start with `/`, and it cannot contain `..`. A plugin manifest that does not follow this fails validation when it loads. When two contracts declare the same path, that path is not a convention, and the world package must use a descriptor to say which one it is for.
+For plugin authors: `path` is a path relative to the world package root. It can contain only ASCII letters, digits, `_`, `.`, `/` and `-`. It cannot start with `/`, and it cannot contain `..`. It also cannot be a path the kernel or the world package owns: `world.yaml`, `WORLD.md`, `data/world.data.yaml`, `data/dimensions.yaml`, `data/lorebook.yaml`, `characters/characters.json`, `media/gallery.json`, `media/portraits.json`, `media/scenes.json`, the `media/gallery/` folder, or a language version of one (such as `world.zh-CN.yaml`), compared without regard to case. A plugin manifest that does not follow this fails validation when it loads.
 
 **When you still need a descriptor:**
 
@@ -1618,6 +1619,8 @@ Output when it passes:
 | `invalid-setting`       | error             | A value in `pluginSettings` does not match the type, range or options the setting declares                                                                                                            |
 | `unprovided-contract`   | error or warning  | A contract in `pluginPolicy.requires` has no provider                                                                                                                                                 |
 | `unresolved-contract`   | error or warning  | A data contract used by a source has no receiving plugin among the scanned plugins                                                                                                                    |
+| `unrequested-receiver`  | warning           | No plugin a new session enables by default receives this source. The source is not imported until the player turns a receiving plugin on.                                                             |
+| `convention-collision`  | error or warning  | The world has no descriptor, and more than one plugin declares the path of one of its files. A session that enables those plugins together does not import it.                                        |
 | `world-data`            | same as preflight | The descriptor, source order, file reading, targets, hidden-data rules, and each record checked against its contract schema                                                                           |
 | `locale-file-name`      | error             | A language file's name gives only the language (`.en.`) and not the locale the world declares (`.en-US.`). This file is not read.                                                                     |
 | `locale-overlay`        | warning           | A translation in a language file has no place to go (the main file has no such key or ID, or it changed a value that is not text). That entry is ignored.                                             |
@@ -1631,7 +1634,9 @@ Output when it passes:
 | `theme-music`           | error             | The file that `themeMusic` points to cannot be played in the world list                                                                                                                               |
 | `prompt-size`           | warning           | The content takes up too much of the prompt. See below.                                                                                                                                               |
 
-For the three items marked "error or warning": a spelling close to a known ID is an error, and it suggests "Did you mean". Otherwise the default is a warning, because the provider may be a community plugin that was not scanned. With `--strict`, all of them are errors. `pnpm release:preflight` uses `--strict` for the built-in worlds.
+For `unknown-plugin`, `unprovided-contract` and `unresolved-contract`: a spelling close to a known ID is an error, and it suggests "Did you mean". Otherwise the default is a warning, because the provider may be a community plugin that was not scanned. With `--strict`, all of them are errors. `pnpm release:preflight` uses `--strict` for the built-in worlds.
+
+**The plugins a new session enables by default** are the ones the session preparation screen ticks by default: `pluginPolicy.requested`, the `requested` list of the pack that `presetId` selects, and plugins with a `preferredTags` tag, plus the core plugins and the dependencies that `requires` brings in. Scanned community plugins count as approved. `unrequested-receiver` and `convention-collision` are judged against this set: `convention-collision` is an error when two of its declarers are in the set, and a warning otherwise. Records are still checked against the schemas of every scanned plugin, so the data of a plugin the player turns on by hand is checked too.
 
 **The three cases of `prompt-size`.** None of them stops the world from being used:
 

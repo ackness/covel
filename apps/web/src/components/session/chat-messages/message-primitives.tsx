@@ -157,7 +157,9 @@ export function RawJsonBlock({ content }: { content: string }) {
     <div className="relative group border border-border bg-muted/10">
       <button
         onClick={handleCopy}
-        className="absolute top-2 right-2 p-1 border border-border bg-background/80 opacity-0 group-hover:opacity-100 transition-opacity"
+        className="absolute top-2 right-2 p-1 border border-border bg-background/80 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:opacity-100 transition-opacity"
+        type="button"
+        aria-label={t("common.copy", "Copy")}
         title={t("common.copy", "Copy")}
       >
         {copied ? (

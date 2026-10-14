@@ -8,7 +8,7 @@ import {
   groupPlugins,
 } from "@/lib/session-plugin-selection.js";
 import {
-  isLockedCorePackage,
+  isBuiltinDefaultPackage,
   requiredPluginIdsForWorld,
 } from "./plugin-selection-helpers.js";
 import * as api from "@/services/api.js";
@@ -112,7 +112,9 @@ export function usePluginSelection(
 
   const corePluginIds = useMemo(
     () =>
-      new Set(plugins.filter(isLockedCorePackage).map((plugin) => plugin.id)),
+      new Set(
+        plugins.filter(isBuiltinDefaultPackage).map((plugin) => plugin.id),
+      ),
     [plugins],
   );
   const worldRequiredPluginIds = useMemo(

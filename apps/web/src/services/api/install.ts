@@ -17,6 +17,7 @@ const installResultSchema = z
     kind: z.enum(["plugin", "world"]),
     id: z.string().min(1),
     restartRequired: z.boolean(),
+    hasServerCode: z.boolean().optional(),
   })
   .strict();
 

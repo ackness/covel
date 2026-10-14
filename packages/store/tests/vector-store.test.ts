@@ -22,6 +22,7 @@ it("rejects a partial vector adapter before callers access model metadata", () =
     supportsVector({
       ...partial,
       listVectorModels: async () => [],
+      getVectorPayloads: async () => new Map(),
       lockSessionEmbeddingModel: async () => {},
       getVectorIndexProgress: async () => null,
       commitVectorIndexBatch: async () => true,

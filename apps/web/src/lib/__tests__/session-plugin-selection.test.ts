@@ -101,7 +101,36 @@ describe("session plugin selection helpers", () => {
     ).toEqual(["chat-mode-narrator"]);
     expect(
       groupPlugins(plugins, (group) => group).map((group) => group.id),
-    ).toContain("dialogue");
+    ).toContain("tag:mode:dialogue");
+  });
+
+  it("groups once by the first declared tag, regardless of kind or source", () => {
+    const items = [
+      plugin("custom", {
+        kind: "core",
+        source: "community",
+        tags: ["mode:custom", "role:guide"],
+      }),
+      plugin("guide", { tags: ["role:guide", "mode:custom"] }),
+      plugin("tagged", { tags: ["untagged"] }),
+      plugin("plain", { kind: "core" }),
+    ];
+    expect(
+      groupPlugins(items, () => "No tags").map(({ id, label, plugins }) => ({
+        id,
+        label,
+        ids: plugins.map((item) => item.id),
+      })),
+    ).toEqual([
+      { id: "tag:mode:custom", label: "mode:custom", ids: ["custom"] },
+      { id: "tag:role:guide", label: "role:guide", ids: ["guide"] },
+      { id: "tag:untagged", label: "untagged", ids: ["tagged"] },
+      { id: "untagged", label: "No tags", ids: ["plain"] },
+    ]);
+    expect(groupPlugins([], () => "No tags")).toEqual([]);
+    expect(
+      groupPlugins(filterPlugins(items, "plain", new Set()), () => "No tags"),
+    ).toHaveLength(1);
   });
 
   const labels = {
