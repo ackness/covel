@@ -31,6 +31,6 @@ export default function (covel) {
 
 Build with `pnpm --filter @covel/plugin-handlers-utils build`. Create a local archive with `pnpm --filter @covel/plugin-handlers-utils pack --pack-destination <directory>`; `prepack` emits `dist/*.js` and `dist/*.d.ts`. `pnpm --filter @covel/plugin-handlers-utils test:package` imports and typechecks that archive in a temporary directory without workspace packages.
 
-Covel's plugin installer does not install npm dependencies. Plugin authors should bundle the helpers into their standalone plugin artifact and include this package's MIT license. Installing this SDK in an authoring project does not change the standalone-plugin packaging requirement. No network publication is part of the build or validation workflow.
+Covel's plugin installer does not install npm dependencies. The host provides this SDK and `zod` to every plugin: an import of `@covel/plugin-handlers-utils` (or a subpath) or `zod` from plugin code resolves to the host's copy, so a plugin does not bundle them. Bundle any other library the plugin uses. No network publication is part of the build or validation workflow.
 
 Workspace installation runs `prepare` to build `dist` before local development. Turbo build, test, and lint also build dependency artifacts. Published archives already include `dist`; consumers do not need the workspace or TypeScript compiler.

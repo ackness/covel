@@ -387,7 +387,7 @@
     "submittedInteraction": "已完成的交互 · 展开查看",
     "advancedPluginSettings": "自定义插件与高级设置",
     "minimalPluginSet": "回到最小集合",
-    "minimalPluginSetHint": "只留叙事插件、保存世界维度的插件，以及它们和世界必需的插件，其余全部关闭。",
+    "minimalPluginSetHint": "只留叙事插件，以及它们和世界必需的插件，其余全部关闭。",
     "configureModelBeforeRetry": "更换模型 / 调整参数",
     "retryModelSettingsHint": "可先更换模型或调低输出限制，再重试此任务；重试使用当前设置。",
     "allWorlds": "全部世界（{{total}}）",
@@ -1288,7 +1288,19 @@
     "providerImportSucceeded": "已导入服务商和模型。",
     "numberExample": "例如 {{value}}",
     "pricePerImageValue": "{{price}}/张",
-    "pricePerMillionValue": "{{price}}/百万 token"
+    "pricePerMillionValue": "{{price}}/百万 token",
+    "themeImportErrors": {
+      "missing-scope": "主题 CSS 必须包含 html[data-theme=\"your-theme\"] 这样的选择器。",
+      "multiple-ids": "一个主题文件只能声明一个主题 ID。",
+      "id-mismatch": "CSS 选择器必须使用主题 ID {{id}}。",
+      "escapes-scope": "每条规则都必须限定在 [data-theme=\"{{id}}\"] 内。未限定的选择器：{{selector}}",
+      "import-rule": "主题 CSS 不能使用 @import。",
+      "builtin-id": "{{id}} 是内置主题 ID，请使用其他 ID。",
+      "invalid-id": "主题 ID 必须为 2–48 个小写字母、数字或连字符。",
+      "invalid-json": "此主题文件不是有效的 JSON。",
+      "invalid-manifest": "主题字段不符合主题包格式。",
+      "theme-changed": "保存期间主题 {{id}} 已发生变化，请检查后重试。"
+    }
   },
   "appearance": {
     "styleTitle": "风格方案",
@@ -1589,7 +1601,10 @@
           "label": "面板纵向留白"
         }
       }
-    }
+    },
+    "replaceThemeTitle": "替换已有主题？",
+    "replaceThemeConfirm": "此名称生成的主题 ID 已存在。替换会覆盖该自定义主题。",
+    "replaceTheme": "替换主题"
   },
   "plugin": {
     "runtimes": "运行任务",

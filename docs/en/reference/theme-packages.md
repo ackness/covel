@@ -54,6 +54,8 @@ Where:
 
 ## 2. Supported import formats
 
+An imported ID cannot match a builtin theme. Validation failures are displayed in the current UI language. Top-level rules must stay within their theme scope; commas inside `:is()`, `:where()`, brackets, and strings do not split selectors.
+
 A theme package can be a CSS file or a JSON file.
 
 ### 2.1 CSS file
@@ -584,7 +586,7 @@ Players can change the look without writing any CSS. "Settings → Appearance" g
 - Animation definitions, `animation` / `animation-name`, and the custom properties that refer to them all switch to the new theme's own animation names.
 - When you save as again, only the generated snapshot at the end is replaced. Source rules and animation name prefixes do not pile up each time.
 - Both the source CSS and the final output must pass import validation. The output does not depend on the original theme's ID: you can export it as described in §8, delete the original theme, and then import it again.
-- `slugifyThemeId()` / `ensureThemeId()` generate theme IDs that do not conflict.
+- `slugifyThemeId()` / `ensureThemeId()` derive the ID from the name and avoid builtin IDs. If the final ID already belongs to a custom theme, saving asks before replacing it. Cancelling preserves the name, selection, and overrides. A theme changed during confirmation is preserved and saving asks the player to review it again.
 
 **When saving fails.** Fine-tuning the appearance and resetting both wait for the real persisted result:
 

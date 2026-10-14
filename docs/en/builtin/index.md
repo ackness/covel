@@ -21,11 +21,11 @@ When you start a game, you do not need to choose plugins one by one. A **gamepla
 | Traditional Story `traditional-story` | Long exploration, reading a story          | Narrator, Action Suggestions, Codex, Relationship Graph, World Rules                                |
 | Dialogue Mode `dialogue-mode`         | Character dialogue, visual novel           | Dialogue Narrator, Scene Stage, Action Suggestions, Character Profiles, World Rules, Reply Variants |
 | Low Cost `low-cost`                   | Keeping model costs down                   | Narrator, World Rules                                                                               |
-| Narrative Only `narrative-only`       | Just reading the story, at the lowest cost | Narrator, World Dimensions                                                                          |
+| Narrative Only `narrative-only`       | Just reading the story, at the lowest cost | Narrator                                                                                            |
 
-The first three packs also include Pre-Game Setup, World Dimensions and Character Creator, and they recommend turning on Story Memory. Narrative Only turns the other always-on plugins off: there is no opening form or character creation, and no world time, Story Memory or history compaction.
+The first three packs also include Pre-Game Setup, World Dimensions and Character Creator, and they recommend turning on Story Memory. Narrative Only turns the other always-on plugins off: there is no opening form, character creation or world dimensions, and no world time, Story Memory or history compaction. The world's declared dimensions are not imported, and the session starts as usual.
 
-The "Back to the minimal set" button on the session-prep screen gets you to such a set in one click: only the narrative plugins, the plugin that holds the world's dimensions, and the plugins the world requires.
+The "Back to the minimal set" button on the session-prep screen gets you to such a set in one click: only the narrative plugins and the plugins that they and the world require.
 
 A world can have its own gameplay pack. For example, "Lantern Barrow" (提灯古冢) has a "Classic Tabletop" pack. It builds on Traditional Story and adds Tabletop Rules, Dice Check, Quest Log, Inventory and Affinity. After you pick a pack, you can still add or remove plugins under "Customize plugins and advanced settings" on the session-prep screen.
 

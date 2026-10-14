@@ -20,7 +20,7 @@ my-plugin/                      my-covel-stuff/
 
 - 仓库必须是公开的。私有仓库装不了。
 - 包里的代码必须拿来就能运行。Covel 安装时不装依赖、不运行构建。
-- 插件的 `package.json` 里不能有 `dependencies`。用到的代码请直接放进包里。
+- 插件的 `package.json` 里不能有 `dependencies`。用到的代码请直接放进包里。插件 SDK 和 `zod` 由 Covel 提供，开发时要装它们，就写进 `devDependencies`。
 
 ## 2. 别人怎么装
 

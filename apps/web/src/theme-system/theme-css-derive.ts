@@ -1,4 +1,8 @@
-import { blankCssNonCode, parseImportedThemeFile } from "./validate.js";
+import {
+  blankCssNonCode,
+  parseImportedThemeFile,
+  validateThemeCss,
+} from "./validate.js";
 
 interface Edit {
   start: number;
@@ -156,8 +160,7 @@ export function deriveThemeCss(
   sourceId: string,
   themeId: string,
 ): string {
-  const source = parseImportedThemeFile(cssText, `${sourceId}.css`).theme;
-  if (source.id !== sourceId) throw new Error("Theme CSS source id mismatch.");
+  validateThemeCss(cssText, sourceId);
   const masked = blankCssNonCode(cssText, true);
   const edits: Edit[] = [];
   const names = new Map<string, string>();

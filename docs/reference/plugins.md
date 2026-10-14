@@ -233,6 +233,12 @@ Agent 的 guard 在调用模型之前执行。
 
 需要在本轮放弃工作时，返回契约允许的最小输出。例如 `story-events/plot` 关闭时返回空计划 `{ skip: true, events: [] }`。
 
+guard 拿到的 `ctx` 和函数 handler 的一样，内置插件和社区插件也一样：
+
+- 有 `ctx.inputs`（本次执行的输入绑定）、`ctx.world`、`ctx.store`、`ctx.pluginData`、`ctx.recursiveCall` 和其他帮手。
+- 写入用 `ctx.pluginData`，或者用 `withPendingProposals` 把 proposal 挂在跳过的结果上。这些写入只在 guard 跳过时提交；不跳过就丢弃，由模型这次运行决定写什么。
+- guard 返回或超时之后，`ctx.signal` 被中止，这些能力全部失效。
+
 ### 隐藏内容的 runtime（`io.concealed`）
 
 `io.concealed: true` 用于处理隐藏内容的 runtime，例如在剧情中策划隐藏事件的 agent。
@@ -506,7 +512,7 @@ Agent 的副作用只来自工具：模型能写什么，以 `agent.tools` 白�
 | `ctx.logicalTurn`             | 调度器的逻辑回合：已提交的主循环玩家回合数加一。函数 handler 和插件工具的上下文里都有。setup、开场续写和第一条玩家消息同为第 1 回合，`startTurn` / `interval` 也按它计数 |
 | 工具上下文的 `turnNumber`     | 会话里已记录的玩家消息数，包括 setup 的表单提交                                                                                                                          |
 | `ctx.session.lastPlayerInput` | 源执行开始时最近的一条 `PlayerInputSubmission \| null`，包含 `id/sessionId/turnId/formId/values/createdAt`                                                               |
-| `ctx.execution.origin`        | 这次执行因何而起：`player`、`continuation`、`manual`、`background`、`recursive` 或 `resume`。agent guard 没有 `ctx.execution`                                            |
+| `ctx.execution.origin`        | 这次执行因何而起：`player`、`continuation`、`manual`、`background`、`recursive` 或 `resume`                                                                                    |
 | `ctx.execution.sourceTurnId`  | 重试一个已提交的回合时，是那个回合的 ID。用它做键，重试时复用上次的掷骰和揭示，不重新抽                                                                                  |
 | `ctx.recursionDepth`          | 顶层执行是 `0`，`ctx.recursiveCall` 每嵌套一层加一                                                                                                                       |
 
@@ -780,7 +786,7 @@ namespace 声明 `search` 之后，它的记录进入框架的记忆检索（[`m
 - 手动修改会清除包卡片的高亮，但旧包的来源仍然记着，下一次切换不会把旧包累加进来。手动重新启用的包内插件作为手选保留。
 - 世界的 `requires` 仍由解析器独立校验。不能把 `requested` 当作不可取消的必需项。
 - 玩法包可以带 `excluded`：选中这个包时关掉其中的插件，`kind: core` 的也一样，玩家可以再打开。切换到下一个包时只撤销上一个包加的排除，玩家自己的排除保留。世界初始选中的包，它的排除从一开始就生效。没有安装的插件不出现在 `excluded` 里。
-- “回到最小集合”按钮只留叙事插件（已选的；一个都没选时用 core 里的）、提供 `world.dimensions@1` 的插件，以及它们和世界的 `requires` 拉进来的插件。其余的 core 插件和世界 `requested` 的插件都被排除，玩法包的高亮清除。
+- “回到最小集合”按钮只留叙事插件（已选的；一个都没选时用 core 里的），以及它们和世界的 `requires` 拉进来的插件。不会额外要求 `world.dimensions@1` 的提供者；其余的 core 插件和世界 `requested` 的插件都被排除，玩法包的高亮清除。
 
 **存档固定玩家确认的那一组。**
 

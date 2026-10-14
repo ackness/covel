@@ -1,3 +1,6 @@
+import { requestConfirm } from "@/lib/confirm-channel.js";
+import { themeImportErrorText } from "@/theme-system/import-error.js";
+import { loadStoredCustomThemes } from "@/theme-system/storage.js";
 import { useSettingsWritable } from "../use-settings-save.js";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -87,6 +90,20 @@ export function AppearancePane() {
         .filter((theme) => theme.source === "builtin")
         .map((theme) => theme.id);
       const id = ensureThemeId(slugifyThemeId(label), builtinIds);
+      const existing =
+        loadStoredCustomThemes(store).find((theme) => theme.id === id) ?? null;
+      if (
+        existing &&
+        !(await requestConfirm({
+          title: t("appearance.replaceThemeTitle"),
+          message: t("appearance.replaceThemeConfirm"),
+          subject: resolveI18nText(existing.label, i18n.language) ?? id,
+          confirmLabel: t("appearance.replaceTheme"),
+          cancelLabel: t("common.cancel"),
+          destructive: true,
+        }))
+      )
+        return;
       // Carry the source theme's scheme support: a dark-only theme must not
       // come out of the snapshot labelled light-only.
       const sourceTheme = registered.find((theme) => theme.id === appearance);
@@ -97,26 +114,29 @@ export function AppearancePane() {
         sourceTheme,
       );
 
-      await saveCustomTheme(store, {
-        id,
-        label,
-        source: "custom",
-        schemes: snapshot.schemes,
-        // A snapshot keeps the structure it was tuned on, not just the tokens,
-        // and joins that style in the picker as one more colourway.
-        layout: sourceTheme?.layout,
-        group: sourceTheme ? themeGroupId(sourceTheme) : undefined,
-        groupLabel: sourceTheme?.groupLabel ?? sourceTheme?.label,
-        cssText: snapshot.cssText,
-      });
+      await saveCustomTheme(
+        store,
+        {
+          id,
+          label,
+          source: "custom",
+          schemes: snapshot.schemes,
+          // A snapshot keeps the structure it was tuned on, not just the tokens,
+          // and joins that style in the picker as one more colourway.
+          layout: sourceTheme?.layout,
+          group: sourceTheme ? themeGroupId(sourceTheme) : undefined,
+          groupLabel: sourceTheme?.groupLabel ?? sourceTheme?.label,
+          cssText: snapshot.cssText,
+        },
+        undefined,
+        existing,
+      );
       await store.set("ui.appearance", id);
       await clearOverrides(store);
       setThemeName("");
     } catch (nextError) {
       setError(
-        nextError instanceof Error
-          ? nextError.message
-          : t("appearance.saveThemeFailed"),
+        themeImportErrorText(nextError, t, "appearance.saveThemeFailed"),
       );
     } finally {
       setSaving(false);
@@ -165,11 +185,7 @@ export function AppearancePane() {
       // hand-edited or hostile file can only ever set real tokens.
       await replaceOverrides(store, parsed as AppearanceOverrides);
     } catch (nextError) {
-      setError(
-        nextError instanceof Error
-          ? nextError.message
-          : t("appearance.importInvalid"),
-      );
+      setError(themeImportErrorText(nextError, t, "appearance.importInvalid"));
     } finally {
       if (fileRef.current) fileRef.current.value = "";
     }

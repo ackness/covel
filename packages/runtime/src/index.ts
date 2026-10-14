@@ -284,12 +284,8 @@ export {
   createPluginLogger,
   createFunctionStoreView,
   createRpcHandlerStoreView,
-  createTrustedHandlerStore,
 } from "./function-runtime/plugin-handler-helpers.js";
-export type {
-  HandlerHelperContext,
-  TrustedHandlerStore,
-} from "./function-runtime/plugin-handler-helpers.js";
+export type { HandlerHelperContext } from "./function-runtime/plugin-handler-helpers.js";
 export {
   createPluginRandom,
   restartSessionRandom,
