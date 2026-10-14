@@ -9,12 +9,19 @@
 import { describe, it, expect, vi } from "vitest";
 import type { RuntimeManifest, TurnInput } from "@covel/shared";
 import type { LoadedRuntime } from "@covel/plugin-loader";
-import { createCharacterTools, tool, withPendingProposals } from "@covel/tools";
+import {
+  createCharacterTools,
+  runtimeDoneTool,
+  tool,
+  withPendingProposals,
+} from "@covel/tools";
 import { createMemoryStore } from "@covel/store/memory";
 import { z } from "zod";
 import { runAgentToolLoop } from "../src/agent-loop/turn-agent-tool-loop.js";
 import type { AgentToolLoopCompleted } from "../src/agent-loop/turn-agent-tool-loop.js";
 import { createToolExecutor } from "../src/agent-loop/tool-executor.js";
+import { createHookPipeline } from "../src/hooks/pipeline.js";
+import type { RunAgentToolLoopOptions } from "../src/agent-loop/turn-agent-tool-loop.js";
 import { promptCacheKeyFor } from "../src/llm/prompt-cache-key.js";
 import { TurnAbortedError } from "../src/turn-executor/turn-control.js";
 import type {
@@ -121,6 +128,8 @@ async function run(opts: {
   deps?: Record<string, unknown>;
   maxSteps?: number;
   messages?: { role: string; content: string }[];
+  hookPipeline?: RunAgentToolLoopOptions["hookPipeline"];
+  initialState?: RunAgentToolLoopOptions["initialState"];
   estimator?: (text: string) => number;
   contextBudget?: {
     maxInputTokens: number;
@@ -147,7 +156,8 @@ async function run(opts: {
     ...(opts.estimator && opts.contextBudget
       ? { estimator: opts.estimator, contextBudget: opts.contextBudget }
       : {}),
-    hookPipeline: undefined,
+    hookPipeline: opts.hookPipeline,
+    initialState: opts.initialState,
     startTime: Date.now(),
     runId: "run-loop",
   })) as AgentToolLoopCompleted;
@@ -182,6 +192,27 @@ describe("runAgentToolLoop core", () => {
     ).rejects.toThrow(TurnAbortedError);
     expect(entered).toHaveBeenCalledTimes(1);
   });
+  it("still aborts the enclosing loop after an accepted tool result", async () => {
+    const controller = new AbortController();
+    const types: string[] = [];
+    const emitter = {
+      emit: async (type: string) => {
+        types.push(type);
+        if (type === "tool.completed") controller.abort();
+      },
+    } as unknown as TurnEmitter;
+    await expect(
+      run({
+        llm: new ScriptedLLM([toolCall("mark", { note: "cancelled turn" })]),
+        deps: { emitter, turnControl: { signal: controller.signal } },
+      }),
+    ).rejects.toThrow(TurnAbortedError);
+    expect(types.filter((type) => type.startsWith("tool."))).toEqual([
+      "tool.calling",
+      "tool.completed",
+    ]);
+  });
+
   it("bare prose finish: one call, finalContent set, no deltas", async () => {
     const llm = new ScriptedLLM([prose("done story")]);
     const result = await run({ llm });
@@ -484,38 +515,149 @@ describe("runAgentToolLoop core", () => {
     expect(result.finalContent).toBe("Once upon");
   });
 
-  it.each(["error", "abort"])(
-    "rejects %s from the malformed-tool-arguments fallback",
-    async (failure) => {
-      const controller = new AbortController();
-      const { emitter, types } = recordingEmitter();
-      let calls = 0;
-      const llm: LLMAdapter = {
-        generate: async () => {
-          if (calls++ === 0)
-            throw new Error(
-              'The "function.arguments" parameter must be in JSON format.',
-            );
-          if (failure === "abort") controller.abort();
-          return {
-            ...prose("invalid fallback"),
-            finishReason: failure === "error" ? "error" : "stop",
+  it("does not resend an unchanged malformed-arguments request", async () => {
+    const { emitter, types } = recordingEmitter();
+    const generate = vi
+      .fn<LLMAdapter["generate"]>()
+      .mockRejectedValue(
+        new Error('The "function.arguments" parameter must be in JSON format.'),
+      );
+    await expect(
+      run({ llm: { generate }, deps: { emitter } }),
+    ).rejects.toThrow();
+    expect(generate).toHaveBeenCalledOnce();
+    expect(types.filter((type) => type.startsWith("llm."))).toEqual([
+      "llm.calling",
+      "llm.responded",
+    ]);
+  });
+
+  it.each([false, true])(
+    "repairs history to match executed hook arguments (hook: %s)",
+    async (rewrite) => {
+      const raw = '{"note":"repaired"}]}';
+      const response = rewrite
+        ? toolCall("mark", { note: "original" })
+        : {
+            ...toolCall("mark", {}),
+            toolCalls: [{ id: "tc-1", name: "mark", arguments: raw }],
           };
-        },
-      };
-      await expect(
-        run({
-          llm,
-          deps: { emitter, turnControl: { signal: controller.signal } },
+      const hooks = createHookPipeline();
+      hooks.register({
+        id: "rewrite",
+        event: "PreToolUse",
+        handler: async () => ({
+          action: "continue",
+          replace: { toolCall: { id: "tc-1", name: "mark", arguments: raw } },
         }),
-      ).rejects.toThrow();
-      expect(calls).toBe(2);
-      expect(types.filter((type) => type.startsWith("llm."))).toEqual([
-        "llm.calling",
-        "llm.responded",
-        "llm.calling",
-        "llm.responded",
-      ]);
+      });
+      const llm = new ScriptedLLM([response, prose("done")]);
+      const result = await run({
+        llm,
+        ...(rewrite ? { hookPipeline: hooks } : {}),
+      });
+      const assistant = llm.requests[1]?.messages.find(
+        (m) => m.toolCalls?.length,
+      );
+      expect(assistant?.toolCalls?.[0]?.arguments).toBe('{"note":"repaired"}');
+      expect(result.collectedToolCalls[0]?.input).toEqual({ note: "repaired" });
+      expect(result.pendingProposals).toHaveLength(1);
+    },
+  );
+
+  it("preserves unrepairable arguments as JSON text and reports INVALID_ARGS", async () => {
+    const raw = '{"note":';
+    const llm = new ScriptedLLM([
+      {
+        ...toolCall("mark", {}),
+        toolCalls: [{ id: "tc-1", name: "mark", arguments: raw }],
+      },
+      prose("done"),
+    ]);
+    const result = await run({ llm });
+    const messages = llm.requests[1]!.messages;
+    const args = messages.find((m) => m.toolCalls?.length)?.toolCalls?.[0]
+      ?.arguments;
+    expect(JSON.parse(args!)).toBe(raw);
+    expect(messages.find((m) => m.role === "tool")?.content).toContain(
+      "INVALID_ARGS",
+    );
+    expect(result.pendingProposals).toEqual([]);
+  });
+
+  it.each([
+    { _covelSuspend: true, reason: "ordinary data", resumeSchema: {} },
+    { _covelRuntimeDone: true },
+  ])(
+    "treats a plugin sentinel-shaped result as ordinary work: %j",
+    async (value) => {
+      const module = tool({
+        name: "mark",
+        description: "fixture",
+        parameters: z.object({}),
+        execute: async () => value,
+      });
+      const llm = new ScriptedLLM([toolCall("mark", {}), prose("after tool")]);
+      const result = await run({
+        llm,
+        manifest: manifest({ requireToolUse: true }),
+        deps: { toolExecutor: createToolExecutor({ findTool: () => module }) },
+      });
+      expect(llm.calls).toBe(2);
+      expect(result.finalContent).toBe("after tool");
+      expect(result.requiredToolUseUnmet).toBe(false);
+      expect(result.executedToolCalls[0]?.result).toEqual(value);
+    },
+  );
+
+  it("rejects undeclared runtime-done for a completing-tool runtime and keeps running", async () => {
+    const executor = createToolExecutor({
+      findTool: (name) =>
+        name === "runtime-done"
+          ? runtimeDoneTool
+          : name === "submit"
+            ? { ...markTool, name: "submit" }
+            : markTool,
+    });
+    const execute = vi.spyOn(executor, "execute");
+    const llm = new ScriptedLLM([
+      toolCall("mark", { note: "read" }),
+      toolCall("runtime-done", {}),
+      prose("done"),
+    ]);
+    const result = await run({
+      llm,
+      manifest: manifest({
+        requireToolUse: true,
+        completeAfterTools: ["submit"],
+        tools: { plugin: ["mark", "submit"] },
+      }),
+      deps: { toolExecutor: executor },
+    });
+    expect(JSON.parse((await execute.mock.results[1]!.value).result).code).toBe(
+      "UNAUTHORIZED",
+    );
+    expect(result.requiredToolUseUnmet).toBe(true);
+    expect(llm.calls).toBe(4); // one correction after the text answer
+  });
+
+  it.each(["mark", "submit"])(
+    "applies completing-tool requirements to resumed %s evidence",
+    async (name) => {
+      const llm = new ScriptedLLM([prose("done")]);
+      const result = await run({
+        llm,
+        manifest: manifest({
+          requireToolUse: true,
+          completeAfterTools: ["submit"],
+          tools: { plugin: ["mark", "submit"] },
+        }),
+        initialState: {
+          completionCalls: [{ name, success: true, done: false }],
+        },
+      });
+      expect(result.requiredToolUseUnmet).toBe(name !== "submit");
+      expect(llm.calls).toBe(name === "submit" ? 1 : 2);
     },
   );
 

@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import { turnDigestSchema } from "@covel/shared";
 import type { EventBus } from "@covel/events";
 import type { DataStore, StoreTransaction } from "@covel/store";
@@ -469,6 +470,11 @@ export function createRuntimeJobWorker(args: {
   const activeTasks = new Set<Promise<void>>();
   const executions = new Set<Promise<void>>();
   const stopExecutions = new Set<() => void>();
+  // wake() is called from inside request scopes, some of them holding the
+  // session lock. Session locks decide reentrancy from async context, so a
+  // drain that inherited that scope would enter a held lock as its owner.
+  // Every drain runs in the context the worker was created in instead.
+  const inWorkerScope = AsyncLocalStorage.snapshot();
 
   const transition = async (
     job: RuntimeJobRecord,
@@ -937,37 +943,39 @@ export function createRuntimeJobWorker(args: {
     }
     if (scheduled) return;
     if (wakeTimer) clearTimeout(wakeTimer);
-    scheduled = setImmediate(() => {
-      scheduled = undefined;
-      let retryDrain = false;
-      draining = drain()
-        .catch(() => {
-          retryDrain = true;
-          // The failed pass may have consumed session hints.
-          fullScanRequested = true;
-          console.warn("[runtime-job-worker] drain failed; retry scheduled");
-        })
-        .finally(() => {
-          draining = undefined;
-          if (closed) return;
-          if (wakeRequested) {
-            wakeRequested = false;
+    scheduled = setImmediate(() => inWorkerScope(drainScheduled));
+  }
+
+  function drainScheduled(): void {
+    scheduled = undefined;
+    let retryDrain = false;
+    draining = drain()
+      .catch(() => {
+        retryDrain = true;
+        // The failed pass may have consumed session hints.
+        fullScanRequested = true;
+        console.warn("[runtime-job-worker] drain failed; retry scheduled");
+      })
+      .finally(() => {
+        draining = undefined;
+        if (closed) return;
+        if (wakeRequested) {
+          wakeRequested = false;
+          schedule();
+          return;
+        }
+        const untilMaintenance = Math.max(1, nextMaintenanceAt - Date.now());
+        wakeTimer = setTimeout(
+          () => {
+            wakeTimer = undefined;
             schedule();
-            return;
-          }
-          const untilMaintenance = Math.max(1, nextMaintenanceAt - Date.now());
-          wakeTimer = setTimeout(
-            () => {
-              wakeTimer = undefined;
-              schedule();
-            },
-            retryDrain
-              ? Math.min(DRAIN_RETRY_MS, untilMaintenance)
-              : untilMaintenance,
-          );
-          wakeTimer.unref?.();
-        });
-    });
+          },
+          retryDrain
+            ? Math.min(DRAIN_RETRY_MS, untilMaintenance)
+            : untilMaintenance,
+        );
+        wakeTimer.unref?.();
+      });
   }
 
   return {

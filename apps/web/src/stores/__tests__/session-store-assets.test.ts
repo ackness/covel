@@ -176,3 +176,30 @@ describe("session-store — P0-b assetsByTurn slice", () => {
     }
   });
 });
+
+it("coalesces progress without an asset ID and bounds unique progress entries", () => {
+  let state = initialState;
+  for (let i = 0; i < 1000; i++) {
+    state = reducer(state, {
+      type: "ASSET_PROGRESS",
+      turnId: "turn-1",
+      progress: makeProgress({
+        assetId: undefined,
+        runtimeId: "renderer",
+        percent: i,
+      }),
+    });
+  }
+  expect(state.assetProgressByTurn.get("turn-1")).toHaveLength(1);
+  expect(state.assetProgressByTurn.get("turn-1")?.[0]?.percent).toBe(999);
+  for (let i = 0; i < 1000; i++) {
+    state = reducer(state, {
+      type: "ASSET_PROGRESS",
+      turnId: "turn-1",
+      progress: makeProgress({ assetId: `asset-${i}` }),
+    });
+  }
+  expect(state.assetProgressByTurn.get("turn-1")!.length).toBeLessThanOrEqual(
+    256,
+  );
+});

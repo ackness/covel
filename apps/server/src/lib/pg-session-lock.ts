@@ -137,7 +137,9 @@ export function createPgAdvisorySessionLock(
     lockIds: readonly string[],
     fn: () => Promise<T>,
   ): Promise<T> => {
-    const orderedIds = [...new Set(lockIds)];
+    // One global order (see SessionLock.withLocks) keeps overlapping key
+    // sets from deadlocking, whatever order the caller listed them in.
+    const orderedIds = [...new Set(lockIds)].sort();
     if (orderedIds.length === 0) return fn();
     // postgres.js's `Serializable` type does not include `bigint`, even
     // though the driver serialises bigint parameters correctly at

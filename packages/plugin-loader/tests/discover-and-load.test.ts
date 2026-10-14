@@ -228,7 +228,7 @@ describe("current package discovery and loading", () => {
     await expect(loadPluginDefinition(d!)).resolves.toBeDefined();
   });
   it.each([
-    { schedule: { needs: ["foreign"] } },
+    { schedule: { needs: ["foreign/step"] } },
     {
       schedule: {
         stage: "setup",
@@ -236,7 +236,7 @@ describe("current package discovery and loading", () => {
       },
     },
     { schedule: { after: ["probe-other/step"] } },
-    { schedule: { after: [{ runtime: "foreign" }] } },
+    { schedule: { after: [{ runtime: "foreign/step" }] } },
     { io: { inputs: { facts: { from: { runtime: "foreign/step" } } } } },
   ])(
     "rejects cross-package runtime references in $schedule $io",

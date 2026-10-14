@@ -30,7 +30,7 @@ export function JobListPanel({
   if (!items.length)
     return (
       <p className="text-xs text-muted-foreground italic text-center px-4 pt-6">
-        {resolve(input.emptyText) || t("coreImage.panel.noJobs")}
+        {resolve(input.emptyText) || t("catalog.jobList.empty")}
       </p>
     );
   return (
@@ -96,7 +96,7 @@ export function JobListPanel({
                           }}
                         >
                           <Copy className="w-3 h-3" />
-                          {t("coreImage.panel.copy")}
+                          {t("catalog.jobList.copy")}
                         </Button>
                       </div>
                       <p className="text-[11px] whitespace-pre-wrap max-h-48 overflow-auto rounded bg-muted/30 p-2">
@@ -144,7 +144,7 @@ export function JobListPanel({
                     }}
                   >
                     {resolve(props.rerunAction.label) ||
-                      t("coreImage.panel.rerun")}
+                      t("catalog.jobList.rerun")}
                   </Button>
                 ) : null}
               </div>

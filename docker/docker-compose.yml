@@ -23,11 +23,11 @@ services:
     # pgvector/pgvector ships PostgreSQL with the `vector` extension
     # pre-installed (required by ADR-002). The app container will refuse
     # to start if the extension is missing.
-    # PostgreSQL 18 + pgvector 0.8.6, pinned by multi-platform digest.
+    # PostgreSQL 18 + pgvector 0.8.7, pinned by multi-platform digest.
     # PG18 changed PGDATA and its volume root. `pgdata18` is deliberately a
     # new volume: existing PG17 `pgdata` contents are preserved but are not
     # migrated or mounted automatically.
-    image: pgvector/pgvector:0.8.6-pg18@sha256:2ba9ca5f2e7daa0f0e7723cba1ee9167bab54efd3640516a44ac1a928dd67e7a
+    image: pgvector/pgvector:0.8.7-pg18@sha256:2358fcba361ed2233a5ed81b5fe4ca779ccb304120ce531a3bf51c0ed7e2bc11
     container_name: covel-postgres
     restart: unless-stopped
     ports:

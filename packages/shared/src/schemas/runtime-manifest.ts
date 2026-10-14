@@ -298,7 +298,7 @@ export const runtimeAuthoringManifestSchema = z
                 require: z
                   .enum(["explicit", "tool-use"])
                   .describe(
-                    '`explicit` needs a completing tool or `runtime-done`. `tool-use` needs a valid business tool call, so "no change" is also submitted through the tool.',
+                    "`explicit` needs a completing tool or `runtime-done`. `tool-use` needs a successful tool named in `afterTools`, or any successful business tool when `afterTools` is empty. Failed calls and `runtime-done` do not count.",
                   )
                   .optional(),
                 afterTools: z

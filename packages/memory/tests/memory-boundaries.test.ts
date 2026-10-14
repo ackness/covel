@@ -360,6 +360,26 @@ describe("incremental archival ingestion (F-039)", () => {
     for (const read of corpusReads) expect(read).not.toHaveBeenCalled();
   });
 
+  it("keeps vectors when a changed text field contains the same text", async () => {
+    const { store, memory, sources, archivalKeys } = await searchable([journal]);
+    await store.setPluginDataBatch(
+      facts(3).map((row) => ({
+        ...row,
+        value: { text: row.value.text, note: row.value.text },
+      })),
+    );
+    await memory.ingest("session");
+    const before = await archivalKeys();
+    expect(before).toHaveLength(4);
+
+    sources.current = [{ ...journal, textField: "note" }];
+    await memory.ingest("session");
+    expect(await archivalKeys()).toEqual(before);
+    // Advancing the cursor must not leave the vectors missing on later sweeps.
+    await memory.ingest("session");
+    expect(await archivalKeys()).toEqual(before);
+  });
+
   it("adds a namespace that becomes searchable and removes one that stops", async () => {
     const { store, memory, sources, archivalKeys } = await searchable([]);
     await store.setPluginDataBatch(facts(3));

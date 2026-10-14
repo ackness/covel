@@ -243,7 +243,7 @@ Agent 的 guard 在调用模型之前执行。
 
 ### 依赖和引用的范围
 
-`schedule.needs`、`schedule.after` 和 `io.inputs.*.from.runtime` 里写的 runtime ID 只能属于本包：写完整的 `<pluginId>/<runtimeId>`，单 runtime 的包写包 ID。不带前缀的字符串依赖同样受这条限制。
+`schedule.needs`、`schedule.after` 和 `io.inputs.*.from.runtime` 里写的 runtime ID 只能属于本包：写完整的 `<pluginId>/<runtimeId>`，单 runtime 的包写包 ID。不带前缀的字符串依赖会被拒绝，诊断会建议补全为 `<pluginId>/<runtimeId>`；只有其他包的完整 runtime ID 才建议改用契约。
 
 **跨包 runtime 引用边界**：
 
@@ -359,7 +359,7 @@ Agent 的超时、重试和步数都在 `agent.loop` 里。
 **完成条件。**
 
 - `completion.afterTools`：指定的工具成功后就结束。
-- `completion.require: tool-use`：要求有效的工具调用，也就是至少一次执行成功的业务工具调用。失败的调用不算。
+- `completion.require: tool-use`：声明了非空的 `afterTools` 时，至少一个列出的完成工具必须成功。没有列表时，任意成功的业务工具调用都算。失败的调用和 `runtime-done` 不算。
 - 模型只回了纯文本，或者调用了 `runtime-done`，而这时还没有这样的调用：框架先注入一次纠正提示，仍未完成才判为失败。所以“无变化”也要通过业务工具提交一个空结果。
 - 纠正之后的那次请求要求模型必须调用工具（`toolChoice: "required"`，清单指名的工具保持不变）。模型调用工具后恢复自选。模型处于思考模式时服务商不接受强制选择，这时仍由模型自选。
 - 这个判定在循环返回处统一进行，普通执行和 resume 的所有结束方式都适用：文本回答、`runtime-done`、`afterTools` 自动完成、`PostToolUse` Hook 终止，以及步数用尽。
@@ -573,7 +573,7 @@ Agent 的副作用只来自工具：模型能写什么，以 `agent.tools` 白�
 
 **插件自己的数据。**
 
-- 插件自有的持久数据经绑定的 `ctx.store.getPluginData(namespace, key)` 和 `listPluginData(namespace?)` 访问。
+- 插件自有的持久数据经绑定的 `ctx.store.getPluginData(namespace, key)` 和 `listPluginData(namespace)` 访问。
 - 插件不能指定任意的 sessionId 或 pluginId 去读其他插件的私有数据。
 - 要跨插件公开数据，用契约、服务或扩展，不要扫描对方的 namespace。
 

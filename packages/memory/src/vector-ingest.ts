@@ -496,6 +496,9 @@ async function ingestArchival(
     namespace: ARCHIVAL_NAMESPACE,
     keys: [...items.keys()],
   });
+  // A source removal may delete these keys in this same batch. Its replacement
+  // must restore them even when the new text field contains identical text.
+  for (const deletion of deletes) stored.delete(deletion.key);
   const toEmbed: ArchivalItem[] = [];
   for (const [key, item] of items) {
     if (!item) {

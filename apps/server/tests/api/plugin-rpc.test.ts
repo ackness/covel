@@ -54,7 +54,7 @@ type Env = {
   };
 };
 
-function setup(): {
+function setup(options: { readonly handlerTimeoutMs?: number } = {}): {
   app: Hono<Env>;
   store: DataStore;
   registry: PluginRpcRegistry;
@@ -68,7 +68,7 @@ function setup(): {
   registry.registerFrameworkDefault("echo", async (payload) => ({
     echoed: payload,
   }));
-  const executor = createRpcExecutor({ registry });
+  const executor = createRpcExecutor({ registry, ...options });
   const gate = createRpcApprovalGate();
   const pluginRegistry = createPluginRegistry();
   const sessionLock = createInProcessSessionLock();
@@ -705,6 +705,41 @@ describe("POST /api/sessions/:id/plugin-rpc", () => {
     const body = (await res.json()) as { status: string; result: unknown };
     expect(body.status).toBe("ok");
     expect(body.result).toEqual({ pluginEcho: { card: "shrine" } });
+  });
+
+  it("fails an action that passes its time limit and frees the session", async () => {
+    const limited = setup({ handlerTimeoutMs: 50 });
+    await seedSession(limited.store);
+    await limited.store.updateSession("sess-rpc-1", {
+      activePlugins: ["codex"],
+    });
+    limited.registry.registerPluginHandler(
+      "codex",
+      "hang",
+      async () => new Promise(() => {}),
+      {},
+      "builtin",
+    );
+
+    const res = await limited.app.request(
+      "/api/sessions/sess-rpc-1/plugin-rpc",
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          kind: "action",
+          pluginId: "codex",
+          action: "hang",
+          payload: null,
+        }),
+      },
+    );
+    expect(res.status).toBe(504);
+    expect(await res.json()).toMatchObject({ code: "handler_timeout" });
+    // Deleting or playing the session no longer waits on the stuck handler.
+    await expect(
+      limited.sessionLock.tryWithLock!("sess-rpc-1", async () => "free"),
+    ).resolves.toEqual({ acquired: true, value: "free" });
   });
 
   it('returns 404 with code "unknown_action" when action not registered', async () => {

@@ -243,7 +243,7 @@ Use `io.concealed: true` for runtimes that handle hidden content, such as an age
 
 ### Scope of dependencies and references
 
-The runtime IDs written in `schedule.needs`, `schedule.after`, and `io.inputs.*.from.runtime` must belong to this package. Write the full `<pluginId>/<runtimeId>`. In a package with a single runtime, write the package ID. A dependency given as a string without a prefix is held to the same rule.
+The runtime IDs written in `schedule.needs`, `schedule.after`, and `io.inputs.*.from.runtime` must belong to this package. Write the full `<pluginId>/<runtimeId>`. In a package with a single runtime, write the package ID. An unprefixed string dependency is rejected with a suggestion to write `<pluginId>/<runtimeId>`. Only a complete runtime ID from another package receives the advice to use a contract.
 
 **Limits on references to runtimes in other packages:**
 
@@ -359,7 +359,7 @@ The budget decides how many retries can actually be used:
 **Completion conditions.**
 
 - `completion.afterTools`: the run finishes once the named tools succeed.
-- `completion.require: tool-use`: requires a valid tool call, meaning at least one successful business tool call. A failed call does not count.
+- `completion.require: tool-use`: with a nonempty `afterTools` list, at least one listed completing tool must succeed. Without that list, any successful business tool counts. Failed calls and `runtime-done` do not count.
 - If the model returns only plain text, or calls `runtime-done` while no such call has been made yet, the framework first injects a correction prompt. Only if the run is still not complete is it marked as failed. So even when "nothing changed", submit an empty result through a business tool.
 - The request right after a correction requires the model to call a tool (`toolChoice: "required"`, with any tool named in the manifest kept as it is). After the model calls a tool, the choice goes back to automatic. When the model is in thinking mode, the provider does not accept a forced choice, so the model keeps choosing on its own.
 - This check runs in one place, where the loop returns. It applies to every way a normal run or a resume can end: a text answer, `runtime-done`, automatic completion through `afterTools`, a `PostToolUse` hook that stops the run, and running out of steps.
@@ -573,7 +573,7 @@ The rules are in [Aliases and name resolution](./world-model.md#aliases-and-name
 
 **The plugin's own data.**
 
-- Persistent data owned by a plugin is accessed through the bound `ctx.store.getPluginData(namespace, key)` and `listPluginData(namespace?)`.
+- Persistent data owned by a plugin is accessed through the bound `ctx.store.getPluginData(namespace, key)` and `listPluginData(namespace)`.
 - A plugin cannot specify an arbitrary sessionId or pluginId to read another plugin's private data.
 - To share data publicly across plugins, use a contract, a service, or an extension. Do not scan the other plugin's namespace.
 

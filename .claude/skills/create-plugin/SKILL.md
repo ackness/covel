@@ -81,8 +81,9 @@ proposals or handler effects.
   `covel.provideExtension(point, id, {handler})` for extensions. Registration
   factories only register; defer I/O to invocation handlers.
 - Agent runtime bodies hold prompts. Function handlers return explicit
-  success / skipped / failed / blocked results
-  ([runtime context](references/runtime-context.md)). Preserve cancellation,
+  success / suspended / skipped / failed results
+  ([public HandlerResult](../../../packages/plugin-handlers-utils/src/handler-result.ts),
+  [runtime context](references/runtime-context.md)). Preserve cancellation,
   bounded work, and successful-commit-only domain writes.
 - Media goes through `ctx.images.generate` and `ctx.speech.generate` /
   `transcribe`. An image-flow entry declares `media.image-flow@1`, returning its
@@ -119,7 +120,8 @@ declarations, and generic UI props.
 ### 7. Sync docs
 
 A bundled plugin added or changed in the main checkout updates
-`docs/reference/plugins.md` in the same change (see the documentation sync list
+`docs/reference/plugins.md`, its theme page under `docs/builtin/`, and the tables
+in `docs/builtin/index.md` in the same change (see the documentation sync list
 in `AGENTS.md`). Update bilingual user documentation, settings instructions,
 network/data behavior, and tests together. Publishing or installing outside the
 authorized workspace requires the user's explicit authorization.

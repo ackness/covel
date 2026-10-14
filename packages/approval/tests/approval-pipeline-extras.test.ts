@@ -53,15 +53,15 @@ describe("approval rule ordering", () => {
 
   it("unsupported actions fail closed during configuration", () => {
     const denyPipeline = createApprovalPipeline([
-      { pattern: "third-party:*", action: "deny" },
+      { pattern: "local:*", action: "deny" },
     ]);
 
-    const denyRes = denyPipeline.check(makeRequest(), "third-party");
+    const denyRes = denyPipeline.check(makeRequest(), "local");
 
     expect(denyRes).toEqual({ decision: "deny", reason: "rule-deny" });
     expect(() =>
       createApprovalPipeline([
-        { pattern: "third-party:*", action: "prompt" },
+        { pattern: "local:*", action: "prompt" },
       ] as unknown as readonly PermissionRule[]),
     ).toThrow(/not supported/i);
   });
@@ -86,12 +86,12 @@ describe("approval rule wildcards vs exact match", () => {
   });
 
   it("source category mismatch causes wildcard rules to be skipped over", () => {
-    // builtin:* must NEVER fire for a third-party request, even if the
+    // builtin:* must NEVER fire for a local request, even if the
     // exact-name rule is missing — falls through to default-allow.
     const pipeline = createApprovalPipeline([
       { pattern: "builtin:*", action: "allow" },
     ]);
-    const result = pipeline.check(makeRequest(), "third-party");
+    const result = pipeline.check(makeRequest(), "local");
     expect(result.reason).toBe("default-allow-all");
   });
 });

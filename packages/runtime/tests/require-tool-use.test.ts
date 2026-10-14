@@ -13,6 +13,8 @@ import { createMemoryStore } from "@covel/store/memory";
 import type { DataStore } from "@covel/store";
 import {
   createEmitEventTool,
+  tool,
+  z,
   runtimeDoneTool,
   type EventDirectoryLike,
 } from "@covel/tools";
@@ -381,6 +383,71 @@ describe("requireToolUse gate", () => {
       { topic: "test.ping", data: { x: 1 } },
     ]);
   });
+
+  it.each([false, true])(
+    "requires a successful declared completion tool after a read (corrected: %s)",
+    async (corrected) => {
+      const store = await mainLoopStore("sess-read");
+      const read = tool({
+        name: "read",
+        description: "fixture",
+        parameters: z.object({}),
+        execute: async () => ({ value: 1 }),
+      });
+      const submit = tool({
+        name: "submit",
+        description: "fixture",
+        parameters: z.object({}),
+        execute: async () => ({ submitted: true }),
+      });
+      const seen: Parameters<LLMAdapter["generate"]>[0][] = [];
+      const llm: LLMAdapter = {
+        generate: async (params) => {
+          seen.push(structuredClone({ messages: params.messages }));
+          const name =
+            seen.length === 1
+              ? "read"
+              : corrected && seen.length === 3
+                ? "submit"
+                : undefined;
+          return {
+            content: name ? null : "done",
+            toolCalls: name
+              ? [{ id: `tc-${seen.length}`, name, arguments: "{}" }]
+              : [],
+            finishReason: name ? "tool_calls" : "stop",
+            usage: { inputTokens: 1, outputTokens: 1 },
+          };
+        },
+      };
+      const result = await executeTurn(
+        makeTurnInput({ sessionId: "sess-read" }),
+        [
+          manifest({
+            requireToolUse: true,
+            completeAfterTools: ["submit"],
+            tools: { plugin: ["read", "submit"] },
+          }),
+        ],
+        {
+          store,
+          llm,
+          loadRuntime: async (m) => ({ manifest: m, promptTemplate: "prompt" }),
+          toolExecutor: createToolExecutor({
+            store,
+            findTool: (name) => [read, submit].find((t) => t.name === name),
+          }),
+        },
+        { maxSteps: 5 },
+      );
+      expect(seen).toHaveLength(3);
+      const res = result.runtimeResults.find(
+        (r) => r.runtimeId === "plug/gated",
+      );
+      expect(res?.status).toBe(corrected ? "success" : "failed");
+      if (!corrected) expect(res?.error).toContain("requireToolUse");
+    },
+  );
 
   it("default (no requireToolUse) finishes on the first bare response", async () => {
     const store = await mainLoopStore("sess-3");

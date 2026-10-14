@@ -141,10 +141,12 @@ Rules:
 - The model can call only the tools listed here. A tool that is not listed is not visible to it.
 - When the plugin has one runtime (written in `runtime:`) and does not write `agent.tools.plugin`, that runtime gets all the tools in `contributes.tools`. You do not need to list them again.
 - When you write `plugin`, what you write is what counts. `plugin: []` means no tools of its own are given.
-- In a plugin with several runtimes, each runtime lists the tools it uses.
+- In a plugin with several runtimes, each runtime lists the tools it uses. Keep internal helpers that no runtime calls out of the tool registry and `contributes.tools`.
 - A tool name is unique only within its own plugin. One plugin cannot call another plugin's tool. Use a service instead. See [plugin extensions and communication](../reference/plugin-extensions.md).
 
 For the list of built-in tools, see the [tools reference](../reference/tools.md).
+
+For agent completion rules, see the [plugin reference](../reference/plugins.md). With `completion.require: tool-use` and `afterTools`, a read tool cannot substitute for a declared completing tool.
 
 ## How to use another plugin's results
 

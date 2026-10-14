@@ -4,6 +4,12 @@ import type { ActionRequest, SseEnvelope } from "@covel/shared";
 import type { MessageRecord, SessionRecord } from "@/services/api.js";
 import type { SessionWorkspace } from "@/services/data-service.js";
 import { ApiError } from "@/services/api/request.js";
+import { initialState, reducer } from "../reducer.js";
+import {
+  createSseEventHandler,
+  type SseEventHandlerDeps,
+} from "../sse-handler.js";
+import type { SessionAction } from "../types.js";
 import { claimSessionAction } from "../runtime-refs.js";
 
 const { sendAction } = vi.hoisted(() => ({ sendAction: vi.fn() }));
@@ -143,6 +149,7 @@ describe("durable player input identity", () => {
           role: "user",
           content,
           timestamp: input.createdAt,
+          requestId: "request-1",
         },
       });
     },
@@ -194,7 +201,9 @@ describe("action stream recovery", () => {
     run.onDone();
     await run.pending;
     expect(run.handle).toHaveBeenCalledWith(terminal);
-    expect(run.dispatch).not.toHaveBeenCalled();
+    expect(run.dispatch).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: "SET_EXECUTION_RECOVERY" }),
+    );
   });
 
   it("shows an HTTP rejection without adopting an unrelated previous turn", async () => {
@@ -249,12 +258,18 @@ describe("action stream recovery", () => {
   it("immediately observes an uncommitted terminal to recover its original input", async () => {
     const run = start();
     run.onEvent(envelope("execution.completed", { committed: false }));
-    expect(run.dispatch).toHaveBeenCalledExactlyOnceWith(
-      expect.objectContaining({ type: "SET_EXECUTION_RECOVERY" }),
-    );
+    expect(
+      run.dispatch.mock.calls.filter(
+        ([action]) => action.type === "SET_EXECUTION_RECOVERY",
+      ),
+    ).toHaveLength(1);
     run.onDone();
     await run.pending;
-    expect(run.dispatch).toHaveBeenCalledOnce();
+    expect(
+      run.dispatch.mock.calls.filter(
+        ([action]) => action.type === "SET_EXECUTION_RECOVERY",
+      ),
+    ).toHaveLength(1);
     expect(sendAction).toHaveBeenCalledOnce();
   });
 
@@ -266,7 +281,11 @@ describe("action stream recovery", () => {
       run.onEvent(envelope("error.occurred", { message: "Runtime failed" }));
       run.onDone();
       await run.pending;
-      expect(run.dispatch).toHaveBeenCalledTimes(started ? 1 : 0);
+      expect(
+        run.dispatch.mock.calls.filter(
+          ([action]) => action.type === "SET_EXECUTION_RECOVERY",
+        ),
+      ).toHaveLength(started ? 1 : 0);
       expect(run.handle).toHaveBeenCalledWith(
         expect.objectContaining({ type: "error.occurred" }),
       );
@@ -294,4 +313,67 @@ describe("action stream recovery", () => {
       expect(run.handle).not.toHaveBeenCalled();
     },
   );
+});
+
+it("claims an echo with the action request ID on the first turn-bearing frame", async () => {
+  const run = start();
+  run.onEvent(envelope("execution.started"));
+  run.onEvent(envelope("execution.completed", { committed: true }));
+  run.onDone();
+  await run.pending;
+  expect(
+    run.dispatch.mock.calls.filter(
+      ([action]) => action.type === "BACKFILL_TURN_ID",
+    ),
+  ).toEqual([
+    [{ type: "BACKFILL_TURN_ID", turnId: "attempt-1", requestId: "request-1" }],
+  ]);
+});
+
+it("does not assign a rejected echo to a subsequent action without an echo", async () => {
+  let state = initialState;
+  const dispatch = (action: SessionAction) => {
+    state = reducer(state, action);
+  };
+  const sessionIdRef = { current: request.sessionId as string | null };
+  const handle = createSseEventHandler({
+    dispatch,
+    ds: {} as SseEventHandlerDeps["ds"],
+    sessionIdRef,
+    stateRef: { current: state },
+    runtimeKindRef: { current: new Map() },
+    deltaBufferRef: { current: new Map() },
+    deltaRafRef: { current: null },
+    lastBackfilledTurnIdRef: { current: null },
+  });
+  const pending = runSingleSessionAction({
+    content: "Rejected input",
+    echoUserMessage: true,
+    owner: claimSessionAction(
+      { current: null },
+      sessionIdRef,
+      request.sessionId,
+      "rejected-request",
+    ),
+    session: { id: request.sessionId, locale: "en-US" } as SessionRecord,
+    workspace: {
+      hydrate: async () => {},
+      checkpoint: async () => {},
+      run: async (_sid, _id, mutate) => mutate(),
+    },
+    dispatch,
+    handleSseEvent: handle,
+    sessionIdRef,
+  });
+  sendAction.mock.calls[0]![2](new ApiError(409, "/api/actions", "busy"));
+  await pending;
+  const next = runActionStream(request, handle, dispatch, { sessionIdRef });
+  const [, onEvent, , onDone] = sendAction.mock.calls[1]!;
+  onEvent(envelope("execution.started", { runtimeCount: 0 }));
+  onEvent(envelope("execution.completed", { committed: true }));
+  onDone();
+  await next;
+  expect(state.messages).toHaveLength(1);
+  expect(state.messages[0]?.turnId).toBeUndefined();
+  expect(state.messages[0]?.requestId).toBe("rejected-request");
 });

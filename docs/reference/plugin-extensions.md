@@ -53,6 +53,8 @@ runtime 发出的事件在同一回合的事件链里逐层匹配订阅者。
 
 多条记录必须一起成功或一起失败时，用 `invokeRuntime`。这个函数 handler 不需要模型。手动触发本身不会运行叙事 runtime；它声明的事件下游仍按调度规则执行。
 
+RPC action 的 handler 收到 `ctx.signal`，到达时限时中止；存储调用的关闭与已开始写入的结算见下方 RPC 通道。
+
 参见 [RPC 通道](./api.md#post-apisessionsidplugin-rpc)与 [handler 写入契约](./plugins.md#输入和输出)。
 
 ### 工具不跨插件
