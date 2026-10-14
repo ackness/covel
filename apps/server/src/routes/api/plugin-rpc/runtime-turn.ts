@@ -86,6 +86,8 @@ export interface PluginRpcRuntimeTurnContext {
  */
 export interface QueuedRunControl {
   readonly expectedSessionIncarnation?: string;
+  /** The plugin version the job was admitted under; checked again at commit. */
+  readonly expectedPluginVersion?: string;
   readonly beforeExecute?: () => Promise<void>;
   /** The runtime returned; the wait for the session commit lock follows. */
   readonly executionFinished?: () => void;
@@ -183,6 +185,9 @@ function queuedRunOptions(control: QueuedRunControl): QueuedRunControl {
   return {
     ...(control.expectedSessionIncarnation
       ? { expectedSessionIncarnation: control.expectedSessionIncarnation }
+      : {}),
+    ...(control.expectedPluginVersion !== undefined
+      ? { expectedPluginVersion: control.expectedPluginVersion }
       : {}),
     ...(control.beforeExecute ? { beforeExecute: control.beforeExecute } : {}),
     ...(control.executionFinished
@@ -407,6 +412,7 @@ export function createPluginRpcRuntimeTurnRunner(
       readonly beforeExecute?: () => Promise<void>;
       readonly executionFinished?: () => void;
       readonly executionSignal?: AbortSignal;
+      /** Background work: a suspended runtime fails the run, nothing commits. */
       readonly rejectSuspension?: boolean;
       readonly proposalGuard?: Parameters<
         typeof commitExecution
@@ -432,6 +438,15 @@ export function createPluginRpcRuntimeTurnRunner(
     const needsSettle = !opts.expectedSessionIncarnation && ctx.withSettledLock;
     let settleTimedOut = false;
     const jobLockId = backgroundRuntimeLockId(ctx.sessionId, runtimeId);
+    const assertPluginVersion = (): void => {
+      if (opts.expectedPluginVersion === undefined) return;
+      const target = activeRuntimes().find(
+        (runtime) => runtime.name === runtimeId,
+      );
+      if (target?.version !== opts.expectedPluginVersion) {
+        throw new SessionApprovalScopeChangedError();
+      }
+    };
     for (;;) {
       if (needsSettle) {
         await ctx.withSettledLock!(async () => {
@@ -476,15 +491,7 @@ export function createPluginRpcRuntimeTurnRunner(
                   ) {
                     throw new SessionApprovalScopeChangedError();
                   }
-                  const target = activeRuntimes().find(
-                    (runtime) => runtime.name === runtimeId,
-                  );
-                  if (
-                    opts.expectedPluginVersion !== undefined &&
-                    target?.version !== opts.expectedPluginVersion
-                  ) {
-                    throw new SessionApprovalScopeChangedError();
-                  }
+                  assertPluginVersion();
                   await opts.beforeExecute?.();
                   executionSignal?.throwIfAborted();
                   return hookScopeFor(live.activePlugins, userSettings);
@@ -517,9 +524,7 @@ export function createPluginRpcRuntimeTurnRunner(
                   ...(result.nestedRuntimeResults ?? []),
                 ].some((runtimeResult) => runtimeResult.status === "suspended")
               ) {
-                throw new Error(
-                  "detached stage runtimes cannot suspend for input",
-                );
+                throw new Error("background runtimes cannot suspend for input");
               }
               const outcome = await withBackgroundSessionLock(
                 ctx.sessionLock,
@@ -538,6 +543,9 @@ export function createPluginRpcRuntimeTurnRunner(
                     throw new SessionNotActiveError(live.status);
                   }
                   assertApprovalScope(live, runtimeId);
+                  // A development reload can replace the plugin while the
+                  // generation runs; its results belong to the old version.
+                  assertPluginVersion();
                   if (
                     opts.expectedSessionIncarnation &&
                     sessionIncarnationIdentity(live) !==
@@ -643,6 +651,7 @@ export function createPluginRpcRuntimeTurnRunner(
           executionSignal: args.executionSignal,
           ...queuedRunOptions(args),
           ...(args.completeInTx ? { completeInTx: args.completeInTx } : {}),
+          rejectSuspension: true,
         }).then((r) => ({
           result: r.turnResult,
           commit: r.commit,
@@ -737,6 +746,7 @@ export function createPluginRpcRuntimeTurnRunner(
       executionSignal: args.executionSignal,
       ...queuedRunOptions(args),
       ...(args.completeInTx ? { completeInTx: args.completeInTx } : {}),
+      rejectSuspension: true,
     });
   }
 

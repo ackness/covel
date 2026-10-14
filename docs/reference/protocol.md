@@ -366,7 +366,7 @@ staged detached worker 也用这个事件报告持久状态：
 
 | durable status        | 语义                                                                                                                                                                                                                    |
 | --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `queued`              | 已随原始回合提交，等待 worker；超过 `maxQueueMs` 转 `timed_out`                                                                                                                                                         |
+| `queued`              | 已随原始回合提交，等待 worker；超过 `maxQueueMs` 转 `timed_out`。正常关闭时还没进入 `committing` 的作业也回到这里                                                                                                       |
 | `claimed` / `running` | worker 已取得 CAS lease / 正在执行；同一 session/plugin/runtime 保持串行                                                                                                                                                |
 | `committing`          | 已通过 owner CAS，正在 session lock 内做 stale/effect guard 和领域提交                                                                                                                                                  |
 | `succeeded`           | 后台 proposal 已提交，`result` 保存 background turn/execution/runtime 摘要                                                                                                                                              |
@@ -376,9 +376,10 @@ staged detached worker 也用这个事件报告持久状态：
 | `stale`               | session inactive、session/plugin incarnation 或版本已变化；提交屏障以 `reason: commit-barrier-rejected` 拒绝结果                                                                                                        |
 | `orphaned`            | 在途 owner 停止续租且 lease 过期；owner 自己连续续租失败直到 lease 过期时，会立即中止正在进行的执行并落此状态                                                                                                           |
 
-**启动时的恢复**
+**关闭和启动时的恢复**
 
-- 还没过排队期限、并且从来没被领取过的 `queued` 作业，继续执行。
+- 正常关闭时，还没进入 `committing` 的作业等这次执行返回后放回 `queued`，jobId 不变，下次认领时 `attempt` 加 1。停下前对外做过的事会在重跑时再做一次。已经进入 `committing` 的作业照常提交完。
+- 还没过排队期限的 `queued` 作业，继续执行。排队期限从最初入队时算起。
 - 排队超时的，结束为 `timed_out`。
 - 租约已经过期的 `claimed` / `running` / `committing` 作业，结束为 `orphaned`。
 - 这些终态**不会自动重放**。原因：服务商可能已经计费，只是回答没保存下来；重放会重复扣费。
@@ -736,7 +737,7 @@ data: {
 | `runtime.skipped`                                          | `apps/server/src/routes/api/actions.ts`                                                       | runtime 因 cooldown / startTurn / maxTriggerCount 被跳过                                                               |
 | `character.upserted`                                       | `packages/runtime/src/commit/session-commit-emitter.ts`（`character.upsert` proposal commit） | 角色快照事件                                                                                                           |
 | `tool.calling` / `tool.completed` / `tool.failed`          | TurnEmitter                                                                                   | LLM 工具调用 trace                                                                                                     |
-| `domain-event.previewed`                                   | ToolExecutor（`emittedEvents` 成功后）                                                        | 服务端投影成 UI slot 预览；前端不直接消费，不代表领域提交                                  |
+| `domain-event.previewed`                                   | ToolExecutor（`emittedEvents` 成功后）                                                        | 服务端投影成 UI slot 预览；前端不直接消费，不代表领域提交                                                              |
 | `llm.calling` / `llm.responded` / `message.completed`      | TurnEmitter                                                                                   | LLM 调用 trace                                                                                                         |
 | `block.emitted` / `state.patch.applied`                    | TurnEmitter                                                                                   | 块发出 / state patch 应用 trace                                                                                        |
 | `hook.fired` / `hook.aborted`                              | TurnEmitter                                                                                   | Hook 行为 trace                                                                                                        |

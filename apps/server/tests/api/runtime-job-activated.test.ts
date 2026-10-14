@@ -43,16 +43,18 @@ async function setup(handlers: {
   readonly entry: FunctionHandler;
   readonly follower?: FunctionHandler;
   readonly llmOptions?: GatewayOptions;
+  readonly version?: string;
 }) {
   const store: DataStore = createMemoryStore();
   const eventBus = createEventBus(store);
   const sessionLock = createInProcessSessionLock();
   const pluginRegistry = createPluginRegistry();
+  const versioned = handlers.version ? { version: handlers.version } : {};
   const runtimes = new Map<string, LoadedRuntime>([
     [
       ENTRY,
       {
-        manifest: manifest(ENTRY),
+        manifest: manifest(ENTRY, versioned),
         promptTemplate: "",
         handler: handlers.entry,
       },
@@ -67,25 +69,36 @@ async function setup(handlers: {
       promptTemplate: "",
       handler: handlers.follower,
     });
-  pluginRegistry.register({
-    id: PLUGIN_ID,
-    summary: {
+  const register = () =>
+    pluginRegistry.register({
       id: PLUGIN_ID,
-      name: PLUGIN_ID,
-      description: "",
-      pluginType: "plugin",
-      runtimeCount: runtimes.size,
-    },
-    manifests: [...runtimes.values()].map((loaded) => ({
-      runtime: { type: "function" as const },
-      manifest: loaded.manifest,
-      promptTemplate: "",
-      rawFrontmatter: {},
-    })),
-    loadedRuntimes: runtimes,
-    status: "registered",
-    source: "builtin",
-  } as PluginRegistryEntry);
+      summary: {
+        id: PLUGIN_ID,
+        name: PLUGIN_ID,
+        description: "",
+        pluginType: "plugin",
+        runtimeCount: runtimes.size,
+      },
+      manifests: [...runtimes.values()].map((loaded) => ({
+        runtime: { type: "function" as const },
+        manifest: loaded.manifest,
+        promptTemplate: "",
+        rawFrontmatter: {},
+      })),
+      loadedRuntimes: runtimes,
+      status: "registered",
+      source: "builtin",
+    } as PluginRegistryEntry);
+  register();
+  /** What a development reload does: the same plugin under a new version. */
+  const reload = (version: string) => {
+    for (const [name, loaded] of runtimes)
+      runtimes.set(name, {
+        ...loaded,
+        manifest: { ...loaded.manifest, version },
+      });
+    register();
+  };
   const now = new Date().toISOString();
   await store.createSession({
     id: SESSION_ID,
@@ -160,7 +173,7 @@ async function setup(handlers: {
     }
     throw new Error(`job ${jobId} did not reach ${statuses.join("/")}`);
   };
-  return { store, enqueue, jobs, settle };
+  return { store, enqueue, jobs, settle, reload };
 }
 
 describe("activated runtime jobs", () => {
@@ -255,6 +268,76 @@ describe("activated runtime jobs", () => {
     await env.settle(jobId, ["stale"]);
     expect(
       await env.store.getPluginData(SESSION_ID, PLUGIN_ID, "state", "late"),
+    ).toBeNull();
+  });
+
+  it("fails a background manual run that suspends, keeping none of its writes", async () => {
+    const env = await setup({
+      entry: async () => ({
+        outcome: "suspended",
+        reason: "needs the player's answer",
+        effects: {
+          pluginData: [{ namespace: "state", key: "asked", value: true }],
+        },
+      }),
+    });
+    const job = await env.settle(await env.enqueue(), ["failed", "succeeded"]);
+    expect(job).toMatchObject({
+      status: "failed",
+      reason: "execution-failed",
+      error: expect.stringContaining("cannot suspend"),
+    });
+    expect(await env.store.listSuspensions(SESSION_ID)).toEqual([]);
+    expect(
+      await env.store.getPluginData(SESSION_ID, PLUGIN_ID, "state", "asked"),
+    ).toBeNull();
+  });
+
+  it("fails an event follower that suspends", async () => {
+    const env = await setup({
+      entry: async () => ({
+        outcome: "success",
+        value: {},
+        effects: {
+          events: [{ topic: "test-activated.ready", data: {} }],
+        },
+      }),
+      follower: async () => ({ outcome: "suspended", reason: "wait" }),
+    });
+    const entry = await env.settle(await env.enqueue(true), ["succeeded"]);
+    const followerJobId = entry.result?.deferredJobs?.[0]?.jobId;
+    const follower = await env.settle(followerJobId!, ["failed", "succeeded"]);
+    expect(follower).toMatchObject({
+      status: "failed",
+      error: expect.stringContaining("cannot suspend"),
+    });
+    expect(await env.store.listSuspensions(SESSION_ID)).toEqual([]);
+  });
+
+  it("goes stale when the plugin is reloaded under another version while it runs", async () => {
+    let reload!: (version: string) => void;
+    const env = await setup({
+      version: "1.0.0",
+      entry: async () => {
+        reload("2.0.0");
+        return {
+          outcome: "success",
+          value: {},
+          effects: {
+            pluginData: [{ namespace: "state", key: "v1", value: true }],
+          },
+        };
+      },
+    });
+    reload = env.reload;
+    const job = await env.settle(await env.enqueue(), [
+      "stale",
+      "succeeded",
+      "failed",
+    ]);
+    expect(job.status).toBe("stale");
+    expect(
+      await env.store.getPluginData(SESSION_ID, PLUGIN_ID, "state", "v1"),
     ).toBeNull();
   });
 

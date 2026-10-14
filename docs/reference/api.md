@@ -93,7 +93,7 @@ PostgreSQL 一列的细节：
 
 - **事件投递**：`LISTEN/NOTIFY` 初始化失败时，服务器拒绝启动，不会悄悄退回进程内广播。
 - **`steer` / `abort`**：请求必须到达正在执行那个回合的实例。到了别的实例，就算数据库显示回合在执行，也返回 `409`。
-- **后台任务**：包括 detached 的 stage，以及在后台运行的手动或事件触发的 runtime。租约过期的 `claimed` / `running` / `committing` 任务会标成 `orphaned`，不会自动重放已经对外产生的效果。
+- **后台任务**：包括 detached 的 stage，以及在后台运行的手动或事件触发的 runtime。实例正常关闭时，还没提交的任务放回队列，由下一个 worker 重跑。实例崩溃时，租约过期的 `claimed` / `running` / `committing` 任务会标成 `orphaned`，不会自动重放已经对外产生的效果。
 
 所以，需要可靠地控制当前回合的部署，应当用单实例，或者保证一个动作和它的 `steer` / `abort` 请求被路由到同一个实例。实例退出后，内存里的执行句柄不能搬到别处；数据库共享，不代表另一个实例能接手正在跑的回合。
 
@@ -1029,6 +1029,7 @@ setup runtime 反复失败、用完重试预算（`maxTriggerCount`）后进入 
 - `POST /api/install/collection`：响应和 batch 相同。
 
 批量安装失败的撤回结果见[插件安装](./plugin-installation.md#多包预览和批量安装)：`details.rolledBack` 和 `details.retained` 分别列出已撤回和保留的包。
+
 - `GET /api/install/plugins`：列表里包含还没有重启加载的插件。
 
 `/api/install/world` 在写入世界记录之前检查 worldData 的 diagnostics：
@@ -2563,13 +2564,14 @@ Web 设置页根据 `operatorTokenRequired` 决定是否显示“运维访问”
 - 成功时以 `202` 直接返回新作业对象。
 - 不可重试时返回 `409`，`code: "runtime_job_not_retryable"`。
 
-框架不会自动重跑失败类的作业，以免重复调用已经计费、但结果没有存下来的 provider。没被认领的普通 `queued` 作业在重启后会继续执行。
+框架不会自动重跑失败类的作业，以免重复调用已经计费、但结果没有存下来的 provider。`queued` 作业在重启后会继续执行，包括正常关闭时放回队列的作业。
 
 **作业是怎么执行的:**
 
 - worker 先认领作业并持有一个可续期的租约。默认并发为 4；同一个 `(session, plugin, runtime)` 的作业串行执行。
 - `maxQueueMs` 限制排队时间。
 - `maxExecutionMs` 限制从 `running` 到 runtime 执行返回的时间。之后等会话锁来提交的时间不计入。
+- 正常关闭时，还没进入 `committing` 的作业等这次执行返回后放回 `queued`，jobId 不变。已经进入 `committing` 的作业照常提交完。
 - 重启后继续认领合法的 `queued` 作业。排队超时的作业标为 `timed_out`，租约过期的在途作业标为 `orphaned`。
 - 提交之前再检查一次：会话是否仍 `active`、身份是否没变，插件的审批范围和版本，以及实际的 proposal effects。
 
@@ -3185,7 +3187,8 @@ runtime 报告失败时，它的原始错误保留在 `result.runtimeResults` �
 **重启与凭证**：
 
 - 任务行是持久化的。服务重启后仍为 `queued` 的任务，会在凭证可用时继续执行：下一次带 provider key 的请求会重新交出凭证，或者服务端自己的凭证满足就绪检查。
-- 执行到一半被打断的任务，在租约过期后标为 `orphaned`。框架不会自动重跑，避免图像或语音被二次计费。
+- 服务正常关闭时，执行到一半的任务放回队列，重启后重跑。它停下前调用过的服务商会再被调用一次，所以作业要能安全地重跑。
+- 进程崩溃时执行到一半的任务，在租约过期后标为 `orphaned`。框架不会自动重跑，避免图像或语音被二次计费。
 - 失败或取消的任务可以用 `POST /api/sessions/:id/runtime-jobs/:jobId/retry` 重试，重试使用新的 `turnId`。
 
 ##### 错误

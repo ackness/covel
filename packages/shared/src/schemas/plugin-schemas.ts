@@ -863,6 +863,8 @@ interface ManifestCrossFieldView {
   };
   readonly needs?: readonly (string | { readonly scope?: string })[];
   readonly output?: { readonly schema?: string; readonly recordAs?: string };
+  readonly execution?: string;
+  readonly tools?: { readonly builtin?: readonly string[] };
 }
 
 interface CrossFieldIssue {
@@ -977,6 +979,21 @@ function sharedManifestCrossFieldIssues(
     issues.push({
       path: ["turnCompletion", "mode"],
       message: "turnCompletion detached options require mode 'detached'",
+    });
+  }
+
+  // Background work has no player waiting on it: a background manual run or
+  // a detached job cannot pause for input. The executor also fails a
+  // background run that suspends anyway — a function handler, or an event
+  // runtime that the background run triggered.
+  if (
+    m.tools?.builtin?.includes("suspend") &&
+    (m.execution === "background" || turnCompletionMode === "detached")
+  ) {
+    issues.push({
+      path: ["tools", "builtin"],
+      message:
+        "a background runtime (schedule.manual.execution: background, or schedule.completion.mode: detached) cannot use the 'suspend' tool",
     });
   }
 
