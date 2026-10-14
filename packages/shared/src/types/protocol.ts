@@ -108,7 +108,8 @@ export interface ExecutionCompletedPayload {
   readonly error?: string;
   /**
    * Set when the turn was aborted before producing results (e.g. a
-   * TurnStart hook that aborts the turn). The client
+   * TurnStart hook that aborts the turn, or the player stopping the action,
+   * {@link PLAYER_ABORT_REASON}, possibly before it began). The client
    * surfaces this so an empty turn carries a visible reason instead of being
    * silently dropped. Absent on normal completions.
    */

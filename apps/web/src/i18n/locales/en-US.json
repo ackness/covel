@@ -212,6 +212,8 @@
     "dimensionsImported": "Imported successfully",
     "reasonConnectionClosed": "Connection closed but backend did not report completion",
     "reasonSessionBusy": "Session is busy, please retry",
+    "reasonInputAlreadyCommitted": "This message was already sent and its turn is saved. Refresh to see it.",
+    "reasonRetryStale": "The task statuses have changed. Refresh them before retrying.",
     "reasonExecutionCommitFailed": "The turn could not be saved. Please try again.",
     "reasonExecutionFailed": "The turn failed. Please try again.",
     "reasonHistoryRestoreFailed": "The message history could not be restored. Reload the page if it stays out of date.",

@@ -314,6 +314,12 @@ export function createRuntimeMethods(state: MemoryState): MemoryStoreMethods {
       return applyWriteOrderPage(sorted, opts);
     },
 
+    async getMessage(sessionId, id) {
+      const index = state.messagePositions.get(id);
+      const record = index === undefined ? undefined : state.messages[index];
+      return record?.sessionId === sessionId ? record : null;
+    },
+
     async listExistingMessageIds(sessionId, ids) {
       return [...new Set(ids)].filter((id) => {
         const index = state.messagePositions.get(id);

@@ -96,6 +96,7 @@ export type SqlSessionContentRecords = Pick<
   | "getEventById"
   | "addMessage"
   | "commitPlayerInputMessage"
+  | "getMessage"
   | "listMessages"
   | "listMessagesPage"
   | "listExistingMessageIds"
@@ -208,6 +209,16 @@ export function createSqlSessionContentRecords(
         }
         throw new Error("Player input changed before commit");
       }
+    },
+
+    async getMessage(
+      sessionId: string,
+      id: string,
+    ): Promise<MessageRecord | null> {
+      const row = await runner.selectFirst<MessageRow>(messages, {
+        where: and(eq(messages.id, id), eq(messages.sessionId, sessionId)),
+      });
+      return row ? toMessageRecord(row, json) : null;
     },
 
     async listMessages(

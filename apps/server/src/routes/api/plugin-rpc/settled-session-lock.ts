@@ -69,7 +69,7 @@ function wait(ms: number, signal?: AbortSignal): Promise<void> {
 }
 
 /** Cancel acquisition promptly, but never detach a callback that already began. */
-function acquire<T>(
+export function withAbortableLock<T>(
   lock: SessionLock,
   sessionId: string,
   signal: AbortSignal | undefined,
@@ -173,7 +173,7 @@ export function createSettledSessionLock(args: {
             continue;
           }
         }
-        const result = await acquire(
+        const result = await withAbortableLock(
           args.sessionLock,
           sessionId,
           options.signal,
