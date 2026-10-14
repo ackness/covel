@@ -39,6 +39,8 @@
   tags:
     - mode:dialogue
   source: builtin
+  # A world generated for this pack opens new sessions on the stage.
+  defaultViewMode: stage
   requested:
     - pregame
     - world-init

@@ -423,7 +423,7 @@ describe("dynamic dimension author import and sync", () => {
     // The check before a session says so instead of failing.
     const preflight = await preflightWorldDataForSession({
       ...withoutProvider,
-      dimensions: { stamina: definition(1) },
+      world: await args.store.getWorld("world"),
     });
     expect(preflight.diagnostics).toEqual([missing]);
     expect(preflight.planned).toBe(0);

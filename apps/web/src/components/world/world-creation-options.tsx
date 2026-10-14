@@ -1,55 +1,36 @@
 import type { TFunction } from "i18next";
-import type {
-  WorldExperienceMode,
-  WorldPackageContentKind,
-} from "@covel/shared";
+import type { WorldPackageContentKind } from "@covel/shared";
 import {
   Backpack,
   BookOpenText,
   Check,
-  MessagesSquare,
+  Layers,
   Puzzle,
-  Route,
   ShieldCheck,
   Users,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import type { GeneratableWorldContent } from "@/services/api.js";
+import type {
+  GeneratableWorldContent,
+  WorldGenerationPack,
+} from "@/services/api.js";
 
 interface WorldCreationOptionsProps {
   t: TFunction;
-  experienceMode: WorldExperienceMode;
+  /** The packs of the server's catalogue, labels already localized. */
+  packs: readonly WorldGenerationPack[];
+  pack: string | undefined;
   content: ReadonlySet<WorldPackageContentKind>;
   /** Content the loaded plugins offer; titles arrive already localized. */
   pluginContent: readonly GeneratableWorldContent[];
   contracts: ReadonlySet<string>;
   additionalInstructions: string;
   disabled: boolean;
-  onExperienceModeChange: (mode: WorldExperienceMode) => void;
+  onPackChange: (pack: string) => void;
   onToggleContent: (kind: WorldPackageContentKind) => void;
   onToggleContract: (contract: string) => void;
   onAdditionalInstructionsChange: (value: string) => void;
 }
-
-const EXPERIENCE_OPTIONS: ReadonlyArray<{
-  mode: WorldExperienceMode;
-  icon: LucideIcon;
-  labelKey: string;
-  descriptionKey: string;
-}> = [
-  {
-    mode: "traditional-story",
-    icon: Route,
-    labelKey: "world.aiExperienceStory",
-    descriptionKey: "world.aiExperienceStoryDesc",
-  },
-  {
-    mode: "dialogue-mode",
-    icon: MessagesSquare,
-    labelKey: "world.aiExperienceDialogue",
-    descriptionKey: "world.aiExperienceDialogueDesc",
-  },
-];
 
 const CONTENT_OPTIONS: ReadonlyArray<{
   kind: WorldPackageContentKind;
@@ -85,13 +66,14 @@ const CONTENT_OPTIONS: ReadonlyArray<{
 
 export function WorldCreationOptions({
   t,
-  experienceMode,
+  packs,
+  pack,
   content,
   pluginContent,
   contracts,
   additionalInstructions,
   disabled,
-  onExperienceModeChange,
+  onPackChange,
   onToggleContent,
   onToggleContract,
   onAdditionalInstructionsChange,
@@ -115,43 +97,44 @@ export function WorldCreationOptions({
         </span>
       </div>
 
-      <div className="mt-4">
-        <p className="ui-eyebrow text-muted-foreground">
-          {t("world.aiExperienceLabel", "Player Experience")}
-        </p>
-        <div className="mt-2 grid grid-cols-2 gap-2">
-          {EXPERIENCE_OPTIONS.map((option) => {
-            const selected = experienceMode === option.mode;
-            const Icon = option.icon;
-            return (
-              <button
-                key={option.mode}
-                type="button"
-                aria-pressed={selected}
-                disabled={disabled}
-                onClick={() => onExperienceModeChange(option.mode)}
-                className={`rounded-(--radius-control) border p-3 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
-                  selected
-                    ? "border-primary/55 bg-primary/8"
-                    : "border-border bg-background/60 hover:border-primary/30"
-                }`}
-              >
-                <div className="flex items-center gap-2">
-                  <Icon
-                    className={`h-4 w-4 ${selected ? "text-primary" : "text-muted-foreground"}`}
-                  />
-                  <span className="text-xs font-medium">
-                    {t(option.labelKey)}
-                  </span>
-                </div>
-                <p className="mt-1.5 text-[11px] leading-relaxed text-muted-foreground">
-                  {t(option.descriptionKey)}
-                </p>
-              </button>
-            );
-          })}
+      {packs.length > 0 && (
+        <div className="mt-4">
+          <p className="ui-eyebrow text-muted-foreground">
+            {t("world.aiExperienceLabel", "Player Experience")}
+          </p>
+          <div className="mt-2 grid grid-cols-2 gap-2">
+            {packs.map((option) => {
+              const selected = pack === option.id;
+              return (
+                <button
+                  key={option.id}
+                  type="button"
+                  aria-pressed={selected}
+                  disabled={disabled}
+                  onClick={() => onPackChange(option.id)}
+                  className={`rounded-(--radius-control) border p-3 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
+                    selected
+                      ? "border-primary/55 bg-primary/8"
+                      : "border-border bg-background/60 hover:border-primary/30"
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <Layers
+                      className={`h-4 w-4 ${selected ? "text-primary" : "text-muted-foreground"}`}
+                    />
+                    <span className="text-xs font-medium">{option.label}</span>
+                  </div>
+                  {option.description && (
+                    <p className="mt-1.5 text-[11px] leading-relaxed text-muted-foreground">
+                      {option.description}
+                    </p>
+                  )}
+                </button>
+              );
+            })}
+          </div>
         </div>
-      </div>
+      )}
 
       <div className="mt-4">
         <p className="ui-eyebrow text-muted-foreground">

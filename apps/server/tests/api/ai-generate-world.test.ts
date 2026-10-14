@@ -1166,7 +1166,7 @@ describe("ai world generation route", () => {
         locale: "zh-CN",
         saveTarget: "server-store",
         brief: {
-          experienceMode: "traditional-story",
+          pack: "traditional-story",
           content: ["characters", "lorebook", "rules"],
         },
       }),
@@ -1220,6 +1220,56 @@ describe("ai world generation route", () => {
     });
   });
 
+  it("makes the world for any pack of the catalogue and takes its view", async () => {
+    const generate = async (pack: string) => {
+      app = createTestApp(
+        store,
+        new FixedLlm(
+          `===WORLD_YAML===\n${WORLD_YAML}\n===WORLD_MD===\n${WORLD_MD}\n===END===`,
+        ),
+      );
+      const response = await app.request("/api/ai/generate-world", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          concept: "A tidal city",
+          saveTarget: "return-only",
+          brief: { pack, content: [] },
+        }),
+      });
+      expect(response.status).toBe(200);
+      const done = doneEvent(await readSseJson(response));
+      return done.world.metadata as Record<string, unknown>;
+    };
+
+    // `low-cost` was not a choice when the two choices were fixed.
+    const lowCost = await generate("low-cost");
+    expect(lowCost.pluginPolicy).toMatchObject({ presetId: "low-cost" });
+    expect(lowCost.defaultViewMode).toBeUndefined();
+    // The stage view is the data of the dialogue pack.
+    const dialogue = await generate("dialogue-mode");
+    expect(dialogue.pluginPolicy).toMatchObject({ presetId: "dialogue-mode" });
+    expect(dialogue.defaultViewMode).toBe("stage");
+  });
+
+  it("rejects a pack the catalogue does not have", async () => {
+    const res = await app.request("/api/ai/generate-world", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        concept: "生成世界",
+        brief: { pack: "no-such-pack" },
+      }),
+    });
+
+    expect(res.status).toBe(400);
+    await expect(res.json()).resolves.toMatchObject({
+      error: expect.stringMatching(
+        /^brief\.pack must be one of .*\bdialogue-mode\b.*\blow-cost\b/,
+      ),
+    });
+  });
+
   it("rejects a plugin contract that no loaded plugin offers for generation", async () => {
     const res = await app.request("/api/ai/generate-world", {
       method: "POST",
@@ -1243,7 +1293,7 @@ describe("ai world generation route", () => {
       body: JSON.stringify({
         concept: "生成世界",
         brief: {
-          experienceMode: "traditional-story",
+          pack: "traditional-story",
           content: ["characters", "unknown-content"],
         },
       }),

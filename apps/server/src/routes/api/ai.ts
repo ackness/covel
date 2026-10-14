@@ -26,10 +26,10 @@ import {
   type GeneratedWorldPackageContent,
 } from "@covel/create";
 import { worldRecordFromManifest } from "../../world-data/world-record.js";
+import { BUILTIN_PLUGIN_PACKS } from "../../config/plugin-packs.js";
 import {
   DEFAULT_LOCALE,
   readRuntimeEnv,
-  WORLD_EXPERIENCE_MODES,
   WORLD_PACKAGE_CONTENT_KINDS,
   i18nTextSchema,
   resolveI18nText,
@@ -212,6 +212,7 @@ function recordForStoreOnly(record: WorldRecord, saveTarget: SaveTarget) {
 function parseCreationBrief(
   value: unknown,
   availableContracts: readonly string[],
+  availablePacks: readonly string[],
 ): {
   value?: WorldCreationBrief;
   error?: string;
@@ -221,16 +222,14 @@ function parseCreationBrief(
     return { error: "brief must be an object" };
   }
   const raw = value as Record<string, unknown>;
-  const experienceMode = raw.experienceMode;
+  // The choices are the packs of the catalogue, whatever they are called.
+  const pack = raw.pack;
   if (
-    experienceMode !== undefined &&
-    (typeof experienceMode !== "string" ||
-      !WORLD_EXPERIENCE_MODES.includes(
-        experienceMode as (typeof WORLD_EXPERIENCE_MODES)[number],
-      ))
+    pack !== undefined &&
+    (typeof pack !== "string" || !availablePacks.includes(pack))
   ) {
     return {
-      error: `brief.experienceMode must be one of ${WORLD_EXPERIENCE_MODES.join(", ")}`,
+      error: `brief.pack must be one of ${availablePacks.join(", ")}`,
     };
   }
   const content = raw.content;
@@ -281,7 +280,7 @@ function parseCreationBrief(
   }
   return {
     value: {
-      ...(typeof experienceMode === "string" ? { experienceMode } : {}),
+      ...(typeof pack === "string" ? { pack } : {}),
       ...(Array.isArray(content)
         ? { content: [...new Set(content as string[])] }
         : {}),
@@ -372,6 +371,7 @@ aiRoutes.post(
     const brief = parseCreationBrief(
       body.brief,
       dataContracts.map((item) => item.contract),
+      BUILTIN_PLUGIN_PACKS.map((pack) => pack.id),
     );
     if (brief.error) {
       return c.json(errorBody(brief.error), 400);
@@ -412,6 +412,7 @@ aiRoutes.post(
           locale: normalizeLocale(body.locale, DEFAULT_LOCALE),
           brief: brief.value,
           dataContracts,
+          packs: BUILTIN_PLUGIN_PACKS,
           signal: shutdownSignal
             ? AbortSignal.any([c.req.raw.signal, shutdownSignal])
             : c.req.raw.signal,
