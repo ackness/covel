@@ -412,6 +412,12 @@ When a column of an existing table changes in a way an old database cannot follo
 - `commitPlayerInputMessage` is a separate idempotent "accept input" path. Its semantics do not apply to a plain insert.
 - The browser checkpoint validation rejects duplicate IDs in `checkpoint.messages` before it opens the replacement transaction. The same ID being used by another record domain is still valid.
 
+**Lists have a complete order.** Rows with the same time are ordered by the bytes of their ID on every backend, so MemoryStore, SQLite and PostgreSQL return the same order, and a `limit` cuts at the same row:
+
+- `listEvents`, `listStateChanges`, `listSnapshots`, `listSuspensions`, `listExpiredSuspensions`: `(createdAt, id)`;
+- `listInteractionRecords`: `(timestamp, id)`, newest first;
+- `listStateSchemas`: `(tableName, id)`. Updating a row does not move it.
+
 **Display message order.** Full lists, cursor pages and forks are ordered by `createdAt`, preserving write order within a timestamp. Checkpoint arrays preserve this order for timestamp ties. After filtering by the snapshot boundary, a fork keeps the parent’s order and assigns new message IDs. Browser pagination uses the cursor row’s position in the checkpoint array. If no row matches both the cursor ID and timestamp, only earlier timestamps are returned.
 
 **Updates do not change rows.** An update changes what a row holds. It does not replace it with another row:

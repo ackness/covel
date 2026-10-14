@@ -21,16 +21,31 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 
 export interface TxNestingGuard {
-  /** True iff called synchronously from within a `runScoped` callback's async context. */
+  /**
+   * True iff called from within a `runScoped` callback's async context while
+   * that callback has not settled yet.
+   */
   readonly isNested: () => boolean;
   /** Run `fn` marked as an active transaction scope (propagates through awaits). */
   readonly runScoped: <T>(fn: () => Promise<T>) => Promise<T>;
 }
 
 export function createTxNestingGuard(): TxNestingGuard {
-  const scope = new AsyncLocalStorage<true>();
+  // The scope object outlives the callback in every continuation it started;
+  // clearing `open` when the callback settles lets work that runs after the
+  // transaction (a timer, a detached promise) count as outside it.
+  const scope = new AsyncLocalStorage<{ open: boolean }>();
   return {
-    isNested: () => scope.getStore() === true,
-    runScoped: <T>(fn: () => Promise<T>): Promise<T> => scope.run(true, fn),
+    isNested: () => scope.getStore()?.open === true,
+    runScoped: <T>(fn: () => Promise<T>): Promise<T> => {
+      const marker = { open: true };
+      return scope.run(marker, async () => {
+        try {
+          return await fn();
+        } finally {
+          marker.open = false;
+        }
+      });
+    },
   };
 }

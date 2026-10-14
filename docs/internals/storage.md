@@ -412,6 +412,12 @@ Dexie BrowserVault 的 schema 归 `apps/web` 所有，不作为服务端 `DataSt
 - `commitPlayerInputMessage` 是另一条幂等的“采纳输入”路径，它的语义不适用于普通插入。
 - 浏览器检查点校验会在打开替换事务之前，拒绝 `checkpoint.messages` 里重复的 ID。同一个 ID 被别的记录领域使用仍然有效。
 
+**列表的完整顺序。** 时间相同的行，每个后端都按 ID 的字节序排，所以 MemoryStore、SQLite 和 PostgreSQL 返回同样的顺序，`limit` 切到的也是同样的行：
+
+- `listEvents`、`listStateChanges`、`listSnapshots`、`listSuspensions`、`listExpiredSuspensions`：`(createdAt, id)`；
+- `listInteractionRecords`：`(timestamp, id)`，从新到旧；
+- `listStateSchemas`：`(tableName, id)`。更新一行不会改变它的位置。
+
 **显示消息顺序。** 完整列表、游标分页和分支都按 `createdAt` 排列，同一时间戳内保持写入顺序。检查点数组保留这个并列顺序。分支筛选快照边界后沿用父会话的顺序，再分配新的消息 ID。浏览器分页按检查点数组里游标行的位置切页；游标的 ID 和时间戳没有匹配行时，只返回更早时间戳的消息。
 
 **更新不换行。** 更新改的是一行里装的内容，不是换成另一行：

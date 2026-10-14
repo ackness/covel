@@ -16,6 +16,7 @@ export {
 export { supportsVector } from "./vector-store.js";
 export { rebindSnapshotPayloadSession } from "./records/snapshot-session-scope.js";
 export {
+  RootStoreWriteInTransactionError,
   SessionAlreadyExistsError,
   SessionNotFoundError,
   SessionRecordScopeConflictError,

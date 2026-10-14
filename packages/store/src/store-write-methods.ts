@@ -30,6 +30,18 @@ export const VECTOR_WRITE_METHODS: ReadonlySet<string> = new Set([
 ]);
 
 /**
+ * The `DataStore` mutators a `withTransaction` callback must call through
+ * `tx`, never through the root store (`root-write-guard.ts`). The vector
+ * capability is left out: it is not part of the transaction scope.
+ */
+export const TRANSACTIONAL_WRITE_METHODS: ReadonlySet<string> = new Set(
+  [...STORE_WRITE_METHODS].filter(
+    (name) =>
+      !VECTOR_WRITE_METHODS.has(name) && name !== "resolveSessionVectorTarget",
+  ),
+);
+
+/**
  * Mutators of the SQLite mirror media store — same connection, same gate.
  */
 export const MEDIA_WRITE_METHODS: ReadonlySet<string> = new Set([

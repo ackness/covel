@@ -133,7 +133,10 @@ export function createSqlSnapshotRecords(
     async listSnapshots(sessionId: string): Promise<readonly SnapshotRecord[]> {
       const rows = await runner.select<SnapshotRow>(stateSnapshots, {
         where: eq(stateSnapshots.sessionId, sessionId),
-        orderBy: [asc(stateSnapshots.createdAt)],
+        orderBy: [
+          asc(stateSnapshots.createdAt),
+          asc(byteOrder(stateSnapshots.id)),
+        ],
       });
       return rows.map((row) => toSnapshotRecord(row, json));
     },
@@ -268,7 +271,7 @@ export function createSqlSnapshotRecords(
     ): Promise<readonly SuspensionRecord[]> {
       const rows = await runner.select<SuspensionRow>(suspensions, {
         where: eq(suspensions.sessionId, sessionId),
-        orderBy: [asc(suspensions.createdAt)],
+        orderBy: [asc(suspensions.createdAt), asc(byteOrder(suspensions.id))],
       });
       return rows.map((row) => toSuspensionRecord(row, json));
     },
@@ -288,7 +291,7 @@ export function createSqlSnapshotRecords(
           isNull(suspensions.resolvedAt),
           lt(suspensions.createdAt, olderThanIso),
         ),
-        orderBy: [asc(suspensions.createdAt)],
+        orderBy: [asc(suspensions.createdAt), asc(byteOrder(suspensions.id))],
       });
       return rows.map((row) => toSuspensionRecord(row, json));
     },

@@ -137,10 +137,15 @@ export const WRITE_METHOD_TOUCHES: Readonly<Record<string, Touched>> = {
   resolveSessionVectorTarget: [],
 };
 
-/** Method-name prefixes that never mutate MemoryState. */
-const READ_METHOD_PREFIXES = ["get", "list", "search"] as const;
+/**
+ * Method-name prefixes that never mutate MemoryState. Every other store method
+ * must be a key of {@link WRITE_METHOD_TOUCHES};
+ * `tests/memory-transaction-rollback.test.ts` checks that each one is exactly
+ * one of the two, so a read never falls into the capture-everything fallback.
+ */
+const READ_METHOD_PREFIXES = ["get", "list", "search", "query"] as const;
 
-function isReadMethod(name: string): boolean {
+export function isReadMethod(name: string): boolean {
   return READ_METHOD_PREFIXES.some((p) => name.startsWith(p));
 }
 
