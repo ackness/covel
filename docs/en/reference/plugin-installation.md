@@ -98,6 +98,8 @@ The settings page shows each plugin's ID and its path in the repository. Tick, r
 
 ### Package layout requirements
 
+Installation uses the loader’s [manifest and runtime directory rules](./plugins.md#package-and-runtime-files). A runtime directory missing `RUNTIME.md` is reported with its path.
+
 - A plugin package directory must have both `package.json` and a root `PLUGIN.md`. `package.json` must declare `"type": "module"`; otherwise the install returns 400.
 - The root declaration uses `{ id, kind, contributes, runtime? }`.
 - A package with several runtimes puts each execution declaration in `runtimes/<sub>/RUNTIME.md`. A sub-declaration uses `{ type, schedule, io, agent/function }`, and it does not repeat the plugin's identity.

@@ -153,6 +153,7 @@ Web 客户端只发送它的请求用得到的供应商的密钥：
 
 插件的服务端 JavaScript（`entry`、handler、guard、hook、wire）运行在服务端进程里，拥有服务端的全部权限。没有进程沙箱、VM 沙箱或模块沙箱。挡在社区包和这些权限之间的，只有玩家的同意：
 
+- 清单读取共用纯 YAML 解析入口，加载、安装、校验和本地化工具都在解析前拒绝 `---js` 等引擎指令。
 - 批准之前，`community` 包只是数据。安装、预览、列表和校验只解析它的文件，一个都不 import。两阶段批准（先 `covel:plugin-server-code`，再授予具体操作，见 [Hosted auth](#hosted-auth)）把守着第一次 import。
 - 批准之后，这些代码能做服务端进程能做的一切：读写服务端系统用户的文件（`keys.env`、`llm.toml`、SQLite 文件），读 `process.env`，打开套接字，启动进程。
 - `permissions.http` 是插件 API 上的白名单，作用于 `ctx.utils.fetchWithRetry`、`ctx.media.ingestUrl` 以及建立在它们之上的媒体绑定（`packages/runtime/src/function-runtime/http-permissions.ts`）。它能阻止一个包通过这套 API 访问它没有声明的源。它阻止不了直接调用全局 `fetch` 或 `node:https` 的代码。
