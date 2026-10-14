@@ -2056,8 +2056,9 @@ sources:
       "assets",
       "mio.png",
     );
+    if (!row) throw new Error("expected the imported portrait row");
     const ref = (
-      row?.value as { ref: { id: string; mime: string; size: number } }
+      row.value as { ref: { id: string; mime: string; size: number } }
     ).ref;
     // sess-b only references the asset (sess-a owns it) and showed it once.
     await store.addMessage({
@@ -2146,7 +2147,8 @@ sources:
       "assets",
       "mio.png",
     );
-    const mediaId = (kept?.value as { ref: { id: string } }).ref.id;
+    if (!kept) throw new Error("expected the imported portrait row");
+    const mediaId = (kept.value as { ref: { id: string } }).ref.id;
     // A later version drops the second source; its file had the same bytes.
     await writeFile(
       path.join(worldRoot, "data/world.data.yaml"),
