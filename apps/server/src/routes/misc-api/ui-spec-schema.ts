@@ -115,6 +115,7 @@ const uiSpecSchema = z
     group: z.string().optional(),
     groupLabel: i18nTextSchema.optional(),
     groupOrder: z.number().optional(),
+    navTarget: z.enum(["images"]).optional(),
     dataSource: z
       .object({
         namespace: z.string().optional(),

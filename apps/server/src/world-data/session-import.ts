@@ -23,6 +23,7 @@ import { loadWorldDataDescriptor } from "./descriptor.js";
 import {
   finalizeWorldDataMediaRefs,
   materializeMediaIndexWrites,
+  releaseUnusedSessionMediaRefs,
   releaseWorldDataMediaRefs,
 } from "./session-import/media-handling.js";
 import { buildImportPlan } from "./session-import/planning.js";
@@ -1002,13 +1003,12 @@ export async function syncWorldDataForSession(
     // Release references after commit. Ownership/bytes remain for lifecycle GC;
     // content-addressed media can be claimed by another session concurrently.
     if (options.mediaStore && pendingMediaUnrefs.length > 0) {
-      for (const mediaId of pendingMediaUnrefs) {
-        try {
-          await options.mediaStore.removeRef(mediaId, options.sessionId);
-        } catch {
-          // Continue finalizing the remaining unrefs.
-        }
-      }
+      await releaseUnusedSessionMediaRefs({
+        store: options.store,
+        mediaStore: options.mediaStore,
+        sessionId: options.sessionId,
+        mediaIds: pendingMediaUnrefs,
+      });
     }
 
     if (mediaRefs.length > 0) {

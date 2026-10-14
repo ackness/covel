@@ -398,7 +398,8 @@
       "succeeded": "Succeeded"
     },
     "retryScopeLimited": "Only the selected failed tasks will run again. The story and other completed results are preserved. Each batch handles up to {{count}} tasks. Retry the remaining tasks afterward.",
-    "activeTask": "{{label}}…"
+    "activeTask": "{{label}}…",
+    "panelUnavailable": "This panel is not available in this session."
   },
   "blocks": {
     "actionPlaceholder": "Or type your own action...",
@@ -1242,7 +1243,7 @@
     },
     "worldGithub": {
       "risk": "Worlds contain third-party prompts, settings and media. Review their content and plugin requirements before playing. World installation does not install or authorize plugins, or run repository scripts.",
-      "updateRisk": "Updates are staged until backend restart. Locally edited worlds cannot be overwritten. Existing saves are not automatically synchronized; use world-data sync separately.",
+      "updateRisk": "Updates are staged until backend restart. Locally edited worlds cannot be overwritten. Updating does not change data already imported into an existing game. To use new starting data, start a new game.",
       "installed": "Installed world packages"
     },
     "deleteProviderTitle": "Delete provider?",

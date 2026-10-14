@@ -534,9 +534,9 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 | DELETE | `/api/worlds/:id`                       | 删除世界及其全部会话，规则见下文                               |
 | GET    | `/api/worlds/:id/dimensions/export`     | 导出世界维度（YAML / JSON）                                    |
 | POST   | `/api/worlds/:id/dimensions/import`     | 导入世界维度                                                   |
-| POST   | `/api/worlds/:id/sync-dimensions`       | 把世界维度同步到活跃会话                                       |
+| POST   | `/api/worlds/:id/sync-dimensions`       | 作者和工具：把世界维度同步到指定的一个活跃会话                 |
 | POST   | `/api/worlds/:id/world-data/preflight`  | 只读地预演 worldData 导入                                      |
-| POST   | `/api/worlds/:id/sync-data`             | 同步由导入器管理的 worldData 行，支持 dry-run 与 force         |
+| POST   | `/api/worlds/:id/sync-data`             | 作者和工具：同步由导入器管理的 worldData 行，默认 dry-run      |
 | POST   | `/api/worlds/:id/translate`             | 用配置的模型为用户世界目录里的世界包增加一种语言版本（SSE）    |
 | GET    | `/api/worlds/:id/gallery`               | 列出世界包自带的图片（场景、立绘）                             |
 | GET    | `/api/media/library`                    | 玩家的媒体库（仅 `self` / 桌面端）                             |
@@ -545,7 +545,7 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 
 几条补充：
 
-- `POST /api/worlds/:id/sync-dimensions` 把维度写入活跃会话的 `plugin_data` 和 lorebook 常量词条，并清理旧 key。
+- `POST /api/worlds/:id/sync-dimensions` 只处理指定会话受保护的 `_dimensions` 记录和导入账本，不写 lorebook；见下文的端点说明。
 - `POST /api/worlds/:id/world-data/preflight` 构建 worldData 的导入计划但不写入，返回 diagnostics、计划写入的数量和目标摘要。
 - `POST /api/worlds/:id/sync-data` 依据来源账本（provenance ledger）判断哪些行归导入器管理。
 - `GET /api/worlds/:id/gallery` 让世界列表和世界详情在还没有会话时也能展示图片。
@@ -1027,6 +1027,8 @@ setup runtime 反复失败、用完重试预算（`maxTriggerCount`）后进入 
 - `POST /api/install/github/preview`：返回 `{ collection, items, problems }`，见[插件安装](./plugin-installation.md#http-契约)。
 - `POST /api/install/github/batch`：返回 `201 { ok, installed, restartRequired }`。
 - `POST /api/install/collection`：响应和 batch 相同。
+
+批量安装失败的撤回结果见[插件安装](./plugin-installation.md#多包预览和批量安装)：`details.rolledBack` 和 `details.retained` 分别列出已撤回和保留的包。
 - `GET /api/install/plugins`：列表里包含还没有重启加载的插件。
 
 `/api/install/world` 在写入世界记录之前检查 worldData 的 diagnostics：
@@ -1798,7 +1800,7 @@ Web 设置页根据 `operatorTokenRequired` 决定是否显示“运维访问”
 
 #### `POST /api/worlds/:id/sync-dimensions`
 
-把世界当前的维度定义同步到指定的一个会话。这个端点直接尝试写入；想先预览，或者需要通用的同步选项，用 `sync-data`。
+作者和工具用的接口，把世界当前的维度定义同步到 `sessionId` 指定的一个活跃会话。应用没有供玩家操作的入口。这个端点直接尝试写入，不支持 dry-run；想先预览，或者需要通用的同步选项，用 [`sync-data`](#post-apiworldsidsync-data)。
 
 它只处理维度：使用 `world_data_import_ledger` 账本和受保护的 `_dimensions` 记录，不写 `entries`，也不写常驻 lorebook，也不清理其他导入的数据。
 
@@ -1884,7 +1886,9 @@ Web 设置页根据 `operatorTokenRequired` 决定是否显示“运维访问”
 
 #### `POST /api/worlds/:id/sync-data`
 
-把世界包里更新过的 worldData 同步到一个已有的会话。**默认只预览（dry-run）**，传 `dryRun: false` 才写入。
+作者和工具用的接口，把世界包里更新过的 worldData 同步到 `sessionId` 指定的一个已有会话。应用目前没有供玩家操作的同步入口。**默认只预览（dry-run）**，传 `dryRun: false` 才写入；实际写入要求会话为 `active`。
+
+更新世界包、文件热更新、启用插件和批准插件运行服务端代码都不会自动调用它。接口使用会话已保存的 `activePlugins`，不启用插件，不重新运行开局流程，也不重写历史故事。玩家要使用新的开局数据，请新开会话；正文仍按[世界数据](./world-data.md)中“改文件后自动重载”的规则更新。
 
 **请求字段:**
 
@@ -1896,7 +1900,7 @@ Web 设置页根据 `operatorTokenRequired` 决定是否显示“运维访问”
 
 **同步哪些数据:**
 
-- 只处理账本 `world_data_import_ledger` 里 `managed=true` 的 row。
+- 已有记录的覆盖和删除，只处理账本 `world_data_import_ledger` 里 `managed=true`、属于当前世界的 row；本次计划里的新记录也会导入并记入账本。
 - 用 `valueHash` 判断玩家或插件有没有改过目标数据。
 - 维度定义也在同一本账里，包括 inline 定义、`dimensionSources`，以及存储型世界的有效定义。
 
@@ -4285,9 +4289,12 @@ runtime 可以中途停下来等玩家提供数据，这叫挂起。本节的端
   "sessionId": "mistport-<new-uuid8>",
   "parentSessionId": "mistport-a1b2c3d4",
   "fromSnapshotId": "<parent-snapshot-id>",
-  "forkSnapshotId": "<child-fork-snapshot-id>"
+  "forkSnapshotId": "<child-fork-snapshot-id>",
+  "missingMediaCount": 0
 }
 ```
+
+`missingMediaCount` 是分叉用到、但已经不在媒体存储里的文件数，同一个文件只算一次。界面在这些位置显示“媒体不可用”的占位。
 
 **服务端做了什么**
 
@@ -4333,7 +4340,8 @@ runtime 可以中途停下来等玩家提供数据，这叫挂起。本节的端
 媒体的处理：
 
 - 为拷贝过来的消息里的媒体建立子会话自己的引用。
-- 消息、状态和 runtime 导出里用到的所有媒体，都必须已经授权给父会话，否则整个分叉以 `403 media_reference_forbidden` 失败。只知道媒体 ID 不能获得访问权。
+- 消息、状态和 runtime 导出里用到的、还存在的媒体，都必须已经授权给父会话，否则整个分叉以 `403 media_reference_forbidden` 失败。只知道媒体 ID 不能获得访问权。
+- 已经不存在的媒体（例如在媒体库里删掉了）不阻止分叉。子会话照常创建，保留原来的消息和数据，但不得到这个文件的引用。它在子会话里和在父会话里一样显示占位，并计入 `missingMediaCount`。
 
 runtime 导出的处理：
 

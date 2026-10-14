@@ -259,7 +259,7 @@ When preparing world data, the operation above is used to "pin" the bytes. The r
 - At the end, ownership and a reference are first recorded for the real session, and then the temporary reference is released.
 - When preparation, the semantic write, a duplicate session, or world admission fails, only this attempt's temporary reference is released. These failures do not force-delete shared content, and they do not release the claims of existing sessions. Bytes that no one claims later can be reclaimed by lifecycle cleanup.
 - If a newly created session fails at media finalization, the create flow deletes that session inside the session lifecycle lock and releases its claims.
-- Sync removes explicit references after the commit. Ownership and reclaiming the bytes are left to lifecycle cleanup.
+- After the commit, sync removes this session's explicit references to files it no longer needs. A file that still appears in the session's other index rows, messages, snapshots, runtime outputs, traces or turn results keeps its reference: the session and its forks can always read the pictures its history has shown. When the scan goes over its row limit (200,000), every reference is kept. Ownership and reclaiming the bytes are left to lifecycle cleanup.
 
 When something goes wrong:
 
@@ -373,6 +373,7 @@ When a scan is incomplete: a session has more rows than the limit (for the media
 - Unused media is deleted with `MediaStore.cleanup()` using `onlyIds`. So each backend checks the file's ownership and references again inside the critical section where it deletes. A file that a session claims after the scan is kept, and it is reported as "skipped".
 - A file that is in use, held, or unknown can only be deleted with a request that has `force` and names exactly one ID. In that case, `delete()` removes it together with every reference that points to it.
 - Sessions that used the file keep their own records. Where an image or sound used to be, the interface shows a "media unavailable" placeholder. When a plugin requests the same generation again, it gets a new file.
+- Forking from these sessions still succeeds, and the missing files show the same placeholder in the child (see [the fork in api.md](./api.md#post-apisessionsidfork)).
 
 **Access.** The media library exists only where everything the server saves belongs to the same player: `DEPLOYMENT_TIER=self` and the desktop app. In `demo` and `commercial` deployments, and in browser-private mode (where the production server uses MemoryStore), MediaStore holds media with several owners, and there is no index by owner. So both routes return `503 unavailable`, with or without an operator token.
 
