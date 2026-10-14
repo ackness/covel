@@ -1776,8 +1776,20 @@
       "enemy": "敌人"
     }
   },
+  "catalog": {
+    "mediaGallery": {
+      "empty": "暂无媒体。",
+      "open": "打开",
+      "download": "下载"
+    },
+    "jobList": {
+      "empty": "暂无任务。",
+      "copy": "复制",
+      "rerun": "重新运行"
+    }
+  },
   "graph": {
-    "empty": "关系图当前为空——等待 NPC 出现。",
+    "empty": "暂无图数据。",
     "clearSelection": "清除选中",
     "loading": "加载关系图……",
     "stats": "{{nodes}} 个节点 · {{links}} 条关系",
