@@ -3,7 +3,7 @@
  *
  * Renders a force-directed relationship graph from panel-bound props.
  * Lazy-loaded so the force-graph + d3 bundle is only pulled in
- * when the user actually opens the NPC tab.
+ * when the user actually opens a graph panel.
  */
 
 import {
@@ -25,6 +25,7 @@ import {
   connectedNodeIds,
 } from "./graph-relationships.js";
 import { buildNodes, buildLinks, drawNodeLabel } from "./graph-canvas-model.js";
+import { useI18nResolver } from "./catalog/helpers.js";
 import { useTranslation } from "react-i18next";
 import type { ComponentRenderer } from "@json-render/react";
 import type { ForceGraphMethods } from "react-force-graph-2d";
@@ -41,7 +42,15 @@ const ForceGraph2D = lazy(async () => {
   return { default: mod.default as ComponentType<Props> };
 });
 
-const Inner = ({ nodes, edges, node, edge, height }: GraphCanvasProps) => {
+const Inner = ({
+  nodes,
+  edges,
+  node,
+  edge,
+  height,
+  emptyText,
+}: GraphCanvasProps) => {
+  const resolve = useI18nResolver();
   const { t } = useTranslation();
   // Keep the library's default structural node/link generics at the ref boundary.
   const graphRef = useRef<ForceGraphMethods | undefined>(undefined);
@@ -155,7 +164,7 @@ const Inner = ({ nodes, edges, node, edge, height }: GraphCanvasProps) => {
     return (
       <div ref={containerCallbackRef} className="w-full">
         <div className="text-xs text-zinc-400 italic px-3 py-6 text-center">
-          {t("graph.empty")}
+          {resolve(emptyText) || t("graph.empty")}
         </div>
       </div>
     );

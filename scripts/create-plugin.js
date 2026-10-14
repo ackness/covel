@@ -334,6 +334,10 @@ function runCustomMultiRuntime(runtimes) {
     }
   }
 
+  const pluginVersion = JSON.parse(
+    readFileSync(join(targetDir, "package.json"), "utf-8"),
+  ).version;
+
   // Custom runtimes do not include the demo's note panel.
   // The agent stub reads the narrator's output, so the package names the contract.
   const optional = runtimes.some((runtime) => runtime.type === "agent")
@@ -341,7 +345,7 @@ function runCustomMultiRuntime(runtimes) {
     : "";
   writeFileSync(
     join(targetDir, "PLUGIN.md"),
-    `---\nid: ${pluginName}\ndescription: ${placeholders["{{pluginDescription}}"]}\nkind: plugin\ncovel: "${placeholders["{{hostRange}}"]}"\n${optional}---\n`,
+    `---\nid: ${pluginName}\ndescription: ${placeholders["{{pluginDescription}}"]}\nkind: plugin\nversion: "${pluginVersion}"\ncovel: "${placeholders["{{hostRange}}"]}"\n${optional}---\n`,
     "utf-8",
   );
   mkdirSync(join(targetDir, "locales"), { recursive: true });
@@ -539,6 +543,8 @@ function renderCustomReadme(runtimes) {
 
 ${placeholders["{{pluginDescriptionZh}}"]}
 
+根清单和 package.json 的版本都从 0.1.0 开始，发布新版本时同时修改两处。用例文件带编辑器用的 $schema；name 和 runtimeId 必填，未知字段会在执行前报错。
+
 ## Runtime
 
 ${lines}
@@ -611,7 +617,7 @@ function renderCustomRuntimeCases(runtimes) {
     };
   });
 
-  return `${JSON.stringify({ cases }, null, 2)}\n`;
+  return `${JSON.stringify({ $schema: "https://raw.githubusercontent.com/AcKnEsS/covel/main/packages/shared/schemas/runtime-cases.schema.json", cases }, null, 2)}\n`;
 }
 
 function camelize(name) {

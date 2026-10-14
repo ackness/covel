@@ -1,0 +1,499 @@
+{
+  "$id": "https://covel.local/schemas/runtime-cases.schema.json",
+  "title": "Covel runtime cases",
+  "description": "Strict runtime-cases.json or covel.test.json test cases, as an array or a cases object.",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "anyOf": [
+    {
+      "minItems": 1,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Required case name, selected by --case."
+          },
+          "runtimeId": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Required runtime ID to execute."
+          },
+          "pluginId": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Package owning the runtime; defaults to the selected plugin."
+          },
+          "withPlugins": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "description": "Additional plugin packages loaded for this case."
+          },
+          "message": {
+            "type": "string",
+            "description": "Player message for this execution."
+          },
+          "payload": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {},
+            "description": "Plugin-defined manual trigger payload."
+          },
+          "userSettings": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {},
+            "description": "Plugin-defined setting overrides."
+          },
+          "llmResponse": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {},
+            "description": "One mock model response."
+          },
+          "llmResponses": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "propertyNames": {
+                "type": "string"
+              },
+              "additionalProperties": {}
+            },
+            "description": "Mock model responses in call order."
+          },
+          "llmContent": {
+            "type": "string",
+            "description": "Mock reply text shorthand."
+          },
+          "llmObject": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {},
+            "description": "Mock reply object shorthand."
+          },
+          "mockPresetId": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Preset ID exposed by the mock gateway."
+          },
+          "ignoreUpstreams": {
+            "type": "boolean",
+            "description": "Ignore upstream requirements for isolated debugging."
+          },
+          "expectsBackgroundFollower": {
+            "type": "boolean",
+            "description": "Require a background follower to be queued."
+          },
+          "mode": {
+            "type": "string",
+            "enum": ["mock", "live", "both"],
+            "description": "Modes that run this case; omitted means both."
+          },
+          "expect": {
+            "type": "object",
+            "properties": {
+              "runtimeResults": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "runtimeId": {
+                      "type": "string",
+                      "minLength": 1,
+                      "description": "Runtime to match; omitted matches any runtime."
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "pending",
+                        "running",
+                        "success",
+                        "failed",
+                        "skipped",
+                        "suspended"
+                      ],
+                      "description": "Required runtime result status."
+                    },
+                    "errorIncludes": {
+                      "type": "string",
+                      "minLength": 1,
+                      "description": "Substring required in the runtime error."
+                    }
+                  },
+                  "required": ["status"],
+                  "additionalProperties": false
+                },
+                "description": "Runtime results that must exist."
+              },
+              "events": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "description": "Event topics that must be emitted."
+              },
+              "logs": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "description": "Plugin log messages that must exist."
+              },
+              "pluginData": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "namespace": {
+                      "type": "string",
+                      "minLength": 1,
+                      "description": "Plugin data namespace to inspect."
+                    },
+                    "key": {
+                      "type": "string",
+                      "minLength": 1,
+                      "description": "Record key to match."
+                    },
+                    "status": {
+                      "type": "string",
+                      "minLength": 1,
+                      "description": "Required value of the record's status field."
+                    },
+                    "field": {
+                      "type": "string",
+                      "minLength": 1,
+                      "description": "Field that must exist on the record."
+                    }
+                  },
+                  "required": ["namespace"],
+                  "additionalProperties": false
+                },
+                "description": "Committed plugin data records that must exist."
+              },
+              "assetGenerations": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "modality": {
+                      "type": "string",
+                      "minLength": 1,
+                      "description": "Media modality to match."
+                    },
+                    "field": {
+                      "type": "string",
+                      "minLength": 1,
+                      "description": "Field that must exist on the generated asset."
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                "description": "Asset generation effects that must exist."
+              }
+            },
+            "additionalProperties": false,
+            "description": "Assertions evaluated after execution."
+          },
+          "artifacts": {
+            "type": "object",
+            "properties": {
+              "saveImages": {
+                "type": "object",
+                "properties": {
+                  "namespace": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Plugin data namespace containing image references."
+                  },
+                  "dir": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Directory for saved images."
+                  },
+                  "field": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Record field containing the image reference."
+                  }
+                },
+                "additionalProperties": false,
+                "description": "Save generated image artifacts for inspection."
+              }
+            },
+            "additionalProperties": false,
+            "description": "Artifacts to save after execution."
+          }
+        },
+        "required": ["name", "runtimeId"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "type": "object",
+      "properties": {
+        "$schema": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Optional JSON Schema URL for editor validation."
+        },
+        "cases": {
+          "minItems": 1,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Required case name, selected by --case."
+              },
+              "runtimeId": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Required runtime ID to execute."
+              },
+              "pluginId": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Package owning the runtime; defaults to the selected plugin."
+              },
+              "withPlugins": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "description": "Additional plugin packages loaded for this case."
+              },
+              "message": {
+                "type": "string",
+                "description": "Player message for this execution."
+              },
+              "payload": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {},
+                "description": "Plugin-defined manual trigger payload."
+              },
+              "userSettings": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {},
+                "description": "Plugin-defined setting overrides."
+              },
+              "llmResponse": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {},
+                "description": "One mock model response."
+              },
+              "llmResponses": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "additionalProperties": {}
+                },
+                "description": "Mock model responses in call order."
+              },
+              "llmContent": {
+                "type": "string",
+                "description": "Mock reply text shorthand."
+              },
+              "llmObject": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {},
+                "description": "Mock reply object shorthand."
+              },
+              "mockPresetId": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Preset ID exposed by the mock gateway."
+              },
+              "ignoreUpstreams": {
+                "type": "boolean",
+                "description": "Ignore upstream requirements for isolated debugging."
+              },
+              "expectsBackgroundFollower": {
+                "type": "boolean",
+                "description": "Require a background follower to be queued."
+              },
+              "mode": {
+                "type": "string",
+                "enum": ["mock", "live", "both"],
+                "description": "Modes that run this case; omitted means both."
+              },
+              "expect": {
+                "type": "object",
+                "properties": {
+                  "runtimeResults": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "runtimeId": {
+                          "type": "string",
+                          "minLength": 1,
+                          "description": "Runtime to match; omitted matches any runtime."
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "pending",
+                            "running",
+                            "success",
+                            "failed",
+                            "skipped",
+                            "suspended"
+                          ],
+                          "description": "Required runtime result status."
+                        },
+                        "errorIncludes": {
+                          "type": "string",
+                          "minLength": 1,
+                          "description": "Substring required in the runtime error."
+                        }
+                      },
+                      "required": ["status"],
+                      "additionalProperties": false
+                    },
+                    "description": "Runtime results that must exist."
+                  },
+                  "events": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "description": "Event topics that must be emitted."
+                  },
+                  "logs": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "description": "Plugin log messages that must exist."
+                  },
+                  "pluginData": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "namespace": {
+                          "type": "string",
+                          "minLength": 1,
+                          "description": "Plugin data namespace to inspect."
+                        },
+                        "key": {
+                          "type": "string",
+                          "minLength": 1,
+                          "description": "Record key to match."
+                        },
+                        "status": {
+                          "type": "string",
+                          "minLength": 1,
+                          "description": "Required value of the record's status field."
+                        },
+                        "field": {
+                          "type": "string",
+                          "minLength": 1,
+                          "description": "Field that must exist on the record."
+                        }
+                      },
+                      "required": ["namespace"],
+                      "additionalProperties": false
+                    },
+                    "description": "Committed plugin data records that must exist."
+                  },
+                  "assetGenerations": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "modality": {
+                          "type": "string",
+                          "minLength": 1,
+                          "description": "Media modality to match."
+                        },
+                        "field": {
+                          "type": "string",
+                          "minLength": 1,
+                          "description": "Field that must exist on the generated asset."
+                        }
+                      },
+                      "additionalProperties": false
+                    },
+                    "description": "Asset generation effects that must exist."
+                  }
+                },
+                "additionalProperties": false,
+                "description": "Assertions evaluated after execution."
+              },
+              "artifacts": {
+                "type": "object",
+                "properties": {
+                  "saveImages": {
+                    "type": "object",
+                    "properties": {
+                      "namespace": {
+                        "type": "string",
+                        "minLength": 1,
+                        "description": "Plugin data namespace containing image references."
+                      },
+                      "dir": {
+                        "type": "string",
+                        "minLength": 1,
+                        "description": "Directory for saved images."
+                      },
+                      "field": {
+                        "type": "string",
+                        "minLength": 1,
+                        "description": "Record field containing the image reference."
+                      }
+                    },
+                    "additionalProperties": false,
+                    "description": "Save generated image artifacts for inspection."
+                  }
+                },
+                "additionalProperties": false,
+                "description": "Artifacts to save after execution."
+              }
+            },
+            "required": ["name", "runtimeId"],
+            "additionalProperties": false
+          },
+          "description": "Non-empty list of runtime cases."
+        }
+      },
+      "required": ["cases"],
+      "additionalProperties": false
+    }
+  ]
+}

@@ -535,6 +535,7 @@ export {
 } from "./utils/host-version-range.js";
 
 export { pluginManifestSchema } from "./schemas/plugin-manifest.js";
+export { FRAMEWORK_PLUGIN_ID } from "./framework-plugin-id.js";
 export {
   runtimeAuthoringManifestSchema,
   contractIdSchema,
@@ -551,3 +552,13 @@ export { isValidPluginSetting } from "./plugin-settings.js";
 export * from "./world-data-target.js";
 export * from "./world-package-paths.js";
 export * from "./plugin-frame.js";
+
+export {
+  runtimeCaseFileSchema,
+  runtimeCasesSchema,
+} from "./schemas/runtime-cases.js";
+export type {
+  RuntimeCase,
+  CaseExpectations,
+  CaseArtifactConfig,
+} from "./schemas/runtime-cases.js";

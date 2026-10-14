@@ -310,6 +310,7 @@ permissions:
 - `origin` must be an `https` address. It cannot include a path, query parameters, or a user name and password.
 - `methods` is optional. The values are `GET`, `POST`, `PUT`, `PATCH`, `DELETE`, and `HEAD`.
 - Requests are sent with `ctx.utils.fetchWithRetry`. A community plugin that calls an address it did not declare is refused.
+- For entry code that sends requests with `covel.http.fetchWithRetry`, declare `permissions.http` in the root `PLUGIN.md`. See the [plugin reference](../reference/plugins.md#runtime-field-groups) for package permissions and wire endpoints.
 - Do not pass a URL that the player typed straight to the backend to fetch. Check it first with `ctx.utils.validateBaseUrl`.
 
 > [!WARNING]

@@ -22,6 +22,8 @@ optional:
   - world-ir-provider@1
   - world-time-evolution@1
 contracts:
+  world-data-provider@1:
+    schema: ./runtimes/schema-gen/output.schema.json
   world.dimensions@1:
     schema: ./schemas/dimension-snapshot.schema.json
 entry: ./server/index.js

@@ -1,3 +1,4 @@
+import { importCssImages } from "@/lib/import-image.js";
 import { useSettingsWritable } from "@/settings/use-settings-save.js";
 import { requestConfirm } from "@/lib/confirm-channel.js";
 import { useMemo, useRef, useState } from "react";
@@ -67,7 +68,14 @@ export function ThemeManagerWidget() {
     try {
       const text = await file.text();
       const payload = parseImportedThemeFile(text, file.name);
-      await saveCustomTheme(store, payload.theme, payload.fileName);
+      await saveCustomTheme(
+        store,
+        {
+          ...payload.theme,
+          cssText: await importCssImages(payload.theme.cssText),
+        },
+        payload.fileName,
+      );
       await store.set("ui.appearance", payload.theme.id);
       flash(
         t("settings.themeImported", {

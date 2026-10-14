@@ -1776,8 +1776,20 @@
       "enemy": "Enemy"
     }
   },
+  "catalog": {
+    "mediaGallery": {
+      "empty": "No media yet.",
+      "open": "Open",
+      "download": "Download"
+    },
+    "jobList": {
+      "empty": "No jobs yet.",
+      "copy": "Copy",
+      "rerun": "Re-run"
+    }
+  },
   "graph": {
-    "empty": "Graph is currently empty — waiting for NPCs to appear.",
+    "empty": "No graph data yet.",
     "clearSelection": "Clear selection",
     "loading": "Loading graph…",
     "stats": "{{nodes}} nodes · {{links}} relations",

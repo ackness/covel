@@ -4,6 +4,7 @@ import {
   kernelConflictMessage,
 } from "../extension-points/contracts.js";
 import { z } from "zod";
+import { FRAMEWORK_PLUGIN_ID } from "../framework-plugin-id.js";
 import { hostVersionRangeSchema } from "../utils/host-version-range.js";
 import { packageCreditFields } from "./package-info.js";
 import { attributeFieldTypeSchema } from "./world.js";
@@ -19,6 +20,7 @@ import {
   runtimeManifestInputSchema,
   extensionDeclarationSchema,
   hookDeclarationSchema,
+  permissionsDeclSchema,
   pluginDataSchemaDeclSchema,
   worldProjectionMapSchema,
 } from "./plugin-schemas.js";
@@ -180,9 +182,13 @@ export const pluginManifestSchema = z.strictObject({
   id: z
     .string()
     .regex(/^[a-z][a-z0-9-]*$/)
+    .refine(
+      (id) => id !== FRAMEWORK_PLUGIN_ID,
+      `"${FRAMEWORK_PLUGIN_ID}" is reserved for the framework`,
+    )
     .meta({
       description:
-        "Stable package ID: lowercase letters, digits and hyphens. It must match the package directory name.",
+        "Stable package ID: lowercase letters, digits and hyphens. It must match the package directory name. `framework` is reserved.",
       examples: ["dice-check"],
     }),
   kind: z
@@ -283,6 +289,11 @@ export const pluginManifestSchema = z.strictObject({
     )
     .optional(),
   entry: shape.entry,
+  permissions: permissionsDeclSchema
+    .describe(
+      "Upper bounds of the package's own code. `http` lists the origins and methods the entry module of a community package may reach through `covel.http`, in addition to those its runtimes declare.",
+    )
+    .optional(),
   contributes: z
     .strictObject({
       tools: z

@@ -2798,7 +2798,7 @@ Submission 里的其他键会被丢弃。来源插件、字段定义和模板只
 调用插件在 `entry` 里用 `covel.registerRpc` 注册的 handler，或者框架默认 handler（如 `slash-debug`）。
 
 - 插件必须在会话当前启用的插件里。服务端在审批前检查一次，取得会话锁后再检查一次。插件已禁用时返回 `404 plugin_not_active`，不执行 handler，也不新增审批。旧面板迟到的请求同样受这个检查约束。
-- `pluginId: "framework"` 表示框架默认 action。它不属于插件启用集，按各自的准入条件执行。
+- `pluginId: "framework"` 表示框架默认 action。它不属于插件启用集，按各自的准入条件执行。`framework` 是保留 ID，没有插件能用它，所以这样的请求只会执行框架默认 action；写插件 ID 的请求也只会执行该插件自己注册的 action。
 
 ##### runtime 级
 

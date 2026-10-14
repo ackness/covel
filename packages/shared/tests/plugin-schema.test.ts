@@ -267,6 +267,26 @@ describe("plugin manifest dataSchemas", () => {
     ).toBe(false);
   });
 
+  it("reserves the framework ID and accepts package-level http permissions", () => {
+    const root = { id: "probe", kind: "plugin", description: "Probe" };
+    expect(
+      pluginManifestSchema.safeParse({ ...root, id: "framework" }).success,
+    ).toBe(false);
+    const withHttp = {
+      ...root,
+      permissions: {
+        http: [{ origin: "https://api.example.com", methods: ["POST"] }],
+      },
+    };
+    expect(pluginManifestSchema.parse(withHttp)).toEqual(withHttp);
+    expect(
+      pluginManifestSchema.safeParse({
+        ...root,
+        permissions: { http: [{ origin: "http://api.example.com" }] },
+      }).success,
+    ).toBe(false);
+  });
+
   it("accepts a world data source inside the world package and rejects one outside it", () => {
     const withSource = (sourcePath: string) => ({
       id: "probe",

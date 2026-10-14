@@ -310,6 +310,7 @@ permissions:
 - `origin` 只能是 `https` 地址，不带路径、参数和账号密码。
 - `methods` 可选，取 `GET`、`POST`、`PUT`、`PATCH`、`DELETE`、`HEAD`。
 - 请求用 `ctx.utils.fetchWithRetry` 发出。社区插件访问没有声明的地址会被拒绝。
+- 入口代码用 `covel.http.fetchWithRetry` 发请求时，在根 `PLUGIN.md` 声明 `permissions.http`。包级权限与 wire 端点的规则见[插件参考](../reference/plugins.md#runtime-分组字段)。
 - 不要把玩家输入的任意网址直接交给后端去抓取。先用 `ctx.utils.validateBaseUrl` 检查。
 
 > [!WARNING]

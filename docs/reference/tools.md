@@ -1440,21 +1440,23 @@ export default function ({ tool, z, shortId, shortIdBatch }) {
 
 ## 审批策略
 
-每次工具调用都经过 `ApprovalPipeline` 的审批检查。当前的规则由 `@covel/approval` 的 `createDefaultToolApprovalPipeline()` 构造，服务端和 `test-runtime` 共用：
+宿主先解析工具，再由 `ApprovalPipeline` 检查静态规则。默认规则由 `@covel/approval` 的 `createDefaultToolApprovalPipeline()` 构造，服务端和 `test-runtime` 共用：
 
-| 来源分类        | 规则      | 说明                           |
-| --------------- | --------- | ------------------------------ |
-| `builtin:*`     | **allow** | 框架内置工具，始终放行         |
-| `local:*`       | **allow** | 已发现的插件本地工具，自动放行 |
-| `third-party:*` | **deny**  | 未知来源工具，拒绝执行         |
+| 来源分类    | 规则      | 说明                                                     |
+| ----------- | --------- | -------------------------------------------------------- |
+| `builtin:*` | **allow** | 已注册的框架工具                                         |
+| `local:*`   | **allow** | 已注册且当前会话可调用的插件工具，包括获准的社区插件工具 |
+
+宿主可以提供自定义规则，按声明顺序取第一个匹配项；精确工具名规则不区分来源。要拒绝某个工具，把它的 `deny` 规则放在来源通配规则之前。没有匹配项时默认放行。
 
 ### 来源分类逻辑
 
-启动时自动分类：
+执行器成功解析工具后，`ToolRegistry.source()` 按注册位置分类：
 
-- 框架用 `registerBuiltin` 注册的工具（包括 `builtinUITools`）→ `builtin`
-- 其他工具，即插件 `entry` 通过 `registerTool()` 注册成功的工具 → `local`
-- `third-party` 目前不会被分给任何工具（分类只产生 `builtin` 和 `local`）
+- `registerBuiltin()` 注册的框架工具（包括 `builtinUITools`）→ `builtin`
+- 插件 `entry` 通过 `registerTool()` 注册成功的工具 → `local`
+
+只有这两种来源。找不到的工具或其他插件的私有工具，在来源检查之前就返回 `NOT_FOUND`。来源分类不代表插件信任等级；社区代码是否获准执行，由下面的授权流程决定。
 
 ### 第三方插件 server-code / plugin tool 审批边界
 

@@ -35,7 +35,7 @@ example/
 
 Layout rules:
 
-- The root `PLUGIN.md` is required. Its `id` must match the package directory name.
+- The root `PLUGIN.md` is required. Its `id` must match the package directory name. `framework` is kept for the framework itself and cannot be used as an `id`.
 - If there is only one runtime, write it in the `runtime` section of the root file. The body of the root file is then its prompt.
 - If there are several runtimes, put each one in `runtimes/<id>/RUNTIME.md`. Its logical ID is `<pluginId>/<id>`. The body of each file is the prompt for that runtime.
 - You cannot mix the two layouts. A child runtime cannot declare package-level contributions.
@@ -197,6 +197,15 @@ Authors of external plugins should follow the framework's [CHANGELOG](../../CHAN
 | `guard`       | The guard module, relative to the runtime                                  |
 | `effects`     | Read and write resources, and `parallelSafe`                               |
 | `permissions` | Declaration of the permissions the execution needs                         |
+
+The root `PLUGIN.md` can also have `permissions.http`. It covers the code of the `entry` module: in a community package, `covel.http` (used in tools, hooks, RPC, services, extensions and wires) reaches only the origins and methods listed in the `permissions.http` of the root file and of each runtime. A wire can also reach the endpoint of the slot it is serving. An undeclared request fails before it is sent: `http permission denied: …`.
+
+```yaml
+permissions:
+  http:
+    - origin: https://api.example.com
+      methods: [POST]
+```
 
 ### Two kinds of runtime
 
@@ -422,6 +431,7 @@ The static validation in the CLI and the installer checks inputs with `scope: tu
 When you publish a runtime's output contract, declare the public schema of the complete output in `contracts.<contractId>.schema` at the root.
 
 - All providers of the same contract ID must publish the same schema.
+- The public schema covers both model output and guard skip output. For example, `world-init` publishes `world-data-provider@1` with support for authored schemas of fewer than 15 attributes; the requirement to generate at least 15 stays in the `initialize-world` tool parameters.
 - The `provides` of a replacement plugin must match the `io.output.contract` of its own runtime. Output from other installed plugins cannot satisfy the declaration in its place.
 - A consumed contract that has no schema, or a provider that declares a contract but never produces it, causes a loading diagnostic.
 

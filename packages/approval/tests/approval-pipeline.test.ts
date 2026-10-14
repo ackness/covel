@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import type { ApprovalRequest } from "@covel/shared";
 import {
+  DEFAULT_TOOL_APPROVAL_RULES,
   matchPermissionRule,
   createApprovalPipeline,
   createDefaultToolApprovalPipeline,
@@ -51,19 +52,11 @@ describe("matchPermissionRule", () => {
     expect(result).toEqual({ pattern: "local:*", action: "allow" });
   });
 
-  it("third-party wildcard — third-party:* matches third-party source", () => {
-    const rules: readonly PermissionRule[] = [
-      { pattern: "third-party:*", action: "deny" },
-    ];
-    const result = matchPermissionRule("covel_some_tool", "third-party", rules);
-    expect(result).toEqual({ pattern: "third-party:*", action: "deny" });
-  });
-
-  it("no match — builtin:* does not match third-party source", () => {
+  it("no match — builtin:* does not match local source", () => {
     const rules: readonly PermissionRule[] = [
       { pattern: "builtin:*", action: "allow" },
     ];
-    const result = matchPermissionRule("covel_some_tool", "third-party", rules);
+    const result = matchPermissionRule("covel_some_tool", "local", rules);
     expect(result).toBeUndefined();
   });
 
@@ -78,11 +71,17 @@ describe("matchPermissionRule", () => {
   });
 });
 
+it("the default policy contains only categories the host registry produces", () => {
+  expect(DEFAULT_TOOL_APPROVAL_RULES).toEqual([
+    { pattern: "builtin:*", action: "allow" },
+    { pattern: "local:*", action: "allow" },
+  ]);
+});
+
 it("uses the same source policy for host and isolated tool execution", () => {
   const pipeline = createDefaultToolApprovalPipeline();
   expect(pipeline.check(makeRequest(), "builtin").decision).toBe("allow");
   expect(pipeline.check(makeRequest(), "local").decision).toBe("allow");
-  expect(pipeline.check(makeRequest(), "third-party").decision).toBe("deny");
 });
 
 // ── createApprovalPipeline ───────────────────────────────────────────────────
@@ -108,7 +107,7 @@ describe("createApprovalPipeline", () => {
     it("rejects unsupported ask rules during configuration", () => {
       expect(() =>
         createApprovalPipeline([
-          { pattern: "third-party:*", action: "ask" },
+          { pattern: "local:*", action: "ask" },
         ] as unknown as readonly PermissionRule[]),
       ).toThrow(/ask.*not supported/i);
     });
@@ -116,7 +115,7 @@ describe("createApprovalPipeline", () => {
     it("check: builtin allowed — no approval needed", () => {
       const pipeline = createApprovalPipeline([
         { pattern: "builtin:*", action: "allow" },
-        { pattern: "third-party:*", action: "deny" },
+        { pattern: "local:*", action: "deny" },
       ]);
       const result = pipeline.check(makeRequest(), "builtin");
       expect(result).toEqual({
@@ -125,12 +124,12 @@ describe("createApprovalPipeline", () => {
       });
     });
 
-    it("check: third-party denied — execution is blocked", () => {
+    it("check: local denied — execution is blocked", () => {
       const pipeline = createApprovalPipeline([
         { pattern: "builtin:*", action: "allow" },
-        { pattern: "third-party:*", action: "deny" },
+        { pattern: "local:*", action: "deny" },
       ]);
-      const result = pipeline.check(makeRequest(), "third-party");
+      const result = pipeline.check(makeRequest(), "local");
       expect(result).toEqual({
         decision: "deny",
         reason: "rule-deny",

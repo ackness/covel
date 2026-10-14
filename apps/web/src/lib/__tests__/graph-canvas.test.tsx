@@ -6,6 +6,7 @@ import {
   render,
   screen,
   within,
+  waitFor,
 } from "@testing-library/react";
 import { buildLinks, buildNodes } from "../graph-canvas-model.js";
 import { createGraphDataPools, syncGraphData } from "../graph-canvas-sync.js";
@@ -15,7 +16,7 @@ import {
 } from "../graph-relationships.js";
 import { GraphCanvas } from "../graph-canvas.js";
 import type { ForceLink } from "../graph-types.js";
-import type { GraphCanvasProps } from "@covel/shared";
+import { graphCanvasPropsSchema, type GraphCanvasProps } from "@covel/shared";
 
 const canvas = vi.hoisted(() => ({ graphData: undefined as unknown }));
 vi.mock("react-force-graph-2d", () => ({
@@ -69,6 +70,89 @@ const edge = {
 };
 
 describe("relationship graph", () => {
+  it("keeps unweighted edges neutral and rejects invalid explicit weights", () => {
+    expect(graphLinks([{ ...edge, strength: undefined }])).toMatchObject([
+      { strength: 0, color: "#94a3b8", width: 1 },
+    ]);
+    expect(
+      graphLinks([0, 0.5, -0.5].map((strength) => ({ ...edge, strength }))),
+    ).toMatchObject([
+      { color: "#94a3b8", width: 1 },
+      { color: "#22c55e", width: 2 },
+      { color: "#ef4444", width: 2 },
+    ]);
+    expect(
+      graphLinks(
+        [NaN, Infinity, "strong", null].map((strength) => ({
+          ...edge,
+          strength,
+        })),
+      ),
+    ).toEqual([]);
+    expect(
+      graphLinks([false, 0].map((invalidAt) => ({ ...edge, invalidAt }))),
+    ).toEqual([]);
+  });
+
+  it("renders a graph without polarity mappings and excludes missing endpoints", async () => {
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        observe() {}
+        disconnect() {}
+      },
+    );
+    const props = graphCanvasPropsSchema.parse({
+      nodes: sourceNodes,
+      edges: [
+        { id: "route", source: "a", target: "b" },
+        { id: "broken", source: "a", target: "missing" },
+      ],
+      node: {
+        idField: "id",
+        labelField: "name",
+        colors: {},
+        defaultColor: "gray",
+      },
+      edge: {
+        idField: "id",
+        sourceField: "source",
+        targetField: "target",
+        defaultColor: "blue",
+      },
+      emptyText: "No routes",
+    });
+    const view = render(
+      <GraphCanvas
+        emit={() => {}}
+        on={() => ({
+          emit: () => {},
+          shouldPreventDefault: false,
+          bound: false,
+        })}
+        element={{ type: "GraphCanvas", props }}
+      />,
+    );
+    await screen.findAllByRole("button", { name: "Mira" });
+    await waitFor(() =>
+      expect(canvas.graphData).toMatchObject({
+        links: [{ edgeId: "route", color: "blue", strength: 0, width: 1 }],
+      }),
+    );
+    view.rerender(
+      <GraphCanvas
+        emit={() => {}}
+        on={() => ({
+          emit: () => {},
+          shouldPreventDefault: false,
+          bound: false,
+        })}
+        element={{ type: "GraphCanvas", props: { ...props, nodes: [] } }}
+      />,
+    );
+    expect(await screen.findByText("No routes")).toBeTruthy();
+  });
+
   it("uses only explicitly configured colors for prototype-named types", () => {
     const namedNodes = {
       a: { id: "a", name: "A", type: "constructor" },

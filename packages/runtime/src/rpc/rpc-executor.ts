@@ -7,15 +7,17 @@
  * Dispatch is always synchronous. Long-running work goes through a background
  * job whose progress reaches the UI as `plugin-data.changed` SSE events.
  *
- * Resolution order for action-level dispatch:
- *   1. Plugin-declared action (`registry.getPluginAction`)
- *   2. Framework default (`registry.getFrameworkDefault`), such as the
- *      actions behind the built-in slash commands.
+ * Resolution for action-level dispatch: `FRAMEWORK_PLUGIN_ID` names the
+ * framework defaults (`registry.getFrameworkDefault`), such as the actions
+ * behind the built-in slash commands; any other ID names that plugin's own
+ * actions (`registry.getPluginAction`). The two never fall back to each
+ * other, so the route's trust decision and the handler that runs agree.
  *
  * Runtime-level dispatch is handled separately (`runtimeId` set) by the
  * caller — the dispatcher just exposes the registry-aware path here.
  */
 
+import { FRAMEWORK_PLUGIN_ID } from "@covel/shared";
 import type {
   PluginRpcRegistry,
   RpcHandlerContext,
@@ -51,13 +53,11 @@ export class RpcDispatchError extends Error {
 
 export function createRpcExecutor(deps: RpcDispatchDeps) {
   function lookupEntry(pluginId: string, action: string): RpcRegistryEntry {
-    // Plugin-declared takes precedence over framework defaults so plugins
-    // can override built-ins for their own pluginId namespace.
-    const pluginEntry = deps.registry.getPluginAction(pluginId, action);
-    if (pluginEntry) return pluginEntry;
-
-    const frameworkEntry = deps.registry.getFrameworkDefault(action);
-    if (frameworkEntry) return frameworkEntry;
+    const entry =
+      pluginId === FRAMEWORK_PLUGIN_ID
+        ? deps.registry.getFrameworkDefault(action)
+        : deps.registry.getPluginAction(pluginId, action);
+    if (entry) return entry;
 
     throw new RpcDispatchError(
       `[plugin-rpc] unknown action "${action}" (pluginId="${pluginId}")`,
