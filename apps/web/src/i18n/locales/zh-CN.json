@@ -17,6 +17,7 @@
     "primary": "主导航"
   },
   "session": {
+    "historyLoadFailed": "无法读取历史存档，请重试。",
     "reasoningContent": "思考内容",
     "reasoningContentHint": "模型返回的思考文本或摘要，按调用顺序展示。",
     "config": "工作室配置",
