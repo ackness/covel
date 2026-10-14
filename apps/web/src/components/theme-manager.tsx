@@ -157,7 +157,11 @@ export function ThemeManagerWidget() {
   return (
     <div className="space-y-4">
       {(notice || error) && (
-        <div className="ui-band text-xs" data-tone={error ? "danger" : "info"}>
+        <div
+          role={error ? "alert" : "status"}
+          className="ui-band text-xs"
+          data-tone={error ? "danger" : "info"}
+        >
           <span
             className={
               error ? "text-(--accent-danger)" : "text-(--accent-secondary)"

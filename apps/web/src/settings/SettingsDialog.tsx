@@ -179,7 +179,7 @@ export function SettingsDialog({
             className="w-full sm:w-56 shrink-0 border-b sm:border-b-0 sm:border-r border-(--rule-color) flex flex-col"
             style={{ background: "var(--surface-rail)" }}
           >
-            <div className="p-3 border-b border-(--rule-color) flex items-center gap-2">
+            <div className="p-3 border-b border-(--rule-color) flex items-center gap-2 focus-within:ring-1 focus-within:ring-(--accent-primary)">
               <Search className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
               <label htmlFor="settings-search" className="sr-only">
                 {t("settings.searchPlaceholder")}

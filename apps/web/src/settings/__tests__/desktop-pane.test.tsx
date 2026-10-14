@@ -67,14 +67,16 @@ describe("DesktopPane proxy loading", () => {
       screen.queryByText(i18n.t("settings.desktopOnboardingResetToast")),
     ).toBeNull();
     await act(async () => rejectReset(new Error("storage unavailable")));
-    expect(screen.getByText(i18n.t("settings.saveFailed"))).toBeTruthy();
+    expect(screen.getByRole("alert").textContent).toBe(
+      i18n.t("settings.saveFailed"),
+    );
     expect(
       screen.queryByText(i18n.t("settings.desktopOnboardingResetToast")),
     ).toBeNull();
     await act(async () => fireEvent.click(button));
-    expect(
-      screen.getByText(i18n.t("settings.desktopOnboardingResetToast")),
-    ).toBeTruthy();
+    expect(screen.getByRole("status").textContent).toBe(
+      i18n.t("settings.desktopOnboardingResetToast"),
+    );
     expect(bridgeMocks.resetOnboarding).toHaveBeenCalledTimes(2);
   });
 
@@ -110,9 +112,13 @@ describe("DesktopPane proxy loading", () => {
     await waitFor(() =>
       expect((save as HTMLButtonElement).disabled).toBe(false),
     );
-    expect((screen.getByRole("combobox") as HTMLSelectElement).value).toBe(
-      "http",
-    );
+    expect(
+      (
+        screen.getByRole("combobox", {
+          name: "Proxy mode",
+        }) as HTMLSelectElement
+      ).value,
+    ).toBe("http");
   });
 
   it("keeps save disabled after load failure and allows an explicit retry", async () => {
@@ -133,8 +139,12 @@ describe("DesktopPane proxy loading", () => {
     await waitFor(() =>
       expect((save as HTMLButtonElement).disabled).toBe(false),
     );
-    expect((screen.getByRole("combobox") as HTMLSelectElement).value).toBe(
-      "system",
-    );
+    expect(
+      (
+        screen.getByRole("combobox", {
+          name: "Proxy mode",
+        }) as HTMLSelectElement
+      ).value,
+    ).toBe("system");
   });
 });

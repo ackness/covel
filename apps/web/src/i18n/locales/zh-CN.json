@@ -1252,7 +1252,11 @@
     "deleteModelConfirm": "同时移除指向此模型配置的角色绑定。服务商的 API 密钥会保留。",
     "deleteThemeTitle": "删除主题？",
     "deleteThemeConfirm": "此自定义主题将被删除。再次使用需要重新导入。",
-    "exportReadOnlyHint": "设置尚未成功加载，导出仅包含当前可读取的值，可能不完整；原始备份可在下方查看和下载。"
+    "exportReadOnlyHint": "设置尚未成功加载，导出仅包含当前可读取的值，可能不完整；原始备份可在下方查看和下载。",
+    "desktopProxyMode": "代理模式",
+    "desktopProxyUrl": "代理地址",
+    "providerIdLabel": "服务商 ID",
+    "themeSchemeLocked": "当前主题只支持一种明暗模式。"
   },
   "appearance": {
     "styleTitle": "风格方案",
@@ -1971,7 +1975,8 @@
     "active": "生效中",
     "retry": "重试",
     "add": "添加",
-    "remove": "移除"
+    "remove": "移除",
+    "darkMode": "深色模式"
   },
   "debugger": {
     "title": "追踪检查器",

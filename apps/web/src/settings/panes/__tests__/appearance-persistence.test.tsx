@@ -194,6 +194,7 @@ describe("AppearancePane truthful persistence", () => {
       }),
     );
     await settle();
+    expect(view.getByRole("alert")).toBeTruthy();
     expect(store.get("ui.appearance")).toBe("stage");
     expect(loadOverrides(store)).toEqual(initialOverrides);
     expect(adapter.bundle.entries[APPEARANCE_TOKENS_KEY]).toEqual(

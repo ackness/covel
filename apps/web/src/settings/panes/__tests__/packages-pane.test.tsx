@@ -149,6 +149,10 @@ describe("PackagesPane installed plugin management", () => {
     });
 
     await waitFor(() => expect(boot).toHaveBeenCalledTimes(1));
-    expect(await screen.findByText("Installed new-world")).toBeTruthy();
+    await waitFor(() =>
+      expect(screen.getByRole("status").textContent).toBe(
+        "Installed new-world",
+      ),
+    );
   });
 });

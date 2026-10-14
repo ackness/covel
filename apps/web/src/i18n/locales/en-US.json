@@ -1252,7 +1252,11 @@
     "deleteModelConfirm": "This also removes role bindings to this configuration. The provider API key is kept.",
     "deleteThemeTitle": "Delete theme?",
     "deleteThemeConfirm": "This custom theme will be deleted. Import it again to use it later.",
-    "exportReadOnlyHint": "Settings have not loaded successfully. The export contains only currently readable values and may be incomplete. View or download original backups below."
+    "exportReadOnlyHint": "Settings have not loaded successfully. The export contains only currently readable values and may be incomplete. View or download original backups below.",
+    "desktopProxyMode": "Proxy mode",
+    "desktopProxyUrl": "Proxy address",
+    "providerIdLabel": "Provider ID",
+    "themeSchemeLocked": "This theme supports only one color mode."
   },
   "appearance": {
     "styleTitle": "Style",
@@ -1971,7 +1975,8 @@
     "active": "Active",
     "retry": "Retry",
     "add": "Add",
-    "remove": "Remove"
+    "remove": "Remove",
+    "darkMode": "Dark mode"
   },
   "debugger": {
     "title": "Trace Inspector",
