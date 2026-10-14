@@ -550,6 +550,120 @@ describe("usePluginSelection", () => {
     expect(result.current.excludedPluginIds).toEqual(["core"]);
   });
 
+  it("turns off what a pack excludes and lifts only those exclusions for the next pack", async () => {
+    const lean: PluginPack = {
+      id: "lean",
+      label: "Lean",
+      requested: ["alternative"],
+      recommended: [],
+      excluded: ["core", "extra"],
+      tags: [],
+      source: "builtin",
+    };
+    vi.mocked(api.getWorldPluginPlan).mockResolvedValue({
+      ...selectionPlan(["core"]),
+      packs: [lean, ...PACKS],
+    });
+    const { result } = renderHook(() =>
+      usePluginSelection(PLAN.worldId, PACK_PLUGINS, prepareWorldForServer),
+    );
+    await waitFor(() => expect(result.current.pluginPlanLoading).toBe(false));
+    act(() => result.current.togglePlugin("manual"));
+    act(() => result.current.togglePlugin("manual"));
+    expect(result.current.excludedPluginIds).toEqual(["manual"]);
+
+    act(() => result.current.applyPack("lean"));
+    expect(result.current.selectedPluginIdSet).toEqual(
+      new Set(["alternative", "dependency"]),
+    );
+    expect(new Set(result.current.excludedPluginIds)).toEqual(
+      new Set(["manual", "core", "extra"]),
+    );
+
+    act(() => result.current.applyPack("full"));
+    expect(result.current.selectedPluginIdSet).toEqual(
+      new Set(["core", "extra"]),
+    );
+    expect(result.current.excludedPluginIds).toEqual(["manual"]);
+  });
+
+  it("starts with the exclusions of the world's initial pack", async () => {
+    const lean: PluginPack = {
+      id: "lean",
+      label: "Lean",
+      requested: ["alternative"],
+      recommended: [],
+      excluded: ["core"],
+      tags: [],
+      source: "world",
+    };
+    vi.mocked(api.getWorldPluginPlan).mockResolvedValue({
+      ...selectionPlan(["alternative"]),
+      packs: [lean],
+      selectedPackId: "lean",
+    });
+    const { result } = renderHook(() =>
+      usePluginSelection(PLAN.worldId, PLUGINS, prepareWorldForServer),
+    );
+    await waitFor(() => expect(result.current.pluginPlanLoading).toBe(false));
+    expect(result.current.excludedPluginIds).toEqual(["core"]);
+    expect(result.current.selectedPluginIdSet).toEqual(
+      new Set(["alternative", "dependency"]),
+    );
+  });
+
+  it("goes back to the narrative plugins and what they and the world need", async () => {
+    const story = [
+      { outputKind: "story" },
+    ] as unknown as PluginSummary["runtimes"];
+    const plugins = [
+      plugin("teller", { kind: "core", runtimes: story }),
+      plugin("helper", { kind: "core" }),
+      plugin("keeper", { kind: "core", provides: ["need@1"] }),
+      plugin("dims", { kind: "core", provides: ["world.dimensions@1"] }),
+      plugin("world-pick"),
+      plugin("extra"),
+    ];
+    vi.mocked(api.getWorldPluginPlan).mockResolvedValue({
+      ...PLAN,
+      policy: {
+        ...PLAN.policy,
+        requested: ["world-pick"],
+        requires: ["need@1"],
+      },
+      defaultPluginIds: ["world-pick", "extra"],
+      packs: [
+        {
+          id: "full",
+          label: "Full",
+          requested: ["extra"],
+          recommended: [],
+          tags: [],
+          source: "builtin",
+        },
+      ],
+      selectedPackId: "full",
+    });
+    const { result } = renderHook(() =>
+      usePluginSelection(PLAN.worldId, plugins, prepareWorldForServer),
+    );
+    await waitFor(() => expect(result.current.pluginPlanLoading).toBe(false));
+    expect(result.current.selectedPluginIdSet).toEqual(
+      new Set(["teller", "helper", "keeper", "dims", "world-pick", "extra"]),
+    );
+
+    act(() => result.current.resetToMinimal());
+
+    expect(result.current.selectedPluginIdSet).toEqual(
+      new Set(["teller", "keeper", "dims"]),
+    );
+    expect(new Set(result.current.excludedPluginIds)).toEqual(
+      new Set(["helper", "world-pick"]),
+    );
+    expect(result.current.activePluginPack).toBeNull();
+    expect(result.current.unmetRequirements).toEqual([]);
+  });
+
   it("applies a replacement pack even when it excludes the currently locked core", async () => {
     const pack = {
       id: "alternative-pack",

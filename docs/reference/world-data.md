@@ -391,14 +391,14 @@ dimensionSources:
 
 `pluginPolicy` 说的是“这个世界希望用哪些插件”。它不会锁死任何插件：最终启用哪些，由 Covel 根据每个插件声明的能力和依赖、玩家的授权以及玩家自己的勾选算出来。
 
-| 字段                            | 说明                                                                                    |
-| ------------------------------- | --------------------------------------------------------------------------------------- |
-| `presetId`                      | 默认组合包 ID，可引用 `packs[].id` 或内置组合包                                         |
-| `preferredTags` / `avoidedTags` | 插件标签偏好                                                                            |
-| `requires`                      | 世界必需的契约 ID（如 `action-check@1`），任何提供该契约的已安装插件都能满足            |
-| `requested`                     | 世界建议作为初始选择的插件 ID                                                           |
-| `recommended`                   | 额外推荐插件 ID                                                                         |
-| `packs`                         | 自定义组合包，每项包含 `id/label`，可选 `description/requested/recommended/tags/reason` |
+| 字段                            | 说明                                                                                                                                                                   |
+| ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `presetId`                      | 默认组合包 ID，可引用 `packs[].id` 或内置组合包                                                                                                                        |
+| `preferredTags` / `avoidedTags` | 插件标签偏好                                                                                                                                                           |
+| `requires`                      | 世界必需的契约 ID（如 `action-check@1`），任何提供该契约的已安装插件都能满足                                                                                           |
+| `requested`                     | 世界建议作为初始选择的插件 ID                                                                                                                                          |
+| `recommended`                   | 额外推荐插件 ID                                                                                                                                                        |
+| `packs`                         | 自定义组合包，每项包含 `id/label`，可选 `description/requested/recommended/excluded/tags/reason`。`excluded` 是选中这个包时关掉的插件 ID，可以包括 `kind: core` 的插件 |
 
 `presetId` 必须是内置组合包或这个世界 `packs` 里的 ID，否则 `pnpm validate:world` 报 `unknown-preset`。
 

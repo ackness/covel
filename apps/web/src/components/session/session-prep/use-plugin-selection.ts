@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import { resolveSessionPlugins } from "@covel/shared";
+import { DIMENSION_CONTRACT, resolveSessionPlugins } from "@covel/shared";
 import {
   collectPluginTags,
   defaultSelectedPluginIds,
@@ -38,6 +38,12 @@ export interface UsePluginSelectionResult {
   setPluginSearch: (value: string) => void;
   togglePluginTag: (tag: string) => void;
   applyPack: (packId: string) => void;
+  /**
+   * Back to the smallest set that still tells a story: the narrative plugins
+   * (the selected ones, else the core ones), what they and the world need,
+   * the provider of the world's dimensions, and nothing else. Every other core or world-requested plugin is excluded.
+   */
+  resetToMinimal: () => void;
   togglePlugin: (name: string) => void;
   retryPluginPlan: () => void;
 }
@@ -79,10 +85,10 @@ export function usePluginSelection(
         // plan alongside the temporary core-only selection. A default the
         // initial pack also requests belongs to the pack, so the next pack can
         // replace it even when the world's preferred tags selected it too.
-        const packRequests = new Set(
-          plan.packs.find((pack) => pack.id === plan.selectedPackId)
-            ?.requested ?? [],
+        const initialPack = plan.packs.find(
+          (pack) => pack.id === plan.selectedPackId,
         );
+        const packRequests = new Set(initialPack?.requested ?? []);
         setPackRequestedPlugins(packRequests);
         setOtherSelectedPlugins(
           new Set(
@@ -91,7 +97,8 @@ export function usePluginSelection(
             ),
           ),
         );
-        setExcludedPlugins(new Set());
+        setExcludedPlugins(new Set(initialPack?.excluded ?? []));
+        setPackExcludedPlugins(new Set(initialPack?.excluded ?? []));
         setActivePluginPackId(plan.selectedPackId ?? null);
         setPluginPlan(plan);
       })
@@ -134,6 +141,11 @@ export function usePluginSelection(
     [otherSelectedPlugins, packRequestedPlugins],
   );
   const [excludedPlugins, setExcludedPlugins] = useState<Set<string>>(
+    () => new Set(),
+  );
+  // The exclusions the active pack added, so the next pack can lift them
+  // without lifting the player's own.
+  const [packExcludedPlugins, setPackExcludedPlugins] = useState<Set<string>>(
     () => new Set(),
   );
   const candidates = useMemo(
@@ -241,9 +253,60 @@ export function usePluginSelection(
       if (!pack) return;
       setActivePluginPackId(pack.id);
       setPackRequestedPlugins(new Set(pack.requested));
+      const excluded = new Set(excludedPlugins);
+      for (const id of packExcludedPlugins) excluded.delete(id);
+      const added = (pack.excluded ?? []).filter((id) => !excluded.has(id));
+      for (const id of added) excluded.add(id);
+      setExcludedPlugins(excluded);
+      setPackExcludedPlugins(new Set(added));
     },
-    [pluginPacks],
+    [pluginPacks, excludedPlugins, packExcludedPlugins],
   );
+
+  const resetToMinimal = useCallback(() => {
+    const tellsStory = (plugin: api.PluginSummary) =>
+      plugin.runtimes.some((runtime) => runtime.outputKind === "story");
+    const selectedStory = plugins.filter(
+      (plugin) => tellsStory(plugin) && selectedPluginIdSet.has(plugin.id),
+    );
+    const story = (
+      selectedStory.length > 0
+        ? selectedStory
+        : plugins.filter(
+            (plugin) => tellsStory(plugin) && plugin.kind === "core",
+          )
+    ).map((plugin) => plugin.id);
+    // Resolve with no core default, so only what the narrative plugins and
+    // the world's required contracts pull in stays. The dimension provider
+    // stays too: a world that declares dimensions cannot start without it.
+    const minimal = new Set(
+      resolveSessionPlugins({
+        requested: story,
+        plugins: candidates.map((plugin) => ({ ...plugin, kind: "plugin" })),
+        requiredContracts: [...requiredContracts, DIMENSION_CONTRACT],
+      }).active,
+    );
+    setActivePluginPackId(null);
+    setPackRequestedPlugins(new Set());
+    setPackExcludedPlugins(new Set());
+    setOtherSelectedPlugins(new Set(story));
+    setExcludedPlugins(
+      new Set(
+        [
+          ...plugins
+            .filter((plugin) => plugin.kind === "core")
+            .map((plugin) => plugin.id),
+          ...worldRequiredPluginIds,
+        ].filter((id) => !minimal.has(id)),
+      ),
+    );
+  }, [
+    plugins,
+    candidates,
+    selectedPluginIdSet,
+    requiredContracts,
+    worldRequiredPluginIds,
+  ]);
 
   const togglePlugin = useCallback(
     (name: string) => {
@@ -323,6 +386,7 @@ export function usePluginSelection(
     setPluginSearch,
     togglePluginTag,
     applyPack,
+    resetToMinimal,
     togglePlugin,
     retryPluginPlan,
   };

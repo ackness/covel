@@ -21,6 +21,8 @@ import {
   preflightWorldDataForSession,
   syncWorldDataForSession,
 } from "../../src/world-data/session-import.js";
+import { BUILTIN_PLUGIN_PACKS } from "../../src/config/plugin-packs.js";
+import { resolveSessionPluginPlan } from "../../src/routes/api/session/plugins.js";
 import { conventionsOfPlugins } from "../../src/world-data/conventions.js";
 import { loadWorldDataDescriptor } from "../../src/world-data/descriptor.js";
 import { collectMediaSourceFiles } from "../../src/world-data/media.js";
@@ -286,6 +288,31 @@ describe("world data session importer", () => {
       },
     });
   });
+
+  it.each(["emberback", "haruka-academy", "lantern-barrow", "mistport"])(
+    "starts %s with the narrative-only pack",
+    async (worldId) => {
+      const registry = await builtinPluginRegistry();
+      const pack = BUILTIN_PLUGIN_PACKS.find(
+        (item) => item.id === "narrative-only",
+      )!;
+      const activePlugins = resolveSessionPluginPlan(pack.requested, registry, {
+        excluded: pack.excluded,
+        authorized: [...registry.getAll().keys()],
+      }).active;
+      expect(activePlugins).toContain("narrator");
+      const result = await preflightWorldDataForSession({
+        sessionId: "preview",
+        worldId,
+        worldsDirs: [path.resolve(import.meta.dirname, "../../../../worlds")],
+        now: NOW,
+        preflight: { registry, activePlugins },
+      });
+      expect(
+        result.diagnostics.filter((item) => item.level === "error"),
+      ).toEqual([]);
+    },
+  );
 
   it("skips time data with a warning when its receiver is disabled", async () => {
     const registry = await builtinPluginRegistry();

@@ -126,6 +126,7 @@ export function SessionPrepScreen({
     setPluginSearch,
     togglePluginTag,
     applyPack,
+    resetToMinimal,
     togglePlugin,
     retryPluginPlan,
   } = usePluginSelection(world.id, plugins, prepareWorldForServer);
@@ -654,6 +655,7 @@ export function SessionPrepScreen({
                 onPluginSearchChange={setPluginSearch}
                 onTogglePluginTag={togglePluginTag}
                 onApplyPack={applyPack}
+                onResetToMinimal={resetToMinimal}
                 pluginGroups={pluginGroups}
                 corePluginIds={corePluginIds}
                 lockedPluginIds={lockedPluginIds}
