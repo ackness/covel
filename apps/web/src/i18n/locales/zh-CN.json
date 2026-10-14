@@ -398,7 +398,8 @@
       "succeeded": "已完成"
     },
     "retryScopeLimited": "只重试选中的失败任务，正文和其他已完成结果会保留。每批最多 {{count}} 个任务，完成后可继续重试其余任务。",
-    "activeTask": "{{label}}…"
+    "activeTask": "{{label}}…",
+    "panelUnavailable": "当前会话没有这个面板。"
   },
   "blocks": {
     "actionPlaceholder": "或输入自定义行动...",

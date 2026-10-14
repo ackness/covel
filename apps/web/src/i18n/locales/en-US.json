@@ -398,7 +398,8 @@
       "succeeded": "Succeeded"
     },
     "retryScopeLimited": "Only the selected failed tasks will run again. The story and other completed results are preserved. Each batch handles up to {{count}} tasks. Retry the remaining tasks afterward.",
-    "activeTask": "{{label}}…"
+    "activeTask": "{{label}}…",
+    "panelUnavailable": "This panel is not available in this session."
   },
   "blocks": {
     "actionPlaceholder": "Or type your own action...",
