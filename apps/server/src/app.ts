@@ -38,6 +38,8 @@ import {
 } from "./lib/session-lock.js";
 import { createPgAdvisorySessionLock } from "./lib/pg-session-lock.js";
 import { applyPendingPackageUpdates } from "./routes/api/install/package-updates.js";
+import { cleanupPackageStaging } from "./routes/api/install/package-staging.js";
+import { recoverWorldPackageDeletions } from "./routes/api/worlds/file-package.js";
 import { isWorldDeleting } from "./world-lifecycle.js";
 import { seedAndReconcileWorlds } from "./world-seed-reconcile.js";
 import { createWorldFileWatcher } from "./world-file-watcher.js";
@@ -294,6 +296,10 @@ async function initializeServer(): Promise<void> {
     const bundledPluginsDir =
       env.pluginsDir ?? resolve(import.meta.dirname, "../../../plugins");
     const userDirs = resolveUserResourceDirs(env);
+    // Before update recovery, discovery, watchers, or routes can touch these files.
+    await cleanupPackageStaging(userDirs.plugins);
+    await cleanupPackageStaging(userDirs.worlds);
+    await recoverWorldPackageDeletions(store, userDirs.worlds);
     const pluginsDirs = mergeDirs(bundledPluginsDir, userDirs.plugins);
     // Before any plugin loads: its labels and messages are read once.
     setTranslationsDirectory(userDirs.translations);

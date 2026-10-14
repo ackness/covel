@@ -5,9 +5,13 @@ import { z } from "zod";
 import { githubPluginSourceSchema, pluginInstallIdSchema } from "@covel/shared";
 import { resolveUserResourceDirs } from "../../../lib/user-resource-dirs.js";
 import { digestEntries } from "./github-source.js";
-import { httpError, LIMITS, type ExtractedEntry } from "./shared.js";
+import {
+  httpError,
+  INSTALL_RECEIPT_FILE,
+  LIMITS,
+  type ExtractedEntry,
+} from "./shared.js";
 
-const receiptFile = ".covel-install.json";
 export const packageReceiptSchema = z
   .object({
     source: githubPluginSourceSchema,
@@ -77,7 +81,10 @@ export async function readReceipt(directory: string): Promise<PackageReceipt> {
   return packageReceiptSchema.parse(
     JSON.parse(
       (
-        await readRegularFile(path.join(directory, receiptFile), 16 * 1024)
+        await readRegularFile(
+          path.join(directory, INSTALL_RECEIPT_FILE),
+          16 * 1024,
+        )
       ).toString("utf8"),
     ),
   );
@@ -97,7 +104,7 @@ async function readPackageFiles(directory: string): Promise<ExtractedEntry[]> {
       if (++count > LIMITS.maxEntries)
         throw httpError(409, "Package contains too many local files");
       const name = relative ? `${relative}/${entry.name}` : entry.name;
-      if (name === receiptFile) continue;
+      if (name === INSTALL_RECEIPT_FILE) continue;
       const absolute = path.join(directory, name);
       if (entry.isDirectory()) {
         await assertPackageDirectory(absolute);
