@@ -182,7 +182,10 @@ describe.each([
   it("does not repeat recovery for ordinary wakes before the next deadline", async () => {
     await seed("committing");
     vi.setSystemTime(new Date("2030-01-01T00:00:02.000Z"));
-    const probe = vi.fn(async () => ({ acquired: false as const }));
+    const probe = vi.fn(async () => ({
+      acquired: false as const,
+      reason: "busy" as const,
+    }));
     const worker = start({ tryWithCommitLock: probe });
     await vi.advanceTimersByTimeAsync(1);
     expect(probe).toHaveBeenCalledOnce();
@@ -343,7 +346,7 @@ describe.each([
     await Promise.resolve();
     expect(closed).toBe(false);
     await expect(lock.tryWithLock(SESSION_ID, async () => {})).resolves.toEqual(
-      { acquired: false },
+      { acquired: false, reason: "busy" },
     );
     release.resolve();
     await closing;

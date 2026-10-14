@@ -18,6 +18,7 @@ import {
   normalizeOutput,
 } from "../commit/session-output-normalizer.js";
 import { makeProposal } from "./session-kernel-helpers.js";
+import type { MediaOwnershipStore } from "../media/canonicalize-media-refs.js";
 import { anchorPluginMessage } from "../commit/plugin-message-turn.js";
 import {
   enforceImageAssetOutput,
@@ -77,6 +78,8 @@ export interface RuntimeCommitOptions {
    * transaction commits — or drop it on rollback.
    */
   readonly deferPostCommit?: (fn: () => Promise<void>) => void;
+  /** Media store the MediaRefs of every proposal are checked against. */
+  readonly mediaStore?: MediaOwnershipStore;
 }
 
 /** Proposals ready to persist, plus the ones already rejected on the way. */
@@ -339,7 +342,10 @@ async function persistProposals(
     opts?.eventBus,
     opts?.emitter,
     opts?.signal,
-    { preStateCommitApplied },
+    {
+      preStateCommitApplied,
+      ...(opts?.mediaStore ? { mediaStore: opts.mediaStore } : {}),
+    },
   );
   const commitResults = await pipeline.commitAll(
     proposals,

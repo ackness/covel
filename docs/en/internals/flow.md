@@ -230,6 +230,7 @@ How it runs:
 - There are two kinds: a follower that one execution starts and that runs later, and a manual trigger in background mode.
 - It is queued as a durable job in `_runtime_jobs`. `origin.activation` is `manual` or `event`. A follower is queued in the commit transaction of the execution that triggered it.
 - After a job worker claims the job, it runs the handler **outside** the session lock. Only `processTurnResults` (the finalize transaction plus the automatic snapshot) takes the lock. The final state of the job and the data it writes are committed in the same transaction.
+- It cannot suspend to wait for the player, because no player is waiting on it. If the runtime suspends anyway, the job is recorded as `failed` and nothing is committed.
 
 Why this is safe:
 
@@ -381,13 +382,21 @@ flowchart LR
 
 **After a restart.**
 
-| State of the job                                     | Result                                          |
-| ---------------------------------------------------- | ----------------------------------------------- |
-| `queued`, queue time limit not passed, never claimed | Keeps going                                     |
-| Queue time limit passed                              | Becomes `timed_out`, not replayed automatically |
-| Running, lease expired                               | Becomes `orphaned`, not replayed automatically  |
+| State of the job                      | Result                                          |
+| ------------------------------------- | ----------------------------------------------- |
+| `queued`, queue time limit not passed | Keeps going                                     |
+| Queue time limit passed               | Becomes `timed_out`, not replayed automatically |
+| Running, lease expired                | Becomes `orphaned`, not replayed automatically  |
 
 When the player retries on purpose, a new jobId is created.
+
+**At a normal shutdown.**
+
+- A job that has not reached `committing` is stopped first. Once that execution returns, the job goes back to `queued` with the same jobId, and its `attempt` goes up by 1 at the next claim.
+- It committed nothing, but what it did outside before it stopped (a provider call, for example) is done again when it reruns. So a background job must be safe to run again.
+- A job already in `committing` finishes its commit.
+- If the process exits before the execution returns, the job keeps its lease and is handled as "lease expired" after the restart.
+- The queue time limit still counts from when the job was first queued.
 
 **Guarantees at commit time.**
 

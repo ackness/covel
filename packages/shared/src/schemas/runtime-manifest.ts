@@ -409,6 +409,8 @@ export const runtimeAuthoringManifestSchema = z
         needs: value.schedule?.needs,
         completion: value.schedule?.completion,
         execution: value.schedule?.manual?.execution,
+        builtinTools: (value.type === "function" ? value.function : value.agent)
+          ?.tools?.builtin,
         visibility: value.io?.visibility,
         output: value.io?.output,
         requireExplicitCompletion:
@@ -420,7 +422,14 @@ export const runtimeAuthoringManifestSchema = z
           )
           .map(([name]) => name),
       },
-      AUTHORING_RULE_FIELD_PATHS,
+      {
+        ...AUTHORING_RULE_FIELD_PATHS,
+        builtinTools: [
+          value.type === "function" ? "function" : "agent",
+          "tools",
+          "builtin",
+        ],
+      },
       { authoring: true },
     ))
       ctx.addIssue({

@@ -163,8 +163,17 @@ export function createSqliteSqlRunner(db: SqliteDb): SqlRunner {
       return Promise.resolve();
     },
 
+    deleteReturningCount(table: Table, where: SQL): Promise<number> {
+      const result = db
+        .delete(table as SQLiteTable)
+        .where(where)
+        .run();
+      return Promise.resolve(result.changes);
+    },
+
     // SQLite text columns use the BINARY collation.
     nextWriteOrderSeq,
     byteOrder: (column) => sql`${column}`,
+    mergeJsonObject: () => undefined,
   };
 }

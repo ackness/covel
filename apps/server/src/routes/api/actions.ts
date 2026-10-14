@@ -73,7 +73,8 @@ import {
   decodePluginUserSettingsHeader,
   loadSessionPluginUserSettings,
 } from "./plugin-user-settings.js";
-import { registerActiveTurn } from "./turn-control.js";
+import { registerActionRequest } from "./turn-control.js";
+import { ActionRejectedError } from "./actions/action-rejection.js";
 import {
   assertRecoverableTurn,
   recoveryAction,
@@ -119,26 +120,33 @@ type Env = {
 
 export const actionRoutes = new Hono<Env>();
 
-/** An entry denial after the SSE response opens keeps the JSON guard's code. */
-class SessionEntryRejectedError extends Error {
-  readonly code?: string;
-
-  constructor(body: ApiErrorResponse) {
-    super(body.error);
-    this.code = body.code;
-  }
-}
-
-/** A guard's JSON refusal, for a stream that is already open. */
+/** A guard's JSON refusal, for a stream that is already open; keeps its code. */
 async function entryRejection(
   response: Response,
-): Promise<SessionEntryRejectedError> {
+): Promise<ActionRejectedError> {
   const body = (await response.json()) as Partial<ApiErrorResponse>;
-  return new SessionEntryRejectedError(
-    typeof body.error === "string"
-      ? (body as ApiErrorResponse)
-      : { error: "Plugin approval is required", code: "approval_required" },
-  );
+  return typeof body.error === "string"
+    ? new ActionRejectedError(body.error, body.code)
+    : new ActionRejectedError(
+        "Plugin approval is required",
+        "approval_required",
+      );
+}
+
+/** Steps after a commit are diagnostics or notices: a failure is only logged. */
+async function afterCommit(
+  sessionId: string,
+  step: string,
+  run: () => Promise<unknown>,
+): Promise<void> {
+  try {
+    await run();
+  } catch (error) {
+    console.warn(
+      `[actions] ${step} failed for ${sessionId} after the turn settled:`,
+      error,
+    );
+  }
 }
 
 actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
@@ -280,9 +288,10 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
     // The turn currently writing to this stream. The opening-continuation
     // turn (below) reuses the stream under its own fresh turnId.
     let currentTurnId: string = turnId;
-    // Released in the finally below so a crashed stream never leaves a
-    // stale steer/abort target behind.
-    let releaseTurnControl: (() => void) | undefined;
+    // Registered before anything waits, so a stop reaches this request while
+    // it waits for the lock and between the turns it chains. Released in the
+    // finally below so a crashed stream never leaves a stale target behind.
+    const control = registerActionRequest(sessionId, turnId, requestId);
     // Whether this turn's execution artifact had its commitStatus settled.
     // Consulted by the outer catch: an error after the artifact was persisted
     // but before settlement is a known failure, not a crash, so the row must
@@ -378,17 +387,80 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
     // One complete turn: lock → execute → finalize → snapshot → followers.
     // Extracted so the opening continuation below can chain a second turn on
     // the same SSE stream (each turn is its own transaction + lock tenure).
+    interface TurnOutcome {
+      readonly resultCount: number;
+      readonly durationMs: number;
+      readonly abortReason?: string;
+      readonly committed: boolean;
+      readonly commitError?: string;
+      readonly fanOutFailed: boolean;
+      /** The opening continuation follows this turn. */
+      readonly continues: boolean;
+    }
+    const stoppedOutcome: TurnOutcome = {
+      resultCount: 0,
+      durationMs: 0,
+      abortReason: PLAYER_ABORT_REASON,
+      committed: false,
+      fanOutFailed: false,
+      continues: false,
+    };
+    // The opening the player stopped before it began is recorded as a stopped
+    // continuation turn: nothing of it is stored, and the execution status
+    // offers to run it (`retry_turn` as a continuation).
+    const recordStoppedContinuation = async (stoppedTurnId: string) => {
+      await afterCommit(
+        sessionId,
+        "recording the stopped opening",
+        async () => {
+          const recorder = createTraceRecorder(
+            store,
+            sessionId,
+            stoppedTurnId,
+            traceId,
+          );
+          await recorder.turnStarted({
+            runtimeCount: 0,
+            requestId,
+            origin: "continuation",
+            recoveryAction: recoveryAction(type, payload, true),
+          });
+          await recorder.turnCompleted({
+            durationMs: 0,
+            resultCount: 0,
+            committed: false,
+            abortReason: PLAYER_ABORT_REASON,
+          });
+        },
+      );
+    };
+
     const runTurnOnce = async (turnArgs: {
       readonly turnId: string;
       readonly playerMessage: string;
       readonly suppressPlayerMessage: boolean;
       readonly origin: "player" | "continuation";
-    }) => {
+    }): Promise<TurnOutcome> => {
       let turnOrigin = turnArgs.origin;
       currentTurnId = turnArgs.turnId;
       commitStatusSettled = false;
       hasStartedTurn = false;
       currentRetryScope = undefined;
+      // Stopped before this turn took the lock: it does not start. A stopped
+      // opening is still recorded, under the lock (no settle wait) so its
+      // marker cannot be ordered behind another action's turn.
+      const stopBeforeStart = async (): Promise<TurnOutcome> => {
+        if (turnArgs.origin === "continuation")
+          await afterCommit(sessionId, "recording the stopped opening", () =>
+            c
+              .get("sessionLock")
+              .withLock(sessionId, () =>
+                recordStoppedContinuation(turnArgs.turnId),
+              ),
+          );
+        return stoppedOutcome;
+      };
+      if (control.signal.aborted) return stopBeforeStart();
       const readLiveActionSession = async () => {
         c.get("requestWork")?.signal.throwIfAborted();
         const live = await readLockedSession({
@@ -422,6 +494,26 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
               { type, payload },
             );
             turnOrigin = recovery?.origin ?? turnOrigin;
+          }
+          // A resent input whose turn is already saved would run the whole
+          // turn only for the commit to refuse it: refuse it before it runs.
+          // The commit's check stays the last line of defence.
+          const inputMessageId =
+            turnOrigin === "player" &&
+            (type === "send_message" || type === "execute_command")
+              ? payload.inputMessageId
+              : undefined;
+          if (inputMessageId) {
+            const saved = await store.getMessage(sessionId, inputMessageId);
+            const savedTurnId =
+              saved?.metadata && typeof saved.metadata === "object"
+                ? (saved.metadata as { turnId?: unknown }).turnId
+                : undefined;
+            if (typeof savedTurnId === "string" && savedTurnId.length > 0)
+              throw new ActionRejectedError(
+                "This message was already sent and its turn is saved.",
+                "input_already_committed",
+              );
           }
           // Prep's editable world document is browser-local until the first
           // start action. Persist its value on the session so setup, opening
@@ -473,24 +565,22 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
           const submissionMessageId = submission
             ? crypto.randomUUID()
             : undefined;
-          const registeredTurn = registerActiveTurn(
-            sessionId,
-            turnArgs.turnId,
-            requestId,
-          );
-          releaseTurnControl = registeredTurn.release;
+          const registeredTurnControl = control.beginTurn(turnArgs.turnId);
+          if (control.signal.aborted) {
+            // Stopped while this turn was being admitted: it does not start.
+            if (turnArgs.origin === "continuation")
+              await recordStoppedContinuation(turnArgs.turnId);
+            return { stopped: true as const };
+          }
           const executionSignal = c.get("requestWork")?.signal;
           const turnControl = {
-            ...registeredTurn.turnControl,
+            ...registeredTurnControl,
             ...(executionSignal ? { executionSignal } : {}),
           };
           const commitSignal = executionSignal
-            ? AbortSignal.any([
-                registeredTurn.turnControl.signal!,
-                executionSignal,
-              ])
-            : registeredTurn.turnControl.signal;
-          commitSignal?.throwIfAborted();
+            ? AbortSignal.any([control.signal, executionSignal])
+            : control.signal;
+          commitSignal.throwIfAborted();
           // Progress display metadata follows the live manifests for this run.
           const outputKindByRuntime = new Map(
             activeRuntimes.map((runtime) => [
@@ -942,8 +1032,9 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
             : outcome.error || proposalErrors || "Execution commit failed";
 
           return {
+            stopped: false as const,
             result:
-              !committed && registeredTurn.turnControl.signal?.aborted
+              !committed && control.signal.aborted
                 ? { ...result, abortReason: PLAYER_ABORT_REASON }
                 : result,
             trace,
@@ -962,6 +1053,21 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
           eventBusUnsubscribe = undefined;
         }
       };
+      let locked: Awaited<ReturnType<typeof executeCapturedTurn>>;
+      try {
+        locked = await withSettledExecutionLock(
+          c,
+          sessionId,
+          executeCapturedTurn,
+          undefined,
+          control.signal,
+        );
+      } catch (error) {
+        // The stop ended the wait for the lock or for earlier work to settle.
+        if (control.signal.aborted && !hasStartedTurn) return stopBeforeStart();
+        throw error;
+      }
+      if (locked.stopped) return stoppedOutcome;
       const {
         result,
         trace,
@@ -971,36 +1077,57 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
         wasPreGamePending,
         queuedRuntimeJobs,
         followerJobs,
-      } = await withSettledExecutionLock(c, sessionId, executeCapturedTurn);
+      } = locked;
+      // A request that completes the LAST setup runtime commits on its own
+      // (turn-wide transaction discipline), so the narrator never ran for it:
+      // the opening continuation follows. Guarded to player actions (both
+      // retry actions keep rerun-only semantics) and skipped when the turn
+      // aborted. Until it starts, a stop reaches this request and the opening
+      // does not start; otherwise a stop from here on has nothing to stop.
+      const continues =
+        turnArgs.origin === "player" &&
+        committed &&
+        wasPreGamePending &&
+        !result.abortReason &&
+        !isRuntimeRetry &&
+        type !== "retry_turn";
+      if (!continues) control.finish();
 
       // ——— Post-lock tail (per turn) ———
       // Job announcements and the final SSE writes deliberately run AFTER the
       // session lock releases: a slow client draining execution.completed must
-      // not extend the critical section.
+      // not extend the critical section. The turn is settled by now, so none
+      // of these steps may turn it into a failure.
 
-      await announceDeferredRuntimeJobs(c, queuedRuntimeJobs, (payload) =>
-        writeEvent("runtime.deferred", payload),
+      await afterCommit(sessionId, "announcing deferred jobs", () =>
+        announceDeferredRuntimeJobs(c, queuedRuntimeJobs, (payload) =>
+          writeEvent("runtime.deferred", payload),
+        ),
       );
-
-      announceQueuedRuntimeJobs(c, followerJobs);
-
+      await afterCommit(sessionId, "announcing queued jobs", async () =>
+        announceQueuedRuntimeJobs(c, followerJobs),
+      );
       // Emit runtime progress: complete + persist trace
-      await trace.turnCompleted(
-        {
-          durationMs: result.durationMs,
-          resultCount: result.runtimeResults.length,
-          committed,
-          ...(result.abortReason ? { abortReason: result.abortReason } : {}),
-        },
-        currentRetryScope,
+      await afterCommit(sessionId, "recording turn.completed", () =>
+        trace.turnCompleted(
+          {
+            durationMs: result.durationMs,
+            resultCount: result.runtimeResults.length,
+            committed,
+            ...(result.abortReason ? { abortReason: result.abortReason } : {}),
+          },
+          currentRetryScope,
+        ),
       );
 
       return {
-        result,
+        resultCount: result.runtimeResults.length,
+        durationMs: result.durationMs,
+        ...(result.abortReason ? { abortReason: result.abortReason } : {}),
         committed,
-        commitError,
+        ...(commitError ? { commitError } : {}),
         fanOutFailed,
-        wasPreGamePending,
+        continues,
       };
     };
 
@@ -1011,6 +1138,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
         await retryPendingDimensionSettlements(c, {
           session,
           playerSettings: decodedUserSettings.settings,
+          signal: control.signal,
         });
       const first = await runTurnOnce({
         turnId,
@@ -1020,27 +1148,21 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
       });
       let finalRun = first;
 
-      // Opening continuation: a request that completes the LAST setup runtime
-      // commits on its own (turn-wide transaction discipline), so the narrator
-      // never ran for this request. Chain exactly one main-loop turn — a
-      // second transaction reading the just-committed setup state — so the
-      // player gets the opening narrative without having to send another
-      // message. Guarded to player actions (both retry actions keep rerun-only
-      // semantics) and skipped when the turn aborted or setup is still pending
-      // (more setup interactions to come).
-      if (
-        first.committed &&
-        first.wasPreGamePending &&
-        !first.result.abortReason &&
-        !isRuntimeRetry &&
-        type !== "retry_turn"
-      ) {
-        const settled = await store.getSession(sessionId);
-        if (
-          settled &&
-          settled.status === "active" &&
-          settled.phase === "playing"
-        ) {
+      // Opening continuation: chain exactly one main-loop turn — a second
+      // transaction reading the just-committed setup state — so the player
+      // gets the opening narrative without having to send another message.
+      // Skipped when setup is still pending (more setup interactions to come).
+      if (first.continues) {
+        // The setup turn is saved either way: a failed read skips the
+        // opening, and the player's next message starts the story.
+        const live = await store.getSession(sessionId).catch((error) => {
+          console.warn(
+            `[actions] reading ${sessionId} before the opening failed:`,
+            error,
+          );
+          return null;
+        });
+        if (live && live.status === "active" && live.phase === "playing") {
           finalRun = await runTurnOnce({
             turnId: crypto.randomUUID(),
             playerMessage: "",
@@ -1048,12 +1170,13 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
             origin: "continuation",
           });
         }
+        control.finish();
       }
 
       await writeEvent("execution.completed", {
         runtimeCount: activeRuntimes.length,
-        resultCount: finalRun.result.runtimeResults.length,
-        durationMs: finalRun.result.durationMs,
+        resultCount: finalRun.resultCount,
+        durationMs: finalRun.durationMs,
         committed: finalRun.committed,
         ...(finalRun.commitError ? { error: finalRun.commitError } : {}),
         // Committed, but the events of some of it were not published: read the
@@ -1062,11 +1185,10 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
           ? { resync: true }
           : {}),
         // Surface a turn that was aborted before producing output (e.g. a
-        // TurnStart hook that refuses the turn) so the player gets a visible reason
-        // instead of a silent empty turn.
-        ...(finalRun.result.abortReason
-          ? { abortReason: finalRun.result.abortReason }
-          : {}),
+        // TurnStart hook that refuses the turn, or the player stopping it
+        // before it began) so the player gets a visible reason instead of a
+        // silent empty turn.
+        ...(finalRun.abortReason ? { abortReason: finalRun.abortReason } : {}),
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -1107,6 +1229,11 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
         console.warn(
           `[actions] session lock timeout for ${sessionId}: ${message}`,
         );
+      } else if (err instanceof ActionRejectedError) {
+        // An expected refusal (stale retry, input already saved): no failure.
+        console.warn(
+          `[actions] action refused for ${sessionId}: ${err.code ?? "rejected"}`,
+        );
       } else if (err instanceof FormValidatorFailedError) {
         // The client gets the fixed text; what the plugin threw stays here.
         logRequestError(
@@ -1125,8 +1252,8 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
         "error.occurred",
         lockBusy
           ? { message: SESSION_BUSY_MESSAGE, code: SESSION_BUSY_CODE }
-          : err instanceof SessionEntryRejectedError
-            ? { message: err.message, code: err.code }
+          : err instanceof ActionRejectedError
+            ? { message: err.message, ...(err.code ? { code: err.code } : {}) }
             : err instanceof InteractionSubmissionError
               ? {
                   // Written for the player (or names a malformed request):
@@ -1140,7 +1267,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
               : { message: isDev ? message : "Internal server error" },
       ).catch(() => {});
     } finally {
-      releaseTurnControl?.();
+      control.release();
       eventBusUnsubscribe?.();
       try {
         if (credentialKeys.length > 0) {

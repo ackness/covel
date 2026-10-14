@@ -221,6 +221,53 @@ describe("BrowserVault session commits", () => {
     );
   });
 
+  it("clears the pending action with its commit, and never a newer one", async () => {
+    const first = commit(checkpoint("session-a", 1, "turn-1"));
+    await vault.stagePendingCommit("session-a", "turn-1");
+    await vault.applySessionCommit(first, { clearPendingActionId: "turn-1" });
+    expect(await vault.getPendingCommit("session-a")).toBeNull();
+
+    await vault.stagePendingCommit("session-a", "turn-2");
+    await expect(
+      vault.applySessionCommit(first, { clearPendingActionId: "turn-1" }),
+    ).resolves.toMatchObject({ duplicate: true });
+    expect(await vault.getPendingCommit("session-a")).toBe("turn-2");
+  });
+
+  it("recognises a replay by the server's checkpoint after the local world changed", async () => {
+    const plain = checkpoint("session-a", 1, "turn-1");
+    const server: BrowserCheckpoint = {
+      ...plain,
+      session: { ...plain.session, worldId: "world" },
+    };
+    const local = (name: string): BrowserCheckpoint => ({
+      ...server,
+      world: {
+        id: "world",
+        name,
+        description: "",
+        createdAt: "2026-08-25T00:00:00.000Z",
+      },
+    });
+    await vault.applySessionCommit(commit(local("Before")), {
+      digestOf: server,
+    });
+    await expect(
+      vault.applySessionCommit(commit(local("After")), { digestOf: server }),
+    ).resolves.toMatchObject({ applied: false, duplicate: true });
+
+    // Other data from the server under the same actionId is still refused.
+    const changedServer: BrowserCheckpoint = {
+      ...server,
+      session: { ...server.session, completedPlayerTurns: 9 },
+    };
+    await expect(
+      vault.applySessionCommit(commit(changedServer), {
+        digestOf: changedServer,
+      }),
+    ).rejects.toBeInstanceOf(BrowserVaultConflictError);
+  });
+
   it("rejects credential-shaped session fields before writing", async () => {
     const secret = checkpoint("session-a", 1, "turn-secret", {
       session: {

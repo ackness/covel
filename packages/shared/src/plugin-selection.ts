@@ -65,7 +65,11 @@ export interface SessionPluginResolution {
   readonly rejected: PluginResolutionRejection[];
   readonly unmet: UnmetWorldRequirement[];
 }
-/** Requirements that are a setup problem rather than a choice the player made. */
+/**
+ * Requirements that are a setup problem (no provider, or several and none
+ * chosen) rather than a choice the player made. Neither stops a session: it
+ * starts without that part of the world, and the player is told.
+ */
 export const isBlockingWorldRequirement = (item: UnmetWorldRequirement) =>
   item.code === "missing-provider" || item.code === "ambiguous-provider";
 const singlePoints = new Set<string>(

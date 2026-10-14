@@ -14,6 +14,8 @@ import type {
 } from "./session-commit-handlers.js";
 import { emitCommittedProposal } from "./session-commit-emitter.js";
 import { flushPostCommit } from "./post-commit-fanout.js";
+import { checkCommitProposal } from "./proposal-check.js";
+import type { MediaOwnershipStore } from "../media/canonicalize-media-refs.js";
 export type { KernelStore } from "../session/session-kernel-store.js";
 import type { KernelStore } from "../session/session-kernel-store.js";
 
@@ -97,6 +99,8 @@ export interface CommitPipelineOptions {
    * outside its transaction. PostStateCommit still runs after commit.
    */
   readonly preStateCommitApplied?: boolean;
+  /** Canonicalize the MediaRefs of every proposal against the session. */
+  readonly mediaStore?: MediaOwnershipStore;
 }
 
 export function createCommitPipeline(
@@ -162,6 +166,16 @@ export function createCommitPipeline(
       if ("error" in hooked) return { committed: false, error: hooked.error };
       effectiveProposal = hooked.proposal;
     }
+
+    // Checked after any hook rewrite, so the handler sees what is stored.
+    const checked = await checkCommitProposal(
+      effectiveProposal,
+      options.mediaStore,
+    );
+    if ("error" in checked) {
+      return { committed: false, error: checked.error, code: checked.code };
+    }
+    effectiveProposal = checked.proposal;
 
     const result = await handler(effectiveProposal);
 

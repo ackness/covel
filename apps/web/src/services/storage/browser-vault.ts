@@ -16,6 +16,22 @@ export interface ApplySessionCommitResult {
   readonly checkpoint: BrowserCheckpoint;
 }
 
+export interface ApplySessionCommitOptions {
+  /**
+   * The checkpoint whose digest identifies this commit when the same
+   * `actionId` is applied again. Defaults to the applied checkpoint. A commit
+   * downloaded from the server passes the server's checkpoint: the browser
+   * swaps its own world in before applying, and that world may change before a
+   * replay.
+   */
+  readonly digestOf?: BrowserCheckpoint;
+  /**
+   * Clear the session's pending commit in the same transaction, when it is
+   * still this action (a newer staged action is kept).
+   */
+  readonly clearPendingActionId?: string;
+}
+
 export interface BrowserVaultSession {
   readonly session: SessionRecord;
   readonly sessionId: string;
@@ -281,20 +297,34 @@ export class BrowserVault {
 
   async applySessionCommit(
     value: SessionCommit,
+    options: ApplySessionCommitOptions = {},
   ): Promise<ApplySessionCommitResult> {
     const commit = validateSessionCommit(value);
     assertNoSecrets(commit.checkpoint.session);
     // Hash before opening the write transaction; native crypto is asynchronous.
-    const digest = await hashCheckpointJson(stableJson(commit.checkpoint));
+    const digest = await hashCheckpointJson(
+      stableJson(options.digestOf ?? commit.checkpoint),
+    );
+    const sessionId = commit.checkpoint.sessionId;
+    const clearPending = async () => {
+      if (options.clearPendingActionId === undefined) return;
+      const pending = await this.db.pendingCommits.get(sessionId);
+      if (pending?.actionId === options.clearPendingActionId) {
+        await this.db.pendingCommits.delete(sessionId);
+      }
+    };
 
     return this.db.transaction(
       "rw",
-      this.db.checkpoints,
-      this.db.heads,
-      this.db.commits,
-      this.db.worlds,
+      [
+        this.db.checkpoints,
+        this.db.heads,
+        this.db.commits,
+        this.db.worlds,
+        this.db.pendingCommits,
+      ],
       async () => {
-        const id = commitKey(commit.checkpoint.sessionId, commit.actionId);
+        const id = commitKey(sessionId, commit.actionId);
         const existingCommit = await this.db.commits.get(id);
         if (existingCommit) {
           if (
@@ -314,6 +344,7 @@ export class BrowserVault {
               `Session ${commit.checkpoint.sessionId} has commit metadata but no checkpoint`,
             );
           }
+          await clearPending();
           return {
             applied: false,
             duplicate: true,
@@ -347,6 +378,7 @@ export class BrowserVault {
           committedAt: next.committedAt,
         });
         if (next.world) await this.db.worlds.put(structuredClone(next.world));
+        await clearPending();
         return {
           applied: true,
           duplicate: false,

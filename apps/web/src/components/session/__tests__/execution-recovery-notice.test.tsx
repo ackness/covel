@@ -108,4 +108,48 @@ describe("execution recovery notice", () => {
       screen.queryByRole("button", { name: "Retry unfinished turn" }),
     ).toBeNull();
   });
+  it("shows a status the server could not check as a check in progress, with no retry or stop (F-203)", () => {
+    setup({
+      ...interrupted,
+      status: { state: "unknown", retry: { type: "retry_turn", payload: {} } },
+    });
+    expect(screen.getByRole("status")).toBeTruthy();
+    expect(screen.getByText("Checking the unfinished turn")).toBeTruthy();
+    expect(
+      screen.getByText(/cannot tell right now whether a turn is running/),
+    ).toBeTruthy();
+    expect(
+      screen.queryByRole("button", { name: "Retry unfinished turn" }),
+    ).toBeNull();
+    expect(screen.queryByRole("button", { name: "Stop task" })).toBeNull();
+  });
+  it.each([undefined, "restore failed"])(
+    "shows stopped unknown checks while hydration remains unfinished (error: %s)",
+    (error) => {
+      const { onRefresh } = setup({
+        ...interrupted,
+        status: { state: "unknown" },
+        hydrating: true,
+        stalled: true,
+        ...(error ? { error } : {}),
+      });
+      const notice = screen.getByRole("alert");
+      expect(screen.getByText("Could not confirm the turn")).toBeTruthy();
+      expect(notice.querySelector(".animate-spin")).toBeNull();
+      fireEvent.click(screen.getByRole("button", { name: "Check status" }));
+      expect(onRefresh).toHaveBeenCalledOnce();
+    },
+  );
+
+  it("says when automatic checks stopped and checks again on request (F-203)", () => {
+    const { onRefresh } = setup({
+      ...interrupted,
+      status: { state: "unknown" },
+      stalled: true,
+    });
+    expect(screen.getByRole("alert")).toBeTruthy();
+    expect(screen.getByText("Could not confirm the turn")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Check status" }));
+    expect(onRefresh).toHaveBeenCalledOnce();
+  });
 });

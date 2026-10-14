@@ -185,6 +185,14 @@ export interface SessionState {
    */
   olderMessagesCursor: PageCursor | null;
 
+  /**
+   * Subscription cursor of the session view this visit restored from
+   * (`SessionSnapshot.eventCursor`). The subscription replays from it, or
+   * reads the session again when its first stream opened later than the view
+   * was read. `null` until the view has been applied.
+   */
+  initialEventCursor: string | null;
+
   /** All sessions for the current world (for switching). */
   worldSessions: api.SessionRecord[];
 
@@ -276,6 +284,11 @@ export interface ExecutionRecovery {
   hydrating: boolean;
   checking: boolean;
   error?: string;
+  /**
+   * The server kept answering `unknown` and automatic checks have stopped;
+   * the player checks again from the notice.
+   */
+  stalled?: boolean;
 }
 
 export type SessionAction =
@@ -318,6 +331,7 @@ export type SessionAction =
       sessionId: string;
       status?: SessionExecutionStatus;
       error?: string;
+      stalled?: boolean;
     }
   // Player abort terminal state: drop the uncommitted streaming placeholder
   // message(s) — the server never commits partial narrative on abort, so
@@ -347,6 +361,7 @@ export type SessionAction =
       cursor: PageCursor | null;
     }
   | { type: "SET_OLDER_MESSAGES_CURSOR"; cursor: PageCursor | null }
+  | { type: "SET_INITIAL_EVENT_CURSOR"; cursor: string | null }
   | {
       type: "MERGE_INITIAL_STATE_PATCHES";
       patches: Array<{

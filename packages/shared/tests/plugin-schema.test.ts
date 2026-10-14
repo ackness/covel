@@ -300,6 +300,48 @@ describe("plugin manifest dataSchemas", () => {
       );
     }
   });
+
+  it("accepts references to world dimensions found at any depth", () => {
+    const withReference = (reference: Record<string, unknown>) => ({
+      id: "probe",
+      kind: "plugin",
+      description: "Probe",
+      contributes: {
+        data: {
+          events: {
+            version: 1,
+            schema: "./schemas/events.json",
+            accepts: ["probe.events@1"],
+            authoring: { title: "Events", references: [reference] },
+          },
+        },
+      },
+    });
+    const parses = (reference: Record<string, unknown>) =>
+      pluginManifestSchema.safeParse(withReference(reference)).success;
+
+    expect(
+      parses({
+        path: "when.**.dimension",
+        to: "world-dimension",
+        within: ["path"],
+      }),
+    ).toBe(true);
+    expect(parses({ path: "**.dimension", to: "world-dimension" })).toBe(true);
+    // `**` must lead to a field, once at a time.
+    expect(parses({ path: "when.**", to: "world-dimension" })).toBe(false);
+    expect(
+      parses({ path: "when.**.**.dimension", to: "world-dimension" }),
+    ).toBe(false);
+    // An attribute type means nothing for a dimension.
+    expect(
+      parses({
+        path: "when.**.dimension",
+        to: "world-dimension",
+        type: "number",
+      }),
+    ).toBe(false);
+  });
 });
 
 describe("kernel extension conflicts", () => {
