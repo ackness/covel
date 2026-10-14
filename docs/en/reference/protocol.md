@@ -1307,7 +1307,7 @@ About `lastPlayerInput`:
 `turn-digest@1` contains `turnId/playerMessage/locale/narrativeText/toolCallSummaries/lastPlayerInput/runtimeResults`:
 
 - `runtimeResults` lists only the `runtimeId` and status (`success/failed/skipped/suspended`) that the source turn had already seen at the moment of recording. It does not include consumers that have not run yet, and it does not include retry seeds from other turns.
-- Only successful story text and accepted tool calls go into the text summary.
+- Only successful story text and accepted tool calls go into the text summary. Tool calls from a runtime declaring `io.concealed: true` are excluded from `toolCallSummaries`; `runtimeResults` still includes its ID and status.
 
 How snapshots are saved:
 

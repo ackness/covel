@@ -35,6 +35,7 @@ import {
   describeUnresolvedCharacter,
   findCharacterAliasConflict,
   mergeCharacterAliases,
+  modelFacingJson,
   resolveCharacter,
 } from "@covel/plugin-handlers-utils";
 import type { ToolExecutionContext, ToolModule } from "../types.js";
@@ -747,7 +748,7 @@ export function createCharacterTools(
         ]);
         return {
           _text: schema
-            ? JSON.stringify(schema)
+            ? JSON.stringify(modelFacingJson(schema))
             : "No character schema is available.",
           schema,
         };
