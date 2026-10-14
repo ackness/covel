@@ -54,6 +54,7 @@
 | DELETE | `/api/install/world/github/update/:id`     | 取消暂存更新，返回 `{ok:true}`                                                     |
 
 - **预览的形状**和插件包的预览相同：`id`、`version`、`description`、`author`、`source`、`token`、`expiresAt`。`author` 是清单里的作者名，没有声明时是 `null`。
+- `description` 是 `I18nText`，包含加载器合并的 `world.<locale>.yaml` 摘要翻译，由客户端按界面语言调用 `resolveI18nText`。
 - `hasServerCode` 固定是 `false`。它的意思是“这条安装路径不会加载代码”，不是“这个文件夹里没有脚本文件”。
 - 安装和更新的签名按“插件还是世界”和“安装还是更新”区分，不能拿一种去冒充另一种。
 - ZIP 安装的接口 `/api/install/world` 仍然可用。

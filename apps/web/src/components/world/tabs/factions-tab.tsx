@@ -69,7 +69,8 @@ export function FactionsTab({ dimensions, onChange, t, problems }: TabProps) {
         <div key={faction.id} className="border border-border p-4 space-y-3">
           <div className="flex items-center justify-between">
             <span className="text-sm font-medium">
-              {text(faction.name) || `${t("world.factions")} #${fi + 1}`}
+              {text(faction.name) ||
+                t("world.unnamedFaction", { number: fi + 1 })}
             </span>
             <Button
               variant="ghost"

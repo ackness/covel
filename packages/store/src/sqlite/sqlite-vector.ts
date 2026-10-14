@@ -51,6 +51,7 @@ import type {
   SearchVectorsInput,
   VectorSearchResult,
   DeleteVectorsInput,
+  GetVectorPayloadsInput,
   VectorIndexProgressScope,
   CommitVectorIndexBatchInput,
 } from "../vector-store.js";
@@ -475,6 +476,29 @@ export function createSqliteVectorCapability(
     }));
   }
 
+  async function getVectorPayloads(
+    input: GetVectorPayloadsInput,
+  ): Promise<Map<string, string | null>> {
+    const payloads = new Map<string, string | null>();
+    if (input.keys.length === 0) return payloads;
+    const target = await resolveSessionVectorTarget(input.sessionId);
+    if (!target) return payloads;
+    const select = sqlite.prepare(
+      `SELECT payload FROM ${physicalTableName(target.modelRegistryId)}
+        WHERE session_id = ? AND plugin_id = ? AND namespace = ? AND data_key = ?`,
+    );
+    for (const key of new Set(input.keys)) {
+      const row = select.get(
+        input.sessionId,
+        input.pluginId,
+        input.namespace,
+        key,
+      ) as { payload: string | null } | undefined;
+      if (row) payloads.set(key, row.payload);
+    }
+    return payloads;
+  }
+
   async function getVectorIndexProgress(
     scope: VectorIndexProgressScope,
   ): Promise<string | null> {
@@ -603,6 +627,7 @@ export function createSqliteVectorCapability(
     commitVectorIndexBatch,
     upsertVector,
     searchVectors,
+    getVectorPayloads,
     deleteVectors,
     ensureVectorModel,
     lockSessionEmbeddingModel,

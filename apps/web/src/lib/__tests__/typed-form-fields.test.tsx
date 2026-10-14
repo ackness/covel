@@ -14,13 +14,19 @@ import {
   buildInitialFormState,
   MessageBlockRenderer,
 } from "../../components/session/chat-messages/message-blocks.js";
+import { emitToast } from "../toast-channel.js";
+import i18n from "@/i18n";
 import type { StreamMessage } from "../../stores/session-store.js";
 
 vi.mock("../../stores/session-store.js", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../stores/session-store.js")>()),
   useSessionActions: () => ({ upsertInteractionDraft: vi.fn() }),
 }));
-afterEach(cleanup);
+vi.mock("../toast-channel.js", () => ({ emitToast: vi.fn() }));
+afterEach(() => {
+  cleanup();
+  vi.clearAllMocks();
+});
 const block = {
   type: "interactive_form",
   interactionId: "allocation",
@@ -146,3 +152,37 @@ it("submits untouched zero defaults and edited values with their original types"
   fireEvent.click(screen.getByRole("button", { name: "Save" }));
   expect(submitted).toHaveBeenCalledTimes(2);
 });
+
+it.each(["turn", "handler"])(
+  "rejects a form missing its %s without sending chat or losing edits",
+  async (missing) => {
+    const send = vi.fn();
+    const markSubmitted = vi.fn();
+    const submit = vi.fn(async () => {});
+    render(
+      <MessageBlockRenderer
+        msg={{ ...message, turnId: missing === "turn" ? undefined : "turn" }}
+        block={block}
+        submitted={false}
+        executing={false}
+        onSubmitInteraction={missing === "handler" ? undefined : submit}
+        onSendMessage={send}
+        onSubmitBlock={markSubmitted}
+      />,
+    );
+    const points = screen.getByRole("spinbutton", { name: "Points" });
+    fireEvent.change(points, { target: { value: "3" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() =>
+      expect(emitToast).toHaveBeenCalledWith(
+        "error",
+        i18n.t("form.missingInteraction"),
+      ),
+    );
+    expect(send).not.toHaveBeenCalled();
+    expect(markSubmitted).not.toHaveBeenCalled();
+    expect(submit).not.toHaveBeenCalled();
+    expect((points as HTMLInputElement).value).toBe("3");
+    expect(points.closest("fieldset")?.disabled).toBe(false);
+  },
+);

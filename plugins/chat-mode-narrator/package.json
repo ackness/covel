@@ -9,7 +9,7 @@
   },
   "devDependencies": {
     "@covel/plugin-loader": "workspace:*",
-    "vitest": "^5.0.1"
+    "vitest": "^5.0.3"
   },
   "dependencies": {
     "@covel/plugin-handlers-utils": "workspace:*"

@@ -283,6 +283,7 @@ describe("operator auth on hosted administration routes", () => {
           kind: "plugin",
           id: "fixture-plugin",
           restartRequired: true,
+          hasServerCode: true,
         }),
       )
       .mockResolvedValueOnce(okJson({ ok: true }));
@@ -292,10 +293,12 @@ describe("operator auth on hosted administration routes", () => {
     await api.createSession("world-1");
     await api.refreshModelDb();
     await api.pingPreset({ presetId: "preset-1" });
-    await api.installPackage(
-      "plugin",
-      new File(["zip"], "fixture.zip", { type: "application/zip" }),
-    );
+    await expect(
+      api.installPackage(
+        "plugin",
+        new File(["zip"], "fixture.zip", { type: "application/zip" }),
+      ),
+    ).resolves.toMatchObject({ hasServerCode: true });
     await api.uninstallPlugin("fixture-plugin");
 
     for (const index of [0, 1, 3, 4, 5, 6]) {

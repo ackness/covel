@@ -16,6 +16,9 @@ const mocks = vi.hoisted(() => ({
   plugins: [] as SessionPlugin[],
   specs: { right: [], message: [], left: [] } as UISpecsResponse,
   fetchSpecs: vi.fn(),
+  health: {} as {
+    storage?: { data: { backend: "memory"; frontendMode: "remote" } };
+  },
   upsertInteractionDraft: vi.fn(),
 }));
 vi.mock("@/stores/session-store.js", () => ({
@@ -28,7 +31,7 @@ vi.mock("@/stores/session-store.js", () => ({
 }));
 vi.mock("@/services/api.js", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/services/api.js")>()),
-  fetchServerHealth: async () => ({}),
+  fetchServerHealth: async () => mocks.health,
   fetchUiSpecs: mocks.fetchSpecs,
   listPluginData: async () => [],
 }));
@@ -106,6 +109,7 @@ const plugin = (id: string): SessionPlugin => ({
   tags: [],
 });
 beforeEach(async () => {
+  mocks.health = {};
   mocks.upsertInteractionDraft.mockReset();
   await i18n.changeLanguage("en-US");
   mocks.plugins = [plugin("provider-a"), plugin("provider-b")];
@@ -264,4 +268,14 @@ it("shows the raw Database tab only when the developer view is on", async () => 
     await getSettings().set("ui.developerView", false);
   });
   view.unmount();
+});
+
+it("translates the memory storage badge", async () => {
+  await i18n.changeLanguage("zh-CN");
+  mocks.health = {
+    storage: { data: { backend: "memory", frontendMode: "remote" } },
+  };
+  render(<RightPanel sessionId="s" world={null} statePatchRevision={0} />);
+  expect(await screen.findByText("内存")).toBeTruthy();
+  expect(screen.queryByText("Memory")).toBeNull();
 });

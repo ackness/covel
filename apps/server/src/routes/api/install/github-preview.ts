@@ -1,8 +1,9 @@
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
+import { compileManifestLabels, parseLocaleFile } from "@covel/plugin-loader";
 import {
   githubPluginPreviewSchema,
-  packageAuthorSchema,
+  i18nTextSchema,
   type GithubPluginPreview,
 } from "@covel/shared";
 import {
@@ -10,10 +11,7 @@ import {
   INSTALL_RECEIPT_FILE,
   type ExtractedEntry,
 } from "./shared.js";
-import {
-  readPluginFrontmatter,
-  validatePluginBundle,
-} from "./plugin-bundle.js";
+import { validatePluginBundle } from "./plugin-bundle.js";
 import { packageReceiptSchema } from "./package-files.js";
 
 const signingKey = randomBytes(32);
@@ -77,66 +75,36 @@ export function inspectBundle(
   entries: readonly ExtractedEntry[],
   reserved: ReadonlySet<string>,
 ) {
-  const { pluginId } = validatePluginBundle(entries, reserved);
-  const pkg = z
-    .object({
-      version: z.string().max(100).optional(),
-      dependencies: z.record(z.string(), z.unknown()).optional(),
-      optionalDependencies: z.record(z.string(), z.unknown()).optional(),
-      peerDependencies: z.record(z.string(), z.unknown()).optional(),
-    })
-    .parse(
-      JSON.parse(
-        entries
-          .find((e) => e.relativePath === "package.json")!
-          .content.toString("utf8"),
-      ),
-    );
-  if (
-    [pkg.dependencies, pkg.optionalDependencies, pkg.peerDependencies].some(
-      (deps) => deps && Object.keys(deps).length > 0,
-    )
-  ) {
-    throw httpError(
-      400,
-      "Plugin must ship self-contained runtime files without runtime dependencies; the installer never runs package managers or build scripts",
-    );
-  }
-  const manifest = entries.find((e) => e.relativePath === "PLUGIN.md")!;
-  const data = readPluginFrontmatter(manifest.content.toString("utf8"));
-  const localized = z
-    .record(z.string(), z.string())
-    .safeParse(data.description);
-  const description =
-    typeof data.description === "string"
-      ? data.description
-      : localized.success
-        ? (localized.data["en-US"] ??
-          localized.data.en ??
-          localized.data["zh-CN"] ??
-          localized.data.zh ??
-          "")
-        : "";
+  const { pluginId, manifest, version, hasServerCode } = validatePluginBundle(
+    entries,
+    reserved,
+  );
+  const labels = entries
+    .filter((entry) => /^locales\/[^/]+\.ya?ml$/.test(entry.relativePath))
+    .sort((a, b) => a.relativePath.localeCompare(b.relativePath))
+    .flatMap((entry) => {
+      const file = parseLocaleFile(
+        entry.content.toString("utf8"),
+        entry.relativePath,
+      );
+      const overlay = file?.document["PLUGIN.md"];
+      return file && overlay != null ? [{ ...file, overlay }] : [];
+    });
+  const { data } = compileManifestLabels(manifest.rawFrontmatter, labels);
+  const description = i18nTextSchema.parse(data.description ?? "");
   return {
     id: pluginId,
-    version: pkg.version ?? null,
-    description: description.slice(0, 1000),
-    author: packageAuthorSchema.safeParse(data.author).data?.name ?? null,
-    hasServerCode:
-      entries.some((e) =>
-        /\.(?:[cm]?js|tsx?|node|wasm)$/i.test(e.relativePath),
-      ) ||
-      entries
-        .filter((e) => /(?:PLUGIN|RUNTIME)\.md$/.test(e.relativePath))
-        .some((e) => {
-          const manifest = readPluginFrontmatter(e.content.toString("utf8"));
-          const runtime = z
-            .record(z.string(), z.unknown())
-            .safeParse(manifest.runtime ?? manifest);
-          return Boolean(
-            manifest.entry ||
-            (runtime.success && (runtime.data.function || runtime.data.guard)),
-          );
-        }),
+    version,
+    description:
+      typeof description === "string"
+        ? description.slice(0, 1000)
+        : Object.fromEntries(
+            Object.entries(description).map(([locale, text]) => [
+              locale,
+              text.slice(0, 1000),
+            ]),
+          ),
+    author: manifest.plugin.author?.name ?? null,
+    hasServerCode,
   };
 }

@@ -34,12 +34,14 @@ export interface FunctionStoreView {
    */
   listTurnMessages(limit?: number): Promise<unknown[]>;
   /**
-   * Page the full turn-message log oldest-first, including messages already
-   * folded into compaction summaries. `cursor` marks the last message read
-   * (or echoes `after` for an empty page); pass it back as `after` to
-   * continue, or persist it to resume incrementally later. `hasMore` is
-   * false once the current end of the log is reached. `limit` defaults to
-   * 100 and is capped at 500.
+   * Page the full turn-message log in the order messages were saved,
+   * including messages already folded into compaction summaries. `cursor`
+   * marks the last message read (or echoes `after` for an empty page); pass
+   * it back as `after` to continue, or persist it to resume incrementally
+   * later: a message saved after the cursor always comes after it, even when
+   * its timestamp is older (a background execution saved after a turn).
+   * `hasMore` is false once the current end of the log is reached. `limit`
+   * defaults to 100 and is capped at 500.
    */
   readTurnMessages(options?: {
     readonly after?: string;
