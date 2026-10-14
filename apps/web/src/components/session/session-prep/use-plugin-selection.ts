@@ -1,11 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import {
-  DIMENSION_CONTRACT,
-  disabledDependents,
-  providedContracts,
-  resolveSessionPlugins,
-} from "@covel/shared";
+import { disabledDependents, resolveSessionPlugins } from "@covel/shared";
 import {
   collectPluginTags,
   defaultSelectedPluginIds,
@@ -50,8 +45,8 @@ export interface UsePluginSelectionResult {
   applyPack: (packId: string) => void;
   /**
    * Back to the smallest set that still tells a story: the narrative plugins
-   * (the selected ones, else the core ones), what they and the world need,
-   * the provider of the world's dimensions, and nothing else. Every other core or world-requested plugin is excluded.
+   * (the selected ones, else the core ones) and what they and the world need.
+   * Every other core or world-requested plugin is excluded.
    */
   resetToMinimal: () => void;
   togglePlugin: (name: string) => void;
@@ -295,28 +290,18 @@ export function usePluginSelection(
           )
     ).map((plugin) => plugin.id);
     // Resolve with no core default, so only what the narrative plugins and
-    // the world's required contracts pull in stays. The dimension provider
-    // stays too: a world that declares dimensions cannot start without it.
+    // the world's required contracts pull in stays.
     const minimal = new Set(
       resolveSessionPlugins({
         requested: story,
         plugins: candidates.map((plugin) => ({ ...plugin, kind: "plugin" })),
-        requiredContracts: [...requiredContracts, DIMENSION_CONTRACT],
+        requiredContracts,
       }).active,
     );
     setActivePluginPackId(null);
     setPackRequestedPlugins(new Set());
     setPackExcludedPlugins(new Set());
-    // Dimensions are an extra requirement of this reset, so retain their
-    // chosen provider even when it is not requested by default as core.
-    const dimensionProviders = candidates
-      .filter(
-        (plugin) =>
-          minimal.has(plugin.id) &&
-          providedContracts(plugin).includes(DIMENSION_CONTRACT),
-      )
-      .map((plugin) => plugin.id);
-    setOtherSelectedPlugins(new Set([...story, ...dimensionProviders]));
+    setOtherSelectedPlugins(new Set(story));
     setExcludedPlugins(
       new Set(
         [
