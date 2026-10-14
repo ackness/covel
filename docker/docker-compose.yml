@@ -1,12 +1,15 @@
 ##
-# Covel — personal self-hosted stack (PostgreSQL persistence)
+# Covel — personal self-hosted stack (PostgreSQL persistence, optional)
+#
+# SQLite is the default for self-hosting (docker/docker-compose.sqlite.yml,
+# `pnpm docker:build`). Use this stack when you want PostgreSQL.
 #
 # Usage:
-#   pnpm docker:build     # Build + start (first time or after code changes)
-#   pnpm docker:up        # Start existing containers
-#   pnpm docker:down      # Stop (keep volumes)
-#   pnpm docker:down-all  # Stop + delete volumes (fresh start)
-#   pnpm docker:logs      # Tail logs
+#   pnpm docker:pg:build     # Build + start (first time or after code changes)
+#   pnpm docker:pg:up        # Start existing containers
+#   pnpm docker:pg:down      # Stop (keep volumes)
+#   pnpm docker:pg:down-all  # Stop + delete volumes (fresh start)
+#   pnpm docker:pg:logs      # Tail logs
 #
 # Prerequisites:
 #   1. Docker Compose 2.24+ (`env_file.required` is used below).

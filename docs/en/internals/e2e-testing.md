@@ -217,7 +217,7 @@ In this case, exclude the specs that support only MemoryStore (see [Using a serv
 To clean up the database container:
 
 ```bash
-pnpm docker:down
+pnpm docker:pg:down
 ```
 
 ## Where Output Goes
