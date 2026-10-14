@@ -538,8 +538,7 @@ function PluginPanelView({
             );
     return (
       <p className="text-xs text-muted-foreground italic">
-        {t("plugin.invalidPanelSpec", "Invalid panel spec")}: {specLabel} —{" "}
-        {reason}
+        {t("plugin.invalidPanelSpecDetail", { label: specLabel, reason })}
       </p>
     );
   }

@@ -84,6 +84,7 @@ export function MediaPreviewDialog({
                 className="shrink-0"
                 onClick={() =>
                   downloadMedia({
+                    t,
                     ref: mediaRef,
                     sessionId,
                     filenameStem: title || "media",

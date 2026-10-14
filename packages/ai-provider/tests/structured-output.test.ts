@@ -70,6 +70,7 @@ describe.each(protocols)("$name structured output", ({ name, create }) => {
       await create().generateObject(config, {
         model: "synthetic",
         messages,
+        instructionLocale: "zh",
         schema,
       });
     }
@@ -80,6 +81,8 @@ describe.each(protocols)("$name structured output", ({ name, create }) => {
       z.toJSONSchema(schemas[1]!, { io: "input" }),
     );
     expect(postedBody(0)).not.toEqual(postedBody(1));
+    if (name !== "responses")
+      expect(JSON.stringify(postedBody())).toContain("只返回完全符合");
     if (name === "responses") {
       expect(postedBody().text).toMatchObject({
         format: { type: "json_schema", name: "structured_output" },
@@ -152,6 +155,7 @@ describe.each(protocols)("$name structured output", ({ name, create }) => {
       const params = {
         model: "synthetic",
         messages,
+        instructionLocale: "zh" as const,
         responseFormat: { type: "json_schema" as const, schema },
       };
       if (streaming) {
@@ -182,6 +186,8 @@ describe.each(protocols)("$name structured output", ({ name, create }) => {
       }
       const body = postedBody();
       expect(requestedSchema(body, name)).toEqual(schema);
+      if (name !== "responses")
+        expect(JSON.stringify(body)).toContain("只返回完全符合");
       if (name === "chat")
         expect(body.response_format).toEqual({ type: "json_object" });
       if (name === "responses")
@@ -216,4 +222,17 @@ describe.each(protocols)("$name structured output", ({ name, create }) => {
     );
     expect(content.match(/<response-format>/g)).toHaveLength(1);
   });
+});
+
+it("uses the selected language for Anthropic's omitted-history opener", async () => {
+  mockResponse({});
+  await createAnthropicMessagesAdapter().generateText(config, {
+    model: "synthetic",
+    instructionLocale: "zh",
+    messages: [{ role: "assistant", content: "此前的回答" }],
+  });
+  expect(postedBody().messages).toEqual([
+    { role: "user", content: "（对话从此前的回合继续。）" },
+    { role: "assistant", content: "此前的回答" },
+  ]);
 });

@@ -1263,7 +1263,7 @@ Fork and community plugin grants:
 - When the dimension provider bound in a snapshot is a community plugin, the child cannot enable it when it is created:
   - If the snapshot has dimension data or settlement receipts for that provider: fork returns `409 { "code": "dimension_provider_required" }`, and no child session is created.
   - If the snapshot has no dimension data: the child session is created normally, but without this binding.
-- After a process restart, volatile grants are not restored either. `GET /api/sessions/:id/plugins` shows a community plugin that lacks its current grant as inactive. It keeps the plugin selection saved in the session, so it can be authorized again later.
+- After a process restart, volatile grants are not restored either. `GET /api/sessions/:id/plugins` shows a community plugin that lacks its current grant as inactive (`approvalRequired: true`). It keeps the plugin selection saved in the session, so it can be authorized again later.
 
 ### Character data
 
@@ -2799,7 +2799,7 @@ Sends a structured command to a plugin in a session. It does not go through chat
 
 Calls the handler that the plugin registers in `entry` with `covel.registerRpc`, or a default framework handler (such as `slash-debug`).
 
-- The plugin must be one of the session's currently enabled plugins. The server checks once before approval, and again after taking the session lock. If the plugin is disabled, it returns `404 plugin_not_active`. It does not run the handler and does not add a new approval. A late request from an old panel is also subject to this check.
+- The plugin must be one of the session's currently enabled plugins that can run now. The server checks once before approval, and again after taking the session lock. If the plugin is disabled, it returns `404 plugin_not_active`. It does not run the handler and does not add a new approval. A plugin the player confirmed that cannot run now (see `unavailable[]`) gets the same error, and the message gives the reason. A late request from an old panel is also subject to this check.
 - `pluginId: "framework"` means a default framework action. It is not part of the plugin set that is enabled, and it runs under its own entry conditions. `framework` is a reserved ID that no plugin can take, so such a request runs only a framework default action; a request that names a plugin ID runs only an action that plugin registered itself.
 - The handler runs inside the session lock and has 30 seconds. Past that the handler's `ctx.signal` aborts, and every later call it makes to `ctx.store` is refused. Store calls already in progress finish before the request returns `504 handler_timeout` and releases the lock. Data it wrote before the limit is kept, not rolled back.
 
@@ -3603,6 +3603,8 @@ Lists the plugins this session can see, and the commands the session can run rig
 - `items[]`: each item adds `active`, `locked`, `sessionState`, and `serverCodeApproved` to `PluginSummary`, and can also include `approvalRequired`, `autoAdded`, and `rejection`.
 - `items[].runtimes` has exactly the same shape as in `GET /api/plugins`.
 - `commands[]`: the only executable command catalog. It is filtered by the plugins that are currently enabled, plus the framework commands. Each command is listed once at the top level, and it is not repeated per plugin.
+- `unavailable[]`: the plugins the player confirmed that cannot run now. Each item is a `rejection` (`pluginId`, `code`, `reason`). The cause can be that the plugin is not installed (`unknown-plugin`), failed to load, or that its installed version lacks a provider or conflicts with another member. The game goes on.
+- The list, the commands and the executor read the same set: the session's saved `activePlugins`, checked against the installed versions, with no new plugin added. The rules are in [Session plugin selection](./plugins.md#session-plugin-selection). This endpoint only reads; it does not rewrite the session.
 
 **Response:**
 
@@ -5677,18 +5679,18 @@ For the full classification table, see [protocol.md § 1. Event types](./protoco
 
 These events are also full members of `CovelEvent`. `COVEL_EVENT_META` says for each one whether it is `forwardToActionStream`. The exhaustiveness check in the front end requires that each one is either handled or explicitly ignored.
 
-| Event                                                                  | Source                           | Forwarded to `/api/actions` | Description                                                                                                       |
-| ---------------------------------------------------------------------- | -------------------------------- | :-------------------------: | ----------------------------------------------------------------------------------------------------------------- |
-| `runtime.skipped`                                                      | `actions.ts`                     |             No              | A runtime was skipped because of cooldown / startTurn / maxTriggerCount                                           |
-| `character.upserted`                                                   | `session-commit-emitter.ts`      |             Yes             | Sent after a `character.upsert` proposal is committed                                                             |
-| `tool.calling` / `tool.completed` / `tool.failed`                      | TurnEmitter                      |             Yes             | Tool-call traces (for the debug timeline)                                                                         |
-| `llm.calling` / `llm.responded` / `message.completed`                  | TurnEmitter                      |             Yes             | LLM call traces                                                                                                   |
-| `block.emitted` / `state.patch.applied`                                | TurnEmitter                      |             Yes             | Traces for a block being emitted / a state patch being applied                                                    |
-| `hook.fired` / `hook.rewrote` / `hook.aborted`                         | TurnEmitter                      |             Yes             | Hook behavior traces                                                                                              |
-| `gateway.calling` / `gateway.responded` / `gateway.failed`             | TurnEmitter (`withGatewayTrace`) |             Yes             | Traces for a function runtime calling a provider through `ctx.gateway` (same as `llm.*`)                          |
-| `function.executing` / `function.completed`                            | TurnEmitter                      |             No              | Start and end traces of a function runtime handler; only goes through the subscription channel and `trace_events` |
-| `recursive.calling` / `recursive.completed` / `recursive.failed`       | TurnEmitter                      |             No              | Traces of a recursive runtime; only goes through the subscription channel (topic `trace`)                         |
-| `utils.fetch.calling` / `utils.fetch.responded` / `utils.fetch.failed` | `withUtilsTrace`                 |             No              | Traces of a plugin's own wire calling a provider over HTTP (`ctx.utils.fetchWithRetry`)                           |
+| Event                                                                  | Source                           | Forwarded to `/api/actions` | Description                                                                                                                                                            |
+| ---------------------------------------------------------------------- | -------------------------------- | :-------------------------: | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `runtime.skipped`                                                      | `actions.ts`                     |             No              | A runtime was skipped because of cooldown / startTurn / maxTriggerCount                                                                                                |
+| `character.upserted`                                                   | `session-commit-emitter.ts`      |             Yes             | Sent after a `character.upsert` proposal is committed                                                                                                                  |
+| `tool.calling` / `tool.completed` / `tool.failed`                      | TurnEmitter                      |             Yes             | Tool-call traces (for the debug timeline)                                                                                                                              |
+| `llm.calling` / `llm.responded` / `message.completed`                  | TurnEmitter                      |             Yes             | LLM call traces                                                                                                                                                        |
+| `block.emitted` / `state.patch.applied`                                | TurnEmitter                      |             Yes             | Traces for a block being emitted / a state patch being applied                                                                                                         |
+| `hook.fired` / `hook.rewrote` / `hook.aborted`                         | TurnEmitter                      |             Yes             | Hook behavior traces                                                                                                                                                   |
+| `gateway.calling` / `gateway.responded` / `gateway.failed`             | TurnEmitter (`withGatewayTrace`) |             Yes             | Traces for a function runtime or an extension provider calling a provider through `ctx.gateway` (same as `llm.*`); a failure carries the `usage` the provider reported |
+| `function.executing` / `function.completed`                            | TurnEmitter                      |             No              | Start and end traces of a function runtime handler; only goes through the subscription channel and `trace_events`                                                      |
+| `recursive.calling` / `recursive.completed` / `recursive.failed`       | TurnEmitter                      |             No              | Traces of a recursive runtime; only goes through the subscription channel (topic `trace`)                                                                              |
+| `utils.fetch.calling` / `utils.fetch.responded` / `utils.fetch.failed` | `withUtilsTrace`                 |             No              | Traces of a plugin's own wire calling a provider over HTTP (`ctx.utils.fetchWithRetry`)                                                                                |
 
 See [protocol.md § Forwarded internal runtime events](./protocol.md#forwarded-runtime-internal-events-apiactions-forwards-them-included-in-covelevent) for details.
 

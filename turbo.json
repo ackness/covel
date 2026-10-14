@@ -1,5 +1,6 @@
 {
   "$schema": "https://v2-9-4.turborepo.dev/schema.json",
+  "agentGuidance": false,
   "cacheMaxAge": "7d",
   "cacheMaxSize": "2GB",
   "globalDependencies": ["tsconfig.json", "mise.toml"],
@@ -151,6 +152,12 @@
     },
     "lint": {
       "dependsOn": ["^build"]
+    },
+    "@covel/plugin-handlers-utils#lint": {
+      "dependsOn": ["^build", "build"]
+    },
+    "@covel/plugin-handlers-utils#test": {
+      "dependsOn": ["^build", "build"]
     },
     "@covel/web#lint": {
       "dependsOn": ["^build", "generate:routes"]

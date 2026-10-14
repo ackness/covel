@@ -1,3 +1,6 @@
+import { PROMPT_CACHE_BREAKPOINT_MARKER } from "@covel/shared";
+import { textWireAdapter } from "../src/text/wire-registry.js";
+import type { TextGenerationParams } from "../src/types.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 
@@ -229,4 +232,86 @@ describe("which sessions may use a text protocol a plugin registers", () => {
       text: expect.stringContaining("acme-1@"),
     });
   });
+});
+
+describe("plugin text wire boundary", () => {
+  it.each(["text", "stream", "object", "fallback"] as const)(
+    "strips markers from strings and text blocks for %s without mutating input",
+    async (mode) => {
+      const marker = PROMPT_CACHE_BREAKPOINT_MARKER;
+      const params: TextGenerationParams = {
+        model: "test",
+        instructionLocale: "zh",
+        messages: [
+          { role: "system", content: `one${marker}two` },
+          {
+            role: "user",
+            content: [
+              { type: "text", text: `three${marker}four` },
+              { type: "image", image: "https://example.org/image.png" },
+            ],
+          },
+          {
+            role: "assistant",
+            content: null,
+            toolCalls: [{ id: "call", name: "test", arguments: "{}" }],
+          },
+        ],
+      };
+      const original = structuredClone(params);
+      const received: TextGenerationParams[] = [];
+      const wire = echoWire({
+        generateText: async (_config, input) => {
+          received.push(input);
+          return {
+            text: "{}",
+            finishReason: "stop",
+            usage: { inputTokens: 0, outputTokens: 0 },
+          };
+        },
+        async *streamText(_config, input) {
+          received.push(input);
+        },
+        ...(mode === "object"
+          ? {
+              async generateObject<T>(
+                _config: unknown,
+                input: TextGenerationParams,
+              ) {
+                received.push(input);
+                return {
+                  object: {} as T,
+                  finishReason: "stop",
+                  usage: { inputTokens: 0, outputTokens: 0 },
+                };
+              },
+            }
+          : {}),
+      });
+      const adapter = textWireAdapter(wire);
+      if (mode === "text") await adapter.generateText({}, params);
+      else if (mode === "stream")
+        await Array.fromAsync(adapter.streamText({}, params));
+      else
+        await adapter.generateObject({}, { ...params, schema: z.object({}) });
+      expect(received).toHaveLength(1);
+      expect(JSON.stringify(received)).not.toContain(marker);
+      expect(received[0]?.messages).toEqual(
+        expect.arrayContaining([
+          { role: "system", content: "onetwo" },
+          {
+            role: "user",
+            content: [
+              { type: "text", text: "threefour" },
+              { type: "image", image: "https://example.org/image.png" },
+            ],
+          },
+          original.messages[2],
+        ]),
+      );
+      if (mode === "fallback")
+        expect(JSON.stringify(received)).toContain("只返回完全符合");
+      expect(params).toEqual(original);
+    },
+  );
 });

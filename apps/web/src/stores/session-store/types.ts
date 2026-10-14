@@ -163,6 +163,8 @@ export interface SessionState {
   sessionCommands: import("@covel/shared").SessionSlashCommand[];
   /** False until this session's command directory has been read once. */
   sessionCommandsLoaded: boolean;
+  /** Confirmed plugins of this session that cannot run now. */
+  unavailableSessionPlugins: readonly import("@covel/shared").PluginResolutionRejection[];
 
   // Active session
   world: api.WorldSummary | null;
@@ -385,6 +387,7 @@ export type SessionAction =
       type: "LOAD_SESSION_PLUGINS";
       plugins: api.SessionPlugin[];
       commands?: import("@covel/shared").SessionSlashCommand[];
+      unavailable?: readonly import("@covel/shared").PluginResolutionRejection[];
     }
   | { type: "TOGGLE_SESSION_PLUGIN"; pluginId: string; active: boolean }
   | { type: "BACKFILL_TURN_ID"; turnId: string; requestId: string }

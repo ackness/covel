@@ -590,3 +590,70 @@ describe("kernel extension execution", () => {
     ).resolves.toEqual({ messages: [message] });
   });
 });
+
+describe("kernel extension model calls", () => {
+  it("traces a provider's gateway calls under the provider, a failure with its usage", async () => {
+    const { point, host, abort } = fixture("single");
+    host.register(
+      "alpha",
+      { point: point.id, id: "summary" },
+      {
+        handler: async (_value: typeof input, ctx: PluginExtensionContext) => {
+          await ctx.gateway!.generateText({ prompt: "hi" });
+          await ctx.gateway!.generateText({ prompt: "again" }).catch(() => {});
+          return { value: 1 };
+        },
+      },
+    );
+    const refused = Object.assign(new Error("refused"), {
+      details: { usage: { inputTokens: 7, outputTokens: 2 } },
+    });
+    const emitted: Array<[string, Record<string, unknown>]> = [];
+    await host
+      .createExecution({
+        sessionId: "session",
+        locale: "en",
+        turnId: "turn",
+        signal: abort.signal,
+        readPluginData: async () => [],
+        gateway: {
+          resolveSlot: () => null,
+          generateObject: async () => {
+            throw new Error("unused");
+          },
+          generateText: vi
+            .fn()
+            .mockResolvedValueOnce({
+              text: "ok",
+              finishReason: "stop",
+              usage: { inputTokens: 3, outputTokens: 1 },
+            })
+            .mockRejectedValueOnce(refused),
+        },
+        emitter: {
+          sessionId: "session",
+          turnId: "turn",
+          emit: async (type, payload) => {
+            emitted.push([type, payload]);
+          },
+        },
+      })
+      .run(point, input);
+    expect(emitted).toContainEqual([
+      "gateway.responded",
+      expect.objectContaining({
+        pluginId: "alpha",
+        runtimeId: "alpha/summary",
+        usage: { inputTokens: 3, outputTokens: 1 },
+      }),
+    ]);
+    expect(emitted).toContainEqual([
+      "gateway.failed",
+      expect.objectContaining({
+        pluginId: "alpha",
+        runtimeId: "alpha/summary",
+        usage: { inputTokens: 7, outputTokens: 2 },
+      }),
+    ]);
+  });
+});

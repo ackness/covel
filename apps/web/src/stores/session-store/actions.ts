@@ -586,6 +586,7 @@ export function useBuildSessionActions({
             type: "LOAD_SESSION_PLUGINS",
             plugins: [...res.items],
             commands: [...res.commands],
+            unavailable: res.unavailable,
           }),
       });
     } catch {

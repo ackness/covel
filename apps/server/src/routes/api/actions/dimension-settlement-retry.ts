@@ -19,6 +19,7 @@ import { resolveMediaImageFlow } from "../media-image-flow.js";
 import { withSettledSessionLock } from "../plugin-rpc/settled-request.js";
 import { createPluginRpcRuntimeTurnRunner } from "../plugin-rpc/runtime-turn.js";
 import { sessionApprovalScope } from "../session/session-guard.js";
+import { runnablePluginIds } from "../session/plugins.js";
 import { buildTurnExecutorDeps } from "../turn-execution-deps.js";
 
 /**
@@ -79,6 +80,7 @@ export async function retryPendingDimensionSettlements(
       return;
     const extensionHost = c.get("pluginExtensions");
     if (!extensionHost) return;
+    const runnable = runnablePluginIds(session.activePlugins, pluginRegistry);
     const context = await extensionHost
       .createExecution({
         sessionId,
@@ -86,7 +88,7 @@ export async function retryPendingDimensionSettlements(
         signal: c.req.raw.signal,
         runtimeIdentities: [...pluginRegistry.getAll()].flatMap(
           ([pluginId, entry]) =>
-            session.activePlugins.includes(pluginId)
+            runnable.includes(pluginId)
               ? pluginRuntimeManifests(entry).map((parsed) => parsed.manifest)
               : [],
         ),

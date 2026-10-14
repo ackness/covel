@@ -88,7 +88,14 @@ export function resolveSessionPlugins(args: {
   readonly plugins: readonly SessionPluginCandidate[];
   /** Contracts the session's world needs; the world acts as one more requirer. */
   readonly requiredContracts?: readonly string[];
+  /**
+   * Resolve a set the player already confirmed: add nothing (no `core`
+   * package, world provider or dependency) and drop the members the
+   * installed versions cannot run together.
+   */
+  readonly fixed?: boolean;
 }): SessionPluginResolution {
+  const fixed = args.fixed === true;
   const registry = new Map(args.plugins.map((p) => [p.id, p]));
   const requested = new Set(args.requested);
   const worldRequired = [...new Set(args.requiredContracts ?? [])];
@@ -170,18 +177,21 @@ export function resolveSessionPlugins(args: {
     return { candidates, choice };
   };
   for (const id of requested) add(id, false);
-  for (const p of args.plugins)
-    if (p.kind === "core" && !active.has(p.id)) add(p.id, true);
+  if (!fixed)
+    for (const p of args.plugins)
+      if (p.kind === "core" && !active.has(p.id)) add(p.id, true);
   // World providers join before plugin dependencies resolve, so the loop below
   // also resolves what they require.
-  for (const contract of worldRequired) {
+  for (const contract of fixed ? [] : worldRequired) {
     if (provided(contract)) continue;
     const { choice } = chooseProvider(contract);
     if (choice) add(choice.id, true);
   }
 
-  // The active Set iterator includes newly added dependencies and terminates on cycles.
-  for (const id of active) {
+  // The active Set iterator includes newly added dependencies and terminates on
+  // cycles. A fixed set adds no provider: the pass after the conflict check
+  // drops a member whose requirement no other member provides.
+  for (const id of fixed ? [] : active) {
     const p = registry.get(id)!;
     for (const required of p.requires ?? []) {
       if (provided(required)) continue;
@@ -365,4 +375,27 @@ export function resolveSessionPlugins(args: {
     rejected: [...rejected.values()],
     unmet,
   };
+}
+
+/**
+ * A session's plugin set: the plugins the player confirmed (the session's
+ * `activePlugins`), checked against the installed versions. Nothing joins on
+ * its own, a newly installed `core` package included. A member that is not
+ * installed, or whose installed version lacks a provider or conflicts with an
+ * earlier member, is left out and reported in `rejected`; the rest play on.
+ * Approval is not part of the set: the trust gate checks it per plugin.
+ */
+export function resolveConfirmedSessionPlugins(args: {
+  readonly confirmed: readonly string[];
+  readonly plugins: readonly Omit<SessionPluginCandidate, "authorized">[];
+  readonly requiredContracts?: readonly string[];
+}): SessionPluginResolution {
+  return resolveSessionPlugins({
+    requested: args.confirmed,
+    plugins: args.plugins.map((plugin) => ({ ...plugin, authorized: true })),
+    ...(args.requiredContracts
+      ? { requiredContracts: args.requiredContracts }
+      : {}),
+    fixed: true,
+  });
 }

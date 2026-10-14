@@ -22,6 +22,7 @@ import {
   assertGenerationPayload,
   assertStreamCompleted,
   assertSuccessfulFinishReason,
+  withFailureUsage,
 } from "./generation-completion.js";
 import type { UsageSummary } from "../types.js";
 import {
@@ -450,16 +451,20 @@ export function createOpenAiResponsesAdapter(): ModelProviderAdapter {
       }
       const response = await postResponses(config, body);
       const payload = await parseJson(response);
+      // A failed answer may still be billed; the error keeps its usage.
+      const reportedUsage = readOpenAiResponsesUsage(payload);
       const diagnostics = readResponseDiagnostics(
         payload,
         "responses",
         "openai-responses",
+        reportedUsage,
       );
       assertSuccess(response, payload, "openai-responses");
-      assertGenerationPayload(payload, "openai-responses");
+      assertGenerationPayload(payload, "openai-responses", reportedUsage);
       assertSuccessfulFinishReason(
         mapResponseStatus(payload.status),
         "openai-responses",
+        reportedUsage,
       );
 
       const reply = splitThinkTags(readResponsesOutputText(payload));
@@ -493,16 +498,20 @@ export function createOpenAiResponsesAdapter(): ModelProviderAdapter {
         },
       });
       const payload = await parseJson(response);
+      // A failed answer may still be billed; the error keeps its usage.
+      const reportedUsage = readOpenAiResponsesUsage(payload);
       const diagnostics = readResponseDiagnostics(
         payload,
         "responses",
         "openai-responses",
+        reportedUsage,
       );
       assertSuccess(response, payload, "openai-responses");
-      assertGenerationPayload(payload, "openai-responses");
+      assertGenerationPayload(payload, "openai-responses", reportedUsage);
       assertSuccessfulFinishReason(
         mapResponseStatus(payload.status),
         "openai-responses",
+        reportedUsage,
       );
 
       const reply = splitThinkTags(readResponsesOutputText(payload));
@@ -598,9 +607,13 @@ export function createOpenAiResponsesAdapter(): ModelProviderAdapter {
       try {
         for await (const payload of iterateSsePayloads(response)) {
           diagnostics.push(payload);
+          // A failed response reports what it used as a completed one does.
+          const reported = payload.response as
+            Record<string, unknown> | undefined;
+          if (reported?.usage) usage = readOpenAiResponsesUsage(reported);
           if (payload.error || payload.type === "response.failed")
-            diagnostics.assertNotRefused("openai-responses");
-          assertGenerationPayload(payload, "openai-responses");
+            diagnostics.assertNotRefused("openai-responses", usage);
+          assertGenerationPayload(payload, "openai-responses", usage);
           if (payload.type === "response.output_item.done")
             outputItems.set(Number(payload.output_index ?? 0), payload.item);
           const reasoningDelta = reasoning.push(payload);
@@ -667,11 +680,11 @@ export function createOpenAiResponsesAdapter(): ModelProviderAdapter {
           }
         }
       } catch (error) {
-        diagnostics.assertNotRefused("openai-responses");
-        throw error;
+        diagnostics.assertNotRefused("openai-responses", usage);
+        throw withFailureUsage(error, usage);
       }
-      diagnostics.assertNotRefused("openai-responses");
-      assertStreamCompleted(completed, "openai-responses");
+      diagnostics.assertNotRefused("openai-responses", usage);
+      assertStreamCompleted(completed, "openai-responses", usage);
       yield* replyParts(thinkSplitter.flush());
 
       // Emit accumulated tool calls before done. The Responses API references
