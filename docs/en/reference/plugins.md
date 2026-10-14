@@ -102,7 +102,7 @@ Extract facts supported by runtime-inputs.narrative.value, then call save-facts.
 | Root field                                      | Meaning                                                                                                                                                          |
 | ----------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `id`, `kind`                                    | Package identity. `kind` is `core` or `plugin`.                                                                                                                  |
-| `version`, `displayName`, `description`, `tags` | Metadata. Tags group and filter plugins in session prep; they do not determine runtime scheduling.                                                                                                         |
+| `version`, `displayName`, `description`, `tags` | Metadata. Tags group and filter plugins in session prep; they do not determine runtime scheduling.                                                               |
 | `covel`                                         | The range of host versions the package works with, such as `">=0.0.45"`. A host outside that range does not install or load the package.                         |
 | `author`, `license`, `homepage`                 | Author information, shown only for display. See [Author information](#author-information).                                                                       |
 | `provides`                                      | Versioned contract strings, or `{contract, default: true}`.                                                                                                      |
@@ -376,6 +376,7 @@ The budget decides how many retries can actually be used:
 - If there is not enough time left for a second attempt (60 seconds or less remain), the call is sent only once, and `function.timeoutMs` ends it.
 - A request that the provider rejects is still handled by the gateway's transport retries and fallback models. It is not sent again here.
 - A handler whose single call really needs more time should raise `function.timeoutMs`.
+- The host creates a request budget from the remaining time when each logical call starts. HTTP retries, fallback models, and a stalled-call resend share 8 transport attempts. The gateway default of 120 seconds adds no extra ceiling, and the budget cannot extend the runtime deadline.
 
 ### Inputs and outputs
 

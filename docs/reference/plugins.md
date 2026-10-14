@@ -102,7 +102,7 @@ Extract facts supported by runtime-inputs.narrative.value, then call save-facts.
 | 根字段                                          | 含义                                                                                                        |
 | ----------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
 | `id`, `kind`                                    | 包身份；`kind` 为 `core` 或 `plugin`                                                                        |
-| `version`, `displayName`, `description`, `tags` | 元数据；标签用于准备页的分组和筛选，不决定运行时调度                                                                         |
+| `version`, `displayName`, `description`, `tags` | 元数据；标签用于准备页的分组和筛选，不决定运行时调度                                                        |
 | `covel`                                         | 适配的宿主版本范围，如 `">=0.0.45"`；范围之外的宿主不安装也不加载该包                                       |
 | `author`, `license`, `homepage`                 | 作者信息，只用于展示；见[作者信息](#作者信息)                                                               |
 | `provides`                                      | 版本化契约字符串，或 `{contract, default: true}`                                                            |
@@ -376,6 +376,7 @@ Agent 的超时、重试和步数都在 `agent.loop` 里。
 - 剩余时间不够放第二次（不超过 60 秒）时只发一次，由 `function.timeoutMs` 结束。
 - 被服务商拒绝的请求仍由网关的传输层重试和后备模型处理，不在这里重发。
 - 单次调用确实需要更久的 handler 应该调大 `function.timeoutMs`。
+- 宿主在每次逻辑调用开始时按剩余时间建立请求预算，HTTP 重试、备用模型和停滞重发共用 8 次传输额度。该预算不再额外受网关默认 120 秒限制，也不能延长 runtime 的截止时间。
 
 ### 输入和输出
 
