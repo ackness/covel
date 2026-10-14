@@ -740,6 +740,8 @@ After a namespace declares `search`, its records enter the framework's memory re
 - The other initial default requests, the world's `requested` list, and the requests the player added by hand are kept. An explicit exclusion still wins.
 - A manual change clears the highlight on the pack card. The source of the old pack is still remembered, though, so the next switch does not add the old pack's plugins back. A plugin in a pack that the player re-enables by hand is kept as a manual choice.
 - The resolver still checks the world's `requires` on its own. Do not treat `requested` as a required item that cannot be canceled.
+- A gameplay pack can have `excluded`: choosing the pack turns those plugins off, `kind: core` ones included, and the player can turn them back on. Switching to the next pack lifts only the exclusions the previous pack added; the player's own exclusions stay. The exclusions of the pack the world selects at the start apply from the beginning. A plugin that is not installed does not appear in `excluded`.
+- The "Back to the minimal set" button keeps only the narrative plugins (the selected ones, or the core ones when none is selected), the plugin that provides `world.dimensions@1`, and the plugins that these and the world's `requires` pull in. Every other core plugin and every plugin the world `requested` is excluded, and the pack highlight is cleared.
 
 **A save keeps the set the player confirmed.**
 

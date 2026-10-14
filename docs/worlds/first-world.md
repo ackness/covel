@@ -73,7 +73,7 @@ characterSchema:
 | `pluginPolicy.presetId` | 开局默认的玩法包。`traditional-story` 是内置的传统叙事组合       |
 | `characterSchema`       | 这个世界的角色有哪些类型和属性。这里只定义了一个 1 到 5 的“胆识” |
 
-内置的玩法包有三个：`traditional-story`（传统叙事）、`dialogue-mode`（角色对话）、`low-cost`（省 token）。
+内置的玩法包有四个：`traditional-story`（传统叙事）、`dialogue-mode`（角色对话）、`low-cost`（省 token）、`narrative-only`（只要叙事）。
 
 ## 3. 写 `WORLD.md`
 
