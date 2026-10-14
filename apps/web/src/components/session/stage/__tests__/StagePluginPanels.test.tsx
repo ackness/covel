@@ -100,9 +100,12 @@ describe("stage plugin panels", () => {
     expect(screen.getAllByTestId("loaded-panel")).toHaveLength(1);
     expect(screen.getByTestId("loaded-panel").textContent).toBe("stage-only");
     expect(api.fetchUiSpecs).toHaveBeenCalledTimes(1);
-    expect(screen.getByTestId("stage-decision-input")).toHaveProperty(
-      "value",
-      "Visit the docks",
+    // The panel drafts from an effect after it mounts, so wait for the text.
+    await waitFor(() =>
+      expect(screen.getByTestId("stage-decision-input")).toHaveProperty(
+        "value",
+        "Visit the docks",
+      ),
     );
     expect(onSendMessage).not.toHaveBeenCalled();
     fireEvent.change(screen.getByTestId("stage-decision-input"), {
