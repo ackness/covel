@@ -174,5 +174,6 @@ export function createSqliteSqlRunner(db: SqliteDb): SqlRunner {
     // SQLite text columns use the BINARY collation.
     nextWriteOrderSeq,
     byteOrder: (column) => sql`${column}`,
+    mergeJsonObject: () => undefined,
   };
 }

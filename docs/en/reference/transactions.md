@@ -46,12 +46,17 @@ Usage is simple: put the writes that must succeed or fail together into `fn`, an
 2. **A rollback restores the state you can observe.** After a transaction rolls back, every read method returns the same result it returned just before the transaction started. Records that existed before keep their original identity. Changes made in the transaction are discarded.
 3. **There is no shared handle.** The transaction's scope is tied only to this one `fn` call. The outer store does not stay stuck in a "transaction in progress" state, and a failed transaction does not block the store.
 4. **Writes outside a transaction take effect at once.** A write method that is not called inside `withTransaction` is permanent as soon as it finishes.
-5. **Nesting is not allowed.** Every backend rejects opening a transaction inside another one (see [below](#nesting-is-rejected-on-every-backend)). When you need a section that can be rolled back on its own, use `tx.savepoint`:
+5. **Inside a transaction, write only through `tx`.** A write method called on the outer root store from inside `fn` (including code `fn` awaits) is refused on every backend: it throws `RootStoreWriteInTransactionError` and writes nothing. If the error leaves `fn`, the whole transaction rolls back. Read methods are not restricted. Code that runs after `fn` has finished (a timer it left behind, for example) is not inside the transaction and writes as usual.
+6. **Nesting is not allowed.** Every backend rejects opening a transaction inside another one (see [below](#nesting-is-rejected-on-every-backend)). When you need a section that can be rolled back on its own, use `tx.savepoint`:
    - SQLite runs `SAVEPOINT` / `ROLLBACK TO` on its single connection.
    - PostgreSQL opens a Drizzle nested transaction, which means a savepoint on the kept connection.
    - MemoryStore keeps a lazy snapshot for each savepoint level it opens.
 
 **Message IDs cannot repeat.** A normal `addMessage` insert rejects a global message ID that is already taken, even if another session holds it. The rejection does not change the existing row. When an error leaves a transaction callback, the earlier writes roll back. A failed savepoint rolls back only its own writes. The other method, `commitPlayerInputMessage`, keeps its own explicit "idempotent takeover" rule.
+
+**Append-only record IDs cannot repeat.** The IDs of turn results, tool calls, runtime outputs, interaction records, state changes, events, traces, turn messages, player inputs and session summaries are global primary keys. On every backend, writing an existing ID again is an error, and the existing row is unchanged.
+
+**A batch of lorebook entries is atomic.** If one entry in an `upsertLorebookEntries` batch fails (for example, its ID contains U+0000), nothing in the batch is written.
 
 **Snapshot refresh.** When the same owner refreshes a snapshot, the capture time and the content are updated in the same write. The update follows the commit or rollback of the outer transaction. It does not change the snapshot ID, and it does not relax the rejection of cross-session ownership.
 
@@ -230,6 +235,7 @@ Session locks order only the turn writes of the same session. They are per sessi
 
 - Reads and writes outside a transaction wait until the transaction ends.
 - Operations issued through the `tx` scope run in place. They belong to this transaction, and queuing them would deadlock.
+- A read issued through the root store from inside the transaction callback runs in place; a `DataStore` write is refused (rule 5). The mirror MediaStore that shares the connection is not covered by rule 5: its writes still run in place.
 - Whether a call is "inside or outside" is decided by `AsyncLocalStorage`. So a truly concurrent caller that starts while a transaction is paused at an `await` is not mistaken for a nested call.
 
 **The gate is set per connection, not per store.** All code that makes changes through the same `node:sqlite` handle shares one gate, obtained with `getConnectionWriteGate(db)` in `sqlite/shared-connection.ts`. The users are:
@@ -270,6 +276,7 @@ If vector or media writes did not go through this gate, such writes from another
 - Ingestion uses its own per-session lock (an advisory lock when there are several PostgreSQL hosts). It never uses the turn lock.
 - Lifecycle replacements and deletions take locks in this order: session → world if needed → ingestion → storage transaction.
 - They wait for all deferred vector, cursor, hash, and archive deletions to finish before they replace or delete the state. The same applies to a checkpoint that keeps `createdAt`.
+- A memory index rebuild ([`POST /api/sessions/:id/memory-index/rebuild`](./api.md#post-apisessionsidmemory-indexrebuild)) also changes the model under the ingestion lock: it waits for the ingestion in progress to finish, and schedules a new one once the model is changed.
 - While an embedding run is in progress, normal turns can still commit. The ingester merges the commits into the next pass so that it reads them.
 - On shutdown, tracked memory tasks are drained before the storage is closed.
 - An embedding failure does not change the result of a committed turn.
@@ -612,8 +619,11 @@ Credentials and shutdown:
 - Deletes run first, then upserts. All changes are committed together with the new progress value.
 - A CAS conflict returns `false`, and the vectors and the progress both stay unchanged.
 - If the session incarnation has expired or does not exist, or if any single change is invalid, it throws and rolls back the whole batch.
+- The optional `expectedModelRegistryId` names the model the batch was embedded with. When the session is locked to another model, it throws and rolls back the whole batch.
 
 Per backend: PostgreSQL holds the parent session row with `FOR KEY SHARE`. SQLite uses an immediate transaction. Memory uses the store boundary where it serializes access. These operations do not run on the business-data view of `StoreTransaction`.
+
+**Changing the model.** `VectorModelOps.resetSessionVectorIndex({ sessionId, expectedSessionCreatedAt, expectedModelRegistryId, target })` deletes, in one transaction, every vector and all progress the session has under its current model, then locks the session to `target` (`null` leaves it unlocked). When the session is not locked to `expectedModelRegistryId`, it returns `false` and changes nothing; a wrong incarnation throws. PostgreSQL locks the session row with `FOR UPDATE`, which waits for vector writes holding `FOR KEY SHARE`.
 
 **Where the progress is kept.** Progress belongs to `vector_index_progress`, not to `plugin_data`.
 

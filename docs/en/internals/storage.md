@@ -81,6 +81,8 @@ When you add a table or a query, put it in the module for its feature area, add 
 - When progress is written, the previously serialized value is compared. The session's "incarnation" is also checked inside the backend's write boundary. (If the same ID is deleted and then recreated, it counts as a different incarnation.)
 - Deleting or replacing a session clears both the progress and the vectors. A transaction rollback restores the progress. See [session deletion](#server-world-and-session-deletion) for the exception when SQLite's vector extension is unavailable.
 - Business snapshots, forks and browser checkpoints do not copy it, so each of them rebuilds its own index.
+- When the vector model changes (the player rebuilds the index in the session), `resetSessionVectorIndex` deletes, in one transaction, every vector the session has in the old model's table and all of its progress, then locks the session to the new model or leaves it unlocked. It first compares the model the session is locked to with the one the caller saw, and changes nothing when they differ. The same contract tests hold all three backends to it.
+- A progress write also names the model the batch was embedded with (`expectedModelRegistryId`). When the session has moved to another model, the whole batch is refused, so vectors computed with the old model never land in the new index.
 
 > [!IMPORTANT]
 > This changes the development-time storage contract. Development databases and browser checkpoints that contain the old layout, where the index was written into `plugin_data`, must be rebuilt. There is no compatibility for reading, migrating or filtering old data.
@@ -411,6 +413,12 @@ When a column of an existing table changes in a way an old database cannot follo
 - `commitPlayerInputMessage` is a separate idempotent "accept input" path. Its semantics do not apply to a plain insert.
 - The browser checkpoint validation rejects duplicate IDs in `checkpoint.messages` before it opens the replacement transaction. The same ID being used by another record domain is still valid.
 
+**Lists have a complete order.** Rows with the same time are ordered by the bytes of their ID on every backend, so MemoryStore, SQLite and PostgreSQL return the same order, and a `limit` cuts at the same row:
+
+- `listEvents`, `listStateChanges`, `listSnapshots`, `listSuspensions`, `listExpiredSuspensions`: `(createdAt, id)`;
+- `listInteractionRecords`: `(timestamp, id)`, newest first;
+- `listStateSchemas`: `(tableName, id)`. Updating a row does not move it.
+
 **Display message order.** Full lists, cursor pages and forks are ordered by `createdAt`, preserving write order within a timestamp. Checkpoint arrays preserve this order for timestamp ties. After filtering by the snapshot boundary, a fork keeps the parent’s order and assigns new message IDs. Browser pagination uses the cursor row’s position in the checkpoint array. If no row matches both the cursor ID and timestamp, only earlier timestamps are returned.
 
 **Updates do not change rows.** An update changes what a row holds. It does not replace it with another row:
@@ -420,6 +428,13 @@ When a column of an existing table changes in a way an old database cannot follo
 - A re-saved suspension keeps its turn, runtime, plugin and creation time.
 
 Memory, SQLite and PostgreSQL agree on this, and the shared contract tests check it.
+
+**Merging session metadata.** `updateSession` merges the patch's `metadata` shallowly into the stored object: each key replaces its value, a key set to `undefined` is removed (`null` is kept), and an empty result is stored as no metadata. A session that does not exist is left alone.
+
+- The merge is atomic on every backend. PostgreSQL merges inside one UPDATE; SQLite and memory read and then write inside their serialized write boundary. So when two concurrent updates change different keys, both survive.
+- Two concurrent updates of the same key still have one winner. A caller that reads metadata to decide what to write must hold the session lock.
+
+The shared contract tests check this.
 
 **Suspensions.** A pending suspension stores the whole request it will continue: the messages up to the suspension point, the buffered tool calls and proposals, and the frozen input. On resume this record is sent out as it is, so none of it can be rebuilt from the session's later state.
 

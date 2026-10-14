@@ -157,4 +157,18 @@ export interface SqlRunner {
    * ASCII of one shape and needs none.
    */
   readonly byteOrder: (column: Column) => SQL;
+
+  /**
+   * An UPDATE value that shallow-merges into the JSON object held by `column`
+   * inside the UPDATE itself: the keys of `set` replace their values, the
+   * keys in `remove` are dropped, and an empty object becomes NULL. Two such
+   * updates of one row then never lose each other's keys. `undefined` on
+   * SQLite, which merges with a read and a write under its serialized write
+   * gate instead, so no other writer runs between them.
+   */
+  readonly mergeJsonObject: (
+    column: Column,
+    set: Readonly<Record<string, unknown>>,
+    remove: readonly string[],
+  ) => SQL | undefined;
 }

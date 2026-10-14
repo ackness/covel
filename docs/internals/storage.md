@@ -81,6 +81,8 @@ Covel 不用一个大而全的存储适配器去覆盖所有环境。它按部�
 - 写进度时会比较上一次序列化的值，并在后端的写入边界内校验会话的“化身”（同一个 ID 被删除后重建，算不同的化身）。
 - 删除或替换会话会同时清掉进度和向量；事务回滚会恢复进度。SQLite 向量扩展不可用时的例外见[会话删除](#server-world-and-session-deletion)。
 - 业务快照、分支（fork）和浏览器检查点都不复制它，所以它们会各自重建索引。
+- 换向量模型时（玩家在会话里重建索引），`resetSessionVectorIndex` 在一个事务里删掉会话在旧模型表里的全部向量和全部进度，再把会话锁到新模型，或者解除锁定。它先比较会话当前锁定的模型和调用方看到的是否相同，不同就什么都不改。三个后端由同一套契约测试守住。
+- 写进度时还带上这一轮嵌入用的模型（`expectedModelRegistryId`）。会话已经换了模型，这一批整批被拒绝，旧模型算出的向量不会落进新索引。
 
 > [!IMPORTANT]
 > 这改变了开发期的存储契约。含有旧式“索引写在 `plugin_data` 里”的开发数据库和浏览器检查点需要重建；没有旧数据读取、迁移或过滤兼容。
@@ -411,6 +413,12 @@ Dexie BrowserVault 的 schema 归 `apps/web` 所有，不作为服务端 `DataSt
 - `commitPlayerInputMessage` 是另一条幂等的“采纳输入”路径，它的语义不适用于普通插入。
 - 浏览器检查点校验会在打开替换事务之前，拒绝 `checkpoint.messages` 里重复的 ID。同一个 ID 被别的记录领域使用仍然有效。
 
+**列表的完整顺序。** 时间相同的行，每个后端都按 ID 的字节序排，所以 MemoryStore、SQLite 和 PostgreSQL 返回同样的顺序，`limit` 切到的也是同样的行：
+
+- `listEvents`、`listStateChanges`、`listSnapshots`、`listSuspensions`、`listExpiredSuspensions`：`(createdAt, id)`；
+- `listInteractionRecords`：`(timestamp, id)`，从新到旧；
+- `listStateSchemas`：`(tableName, id)`。更新一行不会改变它的位置。
+
 **显示消息顺序。** 完整列表、游标分页和分支都按 `createdAt` 排列，同一时间戳内保持写入顺序。检查点数组保留这个并列顺序。分支筛选快照边界后沿用父会话的顺序，再分配新的消息 ID。浏览器分页按检查点数组里游标行的位置切页；游标的 ID 和时间戳没有匹配行时，只返回更早时间戳的消息。
 
 **更新不换行。** 更新改的是一行里装的内容，不是换成另一行：
@@ -420,6 +428,13 @@ Dexie BrowserVault 的 schema 归 `apps/web` 所有，不作为服务端 `DataSt
 - 重新保存的挂起（suspension）保留它的回合、运行时、插件和创建时间。
 
 内存、SQLite 和 PostgreSQL 在这一点上一致，共享的契约测试会检查。
+
+**会话 metadata 的合并。** `updateSession` 把补丁里的 `metadata` 浅合并进已存的对象：每个键替换自己的值，值为 `undefined` 的键被删掉（`null` 保留），合并后为空就存成没有 metadata。会话不存在时什么也不做。
+
+- 合并在每个后端都是原子的。PostgreSQL 在一条 UPDATE 里合并；SQLite 和内存在串行的写入边界里先读后写。所以两个并发更新改的是不同的键时，两边都会保留。
+- 两个并发更新改同一个键，仍然只有一个生效。先读 metadata 再决定写什么的调用方，要持有会话锁。
+
+共享的契约测试会检查这些。
 
 **挂起。** 一个待处理的挂起保存着它要继续的整个请求：到挂起点为止的消息、已缓冲的工具调用和提案、冻结的输入。恢复时把这份记录原样发出去，所以其中任何一部分都不能用会话后来的状态重建。
 

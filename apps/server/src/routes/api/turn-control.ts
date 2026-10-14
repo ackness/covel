@@ -20,10 +20,24 @@ interface ActionEntry {
   /** The turn the request runs now, or will run next. */
   turnId: string;
   readonly steering: string[];
+  /** Every interjection accepted since the last turn commit. */
+  readonly accepted: TurnInterjection[];
+  /** How many of `accepted` a model call has read. */
+  read: number;
   /** False once no runtime of the execution reads the queue any more. */
   steeringOpen: boolean;
   /** No further turn of the request will start: a stop has nothing to stop. */
   finished: boolean;
+}
+
+/** Saved user rows of a turn, excluded from the player-turn count. */
+export const PLAYER_INTERJECTION_SOURCE = "player-interjection";
+
+/** A player interjection saved only if its turn commits. */
+export interface TurnInterjection {
+  readonly content: string;
+  /** When a model call read it; absent when none did. */
+  readonly readAt?: string;
 }
 
 /** The request holding (or last holding) each session's execution lock. */
@@ -36,6 +50,7 @@ export type SteerRefusal = "no_active_turn" | "steering_closed";
 
 export interface RegisteredTurn {
   readonly turnControl: TurnControl;
+  readonly closeInterjections: () => readonly TurnInterjection[];
   readonly release: () => void;
 }
 
@@ -44,9 +59,11 @@ export interface ActionRequestControl {
   readonly signal: AbortSignal;
   /**
    * Under the session lock: make this request the session's active turn.
-   * Interjections not read yet carry over from the request's previous turn.
+   * Interjections not committed yet carry over from the previous turn.
    */
   beginTurn(turnId: string): TurnControl;
+  /** Stop accepting interjections and hand them to the current turn's commit. */
+  closeInterjections(): readonly TurnInterjection[];
   /** No further turn of this request will start. */
   finish(): void;
   /** Idempotent; removes only this request's own entries. */
@@ -71,6 +88,8 @@ export function registerActionRequest(
     startedAt: new Date().toISOString(),
     controller: new AbortController(),
     steering: [],
+    accepted: [],
+    read: 0,
     steeringOpen: true,
     finished: false,
   };
@@ -93,11 +112,27 @@ export function registerActionRequest(
       activeTurns.set(sessionId, entry);
       return {
         signal: entry.controller.signal,
-        drainSteering: () => entry.steering.splice(0),
+        drainSteering: () => {
+          const drained = entry.steering.splice(0);
+          const readAt = new Date().toISOString();
+          for (let i = 0; i < drained.length; i += 1) {
+            const index = entry.read + i;
+            entry.accepted[index] = { ...entry.accepted[index]!, readAt };
+          }
+          entry.read += drained.length;
+          return drained;
+        },
         closeSteering: () => {
           entry.steeringOpen = false;
         },
       };
+    },
+    closeInterjections: () => {
+      entry.steeringOpen = false;
+      // The next turn reads these from committed history, not this queue.
+      entry.steering.length = 0;
+      entry.read = 0;
+      return entry.accepted.splice(0);
     },
     finish: () => {
       entry.finished = true;
@@ -106,15 +141,6 @@ export function registerActionRequest(
     release: () => {
       leaveWaiting();
       if (activeTurns.get(sessionId) === entry) {
-        if (entry.steering.length > 0) {
-          // Accepted while a story runtime could still read the queue, which
-          // then ended without another step. The chat log has them; the
-          // prompt history of later turns comes from the turn journal, which
-          // does not.
-          console.warn(
-            `[turn-control] ${sessionId}: ${entry.steering.length} steering message(s) were accepted for turn ${entry.turnId} but no story runtime read them; they are in the chat log only, not in the prompt history of later turns`,
-          );
-        }
         activeTurns.delete(sessionId);
       }
     },
@@ -128,7 +154,11 @@ export function registerActiveTurn(
   requestId?: string,
 ): RegisteredTurn {
   const request = registerActionRequest(sessionId, turnId, requestId);
-  return { turnControl: request.beginTurn(turnId), release: request.release };
+  return {
+    turnControl: request.beginTurn(turnId),
+    closeInterjections: request.closeInterjections,
+    release: request.release,
+  };
 }
 
 /**
@@ -146,19 +176,8 @@ export function steerActiveTurn(
     return { refused: "steering_closed" };
   }
   entry.steering.push(message);
+  entry.accepted.push({ content: message });
   return { turnId: entry.turnId };
-}
-
-/**
- * Best-effort removal of a queued interjection whose persistence failed —
- * no-op when the loop already drained it (the retry may then duplicate,
- * but the common case is retracted before the next LLM step).
- */
-export function retractSteering(sessionId: string, message: string): void {
-  const entry = activeTurns.get(sessionId);
-  if (!entry) return;
-  const idx = entry.steering.lastIndexOf(message);
-  if (idx >= 0) entry.steering.splice(idx, 1);
 }
 
 /**

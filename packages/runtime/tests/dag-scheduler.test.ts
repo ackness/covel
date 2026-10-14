@@ -45,64 +45,19 @@ describe("scheduleByDag", () => {
     const input = [
       mk("npc-graph/rag-retriever", 490),
       mk("narrator", 500, {
-        input: {
-          inject: [
-            {
-              kind: "runtime",
-              from: "npc-graph/rag-retriever",
-              field: "npcContext",
-              as: "<npc>",
-            },
-          ],
-        },
+        inputs: { npc: { from: { runtime: "npc-graph/rag-retriever" } } },
       } as Partial<RuntimeManifest>),
       mk("guide", 550, {
-        input: {
-          inject: [
-            {
-              kind: "runtime",
-              from: "narrator",
-              field: "narrativeOutput",
-              as: "<n>",
-            },
-          ],
-        },
+        inputs: { n: { from: { runtime: "narrator" } } },
       } as Partial<RuntimeManifest>),
       mk("npc-graph/extractor", 620, {
-        input: {
-          inject: [
-            {
-              kind: "runtime",
-              from: "narrator",
-              field: "narrativeOutput",
-              as: "<n>",
-            },
-          ],
-        },
+        inputs: { n: { from: { runtime: "narrator" } } },
       } as Partial<RuntimeManifest>),
       mk("codex", 650, {
-        input: {
-          inject: [
-            {
-              kind: "runtime",
-              from: "narrator",
-              field: "narrativeOutput",
-              as: "<n>",
-            },
-          ],
-        },
+        inputs: { n: { from: { runtime: "narrator" } } },
       } as Partial<RuntimeManifest>),
       mk("char-creator/character-tracker", 750, {
-        input: {
-          inject: [
-            {
-              kind: "runtime",
-              from: "narrator",
-              field: "narrativeOutput",
-              as: "<n>",
-            },
-          ],
-        },
+        inputs: { n: { from: { runtime: "narrator" } } },
       } as Partial<RuntimeManifest>),
     ];
 
@@ -216,11 +171,7 @@ describe("scheduleByDag", () => {
     // downstream declares `from: 'not-scheduled'` which isn't in the input.
     const input = [
       mk("downstream", 500, {
-        input: {
-          inject: [
-            { kind: "runtime", from: "not-scheduled", field: "x", as: "<x>" },
-          ],
-        },
+        inputs: { x: { from: { runtime: "not-scheduled" } } },
       } as Partial<RuntimeManifest>),
     ];
     const { groups, error } = scheduleByDag(input);

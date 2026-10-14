@@ -123,17 +123,24 @@ function LivePluginPanel(props: PluginPanelProps) {
           }),
         )
       : {};
+  const schema = sessionState.gameState.characterSchema;
+  const sessionCharacterSchema =
+    schema && typeof schema === "object" && !Array.isArray(schema)
+      ? (schema as Record<string, unknown>)
+      : {};
   const frameworkData =
     sourceKind === "session.characters"
       ? sessionCharacters
-      : namespace === "_jobs"
-        ? Object.fromEntries(
-            jobs.map((job) => [
-              job.jobId,
-              job.messageKey ? { ...job, message: t(job.messageKey) } : job,
-            ]),
-          )
-        : liveData;
+      : sourceKind === "session.characterSchema"
+        ? sessionCharacterSchema
+        : namespace === "_jobs"
+          ? Object.fromEntries(
+              jobs.map((job) => [
+                job.jobId,
+                job.messageKey ? { ...job, message: t(job.messageKey) } : job,
+              ]),
+            )
+          : liveData;
   return (
     <PluginPanelView
       {...props}

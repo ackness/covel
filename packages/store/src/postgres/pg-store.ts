@@ -17,6 +17,8 @@ import {
   nestedWithTransactionError,
 } from "../tx-nesting-error.js";
 import { createTxNestingGuard } from "../tx-nesting-guard.js";
+import { rejectRootWritesInTransaction } from "../root-write-guard.js";
+import { TRANSACTIONAL_WRITE_METHODS } from "../store-write-methods.js";
 import type { VectorModelOps, VectorStoreCapability } from "../vector-store.js";
 import type { PgDb } from "./pg-db.js";
 import { createPgDataCrud } from "./pg-data-crud.js";
@@ -155,7 +157,13 @@ export async function createPgStore(
   const nesting = createTxNestingGuard();
 
   const baseStore: DataStore = {
-    ...buildPgData(getDb),
+    // A root write from inside a transaction callback would commit on its own
+    // pooled connection; it is refused, as on every backend.
+    ...rejectRootWritesInTransaction(
+      buildPgData(getDb),
+      nesting.isNested,
+      TRANSACTIONAL_WRITE_METHODS,
+    ),
 
     /**
      * Scoped, isolation-correct transaction. Drizzle reserves a dedicated

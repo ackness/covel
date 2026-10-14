@@ -50,6 +50,7 @@ type VectorIndexUpsert = NonNullable<
 import {
   ARCHIVAL_NAMESPACE,
   type EmbedFn,
+  isEmbeddingModelChanged,
   MAX_INGEST_BATCH,
   MEMORY_VECTOR_PLUGIN_ID,
   RECALL_NAMESPACE,
@@ -97,6 +98,16 @@ interface ArchivalProgress {
   readonly jobs: readonly SourceJob[];
 }
 
+/**
+ * What a sweep's writes are bound to: the session incarnation whose rows it
+ * read and the model it embedded with. A batch that no longer matches either
+ * is refused by the store.
+ */
+interface IndexGuard {
+  readonly expectedSessionCreatedAt: string;
+  readonly expectedModelRegistryId: number;
+}
+
 const CURSOR_NS = "recall-ingest";
 const ARCHIVAL_NS = "archival-ingest";
 
@@ -135,6 +146,22 @@ export function createVectorIngestor(deps: {
   }
   const pendingBySession = new Map<string, PendingIngest>();
 
+  // A session whose index was built with a model the configuration no longer
+  // selects fails every sweep the same way; say so once per locked model.
+  const warnedModelChanges = new Set<string>();
+  const modelChanged = (
+    sessionId: string,
+    modelId: string,
+    err: unknown,
+  ): IngestResult => {
+    const key = JSON.stringify([sessionId, modelId]);
+    if (!warnedModelChanges.has(key)) {
+      warnedModelChanges.add(key);
+      warn("model", sessionId, err);
+    }
+    return { skipped: false, recall: 0, archival: 0 };
+  };
+
   const runSweep = async (
     sessionId: string,
   ): Promise<IngestResult & { more?: boolean }> => {
@@ -142,10 +169,6 @@ export function createVectorIngestor(deps: {
 
     const session = await store.getSession(sessionId);
     if (!session) return SKIPPED;
-    // Bind every delayed embedding write to the session incarnation whose
-    // source rows were read. A delete + same-id recreate during provider work
-    // must not let the old sweep populate the new session's vector namespace.
-    const expectedSessionCreatedAt = session.createdAt;
 
     let target;
     try {
@@ -157,6 +180,14 @@ export function createVectorIngestor(deps: {
       return { skipped: false, recall: 0, archival: 0 };
     }
     if (!target) return SKIPPED;
+    // Bind every delayed embedding write to the session incarnation whose
+    // source rows were read, and to the model it embeds with. A delete +
+    // same-id recreate, or an index reset to another model, during provider
+    // work must not let this sweep write into the new index.
+    const guard: IndexGuard = {
+      expectedSessionCreatedAt: session.createdAt,
+      expectedModelRegistryId: target.modelRegistryId,
+    };
 
     let recall = 0;
     let archival = 0;
@@ -166,7 +197,7 @@ export function createVectorIngestor(deps: {
         store,
         (texts) => embed(texts, { sessionId, modelId: target.modelId }),
         sessionId,
-        expectedSessionCreatedAt,
+        guard,
         {
           batchSize: deps.embeddingBatchSize,
           maxCharacters: deps.maxEmbeddingCharacters,
@@ -175,6 +206,8 @@ export function createVectorIngestor(deps: {
       recall = result.written;
       more ||= result.more;
     } catch (err) {
+      if (isEmbeddingModelChanged(err))
+        return modelChanged(sessionId, target.modelId, err);
       warn("recall", sessionId, err);
     }
     try {
@@ -182,7 +215,7 @@ export function createVectorIngestor(deps: {
         store,
         (texts) => embed(texts, { sessionId, modelId: target.modelId }),
         sessionId,
-        expectedSessionCreatedAt,
+        guard,
         {
           batchSize: deps.embeddingBatchSize,
           maxCharacters: deps.maxEmbeddingCharacters,
@@ -192,6 +225,8 @@ export function createVectorIngestor(deps: {
       archival = result.written;
       more ||= result.more;
     } catch (err) {
+      if (isEmbeddingModelChanged(err))
+        return modelChanged(sessionId, target.modelId, err);
       warn("archival", sessionId, err);
     }
     return { skipped: false, recall, archival, more };
@@ -251,7 +286,7 @@ async function ingestRecall(
   store: VectorStore,
   embed: (texts: readonly string[]) => Promise<readonly Float32Array[]>,
   sessionId: string,
-  expectedSessionCreatedAt: string,
+  guard: IndexGuard,
   limits: EmbeddingLimits,
 ): Promise<{ written: number; more: boolean }> {
   const progress = await readProgress<RecallProgress>(
@@ -325,7 +360,7 @@ async function ingestRecall(
       CURSOR_NS,
       { writeSeq: lastHandled } satisfies RecallProgress,
       progress.raw,
-      expectedSessionCreatedAt,
+      guard,
       { upserts },
     );
   }
@@ -392,7 +427,7 @@ async function ingestArchival(
   store: VectorStore,
   embed: (texts: readonly string[]) => Promise<readonly Float32Array[]>,
   sessionId: string,
-  expectedSessionCreatedAt: string,
+  guard: IndexGuard,
   limits: EmbeddingLimits,
   pluginData: SearchablePluginDataResolver | undefined,
 ): Promise<{ written: number; more: boolean }> {
@@ -433,16 +468,10 @@ async function ingestArchival(
     if (page.length === limit) jobs.push({ ...job, after: page.at(-1)!.seq });
   }
   if (jobs.some((job) => job.remove)) {
-    await commitArchival(
-      store,
-      sessionId,
-      progress.raw,
-      expectedSessionCreatedAt,
-      {
-        state: { ...state, jobs },
-        deletes,
-      },
-    );
+    await commitArchival(store, sessionId, progress.raw, guard, {
+      state: { ...state, jobs },
+      deletes,
+    });
     return { written: 0, more: true };
   }
 
@@ -577,17 +606,11 @@ async function ingestArchival(
     deletes.length > 0 ||
     JSON.stringify(next) !== progress.raw
   ) {
-    await commitArchival(
-      store,
-      sessionId,
-      progress.raw,
-      expectedSessionCreatedAt,
-      {
-        state: next,
-        upserts,
-        deletes,
-      },
-    );
+    await commitArchival(store, sessionId, progress.raw, guard, {
+      state: next,
+      upserts,
+      deletes,
+    });
   }
   return { written: upserts.length, more };
 }
@@ -601,7 +624,7 @@ function commitArchival(
   store: VectorStore,
   sessionId: string,
   expectedValue: string | null,
-  expectedSessionCreatedAt: string,
+  guard: IndexGuard,
   batch: {
     readonly state: ArchivalProgress;
     readonly upserts?: VectorIndexUpsert[];
@@ -614,7 +637,7 @@ function commitArchival(
     ARCHIVAL_NS,
     batch.state,
     expectedValue,
-    expectedSessionCreatedAt,
+    guard,
     { upserts: batch.upserts ?? [], deletes: batch.deletes },
   );
 }
@@ -654,7 +677,7 @@ async function commitIndexBatch(
   namespace: string,
   value: unknown,
   expectedValue: string | null,
-  expectedSessionCreatedAt: string,
+  guard: IndexGuard,
   changes: Pick<CommitVectorIndexBatchInput, "upserts" | "deletes">,
 ): Promise<void> {
   const updated = await store.commitVectorIndexBatch({
@@ -663,7 +686,7 @@ async function commitIndexBatch(
     namespace,
     value: JSON.stringify(value),
     expectedValue,
-    expectedSessionCreatedAt,
+    ...guard,
     ...changes,
   });
   if (!updated)

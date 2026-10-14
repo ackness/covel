@@ -19,6 +19,9 @@ export function registerSessionViewRoute(routes: Hono<SessionRouteEnv>): void {
     const guard = await resolveSessionParam(c);
     if (!guard.ok) return guard.response;
 
+    // Read before the snapshot: an event published while the snapshot is read
+    // is then both in the snapshot and after the cursor, never in neither.
+    const eventCursor = c.get("eventBus").headCursor(id);
     const execution = await getSessionExecutionStatus(
       store,
       id,
@@ -80,6 +83,7 @@ export function registerSessionViewRoute(routes: Hono<SessionRouteEnv>): void {
         ? { dimensionRecovery: context.dimensionRecovery }
         : {}),
       execution,
+      eventCursor,
       plugins: buildSnapshotPluginList(pluginRegistry, new Set(runnable)),
     };
     return c.json({

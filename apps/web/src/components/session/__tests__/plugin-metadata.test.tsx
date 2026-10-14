@@ -36,7 +36,6 @@ function plugin(
         turnCompletion: { mode: "await" },
         outputKind: "plugin",
         outputContract: undefined,
-        tags: [],
       },
     ],
     tools: [],

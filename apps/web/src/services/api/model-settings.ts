@@ -24,9 +24,14 @@ const RESUME_ROUTE_REGEX =
  * and needs both provider keys and player-authored plugin settings. */
 const PLUGIN_RPC_ROUTE_REGEX = /^\/api\/sessions\/[^/]+\/plugin-rpc(?:\?|$)/;
 
+/** A memory index rebuild measures the configured embedding model with one request. */
+const MEMORY_INDEX_REBUILD_ROUTE_REGEX =
+  /^\/api\/sessions\/[^/]+\/memory-index\/rebuild(?:\?|$)/;
+
 export function needsProviderKeys(url: string): boolean {
   if (AI_ROUTES.some((prefix) => url.startsWith(prefix))) return true;
   if (RESUME_ROUTE_REGEX.test(url)) return true;
+  if (MEMORY_INDEX_REBUILD_ROUTE_REGEX.test(url)) return true;
   return PLUGIN_RPC_ROUTE_REGEX.test(url);
 }
 

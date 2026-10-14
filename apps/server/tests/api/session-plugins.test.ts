@@ -923,7 +923,7 @@ describe("Session plugin routes (real sessionRoutes)", () => {
       });
     });
 
-    it("refuses creation when no installed plugin provides a world-required contract", async () => {
+    it("starts a world whose required contract has no provider, and names it", async () => {
       await store.upsertWorld({
         id: "unplayable-world",
         name: "Unplayable World",
@@ -942,12 +942,54 @@ describe("Session plugin routes (real sessionRoutes)", () => {
         }),
       });
 
-      expect(res.status).toBe(400);
+      // A missing piece never stops the game; the player is told what it is.
+      expect(res.status).toBe(201);
       expect(await res.json()).toMatchObject({
-        code: "world_requirement_unmet",
-        details: { contract: "absent-check@1", code: "missing-provider" },
+        unmetRequirements: [
+          { contract: "absent-check@1", code: "missing-provider" },
+        ],
       });
-      expect(await store.getSession("sess-unmet-world")).toBeNull();
+      expect(await store.getSession("sess-unmet-world")).toMatchObject({
+        metadata: {
+          pluginSelection: { requiredContracts: ["absent-check@1"] },
+        },
+      });
+    });
+
+    it("starts a world with dimensions no active plugin keeps, without them", async () => {
+      await store.upsertWorld({
+        id: "dimension-world",
+        name: "Dimension World",
+        description: "Test world",
+        metadata: {
+          dimensions: {
+            stamina: {
+              name: "Stamina",
+              schema: { type: "integer", minimum: 0 },
+              initialValue: 3,
+            },
+          },
+        },
+        createdAt: "2026-10-15T00:00:00.000Z",
+      });
+
+      const res = await app.request("/api/sessions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: "sess-no-dimension-provider",
+          worldId: "dimension-world",
+          plugins: [],
+        }),
+      });
+
+      expect(res.status).toBe(201);
+      expect(await res.json()).toMatchObject({
+        ignoredDimensions: ["stamina"],
+      });
+      expect(
+        await store.listWorldDataImportLedger("sess-no-dimension-provider"),
+      ).toEqual([]);
     });
 
     it("creates the session in a language the world has an edition for", async () => {

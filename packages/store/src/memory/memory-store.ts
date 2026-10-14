@@ -24,7 +24,11 @@ import { createServerSettingMethods } from "./server-setting-methods.js";
 import type { MemoryStore } from "./memory-types.js";
 import type { StoreTransaction } from "../types.js";
 import { createSerializedWriteGate } from "../serialized-write-gate.js";
-import { STORE_WRITE_METHODS } from "../store-write-methods.js";
+import {
+  STORE_WRITE_METHODS,
+  TRANSACTIONAL_WRITE_METHODS,
+} from "../store-write-methods.js";
+import { rejectRootWritesInTransaction } from "../root-write-guard.js";
 import { withStructuredCloneBoundary } from "./structured-clone-boundary.js";
 
 export function createMemoryStore(): MemoryStore {
@@ -53,10 +57,16 @@ export function createMemoryStore(): MemoryStore {
   // root operation (reads included) behind an open transaction so callers can
   // never observe a value that is subsequently rolled back. The transaction
   // scope keeps the UNGATED methods, so reads/writes through `tx` run inline.
+  // A root write from inside a transaction callback is refused: it would
+  // escape the rollback snapshot (`root-write-guard.ts`).
   const gate = createSerializedWriteGate();
-  const gatedData = gate.gateWrites(
-    isolatedData,
-    new Set([...Object.keys(isolatedData), ...STORE_WRITE_METHODS]),
+  const gatedData = rejectRootWritesInTransaction(
+    gate.gateWrites(
+      isolatedData,
+      new Set([...Object.keys(isolatedData), ...STORE_WRITE_METHODS]),
+    ),
+    gate.isInTransaction,
+    TRANSACTIONAL_WRITE_METHODS,
   );
 
   return {

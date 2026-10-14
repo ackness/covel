@@ -107,24 +107,50 @@ describe("MemoryStore transaction rollback (H3 shallow snapshot)", () => {
     expect(rows.map((r) => r.key)).toEqual(["committed"]);
   });
 
-  it("snapshots only touched collections: a concurrent write to an untouched collection survives rollback (R-16)", async () => {
-    // Pre-R-16 the eager whole-store snapshot would roll this concurrent
-    // pluginData write back together with the failed tx. Touched-only capture
-    // leaves untouched collections alone.
-    await expect(
-      store.withTransaction!(async (tx) => {
-        await tx.appendTurnMessage(
-          makeTurnMessage({ id: "tm-drop", sessionId: "sess-1", order: 0 }),
-        );
-        // Concurrent non-transaction write to a collection the tx never touches.
-        await store.setPluginData(pluginData({ key: "survivor" }));
-        throw new Error("rollback");
-      }),
-    ).rejects.toThrow("rollback");
+  it("a write queued behind a rolled-back transaction survives the rollback (R-16)", async () => {
+    // A root write cannot run inside the callback (it is refused), and one
+    // from outside waits for the transaction, so the rollback, which restores
+    // only the collections the transaction touched, cannot take it.
+    let release!: () => void;
+    let markOpen!: () => void;
+    const hold = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const open = new Promise<void>((resolve) => {
+      markOpen = resolve;
+    });
+    const transaction = store.withTransaction!(async (tx) => {
+      await tx.appendTurnMessage(
+        makeTurnMessage({ id: "tm-drop", sessionId: "sess-1", order: 0 }),
+      );
+      markOpen();
+      await hold;
+      throw new Error("rollback");
+    });
+    await open;
+    const queued = store.setPluginData(pluginData({ key: "survivor" }));
+    release();
+    await expect(transaction).rejects.toThrow("rollback");
+    await queued;
 
     expect(await store.listTurnMessages("sess-1")).toHaveLength(0);
     const rows = await store.listPluginData("sess-1", "p1");
     expect(rows.map((r) => r.key)).toEqual(["survivor"]);
+  });
+
+  it("classifies every store method as exactly one of a read and a write (F-112)", async () => {
+    const { WRITE_METHOD_TOUCHES, isReadMethod } =
+      await import("../src/memory/transaction-methods.js");
+    const methods = Object.entries(store as unknown as Record<string, unknown>)
+      .filter(([, value]) => typeof value === "function")
+      .map(([name]) => name)
+      .filter((name) => name !== "withTransaction" && name !== "close");
+    for (const name of methods) {
+      expect(
+        Object.hasOwn(WRITE_METHOD_TOUCHES, name) !== isReadMethod(name),
+        `${name} must be either a key of WRITE_METHOD_TOUCHES or a read`,
+      ).toBe(true);
+    }
   });
 
   it("deleteSession inside a tx rolls back every cascaded collection", async () => {

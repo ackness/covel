@@ -106,22 +106,28 @@ export function ProviderDialog({
               ))}
             </select>
           </label>
-          <input
-            value={draft.providerId}
-            onChange={(event) =>
-              onDraftChange({ ...draft, providerId: event.target.value })
-            }
-            placeholder={t("settings.providerIdExample")}
-            className="w-full border border-border bg-background px-3 py-2 font-mono text-sm outline-none focus:ring-1 focus:ring-primary"
-          />
-          <input
-            value={draft.baseUrl}
-            onChange={(event) =>
-              onDraftChange({ ...draft, baseUrl: event.target.value })
-            }
-            placeholder={t("settings.baseUrlPlaceholder")}
-            className="w-full border border-border bg-background px-3 py-2 font-mono text-sm outline-none focus:ring-1 focus:ring-primary"
-          />
+          <label className="block space-y-1 text-xs">
+            <span>{t("settings.providerIdLabel")}</span>
+            <input
+              value={draft.providerId}
+              onChange={(event) =>
+                onDraftChange({ ...draft, providerId: event.target.value })
+              }
+              placeholder={t("settings.providerIdExample")}
+              className="w-full border border-border bg-background px-3 py-2 font-mono text-sm outline-none focus:ring-1 focus:ring-primary"
+            />
+          </label>
+          <label className="block space-y-1 text-xs">
+            <span>{t("settings.baseUrl")}</span>
+            <input
+              value={draft.baseUrl}
+              onChange={(event) =>
+                onDraftChange({ ...draft, baseUrl: event.target.value })
+              }
+              placeholder={t("settings.baseUrlPlaceholder")}
+              className="w-full border border-border bg-background px-3 py-2 font-mono text-sm outline-none focus:ring-1 focus:ring-primary"
+            />
+          </label>
           <ProtocolSelect
             provider={draft.providerId}
             inheritLabel={t("settings.providerProtocolDefault")}

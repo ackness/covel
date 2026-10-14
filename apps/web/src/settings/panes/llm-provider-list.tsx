@@ -31,6 +31,7 @@ export function ProviderList({
         <div className="relative">
           <Search className="absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
           <input
+            aria-label={t("settings.searchProviders")}
             value={query}
             onChange={(event) => onQueryChange(event.target.value)}
             placeholder={t(

@@ -12,7 +12,6 @@ import {
   docPathFromAbsolute,
   isStoryRuntime,
   textValue,
-  uiSlotsOf,
   type FlowSegmentId,
 } from "./shared.js";
 import {
@@ -79,14 +78,12 @@ export function buildPluginFlowResponse(registry: PluginRegistry) {
       kind: string;
       as?: string;
       from?: string;
-      field?: string;
       namespace?: string;
       format?: string;
       name?: string;
       recordAs?: string;
     }>;
     tools: { builtin: string[]; local: string[] };
-    uiSlots: string[];
     docPath: string;
     isStoryRuntime: boolean;
     turnCompletion: EffectiveTurnCompletion;
@@ -151,17 +148,15 @@ export function buildPluginFlowResponse(registry: PluginRegistry) {
         },
         injects: (manifest.input?.inject ?? []).map((inject) => ({
           kind: inject.kind,
-          ...(inject.kind === "runtime"
-            ? { from: inject.from, field: inject.field, as: inject.as }
-            : inject.kind === "plugin-data"
-              ? {
-                  namespace: inject.namespace,
-                  format: inject.format,
-                  as: inject.as,
-                }
-              : inject.kind === "kernel"
-                ? { name: inject.name, from: inject.from }
-                : { name: inject.name, recordAs: inject.recordAs }),
+          ...(inject.kind === "plugin-data"
+            ? {
+                namespace: inject.namespace,
+                format: inject.format,
+                as: inject.as,
+              }
+            : inject.kind === "kernel"
+              ? { name: inject.name, from: inject.from }
+              : { name: inject.name, recordAs: inject.recordAs }),
         })),
         tools: {
           builtin: [...(manifest.tools?.builtin ?? [])],
@@ -169,7 +164,6 @@ export function buildPluginFlowResponse(registry: PluginRegistry) {
           // name like `foo.v2` must not lose its suffix).
           local: [...(manifest.tools?.plugin ?? [])],
         },
-        uiSlots: uiSlotsOf(manifest),
         docPath,
         isStoryRuntime: isStoryRuntime(manifest),
         turnCompletion: effectiveTurnCompletion(manifest),

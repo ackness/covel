@@ -188,7 +188,7 @@ Control during a turn uses HTTP endpoints, not SSE events (see [api.md § Contro
 
 - The message goes into the queue for this session on the server. Before the next model call, the story runtime merges the queued content into the live conversation record.
 - If the interjection arrives while the final answer is still streaming, the story runtime makes one more model call to handle it before it finishes (limited by maxSteps).
-- The interjection is also saved as a user message, so later turn history includes it naturally. If saving fails, the queued item is withdrawn and a 500 is returned, so the queue and the history stay consistent.
+- The interjection is saved with its turn. When the turn commits, it is written in the same transaction to the conversation history (after the player's message of the turn) and to the chat log, so later turns read it. An interjection does not count as a new player turn. When the turn is stopped, fails or is rolled back, neither keeps it.
 - The client shows the interjection locally itself. There is no new SSE event.
 
 **abort: the player stops this turn** (`POST /api/sessions/:id/abort`)
@@ -608,6 +608,11 @@ The data of `system.connected` has a `cursor`. It is the latest event ID this se
 
 - A client that has no cursor yet records it as its `lastEventId`. So even if the client received no event on this connection, the next connection (for example, resuming the subscription after an action ends) can catch up on the events it missed.
 - A client that already has a cursor ignores it.
+
+**The first connection joins the restored view.** When a session opens, the subscription and `GET /api/sessions/:id/view` go out almost together, and the server may handle either first. The view's `eventCursor` is the session's newest event id before the view was read, and the client uses it to join the two:
+
+- If the first connection has not been sent yet, the client sends `eventCursor` as its `lastEventId`, and the server replays the events after the view was read.
+- If the first connection already went out without a cursor, the client compares the `cursor` of its `system.connected` with `eventCursor`. A newer one, or another epoch, means the subscription registered after the view was read and the events in between reached neither, so the client reads the whole session again (as on `system.reset`). Otherwise it does nothing.
 
 **Which topics you can subscribe to**
 
@@ -1067,7 +1072,7 @@ Frames on `/api/events/stream` use a different structure, `ProtocolEvent`: `{ id
 narrative.delta       → messages (streaming buffer)
 narrative.completed   → messages (completed)
 interaction.requested → messages (block)
-state.changed         → gameState (deep merge) + statePatches
+state.changed         → gameState.tables (deep merge) + statePatches
 event.emitted         → gameState.events
 interaction.submitted → handled by the caller that submitted the form: SUBMIT_BLOCK + player bubble (not through handleSseEvent)
 execution.started     → executionSteps

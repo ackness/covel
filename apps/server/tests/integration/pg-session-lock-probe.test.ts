@@ -48,6 +48,7 @@ describe.skipIf(!available)("PostgreSQL nonblocking lock integration", () => {
       warm.release();
       expect(await b.tryWithLock!(sessionId, async () => 42)).toEqual({
         acquired: false,
+        reason: "busy",
       });
       release();
       await owner;
@@ -99,7 +100,7 @@ describe.skipIf(!available)("PostgreSQL nonblocking lock integration", () => {
           `probe-pool-${crypto.randomUUID()}`,
           async () => "unexpected",
         ),
-      ).toEqual({ acquired: false });
+      ).toEqual({ acquired: false, reason: "unavailable" });
     } finally {
       occupied.release();
       // Let the timed-out checkout resolve and return its connection before

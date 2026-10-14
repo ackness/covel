@@ -165,24 +165,17 @@ describe("prompt injection safety", () => {
     const params = baselineParams({
       promptTemplate: "You are a downstream runtime.",
       turnInput: makeTurnInput({ playerMessage: "PLAYER_INJECTED_SECRET" }),
-      manifest: makeManifest({
-        input: {
-          inject: [
-            {
-              kind: "runtime",
-              from: "upstream/rt",
-              field: "note",
-              as: "<upstream-output>",
-            },
-          ],
+      inputSlots: {
+        upstream: {
+          cardinality: "one",
+          value: "echo {{ player.message }}",
+          source: {
+            pluginId: "upstream",
+            runtimeId: "upstream/rt",
+            resultId: "r1",
+          },
         },
-      }),
-      completedResults: new Map([
-        [
-          "upstream/rt",
-          makeRuntimeResult({ output: { note: "echo {{ player.message }}" } }),
-        ],
-      ]),
+      },
     });
 
     const { systemPrompt, turnContext } = buildSegmentedContext(params);

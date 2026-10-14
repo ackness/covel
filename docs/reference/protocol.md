@@ -188,7 +188,7 @@ return { result: execution.result, committed: outcome.status === "committed" };
 
 - 消息进入服务端里这个会话的队列。story runtime 在下一次调用模型之前，把队列里的内容并进实时的对话记录。
 - 如果插话在最终回答的流式输出期间才到，story runtime 会在收尾之前多做一步模型调用来处理它（受 maxSteps 限制）。
-- 插话同时保存成一条 user 消息，之后的回合历史里自然包含它。保存失败时撤回队列里的那一项，并返回 500，保证队列和历史一致。
+- 插话跟着回合一起保存。回合提交时，它在同一个事务里写进对话历史（排在玩家这一回合的消息之后），也写进聊天记录，之后的回合能读到它。插话不算一个新的玩家回合。回合被停止、失败或回滚时，两边都不留它。
 - 客户端自己在本地显示这条插话就行，没有新增的 SSE 事件。
 
 **abort：玩家停止这一回合**（`POST /api/sessions/:id/abort`）
@@ -608,6 +608,11 @@ Gemini 原生的思考强度、`providerOptions.google.thinkingConfig`、`cached
 
 - 还没有游标的客户端把它记成 `lastEventId`。这样即使这条连接上一个事件都没收到，下次连接（例如一次 action 结束之后恢复订阅）也能补上这期间错过的事件。
 - 已经有游标的客户端忽略它。
+
+**第一次连接接上恢复的视图。** 打开会话时，订阅流和 `GET /api/sessions/:id/view` 几乎同时发出，服务端先处理哪个没有保证。视图的 `eventCursor` 是读视图之前这个会话最新的事件 id，客户端用它把两者接上：
+
+- 第一次连接还没发出时，客户端把 `eventCursor` 当作 `lastEventId`，服务端补发读视图之后的事件。
+- 第一次连接已经不带游标发出了，客户端拿它的 `system.connected` 里的 `cursor` 和 `eventCursor` 比：前者更新，或 epoch 不同，说明订阅在读视图之后才登记，中间的事件两边都没有，客户端重新读整个会话（和收到 `system.reset` 一样）。不比它新就什么都不做。
 
 **订阅哪些 topic**
 
@@ -1067,7 +1072,7 @@ interface SseEnvelope {
 narrative.delta       → messages (streaming buffer)
 narrative.completed   → messages (completed)
 interaction.requested → messages (block)
-state.changed         → gameState (deep merge) + statePatches
+state.changed         → gameState.tables (deep merge) + statePatches
 event.emitted         → gameState.events
 interaction.submitted → handled by the caller that submitted the form: SUBMIT_BLOCK + player bubble (not through handleSseEvent)
 execution.started     → executionSteps

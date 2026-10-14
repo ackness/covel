@@ -1,7 +1,8 @@
 import type { WorldGenerationDataContract } from "./types.js";
 import { interpolate, loadPrompt, type PromptLoader } from "@covel/context";
-import { selectedDataContracts } from "./package-processor.js";
+import { selectedDataContracts, selectedPack } from "./package-processor.js";
 import type {
+  PluginPack,
   WorldCreationBrief,
   WorldPackageContentKind,
 } from "@covel/shared";
@@ -25,6 +26,7 @@ export async function buildWorldPrompt(
   brief?: WorldCreationBrief,
   loader: PromptLoader = loadPrompt,
   dataContracts: readonly WorldGenerationDataContract[] = [],
+  packs: readonly PluginPack[] = [],
 ): Promise<string> {
   const promptLocale = resolvePromptLocale(locale);
 
@@ -38,10 +40,25 @@ export async function buildWorldPrompt(
     locale: promptLocale.locale,
     language: promptLocale.language,
     creationBrief: [
+      // A revision has no brief: it keeps the pack the world has.
+      ...(brief
+        ? [formatPackBrief(selectedPack(brief, packs), promptLocale.locale)]
+        : []),
       formatCreationBrief(brief),
       formatContractBrief(selectedDataContracts(brief, dataContracts)),
     ].join("\n"),
   });
+}
+
+/** The plugin pack the world is made for, as the catalogue describes it. */
+function formatPackBrief(pack: PluginPack | undefined, locale: string): string {
+  if (!pack)
+    return "Plugin pack: none chosen. Omit pluginPolicy.presetId and defaultViewMode.";
+  const label = resolveI18nText(pack.label, locale) ?? pack.id;
+  const description = pack.description
+    ? resolveI18nText(pack.description, locale)
+    : undefined;
+  return `Plugin pack: ${label} (presetId ${pack.id}).${description ? ` ${description}` : ""} Design the world for this way of playing.`;
 }
 
 export async function buildWorldLoreRepairPrompt(
@@ -100,14 +117,12 @@ function formatContractBrief(
 function formatCreationBrief(brief: WorldCreationBrief | undefined): string {
   if (!brief) {
     return [
-      "Experience preset: traditional-story.",
       "No optional package supplements were explicitly requested.",
       "Return empty characters/lorebook/rules arrays.",
     ].join("\n");
   }
   const requested = new Set(brief.content ?? []);
   return [
-    `Experience preset: ${brief.experienceMode ?? "traditional-story"}.`,
     requestedLine(
       requested,
       "characters",

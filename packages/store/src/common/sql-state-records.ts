@@ -43,6 +43,7 @@ type StateEntriesTable = Table & {
   fieldName: Column;
 };
 type StateChangesTable = Table & {
+  id: Column;
   sessionId: Column;
   tableName: Column;
   fieldName: Column;
@@ -99,6 +100,11 @@ export function createSqlStateRecords(
     async listStateSchemas(sessionId: string): Promise<StateSchemaRecord[]> {
       const rows = await runner.select<StateSchemaRow>(stateSchemas, {
         where: eq(stateSchemas.sessionId, sessionId),
+        // Without an order PostgreSQL returns an updated row last.
+        orderBy: [
+          asc(byteOrder(stateSchemas.tableName)),
+          asc(byteOrder(stateSchemas.id)),
+        ],
       });
       return rows.map((row) => toStateSchemaRecord(row, json));
     },
@@ -174,7 +180,7 @@ export function createSqlStateRecords(
           eq(stateChanges.tableName, tableName),
           eq(stateChanges.fieldName, fieldName),
         ),
-        orderBy: [asc(stateChanges.createdAt)],
+        orderBy: [asc(stateChanges.createdAt), asc(byteOrder(stateChanges.id))],
       });
       return rows.map((row) => toStateChangeRecord(row, json));
     },

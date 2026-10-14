@@ -16,9 +16,11 @@ Find it under "Settings", in "Appearance". "Style" decides the layout and visual
 
 In "Theme Library" you can "Import theme". Imported themes are saved on this device and appear in the Style list. To make your own theme, see [Themes](../recipes/themes.md).
 
+The settings search shows keyboard focus. Configuration sources use segmented buttons with a selected state; model capability and dark-mode toggles announce their current state. Results of saving and importing are announced too. When a theme supports only one color mode, its toggle explains why it is unavailable.
+
 ## AI Create World
 
-On the world selection page, click "AI Create World". Write a "Core Direction", choose "Story Adventure" or "Character Dialogue" as the player experience, and tick what to generate together: "Main Cast", "World Lorebook", "World Rules", and "Opening Kit". In "Author Notes", you can write what must appear or what to avoid. Click "Start Building". The app then writes the content, checks it for consistency, and packages it as a world package.
+On the world selection page, click "AI Create World". Write a "Core Direction", under "Player Experience" choose the gameplay pack the world is made for (the choices are the app's gameplay packs, such as "Traditional Story", "Dialogue Mode" and "Low Cost"), and tick what to generate together: "Main Cast", "World Lorebook", "World Rules", and "Opening Kit". In "Author Notes", you can write what must appear or what to avoid. Click "Start Building". The app then writes the content, checks it for consistency, and packages it as a world package.
 
 ![World package builder](/world-package-builder.webp)
 

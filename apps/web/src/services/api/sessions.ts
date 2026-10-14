@@ -4,6 +4,7 @@ import type {
   PluginMutationResponse,
   RuntimeResult,
   SessionEvent,
+  SessionMemoryIndexStatus,
   SessionPluginsResponse,
   SuspensionSummary,
 } from "@covel/shared";
@@ -16,6 +17,7 @@ import {
 import i18n from "@/i18n";
 import { emitToast } from "@/lib/toast-channel";
 import { actionApprovalSchema, type ActionApproval } from "./actions.js";
+import { buildSlotConfigHeaderInternal } from "./model-settings.js";
 import { isNotFound, request, requestResponse } from "./request.js";
 import { ignoreError } from "../../lib/ignore-error.js";
 import { verifyCreatedSessionCredential } from "./session-credential-cleanup.js";
@@ -95,6 +97,31 @@ export async function waiveSetupRuntime(sessionId: string, runtimeId: string) {
   return request<{ ok: boolean; runtimeId: string; state: SetupRuntimeState }>(
     `/api/sessions/${encodeURIComponent(sessionId)}/setup/${encodeURIComponent(runtimeId)}/waive`,
     { method: "POST", body: JSON.stringify({ confirm: true }) },
+  );
+}
+
+// -- Memory index ------------------------------------------------
+
+/**
+ * The embedding model this session's memory index was built with, and whether
+ * the model settings a turn would send still select it.
+ */
+export async function getSessionMemoryIndex(
+  sessionId: string,
+): Promise<SessionMemoryIndexStatus> {
+  return request<SessionMemoryIndexStatus>(
+    `/api/sessions/${encodeURIComponent(sessionId)}/memory-index`,
+    { headers: buildSlotConfigHeaderInternal(), silentErrors: true },
+  );
+}
+
+/** Discard the session's memory index and index it again with the configured model. */
+export async function rebuildSessionMemoryIndex(
+  sessionId: string,
+): Promise<SessionMemoryIndexStatus> {
+  return request<SessionMemoryIndexStatus>(
+    `/api/sessions/${encodeURIComponent(sessionId)}/memory-index/rebuild`,
+    { method: "POST", silentErrors: true },
   );
 }
 

@@ -85,12 +85,10 @@ export type {
 
 export {
   WORLD_AUTHORING_IDLE_TIMEOUT_MS,
-  WORLD_EXPERIENCE_MODES,
   WORLD_PACKAGE_CONTENT_KINDS,
 } from "./world-generation.js";
 export type {
   WorldCreationBrief,
-  WorldExperienceMode,
   WorldGenerationPart,
   WorldPackageContentKind,
 } from "./world-generation.js";
@@ -104,7 +102,6 @@ export type {
   TurnCompletionMode,
   TurnCompletionConfig,
   InputInjectDecl,
-  RuntimeInjectDecl,
   PluginDataInjectDecl,
   InputConfig,
   OutputConfig,
@@ -127,7 +124,6 @@ export type {
   HookEnforce,
   HookDeclaration,
   RuntimeManifest,
-  PluginScopedManifestFields,
 } from "./plugin.js";
 
 export { SLASH_COMMAND_CONTEXT_SCOPES } from "./plugin.js";
@@ -180,6 +176,7 @@ export type {
   SessionStatus,
   Session,
   SessionEmbeddingInfo,
+  SessionMemoryIndexStatus,
 } from "./session.js";
 
 export type {
@@ -272,6 +269,7 @@ export {
   COVEL_EVENT_META,
   FORWARDED_EVENT_TYPES,
   PLAYER_ABORT_REASON,
+  executionMayBeRunning,
 } from "./protocol.js";
 
 export type {

@@ -736,11 +736,12 @@ namespace 声明 `search` 之后，它的记录进入框架的记忆检索（[`m
 - 准备页在开局前列出会因此停用的插件、它缺的契约和能提供它的已安装插件，并给出“打开”按钮。游戏界面对 `unavailable` 做同样的提示。
 - 开启的插件里没有叙事 runtime（`io.visibility: story`）时，回合不会产生故事。准备页和游戏界面都会说明这一点，列出可以打开的叙事插件；一个都没有安装时，提示去“设置 → 安装与管理”安装。
 - `requested` 和计算出的 `active` 分开保存。自动依赖不会变成玩家的显式选择。
-- 世界的 `pluginPolicy.requires` 作为 `requiredContracts` 传入。世界和插件一样是依赖方：唯一的提供者自动加入，而且不会被当作没人需要的依赖移除。无法满足的需求在 `unmet` 里返回，原因是 `missing-provider`、`ambiguous-provider`、`approval-required` 或 `excluded`。前两种阻止创建会话；后两种是玩家的选择，不阻止。
+- 世界的 `pluginPolicy.requires` 作为 `requiredContracts` 传入。世界和插件一样是依赖方：唯一的提供者自动加入，而且不会被当作没人需要的依赖移除。无法满足的需求在 `unmet` 里返回，原因是 `missing-provider`、`ambiguous-provider`、`approval-required` 或 `excluded`。四种都不阻止创建会话：会话少了这部分照常开始，准备页和创建会话的响应（`unmetRequirements`）告诉玩家缺了什么。前两种是安装问题，后两种是玩家的选择。
 
 **世界和玩法包怎样给出初始请求。**
 
 - 世界的 `pluginPolicy` 使用 `presetId/preferredTags/avoidedTags/requested/recommended/packs`。玩法包使用 `requested/recommended`。
+- 内置玩法包（`packs/builtin.yaml`）还可以写 `defaultViewMode`（`stage` 或 `parsed`）。AI 创建世界时选了这个玩法包，生成的世界就带上这个 `defaultViewMode`。框架不按玩法包的 ID 做判断：AI 创建世界的选项就是这份目录里的全部玩法包，见 [`GET /api/framework/authoring`](./api.md#get-apiframeworkauthoring) 的 `packs`。
 - 推荐项不自动启用，也不会覆盖玩家的显式排除。
 - `GET /api/worlds/:id/plugin-plan` 的 `defaultPluginIds` 是初始的显式请求。准备页和创建端再用同一个解析器计算活动集合。
 - 这个接口返回的各 `requested` 和 `defaultPluginIds` 只含已安装的插件。世界或玩法包请求了但没有安装的插件列在 `missing` 里，由准备页提示，不进入创建请求。
