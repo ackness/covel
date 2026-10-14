@@ -102,7 +102,8 @@ function humanSessionId(): string {
     "wood",
     "glow",
   ];
-  const pick = (arr: string[]) => arr[Math.floor(Math.random() * arr.length)];
+  const pick = (arr: string[]) =>
+    arr[Number.parseInt(crypto.randomUUID().slice(0, 8), 16) % arr.length];
   const hex = crypto.randomUUID().slice(0, 8);
   return `${pick(words)}-${pick(nouns)}-${pick(words)}-${hex}`;
 }

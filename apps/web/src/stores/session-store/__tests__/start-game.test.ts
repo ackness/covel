@@ -13,6 +13,7 @@ const api = vi.hoisted(() => ({
   updateSession: vi.fn(),
   clearPrepRuntimeBindings: vi.fn(),
   getSessionView: vi.fn(),
+  takeCreatedWorldDataNotices: vi.fn(() => []),
   getSession: vi.fn(),
   createSession: vi.fn(),
   getWorld: vi.fn(),

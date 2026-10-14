@@ -124,6 +124,11 @@ describe("usePluginSelection with the bundled worlds and packs", () => {
       expect(
         pack.requested.filter((id) => !result.current.selectedPlugins.has(id)),
       ).toEqual([]);
+      expect(
+        (pack.excluded ?? []).filter((id) =>
+          result.current.selectedPlugins.has(id),
+        ),
+      ).toEqual([]);
     },
   );
 });

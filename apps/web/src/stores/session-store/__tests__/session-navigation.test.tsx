@@ -15,6 +15,7 @@ import {
 
 const api = vi.hoisted(() => ({
   getSessionView: vi.fn(),
+  takeCreatedWorldDataNotices: vi.fn(() => []),
   getSession: vi.fn(),
   listSessionPlugins: vi.fn(),
   listSuspensions: vi.fn(),
