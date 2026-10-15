@@ -1,0 +1,22 @@
+{
+  "apps/web/src/components/asset-render/AssetAudio.tsx": 1,
+  "apps/web/src/components/asset-render/AssetGenericLink.tsx": 2,
+  "apps/web/src/components/asset-render/AssetImage.tsx": 1,
+  "apps/web/src/components/session/chat-messages/chat-block-renderer.tsx": 5,
+  "apps/web/src/components/session/dimension-value-editor.tsx": 1,
+  "apps/web/src/components/session/dimension-value-view.tsx": 2,
+  "apps/web/src/components/session/game-view/message-composer.tsx": 2,
+  "apps/web/src/components/session/left-panel.tsx": 1,
+  "apps/web/src/components/session/plugin-list-panel/plugin-error-item.tsx": 1,
+  "apps/web/src/components/session/plugin-list-panel/session-plugin-item.tsx": 3,
+  "apps/web/src/components/session/right-panel.tsx": 2,
+  "apps/web/src/components/shared/ping-button.tsx": 1,
+  "apps/web/src/components/theme-manager.tsx": 1,
+  "apps/web/src/lib/catalog/character-avatar-renderer.tsx": 1,
+  "apps/web/src/lib/catalog/interactive-form-renderers.tsx": 3,
+  "apps/web/src/lib/catalog/media-renderers.tsx": 8,
+  "apps/web/src/routes/__root.tsx": 2,
+  "apps/web/src/settings/panes/LlmKeysPane.tsx": 1,
+  "apps/web/src/settings/panes/llm-provider-dialogs.tsx": 1,
+  "apps/web/src/settings/widgets/index.tsx": 1
+}
