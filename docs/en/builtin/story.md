@@ -54,7 +54,7 @@ A world can set a default for this setting in `pluginSettings`. Your own setting
 
 ### Notes
 
-The finished text first has its narration checked for the right person. If it is wrong, the model is asked to rewrite it, up to two extra model calls. You only see the text after it passes the check.
+Once the story is written, its narration is checked for the correct person. If it is wrong, the model is asked to rewrite it, up to two extra model calls. You only see the text after it passes the check.
 
 ## Dialogue Narrator (`chat-mode-narrator`)
 

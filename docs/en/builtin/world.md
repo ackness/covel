@@ -2,7 +2,7 @@
 
 This page covers the start of a game and the world itself: what happens when a game begins, how the player character is created, and how the people, rules, time and new discoveries in the world are recorded.
 
-The page follows the order you meet them in a game. First come the four that run at the start, then the five that keep updating as the story goes on.
+This page introduces the plugins in the order you encounter them in a game. First come the four that run at the start, then the five that keep updating as the story goes on.
 
 | Plugin                                     | In short                                                                             |
 | ------------------------------------------ | ------------------------------------------------------------------------------------ |
@@ -77,7 +77,7 @@ At the start, it prepares the character attributes and the "dimensions" of this 
 
 **What you will see**
 
-- "Overview" and "Character Traits" in the "World Details" tab on the right. Character Traits reads the current session character schema, so a save with an existing schema shows it immediately. Type and category badges follow the UI language.
+- "Overview" and "Character Traits" in the "World Details" tab on the right. Character Traits shows the character attribute definitions for the current session. If a save already has these definitions, you can view them as soon as you open it. Type and category badges follow the UI language.
 - The current value of each dimension is shown in the panel, and you can change it by hand. If a turn's settlement fails, the panel tells you. You can retry, mark it as handled manually, or skip it explicitly. Before your next action, the system automatically retries once.
 
 **When it is on**: on by default (`kind: core`). You can turn it off on the session-prep screen. All three built-in packs include it.
@@ -125,7 +125,7 @@ Shows the rules that hold for the whole world over time: customs, taboos, laws, 
 
 When a named place, person, item, skill, legend or monster first appears in the story, it is recorded in the codex automatically, and you can look it up any time. If the same name appears again, it only adds to the existing entry. It does not create a duplicate.
 
-**What you will see**: the "Codex" tab on the right. You can search it, and filter entries by Characters, Locations, Items, Skills, Lore and Monsters. At the bottom it shows "N entries collected". Below each turn there is also a "Found this turn" card. Entry badges use the same localized names as the category tabs; the codex panel declares its rarity colors.
+**What you will see**: the "Codex" tab on the right. You can search it, and filter entries by Characters, Locations, Items, Skills, Lore and Monsters. At the bottom it shows "N entries collected". Below each turn there is also a "Found this turn" card. Entry badges and category tabs show the same names in the interface language. The codex panel defines the colors used to highlight rarity.
 
 **When it is on**: optional. The Traditional Story pack includes it. It needs "World Fact Extraction", which is turned on together with it.
 
