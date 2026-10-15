@@ -52,7 +52,7 @@ const mediaTables = allTables.filter((t) => isMediaTable(t));
  * PostgreSQL (like SQLite) treats each NULL as distinct in a UNIQUE column,
  * which made an earlier (session_id, media_id, plugin_id) constraint silently
  * allow unbounded duplicate rows when callers passed undefined / NULL pluginId.
- * addRef() is idempotent per (session_id, media_id). Sites with legacy duplicate
+ * addRef() is idempotent per (session_id, media_id). Databases with duplicate
  * rows must dedupe before this index can be created. See docs/reference/media-store.md.
  */
 export const CREATE_MEDIA_TABLES_SQL = buildCreateTablesSql(mediaTables, "pg");

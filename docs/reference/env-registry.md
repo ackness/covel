@@ -310,7 +310,7 @@ v0.0.42 调整了插件扩展契约，旧的开发数据不会自动升级。桌
 | `COVEL_USER_TRANSLATIONS_DIR` | — | 包外插件译文的目录 |
 | `COVEL_DESKTOP_REST` | `false` | 开启桌面配置 REST 接口 |
 | `COVEL_DESKTOP_REST_TOKEN` | — | 桌面配置写接口的 bearer token，也是托管层级的运维凭证 |
-| `COVEL_SYSTEM_PROXY_URL` | — | 给不支持动态系统代理解析的旧桌面程序用的兼容入口 |
+| `COVEL_SYSTEM_PROXY_URL` | — | 不支持动态系统代理 IPC 的宿主使用的静态系统代理 |
 | `COVEL_DESKTOP_SYSTEM_PROXY_IPC` | `false` | Electron 注入的内部标记，表示后端可以逐个 URL 询问系统代理 |
 | `COVEL_LOGS_DIR` | — | 桌面版日志目录（设置页显示） |
 | `COVEL_LOG_MAX_SIZE_MB` / `COVEL_LOG_MAX_FILES` | `10` / `10` | 桌面版日志轮转：单个文件的上限和保留的份数 |
@@ -460,7 +460,7 @@ v0.0.42 调整了插件扩展契约，旧的开发数据不会自动升级。桌
 
 - 桌面版选择 `system` 代理时，后端为每个目标 URL 通过 IPC 询问 Chromium 的系统代理，并按系统返回的代理顺序依次尝试连接。
 - Electron 注入内部标记 `COVEL_DESKTOP_SYSTEM_PROXY_IPC=1`，所以普通的 Node IPC 或 cluster 进程不会误用这套协议。
-- `COVEL_SYSTEM_PROXY_URL` 只是给不支持动态 IPC 的旧桌面程序留的兼容入口。
+- `COVEL_SYSTEM_PROXY_URL` 为不支持动态 IPC 的宿主提供静态系统代理地址；Electron 按请求 URL 通过 IPC 解析代理。
 - 代理用于框架自己的服务商请求、模型数据库更新、GitHub 插件解析和下载。它不作用于第三方插件的 `fetchWithRetry`。
 
 ### 模型调用

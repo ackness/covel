@@ -112,7 +112,7 @@ export interface SqlRunner {
   /**
    * Upsert many rows atomically inside one transaction. A no-op on an empty
    * batch. Each row carries its own `set`, so per-record update payloads are
-   * preserved (matching the legacy per-backend batch loops).
+   * preserved across every backend.
    */
   insertManyAtomic(table: Table, rows: readonly UpsertRow[]): Promise<void>;
 

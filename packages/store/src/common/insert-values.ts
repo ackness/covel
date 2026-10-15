@@ -231,8 +231,7 @@ function buildInsertValues(json: JsonWriter): InsertValueBuilders {
     },
 
     // ── Runtime-domain tables (no upsert; plain inserts) ──────────
-    // The JSON column nullability below mirrors the legacy inline builders
-    // exactly: `writeJson` columns are always serialized (PG `value ?? null`,
+    // JSON columns use the backend writers: `writeJson` columns are always serialized (PG `value ?? null`,
     // SQLite `toJson`), `writeNullableJson` columns keep SQL NULL when absent.
 
     turnResultInsert(record) {
@@ -401,7 +400,7 @@ function buildInsertValues(json: JsonWriter): InsertValueBuilders {
     },
 
     // ── Session content/journal tables ────────────────────────────
-    // JSON column nullability mirrors the legacy inline builders exactly:
+    // JSON columns use these backend writers:
     //  - `payload`/`metadata`/`fields` were `?? null` (PG) / `!= null ? toJson
     //    : null` (SQLite) → `writeNullableJson`.
     //  - `config`/`values`/`focusSections` were `?? null` (PG) / `toJson`
@@ -504,7 +503,7 @@ function buildInsertValues(json: JsonWriter): InsertValueBuilders {
     // ── Turn messages ─────────────────────────────────────────────
     // `ui`/`pendingInput` are nullable JSON (PG passthrough / SQLite toJson with
     // a null-guard) → `writeNullableJson`. `compactedAtTurnId` is persisted on
-    // every backend (the legacy SQLite insert omitted it — a data-loss bug).
+    // every backend to retain compaction state.
 
     turnMessageInsert(record) {
       return {
@@ -586,8 +585,7 @@ function buildInsertValues(json: JsonWriter): InsertValueBuilders {
 
     // ── Snapshots / Suspensions ───────────────────────────────────
     // `payload`/`resumeSchema`/`pendingContinuation` are required (`notNull`)
-    // JSON columns → `writeJson` (PG passthrough / SQLite `toJson`), matching the
-    // legacy raw-SQL `toJson(...)` (SQLite) and direct passthrough (PG). The
+    // JSON columns → `writeJson` (PG passthrough / SQLite `toJson`). The
     // upsert builders return ONLY the ON CONFLICT DO UPDATE SET column set:
     //  - snapshots: {turnId, kind, parentId, payload} (not id/sessionId/createdAt)
     //  - suspensions: {reason, resumeSchema, pendingContinuation, resolvedAt}

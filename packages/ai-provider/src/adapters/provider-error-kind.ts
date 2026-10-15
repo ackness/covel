@@ -33,7 +33,7 @@ const KNOWN_CODES: ReadonlyMap<string, ProviderErrorKind> = new Map([
 ]);
 
 /**
- * Compatible gateways vary the documented words (`ContentPolicyViolation`
+ * API gateways vary the documented words (`ContentPolicyViolation`
  * style suffixes, `insufficient_balance`, `token_limit_reached`). These
  * fragments of a code are the fallback after the exact table.
  */

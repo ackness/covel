@@ -12,7 +12,7 @@ export interface OutboundProxyConfig {
 export interface ConfigureOutboundProxyInput extends OutboundProxyConfig {
   /** Resolve Chromium's ordered proxy result for each concrete target URL. */
   readonly resolveSystemProxy?: SystemProxyResolver;
-  /** @deprecated Compatibility path for shells without a per-request resolver. */
+  /** @deprecated Static system proxy for shells without a per-request resolver. */
   readonly systemProxyUrl?: string;
 }
 
@@ -314,7 +314,7 @@ function actionableFetchError(error: unknown): Error | unknown {
   return detail ? new Error(message, { cause: error }) : error;
 }
 
-/** Fetch with an explicitly compatible Undici dispatcher and useful causes. */
+/** Fetch with an Undici dispatcher from the same fetch implementation and useful causes. */
 export async function fetchWithDispatcher(
   input: string | URL,
   init: RequestInit,

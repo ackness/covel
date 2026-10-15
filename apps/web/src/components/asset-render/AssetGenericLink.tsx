@@ -13,7 +13,7 @@
  *     modality-specific shape
  *
  * The component is deliberately conservative: it never tries to embed unknown
- * mime types as media because that is what blew up the legacy `<Image>`
+ * mime types as media because that is what blew up the image-only
  * renderer when plugins started shipping `audio/*` payloads through it.
  */
 

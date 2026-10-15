@@ -11,7 +11,7 @@ export const THEME_MANAGER_WIDGET_KEY = "ui.themeManager";
  * skips schema validation for it — a shared "settings backup" JSON can carry
  * arbitrary cssText straight past `parseImportedThemeFile`. Strip `@import` on
  * the way *in*, so one chokepoint covers file import, settings import, hand
- * edits and legacy rows alike. (Full scope enforcement runs at import time;
+ * edits and stored rows alike. (Full scope enforcement runs at import time;
  * applying it here too would silently delete themes players already have.)
  */
 /** Same shape as a theme id: the group may name the package it derives from. */

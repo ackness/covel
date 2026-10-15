@@ -301,10 +301,9 @@ export async function importWorldDataForSession(
     worldsDirs: options.worldsDirs,
     covelHome: options.covelHome,
     now: options.now,
-    // Keep the compatibility helper's historical DB/media ordering. Session
-    // creation passes mediaStore explicitly and gets the transaction-shortened
-    // path; callers importing into an existing session may need skipExisting
-    // selection before materialization.
+    // Existing sessions select skipExisting writes before materializing media.
+    // Session creation passes mediaStore to preparation to keep the subsequent
+    // database transaction short.
     preflight: {
       ...options.preflight,
       activePlugins: options.preflight?.activePlugins ?? session?.activePlugins,

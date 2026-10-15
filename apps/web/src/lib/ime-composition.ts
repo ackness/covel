@@ -8,7 +8,7 @@
  *
  * `isComposing` covers the composition itself. Safari reports the key press
  * that commits a candidate after `compositionend`, with `isComposing` already
- * false; only the legacy key code 229 marks it there.
+ * false; only key code 229 marks it there.
  */
 
 interface ComposingKeyEvent {

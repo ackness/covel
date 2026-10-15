@@ -120,6 +120,8 @@ pnpm check:scripts    # scripts/tests/*.test.mjs under node --test
 pnpm check:workflows  # actionlint on .github/workflows/
 ```
 
+`check:scripts` 还检查 `apps/*/src`、`packages/*/src` 和插件代码里的兼容措辞，跳过测试和归档。`legacy`、`compat`、`compatible`、`compatibility`、`backward(s)`、`old format`、`old decoder` 必须在同一行或上一行有 `ponytail:`，并同步[限制清单](./technical-debt.md)。只有少数当前 API 或领域术语可以写进 `scripts/tests/compat-wording.test.mjs` 的文件白名单，每项都要说明原因；过时分支应删除，描述当前行为的注释应改写。
+
 ## Release
 
 ```bash

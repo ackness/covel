@@ -126,7 +126,7 @@ type _Segment = Assert<IoMember<"prompt.segment@1">>;
 type _WorldContext = Assert<IoMember<"session.world-context@1">>;
 type _UiSlot = Assert<IoMember<"ui.slot@1">>;
 
-// The SDK exposes every kernel extension-context capability with compatible
+// The SDK exposes every kernel extension-context capability with matching
 // signatures. Adding a kernel field must update the public mirror.
 type _SameContextKeys = Assert<
   Exclude<

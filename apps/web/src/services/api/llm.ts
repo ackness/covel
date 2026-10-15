@@ -44,14 +44,6 @@ export interface ModelCapabilityInfo {
   contextWindow?: number;
   maxOutputTokens?: number;
   pricing?: ModelPricing;
-  /**
-   * Flat compatibility fields returned alongside the nested `pricing` object
-   * by `GET /api/model-db/lookup`.
-   */
-  inputPerMToken?: number;
-  cacheReadPerMToken?: number;
-  cacheWritePerMToken?: number;
-  outputPerMToken?: number;
 }
 
 export interface LlmSlotInfo {

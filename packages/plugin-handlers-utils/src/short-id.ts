@@ -64,7 +64,7 @@ export function wordId(
 /**
  * Allocate a new ID without reading the namespace: the label's words plus an
  * 8-hex random part, so repeated labels and lossy slugs stay distinct.
- * The session argument is retained for source compatibility, not uniqueness.
+ * The reserved session argument does not contribute to uniqueness.
  * Names are display text, not identity; deduplicate against stored entities.
  * The random part comes from the context's `random`, so it repeats in a test
  * server started with a seed, as every other draw of the plugin does.

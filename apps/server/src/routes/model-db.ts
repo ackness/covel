@@ -95,13 +95,7 @@ export function createModelDbRoutes(ai: AiStack): Hono {
         protocol,
         result.capability.features,
       ),
-      capability: {
-        ...result.capability,
-        inputPerMToken: result.capability.pricing?.inputPerMToken,
-        cacheReadPerMToken: result.capability.pricing?.cacheReadPerMToken,
-        cacheWritePerMToken: result.capability.pricing?.cacheWritePerMToken,
-        outputPerMToken: result.capability.pricing?.outputPerMToken,
-      },
+      capability: result.capability,
       ...(usesBuiltinAdapter !== undefined ? { usesBuiltinAdapter } : {}),
       ...(role && protocol && usesBuiltinAdapter !== false
         ? {

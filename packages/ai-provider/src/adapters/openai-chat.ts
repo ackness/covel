@@ -293,7 +293,7 @@ function serializeMessages(
 
 /**
  * OpenAI Chat Completions v1 adapter.
- * Works with any OpenAI-compatible API (DeepSeek, DashScope, etc.).
+ * Works with any API using the OpenAI wire format (DeepSeek, DashScope, etc.).
  */
 export function createOpenAiChatAdapter(): ModelProviderAdapter {
   return {
@@ -331,7 +331,7 @@ export function createOpenAiChatAdapter(): ModelProviderAdapter {
       );
       if (params.responseFormat) {
         // json_object is the widest interoperable structured-output mode for
-        // OpenAI-compatible endpoints (including Qwen/DeepSeek proxies). The
+        // OpenAI API endpoints (including Qwen/DeepSeek proxies). The
         // adapter also places the exact schema in the system prompt;
         // runtime validation remains the final contract gate.
         body.response_format = { type: "json_object" };
@@ -468,7 +468,7 @@ export function createOpenAiChatAdapter(): ModelProviderAdapter {
         ),
         stream: true,
         // OpenAI Chat only includes a final usage chunk when this option is
-        // explicit. Compatible providers that support usage follow the same
+        // explicit. Third-party providers that support usage follow the same
         // shape; malformed/absent counters remain safely normalized to zero.
         stream_options: { include_usage: true },
         ...(params.responseFormat
@@ -585,7 +585,7 @@ export function createOpenAiChatAdapter(): ModelProviderAdapter {
           if (!tc.name) continue;
           yield {
             type: "tool-call",
-            // Some compatible gateways leave `id` out of the stream.
+            // Some API gateways leave `id` out of the stream.
             id: tc.id ?? fallbackId(index),
             name: tc.name,
             arguments: tc.arguments || "{}",

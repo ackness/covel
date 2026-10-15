@@ -3,7 +3,7 @@ import { mediaRefSchema } from "../types/media.js";
 /**
  * Deep-scan arbitrary JSON-like values for MediaRef-shaped objects.
  *
- * Used by snapshot/fork, media lifecycle cleanup, and legacy trace adapters.
+ * Used by snapshot/fork, media lifecycle cleanup, and trace adapters.
  * The scanner accepts readonly records/arrays and stops descending once a
  * complete MediaRef is found, so nested metadata inside the ref does not
  * produce duplicate ids.

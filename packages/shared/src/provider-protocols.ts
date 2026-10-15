@@ -15,7 +15,7 @@ export interface ProviderProtocolDescriptor {
  * only list: the config schema, the request validators, the settings UI and
  * the provider package derive their protocol IDs from it.
  *
- * An OpenAI-compatible provider is not a protocol. It speaks
+ * An OpenAI API provider is not a protocol. It speaks
  * `openai-chat-v1` and belongs in `BUILTIN_PROVIDER_CONNECTIONS`.
  */
 export const PROVIDER_PROTOCOL_DESCRIPTORS = [

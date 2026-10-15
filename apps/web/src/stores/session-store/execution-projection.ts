@@ -12,7 +12,7 @@ export interface ExecutionTurn {
   sourceCommitted?: boolean;
 }
 
-/** Resolve legacy retry chains without allowing malformed links to loop. */
+/** Resolve retry source chains without allowing malformed links to loop. */
 export function getSourceTurnId(
   turnId: string | undefined,
   sources: ReadonlyMap<string, string>,

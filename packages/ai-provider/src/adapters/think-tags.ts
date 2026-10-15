@@ -2,7 +2,7 @@
  * Reasoning that a model writes inline in its reply as `<think>…</think>`.
  *
  * Some models reason in the reply itself (Qwen3, DeepSeek-R1 and their
- * distills), and an OpenAI-compatible gateway may pass that through as plain
+ * distills), and an OpenAI API gateway may pass that through as plain
  * content instead of a reasoning field. Left in the text, a story would show
  * the reasoning to the player and a JSON reply would not parse. The split
  * moves it to the reasoning channel, as AI SDK's `extractReasoningMiddleware`

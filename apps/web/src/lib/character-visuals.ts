@@ -70,7 +70,7 @@ function selection(variant: CharacterVisualVariant): ResolvedCharacterVisual {
 
 /**
  * Resolve a requested character visual with a deterministic Galgame-style
- * fallback chain. Legacy `sprite` / `avatar` records stay valid indefinitely.
+ * fallback chain. Base `sprite` / `avatar` images work without a variant catalog.
  */
 export function resolveCharacterVisual(
   presence: PresenceRecord | undefined,

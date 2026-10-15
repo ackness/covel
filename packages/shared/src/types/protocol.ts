@@ -38,7 +38,7 @@ import type {
 // untyped `payload[key]` reads are coupled to these shapes today.
 
 /** Open payload for runtime-internal / trace events whose shape is not yet
- *  pinned. Structurally a read-only record so it stays compatible with the
+ *  pinned. Structurally a read-only record so it matches the
  *  loose `SseEnvelope.payload` carried over the wire. */
 export type CovelEventPayload = Readonly<Record<string, unknown>>;
 
@@ -589,7 +589,7 @@ export interface ProtocolEvent {
 // ── Session Snapshot (for restore/reconnection) ─────────────────
 
 /**
- * Keyset cursor for backward pagination over an append-only, time-ordered log.
+ * Keyset cursor for pagination toward older entries over an append-only, time-ordered log.
  * The `(createdAt, id)` tuple is a total order even when rows share a
  * millisecond, so paging by it never skips or repeats a row. Pass it as the
  * `before` position to fetch the page immediately older than the current one.

@@ -175,7 +175,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
     type === "retry_runtime" || type === "retry_failed_runtimes";
 
   // Enforce header transport limits before opening the SSE response or doing
-  // any session work. Malformed legacy values remain a no-settings request.
+  // any session work. Malformed values remain a no-settings request.
   const decodedUserSettings = decodePluginUserSettingsHeader(
     c.req.header("X-Plugin-User-Settings"),
   );

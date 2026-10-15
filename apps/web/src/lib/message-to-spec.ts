@@ -282,9 +282,8 @@ function formToSpec(
 
 /**
  * Convert a form block to a disabled json-render spec (post-submission).
- * If `submittedValues` is provided, each field's submitted value is rendered
- * inline (as static `value` and `placeholder`) so the player can see what
- * they originally entered without depending on a live state tree.
+ * Render saved values inline; an absent value stays empty so another form's
+ * live state cannot alter a historical submission.
  */
 function formToSpecDisabled(
   data: Record<string, unknown>,
@@ -312,14 +311,9 @@ function formToSpecDisabled(
       label: field.label ?? field.name,
       options,
       disabled: true,
+      value: raw ?? "",
+      placeholder: submittedValue,
     };
-    if (submittedValue) {
-      props.value = raw;
-      props.placeholder = submittedValue;
-    } else {
-      // No persisted value (legacy submissions) — fall back to live state binding.
-      props.value = { $bindState: `/form/${field.name}` };
-    }
     children.push({ type: "FormField", props });
   }
 

@@ -85,7 +85,7 @@ export type PlayerInputSubmission = import("zod").infer<
 /**
  * Wire-format `Message` — the contract returned by `/api/sessions/:id/messages`.
  *
- * This is a flattened, backwards-compatible projection used by frontend
+ * This is a flattened projection used by frontend
  * chat lists and message replay. The richer `TurnMessage` (above) is the
  * authoritative server-side conversation type and is returned by the
  * `/turn-messages` endpoint when full UI render instructions are needed.

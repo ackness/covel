@@ -259,28 +259,16 @@ function lookupPrice(
   const cached = priceCache.get(key);
   if (cached) return cached;
   const promise = lookupModelCapability(model, provider)
-    .then((cap) =>
-      cap &&
-      (cap.inputPerMToken !== undefined ||
-        cap.outputPerMToken !== undefined ||
-        cap.cacheReadPerMToken !== undefined ||
-        cap.cacheWritePerMToken !== undefined)
-        ? {
-            ...(cap.cacheReadPerMToken !== undefined
-              ? { cacheReadPerMToken: cap.cacheReadPerMToken }
-              : {}),
-            ...(cap.cacheWritePerMToken !== undefined
-              ? { cacheWritePerMToken: cap.cacheWritePerMToken }
-              : {}),
-            ...(cap.inputPerMToken !== undefined
-              ? { inputPerMToken: cap.inputPerMToken }
-              : {}),
-            ...(cap.outputPerMToken !== undefined
-              ? { outputPerMToken: cap.outputPerMToken }
-              : {}),
-          }
-        : null,
-    )
+    .then((capability) => {
+      const pricing = capability?.pricing;
+      return pricing &&
+        (pricing.inputPerMToken !== undefined ||
+          pricing.outputPerMToken !== undefined ||
+          pricing.cacheReadPerMToken !== undefined ||
+          pricing.cacheWritePerMToken !== undefined)
+        ? pricing
+        : null;
+    })
     .catch(() => null);
   priceCache.set(key, promise);
   return promise;

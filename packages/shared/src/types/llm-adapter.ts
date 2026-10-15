@@ -9,9 +9,8 @@ import type { LLMFinishReason } from "../llm-finish-reason.js";
  * This is the canonical contract describing a single LLM call. It lives in
  * `@covel/shared` so that distribution-level consumers (e.g. `@covel/create`)
  * can depend on the call shape without pulling in the entire kernel via
- * `@covel/runtime`. Runtime re-exports these names for backward
- * compatibility; implementations can wrap `@covel/ai-provider`'s gateway or
- * provide mock responses for testing.
+ * `@covel/runtime`. Runtime re-exports these contracts; implementations can
+ * wrap `@covel/ai-provider`'s gateway or provide mock responses for testing.
  */
 
 import type { MediaRef } from "./media.js";
@@ -114,7 +113,7 @@ export interface LLMToolDefinition {
   readonly parameters: Readonly<Record<string, unknown>>; // JSON Schema
 }
 
-/** Runtime preferences applied only when compatible with explicit user settings. */
+/** Runtime preferences applied only when allowed by explicit user settings. */
 export interface LLMRequestDefaults {
   /** Deterministic extraction can opt out of optional reasoning by default. */
   readonly reasoningEffort?: "disabled";

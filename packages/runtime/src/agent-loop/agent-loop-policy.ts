@@ -49,7 +49,7 @@ export interface AgentLoopPolicy {
   readonly outputFromCompletingTool: boolean;
   /**
    * Session/API model override for this runtime. Story runtimes honour
-   * the legacy story-only API override; every runtime kind honours the
+   * the request-scoped story-only API override; every runtime kind honours the
    * per-session `runtimeModelOverrides` snapshot.
    */
   readonly runtimeModelOverride: string | undefined;

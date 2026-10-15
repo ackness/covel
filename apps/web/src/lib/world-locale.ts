@@ -92,7 +92,7 @@ export function prioritizeWorldsByLocale(
 /**
  * Whether selecting a world would make its content language differ from the
  * active interface language. Compare maximized language and script so regional
- * variants remain compatible without collapsing Traditional and Simplified
+ * variants match without collapsing Traditional and Simplified
  * Chinese into one language preference.
  */
 export function isWorldLocaleMismatch(

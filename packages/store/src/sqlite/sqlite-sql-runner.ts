@@ -5,7 +5,7 @@
  * query layer to the concrete `node:sqlite` driver. `node:sqlite` is fully
  * synchronous, so each terminal (`.all()/.get()/.run()`) is wrapped in
  * `Promise.resolve(...)` to satisfy the async {@link SqlRunner} contract — a
- * zero-cost wrap, identical in behaviour to the legacy inline calls. The loose
+ * wrap that keeps driver calls synchronous. The loose
  * `Table` handle is cast up to `SQLiteTable` for the driver; these casts are the
  * dialect-bridging gateway (analogous to `sqliteJsonReader`/`sqliteJsonWriter`)
  * and are sound — the shared modules only ever pass real SQLite schema tables.

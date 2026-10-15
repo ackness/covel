@@ -120,6 +120,8 @@ pnpm check:scripts    # scripts/tests/*.test.mjs under node --test
 pnpm check:workflows  # actionlint on .github/workflows/
 ```
 
+`check:scripts` also checks compatibility wording in `apps/*/src`, `packages/*/src`, and plugin code, excluding tests and archives. `legacy`, `compat`, `compatible`, `compatibility`, `backward(s)`, `old format`, and `old decoder` require `ponytail:` on the same or preceding line and a matching [limits ledger](./technical-debt.md) entry. A few current API or domain terms may use the file allowlist in `scripts/tests/compat-wording.test.mjs`, with a reason for each entry. Delete obsolete branches and reword comments that describe current behavior.
+
 ## Release
 
 ```bash

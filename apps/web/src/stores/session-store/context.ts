@@ -76,8 +76,7 @@ export interface SessionContextValue extends SessionActions {
 /**
  * State and actions are split across two contexts so that components which
  * only call actions (e.g. interactive block handlers) do not re-render on
- * every streaming state change. `useSession()` stays as an aggregate hook for
- * backwards compatibility; prefer `useSessionActions()` in action-only
+ * every streaming state change. `useSession()` reads both contexts; prefer `useSessionActions()` in action-only
  * consumers to avoid the high-frequency state subscription.
  */
 export const SessionStateContext = createContext<SessionState | null>(null);

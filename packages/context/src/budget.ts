@@ -203,7 +203,7 @@ export function isCompactedHistoryEnvelope(message: {
 }
 
 /**
- * Walk backwards through the message list and compute the index at which
+ * Walk the message list from newest to oldest to find the index where
  * the protect window starts. `messages.slice(protectStartIndex)` is
  * guaranteed to be preserved under all circumstances.
  *

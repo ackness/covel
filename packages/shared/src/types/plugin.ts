@@ -13,7 +13,7 @@ export type PluginType = "core-plugin" | "plugin";
  * Runtime execution type.
  * - `agent` (default): LLM-driven with prompt template, tool calling, context assembly.
  * - `function`: Pure JS/TS function execution, no LLM call. Handler receives execution
- *   context and returns a RuntimeResult-compatible output directly.
+ *   context and returns an output matching RuntimeResult directly.
  */
 export type RuntimeType = "agent" | "function";
 

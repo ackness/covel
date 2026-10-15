@@ -24,7 +24,7 @@ function localeEntry(
  *
  * Resolution order for locale-keyed records:
  *   1. exact locale key (e.g. `zh-CN`)
- *   2. compatible language-only key, then another same-language/script variant
+ *   2. matching language-only key, then another same-language/script variant
  *   3. fallbacks declared by the locale registry (English by default)
  *   4. first available value
  *

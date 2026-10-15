@@ -16,7 +16,7 @@ export type LLMFinishReason =
 
 /**
  * Provider words, lower case with `_`, for each unified reason: OpenAI Chat
- * and its compatible endpoints (DeepSeek, Mistral), Anthropic, Gemini and
+ * and its third-party endpoints (DeepSeek, Mistral), Anthropic, Gemini and
  * Cohere. A documented word that says the answer was cut short for another
  * reason (Anthropic `pause_turn`, DeepSeek `insufficient_system_resource`)
  * stays out on purpose and reads as `other`.

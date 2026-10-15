@@ -236,7 +236,7 @@ async function send(
   );
 }
 
-/** Native Gemini Developer API; no OpenAI-compatible endpoint assumptions. */
+/** Native Gemini Developer API; no OpenAI API endpoint assumptions. */
 export function createGoogleGenerativeAiAdapter(): ModelProviderAdapter {
   const adapter: ModelProviderAdapter = {
     async generateText(config, params, context) {

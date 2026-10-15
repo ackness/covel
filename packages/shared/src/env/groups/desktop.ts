@@ -89,7 +89,7 @@ export const DESKTOP_ENV_VARS = [
     type: "string",
     status: "active",
     description:
-      "Compatibility fallback for shells without dynamic system-proxy IPC. Electron resolves each request URL over IPC.",
+      "Static system proxy for shells without dynamic system-proxy IPC. Electron resolves each request URL over IPC.",
   },
   {
     name: "COVEL_DESKTOP_SYSTEM_PROXY_IPC",

@@ -24,7 +24,7 @@ const cache = new WeakMap<
  *
  * Each message uses the shared exact-locale and same-language/script lookup:
  * a partial `zh-CN` catalog can inherit `zh`, while `zh-Hant` cannot. Messages
- * without a compatible translation keep the English text in the code.
+ * without a matching translation keep the English text in the code.
  */
 export function pluginMessagesFor(
   catalogs: readonly PluginMessageCatalog[] | undefined,
@@ -42,14 +42,14 @@ export function pluginMessagesFor(
   const translations: Record<string, string> = {};
   if (sessionLocale) {
     for (const [text, variants] of Object.entries(labels)) {
-      const compatible = Object.fromEntries(
+      const matching = Object.fromEntries(
         Object.entries(variants).filter(([language]) =>
           localesShareLanguageAndScript(sessionLocale, language),
         ),
       );
-      if (Object.keys(compatible).length > 0)
+      if (Object.keys(matching).length > 0)
         translations[text] =
-          resolveI18nText({ en: text, ...compatible }, sessionLocale) ?? text;
+          resolveI18nText({ en: text, ...matching }, sessionLocale) ?? text;
     }
   }
   const messages: PluginMessages = Object.freeze({

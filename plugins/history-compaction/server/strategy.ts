@@ -198,7 +198,7 @@ function boundSummaryContent(
 }
 
 /**
- * Walk backwards through the message list to find the index at which the
+ * Walk from newest to oldest through the message list to find the index at which the
  * protect window begins — mirrors the logic in budget.ts.
  *
  * Protects:

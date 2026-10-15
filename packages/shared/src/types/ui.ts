@@ -108,20 +108,20 @@ export function normalizeUIRenderInstruction(
     };
   }
 
-  const legacy = instruction as UIRenderLegacyInstruction;
+  const single = instruction as UIRenderLegacyInstruction;
   const id =
-    typeof legacy.id === "string" && legacy.id.length > 0
-      ? legacy.id
+    typeof single.id === "string" && single.id.length > 0
+      ? single.id
       : fallbackId;
   const content: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(legacy)) {
+  for (const [key, value] of Object.entries(single)) {
     if (key !== "id" && key !== "type") content[key] = value;
   }
   const part: UIRenderPart = {
     id,
     type:
-      typeof legacy.type === "string" && legacy.type.length > 0
-        ? legacy.type
+      typeof single.type === "string" && single.type.length > 0
+        ? single.type
         : "card",
     status: "success",
     content,

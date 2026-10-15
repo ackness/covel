@@ -37,7 +37,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
-/** Read old full-body traces and new backward-only references without recursion. */
+/** Read full request bodies and references to earlier bodies without recursion. */
 export function resolveProviderRequestBody(
   requests: readonly unknown[],
   index: number,

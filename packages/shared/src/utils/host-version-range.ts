@@ -3,7 +3,7 @@
  *
  * Deliberately small: space-separated comparators (`>=0.0.45 <0.1.0`), each an
  * operator `>=`, `>`, `<=`, `<` or `=` (the default) followed by `X.Y.Z`. All
- * comparators must hold. Plugin-to-plugin compatibility is expressed by
+ * comparators must hold. Plugin-to-plugin contract matching is expressed by
  * contract IDs, so there is no caret/tilde/OR syntax and no dependency solving.
  */
 import { z } from "zod";
