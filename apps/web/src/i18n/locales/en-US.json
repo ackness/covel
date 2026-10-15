@@ -497,6 +497,11 @@
       "uiRightPanel": "Side panel",
       "uiMessageBlock": "Message cards",
       "uiManualAction": "Player actions"
+    },
+    "toggleSideEffects": {
+      "turnedOn": "Also turned on {{plugins}}: another plugin needs what they provide.",
+      "turnedOffConflict": "Also turned off {{plugins}}: they cannot be used together with \"{{plugin}}\".",
+      "turnedOffNeeds": "Also turned off {{plugins}}: they need \"{{plugin}}\"."
     }
   },
   "blocks": {

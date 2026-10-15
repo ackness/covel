@@ -14,6 +14,13 @@ import {
 } from "./plugin-selection-helpers.js";
 import * as api from "@/services/api.js";
 
+export interface ToggleSideEffects {
+  readonly pluginId: string;
+  readonly enabled: boolean;
+  readonly turnedOn: readonly string[];
+  readonly turnedOff: readonly string[];
+}
+
 export interface UsePluginSelectionResult {
   corePluginIds: ReadonlySet<string>;
   lockedPluginIds: ReadonlySet<string>;
@@ -53,6 +60,11 @@ export interface UsePluginSelectionResult {
    */
   resetToMinimal: () => void;
   togglePlugin: (name: string) => void;
+  /**
+   * Plugins the last toggle turned on or off besides the one toggled, such
+   * as a provider another plugin needs, or one that conflicts with it.
+   */
+  toggleSideEffects: ToggleSideEffects | null;
   /** Turn several plugins off at once, as a toggle of each would. */
   turnOffPlugins: (ids: readonly string[]) => void;
   retryPluginPlan: () => void;
@@ -183,6 +195,30 @@ export function usePluginSelection(
     ],
   );
   const enabledPluginIds = resolution.active;
+  // The active set when the player last flipped one switch, to tell them what
+  // else moved with it. Any other change of the selection clears it.
+  const [lastToggle, setLastToggle] = useState<{
+    readonly pluginId: string;
+    readonly enabled: boolean;
+    readonly before: readonly string[];
+  } | null>(null);
+  const toggleSideEffects = useMemo((): ToggleSideEffects | null => {
+    if (!lastToggle) return null;
+    const before = new Set(lastToggle.before);
+    const after = new Set(enabledPluginIds);
+    const moved = (from: ReadonlySet<string>, to: ReadonlySet<string>) =>
+      [...from].filter((id) => !to.has(id) && id !== lastToggle.pluginId);
+    const turnedOn = moved(after, before);
+    const turnedOff = moved(before, after);
+    return turnedOn.length > 0 || turnedOff.length > 0
+      ? {
+          pluginId: lastToggle.pluginId,
+          enabled: lastToggle.enabled,
+          turnedOn,
+          turnedOff,
+        }
+      : null;
+  }, [lastToggle, enabledPluginIds]);
   const pendingApproval = useMemo(
     () =>
       resolution.rejected.filter(
@@ -272,6 +308,7 @@ export function usePluginSelection(
     (packId: string) => {
       const pack = pluginPacks.find((item) => item.id === packId);
       if (!pack) return;
+      setLastToggle(null);
       setActivePluginPackId(pack.id);
       setPackRequestedPlugins(new Set(pack.requested));
       const excluded = new Set(excludedPlugins);
@@ -285,6 +322,7 @@ export function usePluginSelection(
   );
 
   const resetToMinimal = useCallback(() => {
+    setLastToggle(null);
     const tellsStory = (plugin: api.PluginSummary) =>
       plugin.runtimes.some((runtime) => runtime.outputKind === "story");
     const selectedStory = plugins.filter(
@@ -352,6 +390,11 @@ export function usePluginSelection(
         return next;
       });
       const enabling = !selectedPluginIdSet.has(name);
+      setLastToggle({
+        pluginId: name,
+        enabled: enabling,
+        before: enabledPluginIds,
+      });
       const next = new Set(
         enabling ? [name, ...otherSelectedPlugins] : otherSelectedPlugins,
       );
@@ -397,6 +440,7 @@ export function usePluginSelection(
       candidates,
       worldRequiredPluginIds,
       requiredContracts,
+      enabledPluginIds,
     ],
   );
 
@@ -404,6 +448,7 @@ export function usePluginSelection(
     (ids: readonly string[]) => {
       const off = new Set(ids.filter((id) => !lockedPluginIds.has(id)));
       if (off.size === 0) return;
+      setLastToggle(null);
       setActivePluginPackId(null);
       const without = (previous: ReadonlySet<string>) =>
         new Set([...previous].filter((id) => !off.has(id)));
@@ -443,6 +488,7 @@ export function usePluginSelection(
     applyPack,
     resetToMinimal,
     togglePlugin,
+    toggleSideEffects,
     turnOffPlugins,
     retryPluginPlan,
   };

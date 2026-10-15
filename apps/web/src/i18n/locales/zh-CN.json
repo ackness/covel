@@ -458,6 +458,11 @@
       "uiRightPanel": "侧边面板",
       "uiMessageBlock": "消息卡片",
       "uiManualAction": "可手动使用"
+    },
+    "toggleSideEffects": {
+      "turnedOn": "同时打开了 {{plugins}}：有插件需要它们提供的功能。",
+      "turnedOffConflict": "同时关闭了 {{plugins}}：它们不能和“{{plugin}}”一起用。",
+      "turnedOffNeeds": "同时关闭了 {{plugins}}：它们需要“{{plugin}}”。"
     }
   },
   "blocks": {

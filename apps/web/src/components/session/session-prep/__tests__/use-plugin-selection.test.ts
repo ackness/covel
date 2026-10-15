@@ -423,6 +423,13 @@ describe("usePluginSelection", () => {
     );
     expect(result.current.lockedPluginIds.has("core")).toBe(false);
     expect(result.current.activePluginPack).toBeNull();
+    // The screen tells the player what moved besides the switch.
+    expect(result.current.toggleSideEffects).toEqual({
+      pluginId: "alternative",
+      enabled: true,
+      turnedOn: ["dependency"],
+      turnedOff: ["core"],
+    });
 
     act(() => result.current.togglePlugin("alternative"));
     expect(result.current.selectedPluginIdSet.has("alternative")).toBe(false);

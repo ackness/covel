@@ -528,6 +528,11 @@
       "uiRightPanel": "Боковая панель",
       "uiMessageBlock": "Карточки в чате",
       "uiManualAction": "Действия игрока"
+    },
+    "toggleSideEffects": {
+      "turnedOn": "Также включено: {{plugins}} — они нужны другому плагину.",
+      "turnedOffConflict": "Также выключено: {{plugins}} — их нельзя использовать вместе с «{{plugin}}».",
+      "turnedOffNeeds": "Также выключено: {{plugins}} — им нужен «{{plugin}}»."
     }
   },
   "blocks": {
