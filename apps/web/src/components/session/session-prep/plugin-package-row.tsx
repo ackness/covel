@@ -112,7 +112,8 @@ export function PluginPackageRow({
           />
         </button>
 
-        <span className="text-xs font-medium truncate flex-1 min-w-0">
+        {/* Keep room for the name: the badges wrap to the next line first. */}
+        <span className="min-w-28 flex-1 truncate text-xs font-medium">
           {displayName}
         </span>
         {isCore && (

@@ -16,6 +16,7 @@ import { getStreamingText } from "@/stores/streaming-text-store.js";
 import { emitToast } from "@/lib/toast-channel.js";
 import { useSlotConfig } from "@/hooks/use-slot-config.js";
 import { useSessionNavigation } from "@/hooks/use-session-navigation.js";
+import { usePrepWorldRestore } from "@/hooks/use-prep-world-restore.js";
 import type { SessionPanel } from "@/lib/nav-events.js";
 import { useSettingsDialog } from "@/hooks/use-settings-dialog.js";
 import { worldDisplayText, worldPlayLocale } from "@/lib/world-locale.js";
@@ -111,6 +112,14 @@ function SessionScreen() {
     resumeSessionById,
     backToWorldSelect,
     replaceSessionUrl,
+  });
+  usePrepWorldRestore({
+    booted: state.booted,
+    sid,
+    worlds: state.worlds,
+    prepWorldId: state.world?.id,
+    inSession: Boolean(state.session),
+    selectWorld,
   });
   const handlePanelHandled = useCallback(() => {
     void navigate({ to: "/session", search: { sid }, replace: true });
