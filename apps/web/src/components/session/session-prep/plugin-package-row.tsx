@@ -10,6 +10,7 @@ import {
   effectiveSlotModel,
   formatSlotBindingLabel,
 } from "@/hooks/use-slot-config.js";
+import { resolveTextRuntimeSlot } from "./model-slot-helpers.js";
 import type { UseRuntimeBindingsResult } from "@/hooks/use-runtime-bindings.js";
 import {
   recommendationReason,
@@ -32,7 +33,6 @@ export interface PluginPackageRowProps {
   lockedPluginIds: ReadonlySet<string>;
   bindingState: UseRuntimeBindingsResult;
   resolvedSlots: ResolvedSlot[];
-  resolveDeclaredSlot: (slotId: string) => ResolvedSlot | null;
   isMissingDeclaredSlot: (slotId: string) => boolean;
   onTogglePlugin: (name: string) => void;
 }
@@ -46,7 +46,6 @@ export function PluginPackageRow({
   lockedPluginIds,
   bindingState,
   resolvedSlots,
-  resolveDeclaredSlot,
   isMissingDeclaredSlot,
   onTogglePlugin,
 }: PluginPackageRowProps) {
@@ -192,13 +191,18 @@ export function PluginPackageRow({
         <div className="mt-2.5 ml-9 space-y-2">
           {pluginBindings.map((binding) => {
             const declared = binding.defaultSlot;
-            const configuredDefault = resolveDeclaredSlot(declared);
+            // A declared slot that is not set up runs on the first text slot.
+            const runtimeDefault = resolveTextRuntimeSlot(
+              resolvedSlots,
+              declared,
+            );
+            const configuredDefault = runtimeDefault?.slot ?? null;
             const effectiveName = binding.slotName || declared;
             const selectedSlot = binding.slotName
               ? textSlots.find((slot) => slot.slotId === binding.slotName)
-              : configuredDefault?.tag === "text"
-                ? configuredDefault
-                : null;
+              : configuredDefault;
+            const usesFallback =
+              !binding.slotName && runtimeDefault?.fallback === true;
             const missingOverride =
               binding.slotName &&
               !textSlots.some((slot) => slot.slotId === binding.slotName);
@@ -217,7 +221,12 @@ export function PluginPackageRow({
                   role={selectedSlot ? undefined : "status"}
                 >
                   {selectedSlot
-                    ? formatSlotBindingLabel(selectedSlot)
+                    ? usesFallback
+                      ? t("plugin.runtimeModelFallback", {
+                          slot: declared,
+                          model: formatSlotBindingLabel(selectedSlot),
+                        })
+                      : formatSlotBindingLabel(selectedSlot)
                     : t("plugin.runtimeModelMissing", { slot: effectiveName })}
                 </Badge>
                 <select

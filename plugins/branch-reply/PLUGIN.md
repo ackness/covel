@@ -24,7 +24,9 @@ runtime:
         required: false
     output:
       contract: branch-reply@1
-  function: {}
+  function:
+    # Regenerate asks the fast text slot for alternative phrasings.
+    model: fast
   effects:
     parallelSafe: true
 ---

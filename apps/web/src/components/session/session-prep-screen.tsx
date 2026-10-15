@@ -27,10 +27,7 @@ import { SessionBreadcrumb } from "./session-breadcrumb.js";
 import { confirmDeleteSession } from "./confirm-delete-session.js";
 import { text } from "@/components/world/editor-helpers.js";
 import { useSlotConfig } from "@/hooks/use-slot-config.js";
-import {
-  isDeclaredSlotMissing,
-  resolveDeclaredSlot,
-} from "./session-prep/model-slot-helpers.js";
+import { isDeclaredSlotMissing } from "./session-prep/model-slot-helpers.js";
 import {
   activeSessionRecords,
   removeSessionById,
@@ -339,14 +336,6 @@ export function SessionPrepScreen({
       });
   }, [flowData, plugins, enabledPluginIds]);
 
-  const resolveSelectedDeclaredSlot = useCallback(
-    (slotId: string) =>
-      resolveDeclaredSlot(
-        resolvedSlots.filter((slot) => slot.tag === "text"),
-        slotId,
-      ),
-    [resolvedSlots],
-  );
   const isSelectedDeclaredSlotMissing = useCallback(
     (slotId: string) => isDeclaredSlotMissing(resolvedSlots, slotId),
     [resolvedSlots],
@@ -763,7 +752,6 @@ export function SessionPrepScreen({
                 lockedPluginIds={lockedPluginIds}
                 bindingState={bindingState}
                 resolvedSlots={resolvedSlots}
-                resolveDeclaredSlot={resolveSelectedDeclaredSlot}
                 isMissingDeclaredSlot={isSelectedDeclaredSlotMissing}
                 onTogglePlugin={togglePlugin}
                 worldDataPreflight={worldDataPreflight}

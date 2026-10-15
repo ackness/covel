@@ -1987,6 +1987,7 @@
       "conversionFailed": "не удалось отобразить `view`"
     },
     "runtimeModelMissing": "Роль модели {{slot}} недоступна. Выберите настроенную роль или обновите назначения моделей.",
+    "runtimeModelFallback": "{{slot}} не настроен; используется {{model}}",
     "untranslated": "Без перевода",
     "untranslatedHint": "У этого плагина нет текста на вашем языке. Его панели показываются на английском.",
     "invalidPanelSpecDetail": "Неверное описание панели: {{label}} — {{reason}}",
