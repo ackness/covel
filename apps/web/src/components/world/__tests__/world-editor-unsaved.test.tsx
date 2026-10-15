@@ -157,6 +157,24 @@ describe("WorldEditor unsaved changes", () => {
     },
   );
 
+  it("asks again when the player leaves before the editor re-renders", async () => {
+    const { history } = openEditor();
+    changeOpening("At the harbor");
+    let keepEditing!: (discard: boolean) => void;
+    mocks.requestConfirm.mockReturnValueOnce(
+      new Promise<boolean>((resolve) => (keepEditing = resolve)),
+    );
+    await act(async () => history.push("/elsewhere"));
+    await waitFor(() => expect(mocks.requestConfirm).toHaveBeenCalledOnce());
+    mocks.requestConfirm.mockResolvedValue(true);
+    // The router still holds the guard of the render that opened the dialog.
+    keepEditing(false);
+    for (let tick = 0; tick < 10; tick += 1) await Promise.resolve();
+    history.push("/elsewhere");
+    await waitFor(() => expect(history.location.pathname).toBe("/elsewhere"));
+    expect(mocks.requestConfirm).toHaveBeenCalledTimes(2);
+  });
+
   it("does not block clean or reverted navigation and removes the blocker on unmount", async () => {
     const { history, unmount } = openEditor();
     changeOpening("At the harbor");
