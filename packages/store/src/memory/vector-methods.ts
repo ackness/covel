@@ -229,6 +229,12 @@ export function createVectorMethods(state: MemoryState): MemoryStoreMethods {
       sessionId: string,
       target: VectorTarget,
     ): Promise<void> {
+      const session = state.sessions.get(sessionId);
+      if (!session) {
+        throw new Error(
+          `Memory lockSessionEmbeddingModel: session ${sessionId} not found`,
+        );
+      }
       const existing = state.sessionVectorTargets.get(sessionId);
       if (existing !== undefined && existing !== null) {
         throw new Error(
@@ -236,6 +242,11 @@ export function createVectorMethods(state: MemoryState): MemoryStoreMethods {
         );
       }
       state.sessionVectorTargets.set(sessionId, target);
+      state.sessions.set(sessionId, {
+        ...session,
+        embeddingModelId: target.modelRegistryId,
+        embeddingLockedAt: new Date().toISOString(),
+      });
     },
 
     async resetSessionVectorIndex(input: ResetSessionVectorIndexInput) {
@@ -260,6 +271,11 @@ export function createVectorMethods(state: MemoryState): MemoryStoreMethods {
       } else {
         state.sessionVectorTargets.delete(input.sessionId);
       }
+      state.sessions.set(input.sessionId, {
+        ...session,
+        embeddingModelId: input.target?.modelRegistryId ?? null,
+        embeddingLockedAt: input.target ? new Date().toISOString() : null,
+      });
       return true;
     },
 

@@ -756,7 +756,7 @@ The following describes the behavior of the web client itself. It is written for
 - Closing the page releases the lock, and another page can pick up and recover. An operation still held by an active page is not exported early as an old result.
 - The session lock and revision check of a single server request cannot replace this whole client-side coordination.
 
-**`actionId` conflicts.** The client's `applySessionCommit` rejects a commit where the same `actionId` carries different content. It throws `ActionIdConflictError`. The caller identifies a conflict by the error class and its `sessionId` and `actionId`. This local error has no `code` field. The error codes in HTTP responses are defined by each endpoint.
+**`actionId` conflicts.** The client's `applySessionCommit` rejects a commit where the same `actionId` carries different content. It throws `BrowserVaultConflictError`. The caller identifies a conflict by the error class; its message includes the `actionId`. This local error has no `code` field. The error codes in HTTP responses are defined by each endpoint.
 
 **World lock and session lock.** The order is fixed: world first, then session.
 

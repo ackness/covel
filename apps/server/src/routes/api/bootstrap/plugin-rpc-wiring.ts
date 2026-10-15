@@ -5,7 +5,7 @@ import {
   type PluginRpcRegistry,
   type RpcExecutor,
 } from "@covel/runtime";
-import { isDefaultLocale } from "@covel/shared";
+import { resolveI18nText } from "@covel/shared";
 
 export interface BootstrapPluginRpc {
   readonly rpcRegistry: PluginRpcRegistry;
@@ -23,14 +23,18 @@ export function createBootstrapPluginRpc(): BootstrapPluginRpc {
         .filter((runtime) => runtime.outputKind === "story")
         .map((runtime) => runtime.model?.resolved ?? runtime.model?.slot)
         .filter((model): model is string => Boolean(model));
-      const chinese = isDefaultLocale(context.locale);
       const modelSummary =
-        [...new Set(storyModels)].join(", ") || (chinese ? "默认" : "default");
+        [...new Set(storyModels)].join(", ") ||
+        resolveI18nText({ "zh-CN": "默认", en: "default" }, context.locale);
       return {
         ok: true,
-        message: chinese
-          ? `调试上下文已就绪：${runtimes.length} 个活跃 runtime，story model 为 ${modelSummary}。`
-          : `Debug context ready: ${runtimes.length} active runtime(s), story model ${modelSummary}.`,
+        message: resolveI18nText(
+          {
+            "zh-CN": `调试上下文已就绪：${runtimes.length} 个活跃 runtime，story model 为 ${modelSummary}。`,
+            en: `Debug context ready: ${runtimes.length} active runtime(s), story model ${modelSummary}.`,
+          },
+          context.locale,
+        ),
         data: context.environment,
         clientAction: { type: "open-debug" },
       };

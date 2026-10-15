@@ -756,7 +756,7 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 - 页面关闭会释放锁，另一个页面可以接着恢复。仍由活跃页面持有的操作不会被提前导出成旧结果。
 - 服务端单次请求的会话锁和 revision 检查，不能代替客户端这一整套协调。
 
-**`actionId` 冲突。** 客户端的 `applySessionCommit` 拒绝同一个 `actionId` 携带不同内容的提交，抛出 `ActionIdConflictError`。调用方通过错误类和它的 `sessionId`、`actionId` 判断冲突。这个本地错误没有 `code` 字段；HTTP 响应里的错误码由端点定义。
+**`actionId` 冲突。** 客户端的 `applySessionCommit` 拒绝同一个 `actionId` 携带不同内容的提交，抛出 `BrowserVaultConflictError`。调用方通过错误类识别冲突，消息中带有 `actionId`。这个本地错误没有 `code` 字段；HTTP 响应里的错误码由端点定义。
 
 **世界锁和会话锁。** 顺序固定：先世界，后会话。
 

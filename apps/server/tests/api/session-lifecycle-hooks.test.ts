@@ -21,6 +21,7 @@ import { characterRoutes } from "../../src/routes/api/characters.js";
 import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
 import { backgroundRuntimeLockId } from "../../src/routes/api/plugin-rpc/runtime-turn.js";
 import { setSessionWorld } from "../helpers/session-world.js";
+import { CompactionFailureTracker } from "../../src/routes/api/bootstrap/compactor.js";
 
 const TEST_APPROVAL_SCOPE = "session-lifecycle-test-scope";
 
@@ -38,6 +39,7 @@ async function build() {
   const rpcApprovalGate = createRpcApprovalGate();
   const mediaStore = createMemoryMediaStore();
   const clearSessionToolOverrides = vi.fn();
+  const compactionFailures = new CompactionFailureTracker();
   const app = new Hono();
   app.use("*", async (c, next) => {
     c.set("store", store);
@@ -45,6 +47,7 @@ async function build() {
     c.set("rpcApprovalGate", rpcApprovalGate);
     c.set("mediaStore", mediaStore);
     c.set("clearSessionToolOverrides", clearSessionToolOverrides);
+    c.set("clearCompactionFailures", (id) => compactionFailures.reset(id));
     c.set("hookPipeline", hookPipeline);
     c.set("sessionLock", sessionLock);
     await next();
@@ -59,6 +62,7 @@ async function build() {
     rpcApprovalGate,
     mediaStore,
     clearSessionToolOverrides,
+    compactionFailures,
   };
 }
 
@@ -542,6 +546,32 @@ describe("Session lifecycle hooks", () => {
     ).toBe(200);
     expect(await store.getSession(id)).toBeNull();
   });
+
+  it.each(["ended", "deleted"] as const)(
+    "clears only this session's compaction failure count when %s",
+    async (reason) => {
+      const { app, compactionFailures } = await build();
+      const id = await createSession(app);
+      const otherId = await createSession(app);
+      compactionFailures.record(id);
+      compactionFailures.record(id);
+      compactionFailures.record(otherId);
+
+      const response = await app.request(
+        `/api/sessions/${id}`,
+        reason === "ended"
+          ? {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ status: "ended" }),
+            }
+          : { method: "DELETE" },
+      );
+      expect(response.status).toBe(200);
+      expect(compactionFailures.record(id)).toBe(1);
+      expect(compactionFailures.record(otherId)).toBe(2);
+    },
+  );
 
   it("fires SessionEnd on transition to ended (and not twice)", async () => {
     const { app, hookPipeline } = await build();

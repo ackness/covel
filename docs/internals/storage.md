@@ -482,7 +482,7 @@ Dexie BrowserVault 的 schema 归 `apps/web` 所有，不作为服务端 `DataSt
 
 MemoryStore、SQLite、PostgreSQL 和浏览器检查点都保持这些身份。所以浏览器持久化和服务端共用领域形状，但不共用服务端的表结构或各后端的增删改查实现。
 
-**模型路由。** 模型路由只看三样：slot 设置、请求覆盖、会话的 `runtimeModelOverrides`。会话不带 `presetId`，会话记录、检查点和快照里都没有这个字段。任意的会话 metadata 不能用来选模型。embedding 模型的身份和锁定时间，在创建和更新时都会持久化，三个后端一致。
+**模型路由。** 模型路由只看三样：slot 设置、请求覆盖、会话的 `runtimeModelOverrides`。会话不带 `presetId`，会话记录、检查点和快照里都没有这个字段。任意的会话 metadata 不能用来选模型。embedding 模型的身份和锁定时间，在创建和更新时都会持久化，三个后端一致。首次锁定和重建向量索引也会更新会话的 `embeddingModelId` 和 `embeddingLockedAt`；清除索引会清除这两个字段。
 
 ## Current Snapshot Contract
 

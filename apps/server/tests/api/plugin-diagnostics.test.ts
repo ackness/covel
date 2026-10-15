@@ -8,12 +8,14 @@ import {
 import {
   createHookPipeline,
   createPluginRpcRegistry,
+  createRpcExecutor,
   PluginServiceRegistry,
   type PluginServiceCallEvent,
 } from "@covel/runtime";
 import { type SessionRecord } from "@covel/store";
 import { createMemoryStore } from "@covel/store/memory";
 import { tool, ToolRegistry } from "@covel/tools";
+import { emptyRpcStore } from "../helpers/rpc-store.js";
 import {
   createPluginDiagnostics,
   RecentPluginServiceCalls,
@@ -182,6 +184,38 @@ function fixture() {
 }
 
 describe("recent plugin service calls", () => {
+  it.each([
+    ["zh-SG", "打开插件注册与服务调用诊断。"],
+    ["zh-Hans-CN", "打开插件注册与服务调用诊断。"],
+    ["zh-TW", "Open plugin registrations and service call diagnostics."],
+    ["ru-RU", "Open plugin registrations and service call diagnostics."],
+  ])(
+    "resolves the diagnostics command's player text for %s",
+    async (locale, message) => {
+      const { rpc } = fixture();
+      const executor = createRpcExecutor({ registry: rpc });
+      const dispatched = await executor.dispatch(
+        { pluginId: "framework", action: "slash-plugins", payload: {} },
+        {
+          sessionId: "sess-locale",
+          store: emptyRpcStore(),
+          locale,
+          command: {
+            invocationId: "inspect-locale",
+            commandId: "framework:plugins",
+            source: "composer",
+            command: "plugins",
+            raw: "/plugins",
+            canonical: "/plugins",
+            argv: [],
+            args: {},
+          },
+        },
+      );
+      expect(dispatched.result).toMatchObject({ message });
+    },
+  );
+
   it("aggregates exactly the returned extension call window and respects filters and incarnation", () => {
     const { diagnostics, calls } = fixture();
     const owner = session();

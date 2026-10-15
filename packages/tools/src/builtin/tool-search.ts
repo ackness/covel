@@ -45,7 +45,7 @@ export const SEARCH_TOOLS_JSON_SCHEMA: Readonly<Record<string, unknown>> = {
 };
 
 /**
- * LLM-facing description. Advertises the deferred pool (count + owner) so the
+ * LLM-facing description. Advertises the deferred pool (count + caller) so the
  * model knows undeclared tools exist at all — without this hint a deferred
  * pool is effectively invisible (codex does the same in its tool_search
  * description).
@@ -55,8 +55,9 @@ export function buildSearchToolsDescription(
   pluginId: string,
 ): string {
   return (
-    `This runtime has ${deferredCount} additional tool(s) from plugin "${pluginId}" ` +
+    `This runtime in plugin "${pluginId}" has ${deferredCount} additional tool(s) ` +
     `that were NOT preloaded into your tool list (deferred to save context). ` +
+    `The pool can include builtin tools and this plugin's own tools. ` +
     `Search them by describing the capability you need; matching tools are ` +
     `activated and become directly callable from your next step onward. ` +
     `Call this first whenever none of your current tools fits the task.`

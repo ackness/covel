@@ -785,6 +785,66 @@ export function runVectorStoreContractTests(
       expect(t1.tableName).toMatch(/^vec_mem_m\d+$/);
     });
 
+    it("persists embedding lock metadata on session reads and index resets", async () => {
+      const sessionId = "s-lock-metadata";
+      const target = await setupSessionWithModel(store, sessionId, 16);
+      const session = await store.getSession(sessionId);
+      expect(session?.embeddingModelId).toBe(target.modelRegistryId);
+      expect(session?.embeddingLockedAt).toEqual(expect.any(String));
+      if (!session?.embeddingLockedAt)
+        throw new Error("Expected a locked session");
+      expect(Number.isFinite(Date.parse(session.embeddingLockedAt))).toBe(true);
+      expect(
+        (await store.listSessions()).find((row) => row.id === sessionId),
+      ).toMatchObject({
+        embeddingModelId: target.modelRegistryId,
+        embeddingLockedAt: session?.embeddingLockedAt,
+      });
+
+      const replacement = await store.ensureVectorModel({
+        provider: "test",
+        modelName: "replacement",
+        dim: 8,
+        modelId: "test/replacement",
+      });
+      expect(
+        await store.resetSessionVectorIndex({
+          sessionId,
+          expectedSessionCreatedAt: session.createdAt,
+          expectedModelRegistryId: target.modelRegistryId,
+          target: replacement,
+        }),
+      ).toBe(true);
+      expect(await store.getSession(sessionId)).toMatchObject({
+        embeddingModelId: replacement.modelRegistryId,
+        embeddingLockedAt: expect.any(String),
+      });
+      expect(
+        await store.resetSessionVectorIndex({
+          sessionId,
+          expectedSessionCreatedAt: session.createdAt,
+          expectedModelRegistryId: replacement.modelRegistryId,
+          target: null,
+        }),
+      ).toBe(true);
+      const cleared = await store.getSession(sessionId);
+      expect(cleared?.embeddingModelId ?? null).toBeNull();
+      expect(cleared?.embeddingLockedAt ?? null).toBeNull();
+    });
+
+    it("refuses to lock a missing session", async () => {
+      const target = await store.ensureVectorModel({
+        provider: "test",
+        modelName: "missing-session",
+        dim: 16,
+        modelId: "test/missing-session",
+      });
+      await expect(
+        store.lockSessionEmbeddingModel("missing", target),
+      ).rejects.toThrow();
+      expect(await store.resolveSessionVectorTarget("missing")).toBeNull();
+    });
+
     it("lockSessionEmbeddingModel throws if session already locked", async () => {
       const dim = 16;
       const target = await setupSessionWithModel(store, "s-lock", dim);

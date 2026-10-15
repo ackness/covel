@@ -14,7 +14,7 @@ import {
   type PluginServiceRegistry,
 } from "@covel/runtime";
 import {
-  isDefaultLocale,
+  resolveI18nText,
   type PluginDiagnostic,
   type PluginDiagnosticsSnapshot,
   type PluginServiceCallDiagnostic,
@@ -289,9 +289,13 @@ export function createPluginDiagnostics(deps: PluginDiagnosticsDeps) {
         throw new RpcValidationError("Unknown plugin");
       return {
         ok: true,
-        message: isDefaultLocale(context.locale)
-          ? "打开插件注册与服务调用诊断。"
-          : "Open plugin registrations and service call diagnostics.",
+        message: resolveI18nText(
+          {
+            "zh-CN": "打开插件注册与服务调用诊断。",
+            en: "Open plugin registrations and service call diagnostics.",
+          },
+          context.locale,
+        ),
         clientAction: {
           type: "open-plugin-diagnostics",
           ...(pluginId ? { pluginId } : {}),
