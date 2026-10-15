@@ -1,3 +1,4 @@
+import { publicIncarnationTag } from "../session/session-guard.js";
 import type { Context } from "hono";
 import type { RuntimeJobServices } from "./runtime-job-credentials.js";
 import {
@@ -154,10 +155,14 @@ export function announceQueuedRuntimeJobs(
 ): void {
   if (queued.length === 0) return;
   const services = requestJobServices(c);
-  for (const { credentialKey, status } of queued) {
+  for (const { credentialKey, status, job } of queued) {
     if (services)
       c.get("runtimeJobCredentials")?.register(credentialKey, services);
-    publishRuntimeJobStatusEvent(c.get("eventBus"), status);
+    publishRuntimeJobStatusEvent(
+      c.get("eventBus"),
+      status,
+      runtimeJobIncarnation(job.payload) ?? "",
+    );
   }
   for (const sessionId of new Set(queued.map(({ job }) => job.sessionId)))
     c.get("runtimeJobWorker")?.wake(sessionId);
@@ -190,7 +195,14 @@ export async function publishDeferredRuntimeJobs(
 ): Promise<void> {
   const { eventBus } = deps;
   for (const { job, status } of queued) {
-    if (eventBus) publishRuntimeJobStatusEvent(eventBus, status);
+    const incarnation = runtimeJobIncarnation(job.payload);
+    if (!incarnation) {
+      eventBus?.rejectEmission(
+        "Deferred job is missing its session incarnation",
+      );
+      continue;
+    }
+    if (eventBus) publishRuntimeJobStatusEvent(eventBus, status, incarnation);
     const payload = {
       runtimeId: job.runtimeId,
       pluginId: job.pluginId,
@@ -203,6 +215,7 @@ export async function publishDeferredRuntimeJobs(
       type: "event",
       topic: "runtime",
       sessionId: job.sessionId,
+      sessionIncarnation: publicIncarnationTag(incarnation),
       timestamp: new Date().toISOString(),
       payload: {
         ...payload,

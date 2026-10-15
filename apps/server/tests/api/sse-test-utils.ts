@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 /**
  * Shared SSE test helpers for `/api/events/stream` route tests
  * (subscribe-replay.test.ts, subscribe-reset.test.ts).
@@ -105,7 +106,7 @@ export async function seedSession(
     setupRuntimes: {},
     metadata: {
       approvalScopeNonce: globalThis.crypto.randomUUID(),
-      sessionIncarnationNonce: globalThis.crypto.randomUUID(),
+      sessionIncarnationNonce: `test-${sessionId}`,
     },
     id: sessionId,
     status: "active",
@@ -125,6 +126,9 @@ export function emitSeq(
   n: number,
 ): void {
   eventBus.emit({
+    sessionIncarnation: createHash("sha256")
+      .update(`incarnation:test-${sessionId}`)
+      .digest("hex"),
     id: `msg-${n}`,
     type: "event",
     topic,

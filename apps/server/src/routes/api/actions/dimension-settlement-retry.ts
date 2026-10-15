@@ -1,3 +1,4 @@
+import { sessionEventBus } from "../session/session-events.js";
 import type { Context } from "hono";
 import {
   createWorldModelView,
@@ -128,7 +129,7 @@ export async function retryPendingDimensionSettlements(
         sessionLock.withLock(sessionId, async () => beforeCapture?.()).then(fn),
       pluginRegistry,
       store,
-      eventBus,
+      eventBus: sessionEventBus(eventBus, session),
       sessionLock,
       sessionId,
       session,

@@ -4,6 +4,7 @@
  * GET /stream?sessionId=xxx&topics=runtime,state&lastEventId=xxx
  */
 
+import { watchSubscription } from "./subscription-watch.js";
 import {
   createBoundedSerialQueue,
   closeSseDelivery,
@@ -23,7 +24,7 @@ import { errorBody } from "../../api-error.js";
 import { rateLimiter } from "../../middleware/rate-limit.js";
 import {
   checkSessionOwner,
-  sessionIncarnationIdentity,
+  publicSessionIncarnation,
 } from "./session/session-guard.js";
 
 type Env = {
@@ -128,38 +129,6 @@ subscribeRoutes.get(
     const sessionId = c.req.query("sessionId");
     if (!sessionId) return c.json(errorBody("sessionId required"), 400);
 
-    const session = await store.getSession(sessionId);
-    if (!session) return c.json(errorBody("Session not found"), 404);
-
-    // Owner guard (hosted tiers). EventSource cannot set headers, so
-    // clients pass `?session_token=` — see extractSessionOwnerToken.
-    const denied = checkSessionOwner(c, session);
-    if (denied) return denied;
-    const expectedIncarnation = sessionIncarnationIdentity(session);
-
-    const topicsParam = c.req.query("topics");
-    // M2: Validate topics parameter against known SubscriptionTopic values.
-    // Derived from the shared `SUBSCRIPTION_TOPICS` source of truth so the guard
-    // can never drift from the `SubscriptionTopic` union (which now includes the
-    // runtime-internal `trace` / `hooks` topics emitted by TurnEmitter and the
-    // hook pipeline).
-    const VALID_TOPICS = new Set<string>(SUBSCRIPTION_TOPICS);
-    if (topicsParam) {
-      const parsed = topicsParam.split(",").map((t) => t.trim());
-      const invalid = parsed.filter((t) => !VALID_TOPICS.has(t));
-      if (invalid.length > 0) {
-        return c.json(errorBody(`Invalid topics: ${invalid.join(", ")}`), 400);
-      }
-    }
-    const topics = topicsParam
-      ? new Set(
-          topicsParam.split(",").map((t) => t.trim()) as SubscriptionTopic[],
-        )
-      : null; // null = all topics
-
-    const lastEventId =
-      c.req.query("lastEventId") ?? c.req.header("Last-Event-ID");
-
     // Per-session concurrent-connection cap. Checked (and reserved) before the
     // stream starts so we can still return a 429 JSON body; released in the
     // stream's `finally` below.
@@ -181,7 +150,48 @@ subscribeRoutes.get(
       );
     }
 
+    let pendingWatch: ReturnType<typeof watchSubscription> | undefined;
+    let streamOwnsWatch = false;
     try {
+      const watch = watchSubscription(eventBus, sessionId);
+      pendingWatch = watch;
+      const session = await store.getSession(sessionId);
+      if (!session) return c.json(errorBody("Session not found"), 404);
+
+      // Owner guard (hosted tiers). EventSource cannot set headers, so
+      // clients pass `?session_token=` — see extractSessionOwnerToken.
+      const denied = checkSessionOwner(c, session);
+      if (denied) return denied;
+      const expectedIncarnation = publicSessionIncarnation(session);
+
+      const topicsParam = c.req.query("topics");
+      // M2: Validate topics parameter against known SubscriptionTopic values.
+      // Derived from the shared `SUBSCRIPTION_TOPICS` source of truth so the guard
+      // can never drift from the `SubscriptionTopic` union (which now includes the
+      // runtime-internal `trace` / `hooks` topics emitted by TurnEmitter and the
+      // hook pipeline).
+      const VALID_TOPICS = new Set<string>(SUBSCRIPTION_TOPICS);
+      if (topicsParam) {
+        const parsed = topicsParam.split(",").map((t) => t.trim());
+        const invalid = parsed.filter((t) => !VALID_TOPICS.has(t));
+        if (invalid.length > 0) {
+          return c.json(
+            errorBody(`Invalid topics: ${invalid.join(", ")}`),
+            400,
+          );
+        }
+      }
+      const topics = topicsParam
+        ? new Set(
+            topicsParam.split(",").map((t) => t.trim()) as SubscriptionTopic[],
+          )
+        : null; // null = all topics
+
+      const lastEventId =
+        c.req.query("lastEventId") ?? c.req.header("Last-Event-ID");
+
+      const pinnedEpoch = watch.pin();
+      streamOwnsWatch = true;
       return streamOwnedSSE(c, async (stream) => {
         // R-01 Bug A (event-loss race): register the live listener BEFORE
         // computing/sending the replay batch. Events emitted during replay are
@@ -215,7 +225,7 @@ subscribeRoutes.get(
             if (
               !closing &&
               live &&
-              sessionIncarnationIdentity(live) === expectedIncarnation
+              publicSessionIncarnation(live) === expectedIncarnation
             ) {
               return true;
             }
@@ -236,14 +246,17 @@ subscribeRoutes.get(
           event: SubscriptionEvent,
           trackReplay = true,
         ): Promise<void> => {
-          return stillOwnsIncarnation().then(async (current) => {
-            if (!current) return;
-            if (trackReplay) sentIds.add(event.id);
-            await stream.writeSSE({
-              id: event.id,
-              event: deriveSseEventName(event),
-              data: JSON.stringify(event),
-            });
+          if (
+            closing ||
+            resetScheduled ||
+            event.sessionIncarnation !== expectedIncarnation
+          )
+            return Promise.resolve();
+          if (trackReplay) sentIds.add(event.id);
+          return stream.writeSSE({
+            id: event.id,
+            event: deriveSseEventName(event),
+            data: JSON.stringify(event),
           });
         };
 
@@ -271,12 +284,36 @@ subscribeRoutes.get(
           });
         };
 
-        let unsubscribe = (): void => {};
-        let unsubscribeReset: (() => void) | undefined;
-        let pinned: ReturnType<EventBus["pin"]> | undefined;
         try {
-          unsubscribe = eventBus.onEmit((event) => {
-            if (event.sessionId !== sessionId) return;
+          let rechecking = false;
+          const pendingRecheck: SubscriptionEvent[] = [];
+          const receiveEvent = (event: SubscriptionEvent): void => {
+            if (closing || resetScheduled) return;
+            if (
+              event.sessionIncarnation === expectedIncarnation &&
+              event.type === "session.invalidated"
+            ) {
+              closeStream();
+              return;
+            }
+            if (rechecking) {
+              if (pendingRecheck.length >= SSE_WRITE_QUEUE_MAX) closeStream();
+              else pendingRecheck.push(event);
+              return;
+            }
+            if (event.sessionIncarnation !== expectedIncarnation) {
+              // An old producer can arrive after recreation on another origin.
+              // Keep the stream if its owner is still current; buffer arrivals
+              // until that check settles so no intervening control is lost.
+              rechecking = true;
+              writes.enqueue(async () => {
+                if (!(await stillOwnsIncarnation()) || resetScheduled) return;
+                rechecking = false;
+                for (const pending of pendingRecheck.splice(0))
+                  receiveEvent(pending);
+              });
+              return;
+            }
             if (topics && !topics.has(event.topic)) return;
             if (replaying) {
               if (liveBuffer.length >= SSE_WRITE_QUEUE_MAX) {
@@ -289,8 +326,8 @@ subscribeRoutes.get(
             // No sentIds bookkeeping on the live path — dedupe only
             // covers the replay→live cutover window; live ids are epoch-unique.
             writes.enqueue(() => writeEvent(event, false));
-          });
-          unsubscribeReset = eventBus.onReset?.((reset) => {
+          };
+          watch.activate(receiveEvent, (reset) => {
             if (reset.sessionId !== sessionId || resetScheduled) return;
             resetScheduled = true;
             if (replaying) {
@@ -308,24 +345,19 @@ subscribeRoutes.get(
               closeStream();
             });
           });
-          // Pin the session's replay state for the lifetime of this
-          // stream so LRU/TTL eviction can't reset its seq/epoch underneath an
-          // active subscriber. Transport gaps explicitly invalidate pinned
-          // state and are surfaced through onReset above.
-          pinned = eventBus.pin(sessionId);
           stream.onAbort(() => {
             writes.close();
             closing = true;
             resolveDone();
           });
-          if (stream.aborted) return;
+          if (stream.aborted || closing) return;
 
           // R-01 Bug B (cursor reset): the connected frame carries NO id, so the
           // frontend never clobbers its lastEventId back to "0" on reconnect
           // (mirrors the id-less heartbeat frame below).
           const connectedCursor = headCursor();
           await writes.write(async () => {
-            if (!(await stillOwnsIncarnation())) return;
+            if (closing || resetScheduled) return;
             await stream.writeSSE({
               event: "system.connected",
               data: JSON.stringify({
@@ -345,11 +377,11 @@ subscribeRoutes.get(
           if (lastEventId) {
             const cursor = parseSubscriptionEventId(lastEventId);
             const replay = eventBus.getEventsAfter(sessionId, cursor?.seq ?? 0);
-            const epoch = replay.epoch ?? pinned.epoch;
+            const epoch = replay.epoch ?? pinnedEpoch;
             const epochChanged = !cursor || cursor.epoch !== epoch;
             if (epochChanged || replay.gap) {
               await writes.write(async () => {
-                if (!(await stillOwnsIncarnation())) return;
+                if (closing || resetScheduled) return;
                 await stream.writeSSE({
                   event: "system.reset",
                   data: JSON.stringify({
@@ -392,7 +424,7 @@ subscribeRoutes.get(
           // concurrent writes when a client is applying backpressure.
           heartbeatInterval = setInterval(() => {
             writes.enqueue(async () => {
-              if (!(await stillOwnsIncarnation())) return;
+              if (closing || resetScheduled) return;
               await stream.writeSSE({
                 event: "system.heartbeat",
                 data: JSON.stringify({ timestamp: new Date().toISOString() }),
@@ -410,9 +442,7 @@ subscribeRoutes.get(
           writes.close();
           liveBuffer.length = 0;
           sentIds.clear();
-          unsubscribe();
-          unsubscribeReset?.();
-          pinned?.release();
+          watch.close();
           if (heartbeatInterval) clearInterval(heartbeatInterval);
           try {
             await writes.drain();
@@ -423,8 +453,13 @@ subscribeRoutes.get(
         }
       });
     } catch (err) {
-      connectionLease.release();
+      streamOwnsWatch = false;
       throw err;
+    } finally {
+      if (!streamOwnsWatch) {
+        pendingWatch?.close();
+        connectionLease.release();
+      }
     }
   },
 );

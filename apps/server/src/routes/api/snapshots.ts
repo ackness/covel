@@ -1,3 +1,7 @@
+import {
+  publicIncarnationTag,
+  publicSessionIncarnation,
+} from "./session/session-guard.js";
 import { scheduleMemoryIngest } from "./commit-execution.js";
 import { rateLimiter } from "../../middleware/rate-limit.js";
 /**
@@ -154,6 +158,7 @@ snapshotRoutes.post("/:id/snapshots", async (c) => {
       const eventBus = c.get("eventBus");
       if (eventBus) {
         eventBus.emit({
+          sessionIncarnation: publicSessionIncarnation(session),
           id: randomUUID(),
           type: "event",
           topic: "session",
@@ -381,6 +386,7 @@ snapshotRoutes.post("/:id/fork", rateLimiter({ max: 10 }), async (c) => {
       // adding stale refs for a session that no longer exists.
       return sessionLock.withLock(childSessionId, async () => {
         const childOwner = mintSessionOwnerToken();
+        const childIncarnationNonce = randomUUID();
 
         const now = nowIso;
 
@@ -429,7 +435,7 @@ snapshotRoutes.post("/:id/fork", rateLimiter({ max: 10 }), async (c) => {
                   : {}),
                 [SESSION_OWNER_TOKEN_HASH_KEY]: childOwner.tokenHash,
                 [SESSION_APPROVAL_SCOPE_KEY]: mintSessionApprovalScope(),
-                [SESSION_INCARNATION_KEY]: randomUUID(),
+                [SESSION_INCARNATION_KEY]: childIncarnationNonce,
               },
               createdAt: now,
               updatedAt: now,
@@ -737,6 +743,9 @@ snapshotRoutes.post("/:id/fork", rateLimiter({ max: 10 }), async (c) => {
           // Also publish state.snapshot.created (kind='fork') so a
           // forked session's snapshot list reacts immediately.
           eventBus.emit({
+            sessionIncarnation: publicIncarnationTag(
+              `incarnation:${childIncarnationNonce}`,
+            ),
             id: randomUUID(),
             type: "event",
             topic: "session",
@@ -753,6 +762,9 @@ snapshotRoutes.post("/:id/fork", rateLimiter({ max: 10 }), async (c) => {
           });
 
           eventBus.emit({
+            sessionIncarnation: publicIncarnationTag(
+              `incarnation:${childIncarnationNonce}`,
+            ),
             id: randomUUID(),
             type: "event",
             topic: "session",

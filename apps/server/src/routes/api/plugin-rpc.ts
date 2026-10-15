@@ -1,3 +1,4 @@
+import { sessionEventBus } from "./session/session-events.js";
 import { resolveMediaImageFlow } from "./media-image-flow.js";
 import {
   announceQueuedRuntimeJobs,
@@ -385,7 +386,7 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
         sessionLock.withLock(sessionId, async () => beforeCapture?.()).then(fn),
       pluginRegistry,
       store,
-      eventBus,
+      eventBus: sessionEventBus(eventBus, session),
       sessionLock,
       sessionId,
       session,
