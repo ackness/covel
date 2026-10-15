@@ -22,6 +22,7 @@ import { PackageCredits } from "@/components/shared/package-credits.js";
 import { PluginLoadWarnings } from "@/components/shared/plugin-load-warnings.js";
 import type * as api from "@/services/api.js";
 import { RuntimeCollectionFeatureBadges } from "../runtime-feature-badges.js";
+import { FunctionRuntimeModels } from "../function-runtime-models.js";
 
 export interface PluginPackageRowProps {
   worldPluginSettings?: import("@covel/shared").WorldPluginSettings;
@@ -265,6 +266,13 @@ export function PluginPackageRow({
             );
           })}
         </div>
+      )}
+      {isSelected && (
+        <FunctionRuntimeModels
+          runtimes={runtimes}
+          resolvedSlots={resolvedSlots}
+          className="mt-2.5 ml-9 space-y-2"
+        />
       )}
     </div>
   );

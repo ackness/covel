@@ -230,7 +230,7 @@ The generation parameters page shows parameters that match the model's actual ca
 
 For one call, the role is chosen in this order:
 
-1. An explicit choice made by the runtime, including the session's `runtimeModelOverrides`. It decides which role or preset to use.
+1. An explicit choice: an agent uses the session's `runtimeModelOverrides`; a function text call uses the handler's `presetId`. Function runtimes do not read `runtimeModelOverrides`.
 2. If there is no explicit choice, the role the runtime names itself (`agent.model` / `function.model`). An agent that names none uses `story` when it has `io.visibility: story` and `plugin` otherwise. For a function that names none, the `default` binding of the current request is used when there is one, otherwise the system's default role.
 3. That role is resolved first with the UI role binding in the current request. Without a binding, it is resolved with the system `llm.toml`, and the fallback of an available text role.
 
@@ -346,7 +346,11 @@ Both appear together so you can see "which role is used" and "which model is fin
 
 **Function runtime**
 
-A function runtime does not read `runtimeModelOverrides`. Image and speech function plugins usually choose a role for their capability through their own `userSettings.modelPresetId`. The session-prep screen shows it as a separate option and writes it to the device setting `plugin.<pluginId>.modelPresetId`. Do not mix the session override of an agent runtime with this setting of a function runtime.
+A function runtime does not read `runtimeModelOverrides`. Calls to `ctx.gateway.generateText` and `generateObject` without a `presetId` use `function.model`; an explicit handler `presetId` takes priority. This default does not affect image, speech, music, or evaluation calls.
+
+The prep screen and session plugin list show the role declared by `function.model` and its resolved "provider · model" as read-only text, without a selector. They show the fallback target when the role is not configured, or an unavailable notice when it is configured but unusable. Functions without `function.model` show no model entry. A handler call that explicitly chooses another role still uses that choice.
+
+Image and speech function plugins usually choose a role for their capability through their own `userSettings.modelPresetId`. The session-prep screen shows it as a separate option and writes it to the device setting `plugin.<pluginId>.modelPresetId`. Do not mix the session override of an agent runtime with this setting of a function runtime.
 
 **Connection tests and the settings page**
 
