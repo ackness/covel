@@ -877,6 +877,41 @@ describe("runAgentToolLoop core", () => {
     expect(result.finalContent).toBe("walks ahead\n\nturns back");
   });
 
+  it("steering: the live text breaks between the steered segments as the final content does", async () => {
+    const drains: string[][] = [[], ["等等，回头"]];
+    let call = 0;
+    const llm: LLMAdapter = {
+      generate: async () => prose("fallback"),
+      stream: async function* (): AsyncIterable<LLMStreamEvent> {
+        call += 1;
+        yield {
+          type: "text-delta",
+          textDelta: call === 1 ? "walks ahead" : "turns back",
+        };
+        yield {
+          type: "done",
+          finishReason: "stop",
+          usage: { inputTokens: 1, outputTokens: 1 },
+        };
+      } as never,
+    };
+    const live: string[] = [];
+    const m = manifest({ name: "plug/story", outputKind: "story", tools: {} });
+    const result = await run({
+      llm,
+      manifest: m,
+      deps: {
+        toolExecutor: undefined,
+        onDelta: async (d: { textDelta: string }) => {
+          live.push(d.textDelta);
+        },
+        turnControl: { drainSteering: () => drains.shift() ?? [] },
+      },
+    });
+    expect(result.finalContent).toBe("walks ahead\n\nturns back");
+    expect(live.join("")).toBe(result.finalContent);
+  });
+
   it("steering: an interjection keeps the player's own message under the budget's protection", async () => {
     // Both are user messages of the current turn. A budget that protected
     // only the last one dropped the player's message to make room and sent

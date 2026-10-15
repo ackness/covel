@@ -232,6 +232,8 @@ The tags the author writes come first, followed by the derived tags in this orde
 | `ui:message-block` | `contributes.ui.message` has a message block |
 | `ui:manual-action` | There is a runtime with a `manual` trigger, or there are `contributes.actions` / `contributes.commands` |
 
+The prep screen groups a plugin under its first tag. It shows a derived tag as words ("Calls a model", "Player actions"), and a tag the author wrote as written.
+
 `io.visibility` has two values: `story` for the narrative runtime that provides the story text, and `system` for every other runtime.
 
 ### Two kinds of runtime

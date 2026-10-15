@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { localeDefinitions } from "@/i18n/catalog-registry.js";
 import { emitToast } from "@/lib/toast-channel.js";
+import { emitWorldListRequest } from "@/lib/nav-events.js";
 import {
   receiveSettingsBackupNotices,
   settingLabels,
@@ -128,6 +129,7 @@ function RootLayout() {
   const goWorld = () => {
     if (sessionState.session) backToWorldSelect();
     navigate({ to: "/session", search: {} });
+    emitWorldListRequest();
   };
   const goSession = () => navigate({ to: "/session", search: sessionSearch });
   const goPlugins = () => {

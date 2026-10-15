@@ -19,3 +19,17 @@ export function resolveDisplayText(value: unknown, locale?: string): string {
   ) as I18nText;
   return resolveI18nText(localized, locale ?? i18n.language) ?? "";
 }
+
+/**
+ * Join names the way the interface language writes a list ("A、B和C",
+ * "A, B, and C"). `or` lists alternatives the player picks one of.
+ */
+export function formatList(
+  items: readonly string[],
+  type: "and" | "or" = "and",
+  locale: string = i18n.language,
+): string {
+  return new Intl.ListFormat(locale, {
+    type: type === "or" ? "disjunction" : "conjunction",
+  }).format(items);
+}

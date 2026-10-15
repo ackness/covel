@@ -1,11 +1,15 @@
 import { useState, type CSSProperties } from "react";
 import { ArrowRight, Eye, Play, Trash2 } from "lucide-react";
 import type { SessionRecord, WorldRecord } from "@/services/api.js";
-import { text } from "@/components/world/editor-helpers.js";
 import { sessionContinueLabel } from "@/lib/session-display.js";
 import { worldVisual } from "@/lib/world-visuals.js";
 import { packageByline, worldPackageInfo } from "@/lib/package-info.js";
-import { worldLanguageBadge, worldLanguageName } from "@/lib/world-locale.js";
+import {
+  worldDisplayText,
+  worldLanguageBadge,
+  worldLanguageName,
+  worldTextForPlayer,
+} from "@/lib/world-locale.js";
 import { isWorldDeletable } from "./world-deletion.js";
 import { WorldUpdateBadge } from "./world-update-badge.js";
 import type { WorldCardProps } from "./world-card.js";
@@ -116,8 +120,10 @@ export function WorldTileCard({
   onResume,
 }: WorldCardProps) {
   const visual = worldVisual(world);
-  const languageBadge = worldLanguageBadge(world.locale);
-  const languageName = worldLanguageName(world.locale, interfaceLocale);
+  // The edition a new game would be played in, not always the world's own.
+  const shown = worldTextForPlayer(world, interfaceLocale);
+  const languageBadge = worldLanguageBadge(shown.playLocale);
+  const languageName = worldLanguageName(shown.playLocale, interfaceLocale);
   const tags = world.tags ?? [];
   const byline = packageByline(worldPackageInfo(world), t);
   return (
@@ -130,7 +136,7 @@ export function WorldTileCard({
     >
       <WorldCardCover
         world={world}
-        title={text(world.name)}
+        title={shown.name}
         cover={visual.image}
         eager={index < 3}
         className="h-40"
@@ -149,10 +155,10 @@ export function WorldTileCard({
         )}
       </WorldCardCover>
       <div className="flex flex-1 flex-col gap-2.5 p-4">
-        <h2 className="ui-title text-lg leading-snug">{text(world.name)}</h2>
+        <h2 className="ui-title text-lg leading-snug">{shown.name}</h2>
         <WorldUpdateBadge world={world} t={t} />
         <p className="flex-1 text-[13px] leading-relaxed text-muted-foreground line-clamp-3 wrap-break-word">
-          {text(world.description)}
+          {shown.description}
         </p>
         {byline && (
           <p className="truncate text-xs text-muted-foreground">{byline}</p>
@@ -228,6 +234,12 @@ export function WorldContinueBanner({
 }) {
   const { slides, pictures } = useWorldArt(world, worldVisual(world).image);
   const slideshow = useSlideshow(world.id, slides.length);
+  // The saved game's own language.
+  const edition = worldDisplayText(world, recentSession.locale);
+  const shown = {
+    name: edition.name ?? "",
+    description: edition.description ?? "",
+  };
   const [open, setOpen] = useState<number | null>(null);
   return (
     <section
@@ -241,7 +253,7 @@ export function WorldContinueBanner({
         <span className="text-xs font-semibold text-(--accent-primary)">
           {t("session.continueLatest")}
         </span>
-        <h2 className="ui-title text-2xl leading-snug">{text(world.name)}</h2>
+        <h2 className="ui-title text-2xl leading-snug">{shown.name}</h2>
         <WorldUpdateBadge world={world} t={t} />
         <WorldGalleryStrip
           items={pictures}
@@ -265,7 +277,7 @@ export function WorldContinueBanner({
       <WorldGalleryLightbox
         items={pictures}
         index={open}
-        title={text(world.name)}
+        title={shown.name}
         onIndexChange={setOpen}
         t={t}
       />
@@ -288,7 +300,8 @@ export function WorldRowItem({
   onResume,
 }: WorldCardProps) {
   const visual = worldVisual(world);
-  const languageName = worldLanguageName(world.locale, interfaceLocale);
+  const shown = worldTextForPlayer(world, interfaceLocale);
+  const languageName = worldLanguageName(shown.playLocale, interfaceLocale);
   const meta = [
     ...(world.tags ?? []).slice(0, 5),
     languageName,
@@ -309,10 +322,10 @@ export function WorldRowItem({
         {String(index + 1).padStart(2, "0")}
       </span>
       <div className="min-w-0 space-y-2">
-        <h2 className="ui-title text-2xl leading-snug">{text(world.name)}</h2>
+        <h2 className="ui-title text-2xl leading-snug">{shown.name}</h2>
         <WorldUpdateBadge world={world} t={t} />
         <p className="max-w-xl text-[14.5px] leading-[1.75] text-muted-foreground line-clamp-3 wrap-break-word">
-          {text(world.description)}
+          {shown.description}
         </p>
         {meta.length > 0 && (
           <p className="text-[13px] text-muted-foreground">

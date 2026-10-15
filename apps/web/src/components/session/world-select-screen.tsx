@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useEffectEvent, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ArrowRight, Languages } from "lucide-react";
 import { Button } from "@/components/ui/button.js";
@@ -17,6 +17,7 @@ import { WorldListView } from "@/components/world/world-list-view.js";
 import { getDataService } from "@/services/data-service.js";
 import { emitToast } from "@/lib/toast-channel.js";
 import { requestConfirm } from "@/lib/confirm-channel.js";
+import { onWorldListRequest } from "@/lib/nav-events.js";
 import type {
   PluginSummary,
   SessionRecord,
@@ -24,13 +25,13 @@ import type {
   WorldSummary,
 } from "@/services/api.js";
 import { useRecentSessions } from "@/components/world/use-recent-sessions.js";
-import { text } from "@/components/world/editor-helpers.js";
 import { formatSlotLabel, type ResolvedSlot } from "@/hooks/use-slot-config.js";
 import {
   isWorldLocaleMismatch,
   prioritizeWorldsByLocale,
   worldLanguageName,
   worldPlayLocale,
+  worldTextForPlayer,
 } from "@/lib/world-locale.js";
 import i18n from "@/i18n";
 import { DEFAULT_FALLBACK_LOCALE } from "@covel/shared";
@@ -49,6 +50,11 @@ interface WorldSelectScreenProps {
   onResumeSession?: (session: SessionRecord) => void;
   onOpenOnboarding?: () => void;
   onWorldUpdated?: (world: WorldSummary) => void;
+  /**
+   * Fetch the list again: on the way back to it and when the window regains
+   * the focus, so a world package edited meanwhile shows its update.
+   */
+  onRefreshWorlds?: () => void;
   onWorldCreated?: (world: WorldSummary) => void;
   onWorldDeleted?: (worldId: string) => void;
 }
@@ -93,6 +99,7 @@ export function WorldSelectScreen({
   onResumeSession,
   onOpenOnboarding,
   onWorldUpdated,
+  onRefreshWorlds,
   onWorldCreated,
   onWorldDeleted,
 }: WorldSelectScreenProps) {
@@ -173,7 +180,29 @@ export function WorldSelectScreen({
   function handleBack() {
     setMode("list");
     setSelectedWorldId(null);
+    onRefreshWorlds?.();
   }
+
+  const refreshOnFocus = useEffectEvent(() => onRefreshWorlds?.());
+  useEffect(() => {
+    const onFocus = () => refreshOnFocus();
+    const onVisible = () => {
+      if (document.visibilityState === "visible") refreshOnFocus();
+    };
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, []);
+
+  // The topbar's World item: the detail view returns to the list (the
+  // editor handles it itself, asking first when it has changes).
+  const showList = useEffectEvent(() => {
+    if (mode === "detail") handleBack();
+  });
+  useEffect(() => onWorldListRequest(() => showList()), []);
 
   function handleEditFromDetail() {
     setMode("edit");
@@ -197,7 +226,12 @@ export function WorldSelectScreen({
       message: t(
         "world.deleteConfirmDesc",
         'This will permanently delete "{{name}}" and all of its session data. This action cannot be undone.',
-        { name: world ? text(world.name) : worldId },
+        {
+          name: world
+            ? worldTextForPlayer(world, i18n.resolvedLanguage ?? i18n.language)
+                .name
+            : worldId,
+        },
       ),
       confirmLabel: t("world.deleteConfirmAction", "Delete"),
       cancelLabel: t("common.cancel", "Cancel"),
@@ -257,7 +291,7 @@ export function WorldSelectScreen({
             <DialogDescription className="max-w-md leading-relaxed">
               {pendingWorld
                 ? t("world.localeMismatchDesc", {
-                    name: text(pendingWorld.name, activeLocale),
+                    name: worldTextForPlayer(pendingWorld, activeLocale).name,
                     worldLanguage: localeName(pendingWorld.locale),
                     interfaceLanguage: localeName(activeLocale),
                     defaultValue:
@@ -336,6 +370,7 @@ export function WorldSelectScreen({
         world={selectedWorld}
         onSave={handleSave}
         onCancel={() => setMode("detail")}
+        onExit={handleBack}
       />
     );
   }

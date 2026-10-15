@@ -35,8 +35,7 @@ export function WorldDataNotices({
       <ul className="mt-1 list-disc pl-4">
         {notices.map((notice, index) => (
           <li key={`${notice.sourceId ?? ""}:${index}`}>
-            {notice.sourceId ? `${notice.sourceId}: ` : ""}
-            {notice.message}
+            <WorldDataNoticeText notice={notice} />
           </li>
         ))}
       </ul>
@@ -45,4 +44,34 @@ export function WorldDataNotices({
       </p>
     </div>
   );
+}
+
+/**
+ * A notice in the interface language. The importer's own message is English
+ * and meant for the world's author, so it stays folded under "Details".
+ */
+export function WorldDataNoticeText({
+  notice,
+}: {
+  readonly notice: Pick<WorldDataImportNotice, "code" | "sourceId" | "message">;
+}) {
+  const { t } = useTranslation();
+  const source = notice.sourceId ?? "";
+  switch (notice.code) {
+    case "dimension-provider-missing":
+      return <>{t("session.worldDataNotices.dimensionsMissing")}</>;
+    case "receiver-missing":
+      return <>{t("session.worldDataNotices.receiverMissing", { source })}</>;
+    default:
+      return (
+        <details className="inline">
+          <summary className="cursor-pointer">
+            {source
+              ? t("session.worldDataNotices.sourceNotImported", { source })
+              : t("session.worldDataNotices.notImported")}
+          </summary>
+          <span className="text-muted-foreground">{notice.message}</span>
+        </details>
+      );
+  }
 }

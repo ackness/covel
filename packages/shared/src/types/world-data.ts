@@ -48,11 +48,13 @@ export interface WorldDataDescriptorFile {
 /**
  * A world-data import finding the player is shown: data of the world that
  * did not reach the session, say because no enabled plugin receives it. The
- * message is the importer's, in English, like the session prep preflight.
+ * message is the importer's, in English, like the session prep preflight;
+ * `code`, when present, lets the client say it in the player's language.
  */
 export interface WorldDataImportNotice {
   readonly level: "warning" | "error";
   readonly sourceId?: string;
+  readonly code?: string;
   readonly message: string;
 }
 

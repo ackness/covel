@@ -3,12 +3,12 @@ import {
   useEffect,
   useCallback,
   useMemo,
+  useRef,
   type CSSProperties,
 } from "react";
 import { useTranslation } from "react-i18next";
 import { z } from "zod";
 import {
-  DIMENSION_CONTRACT,
   localizedWorldText,
   playerVisibleLore,
   withNarratorOnlyLore,
@@ -49,6 +49,8 @@ import { ModelsCard } from "./session-prep/models-card.js";
 import { PluginSelectionCard } from "./session-prep/plugin-selection-card.js";
 import { SessionPluginNotices } from "./session-plugin-notices.js";
 import { pluginName } from "@/lib/plugin-notices.js";
+import { formatList } from "@/lib/i18n-text.js";
+import { emitToast } from "@/lib/toast-channel.js";
 import type { SessionPrepScreenProps } from "./session-prep/types.js";
 import { worldDisplayText, worldPlayLocale } from "@/lib/world-locale.js";
 import { worldVisual } from "@/lib/world-visuals.js";
@@ -132,9 +134,45 @@ export function SessionPrepScreen({
     applyPack,
     resetToMinimal,
     togglePlugin,
+    toggleSideEffects,
     turnOffPlugins,
     retryPluginPlan,
   } = usePluginSelection(world.id, plugins, prepareWorldForServer);
+
+  // A switch can move others with it: a provider another plugin needs comes
+  // on, a plugin that conflicts goes off. Say so once, or the list just
+  // changes under the player.
+  const toldSideEffects = useRef<string>(undefined);
+  useEffect(() => {
+    if (!toggleSideEffects) return;
+    const plugin = pluginName(plugins, toggleSideEffects.pluginId);
+    const names = (ids: readonly string[]) =>
+      formatList(
+        ids.map((id) => pluginName(plugins, id)),
+        "and",
+      );
+    const lines: string[] = [];
+    if (toggleSideEffects.turnedOn.length > 0)
+      lines.push(
+        t("session.toggleSideEffects.turnedOn", {
+          plugins: names(toggleSideEffects.turnedOn),
+          plugin,
+        }),
+      );
+    if (toggleSideEffects.turnedOff.length > 0)
+      lines.push(
+        t(
+          toggleSideEffects.enabled
+            ? "session.toggleSideEffects.turnedOffConflict"
+            : "session.toggleSideEffects.turnedOffNeeds",
+          { plugins: names(toggleSideEffects.turnedOff), plugin },
+        ),
+      );
+    const message = lines.join(" ");
+    if (toldSideEffects.current === message) return;
+    toldSideEffects.current = message;
+    emitToast("info", message);
+  }, [toggleSideEffects, plugins, t]);
 
   const {
     worldDataPreflight,
@@ -561,16 +599,19 @@ export function SessionPrepScreen({
                         }`,
                         {
                           contract: item.contract,
-                          plugins: (item.candidates ?? []).join(", "),
+                          plugins: formatList(
+                            (item.candidates ?? []).map((id) =>
+                              pluginName(plugins, id),
+                            ),
+                            item.code === "ambiguous-provider" ? "or" : "and",
+                          ),
                         },
                       )}
                     </li>
                   ))}
                   {dimensionsLeftOut && (
                     <li className="wrap-break-word">
-                      {t("session.worldRequirements.dimensions", {
-                        contract: DIMENSION_CONTRACT,
-                      })}
+                      {t("session.worldRequirements.dimensions")}
                     </li>
                   )}
                 </ul>
@@ -591,9 +632,11 @@ export function SessionPrepScreen({
                 </p>
                 <p className="mt-1 text-xs text-muted-foreground">
                   {t("session.dimensionProvider.conflictDetail", {
-                    plugins: dimensionProviderConflict
-                      .map((id) => pluginName(plugins, id))
-                      .join(", "),
+                    plugins: formatList(
+                      dimensionProviderConflict.map((id) =>
+                        pluginName(plugins, id),
+                      ),
+                    ),
                   })}
                 </p>
                 <div className="mt-2 flex flex-wrap gap-2">

@@ -76,6 +76,7 @@ describe("session creation without installed world-data receivers", () => {
         expect.arrayContaining([
           expect.objectContaining({
             level: "warning",
+            code: "dimension-provider-missing",
             message: expect.stringContaining("world.dimensions@1"),
           }),
         ]),

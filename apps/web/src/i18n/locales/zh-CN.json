@@ -93,7 +93,7 @@
       "ambiguous-provider": "有多个插件提供 {{contract}}：{{plugins}}。请在下方插件列表中启用其中一个。",
       "excluded": "你关闭了提供 {{contract}} 的 {{plugins}}。游戏可以开始，但世界的这部分玩法不会生效。",
       "approval-required": "{{plugins}} 提供 {{contract}}，开始游戏后会请求你的授权。",
-      "dimensions": "你开启的插件里没有能保存这个世界维度的（{{contract}}），游戏会在没有维度的情况下开始。开启一个提供它的插件就能用上维度。"
+      "dimensions": "你开启的插件里没有能保存这个世界维度的，游戏会在没有维度的情况下开始。开启一个保存世界维度的插件就能用上它们。"
     },
     "dimensionProvider": {
       "conflictTitle": "选一个插件保存这个世界的维度",
@@ -281,7 +281,11 @@
     "worldDataNotices": {
       "title": "这个世界的部分数据没有进入这局游戏：",
       "hint": "给已关闭或正在等你批准的插件的数据，会在打开那个插件时导入。",
-      "hide": "隐藏"
+      "hide": "隐藏",
+      "dimensionsMissing": "世界维度（如关系、资源）：没有启用的插件保存它们，这局不记录。",
+      "receiverMissing": "“{{source}}”：没有启用的插件接收这份数据。",
+      "sourceNotImported": "“{{source}}”的数据没有导入（详情）",
+      "notImported": "有一部分数据没有导入（详情）"
     },
     "pendingApproval": {
       "title": "需要批准",
@@ -297,7 +301,13 @@
       "errors": "{{count}} 个错误",
       "failed": "检查失败",
       "retry": "重试",
-      "moreTargets": "另有 {{count}} 项"
+      "kind": {
+        "character": "角色 {{count}}",
+        "lorebook": "资料条目 {{count}}",
+        "media-index": "图片 {{count}}",
+        "plugin-data": "插件数据 {{count}}",
+        "other": "其他 {{count}}"
+      }
     },
     "dbSchema": "结构",
     "dbValues": "数据",
@@ -433,7 +443,27 @@
     "activeTask": "{{label}}…",
     "panelUnavailable": "当前会话没有这个面板。",
     "previousPluginContent": "{{title}} · 展开查看",
-    "pluginContent": "插件内容"
+    "pluginContent": "插件内容",
+    "skipReason": {
+      "setupIncomplete": "开局准备还没完成",
+      "upstreamFailed": "它依赖的任务没有成功",
+      "inputMissing": "缺少它需要的输入",
+      "missingProvider": "没有插件提供它需要的输入",
+      "inputUnusable": "它收到的输入不能用",
+      "dimensionsPaused": "世界维度暂停了"
+    },
+    "pluginTags": {
+      "costLlm": "调用模型",
+      "costFunction": "不调用模型",
+      "uiRightPanel": "侧边面板",
+      "uiMessageBlock": "消息卡片",
+      "uiManualAction": "可手动使用"
+    },
+    "toggleSideEffects": {
+      "turnedOn": "同时打开了 {{plugins}}：有插件需要它们提供的功能。",
+      "turnedOffConflict": "同时关闭了 {{plugins}}：它们不能和“{{plugin}}”一起用。",
+      "turnedOffNeeds": "同时关闭了 {{plugins}}：它们需要“{{plugin}}”。"
+    }
   },
   "blocks": {
     "actionPlaceholder": "或输入自定义行动...",
@@ -633,6 +663,7 @@
     "translateTitle": "翻译这个世界",
     "updateAvailable": "有更新可用",
     "packageUpdateHint": "这个世界的包文件有变化。打开世界详情，选择“恢复为包里的版本”即可更新。世界数据和设置会被包里的内容替换，已保存的会话保留。",
+    "packageUpdateDetail": "这个世界的包文件有变化。选择“恢复为包里的版本”即可更新：世界数据和设置会被包里的内容替换，已保存的会话保留。",
     "packageEditedHint": "你在 Covel 里改过这个世界。游玩用的是你改过的版本：它的包文件之后的变化，包括更新，都不再覆盖它。",
     "restorePackageAction": "恢复为包里的版本",
     "restorePackageTitle": "恢复为包里的版本？",
@@ -917,7 +948,7 @@
       "title": "插件与世界包管理",
       "description": "从 GitHub 或 ZIP 安装插件及世界包。插件变更和待更新资源包在重启后端后生效。",
       "pluginLabel": "插件包",
-      "pluginHint": ".zip，需包含 PLUGIN.md（或 runtimes/<sub>/PLUGIN.md）+ package.json",
+      "pluginHint": ".zip，根目录（或唯一的顶层文件夹）里要有 PLUGIN.md",
       "worldLabel": "世界包",
       "worldHint": ".zip，需包含 world.yaml 与 WORLD.md",
       "collectionLabel": "合集包",
@@ -1669,6 +1700,7 @@
       "generic": "无法更改本局插件，请重试。",
       "dimensionProviderConflict": "本局只能使用一个维度提供插件，请保留当前提供插件。",
       "dimensionProviderRequired": "此插件保存着本局的维度数据，必须保持启用。",
+      "dimensionProviderRequiredNamed": "“{{plugin}}”保存着本局的维度数据，必须保持启用。",
       "pluginNotFound": "此插件已不可用，请刷新插件列表。",
       "approvalQueueFull": "待审批请求过多，请先处理后再试。",
       "approvalScopeChanged": "插件的授权已改变，请刷新并重新审批。",
@@ -1785,16 +1817,16 @@
     },
     "approval": {
       "title": "授权插件操作",
-      "confirmMessage": "插件 {{pluginId}} 请求执行 {{action}}。是否在本次会话内授权所有同类调用？",
-      "serverCodeMessage": "插件 {{pluginId}} 是社区插件。授权后，它的代码会在 Covel 后端运行，没有进程沙箱，直到后端重启。",
-      "runtimeMessage": "插件 {{pluginId}} 请求在本会话中运行它的任务 {{runtime}}。是否授权？",
+      "confirmMessage": "插件“{{plugin}}”请求执行 {{action}}。要在这局游戏里允许它的同类请求吗？",
+      "serverCodeMessage": "“{{plugin}}”是社区插件。允许后，它的代码会在 Covel 后端运行，没有进程沙箱，直到后端重启。",
+      "runtimeMessage": "插件“{{plugin}}”请求在这局游戏里运行它的任务 {{runtime}}。允许吗？",
       "allow": "授权",
       "deny": "拒绝",
       "denied": "已拒绝 {{action}}",
       "submitFailed": "审批提交失败：{{error}}",
       "unexpectedRequired": "授权后仍返回 approval-required，请检查审批后端",
       "required": "已选择的社区插件需要在本次服务启动后授权，批准前暂停运行。",
-      "review": "授权 {{pluginId}}",
+      "review": "授权“{{plugin}}”",
       "batchTitle": "授权社区插件",
       "batchMessage": "以下社区插件已在本会话中选用，授权前保持暂停。它们的代码在 Covel 后端运行，没有进程沙箱。不想运行的请取消勾选。授权在本会话内有效，后端重启后需要重新授权。",
       "allowSelected": "授权所选",

@@ -1306,6 +1306,8 @@ describe("Session plugin routes (real sessionRoutes)", () => {
       expect(res.status).toBe(409);
       expect(await res.json()).toMatchObject({
         code: "dimension_provider_required",
+        // The client names the provider, which need not be the plugin toggled.
+        details: { pluginId: "narrator" },
       });
       const after = (await store.getSession(SESSION_ID))!;
       expect(after.activePlugins).toEqual(before.activePlugins);

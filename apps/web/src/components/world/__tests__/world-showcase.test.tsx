@@ -40,7 +40,7 @@ const GALLERY = [
   picture("portraits/mara.png", 1024, 1536),
 ];
 
-function renderShowcase(worlds: WorldRecord[]) {
+function renderShowcase(worlds: WorldRecord[], interfaceLocale = "zh-CN") {
   const props: WorldListViewProps = {
     worlds,
     t: i18n.t,
@@ -48,7 +48,7 @@ function renderShowcase(worlds: WorldRecord[]) {
     enabledPluginCount: 0,
     enteringWorldId: null,
     storageLabel: () => "",
-    interfaceLocale: "zh-CN",
+    interfaceLocale,
     onOpenGenerator: () => {},
     onOpenSettings: () => {},
     onEnterWorld: () => {},
@@ -65,7 +65,53 @@ const backdrop = (container: HTMLElement) =>
 /** Let the gallery request settle while the timers are faked. */
 const settle = () => act(async () => {});
 
+/** A Chinese world with an English edition. */
+const bilingual: WorldRecord = {
+  ...world("bilingual-port", "雾港"),
+  locale: "zh-CN",
+  metadata: {
+    supportedLocales: ["zh-CN", "en-US"],
+    localizedText: {
+      name: { "zh-CN": "雾港", "en-US": "Mistport" },
+      description: { "zh-CN": "雾港简介", "en-US": "Mistport summary" },
+    },
+  },
+};
+
 describe("world showcase", () => {
+  it("names a world after the edition an English player would play", async () => {
+    vi.mocked(getWorldGallery).mockResolvedValueOnce({ items: [] });
+    renderShowcase([bilingual, world("other", "Other")], "en-US");
+    await settle();
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe(
+      "Mistport",
+    );
+    expect(screen.getByText("Mistport summary")).toBeTruthy();
+    expect(screen.queryByText("雾港")).toBeNull();
+  });
+
+  it.each([WorldTileCard, WorldRowItem])(
+    "names a world after the played edition in %s",
+    async (Card) => {
+      render(
+        <Card
+          world={bilingual}
+          index={0}
+          isEntering={false}
+          dimmed={false}
+          storageLabel=""
+          interfaceLocale="en-US"
+          t={i18n.t}
+          onEnter={() => {}}
+          onViewDetails={() => {}}
+          onDelete={() => {}}
+        />,
+      );
+      expect(screen.getAllByText("Mistport").length).toBeGreaterThan(0);
+      expect(screen.queryByText("雾港")).toBeNull();
+    },
+  );
+
   it("shows available package updates in the showcase", async () => {
     renderShowcase([{ ...world("updated", "Updated"), updateAvailable: true }]);
     await settle();

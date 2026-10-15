@@ -91,7 +91,7 @@
       "ambiguous-provider": "Several plugins provide {{contract}}: {{plugins}}. Enable one of them in the plugin list below.",
       "excluded": "You turned off {{plugins}}, which provides {{contract}}. The game can start, but that part of the world will not work.",
       "approval-required": "{{plugins}} provides {{contract}} and will ask for your approval after the game starts.",
-      "dimensions": "No plugin you turned on keeps this world's dimensions ({{contract}}), so the game starts without them. Turn on a plugin that provides it to use them."
+      "dimensions": "No plugin you turned on keeps this world's dimensions, so the game starts without them. Turn on a plugin that keeps world dimensions to use them."
     },
     "dimensionProvider": {
       "conflictTitle": "Choose the plugin that keeps this world's dimensions",
@@ -281,7 +281,11 @@
     "worldDataNotices": {
       "title": "Some of this world's data is not in this game:",
       "hint": "Data for a plugin that is off, or waiting for your approval, arrives when you turn that plugin on.",
-      "hide": "Hide"
+      "hide": "Hide",
+      "dimensionsMissing": "World dimensions (such as relationships and resources): no enabled plugin keeps them, so this game does not track them.",
+      "receiverMissing": "\"{{source}}\": no enabled plugin receives this data.",
+      "sourceNotImported": "The data in \"{{source}}\" was not imported (details)",
+      "notImported": "Some data was not imported (details)"
     },
     "pendingApproval": {
       "title": "Needs approval",
@@ -297,13 +301,29 @@
       "errors": "{{count}} error(s)",
       "failed": "Check failed",
       "retry": "Retry",
-      "moreTargets": "{{count}} more",
       "ready_one": "{{count}} item will be imported",
       "ready_other": "{{count}} items will be imported",
       "warnings_one": "{{count}} warning",
       "warnings_other": "{{count}} warnings",
       "errors_one": "{{count}} error",
-      "errors_other": "{{count}} errors"
+      "errors_other": "{{count}} errors",
+      "kind": {
+        "character": "{{count}} characters",
+        "character_one": "{{count}} character",
+        "character_other": "{{count}} characters",
+        "lorebook": "{{count}} lore entries",
+        "lorebook_one": "{{count}} lore entry",
+        "lorebook_other": "{{count}} lore entries",
+        "media-index": "{{count}} images",
+        "media-index_one": "{{count}} image",
+        "media-index_other": "{{count}} images",
+        "plugin-data": "{{count}} plugin records",
+        "plugin-data_one": "{{count}} plugin record",
+        "plugin-data_other": "{{count}} plugin records",
+        "other": "{{count}} other items",
+        "other_one": "{{count}} other item",
+        "other_other": "{{count}} other items"
+      }
     },
     "dbSchema": "Schema",
     "dbValues": "Values",
@@ -467,7 +487,27 @@
     "retryScopeLimited_one": "Only the selected failed tasks will run again. The story and other completed results are preserved. Each batch handles up to {{count}} task. Retry the remaining tasks afterward.",
     "retryScopeLimited_other": "Only the selected failed tasks will run again. The story and other completed results are preserved. Each batch handles up to {{count}} tasks. Retry the remaining tasks afterward.",
     "previousPluginContent": "{{title}} · expand to review",
-    "pluginContent": "Plugin content"
+    "pluginContent": "Plugin content",
+    "skipReason": {
+      "setupIncomplete": "Setup is not finished",
+      "upstreamFailed": "A task it depends on did not succeed",
+      "inputMissing": "An input it needs is missing",
+      "missingProvider": "No plugin provides an input it needs",
+      "inputUnusable": "The input it received could not be used",
+      "dimensionsPaused": "World dimensions are paused"
+    },
+    "pluginTags": {
+      "costLlm": "Calls a model",
+      "costFunction": "No model calls",
+      "uiRightPanel": "Side panel",
+      "uiMessageBlock": "Message cards",
+      "uiManualAction": "Player actions"
+    },
+    "toggleSideEffects": {
+      "turnedOn": "Also turned on {{plugins}}: another plugin needs what they provide.",
+      "turnedOffConflict": "Also turned off {{plugins}}: they cannot be used together with \"{{plugin}}\".",
+      "turnedOffNeeds": "Also turned off {{plugins}}: they need \"{{plugin}}\"."
+    }
   },
   "blocks": {
     "actionPlaceholder": "Or type your own action...",
@@ -667,6 +707,7 @@
     "translateTitle": "Translate this world",
     "updateAvailable": "Update available",
     "packageUpdateHint": "This world’s package files have changed. Open world details and choose “Restore the package version” to update. World data and settings are replaced with the package contents; saved sessions are kept.",
+    "packageUpdateDetail": "This world’s package files have changed. Choose “Restore the package version” to update: world data and settings are replaced with the package contents; saved sessions are kept.",
     "packageEditedHint": "You edited this world in Covel. Your version is the one you play: changes to its package files, including updates, no longer replace it.",
     "restorePackageAction": "Restore the package version",
     "restorePackageTitle": "Restore the package version?",
@@ -951,7 +992,7 @@
       "title": "Plugin and world packages",
       "description": "Install plugins and worlds from GitHub or ZIP. Plugin changes and staged updates take effect after backend restart.",
       "pluginLabel": "Plugin package",
-      "pluginHint": ".zip containing PLUGIN.md (or runtimes/<sub>/PLUGIN.md) + package.json",
+      "pluginHint": ".zip with PLUGIN.md at the root (or in its only top-level folder)",
       "worldLabel": "World package",
       "worldHint": ".zip containing world.yaml and WORLD.md",
       "collectionLabel": "Collection package",
@@ -1721,6 +1762,7 @@
       "generic": "Could not change this session's plugins. Please try again.",
       "dimensionProviderConflict": "This session can use only one dimension provider. Keep the current provider enabled.",
       "dimensionProviderRequired": "This plugin holds the session's dimensions and must stay enabled.",
+      "dimensionProviderRequiredNamed": "\"{{plugin}}\" holds this session's dimensions and must stay enabled.",
       "pluginNotFound": "This plugin is no longer available. Refresh the plugin list.",
       "approvalQueueFull": "Too many approvals are pending. Resolve them before trying again.",
       "approvalScopeChanged": "The plugin's approval changed. Refresh and approve it again.",
@@ -1837,16 +1879,16 @@
     },
     "approval": {
       "title": "Authorize plugin action",
-      "confirmMessage": "Plugin {{pluginId}} requests permission to run {{action}}. Authorize all matching calls for this session?",
-      "serverCodeMessage": "Plugin {{pluginId}} is a community plugin. Authorizing it lets its code run inside the Covel backend, without a process sandbox, until the backend restarts.",
-      "runtimeMessage": "Plugin {{pluginId}} asks to run its task {{runtime}} in this session. Authorize it?",
+      "confirmMessage": "\"{{plugin}}\" asks to run {{action}}. Allow all such requests in this game?",
+      "serverCodeMessage": "\"{{plugin}}\" is a community plugin. If you allow it, its code runs inside the Covel backend, without a process sandbox, until the backend restarts.",
+      "runtimeMessage": "\"{{plugin}}\" asks to run its task {{runtime}} in this game. Allow it?",
       "allow": "Authorize",
       "deny": "Deny",
       "denied": "Denied {{action}}",
       "submitFailed": "Approval submission failed: {{error}}",
       "unexpectedRequired": "Still got approval-required after grant — please check the approval backend",
       "required": "Your selected community plugins need authorization for this server session. They remain paused until approved.",
-      "review": "Authorize {{pluginId}}",
+      "review": "Authorize \"{{plugin}}\"",
       "batchTitle": "Authorize community plugins",
       "batchMessage": "These community plugins are selected for this session and stay paused until you authorize them. Their code runs in the Covel backend without a process sandbox. Untick any you do not want to run. Authorization lasts for this session until the backend restarts.",
       "allowSelected": "Authorize selected",

@@ -64,6 +64,7 @@ function manifest(
 async function runTurn(
   manifests: readonly RuntimeManifest[],
   handlers: Record<string, (ctx: unknown) => Promise<Record<string, unknown>>>,
+  onRuntimeComplete?: TurnExecutorDeps["onRuntimeComplete"],
 ): Promise<Awaited<ReturnType<typeof executeTurn>>> {
   const input: TurnInput = {
     origin: "player",
@@ -82,6 +83,7 @@ async function runTurn(
     }),
     llm: new NoopLLM(),
     store: await mainLoopStore("sess-1"),
+    ...(onRuntimeComplete ? { onRuntimeComplete } : {}),
   };
   return executeTurn(input, manifests, deps);
 }
@@ -94,16 +96,27 @@ describe("executeTurn: manifest.needs", () => {
       needs: ["narrator"],
     });
 
-    const result = await runTurn([upstream, downstream], {
-      // Narrator handler throws → produces a failed RuntimeResult.
-      narrator: async () => {
-        throw new Error("llm provider exploded");
+    const reported: Array<{ runtimeId: string; reason?: string }> = [];
+    const result = await runTurn(
+      [upstream, downstream],
+      {
+        // Narrator handler throws → produces a failed RuntimeResult.
+        narrator: async () => {
+          throw new Error("llm provider exploded");
+        },
+        // Should never be called because the framework skips first.
+        guide: async () => {
+          throw new Error("downstream should not have executed");
+        },
       },
-      // Should never be called because the framework skips first.
-      guide: async () => {
-        throw new Error("downstream should not have executed");
+      async (info) => {
+        reported.push(info);
       },
-    });
+    );
+    // The stream gets a code the client can translate.
+    expect(reported.find((info) => info.runtimeId === "guide")?.reason).toBe(
+      "upstream-failed",
+    );
 
     const byId = new Map(result.runtimeResults.map((r) => [r.runtimeId, r]));
     expect(byId.get("narrator")?.status).toBe("failed");

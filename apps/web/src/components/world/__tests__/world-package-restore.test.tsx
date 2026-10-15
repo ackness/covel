@@ -65,7 +65,11 @@ describe("WorldPackageRestore", () => {
       />,
     );
     expect(screen.getByRole("note").textContent).toContain(
-      "World data and settings are replaced",
+      "world data and settings are replaced",
+    );
+    // The panel sits on the details page; it does not send the player there.
+    expect(screen.getByRole("note").textContent).not.toContain(
+      "Open world details",
     );
     expect(screen.getByRole("note").textContent).toContain(
       "saved sessions are kept",

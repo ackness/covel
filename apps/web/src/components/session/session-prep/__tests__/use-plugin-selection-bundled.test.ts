@@ -146,4 +146,37 @@ describe("usePluginSelection with the bundled worlds and packs", () => {
       ).toEqual([]);
     },
   );
+
+  it.each(
+    bundled("worlds").flatMap((worldId) => {
+      const plan = bundledPlan(worldId);
+      return plan.packs.map((pack) => ({ worldId, plan, pack }));
+    }),
+  )(
+    "$worldId gives $pack.id the same plugins after the minimal set as on a fresh screen",
+    async ({ worldId, plan, pack }) => {
+      vi.mocked(api.getWorldPluginPlan).mockResolvedValue(plan);
+      const fresh = renderHook(() =>
+        usePluginSelection(worldId, PLUGINS, prepareWorldForServer),
+      );
+      await waitFor(() =>
+        expect(fresh.result.current.pluginPlanLoading).toBe(false),
+      );
+      act(() => fresh.result.current.applyPack(pack.id));
+
+      const reset = renderHook(() =>
+        usePluginSelection(worldId, PLUGINS, prepareWorldForServer),
+      );
+      await waitFor(() =>
+        expect(reset.result.current.pluginPlanLoading).toBe(false),
+      );
+      act(() => reset.result.current.resetToMinimal());
+      act(() => reset.result.current.applyPack(pack.id));
+
+      expect(reset.result.current.activePluginPack?.id).toBe(pack.id);
+      expect([...reset.result.current.enabledPluginIds].sort()).toEqual(
+        [...fresh.result.current.enabledPluginIds].sort(),
+      );
+    },
+  );
 });

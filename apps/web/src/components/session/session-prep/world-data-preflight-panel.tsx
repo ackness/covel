@@ -3,7 +3,11 @@ import { useTranslation } from "react-i18next";
 import { Badge } from "@/components/ui/badge.js";
 import { Button } from "@/components/ui/button.js";
 import type * as api from "@/services/api.js";
+import { WorldDataNoticeText } from "../world-data-notices.js";
 import type { PrepSectionStatus } from "./types.js";
+
+/** Kinds of import target the player can name; anything else is "other". */
+const TARGET_KINDS = ["character", "lorebook", "media-index", "plugin-data"];
 
 interface WorldDataPreflightPanelProps {
   result: api.WorldDataPreflightResponse | null;
@@ -25,8 +29,13 @@ export function WorldDataPreflightPanel({
   const visibleDiagnostics = diagnostics
     .filter((item) => item.level !== "info")
     .slice(0, 3);
-  const visibleTargets = result?.targets.slice(0, 3) ?? [];
-  const moreTargets = Math.max((result?.targets.length ?? 0) - 3, 0);
+  // What will be imported, counted by kind: the targets themselves are
+  // storage addresses the player has no use for.
+  const targetCounts = new Map<string, number>();
+  for (const target of result?.targets ?? []) {
+    const kind = TARGET_KINDS.includes(target.kind) ? target.kind : "other";
+    targetCounts.set(kind, (targetCounts.get(kind) ?? 0) + 1);
+  }
   const badge =
     status === "loading"
       ? t("session.worldDataPreflight.loading", "Checking")
@@ -107,37 +116,20 @@ export function WorldDataPreflightPanel({
                 }`}
               />
               <span className="wrap-break-word">
-                {item.sourceId ? `${item.sourceId}: ` : ""}
-                {item.message}
+                <WorldDataNoticeText notice={item} />
               </span>
             </div>
           ))}
         </div>
       )}
 
-      {visibleTargets.length > 0 && (
+      {targetCounts.size > 0 && (
         <div className="flex flex-wrap gap-1">
-          {visibleTargets.map((target, index) => (
-            <Badge
-              key={`${target.target}-${target.key ?? index}`}
-              variant="outline"
-              className="max-w-full text-xs font-mono"
-              title={`${target.kind} ${target.target}${target.key ? `:${target.key}` : ""}`}
-            >
-              <span className="truncate max-w-55">
-                {target.target}
-                {target.key ? `:${target.key}` : ""}
-              </span>
+          {[...targetCounts].map(([kind, count]) => (
+            <Badge key={kind} variant="outline" className="text-xs">
+              {t(`session.worldDataPreflight.kind.${kind}`, { count })}
             </Badge>
           ))}
-          {moreTargets > 0 && (
-            <Badge variant="outline" className="text-xs">
-              {t("session.worldDataPreflight.moreTargets", {
-                count: moreTargets,
-                defaultValue: "{{count}} more",
-              })}
-            </Badge>
-          )}
         </div>
       )}
     </div>

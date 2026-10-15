@@ -168,6 +168,7 @@ describe("world data of a community receiver approved after creation", () => {
       worldDataNotices?: {
         level: string;
         sourceId?: string;
+        code?: string;
         message: string;
       }[];
     };
@@ -175,6 +176,7 @@ describe("world data of a community receiver approved after creation", () => {
       expect.objectContaining({
         level: "warning",
         sourceId: "facts",
+        code: "receiver-missing",
         message: expect.stringContaining(CONTRACT),
       }),
     );

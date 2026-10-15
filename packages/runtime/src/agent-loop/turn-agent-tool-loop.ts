@@ -949,7 +949,11 @@ async function runAgentToolLoopWithinBudget(
           messages.push({ role: "assistant", content: response.content });
           // Schema-shaped outputs stay last-wins — the final envelope is
           // the one that saw the steering; free prose is accumulated.
-          if (!responseFormat) steeredProse.push(response.content);
+          if (!responseFormat) {
+            steeredProse.push(response.content);
+            // The live text gets the break the final content joins with.
+            await delta.forward("\n\n");
+          }
         }
         for (const steer of lateSteering) {
           messages.push({ role: "user", content: steer });

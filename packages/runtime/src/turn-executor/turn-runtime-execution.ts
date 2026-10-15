@@ -389,7 +389,8 @@ export async function executeOneRuntime(
           durationMs: Date.now() - startTime,
           timestamp: new Date().toISOString(),
         };
-        return emitGateTerminal(skipResult, reason);
+        // The stream carries a code; the output keeps the upstream names.
+        return emitGateTerminal(skipResult, "upstream-failed");
       }
     }
 

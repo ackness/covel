@@ -1,5 +1,6 @@
 import { Cpu, Wrench } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { pluginTagLabel } from "@/lib/session-plugin-selection.js";
 import { pluginHasTextIn } from "@covel/shared";
 import { Badge } from "@/components/ui/badge.js";
 import { text } from "@/components/world/editor-helpers.js";
@@ -111,7 +112,8 @@ export function PluginPackageRow({
           />
         </button>
 
-        <span className="text-xs font-medium truncate flex-1 min-w-0">
+        {/* Keep room for the name: the badges wrap to the next line first. */}
+        <span className="min-w-28 flex-1 truncate text-xs font-medium">
           {displayName}
         </span>
         {isCore && (
@@ -157,7 +159,7 @@ export function PluginPackageRow({
             variant="outline"
             className="text-xs px-1.5 py-0 h-4 text-muted-foreground"
           >
-            {tag}
+            {pluginTagLabel(tag, t)}
           </Badge>
         ))}
         {!pluginHasTextIn(pkg.languages, i18n.language) && (

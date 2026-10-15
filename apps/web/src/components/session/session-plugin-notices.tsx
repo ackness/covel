@@ -10,6 +10,7 @@ import {
   pluginOffReason,
   storyPlugins,
 } from "@/lib/plugin-notices.js";
+import { formatList } from "@/lib/i18n-text.js";
 
 interface SessionPluginNoticesProps {
   /** Every installed plugin, with `active` for the session's running ones. */
@@ -128,9 +129,10 @@ export function SessionPluginNotices({
             <div className="mt-1 flex flex-wrap items-center gap-2">
               <span>
                 {t("plugin.noStory.enable", {
-                  plugins: storyCandidates
-                    .map((id) => pluginName(plugins, id))
-                    .join(", "),
+                  plugins: formatList(
+                    storyCandidates.map((id) => pluginName(plugins, id)),
+                    "or",
+                  ),
                 })}
               </span>
               {turnOn(storyCandidates)}

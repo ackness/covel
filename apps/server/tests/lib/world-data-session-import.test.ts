@@ -892,6 +892,7 @@ describe("world data session importer", () => {
         {
           level: "warning",
           sourceId: "facts",
+          code: "receiver-missing",
           message:
             'No registered receiver for data contract "missing-plugin.facts@1"; contract writes skipped',
         },

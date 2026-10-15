@@ -309,10 +309,13 @@ export type SessionAction =
   | { type: "SET_WORLD"; world: api.WorldSummary }
   | { type: "ADD_WORLD"; world: api.WorldSummary }
   | { type: "UPDATE_WORLD"; world: api.WorldSummary }
+  | { type: "SET_WORLDS"; worlds: api.WorldSummary[] }
   | { type: "REMOVE_WORLD"; worldId: string }
   | { type: "SET_SESSION"; session: api.SessionRecord }
   | { type: "SET_WORLD_SESSIONS"; sessions: api.SessionRecord[] }
   | { type: "ADD_MESSAGE"; message: StreamMessage }
+  /** A player interjection, shown where the turn's commit saves it. */
+  | { type: "ADD_STEER_MESSAGE"; message: StreamMessage & { turnId: string } }
   | {
       type: "COMPLETE_MESSAGE";
       turnId: string;

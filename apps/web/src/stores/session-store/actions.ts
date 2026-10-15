@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import i18n from "i18next";
+import { approvalConfirmMessage } from "@/lib/approval-message.js";
 import type { PluginMutationResponse, SessionPlugin } from "@covel/shared";
 import * as api from "@/services/api";
 import { ignoreError } from "@/lib/ignore-error.js";
@@ -322,7 +323,7 @@ export function useBuildSessionActions({
       const id = crypto.randomUUID();
       const ts = new Date().toISOString();
       dispatch({
-        type: "ADD_MESSAGE",
+        type: "ADD_STEER_MESSAGE",
         message: {
           id,
           role: "user",
@@ -563,6 +564,16 @@ export function useBuildSessionActions({
     [dispatch],
   );
 
+  // The list again, for what changed on the server meanwhile (a world
+  // package edited on disk marks its world as having an update).
+  const refreshWorlds = useCallback(async () => {
+    try {
+      dispatch({ type: "SET_WORLDS", worlds: await ds.listWorlds() });
+    } catch {
+      // The list shown stays; the next refresh or a reload tries again.
+    }
+  }, [dispatch, ds]);
+
   const removeWorldLocal = useCallback(
     (worldId: string) => {
       invalidateWorldRecord(worldId);
@@ -654,10 +665,11 @@ export function useBuildSessionActions({
           isCurrent() &&
           (await requestConfirm({
             title: i18n.t("plugin.approval.title"),
-            message: i18n.t("plugin.approval.confirmMessage", {
-              pluginId: firstResult.pending.pluginId,
-              action: firstResult.pending.action,
-            }),
+            message: approvalConfirmMessage(
+              (key, options) => i18n.t(key, options) as string,
+              firstResult.pending.pluginId,
+              firstResult.pending.action,
+            ),
             confirmLabel: i18n.t("plugin.approval.allow"),
             cancelLabel: i18n.t("plugin.approval.deny"),
           }));
@@ -932,6 +944,7 @@ export function useBuildSessionActions({
       resetSession,
       backToWorldSelect,
       updateWorldLocal,
+      refreshWorlds,
       addWorldLocal,
       removeWorldLocal,
       loadSessionPlugins,
@@ -967,6 +980,7 @@ export function useBuildSessionActions({
       resetSession,
       backToWorldSelect,
       updateWorldLocal,
+      refreshWorlds,
       addWorldLocal,
       removeWorldLocal,
       loadSessionPlugins,

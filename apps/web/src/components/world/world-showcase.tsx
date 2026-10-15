@@ -21,7 +21,7 @@ import { matchesWorldQuery, text } from "@/components/world/editor-helpers.js";
 import { useOverflowEdges } from "@/hooks/use-overflow-edges.js";
 import { worldVisual } from "@/lib/world-visuals.js";
 import { packageByline, worldPackageInfo } from "@/lib/package-info.js";
-import { worldLanguageName } from "@/lib/world-locale.js";
+import { worldLanguageName, worldTextForPlayer } from "@/lib/world-locale.js";
 import { isWorldDeletable } from "./world-deletion.js";
 import { WorldUpdateBadge } from "./world-update-badge.js";
 import {
@@ -48,9 +48,11 @@ function AllWorldsDialog({
   onOpenChange,
   onSelect,
   t,
+  interfaceLocale,
 }: {
   readonly worlds: readonly WorldRecord[];
   readonly selectedId: string;
+  readonly interfaceLocale: string;
   readonly open: boolean;
   readonly onOpenChange: (open: boolean) => void;
   readonly onSelect: (worldId: string) => void;
@@ -99,7 +101,7 @@ function AllWorldsDialog({
               />
               <span className="block px-3 py-2">
                 <span className="ui-title line-clamp-1 block text-sm">
-                  {text(world.name)}
+                  {worldTextForPlayer(world, interfaceLocale).name}
                 </span>
                 <WorldUpdateBadge world={world} t={t} />
                 <span className="mt-0.5 line-clamp-1 block text-xs text-muted-foreground">
@@ -131,10 +133,12 @@ function WorldRail({
   leading,
   onSelect,
   t,
+  interfaceLocale,
 }: {
   readonly worlds: readonly WorldRecord[];
   readonly selectedId: string;
   readonly busy: boolean;
+  readonly interfaceLocale: string;
   /** Controls that share the row above the strip. */
   readonly leading: ReactNode;
   readonly onSelect: (worldId: string) => void;
@@ -262,7 +266,7 @@ function WorldRail({
                   className="absolute inset-x-0 bottom-0 h-28 bg-linear-to-t from-black/90 to-transparent"
                 />
                 <span className="ui-title absolute inset-x-3 bottom-3 text-base leading-snug text-white">
-                  {text(world.name)}
+                  {worldTextForPlayer(world, interfaceLocale).name}
                 </span>
                 <WorldUpdateBadge
                   world={world}
@@ -281,6 +285,7 @@ function WorldRail({
         onOpenChange={setBrowsing}
         onSelect={onSelect}
         t={t}
+        interfaceLocale={interfaceLocale}
       />
     </div>
   );
@@ -325,7 +330,9 @@ export function WorldShowcase({
     recentSessions?.get(selected.id) && onResumeSession,
   );
   const visual = worldVisual(selected);
-  const languageName = worldLanguageName(selected.locale, interfaceLocale);
+  // The edition a new game would be played in, as on the cover cards.
+  const shown = worldTextForPlayer(selected, interfaceLocale);
+  const languageName = worldLanguageName(shown.playLocale, interfaceLocale);
   const busy = enteringWorldId !== null;
   const tags = selected.tags ?? [];
   const byline = packageByline(worldPackageInfo(selected), t);
@@ -390,11 +397,11 @@ export function WorldShowcase({
                   )}
             </p>
             <h1 className="ui-title text-5xl leading-[1.1] md:text-6xl">
-              {text(selected.name)}
+              {shown.name}
             </h1>
             <WorldUpdateBadge world={selected} t={t} />
             <p className="text-base leading-[1.8] text-white/88 line-clamp-4 wrap-break-word">
-              {text(selected.description)}
+              {shown.description}
             </p>
             {byline && (
               <p className="truncate text-[13px] text-white/72">{byline}</p>
@@ -464,6 +471,7 @@ export function WorldShowcase({
                 />
               }
               onSelect={select}
+              interfaceLocale={interfaceLocale}
               t={t}
             />
           )}
@@ -473,7 +481,7 @@ export function WorldShowcase({
       <WorldGalleryLightbox
         items={pictures}
         index={openImage}
-        title={text(selected.name)}
+        title={shown.name}
         onIndexChange={setOpenImage}
         t={t}
       />
