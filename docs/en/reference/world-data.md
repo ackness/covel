@@ -848,6 +848,8 @@ For plugin authors: the merge rule is `applyLocaleOverlay` in `@covel/shared`. T
 
 ### Receivers that join after the game starts
 
+The prep screen lists selected community plugins whose server code is not yet approved under “Needs approval.” They stay checked, but do not count toward enabled plugins, runtimes, narrative checks or receivers in the world-data preflight. Players can still start the game. The world data those plugins receive is imported after approval and enablement.
+
 A plugin that is not enabled when the session is created gets no world data, for example a community plugin approved after the game starts. When a plugin is enabled in the game (`PUT /api/sessions/:id/plugins/:pluginId`), Covel imports once for the plugins that just joined:
 
 - It writes data only for joined plugins that have no import ledger rows for this world yet. Other plugins' data and ledger rows stay as they are; turning the same plugin off and on again does not overwrite what the game changed.

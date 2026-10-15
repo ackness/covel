@@ -264,25 +264,77 @@ describe("usePluginSelection", () => {
     act(() => result.current.applyPack("small"));
     expect(result.current.requestedPluginIds).toEqual(["core"]);
   });
-  it("does not infer new-session authorization from a globally loaded community entry", async () => {
-    vi.mocked(api.getWorldPluginPlan).mockResolvedValue(
-      selectionPlan(["community"]),
-    );
-    const community = plugin("community", {
-      source: "community",
-      hostState: "loaded",
-      requires: ["dependency@1"],
+  it.each(["installed", "loaded"] as const)(
+    "keeps a community request pending without treating it as enabled (host: %s)",
+    async (hostState) => {
+      vi.mocked(api.getWorldPluginPlan).mockResolvedValue(
+        selectionPlan(["community"]),
+      );
+      const community = plugin("community", {
+        source: "community",
+        hostState,
+        requires: ["dependency@1"],
+      });
+      const { result } = renderHook(() =>
+        usePluginSelection(
+          PLAN.worldId,
+          [community, DEPENDENCY_PLUGIN],
+          prepareWorldForServer,
+        ),
+      );
+      await waitFor(() => expect(result.current.pluginPlanLoading).toBe(false));
+      expect(result.current.requestedPluginIds).toEqual(["community"]);
+      expect(result.current.selectedPluginIdSet.has("community")).toBe(true);
+      expect(result.current.enabledPluginIds).toEqual([]);
+      expect(result.current.enabledPluginSummaries).toEqual([]);
+      expect(result.current.pendingApproval).toEqual([
+        expect.objectContaining({
+          pluginId: "community",
+          code: "approval-required",
+        }),
+      ]);
+      const submitted = resolveSessionPlugins({
+        requested: result.current.requestedPluginIds,
+        excluded: result.current.excludedPluginIds,
+        plugins: [community, DEPENDENCY_PLUGIN].map((item) => ({
+          ...item,
+          authorized: item.source === "builtin",
+        })),
+      });
+      expect(result.current.enabledPluginIds).toEqual(submitted.active);
+
+      act(() => result.current.togglePlugin("community"));
+      expect(result.current.pendingApproval).toEqual([]);
+      expect(result.current.requestedPluginIds).toEqual([]);
+      expect(result.current.selectedPluginIdSet.has("community")).toBe(false);
+      act(() => result.current.togglePlugin("community"));
+      expect(result.current.pendingApproval).toHaveLength(1);
+      expect(result.current.enabledPluginIds).toEqual([]);
+    },
+  );
+  it("lists only requested community packages, including world requests outside the defaults", async () => {
+    vi.mocked(api.getWorldPluginPlan).mockResolvedValue({
+      ...selectionPlan([]),
+      policy: { ...PLAN.policy, requested: ["community"] },
     });
+    const plugins = [
+      CORE_PLUGIN,
+      plugin("community", { source: "community" }),
+      plugin("unrequested-core", { source: "community", kind: "core" }),
+    ];
     const { result } = renderHook(() =>
-      usePluginSelection(
-        PLAN.worldId,
-        [community, DEPENDENCY_PLUGIN],
-        prepareWorldForServer,
-      ),
+      usePluginSelection(PLAN.worldId, plugins, prepareWorldForServer),
     );
     await waitFor(() => expect(result.current.pluginPlanLoading).toBe(false));
-    expect(result.current.selectedPluginIds).toContain("community");
-    expect(result.current.selectedPluginIds).not.toContain("dependency");
+    expect(result.current.pendingApproval.map((item) => item.pluginId)).toEqual(
+      ["community"],
+    );
+    expect(result.current.selectedPluginIdSet).toEqual(
+      new Set(["core", "community"]),
+    );
+    expect(result.current.enabledPluginIds).toEqual(["core"]);
+    expect(result.current.enabledPluginSummaries).toEqual([CORE_PLUGIN]);
+    expect(result.current.requestedPluginIds).toEqual(["community"]);
   });
   beforeEach(() => {
     vi.mocked(api.getWorldPluginPlan).mockReset();
@@ -330,7 +382,7 @@ describe("usePluginSelection", () => {
         prepareWorldForServer,
       );
       if (!selection.pluginPlanLoading && selection.pluginPlan) {
-        readySelections.push(selection.selectedPluginIds);
+        readySelections.push(selection.enabledPluginIds);
       }
       return selection;
     });
@@ -342,7 +394,7 @@ describe("usePluginSelection", () => {
     expect(readySelections.length).toBeGreaterThan(0);
     expect(readySelections.every((ids) => !ids.includes("core"))).toBe(true);
     expect(result.current.lockedPluginIds.has("core")).toBe(false);
-    expect(result.current.selectedPluginSummaries.map(({ id }) => id)).toEqual([
+    expect(result.current.enabledPluginSummaries.map(({ id }) => id)).toEqual([
       "alternative",
       "dependency",
     ]);
@@ -360,7 +412,7 @@ describe("usePluginSelection", () => {
     expect(result.current.selectedPluginIdSet).toEqual(
       new Set(["alternative", "dependency"]),
     );
-    expect(result.current.selectedPluginSummaries).toContain(DEPENDENCY_PLUGIN);
+    expect(result.current.enabledPluginSummaries).toContain(DEPENDENCY_PLUGIN);
     expect(result.current.requestedPluginIds).toEqual(["alternative"]);
     act(() => result.current.togglePlugin("alternative"));
     expect(result.current.selectedPluginIdSet.has("dependency")).toBe(false);
@@ -422,7 +474,7 @@ describe("usePluginSelection", () => {
       excluded: result.current.excludedPluginIds,
       plugins: plugins.map((entry) => ({ ...entry, authorized: true })),
     });
-    expect(submitted.active).toEqual(result.current.selectedPluginIds);
+    expect(submitted.active).toEqual(result.current.enabledPluginIds);
     expect(submitted.rejected).toEqual([]);
   });
 
@@ -444,13 +496,13 @@ describe("usePluginSelection", () => {
 
     act(() => result.current.togglePlugin("replacement"));
 
-    expect(result.current.selectedPluginIds).toEqual(["replacement"]);
+    expect(result.current.enabledPluginIds).toEqual(["replacement"]);
     expect(result.current.requestedPluginIds).toEqual(["replacement"]);
     expect(result.current.excludedPluginIds).toContain("original");
     act(() => result.current.togglePlugin("replacement"));
-    expect(result.current.selectedPluginIds).toEqual([]);
+    expect(result.current.enabledPluginIds).toEqual([]);
     act(() => result.current.togglePlugin("original"));
-    expect(result.current.selectedPluginIds).toEqual(["original"]);
+    expect(result.current.enabledPluginIds).toEqual(["original"]);
     expect(result.current.excludedPluginIds).not.toContain("original");
   });
 

@@ -91,7 +91,7 @@ function usePrep(resolvedSlots: ResolvedSlot[]) {
     selection.pluginPlan !== null;
   const { bindingState } = usePrepRuntimeBindings(
     plan.worldId,
-    selection.selectedPluginSummaries,
+    selection.enabledPluginSummaries,
     resolvedSlots,
     ready,
   );
@@ -121,7 +121,7 @@ describe("prep runtime bindings with asynchronous plugin selection", () => {
 
       await act(async () => pending.resolve(plan));
       await waitFor(() => expect(result.current.ready).toBe(true));
-      expect(result.current.selection.selectedPluginIds).toContain("guide");
+      expect(result.current.selection.enabledPluginIds).toContain("guide");
       expect(result.current.bindingState.bindings).toEqual({ guide: "custom" });
       expect(api.setPrepRuntimeBindings).not.toHaveBeenCalled();
 

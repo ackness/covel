@@ -57,6 +57,8 @@ export function pluginOffReason(
       : t("plugin.off.noProvider", { plugin, contract: item.contract });
   }
   switch (item.code) {
+    case "approval-required":
+      return t("plugin.off.approvalRequired", { plugin });
     case "unknown-plugin":
       return t("plugin.off.notInstalled", { plugin });
     case "conflict":
