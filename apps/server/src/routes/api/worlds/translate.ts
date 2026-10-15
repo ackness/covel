@@ -47,9 +47,8 @@ import {
   worldOperationLockId,
 } from "../../../world-lifecycle.js";
 import { preserveWorldProvenance } from "../../../world-seed-loader.js";
-import { checkHostedOperator } from "../session/session-guard.js";
 import type { WorldEnv } from "./shared.js";
-import { checkWorldWriteAccess } from "./world-write-guard.js";
+import { requireAccess } from "../../../host-profile.js";
 
 type TranslateEvent =
   | {
@@ -119,7 +118,8 @@ function withNewEdition(
 worldTranslateRoutes.post(
   "/:id/translate",
   async (c, next) => {
-    const denied = checkHostedOperator(c) ?? checkWorldWriteAccess(c);
+    const denied =
+      requireAccess(c, "world.generate") ?? requireAccess(c, "world.write");
     if (denied) return denied;
     await next();
   },

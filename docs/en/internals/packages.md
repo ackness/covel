@@ -74,6 +74,14 @@ The host is an application that assembles these packages and runs them: the serv
 
 The desktop shell depends on Zod directly to validate the window state saved locally. The window position and size belong to the Electron host. They are not exposed as a shared domain schema.
 
+### The deployment form is decided only in the host
+
+At startup the server combines the deployment tier, the storage actually in use and the tokens into a host profile (`apps/server/src/host-profile.ts`; for the rules, see [Security boundaries](./security.md#host-profile)), and from then on asks only that. The core packages do not read these deployment variables:
+
+- The local-network exemption of `ai-provider`, and whether a request outside any session may use a community plugin's wire, are passed in by the host at startup through `configureProviderHostPolicy`. When no host passes them (tools, tests), the single-user `self` rules apply.
+- `shared` keeps only the registry entries and the parser of these variables. Whether the server settings use the value a player stored is decided by the host, which passes `playerWritable`.
+- The desktop shell always passes `DEPLOYMENT_TIER=self` when it starts the server.
+
 ### After execution, you must commit
 
 An execution first gets `{ result, commit }` from `executeTurn(...)` or `resumeSuspendedRuntime(...)`:

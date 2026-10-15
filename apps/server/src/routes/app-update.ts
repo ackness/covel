@@ -3,7 +3,7 @@ import { z } from "zod";
 import { outboundFetch, readResponseJson } from "@covel/ai-provider";
 import { readRuntimeEnv } from "@covel/shared";
 import { errorBody } from "../api-error.js";
-import { makeDesktopRestTokenGuard } from "./privileged-auth.js";
+import { accessGuard } from "../host-profile.js";
 
 const GITHUB_LATEST_RELEASE_URL =
   "https://api.github.com/repos/AcKnEsS/covel/releases/latest";
@@ -83,7 +83,7 @@ export interface AppUpdateRoutesDeps {
 
 export function createAppUpdateRoutes(deps: AppUpdateRoutesDeps = {}): Hono {
   const app = new Hono();
-  const requireToken = makeDesktopRestTokenGuard();
+  const requireToken = accessGuard("host.config");
   const fetchLatestRelease =
     deps.fetchLatestRelease ?? (() => fetchLatestCovelRelease());
 

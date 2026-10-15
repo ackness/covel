@@ -186,6 +186,7 @@ PostgreSQL 一列的细节：
 - 没有保存哈希的历史会话一律拒绝。
 - `GET /api/sessions` 只对带运维 token 的调用方返回内容，其他人拿到空列表。
 - `POST /api/sessions` 创建会话需要运维 token，缺失时返回 `401 { code: "operator_token_required" }`。
+- `POST /api/sessions/:id/fork` 也会创建会话，所以问的是同一个问题：只带 owner token 不能分叉，要运维 token，缺失时同样返回 `401 { code: "operator_token_required" }`。
 
 > [!NOTE]
 > 创建会话要运维 token，这是“只有一个运维方”的门禁。完整的用户身份、租户隔离和配额还没有实现。
@@ -212,7 +213,7 @@ PostgreSQL 一列的细节：
 
 - 可以通过任何会话的 owner 检查。管理工具和 e2e harness 用它。
 - 在托管层级，它还是下面这些操作的凭证：
-  - 创建会话
+  - 创建会话、分叉会话
   - 世界写入、维度导入
   - AI 世界生成
   - 模型探测和刷新
@@ -221,7 +222,7 @@ PostgreSQL 一列的细节：
 
 community 插件的 ESM 代码会在服务器进程里注册全局能力，所以托管层级激活它时同时要求 owner token 和运维 token。这是目前“只有一个运维方”的信任模型，不提供多租户的代码沙箱。
 
-`DEPLOYMENT_TIER=demo|commercial` 启动时如果没有配置这个 token，`validateSecurityPosture` 会直接拒绝启动。
+`DEPLOYMENT_TIER=demo|commercial` 启动时如果没有配置这个 token，服务端会直接拒绝启动。这些规则都来自启动时定下的宿主配置，每条路由要什么见 [安全边界](../internals/security.md#host-profile)。
 
 纯 Web 客户端可以在 **设置 → 运维访问** 里输入或清除这个 token：
 
@@ -1270,6 +1271,7 @@ setup runtime 反复失败、用完重试预算（`maxTriggerCount`）后进入 
 
 - 新会话（child）拷贝快照里的状态，以及截至 cursor 的消息。
 - 响应里一次性返回 child 的 `ownerToken`。
+- 分叉和创建会话走同一个授权检查：托管层级要运维 token；`self` 和生产 MemoryStore 上，能访问这个会话的人就能分叉。
 
 自动快照被刷新时：
 

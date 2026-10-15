@@ -186,6 +186,7 @@ Rules for `demo` / `commercial`:
 - Historical sessions with no saved hash are always refused.
 - `GET /api/sessions` returns content only to callers with the operator token. Anyone else gets an empty list.
 - `POST /api/sessions` to create a session needs the operator token. If it is missing, it returns `401 { code: "operator_token_required" }`.
+- `POST /api/sessions/:id/fork` creates a session too, so it asks the same question: the owner token alone cannot fork, the operator token is needed, and without it the route also returns `401 { code: "operator_token_required" }`.
 
 > [!NOTE]
 > Creating a session needs the operator token. This is a gate for "only one operator." Full user identity, tenant isolation, and quotas are not built yet.
@@ -212,7 +213,7 @@ After `COVEL_DESKTOP_REST_TOKEN` is set, treat its value as a Bearer token:
 
 - It passes the owner check of any session. Admin tools and the e2e harness use it.
 - On hosted tiers, it is also the credential for these operations:
-  - Creating a session
+  - Creating a session, forking a session
   - Writing worlds, importing dimensions
   - AI world generation
   - Probing and refreshing models
@@ -221,7 +222,7 @@ After `COVEL_DESKTOP_REST_TOKEN` is set, treat its value as a Bearer token:
 
 The ESM code of a community plugin registers global capabilities inside the server process. So on hosted tiers, activating it requires both the owner token and the operator token. This is the current "one operator" trust model. It does not provide a code sandbox for multiple tenants.
 
-If `DEPLOYMENT_TIER=demo|commercial` starts without this token configured, `validateSecurityPosture` refuses to start.
+If `DEPLOYMENT_TIER=demo|commercial` starts without this token configured, the server refuses to start. All these rules come from the host profile fixed at startup; for what each route needs, see [Security boundaries](../internals/security.md#host-profile).
 
 A web-only client can enter or clear this token under **Settings → Operator Access**:
 
@@ -1270,6 +1271,7 @@ The built-in interface does not use this group of endpoints for now. The "World"
 
 - The new session (the child) copies the state in the snapshot, and the messages up to the cursor.
 - The response returns the child's `ownerToken` once, all at once.
+- Forking and creating a session go through the same authorization check: hosted tiers need the operator token; on `self` and the production MemoryStore, anyone who can access the session can fork it.
 
 When an automatic snapshot is refreshed:
 

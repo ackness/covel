@@ -27,11 +27,10 @@ import { errorBody, readJsonBody } from "../../api-error.js";
 import {
   publicSessionMetadata,
   resolveSessionParam,
-  hasOperatorToken,
-  isSessionOwnerAuthEnforced,
   sessionIncarnationIdentity,
 } from "./session/session-guard.js";
 import { withLockedSessionMutation } from "./session/locked-mutation.js";
+import { allowsAccess } from "../../host-profile.js";
 import { earliestUnfinishedJobSourceStart } from "./plugin-rpc/runtime-job-worker.js";
 
 type Env = {
@@ -283,8 +282,7 @@ export function createBrowserWorkspaceRoutes(
               }
             }
 
-            const writeWorld =
-              !isSessionOwnerAuthEnforced(c) || hasOperatorToken(c);
+            const writeWorld = allowsAccess(c, "world.write");
             if (checkpoint.session.worldId && !writeWorld) {
               const world = worlds.get(checkpoint.session.worldId);
               // Ordinary session sync uses the server's existing catalog record.

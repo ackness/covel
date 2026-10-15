@@ -9,8 +9,6 @@ export type FlowSegmentId = Stage | "event-manual";
 
 export type UiSlotName = "right" | "message";
 
-export { bearerToken } from "../privileged-auth.js";
-
 export function textValue(
   value: unknown,
   locale: string = DEFAULT_LOCALE,

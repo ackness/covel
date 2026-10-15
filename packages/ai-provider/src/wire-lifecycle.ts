@@ -1,11 +1,11 @@
 import { AsyncLocalStorage } from "node:async_hooks";
-import { readRuntimeEnv } from "@covel/shared";
 import { WireAlreadyRegisteredError } from "./errors.js";
+import { providerHostPolicy } from "./host-policy.js";
 
 /** The plugin that provides a wire, when the wire is limited to sessions that run it. */
 export interface WireOwner {
   readonly pluginId: string;
-  /** Builtin plugin code may serve a request that has no session on any tier. */
+  /** Builtin plugin code may serve a request that has no session on any host. */
   readonly builtin: boolean;
 }
 
@@ -47,10 +47,10 @@ function usable(entry: WireEntry, snapshot: WireSnapshot | undefined): boolean {
   if (snapshot?.activePlugins) {
     return snapshot.activePlugins.has(owner.pluginId);
   }
-  // No session: on the self tier the one player approved every loaded plugin,
-  // so the settings page can test a model that uses its protocol. On a hosted
-  // tier another player's approval must not serve this request.
-  return owner.builtin || readRuntimeEnv().deploymentTier === "self";
+  // No session: on a personal host the one player approved every loaded
+  // plugin, so the settings page can test a model that uses its protocol. On
+  // a shared host another player's approval must not serve this request.
+  return owner.builtin || providerHostPolicy().sessionlessCommunityWires;
 }
 
 /**

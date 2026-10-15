@@ -16,21 +16,33 @@ import { lookup } from "node:dns/promises";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { getJson, postJson } from "../src/adapters/http.js";
 import { createPinnedDispatcher } from "../src/adapters/http/dns-safety.js";
+import {
+  configureProviderHostPolicy,
+  PERSONAL_PROVIDER_HOST_POLICY,
+} from "../src/host-policy.js";
 
 vi.mock("node:dns/promises", () => ({ lookup: vi.fn() }));
 
 const lookupMock = vi.mocked(lookup);
 
+/** What the server passes in on `demo` / `commercial`. */
+function useSharedHost(): void {
+  configureProviderHostPolicy({
+    localNetwork: false,
+    sessionlessCommunityWires: false,
+  });
+}
+
 afterEach(() => {
   lookupMock.mockReset();
-  vi.unstubAllEnvs();
+  configureProviderHostPolicy(PERSONAL_PROVIDER_HOST_POLICY);
 });
 
 describe("core request DNS SSRF safety", () => {
   it.each(["2001:2::1", "2001:100::1", "2002:a00:1::1", "3fff::1"])(
     "rejects special IPv6 DNS answer %s on hosted and plugin paths",
     async (address) => {
-      vi.stubEnv("DEPLOYMENT_TIER", "demo");
+      useSharedHost();
       lookupMock.mockResolvedValue([{ address, family: 6 }] as never);
       for (const trusted of [false, true]) {
         await expect(
@@ -39,9 +51,9 @@ describe("core request DNS SSRF safety", () => {
       }
     },
   );
-  // Hosted tiers keep the strict public-only policy on the core provider path.
-  it("rejects a POST to a hostname resolving to a private IP (hosted tier)", async () => {
-    vi.stubEnv("DEPLOYMENT_TIER", "demo");
+  // A shared host keeps the strict public-only policy on the core provider path.
+  it("rejects a POST to a hostname resolving to a private IP (shared host)", async () => {
+    useSharedHost();
     lookupMock.mockResolvedValue([{ address: "10.0.0.8", family: 4 }] as never);
 
     await expect(
@@ -53,8 +65,8 @@ describe("core request DNS SSRF safety", () => {
     ).rejects.toThrow(/SSRF policy rejected internal\.example/);
   });
 
-  it("rejects a GET to a hostname resolving to cloud metadata (hosted tier)", async () => {
-    vi.stubEnv("DEPLOYMENT_TIER", "commercial");
+  it("rejects a GET to a hostname resolving to cloud metadata (shared host)", async () => {
+    useSharedHost();
     lookupMock.mockResolvedValue([
       { address: "169.254.169.254", family: 4 },
     ] as never);
@@ -64,39 +76,36 @@ describe("core request DNS SSRF safety", () => {
     ).rejects.toThrow(/disallowed address 169\.254\.169\.254/);
   });
 
-  it.each(["demo", "commercial"])(
-    "rejects loopback targets on the %s tier, on provider and plugin paths",
-    async (tier) => {
-      vi.stubEnv("DEPLOYMENT_TIER", tier);
-      lookupMock.mockResolvedValue([
-        { address: "127.0.0.1", family: 4 },
-      ] as never);
+  it("rejects loopback targets on a shared host, on provider and plugin paths", async () => {
+    useSharedHost();
+    lookupMock.mockResolvedValue([
+      { address: "127.0.0.1", family: 4 },
+    ] as never);
 
-      // String check: the request never reaches DNS or a socket.
-      for (const baseUrl of [
-        "http://localhost:11434",
-        "http://127.0.0.1:11434",
-        "http://[::1]:11434",
-        "https://127.0.0.1:11434",
-      ]) {
+    // String check: the request never reaches DNS or a socket.
+    for (const baseUrl of [
+      "http://localhost:11434",
+      "http://127.0.0.1:11434",
+      "http://[::1]:11434",
+      "https://127.0.0.1:11434",
+    ]) {
+      await expect(
+        postJson({ baseUrl }, "/chat/completions", {}),
+      ).rejects.toThrow(/is not allowed/);
+    }
+    expect(lookupMock).not.toHaveBeenCalled();
+
+    // Connect-time check, for a loopback name that passed the string check.
+    for (const trusted of [false, true]) {
+      for (const host of ["localhost", "127.0.0.1", "[::1]"]) {
         await expect(
-          postJson({ baseUrl }, "/chat/completions", {}),
-        ).rejects.toThrow(/is not allowed/);
+          createPinnedDispatcher(new URL(`https://${host}`), trusted),
+        ).rejects.toThrow(/disallowed address/);
       }
-      expect(lookupMock).not.toHaveBeenCalled();
+    }
+  });
 
-      // Connect-time check, for a loopback name that passed the string check.
-      for (const trusted of [false, true]) {
-        for (const host of ["localhost", "127.0.0.1", "[::1]"]) {
-          await expect(
-            createPinnedDispatcher(new URL(`https://${host}`), trusted),
-          ).rejects.toThrow(/disallowed address/);
-        }
-      }
-    },
-  );
-
-  it("self tier accepts private resolver answers on the trusted provider path", async () => {
+  it("the personal host policy (the default) accepts private resolver answers on the trusted provider path", async () => {
     // self tier (default) = single-user local play: a TUN proxy fake-IP
     // (198.18/15) and a LAN Ollama (192.168.x.x) both resolve to private
     // ranges and must not be rejected on the user's own configured baseUrl,
@@ -112,7 +121,7 @@ describe("core request DNS SSRF safety", () => {
     }
   });
 
-  it("self tier still rejects private answers on the fetchWithRetry (plugin) path", async () => {
+  it("the personal host policy still rejects private answers on the fetchWithRetry (plugin) path", async () => {
     // Third-party plugin code never gets the self-tier exemption, so it can
     // not probe the local network even on a desktop install.
     lookupMock.mockResolvedValue([
@@ -124,8 +133,8 @@ describe("core request DNS SSRF safety", () => {
     ).rejects.toThrow(/disallowed address 198\.18\.2\.176/);
   });
 
-  it("rejects private answers on the trusted path on hosted tiers", async () => {
-    vi.stubEnv("DEPLOYMENT_TIER", "demo");
+  it("rejects private answers on the trusted path on a shared host", async () => {
+    useSharedHost();
     lookupMock.mockResolvedValue([
       { address: "198.18.2.176", family: 4 },
     ] as never);

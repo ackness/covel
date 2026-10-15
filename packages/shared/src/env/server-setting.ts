@@ -1,5 +1,5 @@
 import type { ZodType } from "zod";
-import { readRuntimeEnv, type EnvSource } from "./registry-readers.js";
+import type { EnvSource } from "./registry-readers.js";
 
 /** Where the value in force of a server-scoped setting comes from. */
 export type ServerSettingSource = "env" | "setting" | "default";
@@ -39,18 +39,12 @@ export interface ServerSettingsSnapshot {
 }
 
 /**
- * True where a player may store server-scoped settings: `DEPLOYMENT_TIER=self`,
- * where the one player owns the server. On a hosted tier they belong to the
- * operator, who sets them through the environment.
- */
-export function serverSettingsWritable(envSource?: EnvSource): boolean {
-  return readRuntimeEnv(envSource).deploymentTier === "self";
-}
-
-/**
- * Precedence: the operator's environment value, then the stored setting (only
- * where {@link serverSettingsWritable}), then the default. A stored value the
- * schema refuses counts as not stored.
+ * Precedence: the operator's environment value, then the stored setting, then
+ * the default. A stored value the schema refuses counts as not stored.
+ *
+ * Whether a player's stored value may count at all is the host's decision
+ * (the server's host profile: only where one player owns the server). A host
+ * that does not let players set these settings passes `undefined`.
  */
 export function resolveServerSetting(
   definition: ServerSettingDefinition,
@@ -59,22 +53,31 @@ export function resolveServerSetting(
 ): ResolvedServerSetting {
   const operator = definition.operatorValue?.(envSource);
   if (operator !== undefined) return { value: operator, source: "env" };
-  if (stored !== undefined && serverSettingsWritable(envSource)) {
+  if (stored !== undefined) {
     const parsed = definition.schema.safeParse(stored);
     if (parsed.success) return { value: parsed.data, source: "setting" };
   }
   return { value: definition.default, source: "default" };
 }
 
-/** {@link resolveServerSetting} plus whether a player's write would count. */
+/**
+ * {@link resolveServerSetting} plus whether a player's write would count.
+ * `playerWritable` is the host's answer to "may a player store server-scoped
+ * settings here"; where it is false a stored value is ignored.
+ */
 export function describeServerSetting(
   definition: ServerSettingDefinition,
   stored: unknown,
+  playerWritable: boolean,
   envSource?: EnvSource,
 ): ServerSettingInfo {
-  const resolved = resolveServerSetting(definition, stored, envSource);
+  const resolved = resolveServerSetting(
+    definition,
+    playerWritable ? stored : undefined,
+    envSource,
+  );
   return {
     ...resolved,
-    settable: resolved.source !== "env" && serverSettingsWritable(envSource),
+    settable: resolved.source !== "env" && playerWritable,
   };
 }

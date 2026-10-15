@@ -42,12 +42,17 @@ describe("resolveTraceRetention", () => {
     ).toEqual({ days: 30, source: "default" });
   });
 
-  it("never applies the player's choice on a hosted tier", () => {
+  it("leaves the hosted-tier decision to the host: the tier variable does not count here", () => {
+    // The server's host profile decides whether a player's value is passed at
+    // all; this resolver applies what it is given.
     for (const tier of ["demo", "commercial"]) {
-      expect(resolveTraceRetention(0, { DEPLOYMENT_TIER: tier })).toEqual({
-        days: 30,
-        source: "default",
+      expect(resolveTraceRetention(7, { DEPLOYMENT_TIER: tier })).toEqual({
+        days: 7,
+        source: "setting",
       });
+      expect(
+        resolveTraceRetention(undefined, { DEPLOYMENT_TIER: tier }),
+      ).toEqual({ days: 30, source: "default" });
     }
   });
 });

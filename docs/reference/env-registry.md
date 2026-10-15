@@ -406,14 +406,15 @@ v0.0.42 调整了插件扩展契约，旧的开发数据不会自动升级。桌
 - `self` 是本地自部署。来自 localhost 的请求可以读取 server 注入的服务商密钥的元数据。
 - `demo` / `commercial` 强制要求会话 owner token。
 - 即使是 `self`，当 `NODE_ENV=production` 并且实际使用的存储是 MemoryStore 时，也强制要求会话 owner token，全局世界写入还要求 operator token。这个判断看实际注入的存储，不只看 `STORE_BACKEND` 的值。
-- 未知的层级按最严格的 `commercial` 处理。
-- 详见 [`api.md`](./api.md) 的鉴权章节。
+- 大小写和首尾空格不计。其他值会让服务启动失败，错误信息列出可以接受的值。
+- 服务端在启动时把它和存储、令牌一起合成宿主配置，路由不再自己读它。各档位的规则见 [安全边界](../internals/security.md#host-profile)，鉴权细节见 [`api.md`](./api.md) 的鉴权章节。
+- 桌面客户端启动服务端时固定传 `self`。
 
 **`COVEL_DESKTOP_REST_TOKEN`**
 
 - 它是运维凭证（operator token）。用它作为 Bearer token 可以通过任何会话的 owner 校验，管理工具和 e2e 脚本靠它工作。
-- 在 `demo` / `commercial` 层级，下面这些操作必须带它：创建和列出会话、世界写入和维度导入、AI 世界生成、模型探测和刷新、激活社区插件的服务端代码。
-- `DEPLOYMENT_TIER=demo|commercial` 启动时如果没配置它，`validateSecurityPosture` 直接拒绝启动。
+- 在 `demo` / `commercial` 层级，下面这些操作必须带它：创建、分叉和列出会话，世界写入和维度导入、AI 世界生成、模型探测和刷新、激活社区插件的服务端代码。
+- `DEPLOYMENT_TIER=demo|commercial` 启动时如果没配置它，服务端直接拒绝启动（宿主配置的启动检查）。
 - `self` 层级启动不要求它。但在生产环境的 MemoryStore 下，全局世界的创建、修改、删除、维度导入和服务端生成保存都会校验它；没配置时这些写入保持关闭，公开读取和合法的会话访问仍然可用。
 - 普通的本地或桌面会话不需要 token。桌面配置接口有它自己的 token 校验。
 - 这是“只有一个运维方”的信任模型，不提供多租户身份或代码沙箱。见 [`api.md`](./api.md) 的鉴权章节。
@@ -428,7 +429,7 @@ v0.0.42 调整了插件扩展契约，旧的开发数据不会自动升级。桌
 - `self` 档位只回答用 `localhost`、`127.0.0.1` 或 `[::1]` 打开的请求（端口不限），其他主机名一律 `403 host_not_allowed`。这挡住 DNS 重绑定：恶意网页把自己的域名指向本机，也没法驱动不要令牌的接口。
 - 自部署的网页版要从别的机器打开时，把打开它用的名字写进来，例如 `COVEL_ALLOWED_HOSTS=covel.example.com,192.168.1.20`。写了端口也只比较主机名。
 - 放在反向代理后面时，写代理转发过来的 `Host`。代理把 `Host` 改成上游名字（比如 nginx 默认的 `app:3001`）时，写那个名字。
-- `demo` / `commercial` 档位使用各自的鉴权规则，不做这个检查。
+- `demo` / `commercial` 档位使用各自的鉴权规则，不做这个检查。在这两个档位上设置它，服务端会拒绝启动，因为这个值不起作用。
 
 **`TRUSTED_PROXY_IPS`**
 
@@ -450,7 +451,7 @@ v0.0.42 调整了插件扩展契约，旧的开发数据不会自动升级。桌
 **`COVEL_MEDIA_CLEANUP_ENABLED`**
 
 - 默认 `false`，决定 `POST /api/media/cleanup` 能不能用。
-- 即使设为 `true`，`DEPLOYMENT_TIER=commercial` 时这个接口也固定返回 503。
+- `DEPLOYMENT_TIER=commercial` 时这个接口固定返回 503，所以在这个档位上设为 `true` 会让服务端拒绝启动。
 - 详见 [`api.md`](./api.md) 的媒体管理章节。
 
 ### 桌面代理

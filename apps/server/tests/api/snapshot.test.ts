@@ -1490,7 +1490,7 @@ describe("Snapshot routes", () => {
       expect(childSuspensions).toHaveLength(0);
     });
 
-    it("mints an independent child owner token on hosted tiers", async () => {
+    it("asks for the operator token like session creation, and mints an independent child owner token, on hosted tiers", async () => {
       const previousTier = process.env.DEPLOYMENT_TIER;
       const previousOperator = process.env.COVEL_DESKTOP_REST_TOKEN;
       process.env.DEPLOYMENT_TIER = "demo";
@@ -1516,11 +1516,27 @@ describe("Snapshot routes", () => {
         expect(snapshotRes.status).toBe(201);
         const snapshotBody = (await snapshotRes.json()) as { id: string };
 
-        const forkRes = await app.request("/api/sessions/sess-1/fork", {
+        // F-204: a fork creates a session, so the owner token alone cannot
+        // mint one on a hosted tier; POST /api/sessions asks the same.
+        const ownerFork = await app.request("/api/sessions/sess-1/fork", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
             "X-Session-Token": parentToken,
+          },
+          body: JSON.stringify({ fromSnapshotId: snapshotBody.id }),
+        });
+        expect(ownerFork.status).toBe(401);
+        expect(await ownerFork.json()).toMatchObject({
+          code: "operator_token_required",
+        });
+        expect(await store.listSessions()).toHaveLength(1);
+
+        const forkRes = await app.request("/api/sessions/sess-1/fork", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: "Bearer operator-secret",
           },
           body: JSON.stringify({ fromSnapshotId: snapshotBody.id }),
         });

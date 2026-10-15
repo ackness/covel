@@ -44,7 +44,8 @@ import {
 import type { PluginRuntimeGateway } from "@covel/plugin-loader";
 import { decodeBase64Json } from "../lib/base64-json.js";
 import { hasRuntimeJobCredentials } from "../runtime-job-readiness.js";
-import { llmModelBindingSchema, readRuntimeEnv } from "@covel/shared";
+import { llmModelBindingSchema } from "@covel/shared";
+import { hostProfileOf } from "../host-profile.js";
 
 export interface PerRequestLlmOptions {
   readonly ai: AiStack;
@@ -109,7 +110,7 @@ export function createPerRequestLlmMiddleware(
       );
     }
     const capabilityOverridePolicy =
-      readRuntimeEnv().deploymentTier === "self" ? "full" : "restrict-only";
+      hostProfileOf(c).credentials.capabilityOverrides;
 
     const hasRequestKeys =
       requestKeys !== null && Object.keys(requestKeys).length > 0;

@@ -16,7 +16,7 @@ import {
   editedWorldMetadata,
   notifyWorldDimensionsChanged,
 } from "./shared.js";
-import { checkWorldWriteAccess } from "./world-write-guard.js";
+import { requireAccess } from "../../../host-profile.js";
 
 export const worldDimensionRoutes = new Hono<WorldEnv>();
 
@@ -54,7 +54,7 @@ worldDimensionRoutes.get("/:id/dimensions/export", async (c) => {
 
 // POST /worlds/:id/dimensions/import — import dimensions from JSON body
 worldDimensionRoutes.post("/:id/dimensions/import", async (c) => {
-  const denied = checkWorldWriteAccess(c);
+  const denied = requireAccess(c, "world.write");
   if (denied) return denied;
   const store = c.get("store");
   const eventBus = c.get("eventBus");

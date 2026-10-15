@@ -25,21 +25,15 @@
 
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
-import {
-  isEnvTruthy,
-  MEDIA_PIN_REF_PREFIX,
-  readEnvString,
-} from "@covel/shared";
+import { MEDIA_PIN_REF_PREFIX } from "@covel/shared";
 import type { MediaRef } from "@covel/shared";
 import type { DataStore, MediaLifecyclePolicy, MediaStore } from "@covel/store";
 import {
   getMediaTokenSecret,
   verifyMediaToken,
 } from "../../middleware/media-token.js";
-import {
-  checkHostedOperator,
-  checkSessionOwner,
-} from "./session/session-guard.js";
+import { checkSessionOwner } from "./session/session-guard.js";
+import { hostProfileOf, requireAccess } from "../../host-profile.js";
 import { withLockedSessionMutation } from "./session/locked-mutation.js";
 import { rateLimiter, singleFlight } from "../../middleware/rate-limit.js";
 import { errorBody } from "../../api-error.js";
@@ -282,9 +276,12 @@ function optionalPositiveInteger(value: unknown): number | undefined {
  *
  * Hardening summary:
  *
- *   1. Disabled by default: must set `COVEL_MEDIA_CLEANUP_ENABLED=true`.
- *   2. Forbidden in `DEPLOYMENT_TIER=commercial`; `demo` requires the hosted
- *      operator credential before the route inspects cleanup policy.
+ *   1. Disabled by default: must set `COVEL_MEDIA_CLEANUP_ENABLED=true`
+ *      (the host profile's `retention.mediaCleanup`).
+ *   2. The host profile's `media.cleanup` rule: closed on
+ *      `DEPLOYMENT_TIER=commercial` (which refuses to start with the switch
+ *      on); `demo` requires the operator credential before the route
+ *      inspects cleanup policy.
  *   3. `dryRun:false` requires an explicit `X-Confirm-Cleanup: yes` header
  *      so an automated job or curl typo cannot delete bytes.
  *   4. Single-flight wrapper prevents two cleanup runs from racing each
@@ -299,25 +296,13 @@ function optionalPositiveInteger(value: unknown): number | undefined {
  *      referenced media.
  */
 mediaRoutes.post("/cleanup", singleFlight(), async (c) => {
-  // Deployment-tier gate first: refuse to even inspect the body in
-  // commercial deployments. There is no admin auth wired yet, and a
-  // 503 makes that disabled-by-policy state explicit to callers.
-  const deploymentTier = readEnvString(
-    "DEPLOYMENT_TIER",
-    "self",
-  )?.toLowerCase();
-  if (deploymentTier === "commercial") {
-    return jsonError(
-      "unavailable",
-      "cleanup endpoint not available in this deployment tier",
-      503,
-    );
-  }
+  // The host profile's `media.cleanup` rule first, before the body is read:
+  // closed (503) on commercial, where no admin auth is wired; the operator
+  // token on demo; open on the self tier.
+  const denied = requireAccess(c, "media.cleanup");
+  if (denied) return denied;
 
-  const operatorDenied = checkHostedOperator(c);
-  if (operatorDenied) return operatorDenied;
-
-  if (!isEnvTruthy("COVEL_MEDIA_CLEANUP_ENABLED")) {
+  if (!hostProfileOf(c).retention.mediaCleanup) {
     return jsonError("forbidden", "cleanup endpoint disabled", 403);
   }
 

@@ -51,8 +51,6 @@ import {
 } from "@covel/shared/settings-persistence";
 import { errorBody, listBody, readJsonBody } from "../api-error.js";
 import { LLM_TOML_STARTER } from "../ai-setup.js";
-import { makeDesktopRestTokenGuard } from "./privileged-auth.js";
-import { checkHostedOperator } from "./api/session/session-guard.js";
 import {
   configureOutboundProxy,
   getOutboundProxyStatus,
@@ -66,6 +64,7 @@ import {
 } from "../lib/proxy-config.js";
 import { getDesktopSystemProxyResolver } from "../lib/desktop-system-proxy.js";
 import { captureBootKeySources } from "../lib/env-key-overrides.js";
+import { accessGuard, allowsAccess, hostProfileOf } from "../host-profile.js";
 
 export interface ConfigApiDeps {
   /** Mutable map shared with the gateway adapter. PUT handlers mutate in-place. */
@@ -76,7 +75,7 @@ export interface ConfigApiDeps {
 
 export function createConfigApiRoutes(deps: ConfigApiDeps): Hono {
   const app = new Hono();
-  const requireToken = makeDesktopRestTokenGuard();
+  const requireToken = accessGuard("host.config");
   const initialCovelHome = resolveCovelHome();
   const externalApiKeys = {
     ...(deps.externalApiKeys ?? providerApiKeysFromEnv()),
@@ -108,7 +107,7 @@ export function createConfigApiRoutes(deps: ConfigApiDeps): Hono {
   }
 
   app.get("/api/config/info", (c) => {
-    if (checkHostedOperator(c)) {
+    if (!allowsAccess(c, "server.diagnostics")) {
       return c.json({
         isDesktop: false,
         requiresAuth: true,
@@ -139,7 +138,7 @@ export function createConfigApiRoutes(deps: ConfigApiDeps): Hono {
       // renderer must attach `Authorization: Bearer <token>` on privileged
       // config calls (settings read/write, key reads/writes, data-root writes,
       // open-folder).
-      requiresAuth: !!env.desktopRestToken,
+      requiresAuth: hostProfileOf(c).access["host.config"].kind !== "open",
     });
   });
 

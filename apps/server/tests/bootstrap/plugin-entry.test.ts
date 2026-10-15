@@ -8,6 +8,8 @@ import {
   getSpeechWire,
   getTextWire,
   getTranscriptionWire,
+  configureProviderHostPolicy,
+  PERSONAL_PROVIDER_HOST_POLICY,
 } from "@covel/ai-provider";
 import {
   createPluginRegistry,
@@ -29,6 +31,12 @@ import { createMemoryStore } from "@covel/store/memory";
 import { ToolRegistry } from "@covel/tools";
 import { createBootstrapPluginEntries } from "../../src/routes/api/bootstrap/plugin-entry.js";
 import { emptyRpcStore } from "../helpers/rpc-store.js";
+
+/** What the host profile passes to the provider layer on a hosted tier. */
+const HOSTED_PROVIDER_POLICY = {
+  localNetwork: false,
+  sessionlessCommunityWires: false,
+};
 
 let tmpRoot: string;
 
@@ -381,13 +389,14 @@ describe("createBootstrapPluginEntries", () => {
       await entries.withSnapshot("without", async () => {
         expect(getTextWire("entry-text-wire/chat")).toBeNull();
       });
-      // Outside any session: the self tier has one player, who approved the
-      // plugin; a hosted tier refuses a community plugin's protocol.
+      // Outside any session: a personal host has one player, who approved the
+      // plugin; a hosted one (its provider policy) refuses a community
+      // plugin's protocol.
       expect(getTextWire("entry-text-wire/chat")).not.toBeNull();
-      vi.stubEnv("DEPLOYMENT_TIER", "demo");
+      configureProviderHostPolicy(HOSTED_PROVIDER_POLICY);
       expect(getTextWire("entry-text-wire/chat")).toBeNull();
     } finally {
-      vi.unstubAllEnvs();
+      configureProviderHostPolicy(PERSONAL_PROVIDER_HOST_POLICY);
       await entries.close();
     }
   });
@@ -427,10 +436,10 @@ describe("createBootstrapPluginEntries", () => {
       await entries.withSnapshot("without", async () => {
         expect(lookups()).toEqual([null, null, null, null]);
       });
-      vi.stubEnv("DEPLOYMENT_TIER", "demo");
+      configureProviderHostPolicy(HOSTED_PROVIDER_POLICY);
       expect(lookups()).toEqual([null, null, null, null]);
     } finally {
-      vi.unstubAllEnvs();
+      configureProviderHostPolicy(PERSONAL_PROVIDER_HOST_POLICY);
       await entries.close();
     }
   });

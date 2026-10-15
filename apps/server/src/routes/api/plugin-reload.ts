@@ -3,7 +3,7 @@ import { z } from "zod";
 import { readRuntimeEnv } from "@covel/shared";
 import type { BootstrapPluginEntries } from "./bootstrap/plugin-entry.js";
 import { errorBody, okBody } from "../../api-error.js";
-import { makeInstallApiGuard } from "../privileged-auth.js";
+import { accessGuard } from "../../host-profile.js";
 
 /** Community development reload never becomes a production or builtin write path. */
 export function createPluginReloadRoutes(
@@ -11,7 +11,7 @@ export function createPluginReloadRoutes(
   development = readRuntimeEnv().nodeEnv === "development",
 ) {
   const routes = new Hono();
-  routes.post("/:id/reload", makeInstallApiGuard(), async (c) => {
+  routes.post("/:id/reload", accessGuard("host.files"), async (c) => {
     if (!development)
       return c.json(
         errorBody("Plugin reload is disabled", {

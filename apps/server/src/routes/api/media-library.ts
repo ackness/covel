@@ -20,7 +20,7 @@ import type { Context, Hono } from "hono";
 import type { DataStore, MediaStore, SessionRecord } from "@covel/store";
 import { errorBody } from "../../api-error.js";
 import { signMediaTokenForSession } from "../../middleware/media-token.js";
-import { isSessionOwnerAuthEnforced } from "./session/session-guard.js";
+import { allowsAccess, requireAccess } from "../../host-profile.js";
 import {
   scanMediaReferences,
   type MediaReferenceScan,
@@ -94,7 +94,7 @@ interface LibrarySnapshot {
 }
 
 export function isMediaLibraryAvailable(c: Context): boolean {
-  return !isSessionOwnerAuthEnforced(c);
+  return allowsAccess(c, "media.library");
 }
 
 function mediaKind(mime: string): MediaKind {
@@ -244,7 +244,8 @@ function sessionSummary(session: SessionRecord) {
 
 export function registerMediaLibraryRoutes(routes: Hono): void {
   routes.get("/library", async (c) => {
-    if (!isMediaLibraryAvailable(c)) return unavailable(c);
+    const denied = requireAccess(c, "media.library");
+    if (denied) return denied;
     const mediaStore = c.get("mediaStore");
     if (!mediaStore) return unavailable(c);
 
@@ -331,7 +332,8 @@ export function registerMediaLibraryRoutes(routes: Hono): void {
   });
 
   routes.post("/library/delete", async (c) => {
-    if (!isMediaLibraryAvailable(c)) return unavailable(c);
+    const denied = requireAccess(c, "media.library");
+    if (denied) return denied;
     const mediaStore = c.get("mediaStore");
     if (!mediaStore) return unavailable(c);
 
