@@ -3993,13 +3993,15 @@ Shared rules for the read endpoints:
 
 Shared rules for the write endpoints (`PUT` / `DELETE`):
 
-| Status | `code`               | When                                                                        |
-| ------ | -------------------- | --------------------------------------------------------------------------- |
-| 403    | —                    | `namespace` is a namespace reserved by the kernel                           |
-| 403    | —                    | The target is a core plugin (its data can only be changed by its own tools) |
-| 403    | —                    | The plugin is not enabled in this session                                   |
-| 404    | —                    | `pluginId` is not a loaded plugin                                           |
-| 409    | `session_not_active` | The session is not in the `active` state                                    |
+The same write rules apply to every plugin, including `kind: core` plugins. `kind` only decides whether a plugin is selected by default; it does not restrict write access here.
+
+<!-- prettier-ignore -->
+| Status | `code` | When |
+| --- | --- | --- |
+| 403 | — | `namespace` is a namespace reserved by the kernel |
+| 403 | — | The plugin is not enabled in this session |
+| 404 | — | `pluginId` is not a loaded plugin |
+| 409 | `session_not_active` | The session is not in the `active` state |
 
 #### `GET /api/sessions/:id/plugin-data/:pluginId/:namespace`
 
