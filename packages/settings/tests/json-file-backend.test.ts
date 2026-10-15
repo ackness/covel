@@ -1,118 +1,72 @@
-/**
- * The desktop/self-host backend used to swallow every load failure and return
- * `{}`. Because `save()` always writes a full snapshot, that turned a sidecar
- * hiccup during boot into "the next setting change wipes settings.json and
- * keys.env". Only a genuine 404 (nothing written yet) may read as empty.
- */
 import { afterEach, describe, expect, it, vi } from "vitest";
-import {
-  createJsonFileBackend,
-  type SettingsIpcTransport,
-  SERVER_MANAGED_SECRET,
-} from "../src/backends/json-file.js";
-
-function res(status: number, body: unknown): Response {
-  return {
-    status,
-    ok: status >= 200 && status < 300,
-    json: async () => body,
-  } as Response;
-}
+import { createJsonFileBackend } from "../src/backends/json-file.js";
 
 afterEach(() => {
   delete (globalThis as { covelIpc?: unknown }).covelIpc;
 });
 
 describe("json-file backend load contract", () => {
-  it("does not discover another host's ambient IPC transport", async () => {
-    const invoke = vi.fn();
-    (globalThis as { covelIpc?: unknown }).covelIpc = { invoke };
-    const fetchImpl = vi.fn().mockResolvedValue(res(404, {}));
-    await expect(createJsonFileBackend({ fetchImpl }).load()).resolves.toEqual(
-      {},
+  it("requires an explicit IPC transport", () => {
+    // @ts-expect-error The JSON file backend requires a host-owned bridge.
+    expect(() => createJsonFileBackend({})).toThrow(
+      /requires an IPC transport/,
     );
-    expect(invoke).not.toHaveBeenCalled();
-    expect(fetchImpl).toHaveBeenCalledOnce();
   });
-  it("treats 404 as an empty store", async () => {
-    const backend = createJsonFileBackend({
-      fetchImpl: vi.fn().mockResolvedValue(res(404, {})),
+  it("uses the supplied transport instead of another host's ambient bridge", async () => {
+    const ambientInvoke = vi.fn();
+    (globalThis as { covelIpc?: unknown }).covelIpc = { invoke: ambientInvoke };
+    const invoke = vi.fn().mockResolvedValue({
+      schemaVersion: 2,
+      revision: 0,
+      savedAt: "",
+      entries: { "ui.locale": "en-US" },
     });
-    await expect(backend.load()).resolves.toEqual({});
-    await expect(backend.loadSecrets()).resolves.toEqual({});
-  });
+    const backend = createJsonFileBackend({ ipc: { invoke } });
 
-  it("propagates a server error instead of reporting an empty store", async () => {
-    const backend = createJsonFileBackend({
-      fetchImpl: vi.fn().mockResolvedValue(res(500, {})),
-    });
-    await expect(backend.load()).rejects.toThrow(/HTTP 500/);
-    await expect(backend.loadSecrets()).rejects.toThrow(/HTTP 500/);
-  });
-
-  it("propagates a transport failure", async () => {
-    const backend = createJsonFileBackend({
-      fetchImpl: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
-    });
-    await expect(backend.load()).rejects.toThrow(/Failed to fetch/);
-  });
-
-  it("returns stored entries on success", async () => {
-    const backend = createJsonFileBackend({
-      fetchImpl: vi.fn().mockResolvedValue(
-        res(200, {
-          schemaVersion: 2,
-          revision: 0,
-          savedAt: "",
-          entries: { "ui.locale": "en-US" },
-        }),
-      ),
-    });
     await expect(backend.load()).resolves.toEqual({ "ui.locale": "en-US" });
+    expect(invoke).toHaveBeenCalledExactlyOnceWith("covel:settings:load");
+    expect(ambientInvoke).not.toHaveBeenCalled();
+  });
+
+  it("propagates IPC read failures instead of reporting an empty store", async () => {
+    const invoke = vi.fn().mockRejectedValue(new Error("read failed"));
+    const backend = createJsonFileBackend({ ipc: { invoke } });
+
+    await expect(backend.load()).rejects.toThrow("read failed");
+    await expect(backend.loadSecrets()).rejects.toThrow("read failed");
+  });
+
+  it("loads secret values through IPC", async () => {
+    const invoke = vi.fn().mockResolvedValue({ fixture: "synthetic-secret" });
+    const backend = createJsonFileBackend({ ipc: { invoke } });
+
+    await expect(backend.loadSecrets()).resolves.toEqual({
+      fixture: "synthetic-secret",
+    });
+    expect(invoke).toHaveBeenCalledExactlyOnceWith("covel:keys:load");
   });
 
   it("asks only the desktop shell where an earlier settings file went", async () => {
     const invoke = vi.fn().mockResolvedValue("settings.v1.bak.json");
-    const fetchImpl = vi.fn();
     await expect(
       createJsonFileBackend({ ipc: { invoke } }).takeArchivedBundle!(),
     ).resolves.toBe("settings.v1.bak.json");
     expect(invoke).toHaveBeenCalledExactlyOnceWith("covel:settings:archived");
-    await expect(
-      createJsonFileBackend({ fetchImpl }).takeArchivedBundle!(),
-    ).resolves.toBeNull();
-    expect(fetchImpl).not.toHaveBeenCalled();
   });
 
-  it.each(["REST", "IPC"] as const)(
-    "rejects an unversioned %s response before saving",
-    async (transport) => {
-      const bundle = { entries: { retained: true } };
-      const fetchImpl = vi.fn().mockResolvedValue(res(200, bundle));
-      const invoke = vi.fn().mockResolvedValue(bundle);
-      const backend = createJsonFileBackend({
-        fetchImpl,
-        ...(transport === "IPC" ? { ipc: { invoke } } : {}),
-      });
-      await expect(backend.load()).rejects.toThrow(/unsupported/);
-      await expect(backend.save({ replacement: true })).rejects.toThrow(
-        /unsupported/,
-      );
-      if (transport === "IPC") {
-        expect(
-          invoke.mock.calls.every(
-            ([channel]) => channel === "covel:settings:load",
-          ),
-        ).toBe(true);
-        expect(fetchImpl).not.toHaveBeenCalled();
-      } else {
-        expect(fetchImpl.mock.calls.every(([, init]) => !init?.method)).toBe(
-          true,
-        );
-        expect(invoke).not.toHaveBeenCalled();
-      }
-    },
-  );
+  it("rejects an unversioned IPC response before saving", async () => {
+    const invoke = vi.fn().mockResolvedValue({ entries: { retained: true } });
+    const backend = createJsonFileBackend({ ipc: { invoke } });
+
+    await expect(backend.load()).rejects.toThrow(/unsupported/);
+    await expect(backend.save({ replacement: true })).rejects.toThrow(
+      /unsupported/,
+    );
+    expect(invoke.mock.calls.map(([channel]) => channel)).toEqual([
+      "covel:settings:load",
+      "covel:settings:load",
+    ]);
+  });
 });
 
 describe("json-file backend IPC write contract", () => {
@@ -142,10 +96,7 @@ describe("json-file backend IPC write contract", () => {
           },
         });
       });
-    (globalThis as { covelIpc?: unknown }).covelIpc = { invoke };
-    const backend = createJsonFileBackend({
-      ipc: (globalThis as { covelIpc?: SettingsIpcTransport }).covelIpc,
-    });
+    const backend = createJsonFileBackend({ ipc: { invoke } });
 
     await expect(
       backend.saveWithRevision!({ next: true }, 4),
@@ -156,16 +107,14 @@ describe("json-file backend IPC write contract", () => {
   });
 
   it("turns an IPC revision conflict into the typed error", async () => {
-    (globalThis as { covelIpc?: unknown }).covelIpc = {
+    const ipc = {
       invoke: vi.fn().mockResolvedValue({
         ok: false,
         code: "settings_revision_conflict",
         revision: 3,
       }),
     };
-    const backend = createJsonFileBackend({
-      ipc: (globalThis as { covelIpc?: SettingsIpcTransport }).covelIpc,
-    });
+    const backend = createJsonFileBackend({ ipc });
     await expect(backend.saveWithRevision!({}, 2)).rejects.toMatchObject({
       code: "settings_revision_conflict",
       currentRevision: 3,
@@ -173,7 +122,7 @@ describe("json-file backend IPC write contract", () => {
   });
 
   it("rejects when the main process reports a settings write failure", async () => {
-    (globalThis as { covelIpc?: unknown }).covelIpc = {
+    const ipc = {
       invoke: vi.fn().mockImplementation((channel: string) =>
         channel === "covel:settings:load"
           ? Promise.resolve({
@@ -185,9 +134,7 @@ describe("json-file backend IPC write contract", () => {
           : Promise.resolve({ ok: false }),
       ),
     };
-    const backend = createJsonFileBackend({
-      ipc: (globalThis as { covelIpc?: SettingsIpcTransport }).covelIpc,
-    });
+    const backend = createJsonFileBackend({ ipc });
 
     await expect(backend.save({ "ui.locale": "en-US" })).rejects.toThrow(
       /settings:save.*failed/i,
@@ -195,12 +142,10 @@ describe("json-file backend IPC write contract", () => {
   });
 
   it("rejects when the main process reports a secrets write failure", async () => {
-    (globalThis as { covelIpc?: unknown }).covelIpc = {
+    const ipc = {
       invoke: vi.fn().mockResolvedValue({ ok: false }),
     };
-    const backend = createJsonFileBackend({
-      ipc: (globalThis as { covelIpc?: SettingsIpcTransport }).covelIpc,
-    });
+    const backend = createJsonFileBackend({ ipc });
 
     await expect(backend.saveSecrets({ openai: "sk-test" })).rejects.toThrow(
       /keys:save.*failed/i,
@@ -208,7 +153,7 @@ describe("json-file backend IPC write contract", () => {
   });
 });
 
-describe("json-file backend REST secrets contract", () => {
+describe("json-file backend IPC secrets contract", () => {
   it("passes explicit secret patches unchanged through IPC", async () => {
     const invoke = vi.fn().mockResolvedValue({ ok: true });
     const backend = createJsonFileBackend({ ipc: { invoke } });
@@ -217,36 +162,5 @@ describe("json-file backend REST secrets contract", () => {
       providerA: "synthetic-a",
       providerB: null,
     });
-  });
-  it("preserves omitted providers and sends only explicit changes", async () => {
-    const fetchImpl = vi
-      .fn()
-      .mockResolvedValueOnce(res(200, { items: ["deepseek", "open-router"] }))
-      .mockResolvedValueOnce(res(200, { ok: true }));
-    const backend = createJsonFileBackend({ fetchImpl });
-
-    await expect(backend.loadSecrets()).resolves.toEqual({
-      deepseek: SERVER_MANAGED_SECRET,
-      "open-router": SERVER_MANAGED_SECRET,
-    });
-    await backend.saveSecrets({
-      deepseek: SERVER_MANAGED_SECRET,
-      qwen: "new-qwen-key",
-      deleted: null,
-    });
-
-    const init = fetchImpl.mock.calls[1]?.[1] as RequestInit;
-    expect(JSON.parse(String(init.body))).toEqual({
-      qwen: "new-qwen-key",
-      deleted: null,
-    });
-  });
-
-  it("rejects the old raw-record response instead of silently losing keys", async () => {
-    const backend = createJsonFileBackend({
-      fetchImpl: vi.fn().mockResolvedValue(res(200, { deepseek: "secret" })),
-    });
-
-    await expect(backend.loadSecrets()).rejects.toThrow(/invalid body/);
   });
 });
