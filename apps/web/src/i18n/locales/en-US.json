@@ -1734,6 +1734,7 @@
       "generic": "Could not change this session's plugins. Please try again.",
       "dimensionProviderConflict": "This session can use only one dimension provider. Keep the current provider enabled.",
       "dimensionProviderRequired": "This plugin holds the session's dimensions and must stay enabled.",
+      "dimensionProviderRequiredNamed": "\"{{plugin}}\" holds this session's dimensions and must stay enabled.",
       "pluginNotFound": "This plugin is no longer available. Refresh the plugin list.",
       "approvalQueueFull": "Too many approvals are pending. Resolve them before trying again.",
       "approvalScopeChanged": "The plugin's approval changed. Refresh and approve it again.",

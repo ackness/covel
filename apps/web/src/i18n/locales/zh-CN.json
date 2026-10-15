@@ -1682,6 +1682,7 @@
       "generic": "无法更改本局插件，请重试。",
       "dimensionProviderConflict": "本局只能使用一个维度提供插件，请保留当前提供插件。",
       "dimensionProviderRequired": "此插件保存着本局的维度数据，必须保持启用。",
+      "dimensionProviderRequiredNamed": "“{{plugin}}”保存着本局的维度数据，必须保持启用。",
       "pluginNotFound": "此插件已不可用，请刷新插件列表。",
       "approvalQueueFull": "待审批请求过多，请先处理后再试。",
       "approvalScopeChanged": "插件的授权已改变，请刷新并重新审批。",

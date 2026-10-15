@@ -3830,7 +3830,7 @@ runtime 报告失败时，它的原始错误保留在 `result.runtimeResults` �
 规则（启用和禁用相同）：
 
 - 启用、禁用与同一会话的其他写入共用会话锁，拿到锁后重新读取 `activePlugins`。先持久化成功，再更新进程内的注册表。这样并发请求不会互相覆盖，持久化失败也不会让内存和存储不一致。
-- 会话已绑定的维度 provider 必须保持启用。它持有这个会话的 `_dimensions` 数据，快照和浏览器 checkpoint 都从它那里读。它在运行时，重新求解后的启用集合如果不再包含它，请求以 `409 { "code": "dimension_provider_required" }` 拒绝，会话的插件选择不变。
+- 会话已绑定的维度 provider 必须保持启用。它持有这个会话的 `_dimensions` 数据，快照和浏览器 checkpoint 都从它那里读。它在运行时，重新求解后的启用集合如果不再包含它，请求以 `409 { "code": "dimension_provider_required" }` 拒绝，会话的插件选择不变。`details` 里的 `pluginId` 和 `displayName` 指明是哪个 provider（它不一定是这次开关的插件）。
 - 已绑定的 provider 本来就没在运行（没有安装、加载失败，或者缺依赖）时，其他插件照常启用和禁用。它留在会话的插件选择里，维度暂停；它回来后维度接着变化。
 - 一局游戏只用一个负责维度的插件。这次改动让两个提供 `world.dimensions@1` 的插件同时启用，或者在已绑定的 provider 之外再启用一个时，请求以 `409 { "code": "dimension_provider_conflict", "details": { "candidates": [...] } }` 拒绝。会话里原来就有的冲突（例如插件更新后多声明了这个契约）不拦其他改动：回合会说明冲突，关掉其中一个就好。
 - 这次新加入的是会话里第一个负责维度的插件时，世界的维度随上面的补导入马上写入。

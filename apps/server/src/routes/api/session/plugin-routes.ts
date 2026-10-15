@@ -81,10 +81,20 @@ function keepBoundDimensionProvider(
     : [...confirmed];
 }
 
-function dimensionProviderRequired(pluginId: string) {
+/** `details` names the provider, so the client can say which plugin it is. */
+function dimensionProviderRequired(
+  pluginId: string,
+  registry: {
+    get(id: string): { summary: { displayName?: unknown } } | undefined;
+  },
+) {
+  const displayName = registry.get(pluginId)?.summary.displayName;
   return errorBody(
     `This change would disable "${pluginId}", which holds this session's dimensions and must stay enabled`,
-    { code: "dimension_provider_required" },
+    {
+      code: "dimension_provider_required",
+      details: { pluginId, ...(displayName ? { displayName } : {}) },
+    },
   );
 }
 
@@ -273,7 +283,10 @@ export function registerSessionPluginRoutes(
         active,
       );
       if (droppedProvider)
-        return c.json(dimensionProviderRequired(droppedProvider), 409);
+        return c.json(
+          dimensionProviderRequired(droppedProvider, pluginRegistry),
+          409,
+        );
       const providerConflict = dimensionProviderConflict(
         session,
         previouslyActive,
@@ -436,7 +449,10 @@ export function registerSessionPluginRoutes(
         pluginId,
       );
       if (droppedProvider)
-        return c.json(dimensionProviderRequired(droppedProvider), 409);
+        return c.json(
+          dimensionProviderRequired(droppedProvider, pluginRegistry),
+          409,
+        );
       // Plugins that need the disabled one stay confirmed but off, and the
       // plugin list tells the player why. The provider that holds the
       // session's dimensions stays confirmed too.
