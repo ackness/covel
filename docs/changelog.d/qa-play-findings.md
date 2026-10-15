@@ -8,7 +8,7 @@
 
 ### Fixed
 
-- **The prep screen groups plugins by the tag their author wrote.** The plugin list sorted every plugin's tags, so the derived cost tags came first and almost every plugin landed under "No model calls" or "Calls a model".
+- **The plugin list keeps each plugin's tags in their order.** `GET /api/plugins` sorted them, so a derived tag came before the ones the author wrote. The prep screen now groups plugins on purpose by whether they call a model ("Calls a model", "No model calls"), and a plugin that has no such tag under its first tag.
 - **A plugin pack chosen after "Back to the minimal set" gets its plugins back.** The minimal set excluded the pack's plugins for good, so choosing a pack afterwards left them off.
 - **World lists name each world in the edition the player gets.** The showcase, the other list layouts and the delete and language dialogs showed a world's own language (an English interface showed the Chinese names of worlds that have an English edition).
 - **The world detail page shows dimension values in the play language.** Values kept as locale maps printed every language, booleans and empty values printed `false` and `null`, and dimension names ignored the play language. Its update note no longer tells the player to open the page they are on.

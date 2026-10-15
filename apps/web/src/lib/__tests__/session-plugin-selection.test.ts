@@ -137,6 +137,24 @@ describe("session plugin selection helpers", () => {
     ).toHaveLength(1);
   });
 
+  it("groups by the cost tag before the tags the author wrote", () => {
+    const items = [
+      plugin("talker", { tags: ["data:characters", "cost:llm"] }),
+      plugin("counter", { tags: ["mode:dialogue", "cost:function"] }),
+      plugin("panel", { tags: ["data:lorebook", "ui:right-panel"] }),
+    ];
+    expect(
+      groupPlugins(items, (tag) => tag ?? "No tags").map(({ id, plugins }) => ({
+        id,
+        ids: plugins.map((item) => item.id),
+      })),
+    ).toEqual([
+      { id: "tag:cost:function", ids: ["counter"] },
+      { id: "tag:cost:llm", ids: ["talker"] },
+      { id: "tag:data:lorebook", ids: ["panel"] },
+    ]);
+  });
+
   it("names derived tags in the player's words and keeps written ones", () => {
     const t = (key: string) => `<${key}>`;
     expect(pluginTagLabel("cost:llm", t)).toBe("<session.pluginTags.costLlm>");
