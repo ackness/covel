@@ -8,7 +8,7 @@ import {
 
 for (const [locale, itemName] of [
   ["en-US", "Field radio"],
-  ["zh-CN", "野战无线电"],
+  ["zh-CN", "野战电台"],
 ] as const) {
   test(`bundled plugins put the objective and the pack into the status strip in ${locale}`, async ({
     page,
