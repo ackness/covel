@@ -5,11 +5,13 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 
 import {
+  configureProviderHostPolicy,
   createGateway,
   createPresetRegistry,
   createProviderRegistry,
   createSlotRegistry,
   parseLlmConfig,
+  PERSONAL_PROVIDER_HOST_POLICY,
   registerTextWire,
   withWireRegistrySnapshot,
   type TextWire,
@@ -23,6 +25,7 @@ import {
 const disposers: Array<() => void> = [];
 afterEach(() => {
   vi.unstubAllEnvs();
+  configureProviderHostPolicy(PERSONAL_PROVIDER_HOST_POLICY);
   for (const dispose of disposers.splice(0)) dispose();
 });
 
@@ -215,7 +218,10 @@ describe("which sessions may use a text protocol a plugin registers", () => {
     await expect(gateway.generateText(request)).resolves.toMatchObject({
       text: expect.stringContaining("acme-1@"),
     });
-    vi.stubEnv("DEPLOYMENT_TIER", "demo");
+    configureProviderHostPolicy({
+      localNetwork: false,
+      sessionlessCommunityWires: false,
+    });
 
     await expect(gateway.generateText(request)).rejects.toThrow(
       /plugin "demo".*session that has enabled it/,

@@ -19,7 +19,6 @@ import {
 import { buildSessionCommandList } from "./commands.js";
 import { importWorldDataForJoinedPlugins } from "../../../world-data/receiver-import.js";
 import {
-  checkHostedOperator,
   resolveSessionParam,
   rotateSessionApprovalScope,
   sessionApprovalScope,
@@ -27,6 +26,7 @@ import {
   SESSION_DELETION_PENDING_KEY,
 } from "./session-guard.js";
 import type { SessionRouteEnv } from "./route-env.js";
+import { requireAccess } from "../../../host-profile.js";
 
 /**
  * A session keeps its dimension data under the provider it bound, and turns,
@@ -113,7 +113,7 @@ export function registerSessionPluginRoutes(
 
     const trust = getPluginTrustInfo(pluginId, pluginEntry.source);
     if (trust.source === "community") {
-      const operatorDenied = checkHostedOperator(c);
+      const operatorDenied = requireAccess(c, "plugin.community");
       if (operatorDenied) return operatorDenied;
     }
     const approvalScope = sessionApprovalScope(guard.session, pluginId);

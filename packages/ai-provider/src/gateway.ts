@@ -62,6 +62,7 @@ import {
 import {
   handleTargetFailure,
   prepareTarget,
+  createFailedAccountTracker,
 } from "./gateway-fallback-chain.js";
 import {
   createGatewaySlotResolution,
@@ -481,6 +482,7 @@ export function createGateway(deps: GatewayDependencies) {
       ),
     );
     let lastError: AiProviderError | null = null;
+    const failedAccounts = createFailedAccountTracker();
     let metadataTarget: string | undefined;
     let initialTarget: ResolvedTarget | undefined;
 
@@ -491,6 +493,8 @@ export function createGateway(deps: GatewayDependencies) {
         "stream",
         options,
       );
+
+      if (failedAccounts.has(provider, resolved)) continue;
 
       let emittedDelta = false;
       const startTime = Date.now();
@@ -594,6 +598,7 @@ export function createGateway(deps: GatewayDependencies) {
         yield completion;
         return;
       } catch (error) {
+        failedAccounts.record(provider, resolved, error);
         // Once a delta has been emitted we can no longer retry on another
         // provider — the consumer has already seen partial output.
         lastError = await handleTargetFailure({

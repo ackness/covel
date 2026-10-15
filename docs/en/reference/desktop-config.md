@@ -245,7 +245,7 @@ An endpoint that requires the token checks the `Authorization: Bearer <token>` h
 
 **How keys appear in the UI.** The Electron UI reads plaintext keys from `keys.env` through `covel:keys:load` IPC. SettingsStore keeps them in memory to build the `X-Provider-Keys` header, without writing them to the desktop page's `localStorage`. Saving sends a patch through `covel:keys:save`: unchanged keys stay, new values are written, and `null` deletes a key. The main process first writes through the sidecar's `PUT /api/config/keys`; in development without a sidecar, or when the sidecar is unavailable, it writes the file directly.
 
-`GET /api/config/keys` returns provider names only, never key values. The current Electron UI does not call it: its `json-file` backend uses IPC, while a plain browser uses `localStorage`. An integration that explicitly selects the `json-file` REST transport represents this list as in-memory “server-managed key” markers, which never enter `X-Provider-Keys`. See [Settings store](./settings-store.md).
+`GET /api/config/keys` returns provider names only, never key values. The current Electron UI does not call it: its `json-file` backend supports only IPC, while a plain browser uses `localStorage`. See [Settings store](./settings-store.md).
 
 **When `keys.env` cannot be read.** GET returns `500 keys_file_unreadable` and PUT returns `409 keys_file_unreadable`; the original file is kept. Writes use the same temporary file plus rename.
 

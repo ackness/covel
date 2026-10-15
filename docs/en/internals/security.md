@@ -11,6 +11,54 @@ Related material is on other pages:
 
 Below, the "deployment tier" (`DEPLOYMENT_TIER`) comes up many times. `self` is the default. It means the desktop app, and instances that a person deploys for their own use. `demo` is the tier for public web instances, meant for the official web app, which is not supported yet. `commercial` is the strictest tier, reserved for a possible future commercial edition. There are no accounts, tenant isolation, or quotas, and this repository does not maintain it. `demo` and `commercial` both require tokens. Together they are called the hosted tiers.
 
+## Host profile
+
+The server decides once, at startup: it combines the deployment tier, the storage it actually uses and a few switches into a host profile (`apps/server/src/host-profile.ts`) and puts it in every request. Route permission checks, the media routes, the server settings, a request's own model settings and the trace retention all ask it, and no longer read environment variables themselves. `@covel/ai-provider` receives its own part at startup (`configureProviderHostPolicy`). The desktop app always passes `DEPLOYMENT_TIER=self` when it starts the server.
+
+The host profile has three forms:
+
+- **personal**: the `self` tier with data kept by the server. The desktop app, a web app someone deploys for their own use, and `pnpm dev` are all this form. Routes ask for no token; only when the desktop shell set its launch token do the config and file APIs require it. The network boundary is the loopback bind plus the Host check.
+- **browser-private**: the `self` tier with `NODE_ENV=production` and a MemoryStore as the storage actually in use. Each player's data lives in their own browser, and the server holds only temporary copies. A session needs its owner token, writing shared worlds needs the operator token, and anyone may create a session. The future official web app is built on this form; it is not supported yet.
+- **hosted**: `demo` / `commercial`, see [Hosted auth](#hosted-auth).
+
+Each route states which "actions" it performs, and the host profile decides how each form answers. In the table, operator means the operator token (`COVEL_DESKTOP_REST_TOKEN`), which may be sent in `Authorization: Bearer`, `X-Session-Token` or `?session_token=`; "operator (Bearer)" accepts only `Authorization: Bearer`. "Desktop token" means the token is required when `COVEL_DESKTOP_REST_TOKEN` is set, and the action is open when it is not.
+
+<!-- prettier-ignore -->
+| Action | Covers | personal | browser-private | hosted |
+| --- | --- | --- | --- | --- |
+| `session.access` | Reading or changing one session | Open | Owner token | Owner token |
+| `session.create` | Creating a session, forking a new session from a snapshot | Open | Open | Operator |
+| `session.list` | Listing every session | Open | Empty list (open with `ENABLE_DEBUG_PAGE`) | Operator, otherwise an empty list |
+| `world.write` | Writing the shared world catalog | Open | Operator | Operator |
+| `world.generate` | Generating, revising or translating a world with the server's models | Open | Open | Operator |
+| `plugin.community` | Approving, enabling or running a community plugin's server code | Open | Open | Operator |
+| `server.diagnostics` | Model endpoints, config paths, load errors, which keys are configured | Open | Open | Operator, otherwise these fields are left out |
+| `model.probe` | Listing a provider's models, testing a model | Open | Open | Operator |
+| `model-db.refresh` | Downloading a new model database | Open | Open | Operator |
+| `server.settings` | Writing server settings | Desktop token | Desktop token | Refused |
+| `host.config` | The desktop shell's settings, keys, proxy, data folder, update check | Desktop token | Desktop token | Operator (Bearer) |
+| `host.files` | Installing, uninstalling and reloading packages, reading and writing raw config files | Desktop token; in production without a token, needs `COVEL_INSTALL_API_ENABLED=1` | Same | Operator (Bearer) |
+| `media.cleanup` | Deleting media that no session references | Open | Open | `demo`: operator; `commercial`: refused |
+| `media.library` | The media library across sessions | Open | Refused (503) | Refused (503) |
+
+In the browser-private column, `plugin.community`, `server.diagnostics`, `model.probe`, `model-db.refresh`, `server.settings` and `host.config` are the same as personal today. Before the official web app goes live they must be closed to visitors, and that change is this column in `host-profile.ts`.
+
+Besides these actions, the host profile decides:
+
+- **Network**: only `self` runs the Host check (`network.checkHost`); hosted tiers rely on tokens.
+- **A request's own model settings**: on `self` they may change every capability of a model; on hosted tiers they may only narrow them (`credentials.capabilityOverrides`).
+- **Provider requests**: on `self` the model address the user configured may resolve to the local network (see [Self-tier exemption](#self-tier-exemption-core-provider-path-only)), and a request outside any session may use a community plugin's wire; hosted tiers allow neither (`credentials.provider`).
+- **Retention**: only on `self` do the server settings a player stores (such as how long traces are kept) count; on hosted tiers they belong to the operator.
+
+The server refuses to start in these cases, and the error names the variable:
+
+- `DEPLOYMENT_TIER` is not one of `self`, `demo`, `commercial` (case and surrounding spaces do not count).
+- A hosted tier lacks `COVEL_MEDIA_TOKEN_SECRET` or `COVEL_DESKTOP_REST_TOKEN`; `commercial` lists no `CORS_ORIGIN`.
+- A hosted tier sets `COVEL_ALLOWED_HOSTS`: the Host check runs only on `self`, so the value has no effect.
+- `commercial` sets `COVEL_MEDIA_CLEANUP_ENABLED`: the cleanup endpoint is always closed on that tier.
+
+`apps/server/tests/bootstrap/route-access.test.ts` lists every API route of the server and the actions it needs. A new route fails the test until it is added to that table. The test also requests every route under a host profile that closes every action, which catches a route that decides from environment variables on its own; apart from `host-profile.ts`, no code in the server or the core packages may read these deployment variables.
+
 ## Outbound requests (SSRF guard)
 
 The server sends requests to model providers on the player's behalf. The SSRF protection makes sure these requests cannot be pointed at services on the internal network or on the local machine.
@@ -215,9 +263,9 @@ Real isolation needs a separate operating system process with limited permission
 The `demo` and `commercial` tiers enforce two kinds of token:
 
 - One **owner token** per session. It is generated when the session is created, is stored only as a hash in `SessionRecord.metadata`, and is returned only once. Every session-level route requires it.
-- One **operator token** (`COVEL_DESKTOP_REST_TOKEN`). It is a master key, and it passes every owner check. Global and admin routes require it: creating and listing sessions, writing worlds, AI and model routes, and enabling community server code.
+- One **operator token** (`COVEL_DESKTOP_REST_TOKEN`). It is a master key, and it passes every owner check. Global and admin routes require it: creating, forking and listing sessions, writing worlds, AI and model routes, and enabling community server code. A fork makes a new session, so it asks the same question as creating one: the owner token alone cannot fork.
 
-If the hosted tiers lack an operator token or a media key, `validateSecurityPosture` (`apps/server/src/security-posture.ts`) makes startup fail. `commercial` also requires an explicit list of CORS origins. The `self` tier, the desktop app, and development environments do nothing of the kind: tokens are ignored, and single-user local play is not affected.
+If the hosted tiers lack an operator token or a media key, the server refuses to start. `commercial` also requires an explicit list of CORS origins (see [Host profile](#host-profile)). The `self` tier, the desktop app, and development environments do nothing of the kind: tokens are ignored, and single-user local play is not affected.
 
 The import of community server code (`entry`, handlers, hooks, wires, runtime JavaScript) is guarded by two-step approval: first `covel:plugin-server-code` is granted, then the specific operations.
 

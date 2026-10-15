@@ -395,7 +395,7 @@ export default async function handler(ctx) {
 | `ctx.tools.call(name, args)`                                                  | 调用 `function.tools` 里列出的工具                                                       |
 | `ctx.logger`                                                                  | 写插件日志                                                                               |
 | `ctx.signal`                                                                  | 运行被取消时得到通知                                                                     |
-| `ctx.recursiveCall({ playerMessage, manualTrigger: { runtimeId, payload } })` | 在这一回合里再运行一个手动 runtime。只认这两个字段，会话、语言、设置和模型都沿用本次运行 |
+| `ctx.recursiveCall({ playerMessage, manualTrigger: { runtimeId, payload } })` | 在这一回合里调用自己包里的 runtime，见[嵌套调用](../reference/plugins.md#嵌套调用ctxrecursivecall)。跨包协作用[服务或事件](../reference/plugin-extensions.md#选择通信方式) |
 | `ctx.recursionDepth`                                                          | 被 `recursiveCall` 嵌套运行时大于 0。只该在顶层做的事，先判断它                          |
 | `ctx.execution?.sourceTurnId`                                                 | 重试旧回合时是那个回合的 ID。掷骰、揭示用它做键，重试就不会重新抽                        |
 | `ctx.store.getSession()`                                                      | 这一局的阶段、回合数、语言和开局步骤的进度（只读）                                       |

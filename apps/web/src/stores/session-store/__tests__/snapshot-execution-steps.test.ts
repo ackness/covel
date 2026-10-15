@@ -25,6 +25,22 @@ function event(
 }
 
 describe("authoritative execution recovery", () => {
+  it.each(["quota", "auth", "unknown"])(
+    "restores the %s remedy after refresh",
+    (errorKind) => {
+      expect(
+        buildSnapshotExecutionSteps([
+          event("runtime.failed", { errorKind, error: "provider detail" }),
+        ]),
+      ).toEqual([
+        expect.objectContaining({
+          status: "failed",
+          errorKind,
+          detail: "provider detail",
+        }),
+      ]);
+    },
+  );
   it("settles terminal events even when same-millisecond random IDs sort before start", () => {
     expect(
       buildSnapshotExecutionSteps([

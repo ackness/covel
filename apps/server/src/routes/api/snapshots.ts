@@ -24,6 +24,7 @@ import { rateLimiter } from "../../middleware/rate-limit.js";
  */
 
 import { withWritableWorld } from "./worlds/mutation-guard.js";
+import { requireAccess } from "../../host-profile.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { z } from "zod";
@@ -284,8 +285,12 @@ snapshotRoutes.get("/:id/snapshots/:snapshotId", async (c) => {
 // ── POST /api/sessions/:id/fork — fork from snapshot ──────────────
 
 // A fork creates a whole session, so it is limited like the other routes that
-// start expensive work.
+// start expensive work, and it asks the host profile the same question as
+// `POST /api/sessions` (`session.create`): on a hosted tier a session owner
+// cannot mint a new session by forking their own.
 snapshotRoutes.post("/:id/fork", rateLimiter({ max: 10 }), async (c) => {
+  const createDenied = requireAccess(c, "session.create");
+  if (createDenied) return createDenied;
   const parentSessionId = c.req.param("id");
   const store = c.get("store");
   const sessionLock = c.get("sessionLock");

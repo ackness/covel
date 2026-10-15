@@ -19,6 +19,8 @@ export interface ManifestValidationResult<T = unknown> {
   readonly valid: boolean;
   readonly data?: T;
   readonly errors?: readonly ManifestValidationError[];
+  /** Unknown top-level fields left out by tolerant world-package loading. */
+  readonly ignoredFields?: readonly string[];
 }
 
 export interface ManifestValidationError {
@@ -66,8 +68,23 @@ export function validatePluginManifest(
 /**
  * Validate a world.yaml manifest object.
  */
-export function validateWorldManifest(data: unknown): ManifestValidationResult {
-  return validate(worldManifestSchema, data);
+export function validateWorldManifest(
+  data: unknown,
+  options?: { ignoreUnknownRootFields?: boolean },
+): ManifestValidationResult {
+  if (!options?.ignoreUnknownRootFields)
+    return validate(worldManifestSchema, data);
+  const result = validate(worldManifestSchema.strip(), data);
+  const ignoredFields =
+    data && typeof data === "object" && !Array.isArray(data)
+      ? Object.keys(data).filter(
+          (key) => !Object.hasOwn(worldManifestSchema.shape, key),
+        )
+      : [];
+  return {
+    ...result,
+    ...(ignoredFields.length ? { ignoredFields } : {}),
+  };
 }
 
 /**

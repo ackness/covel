@@ -8,21 +8,32 @@ import { sessionEventBus } from "./session/session-events.js";
  * pending suspension of its turn, the turn counts and the detached jobs the
  * turn held back are queued, in the transaction that deletes the record, as
  * after a normal end. The progress jobs of the suspended execution end
- * `cancelled` once that transaction commits.
+ * `cancelled` once that transaction commits, and a suspended setup runtime's
+ * attempt ends `failed` (the runtime stays not done).
  *
  * The caller holds the session lock.
  */
 
 import type { Context } from "hono";
-import type { DataStore, SuspensionRecord } from "@covel/store";
+import type {
+  DataStore,
+  StoreTransaction,
+  SuspensionRecord,
+} from "@covel/store";
 import type { EventBus } from "@covel/events";
 import type { PluginRegistry } from "@covel/plugin-loader";
 import {
   applySuspensionAbandonTx,
   planSuspensionAbandon,
+  settleAbandonedSetupAttempt,
   settleAbandonedSuspensionJobs,
 } from "@covel/runtime";
-import { DEFAULT_LOCALE, type TurnInput } from "@covel/shared";
+import {
+  DEFAULT_LOCALE,
+  type DeferredRuntimeJob,
+  type RuntimeManifest,
+  type TurnInput,
+} from "@covel/shared";
 import {
   enqueueDeferredRuntimeJobs,
   type QueuedRuntimeJob,
@@ -72,6 +83,79 @@ export function requestSuspensionAbandonDeps(
 }
 
 /**
+ * Queues the detached jobs a suspension's turn held back, inside the caller's
+ * transaction, and publishes them once it committed. An abandon uses it, and
+ * so does a commit whose new suspension replaces an older one of the same
+ * runtime (`enqueueReleasedJobsInTx` of `commitExecution`).
+ */
+export interface HeldJobsRelease {
+  readonly enqueueInTx: (
+    tx: StoreTransaction,
+    jobs: readonly DeferredRuntimeJob[],
+  ) => Promise<void>;
+  /** Call after the transaction committed. */
+  readonly publish: () => Promise<readonly QueuedRuntimeJob[]>;
+}
+
+export function heldJobsRelease(
+  deps: SuspensionAbandonDeps,
+  sessionId: string,
+): HeldJobsRelease {
+  const queued: QueuedRuntimeJob[] = [];
+  return {
+    enqueueInTx: async (tx, jobs) => {
+      if (jobs.length === 0) return;
+      const session = await tx.getSession(sessionId);
+      if (!session) return;
+      deps.pluginRegistry.syncSessionActivations(
+        session.id,
+        session.activePlugins,
+      );
+      const userSettings = await loadSessionPluginUserSettings(
+        tx,
+        session,
+        deps.playerSettings,
+      );
+      queued.push(
+        ...(await enqueueDeferredRuntimeJobs(tx, {
+          sessionId: session.id,
+          session,
+          activeRuntimes: deps.pluginRegistry.getActiveRuntimes(session.id),
+          descriptors: jobs,
+          locale: session.locale ?? DEFAULT_LOCALE,
+          ...(userSettings ? { userSettings } : {}),
+          // A runtime switched off since the turn has no job to run.
+          skipInactive: true,
+          ...(deps.registerCredentials
+            ? { registerCredentials: deps.registerCredentials }
+            : {}),
+        })),
+      );
+    },
+    publish: async () => {
+      await publishDeferredRuntimeJobs(
+        { eventBus: deps.eventBus, worker: deps.worker },
+        queued,
+      );
+      return queued;
+    },
+  };
+}
+
+/** The active manifest of a suspension's runtime, if it is still active. */
+async function activeManifest(
+  deps: SuspensionAbandonDeps,
+  suspension: SuspensionRecord,
+): Promise<RuntimeManifest | undefined> {
+  const session = await deps.store.getSession(suspension.sessionId);
+  if (!session) return undefined;
+  deps.pluginRegistry.syncSessionActivations(session.id, session.activePlugins);
+  return deps.pluginRegistry
+    .getActiveRuntimes(session.id)
+    .find((runtime) => runtime.name === suspension.runtimeId);
+}
+
+/**
  * Delete `suspension` and settle its turn. Call under the session lock with
  * the record as read under that lock. Returns the jobs it queued.
  */
@@ -86,47 +170,21 @@ export async function abandonSuspension(
       ? sessionEventBus(deps.eventBus, session)
       : undefined;
   const plan = await planSuspensionAbandon(store, suspension);
-  let enqueue:
-    | Omit<Parameters<typeof enqueueDeferredRuntimeJobs>[1], "descriptors">
-    | undefined;
-  if (session && plan.releasedRuntimeJobs.length > 0) {
-    deps.pluginRegistry.syncSessionActivations(
-      session.id,
-      session.activePlugins,
-    );
-    const userSettings = await loadSessionPluginUserSettings(
-      store,
-      session,
-      deps.playerSettings,
-    );
-    enqueue = {
-      sessionId: session.id,
-      session,
-      activeRuntimes: deps.pluginRegistry.getActiveRuntimes(session.id),
-      locale: session.locale ?? DEFAULT_LOCALE,
-      ...(userSettings ? { userSettings } : {}),
-      // A runtime switched off since the turn has no job to run.
-      skipInactive: true,
-      ...(deps.registerCredentials
-        ? { registerCredentials: deps.registerCredentials }
-        : {}),
-    };
-  }
-  const queued = await store.withTransaction(async (tx) => {
-    await applySuspensionAbandonTx(tx, plan, new Date().toISOString());
-    if (!enqueue) return [];
-    return enqueueDeferredRuntimeJobs(tx, {
-      ...enqueue,
-      descriptors: plan.releasedRuntimeJobs,
-    });
+  const release = heldJobsRelease(deps, suspension.sessionId);
+  const now = new Date().toISOString();
+  await store.withTransaction(async (tx) => {
+    await applySuspensionAbandonTx(tx, plan, now);
+    await release.enqueueInTx(tx, plan.releasedRuntimeJobs);
   });
   await settleAbandonedSuspensionJobs(
     { store, ...(eventBus ? { eventBus } : {}) },
     suspension,
   );
-  await publishDeferredRuntimeJobs(
-    { eventBus: deps.eventBus, worker: deps.worker },
-    queued,
+  await settleAbandonedSetupAttempt(
+    store,
+    suspension,
+    await activeManifest(deps, suspension),
+    now,
   );
-  return queued;
+  return release.publish();
 }

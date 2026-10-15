@@ -49,6 +49,7 @@ import {
 import {
   handleTargetFailure,
   prepareTarget,
+  createFailedAccountTracker,
 } from "./gateway-fallback-chain.js";
 import type { ProviderRegistryLike } from "./gateway-fallback-chain.js";
 import {
@@ -173,11 +174,13 @@ export function createRunOperation(
         );
       const resolveUsage = spec.resolveUsage ?? (() => null);
       let lastError: AiProviderError | null = null;
+      const failedAccounts = createFailedAccountTracker();
 
       for (const [index, target] of targets.entries()) {
         const { provider, resolved: prepared } = spec.prepare
           ? spec.prepare(target, options)
           : prepareTarget(deps.providerRegistry, target, spec.mode, options);
+        if (failedAccounts.has(provider, prepared)) continue;
         const resolved = {
           ...prepared,
           config: {
@@ -234,6 +237,7 @@ export function createRunOperation(
           );
           return result;
         } catch (error) {
+          failedAccounts.record(provider, resolved, error);
           lastError = await handleTargetFailure({
             error,
             resolved,

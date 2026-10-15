@@ -22,31 +22,34 @@
  * endpoint can ever leak it. Callers present it via `Authorization: Bearer`,
  * `X-Session-Token`, or `?session_token=` (SSE/EventSource cannot set headers).
  *
- * Tiered enforcement:
- *   - `self` (default) / desktop / dev: NOT enforced. Single-user local play
- *     must keep working token-free; the network boundary for these tiers is
- *     the loopback bind in `index.ts` (COVEL_BIND_HOST=127.0.0.1 default)
- *     plus the Host check in `middleware/host-guard.ts`, which refuses
- *     DNS-rebound pages.
- *   - `demo` / `commercial`: hard-required on every session-scoped route that
- *     goes through this guard. Sessions without a stored hash fail closed.
- *     The operator token (COVEL_DESKTOP_REST_TOKEN) acts as a master key.
- *   - production + MemoryStore: hard-required as well. This is the anonymous
- *     browser-private profile: durable data lives in each browser, while the
- *     shared server only holds transient execution mirrors. Anonymous session
- *     creation stays open, but one player cannot read another player's mirror.
+ * Whether the token is required is the host profile's `session.access` rule
+ * (`host-profile.ts`):
+ *   - `personal` (`self` with a store that keeps data: desktop, self-hosted,
+ *     dev): NOT required. Single-user local play keeps working token-free;
+ *     the network boundary is the loopback bind plus the Host check in
+ *     `middleware/host-guard.ts`, which refuses DNS-rebound pages.
+ *   - `hosted` (`demo` / `commercial`): required on every session-scoped
+ *     route that goes through this guard. Sessions without a stored hash fail
+ *     closed. The operator token (COVEL_DESKTOP_REST_TOKEN) acts as a master
+ *     key.
+ *   - `browser-private` (`self`, production, MemoryStore): required as well.
+ *     Durable data lives in each browser, while the shared server only holds
+ *     transient execution mirrors. Anonymous session creation stays open, but
+ *     one player cannot read another player's mirror.
  *
  * CORS remains a browser policy only — it is never relied on for authz.
  */
-import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import type { Context } from "hono";
 import type { DataStore, SessionRecord } from "@covel/store";
-import { readRuntimeEnv } from "@covel/shared";
 import { errorBody } from "../../../api-error.js";
+import {
+  hostProfileOf,
+  presentedToken,
+  safeEqual,
+} from "../../../host-profile.js";
 
 export const SESSION_NOT_FOUND_CODE = "session_not_found";
-const SESSION_OWNER_REQUIRED_CODE = "session_owner_required";
-export const OPERATOR_TOKEN_REQUIRED_CODE = "operator_token_required";
 const SESSION_INCARNATION_CHANGED_CODE = "session_incarnation_changed";
 
 /** Metadata key holding the SHA-256 hex hash of the session owner token. */
@@ -183,94 +186,35 @@ export function rotateSessionApprovalScope(
 }
 
 /**
- * Constant-time string comparison. Both inputs are re-hashed to fixed-length
- * digests so `timingSafeEqual` never throws on length mismatch and the
- * comparison leaks neither content nor length.
- *
- * Exported so every comparison of `COVEL_DESKTOP_REST_TOKEN` (privileged-auth,
- * misc-api) shares one constant-time path instead of `!==` per call site.
+ * True when this host requires a session's owner token (the host profile's
+ * `session.access` rule is not open).
  */
-export function safeEqual(a: string, b: string): boolean {
-  return timingSafeEqual(
-    createHash("sha256").update(a).digest(),
-    createHash("sha256").update(b).digest(),
-  );
-}
-
-/**
- * Extract the caller-presented session token. Query-param fallback exists for
- * EventSource (SSE) clients, which cannot set request headers.
- */
-function extractSessionOwnerToken(c: Context): string | undefined {
-  const auth = (c.req.header("authorization") ?? "").trim();
-  const bearer = /^Bearer\s+(.+)$/i.exec(auth)?.[1]?.trim();
-  if (bearer) return bearer;
-  const header = c.req.header("x-session-token")?.trim();
-  if (header) return header;
-  const query = c.req.query("session_token")?.trim();
-  return query || undefined;
-}
-
-/** Owner-token enforcement is a hosted-tier posture only. */
-export function isOwnerAuthEnforced(
-  tier: string = readRuntimeEnv().deploymentTier,
-): boolean {
-  return tier === "demo" || tier === "commercial";
-}
-
-/** Request-aware owner guard, including the anonymous browser-private tier. */
-export function isSessionOwnerAuthEnforced(c: Context): boolean {
-  if (isOwnerAuthEnforced()) return true;
-  const env = readRuntimeEnv();
-  return c.get("storeBackend") === "memory" && env.nodeEnv === "production";
-}
-
-/**
- * True when the caller presented the operator master token
- * (COVEL_DESKTOP_REST_TOKEN) — used to admit privileged tooling to
- * cross-session surfaces (e.g. the session listing) on hosted tiers.
- */
-export function hasOperatorToken(c: Context): boolean {
-  const expected = readRuntimeEnv().desktopRestToken;
-  if (!expected) return false;
-  const provided = extractSessionOwnerToken(c);
-  return provided !== undefined && safeEqual(provided, expected);
-}
-
-/** Require the configured operator credential for global hosted mutations. */
-export function checkHostedOperator(c: Context): Response | undefined {
-  if (!isOwnerAuthEnforced()) return undefined;
-  if (hasOperatorToken(c)) return undefined;
-  return c.json(
-    errorBody("Operator token required on this tier", {
-      code: OPERATOR_TOKEN_REQUIRED_CODE,
-    }),
-    401,
-  );
+export function isSessionAccessGuarded(c: Context): boolean {
+  return hostProfileOf(c).access["session.access"].kind !== "open";
 }
 
 /**
  * Authorize the request against the session's owner token.
  *
  * Returns `undefined` when access is allowed, or a ready-to-return 401
- * response when a hosted tier requires a token the caller did not present.
- * Non-hosted tiers (`self`, unset) always allow — see module doc.
+ * response when the host requires a token the caller did not present. A
+ * personal host always allows — see module doc.
  */
 export function checkSessionOwner(
   c: Context,
   session: SessionRecord,
 ): Response | undefined {
-  const env = readRuntimeEnv();
-  if (!isSessionOwnerAuthEnforced(c)) return undefined;
+  const profile = hostProfileOf(c);
+  const rule = profile.access["session.access"];
+  if (rule.kind === "open") return undefined;
 
-  const provided = extractSessionOwnerToken(c);
+  const provided = presentedToken(c);
   if (provided) {
     // Operator master token — admin tooling / e2e harnesses.
-    if (env.desktopRestToken && safeEqual(provided, env.desktopRestToken)) {
-      return undefined;
-    }
+    if (profile.isOperatorToken(provided)) return undefined;
     const expected = session.metadata?.[SESSION_OWNER_TOKEN_HASH_KEY];
     if (
+      rule.kind === "owner" &&
       typeof expected === "string" &&
       safeEqual(hashSessionOwnerToken(provided), expected)
     ) {
@@ -278,13 +222,11 @@ export function checkSessionOwner(
     }
   }
 
-  // Fail closed: sessions without a stored hash predate this guard; on hosted
-  // tiers they are only reachable with the operator token.
+  // Fail closed: a session without a stored hash is reachable only with the
+  // operator token.
   return c.json(
-    errorBody("Session owner token missing or invalid", {
-      code: SESSION_OWNER_REQUIRED_CODE,
-    }),
-    401,
+    errorBody(rule.denial.message, { code: rule.denial.code }),
+    rule.denial.status,
   );
 }
 
@@ -296,17 +238,16 @@ export function checkSessionOwner(
  * Returns `undefined` when access is allowed, else a ready-to-return 404
  * (unknown session) or 401 (owner token missing/invalid) response.
  *
- * Strict no-op on non-hosted tiers — not even a store lookup — because
- * several of these routes historically accepted session ids with no
- * existence requirement (e.g. approvals listing) and self-tier behavior
- * must not change.
+ * Strict no-op on a personal host — not even a store lookup — because several
+ * of these routes accept session ids with no existence requirement there
+ * (e.g. the approvals listing).
  */
 export async function checkSessionOwnerById(
   c: Context,
   store: DataStore,
   sessionId: string,
 ): Promise<Response | undefined> {
-  if (!isSessionOwnerAuthEnforced(c)) return undefined;
+  if (!isSessionAccessGuarded(c)) return undefined;
   const session = await store.getSession(sessionId);
   if (!session) {
     return c.json(
@@ -329,9 +270,9 @@ export async function checkSessionOwnerById(
 
 /**
  * Look up the session named by the `:id` (or `:sessionId`) route param and
- * enforce owner-token authorization on hosted tiers. On miss, the returned
- * `response` is a ready-to-return 404 (unknown session) or 401 (owner token
- * required) with the unified error envelope.
+ * enforce owner-token authorization where the host profile requires it. On
+ * miss, the returned `response` is a ready-to-return 404 (unknown session) or
+ * 401 (owner token required) with the unified error envelope.
  */
 export async function resolveSessionParam(
   c: Context,

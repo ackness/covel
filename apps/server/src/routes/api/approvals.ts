@@ -30,12 +30,12 @@ import type { SessionLock } from "../../lib/session-lock.js";
 import { errorBody, listBody, okBody, parseJsonBody } from "../../api-error.js";
 import {
   checkSessionOwner,
-  checkHostedOperator,
   checkSessionOwnerById,
   rotateSessionApprovalScope,
   sessionApprovalScope,
 } from "./session/session-guard.js";
 import { withLockedSessionMutation } from "./session/locked-mutation.js";
+import { requireAccess } from "../../host-profile.js";
 
 type Env = {
   Variables: {
@@ -154,7 +154,7 @@ approvalRoutes.post("/:approvalId/decision", async (c) => {
   const denied = checkSessionOwner(c, session);
   if (denied) return denied;
   if (pendingForAuth.trustLevel === "community") {
-    const operatorDenied = checkHostedOperator(c);
+    const operatorDenied = requireAccess(c, "plugin.community");
     if (operatorDenied) return operatorDenied;
   }
 

@@ -18,8 +18,8 @@ import {
 } from "@covel/ai-provider";
 import { rateLimiter, singleFlight } from "../middleware/rate-limit.js";
 import type { AiStack } from "../ai-setup.js";
-import { checkHostedOperator } from "./api/session/session-guard.js";
 import { errorBody, listBody, okBody } from "../api-error.js";
+import { requireAccess } from "../host-profile.js";
 
 const MAX_SEARCH_LIMIT = 200;
 
@@ -118,7 +118,7 @@ export function createModelDbRoutes(ai: AiStack): Hono {
   app.post(
     "/api/model-db/refresh",
     async (c, next) => {
-      const denied = checkHostedOperator(c);
+      const denied = requireAccess(c, "model-db.refresh");
       if (denied) return denied;
       await next();
     },

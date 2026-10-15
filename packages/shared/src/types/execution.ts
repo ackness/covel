@@ -1,3 +1,5 @@
+import type { ProviderFailureKind } from "../llm-failure-kind.js";
+
 /**
  * Execution types for turns, runtime results, and tool calls.
  */
@@ -73,6 +75,8 @@ export interface RuntimeResult {
   readonly durationMs: number;
   readonly tokenUsage?: TokenUsage;
   readonly error?: string;
+  /** Classified provider failure; absent for non-provider result failures. */
+  readonly errorKind?: ProviderFailureKind;
   readonly timestamp: string;
 }
 
@@ -242,7 +246,7 @@ export interface TurnInput {
 export interface RecursiveCallDelta {
   /** Player message the nested execution sees. Defaults to the parent's. */
   readonly playerMessage?: string;
-  /** Run one manual runtime of the session, with an optional payload. */
+  /** Run one manual runtime of the caller's plugin, with an optional payload. */
   readonly manualTrigger?: {
     readonly runtimeId: string;
     readonly payload?: Readonly<Record<string, unknown>>;

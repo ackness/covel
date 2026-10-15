@@ -883,6 +883,19 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
             readonly status: JobStatusRecord;
           }> = [];
           const followerJobs: QueuedActivatedRuntimeJob[] = [];
+          const registerJobCredentials = (
+            credentialKey: (typeof credentialKeys)[number],
+            maxQueueMs: number | undefined,
+          ) => {
+            const services = requestJobServices(c);
+            if (!services) return;
+            c.get("runtimeJobCredentials")?.register(
+              credentialKey,
+              services,
+              maxQueueMs,
+            );
+            credentialKeys.push(credentialKey);
+          };
           // Interjections the player sent during the turn are part of it: the
           // turn's commit saves them to the prompt history (after the player's
           // message, at the moment a model call read them; one no call read
@@ -970,6 +983,23 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
             signal: commitSignal,
             store,
             execution,
+            // A suspension this turn saves replaces an older one of the same
+            // runtime; when that ends the older turn, its held-back jobs are
+            // queued here and announced with this turn's own.
+            enqueueReleasedJobsInTx: async (tx, jobs) => {
+              queuedRuntimeJobs.push(
+                ...(await enqueueDeferredRuntimeJobs(tx, {
+                  sessionId,
+                  session: effectiveSession,
+                  activeRuntimes,
+                  descriptors: jobs,
+                  locale: effectiveLocale,
+                  ...(userSettings ? { userSettings } : {}),
+                  skipInactive: true,
+                  registerCredentials: registerJobCredentials,
+                })),
+              );
+            },
             extraInTx: async (tx, { droppedRuntimeIds }) => {
               // Work derived from a runtime whose writes were dropped
               // builds on output that never landed: queue none of it.
@@ -1005,16 +1035,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
                   locale: effectiveLocale,
                   ...(model ? { modelOverride: model } : {}),
                   ...(userSettings ? { userSettings } : {}),
-                  registerCredentials: (credentialKey, maxQueueMs) => {
-                    const services = requestJobServices(c);
-                    if (!services) return;
-                    c.get("runtimeJobCredentials")?.register(
-                      credentialKey,
-                      services,
-                      maxQueueMs,
-                    );
-                    credentialKeys.push(credentialKey);
-                  },
+                  registerCredentials: registerJobCredentials,
                 })),
               );
               // Background followers (e.g. image generation) are

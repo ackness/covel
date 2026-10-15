@@ -14,8 +14,7 @@ beforeEach(async () => {
     await mkdir(path.join(root, id));
     await writeFile(
       path.join(root, id, "world.yaml"),
-      `schemaVersion: "1.0"
-id: ${id}
+      `id: ${id}
 name: ${id}
 summary: Synthetic world
 defaultLocale: en-US
@@ -71,7 +70,7 @@ it("keeps the last good override when a higher-priority package fails to load", 
   const packageDir = path.join(user, "override");
   await mkdir(packageDir, { recursive: true });
   const manifest =
-    'schemaVersion: "1.0"\nid: healthy\nname: User world\nsummary: Override fixture\ndefaultLocale: en-US\ndimensionSources:\n  tone: tone.yaml\n';
+    "id: healthy\nname: User world\nsummary: Override fixture\ndefaultLocale: en-US\ndimensionSources:\n  tone: tone.yaml\n";
   await writeFile(path.join(packageDir, "world.yaml"), manifest, "utf8");
   await writeFile(
     path.join(packageDir, "tone.yaml"),
@@ -107,7 +106,7 @@ it("does not choose an arbitrary duplicate id or follow a linked manifest", asyn
     await mkdir(duplicate);
     await writeFile(
       path.join(duplicate, "world.yaml"),
-      'schemaVersion: "1.0"\nid: healthy\nname: Duplicate\nsummary: Ambiguous fixture\ndefaultLocale: en-US\n',
+      "id: healthy\nname: Duplicate\nsummary: Ambiguous fixture\ndefaultLocale: en-US\n",
       "utf8",
     );
     await seedAndReconcileWorlds(store, [root], sessionLock);
@@ -120,7 +119,7 @@ it("does not choose an arbitrary duplicate id or follow a linked manifest", asyn
     const target = path.join(outside, "world.yaml");
     await writeFile(
       target,
-      'schemaVersion: "1.0"\nid: linked-world\nname: Linked\nsummary: Linked fixture\ndefaultLocale: en-US\n',
+      "id: linked-world\nname: Linked\nsummary: Linked fixture\ndefaultLocale: en-US\n",
       "utf8",
     );
     await symlink(target, path.join(linked, "world.yaml"));
@@ -159,13 +158,13 @@ it.each(["missing", "yaml", "schema"])(
     await mkdir(path.join(dir, "data"));
     await writeFile(
       path.join(dir, "world.data.yaml"),
-      "schemaVersion: 1\nsources:\n  dimensions:\n    kind: yaml\n    path: data/dimensions.yaml\n    to: world:metadata.dimensions\n",
+      "sources:\n  dimensions:\n    kind: yaml\n    path: data/dimensions.yaml\n    to: world:metadata.dimensions\n",
     );
     // Explicit descriptors keep a missing source declared.
     const manifest = path.join(dir, "world.yaml");
     await writeFile(
       manifest,
-      'schemaVersion: "1.0"\nid: healthy\nname: Healthy\nsummary: Fixture\ndefaultLocale: en-US\nworldData: world.data.yaml\n',
+      "id: healthy\nname: Healthy\nsummary: Fixture\ndefaultLocale: en-US\nworldData: world.data.yaml\n",
     );
     const file = path.join(dir, "data/dimensions.yaml");
     await writeFile(

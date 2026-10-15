@@ -26,6 +26,8 @@
 
 下面是表里装不下的细节。
 
+`ctx.recursiveCall` 的用途是[包内嵌套调用](./plugins.md#嵌套调用ctxrecursivecall)。要请求其他包的结果，使用服务；要触发其他包的后续工作，使用事件。
+
 ### 服务只给函数 runtime
 
 `ctx.services` 目前只向函数 runtime 开放。框架不会把所有公共服务自动暴露给每个 agent。agent 想用服务的结果，有两条路：

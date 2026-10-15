@@ -16,11 +16,11 @@ import { errorBody, listBody, okBody } from "../../api-error.js";
 import { withPackageMutation } from "./install/package-files.js";
 import { cancelPackageUpdate } from "./install/package-updates.js";
 import { errorResponse } from "./install/shared.js";
-import { makeInstallApiGuard } from "../privileged-auth.js";
 import {
   removePackageStaging,
   stagePackageRemoval,
 } from "./install/package-staging.js";
+import { accessGuard } from "../../host-profile.js";
 
 type Env = {
   Variables: {
@@ -61,7 +61,7 @@ pluginRoutes.get("/:id", async (c) => {
 // DELETE /plugins/:id — uninstall a third-party plugin from the user plugins
 // dir. Builtin plugins cannot be removed. Mirrors the install route's id rules
 // and returns restartRequired:true (the loader only re-scans the dir at boot).
-pluginRoutes.delete("/:id", makeInstallApiGuard(), async (c) => {
+pluginRoutes.delete("/:id", accessGuard("host.files"), async (c) => {
   const id = c.req.param("id");
   // Format guard — also blocks path traversal (no `/`, `.`, `..`).
   if (!PLUGIN_ID_RE.test(id)) {

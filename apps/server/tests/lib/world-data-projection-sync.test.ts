@@ -95,8 +95,7 @@ describe("world data projections", () => {
     await mkdir(path.join(worldRoot, "data"), { recursive: true });
     await writeFile(
       path.join(worldRoot, "world.yaml"),
-      `schemaVersion: "1"
-id: ${worldId}
+      `id: ${worldId}
 name: Projection World
 summary: Projection test world
 defaultLocale: en-US
@@ -105,8 +104,7 @@ worldData: data/world.data.yaml
     );
     await writeFile(
       path.join(worldRoot, "data/world.data.yaml"),
-      `schemaVersion: 1
-sources:
+      `sources:
   worldIr:
     kind: json
     path: data/world-ir.json

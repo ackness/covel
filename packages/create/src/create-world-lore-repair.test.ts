@@ -6,8 +6,7 @@ import type { LLMAdapter, LLMResponse } from "@covel/shared";
 import { createWorld } from "./create-world.js";
 import { createPromptLoader } from "@covel/context";
 
-const WORLD_YAML = `schemaVersion: "1.0"
-id: repair-world
+const WORLD_YAML = `id: repair-world
 name: 修复世界
 version: "0.1.0"
 summary: 一个用于验证定向修复流程的世界。

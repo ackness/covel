@@ -94,12 +94,18 @@ export {
   finalizeSuspendedJobStatuses,
 } from "./job-status/job-status.js";
 export {
+  ABANDONED_SETUP_ATTEMPT_ERROR,
   applySuspensionAbandonTx,
   isPendingSuspension,
   planSuspensionAbandon,
+  settleAbandonedSetupAttempt,
   settleAbandonedSuspensionJobs,
   suspensionOutdatedReason,
 } from "./resume/suspension-settlement.js";
+export {
+  SuspensionDataChangedError,
+  suspensionWriteTargets,
+} from "./resume/suspension-baseline.js";
 export type {
   SuspensionAbandonPlan,
   SuspensionOutdatedReason,

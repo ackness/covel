@@ -137,6 +137,10 @@ export function createExecutionStepUpdate(args: {
     pluginId: (payload.pluginId as string) ?? "",
     status,
     durationMs: payload.durationMs as number | undefined,
+    errorKind:
+      status === "failed" && typeof payload.errorKind === "string"
+        ? payload.errorKind
+        : undefined,
     turnId,
     ...retryStepMetadata(payload, turnId),
     ...(typeof payload.jobId === "string" ? { jobId: payload.jobId } : {}),

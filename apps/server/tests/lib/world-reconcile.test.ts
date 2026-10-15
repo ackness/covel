@@ -156,8 +156,7 @@ describe("seedWorlds", () => {
       await mkdir(dir, { recursive: true });
       await writeFile(
         path.join(dir, "world.yaml"),
-        `schemaVersion: "1.0"
-id: ${id}
+        `id: ${id}
 name: ${id}
 summary: seed test
 defaultLocale: zh-CN

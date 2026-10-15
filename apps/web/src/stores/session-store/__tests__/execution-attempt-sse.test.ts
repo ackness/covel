@@ -65,6 +65,22 @@ function harness(retrying = true) {
   };
 }
 
+it.each(["quota", "auth", "unknown"])(
+  "preserves %s from runtime.failed",
+  (errorKind) => {
+    const h = harness(false);
+    h.send("runtime.failed", { errorKind, error: "provider detail" });
+    expect(
+      h.getState().executionSteps.find((step) => step.turnId === "attempt"),
+    ).toMatchObject({ status: "failed", errorKind, detail: "provider detail" });
+    h.send("runtime.completed", { status: "success" });
+    expect(
+      h.getState().executionSteps.find((step) => step.turnId === "attempt")
+        ?.errorKind,
+    ).toBeUndefined();
+  },
+);
+
 describe("a story cut at the output limit", () => {
   it.each([
     { finishReason: "length", notices: 1 },

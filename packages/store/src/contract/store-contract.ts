@@ -17,6 +17,7 @@ import { registerPaginationStoreSuites } from "./suites/pagination-suites.js";
 import { registerJsonStringStoreSuite } from "./suites/json-string-suite.js";
 import { registerWriteOrderStoreSuites } from "./suites/write-order-suites.js";
 import { registerRecordContractSuites } from "./suites/record-contract-suites.js";
+import { registerSuspensionWriteSuites } from "./suites/suspension-write-suites.js";
 
 // ── Contract test suite ─────────────────────────────────────────
 
@@ -56,5 +57,6 @@ export function runStoreContractTests(
     registerJsonStringStoreSuite(getStore);
     registerWriteOrderStoreSuites(getStore);
     registerRecordContractSuites(getStore);
+    registerSuspensionWriteSuites(getStore);
   });
 }

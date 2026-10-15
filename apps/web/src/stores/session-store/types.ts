@@ -62,6 +62,7 @@ export interface ExecutionStep {
     | "unknown";
   label?: string;
   detail?: string;
+  errorKind?: string;
   /** Qualified tool name when status is "tool". */
   toolName?: string;
   durationMs?: number;

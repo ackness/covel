@@ -74,6 +74,14 @@ Covel 是模块化单体：一个仓库、一起发布，内部分成若干包�
 
 桌面壳直接依赖 Zod 来校验本地保存的窗口状态。窗口的位置和大小属于 Electron 宿主，不作为共享的领域 schema 暴露。
 
+### 部署形态只在宿主里决定
+
+server 启动时把部署档位、实际存储和令牌合成一份宿主配置（`apps/server/src/host-profile.ts`，规则见[安全边界](./security.md#host-profile)），之后只问它。核心包不读这些部署变量：
+
+- `ai-provider` 的局域网豁免和“不属于会话的请求能否用社区插件的 wire”，由宿主在启动时通过 `configureProviderHostPolicy` 传入；没有宿主传入时（工具、测试）按单用户的 `self` 处理。
+- `shared` 只保留这些变量的登记和解析。服务端设置是否采用玩家存的值，由宿主传 `playerWritable` 决定。
+- 桌面壳启动 server 时固定传 `DEPLOYMENT_TIER=self`。
+
 ### 执行之后必须提交
 
 一次执行先通过 `executeTurn(...)` 或 `resumeSuspendedRuntime(...)` 得到 `{ result, commit }`：

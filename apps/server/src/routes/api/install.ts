@@ -15,7 +15,6 @@
  */
 
 import { Hono } from "hono";
-import { makeInstallApiGuard } from "../privileged-auth.js";
 import { pluginInstallRoutes } from "./install/plugin.js";
 import { worldInstallRoutes } from "./install/worlds.js";
 import { createGithubInstallRoutes } from "./install/github-install.js";
@@ -23,9 +22,10 @@ import { githubCollectionRoutes } from "./install/github-collection.js";
 
 import { createGithubUpdateRoutes } from "./install/github-updates.js";
 import { createInstalledPackageRoutes } from "./install/installed-packages.js";
+import { accessGuard } from "../../host-profile.js";
 
 export const installRoutes = new Hono();
-installRoutes.use("*", makeInstallApiGuard());
+installRoutes.use("*", accessGuard("host.files"));
 
 installRoutes.route("/", pluginInstallRoutes);
 for (const kind of ["plugin", "world"] as const) {

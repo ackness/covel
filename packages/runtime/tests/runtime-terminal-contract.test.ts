@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { AiProviderError } from "@covel/ai-provider";
 import { createEventBus } from "@covel/events";
 import type {
   RuntimeManifest,
@@ -375,7 +376,11 @@ describe.each(["turn", "resume"] as const)("%s terminal contract", (entry) => {
                       resumeSchema: {},
                       createdAt: new Date().toISOString(),
                       pendingContinuation: {
-                        takenUnder: { playerTurns: 0, pluginVersion: "1.0.0" },
+                        takenUnder: {
+                          playerTurns: 0,
+                          pluginVersion: "1.0.0",
+                          writes: [],
+                        },
                         executionContext: {
                           executionId: "previous-run",
                           origin: "manual",
@@ -454,3 +459,80 @@ describe.each(["turn", "resume"] as const)("%s terminal contract", (entry) => {
     },
   );
 });
+
+describe.each(["generate", "stream", "function"] as const)(
+  "%s provider failure kind",
+  (mode) => {
+    it.each([
+      {
+        statusCode: 429,
+        errorKind: "quota",
+        details: { providerCode: "insufficient_quota" },
+      },
+      { statusCode: 401, errorKind: "auth" },
+      { statusCode: undefined, errorKind: "unknown" },
+    ])(
+      "preserves $errorKind on the runtime result and terminal observer",
+      async ({ statusCode, errorKind, details }) => {
+        const failure = new AiProviderError({
+          code: "PROVIDER_ERROR",
+          provider: "fixture",
+          message: "provider detail",
+          statusCode,
+          details,
+          retriable: false,
+        });
+        const manifest: RuntimeManifest = {
+          name: "probe/main",
+          pluginId: "probe",
+          description: "test",
+          runtimeType: mode === "function" ? "function" : "agent",
+          stage: "narrative",
+          outputKind: "story",
+          trigger: { type: "auto" },
+        };
+        const onRuntimeComplete = vi.fn(async () => {});
+        const turn = await executeTurn(
+          {
+            origin: "player",
+            sessionId: "session",
+            turnId: "turn",
+            playerMessage: "Continue",
+          },
+          [manifest],
+          {
+            onRuntimeComplete,
+            loadRuntime: async () => ({
+              manifest,
+              promptTemplate: "probe",
+              handler: async () => {
+                throw failure;
+              },
+            }),
+            llm: {
+              async generate() {
+                throw failure;
+              },
+              ...(mode === "stream"
+                ? {
+                    async *stream() {
+                      throw failure;
+                    },
+                  }
+                : {}),
+            },
+            toolExecutor: { execute: vi.fn(), getToolInfo: () => undefined },
+          },
+        );
+        expect(turn.runtimeResults[0]).toMatchObject({
+          status: "failed",
+          errorKind,
+          error: expect.stringContaining("provider detail"),
+        });
+        expect(onRuntimeComplete).toHaveBeenCalledWith(
+          expect.objectContaining({ status: "failed", errorKind }),
+        );
+      },
+    );
+  },
+);

@@ -14,7 +14,6 @@ import { Hono, type Context } from "hono";
 import { resolveUserResourceDirs } from "../../../lib/user-resource-dirs.js";
 import { parse as parseYaml } from "yaml";
 import { errorBody } from "../../../api-error.js";
-import { checkWorldWriteAccess } from "../worlds/world-write-guard.js";
 import { validateWorldManifest, formatValidationErrors } from "@covel/shared";
 import {
   SAFE_WORLD_ID_RE,
@@ -31,6 +30,7 @@ import {
   rejectByContentLength,
   type ExtractedEntry,
 } from "./shared.js";
+import { requireAccess } from "../../../host-profile.js";
 
 export const worldInstallRoutes = new Hono();
 
@@ -63,7 +63,7 @@ export function validateWorldBundle(
     );
   }
 
-  const result = validateWorldManifest(raw);
+  const result = validateWorldManifest(raw, { ignoreUnknownRootFields: true });
   if (!result.valid) {
     throw httpError(
       400,
@@ -80,7 +80,7 @@ export function validateWorldBundle(
 }
 
 worldInstallRoutes.post("/world", async (c) => {
-  const denied = checkWorldWriteAccess(c);
+  const denied = requireAccess(c, "world.write");
   if (denied) return denied;
   try {
     const tooLarge = rejectByContentLength(c.req.header("content-length"));

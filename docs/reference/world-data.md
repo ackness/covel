@@ -15,7 +15,7 @@
 
 **最小的世界包**是两个文件：
 
-- `world.yaml`：世界的清单。必填字段有五个：`schemaVersion`、`id`、`name`、`summary`、`defaultLocale`。
+- `world.yaml`：世界的清单。必填字段有四个：`id`、`name`、`summary`、`defaultLocale`。
 - `WORLD.md`：世界观正文。
 
 之后每增加一种内容，就在约定的位置加一个文件，不需要再登记：
@@ -63,7 +63,6 @@ worlds/my-world/
 `world.yaml`：
 
 ```yaml
-schemaVersion: "1.0"
 id: my-world
 name: 我的世界
 summary: 一个示例世界。
@@ -86,7 +85,7 @@ defaultViewMode: stage
 
 - `worldData` 是 descriptor 的路径，相对世界包根目录。只有世界包带 descriptor 时才写它。
 - `world.yaml` 的全部字段见生成的 [World manifest 字段表](./schema/world-manifest.md)，外置维度文件见 [World dimensions 字段表](./schema/world-dimensions.md)。
-- 清单只接受当前的字段。写了不认识的字段会报错，不会被悄悄忽略或换成别的写法。
+- 清单按当前字段读取。不认识的顶层字段会被忽略，加载器和 `pnpm validate:world` 会给出警告；已知字段内部的未知字段仍然报错。
 
 ### 正文怎样进入故事
 
@@ -568,7 +567,6 @@ pluginSettings:
 文件放在 `data/memory-blocks.json` 时按约定读取。用 descriptor 时这样写：
 
 ```yaml
-schemaVersion: 1
 sources:
   memory-definitions:
     kind: json
@@ -639,7 +637,6 @@ Put the file at `data/quests.yaml`: it is imported without a descriptor. The sam
 descriptor 是一个 YAML 文件，通常叫 `data/world.data.yaml`，用 `sources` 列出每份数据：
 
 ```yaml
-schemaVersion: 1
 sources:
   dimensions:
     kind: yaml
@@ -675,7 +672,7 @@ sources:
 逐字段说明见生成的 [World data descriptor 字段表](./schema/world-data-descriptor.md)。
 
 - source 的名字（`sources` 下的键）必须匹配 `^[a-z][a-zA-Z0-9_-]{0,63}$`。
-- descriptor 顶层目前只接受 `schemaVersion: 1` 和 `sources`。
+- descriptor 顶层只写 `sources`；override descriptor 也一样。不认识的顶层字段会被忽略并给出警告，source 内部的未知字段仍然报错。
 
 **`schema` 什么时候写：**
 
@@ -870,7 +867,6 @@ worldData: data/world.data.yaml
 
 ```yaml
 # data/world.data.yaml
-schemaVersion: 1
 sources:
   lore:
     kind: yaml
@@ -1089,7 +1085,6 @@ characterSchema:
 四个内置世界两种都带。在 descriptor 里这样写：
 
 ```yaml
-schemaVersion: 1
 sources:
   cast:
     kind: json
@@ -1404,7 +1399,6 @@ worlds/my-world-extra/
 `world.data.override.yaml`：
 
 ```yaml
-schemaVersion: 1
 sources:
   cast-extra:
     kind: json
@@ -1596,7 +1590,6 @@ worldData: data/world.data.yaml
 override descriptor 可以新增 source，也可以覆盖已有 source 的 `path`、`enabled`、`merge` 等字段：
 
 ```yaml
-schemaVersion: 1
 sources:
   social-links:
     kind: yaml
@@ -1644,6 +1637,7 @@ pnpm validate:world --strict --plugins ~/.covel/plugins ~/.covel/worlds/my-world
 | 诊断 code | 级别 | 含义 |
 | --- | --- | --- |
 | `manifest-invalid` | error | `world.yaml` 无法解析或不符合 schema |
+| `manifest-unknown-field` | warning | `world.yaml` 有不认识的顶层字段，加载时忽略 |
 | `lore-missing` | error | 某个声明的语言（`defaultLocale` / `supportedLocales`）找不到正文文件 |
 | `lore-fallback-missing` | warning | 没有 `WORLD.md`，未声明语言的会话会拿到空的正文 |
 | `lore-narrator-only` | warning | [narrator-only 标记](#只给叙事者的正文narrator-only)没有结束、没有开始、嵌套或写错；后面的正文会对玩家隐藏 |

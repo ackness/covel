@@ -12,6 +12,8 @@
 
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { Hono } from "hono";
+import { AiProviderError } from "@covel/ai-provider";
+import { CONCEALED_FAILURE_MESSAGE } from "@covel/shared";
 import { type DataStore } from "@covel/store";
 import { createMemoryStore } from "@covel/store/memory";
 import { createEventBus } from "@covel/events";
@@ -31,6 +33,12 @@ import {
 } from "../../src/lib/session-lock.js";
 import { makeFakeLLM, makeFakeLoadedRuntime } from "./__helpers/fake-llm.js";
 import { setSessionWorld } from "../helpers/session-world.js";
+
+// Give each isolated app fixture its own per-client rate-limit bucket.
+const client = vi.hoisted(() => ({ address: "" }));
+vi.mock("@hono/node-server/conninfo", () => ({
+  getConnInfo: () => ({ remote: { address: client.address } }),
+}));
 
 function makeSummary(overrides: Partial<PluginSummary> = {}): PluginSummary {
   return {
@@ -80,11 +88,14 @@ describe("POST /api/actions — action type contract ", () => {
   let loadedByName: Map<string, LoadedRuntime>;
   let hookPipeline: ReturnType<typeof createHookPipeline>;
   let sessionLock: SessionLock;
+  let providerError: Error | undefined;
   const sessionId = "sess-contract";
   const NARRATOR_ID = "fake-narrator";
   const SIDE_ID = "fake-side";
 
   beforeEach(async () => {
+    client.address = crypto.randomUUID();
+    providerError = undefined;
     store = createMemoryStore();
     registry = createPluginRegistry();
     hookPipeline = createHookPipeline();
@@ -125,6 +136,11 @@ describe("POST /api/actions — action type contract ", () => {
 
     const eventBus = createEventBus(store);
     const { llm } = makeFakeLLM("A fake reply.");
+    const generate = llm.generate;
+    llm.generate = async (params) => {
+      if (providerError) throw providerError;
+      return generate(params);
+    };
     sessionLock = createInProcessSessionLock();
 
     app = new Hono();
@@ -144,6 +160,79 @@ describe("POST /api/actions — action type contract ", () => {
     });
     app.route("/api/actions", actionRoutes);
   });
+
+  it.each(
+    [
+      {
+        errorKind: "quota",
+        statusCode: 429,
+        details: { providerCode: "insufficient_quota" },
+      },
+      { errorKind: "quota", statusCode: 402 },
+      { errorKind: "auth", statusCode: 401 },
+      { errorKind: "unknown", statusCode: undefined },
+    ].flatMap((failure) =>
+      [false, true].map((concealed) => ({ ...failure, concealed })),
+    ),
+  )(
+    "keeps $errorKind in the failure SSE and trace (concealed=$concealed)",
+    async ({ errorKind, statusCode, details, concealed }) => {
+      providerError = new AiProviderError({
+        code: "PROVIDER_ERROR",
+        provider: "fixture",
+        message: "provider detail containing hidden content",
+        statusCode,
+        details,
+        retriable: false,
+      });
+      const loaded = loadedByName.get(NARRATOR_ID)!;
+      // The registry and loader share this manifest, as they do in production.
+      Object.assign(loaded.manifest, { concealed });
+      const response = await app.request("/api/actions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          requestId: "provider-failure",
+          type: "send_message",
+          sessionId,
+          payload: { content: "Continue" },
+        }),
+      });
+      expect(response.status).toBe(200);
+      const envelopes = (await response.text())
+        .split("\n")
+        .filter((line) => line.startsWith("data: "))
+        .map(
+          (line) =>
+            JSON.parse(line.slice(6)) as {
+              type: string;
+              payload: Record<string, unknown>;
+            },
+        );
+      const failures = envelopes.filter(
+        (event) =>
+          event.type === "runtime.failed" &&
+          event.payload.runtimeId === NARRATOR_ID,
+      );
+      expect(failures).toHaveLength(1);
+      const expected = {
+        errorKind,
+        error: concealed
+          ? CONCEALED_FAILURE_MESSAGE
+          : expect.stringContaining(providerError.message),
+      };
+      expect(failures[0]?.payload).toMatchObject(expected);
+      const traces = await store.listTraceEvents(sessionId);
+      expect(
+        traces.find(
+          (trace) =>
+            trace.type === "runtime.failed" &&
+            (trace.payload as Record<string, unknown>).runtimeId ===
+              NARRATOR_ID,
+        )?.payload,
+      ).toMatchObject(expected);
+    },
+  );
 
   it("captures current world overrides for each player turn", async () => {
     const seen: unknown[] = [];

@@ -8,6 +8,7 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PluginSummary } from "@covel/shared";
 import i18n from "@/i18n";
+import { describeProviderFailure } from "@/lib/provider-failure-hint.js";
 import { ExecutionTimeline } from "../execution-timeline.js";
 
 function plugin(
@@ -73,6 +74,35 @@ describe("ExecutionTimeline plugin names", () => {
     expect(screen.getByText("Relationship Graph / rag-retriever")).toBeTruthy();
     expect(screen.queryByText(/骰子判定|关系图谱/)).toBeNull();
   });
+
+  it.each(["quota", "auth", "unknown"])(
+    "renders the %s provider remedy with the original message as detail",
+    (errorKind) => {
+      const detail = "HTTP 429: original provider diagnostic";
+      render(
+        <ExecutionTimeline
+          executing
+          steps={[
+            {
+              runtimeId: "story",
+              pluginId: "story",
+              status: "failed",
+              turnId: "turn-1",
+              errorKind,
+              detail,
+            },
+          ]}
+        />,
+      );
+      fireEvent.click(screen.getByRole("button", { name: /Execution/ }));
+      const notice = within(screen.getByRole("alert"));
+      const hint = describeProviderFailure(i18n.t, errorKind, undefined);
+      if (hint) expect(notice.getByText(hint)).toBeTruthy();
+      expect(notice.queryByText(detail)).toBeNull();
+      fireEvent.click(notice.getByRole("button", { name: "Show details" }));
+      expect(notice.getByText(detail)).toBeTruthy();
+    },
+  );
 
   it("renders failure details as a bounded callout outside the status chip", () => {
     const { container } = render(

@@ -10,10 +10,9 @@ In the path headings below, `[]` is a list item and `.*` is a map value.
 
 ## Top-level fields
 
-| Field           | Type          | Required | Description                                                                                             |
-| --------------- | ------------- | -------- | ------------------------------------------------------------------------------------------------------- |
-| `schemaVersion` | `1`           | yes      | Descriptor format version.                                                                              |
-| `sources`       | map of object | yes      | Data sources keyed by source ID. A source ID starts with a letter and uses letters, digits, `_` or `-`. |
+| Field     | Type          | Required | Description                                                                                             |
+| --------- | ------------- | -------- | ------------------------------------------------------------------------------------------------------- |
+| `sources` | map of object | yes      | Data sources keyed by source ID. A source ID starts with a letter and uses letters, digits, `_` or `-`. |
 
 ## `sources.*`
 

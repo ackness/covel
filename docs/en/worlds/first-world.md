@@ -38,7 +38,6 @@ mkdir -p ~/.covel/worlds/tidelamp/data ~/.covel/worlds/tidelamp/characters
 This file states the world's identity and the gameplay it wants. Create `~/.covel/worlds/tidelamp/world.yaml`:
 
 ```yaml
-schemaVersion: "1.0"
 id: tidelamp
 name: 潮灯镇
 version: 0.1.0

@@ -15,10 +15,7 @@ import type {
 } from "@covel/shared";
 import type { SessionRecord } from "@covel/store";
 import { getPluginTrustInfo } from "@covel/plugin-loader";
-import {
-  checkHostedOperator,
-  sessionApprovalScope,
-} from "../session/session-guard.js";
+import { sessionApprovalScope } from "../session/session-guard.js";
 import {
   buildCommandEnvironment,
   parseSessionCommandInvocation,
@@ -31,6 +28,7 @@ import {
   resolveSessionPluginSet,
   sessionPluginIds,
 } from "../session/plugins.js";
+import { requireAccess } from "../../../host-profile.js";
 
 /** Action dispatch shares the session commit lock with turns. */
 export async function dispatchPluginAction(
@@ -140,7 +138,7 @@ export async function dispatchPluginAction(
   // capabilities. Hosted deployments therefore require the operator
   // credential in addition to the session owner token.
   if (entryTrust === "community") {
-    const operatorDenied = checkHostedOperator(c);
+    const operatorDenied = requireAccess(c, "plugin.community");
     if (operatorDenied) return operatorDenied;
   }
 

@@ -27,6 +27,7 @@ export interface RuntimeStatus {
     | "suspended"
     | "unknown";
   detail?: string;
+  errorKind?: string;
   /** Qualified tool name when status is "tool" (e.g. "init-wizard:emit-character-form"). */
   toolName?: string;
   /** Duration in milliseconds (only set when completed or failed). */
@@ -69,6 +70,7 @@ export function deriveStatuses(
     label: runtimeLabel(step),
     status: step.status,
     detail: step.detail,
+    errorKind: step.errorKind,
     toolName: step.toolName,
     durationMs: step.durationMs,
     detached: step.detached,

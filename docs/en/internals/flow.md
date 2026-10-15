@@ -148,6 +148,7 @@ Rules for failure:
 - Retries used up (`maxTriggerCount`): the runtime is not counted as done. It becomes `blocked`, and the session stays in the setup phase until the player retries or waives it. The framework does not skip a broken setup step and move on. A `blocked` runtime must first be unblocked through the `retry` endpoint.
 - A setup runtime that reads a saved form must not fail every time on the same submission. When a submission cannot be used, void it and send the form again (with a `notice` and the last values). Otherwise the session stays in the setup phase forever.
 - When a suspended setup runtime gives its done signal after a resume, the `done` state and the switch of `phase` are written together with the submission that resumed it.
+- A setup runtime that is suspended and waits for the player uses up no retry. When its suspended item is abandoned, expires or is voided, the attempt is recorded as failed and the runtime goes back to `pending`, or to `blocked` when the retries are used up.
 
 Setup runtimes can declare dependencies on each other with `needs(scope: session)`. This reads the saved `done` state:
 
@@ -209,6 +210,7 @@ Details to remember:
   - The player retrying or waiving a setup runtime in the UI.
   - The execution record. `turn_results` and each runtime's output are written before the commit; `turn_results` starts as `pending` and is settled to `committed` or `failed` after the commit.
 - `turn.suspended` is sent only after the commit.
+- When a suspension record is saved, an older item of the same runtime that still waits is voided in the same transaction. A resume's commit transaction first checks the record contents noted at the suspension, and writes nothing when one changed.
 - The automatic snapshot is taken after all proposals are committed. This makes sure the conversation position, characters, state, and plugin data all belong to the same committed turn.
 - `execution.completed.committed` is the final signal to the client. The frontend uses it to confirm or take back what it showed first.
 - Event publishing after a commit runs one event at a time, and one failure does not roll back data that was already written. On failure, the host records a `commit.fanout.failed` trace. The session's subscribed stream receives `system.reset` (`reason: "publish-failed"`) and reads everything again. The `execution.completed` event carries `resync: true`.
@@ -362,6 +364,8 @@ flowchart LR
 - It changes characters, state, or interactions directly.
 
 **When the turn has a suspension.** When a runtime in the turn suspends, these jobs are not queued yet: they are saved with the suspended item, and the turn is not counted yet either. The exit that ends the turn queues the jobs and counts the turn: the last suspended item resumes successfully, or it is abandoned, expires, or is voided as out of date. The rules are in [Suspensions and turn counting](../reference/api.md#suspensions-and-turn-counting).
+
+**Writes after a suspension.** While an item is suspended, background jobs and manual runs commit as usual. The suspended item notes the content at that moment of every record its saved writes would change. When one of them is changed later, the resume is refused and the item is voided, so the old writes never overwrite the new ones. The rules are in [Out-of-date suspended items](../reference/api.md#out-of-date-suspended-items).
 
 **Time limits.**
 

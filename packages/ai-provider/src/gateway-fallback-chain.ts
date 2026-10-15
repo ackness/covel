@@ -10,6 +10,7 @@
 
 import { AiProviderError } from "./errors.js";
 import { assertLlmRequestBudget } from "@covel/shared";
+import { classifyProviderFailure } from "./provider-failure.js";
 import type { ProviderResolution } from "./provider-registry.js";
 import {
   normalizeError,
@@ -24,6 +25,51 @@ import type {
   ProviderProtocol,
   ResolvedTarget,
 } from "./types.js";
+
+/**
+ * A refused key (401) or an empty balance fails every model of the account, so
+ * a backup with the same provider, base URL and key is skipped. A 403 or a rate
+ * limit can apply to one model only, so such a backup still runs.
+ */
+function failsWholeAccount(error: unknown): boolean {
+  const failure = classifyProviderFailure(error);
+  return (
+    failure.kind === "quota" ||
+    (failure.kind === "auth" && failure.statusCode === 401)
+  );
+}
+
+/** Per-call account failures; credentials never enter diagnostics or traces. */
+export function createFailedAccountTracker() {
+  const accounts: Array<{
+    provider: string;
+    baseUrl?: string;
+    apiKey?: string;
+  }> = [];
+  const identity = (provider: string, resolved: ProviderResolution) => ({
+    provider,
+    baseUrl: resolved.config.baseUrl?.replace(/\/+$/, ""),
+    apiKey: resolved.config.apiKey,
+  });
+  return {
+    has(provider: string, resolved: ProviderResolution): boolean {
+      const candidate = identity(provider, resolved);
+      return accounts.some(
+        (account) =>
+          account.provider === candidate.provider &&
+          account.baseUrl === candidate.baseUrl &&
+          account.apiKey === candidate.apiKey,
+      );
+    },
+    record(
+      provider: string,
+      resolved: ProviderResolution,
+      error: unknown,
+    ): void {
+      if (failsWholeAccount(error)) accounts.push(identity(provider, resolved));
+    },
+  };
+}
 
 /** Subset of the provider registry the fallback chain depends on. */
 export interface ProviderRegistryLike {

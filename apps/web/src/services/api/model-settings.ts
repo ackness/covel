@@ -3,7 +3,6 @@ import {
   PLUGIN_USER_SETTINGS_HEADER_MAX_BYTES,
   utf8ByteLength,
 } from "@covel/shared/plugin-user-settings-header";
-import { isServerManagedSecret } from "@covel/settings";
 import { getSettings, registerKnownProviders } from "@/settings/store";
 import {
   flattenProviderProfiles,
@@ -170,9 +169,8 @@ export function buildProviderKeysHeader(
   // Request keys are connection-scoped and never embedded in model profiles.
   const keys = Object.fromEntries(
     Object.entries(providerKeysSnapshot()).filter(
-      ([name, value]) =>
+      ([name]) =>
         providerKeyToId(name) === name &&
-        !isServerManagedSecret(value) &&
         (referenced === null || referenced.has(name)),
     ),
   );

@@ -36,7 +36,8 @@ export type ProviderFailureKind =
  * A failure of the account at this provider: no balance, or a key it does
  * not accept. Sending the same request to the same provider again fails the
  * same way until the player fixes the account, so it is never retried there.
- * A backup the player configured is another target and may still work.
+ * A backup the player configured is another target and may still work; the
+ * gateway skips a same-account backup only after a 401 or a balance failure.
  */
 export function isAccountFailure(kind: ProviderFailureKind): boolean {
   return kind === "quota" || kind === "auth";

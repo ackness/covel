@@ -57,7 +57,6 @@ describe("attributeDefinitionSchema", () => {
 
 describe("worldManifestSchema characterSchema", () => {
   const base = {
-    schemaVersion: "1.0",
     id: "demo-world",
     name: "Demo",
     summary: "A demo world.",

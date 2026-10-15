@@ -50,11 +50,22 @@ async function readDescriptorFile(
   }
   try {
     const raw = parseYaml(await readFile(fullPath, "utf-8"));
-    const validation = (
-      options?.override
-        ? worldDataDescriptorOverrideSchema
-        : worldDataDescriptorSchema
-    ).safeParse(raw);
+    const schema = options?.override
+      ? worldDataDescriptorOverrideSchema
+      : worldDataDescriptorSchema;
+    // A whole unknown root field removes no part of a source declaration.
+    // Leave it out, but keep source fields strict so a typo cannot change a target.
+    if (raw && typeof raw === "object" && !Array.isArray(raw))
+      for (const key of Object.keys(raw))
+        if (!Object.hasOwn(schema.shape, key))
+          diagnostics.push({
+            level: "warning",
+            path: relativePath,
+            pointer: key,
+            message: `unknown field "${key}" is ignored`,
+            hint: "Remove the field or correct its name.",
+          });
+    const validation = schema.strip().safeParse(raw);
     if (!validation.success) {
       for (const issue of validation.error.issues) {
         diagnostics.push({
