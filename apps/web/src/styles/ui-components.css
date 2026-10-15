@@ -170,8 +170,7 @@
     border-top: var(--rule-thickness) var(--rule-style) var(--rule-color);
   }
 
-  /* Card surface (LEGACY — keep so existing usage stays valid;
-   now renders as a quiet hairline frame instead of a glossy card) */
+  /* Card surface with a quiet hairline frame. */
   .ui-card-surface {
     background: var(--surface-elevated);
     border-radius: var(--radius-card);
@@ -714,7 +713,7 @@
     background: transparent;
   }
 
-  /* `.ui-scroll` is now a no-op alias kept for backward compat */
+  /* Explicit scrollbar styling for scrollable surfaces. */
   .ui-scroll {
     scrollbar-width: thin;
     scrollbar-color: color-mix(

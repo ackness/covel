@@ -62,7 +62,7 @@ function headerLimitError(error: string): PluginUserSettingsHeaderDecodeResult {
 /**
  * Decode the request-scoped player setting buckets.
  *
- * Missing and malformed legacy headers intentionally degrade to no overrides.
+ * Missing and malformed headers intentionally degrade to no overrides.
  * A header that is syntactically valid but exceeds any declared transport
  * budget is rejected so it cannot become a request-amplification vector.
  */
@@ -94,8 +94,7 @@ export function decodePluginUserSettingsHeader(
     ) {
       return headerLimitError("X-Plugin-User-Settings plugin id is too long");
     }
-    // Keep compatibility with the old decoder: malformed individual buckets
-    // are ignored rather than turning an otherwise valid request into an error.
+    // Ignore malformed individual buckets so valid settings can still apply.
     if (!bucket || typeof bucket !== "object" || Array.isArray(bucket))
       continue;
     const entries = Object.entries(bucket as Record<string, unknown>);

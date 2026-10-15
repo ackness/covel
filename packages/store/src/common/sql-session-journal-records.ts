@@ -11,10 +11,8 @@
  *
  * The two turn-message writers are now shared as well:
  *  - `appendTurnMessage` persists `compactedAtTurnId ?? null` on every backend
- *    via the {@link InsertValueBuilders.turnMessageInsert} builder. The legacy
- *    SQLite insert omitted the column entirely (relying on its nullable
- *    default), silently dropping a non-null `compactedAtTurnId` — a real
- *    data-loss divergence the shared builder fixes.
+ *    via the {@link InsertValueBuilders.turnMessageInsert} builder, retaining
+ *    compaction state on both backends.
  *  - `tagTurnMessagesCompacted` is an UPDATE, now modelled by the shared
  *    {@link SqlRunner.update} primitive, with the empty-`messageIds` early
  *    return unified across both backends.

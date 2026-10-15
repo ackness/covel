@@ -41,8 +41,8 @@ const FILTER_FROM_SLOT_COUNT = 6;
 
 /**
  * Pane that surfaces the `[covel.<slot>]` sections from llm.toml and lets the
- * user override each slot's preset and capability metadata. Legacy (non-
- * configured) environments fall back to a fixed slot list.
+ * user override each slot's preset and capability metadata. Unconfigured
+ * environments fall back to a fixed slot list.
  */
 export function LlmSlotsPane() {
   const { t, i18n } = useTranslation();

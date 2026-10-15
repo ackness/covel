@@ -107,6 +107,37 @@ describe("typed form rendering and input", () => {
         .checked,
     ).toBe(false);
   });
+  it.each([undefined, {}, { notes: "" }, { notes: null }])(
+    "keeps absent or empty submitted fields independent of live form state (%j)",
+    (submittedValues) => {
+      const spec = nestedToFlat(
+        messageToSpecDisabled(message, submittedValues)!,
+      );
+      render(
+        <JSONUIProvider
+          registry={covelRegistry}
+          initialState={{
+            form: { points: 4, ready: true, notes: "New draft" },
+          }}
+          handlers={{}}
+        >
+          <Renderer spec={spec} registry={covelRegistry} />
+        </JSONUIProvider>,
+      );
+      expect(
+        (screen.getByRole("spinbutton", { name: "Points" }) as HTMLInputElement)
+          .value,
+      ).toBe("");
+      expect(
+        (screen.getByRole("checkbox", { name: "Ready" }) as HTMLInputElement)
+          .checked,
+      ).toBe(false);
+      expect(
+        (screen.getByRole("textbox", { name: "Notes" }) as HTMLTextAreaElement)
+          .value,
+      ).toBe("");
+    },
+  );
 });
 
 it("submits untouched zero defaults and edited values with their original types", async () => {

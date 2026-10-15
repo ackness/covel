@@ -344,7 +344,7 @@ function parseMemoryUpdate(raw, validLabels) {
     );
   }
 
-  // Unknown labels remain forward compatible, but malformed known blocks and
+  // Unknown labels remain readable, but malformed known blocks and
   // envelopes with no recognized content cannot masquerade as a valid no-op.
   for (const [key, value] of Object.entries(obj)) {
     if (!validLabels.has(key)) continue;

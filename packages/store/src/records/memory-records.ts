@@ -2,7 +2,7 @@
  * Working-memory, world-data ledger, lorebook, summary, turn-message and
  * player-input record types.
  *
- * Split out of `../types.ts` by domain; re-exported there for compatibility.
+ * Split out of `../types.ts` by domain; re-exported there as the public entry point.
  */
 
 export interface WorldDataImportLedgerRecord {
@@ -46,7 +46,7 @@ export interface LorebookEntryRecord {
   readonly position: string; // LorebookPosition — keep stringly-typed at the store edge
   readonly insertionOrder: number;
   readonly enabled: boolean;
-  /** Free-form JSON for forward-compatible fields (atDepth, budgetCap, etc.). */
+  /** Free-form JSON for additional fields (atDepth, budgetCap, etc.). */
   readonly extra?: unknown;
   readonly createdAt: string;
   readonly updatedAt: string;

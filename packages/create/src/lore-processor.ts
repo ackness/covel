@@ -2,7 +2,7 @@
  * LLM world-generation output parsing.
  *
  * Splits the raw model response into `world.yaml`, `WORLD.md`, and an optional
- * portable text-package section. Legacy two-section responses remain valid.
+ * portable text-package section. The first two sections are required.
  */
 
 export function parseWorldOutput(

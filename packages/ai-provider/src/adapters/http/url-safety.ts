@@ -5,7 +5,7 @@ import { isPublicIpAddress } from "./ip-safety.js";
 const LOOPBACK_HOSTNAMES = new Set(["localhost", "127.0.0.1", "::1"]);
 
 const BLOCKED_HOSTNAMES = ["metadata.google.internal", "metadata.internal"];
-// Google exposes its OpenAI-compatible wire below /v1beta/openai.
+// Google exposes its OpenAI API wire below /v1beta/openai.
 const TRAILING_VERSION_RE = /\/(v\d[a-z0-9]*)(?:\/openai)?$/i;
 
 /**

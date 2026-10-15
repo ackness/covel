@@ -1,7 +1,7 @@
 /**
  * World record type and normalisers.
  *
- * Split out of `../types.ts` by domain; re-exported there for compatibility.
+ * Split out of `../types.ts` by domain; re-exported there as the public entry point.
  */
 
 import type { WorldDimensions } from "@covel/shared";

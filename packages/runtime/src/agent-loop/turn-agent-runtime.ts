@@ -127,8 +127,8 @@ export async function executeAgentRuntime({
 
   // Choose sync vs async build path based on whether the manifest
   // declares any `input.inject` entries of kind `plugin-data`. The async
-  // path resolves those against the store; the sync path is unchanged
-  // and handles all legacy runtime-output injects.
+  // path resolves those against the store; the sync path
+  // handles runtime-output injects without store reads.
   // Filter message history for every agent runtime: drop OTHER plugins'
   // structured tool-output JSON while keeping player/system messages,
   // narrative-like text, and the runtime's own previous outputs. Story

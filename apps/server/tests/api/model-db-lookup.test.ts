@@ -48,6 +48,18 @@ describe("model database lookup", () => {
     const raw = await rawResponse.json();
     expect(raw.capability.input).toEqual(["text", "image", "audio", "file"]);
     expect(raw.capability.features).toContain("web_search");
+    expect(raw.capability.pricing).toMatchObject({
+      inputPerMToken: expect.any(Number),
+      outputPerMToken: expect.any(Number),
+    });
+    for (const key of [
+      "inputPerMToken",
+      "cacheReadPerMToken",
+      "cacheWritePerMToken",
+      "outputPerMToken",
+    ]) {
+      expect(raw.capability).not.toHaveProperty(key);
+    }
     expect(raw.effectiveCapability).toBeUndefined();
 
     base.set("role", "text");

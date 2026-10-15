@@ -12,11 +12,11 @@
  * Only methods invoked by `session-context.ts`, `session-context-views.ts`,
  * `prompt-internals.ts`, and `compactor.ts` belong here. Adding a new store
  * call from inside `@covel/context` requires extending this interface and
- * re-running structural-compat checks against `DataStore`.
+ * re-running structural type checks against `DataStore`.
  *
  * Record types are declared locally as plain wire shapes (no `Date`, no DB
  * driver types — ISO timestamps as `string`). They are intentional supersets
- * compatible with the `@covel/store` records via structural typing.
+ * matching the `@covel/store` records via structural typing.
  */
 
 import type {

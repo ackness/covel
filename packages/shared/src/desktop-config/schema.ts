@@ -14,8 +14,7 @@ export type DesktopProxyMode = (typeof DESKTOP_PROXY_MODES)[number];
 
 const pathsSchema = z
   .object({
-    // Empty strings remain readable for compatibility and resolve to the
-    // default data root. Settings writes only persist non-empty absolute paths.
+    // Empty strings resolve to the default data root. Settings writes only persist non-empty absolute paths.
     data_root: z.string().optional(),
   })
   .passthrough();
@@ -39,8 +38,8 @@ const loggingSchema = z
  * Versioned schema for `~/.covel/config.toml`.
  *
  * Unknown root keys, sections, and keys inside framework-owned sections pass
- * through unchanged so newer versions and operator-authored metadata survive
- * an older binary's focused patch. A missing schema_version is legacy v1.
+ * through unchanged so a focused patch preserves operator-authored metadata.
+ * A missing schema_version defaults to 1.
  */
 export const desktopConfigSchema = z
   .object({

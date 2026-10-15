@@ -76,7 +76,7 @@ export interface RpcApprovalGate {
     sessionId: string,
     sessionScope: string,
   ): readonly RpcApprovalPending[];
-  /** Enumerate every incarnation for local cleanup/compatibility surfaces. */
+  /** Enumerate every incarnation for local cleanup. */
   listAllPendingForSession(sessionId: string): readonly RpcApprovalPending[];
   /** Test whether one pending request belongs to the supplied incarnation. */
   pendingMatchesScope(approvalId: string, sessionScope: string): boolean;

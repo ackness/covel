@@ -5,7 +5,7 @@ import type { ProviderConfig, TextGenerationParams } from "../types.js";
  *
  * OpenAI routes requests by a hash of the prompt's first tokens, and this key
  * is combined with it: requests with one key and one prefix reach the machine
- * that holds the cached prefix. The field is OpenAI's own. An OpenAI-compatible
+ * that holds the cached prefix. The field is OpenAI's own. An OpenAI API
  * server may reject a field it does not know, and a rejected request costs
  * more than a missed cache, so the key goes to api.openai.com only unless the
  * target's `providerOptions` set `promptCacheKey` (true for a relay that

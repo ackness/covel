@@ -16,8 +16,9 @@ vi.mock("@/stores/session-store.js", () => ({
 vi.mock("@/services/api.js", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/services/api.js")>()),
   lookupModelCapability: vi.fn(async () => ({
-    inputPerMToken: 2,
-    outputPerMToken: 4,
+    input: ["text"],
+    output: ["text"],
+    pricing: { inputPerMToken: 2, outputPerMToken: 4 },
   })),
 }));
 

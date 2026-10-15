@@ -45,7 +45,7 @@ export function buildWorldContextView(input: BuildViewInput): WorldContextView {
       ? (worldRecord.metadata as Record<string, unknown>)
       : undefined;
   if (metadata) {
-    // Surface remaining metadata keys through `extra` for forward-compat.
+    // Surface remaining metadata keys through the open `extra` record.
     for (const [k, v] of Object.entries(metadata)) {
       if (k === "dimensions" || k === WORLD_LOCALIZED_TEXT_KEY) continue;
       // Credits are the package author's own text, for cards only. Keeping

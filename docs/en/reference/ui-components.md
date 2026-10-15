@@ -214,6 +214,7 @@ Translate label values and string fallbacks in the plugin's `locales/<locale>.ya
 | `SubmitButton` | The main submit button, with a disabled state. | `label` _(I18nText)_, `disabled` (boolean); emits `click` with `on.click`                                                                                                                                                                                           |
 
 - A number field binds a number when it has content. A checkbox binds a boolean.
+- Submitted forms show only saved submission values; empty or missing fields stay empty and do not read the current form draft. Development sessions without saved submission values cannot recover those answers. Recreate the session and submit again to retain them.
 - Browser input limits only improve the interaction. They cannot replace server-side validation.
 - A form created with `create-form` keeps the field types and limits it declares when it is submitted. A plugin's validator can check rules that span several fields before the submission is written.
 

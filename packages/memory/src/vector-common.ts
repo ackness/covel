@@ -14,7 +14,7 @@
  * and handed in as this seam (mirrors how the LLM adapter is injected). Returns
  * one `Float32Array` per input string, in order. Implementations must enforce
  * context.modelId before issuing provider work; matching dimensions alone do
- * not make embeddings from different models compatible.
+ * not put embeddings from different models in the same vector space.
  */
 export type EmbedFn = (
   texts: readonly string[],

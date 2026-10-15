@@ -522,7 +522,7 @@ const RPC_TURN_MESSAGE_LIMIT = 200;
 
 /**
  * Build a scoped immediate-write store for all plugin action-level RPC handlers.
- * Method shapes stay compatible with `RpcHandlerStore`, while session/plugin
+ * Method shapes match `RpcHandlerStore`, while session/plugin
  * arguments are bound to the current request so handler code cannot reach a
  * different session or plugin namespace by supplying alternate ids.
  */

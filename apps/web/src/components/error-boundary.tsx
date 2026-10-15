@@ -20,7 +20,7 @@ const copyToClipboard = async (text: string): Promise<void> => {
       await navigator.clipboard.writeText(text);
       return;
     } catch {
-      // fall through to legacy path
+      // Try document copying when clipboard permissions reject the write.
     }
   }
   const ta = document.createElement("textarea");

@@ -139,7 +139,7 @@ export function readOpenAiChatStreamToolCallDeltas(
 }
 
 /**
- * The tool calls of a non-streamed reply. Some compatible gateways leave `id`
+ * The tool calls of a non-streamed reply. Some API gateways leave `id`
  * out; such a call takes `fallbackId` of its position, as the streamed reader
  * gives it.
  */

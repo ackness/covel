@@ -384,7 +384,7 @@ function createUpdateCharacterTool(
         ...(context.upstreamProposals ?? []),
         ...(context.pendingProposals ?? []),
       ]);
-      // Validate the supplied patch, so correcting one legacy field does not
+      // Validate the supplied patch, so correcting one malformed field does not
       // require rewriting unrelated attributes that were already malformed.
       if (params.fields !== undefined)
         assertCharacterFields(params.fields, schema);

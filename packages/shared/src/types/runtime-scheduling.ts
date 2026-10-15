@@ -229,7 +229,7 @@ export interface NormalizedRuntimeSpec {
   /**
    * Which spec fields the normalizer derived rather than read verbatim
    * (diagnostics) — e.g. `trigger:default-auto` when no trigger is declared.
-   * Every entry names a live normalization; legacy-field folding is gone.
+   * Every entry names a normalization of the current contract.
    */
   readonly provenance: { readonly derivedFrom: readonly string[] };
 }

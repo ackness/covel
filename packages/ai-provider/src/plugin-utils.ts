@@ -26,9 +26,8 @@ import type { SpeechWire, TranscriptionWire } from "./speech/types.js";
 import type { TextWire } from "./text/types.js";
 
 /**
- * Shape of a plugin's media-wire registrations — what a wires module
- * default-exports (legacy `wires` frontmatter) and what
- * `PluginAPI.registerWires()` accepts (unified `entry` path). Each wire is
+ * Shape of the media-wire registrations `PluginAPI.registerWires()` accepts
+ * from the plugin's `entry` module. Each wire is
  * registered under the `<pluginId>/<wireId>` namespace.
  */
 export interface WireModuleShape {

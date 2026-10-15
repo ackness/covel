@@ -272,9 +272,8 @@ export function createSseEventHandler(
       deps.lastBackfilledTurnIdRef.current = turnId;
     }
 
-    // Compat boundary: rollout can deliver the new event before the web app's
-    // generated CovelEvent union is upgraded. Handle the additive wire value
-    // explicitly, then keep exhaustive checking for the remaining vocabulary.
+    // Deferred work has its own step builder. Handle it here, then keep
+    // exhaustive checking for the remaining event vocabulary.
     if (envelope.type === "runtime.deferred") {
       const step = buildDeferredExecutionStep(
         payload,

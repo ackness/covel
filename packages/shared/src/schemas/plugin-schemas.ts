@@ -293,9 +293,8 @@ export const outputKindSchema = z.enum(["story", "system"]);
 
 const outputConfigSchema = z
   .object({
-    // Compatibility: output schema declarations historically allowed any
-    // string and the loader enforced containment. Keep that surface while
-    // resolving known public schema URIs before path handling.
+    // The loader resolves public schema URIs and checks path containment.
+    // Both forms use the same non-empty string declaration.
     schema: z.string().min(1).optional(),
     recordAs: z.string().optional(),
   })

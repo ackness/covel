@@ -35,8 +35,7 @@ export type MediaRefSchema = z.infer<typeof mediaRefSchema>;
  * Distinct from `MediaRef` because callers (e.g. the `/api/media/:id` route)
  * need the owner identifiers to perform per-session authorisation BEFORE
  * dereferencing the bytes. Owner fields are nullable: assets uploaded before
- * `recordOwnership()` runs (legacy, or runtime contexts that don't yet thread
- * a sessionId) will appear with `ownerSessionId: null`.
+ * `recordOwnership()` runs appear with `ownerSessionId: null`.
  */
 export interface MediaAssetLookup {
   readonly id: string;

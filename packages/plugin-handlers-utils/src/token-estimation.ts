@@ -1,6 +1,6 @@
 /**
  * CJK ranges: radicals/kana/ideographs (2E80–9FFF), Hangul syllables
- * (AC00–D7AF), compatibility ideographs (F900–FAFF), fullwidth forms
+ * (AC00–D7AF), the CJK block F900–FAFF, fullwidth forms
  * (FF00–FFEF).
  */
 const CJK_RE = /[⺀-鿿가-힯豈-﫿＀-￯]/g;

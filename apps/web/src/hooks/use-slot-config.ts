@@ -26,7 +26,7 @@ export interface ResolvedSlot {
   isAvailable?: boolean;
   /** A matching client key or server credential exists; not a connectivity probe. */
   hasCredentials?: boolean;
-  /** Capability tag used for runtime binding compatibility. */
+  /** Capability tag used for runtime binding selection. */
   tag: string;
   /** Server-configured model for this slot (from llm.toml). */
   serverModel?: string;

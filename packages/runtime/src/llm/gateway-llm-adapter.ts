@@ -477,8 +477,8 @@ export function createGatewayAdapter(
 }
 
 /**
- * Keep the JSON Schema visible to every gateway-backed provider. Some OpenAI-
- * compatible endpoints only support JSON mode rather than native strict
+ * Keep the JSON Schema visible to every gateway-backed provider. Some endpoints using the
+ * OpenAI API only support JSON mode rather than native strict
  * schemas; the provider wire hint guarantees JSON while this instruction
  * supplies the exact allowed fields that the runtime validates afterward.
  * It is appended to the system prompt, so it is in the instruction language

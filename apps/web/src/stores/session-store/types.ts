@@ -87,7 +87,7 @@ export interface ExecutionStep {
   backgroundTurnId?: string;
   /** True for a detached runtime, including after it reaches a terminal state. */
   detached?: boolean;
-  /** Latest kernel/legacy job state used for accessible progress text. */
+  /** Latest kernel job state used for accessible progress text. */
   jobState?: string;
   /** Durable parent control state; plugin sub-job sequences are independent. */
   durableJobStatus?: { state: string; sequence?: number };
@@ -115,7 +115,7 @@ export interface PendingInteractionDraft {
    * StreamMessage id of the block that produced this draft. When the player
    * confirms drafts, the framework stamps the block as submitted and records
    * the player's chosen labels — so re-rendering the disabled block can show
-   * the historical selection. Optional for backward compatibility with drafts
+   * the historical selection. Optional for drafts
    * that originate outside a block (e.g. composer-only).
    */
   sourceBlockId?: string;
@@ -153,7 +153,7 @@ export interface SessionState {
   pluginLoadErrors: api.PluginLoadError[];
   /** Summaries; a screen that needs the lore or dimensions reads `useWorldRecord`. */
   worlds: api.WorldSummary[];
-  /** Server-side llm.toml config (null = legacy / unconfigured). */
+  /** Server-side llm.toml config (null = not loaded). */
   llmConfig: api.LlmConfigResponse | null;
   booted: boolean;
   bootError: string | null;

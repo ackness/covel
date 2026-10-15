@@ -1,7 +1,7 @@
 /**
  * Plugin data and trace event record types.
  *
- * Split out of `../types.ts` by domain; re-exported there for compatibility.
+ * Split out of `../types.ts` by domain; re-exported there as the public entry point.
  */
 
 export interface PluginDataRecord {

@@ -57,7 +57,7 @@ export interface SubscriptionEventCursor {
 
 /**
  * Parse a `${epoch}:${seq}` wire event id. Returns undefined for malformed or
- * legacy plain-number ids — the server answers those with a `system.reset`
+ * plain-number ids — the server answers those with a `system.reset`
  * frame, so callers can treat "unparseable" as "cursor is stale".
  */
 export function parseSubscriptionEventId(

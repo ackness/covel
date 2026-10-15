@@ -28,10 +28,11 @@ export async function preparePluginReload(
     for (const entry of runtimeDirs) {
       if (!entry.isDirectory()) continue;
       const directory = path.join(runtimes, entry.name);
-      const legacy = await fs
+      const misnamedManifest = await fs
         .stat(path.join(directory, "PLUGIN.md"))
         .catch(() => undefined);
-      if (legacy) throw new Error("Runtime manifests must be named RUNTIME.md");
+      if (misnamedManifest)
+        throw new Error("Runtime manifests must be named RUNTIME.md");
       const manifest = path.join(directory, "RUNTIME.md");
       if ((await fs.stat(manifest).catch(() => undefined))?.isFile())
         pluginMdPaths.push(manifest);

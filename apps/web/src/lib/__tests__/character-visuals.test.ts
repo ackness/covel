@@ -10,7 +10,7 @@ const ref = (id: string) => ({ id, mime: "image/png", size: 100 });
 
 const presence: PresenceRecord = {
   characterId: "npc-rin",
-  sprite: ref("legacy"),
+  sprite: ref("base"),
   visuals: {
     defaultVariant: "uniform-neutral",
     variants: [
@@ -113,7 +113,7 @@ describe("resolveCharacterVisual", () => {
     ).toMatchObject({ ref: ref("uniform-neutral") });
   });
 
-  it("keeps legacy sprite/avatar records working", () => {
+  it("uses base sprite/avatar images without a variant catalog", () => {
     expect(resolveCharacterVisual({ sprite: ref("sprite") })).toEqual({
       ref: ref("sprite"),
     });
@@ -133,7 +133,7 @@ describe("resolveCharacterVisual", () => {
 });
 
 describe("collectCharacterVisualRefs", () => {
-  it("deduplicates legacy and variant refs", () => {
+  it("deduplicates base and variant refs", () => {
     const duplicate = ref("same");
     expect(
       collectCharacterVisualRefs({

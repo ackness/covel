@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
  * Card — default renders as a quiet "section" frame: hairline border on
  * top + bottom, transparent background, no shadow. Acts as a structural
  * separator rather than a glossy card. Pass `className="ui-frame"` for the
- * legacy enclosed look.
+ * enclosed card look.
  */
 function Card({ className, ...props }: React.ComponentProps<"div">) {
   return (

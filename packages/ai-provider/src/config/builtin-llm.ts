@@ -3,7 +3,7 @@
  *
  * Without settings it is one DeepSeek `story` slot, so a fresh install boots
  * and every runtime resolves to it through the gateway's first-slot fallback.
- * `DEFAULT_BASE_URL` points that slot at any OpenAI-compatible endpoint
+ * `DEFAULT_BASE_URL` points that slot at any OpenAI API endpoint
  * instead: the provider is then `default`, whose key is read from
  * `DEFAULT_API_KEY` like any other `<PROVIDER>_API_KEY`, and
  * `DEFAULT_MODEL` names the model. No key lives in this text.

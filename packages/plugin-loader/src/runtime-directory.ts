@@ -3,12 +3,12 @@ export function runtimeDirectoryDiagnostics(
   directory: string,
   files: readonly string[],
 ): { error?: string; warning?: string } {
-  const legacy = files.find((file) =>
+  const misnamedManifest = files.find((file) =>
     /^PLUGIN(?:\.[a-zA-Z0-9-]+)?\.md$/.test(file),
   );
-  if (legacy)
+  if (misnamedManifest)
     return {
-      error: `${directory}/${legacy}: runtime manifests must be named RUNTIME.md`,
+      error: `${directory}/${misnamedManifest}: runtime manifests must be named RUNTIME.md`,
     };
   if (!files.includes("RUNTIME.md"))
     return {

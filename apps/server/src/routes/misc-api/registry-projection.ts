@@ -17,32 +17,14 @@ export function pluginRuntimeDirectory(
   entry: PluginRegistryEntry,
   runtimeName: string,
 ): string | undefined {
-  if (entry.packageManifest?.manifest.name === runtimeName)
-    return entry.rootPath;
-  if (entry.runtimeManifestPaths) {
-    const documentPath = entry.runtimeManifestPaths[runtimeName];
-    return documentPath ? path.dirname(documentPath) : undefined;
-  }
-  // Compatibility for manually constructed registry entries without discovery metadata.
-  if (!entry.rootPath) return undefined;
-  if (runtimeName === entry.id) return entry.rootPath;
-  const prefix = `${entry.id}/`;
-  const localName = runtimeName.startsWith(prefix)
-    ? runtimeName.slice(prefix.length)
-    : runtimeName;
-  return path.join(entry.rootPath, "runtimes", localName);
+  const documentPath = pluginRuntimeDocumentPath(entry, runtimeName);
+  return documentPath ? path.dirname(documentPath) : undefined;
 }
 
-/** PLUGIN.md path represented by a registry runtime record. */
+/** Discovered PLUGIN.md or RUNTIME.md path represented by a registry record. */
 export function pluginRuntimeDocumentPath(
   entry: PluginRegistryEntry,
   runtimeName: string,
 ): string | undefined {
-  if (entry.runtimeManifestPaths) {
-    return entry.runtimeManifestPaths[runtimeName];
-  }
-  const runtimeDirectory = pluginRuntimeDirectory(entry, runtimeName);
-  return runtimeDirectory
-    ? path.join(runtimeDirectory, "PLUGIN.md")
-    : undefined;
+  return entry.runtimeManifestPaths?.[runtimeName];
 }

@@ -135,7 +135,7 @@ export interface LorebookUpsertEntry {
   readonly insertionOrder?: number; // defaults to 100
   readonly enabled?: boolean; // defaults to true
   readonly keys?: readonly string[];
-  /** Free-form forward-compatible fields (atDepth, budgetCap, …). */
+  /** Additional free-form fields (atDepth, budgetCap, …). */
   readonly extra?: unknown;
 }
 

@@ -310,7 +310,7 @@ The variables below are also in `registry.ts`. For variables whose use is alread
 | `COVEL_USER_TRANSLATIONS_DIR` | — | Folder of translations for plugins outside the package |
 | `COVEL_DESKTOP_REST` | `false` | Turns on the desktop config REST interface |
 | `COVEL_DESKTOP_REST_TOKEN` | — | Bearer token for the desktop config write interface. It is also the operator credential for the hosted tier |
-| `COVEL_SYSTEM_PROXY_URL` | — | Compatibility entry for older desktop programs that cannot resolve a dynamic system proxy |
+| `COVEL_SYSTEM_PROXY_URL` | — | Static system proxy for hosts without dynamic system-proxy IPC |
 | `COVEL_DESKTOP_SYSTEM_PROXY_IPC` | `false` | Internal flag injected by Electron. It means the backend can ask the system proxy one URL at a time |
 | `COVEL_LOGS_DIR` | — | Log folder of the desktop app (shown on the settings page) |
 | `COVEL_LOG_MAX_SIZE_MB` / `COVEL_LOG_MAX_FILES` | `10` / `10` | Log rotation for the desktop app: the size limit of one file, and how many files are kept |
@@ -460,7 +460,7 @@ This section explains, one by one, the variables whose behavior is more detailed
 
 - When the desktop app selects the `system` proxy, the backend asks Chromium's system proxy through IPC for each target URL. It then tries the connection in the proxy order that the system returns.
 - Electron injects the internal flag `COVEL_DESKTOP_SYSTEM_PROXY_IPC=1`. So ordinary Node IPC or cluster processes do not use this protocol by mistake.
-- `COVEL_SYSTEM_PROXY_URL` is only a compatibility entry for older desktop programs that do not support dynamic IPC.
+- `COVEL_SYSTEM_PROXY_URL` supplies a static system proxy address for hosts without dynamic IPC; Electron resolves the proxy for each request URL over IPC.
 - The proxy is used for the framework's own provider requests, model database updates, and GitHub plugin resolution and download. It does not apply to `fetchWithRetry` of third-party plugins.
 
 ### Model calls

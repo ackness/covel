@@ -20,7 +20,7 @@ import type { ReasoningEffort } from "./reasoning-effort.js";
  * All wire protocols the framework knows how to speak, from the descriptor
  * table in `@covel/shared` (`PROVIDER_PROTOCOL_DESCRIPTORS`).
  *
- * OpenAI-compatible providers (DeepSeek, Qwen/DashScope, Groq, …) are not
+ * OpenAI API providers (DeepSeek, Qwen/DashScope, Groq, …) are not
  * separate protocols — they speak `openai-chat-v1` and register with zero
  * code via `llm.toml` `[covel.<slot>]`. Only a genuinely new *wire* shape
  * (e.g. Bedrock SigV4, Cohere) warrants a new protocol: a descriptor there
@@ -265,7 +265,7 @@ export interface PresetConfig {
   providerRequestMetadata?: Record<string, unknown>;
   /** Multimodal capability descriptor. Auto-inferred or manually set. */
   capability?: ModelCapability;
-  /** Capability tag for slot compatibility. */
+  /** Capability tag for slot selection. */
   tag?: string;
   /**
    * Embeddings request body format. Carried from llm.toml `embeddingFormat`
@@ -290,7 +290,7 @@ export interface PresetConfig {
 
 // ── Tool Calling ──────────────────────────────────────────────────
 
-/** OpenAI-compatible function tool definition. */
+/** OpenAI API function tool definition. */
 export interface ToolDefinition {
   type: "function";
   function: {
@@ -593,7 +593,7 @@ export type EmbeddingFormat = "openai" | "nemotron-multimodal";
 export interface ModelSlotConfig {
   slotId: string;
   presetId: string;
-  /** Capability tag — determines fallback compatibility for this slot. */
+  /** Capability tag — selects fallbacks with the same tag for this slot. */
   tag: SlotTag;
   parameterOverrides?: ModelParameterOverrides;
 }

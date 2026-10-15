@@ -77,7 +77,7 @@ function localeScript(locale: string | undefined): string | undefined {
  * True when two canonicalizable locales use the same primary language and
  * likely script. Regions may differ, but script boundaries never collapse
  * (for example `zh-Hant` is incompatible with bare `zh`, which maximizes to
- * Hans, while `en-GB` remains compatible with bare `en`).
+ * Hans, while `en-GB` matches bare `en`).
  */
 export function localesShareLanguageAndScript(
   first: string | undefined,
@@ -94,8 +94,8 @@ export function localesShareLanguageAndScript(
 
 /**
  * Locale tags to try for a localized resource: exact canonical tag followed
- * by the primary-language short key only when its inferred script is
- * compatible. Invalid/path-like input yields no candidates.
+ * by the primary-language short key only when its inferred script
+ * matches. Invalid/path-like input yields no candidates.
  */
 export function localeLookupCandidates(
   locale: string | undefined,

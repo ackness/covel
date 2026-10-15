@@ -1,7 +1,7 @@
 import { getSourceTurnId } from "./execution-projection.js";
 import type { ExecutionStep, StreamMessage } from "./types.js";
 
-/** Compatibility for message stamps committed before retry anchors were fixed. */
+/** Project committed non-story retry messages onto their source story turn. */
 export function pluginMessageTurnResolver(
   steps: readonly ExecutionStep[],
   messages: readonly StreamMessage[],

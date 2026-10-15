@@ -1346,6 +1346,7 @@ fork 和社区插件的授权：
 - `model` 被当作不透明的 ID，服务器不会改写你实际请求用的模型 ID。
 - `matchedModelId`、`matchKind` 和 `candidates` 只说明能力资料是怎么匹配上的。
 - `source` 是 `known`、`model-database` 或 `protocol-default`。
+- 价格字段只在 `capability.pricing` 中返回，如 `inputPerMToken`、`outputPerMToken`；`capability` 不再重复这些字段。调用方需要改读嵌套字段，不需要重建保存的数据。
 - `pricingKind=reference` 表示这是通过聚合服务商匹配到的上游模型参考价，实际账单可能不同。
 - `reasoning` 返回按上游模型家族识别出的思考强度档位、默认值和家族名称，供生成参数界面使用。
 
@@ -3710,6 +3711,7 @@ runtime 报告失败时，它的原始错误保留在 `result.runtimeResults` �
 - `disabledRuntimes`：每项是 `{ sourcePath, message, outputContract? }`，对应加载时去掉的 runtime；它不计入 `runtimeCount`、`runtimes` 或包的输出契约。
 - `ignoredFields`：每项是 `{ sourcePath, field, message }`，对应宿主忽略的未知字段。两组诊断没有项目时不返回。`sourcePath` 相对于插件根目录（例如 `runtimes/note/RUNTIME.md`）；`message` 中的文件路径也不含服务器安装目录。它们不把整个包标成 `hostState: "error"`，重载后反映当前注册的一版。
 - 插件详情、会话插件列表和 `GET /api/plugin-flows` 的 `plugins[]` 返回相同的诊断字段；流程的 `steps[]` 只包含保留的 runtime。
+- 流程步骤的 `docPath` 来自发现插件时记录的 `PLUGIN.md` 或 `RUNTIME.md` 路径。注册表没有该路径时返回空字符串，不根据 runtime ID 推测文件位置。
 - `eventTopics`：会话解析插件集合时用它保证一个 topic 只有一个声明者。
 - `languages.text`：插件有文字的语言，包括标签、界面文字、代码里的文字，以及翻译目录里的译文。`languages.instructions`：有指令（prompt 正文）的语言。两者都至少包含 `en`。
 - `author.about` 和链接的 `label` 可能是按语言分的 map。

@@ -1346,6 +1346,7 @@ In the table below, "hosted deployment" means `DEPLOYMENT_TIER` is `demo` or `co
 - `model` is treated as an opaque ID. The server does not rewrite the model ID you actually request.
 - `matchedModelId`, `matchKind`, and `candidates` only explain how the capability data was matched.
 - `source` is `known`, `model-database`, or `protocol-default`.
+- Prices such as `inputPerMToken` and `outputPerMToken` appear only under `capability.pricing`; `capability` no longer duplicates them. Callers must read the nested fields. Saved data does not need to be recreated.
 - `pricingKind=reference` means the price is a reference price for an upstream model, matched through an aggregating provider. The actual bill may differ.
 - `reasoning` returns the reasoning effort levels, the default value, and the family name, recognized from the upstream model family. The generation-parameter screen uses them.
 
@@ -3710,6 +3711,7 @@ Field notes:
 - `disabledRuntimes`: each item is `{ sourcePath, message, outputContract? }` for a runtime left out at load. It does not count toward `runtimeCount`, `runtimes`, or the package’s output contracts.
 - `ignoredFields`: each item is `{ sourcePath, field, message }` for an unknown field the host ignored. Both arrays are omitted when empty. `sourcePath` is relative to the plugin root (for example `runtimes/note/RUNTIME.md`); file paths in `message` also exclude the server’s installation directory. These warnings do not mark the whole package as `hostState: "error"`. After reload, they describe the currently registered version.
 - Plugin details, session plugin lists, and `plugins[]` in `GET /api/plugin-flows` return the same diagnostic fields. Flow `steps[]` only contains retained runtimes.
+- A flow step's `docPath` comes from the `PLUGIN.md` or `RUNTIME.md` path recorded during discovery. Without that registry metadata it is an empty string; the server does not infer file locations from runtime IDs.
 - `eventTopics`: when a session resolves its plugin set, it uses this to make sure a topic has only one declaring plugin.
 - `languages.text`: the languages the plugin has text in. This covers labels, interface text, text in code, and translations in the translation catalog. `languages.instructions`: the languages it has instructions (prompt body) in. Both always include at least `en`.
 - `author.about` and the `label` of links can be maps split by language.

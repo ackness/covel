@@ -10,7 +10,7 @@ function header(value: unknown): string {
 }
 
 describe("decodePluginUserSettingsHeader", () => {
-  it("keeps missing and malformed headers compatible as no settings", () => {
+  it("treats missing and malformed headers as no settings", () => {
     expect(decodePluginUserSettingsHeader(undefined)).toEqual({
       ok: true,
       settings: undefined,
