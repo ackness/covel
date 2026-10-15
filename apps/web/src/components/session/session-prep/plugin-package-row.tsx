@@ -153,7 +153,9 @@ export function PluginPackageRow({
             {reason}
           </Badge>
         )}
-        {(pkg.tags ?? []).slice(0, 4).map((tag) => (
+        {/* Every tag: the written ones come first and would push the
+            derived ones (model calls, panels) out of a shorter list. */}
+        {(pkg.tags ?? []).map((tag) => (
           <Badge
             key={tag}
             variant="outline"
