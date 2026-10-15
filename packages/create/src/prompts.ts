@@ -105,6 +105,11 @@ function formatContractBrief(
     ...contracts.map((item) =>
       [
         `- CREATE contract "${item.contract}"${item.title ? ` (${item.title})` : ""}.${item.hint ? ` ${item.hint}` : ""}`,
+        ...(item.characterField !== undefined
+          ? [
+              `  One record for each character: its \`key\` is the character's \`id\`, and its \`value\` has no \`id\`. The record is stored in the character's record as \`${item.characterField}\`.`,
+            ]
+          : []),
         `  Record schema: ${JSON.stringify(item.schema)}`,
         ...(item.example !== undefined
           ? [`  Example value: ${JSON.stringify(item.example)}`]

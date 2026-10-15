@@ -29,14 +29,14 @@ World Model 是一局游戏里由内核保管的那部分世界数据：世界�
 - 角色的 `fields` 按当前的 schema 校验。
 - 修改 schema 的 proposal 是 `character.schema.set`，内容是 `{types, attributes}`，版本由内核递增。
 
-世界文件、角色初值和导入的例子见[世界数据](./world-data.md#世界角色-schema)与[领域角色](./world-data.md#领域角色与插件角色卡)。
+世界文件、角色初值和导入的例子见[世界数据](./world-data.md#世界角色-schema)与[角色文件](./world-data.md#一个世界一份角色文件)。
 
 几条边界：
 
 - 角色的创建和更新只通过角色 proposal 和角色工具。
 - 角色面板读会话的 `session.characters`，属性的显示读会话的 `characterSchema`。
-- 插件的角色卡可以保留自己的原始内容，但内核的角色记录不会复制到任何插件的数据里。
-- 角色卡里的 `persona`、`scenarioDefaults` 不会自动变成角色的 `fields`。需要时请明确提供 `fields`。schema 没有声明的字段不会因此被拒绝。
+- 世界的角色记录可以带插件的数据（例如扮演说明），写在插件声明的字段里。导入时内核把它交给接收的插件，键是角色的 `id`；它不会变成角色的 `fields`，也不留在角色记录里。
+- 内核的角色记录不会复制到任何插件的数据里。
 - 维度的结构不会自动变成角色属性。角色、背包、好感和时间各由自己的插件维护。
 
 AI 生成世界时的校验：
@@ -92,7 +92,7 @@ interface CharacterRecord {
 
 **别名从哪里来：**
 
-- 世界作者在 `characters/characters.json` 里写 `aliases`（见[领域角色](./world-data.md#领域角色与插件角色卡)）。语言文件可以整列替换。
+- 世界作者在 `characters/characters.json` 里写 `aliases`（见[角色文件](./world-data.md#一个世界一份角色文件)）。语言文件可以整列替换。
 - 故事揭示新名字时，模型通过 `update-character` / `sync-characters.updates[]` 的 `aliases` 参数追加。`create-character` 也接受 `aliases`。
 - `character.upsert` proposal 的 `aliases`：
   - 带 `expectedVersion` 时，追加到已有别名之后。同一回合两次追加都保留，和 `fields` 的合并方式一样。

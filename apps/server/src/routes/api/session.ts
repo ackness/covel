@@ -2,7 +2,6 @@ import {
   invalidateSessionEvents,
   sessionEventBus,
 } from "./session/session-events.js";
-import { importWorldEmbeddedCharacters } from "./session/world-characters.js";
 import { withSettledSessionLock } from "./plugin-rpc/settled-request.js";
 import { characterSchemaSchema, sessionContentLocale } from "@covel/shared";
 /**
@@ -380,8 +379,8 @@ sessionRoutes.post("/", async (c) => {
   // acquire the session lock without deadlocking.
   let creationCommitted = false;
   const commitCreation = async () => {
-    // Scoped transaction: createSession + world-data import + blueprint
-    // fallback commit atomically. Writes flow through the tx-bound view (`tx`),
+    // Scoped transaction: createSession and the world-data import (the
+    // characters among it) commit atomically. Writes flow through the tx-bound view (`tx`),
     // so a mid-import failure auto-rolls-back the session row — and on
     // PostgreSQL the import runs on an isolated connection instead of
     // serializing the store.
@@ -419,7 +418,6 @@ sessionRoutes.post("/", async (c) => {
           (preparedWorldData.imported && preparedWorldData.portableOnly)
         ) {
           await importWorldEmbeddedLorebook(tx, id, rawWorldId, now);
-          await importWorldEmbeddedCharacters(tx, id, rawWorldId, now);
         }
         return importedWorldData.mediaRefs;
       });

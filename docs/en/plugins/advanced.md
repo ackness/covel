@@ -202,7 +202,7 @@ World authors only need to put files in the agreed locations. When they need to 
 
 To turn other world content into your own data, use `contributes.worldProjections`. Its output must match an importable data namespace. For the full rules, see the [World data reference](../reference/world-data.md). For the fields, see the [plugin manifest field table](../reference/schema/plugin-manifest.md).
 
-Business formats such as character cards belong to the plugin that handles them. Covel handles only the general "source to target" flow and the characters themselves. It does not wrap data for any particular plugin.
+Business formats such as character cards belong to the plugin that handles them. Covel handles only the general "source to target" flow and the characters themselves. It does not wrap data for any particular plugin. A plugin's data about a character can be written in the world's character record: declare `authoring.characterField` on the receiving data space, and Covel gives you that field of the record, keyed by the character ID. See [one character file per world](../reference/world-data.md#one-character-file-per-world).
 
 ## Services and extensions
 

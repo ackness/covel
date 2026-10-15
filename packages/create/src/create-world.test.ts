@@ -363,12 +363,13 @@ describe("createWorld", () => {
     },
   );
 
-  it("accepts a repaired set and preserves blueprint data without copying it into fields", async () => {
+  it("accepts a repaired set and keeps a character to the fields of a character record", async () => {
     const yaml =
       WORLD_YAML +
       `characterSchema:\n  attributes:\n    - { id: persona, name: Persona, type: string, category: bio }\n`;
     const invalid = `characters:\n  - { id: keeper, name: Keeper, fields: { persona: { voice: quiet } } }`;
-    const repaired = `characters:\n  - id: keeper\n    name: Keeper\n    type: npc\n    attributes: { undeclared: retained }\n    persona: { voice: quiet }\n    scenarioDefaults: { location: tower }`;
+    // A field no plugin names for its data is not part of the record.
+    const repaired = `characters:\n  - id: keeper\n    name: Keeper\n    type: npc\n    fields: { undeclared: retained }\n    persona: { voice: quiet }\n    scenarioDefaults: { location: tower }`;
     let characterCalls = 0;
     const result = await createWorld({
       llm: {
@@ -387,19 +388,156 @@ describe("createWorld", () => {
     });
     if (!result.success) throw new Error(result.errors.join("; "));
     expect(characterCalls).toBe(2);
-    expect(result.packageContent.characters).toHaveLength(1);
-    expect(result.packageContent.characters[0]).toMatchObject({
-      persona: { voice: "quiet" },
-      scenarioDefaults: { location: "tower" },
-      fields: { undeclared: "retained" },
-      instantiate: { fields: { undeclared: "retained" } },
+    expect(result.packageContent.characters).toEqual([
+      {
+        id: "keeper",
+        name: "Keeper",
+        type: "npc",
+        fields: { undeclared: "retained" },
+      },
+    ]);
+  });
+
+  describe("a contract whose records live in character records", () => {
+    const notes = {
+      contract: "character.blueprints@1",
+      schema: { type: "object" },
+      validate: (value: unknown) =>
+        typeof value === "object" &&
+        value !== null &&
+        !("name" in value) &&
+        typeof (value as { persona?: { voice?: unknown } }).persona?.voice ===
+          "string",
+      title: "Roleplay notes",
+      characterField: "blueprint",
+      pluginId: "character-blueprint",
+    };
+    const cast = `characters:\n  - { id: keeper, name: Keeper, type: npc, description: Keeps the bell. }\n  - { id: courier, name: Courier, type: npc }`;
+    const contractAnswer = (records: string) => `contractData:\n${records}`;
+    const generate = (answers: {
+      cast?: string;
+      notes: string[];
+      content?: ("characters" | "lorebook")[];
+    }) => {
+      const requests: string[] = [];
+      let noteCalls = 0;
+      return {
+        requests,
+        result: createWorld({
+          llm: {
+            async generate(request) {
+              const asked = String(request.messages[1]?.content);
+              requests.push(asked);
+              const pack = asked.includes(
+                "Write one part of the world package now: the `characters`",
+              )
+                ? (answers.cast ?? cast)
+                : asked.includes("records of contract")
+                  ? (answers.notes[noteCalls++] ?? "")
+                  : "";
+              return new FixedLlm(
+                `===WORLD_YAML===\n${WORLD_YAML}\n===WORLD_MD===\n${WORLD_LORE}\n===WORLD_PACKAGE_YAML===\n${pack}\n===END===`,
+              ).generate();
+            },
+          },
+          concept: "Synthetic world",
+          brief: {
+            content: answers.content ?? ["characters"],
+            contracts: [notes.contract],
+          },
+          dataContracts: [notes],
+        }),
+      };
+    };
+
+    it("writes each record into the record of its character, in one character file", async () => {
+      const { result: pending, requests } = generate({
+        notes: [
+          contractAnswer(
+            `  - contract: character.blueprints@1\n    key: keeper\n    value: { persona: { voice: Slow and exact. } }`,
+          ),
+        ],
+      });
+      const result = await pending;
+      if (!result.success) throw new Error(result.errors.join("; "));
+      // The model is told where the record goes and what names it.
+      expect(requests.join("\n")).toContain(
+        "one for each character, with `key` set to the character's `id`",
+      );
+      expect(result.packageContent.contractData).toEqual([]);
+      expect(result.packageContent.characters).toEqual([
+        {
+          id: "keeper",
+          name: "Keeper",
+          type: "npc",
+          description: "Keeps the bell.",
+          blueprint: { persona: { voice: "Slow and exact." } },
+        },
+        { id: "courier", name: "Courier", type: "npc" },
+      ]);
+      expect(result.manifest).toMatchObject({
+        pluginPolicy: { plus: ["character-blueprint"] },
+      });
+
+      // One character file; no file of the plugin's and no descriptor.
+      const written = await writeWorldPackage(tmp, result, {
+        dataContracts: [notes],
+      });
+      expect(written.sort()).toEqual([
+        "test-world/WORLD.md",
+        "test-world/characters/characters.json",
+        "test-world/data/dimensions.yaml",
+        "test-world/world.yaml",
+      ]);
+      expect(
+        JSON.parse(
+          await readFile(
+            path.join(tmp, result.id, "characters/characters.json"),
+            "utf8",
+          ),
+        ),
+      ).toEqual(result.packageContent.characters);
     });
-    expect(result.packageContent.characters[0]?.fields).not.toHaveProperty(
-      "persona",
-    );
-    expect(result.packageContent.characters[0]?.fields).not.toHaveProperty(
-      "scenarioDefaults",
-    );
+
+    it("asks again for a record whose key names no character or that repeats the character", async () => {
+      const { result: pending } = generate({
+        notes: [
+          contractAnswer(
+            `  - contract: character.blueprints@1\n    key: stranger\n    value: { persona: { voice: Loud. } }`,
+          ),
+          contractAnswer(
+            `  - contract: character.blueprints@1\n    key: keeper\n    value: { name: Keeper, persona: { voice: Loud. } }`,
+          ),
+          contractAnswer(
+            `  - contract: character.blueprints@1\n    key: courier\n    value: { persona: { voice: Quick. } }`,
+          ),
+        ],
+      });
+      const result = await pending;
+      if (!result.success) throw new Error(result.errors.join("; "));
+      expect(result.packageContent.characters[1]).toMatchObject({
+        id: "courier",
+        blueprint: { persona: { voice: "Quick." } },
+      });
+      expect(result.packageContent.characters[0]).not.toHaveProperty(
+        "blueprint",
+      );
+    });
+
+    it("does not ask for the records of a world without characters", async () => {
+      const { result: pending, requests } = generate({
+        notes: [],
+        content: ["lorebook"],
+      });
+      const result = await pending;
+      if (!result.success) throw new Error(result.errors.join("; "));
+      expect(
+        requests.some((asked) => asked.includes("records of contract")),
+      ).toBe(false);
+      expect(result.warnings).toContain(
+        "Roleplay notes was not requested: the world has no characters to write it for",
+      );
+    });
   });
 
   it("rejects unresolved file references before returning generated content", async () => {

@@ -22,12 +22,12 @@ The world's ID is the folder's name by default: the world in `worlds/my-world/` 
 
 When you add a kind of content later, put a file in the agreed location. You do not need to register it anywhere:
 
-| File                         | Content                                                                                                                                                                                                         |
-| ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `data/dimensions.yaml`       | World dimensions                                                                                                                                                                                                |
-| `data/lorebook.yaml`         | Lore entries that are triggered by keywords                                                                                                                                                                     |
-| `characters/characters.json` | Domain character records                                                                                                                                                                                        |
-| Path declared by a plugin    | Data that the plugin receives, for example `data/quests.yaml` (quests), `characters/main-cast.json` (character blueprints), `media/portraits/` (portraits), `data/rules/*.yaml` (world rules, one set per file) |
+| File                         | Content                                                                                                                                                     |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `data/dimensions.yaml`       | World dimensions                                                                                                                                            |
+| `data/lorebook.yaml`         | Lore entries that are triggered by keywords                                                                                                                 |
+| `characters/characters.json` | Domain character records                                                                                                                                    |
+| Path declared by a plugin    | Data that the plugin receives, for example `data/quests.yaml` (quests), `media/portraits/` (portraits), `data/rules/*.yaml` (world rules, one set per file) |
 
 A plugin declares the last row's paths itself. Each installed plugin brings its own agreed paths. The command below lists all the paths in the current version, with an example of each kind of data:
 
@@ -49,8 +49,7 @@ worlds/my-world/
 │   ├── memory-blocks.json            # optional: genre memory definitions
 │   └── rules/                       # optional: genre rules, one set per .yaml file, imported into living-world-rules
 ├── characters/
-│   ├── main-cast.json                # optional: character.blueprints@1 plugin content
-│   └── characters.json               # general domain character records
+│   └── characters.json               # character records, may carry plugin data (such as roleplay notes)
 └── media/
     ├── portraits.json               # optional: portrait generation manifest
     ├── portraits/                   # optional: character portraits
@@ -787,8 +786,8 @@ world.yaml                     # main file, text in defaultLocale
 world.en-US.yaml               # English translation only
 data/dimensions.yaml
 data/dimensions.en-US.yaml
-characters/main-cast.json
-characters/main-cast.en-US.json
+characters/characters.json
+characters/characters.en-US.json
 WORLD.md
 WORLD.en-US.md                 # lore-type files have no id to line up on, so the whole file is replaced
 ```
@@ -1081,47 +1080,45 @@ For plugin authors:
 - The guard of `world-init` uses the schema the session already has first, then the schema the world declares. It calls the model to generate a schema only when neither exists.
 - Dimensions and character attributes are different things. A dimension's structure does not turn into a character attribute automatically. A schema is not copied from another session or from another plugin's private data.
 
-## Domain characters and plugin character cards
+<a id="domain-characters-and-plugin-character-cards"></a>
 
-Characters come from two kinds of files, which do different jobs:
+## One character file per world
 
-| File                         | What it is                                                                        | Who reads it                                 |
-| ---------------------------- | --------------------------------------------------------------------------------- | -------------------------------------------- |
-| `characters/characters.json` | Domain characters: the character records that actually exist in the session       | The kernel, the character panel, all plugins |
-| `characters/main-cast.json`  | Character cards: optional role-play notes for the model (voice, motives, secrets) | The `character-blueprint` plugin             |
-
-All four built-in worlds include both, at the convention paths. Written as sources, they look like this:
-
-```yaml
-sources:
-  cast:
-    kind: json
-    path: characters/main-cast.json
-    schema: contract:character.blueprints@1
-    to: contract:character.blueprints@1
-    key: id
-  characters:
-    kind: json
-    path: characters/characters.json
-    to: characters
-    key: id
-    after: cast
-```
-
-An example of a domain character file:
+A world writes all its characters in `characters/characters.json`, one record per character. When a session is created, the kernel turns each record into a character of that game.
 
 ```json
 [
   {
-    "id": "mio",
+    "id": "npc-mio",
     "name": "Mio",
     "aliases": ["Class President", "澪"],
     "type": "npc",
     "description": "A fellow student.",
-    "fields": { "affection": 20 }
+    "fields": { "affection": 20 },
+    "blueprint": {
+      "persona": { "voice": "Soft, complete sentences." },
+      "dialogueExamples": [{ "character": "If you get lost, ask me first." }]
+    }
   }
 ]
 ```
+
+| Field                            | What it is                                                                            |
+| -------------------------------- | ------------------------------------------------------------------------------------- |
+| `id`                             | The character's ID                                                                    |
+| `name`, `aliases`, `description` | Name, other names, description                                                        |
+| `type`                           | Character type, one of `characterSchema.types`                                        |
+| `fields`                         | Attribute values, keyed by the attribute IDs of `characterSchema`                     |
+| A field a plugin declares        | One plugin's data about this character, for example `blueprint` of Character Profiles |
+
+**A plugin's data is written in the character record.** A plugin declares `authoring.characterField` on a namespace that receives world data (see [plugin manifest](./plugins.md)). The field of that name in a character record is one record of that plugin's data about the character.
+
+- On import, the kernel gives this field to the plugins enabled in the game that accept the matching contract, keyed by the character's `id`.
+- When the game has no such plugin, the field is ignored and the character is created as usual.
+- The field does not go into the character's `fields`. A plugin finds its data by the character's `id`.
+- `pnpm validate:world` checks the field against the receiving plugin's schema, and warns when no plugin reads it. It also warns when a new session does not enable a receiving plugin by default.
+- Language files match records by `id`, and can translate the text in this field.
+- `pnpm describe:authoring` lists the field each plugin declares (`characterField`) with an example.
 
 **Order.** Domain characters enter the session in the order the author wrote them in the file. The panel and the roster in the prompt both use this order. When several sources write characters, they follow on in the order the sources are imported. Characters created during play come after them. (In the implementation, each character's `createdAt` is one millisecond later than the one before it on import, and the list is sorted by `(createdAt, id)`.)
 
@@ -1133,24 +1130,27 @@ An example of a domain character file:
 - In a language file, the `aliases` list replaces the list in the main file as a whole.
 - For the full rules, see [aliases and name resolution](./world-model.md#aliases-and-name-resolution).
 
-**ID.** On import, the ID in the file (such as `mio`) is used exactly as written, with no prefix. Character records are not copied into any plugin's data. The panel and plugins read the same data through `ctx.world.characters` or the character API. Turning off the plugin that receives character cards only skips the cards. It does not affect domain characters.
+**ID.** On import, the ID in the file (such as `npc-mio`) is used exactly as written: no prefix is added or removed. Character records are not copied into any plugin's data. The panel and plugins read the same data through `ctx.world.characters` or the character API.
 
-**`effects: [characters]`.** This can turn the general `{id,name,type,description,fields}` of a source into domain characters. It does not understand the `persona/attributes/instantiate` of character cards. It is better to write a separate source with `to: characters` that states clearly which fields go into the session.
+**`effects: [characters]`.** This also writes the `{id,name,type,description,fields}` of each record of a `contract:` source as a character. A world's own characters belong in the character file and do not need it.
 
-**Where the fields of a character card go.** This assumes the receiving plugin `character-blueprint` is enabled in this game:
+### Roleplay notes (`blueprint`)
 
-| Character card field                                                                                        | Where it goes                                                                                                                                                                                             |
-| ----------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `name`, `persona.summary`, `description`, `role`, `aliases`, `tags`, `attributes`                           | The plugin's read-only "preset characters" panel                                                                                                                                                          |
-| `persona` (`voice`, `style`, `summary`, `traits`, `goals`, `fears`, `secrets`), `rules`, `dialogueExamples` | The `<character-notes>` section of the story runtime's prompt. The character is played using these notes. `secrets` is marked as known only to the narrator.                                              |
-| `scenarioDefaults.relationships`, `scenarioDefaults.state`                                                  | The same prompt section. `state` is listed only as opening facts. It is not saved, and tools cannot change it.                                                                                            |
-| `attributes`, `instantiate`                                                                                 | Not turned into domain characters automatically. Domain characters come from the source with `to: characters`. These are used only when the `import` runtime is run by hand and instantiates a character. |
+The built-in Character Profiles (`character-blueprint`) reads a character's roleplay notes from the `blueprint` field. When it is enabled in the game:
 
-Three points to note:
+| Field in `blueprint`                                                                                        | Where it goes                                                                                                                                                |
+| ----------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `persona` (`voice`, `style`, `summary`, `traits`, `goals`, `fears`, `secrets`), `rules`, `dialogueExamples` | The `<character-notes>` section of the story runtime's prompt. The character is played using these notes. `secrets` is marked as known only to the narrator. |
+| `scenarioDefaults.relationships`, `scenarioDefaults.state`                                                  | The same prompt section. `state` is listed only as opening facts. It is not saved, and tools cannot change it.                                               |
+| `tags`                                                                                                      | Saved only; not in the prompt section                                                                                                                        |
 
-- The prompt section holds only the cards of characters "in this game". To tell, check whether the card's `id` equals a domain character's `id`, or whether the domain character's `id` is `npc-<card id>`. So character cards and domain characters must use IDs that match.
-- A state the model should be able to change must be declared as an attribute of `characterSchema`, and written into the domain character's `fields`. A switch written only in `scenarioDefaults.state` has no way to be changed.
-- By default, AI world creation in the app generates only domain characters, and puts their voice and motives in `description`. Character cards are generated separately, as in the table above, only when the creator ticks the "preset characters" content that the receiving plugin provides.
+Points to note:
+
+- The prompt section holds only the characters in this game, except the player's character.
+- The keys of `scenarioDefaults.relationships` are `player`, a character's `id` or the `id` of a dimension entry. The prompt section writes them as names.
+- Name, description, type and attributes belong in the character record only. A `name` or similar field in `blueprint` fails validation.
+- A state the model should be able to change must be declared as an attribute of `characterSchema`, and written into the character's `fields`. A switch written only in `scenarioDefaults.state` has no way to be changed.
+- By default, AI world creation in the app generates only character records, and puts their voice and motives in `description`. When the creator ticks "Roleplay notes", the generator also writes a `blueprint` for each character.
 
 For the length limits and the trimming order, see the [plugin README](../../../plugins/character-blueprint/README.md#角色卡怎样进入叙事).
 
@@ -1411,10 +1411,8 @@ sources:
   cast-extra:
     kind: json
     path: data/characters/cast-extra.json
-    schema: contract:character.blueprints@1
-    to: contract:character.blueprints@1
+    to: characters
     key: id
-    after: cast
 ```
 
 In an override, `path` is relative to `~/.covel/world-overrides/<world-id>/`. After symbolic links are resolved, the path must still be inside this directory.

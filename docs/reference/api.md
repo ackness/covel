@@ -2268,7 +2268,7 @@ Web 设置页根据 `operatorTokenRequired` 决定是否显示“运维访问”
 - 世界数据契约没有接收插件（未安装或没有启用）时，跳过对应契约写入，会话照常创建。已启用的投影仍独立处理；同步保留被跳过写入的已有托管数据。响应的 `worldDataNotices` 带 warning；会话预检和开局后的导入或同步遵守同一条[接收规则](./world-data.md#target-uri)。
 - 依赖缺失的插件：它依赖的契约没有提供者（例如玩家关掉了提供者）时，会话照常创建，这个插件自动停用。玩家要的和 `kind: core` 的这类插件仍写进 `activePlugins`，`GET /api/sessions/:id/plugins` 把它们列在 `unavailable`，依赖回来后自动恢复。规则见[会话插件选择](./plugins.md#会话插件选择)。
 - `metadata.characterSchema`：Web 私有模式创建本地会话时写入同样的 schema。预设不合法时，会话不创建。
-- `metadata.embeddedCharacters`：它不是插件的角色卡，不会产生插件数据的副本。
+- `metadata.embeddedCharacters`：世界的角色记录，和角色文件一样导入。记录里插件声明的字段（`characterField`）交给接收的插件，键是角色 ID；角色记录本身不复制进插件数据。
 - `metadata.embeddedLorebook`：AI 生成的 `server-store` / `return-only` 世界用它携带资料与规则。
 
 **响应 201:**
@@ -3540,6 +3540,7 @@ runtime 报告失败时，它的原始错误保留在 `result.runtimeResults` �
 - `pnpm describe:authoring` 输出的是同一份数据。
 - 示例无法读取、不是 JSON，或可生成契约的 schema 缺失、无效或冲突时，只略过对应契约。可选的 `diagnostics` 数组逐项返回 `{ pluginId, namespace, message }`，服务端也记录警告；其他契约和插件仍可用。
 - 查询参数 `locale` 决定 `title` 等展示文本的语言，省略时用服务端默认语言。
+- 契约带 `characterField` 时没有 `source`：它的记录写在角色文件每条角色记录的这个字段里，`example` 是一个角色的那一条。
 
 **响应节选:**
 

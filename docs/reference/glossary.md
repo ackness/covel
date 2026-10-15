@@ -27,6 +27,7 @@
 | Preset | 预设 |  |
 | Proposal | 提案 |  |
 | Provider | 提供商 |  |
+| Roleplay notes | 扮演说明 | 世界作者写在角色记录的 `blueprint` 字段里、告诉叙事怎样演这个角色的内容；由“角色资料”插件读取。不是角色本身。 |
 | Runtime | runtime | 保留英文：它指清单里的一个运行单元，不是泛指“运行时”。 |
 | Runtime manifest | runtime 清单 |  |
 | Segment | 提示词段 |  |

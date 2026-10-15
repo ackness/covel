@@ -1,8 +1,8 @@
 /**
- * The roleplay material of the world's character cards as one prompt
- * segment for the narrative: voice, manner, traits, goals, fears, secrets,
- * relationships, rules and example lines. The card's attributes are not
- * here; they are the character's fields, which the narrative already has.
+ * The roleplay notes of the world's characters (one card per character) as
+ * one prompt segment for the narrative: voice, manner, traits, goals, fears,
+ * secrets, relationships, rules and example lines. The character's name,
+ * description and fields are not here: the narrative already has them.
  */
 import { estimateTokens, pickLocaleText } from "@covel/plugin-handlers-utils";
 
@@ -137,7 +137,7 @@ function renderCard(entry, level, names, l) {
         Object.entries(defaults.relationships)
           .filter(([, value]) => text(value))
           .slice(0, MAX_LIST_ITEMS)
-          // A model knows a character by name, not by the card's id.
+          // A model knows a character by name, not by its id.
           .map(
             ([id, value]) =>
               `${id === "player" ? l.player : (names.get(id) ?? id)}${l.colon}${text(value)}`,
@@ -154,27 +154,22 @@ function renderCard(entry, level, names, l) {
 }
 
 /**
- * The cards of the characters that are in the session. A card belongs to the
- * character with its id, or with `npc-<id>`: the same match the portrait
- * projection uses. The player's own card is left out; the narrative does not
- * speak for the player.
+ * The notes of the characters that are in the session. A row is keyed by the
+ * id of its character. The player's own notes are left out; the narrative
+ * does not speak for the player.
  */
 function matchCards(rows, characters) {
   const byId = new Map(
     characters.map((character) => [character.id, character]),
   );
   const entries = [];
-  const seen = new Set();
   for (const row of rows) {
     const card = row?.value;
-    if (!isRecord(card) || typeof card.id !== "string") continue;
-    const character = byId.get(card.id) ?? byId.get(`npc-${card.id}`);
-    if (!character || character.type === "player" || seen.has(character.id))
-      continue;
-    seen.add(character.id);
-    entries.push({ card, name: character.name });
+    const character = byId.get(row?.key);
+    if (!isRecord(card) || !character || character.type === "player") continue;
+    entries.push({ id: character.id, card, name: character.name });
   }
-  return entries.sort((a, b) => codeUnit(a.card.id, b.card.id));
+  return entries.sort((a, b) => codeUnit(a.id, b.id));
 }
 
 /**
@@ -209,7 +204,7 @@ export function roleplayNoteSegments(rows, characters, locale, dimensions) {
   const l = labels(locale);
   const names = new Map([
     ...dimensionEntryNames(dimensions),
-    ...entries.map(({ card, name }) => [card.id, name]),
+    ...characters.map((character) => [character.id, character.name]),
   ]);
   const room = NOTES_TOKEN_BUDGET - estimateTokens(l.intro);
 

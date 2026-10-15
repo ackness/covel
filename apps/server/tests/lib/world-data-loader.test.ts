@@ -734,16 +734,27 @@ worldData: data/world.data.yaml
       });
     }
 
+    // The roleplay notes are part of the character records: one file.
     const haruka = await load("haruka-academy");
     expect(haruka?.metadata?.characterBlueprints).toBeUndefined();
     expect(haruka?.metadata?.worldData).toMatchObject({
       sources: expect.arrayContaining([
-        expect.objectContaining({
-          id: "blueprints",
-          target: "contract:character.blueprints@1",
-        }),
+        expect.objectContaining({ id: "characters", target: "characters" }),
       ]),
     });
+    expect(haruka?.metadata?.worldData).not.toMatchObject({
+      sources: expect.arrayContaining([
+        expect.objectContaining({ target: "contract:character.blueprints@1" }),
+      ]),
+    });
+    expect(haruka?.metadata?.embeddedCharacters).toContainEqual(
+      expect.objectContaining({
+        id: "npc-kamishiro-mio",
+        blueprint: expect.objectContaining({
+          persona: expect.objectContaining({ voice: expect.any(String) }),
+        }),
+      }),
+    );
 
     // Each flagship world declares its own genre-specific core-memory blocks.
     const memoryBlocksByWorld = {

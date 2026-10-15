@@ -8,7 +8,7 @@ PLUGIN.md:
     data:
       blueprints:
         authoring:
-          title: 预设角色
+          title: 角色扮演说明
       presence:
         authoring:
           title: 角色立绘映射
@@ -18,12 +18,6 @@ PLUGIN.md:
 runtimes/presence/RUNTIME.md:
   description: 保存角色头像、立绘和声音。
 messages:
-  Characters: 角色
-  Preset Characters: 预设角色
-  Presets: 预设
-  This world ships no preset characters. The cast is authored in the world package (e.g. main-cast.json, imported via world-data).: 本世界没有预设角色。登场角色由世界作者写在世界包里（如 main-cast.json，经 world-data 导入）。
-  Preset characters that appear in this world (read-only).: 本世界登场的预设角色（只读）。
-  Attributes: 属性
   Character Portraits: 角色立绘
   Art: 立绘
   Portraits: 角色立绘

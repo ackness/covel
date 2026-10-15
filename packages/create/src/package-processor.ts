@@ -46,6 +46,8 @@ function normalizeCharacter(
   value: unknown,
   index: number,
   errors: string[],
+  /** The contracts whose records live in character records. */
+  inCharacters: readonly WorldGenerationDataContract[],
 ): GeneratedWorldCharacter | null {
   if (!isRecord(value)) {
     errors.push(`characters[${index}] must be an object`);
@@ -62,55 +64,42 @@ function normalizeCharacter(
     return null;
   }
 
-  const attributes = isRecord(value.attributes) ? value.attributes : undefined;
-  const persona = isRecord(value.persona) ? value.persona : undefined;
-  const scenarioDefaults = isRecord(value.scenarioDefaults)
-    ? value.scenarioDefaults
-    : undefined;
-  const dialogueExamples = Array.isArray(value.dialogueExamples)
-    ? value.dialogueExamples.filter(isRecord)
-    : undefined;
-  const characterRules = Array.isArray(value.rules)
-    ? value.rules.filter(isRecord)
-    : undefined;
   if (value.fields !== undefined && !isRecord(value.fields)) {
     errors.push(`characters[${index}].fields must be an object`);
     return null;
   }
-  // Persona and scenario defaults are blueprint data, not domain fields.
-  const fields = isRecord(value.fields) ? value.fields : attributes;
-  const instantiate = isRecord(value.instantiate)
-    ? {
-        ...value.instantiate,
-        ...(fields && !isRecord(value.instantiate.fields) ? { fields } : {}),
-      }
-    : fields
-      ? { fields }
-      : undefined;
+  // A plugin's record of the character, under the field its plugin names.
+  const records: Record<string, unknown> = {};
+  for (const contract of inCharacters) {
+    const field = contract.characterField;
+    if (field === undefined || value[field] === undefined) continue;
+    if (!contract.validate(value[field])) {
+      errors.push(
+        `characters[${index}].${field} does not match the schema of contract "${contract.contract}"`,
+      );
+      return null;
+    }
+    records[field] = value[field];
+  }
 
   return {
-    schemaVersion: 1,
     id: value.id,
     name: value.name.trim(),
-    ...(typeof value.role === "string" ? { role: value.role } : {}),
-    ...(typeof value.type === "string"
-      ? { type: value.type }
-      : typeof value.role === "string"
-        ? { type: value.role }
-        : { type: "npc" }),
+    type: typeof value.type === "string" && value.type ? value.type : "npc",
     ...(typeof value.description === "string"
       ? { description: value.description }
       : {}),
     ...(strings(value.aliases) ? { aliases: strings(value.aliases) } : {}),
-    ...(strings(value.tags) ? { tags: strings(value.tags) } : {}),
-    ...(attributes ? { attributes } : {}),
-    ...(persona ? { persona } : {}),
-    ...(dialogueExamples ? { dialogueExamples } : {}),
-    ...(scenarioDefaults ? { scenarioDefaults } : {}),
-    ...(characterRules ? { rules: characterRules } : {}),
-    ...(fields ? { fields } : {}),
-    ...(instantiate ? { instantiate } : {}),
+    ...(isRecord(value.fields) ? { fields: value.fields } : {}),
+    ...records,
   };
+}
+
+/** The contracts whose records live in the world's character records. */
+function inCharacterContracts(
+  dataContracts: readonly WorldGenerationDataContract[],
+): readonly WorldGenerationDataContract[] {
+  return dataContracts.filter((item) => item.characterField !== undefined);
 }
 
 /** Check the entire accepted roster using the same domain boundary as import. */
@@ -131,7 +120,7 @@ export function validateGeneratedCharacters(
         id: character.id,
         name: character.name,
         ...(character.aliases?.length ? { aliases: character.aliases } : {}),
-        type: character.type ?? "npc",
+        type: character.type,
         fields: character.fields,
         sessionId: "",
         version: 1,
@@ -207,8 +196,16 @@ export function normalizeGeneratedPackage(
   value: unknown,
   brief: WorldCreationBrief | undefined,
   dataContracts: readonly WorldGenerationDataContract[] = [],
-  /** `amounts: false` skips the brief's target amounts; a revision has none. */
-  options: { readonly amounts?: boolean } = {},
+  options: {
+    /** `false` skips the brief's target amounts; a revision has none. */
+    readonly amounts?: boolean;
+    /**
+     * The characters written before, when the brief does not ask for
+     * characters: the records of a contract that lives in character records
+     * go into them.
+     */
+    readonly characters?: readonly GeneratedWorldCharacter[];
+  } = {},
 ): {
   content: GeneratedWorldPackageContent;
   errors: string[];
@@ -237,6 +234,13 @@ export function normalizeGeneratedPackage(
   const root = isRecord(value) ? value : {};
 
   const contractData: GeneratedContractData[] = [];
+  // Records of a contract that lives in character records, by character id.
+  const inCharacters: {
+    index: number;
+    field: string;
+    key: string;
+    value: Record<string, unknown>;
+  }[] = [];
   const identities = new Set<string>();
   if (root.contractData !== undefined && !Array.isArray(root.contractData))
     errors.push("contractData must be an array");
@@ -244,22 +248,26 @@ export function normalizeGeneratedPackage(
     ? root.contractData
     : []
   ).entries()) {
+    const declaration = isRecord(record)
+      ? selected.find((item) => item.contract === record.contract)
+      : undefined;
     if (
       !isRecord(record) ||
       typeof record.contract !== "string" ||
       typeof record.key !== "string" ||
       !CONTENT_ID.test(record.key) ||
       !isRecord(record.value) ||
-      record.value.id !== record.key
+      // A record in a character's record is named by the character.
+      (declaration?.characterField === undefined &&
+        record.value.id !== record.key)
     ) {
       errors.push(
-        `contractData[${index}] requires contract, key and an object value with matching id`,
+        declaration?.characterField === undefined
+          ? `contractData[${index}] requires contract, key and an object value with matching id`
+          : `contractData[${index}] requires contract, key (a character's id) and an object value`,
       );
       continue;
     }
-    const declaration = selected.find(
-      (item) => item.contract === record.contract,
-    );
     if (!declaration) {
       errors.push(
         `contractData[${index}] uses contract "${record.contract}", which the creation brief did not request`,
@@ -278,15 +286,26 @@ export function normalizeGeneratedPackage(
       continue;
     }
     identities.add(identity);
-    contractData.push({
-      contract: record.contract,
-      key: record.key,
-      value: record.value,
-      ...(declaration.lorebook ? { lorebook: true as const } : {}),
-    });
+    if (declaration.characterField !== undefined)
+      inCharacters.push({
+        index,
+        field: declaration.characterField,
+        key: record.key,
+        value: record.value,
+      });
+    else
+      contractData.push({
+        contract: record.contract,
+        key: record.key,
+        value: record.value,
+        ...(declaration.lorebook ? { lorebook: true as const } : {}),
+      });
   }
   for (const declaration of selected) {
-    if (!contractData.some((item) => item.contract === declaration.contract))
+    if (
+      !contractData.some((item) => item.contract === declaration.contract) &&
+      !inCharacters.some((item) => item.field === declaration.characterField)
+    )
       errors.push(
         `contractData must include at least one record for contract "${declaration.contract}"`,
       );
@@ -296,11 +315,36 @@ export function normalizeGeneratedPackage(
   // world that exists: cutting it down would lose the player's content.
   const most = (count: number) =>
     options.amounts === false ? Infinity : count;
-  const characters = requested.has("characters")
+  const written = requested.has("characters")
     ? (Array.isArray(root.characters) ? root.characters.slice(0, most(5)) : [])
-        .map((item, index) => normalizeCharacter(item, index, errors))
+        .map((item, index) =>
+          normalizeCharacter(
+            item,
+            index,
+            errors,
+            inCharacterContracts(dataContracts),
+          ),
+        )
         .filter((item): item is GeneratedWorldCharacter => item !== null)
-    : [];
+    : (options.characters ?? []);
+  // Each record of a contract that lives in character records goes into the
+  // record of its character.
+  const characters = written.map((character) => {
+    const records = inCharacters.filter((item) => item.key === character.id);
+    return records.length === 0
+      ? character
+      : {
+          ...character,
+          ...Object.fromEntries(
+            records.map((item) => [item.field, item.value]),
+          ),
+        };
+  });
+  for (const item of inCharacters)
+    if (!written.some((character) => character.id === item.key))
+      errors.push(
+        `contractData[${item.index}] key "${item.key}" is not the id of a character`,
+      );
   const lorebook = requested.has("lorebook")
     ? (Array.isArray(root.lorebook) ? root.lorebook.slice(0, most(8)) : [])
         .map((item, index) =>

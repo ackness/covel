@@ -9,6 +9,7 @@ import { hostVersionRangeSchema } from "../utils/host-version-range.js";
 import { packageCreditFields } from "./package-info.js";
 import { attributeFieldTypeSchema } from "./world.js";
 import {
+  KERNEL_CHARACTER_FIELDS,
   RESERVED_WORLD_PACKAGE_PATHS,
   isReservedWorldPackagePath,
 } from "../world-package-paths.js";
@@ -143,6 +144,24 @@ const dataAuthoringSchema = z
         "The world data source an author declares to supply this content.",
       )
       .optional(),
+    characterField: z
+      .string()
+      .regex(/^[a-z][A-Za-z0-9]*$/, {
+        message:
+          "characterField must start with a lowercase letter and hold only letters and digits",
+      })
+      .refine(
+        (field) => !(KERNEL_CHARACTER_FIELDS as readonly string[]).includes(field),
+        {
+          message: `characterField must not name a field the kernel reads from a character record (${KERNEL_CHARACTER_FIELDS.join(", ")})`,
+        },
+      )
+      .meta({
+        description:
+          "The content is written inside the world's character records instead of a file of its own: each character may carry one record under this field. The character's `id` keys the record, and the character's `name`, `type`, `description` and `fields` are not repeated in it. Not together with `source`.",
+        examples: ["blueprint"],
+      })
+      .optional(),
     references: z
       .array(
         z
@@ -212,22 +231,32 @@ const dataAuthoringSchema = z
     generate: z
       .enum(["offer", "default"])
       .describe(
-        "Lets the in-app world generator produce this content from `hint` and `example` alone. `offer` lists it as a choice; `default` also selects it. It needs an `example`, and a public, non-media `source` keyed by `id`.",
+        "Lets the in-app world generator produce this content from `hint` and `example` alone. `offer` lists it as a choice; `default` also selects it. It needs an `example`, and a `characterField` or a public, non-media `source` keyed by `id`.",
       )
       .optional(),
   })
   .refine(
     (authoring) =>
+      authoring.source === undefined || authoring.characterField === undefined,
+    {
+      path: ["characterField"],
+      message:
+        "the content is read from a file (`source`) or from the character records (`characterField`), not from both",
+    },
+  )
+  .refine(
+    (authoring) =>
       !authoring.generate ||
       (authoring.example !== undefined &&
-        authoring.source !== undefined &&
-        authoringSourceKind(authoring.source.path) !== "media" &&
-        (authoring.source.key ?? "id") === "id" &&
-        authoring.source.visibility !== "hidden"),
+        (authoring.characterField !== undefined ||
+          (authoring.source !== undefined &&
+            authoringSourceKind(authoring.source.path) !== "media" &&
+            (authoring.source.key ?? "id") === "id" &&
+            authoring.source.visibility !== "hidden"))),
     {
       path: ["generate"],
       message:
-        "generate needs an example and a public, non-media source keyed by `id`",
+        "generate needs an example, and a `characterField` or a public, non-media source keyed by `id`",
     },
   )
   .describe(

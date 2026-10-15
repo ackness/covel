@@ -136,7 +136,6 @@ The second column is the panel ID, which is the `id` in the UI spec. Every right
 | --- | --- | --- | --- | --- | --- |
 | affinity | affinity | heart | affinity | affinity | Affinity panel (two-way player↔NPC score bar + tier badge + reason for the latest change) |
 | char-creator | character | users | character | session.characters | Character list (its type is defined by the current character schema) |
-| character-blueprint | character-blueprint | id-card | character | blueprints | Preset characters (character templates the world author has placed, read-only; a sub-tab of the `character` group) |
 | character-blueprint | character-presence | image | character-art | presence | Character portrait gallery (`PortraitGallery`, read-only display, the player can upload to replace an avatar, `alwaysRender`) |
 | codex | codex | book-open | codex | entries | Knowledge codex |
 | core-quest | core-quest | scroll-text | core-quest | quests | Quest log (in progress, with a checklist of objectives / completed / failed groups) |
@@ -160,7 +159,7 @@ The second column is the panel ID, which is the `id` in the UI spec. Every right
 Notes on some groups:
 
 - **The `world-data` group** (group name "World Data") brings together three specs: `world-overview` and `world-schema` from `world-init`, and `living-world-rules` from `living-world-rules`. They form one outer tab, and horizontal sub-tabs switch between the overview, the attributes and the world rules. The `WorldDimensions` in the overview reads the public current values of the session directly. It does not build them from `entries` or the world's initial values. A dimension also no longer has a copy in a constant lorebook.
-- **The `character` group** brings together the character list from `char-creator` and the preset characters from `character-blueprint`. The first reads `session.characters` from the session's World Model, which is the live state of the current save. The second is an imported read-only template. Characters are created and imported through the World Model. Plugins do not copy characters to each other.
+- **The `character` group** is the character list from `char-creator`. It reads `session.characters` from the session's World Model, which is the live state of the current save. A world's characters are imported from its character file into the World Model, and a plugin's data about a character (such as the roleplay notes of `character-blueprint`) is stored in the plugin's own namespace, keyed by the character's ID. Characters are created and imported through the World Model. Plugins do not copy characters to each other.
 - **The `npc-graph`** panel uses `dataSource.bindings` to connect its own `nodes` and `edges` namespaces into the panel state. It then passes them as properties to `GraphCanvas`, which draws the relationship graph (`react-force-graph-2d`, loaded on demand).
 - **The `memory`** package registers the `prompt.segment@1` and `memory.block-definitions@1` services and a right-side panel. `runtimes/extract/RUNTIME.md` reads the frozen `turn-digest@1` and, as a background job with `settle: before-next-execution`, updates this plugin's `blocks` namespace. The panel reads these blocks directly. Its prompt segment is at the turn level and sits in the turn context after the history. In a session where this plugin is disabled, extraction does not run, the next turn does not wait for its job, and no memory is injected.
 
@@ -534,7 +533,7 @@ The original keys can still be read directly with `$state: "/someKey"`. Both way
 **Two typical uses**:
 
 - Several panels of one plugin: `world-overview` and `world-schema` from `world-init` both declare `group: "world-data"`.
-- Combining across plugins: `char-creator` provides the character list and `character-blueprint` provides preset characters. Both declare `group: "character"`, and they are automatically gathered into the same outer tab.
+- Combining across plugins: `world-init` provides the overview and attributes, and `living-world-rules` provides the world rules. They all declare `group: "world-data"`, and they are automatically gathered into the same outer tab.
 
 **Merge rules**:
 

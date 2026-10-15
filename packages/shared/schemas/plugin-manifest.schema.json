@@ -800,6 +800,12 @@
                     "additionalProperties": false,
                     "description": "The world data source an author declares to supply this content."
                   },
+                  "characterField": {
+                    "type": "string",
+                    "pattern": "^[a-z][A-Za-z0-9]*$",
+                    "description": "The content is written inside the world's character records instead of a file of its own: each character may carry one record under this field. The character's `id` keys the record, and the character's `name`, `type`, `description` and `fields` are not repeated in it. Not together with `source`.",
+                    "examples": ["blueprint"]
+                  },
                   "references": {
                     "minItems": 1,
                     "type": "array",
@@ -857,7 +863,7 @@
                   "generate": {
                     "type": "string",
                     "enum": ["offer", "default"],
-                    "description": "Lets the in-app world generator produce this content from `hint` and `example` alone. `offer` lists it as a choice; `default` also selects it. It needs an `example`, and a public, non-media `source` keyed by `id`."
+                    "description": "Lets the in-app world generator produce this content from `hint` and `example` alone. `offer` lists it as a choice; `default` also selects it. It needs an `example`, and a `characterField` or a public, non-media `source` keyed by `id`."
                   }
                 },
                 "required": ["title"],

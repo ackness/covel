@@ -265,8 +265,13 @@ describe("world data conventions", () => {
 
     // A second plugin that names the same file for a contract of its own.
     // A file the generator wrote there with no descriptor would be read for
-    // neither contract.
-    const owner = catalogue.get(target.pluginId!)!;
+    // neither contract. The receiver is found by its contract: the result
+    // does not name a `kind: core` one.
+    const owner = [...catalogue.getAll().values()].find((entry) =>
+      Object.values(
+        entry.packageManifest?.plugin?.contributes?.data ?? {},
+      ).some((item) => item.accepts?.includes(target.contract)),
+    )!;
     const plugin = owner.packageManifest!.plugin!;
     const [namespace, declaration] = Object.entries(
       plugin.contributes!.data!,
@@ -294,12 +299,11 @@ describe("world data conventions", () => {
       get: (id) => crowded.get(id),
       getAll: () => crowded,
     });
-    expect(
-      contracts.find((item) => item.contract === target.contract),
-    ).toMatchObject({ contract: target.contract, pluginId: target.pluginId });
-    expect(
-      contracts.find((item) => item.contract === target.contract)?.source,
-    ).toBeUndefined();
+    const crowdedTarget = contracts.find(
+      (item) => item.contract === target.contract,
+    );
+    expect(crowdedTarget?.pluginId).toBe(target.pluginId);
+    expect(crowdedTarget?.source).toBeUndefined();
   });
 
   /** The bundled plugins and the rival, as one catalogue. */

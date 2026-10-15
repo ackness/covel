@@ -24,7 +24,7 @@
       "relatedCharacters": ["npc-kamishiro-mio"],
       "depiction": "setting-illustration",
       "spoilerLevel": "opening",
-      "sourceRefs": ["WORLD.md", "characters/main-cast.json"],
+      "sourceRefs": ["WORLD.md", "characters/characters.json"],
       "generation": {
         "tool": "built-in-imagegen",
         "prompt": "Create EXACTLY 1536x1024 landscape visual-novel background for Haruka Academy, wholesome spring seaside Japanese high school. Clean anime scenery, delicate linework, soft painterly cel shading, sea blue mint green cream and pale pink, warm afternoon light. Interior of the LITERATURE CLUB on third floor of an old THREE-STORY wooden clubhouse: modest sunlit room, worn wood floor and beams, one large worktable with neatly grouped blank manuscript sheets, a blue-bound anthology mockup with no title, pencils, binder clips; low shelves of old club journals, empty mismatched school chairs. Windows show nearby school rooftops and a distant strip of blue sea from modest third-floor height. Light curtains in sea breeze, a few spring cherry petals outside, calm intimacy and sense of shared effort. Clear central foreground for character sprites and quiet lower dialogue area; lovely warm/cool depth, no people or silhouettes, no readable text, no watermark, no fantasy or photorealism. Not a lavish library: a small club fighting to keep its room."
@@ -52,7 +52,7 @@
       "relatedCharacters": ["npc-kamishiro-mio"],
       "depiction": "possible-moment",
       "spoilerLevel": "opening",
-      "sourceRefs": ["WORLD.md", "characters/main-cast.json"],
+      "sourceRefs": ["WORLD.md", "characters/characters.json"],
       "generation": {
         "tool": "built-in-imagegen",
         "prompt": "Transform the reference portrait into a wholesome anime visual-novel story CG, EXACTLY 1536x1024 landscape. Preserve KAMISHIRO MIO's exact reference identity and costume: seventeen-year-old high-school girl, neat shoulder-length dark navy hair with full bangs, violet eyes, gentle face, navy SAILOR uniform with white piping and tiny white chest motif, blue-bound book and club papers. Keep soft refined cel shading and pastel seaside-school spring palette. New scene in the literature club's modest third-floor wooden room: Mio seated at a shared worktable, three-quarter upper body, carefully sliding a stack of manuscript pages toward an EMPTY nearby chair just outside frame, one hand holding a pencil, shy relieved little smile as she looks toward the unseen listener. No player body or identity shown. Blank undecipherable manuscript markings, blue anthology binder, clips, warm afternoon light through an open window, blue sea beyond rooftops, soft curtain and blurred old-journal shelves. Teen-appropriate, modest, everyday collaboration with no romantic outcome, no confession, no sexualization. Expressive eyes and naturally posed hands, spacious narrative composition, subtle warm light volume, no text or watermark.",
@@ -81,7 +81,7 @@
       "spoilerLevel": "opening",
       "sourceRefs": [
         "WORLD.md",
-        "characters/main-cast.json",
+        "characters/characters.json",
         "media/portraits.json"
       ],
       "sha256": "aa4224a86bb477f3ce74bb0eee838a6ace6837b6baa10f84be82db1526e17c4b",
@@ -103,7 +103,7 @@
       "spoilerLevel": "opening",
       "sourceRefs": [
         "WORLD.md",
-        "characters/main-cast.json",
+        "characters/characters.json",
         "media/portraits.json"
       ],
       "sha256": "e35ba3fc0eb68c7954b4d7e454faf16200100b6bf0e313ca200553213dda9fbb",
@@ -125,7 +125,7 @@
       "spoilerLevel": "opening",
       "sourceRefs": [
         "WORLD.md",
-        "characters/main-cast.json",
+        "characters/characters.json",
         "media/portraits.json"
       ],
       "sha256": "45b807886b84bc0c3eeafee6533840b83db34be6a5c1eee85d5296d86fba66df",
@@ -147,7 +147,7 @@
       "spoilerLevel": "opening",
       "sourceRefs": [
         "WORLD.md",
-        "characters/main-cast.json",
+        "characters/characters.json",
         "media/portraits.json"
       ],
       "sha256": "74ce6b82bf137ebdc7b9eef35e92e2de75fb96c2d4ae90c3daaf0a56d44bd3e4",
@@ -169,7 +169,7 @@
       "spoilerLevel": "opening",
       "sourceRefs": [
         "WORLD.md",
-        "characters/main-cast.json",
+        "characters/characters.json",
         "media/portraits.json"
       ],
       "sha256": "3304df5d71a1911895df6ed4d89020e40124158fc952d852cb2fb15777c9f17b",
@@ -193,7 +193,7 @@
       "spoilerLevel": "opening",
       "sourceRefs": [
         "WORLD.md",
-        "characters/main-cast.json",
+        "characters/characters.json",
         "media/portraits.json"
       ],
       "sha256": "267245954aeeac6d825fc5d5652c46f8715e469b424e0a3336944805cd2147a4",
@@ -215,7 +215,7 @@
       "spoilerLevel": "opening",
       "sourceRefs": [
         "WORLD.md",
-        "characters/main-cast.json",
+        "characters/characters.json",
         "media/portraits.json"
       ],
       "sha256": "e875024177010d639e79ab5759b3df4c19cf7c00ff4d67e62f598a58039d45ca",
@@ -239,7 +239,7 @@
       "spoilerLevel": "opening",
       "sourceRefs": [
         "WORLD.md",
-        "characters/main-cast.json",
+        "characters/characters.json",
         "media/portraits.json"
       ],
       "sha256": "f7b87fabc9590239fdca4fb606e210cad63951e224e4fe6836e594704c339d3c",
@@ -261,7 +261,7 @@
       "spoilerLevel": "opening",
       "sourceRefs": [
         "WORLD.md",
-        "characters/main-cast.json",
+        "characters/characters.json",
         "media/portraits.json"
       ],
       "sha256": "36bf9dbe6ef0f8317710950b35011a02c7afc3a0a7dc9f8bbc5b2dc370e3f427",
@@ -283,7 +283,7 @@
       "spoilerLevel": "opening",
       "sourceRefs": [
         "WORLD.md",
-        "characters/main-cast.json",
+        "characters/characters.json",
         "media/portraits.json"
       ],
       "sha256": "49c8e50bdc659d652a070b9ab697c060cdbc9b67cad36f9096a0bf0aa06edd50",
@@ -307,7 +307,7 @@
       "spoilerLevel": "opening",
       "sourceRefs": [
         "WORLD.md",
-        "characters/main-cast.json",
+        "characters/characters.json",
         "media/portraits.json"
       ],
       "sha256": "5e6354645d55b1d853f326606fc14c8d59c94a174346f36b8c654d9cf6917433",
@@ -331,7 +331,7 @@
       "spoilerLevel": "opening",
       "sourceRefs": [
         "WORLD.md",
-        "characters/main-cast.json",
+        "characters/characters.json",
         "media/portraits.json"
       ],
       "sha256": "bed44340883f50d41685dbc0a2d28eb3b3aa790a9164c48b01a41d6234fb6e40",

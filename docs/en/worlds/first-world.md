@@ -167,6 +167,8 @@ Create `~/.covel/worlds/tidelamp/characters/characters.json`:
 
 `type` must be one of the types listed in `characterSchema.types`. Each key in `fields` must be an attribute defined in `characterSchema.attributes`. Do not write the protagonist here. The player creates the protagonist when the game starts.
 
+To have the narrative play this character with a fixed voice and personality, add `blueprint` (roleplay notes) to the same record, and enable Character Profiles in the game. See [roleplay notes](../reference/world-data.md#roleplay-notes-blueprint).
+
 > [!IMPORTANT]
 > When the same person, place, or item appears in more than one file, the name and the ID must match exactly, and must be written the same way as in `WORLD.md`. The model matches them by name.
 

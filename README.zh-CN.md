@@ -100,7 +100,7 @@ worlds/my-world/
 │   ├── world.data.yaml               # 有序 source → schema → target 导入
 │   ├── dimensions.yaml
 │   └── rules/
-├── characters/main-cast.json
+├── characters/characters.json         # 角色记录，可带扮演说明
 └── media/
     ├── portraits/
     ├── scenes/
@@ -120,7 +120,7 @@ apps/web/src/i18n/locales/ja-JP.json       # 应用界面词典
 plugins/my-plugin/locales/ja.yaml          # 插件的标签、界面文字和消息
 worlds/my-world/world.ja.yaml              # 世界名称、简介、属性名
 worlds/my-world/WORLD.ja.md                # 本地化的世界设定
-worlds/my-world/characters/main-cast.ja.json
+worlds/my-world/characters/characters.ja.json
 worlds/my-world/data/rules/core.ja.yaml
 ```
 

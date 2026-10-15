@@ -250,6 +250,76 @@ export async function conventionCollisionDiagnostics(
   return diagnostics;
 }
 
+/**
+ * A data contract whose records ride inside the world's character records:
+ * each character may carry one record under `field`, keyed by the
+ * character's `id`. The kernel imports the character and gives the record to
+ * the namespaces that accept `contract`.
+ */
+export interface CharacterBlockRoute {
+  readonly field: string;
+  readonly contract: string;
+}
+
+/** A field of a character record that more than one data contract names. */
+export interface CharacterBlockCollision {
+  readonly field: string;
+  /** Each declaration that names it, labelled `pluginId/namespace (contract)`. */
+  readonly claimants: readonly string[];
+}
+
+/**
+ * The fields of a character record that hold data for a plugin
+ * (`contributes.data.<ns>.authoring.characterField`). As with conventional
+ * paths, only plugins that loaded count, and of those only `activePlugins`
+ * when it is given. A field that two contracts name is read for neither.
+ */
+export function characterBlockRoutes(
+  catalogue: Pick<PluginRegistry, "getAll">,
+  activePlugins?: readonly string[],
+): {
+  readonly routes: readonly CharacterBlockRoute[];
+  readonly collisions: readonly CharacterBlockCollision[];
+} {
+  const claims = new Map<
+    string,
+    { contracts: Set<string>; claimants: string[] }
+  >();
+  const entries = [...catalogue.getAll()]
+    .filter(
+      ([pluginId, entry]) =>
+        entry.status !== "error" &&
+        (!activePlugins || activePlugins.includes(pluginId)),
+    )
+    .sort(([a], [b]) => compareText(a, b));
+  for (const [pluginId, entry] of entries)
+    for (const [namespace, declaration] of Object.entries(
+      entry.packageManifest?.plugin?.contributes?.data ?? {},
+    )) {
+      const field = declaration.authoring?.characterField;
+      if (!field) continue;
+      for (const contract of declaration.accepts ?? []) {
+        const claim = claims.get(field) ?? {
+          contracts: new Set<string>(),
+          claimants: [],
+        };
+        claim.contracts.add(contract);
+        claim.claimants.push(`${pluginId}/${namespace} (${contract})`);
+        claims.set(field, claim);
+      }
+    }
+  const routes: CharacterBlockRoute[] = [];
+  const collisions: CharacterBlockCollision[] = [];
+  for (const [field, claim] of [...claims].sort(([a], [b]) =>
+    compareText(a, b),
+  )) {
+    if (claim.contracts.size > 1)
+      collisions.push({ field, claimants: claim.claimants });
+    else routes.push({ field, contract: [...claim.contracts][0]! });
+  }
+  return { routes, collisions };
+}
+
 let conventions: readonly ConventionalSource[] = KERNEL_SOURCES;
 
 /**

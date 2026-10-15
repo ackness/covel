@@ -10,43 +10,43 @@ register({
   },
 });
 
-const card = (id, extra = {}) => ({
-  schemaVersion: 1,
-  id,
-  name: id,
-  attributes: { faction: "Harbor Office" },
-  persona: {
-    summary: "A patient clerk.",
-    traits: ["patient", "exact"],
-    goals: ["Keep the records honest"],
-    fears: ["A forged entry"],
-    secrets: ["She burned the old ledger."],
-    voice: "Short, level sentences.",
+/** A row of `blueprints`: the notes of one character, keyed by its id. */
+const card = (key, extra = {}) => ({
+  key,
+  value: {
+    tags: ["harbor-office"],
+    persona: {
+      summary: "A patient clerk.",
+      traits: ["patient", "exact"],
+      goals: ["Keep the records honest"],
+      fears: ["A forged entry"],
+      secrets: ["She burned the old ledger."],
+      voice: "Short, level sentences.",
+    },
+    dialogueExamples: [
+      { user: "Who signed this?", character: "Show me the page first." },
+      { character: "A ledger is a promise." },
+      { character: "A third line." },
+    ],
+    scenarioDefaults: {
+      relationships: { player: "mentor", rook: "rival" },
+      state: { ledgerFound: false },
+    },
+    rules: [
+      { text: "Low rule.", priority: 1 },
+      { text: "Set ledgerFound when the player sees the ledger.", priority: 9 },
+    ],
+    ...extra,
   },
-  dialogueExamples: [
-    { user: "Who signed this?", character: "Show me the page first." },
-    { character: "A ledger is a promise." },
-    { character: "A third line." },
-  ],
-  scenarioDefaults: {
-    relationships: { player: "mentor", rook: "rival" },
-    state: { ledgerFound: false },
-  },
-  rules: [
-    { text: "Low rule.", priority: 1 },
-    { text: "Set ledgerFound when the player sees the ledger.", priority: 9 },
-  ],
-  ...extra,
 });
-const run = (cards, characters, locale = "en-US", dimensions) =>
+const run = (rows, characters, locale = "en-US", dimensions) =>
   notes(
     { turnId: "t", playerMessage: "" },
     {
       locale,
       world: { characters, dimensions },
       pluginData: {
-        list: async (namespace) =>
-          namespace === "blueprints" ? cards.map((value) => ({ value })) : [],
+        list: async (namespace) => (namespace === "blueprints" ? rows : []),
       },
     },
   );
@@ -69,11 +69,16 @@ describe("character notes prompt segment", () => {
     expect(segment.content).toContain("Relationships: The Salt Fangs: rival");
   });
 
-  it("gives story runtimes the roleplay material of a card, and not its attributes", async () => {
+  it("gives story runtimes the roleplay notes of a character, and not its fields", async () => {
     const [segment, ...rest] = await run(
-      [card("mara"), card("rook")],
+      [card("npc-mara"), card("rook")],
       [
-        { id: "npc-mara", name: "Mara Voss", type: "npc" },
+        {
+          id: "npc-mara",
+          name: "Mara Voss",
+          type: "npc",
+          fields: { faction: "Harbor Office" },
+        },
         { id: "rook", name: "Rook", type: "npc" },
       ],
     );
@@ -89,7 +94,7 @@ describe("character notes prompt segment", () => {
     expect(content).toContain(
       "Secrets (known only to you): She burned the old ledger.",
     );
-    // Relationships name characters, not card ids.
+    // Relationships name characters, not their ids.
     expect(content).toContain("Relationships: player: mentor; Rook: rival");
     expect(content).toContain('State at start: {"ledgerFound":false}');
     // The more important rule first; two example lines at most.
@@ -101,19 +106,41 @@ describe("character notes prompt segment", () => {
     );
     expect(content).not.toContain("A third line.");
     expect(content).not.toContain("Harbor Office");
+    expect(content).not.toContain("harbor-office");
     // Card order does not follow the order of the stored rows.
     expect(content.indexOf("## Mara Voss")).toBeLessThan(
       content.indexOf("## Rook"),
     );
     expect(
       await run(
-        [card("rook"), card("mara")],
+        [card("rook"), card("npc-mara")],
         [
           { id: "rook", name: "Rook", type: "npc" },
-          { id: "npc-mara", name: "Mara Voss", type: "npc" },
+          {
+            id: "npc-mara",
+            name: "Mara Voss",
+            type: "npc",
+            fields: { faction: "Harbor Office" },
+          },
         ],
       ),
     ).toEqual([segment]);
+  });
+
+  it("names a character without notes that a relationship points at", async () => {
+    const [segment] = await run(
+      [
+        card("mara", {
+          scenarioDefaults: { relationships: { "npc-rook": "rival" } },
+        }),
+      ],
+      [
+        { id: "mara", name: "Mara Voss", type: "npc" },
+        { id: "npc-rook", name: "Rook", type: "npc" },
+      ],
+    );
+    expect(segment.content).toContain("Relationships: Rook: rival");
+    expect(segment.content).not.toContain("## Rook");
   });
 
   it("writes its own text in Chinese for a Simplified Chinese session", async () => {
@@ -123,7 +150,7 @@ describe("character notes prompt segment", () => {
           persona: { voice: "短句。", secrets: ["她烧了旧账。"] },
         }),
       ],
-      [{ id: "npc-mara", name: "玛拉", type: "npc" }],
+      [{ id: "mara", name: "玛拉", type: "npc" }],
       "zh-CN",
     );
     expect(segment.content).toContain("## 玛拉\n口吻：短句。");
@@ -131,28 +158,29 @@ describe("character notes prompt segment", () => {
     expect(segment.content).not.toContain("Voice");
   });
 
-  it("returns no segment for cards without a session character, the player's card, or a card with no notes", async () => {
+  it("returns no segment for notes without a session character, the player's notes, or notes with nothing to play", async () => {
     expect(await run([card("mara")], [])).toEqual([]);
+    // The id of the character is the key: no prefix is added or removed.
     expect(
-      await run(
-        [card("mara")],
-        [{ id: "other-npc-mara", name: "M", type: "npc" }],
-      ),
+      await run([card("mara")], [{ id: "npc-mara", name: "M", type: "npc" }]),
+    ).toEqual([]);
+    expect(
+      await run([card("npc-mara")], [{ id: "mara", name: "M", type: "npc" }]),
     ).toEqual([]);
     expect(
       await run([card("hero")], [{ id: "hero", name: "Hero", type: "player" }]),
     ).toEqual([]);
     expect(
       await run(
-        [{ schemaVersion: 1, id: "mara", name: "Mara", attributes: { a: 1 } }],
-        [{ id: "npc-mara", name: "Mara", type: "npc" }],
+        [{ key: "mara", value: { tags: ["clerk"] } }],
+        [{ id: "mara", name: "Mara", type: "npc" }],
       ),
     ).toEqual([]);
   });
 
   it("drops example lines, then rules, to stay in the budget, and keeps every voice", async () => {
     const long = "x".repeat(280);
-    const cards = Array.from({ length: 32 }, (_, i) =>
+    const rows = Array.from({ length: 32 }, (_, i) =>
       card(`c${String(i).padStart(2, "0")}`, {
         dialogueExamples: [{ character: `example ${long}` }],
         rules: [
@@ -161,8 +189,12 @@ describe("character notes prompt segment", () => {
         ],
       }),
     );
-    const characters = cards.map(({ id }) => ({ id, name: id, type: "npc" }));
-    const [{ content }] = await run(cards, characters);
+    const characters = rows.map(({ key }) => ({
+      id: key,
+      name: key,
+      type: "npc",
+    }));
+    const [{ content }] = await run(rows, characters);
     expect(estimateTokens(content)).toBeLessThanOrEqual(
       NOTES_TOKEN_BUDGET + 20,
     );
@@ -173,13 +205,17 @@ describe("character notes prompt segment", () => {
   });
 
   it("names the characters whose notes do not fit even as a voice line", async () => {
-    const cards = Array.from({ length: 90 }, (_, i) =>
+    const rows = Array.from({ length: 90 }, (_, i) =>
       card(`c${String(i).padStart(2, "0")}`, {
         persona: { voice: "v".repeat(400) },
       }),
     );
-    const characters = cards.map(({ id }) => ({ id, name: id, type: "npc" }));
-    const [{ content }] = await run(cards, characters);
+    const characters = rows.map(({ key }) => ({
+      id: key,
+      name: key,
+      type: "npc",
+    }));
+    const [{ content }] = await run(rows, characters);
     expect(estimateTokens(content)).toBeLessThanOrEqual(
       NOTES_TOKEN_BUDGET + 200,
     );

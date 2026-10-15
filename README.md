@@ -102,7 +102,7 @@ worlds/my-world/
 │   ├── world.data.yaml               # ordered source → schema → target imports
 │   ├── dimensions.yaml
 │   └── rules/
-├── characters/main-cast.json
+├── characters/characters.json         # characters, with roleplay notes
 └── media/
     ├── portraits/
     ├── scenes/
@@ -122,7 +122,7 @@ apps/web/src/i18n/locales/ja-JP.json       # application UI catalog
 plugins/my-plugin/locales/ja.yaml          # a plugin's labels, UI text and messages
 worlds/my-world/world.ja.yaml              # world name, summary, attribute names
 worlds/my-world/WORLD.ja.md                # localized setting document
-worlds/my-world/characters/main-cast.ja.json
+worlds/my-world/characters/characters.ja.json
 worlds/my-world/data/rules/core.ja.yaml
 ```
 

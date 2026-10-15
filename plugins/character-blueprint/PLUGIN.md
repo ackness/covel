@@ -27,28 +27,26 @@ contributes:
   data:
     blueprints:
       schema: ./schemas/blueprints.schema.json
-      description: Importable world character blueprints.
+      description: Roleplay notes of the world's characters, by character id.
       accepts:
         - character.blueprints@1
       authoring:
-        title: Preset characters
+        title: Roleplay notes
         hint: >-
-          Write one record for each preset character. Give it the `id` of the
-          character's record in the world's characters, with or without the
-          `npc-` prefix: the narrative reads a card only when its character is
-          in the session. `role` is a character type the world declares in
-          `characterSchema.types`. Use the world's `characterSchema` attribute
-          IDs as the keys of `attributes`. The narrative plays the character
-          from `persona` (`summary`, `traits`, `goals`, `fears`, `secrets`,
-          `voice`, `style`), from `rules` (at most three, highest `priority`
-          first), from `dialogueExamples` (at most two) and from
-          `scenarioDefaults.relationships`. `voice` says how the character
-          speaks. A secret is for the narrator, who does not state it before
-          the story reveals it. Keep names identical to the lore.
-        example: ./examples/blueprints.json
+          Write the notes in the record of the character they are for, under
+          `blueprint`. The record already gives the character's name,
+          description, type and fields: do not repeat them. The narrative
+          reads the notes of the characters in the session, except the
+          player's. It plays a character from `persona` (`summary`, `traits`,
+          `goals`, `fears`, `secrets`, `voice`, `style`), from `rules` (at
+          most three, highest `priority` first), from `dialogueExamples` (at
+          most two) and from `scenarioDefaults.relationships`, whose keys are
+          `player`, a character's id or the id of a dimension entry. `voice`
+          says how the character speaks. A secret is for the narrator, who
+          does not state it before the story reveals it.
+        example: ./examples/blueprint.json
         generate: default
-        source:
-          path: characters/main-cast.json
+        characterField: blueprint
     presence:
       schema: ./schemas/presence.schema.json
       description: Importable character media presence records.
@@ -77,15 +75,16 @@ contributes:
           path: media/portraits
   ui:
     right:
-      - ./ui/blueprints-panel.json
       - ./ui/character-presence-panel.json
 ---
 
-Character Profiles holds the world's preset cast. World packages fill the
-`blueprints`, `presence` and `assets` namespaces through world data; the cards
+Character Profiles holds the roleplay notes and portraits of the world's
+characters. A world writes a character's notes in that character's record
+(`blueprint`), and the kernel imports them into `blueprints`, keyed by the
+character's id; `presence` and `assets` come from the world's media. The notes
 are read-only during play. The manual `presence` runtime stores a character's
 portrait, sprite, voice, and visual variants, which the `character.visual@1`
 slot projects onto the stage: the portrait panel calls it when the player
 uploads a replacement portrait. A `prompt.segment@1` provider gives story runtimes the roleplay
-notes of each card whose character is in the session (`<character-notes>`). This root `PLUGIN.md` is metadata only — executable runtimes live
+notes of each character in the session (`<character-notes>`). This root `PLUGIN.md` is metadata only — executable runtimes live
 under `runtimes/`.

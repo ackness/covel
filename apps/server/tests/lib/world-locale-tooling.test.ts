@@ -312,7 +312,7 @@ describe("world translation tooling: what counts as text", () => {
       "en-US",
     );
     const cast = status.files.find(
-      (file) => file.file === "characters/main-cast.json",
+      (file) => file.file === "characters/characters.json",
     )!;
     // A later translation uses these: one name, one translation.
     expect(cast.terms).toContainEqual({ source: "苏窈", target: "Su Yao" });

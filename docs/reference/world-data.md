@@ -22,12 +22,12 @@
 
 之后每增加一种内容，就在约定的位置加一个文件，不需要再登记：
 
-| 文件                         | 内容                                                                                                                                                                  |
-| ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `data/dimensions.yaml`       | 世界维度                                                                                                                                                              |
-| `data/lorebook.yaml`         | 按关键词触发的设定条目                                                                                                                                                |
-| `characters/characters.json` | 领域角色记录                                                                                                                                                          |
-| 插件声明的路径               | 该插件接收的数据，例如 `data/quests.yaml`（任务）、`characters/main-cast.json`（角色蓝图）、`media/portraits/`（立绘）、`data/rules/*.yaml`（世界规则，一个文件一组） |
+| 文件                         | 内容                                                                                                                         |
+| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `data/dimensions.yaml`       | 世界维度                                                                                                                     |
+| `data/lorebook.yaml`         | 按关键词触发的设定条目                                                                                                       |
+| `characters/characters.json` | 领域角色记录                                                                                                                 |
+| 插件声明的路径               | 该插件接收的数据，例如 `data/quests.yaml`（任务）、`media/portraits/`（立绘）、`data/rules/*.yaml`（世界规则，一个文件一组） |
 
 最后一行的路径由插件自己声明，装了什么插件就有什么约定路径。下面的命令列出当前版本的全部路径和每种数据的示例：
 
@@ -49,8 +49,7 @@ worlds/my-world/
 │   ├── memory-blocks.json            # 可选：题材记忆定义
 │   └── rules/                       # 可选：题材规则，每个 .yaml 一组，导入 living-world-rules
 ├── characters/
-│   ├── main-cast.json                # 可选：character.blueprints@1 插件内容
-│   └── characters.json               # 通用领域角色记录
+│   └── characters.json               # 角色记录，可带插件的数据（如扮演说明）
 └── media/
     ├── portraits.json               # 可选：立绘生成清单
     ├── portraits/                   # 可选：角色立绘
@@ -787,8 +786,8 @@ world.yaml                     # 主文件，defaultLocale 的文本
 world.en-US.yaml               # 只有英文译文
 data/dimensions.yaml
 data/dimensions.en-US.yaml
-characters/main-cast.json
-characters/main-cast.en-US.json
+characters/characters.json
+characters/characters.en-US.json
 WORLD.md
 WORLD.en-US.md                 # 正文类文件没有可对齐的 id，整份替换
 ```
@@ -1081,47 +1080,45 @@ characterSchema:
 - `world-init` 的 guard 先用会话已有的 schema，再用世界声明的 schema；两者都没有时才调用模型生成。
 - 维度和角色属性是两回事。维度的结构不会自动变成角色属性，也不会从其他会话或其他插件的私有数据里复制 schema。
 
-## 领域角色与插件角色卡
+<a id="领域角色与插件角色卡"></a>
 
-角色有两类文件，作用不同：
+## 一个世界一份角色文件
 
-| 文件                         | 是什么                                             | 谁读                       |
-| ---------------------------- | -------------------------------------------------- | -------------------------- |
-| `characters/characters.json` | 领域角色：会话里真正存在的角色记录                 | 内核、角色面板、所有插件   |
-| `characters/main-cast.json`  | 角色卡：给模型的扮演说明（口吻、动机、秘密），可选 | 插件 `character-blueprint` |
-
-四个内置世界两种都带，都放在约定路径上。写成 source 是这样：
-
-```yaml
-sources:
-  cast:
-    kind: json
-    path: characters/main-cast.json
-    schema: contract:character.blueprints@1
-    to: contract:character.blueprints@1
-    key: id
-  characters:
-    kind: json
-    path: characters/characters.json
-    to: characters
-    key: id
-    after: cast
-```
-
-领域文件示例：
+世界的角色都写在 `characters/characters.json` 里，一个角色一条记录。创建会话时，内核把每条记录变成这局游戏里的角色。
 
 ```json
 [
   {
-    "id": "mio",
+    "id": "npc-mio",
     "name": "Mio",
     "aliases": ["Class President", "澪"],
     "type": "npc",
     "description": "A fellow student.",
-    "fields": { "affection": 20 }
+    "fields": { "affection": 20 },
+    "blueprint": {
+      "persona": { "voice": "Soft, complete sentences." },
+      "dialogueExamples": [{ "character": "If you get lost, ask me first." }]
+    }
   }
 ]
 ```
+
+| 字段                             | 是什么                                                 |
+| -------------------------------- | ------------------------------------------------------ |
+| `id`                             | 角色的 ID                                              |
+| `name`、`aliases`、`description` | 名字、其他叫法、说明                                   |
+| `type`                           | 角色类型，取 `characterSchema.types` 里的一个          |
+| `fields`                         | 属性值，键是 `characterSchema` 的属性 ID               |
+| 插件声明的字段                   | 一个插件给这个角色的数据，例如“角色资料”的 `blueprint` |
+
+**插件的数据写在角色记录里。** 插件在接收世界数据的 namespace 上声明 `authoring.characterField`（见[插件清单](./plugins.md)），角色记录里这个名字的字段就是该插件给这个角色的一条数据。
+
+- 导入时，内核把这个字段交给本局启用的、接受对应契约的插件，键是角色的 `id`。
+- 本局没有这样的插件时，这个字段被忽略，角色照常创建。
+- 这个字段不会进入角色的 `fields`。插件按角色的 `id` 找到自己的数据。
+- `pnpm validate:world` 用接收插件的 schema 检查这个字段；没有插件读它时给出警告。新会话默认不启用接收插件时，也给出警告。
+- 语言文件按 `id` 对齐，可以翻译这个字段里的文字。
+- `pnpm describe:authoring` 列出每个插件声明的字段（`characterField`）和一份示例。
 
 **顺序。** 领域角色按作者在文件里写的顺序进入会话，面板和提示词里的名册都按这个顺序。多个 source 都写角色时，按 source 的导入顺序接着排。游玩中新建的角色排在它们之后。（实现上，导入时每个角色的 `createdAt` 比前一个晚一毫秒，列表按 `(createdAt, id)` 排序。）
 
@@ -1133,24 +1130,27 @@ sources:
 - 语言文件里的 `aliases` 整列替换主文件的列表。
 - 完整规则见[别名与按名字解析](./world-model.md#别名与按名字解析)。
 
-**ID。** 导入时原样使用文件里的 ID（如 `mio`），不加前缀。角色记录不会复制到任何插件的数据里；面板和插件通过 `ctx.world.characters` 或角色 API 读到同一份。关掉接收角色卡的插件只跳过角色卡，不影响领域角色。
+**ID。** 导入时原样使用文件里的 ID（如 `npc-mio`），不加前缀，也不去掉前缀。角色记录不会复制到任何插件的数据里；面板和插件通过 `ctx.world.characters` 或角色 API 读到同一份。
 
-**`effects: [characters]`。** 它可以把同一个 source 里通用的 `{id,name,type,description,fields}` 变成领域角色，但不会理解角色卡里的 `persona/attributes/instantiate`。建议单独写一个 `to: characters` 的 source，明确给出要进入会话的字段。
+**`effects: [characters]`。** 它把一个 `contract:` source 里每条记录的 `{id,name,type,description,fields}` 同时写成角色。世界自己的角色写在角色文件里即可，不需要它。
 
-**角色卡的字段去了哪里。** 前提是接收插件 `character-blueprint` 在这局游戏里启用：
+### 扮演说明（`blueprint`）
 
-| 角色卡字段                                                                                                   | 去向                                                                                                          |
-| ------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------- |
-| `name`、`persona.summary`、`description`、`role`、`aliases`、`tags`、`attributes`                            | 插件的只读“预设角色”面板                                                                                      |
-| `persona`（`voice`、`style`、`summary`、`traits`、`goals`、`fears`、`secrets`）、`rules`、`dialogueExamples` | 故事 runtime 的 `<character-notes>` 提示段：按这些说明扮演角色；`secrets` 标为只有叙事者知道                  |
-| `scenarioDefaults.relationships`、`scenarioDefaults.state`                                                   | 同一提示段；`state` 只作为开场事实列出，不保存、不能用工具修改                                                |
-| `attributes`、`instantiate`                                                                                  | 不会自动变成领域角色；领域角色来自 `to: characters` 的 source。手动运行 `import` runtime 并实例化时才使用它们 |
+内置的“角色资料”（`character-blueprint`）从 `blueprint` 字段读角色的扮演说明。它在这局游戏里启用时：
 
-要注意的三点：
+| `blueprint` 里的字段                                                                                         | 去向                                                                                         |
+| ------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------- |
+| `persona`（`voice`、`style`、`summary`、`traits`、`goals`、`fears`、`secrets`）、`rules`、`dialogueExamples` | 故事 runtime 的 `<character-notes>` 提示段：按这些说明扮演角色；`secrets` 标为只有叙事者知道 |
+| `scenarioDefaults.relationships`、`scenarioDefaults.state`                                                   | 同一提示段；`state` 只作为开场事实列出，不保存、不能用工具修改                               |
+| `tags`                                                                                                       | 只保存，不进提示段                                                                           |
 
-- 提示段只写“角色在这局游戏里”的卡。判断方法：卡的 `id` 等于领域角色的 `id`，或者领域角色的 `id` 是 `npc-<卡 id>`。所以角色卡和领域角色要用对得上的 ID。
-- 想让模型能修改的状态，要声明成 `characterSchema` 的属性，并写进领域角色的 `fields`。只写在 `scenarioDefaults.state` 里的开关没有可以修改的地方。
-- 应用内的 AI 创建世界默认只生成领域角色，口吻和动机写在 `description` 里。创作者勾选了接收插件提供的“预设角色”内容时，才按上表另外生成角色卡。
+要注意的几点：
+
+- 提示段只写这局游戏里有的角色，玩家角色除外。
+- `scenarioDefaults.relationships` 的键是 `player`、角色的 `id` 或维度条目的 `id`，提示段里写成名字。
+- 名字、说明、类型和属性只写在角色记录里。`blueprint` 里再写 `name` 这类字段，校验会报错。
+- 想让模型能修改的状态，要声明成 `characterSchema` 的属性，并写进角色的 `fields`。只写在 `scenarioDefaults.state` 里的开关没有可以修改的地方。
+- 应用内的 AI 创建世界默认只生成角色记录，口吻和动机写在 `description` 里。创作者勾选了“角色扮演说明”时，生成器给每个角色另外写一份 `blueprint`。
 
 长度上限与裁剪顺序见[插件 README](../../plugins/character-blueprint/README.md#角色卡怎样进入叙事)。
 
@@ -1411,10 +1411,8 @@ sources:
   cast-extra:
     kind: json
     path: data/characters/cast-extra.json
-    schema: contract:character.blueprints@1
-    to: contract:character.blueprints@1
+    to: characters
     key: id
-    after: cast
 ```
 
 override 里的 `path` 相对 `~/.covel/world-overrides/<world-id>/`。路径解析符号链接之后仍然必须在这个目录里。

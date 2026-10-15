@@ -103,15 +103,26 @@ function render(surface: AuthoringSurface): string {
         yamlBlock({ [contract.source.id]: contract.source.entry }),
         "",
       );
+    if (contract.characterField)
+      lines.push(
+        `Write it in the character file: one record of this contract under \`${contract.characterField}\` in the record of each character it is for. It is imported keyed by the character's \`id\`.`,
+        "",
+      );
     lines.push(
       `Record schema: \`plugins/${contract.pluginId}/${contract.schema.replace(/^\.\//, "")}\``,
       "",
     );
     if (contract.example !== undefined)
       lines.push(
-        `Example${contract.source ? ` (\`${contract.source.entry.path}\`)` : ""}:`,
+        `Example${
+          contract.source
+            ? ` (\`${contract.source.entry.path}\`)`
+            : contract.characterField
+              ? ` (\`${contract.characterField}\` of one character)`
+              : ""
+        }:`,
         "",
-        contract.source?.entry.kind === "json"
+        contract.source?.entry.kind === "json" || contract.characterField
           ? indent(JSON.stringify(contract.example, null, 2))
           : yamlBlock(contract.example),
         "",

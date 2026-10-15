@@ -121,7 +121,13 @@ contributes:
       )
     )?.value,
   ).toEqual(definition);
+  // One import of each record: the contract record and the two characters.
+  const ledger = await store.listWorldDataImportLedger("portable-session");
   expect(
-    await store.listWorldDataImportLedger("portable-session"),
-  ).toHaveLength(1);
+    ledger.map(({ target, key }) => `${target}:${key ?? ""}`).sort(),
+  ).toEqual([
+    "characters:archivist",
+    "characters:guide",
+    "contract:world.time-definition@1:world",
+  ]);
 });

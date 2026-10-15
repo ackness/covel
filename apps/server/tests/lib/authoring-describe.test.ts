@@ -99,11 +99,26 @@ describe("authoring surface", () => {
   it("every bundled namespace that accepts world data explains how to author it", async () => {
     const catalogue = await loadPluginCatalogue([bundledPlugins]);
     const surface = await describeAuthoringSurface(catalogue);
+    // Each says where it goes: a file of its own, or a field of the
+    // world's character records.
     expect(
       surface.contracts
-        .filter((item) => !item.hint || !item.source)
+        .filter(
+          (item) =>
+            !item.hint ||
+            (item.source === undefined) === (item.characterField === undefined),
+        )
         .map((item) => `${item.pluginId}/${item.namespace}`),
     ).toEqual([]);
+    expect(
+      surface.contracts.find(
+        (item) => item.contract === "character.blueprints@1",
+      ),
+    ).toMatchObject({
+      pluginId: "character-blueprint",
+      characterField: "blueprint",
+      example: { persona: expect.any(Object) },
+    });
   });
 
   it("bundled examples match their schemas", async () => {

@@ -25,7 +25,7 @@ describe("character visual projection", () => {
       ],
     });
   });
-  it("matches a bare blueprint id to its npc- character only, never to another id ending the same way", async () => {
+  it("matches a portrait to the character with its id only, never to an npc- one", async () => {
     const ctx = {
       world: {
         characters: [
@@ -37,14 +37,12 @@ describe("character visual projection", () => {
         list: async () => [{ value: { characterId: "guard", avatar: ref } }],
       },
     };
-    expect(await project({ previous: null }, ctx)).toEqual({
-      characters: [
-        { characterId: "npc-guard", displayName: "Guard", avatar: ref },
-      ],
-    });
-    ctx.world.characters.pop();
     expect((await project({ previous: null }, ctx)).characters).toEqual([
       { characterId: "guard", avatar: ref },
+    ]);
+    ctx.world.characters.push({ id: "guard", name: "Guard" });
+    expect((await project({ previous: null }, ctx)).characters).toEqual([
+      { characterId: "guard", displayName: "Guard", avatar: ref },
     ]);
   });
   it("does not match a different compound suffix and preserves earlier provider values", async () => {

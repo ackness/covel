@@ -24,7 +24,7 @@
       "relatedCharacters": ["npc-june-okafor"],
       "depiction": "possible-moment",
       "spoilerLevel": "opening",
-      "sourceRefs": ["WORLD.md", "characters/main-cast.json"],
+      "sourceRefs": ["WORLD.md", "characters/characters.json"],
       "generation": {
         "tool": "built-in-imagegen",
         "prompt": "Create an environmental gallery illustration for Emberback Relay, EXACTLY 1536x1024 landscape PNG. Match bright graphic painterly retro-frontier science fiction, elegant adventure-poster shapes, cream, terracotta and cobalt, tactile repaired technology and layered depth. Vesper is TIDALLY LOCKED: low white brightward sun fixed on the LEFT horizon, cold nightward sky on the RIGHT, NOT sunset on Earth. Mile Seventeen: an exposed rust-red basalt road crossing under a large NATURAL ROCK ARCH. A small practical field radio repeater with cream ceramic heat shielding, cobalt casing and short aerial is bolted beneath the arch. Wheel tracks and a modest guard rail show courier use; road leads toward remote warm Crownfire storm clouds, no disaster happening, no vehicle wreck. Distant ridge geometry and solar glare give scale. No people, no words, no logos, no floating holograms, no ornamental gears, no magic. Open foreground supports UI and character overlays, focal arch in central 60 percent, readable warm sunlight, scientific frontier optimism mixed with weather danger."
@@ -52,7 +52,7 @@
       "relatedCharacters": ["npc-tomas-reed"],
       "depiction": "possible-moment",
       "spoilerLevel": "opening",
-      "sourceRefs": ["WORLD.md", "characters/main-cast.json"],
+      "sourceRefs": ["WORLD.md", "characters/characters.json"],
       "generation": {
         "tool": "built-in-imagegen",
         "prompt": "Transform the reference character portrait into a cinematic story still, EXACTLY 1536x1024 landscape. The reference is the identity and costume authority for TOMAS REED: preserve his late-fifties Latino face, greying hair and short beard, cream-and-cobalt coveralls, mustard harness, enamel mug and analog field radio. Keep the reference's warm graphic painterly retro-frontier science-fiction illustration style, creamy sunlight, terracotta basalt and cobalt details. NEW scene: Tomas at a relay operations workbench, three-quarter waist-up, quietly leaning forward to adjust an analog receiver with one hand, the other beside his battered enamel coffee mug. A reel-to-reel recorder, practical ceramic electrical fittings and a few unlettered paper notes. Through a narrow open hatch, a rust ridge and distant relay mast under fixed low brightward light and gathering golden Crownfire weather. His expression is attentive, humane, weighing evidence. No panic, explosion or resolved crisis. Single character, background lower contrast, dramatic but welcoming dimensional lighting, clear hands and believable device. No text, no watermark, no future prediction made visible, no holographic magic. A possible quiet work moment, not a canonical new event.",
@@ -74,7 +74,7 @@
       "relatedCharacters": ["npc-priya-nair"],
       "depiction": "character-portrait",
       "spoilerLevel": "opening",
-      "sourceRefs": ["characters/main-cast.json"],
+      "sourceRefs": ["characters/characters.json"],
       "generation": {
         "tool": "built-in-imagegen",
         "prompt": "Create a NEW full-body character portrait for Emberback Relay, 1024x1536 PNG. Bright retro-frontier science fiction, graphic painterly adventure illustration with screen-printed poster sensibility, tactile fabrics, natural anatomy, cream, terracotta and cobalt palette, low fixed brightward sunlight and crisp blue nightward rim light. Single forty-five-year-old South Asian female lead medic Priya Nair, medium-brown skin, practical mature face, graying dark hair tied back with reading glasses pushed into it. Rolled cream sleeves, grey clinic vest, cobalt work trousers, practical shoes; a compact battery tester on a lanyard at chest, holding a slim medical chart with no readable text. Quiet, level, dryly compassionate gaze, solid grounded working stance. Background is an eight-bed clinic's modest service alcove: repaired cream ceramic panels, cool medicine cabinet, reserve battery with analog meter, soft warm light. No visible patients or other people. Complete head-to-boots body, head y=70, soles y=1480, centered, same full-length scale as matching Emberback cast. Restrained foreground-midground-background depth, lower-contrast environment, face and signature tester readable. Optimistic community life under resource pressure, no neon cyberpunk, no spaceship, no fantasy, no bulky armor, no text or watermark. OPAQUE environmental portrait."
@@ -95,7 +95,7 @@
       "relatedCharacters": ["npc-eli-varga"],
       "depiction": "character-portrait",
       "spoilerLevel": "opening",
-      "sourceRefs": ["characters/main-cast.json"],
+      "sourceRefs": ["characters/characters.json"],
       "generation": {
         "tool": "built-in-imagegen",
         "prompt": "Create a NEW full-body character portrait for Emberback Relay, EXACTLY 1024x1536 PNG. Bright retro-frontier science fiction, graphic painterly adventure illustration with screen-printed poster sensibility, tactile fabrics, natural anatomy, cream, terracotta and cobalt palette, low fixed brightward sunlight and crisp blue nightward rim light. Single nineteen-year-old ADULT male signal operator Eli Varga, slight natural adult build, unruly dark blond hair, alert anxious grey eyes, pale face with a few freckles, earnest intelligent expression. Oversized cream-and-cobalt cooperative work jacket, ochre utility trousers and practical boots, old over-ear communications headphones around neck, ink-stained fingers holding a small frequency notebook at waist with no readable text. Slightly hesitant posture as though about to report something important. Background: warm rust-red basalt-walled operations alcove, repaired cobalt analog radio receivers, reel-to-reel recorder, cream ceramic electrical panels, coils of functional cable, softer and lower contrast than character. Complete head-to-boots body, head y=70 soles y=1480, centered, same full-length scale as matching Emberback cast. Clear face silhouette, believable contact shadow and dimensional depth. No people other than Eli, no screens full of text, no cyberpunk, no military costume, no space suit, no watermark. OPAQUE environmental portrait."
@@ -121,7 +121,7 @@
       "spoilerLevel": "opening",
       "sourceRefs": [
         "WORLD.md",
-        "characters/main-cast.json",
+        "characters/characters.json",
         "media/portraits.json"
       ],
       "sha256": "34ef4bafbc15ace6d16f9a5ed8c34d255b005e696860c9bcdf4cb4d5ff1b90e8",
@@ -145,7 +145,7 @@
       "spoilerLevel": "opening",
       "sourceRefs": [
         "WORLD.md",
-        "characters/main-cast.json",
+        "characters/characters.json",
         "media/portraits.json"
       ],
       "sha256": "de5cc941e8b69b213061876f10e1d2319532a5c3e1caca722b96622b59acb4e4",
@@ -169,7 +169,7 @@
       "spoilerLevel": "opening",
       "sourceRefs": [
         "WORLD.md",
-        "characters/main-cast.json",
+        "characters/characters.json",
         "media/portraits.json"
       ],
       "sha256": "4647f07e4a345689ae6509dc8f23f3319299b4b27c5de04bf652567c9e9b8ec2",

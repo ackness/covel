@@ -109,22 +109,19 @@ export type CreateResult =
       readonly idleTimeout?: true;
     };
 
+/**
+ * A record of the world's character file: the kernel's fields, plus one
+ * record of each plugin contract that lives in character records, under the
+ * field its plugin names (`characterField`).
+ */
 export interface GeneratedWorldCharacter {
-  readonly schemaVersion: 1;
   readonly id: string;
   readonly name: string;
-  readonly role?: string;
-  readonly type?: string;
+  readonly type: string;
   readonly description?: string;
   readonly aliases?: readonly string[];
-  readonly tags?: readonly string[];
-  readonly attributes?: Readonly<Record<string, unknown>>;
-  readonly persona?: Readonly<Record<string, unknown>>;
-  readonly dialogueExamples?: readonly Readonly<Record<string, unknown>>[];
-  readonly scenarioDefaults?: Readonly<Record<string, unknown>>;
-  readonly rules?: readonly Readonly<Record<string, unknown>>[];
   readonly fields?: Readonly<Record<string, unknown>>;
-  readonly instantiate?: Readonly<Record<string, unknown>>;
+  readonly [characterField: string]: unknown;
 }
 
 export interface GeneratedWorldLorebookEntry {
@@ -170,6 +167,12 @@ export interface WorldGenerationDataContract {
   readonly pluginId?: string;
   /** The receiver also wants each record projected into the lorebook. */
   readonly lorebook?: boolean;
+  /**
+   * The field of a character record that holds one record of this
+   * contract (`authoring.characterField`). Its records are keyed by the id
+   * of their character and written into that character's record.
+   */
+  readonly characterField?: string;
   /**
    * The file the receiving plugin names for this contract's records
    * (`authoring.source`), given only when that path is a convention: no

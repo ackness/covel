@@ -415,6 +415,8 @@ interface PartPlan {
    * playable, and the player can ask for the supplement in a revision.
    */
   readonly required: boolean;
+  /** Why the part is not asked for, given what is written so far. */
+  skip?(draft: Draft): string | undefined;
   /** Check the section and add it to the draft; the errors when it cannot be imported. */
   accept(section: string, draft: Draft): string[] | Promise<string[]>;
 }
@@ -474,13 +476,25 @@ function contractPart(
   contract: WorldGenerationDataContract,
   dataContracts: readonly WorldGenerationDataContract[],
 ): PartPlan {
+  const inCharacters = contract.characterField !== undefined;
   return {
     id: `contract:${contract.contract}`,
     title: contract.title ?? contract.contract,
-    label: `the \`contractData\` records of contract "${contract.contract}"`,
+    label: inCharacters
+      ? `the \`contractData\` records of contract "${contract.contract}", one for each character, with \`key\` set to the character's \`id\``
+      : `the \`contractData\` records of contract "${contract.contract}"`,
     marker: "WORLD_PACKAGE_YAML",
     body: "only the key `contractData` with the records of this contract",
     required: false,
+    // Its records go into the records of the characters.
+    ...(inCharacters
+      ? {
+          skip: (draft: Draft) =>
+            draft.characters.length === 0
+              ? "the world has no characters to write it for"
+              : undefined,
+        }
+      : {}),
     accept(section, draft) {
       const parsed = parsePackage(section);
       if ("errors" in parsed) return parsed.errors;
@@ -501,10 +515,12 @@ function contractPart(
         },
         { contracts: [contract.contract] },
         dataContracts,
+        { characters: draft.characters },
       );
       if (result.errors.length > 0) return result.errors;
       draft.warnings.push(...result.warnings);
       draft.contractData.push(...(result.content.contractData ?? []));
+      draft.characters = result.content.characters;
       draft.packageSections.push(section);
       return [];
     },
@@ -631,6 +647,15 @@ async function writeNewWorld(
   options.onProgress?.([...parts]);
 
   for (const [index, plan] of plans.entries()) {
+    const skipped = plan.skip?.(draft);
+    if (skipped) {
+      parts[index] = { ...parts[index]!, state: "failed" };
+      options.onProgress?.([...parts]);
+      draft.warnings.push(
+        `${plan.title ?? plan.id} was not requested: ${skipped}`,
+      );
+      continue;
+    }
     const result = await askUntilAccepted({
       options,
       signal,

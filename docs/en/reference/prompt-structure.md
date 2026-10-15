@@ -363,9 +363,9 @@ The built-in `narrator` and `chat-mode-narrator` do this.
 - An omission does not mean the value does not exist. The preview does not pass itself off as complete JSON.
 - Choosing a template path does not mean the framework automatically expands every row set in full.
 
-**Character notes for the narrative.** The built-in `character-blueprint` provides the `<character-notes>` session segment for the story audience through the same extension point. The content is what the world character sheet writes for playing the role: tone, manner, personality, goals, fears, secrets, relationships, rules, and sample lines.
+**Character notes for the narrative.** The built-in `character-blueprint` provides the `<character-notes>` session segment for the story audience through the same extension point. The content is each character's roleplay notes in the world's character file (the `blueprint` field: tone, manner, personality, goals, fears, secrets, relationships, rules, and sample lines).
 
-- Only the character sheets in the session are written. They are sorted by sheet ID.
+- Only the characters in the session are written (not the player's character). They are sorted by character ID.
 - Within a budget of about 6000 tokens, they are trimmed level by level. Sample lines are trimmed first, then rules. Tone is never trimmed.
 - It is stable text within the session, placed in the stable part of the system prompt. It changes only when the character roster changes.
 - For the fields and trimming rules, see the [plugin README](../../../plugins/character-blueprint/README.md#角色卡怎样进入叙事).

@@ -109,7 +109,8 @@ one list, write that list alone.
 When the Creation Brief lists plugin data contracts, also include
 `contractData: [{ contract, key, value }]`. Write one item for each record.
 Each `value` must satisfy the record schema of its contract, and `value.id`
-must equal `key`. Follow the guidance and the example given for the contract.
+must equal `key`, unless the contract says that its `key` is a character's
+`id`. Follow the guidance and the example given for the contract.
 Create records only for the listed contracts. Do not put plugin-owned data in
 `dimensions`. Omit `contractData` when the brief lists no contract.
 
@@ -123,7 +124,7 @@ characters:
     name: <display name>
     type: npc
     description: <specific role in the current crisis, then how they speak and what they want; two or three sentences>
-    attributes:
+    fields:
       faction: <faction>
       role: <social/story role>
       location: <opening location>

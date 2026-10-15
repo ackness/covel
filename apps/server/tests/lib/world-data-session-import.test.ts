@@ -3069,3 +3069,220 @@ describe("world data sync compare-and-swap", () => {
     expect((row!.value as { content: string }).content).toBe("v2");
   });
 });
+
+describe("plugin data in character records", () => {
+  /** The bundled plugin that names `blueprint` for its roleplay notes. */
+  async function notesRegistry() {
+    const pluginsRoot = path.resolve(
+      import.meta.dirname,
+      "../../../../plugins",
+    );
+    const registry = createPluginRegistry();
+    for (const discovery of await discoverPlugins(pluginsRoot)) {
+      if (discovery.id !== "character-blueprint") continue;
+      const { manifests, packageManifest } =
+        await loadPluginDefinition(discovery);
+      registry.register({
+        id: discovery.id,
+        summary: {
+          id: discovery.id,
+          name: discovery.id,
+          description: "",
+          pluginType: "plugin",
+          runtimeCount: manifests.length,
+        },
+        rootPath: discovery.rootPath,
+        source: "builtin",
+        manifests,
+        packageManifest,
+        loadedRuntimes: new Map(),
+        status: "registered",
+      });
+    }
+    return registry;
+  }
+
+  const mara = {
+    id: "npc-mara",
+    name: "玛拉",
+    type: "npc",
+    description: "港务局书记。",
+    fields: { faction: "港务局" },
+    blueprint: {
+      persona: { voice: "短句，先要证据。", secrets: ["她烧了旧账。"] },
+      dialogueExamples: [{ id: "first", character: "先给我看那一页。" }],
+      scenarioDefaults: { relationships: { "npc-rook": "对手" } },
+    },
+  };
+  const rook = { id: "npc-rook", name: "鲁克", type: "npc" };
+
+  async function castWorld(
+    characters: readonly unknown[],
+    overlay?: readonly unknown[],
+  ): Promise<{ worldsDir: string; worldId: string }> {
+    const worldsDir = await mkdtemp(path.join(tmpdir(), "covel-cast-world-"));
+    const worldId = "cast-world";
+    const worldRoot = path.join(worldsDir, worldId);
+    await mkdir(path.join(worldRoot, "characters"), { recursive: true });
+    await writeFile(
+      path.join(worldRoot, "world.yaml"),
+      "name: 港口\nsummary: 港口\ndefaultLocale: zh-CN\n",
+    );
+    await writeFile(path.join(worldRoot, "WORLD.md"), "# 港口\n");
+    await writeFile(
+      path.join(worldRoot, "characters/characters.json"),
+      JSON.stringify(characters),
+    );
+    if (overlay) {
+      await writeFile(
+        path.join(worldRoot, "world.en-US.yaml"),
+        "name: Harbor\nsummary: Harbor\n",
+      );
+      await writeFile(path.join(worldRoot, "WORLD.en-US.md"), "# Harbor\n");
+      await writeFile(
+        path.join(worldRoot, "characters/characters.en-US.json"),
+        JSON.stringify(overlay),
+      );
+    }
+    return { worldsDir, worldId };
+  }
+
+  async function importCast(
+    world: { worldsDir: string; worldId: string },
+    activePlugins: readonly string[],
+    locale = "zh-CN",
+    store?: DataStore,
+  ) {
+    store ??= await makeStore(activePlugins);
+    const result = await importWorldDataForSession({
+      store,
+      sessionId: "sess-1",
+      worldId: world.worldId,
+      worldsDirs: [world.worldsDir],
+      now: NOW,
+      locale,
+      preflight: { registry: await notesRegistry(), activePlugins },
+    });
+    return { store, result };
+  }
+
+  it("delivers a character's notes to the plugin that names them, keyed by the character's id", async () => {
+    const { store, result } = await importCast(await castWorld([mara, rook]), [
+      "character-blueprint",
+    ]);
+    expect(result.diagnostics.filter((d) => d.level === "error")).toEqual([]);
+    const characters = await store.listCharacters("sess-1");
+    expect(characters.map(({ id }) => id)).toEqual(["npc-mara", "npc-rook"]);
+    // The record keeps the kernel's fields; the notes are the plugin's.
+    expect(characters[0]).toMatchObject({
+      name: "玛拉",
+      description: "港务局书记。",
+      fields: { faction: "港务局" },
+    });
+    expect(characters[0]).not.toHaveProperty("blueprint");
+    expect(
+      await store.listPluginData("sess-1", "character-blueprint", "blueprints"),
+    ).toEqual([
+      expect.objectContaining({ key: "npc-mara", value: mara.blueprint }),
+    ]);
+    expect(
+      (await store.listWorldDataImportLedger("sess-1")).map(
+        ({ target, key }) => `${target}:${key}`,
+      ),
+    ).toEqual(
+      expect.arrayContaining([
+        "characters:npc-mara",
+        "characters:npc-rook",
+        "contract:character.blueprints@1:npc-mara",
+      ]),
+    );
+  });
+
+  it("creates the same characters without the plugin, and leaves the notes out", async () => {
+    const { store, result } = await importCast(
+      await castWorld([mara, rook]),
+      [],
+    );
+    expect(result.diagnostics.filter((d) => d.level === "error")).toEqual([]);
+    const characters = await store.listCharacters("sess-1");
+    expect(characters).toEqual([
+      expect.objectContaining({
+        id: "npc-mara",
+        name: "玛拉",
+        fields: { faction: "港务局" },
+      }),
+      expect.objectContaining({ id: "npc-rook", name: "鲁克" }),
+    ]);
+    expect(characters[0]).not.toHaveProperty("blueprint");
+    expect(
+      await store.listPluginData("sess-1", "character-blueprint", "blueprints"),
+    ).toEqual([]);
+  });
+
+  it("imports the translation of the notes for a session in the overlay's language", async () => {
+    const { store, result } = await importCast(
+      await castWorld(
+        [mara, rook],
+        [
+          {
+            id: "npc-mara",
+            name: "Mara",
+            description: "Harbor clerk.",
+            blueprint: {
+              persona: {
+                voice: "Short sentences; evidence first.",
+                secrets: ["She burned the old ledger."],
+              },
+              dialogueExamples: [
+                { id: "first", character: "Show me the page first." },
+              ],
+              scenarioDefaults: { relationships: { "npc-rook": "rival" } },
+            },
+          },
+          { id: "npc-rook", name: "Rook" },
+        ],
+      ),
+      ["character-blueprint"],
+      "en-US",
+    );
+    expect(result.diagnostics.filter((d) => d.level === "error")).toEqual([]);
+    expect(
+      (await store.listCharacters("sess-1")).map(({ name }) => name),
+    ).toEqual(["Mara", "Rook"]);
+    expect(
+      (
+        await store.getPluginData(
+          "sess-1",
+          "character-blueprint",
+          "blueprints",
+          "npc-mara",
+        )
+      )?.value,
+    ).toEqual({
+      persona: {
+        voice: "Short sentences; evidence first.",
+        secrets: ["She burned the old ledger."],
+      },
+      dialogueExamples: [{ id: "first", character: "Show me the page first." }],
+      scenarioDefaults: { relationships: { "npc-rook": "rival" } },
+    });
+  });
+
+  it("rejects notes that repeat the record's name, before writing anything", async () => {
+    const store = await makeStore(["character-blueprint"]);
+    await expect(
+      importCast(
+        await castWorld([
+          { ...mara, blueprint: { ...mara.blueprint, name: "玛拉" } },
+          rook,
+        ]),
+        ["character-blueprint"],
+        "zh-CN",
+        store,
+      ),
+    ).rejects.toThrow(
+      /\(id "npc-mara"\) field "blueprint" of source "characters", for plugin "character-blueprint" namespace "blueprints", failed schema validation/,
+    );
+    expect(await store.listCharacters("sess-1")).toEqual([]);
+  });
+});
