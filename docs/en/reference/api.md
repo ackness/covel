@@ -5108,7 +5108,7 @@ The response is SSE. First come progress frames, and the generated world comes l
 {
   "concept": "一个被永恒暴风雪笼罩的冰封大陆",
   "locale": "zh-CN",
-  "model": "utility",
+  "model": "story",
   "saveTarget": "server-file",
   "idleTimeoutMs": 300000,
   "brief": {
@@ -5124,7 +5124,7 @@ The response is SSE. First come progress frames, and the generated world comes l
 | --------------- | ------ | -------- | -------------------------------------------------------------------------------------------------------------------------------------- |
 | `concept`       | string | Yes      | A description of the world concept (up to 4000 characters). The synonym key `prompt` is also accepted                                  |
 | `locale`        | string | No       | The locale. The default is `zh-CN`                                                                                                     |
-| `model`         | string | No       | Model role or preset ID; defaults to `utility`, following [model selection](./slots.md#actual-selection-priority)                      |
+| `model`         | string | No       | Model role or preset ID; defaults to `story`, following [model selection](./slots.md#actual-selection-priority)                        |
 | `saveTarget`    | string | No       | Where to save. The default is `server-file`. The allowed values are in the table below                                                 |
 | `brief`         | object | No       | A structured creative brief. If omitted, only basic generation is done                                                                 |
 | `idleTimeoutMs` | number | No       | The longest time to wait for the model's next piece of output, in milliseconds. An integer from 1000 to 1800000. The default is 120000 |
@@ -5332,7 +5332,7 @@ So "add a character" does not change the other characters, and it does not drop 
 | `worldId`       | string | Yes      | The world to change                                                                                                                        |
 | `instruction`   | string | Yes      | The change request (up to 2000 characters)                                                                                                 |
 | `world`         | object | No       | A world saved in the browser. Send its `WorldRecord` with the request                                                                      |
-| `model`         | string | No       | Model role or preset ID; defaults to `utility`, following [model selection](./slots.md#actual-selection-priority)                          |
+| `model`         | string | No       | Model role or preset ID; defaults to `story`, following [model selection](./slots.md#actual-selection-priority)                            |
 | `idleTimeoutMs` | number | No       | The longest time to wait for the model's next piece of output, in milliseconds. The meaning and range are the same as for `generate-world` |
 
 About `world`:

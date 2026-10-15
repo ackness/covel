@@ -230,20 +230,26 @@ describe("ai world generation route", () => {
     },
     {
       configuredUtility: true,
-      boundRole: "utility",
+      boundRole: "story",
       model: undefined,
       expected: "player-model",
     },
     {
       configuredUtility: true,
-      boundRole: "story",
-      model: undefined,
-      expected: "server-utility",
+      boundRole: "utility",
+      model: "utility",
+      expected: "player-model",
     },
     {
       configuredUtility: true,
+      boundRole: "utility",
+      model: undefined,
+      expected: "server-story",
+    },
+    {
+      configuredUtility: false,
       boundRole: "story",
-      model: "story",
+      model: "utility",
       expected: "player-model",
     },
   ])(
@@ -373,9 +379,7 @@ protocol = "openai-chat-v1"
       expect(
         calls.every(
           (call) =>
-            call.model ===
-              (configuredUtility ? "server-utility" : "server-story") &&
-            call.apiKey === "server-key",
+            call.model === "server-story" && call.apiKey === "server-key",
         ),
       ).toBe(true);
       expect(JSON.stringify(await store.listWorlds())).not.toContain(

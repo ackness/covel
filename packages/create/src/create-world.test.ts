@@ -188,10 +188,10 @@ describe("createWorld", () => {
   });
 
   it.each([
-    { model: undefined, expected: "utility", revision: false },
-    { model: "authoring", expected: "authoring", revision: false },
-    { model: undefined, expected: "utility", revision: true },
-    { model: "authoring", expected: "authoring", revision: true },
+    { model: undefined, expected: "story", revision: false },
+    { model: "utility", expected: "utility", revision: false },
+    { model: undefined, expected: "story", revision: true },
+    { model: "utility", expected: "utility", revision: true },
   ])(
     "uses $expected for every request and repair (revision=$revision)",
     async ({ model, expected, revision }) => {

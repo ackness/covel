@@ -819,8 +819,8 @@ export async function createWorld(
   options: CreateWorldOptions,
 ): Promise<CreateResult> {
   // A named text slot uses request bindings before the server configuration,
-  // including the gateway's same-tag fallback when utility is not configured.
-  options = { ...options, model: options.model ?? "utility" };
+  // including the gateway's same-tag fallback when the slot is not configured.
+  options = { ...options, model: options.model ?? "story" };
   options.signal?.throwIfAborted();
   const locale = canonicalizeLocale(options.locale) ?? DEFAULT_LOCALE;
   const prompt = await buildWorldPrompt(
