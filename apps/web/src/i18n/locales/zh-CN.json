@@ -633,6 +633,7 @@
     "translateTitle": "翻译这个世界",
     "updateAvailable": "有更新可用",
     "packageUpdateHint": "这个世界的包文件有变化。打开世界详情，选择“恢复为包里的版本”即可更新。世界数据和设置会被包里的内容替换，已保存的会话保留。",
+    "packageUpdateDetail": "这个世界的包文件有变化。选择“恢复为包里的版本”即可更新：世界数据和设置会被包里的内容替换，已保存的会话保留。",
     "packageEditedHint": "你在 Covel 里改过这个世界。游玩用的是你改过的版本：它的包文件之后的变化，包括更新，都不再覆盖它。",
     "restorePackageAction": "恢复为包里的版本",
     "restorePackageTitle": "恢复为包里的版本？",

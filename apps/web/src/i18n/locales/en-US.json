@@ -667,6 +667,7 @@
     "translateTitle": "Translate this world",
     "updateAvailable": "Update available",
     "packageUpdateHint": "This world’s package files have changed. Open world details and choose “Restore the package version” to update. World data and settings are replaced with the package contents; saved sessions are kept.",
+    "packageUpdateDetail": "This world’s package files have changed. Choose “Restore the package version” to update: world data and settings are replaced with the package contents; saved sessions are kept.",
     "packageEditedHint": "You edited this world in Covel. Your version is the one you play: changes to its package files, including updates, no longer replace it.",
     "restorePackageAction": "Restore the package version",
     "restorePackageTitle": "Restore the package version?",

@@ -59,6 +59,23 @@ export function worldDisplayText(
   );
 }
 
+/**
+ * The name and summary a player with this interface language sees: those of
+ * the edition a new game would be played in.
+ */
+export function worldTextForPlayer(
+  world: Pick<WorldRecord, "name" | "description" | "locale" | "metadata">,
+  interfaceLocale: string,
+) {
+  const playLocale = worldPlayLocale(world, interfaceLocale);
+  const shown = worldDisplayText(world, playLocale ?? interfaceLocale);
+  return {
+    playLocale,
+    name: shown.name ?? "",
+    description: shown.description ?? "",
+  };
+}
+
 /** Normalize the primary language subtag used by Covel's locale switcher. */
 export function worldLanguage(
   locale: string | undefined,

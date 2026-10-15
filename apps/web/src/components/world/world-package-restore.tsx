@@ -61,7 +61,7 @@ export function WorldPackageRestore({
       <p>
         {t(
           world.updateAvailable
-            ? "world.packageUpdateHint"
+            ? "world.packageUpdateDetail"
             : "world.packageEditedHint",
         )}
       </p>

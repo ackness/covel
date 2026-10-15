@@ -24,13 +24,13 @@ import type {
   WorldSummary,
 } from "@/services/api.js";
 import { useRecentSessions } from "@/components/world/use-recent-sessions.js";
-import { text } from "@/components/world/editor-helpers.js";
 import { formatSlotLabel, type ResolvedSlot } from "@/hooks/use-slot-config.js";
 import {
   isWorldLocaleMismatch,
   prioritizeWorldsByLocale,
   worldLanguageName,
   worldPlayLocale,
+  worldTextForPlayer,
 } from "@/lib/world-locale.js";
 import i18n from "@/i18n";
 import { DEFAULT_FALLBACK_LOCALE } from "@covel/shared";
@@ -197,7 +197,12 @@ export function WorldSelectScreen({
       message: t(
         "world.deleteConfirmDesc",
         'This will permanently delete "{{name}}" and all of its session data. This action cannot be undone.',
-        { name: world ? text(world.name) : worldId },
+        {
+          name: world
+            ? worldTextForPlayer(world, i18n.resolvedLanguage ?? i18n.language)
+                .name
+            : worldId,
+        },
       ),
       confirmLabel: t("world.deleteConfirmAction", "Delete"),
       cancelLabel: t("common.cancel", "Cancel"),
@@ -257,7 +262,7 @@ export function WorldSelectScreen({
             <DialogDescription className="max-w-md leading-relaxed">
               {pendingWorld
                 ? t("world.localeMismatchDesc", {
-                    name: text(pendingWorld.name, activeLocale),
+                    name: worldTextForPlayer(pendingWorld, activeLocale).name,
                     worldLanguage: localeName(pendingWorld.locale),
                     interfaceLanguage: localeName(activeLocale),
                     defaultValue:

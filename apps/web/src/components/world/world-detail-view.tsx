@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/badge.js";
 import { Button } from "@/components/ui/button.js";
 import { Separator } from "@/components/ui/separator.js";
 import { text } from "./world-detail/detail-primitives.js";
+import { resolveDisplayText } from "@/lib/i18n-text.js";
 import {
   worldLanguageBadge,
   worldLanguageName,
@@ -243,17 +244,25 @@ export function WorldDetailView({
             {Object.entries(dims).map(([id, definition]) => (
               <section key={id} className="space-y-2 rounded border p-4">
                 <h2 className="font-medium">
-                  {text(definition.name)}{" "}
+                  {resolveDisplayText(
+                    definition.name,
+                    playLocale ?? interfaceLocale,
+                  )}{" "}
                   <span className="text-xs text-muted-foreground">{id}</span>
                 </h2>
                 {definition.description && (
                   <p className="text-sm text-muted-foreground">
-                    {text(definition.description)}
+                    {resolveDisplayText(
+                      definition.description,
+                      playLocale ?? interfaceLocale,
+                    )}
                   </p>
                 )}
                 <DimensionValueView
                   schema={definition.schema}
                   value={definition.initialValue}
+                  locale={playLocale ?? interfaceLocale}
+                  baseLocale={world.locale}
                 />
               </section>
             ))}

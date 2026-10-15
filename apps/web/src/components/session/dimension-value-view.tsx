@@ -1,28 +1,56 @@
 import { useTranslation } from "react-i18next";
-import type { DimensionValueSchema, JsonValue } from "@covel/shared";
+import {
+  isLocaleMapFor,
+  type DimensionValueSchema,
+  type JsonValue,
+} from "@covel/shared";
 import { resolveDisplayText } from "@/lib/i18n-text.js";
 
+/**
+ * A dimension value as a table, list or text. A world's own record keeps
+ * translated text as locale maps; `baseLocale` (the world's language) tells
+ * them apart from objects, and `locale` picks the language shown.
+ */
 export function DimensionValueView({
   schema,
   value,
+  locale,
+  baseLocale,
 }: {
   schema: DimensionValueSchema;
   value: JsonValue;
+  locale?: string;
+  baseLocale?: string;
 }) {
   const { i18n } = useTranslation();
-  const locale = i18n.resolvedLanguage ?? i18n.language;
-  return <Value schema={schema} value={value} locale={locale} />;
+  return (
+    <Value
+      schema={schema}
+      value={value}
+      locale={locale ?? i18n.resolvedLanguage ?? i18n.language}
+      baseLocale={baseLocale}
+    />
+  );
 }
 
 function Value({
   schema,
   value,
   locale,
+  baseLocale,
 }: {
   schema: DimensionValueSchema;
   value: JsonValue;
   locale: string;
+  baseLocale: string | undefined;
 }) {
+  const { t } = useTranslation();
+  if (baseLocale && isLocaleMapFor(value, baseLocale))
+    return (
+      <span className="whitespace-pre-wrap wrap-break-word">
+        {resolveDisplayText(value, locale)}
+      </span>
+    );
   if (value === null || typeof value !== "object") {
     const label = schema["x-enumLabels"]?.[String(value)];
     return (
@@ -30,8 +58,10 @@ function Value({
         {label !== undefined
           ? resolveDisplayText(label, locale)
           : value === null
-            ? "null"
-            : String(value)}
+            ? "—"
+            : typeof value === "boolean"
+              ? t(value ? "common.yes" : "common.no")
+              : String(value)}
       </span>
     );
   }
@@ -84,6 +114,7 @@ function Value({
                       schema={rowSchema?.properties?.[key] ?? {}}
                       value={(row as Record<string, JsonValue>)[key] ?? null}
                       locale={locale}
+                      baseLocale={baseLocale}
                     />
                   </td>
                 ))}
@@ -98,7 +129,12 @@ function Value({
       <ol className="list-inside list-decimal space-y-1">
         {value.map((item, index) => (
           <li key={index}>
-            <Value schema={schema.items ?? {}} value={item} locale={locale} />
+            <Value
+              schema={schema.items ?? {}}
+              value={item}
+              locale={locale}
+              baseLocale={baseLocale}
+            />
           </li>
         ))}
       </ol>
@@ -120,6 +156,7 @@ function Value({
               }
               value={item}
               locale={locale}
+              baseLocale={baseLocale}
             />
           </dd>
         </div>
