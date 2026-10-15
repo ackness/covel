@@ -232,6 +232,8 @@ permissions:
 | `ui:message-block` | `contributes.ui.message` 有消息块 |
 | `ui:manual-action` | 有 `manual` 触发的 runtime，或者有 `contributes.actions` / `contributes.commands` |
 
+准备页按插件的第一个标签分组。推出的标签在那里显示成文字（如“调用模型”“可手动使用”），作者写的标签照原样显示。
+
 `io.visibility` 只有两个值：`story` 给提供故事正文的叙事 runtime，`system` 给其他所有 runtime。
 
 ### 两种 runtime

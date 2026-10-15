@@ -42,19 +42,19 @@ export function approvalConfirmMessage(
     return t("plugin.approval.serverCodeMessage", {
       plugin,
       defaultValue:
-        '"{{plugin}}" is a community plugin. Authorizing it lets its code run inside the Covel backend, without a process sandbox, until the backend restarts.',
+        '"{{plugin}}" is a community plugin. If you allow it, its code runs inside the Covel backend, without a process sandbox, until the backend restarts.',
     });
   if (action.startsWith(RUNTIME_ACTION_PREFIX))
     return t("plugin.approval.runtimeMessage", {
       plugin,
       runtime: action.slice(RUNTIME_ACTION_PREFIX.length),
       defaultValue:
-        '"{{plugin}}" asks to run its task {{runtime}} in this session. Authorize it?',
+        '"{{plugin}}" asks to run its task {{runtime}} in this game. Allow it?',
     });
   return t("plugin.approval.confirmMessage", {
     plugin,
     action,
     defaultValue:
-      '"{{plugin}}" asks to run {{action}}. Authorize all such calls for this session?',
+      '"{{plugin}}" asks to run {{action}}. Allow all such requests in this game?',
   });
 }

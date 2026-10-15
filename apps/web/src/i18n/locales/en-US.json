@@ -308,14 +308,19 @@
       "errors_one": "{{count}} error",
       "errors_other": "{{count}} errors",
       "kind": {
+        "character": "{{count}} characters",
         "character_one": "{{count}} character",
         "character_other": "{{count}} characters",
+        "lorebook": "{{count}} lore entries",
         "lorebook_one": "{{count}} lore entry",
         "lorebook_other": "{{count}} lore entries",
+        "media-index": "{{count}} images",
         "media-index_one": "{{count}} image",
         "media-index_other": "{{count}} images",
+        "plugin-data": "{{count}} plugin records",
         "plugin-data_one": "{{count}} plugin record",
         "plugin-data_other": "{{count}} plugin records",
+        "other": "{{count}} other items",
         "other_one": "{{count}} other item",
         "other_other": "{{count}} other items"
       }

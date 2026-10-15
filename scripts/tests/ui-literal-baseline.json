@@ -4,7 +4,7 @@
   "apps/web/src/components/asset-render/AssetImage.tsx": 1,
   "apps/web/src/components/session/chat-messages/chat-block-renderer.tsx": 5,
   "apps/web/src/components/session/dimension-value-editor.tsx": 1,
-  "apps/web/src/components/session/dimension-value-view.tsx": 2,
+  "apps/web/src/components/session/dimension-value-view.tsx": 1,
   "apps/web/src/components/session/game-view/message-composer.tsx": 2,
   "apps/web/src/components/session/left-panel.tsx": 1,
   "apps/web/src/components/session/plugin-list-panel/plugin-error-item.tsx": 1,
