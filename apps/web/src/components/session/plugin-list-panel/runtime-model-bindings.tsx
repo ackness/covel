@@ -11,6 +11,7 @@ import {
 } from "../session-prep/model-slot-helpers.js";
 import { useRuntimeModelSlotOverride } from "./runtime-model-slot-override.js";
 import type { RuntimeModelOverrideChange } from "./types.js";
+import { FunctionRuntimeModels } from "../function-runtime-models.js";
 
 interface RuntimeModelBindingsProps {
   runtimes: readonly PluginRuntimeSummary[];
@@ -21,7 +22,7 @@ interface RuntimeModelBindingsProps {
   onChange?: RuntimeModelOverrideChange;
 }
 
-/** Each agent runtime owns a binding; function runtimes do not use this gateway. */
+/** Agents can override their binding; functions only display their declared text slot. */
 export function RuntimeModelBindings(props: RuntimeModelBindingsProps) {
   return (
     <div className="space-y-2 px-2.5 pb-2">
@@ -37,6 +38,11 @@ export function RuntimeModelBindings(props: RuntimeModelBindingsProps) {
         .map((runtime) => (
           <RuntimeModelBinding key={runtime.id} {...props} runtime={runtime} />
         ))}
+      <FunctionRuntimeModels
+        runtimes={props.runtimes}
+        resolvedSlots={props.resolvedSlots}
+        className="space-y-2"
+      />
     </div>
   );
 }

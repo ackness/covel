@@ -25,7 +25,7 @@ export interface CreateWorldOptions {
   readonly concept: string;
   /** IDs already present in the destination; new manifests receive a free suffix. */
   readonly existingWorldIds?: readonly string[];
-  /** Model slot to use (default: 'default'). */
+  /** Model slot to use (default: 'story'; falls back to the first text slot). */
   readonly model?: string;
   /** Locale for generated content (default: 'zh-CN'). */
   readonly locale?: string;

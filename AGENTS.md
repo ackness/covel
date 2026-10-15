@@ -571,9 +571,9 @@ Branch, Snapshot, State, Event, Record, Character, PluginData**.
   hydrates an ephemeral `MemoryStore`; it is not a `DataStore` backend. Contract:
   `docs/internals/storage.md` (it also describes how each SQL backend's files
   are split).
-- `sessions.runtime_model_overrides` stores only `runtimeId → slot` names. An
-  explicit runtime selection (this map included) wins over the slot the runtime
-  names (`agent.model` / `function.model`); the slot resolves through the
+- `sessions.runtime_model_overrides` stores only `runtimeId → slot` names. For
+  agent runtimes, an explicit selection (this map included) wins over
+  `agent.model`. Function runtimes do not read this map. The slot resolves through the
   request's UI slot binding, then the `llm.toml` default. A plugin names only a
   slot, never a provider, model or endpoint (a plugin's own `llm.toml` is not
   read). A request-scoped `modelOverride` applies to `story` runtimes only. Full

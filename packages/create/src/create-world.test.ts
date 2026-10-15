@@ -187,6 +187,45 @@ describe("createWorld", () => {
     if (tmp) await rm(tmp, { recursive: true, force: true });
   });
 
+  it.each([
+    { model: undefined, expected: "story", revision: false },
+    { model: "utility", expected: "utility", revision: false },
+    { model: undefined, expected: "story", revision: true },
+    { model: "utility", expected: "utility", revision: true },
+  ])(
+    "uses $expected for every request and repair (revision=$revision)",
+    async ({ model, expected, revision }) => {
+      const models: (string | undefined)[] = [];
+      const valid = new FixedLlm(
+        `===WORLD_YAML===\n${WORLD_YAML}\n===WORLD_MD===\n${WORLD_LORE}\n===END===`,
+      );
+      const result = await createWorld({
+        concept: "Clockwork city",
+        model,
+        ...(revision
+          ? {
+              revision: {
+                current: { yaml: WORLD_YAML, lore: WORLD_LORE },
+                instruction: "Keep the setting",
+              },
+            }
+          : {}),
+        llm: {
+          async generate(request) {
+            models.push(request.model);
+            const response = await valid.generate();
+            return models.length === 1
+              ? { ...response, content: "invalid output" }
+              : response;
+          },
+        },
+      });
+      expect(result.success).toBe(true);
+      expect(models.length).toBeGreaterThanOrEqual(2);
+      expect(new Set(models)).toEqual(new Set([expected]));
+    },
+  );
+
   it("chooses an unused ID before writing the remaining parts", async () => {
     const result = await createWorld({
       llm: new FixedLlm(

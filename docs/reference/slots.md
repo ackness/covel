@@ -230,7 +230,7 @@ model    = "glm-5"
 
 一次调用用哪个用途，按下面的顺序决定：
 
-1. 运行时的明确选择，包括会话的 `runtimeModelOverrides`。它决定用哪个用途或预设。
+1. 运行时的明确选择：agent 使用会话的 `runtimeModelOverrides`，function 的文本调用使用 handler 传入的 `presetId`。Function runtime 不读取 `runtimeModelOverrides`。
 2. 没有明确选择时，runtime 自己写的用途名（`agent.model` / `function.model`）。agent 没写时，`io.visibility: story` 的用 `story`，其他用 `plugin`。function 没写时，当前请求绑定了 `default` 就用它，否则用系统的默认用途。
 3. 这个用途先按当前请求里的 UI 用途绑定解析，没有绑定时按系统 `llm.toml` 的定义，以及可用文本用途的回退。
 
@@ -238,6 +238,7 @@ model    = "glm-5"
 
 - 插件只说明想用哪个用途，不能自己指定服务商、模型、地址或协议。用哪个模型、请求发到哪里，由玩家（或运营者）的模型设置决定，所以玩家的密钥只会发到这些设置里的地址。插件目录里的 `llm.toml` 不会被读取，`pnpm validate:plugin` 遇到它会给出提醒。
 - `fast`、`memory` 等文本用途没有定义时，回退到第一个文本用途。这个用途同样读取当前请求的 UI 绑定、参数和能力。准备页和会话里的插件列表把这种情况显示为“未配置 `fast`，改用 …”。定义了但不能用的用途（例如缺少密钥）不回退，仍显示为不可用。
+- AI 创建世界和修订世界默认使用 `story` 用途；API 的 `model` 字段可以指定其他用途或预设。每一部分、重试和修复都使用同一个选择，并读取当前请求的 UI 绑定。未定义的文本用途沿用上面的回退规则。
 - 准备页的任务对应关系必须先保存成功，并同步到服务端的临时镜像，之后才发布可运行的会话。保存失败时保留选择并回滚启动，不会用默认值继续启动。
 
 价格覆盖和服务商倍率只用于调试时估算成本，不随模型请求发送，也不改变服务商实际收的钱。手动价格只在 trace 里的实际 provider/model 能唯一对应当前配置时才应用；对应不上时沿用资料库的估算。
@@ -346,7 +347,11 @@ model    = "glm-5"
 
 **Function runtime**
 
-Function runtime 不读取 `runtimeModelOverrides`。图像、语音等 function 插件通常用自己的 `userSettings.modelPresetId` 选择对应能力的用途。准备页把它显示成一个独立的选项，写进设备设置 `plugin.<pluginId>.modelPresetId`。不要把 agent runtime 的会话覆盖和 function runtime 的这个设置混用。
+Function runtime 不读取 `runtimeModelOverrides`。`ctx.gateway.generateText` 和 `generateObject` 没传 `presetId` 时使用 `function.model`；handler 显式传入的 `presetId` 优先。这个默认值不影响图像、语音、音乐或评估调用。
+
+准备页和会话插件列表会只读显示 `function.model` 声明的用途及其解析出的“服务商 · 模型”，没有选择控件。用途未配置时显示回退目标，已配置但不可用时显示不可用提示。没有声明 `function.model` 的函数不显示这一项。handler 显式选择其他用途的调用仍以该调用为准。
+
+图像、语音等 function 插件通常用自己的 `userSettings.modelPresetId` 选择对应能力的用途。准备页把它显示成一个独立的选项，写进设备设置 `plugin.<pluginId>.modelPresetId`。不要把 agent runtime 的会话覆盖和 function runtime 的这个设置混用。
 
 **连接测试和设置页**
 
