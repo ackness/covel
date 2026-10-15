@@ -68,7 +68,7 @@ function normalizeTurnCompletionPolicy(
   const declared = manifest.turnCompletion;
   return {
     mode: declared?.mode ?? "await",
-    ...(declared?.settle ? { settle: declared.settle } : {}),
+    ...(declared?.settle ? { settle: true } : {}),
     ...(declared?.maxSettleWaitMs !== undefined
       ? { maxSettleWaitMs: declared.maxSettleWaitMs }
       : {}),
@@ -78,8 +78,6 @@ function normalizeTurnCompletionPolicy(
     ...(declared?.maxExecutionMs !== undefined
       ? { maxExecutionMs: declared.maxExecutionMs }
       : {}),
-    overlap: declared?.overlap ?? "serial",
-    stalePolicy: declared?.stalePolicy ?? "reject",
   };
 }
 
@@ -170,12 +168,10 @@ export type EffectiveTurnCompletion =
   | { readonly mode: "await" }
   | {
       readonly mode: "detached";
-      readonly settle?: "before-next-execution";
+      readonly settle?: boolean;
       readonly maxSettleWaitMs?: number;
       readonly maxQueueMs?: number;
       readonly maxExecutionMs?: number;
-      readonly overlap: "serial";
-      readonly stalePolicy: "reject";
     };
 
 /**
@@ -190,7 +186,7 @@ export function effectiveTurnCompletion(
   return policy.mode === "detached"
     ? {
         mode: "detached",
-        ...(policy.settle ? { settle: policy.settle } : {}),
+        ...(policy.settle ? { settle: true } : {}),
         ...(policy.maxSettleWaitMs !== undefined
           ? { maxSettleWaitMs: policy.maxSettleWaitMs }
           : {}),
@@ -200,8 +196,6 @@ export function effectiveTurnCompletion(
         ...(policy.maxExecutionMs !== undefined
           ? { maxExecutionMs: policy.maxExecutionMs }
           : {}),
-        overlap: policy.overlap,
-        stalePolicy: policy.stalePolicy,
       }
     : { mode: "await" };
 }

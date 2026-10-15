@@ -1,5 +1,5 @@
 ---
-version: 0.0.37
+version: 0.0.38
 displayName: Scene Stage
 description: >-
   Tracks the current scene, time of day, and who is on stage for the visual
@@ -19,13 +19,11 @@ contributes:
     - point: ui.slot@1
       id: cast
       slot: stage.cast@1
-      order: 0
       watch:
         - active-cast
     - point: ui.slot@1
       id: backdrop
       slot: stage.backdrop@1
-      order: 0
       watch:
         - stage
         - scenes
@@ -42,7 +40,6 @@ contributes:
     - point: ui.slot@1
       id: dialogue
       slot: stage.dialogue@1
-      order: 0
       watch:
         - dialogue
       preview:

@@ -1,8 +1,9 @@
 /**
  * Author warnings `validate:plugin` prints for a package that loads: a field
- * written with the value it has by default or that the loader works out, and
- * a missing version where setup reruns depend on it. They read the
- * frontmatter as written, before the schemas fill in their defaults.
+ * written with the value it has by default or that the loader works out, a
+ * declaration that has a shorter form, and a missing version where setup
+ * reruns depend on it. They read the frontmatter as written, before the
+ * schemas fill in their defaults.
  */
 import path from "node:path";
 import {
@@ -44,6 +45,14 @@ class Findings {
       `${this.file}: ${field}: ${JSON.stringify(value)} is worked out from ${from}; remove it`,
     );
   }
+  shorter(field: string, advice: string): void {
+    this.messages.push(`${this.file}: ${field}: ${advice}; it means the same`);
+  }
+}
+
+/** Whether `value` has exactly these keys, given or not. */
+function onlyKeys(value: Raw, keys: readonly string[]): boolean {
+  return Object.keys(value).every((key) => keys.includes(key));
 }
 
 function runtimeWarnings(runtime: Raw, prefix: string, out: Findings): void {
@@ -55,10 +64,12 @@ function runtimeWarnings(runtime: Raw, prefix: string, out: Findings): void {
     "auto",
   );
   out.check(at("schedule.every"), schedule?.every, 1);
+  out.check(at("schedule.background"), schedule?.background, false);
+  out.check(at("schedule.detached"), schedule?.detached, false);
   out.check(
-    at("schedule.manual.execution"),
-    record(schedule?.manual)?.execution,
-    "sync",
+    at("schedule.detached.settle"),
+    record(schedule?.detached)?.settle,
+    false,
   );
   const io = record(runtime.io);
   out.check(
@@ -87,6 +98,23 @@ function runtimeWarnings(runtime: Raw, prefix: string, out: Findings): void {
     io?.visibility === "story" ? "story" : DEFAULT_RUNTIME_VISIBILITY;
   const agent = record(runtime.agent);
   out.check(at("agent.model"), agent?.model, defaultAgentModel(visibility));
+  out.check(at("agent.reasoning"), agent?.reasoning, true);
+  if (agent?.finishWith !== undefined)
+    out.check(at("agent.toolChoice"), agent.toolChoice, "required");
+  const completion = record(agent?.completion);
+  const afterTools = list(completion?.afterTools);
+  const [onlyTool] = afterTools;
+  if (
+    completion?.require === "tool-use" &&
+    afterTools.length === 1 &&
+    typeof onlyTool === "string" &&
+    onlyKeys(completion, ["require", "afterTools"]) &&
+    agent?.toolChoice === "required"
+  )
+    out.shorter(
+      at("agent.completion"),
+      `write finishWith: ${onlyTool} in place of completion and toolChoice`,
+    );
   const loop = record(agent?.loop);
   const defaults = defaultAgentLoop(visibility);
   for (const field of ["timeoutMs", "callTimeoutMs", "maxRetries"] as const)
@@ -131,12 +159,31 @@ export function authoringWarnings(
         "the io.output.contract of a runtime",
       );
   const contributes = record(raw.contributes);
-  for (const [index, value] of list(contributes?.hooks).entries())
-    plugin.check(
-      `contributes.hooks[${index}].enforce`,
-      record(value)?.enforce,
-      "normal",
-    );
+  for (const [index, value] of list(contributes?.hooks).entries()) {
+    const hook = record(value);
+    if (!hook) continue;
+    plugin.check(`contributes.hooks[${index}].enforce`, hook.enforce, "normal");
+    if (
+      typeof hook.event === "string" &&
+      hook.enforce === undefined &&
+      onlyKeys(hook, ["event"])
+    )
+      plugin.shorter(`contributes.hooks[${index}]`, `write ${hook.event}`);
+  }
+  for (const [index, value] of list(contributes?.extensions).entries()) {
+    const extension = record(value);
+    if (!extension) continue;
+    plugin.check(`contributes.extensions[${index}].order`, extension.order, 0);
+    if (
+      typeof extension.point === "string" &&
+      typeof extension.id === "string" &&
+      onlyKeys(extension, ["point", "id"])
+    )
+      plugin.shorter(
+        `contributes.extensions[${index}]`,
+        `write ${extension.point}/${extension.id}`,
+      );
+  }
   for (const [namespace, value] of Object.entries(
     record(contributes?.data) ?? {},
   )) {

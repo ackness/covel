@@ -226,7 +226,7 @@ stateDiagram-v2
 
 #### 后台运行的 RPC / event runtime
 
-声明 `schedule.manual.execution: background` 的 runtime，不占着会话锁运行。这类 runtime 通常是几分钟的外部调用，例如出图或手动 TTS。持锁运行会让玩家的下一条消息一直排队；PostgreSQL 部署下还会撞上获取锁的 30 秒上限。
+声明 `schedule.background: true` 的 runtime，不占着会话锁运行。这类 runtime 通常是几分钟的外部调用，例如出图或手动 TTS。持锁运行会让玩家的下一条消息一直排队；PostgreSQL 部署下还会撞上获取锁的 30 秒上限。
 
 它的运行方式：
 
@@ -245,7 +245,7 @@ stateDiagram-v2
 
 #### 回合里转到后台的 runtime（staged detached）
 
-`schedule.completion.mode: detached` 是另一件事，和上面的 `execution` 互不影响。它只对通过安全检查的 `post-turn` / `audit` function 叶节点（没有别的 runtime 等它结果的 runtime）生效。完整过程见下面的 2.3 节，要点是：
+`schedule.detached` 是另一件事，和上面的 `schedule.background` 互不影响。它只对通过安全检查的 `post-turn` / `audit` function 叶节点（没有别的 runtime 等它结果的 runtime）生效。完整过程见下面的 2.3 节，要点是：
 
 - 调度器在原来那一层开始时冻结上游结果。只有该 runtime 声明依赖的上游保留输出，其余只留身份和状态。
 - 作业描述随原始回合的提案、日志、会话时钟一起原子写入 `_runtime_jobs`。提交后立刻发 `runtime.deferred`，玩家的回合就此结束。
@@ -259,7 +259,7 @@ stateDiagram-v2
 
 ```mermaid
 flowchart TB
-    In(["POST /api/actions<br/>玩家输入 / 开始游戏"]) --> Settle["等待 before-next-execution 作业<br/>锁外等待，锁内重查"]
+    In(["POST /api/actions<br/>玩家输入 / 开始游戏"]) --> Settle["等待要求 settle 的作业<br/>锁外等待，锁内重查"]
     Settle --> Capture["冻结 registry / extension generation<br/>加载 canonical 历史并投影"]
     Capture --> Exec[executeTurn]
     Exec --> StartEvt["SSE: execution.started"]
@@ -337,11 +337,11 @@ flowchart TB
 
 ### 2.3 Staged Runtime 后台流水线
 
-有些收尾工作不该让玩家等，例如回合结束后整理记忆。runtime 声明 `schedule.completion.mode: detached` 后，回合照常提交并结束，这个 runtime 变成一个后台作业稍后运行。
+有些收尾工作不该让玩家等，例如回合结束后整理记忆。runtime 声明 `schedule.detached: true` 后，回合照常提交并结束，这个 runtime 变成一个后台作业稍后运行。
 
 ```mermaid
 flowchart LR
-    DAG["post-turn / audit DAG level"] --> Plan{"schedule.completion: detached<br/>且 function + 安全叶节点?"}
+    DAG["post-turn / audit DAG level"] --> Plan{"schedule.detached<br/>且 function + 安全叶节点?"}
     Plan -->|否| Foreground["保留前台执行<br/>不安全声明产生 diagnostic"]
     Plan -->|是| Freeze["冻结 upstream RuntimeResult[]<br/>execution / model / settings / plugin version"]
     Foreground --> Tx["finalizeExecution transaction"]
@@ -414,7 +414,7 @@ flowchart LR
 
 ### 2.4 下一次执行前的 settle 屏障
 
-有的后台工作必须在下一回合开始前做完，因为下一回合要读它的结果。这类 `post-turn` / `audit` function 可以声明 `schedule.completion.settle: before-next-execution` 和 `maxSettleWaitMs`。
+有的后台工作必须在下一回合开始前做完，因为下一回合要读它的结果。这类 `post-turn` / `audit` function 可以声明 `schedule.detached: { settle: true, maxSettleWaitMs: … }`。
 
 - 这类任务可以读取自己的 plugin-data，由 worker 按来源任务的顺序一个一个处理。
 - 输入里的 `turn-digest@1` 是内核冻结的来源回合摘要，不需要绑定某个叙事插件。

@@ -36,17 +36,11 @@ io:
     schema: ../../schemas/story-event-plan.schema.json
   concealed: true
 agent:
-  llm:
-    reasoningEffort: disabled
-    toolChoice: required
+  reasoning: false
   tools:
     plugin:
       - plan-story-events
-  loop:
-    completion:
-      require: tool-use
-      afterTools:
-        - plan-story-events
+  finishWith: plan-story-events
 guard: ./guard.js
 ---
 

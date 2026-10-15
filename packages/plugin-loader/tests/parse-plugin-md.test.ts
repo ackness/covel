@@ -102,10 +102,8 @@ describe("current authoring manifests", () => {
           agent: {
             model: "plugin",
             history: { maxTurns: 2 },
-            loop: {
-              maxSteps: 4,
-              completion: { require: "explicit", afterTools: ["save"] },
-            },
+            completion: { require: "explicit", afterTools: ["save"] },
+            loop: { maxSteps: 4 },
           },
         },
       }),
@@ -134,6 +132,97 @@ describe("current authoring manifests", () => {
         maxEntries: 50,
       },
     ]);
+  });
+  it("compiles finishWith into tool-use completion with a required tool call", () => {
+    const compile = (agent: object) =>
+      compileInlineRuntime(
+        parsePluginMd(
+          md({
+            ...root,
+            runtime: { schedule: { stage: "post-turn" }, agent },
+          }),
+          "probe/PLUGIN.md",
+        ),
+      )!.manifest;
+    expect(compile({ reasoning: false, finishWith: "save" })).toMatchObject({
+      requireToolUse: true,
+      completeAfterTools: ["save"],
+      llm: { reasoningEffort: "disabled", toolChoice: "required" },
+    });
+    // A written tool choice replaces the one finishWith implies.
+    expect(
+      compile({ finishWith: "save", toolChoice: { name: "save" } }).llm,
+    ).toEqual({ toolChoice: { name: "save" } });
+    // Reasoning is the model's own setting unless the agent turns it off.
+    expect(compile({ reasoning: true }).llm).toBeUndefined();
+    expect(() =>
+      compile({
+        finishWith: "save",
+        completion: { require: "explicit", afterTools: ["save"] },
+      }),
+    ).toThrow("agent.finishWith");
+  });
+  it("compiles schedule.detached into the turn completion policy", () => {
+    const compile = (detached: unknown) =>
+      compileInlineRuntime(
+        parsePluginMd(
+          md({
+            ...root,
+            runtime: {
+              schedule: { stage: "post-turn", detached },
+              function: { handler: "./handler.js" },
+            },
+          }),
+          "probe/PLUGIN.md",
+        ),
+      )!.manifest.turnCompletion;
+    expect(compile(true)).toEqual({ mode: "detached" });
+    expect(compile(false)).toBeUndefined();
+    expect(
+      compile({ settle: true, maxSettleWaitMs: 1000, maxQueueMs: 5000 }),
+    ).toEqual({
+      mode: "detached",
+      settle: true,
+      maxSettleWaitMs: 1000,
+      maxQueueMs: 5000,
+    });
+    // The single-value policies are gone; writing one is an unknown field.
+    expect(() => compile({ overlap: "serial" })).toThrow("overlap");
+  });
+  it("reads hooks and extensions written as strings", () => {
+    const parsed = parsePluginMd(
+      md({
+        ...root,
+        contributes: {
+          hooks: ["PreToolUse", { event: "PostToolUse", enforce: "post" }],
+          extensions: [
+            "prompt.segment@1/notes",
+            { point: "ui.slot@1", id: "panel", slot: "session.summary@1" },
+          ],
+        },
+      }),
+      "probe/PLUGIN.md",
+    );
+    expect(parsed.plugin.contributes?.hooks).toEqual([
+      { event: "PreToolUse" },
+      { event: "PostToolUse", enforce: "post" },
+    ]);
+    expect(parsed.manifest.extensions).toEqual([
+      { point: "prompt.segment@1", id: "notes" },
+      { point: "ui.slot@1", id: "panel", slot: "session.summary@1" },
+    ]);
+    expect(() =>
+      parsePluginMd(
+        md({ ...root, contributes: { hooks: ["PreToolUsed"] } }),
+        "probe/PLUGIN.md",
+      ),
+    ).toThrow(/contributes\.hooks\.0: Invalid option/);
+    expect(() =>
+      parsePluginMd(
+        md({ ...root, contributes: { extensions: ["prompt.segment@1"] } }),
+        "probe/PLUGIN.md",
+      ),
+    ).toThrow(/contributes\.extensions\.0: an extension written as a string/);
   });
   it("gives the runtime of a single-runtime package the tools the package contributes", () => {
     const agent = { schedule: { stage: "post-turn" } };
@@ -228,10 +317,7 @@ describe("current authoring manifests", () => {
     const plugin = parsePluginMd(md(root), "probe/PLUGIN.md").plugin!;
     const parsed = parseRuntimeMd(
       md({
-        schedule: {
-          trigger: { type: "manual" },
-          manual: { execution: "background" },
-        },
+        schedule: { trigger: { type: "manual" }, background: true },
         function: { handler: "./handler.js" },
       }),
       "probe/runtimes/import/RUNTIME.md",

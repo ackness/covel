@@ -189,7 +189,7 @@ The full values are not all put into the prompt. For anything left out, use a pa
 - If WorldIR extraction exists but failed, that must not be read as "no change".
 - The rules and schema are in the `<dimension-rules>` section of its system prompt, and they do not change during the game. The frozen values are in `<dimension-values>` in the turn context (see [Prompt structure](./prompt-structure.md#layout-for-bookkeeping-runtimes)).
 - The budget for `<dimension-rules>` is 24000 characters. Within the budget, the full rules and schema of every dimension that has rules are given directly, so one model call can usually settle everything. For dimensions that do not fit, `dimension-rule-get` is used instead (available only inside the responsible plugin, it reads the full rules and schema page by page from the frozen version), along with `world-dimension-get`.
-- Reasoning is turned off for the tracker (`reasoningEffort: disabled`).
+- Reasoning is turned off for the tracker (`agent.reasoning: false`).
 - The `expectedVersion` for each update in `update-dimensions` is taken by the tool from the version read during this run. The model does not fill it in.
 
 **Text length has a safety margin.** In the schema shown to the tracker, the `maxLength` of a text field is 80% of the value the author wrote. The reason: the model does not count characters, so when it writes to the limit it often goes over by a few to several dozen characters. Then the whole submission is rejected, and the model has to be called again. With the margin, a slightly longer text still stays within the author's limit. Validation on write always checks the limit the author wrote.

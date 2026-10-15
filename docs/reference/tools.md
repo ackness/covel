@@ -740,7 +740,7 @@ JSON Schema 只能检查字段的形状，检查不了“这个结果和骰子�
 - `resumeSchema` 必须能被 `JSON.stringify`，因为现场要写进存储。
 - 一个 runtime 同时只有一条待恢复的挂起项：它再次挂起时，旧的那条立刻作废。玩家之后又玩了回合、插件换了版本，或者挂起项要改的记录之后被别的执行（例如后台作业或手动运行）改过，挂起项在恢复时被作废，见[过时的挂起项](./api.md#过时的挂起项)。恢复接口按挂起项的 ID 查找。
 - `@covel/tools` 的 `createDefaultToolRegistry` 把它注册为内置工具。agent 仍要在 `agent.tools.builtin` 里列出 `suspend` 才能调用。
-- 后台运行的 runtime 不能挂起，因为没有玩家在等它。声明了 `schedule.manual.execution: background` 或 `schedule.completion.mode: detached` 的 runtime 在 `agent.tools.builtin` 里列出 `suspend`，加载时被拒绝。后台作业里的 runtime 真的挂起了（function handler 返回挂起，或者后台运行触发的事件 runtime 调用了 `suspend`），作业记为 `failed`，什么也不提交。
+- 后台运行的 runtime 不能挂起，因为没有玩家在等它。声明了 `schedule.background: true` 或 `schedule.detached` 的 runtime 在 `agent.tools.builtin` 里列出 `suspend`，加载时被拒绝。后台作业里的 runtime 真的挂起了（function handler 返回挂起，或者后台运行触发的事件 runtime 调用了 `suspend`），作业记为 `failed`，什么也不提交。
 - 恢复是接着被挂起的那次执行继续：
   - `ctx.locale`、`ctx.logicalTurn`、`ctx.turnNumber` 取挂起时的值，不随会话之后的回合计数变化。
   - `ctx.world` 是恢复时已提交的 World Model，再叠加现场里缓冲的写入。
@@ -1111,7 +1111,7 @@ Attributes:
 
 `worldSchema` 同时是 `world-init/schema-gen` 的 runtime 输出，交给同一次 setup 执行里的 `char-creator/player-init`。这样下游不用去读还没提交的存储。
 
-这个 runtime 声明了 `agent.loop.completion: {require: tool-use, afterTools: [initialize-world]}` 和 `io.output.schema`。所以模型只需要生成一次工具参数：工具成功后，框架直接用输出 schema 检查结果并结束。
+这个 runtime 声明了 `agent.completion: {require: tool-use, afterTools: [initialize-world]}` 和 `io.output.schema`。所以模型只需要生成一次工具参数：工具成功后，框架直接用输出 schema 检查结果并结束。
 
 **使用者**: `world-init/schema-gen`
 
@@ -1318,7 +1318,7 @@ schema 里带 `x-derive` 的字段由 `world-init/dimension-clock` 按时钟计�
 
 模型不用自己写 `{ topic, data }` 事件信封，所以不会漏写 topic 或写成空的。runtime 的输出 schema 只校验工具产生的可信结果。
 
-两个 prompt-generator 都是手动触发的 agent，声明了 `schedule.manual.execution: background`。它们的 `agent.loop.completion.afterTools` 列出了对应的工具，所以一次成功提交后就结束。之后的 image-generator 在后台继续执行。
+两个 prompt-generator 都是手动触发的 agent，声明了 `schedule.background: true`。它们的 `agent.completion.afterTools` 列出了对应的工具，所以一次成功提交后就结束。之后的 image-generator 在后台继续执行。
 
 ## 短 ID（LLM 友好实体引用）
 

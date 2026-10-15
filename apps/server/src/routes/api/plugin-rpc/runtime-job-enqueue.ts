@@ -97,9 +97,10 @@ export async function enqueueDeferredRuntimeJobs(
         sourceRuntimeId: descriptor.runtimeId,
       },
       payload: jobPayload,
+      // The job record names the barrier it holds.
       ...(policy.settle
         ? {
-            settle: policy.settle,
+            settle: "before-next-execution" as const,
             maxSettleWaitMs: policy.maxSettleWaitMs,
           }
         : {}),

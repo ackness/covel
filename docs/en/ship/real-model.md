@@ -117,7 +117,7 @@ After it passes these three gates, it checks which turn this is. The opening and
 | `startTurn` is greater than the current turn, or `every` does not divide the current turn | This turn does not run (`SKIP`)                                                                                                                                                   |
 | `auto`, with no `every`, no cooldown and no count limit                                   | It must run in every turn (strict `PASS` / `FAIL`)                                                                                                                                |
 | `auto` with `every`, `cooldownTurns` or `maxTriggerCount`                                 | It must run at least once in the whole session. A turn that does not get its turn is marked `WAIT`, and step 7 checks them all together                                           |
-| `schedule.completion.mode: detached`                                                      | Marked `DEFER` in the turn. In step 6, it waits for background jobs to clear, and each job must succeed or be cancelled on purpose                                                |
+| `schedule.detached: true`                                                                 | Marked `DEFER` in the turn. In step 6, it waits for background jobs to clear, and each job must succeed or be cancelled on purpose                                                |
 | `stage: setup`                                                                            | Step 6 checks whether it is marked as completed in this session's records. Opening work may happen after the form is submitted, so it may not show up in the report for each turn |
 
 ### How the script fills in forms
@@ -222,7 +222,7 @@ The biggest use of this script is to confirm that each runtime's actual behavior
 | `stage: pre-turn` / `narrative` / `post-turn` / `audit` | Runs only in normal turns                                                                   |
 | `auto` (the default), with a `stage`                    | Must run in every turn                                                                      |
 | `auto`, with a `stage` and `every`                      | Runs at least once in the turns that are allowed                                            |
-| `schedule.completion.mode: detached`                    | Marked `DEFER` in the turn. Step 6 checks that the background job succeeded                 |
+| `schedule.detached: true`                               | Marked `DEFER` in the turn. Step 6 checks that the background job succeeded                 |
 | No `stage`                                              | Not scheduled by stage. Marked `FIRE` when it is triggered itself                           |
 | Plugin not enabled in this session                      | `SKIP` throughout                                                                           |
 | `io.visibility: story`                                  | The output column of the Runtime Timeline shows `narrative(<character count>c)`             |

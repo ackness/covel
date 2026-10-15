@@ -141,7 +141,7 @@ Rules:
 
 For the list of built-in tools, see the [tools reference](../reference/tools.md).
 
-For agent completion rules, see the [plugin reference](../reference/plugins.md). With `completion.require: tool-use` and `afterTools`, a read tool cannot substitute for a declared completing tool.
+An agent that finishes by calling one tool writes `agent.finishWith: <tool>`. For the full completion rules, see the [plugin reference](../reference/plugins.md#completion-conditions-agentfinishwith-agentcompletion). With `completion.require: tool-use` and `afterTools`, a read tool cannot substitute for a declared completing tool.
 
 ## How to use another plugin's results
 

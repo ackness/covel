@@ -23,15 +23,15 @@ In the path headings below, `[]` is a list item and `.*` is a map value.
 
 ## `schedule`
 
-| Field        | Type                                                                     | Required | Description                                                                                                                            |
-| ------------ | ------------------------------------------------------------------------ | -------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| `stage`      | `"setup"` or `"pre-turn"` or `"narrative"` or `"post-turn"` or `"audit"` | no       | Stage the runtime runs in. Required for an `auto` trigger, the default. Order: `setup`, `pre-turn`, `narrative`, `post-turn`, `audit`. |
-| `every`      | integer                                                                  | no       | `auto` only: run on the logical turns that are a multiple of this number. Defaults to 1, every turn.                                   |
-| `trigger`    | object                                                                   | no       | When the runtime is activated. Leave it out for an `auto` runtime without options.                                                     |
-| `needs`      | list of string or object                                                 | no       | Upstream runtimes or contracts that must succeed first. Sets order and gates this runtime.                                             |
-| `after`      | list of string or object                                                 | no       | Upstream runtimes or contracts that run first. Sets order only; it does not gate and does not activate a provider.                     |
-| `completion` | object                                                                   | no       | Whether the turn waits for this runtime.                                                                                               |
-| `manual`     | object                                                                   | no       | Execution mode for `manual` and `event` activation.                                                                                    |
+| Field        | Type                                                                     | Required | Description                                                                                                                                                                                                                                   |
+| ------------ | ------------------------------------------------------------------------ | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `stage`      | `"setup"` or `"pre-turn"` or `"narrative"` or `"post-turn"` or `"audit"` | no       | Stage the runtime runs in. Required for an `auto` trigger, the default. Order: `setup`, `pre-turn`, `narrative`, `post-turn`, `audit`.                                                                                                        |
+| `every`      | integer                                                                  | no       | `auto` only: run on the logical turns that are a multiple of this number. Defaults to 1, every turn.                                                                                                                                          |
+| `trigger`    | object                                                                   | no       | When the runtime is activated. Leave it out for an `auto` runtime without options.                                                                                                                                                            |
+| `needs`      | list of string or object                                                 | no       | Upstream runtimes or contracts that must succeed first. Sets order and gates this runtime.                                                                                                                                                    |
+| `after`      | list of string or object                                                 | no       | Upstream runtimes or contracts that run first. Sets order only; it does not gate and does not activate a provider.                                                                                                                            |
+| `detached`   | boolean or object                                                        | no       | `true` lets the turn finish before this runtime does: it runs afterwards as a durable background job. Only on stage `post-turn` or `audit`. An object sets the job's options and also makes it detached. Defaults to `false`: the turn waits. |
+| `background` | boolean                                                                  | no       | `true` runs a `manual` or `event` activation as a durable background job: the caller gets a job ID at once. Defaults to `false`: the caller waits for the result.                                                                             |
 
 ## `schedule.trigger`
 
@@ -71,23 +71,14 @@ In the path headings below, `[]` is a list item and `.*` is a map value.
 | `contract`    | string             | yes      | Contract ID. This runtime runs after the contract's active providers; it never activates a provider. |
 | `cardinality` | `"one"` or `"all"` | no       | `one` takes a single provider; `all` takes every provider. Defaults to `one`.                        |
 
-## `schedule.completion`
+## `schedule.detached`
 
-| Field             | Type                      | Required | Description                                                                                                                                                   |
-| ----------------- | ------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `mode`            | `"await"` or `"detached"` | no       | `await` makes the turn wait for this runtime. `detached` lets the turn finish first; it is valid only on `post-turn` and `audit` stages. Defaults to `await`. |
-| `settle`          | `"before-next-execution"` | no       | Makes the next player action wait until this detached runtime settles.                                                                                        |
-| `maxSettleWaitMs` | integer                   | no       | Longest time in ms the next action waits for settlement. Requires `settle`.                                                                                   |
-| `maxQueueMs`      | integer                   | no       | Longest time in ms a detached job may wait in the queue.                                                                                                      |
-| `maxExecutionMs`  | integer                   | no       | Longest time in ms a detached job may run.                                                                                                                    |
-| `overlap`         | `"serial"`                | no       | Overlap policy for detached jobs of this runtime. Only `serial` is supported.                                                                                 |
-| `stalePolicy`     | `"reject"`                | no       | Policy for a detached job that has become stale. Only `reject` is supported.                                                                                  |
-
-## `schedule.manual`
-
-| Field       | Type                       | Required | Description                                                                     |
-| ----------- | -------------------------- | -------- | ------------------------------------------------------------------------------- |
-| `execution` | `"sync"` or `"background"` | yes      | `sync` awaits the result. `background` queues a durable job and returns its ID. |
+| Field             | Type    | Required | Description                                                                                                                         |
+| ----------------- | ------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `settle`          | boolean | no       | `true` makes the next player action wait until this runtime's job has finished, for at most `maxSettleWaitMs`. Defaults to `false`. |
+| `maxSettleWaitMs` | integer | no       | Longest time in ms the next action waits for the job, at most 120000. Requires `settle: true`.                                      |
+| `maxQueueMs`      | integer | no       | Longest time in ms the job may wait in the queue.                                                                                   |
+| `maxExecutionMs`  | integer | no       | Longest time in ms the job may run.                                                                                                 |
 
 ## `io`
 
@@ -149,23 +140,19 @@ In the path headings below, `[]` is a list item and `.*` is a map value.
 
 ## `agent`
 
-| Field             | Type    | Required | Description                                                                                                           |
-| ----------------- | ------- | -------- | --------------------------------------------------------------------------------------------------------------------- |
-| `model`           | string  | no       | Model slot the agent uses. Defaults to `story` with `io.visibility: story`, otherwise `plugin`. Example: `"utility"`. |
-| `llm`             | object  | no       | Model call options for this runtime.                                                                                  |
-| `history`         | object  | no       | Bounds the agent's prompt history. When omitted, the runtime sees the shared session history.                         |
-| `tools`           | object  | no       | Tools the agent's model may call.                                                                                     |
-| `advertiseEvents` | boolean | no       | `true` lists the session's event directory in the prompt so the model knows which topics it may emit.                 |
-| `loop`            | object  | no       | Limits and completion rules of the agent loop.                                                                        |
+| Field             | Type                   | Required | Description                                                                                                                                                                                                                                                                                              |
+| ----------------- | ---------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `model`           | string                 | no       | Model slot the agent uses. Defaults to `story` with `io.visibility: story`, otherwise `plugin`. Example: `"utility"`.                                                                                                                                                                                    |
+| `toolChoice`      | `"required"` or object | no       | `required` makes the model call a tool on every step. `{ name }` makes it call that one tool. Without it, the model chooses.                                                                                                                                                                             |
+| `reasoning`       | boolean                | no       | `false` turns model reasoning off for this runtime. Defaults to `true`: the model's own reasoning setting applies.                                                                                                                                                                                       |
+| `history`         | object                 | no       | Bounds the agent's prompt history. When omitted, the runtime sees the shared session history.                                                                                                                                                                                                            |
+| `tools`           | object                 | no       | Tools the agent's model may call.                                                                                                                                                                                                                                                                        |
+| `advertiseEvents` | boolean                | no       | `true` lists the session's event directory in the prompt so the model knows which topics it may emit.                                                                                                                                                                                                    |
+| `finishWith`      | string                 | no       | Tool that ends the run: the run completes after a successful call to it, and fails if it ends without one. The model must call a tool on every step (`toolChoice: required`) unless `toolChoice` says otherwise. Not with `completion`, which is the long form for several tools or explicit completion. |
+| `completion`      | object                 | no       | How the agent run ends. For one completing tool, `finishWith` is shorter.                                                                                                                                                                                                                                |
+| `loop`            | object                 | no       | Time, retry and step limits of the agent loop.                                                                                                                                                                                                                                                           |
 
-## `agent.llm`
-
-| Field             | Type                   | Required | Description                                                                    |
-| ----------------- | ---------------------- | -------- | ------------------------------------------------------------------------------ |
-| `reasoningEffort` | `"disabled"`           | no       | `disabled` turns model reasoning off for this runtime.                         |
-| `toolChoice`      | `"required"` or object | no       | `required` forces a tool call on every step. `{ name }` forces one named tool. |
-
-## `agent.llm.toolChoice`
+## `agent.toolChoice`
 
 | Field  | Type   | Required | Description                |
 | ------ | ------ | -------- | -------------------------- |
@@ -186,6 +173,13 @@ In the path headings below, `[]` is a list item and `.*` is a map value.
 | `plugin`  | list of string           | no       | Names of this package's own tools the runtime may call. Each must be listed in `contributes.tools`. The runtime of a single-runtime package gets every contributed tool when this is omitted. |
 | `defer`   | `true` or list of string | no       | Deferred tool loading. `true` defers the whole whitelist; a list defers only those names.                                                                                                     |
 
+## `agent.completion`
+
+| Field        | Type                         | Required | Description                                                                                                                                                                                                               |
+| ------------ | ---------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `require`    | `"explicit"` or `"tool-use"` | no       | `explicit` needs a completing tool or `runtime-done`. `tool-use` needs a successful tool named in `afterTools`, or any successful business tool when `afterTools` is empty. Failed calls and `runtime-done` do not count. |
+| `afterTools` | list of string               | no       | The runtime completes after a successful call to one of these tools.                                                                                                                                                      |
+
 ## `agent.loop`
 
 | Field                 | Type    | Required | Description                                                                                                                                                                                         |
@@ -198,14 +192,6 @@ In the path headings below, `[]` is a list item and `.*` is a map value.
 | `maxRetries`          | integer | no       | Retries on a transient model failure; `0` disables retry. Defaults to 3; 1 with `io.visibility: story`.                                                                                             |
 | `loopDetection`       | integer | no       | Number of repeated tool calls that counts as a loop. Defaults to 3; `0` disables detection.                                                                                                         |
 | `maxRecursionDepth`   | integer | no       | Maximum depth of nested `ctx.recursiveCall()`. Defaults to 10.                                                                                                                                      |
-| `completion`          | object  | no       | How the agent loop ends.                                                                                                                                                                            |
-
-## `agent.loop.completion`
-
-| Field        | Type                         | Required | Description                                                                                                                                                                                                               |
-| ------------ | ---------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `require`    | `"explicit"` or `"tool-use"` | no       | `explicit` needs a completing tool or `runtime-done`. `tool-use` needs a successful tool named in `afterTools`, or any successful business tool when `afterTools` is empty. Failed calls and `runtime-done` do not count. |
-| `afterTools` | list of string               | no       | The runtime completes after a successful call to one of these tools.                                                                                                                                                      |
 
 ## `function`
 

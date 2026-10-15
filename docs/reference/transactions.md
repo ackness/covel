@@ -590,7 +590,7 @@ await store.withTransaction(async (tx) => {
 - 故事提交的事务同时保存 `turn-digest@1` 和作业记录。凭据只保留在进程内的交接表里；登记之后事务失败时，必须清理对应的凭据。
 - Worker 把插件块的 proposal 和作业的完成回执放在同一个事务里提交。
 
-`completion.settle: before-next-execution` 让下一次执行在入口处等这些作业。
+`schedule.detached: { settle: true }` 让下一次执行在入口处等这些作业。
 
 - 等待时不持有 SessionLock。取得锁之后再检查一次。
 - 超过声明的等待预算时，记录 trace 并继续。

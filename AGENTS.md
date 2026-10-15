@@ -358,10 +358,10 @@ Input/Event → settle barrier → freeze registry generation → Trigger Router
   (agents report `preGameDone: true`). Setup completion is recorded per plugin
   `version`, so a version bump re-runs setup — setup guards must return
   `{ skip: true }` for work already done.
-- **Background execution**: `schedule.completion.mode: detached` moves a safe
+- **Background execution**: `schedule.detached: true` moves a safe
   post-turn / audit function leaf to the durable `_runtime_jobs` queue;
-  `schedule.completion.settle: before-next-execution` makes the next execution wait
-  for it; `schedule.manual.execution: background` backgrounds a manual run.
+  `schedule.detached: { settle: true }` makes the next execution wait
+  for it; `schedule.background: true` backgrounds a manual or event run.
 - **Session clock** (`Session` in `packages/shared/src/types/session.ts`): `status`
   (`active` / `paused` / `ended`), `phase` (`setup` / `playing`),
   `completedPlayerTurns` (only committed player executions count — setup and the
@@ -496,7 +496,10 @@ handling, and supported backend differences — those are not version compatibil
   for a `story` runtime), `firstTokenTimeoutMs` and `idleTimeoutMs`
   (a streamed call; 120s by default, and the default first-token wait of an
   attempt is shortened so the retries left fit into `timeoutMs`),
-  `loopDetection` (default 3); a function's limit is `function.timeoutMs`.
+  `loopDetection` (default 3); a function's limit is `function.timeoutMs`. An
+  agent that ends with one tool writes `agent.finishWith: <tool>`; several
+  completing tools or `runtime-done` take `agent.completion`. `agent.toolChoice`
+  and `agent.reasoning: false` sit beside them.
 - `pnpm validate:plugin plugins/<id>` is static and never executes `entry`; real
   registration of bundled plugins is asserted by
   `apps/server/tests/bootstrap/builtin-plugin-entries.test.ts`.

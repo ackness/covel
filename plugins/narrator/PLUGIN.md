@@ -1,6 +1,6 @@
 ---
 kind: core
-version: 0.0.37
+version: 0.0.38
 displayName: Narrator
 description: >-
   Continues the story from your actions, describing scenes, reactions, and
@@ -22,8 +22,7 @@ contracts:
     schema: ./schemas/narrative-engine.schema.json
 contributes:
   extensions:
-    - point: prompt.segment@1
-      id: character-sheets
+    - prompt.segment@1/character-sheets
   settings:
     - key: narrativePerson
       type: select
@@ -72,10 +71,10 @@ contributes:
         tool calls
       position: post-history
   hooks:
-    - event: PostContextAssembly
-    - event: PreLLMCall
-    - event: PostLLMResponse
-    - event: TurnStop
+    - PostContextAssembly
+    - PreLLMCall
+    - PostLLMResponse
+    - TurnStop
 runtime:
   schedule:
     stage: narrative

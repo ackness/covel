@@ -169,8 +169,6 @@ describe("plugin flow routes", () => {
       turnCompletion: {
         mode: "detached",
         maxQueueMs: 30_000,
-        overlap: "serial",
-        stalePolicy: "reject",
       },
     };
     const parsed: ParsedRuntimeMd = {
@@ -247,8 +245,6 @@ describe("plugin flow routes", () => {
     expect(pkg?.runtimes?.[0]?.turnCompletion).toEqual({
       mode: "detached",
       maxQueueMs: 30_000,
-      overlap: "serial",
-      stalePolicy: "reject",
     });
   });
 });

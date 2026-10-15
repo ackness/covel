@@ -19,8 +19,7 @@ Hook 不写玩法。一条玩法规则应该放在 runtime 或工具里。
 
 ```yaml
 contributes:
-  hooks:
-    - event: PreToolUse
+  hooks: [PreToolUse]
 ```
 
 ```js

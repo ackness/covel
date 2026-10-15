@@ -87,8 +87,6 @@ describe("POST /api/actions — scheduler-detached runtime", () => {
           mode: "detached",
           maxQueueMs: 30_000,
           maxExecutionMs: 90_000,
-          overlap: "serial",
-          stalePolicy: "reject",
         },
       },
     ];
@@ -283,8 +281,7 @@ runtime:
     stage: post-turn
     trigger:
       type: auto
-    completion:
-      mode: detached
+    detached: true
   function:
     handler: ./handler.js
   effects:

@@ -84,8 +84,7 @@ runtime:
         select: /narrativeOutput
     output: { contract: example.facts@1 }
   agent:
-    loop:
-      completion: { require: tool-use, afterTools: [save-facts] }
+    finishWith: save-facts
 ---
 Extract facts supported by runtime-inputs.narrative.value, then call save-facts.
 ```
@@ -98,8 +97,7 @@ The ID of this package is its directory name, `example`; its entry is `server/in
 | `id` | The plugin ID. When left out, it is the package directory name; when written, it must match that name. |
 | `kind` | `core` (added to every game by default) or `plugin` (the value when left out; added only when chosen). |
 | `version`, `displayName`, `description`, `tags` | Metadata. Tags group and filter plugins in session prep; they do not determine runtime scheduling. Covel works out the `ui:*` and `cost:*` tags; authors write only the others, such as `mode:*`. See [Derived tags](#derived-tags). |
-| `covel` | The range of host versions the package works with, such as `">=0.0.45"`. A host outside that range does not install or load the package. |
-| `author`, `license`, `homepage` | Author information, shown only for display. See [Author information](#author-information). |
+| `author`, `license` | Author information, shown only for display. See [Author information](#author-information). |
 | `provides` | Contracts that no runtime outputs (for example, ones a service provides), or contracts to mark as `{contract, default: true}`. The `io.output.contract` of each runtime is added on its own; do not write it. |
 | `requires` | Required contracts. The resolver adds a provider for each one. A contract that a runtime refers to but `requires` does not list is optional. |
 | `conflicts` | Makes the package mutually exclusive with other plugins that provide these contracts. |
@@ -107,6 +105,8 @@ The ID of this package is its directory name, `example`; its entry is `server/in
 | `entry` | The path, relative to the package root, of the module that does the registration. When left out, `server/index.js` is used if it exists. |
 | `contributes` | Package-level contributions. See [contributes fields](#contributes-fields). |
 | `runtime` | An optional declaration of a single runtime. |
+
+Root fields that are rarely needed, such as `covel` and `homepage`, are in [Advanced fields](#advanced-fields).
 
 A contract is a versioned name, such as `narrative-engine@1`. Plugins find each other through it, not through plugin IDs. A few rules:
 
@@ -127,9 +127,9 @@ Session prep groups each plugin by its first tag (the tags the author writes com
 | `actions` | Action names passed to `registerRpc` |
 | `commands` | Player command metadata. Its `action` must be listed in `actions`. |
 | `services` | Contract IDs passed to `registerService` |
-| `extensions` | `{point, id}` pairs passed to `provideExtension` |
-| `hooks` | `{event, enforce}` declarations for hooks. See [Hooks](./hooks.md). |
-| `wires`, `forms` | The matching registration IDs |
+| `extensions` | Extensions provided with `provideExtension`, written as `<point>/<id>`, such as `prompt.segment@1/notes`. To set options such as `order` or `slot`, write `{point, id, …}`. |
+| `hooks` | The hook events the package listens to, written as event names, such as `PreToolUse`. To set `enforce`, write `{event, enforce}`. See [Hooks](./hooks.md). |
+| `forms` | Form IDs passed to `registerFormValidator` |
 | `events` | Plugin event contracts |
 | `settings` | Player settings. The runtime reads them through `ctx.userSettings`. |
 | `data` | The schema, version, accepts, and search settings for this plugin's data namespace |
@@ -137,40 +137,7 @@ Session prep groups each plugin by its first tag (the tags the author writes com
 | `worldProjections` | Declarations of world data projections |
 | `prompt` | Static prompt sections |
 
-Registrations in `entry` and declarations in the manifest are checked in both directions. If something is registered but not declared, or declared but not implemented, loading fails. Package-level contributions belong only to the root file. They are not merged with the fields of a child runtime.
-
-### Author information
-
-Plugins, worlds (`world.yaml`), and collections (`covel-collection.yaml`) use the same optional fields to say who made them and where to find them. These fields are for display only. The host makes no decisions based on them, and their text never goes into a prompt.
-
-```yaml
-version: 1.2.0
-author:
-  name: Jane Doe
-  url: https://example.com
-  about: I write small mystery worlds. A new one comes out every month.
-  links:
-    - label: Community
-      url: https://example.com/community
-    - label: Support my work
-      url: https://example.com/support
-license: CC-BY-4.0
-homepage: https://example.com/tidefall
-```
-
-| Field          | Description                                                                                                                            |
-| -------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| `author.name`  | The author or team name, up to 80 characters. It is shown as written in every language and is not translated.                          |
-| `author.url`   | The author's own page                                                                                                                  |
-| `author.about` | A short note the author writes for players: who they are, their other work, and how to support them. Plain text, up to 500 characters. |
-| `author.links` | Links with labels, up to 6 of them. Each `label` is up to 40 characters.                                                               |
-| `license`      | The license: an SPDX identifier or a short name, up to 64 characters                                                                   |
-| `homepage`     | The package's own page, such as its repository or documentation                                                                        |
-
-- **Links must use `https`.** They cannot contain a user name or password. Addresses such as `http:`, `javascript:`, and `file:` are rejected when the manifest is validated. The host does not review these links, because they are third-party addresses the author provides. Before a player opens any of them, the interface shows the full address and the domain and says so. The link opens in the browser only after the player confirms. Domains are displayed in ASCII form. A look-alike domain written with other characters is shown as `xn--…`.
-- **Where they appear:** the world list (author · version), the world details, the world cards and plugin rows on the session-prep screen, and the installed plugins in Settings. The install preview shows only the author name, not the links. The screens used during play do not show these fields.
-- **Translation:** a plugin translates `author.about` and the `label` of each `author.links` entry in the `PLUGIN.md` section of `locales/<locale>.yaml`. Links are matched by position. A world translates the same two items in `world.<locale>.yaml`. Author names and licenses are not translated, and `pnpm i18n` does not count them as text to translate.
-- **Version number:** the list shows the `version` from the manifest. The version is written only in `PLUGIN.md`: the host, the install preview and the update check all read it, and a `version` in `package.json` is not read. A change to `version` makes existing sessions run the plugin's setup runtimes again, so the setup guard or handler must return a skip for work that is already done.
+Registrations in `entry` and declarations in the manifest are checked in both directions. If something is registered but not declared, or declared but not implemented, loading fails. Package-level contributions belong only to the root file. They are not merged with the fields of a child runtime. `wires` and other rarely needed forms are in [Advanced fields](#advanced-fields).
 
 Bundled plugins follow the same current data contracts as external packages. Dice receipts carry a `checks` array, and `pluginData.get()` returns the stored value directly. A narrative binding projected with `select: /narrativeOutput` carries a string. World rules use flat records with `schemaVersion`, `id`, and `content`, without a `{ rule, ... }` wrapper. NPC edge history permits one open version per relation; duplicate open versions are rejected without automatic repair. Portrait replacement matches an exact character ID or the current `npc-<blueprintId>` projection, never an arbitrary session prefix.
 
@@ -188,9 +155,9 @@ Authors of external plugins should follow the framework's [CHANGELOG](../../CHAN
 
 | Field         | Main settings                                                                                              |
 | ------------- | ---------------------------------------------------------------------------------------------------------- |
-| `schedule`    | `stage`, `every`, `trigger`, `needs`, `after`, `completion`, `manual`                                      |
+| `schedule`    | `stage`, `every`, `trigger`, `needs`, `after`, `detached`, `background`                                    |
 | `io`          | `inputs`, `selfData`, `payloadSchema`, `output`, `visibility`, `concealed`                                 |
-| `agent`       | `model`, `llm`, `history`, `tools`, `advertiseEvents`, `loop`                                              |
+| `agent`       | `model`, `toolChoice`, `reasoning`, `history`, `tools`, `finishWith`, `completion`, `loop`                 |
 | `function`    | A runtime with this block is a function, one without it an agent; `handler`, `model`, `timeoutMs`, `tools` |
 | `guard`       | The guard module, relative to the runtime                                                                  |
 | `effects`     | Read and write resources, and `parallelSafe`                                                               |
@@ -214,17 +181,28 @@ Leave out a field whose value is the default. When you write one, `pnpm validate
 | --- | --- |
 | `schedule.trigger.type` | `auto` |
 | `schedule.every` | `1`: runs every turn |
-| `schedule.manual.execution` | `sync` |
+| `schedule.detached` | `false`: the turn waits for the runtime |
+| `schedule.detached.settle` | `false`: the player's next action does not wait for it |
+| `schedule.background` | `false`: the caller waits for the result |
 | `io.visibility` | `system` |
 | `cardinality` (`needs`, `after`, `io.inputs.*.from`) | `one` |
 | `io.inputs.*.required` | `true` |
 | `io.inputs.*.scope` | `turn` |
 | `io.selfData[].format`, `maxEntries` | `summary`, `50` |
 | `agent.model` | `story` for a runtime with `io.visibility: story`, `plugin` for any other |
+| `agent.reasoning` | `true`: the model's own reasoning setting applies |
+| `agent.toolChoice` (with `finishWith`) | `required` |
 | `agent.loop.timeoutMs`, `callTimeoutMs`, `maxRetries` | a runtime with `io.visibility: story`: 240000, 120000, 1; any other: 120000, 60000, 3 |
 | `contributes.data.*.version` | `1` |
 | `contributes.hooks[].enforce` | `normal` |
+| `contributes.extensions[].order` | `0` |
 | `contributes.prompt[].role` | `system` |
+
+`pnpm validate:plugin` also warns about a declaration that has a shorter form (`it means the same`), and the package still passes:
+
+- A hook with only `event` is written as the event name: `- PreToolUse`.
+- An extension with only `point` and `id` is written as `<point>/<id>`.
+- `completion: {require: tool-use, afterTools: [one tool]}` with `toolChoice: required` is written as `finishWith: <tool>`. See [Completion conditions](#completion-conditions-agentfinishwith-agentcompletion).
 
 Covel works out the fields below when they are left out. When one is written with the value Covel would work out, `pnpm validate:plugin` warns in the same way (`is the default value; remove it` or `is worked out from …; remove it`).
 
@@ -353,8 +331,10 @@ The trigger types are `auto` (the default), `manual`, and `event`.
 - `schedule.every: N` makes an `auto` runtime run only on the logical turns that are a multiple of N. For example, `every: 3` runs on turns 3, 6 and 9.
 - `schedule.trigger` can also set `startTurn` (the first turn it may run), `cooldownTurns` (the least number of turns between two runs) and `maxTriggerCount` (the most runs in one session). When it sets only these, `type` can be left out too.
 - `manual` and `event` runtimes are triggered separately, by a request or by an event. They declare no stage and cannot set `every`. A setup runtime cannot set `every`, `startTurn` or `cooldownTurns`.
-- `schedule.manual.execution: background` makes a manual run execute in the background. Such a manual or event runtime has no upstream in the same execution, so it cannot read a `scope: turn` input; use `scope: committed` or a kernel input instead.
-- `schedule.completion` controls whether the turn waits for the runtime to finish. The manifest validation and the runtime admission check enforce the specific limits.
+- `schedule.background: true` runs a manual or event runtime in the background: the caller gets a job ID at once and does not wait for the result. Such a runtime has no upstream in the same execution, so it cannot read a `scope: turn` input; use `scope: committed` or a kernel input instead.
+- `schedule.detached: true` lets the turn finish first; the runtime then runs as a durable background job. It is allowed only on the `post-turn` and `audit` stages, and not on a runtime with `io.visibility: story`.
+- Written as an object, `schedule.detached` sets the job's options and also makes the runtime detached: `settle: true` makes the player's next action wait until the job is done, for at most `maxSettleWaitMs` (120000 at most); `maxQueueMs` and `maxExecutionMs` limit how long the job may queue and run.
+- The manifest validation and the runtime admission check enforce the specific limits.
 
 ### History window (`agent.history`)
 
@@ -367,27 +347,13 @@ The trigger types are `auto` (the default), `manual`, and `event`.
 
 An extraction runtime that reads only this turn's input should declare it, so the prompt does not keep growing as the session gets longer.
 
-### Timeouts, retries, and completion conditions (`agent.loop`)
+<a id="timeouts-retries-and-completion-conditions-agentloop"></a>
 
-An agent's timeouts, retries, and step limits are all in `agent.loop`. When they are left out, the defaults follow `io.visibility`: a `story` runtime has `timeoutMs` 240 seconds, `callTimeoutMs` 120 seconds and `maxRetries` 1; any other runtime has 120 seconds, 60 seconds and 3.
+### Timeouts and retries (`agent.loop`)
 
-**A streaming call is limited by how long it goes without output.**
+An agent's timeouts and retries are in `agent.loop`. When they are left out, the defaults follow `io.visibility`: a `story` runtime has `timeoutMs` 240 seconds, `callTimeoutMs` 120 seconds and `maxRetries` 1; any other runtime has 120 seconds, 60 seconds and 3. Rarely needed limits, such as the step limit, are in [Advanced fields](#advanced-fields).
 
-- `firstTokenTimeoutMs`: the longest it waits before the first output.
-- `idleTimeoutMs`: the longest silence allowed between two outputs. The default is 120 seconds.
-- A model that keeps producing output is not cut off, and the time spent producing output does not count toward `timeoutMs`.
-
-**How long to wait for the first output.**
-
-- If you set `firstTokenTimeoutMs`: every attempt waits this long.
-- If you do not set it: one attempt waits at most 120 seconds, and time is left for the retries that `maxRetries` still allows. The last attempt can use all of the remaining `timeoutMs`. Earlier attempts wait "remaining time ÷ remaining attempts". If that value is under 60 seconds, the wait is 60 seconds, but never more than half the remaining time.
-
-| `timeoutMs` | `maxRetries` | Maximum wait for each attempt |
-| ----------- | ------------ | ----------------------------- |
-| 120 s       | 3            | 60, 30, 15, 15 s              |
-| 240 s       | 1            | 120, 120 s                    |
-
-So when a provider accepts the request but never produces any text, there is still time to send the retries. A model that is slow to give its first output (a reasoning model that does not stream its reasoning) should set `firstTokenTimeoutMs` explicitly, and set `timeoutMs` large enough.
+A streaming call is limited by how long it goes without output: a model that keeps producing output is not cut off, and the time spent producing output does not count toward `timeoutMs`. The limits on the wait for the first output and between two outputs are in [Wait limits of a streaming call](#wait-limits-of-a-streaming-call).
 
 **The reply is cut off (`finishReason: length`).** When a reply is cut off at the model's output limit, the cut-off tool calls and JSON cannot be used.
 
@@ -417,13 +383,33 @@ The budget decides how many retries can actually be used:
 - A 5xx error that uses up every transport-level retry leaves room for only two rounds.
 - Failures that return quickly and use only one HTTP request (the connection drops partway through a reply, or a generation error) are the ones that can use more attempts.
 
-**Completion conditions.**
+### Completion conditions (`agent.finishWith`, `agent.completion`)
 
-- `completion.afterTools`: the run finishes once the named tools succeed.
+An agent that finishes by calling one tool writes `finishWith`:
+
+```yaml
+agent:
+  finishWith: save-facts
+```
+
+- The runtime finishes as soon as `save-facts` succeeds, without asking the model again. If it ends without a successful call to that tool, the run fails.
+- The model must call a tool on every step, as with `toolChoice: required`. When `agent.toolChoice` is written, its value is used.
+- It means the same as `completion: {require: tool-use, afterTools: [save-facts]}` with `toolChoice: required`.
+
+When there are several completing tools, or the model should call `runtime-done` when nothing changed, write the full `completion`. Write only one of `finishWith` and `completion`.
+
+- `completion.afterTools`: the run finishes once one of the listed tools succeeds.
+- `completion.require: explicit`: the run must end with a successful call to a completing tool, or with `runtime-done`. A runtime with `io.visibility: story` cannot use it.
 - `completion.require: tool-use`: with a nonempty `afterTools` list, at least one listed completing tool must succeed. Without that list, any successful business tool counts. Failed calls and `runtime-done` do not count.
 - If the model returns only plain text, or calls `runtime-done` while no such call has been made yet, the framework first injects a correction prompt. Only if the run is still not complete is it marked as failed. So even when "nothing changed", submit an empty result through a business tool.
 - The request right after a correction requires the model to call a tool (`toolChoice: "required"`, with any tool named in the manifest kept as it is). After the model calls a tool, the choice goes back to automatic. When the model is in thinking mode, the provider does not accept a forced choice, so the model keeps choosing on its own.
 - This check runs in one place, where the loop returns. It applies to every way a normal run or a resume can end: a text answer, `runtime-done`, automatic completion through `afterTools`, a `PostToolUse` hook that stops the run, and running out of steps.
+
+### Tool choice and reasoning (`agent.toolChoice`, `agent.reasoning`)
+
+- `agent.toolChoice: required` makes the model call a tool on every step; the model picks which one. `{name: <tool>}` makes it call that one tool. Without it (and without `finishWith`), the model decides on its own.
+- `agent.reasoning: false` turns reasoning off for this runtime. It suits an extraction runtime that only fills in tool arguments. Without it, the model's own reasoning setting applies; a reasoning level the player sets explicitly still wins.
+- When the model is in thinking mode, the provider does not accept a forced tool choice, so the model keeps choosing on its own.
 
 ### Function tools and timeouts
 
@@ -640,6 +626,77 @@ The kernel input `turn-digest@1` freezes the facts of the source turn. A foregro
 - A background (detached) worker reads the snapshot of the source execution. It does not query the latest form or turn state again.
 - After this input contract is updated, old jobs and snapshots must be rebuilt. There is no compatible read path.
 
+## Advanced fields
+
+No bundled plugin uses the fields below, and a first plugin does not need them. They are there for community plugins with special needs. The type and values of each field are in the [manifest field tables](./schema/plugin-manifest.md) and the [runtime field tables](./schema/runtime-manifest.md).
+
+<!-- prettier-ignore -->
+| Field | Use |
+| --- | --- |
+| `covel` | The range of host versions the package works with, such as `">=0.0.45"`. A host outside that range does not install or load the package. |
+| `homepage`, `author.about`, `author.links` | The package's page, a note to players, and labelled links. See [Author information](#author-information). |
+| `contributes.wires` | IDs of provider wires registered with `registerWires` |
+| `contributes.events[].advertise` | `false` hides the event from the model that writes the story; only the UI and code use it |
+| `contributes.prompt[].position: {depth: N}` | Inserts the static section into the history by message depth. See [Prompt structure](./prompt-structure.md). |
+| `contributes.commands[].context` | Host information a command passes to its action: `session`, `active-runtimes`, `models` |
+| `contributes.commands[].arguments[].variadic`, `choices` | `variadic: true` collects the remaining words into the last argument; `choices` lists the values an argument may take |
+| The `text`, `textarea`, `integer`, `slider` and `slot` values of `contributes.settings[].type` | A one-line text box, a multi-line text box, a whole number, a slider, and a choice of model role |
+| `agent.loop.maxSteps` | The most tool-call steps. A runtime that calls one tool and stops can set 1 or 2. |
+| `agent.loop.firstTokenTimeoutMs`, `idleTimeoutMs` | The wait limits of a streaming call. See [Wait limits of a streaming call](#wait-limits-of-a-streaming-call). |
+| `agent.loop.loopDetection` | How many identical calls in a row count as a loop. The default is 3; `0` turns the check off. |
+| `agent.loop.maxRecursionDepth` | How deep `ctx.recursiveCall()` may nest. The default is 10. |
+
+### Wait limits of a streaming call
+
+- `firstTokenTimeoutMs`: the longest it waits before the first output.
+- `idleTimeoutMs`: the longest silence allowed between two outputs. The default is 120 seconds.
+- A model that keeps producing output is not cut off, and the time spent producing output does not count toward `timeoutMs`.
+
+How long to wait for the first output:
+
+- If you set `firstTokenTimeoutMs`: every attempt waits this long.
+- If you do not set it: one attempt waits at most 120 seconds, and time is left for the retries that `maxRetries` still allows. The last attempt can use all of the remaining `timeoutMs`. Earlier attempts wait "remaining time ÷ remaining attempts". If that value is under 60 seconds, the wait is 60 seconds, but never more than half the remaining time.
+
+| `timeoutMs` | `maxRetries` | Maximum wait for each attempt |
+| ----------- | ------------ | ----------------------------- |
+| 120 s       | 3            | 60, 30, 15, 15 s              |
+| 240 s       | 1            | 120, 120 s                    |
+
+So when a provider accepts the request but never produces any text, there is still time to send the retries. A model that is slow to give its first output (a reasoning model that does not stream its reasoning) should set `firstTokenTimeoutMs` explicitly, and set `timeoutMs` large enough.
+
+### Author information
+
+Plugins, worlds (`world.yaml`), and collections (`covel-collection.yaml`) use the same optional fields to say who made them and where to find them. These fields are for display only. The host makes no decisions based on them, and their text never goes into a prompt.
+
+```yaml
+version: 1.2.0
+author:
+  name: Jane Doe
+  url: https://example.com
+  about: I write small mystery worlds. A new one comes out every month.
+  links:
+    - label: Community
+      url: https://example.com/community
+    - label: Support my work
+      url: https://example.com/support
+license: CC-BY-4.0
+homepage: https://example.com/tidefall
+```
+
+| Field          | Description                                                                                                                            |
+| -------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `author.name`  | The author or team name, up to 80 characters. It is shown as written in every language and is not translated.                          |
+| `author.url`   | The author's own page                                                                                                                  |
+| `author.about` | A short note the author writes for players: who they are, their other work, and how to support them. Plain text, up to 500 characters. |
+| `author.links` | Links with labels, up to 6 of them. Each `label` is up to 40 characters.                                                               |
+| `license`      | The license: an SPDX identifier or a short name, up to 64 characters                                                                   |
+| `homepage`     | The package's own page, such as its repository or documentation                                                                        |
+
+- **Links must use `https`.** They cannot contain a user name or password. Addresses such as `http:`, `javascript:`, and `file:` are rejected when the manifest is validated. The host does not review these links, because they are third-party addresses the author provides. Before a player opens any of them, the interface shows the full address and the domain and says so. The link opens in the browser only after the player confirms. Domains are displayed in ASCII form. A look-alike domain written with other characters is shown as `xn--…`.
+- **Where they appear:** the world list (author · version), the world details, the world cards and plugin rows on the session-prep screen, and the installed plugins in Settings. The install preview shows only the author name, not the links. The screens used during play do not show these fields.
+- **Translation:** a plugin translates `author.about` and the `label` of each `author.links` entry in the `PLUGIN.md` section of `locales/<locale>.yaml`. Links are matched by position. A world translates the same two items in `world.<locale>.yaml`. Author names and licenses are not translated, and `pnpm i18n` does not count them as text to translate.
+- **Version number:** the list shows the `version` from the manifest. The version is written only in `PLUGIN.md`: the host, the install preview and the update check all read it, and a `version` in `package.json` is not read. A change to `version` makes existing sessions run the plugin's setup runtimes again, so the setup guard or handler must return a skip for work that is already done.
+
 ## World Model and data boundaries
 
 The character schema, the characters, and the world record belong to the kernel's World Model. A plugin reads them only, and it writes to them through proposals.
@@ -683,12 +740,12 @@ The rules are in [Aliases and name resolution](./world-model.md#aliases-and-name
 
 The built-in `world-init` has four runtimes related to dimensions. `dimension-clock` runs after time settlement and `dimension-tracker`.
 
-| Runtime             | Stage              | Responsibility                                                                                                                                                                                                                                                                                                                                      |
-| ------------------- | ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `dimension-context` | pre-turn function  | Calls no model. Reads the committed values and publishes `world.dimensions@1`.                                                                                                                                                                                                                                                                      |
-| `dimension-tracker` | post-turn agent    | Must be bound to this turn's narrative, and it maintains the dimensions by the author's rules. WorldIR is an optional supporting input. The world clock after this turn's settlement (`world-time-evolution@1`) is an optional input. `toolChoice: required`. When nothing changed, it still settles by calling `update-dimensions({updates: []})`. |
-| `dimension-clock`   | post-turn function | Calls no model. Using the world clock after this turn's settlement (`world-time-evolution@1`, an optional input), it computes the fields with `x-derive` in the schema. When a value changes, it commits `dimension.update`.                                                                                                                        |
-| `edit-dimensions`   | manual function    | The player changes a value, confirms a manual handling, or explicitly skips it.                                                                                                                                                                                                                                                                     |
+| Runtime             | Stage              | Responsibility                                                                                                                                                                                                                                                                                                                                               |
+| ------------------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `dimension-context` | pre-turn function  | Calls no model. Reads the committed values and publishes `world.dimensions@1`.                                                                                                                                                                                                                                                                               |
+| `dimension-tracker` | post-turn agent    | Must be bound to this turn's narrative, and it maintains the dimensions by the author's rules. WorldIR is an optional supporting input. The world clock after this turn's settlement (`world-time-evolution@1`) is an optional input. `finishWith: update-dimensions`. When nothing changed, it still settles by calling `update-dimensions({updates: []})`. |
+| `dimension-clock`   | post-turn function | Calls no model. Using the world clock after this turn's settlement (`world-time-evolution@1`, an optional input), it computes the fields with `x-derive` in the schema. When a value changes, it commits `dimension.update`.                                                                                                                                 |
+| `edit-dimensions`   | manual function    | The player changes a value, confirms a manual handling, or explicitly skips it.                                                                                                                                                                                                                                                                              |
 
 **Reading.**
 
@@ -868,7 +925,7 @@ The directory-level command `pnpm validate:plugin <dir>` and the ZIP install sha
 - The referenced entry, handler, guard, JSON Schema, and UI files must be inside the package.
 - Each JSON UI spec declares one of `view` and `webview`. Component names in `view` must be in the [component catalogue](./ui-components.md). `repeat.statePath` and `$item` must have a legal form (see [UI panels](./ui-panels.md#json-render-binding-cheat-sheet)). The error gives the spec file and the path of the node.
 - The built-in tool names and the plugin tool declarations, the runtime references inside the package, and the root contract dependencies must all be consistent.
-- An error from a cross-field rule (for example, `schedule.completion.mode: detached` is only allowed on `post-turn` or `audit`) gives the file path and the field path you wrote, for example `runtimes/note/RUNTIME.md: schedule.stage: …`.
+- An error from a cross-field rule (for example, `schedule.detached` is only allowed on `post-turn` or `audit`) gives the file path and the field path you wrote, for example `runtimes/note/RUNTIME.md: schedule.stage: …`.
 
 Loading, `pnpm validate:plugin` and installation use one copy of the manifest rules (the schemas in `@covel/shared`), and the same holds for UI specs: a panel that passes the check is not dropped in the game for its format.
 

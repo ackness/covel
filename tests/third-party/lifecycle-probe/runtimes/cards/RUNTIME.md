@@ -17,20 +17,19 @@ io:
   visibility: system
 agent:
   model: plugin
-  llm:
-    reasoningEffort: disabled
-    toolChoice:
-      name: lifecycle-probe-cards
+  reasoning: false
+  toolChoice:
+    name: lifecycle-probe-cards
   tools:
     plugin:
+      - lifecycle-probe-cards
+  completion:
+    require: tool-use
+    afterTools:
       - lifecycle-probe-cards
   loop:
     maxSteps: 2
     maxRetries: 0
-    completion:
-      require: tool-use
-      afterTools:
-        - lifecycle-probe-cards
 ---
 
 Read narrative.value from the declared inputs and call lifecycle-probe-cards once.

@@ -21,9 +21,7 @@ io:
 agent:
   history:
     maxTurns: 1
-  llm:
-    reasoningEffort: disabled
-    toolChoice: required
+  reasoning: false
   tools:
     builtin:
       - world-dimension-get
@@ -31,11 +29,7 @@ agent:
     plugin:
       - dimension-rule-get
       - update-dimensions
-  loop:
-    completion:
-      require: tool-use
-      afterTools:
-        - update-dimensions
+  finishWith: update-dimensions
 guard: ./guard.js
 ---
 

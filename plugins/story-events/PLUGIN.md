@@ -1,5 +1,5 @@
 ---
-version: 0.1.4
+version: 0.1.5
 displayName: Hidden Story Events
 description: >-
   Keeps world-authored hidden story events out of prompts and player views until

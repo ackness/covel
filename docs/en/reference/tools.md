@@ -742,7 +742,7 @@ When one of the model's replies has several tool calls, the `suspend` call first
 - `resumeSchema` must be serializable with `JSON.stringify`, because the state is written to storage.
 - A runtime has only one suspended item waiting to resume at a time: when it suspends again, the older item is voided at once. When the player played another turn, the plugin changed version, or a record the item would change was changed by another execution afterwards (for example a background job or a manual run), the suspended item is voided on resume; see [Out-of-date suspended items](./api.md#out-of-date-suspended-items). The resume endpoint looks it up by the suspended item's ID.
 - `createDefaultToolRegistry` in `@covel/tools` registers it as a builtin tool. An agent still has to list `suspend` in `agent.tools.builtin` before it can call it.
-- A runtime that runs in the background cannot suspend, because no player is waiting on it. A runtime that declares `schedule.manual.execution: background` or `schedule.completion.mode: detached` and lists `suspend` in `agent.tools.builtin` is rejected at load. If a runtime in a background job suspends anyway (a function handler returns a suspension, or an event runtime triggered by the background run calls `suspend`), the job is recorded as `failed` and nothing is committed.
+- A runtime that runs in the background cannot suspend, because no player is waiting on it. A runtime that declares `schedule.background: true` or `schedule.detached` and lists `suspend` in `agent.tools.builtin` is rejected at load. If a runtime in a background job suspends anyway (a function handler returns a suspension, or an event runtime triggered by the background run calls `suspend`), the job is recorded as `failed` and nothing is committed.
 - Resuming continues the execution that was suspended:
   - `ctx.locale`, `ctx.logicalTurn`, and `ctx.turnNumber` keep the values from the time of suspension. They do not change with the turn count of the session afterwards.
   - `ctx.world` is the World Model committed at resume time, with the writes buffered in the state added on top.
@@ -1113,7 +1113,7 @@ Whose dimension definitions are used:
 
 `worldSchema` is also the runtime output of `world-init/schema-gen`. It is passed to `char-creator/player-init` in the same setup execution. This way, the downstream runtime does not have to read storage that has not been committed yet.
 
-This runtime declares `agent.loop.completion: {require: tool-use, afterTools: [initialize-world]}` and `io.output.schema`. So the model needs to generate the tool arguments only once. After the tool succeeds, the framework checks the result directly against the output schema and ends.
+This runtime declares `agent.completion: {require: tool-use, afterTools: [initialize-world]}` and `io.output.schema`. So the model needs to generate the tool arguments only once. After the tool succeeds, the framework checks the result directly against the output schema and ends.
 
 **Used by**: `world-init/schema-gen`
 
@@ -1320,7 +1320,7 @@ The tool does two things: it writes the normalized `{ prompt, promptMode, compos
 
 The model does not have to write a `{ topic, data }` event envelope itself, so it cannot leave out the topic or write an empty one. The runtime's output schema checks only the trusted result that the tool produces.
 
-Both prompt generators are agents that are triggered manually, and they declare `schedule.manual.execution: background`. Their `agent.loop.completion.afterTools` lists the matching tool, so the run ends after one successful submit. The image generator that follows keeps running in the background.
+Both prompt generators are agents that are triggered manually, and they declare `schedule.background: true`. Their `agent.completion.afterTools` lists the matching tool, so the run ends after one successful submit. The image generator that follows keeps running in the background.
 
 ## Short IDs (entity references the LLM can read)
 

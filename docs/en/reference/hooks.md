@@ -19,8 +19,7 @@ There are two steps. The root `PLUGIN.md` lists the events you use, and the `ent
 
 ```yaml
 contributes:
-  hooks:
-    - event: PreToolUse
+  hooks: [PreToolUse]
 ```
 
 ```js

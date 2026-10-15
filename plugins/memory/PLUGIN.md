@@ -1,6 +1,6 @@
 ---
 kind: core
-version: 0.0.40
+version: 0.0.41
 displayName: Story Memory
 description: >-
   Shows what the story remembers, including plot, scene, relationships, and hero
@@ -11,8 +11,7 @@ author:
 license: MIT
 contributes:
   extensions:
-    - point: prompt.segment@1
-      id: memory
+    - prompt.segment@1/memory
   ui:
     right:
       - ./ui/memory-panel.json
@@ -46,7 +45,7 @@ contributes:
         text: text
 ---
 
-Memory extraction runs as a detached post-turn function with a before-next-execution barrier. Blocks live in this plugin's `blocks` namespace and enter prompts through `prompt.segment@1` after the cache boundary.
+Memory extraction runs as a detached post-turn function that settles before the next execution: the next player action waits for it. Blocks live in this plugin's `blocks` namespace and enter prompts through `prompt.segment@1` after the cache boundary.
 
 The same extraction adds up to three facts of the turn to the `facts` namespace. A block is rewritten every turn and holds the present state; facts are only added and keep what happened. The namespace is declared searchable, so the kernel's `memory-search` reads it, and the prompt segment brings back the facts that the player's message is about. Both use the kernel's lexical ranking and need no embedding model. Additional active plugins can contribute `memory.block-definitions@1` services; world packages can provide definitions in this plugin's `definitions/world` record.
 

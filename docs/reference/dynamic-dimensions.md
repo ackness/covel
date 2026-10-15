@@ -189,7 +189,7 @@ crownfire:
 - WorldIR 抽取存在但失败了，不能理解成“没有变化”。
 - 规则和 schema 放在它的 system prompt 的 `<dimension-rules>` 段里，整局不变。冻结的值放在回合上下文的 `<dimension-values>` 里（见 [Prompt 结构](./prompt-structure.md#记账-runtime-的布局)）。
 - `<dimension-rules>` 的预算是 24000 字符。预算内直接给出每个有规则的维度的完整规则和 schema，通常一次模型调用就能结算。放不下的维度才改用 `dimension-rule-get`（只在负责的插件内部可用，按冻结的版本分页读完整的规则和 schema）和 `world-dimension-get`。
-- tracker 关闭了推理（`reasoningEffort: disabled`）。
+- tracker 关闭了推理（`agent.reasoning: false`）。
 - `update-dimensions` 每条更新的 `expectedVersion` 由工具取这次执行读到的版本，不由模型填写。
 
 **文本长度留了余量。** 给 tracker 看的 schema 里，文本字段的 `maxLength` 是作者所写值的 80%。原因是模型不会数字数，按上限写经常多出几个到几十个字，整次提交被拒之后还要再调用一次模型。留出余量后，写得略超也仍然在作者的上限以内。写入时校验的始终是作者写的上限。

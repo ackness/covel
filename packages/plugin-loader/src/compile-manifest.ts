@@ -35,6 +35,35 @@ function compileDependency(
     ...("scope" in source && source.scope ? { scope: source.scope } : {}),
   };
 }
+
+type AuthoredAgent = NonNullable<RuntimeAuthoringManifest["agent"]>;
+
+/**
+ * The completion rule an agent writes: `finishWith: <tool>` is the short form
+ * of `completion: { require: tool-use, afterTools: [<tool>] }`.
+ */
+function agentCompletion(agent: AuthoredAgent | undefined) {
+  if (agent?.finishWith === undefined) return agent?.completion;
+  return { require: "tool-use" as const, afterTools: [agent.finishWith] };
+}
+
+/**
+ * The model call options of an agent. `finishWith` makes the model call a
+ * tool on every step unless the agent names its own `toolChoice`.
+ */
+function agentLlm(agent: AuthoredAgent | undefined) {
+  const toolChoice =
+    agent?.toolChoice ??
+    (agent?.finishWith !== undefined ? ("required" as const) : undefined);
+  const llm = {
+    ...(agent?.reasoning === false
+      ? { reasoningEffort: "disabled" as const }
+      : {}),
+    ...(toolChoice ? { toolChoice } : {}),
+  };
+  return Object.keys(llm).length ? llm : undefined;
+}
+
 /** Compile current authoring contracts into the kernel's execution IR. */
 export function compileRuntimeManifest(
   plugin: PluginManifest,
@@ -57,6 +86,7 @@ export function compileRuntimeManifest(
       ? { ...a?.tools, plugin: [...contributed] }
       : a?.tools;
   const loop = a?.loop;
+  const completion = agentCompletion(a);
   const visibility = runtime.io?.visibility ?? DEFAULT_RUNTIME_VISIBILITY;
   // An agent that leaves out its slot or loop limits gets the defaults of its
   // visibility; a function runtime has no loop and names a slot only when
@@ -64,6 +94,7 @@ export function compileRuntimeManifest(
   const loopDefaults =
     runtimeType === "agent" ? defaultAgentLoop(visibility) : undefined;
   const schedule = runtime.schedule;
+  const detached = schedule?.detached;
   // `auto` is the default trigger and `every` its cadence.
   const trigger =
     schedule?.trigger || schedule?.every !== undefined
@@ -113,7 +144,7 @@ export function compileRuntimeManifest(
       runtimeType === "agent"
         ? (a?.model ?? defaultAgentModel(visibility))
         : runtime.function?.model,
-    llm: a?.llm,
+    llm: agentLlm(a),
     history: a?.history,
     tools: runtime.function?.tools ?? agentTools,
     advertiseEvents: a?.advertiseEvents,
@@ -121,8 +152,10 @@ export function compileRuntimeManifest(
     trigger,
     needs: schedule?.needs?.map(compileDependency),
     after: schedule?.after?.map(compileDependency),
-    turnCompletion: schedule?.completion,
-    execution: schedule?.manual?.execution,
+    turnCompletion: detached
+      ? { mode: "detached", ...(detached === true ? {} : detached) }
+      : undefined,
+    execution: schedule?.background ? "background" : undefined,
     effects: runtime.effects,
     permissions: runtime.permissions,
     maxSteps: loop?.maxSteps,
@@ -134,10 +167,9 @@ export function compileRuntimeManifest(
     maxRetries: loop?.maxRetries ?? loopDefaults?.maxRetries,
     loopDetectionThreshold: loop?.loopDetection,
     maxRecursionDepth: loop?.maxRecursionDepth,
-    requireToolUse: loop?.completion?.require === "tool-use" || undefined,
-    requireExplicitCompletion:
-      loop?.completion?.require === "explicit" || undefined,
-    completeAfterTools: loop?.completion?.afterTools,
+    requireToolUse: completion?.require === "tool-use" || undefined,
+    requireExplicitCompletion: completion?.require === "explicit" || undefined,
+    completeAfterTools: completion?.afterTools,
     outputKind: visibility,
     ...(runtime.io?.concealed ? { concealed: true } : {}),
     ...(output

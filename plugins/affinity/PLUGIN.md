@@ -1,5 +1,5 @@
 ---
-version: 0.0.38
+version: 0.0.39
 displayName: Affinity
 description: >-
   Tracks numeric player-to-NPC affinity, with scores, tiers, and recent changes
@@ -65,13 +65,11 @@ runtime:
       maxTurns: 0
     # The conversation is story text; without a required tool call the model
     # sometimes continues the story first.
-    llm:
-      toolChoice: required
-    loop:
-      completion:
-        require: explicit
-        afterTools:
-          - update-affinity
+    toolChoice: required
+    completion:
+      require: explicit
+      afterTools:
+        - update-affinity
 ---
 
 You are the Affinity Tracker. Read this turn's narrative and find the NPCs the player **explicitly interacted** with. Record each numeric affinity change with `update-affinity`. **Prefer to miss a change over inventing one**: many turns have nothing worth recording.

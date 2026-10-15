@@ -7,8 +7,8 @@ import {
 import {
   authoringEverySchema,
   authoringTriggerSchema,
+  detachedOptionsSchema,
   stageSchema,
-  turnCompletionConfigSchema,
   toolsConfigSchema,
   effectsDeclSchema,
   permissionsDeclSchema,
@@ -122,18 +122,17 @@ export const runtimeAuthoringManifestSchema = z
             "Upstream runtimes or contracts that run first. Sets order only; it does not gate and does not activate a provider.",
           )
           .optional(),
-        completion: turnCompletionConfigSchema
-          .describe("Whether the turn waits for this runtime.")
+        detached: z
+          .union([z.boolean(), detachedOptionsSchema])
+          .describe(
+            "`true` lets the turn finish before this runtime does: it runs afterwards as a durable background job. Only on stage `post-turn` or `audit`. An object sets the job's options and also makes it detached. Defaults to `false`: the turn waits.",
+          )
           .optional(),
-        manual: z
-          .strictObject({
-            execution: z
-              .enum(["sync", "background"])
-              .describe(
-                "`sync` awaits the result. `background` queues a durable job and returns its ID.",
-              ),
-          })
-          .describe("Execution mode for `manual` and `event` activation.")
+        background: z
+          .boolean()
+          .describe(
+            "`true` runs a `manual` or `event` activation as a durable background job: the caller gets a job ID at once. Defaults to `false`: the caller waits for the result.",
+          )
           .optional(),
       })
       .describe("When and in what order the runtime runs.")
@@ -238,7 +237,23 @@ export const runtimeAuthoringManifestSchema = z
             examples: ["utility"],
           })
           .optional(),
-        llm: runtimeManifestInputSchema.shape.llm,
+        toolChoice: z
+          .union([
+            z.literal("required"),
+            z.strictObject({
+              name: z.string().min(1).describe("Name of the tool to force."),
+            }),
+          ])
+          .describe(
+            "`required` makes the model call a tool on every step. `{ name }` makes it call that one tool. Without it, the model chooses.",
+          )
+          .optional(),
+        reasoning: z
+          .boolean()
+          .describe(
+            "`false` turns model reasoning off for this runtime. Defaults to `true`: the model's own reasoning setting applies.",
+          )
+          .optional(),
         history: runtimeManifestInputSchema.shape.history,
         tools: toolsConfigSchema
           .describe("Tools the agent's model may call.")
@@ -247,6 +262,32 @@ export const runtimeAuthoringManifestSchema = z
           .boolean()
           .describe(
             "`true` lists the session's event directory in the prompt so the model knows which topics it may emit.",
+          )
+          .optional(),
+        finishWith: z
+          .string()
+          .min(1)
+          .describe(
+            "Tool that ends the run: the run completes after a successful call to it, and fails if it ends without one. The model must call a tool on every step (`toolChoice: required`) unless `toolChoice` says otherwise. Not with `completion`, which is the long form for several tools or explicit completion.",
+          )
+          .optional(),
+        completion: z
+          .strictObject({
+            require: z
+              .enum(["explicit", "tool-use"])
+              .describe(
+                "`explicit` needs a completing tool or `runtime-done`. `tool-use` needs a successful tool named in `afterTools`, or any successful business tool when `afterTools` is empty. Failed calls and `runtime-done` do not count.",
+              )
+              .optional(),
+            afterTools: z
+              .array(z.string())
+              .describe(
+                "The runtime completes after a successful call to one of these tools.",
+              )
+              .optional(),
+          })
+          .describe(
+            "How the agent run ends. For one completing tool, `finishWith` is shorter.",
           )
           .optional(),
         loop: z
@@ -318,25 +359,8 @@ export const runtimeAuthoringManifestSchema = z
                 "Maximum depth of nested `ctx.recursiveCall()`. Defaults to 10.",
               )
               .optional(),
-            completion: z
-              .strictObject({
-                require: z
-                  .enum(["explicit", "tool-use"])
-                  .describe(
-                    "`explicit` needs a completing tool or `runtime-done`. `tool-use` needs a successful tool named in `afterTools`, or any successful business tool when `afterTools` is empty. Failed calls and `runtime-done` do not count.",
-                  )
-                  .optional(),
-                afterTools: z
-                  .array(z.string())
-                  .describe(
-                    "The runtime completes after a successful call to one of these tools.",
-                  )
-                  .optional(),
-              })
-              .describe("How the agent loop ends.")
-              .optional(),
           })
-          .describe("Limits and completion rules of the agent loop.")
+          .describe("Time, retry and step limits of the agent loop.")
           .optional(),
       })
       .describe(
@@ -407,6 +431,14 @@ export const runtimeAuthoringManifestSchema = z
         message:
           "A runtime with io.visibility: story writes the text the player reads and cannot be io.concealed; conceal a system runtime instead",
       });
+    if (value.agent?.finishWith !== undefined && value.agent.completion)
+      ctx.addIssue({
+        code: "custom",
+        path: ["agent", "finishWith"],
+        message:
+          "agent.finishWith is the short form of agent.completion; write one of the two",
+      });
+    const detached = value.schedule?.detached;
     const inputs = Object.entries(value.io?.inputs ?? {});
     for (const issue of runtimeRuleIssues(
       {
@@ -418,13 +450,13 @@ export const runtimeAuthoringManifestSchema = z
         trigger: value.schedule?.trigger,
         every: value.schedule?.every,
         needs: value.schedule?.needs,
-        completion: value.schedule?.completion,
-        execution: value.schedule?.manual?.execution,
+        ...(detached ? { detached: detached === true ? {} : detached } : {}),
+        background: value.schedule?.background,
         builtinTools: (value.function ?? value.agent)?.tools?.builtin,
         visibility: value.io?.visibility,
         output: value.io?.output,
         requireExplicitCompletion:
-          value.agent?.loop?.completion?.require === "explicit",
+          value.agent?.completion?.require === "explicit",
         turnInputs: inputs
           .filter(
             ([, binding]) =>

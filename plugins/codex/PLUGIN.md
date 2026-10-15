@@ -1,5 +1,5 @@
 ---
-version: 0.0.38
+version: 0.0.39
 displayName: Codex
 description: >-
   Automatically collects newly discovered places, people, items, and rumors for
@@ -45,13 +45,11 @@ runtime:
       maxTurns: 0
     # The conversation is story text; without a required tool call the model
     # sometimes continues the story first.
-    llm:
-      toolChoice: required
-    loop:
-      completion:
-        require: explicit
-        afterTools:
-          - sync-codex-entries
+    toolChoice: required
+    completion:
+      require: explicit
+      afterTools:
+        - sync-codex-entries
 ---
 
 You are the Knowledge Codex Tracker. Judge whether this turn's narrative surfaces anything **worth cataloguing**, and keep the codex clean and accurate. **Prefer to miss an entry over recording a bad one**: most turns add nothing.

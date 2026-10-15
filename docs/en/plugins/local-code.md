@@ -58,8 +58,7 @@ runtime:
         select: /narrativeOutput
   agent:
     history: { maxTurns: 2 }
-    loop:
-      completion: { afterTools: [save-note] }
+    finishWith: save-note
 ---
 Read `runtime-inputs.narrative.value`. Call `save-note` one time with one fact that the narrative states.
 ```
@@ -73,7 +72,7 @@ Compared with a plugin that has only a prompt, these parts are new:
 | `contributes.tools`              | The tools this plugin registers. The names must match the names registered in the entry file                                                              |
 | `contributes.data.notes`         | Declares the `notes` data space, and the shape (schema) of one record                                                                                     |
 | `agent.history: { maxTurns: 2 }` | The model sees the conversation of only the last 2 turns. See [controlling how much history the model sees](#controlling-how-much-history-the-model-sees) |
-| `loop.completion.afterTools`     | After `save-note` succeeds, this agent ends right away, and does not ask the model one more time                                                          |
+| `agent.finishWith`               | After `save-note` succeeds, this agent ends right away, and does not ask the model one more time                                                          |
 
 This plugin has only one runtime, so you do not need to write `agent.tools.plugin`. It gets all the tools in `contributes.tools` automatically.
 
@@ -315,7 +314,7 @@ Notes:
 
 - The `payload` that the UI sends is external input. Check it before you use it.
 - An action's writes take effect at once. They do not belong to a turn, so if a later step fails, they are not undone. To "save only if everything succeeds", use a function runtime that is triggered manually.
-- Keep actions quick. An action that runs longer than 30 seconds fails: `ctx.signal` aborts and every later `ctx.store` call is refused. Put slow work in a runtime with `schedule.manual.execution: background`.
+- Keep actions quick. An action that runs longer than 30 seconds fails: `ctx.signal` aborts and every later `ctx.store` call is refused. Put slow work in a runtime with `schedule.background: true`.
 - Offline runs do not support actions. When one runs, it prints `Unsupported rpc: notebook/inspect-note. Verify with the server.`, and this is not an error. Verify actions on a real server.
 
 ## Write a function

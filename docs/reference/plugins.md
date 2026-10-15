@@ -84,8 +84,7 @@ runtime:
         select: /narrativeOutput
     output: { contract: example.facts@1 }
   agent:
-    loop:
-      completion: { require: tool-use, afterTools: [save-facts] }
+    finishWith: save-facts
 ---
 Extract facts supported by runtime-inputs.narrative.value, then call save-facts.
 ```
@@ -98,8 +97,7 @@ Extract facts supported by runtime-inputs.narrative.value, then call save-facts.
 | `id` | 插件 ID；不写时是包目录名，写了必须和目录名相同 |
 | `kind` | `core`（默认加入每一局）或 `plugin`（不写时的值，选了才启用） |
 | `version`, `displayName`, `description`, `tags` | 元数据；标签用于准备页的分组和筛选，不决定运行时调度。`ui:*` 和 `cost:*` 标签由 Covel 推出，作者只写其余的标签，如 `mode:*`，见[推出的标签](#推出的标签) |
-| `covel` | 适配的宿主版本范围，如 `">=0.0.45"`；范围之外的宿主不安装也不加载该包 |
-| `author`, `license`, `homepage` | 作者信息，只用于展示；见[作者信息](#作者信息) |
+| `author`, `license` | 作者信息，只用于展示；见[作者信息](#作者信息) |
 | `provides` | 没有 runtime 输出的契约（例如由服务提供），或要标成 `{contract, default: true}` 的契约。每个 runtime 的 `io.output.contract` 自动加入，不用写 |
 | `requires` | 必需契约，解析器补入提供者。runtime 引用了却没写进 `requires` 的契约是可选的 |
 | `conflicts` | 与提供这些契约的其他插件互斥 |
@@ -107,6 +105,8 @@ Extract facts supported by runtime-inputs.narrative.value, then call save-facts.
 | `entry` | 包根相对的注册模块路径；不写时，存在 `server/index.js` 就用它 |
 | `contributes` | 包级贡献，见 [contributes 字段](#contributes-字段) |
 | `runtime` | 可选的单 runtime 声明 |
+
+`covel`、`homepage` 这类不常用的根字段见[高级字段](#高级字段)。
 
 契约是一个带版本的名字，形如 `narrative-engine@1`。插件之间靠它互相找到对方，而不是靠插件 ID。几条规则：
 
@@ -127,9 +127,9 @@ Extract facts supported by runtime-inputs.narrative.value, then call save-facts.
 | `actions` | `registerRpc` 的 action 名 |
 | `commands` | 玩家命令元数据；`action` 必须列入 `actions` |
 | `services` | `registerService` 的契约 ID |
-| `extensions` | `provideExtension` 的 `{point, id}` |
-| `hooks` | hook 的 `{event, enforce}` 声明，见 [Hooks](./hooks.md) |
-| `wires`, `forms` | 对应注册 ID |
+| `extensions` | `provideExtension` 提供的扩展，写成 `<point>/<id>`，例如 `prompt.segment@1/notes`。要写 `order`、`slot` 这些选项时写成 `{point, id, …}` |
+| `hooks` | 监听的 hook 事件，写事件名，例如 `PreToolUse`。要写 `enforce` 时写成 `{event, enforce}`，见 [Hooks](./hooks.md) |
+| `forms` | `registerFormValidator` 的表单 ID |
 | `events` | 插件事件契约 |
 | `settings` | 玩家配置项，运行时通过 `ctx.userSettings` 读取 |
 | `data` | 本插件数据 namespace 的 schema、version、accepts、search |
@@ -137,40 +137,7 @@ Extract facts supported by runtime-inputs.narrative.value, then call save-facts.
 | `worldProjections` | 世界数据投影声明 |
 | `prompt` | 静态提示词段 |
 
-entry 里的注册和清单里的声明双向核对：注册了却没声明，或者声明了却没实现，加载都会失败。包级贡献只属于根文件，不会合并子 runtime 的字段。
-
-### 作者信息
-
-插件、世界（`world.yaml`）和合集（`covel-collection.yaml`）用同一组可选字段说明“谁做的、去哪找”。它们只用于展示：宿主不据此做任何判断，其中的文字不进入提示词。
-
-```yaml
-version: 1.2.0
-author:
-  name: Jane Doe
-  url: https://example.com
-  about: I write small mystery worlds. A new one comes out every month.
-  links:
-    - label: Community
-      url: https://example.com/community
-    - label: Support my work
-      url: https://example.com/support
-license: CC-BY-4.0
-homepage: https://example.com/tidefall
-```
-
-| 字段           | 说明                                                                      |
-| -------------- | ------------------------------------------------------------------------- |
-| `author.name`  | 作者或团队名，最多 80 字符。在任何语言下都按原样显示，不翻译              |
-| `author.url`   | 作者自己的页面                                                            |
-| `author.about` | 作者写给玩家的一段话：自我介绍、其他作品、支持方式。纯文本，最多 500 字符 |
-| `author.links` | 带标签的链接，最多 6 条；`label` 最多 40 字符                             |
-| `license`      | 许可证：SPDX 标识或简短名称，最多 64 字符                                 |
-| `homepage`     | 包自己的页面，例如仓库或文档                                              |
-
-- **链接只接受 `https`**，不能带用户名和密码。`http:`、`javascript:`、`file:` 等地址在清单校验时被拒绝。这些链接是作者提供的第三方地址，宿主没有审核。玩家点开任何一个之前，界面先显示完整地址和域名并说明这一点，确认后才在浏览器中打开。域名以 ASCII 形式显示，用其他文字写成的仿冒域名会显示为 `xn--…`。
-- **展示位置**：世界列表（作者 · 版本）、世界详情、开局准备页的世界卡片和插件行、设置里的已安装插件。安装预览只显示作者名，不显示链接。进入游玩后的界面不显示这些内容。
-- **翻译**：插件在 `locales/<locale>.yaml` 的 `PLUGIN.md` 一节翻译 `author.about` 和 `author.links` 的 `label`（链接按顺序对应）。世界在 `world.<locale>.yaml` 里翻译同样两处。作者名和许可证不翻译，`pnpm i18n` 不把它们算作待翻译文本。
-- **版本号**：列表显示清单里的 `version`。版本只写在 `PLUGIN.md` 里：宿主、安装预览和更新检查都读它，`package.json` 里的 `version` 不被读取。`version` 变化会让已有会话重跑该插件的 setup runtime，所以 setup 的 guard 或 handler 必须对已完成的工作返回跳过。
+entry 里的注册和清单里的声明双向核对：注册了却没声明，或者声明了却没实现，加载都会失败。包级贡献只属于根文件，不会合并子 runtime 的字段。`wires` 和其他不常用的写法见[高级字段](#高级字段)。
 
 内置插件也只读当前数据契约。骰子回执必须带 `checks` 数组，`pluginData.get()` 直接返回保存的值。经过 `select: /narrativeOutput` 投影的叙事输入是字符串。世界规则是带 `schemaVersion`、`id`、`content` 的扁平记录，不接受 `{ rule, ... }` 包装。NPC 关系的每个事实只能有一个开放版本；遇到重复开放版本会拒绝写入，不自动修复。立绘替换只匹配完整角色 ID 或当前的 `npc-<blueprintId>` 投影，不匹配任意会话前缀。
 
@@ -186,15 +153,15 @@ homepage: https://example.com/tidefall
 
 ## Runtime 分组字段
 
-| 字段          | 主要配置                                                                                 |
-| ------------- | ---------------------------------------------------------------------------------------- |
-| `schedule`    | `stage`, `every`, `trigger`, `needs`, `after`, `completion`, `manual`                    |
-| `io`          | `inputs`, `selfData`, `payloadSchema`, `output`, `visibility`, `concealed`               |
-| `agent`       | `model`, `llm`, `history`, `tools`, `advertiseEvents`, `loop`                            |
-| `function`    | 有这个块的 runtime 是 function，没有的是 agent；`handler`、`model`、`timeoutMs`、`tools` |
-| `guard`       | runtime 相对的 guard 模块                                                                |
-| `effects`     | 读写资源与 `parallelSafe`                                                                |
-| `permissions` | 执行权限声明                                                                             |
+| 字段          | 主要配置                                                                                   |
+| ------------- | ------------------------------------------------------------------------------------------ |
+| `schedule`    | `stage`, `every`, `trigger`, `needs`, `after`, `detached`, `background`                    |
+| `io`          | `inputs`, `selfData`, `payloadSchema`, `output`, `visibility`, `concealed`                 |
+| `agent`       | `model`, `toolChoice`, `reasoning`, `history`, `tools`, `finishWith`, `completion`, `loop` |
+| `function`    | 有这个块的 runtime 是 function，没有的是 agent；`handler`、`model`、`timeoutMs`、`tools`   |
+| `guard`       | runtime 相对的 guard 模块                                                                  |
+| `effects`     | 读写资源与 `parallelSafe`                                                                  |
+| `permissions` | 执行权限声明                                                                               |
 
 根 `PLUGIN.md` 也可以写 `permissions.http`。它管 `entry` 模块的代码：社区包的 `covel.http`（工具、钩子、RPC、服务、扩展、wire 里都用它）只能访问根文件和各 runtime 的 `permissions.http` 里列出的源和方法。wire 还能访问它正在服务的那个用途的端点。没有声明的请求在发出之前就失败：`http permission denied: …`。
 
@@ -214,17 +181,28 @@ permissions:
 | --- | --- |
 | `schedule.trigger.type` | `auto` |
 | `schedule.every` | `1`：每个回合都运行 |
-| `schedule.manual.execution` | `sync` |
+| `schedule.detached` | `false`：回合等它结束 |
+| `schedule.detached.settle` | `false`：玩家的下一次行动不等它 |
+| `schedule.background` | `false`：调用方等它完成 |
 | `io.visibility` | `system` |
 | `cardinality`（`needs`、`after`、`io.inputs.*.from`） | `one` |
 | `io.inputs.*.required` | `true` |
 | `io.inputs.*.scope` | `turn` |
 | `io.selfData[].format`、`maxEntries` | `summary`、`50` |
 | `agent.model` | `io.visibility: story` 的 runtime 用 `story`，其他用 `plugin` |
+| `agent.reasoning` | `true`：沿用模型自己的思考设置 |
+| `agent.toolChoice`（写了 `finishWith` 时） | `required` |
 | `agent.loop.timeoutMs`、`callTimeoutMs`、`maxRetries` | `io.visibility: story` 的 runtime：240000、120000、1；其他：120000、60000、3 |
 | `contributes.data.*.version` | `1` |
 | `contributes.hooks[].enforce` | `normal` |
+| `contributes.extensions[].order` | `0` |
 | `contributes.prompt[].role` | `system` |
+
+有更短写法的声明，`pnpm validate:plugin` 也给出警告（`it means the same`），包仍然通过校验：
+
+- 只写了 `event` 的 hook，写成事件名：`- PreToolUse`。
+- 只写了 `point` 和 `id` 的扩展，写成 `<point>/<id>`。
+- `completion: {require: tool-use, afterTools: [一个工具]}` 加 `toolChoice: required`，写成 `finishWith: <工具>`，见[完成条件](#完成条件agentfinishwithagentcompletion)。
 
 下面这些字段不写时由 Covel 推出。写了和推出的值一样时，`pnpm validate:plugin` 同样给出警告（`is the default value; remove it` 或 `is worked out from …; remove it`）。
 
@@ -353,8 +331,10 @@ setup runtime 的完成状态按根 `PLUGIN.md` 的 `version` 记录。发布新
 - `schedule.every: N` 让 `auto` runtime 只在逻辑回合是 N 的倍数时运行。例如 `every: 3` 在第 3、6、9 回合运行。
 - `schedule.trigger` 还可以写 `startTurn`（从第几回合开始）、`cooldownTurns`（两次运行至少隔几个回合）和 `maxTriggerCount`（一局最多几次）。只写这些时，`type` 也不用写。
 - `manual` 和 `event` 按请求或事件单独触发，不声明 stage，也不能写 `every`。setup runtime 不能写 `every`、`startTurn` 和 `cooldownTurns`。
-- `schedule.manual.execution: background` 让手动运行在后台执行。这样的手动或事件 runtime 没有同一次执行的上游，所以不能读 `scope: turn` 的输入；改用 `scope: committed` 或内核输入。
-- `schedule.completion` 控制回合是否等它结束。具体限制由清单校验和运行时准入检查执行。
+- `schedule.background: true` 让手动或事件 runtime 在后台执行：调用方立刻拿到一个任务编号，不等它完成。这样的 runtime 没有同一次执行的上游，所以不能读 `scope: turn` 的输入；改用 `scope: committed` 或内核输入。
+- `schedule.detached: true` 让回合先结束，这个 runtime 之后作为持久的后台作业运行。只能用在 `post-turn` 和 `audit` 阶段，`io.visibility: story` 的 runtime 不能用。
+- `schedule.detached` 写成对象时设置作业的选项，同时表示 detached：`settle: true` 让玩家的下一次行动先等它完成，最多等 `maxSettleWaitMs`（不超过 120000）；`maxQueueMs` 和 `maxExecutionMs` 限制作业排队和运行的时间。
+- 具体限制由清单校验和运行时准入检查执行。
 
 ### 历史窗口（`agent.history`）
 
@@ -367,27 +347,13 @@ setup runtime 的完成状态按根 `PLUGIN.md` 的 `version` 记录。发布新
 
 只读本轮输入的提取类 runtime 应该声明它，免得提示词随会话越来越长。
 
-### 超时、重试和完成条件（`agent.loop`）
+<a id="超时重试和完成条件agentloop"></a>
 
-Agent 的超时、重试和步数都在 `agent.loop` 里。不写时按 `io.visibility` 取默认值：`story` runtime 是 `timeoutMs` 240 秒、`callTimeoutMs` 120 秒、`maxRetries` 1；其他 runtime 是 120 秒、60 秒、3。
+### 超时和重试（`agent.loop`）
 
-**流式调用按“多久没有输出”限时。**
+Agent 的超时和重试都在 `agent.loop` 里。不写时按 `io.visibility` 取默认值：`story` runtime 是 `timeoutMs` 240 秒、`callTimeoutMs` 120 秒、`maxRetries` 1；其他 runtime 是 120 秒、60 秒、3。步数等不常用的限制见[高级字段](#高级字段)。
 
-- `firstTokenTimeoutMs`：第一次输出之前最多等多久。
-- `idleTimeoutMs`：之后两次输出之间最多静默多久，默认 120 秒。
-- 一直在输出的模型不会被截断，输出所用的时间也不计入 `timeoutMs`。
-
-**首次输出等多久。**
-
-- 写了 `firstTokenTimeoutMs`：每次尝试都按这个值等待。
-- 没有写：一次尝试最多等 120 秒，并且要给 `maxRetries` 还允许的重试留出时间。最后一次尝试可以用完 `timeoutMs` 剩下的全部时间。之前的尝试等待“剩余时间 ÷ 剩余尝试次数”；这个值不足 60 秒时等 60 秒，但不超过剩余时间的一半。
-
-| `timeoutMs` | `maxRetries` | 各次尝试最多等待  |
-| ----------- | ------------ | ----------------- |
-| 120 秒      | 3            | 60、30、15、15 秒 |
-| 240 秒      | 1            | 120、120 秒       |
-
-所以服务商接了请求却一直不出字时，重试来得及发出。首个输出本来就慢的模型（不流出推理过程的推理模型）应该显式设置 `firstTokenTimeoutMs`，并把 `timeoutMs` 设得足够大。
+流式调用按“多久没有输出”限时：一直在输出的模型不会被截断，输出所用的时间也不计入 `timeoutMs`。等第一次输出和两次输出之间的时限见[流式调用的等待时限](#流式调用的等待时限)。
 
 **回复被截断（`finishReason: length`）。** 回复在模型的输出上限处被截断时，被截断的工具调用和 JSON 不能用。
 
@@ -417,13 +383,33 @@ Agent 的超时、重试和步数都在 `agent.loop` 里。不写时按 `io.visi
 - 每次都用满传输层重试的 5xx 也只够两轮。
 - 很快返回、只占一个 HTTP 请求的失败（连接在应答中途断开、生成错误）才用得上更多次数。
 
-**完成条件。**
+### 完成条件（`agent.finishWith`、`agent.completion`）
 
-- `completion.afterTools`：指定的工具成功后就结束。
+调用一个工具就结束的 agent 写 `finishWith`：
+
+```yaml
+agent:
+  finishWith: save-facts
+```
+
+- `save-facts` 成功之后 runtime 就结束，不再多问模型一次。没有成功调用它就结束时，这次运行失败。
+- 模型每一步都必须调用工具，和写了 `toolChoice: required` 一样。写了 `agent.toolChoice` 时用写的值。
+- 它和 `completion: {require: tool-use, afterTools: [save-facts]}` 加 `toolChoice: required` 的意思相同。
+
+有几个完成工具，或者没有变化时要调用 `runtime-done`，就写完整的 `completion`。`finishWith` 和 `completion` 只能写一个。
+
+- `completion.afterTools`：列出的工具成功后就结束。
+- `completion.require: explicit`：要以一次成功的完成工具调用，或一次 `runtime-done` 结束。`io.visibility: story` 的 runtime 不能用它。
 - `completion.require: tool-use`：声明了非空的 `afterTools` 时，至少一个列出的完成工具必须成功。没有列表时，任意成功的业务工具调用都算。失败的调用和 `runtime-done` 不算。
 - 模型只回了纯文本，或者调用了 `runtime-done`，而这时还没有这样的调用：框架先注入一次纠正提示，仍未完成才判为失败。所以“无变化”也要通过业务工具提交一个空结果。
 - 纠正之后的那次请求要求模型必须调用工具（`toolChoice: "required"`，清单指名的工具保持不变）。模型调用工具后恢复自选。模型处于思考模式时服务商不接受强制选择，这时仍由模型自选。
 - 这个判定在循环返回处统一进行，普通执行和 resume 的所有结束方式都适用：文本回答、`runtime-done`、`afterTools` 自动完成、`PostToolUse` Hook 终止，以及步数用尽。
+
+### 工具选择和思考（`agent.toolChoice`、`agent.reasoning`）
+
+- `agent.toolChoice: required` 要求模型每一步都调用一个工具，调用哪个由模型选。`{name: <工具>}` 要求它调用这一个工具。不写时（也没写 `finishWith`）由模型自己决定。
+- `agent.reasoning: false` 关闭这个 runtime 的思考，适合只填工具参数的提取类 runtime。不写时沿用模型自己的思考设置；玩家显式设置的思考档位仍然优先。
+- 模型处于思考模式时，服务商不接受强制的工具选择，这时仍由模型自选。
 
 ### Function 的工具和超时
 
@@ -640,6 +626,77 @@ Agent 的副作用只来自工具：模型能写什么，以 `agent.tools` 白�
 - 后台（detached）worker 读的是源执行的快照，不重新查询最新的表单或回合状态。
 - 这个输入契约更新之后，旧作业和快照需要重建，不做兼容读取。
 
+## 高级字段
+
+下面这些字段内置插件都没有用到，写第一个插件时也用不上。它们留给有特殊需要的社区插件。每个字段的类型和取值见[清单字段表](./schema/plugin-manifest.md)和 [runtime 字段表](./schema/runtime-manifest.md)。
+
+<!-- prettier-ignore -->
+| 字段 | 用途 |
+| --- | --- |
+| `covel` | 适配的宿主版本范围，如 `">=0.0.45"`；范围之外的宿主不安装也不加载该包 |
+| `homepage`、`author.about`、`author.links` | 包的页面、写给玩家的一段话、带标签的链接，见[作者信息](#作者信息) |
+| `contributes.wires` | `registerWires` 注册的服务商 wire ID |
+| `contributes.events[].advertise` | `false` 时写故事的模型看不到这个事件，它只给界面和代码用 |
+| `contributes.prompt[].position: {depth: N}` | 按消息深度把静态段插进历史，见 [Prompt 结构](./prompt-structure.md) |
+| `contributes.commands[].context` | 命令调用 action 时带上的宿主信息：`session`、`active-runtimes`、`models` |
+| `contributes.commands[].arguments[].variadic`、`choices` | `variadic: true` 把剩下的词都收进最后一个参数；`choices` 列出参数可选的值 |
+| `contributes.settings[].type` 的 `text`、`textarea`、`integer`、`slider`、`slot` | 单行文字、多行文字、整数、滑块、模型用途选择 |
+| `agent.loop.maxSteps` | 工具调用最多几步。只调用一个工具就结束的 runtime 可以写 1 或 2 |
+| `agent.loop.firstTokenTimeoutMs`、`idleTimeoutMs` | 流式调用的等待时限，见[流式调用的等待时限](#流式调用的等待时限) |
+| `agent.loop.loopDetection` | 模型连续重复同一个调用多少次算打转。默认 3，`0` 关闭检测 |
+| `agent.loop.maxRecursionDepth` | `ctx.recursiveCall()` 最多嵌套几层。默认 10 |
+
+### 流式调用的等待时限
+
+- `firstTokenTimeoutMs`：第一次输出之前最多等多久。
+- `idleTimeoutMs`：之后两次输出之间最多静默多久，默认 120 秒。
+- 一直在输出的模型不会被截断，输出所用的时间也不计入 `timeoutMs`。
+
+首次输出等多久：
+
+- 写了 `firstTokenTimeoutMs`：每次尝试都按这个值等待。
+- 没有写：一次尝试最多等 120 秒，并且要给 `maxRetries` 还允许的重试留出时间。最后一次尝试可以用完 `timeoutMs` 剩下的全部时间。之前的尝试等待“剩余时间 ÷ 剩余尝试次数”；这个值不足 60 秒时等 60 秒，但不超过剩余时间的一半。
+
+| `timeoutMs` | `maxRetries` | 各次尝试最多等待  |
+| ----------- | ------------ | ----------------- |
+| 120 秒      | 3            | 60、30、15、15 秒 |
+| 240 秒      | 1            | 120、120 秒       |
+
+所以服务商接了请求却一直不出字时，重试来得及发出。首个输出本来就慢的模型（不流出推理过程的推理模型）应该显式设置 `firstTokenTimeoutMs`，并把 `timeoutMs` 设得足够大。
+
+### 作者信息
+
+插件、世界（`world.yaml`）和合集（`covel-collection.yaml`）用同一组可选字段说明“谁做的、去哪找”。它们只用于展示：宿主不据此做任何判断，其中的文字不进入提示词。
+
+```yaml
+version: 1.2.0
+author:
+  name: Jane Doe
+  url: https://example.com
+  about: I write small mystery worlds. A new one comes out every month.
+  links:
+    - label: Community
+      url: https://example.com/community
+    - label: Support my work
+      url: https://example.com/support
+license: CC-BY-4.0
+homepage: https://example.com/tidefall
+```
+
+| 字段           | 说明                                                                      |
+| -------------- | ------------------------------------------------------------------------- |
+| `author.name`  | 作者或团队名，最多 80 字符。在任何语言下都按原样显示，不翻译              |
+| `author.url`   | 作者自己的页面                                                            |
+| `author.about` | 作者写给玩家的一段话：自我介绍、其他作品、支持方式。纯文本，最多 500 字符 |
+| `author.links` | 带标签的链接，最多 6 条；`label` 最多 40 字符                             |
+| `license`      | 许可证：SPDX 标识或简短名称，最多 64 字符                                 |
+| `homepage`     | 包自己的页面，例如仓库或文档                                              |
+
+- **链接只接受 `https`**，不能带用户名和密码。`http:`、`javascript:`、`file:` 等地址在清单校验时被拒绝。这些链接是作者提供的第三方地址，宿主没有审核。玩家点开任何一个之前，界面先显示完整地址和域名并说明这一点，确认后才在浏览器中打开。域名以 ASCII 形式显示，用其他文字写成的仿冒域名会显示为 `xn--…`。
+- **展示位置**：世界列表（作者 · 版本）、世界详情、开局准备页的世界卡片和插件行、设置里的已安装插件。安装预览只显示作者名，不显示链接。进入游玩后的界面不显示这些内容。
+- **翻译**：插件在 `locales/<locale>.yaml` 的 `PLUGIN.md` 一节翻译 `author.about` 和 `author.links` 的 `label`（链接按顺序对应）。世界在 `world.<locale>.yaml` 里翻译同样两处。作者名和许可证不翻译，`pnpm i18n` 不把它们算作待翻译文本。
+- **版本号**：列表显示清单里的 `version`。版本只写在 `PLUGIN.md` 里：宿主、安装预览和更新检查都读它，`package.json` 里的 `version` 不被读取。`version` 变化会让已有会话重跑该插件的 setup runtime，所以 setup 的 guard 或 handler 必须对已完成的工作返回跳过。
+
 ## World Model 与数据边界
 
 角色 schema、角色和世界记录属于内核的 World Model。插件只读它，写入要走 proposal。
@@ -683,12 +740,12 @@ Agent 的副作用只来自工具：模型能写什么，以 `agent.tools` 白�
 
 内置的 `world-init` 有四个和维度有关的 runtime。`dimension-clock` 排在时间结算和 `dimension-tracker` 之后。
 
-| Runtime             | 阶段               | 职责                                                                                                                                                                                         |
-| ------------------- | ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `dimension-context` | pre-turn function  | 不调用模型，读取已提交值并发布 `world.dimensions@1`                                                                                                                                          |
-| `dimension-tracker` | post-turn agent    | 必须绑定本轮叙事，按作者规则维护；WorldIR 为可选辅证，本轮结算后的世界时钟（`world-time-evolution@1`）为可选输入；`toolChoice: required`，无变化也以 `update-dimensions({updates: []})` 结算 |
-| `dimension-clock`   | post-turn function | 不调用模型，按本轮结算后的世界时钟（`world-time-evolution@1`，可选输入）计算 schema 里带 `x-derive` 的字段，值有变化时提交 `dimension.update`                                                |
-| `edit-dimensions`   | manual function    | 玩家改值、确认人工处理或明确跳过                                                                                                                                                             |
+| Runtime             | 阶段               | 职责                                                                                                                                                                                                  |
+| ------------------- | ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `dimension-context` | pre-turn function  | 不调用模型，读取已提交值并发布 `world.dimensions@1`                                                                                                                                                   |
+| `dimension-tracker` | post-turn agent    | 必须绑定本轮叙事，按作者规则维护；WorldIR 为可选辅证，本轮结算后的世界时钟（`world-time-evolution@1`）为可选输入；`finishWith: update-dimensions`，无变化也以 `update-dimensions({updates: []})` 结算 |
+| `dimension-clock`   | post-turn function | 不调用模型，按本轮结算后的世界时钟（`world-time-evolution@1`，可选输入）计算 schema 里带 `x-derive` 的字段，值有变化时提交 `dimension.update`                                                         |
+| `edit-dimensions`   | manual function    | 玩家改值、确认人工处理或明确跳过                                                                                                                                                                      |
 
 **读取。**
 
@@ -868,7 +925,7 @@ namespace 声明 `search` 之后，它的记录进入框架的记忆检索（[`m
 - 引用的 entry、handler、guard、JSON Schema 和 UI 文件必须在包里。
 - 每份 JSON UI spec 声明 `view` 或 `webview` 中的一个；`view` 里的组件名必须在[组件目录](./ui-components.md)里；`repeat.statePath` 和 `$item` 的写法必须合法（见 [UI 面板](./ui-panels.md#json-render-绑定速查)）。报错给出 spec 文件和节点的路径。
 - 内置工具名和插件工具声明、包内的 runtime 引用，以及根契约依赖必须一致。
-- 跨字段的规则（例如 `schedule.completion.mode: detached` 只能用在 `post-turn` 或 `audit`）报错时给出文件路径和你写的字段路径，例如 `runtimes/note/RUNTIME.md: schedule.stage: …`。
+- 跨字段的规则（例如 `schedule.detached` 只能用在 `post-turn` 或 `audit`）报错时给出文件路径和你写的字段路径，例如 `runtimes/note/RUNTIME.md: schedule.stage: …`。
 
 加载、`pnpm validate:plugin` 和安装用同一份清单规则（`@covel/shared` 的 schema），UI spec 也一样：校验通过的面板，游戏里不会因为格式被去掉。
 

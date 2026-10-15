@@ -46,7 +46,7 @@ const memory: RuntimeManifest = {
   stage: "post-turn",
   outputKind: "system",
   trigger: { type: "auto" },
-  turnCompletion: { mode: "detached", settle: "before-next-execution" },
+  turnCompletion: { mode: "detached", settle: true },
   input: { inject: [{ kind: "kernel", from: "turn-digest@1", name: "turn" }] },
   effects: {
     reads: ["plugin-data:self:blocks"],

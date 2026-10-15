@@ -1,5 +1,5 @@
 ---
-version: 0.0.38
+version: 0.0.39
 displayName: Action Suggestions
 description: >-
   After each story beat, recaps the relevant context, states the current
@@ -15,7 +15,6 @@ contributes:
     - point: ui.slot@1
       id: choices
       slot: stage.choices@1
-      order: 0
       watch:
         - message
   ui:
@@ -51,15 +50,8 @@ runtime:
     history:
       maxTurns: 2
       includeSummaries: true
-    llm:
-      reasoningEffort: disabled
-      toolChoice:
-        name: generate-guide
-    loop:
-      completion:
-        require: tool-use
-        afterTools:
-          - generate-guide
+    reasoning: false
+    finishWith: generate-guide
   effects:
     parallelSafe: true
 ---

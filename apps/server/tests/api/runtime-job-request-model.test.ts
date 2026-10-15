@@ -114,8 +114,7 @@ runtime:
     stage: post-turn
     trigger:
       type: auto
-    completion:
-      mode: detached
+    detached: true
   function:
     handler: ./handler.js
   effects:
@@ -286,8 +285,7 @@ runtime:
     stage: post-turn
     trigger:
       type: auto
-    completion:
-      mode: detached
+    detached: true
   function:
     model: memory
     handler: ./handler.js

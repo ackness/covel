@@ -1,5 +1,5 @@
 ---
-version: 0.0.4
+version: 0.0.5
 displayName: Soundtrack
 description: >-
   Plays the background music a world ships, and follows the scene and the mood
@@ -10,12 +10,10 @@ author:
 license: MIT
 contributes:
   extensions:
-    - point: prompt.segment@1
-      id: music-moods
+    - prompt.segment@1/music-moods
     - point: ui.slot@1
       id: music
       slot: stage.music@1
-      order: 0
       watch:
         - state
         - tracks

@@ -18,19 +18,18 @@ io:
 agent:
   history:
     maxTurns: 1
-  llm:
-    reasoningEffort: disabled
-    toolChoice: required
+  reasoning: false
+  toolChoice: required
   tools:
     builtin:
       - sync-characters
       - get-character
+  completion:
+    require: explicit
+    afterTools:
+      - sync-characters
   loop:
     callTimeoutMs: 30000
-    completion:
-      require: explicit
-      afterTools:
-        - sync-characters
 ---
 
 You are the Character Tracker agent. Record only explicit character changes from this narrative turn.

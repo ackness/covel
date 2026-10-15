@@ -590,7 +590,7 @@ Memory extraction uses the generic detached runtime job.
 - The story's commit transaction saves `turn-digest@1` and the job record at the same time. Credentials are kept only in an in-process handoff table. If the transaction fails after registration, the matching credentials must be cleaned up.
 - The worker commits the plugin block's proposals and the job's completion receipt in the same transaction.
 
-`completion.settle: before-next-execution` makes the next execution wait for these jobs at its entry point.
+`schedule.detached: { settle: true }` makes the next execution wait for these jobs at its entry point.
 
 - While waiting, it does not hold the SessionLock. It checks again after it gets the lock.
 - When the declared wait budget is exceeded, it records a trace and continues.

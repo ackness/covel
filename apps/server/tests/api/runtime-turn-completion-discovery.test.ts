@@ -68,8 +68,6 @@ describe("runtime turnCompletion discovery", () => {
         mode: "detached",
         maxQueueMs: 15_000,
         maxExecutionMs: 90_000,
-        overlap: "serial",
-        stalePolicy: "reject",
       },
     ]);
   });
@@ -107,8 +105,6 @@ describe("runtime turnCompletion discovery", () => {
         mode: "detached",
         maxQueueMs: 15_000,
         maxExecutionMs: 90_000,
-        overlap: "serial",
-        stalePolicy: "reject",
       },
     ]);
   });

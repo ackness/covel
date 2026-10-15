@@ -1,6 +1,6 @@
 ---
 kind: core
-version: 0.0.44
+version: 0.0.45
 displayName: History Compaction
 description: Maintains bounded segmented summaries of older conversation history.
 author:
@@ -12,8 +12,7 @@ provides:
     default: true
 contributes:
   extensions:
-    - point: history.compact@2
-      id: segmented-summary
+    - history.compact@2/segmented-summary
 ---
 
 # History Compaction

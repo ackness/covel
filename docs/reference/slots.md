@@ -357,8 +357,8 @@ Function runtime 不读取 `runtimeModelOverrides`。图像、语音等 function
 
 **记忆提取**
 
-- 记忆由 `memory` 插件的 post-turn function runtime 提取。它读取冻结的 `turn-digest@1`，作为 `completion.mode: detached` 的后台作业执行。
-- `settle: before-next-execution` 让下一次执行在读取新快照之前，先等已入队的作业完成。最长等待时间由 `maxSettleWaitMs` 控制。
+- 记忆由 `memory` 插件的 post-turn function runtime 提取。它读取冻结的 `turn-digest@1`，作为 `schedule.detached` 的后台作业执行。
+- `settle: true` 让下一次执行在读取新快照之前，先等已入队的作业完成。最长等待时间由 `maxSettleWaitMs` 控制。
 - 作业通过当前请求的 gateway 使用 `memory` 用途，默认 `reasoningEffort: disabled`。请求里的模型绑定、参数覆盖和授权仍然照常解析。
 - 模型调用失败不回滚已提交的剧情。失败或取消的提取不会提交一部分记忆。
 - 成功的提取写入 `memory` 插件自己的 `blocks` namespace，面板直接读取这份数据。提示词由它的 `prompt.segment@1` 扩展注入。
@@ -469,7 +469,7 @@ protocol = "openai-chat-v1"
 reasoningEffort = "disabled"
 ```
 
-- 取值和界面、以及 runtime 的 `llm.reasoningEffort` 相同。
+- 取值和界面相同。runtime 不选档位，只能用 `agent.reasoning: false` 关闭思考。
 - 你只写一个通用的档位，适配器把它翻译成各家自己的字段。做法类似 AI SDK 顶层的 [`reasoning`](https://ai-sdk.dev/docs/ai-sdk-core/reasoning) 选项。
 - 模型不支持的档位会记录一条 warning，并沿用服务商的默认行为。
 - 它和在“服务商与模型”页面给模型设置的思考档位是同一份默认值。

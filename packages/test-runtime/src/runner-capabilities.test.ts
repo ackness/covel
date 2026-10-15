@@ -65,7 +65,7 @@ function:
     plugin: ${mode === "buffered" ? "[set-schema]" : "[]"}
 schedule:
   trigger: {type: event, topic: root.ready}
-  manual: {execution: background}
+  background: true
 ---
 `,
     "support/runtimes/follower/handler.js": `export default async ctx => {

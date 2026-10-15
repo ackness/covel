@@ -145,9 +145,7 @@ function consumerDependsOn(
 }
 
 function intrinsicIneligibility(manifest: RuntimeManifest): string | undefined {
-  const settling =
-    getRuntimeSpec(manifest).turnCompletionPolicy.settle ===
-    "before-next-execution";
+  const settling = getRuntimeSpec(manifest).turnCompletionPolicy.settle;
   if (
     settling &&
     manifest.stage !== "post-turn" &&

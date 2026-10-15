@@ -117,11 +117,12 @@ export interface PresetSummary {
 /** Effective runtime completion policy returned by discovery APIs. */
 export interface TurnCompletionSummary {
   mode: "await" | "detached";
+  /** The next player action waits for the detached job. */
+  settle?: boolean;
+  maxSettleWaitMs?: number;
   /** Maximum time the detached job may wait before it starts. */
   maxQueueMs?: number;
   maxExecutionMs?: number;
-  overlap?: "serial";
-  stalePolicy?: "reject";
 }
 
 export type WorldDataPreflightDiagnosticLevel = "info" | "warning" | "error";

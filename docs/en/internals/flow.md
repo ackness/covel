@@ -225,7 +225,7 @@ Sending events to the client does not decide whether the work is done:
 
 #### RPC and event runtimes that run in the background
 
-A runtime that declares `schedule.manual.execution: background` does not hold the session lock while it runs. These runtimes are usually external calls that take a few minutes, such as image generation or a manual TTS. Holding the lock would make the player's next message wait in a queue. On a PostgreSQL deployment it would also hit the 30-second limit for getting the lock.
+A runtime that declares `schedule.background: true` does not hold the session lock while it runs. These runtimes are usually external calls that take a few minutes, such as image generation or a manual TTS. Holding the lock would make the player's next message wait in a queue. On a PostgreSQL deployment it would also hit the 30-second limit for getting the lock.
 
 How it runs:
 
@@ -244,7 +244,7 @@ Why this is safe:
 
 #### Runtimes that move to the background during a turn (staged detached)
 
-`schedule.completion.mode: detached` is a different thing. It does not affect `execution` above. It applies only to `post-turn` / `audit` function leaf nodes that pass the safety check (runtimes that no other runtime waits for). The full process is in section 2.3 below. The main points are:
+`schedule.detached` is a different thing. It does not affect `schedule.background` above. It applies only to `post-turn` / `audit` function leaf nodes that pass the safety check (runtimes that no other runtime waits for). The full process is in section 2.3 below. The main points are:
 
 - The scheduler freezes the upstream results when that layer starts. Only the upstream outputs the runtime declares it depends on are kept. The rest keep only identity and state.
 - The job description is written atomically to `_runtime_jobs`, together with the proposals, log, and session clock of the original turn. Right after the commit, `runtime.deferred` is sent, and the player's turn ends here.
@@ -258,7 +258,7 @@ The diagram below shows the whole process of one execution. Steps 2 to 10 in the
 
 ```mermaid
 flowchart TB
-    In(["POST /api/actions<br/>player input / start game"]) --> Settle["Wait for before-next-execution jobs<br/>wait outside the lock, recheck inside it"]
+    In(["POST /api/actions<br/>player input / start game"]) --> Settle["Wait for jobs that settle<br/>wait outside the lock, recheck inside it"]
     Settle --> Capture["Freeze registry / extension generation<br/>Load canonical history and project it"]
     Capture --> Exec[executeTurn]
     Exec --> StartEvt["SSE: execution.started"]
@@ -336,11 +336,11 @@ Before triggering and ordering, `resolveRuntimeProviders` uses the compiled `out
 
 ### 2.3 Background pipeline for staged runtimes
 
-Some wrap-up work should not make the player wait, for example tidying up memory after a turn ends. When a runtime declares `schedule.completion.mode: detached`, the turn is committed and ends as usual. This runtime then becomes a background job that runs later.
+Some wrap-up work should not make the player wait, for example tidying up memory after a turn ends. When a runtime declares `schedule.detached: true`, the turn is committed and ends as usual. This runtime then becomes a background job that runs later.
 
 ```mermaid
 flowchart LR
-    DAG["post-turn / audit DAG level"] --> Plan{"schedule.completion: detached<br/>and function + safe leaf node?"}
+    DAG["post-turn / audit DAG level"] --> Plan{"schedule.detached<br/>and function + safe leaf node?"}
     Plan -->|no| Foreground["Keep foreground execution<br/>unsafe declaration produces a diagnostic"]
     Plan -->|yes| Freeze["Freeze upstream RuntimeResult[]<br/>execution / model / settings / plugin version"]
     Foreground --> Tx["finalizeExecution transaction"]
@@ -413,7 +413,7 @@ When the player retries on purpose, a new jobId is created.
 
 ### 2.4 The settle barrier before the next execution
 
-Some background work must finish before the next turn starts, because the next turn reads its result. A `post-turn` / `audit` function like this can declare `schedule.completion.settle: before-next-execution` and `maxSettleWaitMs`.
+Some background work must finish before the next turn starts, because the next turn reads its result. A `post-turn` / `audit` function like this can declare `schedule.detached: { settle: true, maxSettleWaitMs: … }`.
 
 - These tasks can read their own plugin-data. The worker handles them one at a time, in the order of their source tasks.
 - `turn-digest@1` in the input is a summary of the source turn that the kernel freezes. It does not need to be bound to any narrative plugin.

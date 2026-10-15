@@ -188,12 +188,10 @@ export type TriggerSpec = TriggerConfig;
 /** Canonical turn-barrier policy after manifest defaults are applied. */
 export interface TurnCompletionPolicy {
   readonly mode: "await" | "detached";
-  readonly settle?: "before-next-execution";
+  readonly settle?: boolean;
   readonly maxSettleWaitMs?: number;
   readonly maxQueueMs?: number;
   readonly maxExecutionMs?: number;
-  readonly overlap: "serial";
-  readonly stalePolicy: "reject";
 }
 
 /**

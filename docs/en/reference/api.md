@@ -885,7 +885,7 @@ The status code is `409`. The response does not include retry input for the new 
 
 The only entry point for turn execution is [`POST /api/actions`](#post-apiactions) (the SSE bridge). There is no session-level turn endpoint.
 
-Some runtimes do not need the turn to wait for them to finish. A safe leaf runtime that declares `schedule.completion.mode: detached` enters the durable queue in the same transaction as the original turn. It becomes a background job (a runtime job). The endpoints below manage these jobs:
+Some runtimes do not need the turn to wait for them to finish. A safe leaf runtime that declares `schedule.detached: true` enters the durable queue in the same transaction as the original turn. It becomes a background job (a runtime job). The endpoints below manage these jobs:
 
 | Method | Path                                           | Description                                                                                     |
 | ------ | ---------------------------------------------- | ----------------------------------------------------------------------------------------------- |
@@ -1203,7 +1203,7 @@ Reading:
 
 How memory is created and used:
 
-- Background extraction is a detached runtime. It declares a `before-next-execution` barrier, so the next execution waits for it to finish.
+- Background extraction is a detached runtime. It declares `settle: true`, so the next execution waits for it to finish.
 - Committed memory blocks enter later prompts through `prompt.segment@1`.
 
 How a plugin reads and writes its own data:
@@ -2586,14 +2586,14 @@ The only entry point is [`POST /api/actions`](#post-apiactions). The request bod
 - `session.completedPlayerTurns` is the number of committed normal player turns. A run during setup is saved in `turn_results`, but it is not counted. After `phase` becomes `playing`, the first successful player turn moves it to `1`.
 - The server uses `commitExecution` to commit, in one transaction, the results of the top-level run and of its recursive child runs, along with the journal and the pending items. In the transaction, each result is normalized first, then the state is committed. The SessionEvent is published only after the transaction commits.
 - When a runtime's output has `pendingInputs`, the player's answer is sent with `submit_interaction` on `POST /api/actions`. The same request both saves the answer and runs the turn that reads it.
-- `schedule.completion.mode: detached` applies only to a `post-turn` / `audit` function leaf that passes the safety check:
+- `schedule.detached` applies only to a `post-turn` / `audit` function leaf that passes the safety check:
   - Its upstream results, its source run, its model, and its settings are frozen in the original turn.
   - The queue record is committed in the same transaction as the original turn.
   - A declaration that the static check considers unsafe still runs in the foreground, and it produces one diagnostic.
 
 ### Staged runtime background jobs
 
-This group of endpoints manages the background jobs (`_runtime_jobs`) that the scheduler creates for `schedule.completion.mode: detached`. These are a different system from the plugin-rpc `execution: background` / `_jobs` protocol, and they do not affect each other.
+This group of endpoints manages the background jobs (`_runtime_jobs`) that the scheduler creates for `schedule.detached`. These are a different system from the plugin-rpc `schedule.background` / `_jobs` protocol, and they do not affect each other.
 
 - Authentication works the same way as other session endpoints (owner token).
 - The `result` of a succeeded job includes the identity and duration of the background turn, the run, and the runtime, along with the runtime's `output`.
@@ -2932,10 +2932,10 @@ Calls the handler that the plugin registers in `entry` with `covel.registerRpc`,
 
 Runs one target runtime by hand. It goes through the full turn flow: it builds the prompt, runs the tool loop, and submits proposals. Downstream runtimes triggered by an event keep running in the same turn. When one event has several subscribers, they run in order of `name`.
 
-How it runs is decided by `schedule.manual.execution` in the runtime manifest:
+How it runs is decided by `schedule.background` in the runtime manifest:
 
-- `sync` (default): waits for the runtime to finish and submit its proposals, then returns a summary JSON.
-- `background`: inside the session lock, queues one durable background job (`_runtime_jobs`, with `origin.activation: "manual"`), and returns `202` and a `jobId` right away.
+- Left out (default): waits for the runtime to finish and submit its proposals, then returns a summary JSON.
+- `true`: inside the session lock, queues one durable background job (`_runtime_jobs`, with `origin.activation: "manual"`), and returns `202` and a `jobId` right away.
   - The background worker claims and runs the job, and commits the writes and the job's final state in the same transaction.
   - The status is pushed through the `job-status.updated` event and the `plugin-data.changed` event for `_runtime_jobs`.
   - A background follower that the entry runtime emits is queued as an event job in the same commit transaction (`origin.activation: "event"`). It is recorded in the parent job's `result.deferredJobs`.
@@ -4227,7 +4227,7 @@ A runtime has only one suspended item waiting to resume at a time. When it suspe
 - When a runtime suspends, the record of "where to continue from" is saved in the same transaction as this request's proposals, log, and session clock. The `turn.suspended` event is sent only after the commit succeeds. So if the commit is rolled back, no suspended item is left behind that can be resumed but has no origin, and no extra events are sent.
 - The original execution's `logicalTurnId` and `countPolicy` are saved with the suspended item. When a resume succeeds, the player's turn count goes up by one, in the same transaction that commits the proposals.
 - If one logical turn has several parallel suspended items, the count happens only after the last one is resumed. Retries do not count twice.
-- When a suspended item is abandoned, expires or is voided, the turn ends the way a normal end does: if it was the last item of the logical turn still waiting, the player's turn count goes up by one and the background jobs the turn held back (`schedule.completion.mode: detached`) are queued as usual. Both happen in the transaction that deletes the record. An item that another request is resuming still counts as waiting.
+- When a suspended item is abandoned, expires or is voided, the turn ends the way a normal end does: if it was the last item of the logical turn still waiting, the player's turn count goes up by one and the background jobs the turn held back (`schedule.detached`) are queued as usual. Both happen in the transaction that deletes the record. An item that another request is resuming still counts as waiting.
 - Progress jobs (`ctx.progress`) that the suspended execution reported stay in `waiting-input`. When a resume commits, they end as `succeeded`; when the item is abandoned, expires or is voided, they end as `cancelled`. While a failed resume can be retried, they keep waiting.
 
 ##### Resuming setup runtimes

@@ -4,9 +4,9 @@
  * The author writes a grouped RUNTIME.md (or the inline `runtime` of a
  * PLUGIN.md); the loader compiles it into the flat RuntimeManifest IR. Both
  * schemas apply these rules, each reporting an issue under its own field
- * path, so an author reads `schedule.completion.mode` where the IR says
- * `turnCompletion.mode`. JSON Schema cannot express them; the generated
- * schemas list them in their `description`.
+ * path, so an author reads `schedule.detached` where the IR says
+ * `turnCompletion`. JSON Schema cannot express them; the generated schemas
+ * list them in their `description`.
  */
 
 /** The manifest fields the rules read, independent of where a manifest writes them. */
@@ -18,14 +18,12 @@ export interface RuntimeRuleView {
   readonly stage?: string;
   readonly visibility?: string;
   readonly requireExplicitCompletion?: boolean;
-  readonly completion?: {
-    readonly mode?: string;
-    readonly settle?: string;
+  /** Set when the turn finishes before this staged runtime does. */
+  readonly detached?: {
+    readonly settle?: boolean;
     readonly maxSettleWaitMs?: number;
     readonly maxQueueMs?: number;
     readonly maxExecutionMs?: number;
-    readonly overlap?: string;
-    readonly stalePolicy?: string;
   };
   readonly trigger?: {
     readonly type?: string;
@@ -37,8 +35,8 @@ export interface RuntimeRuleView {
   readonly every?: number;
   readonly needs?: readonly (string | { readonly scope?: string })[];
   readonly output?: { readonly schema?: string; readonly recordAs?: string };
-  /** `sync` or `background`: how a `manual` / `event` activation runs. */
-  readonly execution?: string;
+  /** `true` when a `manual` / `event` activation runs as a background job. */
+  readonly background?: boolean;
   readonly builtinTools?: readonly string[];
   /** Names of the inputs read from the same execution (not committed, not kernel). */
   readonly turnInputs?: readonly string[];
@@ -52,12 +50,12 @@ type RuleField =
   | "stage"
   | "visibility"
   | "requireExplicitCompletion"
-  | "completion"
+  | "detached"
   | "trigger"
   | "every"
   | "needs"
   | "output"
-  | "execution"
+  | "background"
   | "inputs"
   | "builtinTools";
 
@@ -75,12 +73,12 @@ export const IR_RULE_FIELD_PATHS: RuntimeRuleFieldPaths = {
   stage: ["stage"],
   visibility: ["outputKind"],
   requireExplicitCompletion: ["requireExplicitCompletion"],
-  completion: ["turnCompletion"],
+  detached: ["turnCompletion"],
   trigger: ["trigger"],
   every: ["trigger", "every"],
   needs: ["needs"],
   output: ["output"],
-  execution: ["execution"],
+  background: ["execution"],
   inputs: ["inputs"],
   builtinTools: ["tools", "builtin"],
 };
@@ -93,13 +91,13 @@ export const AUTHORING_RULE_FIELD_PATHS: RuntimeRuleFieldPaths = {
   handler: ["function", "handler"],
   stage: ["schedule", "stage"],
   visibility: ["io", "visibility"],
-  requireExplicitCompletion: ["agent", "loop", "completion", "require"],
-  completion: ["schedule", "completion"],
+  requireExplicitCompletion: ["agent", "completion", "require"],
+  detached: ["schedule", "detached"],
   trigger: ["schedule", "trigger"],
   every: ["schedule", "every"],
   needs: ["schedule", "needs"],
   output: ["io", "output"],
-  execution: ["schedule", "manual", "execution"],
+  background: ["schedule", "background"],
   inputs: ["io", "inputs"],
   builtinTools: ["agent", "tools", "builtin"],
 };
@@ -202,51 +200,34 @@ export function runtimeRuleIssues(
       `${name("every")} is for an 'auto' runtime; a runtime with ${name("trigger", "type")} 'event' or 'manual' runs when it is activated`,
     );
 
-  const completion = m.completion;
-  if (
-    completion?.maxSettleWaitMs !== undefined &&
-    completion.settle === undefined
-  )
+  const detached = m.detached;
+  if (detached?.maxSettleWaitMs !== undefined && !detached.settle)
     add(
-      at("completion", "maxSettleWaitMs"),
-      `${name("completion", "maxSettleWaitMs")} requires ${name("completion", "settle")}`,
+      at("detached", "maxSettleWaitMs"),
+      `${name("detached", "maxSettleWaitMs")} requires ${name("detached", "settle")}`,
     );
-  if ((completion?.mode ?? "await") === "detached") {
-    const mode = `${name("completion", "mode")} 'detached'`;
+  if (detached) {
+    const runtime = `a detached runtime (${name("detached")})`;
     if (m.stage !== "post-turn" && m.stage !== "audit")
       add(
         at("stage"),
-        `${mode} is only valid on ${name("stage")} 'post-turn' or 'audit'`,
+        `${runtime} is only valid on ${name("stage")} 'post-turn' or 'audit'`,
       );
     if (m.visibility === "story")
       add(
         at("visibility"),
-        `${mode} cannot be used with ${name("visibility")} 'story'`,
+        `${runtime} cannot have ${name("visibility")} 'story'`,
       );
     if (activated)
       add(
         at("trigger", "type"),
-        `event/manual runtimes run in the background with ${name("execution")}; ${mode} is for staged runtimes`,
+        `event/manual runtimes run in the background with ${name("background")}; ${runtime} is for staged runtimes`,
       );
-  } else if (
-    completion?.settle !== undefined ||
-    completion?.maxSettleWaitMs !== undefined ||
-    completion?.maxQueueMs !== undefined ||
-    completion?.maxExecutionMs !== undefined ||
-    completion?.overlap !== undefined ||
-    completion?.stalePolicy !== undefined
-  )
-    add(
-      at("completion", "mode"),
-      `the detached options of ${name("completion")} require ${name("completion", "mode")} 'detached'`,
-    );
+  }
 
   // Background work cannot wait for player input. Runtime execution also
   // rejects suspension returned by a handler or a triggered event runtime.
-  if (
-    m.builtinTools?.includes("suspend") &&
-    (m.execution === "background" || completion?.mode === "detached")
-  )
+  if (m.builtinTools?.includes("suspend") && (m.background || detached))
     add(
       at("builtinTools"),
       "a background runtime cannot use the 'suspend' tool",
@@ -294,11 +275,11 @@ export function runtimeRuleIssues(
 
   // An event/manual runtime that always runs in the background has no
   // same-execution upstream: no activation could satisfy a turn input.
-  if (activated && m.execution === "background")
+  if (activated && m.background)
     for (const input of m.turnInputs ?? [])
       add(
         at("inputs", input),
-        `${name("execution")} 'background' on an event/manual runtime cannot read a same-execution input; read it with scope: committed or run the runtime in sync`,
+        `an event/manual runtime that runs in the background (${name("background")}) cannot read a same-execution input; read it with scope: committed or let the caller wait for it`,
         "runtime",
       );
 

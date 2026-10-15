@@ -1,5 +1,5 @@
 ---
-version: 0.0.37
+version: 0.0.38
 displayName: Reply Variants
 description: Offers several reply options so you can choose the one that fits best.
 author:
@@ -8,8 +8,7 @@ author:
 license: MIT
 contributes:
   extensions:
-    - point: prompt.history-transform@1
-      id: accepted-branch
+    - prompt.history-transform@1/accepted-branch
   ui:
     message:
       - ./ui/branch-reply-block.json

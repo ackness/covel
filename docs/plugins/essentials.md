@@ -141,7 +141,7 @@ agent:
 
 内置工具的清单见[工具参考](../reference/tools.md)。
 
-Agent 的完成条件见[插件参考](../reference/plugins.md)：`completion.require: tool-use` 配合 `afterTools` 时，查询工具不能代替声明的完成工具。
+调用一个工具就结束的 agent 写 `agent.finishWith: <工具>`。完成条件的完整写法见[插件参考](../reference/plugins.md#完成条件agentfinishwithagentcompletion)：`completion.require: tool-use` 配合 `afterTools` 时，查询工具不能代替声明的完成工具。
 
 ## 怎样用别的插件的结果
 
