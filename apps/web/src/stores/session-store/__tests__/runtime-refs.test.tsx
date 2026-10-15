@@ -1,4 +1,5 @@
-import { act, renderHook } from "@testing-library/react";
+import { act, render, renderHook } from "@testing-library/react";
+import { useEffect } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   applyUiSlotEvent,
@@ -73,5 +74,36 @@ describe("useSessionRuntimeRefs slot ownership", () => {
     act(() => preview("session-a"));
     await act(async () => rerender({ state: stateForSession("session-a") }));
     expect(result.current.slots[0]?.previewTurnId).toBe("turn");
+  });
+});
+
+describe("useSessionRuntimeRefs state", () => {
+  it("is current by the time a child's effect runs", () => {
+    const seen: number[] = [];
+    function Child({
+      state,
+      refs,
+    }: {
+      state: SessionState;
+      refs: ReturnType<typeof useSessionRuntimeRefs>;
+    }) {
+      useEffect(() => {
+        seen.push(refs.stateRef.current.worlds.length);
+      }, [refs, state.worlds]);
+      return null;
+    }
+    function Provider({ state }: { state: SessionState }) {
+      const refs = useSessionRuntimeRefs(state);
+      return <Child state={state} refs={refs} />;
+    }
+    const booted = {
+      ...initialState,
+      worlds: [{ id: "mistport" }] as SessionState["worlds"],
+    };
+    const view = render(<Provider state={initialState} />);
+    view.rerender(<Provider state={booted} />);
+    // A child's effect (the prep-screen restore) selects a world right after
+    // boot; the list it reads must be the booted one.
+    expect(seen).toEqual([0, 1]);
   });
 });

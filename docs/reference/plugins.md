@@ -116,7 +116,7 @@ Extract facts supported by runtime-inputs.narrative.value, then call save-facts.
 - 只允许一个提供者的扩展点，以及显式写出的 `conflicts`，另外做互斥检查。
 - `conflicts` 只能写插件契约。写内核扩展点或 UI 槽位会得到 `invalid-conflict`，并指出 `conflicts` 字段的位置。内核扩展点怎样组合由它的 mode 决定。
 
-准备页按插件的第一个标签分组（作者写的标签排在推出的标签前面），组名直接显示标签原文；没有标签的插件放入“无标签”。每个插件只出现一次，后续标签仍可用于筛选。`kind: core` 的徽章显示“默认启用”，不表示锁定；会话列表的“内置”只表示来源。
+准备页按插件是否调用模型分组，即推出的 `cost:*` 标签；没有这个标签的插件按第一个标签分组（作者写的标签排在推出的标签前面），一个标签也没有的放入“无标签”。推出的标签显示成文字（如“调用模型”“可手动使用”），作者写的标签照原样显示。每个插件只出现一次，后续标签仍可用于筛选。`kind: core` 的徽章显示“默认启用”，不表示锁定；会话列表的“内置”只表示来源。
 
 ### contributes 字段
 
@@ -231,8 +231,6 @@ permissions:
 | `ui:right-panel` | `contributes.ui.right` 有面板 |
 | `ui:message-block` | `contributes.ui.message` 有消息块 |
 | `ui:manual-action` | 有 `manual` 触发的 runtime，或者有 `contributes.actions` / `contributes.commands` |
-
-准备页按插件的第一个标签分组。推出的标签在那里显示成文字（如“调用模型”“可手动使用”），作者写的标签照原样显示。
 
 `io.visibility` 只有两个值：`story` 给提供故事正文的叙事 runtime，`system` 给其他所有 runtime。
 

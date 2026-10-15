@@ -189,7 +189,8 @@ describe("plugin flow routes", () => {
         },
         pluginType: "core-plugin",
         runtimeCount: 1,
-        tags: ["mode:dialogue"],
+        // The loader's order: a written tag, then the derived ones.
+        tags: ["mode:dialogue", "cost:llm", "ui:right-panel"],
       },
       packageManifest: parsePluginMd(
         "---\nid: test-package\nkind: core\ndescription: Test\ntags: [mode:dialogue]\nprovides: [narrative-engine@1]\n---\n",
@@ -234,7 +235,8 @@ describe("plugin flow routes", () => {
     });
     expect(pkg?.source).toBe("builtin");
     expect(pkg?.provides).toEqual(["narrative-engine@1"]);
-    expect(pkg?.tags).toEqual(["mode:dialogue"]);
+    // Not sorted: the prep screen groups a plugin under its first tag.
+    expect(pkg?.tags).toEqual(["mode:dialogue", "cost:llm", "ui:right-panel"]);
     expect(pkg?.runtimes?.[0]?.trigger).toEqual({
       type: "auto",
       every: 3,

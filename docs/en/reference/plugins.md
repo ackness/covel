@@ -116,7 +116,7 @@ A contract is a versioned name, such as `narrative-engine@1`. Plugins find each 
 - Only an extension point that allows one provider, and an explicit `conflicts` entry, get a separate mutual-exclusion check.
 - `conflicts` can name only plugin contracts. If you write a kernel extension point or a UI slot, you get `invalid-conflict`, and the error points to the position of the `conflicts` field. How kernel extension points combine is decided by their mode.
 
-Session prep groups each plugin by its first tag (the tags the author writes come before the derived ones), using the tag text as the heading. Plugins with no tags appear under “Untagged”. Each plugin appears once; all tags remain available for filtering. The `kind: core` badge says “Enabled by default” and does not indicate a lock. “Builtin” in the session list describes the source only.
+Session prep groups the plugins by whether they call a model, that is by the derived `cost:*` tag. A plugin without that tag goes under its first tag (the tags the author writes come before the derived ones), and one with no tags under “Untagged”. A derived tag shows as words ("Calls a model", "Player actions"), and a tag the author wrote shows as written. Each plugin appears once; all tags remain available for filtering. The `kind: core` badge says “Enabled by default” and does not indicate a lock. “Builtin” in the session list describes the source only.
 
 ### contributes fields
 
@@ -231,8 +231,6 @@ The tags the author writes come first, followed by the derived tags in this orde
 | `ui:right-panel` | `contributes.ui.right` has a panel |
 | `ui:message-block` | `contributes.ui.message` has a message block |
 | `ui:manual-action` | There is a runtime with a `manual` trigger, or there are `contributes.actions` / `contributes.commands` |
-
-The prep screen groups a plugin under its first tag. It shows a derived tag as words ("Calls a model", "Player actions"), and a tag the author wrote as written.
 
 `io.visibility` has two values: `story` for the narrative runtime that provides the story text, and `system` for every other runtime.
 

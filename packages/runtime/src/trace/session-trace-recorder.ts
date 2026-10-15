@@ -44,6 +44,8 @@ export interface TraceRecorder {
     status: string;
     durationMs: number;
     error?: string;
+    /** Why a skipped runtime did not run (a gate code). */
+    reason?: string;
   }): Promise<void>;
   runtimeFailed(info: {
     runtimeId: string;

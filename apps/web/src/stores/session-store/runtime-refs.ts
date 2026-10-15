@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import { setActiveSession as setActivePluginDataSession } from "@/stores/plugin-data-store.js";
 import { clearUiSlots } from "@/stores/ui-slot-store.js";
 import { clearAllStreamingText } from "@/stores/streaming-text-store.js";
@@ -50,7 +50,10 @@ export interface SessionRuntimeRefs {
 
 export function useSessionRuntimeRefs(state: SessionState): SessionRuntimeRefs {
   const stateRef = useRef(state);
-  useEffect(() => {
+  // A layout effect, so the effects of the provider's children (which run
+  // before its own) already see the state they were rendered with when they
+  // call an action that reads it.
+  useLayoutEffect(() => {
     stateRef.current = state;
   }, [state]);
 

@@ -25,6 +25,22 @@ function event(
 }
 
 describe("authoritative execution recovery", () => {
+  it("restores why a runtime was skipped after refresh", () => {
+    expect(
+      buildSnapshotExecutionSteps([
+        event("runtime.completed", {
+          status: "skipped",
+          reason: "upstream-failed",
+        }),
+      ]),
+    ).toEqual([
+      expect.objectContaining({
+        status: "skipped",
+        detail: "upstream-failed",
+      }),
+    ]);
+  });
+
   it.each(["quota", "auth", "unknown"])(
     "restores the %s remedy after refresh",
     (errorKind) => {

@@ -85,8 +85,9 @@ export function pluginTagLabel(
 }
 
 /**
- * Plugins grouped under their first tag. `labelForGroup` gets that tag, or
- * `undefined` for the plugins without one.
+ * Plugins grouped by whether they call a model (their `cost:*` tag), and a
+ * plugin without one under its first tag. `labelForGroup` gets that tag, or
+ * `undefined` for the plugins without any.
  */
 export function groupPlugins(
   plugins: readonly PluginSummary[],
@@ -94,7 +95,8 @@ export function groupPlugins(
 ): PluginGroup[] {
   const grouped = new Map<string, PluginSummary[]>();
   for (const plugin of plugins) {
-    const tag = plugin.tags?.[0];
+    const tag =
+      plugin.tags?.find((item) => item.startsWith("cost:")) ?? plugin.tags?.[0];
     const groupId = tag === undefined ? "untagged" : `tag:${tag}`;
     const list = grouped.get(groupId) ?? [];
     list.push(plugin);
