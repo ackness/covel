@@ -2653,11 +2653,6 @@
     "deleted": "Удалено элементов: {{count}} · освобождено {{size}}",
     "skipped": "Оставлено, потому что теперь используется сессией: {{count}}"
   },
-  "characterBlueprint": {
-    "empty": "Заготовок персонажей пока нет",
-    "instantiated": "Создан из заготовки",
-    "blueprintOnly": "Только заготовка"
-  },
   "package": {
     "author": "Автор",
     "version": "v{{version}}",

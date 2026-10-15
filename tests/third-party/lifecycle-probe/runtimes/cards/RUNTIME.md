@@ -2,21 +2,15 @@
 description: Generate reply cards for the test story
 schedule:
   stage: post-turn
-  trigger:
-    type: auto
 io:
   inputs:
     narrative:
       from:
         contract: narrative-engine@1
-        cardinality: one
       select: /narrativeOutput
-      required: true
   output:
     contract: scene-prompts@1
-  visibility: system
 agent:
-  model: plugin
   reasoning: false
   toolChoice:
     name: lifecycle-probe-cards
