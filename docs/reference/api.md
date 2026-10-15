@@ -5106,7 +5106,7 @@ interface SseEnvelope {
 {
   "concept": "一个被永恒暴风雪笼罩的冰封大陆",
   "locale": "zh-CN",
-  "model": "deepseek-v4-flash",
+  "model": "utility",
   "saveTarget": "server-file",
   "idleTimeoutMs": 300000,
   "brief": {
@@ -5118,14 +5118,14 @@ interface SseEnvelope {
 }
 ```
 
-| 字段            | 类型   | 必填 | 说明                                                                |
-| --------------- | ------ | ---- | ------------------------------------------------------------------- |
-| `concept`       | string | 是   | 世界概念描述（最多 4000 字符）。也接受同义键 `prompt`               |
-| `locale`        | string | 否   | 语言区域，默认 `zh-CN`                                              |
-| `model`         | string | 否   | 覆盖 LLM 模型                                                       |
-| `saveTarget`    | string | 否   | 保存目标，默认 `server-file`。可选值见下表                          |
-| `brief`         | object | 否   | 结构化的创作简报。省略时只做基础生成                                |
-| `idleTimeoutMs` | number | 否   | 等模型下一段输出的最长时间（毫秒）。整数，1000–1800000，默认 120000 |
+| 字段            | 类型   | 必填 | 说明                                                                               |
+| --------------- | ------ | ---- | ---------------------------------------------------------------------------------- |
+| `concept`       | string | 是   | 世界概念描述（最多 4000 字符）。也接受同义键 `prompt`                              |
+| `locale`        | string | 否   | 语言区域，默认 `zh-CN`                                                             |
+| `model`         | string | 否   | 模型用途或预设 ID；默认 `utility`，按[模型选择规则](./slots.md#实际选择优先级)解析 |
+| `saveTarget`    | string | 否   | 保存目标，默认 `server-file`。可选值见下表                                         |
+| `brief`         | object | 否   | 结构化的创作简报。省略时只做基础生成                                               |
+| `idleTimeoutMs` | number | 否   | 等模型下一段输出的最长时间（毫秒）。整数，1000–1800000，默认 120000                |
 
 `idleTimeoutMs` 超出范围返回 `400`。应用自己的设置项从 15 秒起；接口允许低到 1 秒，方便测试超时路径。
 
@@ -5325,13 +5325,13 @@ Web 前端每次生成前先等 `/api/health` 成功，再根据 `storage.data.f
 }
 ```
 
-| 字段            | 类型   | 必填 | 说明                                                                   |
-| --------------- | ------ | ---- | ---------------------------------------------------------------------- |
-| `worldId`       | string | 是   | 要修改的世界                                                           |
-| `instruction`   | string | 是   | 修改要求（最多 2000 字符）                                             |
-| `world`         | object | 否   | 由浏览器保存的世界，随请求带上它的 `WorldRecord`                       |
-| `model`         | string | 否   | 覆盖 LLM 模型                                                          |
-| `idleTimeoutMs` | number | 否   | 等模型下一段输出的最长时间（毫秒），含义和范围与 `generate-world` 相同 |
+| 字段            | 类型   | 必填 | 说明                                                                               |
+| --------------- | ------ | ---- | ---------------------------------------------------------------------------------- |
+| `worldId`       | string | 是   | 要修改的世界                                                                       |
+| `instruction`   | string | 是   | 修改要求（最多 2000 字符）                                                         |
+| `world`         | object | 否   | 由浏览器保存的世界，随请求带上它的 `WorldRecord`                                   |
+| `model`         | string | 否   | 模型用途或预设 ID；默认 `utility`，按[模型选择规则](./slots.md#实际选择优先级)解析 |
+| `idleTimeoutMs` | number | 否   | 等模型下一段输出的最长时间（毫秒），含义和范围与 `generate-world` 相同             |
 
 关于 `world`：
 

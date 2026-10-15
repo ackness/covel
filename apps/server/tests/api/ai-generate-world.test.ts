@@ -26,7 +26,15 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { Hono } from "hono";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { LLMAdapter, LLMResponse } from "@covel/runtime";
+import {
+  createGatewayAdapter,
+  createPluginRuntimeGateway,
+  type LLMAdapter,
+  type LLMResponse,
+} from "@covel/runtime";
+import type { ModelProviderAdapter } from "@covel/ai-provider";
+import { createAiStack, type AiStack } from "../../src/ai-setup.js";
+import { createPerRequestLlmMiddleware } from "../../src/middleware/per-request-llm.js";
 import { worldEditionLocales } from "@covel/shared";
 import { type DataStore, type WorldRecord } from "@covel/store";
 import { createMemoryStore } from "@covel/store/memory";
@@ -114,6 +122,7 @@ function createTestApp(
   store: DataStore,
   llm: LLMAdapter = new FixedLlm(),
   registry?: PluginRegistry,
+  ai?: AiStack,
 ): Hono<Env> {
   const app = new Hono<Env>();
   const sessionLock = createInProcessSessionLock();
@@ -126,6 +135,17 @@ function createTestApp(
     c.set("worldsDirs", [process.env.COVEL_USER_WORLDS_DIR!]);
     await next();
   });
+  if (ai) {
+    app.use(
+      "*",
+      createPerRequestLlmMiddleware({
+        ai,
+        envApiKeys: { fixture: "server-key" },
+        defaultLlmAdapter: llm,
+        defaultPluginGateway: createPluginRuntimeGateway(ai.gateway),
+      }),
+    );
+  }
   app.route("/api/ai", aiRoutes);
   app.route("/api/worlds", worldCrudRoutes);
   app.route("/api/worlds", worldTranslateRoutes);
@@ -200,6 +220,169 @@ describe("ai world generation route", () => {
     }
     await rm(worldsDir, { recursive: true, force: true });
   });
+
+  it.each([
+    {
+      configuredUtility: false,
+      boundRole: "story",
+      model: undefined,
+      expected: "player-model",
+    },
+    {
+      configuredUtility: true,
+      boundRole: "utility",
+      model: undefined,
+      expected: "player-model",
+    },
+    {
+      configuredUtility: true,
+      boundRole: "story",
+      model: undefined,
+      expected: "server-utility",
+    },
+    {
+      configuredUtility: true,
+      boundRole: "story",
+      model: "story",
+      expected: "player-model",
+    },
+  ])(
+    "resolves generation and revision through request bindings ($configuredUtility, $boundRole, $model)",
+    async ({ configuredUtility, boundRole, model, expected }) => {
+      const configPath = path.join(worldsDir, "llm.toml");
+      const slot = (name: string) => `[covel.${name}]
+provider = "fixture"
+model = "server-${name}"
+baseUrl = "https://server.example/v1"
+protocol = "openai-chat-v1"
+`;
+      await writeFile(
+        configPath,
+        slot("story") + (configuredUtility ? slot("utility") : ""),
+      );
+      vi.stubEnv("COVEL_LLM_TOML", configPath);
+      const ai = createAiStack();
+      const calls: { model: string; baseUrl?: string; apiKey?: string }[] = [];
+      const adapter: ModelProviderAdapter = {
+        async generateText() {
+          throw new Error("expected streaming");
+        },
+        async generateObject() {
+          throw new Error("expected streaming");
+        },
+        async embed() {
+          throw new Error("expected streaming");
+        },
+        async *streamText(config, params) {
+          calls.push({
+            model: params.model,
+            baseUrl: config.baseUrl,
+            apiKey: config.apiKey,
+          });
+          yield {
+            type: "text-delta",
+            textDelta: `===WORLD_YAML===\n${WORLD_YAML}\n===WORLD_MD===\n${WORLD_MD}\n===END===`,
+          };
+          yield {
+            type: "done",
+            finishReason: "stop",
+            usage: { inputTokens: 1, outputTokens: 1 },
+          };
+        },
+      };
+      ai.providerRegistry.reconfigure({
+        providers: { fixture: { adapter }, player: { adapter } },
+        providerDefaults: ai.config.providers,
+      });
+      app = createTestApp(
+        store,
+        createGatewayAdapter(ai.gateway, {
+          envApiKeys: { fixture: "server-key" },
+        }),
+        undefined,
+        ai,
+      );
+      const encode = (value: unknown) =>
+        Buffer.from(JSON.stringify(value)).toString("base64");
+      const headers = {
+        "Content-Type": "application/json",
+        "X-Provider-Keys": encode({ player: "request-key" }),
+        "X-Slot-Config": encode({
+          slotBindings: { [boundRole]: { modelRef: "player-model" } },
+          customPresets: [
+            {
+              id: "player-model",
+              name: "Player model",
+              provider: "player",
+              model: "player-model",
+              baseUrl: "https://player.example/v1",
+              protocol: "openai-chat-v1",
+            },
+          ],
+        }),
+      };
+      const generated = doneEvent(
+        await readSseJson(
+          await app.request("/api/ai/generate-world", {
+            method: "POST",
+            headers,
+            body: JSON.stringify({
+              prompt: "Clockwork city",
+              model,
+              saveTarget: "server-store",
+            }),
+          }),
+        ),
+      );
+      doneEvent(
+        await readSseJson(
+          await app.request("/api/ai/revise-world", {
+            method: "POST",
+            headers,
+            body: JSON.stringify({
+              worldId: generated.world.id,
+              instruction: "Keep the setting",
+              model,
+            }),
+          }),
+        ),
+      );
+      expect(calls.length).toBeGreaterThanOrEqual(3);
+      expect(calls.every((call) => call.model === expected)).toBe(true);
+      expect(calls[0]).toMatchObject(
+        expected === "player-model"
+          ? { baseUrl: "https://player.example/v1", apiKey: "request-key" }
+          : { baseUrl: "https://server.example/v1", apiKey: "server-key" },
+      );
+
+      // Neither the binding nor its key can leak into the next request.
+      calls.length = 0;
+      doneEvent(
+        await readSseJson(
+          await app.request("/api/ai/generate-world", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              prompt: "Clockwork city",
+              saveTarget: "return-only",
+            }),
+          }),
+        ),
+      );
+      expect(calls.length).toBeGreaterThanOrEqual(2);
+      expect(
+        calls.every(
+          (call) =>
+            call.model ===
+              (configuredUtility ? "server-utility" : "server-story") &&
+            call.apiKey === "server-key",
+        ),
+      ).toBe(true);
+      expect(JSON.stringify(await store.listWorlds())).not.toContain(
+        "request-key",
+      );
+    },
+  );
 
   const minimalWorld = {
     id: "writeback-world",
