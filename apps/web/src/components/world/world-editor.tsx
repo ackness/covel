@@ -197,6 +197,9 @@ export function WorldEditor({
     snapshot !== savedSnapshot ||
     Object.values(jsonDrafts).some(({ value, original }) => value !== original);
   const [confirming, setConfirming] = useState(false);
+  // The router keeps the guard of an earlier render until the next one
+  // commits, so the guard reads whether a dialog is open from a ref.
+  const confirmingRef = useRef(false);
   const editorRef = useRef<object | null>(null);
 
   useEffect(() => {
@@ -297,9 +300,10 @@ export function WorldEditor({
   }
 
   async function confirmLeave(): Promise<boolean> {
-    if (saving || confirming) return false;
+    if (saving || confirmingRef.current) return false;
     if (!dirty) return true;
     const editor = editorRef.current;
+    confirmingRef.current = true;
     setConfirming(true);
     try {
       const discard = await requestConfirm({
@@ -311,6 +315,7 @@ export function WorldEditor({
       });
       return editorRef.current === editor && discard;
     } finally {
+      confirmingRef.current = false;
       if (editorRef.current === editor) setConfirming(false);
     }
   }
