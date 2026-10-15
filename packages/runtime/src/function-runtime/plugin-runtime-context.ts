@@ -5,7 +5,7 @@
  * what the security rules require (a community plugin's HTTP calls must
  * match its `permissions.http`).
  */
-import { withInstructionLocale } from "./plugin-runtime-gateway.js";
+import { withRuntimeTextDefaults } from "./plugin-runtime-gateway.js";
 import { snapshotPlayerInput } from "../turn-executor/turn-digest.js";
 import { pluginMessagesFor } from "@covel/shared";
 import type {
@@ -170,7 +170,11 @@ export async function createPluginRuntimeContext({
   const runtimeGateway = deps.gateway
     ? withPromptCacheKey(
         withDefaultGatewaySignal(
-          withInstructionLocale(deps.gateway, input.locale),
+          withRuntimeTextDefaults(
+            deps.gateway,
+            input.locale,
+            manifest.runtimeType === "function" ? manifest.model : undefined,
+          ),
           handlerAbort.signal,
         ),
         promptCacheKeyFor(input.sessionId, manifest.name),

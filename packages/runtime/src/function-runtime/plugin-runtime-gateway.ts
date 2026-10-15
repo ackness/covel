@@ -575,17 +575,30 @@ function toMessages(opts: { system?: string; prompt?: string }): Array<{
   return messages;
 }
 
-/** Bind both text operations to this execution's session instruction language. */
-export function withInstructionLocale(
+/** Bind text calls to the instruction language and an optional runtime default slot. */
+export function withRuntimeTextDefaults(
   gateway: PluginRuntimeGateway,
   locale: string | undefined,
+  defaultModel: string | undefined,
 ): PluginRuntimeGateway {
   const instructionLocale = instructionLocaleFor(locale);
   return {
     ...gateway,
     generateText: (input) =>
-      gateway.generateText({ ...input, instructionLocale }),
+      gateway.generateText({
+        ...input,
+        instructionLocale,
+        ...(defaultModel !== undefined
+          ? { presetId: input.presetId ?? defaultModel }
+          : {}),
+      }),
     generateObject: (input) =>
-      gateway.generateObject({ ...input, instructionLocale }),
+      gateway.generateObject({
+        ...input,
+        instructionLocale,
+        ...(defaultModel !== undefined
+          ? { presetId: input.presetId ?? defaultModel }
+          : {}),
+      }),
   };
 }

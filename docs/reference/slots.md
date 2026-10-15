@@ -230,7 +230,7 @@ model    = "glm-5"
 
 一次调用用哪个用途，按下面的顺序决定：
 
-1. 运行时的明确选择，包括会话的 `runtimeModelOverrides`。它决定用哪个用途或预设。
+1. 运行时的明确选择：agent 使用会话的 `runtimeModelOverrides`，function 的文本调用使用 handler 传入的 `presetId`。Function runtime 不读取 `runtimeModelOverrides`。
 2. 没有明确选择时，runtime 自己写的用途名（`agent.model` / `function.model`）。agent 没写时，`io.visibility: story` 的用 `story`，其他用 `plugin`。function 没写时，当前请求绑定了 `default` 就用它，否则用系统的默认用途。
 3. 这个用途先按当前请求里的 UI 用途绑定解析，没有绑定时按系统 `llm.toml` 的定义，以及可用文本用途的回退。
 
@@ -347,7 +347,11 @@ model    = "glm-5"
 
 **Function runtime**
 
-Function runtime 不读取 `runtimeModelOverrides`。图像、语音等 function 插件通常用自己的 `userSettings.modelPresetId` 选择对应能力的用途。准备页把它显示成一个独立的选项，写进设备设置 `plugin.<pluginId>.modelPresetId`。不要把 agent runtime 的会话覆盖和 function runtime 的这个设置混用。
+Function runtime 不读取 `runtimeModelOverrides`。`ctx.gateway.generateText` 和 `generateObject` 没传 `presetId` 时使用 `function.model`；handler 显式传入的 `presetId` 优先。这个默认值不影响图像、语音、音乐或评估调用。
+
+准备页和会话插件列表会只读显示 `function.model` 声明的用途及其解析出的“服务商 · 模型”，没有选择控件。用途未配置时显示回退目标，已配置但不可用时显示不可用提示。没有声明 `function.model` 的函数不显示这一项。handler 显式选择其他用途的调用仍以该调用为准。
+
+图像、语音等 function 插件通常用自己的 `userSettings.modelPresetId` 选择对应能力的用途。准备页把它显示成一个独立的选项，写进设备设置 `plugin.<pluginId>.modelPresetId`。不要把 agent runtime 的会话覆盖和 function runtime 的这个设置混用。
 
 **连接测试和设置页**
 
