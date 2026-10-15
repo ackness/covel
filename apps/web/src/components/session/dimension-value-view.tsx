@@ -108,14 +108,17 @@ function Value({
                 {columns.map((key) => (
                   // CJK text has a one-character min-content width; without a
                   // floor a narrow panel squeezes prose columns to one glyph
-                  // per line instead of scrolling.
-                  <td key={key} className="min-w-24 p-2 align-top">
-                    <Value
-                      schema={rowSchema?.properties?.[key] ?? {}}
-                      value={(row as Record<string, JsonValue>)[key] ?? null}
-                      locale={locale}
-                      baseLocale={baseLocale}
-                    />
+                  // per line instead of scrolling. Browsers ignore min-width
+                  // on a table cell, so the floor sits on its content.
+                  <td key={key} className="p-2 align-top">
+                    <div className="min-w-24">
+                      <Value
+                        schema={rowSchema?.properties?.[key] ?? {}}
+                        value={(row as Record<string, JsonValue>)[key] ?? null}
+                        locale={locale}
+                        baseLocale={baseLocale}
+                      />
+                    </div>
                   </td>
                 ))}
               </tr>
