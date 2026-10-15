@@ -2538,11 +2538,6 @@
     "deleted": "Deleted items: {{count}} · {{size}} freed",
     "skipped": "Kept because a session uses them now: {{count}}"
   },
-  "characterBlueprint": {
-    "empty": "No character blueprints yet",
-    "instantiated": "Instantiated",
-    "blueprintOnly": "Blueprint only"
-  },
   "package": {
     "author": "Author",
     "version": "v{{version}}",

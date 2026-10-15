@@ -42,7 +42,6 @@ contributes:
   data:
     notes:
       schema: ./schemas/note.schema.json
-      version: 1
       accepts:
         - lifecycle-probe.notes.initial@1
   tools:

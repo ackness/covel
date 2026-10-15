@@ -2433,11 +2433,6 @@
     "deleted": "已删除 {{count}} 项 · 释放 {{size}}",
     "skipped": "有 {{count}} 项现在正被会话使用，已保留"
   },
-  "characterBlueprint": {
-    "empty": "暂无角色蓝图",
-    "instantiated": "已生成角色",
-    "blueprintOnly": "仅蓝图"
-  },
   "package": {
     "author": "作者",
     "version": "v{{version}}",
