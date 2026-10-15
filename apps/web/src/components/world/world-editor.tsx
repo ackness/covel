@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import { useBlocker } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
 import {
@@ -40,6 +40,7 @@ import type { WorldRecord, WorldSummary } from "@/services/api.js";
 import { useWorldRecord } from "@/services/world-records.js";
 import { getDataService } from "@/services/data-service.js";
 import { requestConfirm } from "@/lib/confirm-channel.js";
+import { onWorldListRequest } from "@/lib/nav-events.js";
 import { GeographyTab } from "./tabs/geography-tab.js";
 import { FactionsTab } from "./tabs/factions-tab.js";
 import { PowerSystemTab } from "./tabs/power-system-tab.js";
@@ -54,6 +55,8 @@ interface WorldEditorProps {
   world: WorldRecord;
   onSave: (updated: WorldRecord) => void;
   onCancel: () => void;
+  /** Leave for the world list (the topbar's World item); default `onCancel`. */
+  onExit?: () => void;
 }
 
 interface TabDef {
@@ -116,6 +119,7 @@ interface WorldEditorLoaderProps {
   world: WorldSummary;
   onSave: (updated: WorldRecord) => void;
   onCancel: () => void;
+  onExit?: () => void;
 }
 
 /** Opens the editor once the world's full record (dimensions, lore) is here. */
@@ -123,9 +127,14 @@ export function WorldEditorLoader({
   world,
   onSave,
   onCancel,
+  onExit,
 }: WorldEditorLoaderProps) {
   const { t } = useTranslation();
   const record = useWorldRecord(world.id);
+  const loaded = record.world !== null;
+  const exit = useEffectEvent(() => (onExit ?? onCancel)());
+  // While the record loads there is nothing to lose.
+  useEffect(() => (loaded ? undefined : onWorldListRequest(exit)), [loaded]);
   if (!record.world) {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-3 text-sm text-muted-foreground">
@@ -153,11 +162,17 @@ export function WorldEditorLoader({
       world={record.world}
       onSave={onSave}
       onCancel={onCancel}
+      onExit={onExit}
     />
   );
 }
 
-export function WorldEditor({ world, onSave, onCancel }: WorldEditorProps) {
+export function WorldEditor({
+  world,
+  onSave,
+  onCancel,
+  onExit,
+}: WorldEditorProps) {
   const { t } = useTranslation();
   // The definitions as loaded, or as the JSON editor last applied them.
   const [dimensions, setDimensions] = useState<WorldDimensions>(() =>
@@ -307,6 +322,14 @@ export function WorldEditor({ world, onSave, onCancel }: WorldEditorProps) {
     if (saving || confirming) return;
     if (!dirty || (await confirmLeave())) onCancel();
   }
+
+  // The topbar's World item does not change the route, so the router guard
+  // above never sees it: ask here, as Cancel does.
+  const leaveForList = useEffectEvent(async () => {
+    if (saving || confirming) return;
+    if (!dirty || (await confirmLeave())) (onExit ?? onCancel)();
+  });
+  useEffect(() => onWorldListRequest(() => void leaveForList()), []);
 
   return (
     <div className="h-full overflow-hidden bg-background p-3 sm:p-5 md:p-8">

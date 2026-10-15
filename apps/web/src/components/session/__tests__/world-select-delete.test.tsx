@@ -1,5 +1,11 @@
 import { getSettings, initSettings } from "@/settings/store.js";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import {
   beforeAll,
   afterEach,
@@ -12,6 +18,7 @@ import {
 import { getDataService } from "@/services/data-service.js";
 import type { WorldRecord } from "@/services/api.js";
 import { ConfirmHost } from "@/components/ui/confirm-host.js";
+import { emitWorldListRequest } from "@/lib/nav-events.js";
 import { WorldSelectScreen } from "../world-select-screen.js";
 
 // These assertions exercise the card list, independently of the startup style.
@@ -140,5 +147,19 @@ describe("world select — deleting player-created worlds", () => {
     fireEvent.click(screen.getByRole("button", { name: "删除世界" }));
     expect(await screen.findByRole("dialog")).toBeTruthy();
     expect(screen.getByText("删除世界？")).toBeTruthy();
+  });
+
+  it("returns from details to the list when the topbar's World is pressed", async () => {
+    renderScreen();
+    fireEvent.click(screen.getAllByRole("button", { name: "查看详情" })[1]!);
+    expect(screen.queryAllByRole("button", { name: "查看详情" })).toHaveLength(
+      0,
+    );
+    act(() => emitWorldListRequest());
+    await waitFor(() =>
+      expect(screen.getAllByRole("button", { name: "查看详情" })).toHaveLength(
+        2,
+      ),
+    );
   });
 });

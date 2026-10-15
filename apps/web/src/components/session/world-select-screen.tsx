@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useEffectEvent, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ArrowRight, Languages } from "lucide-react";
 import { Button } from "@/components/ui/button.js";
@@ -17,6 +17,7 @@ import { WorldListView } from "@/components/world/world-list-view.js";
 import { getDataService } from "@/services/data-service.js";
 import { emitToast } from "@/lib/toast-channel.js";
 import { requestConfirm } from "@/lib/confirm-channel.js";
+import { onWorldListRequest } from "@/lib/nav-events.js";
 import type {
   PluginSummary,
   SessionRecord,
@@ -174,6 +175,13 @@ export function WorldSelectScreen({
     setMode("list");
     setSelectedWorldId(null);
   }
+
+  // The topbar's World item: the detail view returns to the list (the
+  // editor handles it itself, asking first when it has changes).
+  const showList = useEffectEvent(() => {
+    if (mode === "detail") handleBack();
+  });
+  useEffect(() => onWorldListRequest(showList), []);
 
   function handleEditFromDetail() {
     setMode("edit");
@@ -341,6 +349,7 @@ export function WorldSelectScreen({
         world={selectedWorld}
         onSave={handleSave}
         onCancel={() => setMode("detail")}
+        onExit={handleBack}
       />
     );
   }

@@ -36,3 +36,21 @@ export function onNavEvent(listener: Listener): () => void {
     listeners.delete(listener);
   };
 }
+
+const worldListListeners = new Set<() => void>();
+
+/**
+ * The topbar's World item, pressed while the world screen is already shown:
+ * the route does not change, so the screen leaves its detail or editor view
+ * itself (the editor asks first when it has unsaved changes).
+ */
+export function emitWorldListRequest(): void {
+  for (const listener of worldListListeners) listener();
+}
+
+export function onWorldListRequest(listener: () => void): () => void {
+  worldListListeners.add(listener);
+  return () => {
+    worldListListeners.delete(listener);
+  };
+}

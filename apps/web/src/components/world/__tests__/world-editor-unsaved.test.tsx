@@ -17,6 +17,7 @@ import {
 } from "@tanstack/react-router";
 import i18n from "@/i18n/index.js";
 import type { WorldRecord } from "@/services/api.js";
+import { emitWorldListRequest } from "@/lib/nav-events.js";
 import { WorldEditor } from "../world-editor.js";
 
 const mocks = vi.hoisted(() => ({
@@ -50,6 +51,7 @@ const disposeHistories: Array<() => void> = [];
 function openEditor(browser = false) {
   const onSave = vi.fn();
   const onCancel = vi.fn();
+  const onExit = vi.fn();
   const root = createRootRoute();
   const routeTree = root.addChildren([
     createRoute({ getParentRoute: () => root, path: "/editor" }),
@@ -68,10 +70,15 @@ function openEditor(browser = false) {
   const router = createRouter({ routeTree, history });
   const view = render(
     <RouterContextProvider router={router}>
-      <WorldEditor world={world} onSave={onSave} onCancel={onCancel} />
+      <WorldEditor
+        world={world}
+        onSave={onSave}
+        onCancel={onCancel}
+        onExit={onExit}
+      />
     </RouterContextProvider>,
   );
-  return { ...view, onSave, onCancel, history };
+  return { ...view, onSave, onCancel, onExit, history };
 }
 function selectStartingConditions() {
   fireEvent.mouseDown(
@@ -114,6 +121,17 @@ describe("WorldEditor unsaved changes", () => {
     cancel();
     expect(onCancel).toHaveBeenCalledOnce();
     expect(mocks.requestConfirm).not.toHaveBeenCalled();
+  });
+
+  it("leaves for the world list from the topbar, asking first when edited", async () => {
+    const { onExit } = openEditor();
+    changeOpening("At the harbor");
+    await act(async () => emitWorldListRequest());
+    await waitFor(() => expect(mocks.requestConfirm).toHaveBeenCalledOnce());
+    expect(onExit).not.toHaveBeenCalled();
+    mocks.requestConfirm.mockResolvedValue(true);
+    await act(async () => emitWorldListRequest());
+    await waitFor(() => expect(onExit).toHaveBeenCalledOnce());
   });
 
   it.each(["push", "back"] as const)(
