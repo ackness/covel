@@ -13,7 +13,6 @@ describe("plugin trigger discovery contract", () => {
       const description = "Trigger contract fixture";
       const name = "trigger-fixture";
       const { schedule } = runtimeAuthoringManifestSchema.parse({
-        type: "agent",
         description,
         schedule: {
           trigger: { type, topic: "" },
@@ -22,7 +21,10 @@ describe("plugin trigger discovery contract", () => {
       });
       const authored = {
         name,
-        trigger: { ...schedule?.trigger, type: schedule?.trigger?.type ?? type },
+        trigger: {
+          ...schedule?.trigger,
+          type: schedule?.trigger?.type ?? type,
+        },
         stage: schedule?.stage,
       };
       const summary = buildPluginSummary({
@@ -38,7 +40,7 @@ describe("plugin trigger discovery contract", () => {
         },
         manifests: [
           {
-            runtime: { type: "agent" as const },
+            runtime: {},
             manifest: { ...authored, pluginId: authored.name, description },
             promptTemplate: "",
             rawFrontmatter: {},

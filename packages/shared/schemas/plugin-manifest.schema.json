@@ -8,13 +8,14 @@
     "id": {
       "type": "string",
       "pattern": "^[a-z][a-z0-9-]*$",
-      "description": "Stable package ID: lowercase letters, digits and hyphens. It must match the package directory name. `framework` is reserved.",
+      "description": "Package ID: lowercase letters, digits and hyphens. Defaults to the name of the package directory; when written it must equal that name. `framework` is reserved.",
       "examples": ["dice-check"]
     },
     "kind": {
+      "default": "plugin",
+      "description": "Package kind. `core` marks a core plugin, which every session requests by default. Defaults to `plugin`.",
       "type": "string",
-      "enum": ["core", "plugin"],
-      "description": "Package kind. `core` marks a core plugin; other packages use `plugin`."
+      "enum": ["core", "plugin"]
     },
     "version": {
       "type": "string",
@@ -67,7 +68,7 @@
       "items": {
         "type": "string"
       },
-      "description": "Catalogue tags such as `ui:right-panel` or `cost:llm`. `role:` tags are rejected; use contracts."
+      "description": "Catalogue tags the loader cannot work out, such as `mode:dialogue` or `data:characters`. The loader adds the `ui:*` and `cost:*` tags from the package's panels and runtimes and ignores written ones. `role:` tags are rejected; use contracts."
     },
     "author": {
       "type": "object",
@@ -193,7 +194,7 @@
           }
         ]
       },
-      "description": "Versioned contracts this package provides, such as `narrative-engine@1`."
+      "description": "Versioned contracts this package provides that no runtime of it outputs, such as an extension or data contract. The contract of each runtime's `io.output.contract` is added by the loader; write it here only to mark the default provider."
     },
     "requires": {
       "type": "array",
@@ -201,15 +202,7 @@
         "type": "string",
         "pattern": "^[a-z][a-z0-9.-]*@[1-9][0-9]*$"
       },
-      "description": "Contracts that must have an active provider. The resolver adds one when the package is active."
-    },
-    "optional": {
-      "type": "array",
-      "items": {
-        "type": "string",
-        "pattern": "^[a-z][a-z0-9.-]*@[1-9][0-9]*$"
-      },
-      "description": "Contracts this package uses when a provider is active. They do not activate a provider."
+      "description": "Contracts that must have an active provider. The resolver adds one when the package is active. A contract a runtime reads and that is not listed here is optional: the runtime uses it when a provider is active."
     },
     "conflicts": {
       "type": "array",
@@ -243,7 +236,7 @@
       "type": "string",
       "minLength": 1,
       "pattern": "^(?!\\/)(?!.*\\/\\.\\.\\/)(?!\\.\\.\\/)[a-zA-Z0-9_./-]+\\.[mMcC]?[jJ][sS]$",
-      "description": "Package-relative path of the server entry module. It registers tools, actions, services, hooks and extensions."
+      "description": "Package-relative path of the server entry module. It registers tools, actions, services, hooks and extensions. Defaults to `./server/index.js` when that file exists."
     },
     "permissions": {
       "type": "object",
@@ -772,22 +765,17 @@
                   "source": {
                     "type": "object",
                     "properties": {
-                      "kind": {
-                        "type": "string",
-                        "enum": ["yaml", "json", "media"],
-                        "description": "Reader type of the source. `media` is a directory whose index this namespace receives."
-                      },
                       "path": {
                         "type": "string",
                         "minLength": 1,
                         "pattern": "^(?!\\/)(?!.*(?:^|\\/)\\.\\.(?:\\/|$))[a-z0-9_./-]+(?:\\/\\*\\.[a-z0-9]+)?$",
-                        "description": "Conventional path of the source inside a world package. `<dir>/*.<ext>` names every such file of a directory, each one a source, read in file-name order. It may not name a path the kernel or the package itself owns: `world.yaml`, `WORLD.md`, `data/world.data.yaml`, `data/dimensions.yaml`, `data/lorebook.yaml`, `characters/characters.json`, `media/gallery.json`, `media/portraits.json`, `media/scenes.json` or `media/gallery/`, nor an edition of one.",
+                        "description": "Conventional path of the source inside a world package. The path sets how it is read: a `.yaml` or `.yml` file, a `.json` file, or a media directory (a path without an extension) whose index this namespace receives. `<dir>/*.<ext>` names every such file of a directory, each one a source, read in file-name order. It may not name a path the kernel or the package itself owns: `world.yaml`, `WORLD.md`, `data/world.data.yaml`, `data/dimensions.yaml`, `data/lorebook.yaml`, `characters/characters.json`, `media/gallery.json`, `media/portraits.json`, `media/scenes.json` or `media/gallery/`, nor an edition of one.",
                         "examples": ["data/quests.yaml", "data/rules/*.yaml"]
                       },
                       "key": {
                         "type": "string",
                         "minLength": 1,
-                        "description": "Field that gives each record a stable key. Media sources use `filename`."
+                        "description": "Field that gives each record a stable key. Defaults to `id`, and to `filename` for a media directory."
                       },
                       "localeArrayKeys": {
                         "minItems": 1,
@@ -808,7 +796,7 @@
                         "description": "`true` also projects each record into the lorebook (`+lorebook`)."
                       }
                     },
-                    "required": ["kind", "path"],
+                    "required": ["path"],
                     "additionalProperties": false,
                     "description": "The world data source an author declares to supply this content."
                   },
@@ -1032,11 +1020,6 @@
     "runtime": {
       "type": "object",
       "properties": {
-        "type": {
-          "type": "string",
-          "enum": ["agent", "function"],
-          "description": "`agent` drives model tool calls from the prompt body. `function` runs a JavaScript handler."
-        },
         "description": {
           "anyOf": [
             {
@@ -1134,7 +1117,7 @@
                       "contract": {
                         "type": "string",
                         "pattern": "^[a-z][a-z0-9.-]*@[1-9][0-9]*$",
-                        "description": "Contract ID. It must be listed in the package's `requires` or `optional`."
+                        "description": "Contract ID. List it in the package's `requires` when a provider must be active; otherwise the runtime uses it when one is."
                       },
                       "cardinality": {
                         "type": "string",
@@ -1182,7 +1165,7 @@
                           "contract": {
                             "type": "string",
                             "pattern": "^[a-z][a-z0-9.-]*@[1-9][0-9]*$",
-                            "description": "Contract ID. This runtime runs after the contract's active providers; the contract does not have to be listed in `requires` or `optional`."
+                            "description": "Contract ID. This runtime runs after the contract's active providers; it never activates a provider."
                           },
                           "cardinality": {
                             "type": "string",
@@ -1295,7 +1278,7 @@
                               "contract": {
                                 "type": "string",
                                 "pattern": "^[a-z][a-z0-9.-]*@[1-9][0-9]*$",
-                                "description": "Contract ID. It must be listed in the package's `requires` or `optional`."
+                                "description": "Contract ID. List it in the package's `requires` when a provider must be active; otherwise the runtime uses it when one is."
                               },
                               "cardinality": {
                                 "type": "string",
@@ -1398,7 +1381,7 @@
                 "contract": {
                   "type": "string",
                   "pattern": "^[a-z][a-z0-9.-]*@[1-9][0-9]*$",
-                  "description": "Contract this runtime's output publishes. It must be listed in the package's `provides`."
+                  "description": "Contract this runtime's output publishes. The package provides it; `provides` needs no entry for it."
                 },
                 "schema": {
                   "type": "string",
@@ -1600,7 +1583,7 @@
             }
           },
           "additionalProperties": false,
-          "description": "Settings of an `agent` runtime. Not allowed on a `function` runtime."
+          "description": "Settings of an agent runtime, the kind of a runtime without a `function` block: it drives model tool calls from the prompt body."
         },
         "function": {
           "type": "object",
@@ -1608,7 +1591,7 @@
             "handler": {
               "type": "string",
               "minLength": 1,
-              "description": "Path of the handler module. The module default-exports the handler function."
+              "description": "Path of the handler module, relative to this manifest. The module default-exports the handler function. Defaults to `./handler.js` next to the manifest when that file exists."
             },
             "model": {
               "type": "string",
@@ -1658,9 +1641,8 @@
               "description": "Tools the handler may call through `ctx.tools.call`."
             }
           },
-          "required": ["handler"],
           "additionalProperties": false,
-          "description": "Settings of a `function` runtime. Required when `type` is `function`."
+          "description": "Makes this a function runtime, which runs a JavaScript handler instead of a model. `function: {}` takes every default. Not allowed with `agent`."
         },
         "guard": {
           "type": "string",
@@ -1779,11 +1761,10 @@
           "description": "Declared permission upper bounds."
         }
       },
-      "required": ["type"],
       "additionalProperties": false,
       "description": "The single inline runtime of this package; its prompt is the body of this file. Packages with several runtimes use `runtimes/<id>/RUNTIME.md` instead."
     }
   },
-  "required": ["id", "kind", "description"],
+  "required": ["description"],
   "additionalProperties": false
 }

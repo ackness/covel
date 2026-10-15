@@ -15,10 +15,9 @@ Hook 不写玩法。一条玩法规则应该放在 runtime 或工具里。
 
 ## Declaring and registering
 
-分两步：根 `PLUGIN.md` 列出要用的事件，`entry` 模块注册 handler。两边必须一致，否则插件加载失败。一条声明可以对应多个 handler，每个 handler 调用一次 `covel.on()`。
+分两步：根 `PLUGIN.md` 列出要用的事件，`entry` 模块（默认 `server/index.js`）注册 handler。两边必须一致，否则插件加载失败。一条声明可以对应多个 handler，每个 handler 调用一次 `covel.on()`。
 
 ```yaml
-entry: ./server/index.js
 contributes:
   hooks:
     - event: PreToolUse

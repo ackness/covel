@@ -1,23 +1,18 @@
 ---
-id: pregame
 kind: core
-version: 0.0.36
+version: 0.0.37
 displayName: Pre-Game Setup
 description: >-
   Reads the world details at the start and prepares the first step of the
   adventure.
-tags:
-  - "cost:function"
 author:
   name: Covel Contributors
   url: https://github.com/ackness/covel
 license: MIT
-provides: [session.opening@1]
 contracts:
   session.opening@1:
     schema: ./schemas/opening.schema.json
 runtime:
-  type: function
   schedule:
     stage: setup
     trigger:
@@ -26,8 +21,7 @@ runtime:
     output:
       contract: session.opening@1
       schema: ./schemas/opening.schema.json
-  function:
-    handler: ./handler.js
+  function: {}
 ---
 
 # Pre-Game Initialization Plugin

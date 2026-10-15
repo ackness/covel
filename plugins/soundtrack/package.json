@@ -1,6 +1,5 @@
 {
   "name": "@covel/plugin-soundtrack",
-  "version": "0.0.3",
   "private": true,
   "type": "module",
   "scripts": {

@@ -1,9 +1,7 @@
 ---
-type: function
 description: Write a deterministic test record
 schedule:
   trigger:
     type: manual
-function:
-  handler: ./handler.js
+function: {}
 ---

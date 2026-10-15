@@ -4,8 +4,10 @@
  * Loading leaves such a field out and warns, so a package with a leftover or
  * newer field keeps working; `pnpm validate:plugin` reports the same field as
  * an error. Only a whole field is left out: one at the top of PLUGIN.md, of a
- * RUNTIME.md or of the inline `runtime`, or a whole entry under
- * `contributes` (including UI placements). Every field the host keeps then means exactly what it says.
+ * RUNTIME.md or of the inline `runtime`, a whole entry under `contributes`
+ * (including UI placements), or a field of a data namespace's
+ * `authoring.source`. Every field the host keeps then means exactly what it
+ * says.
  *
  * Two kinds of unknown key still reject the manifest, because leaving them
  * out could widen what the author declared:
@@ -25,7 +27,6 @@ interface UnknownKeyIssue {
 
 /** Runtime fields that limit what a runtime does or when it runs. */
 const GUARDED_RUNTIME_FIELDS = [
-  "type",
   "guard",
   "permissions",
   "effects",
@@ -46,7 +47,6 @@ const OPEN_LOCATIONS = {
         "covel",
         "provides",
         "requires",
-        "optional",
         "conflicts",
         "permissions",
         "entry",
@@ -56,6 +56,12 @@ const OPEN_LOCATIONS = {
     { path: ["contributes"], guarded: [] },
     // An unsupported placement removes only that panel, never the package.
     { path: ["contributes", "ui"], guarded: [] },
+    // Where world authors put a file is no runtime behaviour; `visibility`
+    // keeps hidden content hidden and is never ignored.
+    {
+      path: ["contributes", "data", "*", "authoring", "source"],
+      guarded: ["path", "key", "visibility"],
+    },
     { path: ["runtime"], guarded: GUARDED_RUNTIME_FIELDS },
   ],
   runtime: [{ path: [], guarded: GUARDED_RUNTIME_FIELDS }],
@@ -73,8 +79,12 @@ export interface UnknownField {
   readonly key: string;
 }
 
+/** `*` in a location stands for any key, such as a data namespace. */
 function samePath(a: readonly PropertyKey[], b: readonly string[]): boolean {
-  return a.length === b.length && a.every((segment, i) => segment === b[i]);
+  return (
+    a.length === b.length &&
+    a.every((segment, i) => b[i] === "*" || segment === b[i])
+  );
 }
 
 /** Edit distance with adjacent transpositions, on lower-cased names. */
@@ -131,7 +141,7 @@ export function ignorableUnknownFields(
   if (!open) return [];
   return (issue.keys ?? [])
     .filter((key) => !misspelledGuardedField(key, open.guarded))
-    .map((key) => ({ at: open.path, key }));
+    .map((key) => ({ at: issue.path.map(String), key }));
 }
 
 /**

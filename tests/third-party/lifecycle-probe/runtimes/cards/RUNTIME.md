@@ -1,5 +1,4 @@
 ---
-type: agent
 description: Generate reply cards for the test story
 schedule:
   stage: post-turn

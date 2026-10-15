@@ -10,8 +10,7 @@ When a plugin has several runtimes, each runtime lives in its own folder under `
 
 ```text
 fact-index/
-├── PLUGIN.md                    package identity, capabilities, shared declarations
-├── package.json
+├── PLUGIN.md                    package description, capabilities, shared declarations
 ├── README.md
 ├── server/index.js              optional: entry file
 ├── schemas/facts.schema.json
@@ -27,10 +26,7 @@ fact-index/
 
 ```yaml
 ---
-id: fact-index
-kind: plugin
 description: Extracts and retrieves narrative facts.
-provides: [facts.index@1, facts.query@1]
 requires: [narrative-engine@1]
 contributes:
   data:
@@ -44,7 +40,6 @@ contributes:
 
 ```yaml
 ---
-type: agent
 schedule: { stage: post-turn }
 io:
   inputs:
@@ -59,17 +54,15 @@ io:
 Extract only the facts that `runtime-inputs.narrative.value` states.
 ```
 
-`runtimes/query/RUNTIME.md` is a function that is triggered manually:
+`runtimes/query/RUNTIME.md` is a function that is triggered manually. It has a `function` block, and its code is in `handler.js` in the same folder:
 
 ```yaml
 ---
-type: function
 schedule:
   trigger: { type: manual }
 io:
   output: { contract: facts.query@1 }
 function:
-  handler: ./handler.js
   timeoutMs: 90000
 ---
 ```
@@ -78,8 +71,7 @@ What is new here:
 
 | This part                   | Meaning                                                                                                                                                                |
 | --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `provides`                  | The capabilities this plugin offers to others. Other plugins can `requires` them.                                                                                      |
-| `io.output.contract`        | The output of this runtime is the content of this capability. It must appear in `provides`.                                                                            |
+| `io.output.contract`        | The output of this runtime is the content of this capability. The plugin then provides it, and other plugins can `requires` it.                                        |
 | `io.output.schema`          | The shape the output must match. If it does not match, this run fails.                                                                                                 |
 | `io.output.recordAs`        | Saves the output under a name. Later turns can read it with `scope: committed`.                                                                                        |
 | `schedule.manual.execution` | Left out, it is `sync`: the caller waits for it to finish. `background` moves it to the background. See [Background work and failures](#background-work-and-failures). |
@@ -87,6 +79,7 @@ What is new here:
 Rules:
 
 - Within one plugin, two runtimes cannot output the same capability.
+- The capabilities a plugin provides are the `io.output.contract` of its runtimes; you do not write them in `provides`. Write in `provides` only a capability that no runtime outputs (for example, one a service in the entry file provides).
 - Paths are relative to the file they appear in. `./handler.js` in `RUNTIME.md` is in its own folder. Paths in `PLUGIN.md` start from the package root. No path or symbolic link may point outside the package.
 - `RUNTIME.md` cannot contain package-wide fields such as `contributes` or `id`. Settings, data declarations, and the tool list are written in `PLUGIN.md`, and all runtimes share them.
 - In a plugin with several runtimes, each agent lists the tools it uses in `agent.tools.plugin`.
@@ -144,20 +137,18 @@ contributes:
           one sentence.
         example: ./examples/facts.json
         source:
-          kind: yaml
           path: data/facts.yaml
-          key: id
 ```
 
-| Field        | Meaning                                                                                                                                                                                                          |
-| ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `title`      | The name of this kind of content, shown to authors                                                                                                                                                               |
-| `hint`       | How to write good records of this kind. Use short, clear English sentences.                                                                                                                                      |
-| `summary`    | One sentence for players. The in-app authoring screen uses it as the option description.                                                                                                                         |
-| `example`    | A valid example (JSON). It is checked against the `schema` above.                                                                                                                                                |
-| `source`     | The agreed location of this content in the world package: `kind`, `path`, `key`, and optionally `visibility: hidden` and `lorebook: true`. Media folders such as images use `kind: media`.                       |
-| `references` | Which values in a record are the `id` of a character attribute of the world. `pnpm validate:world` checks them before a session starts. For how to write it, see the [plugin reference](../reference/plugins.md) |
-| `generate`   | Allows the in-app world generator to create this content from only `hint` and `example`. See below.                                                                                                              |
+| Field        | Meaning                                                                                                                                                                                                                                        |
+| ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `title`      | The name of this kind of content, shown to authors                                                                                                                                                                                             |
+| `hint`       | How to write good records of this kind. Use short, clear English sentences.                                                                                                                                                                    |
+| `summary`    | One sentence for players. The in-app authoring screen uses it as the option description.                                                                                                                                                       |
+| `example`    | A valid example (JSON). It is checked against the `schema` above.                                                                                                                                                                              |
+| `source`     | The agreed location of this content in the world package: `path`, and optionally `key` (default `id`), `visibility: hidden` and `lorebook: true`. The file format comes from `path`: `.yaml`, `.json`, or a media folder without an extension. |
+| `references` | Which values in a record are the `id` of a character attribute of the world. `pnpm validate:world` checks them before a session starts. For how to write it, see the [plugin reference](../reference/plugins.md)                               |
+| `generate`   | Allows the in-app world generator to create this content from only `hint` and `example`. See below.                                                                                                                                            |
 
 `title` is a label, so the manifest is in English and the Chinese goes in `locales/zh.yaml`:
 
@@ -251,7 +242,6 @@ A function that runs in the background and calls a model itself must declare whi
 
 ```yaml
 function:
-  handler: ./handler.js
   model: memory
 ```
 
@@ -398,7 +388,7 @@ homepage: https://example.com/fact-index
 
 | Field      | Meaning                                                                                                                                                                                       |
 | ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `version`  | The plugin's version. It must be the same as `version` in `package.json`. Validation checks this.                                                                                             |
+| `version`  | The plugin's version. It is written only here; `package.json` has no version.                                                                                                                 |
 | `covel`    | The range of Covel versions it works with. A Covel outside that range does not install or load it. For the syntax, see [Collections · Version ranges](../ship/collections.md#version-ranges). |
 | `author`   | The author's name, home page, a note written for players, and a few links. Links must be `https`.                                                                                             |
 | `license`  | The license                                                                                                                                                                                   |
@@ -415,7 +405,7 @@ Explain these things clearly: what the player can see, the inputs and outputs, t
 
 ### Checking what is in the package
 
-- `package.json` has `"type": "module"`.
+- When there is a `package.json`, it has `"type": "module"`. A plugin may have none.
 - A plugin in the user directory must run on its own, without depending on `npm install`.
 - Do not include secrets, generated data, or paths from your own computer.
 
@@ -443,7 +433,7 @@ The key things your tests should cover: the boundaries of the data shape, not be
 | ------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------- |
 | Validation reports `inline runtime and runtimes/ cannot coexist`         | `PLUGIN.md` still has `runtime:`. Remove it from a package that has several runtimes.                      |
 | Validation reports `contributes.hooks.0: Invalid input: expected object` | A hook must be written as `- event: PreToolUse`, not as a plain string.                                    |
-| Validation reports `output contract … is not declared in root provides`  | Add this capability to `provides` in `PLUGIN.md`.                                                          |
+| Validation reports `ambiguous output contract …`                         | Two runtimes output the same capability. Each capability is output by one runtime only.                    |
 | The world package's data is not imported                                 | The file is not at `source.path`, or another plugin declares the same path, or this plugin is not enabled. |
 | `describe:authoring --check` reports an example as invalid               | The `example` file does not match the `schema`.                                                            |
 | A background runtime stays in the queue                                  | It calls a model but does not declare `function.model`.                                                    |

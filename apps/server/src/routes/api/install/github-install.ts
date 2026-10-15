@@ -24,16 +24,13 @@ import {
   digestEntries,
   downloadGithubEntries,
   findPluginDirectories,
+  packageDirectoryName,
   parseGithubUrl,
   resolveGithubRevision,
   selectPackageEntries,
 } from "./github-source.js";
 
-import {
-  findWorldDirectories,
-  inspectWorldBundle,
-  worldPackageName,
-} from "./github-world.js";
+import { findWorldDirectories, inspectWorldBundle } from "./github-world.js";
 import { activateWorldPackage } from "./worlds.js";
 import { requireAccess } from "../../../host-profile.js";
 
@@ -46,13 +43,13 @@ export function createGithubInstallRoutes(kind: "plugin" | "world") {
     bundle: readonly ExtractedEntry[],
     reserved: ReadonlySet<string>,
     source: { readonly repository: string; readonly path: string },
-  ) =>
-    kind === "world"
-      ? inspectWorldBundle(
-          bundle,
-          worldPackageName(source.repository, source.path),
-        )
-      : inspectBundle(bundle, reserved);
+  ) => {
+    // A package that writes no `id` takes the name of its directory.
+    const directoryName = packageDirectoryName(source.repository, source.path);
+    return kind === "world"
+      ? inspectWorldBundle(bundle, directoryName)
+      : inspectBundle(bundle, reserved, directoryName);
+  };
   githubPluginRoutes.use("*", async (c, next) => {
     if (kind === "world") {
       const denied = requireAccess(c, "world.write");

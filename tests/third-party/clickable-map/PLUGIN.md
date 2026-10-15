@@ -1,9 +1,7 @@
 ---
-id: clickable-map
-kind: plugin
+version: 1.0.0
 displayName: Clickable Map
 description: "Example plugin: a self-drawn map; select a place to travel there."
-entry: ./server/index.js
 contributes:
   events:
     - topic: map.opened

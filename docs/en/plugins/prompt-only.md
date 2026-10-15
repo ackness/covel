@@ -1,6 +1,6 @@
 # Plugins with only a prompt
 
-This page walks you through making a plugin that needs no code: one `PLUGIN.md` that holds a few lines of configuration and a prompt. When you finish, you have a plugin called "observation" that adds one line about the surroundings after each turn's story. You also know how to add a setting, a translation, memory, and built-in tools to it.
+This page walks you through making a plugin that needs no code: one `PLUGIN.md` that holds a few lines of configuration and a prompt. You write the smallest version first, then add to it step by step. When you finish, you have a plugin called "observation" that adds one line about the surroundings after each turn's story. You also know how to add a setting, a translation, memory, and built-in tools to it.
 
 This approach fits a need where you want the model to do one more thing, and that thing needs only the tools Covel already has. When you need to write your own tool or function, read [Plugins with local code](./local-code.md).
 
@@ -23,18 +23,52 @@ When you finish this page, the folder holds these files:
 observation/
 ├── PLUGIN.md          config and prompt
 ├── PLUGIN.zh.md       optional: the Simplified Chinese version of the prompt
-├── package.json
-├── README.md
+├── README.md          optional: notes for the people who maintain it
 └── locales/
     └── zh.yaml        optional: Chinese for the name and settings
 ```
 
-## 2. Write `PLUGIN.md`
+Only `PLUGIN.md` is required. No `package.json` is needed.
+
+## 2. Write the smallest `PLUGIN.md`
 
 ```yaml
 ---
-id: observation
-kind: plugin
+description: Adds a short observation after each turn.
+runtime:
+  schedule: { stage: post-turn }
+---
+Write one short observation grounded in the latest narrative.
+```
+
+The configuration sits between the two `---` lines. The prompt for the model comes after them.
+
+| This part                   | What it means                                                                                                                                    |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `description`               | One sentence on what the plugin does. The plugin list on the session-prep screen shows it                                                        |
+| `schedule.stage: post-turn` | Runs after the story of each turn                                                                                                                |
+| The body                    | The prompt for the model                                                                                                                         |
+| Fields left out             | Covel works them out: the ID is the folder name; there is no `function` block, so it is an agent driven by the model, and the body is its prompt |
+
+Validate it:
+
+```bash
+pnpm validate:plugin ~/.covel/plugins/observation
+```
+
+```text
+✓ Static package validation: /Users/you/.covel/plugins/observation
+  languages: text en; instructions en
+```
+
+This is already a plugin that works. But it does not read this turn's story, so the model sees only the conversation history. The next step lets it read the story text and gives the player a setting.
+
+## 3. Read the story of this turn
+
+Change `PLUGIN.md` to:
+
+```yaml
+---
 displayName: Observation
 description: Adds a short observation grounded in the latest narrative.
 requires: [narrative-engine@1]
@@ -47,7 +81,6 @@ contributes:
       min: 1
       max: 4
 runtime:
-  type: agent
   schedule:
     stage: post-turn
   io:
@@ -63,31 +96,18 @@ Use at most {{ userSettings.length }} sentences.
 You must not add an event, a character, an item or a decision that the narrative did not state.
 ```
 
-The configuration sits between the two `---` lines. The prompt for the model comes after them.
-
 | This part                        | What it means                                                                                                                                                                                                                 |
 | -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `id`                             | Must be the same as the folder name                                                                                                                                                                                           |
+| `displayName`                    | The name the player sees                                                                                                                                                                                                      |
 | `requires: [narrative-engine@1]` | Needs a plugin that writes the story. When this plugin is enabled, Covel makes sure one is present                                                                                                                            |
 | `contributes.settings`           | Gives the player one setting: the most sentences to write. The default is 2                                                                                                                                                   |
-| `runtime.type: agent`            | A runtime driven by the model. Its body is its prompt                                                                                                                                                                         |
 | `schedule.stage: post-turn`      | Runs after the story of each turn                                                                                                                                                                                             |
 | `io.inputs.narrative`            | Reads the story text of this turn. The prompt refers to it as `runtime-inputs.narrative.value`                                                                                                                                |
 | Fields left out                  | Take their defaults: if the turn has no story (the narrative failed), this does not run; its output is the plugin's result, not story text; it uses the `plugin` model role. See [Defaults](../reference/plugins.md#defaults) |
 
-Next, write two small files. `package.json`:
+Next, write a `README.md` for the people who maintain the plugin. It says what the plugin does, what the player can see, and which settings it has. A single title line is enough to start. Before you share the plugin with others, add a `version` to the configuration; see [Package](../ship/package.md).
 
-```json
-{
-  "name": "observation",
-  "version": "0.1.0",
-  "type": "module"
-}
-```
-
-`README.md` is for the people who maintain the plugin. It says what the plugin does, what the player can see, and which settings it has. A single title line is enough to start.
-
-## 3. Validate
+## 4. Validate
 
 ```bash
 pnpm validate:plugin ~/.covel/plugins/observation
@@ -100,7 +120,7 @@ pnpm validate:plugin ~/.covel/plugins/observation
 
 The second line means that the interface text is only in English, and the prompt is only in English. The next two steps add Chinese.
 
-## 4. Add a Chinese name
+## 5. Add a Chinese name
 
 Write the name, description, and labels in the configuration in English. Put the Chinese in `locales/zh.yaml`. Its structure matches the configuration in `PLUGIN.md`, and you write only the items to translate:
 
@@ -116,7 +136,7 @@ PLUGIN.md:
 
 Items in a list are matched by `key`. Other languages work the same way: add a `locales/<language>.yaml`.
 
-## 5. Add a Chinese prompt (optional)
+## 6. Add a Chinese prompt (optional)
 
 You don't need it. Games in every language read the English prompt, and the model still writes its output in the language of the game.
 
@@ -142,7 +162,7 @@ Validate again. The second line now reads:
   languages: text en, zh; instructions en, zh
 ```
 
-## 6. Run offline
+## 7. Run offline
 
 ```bash
 pnpm test:runtime -- observation --pretty
@@ -163,7 +183,7 @@ This plugin has no test cases, so the command runs it once with a fake model, to
 
 The fake model does not write a real observation. To see how the model actually performs, play a game.
 
-## 7. Run it in a game
+## 8. Run it in a game
 
 Start `pnpm dev`. Then do the same as the last step of [your first plugin](./first-plugin.md): on the session-prep screen, expand "Customize plugins and advanced settings", select `observation`, click "Start Game", and authorize it when "Authorize plugin action" appears.
 
@@ -277,15 +297,15 @@ This section belongs to the whole plugin. When a plugin has several runtimes, a 
 
 ## When it does not work as expected
 
-| Symptom                                              | Cause and fix                                                                                                   |
-| ---------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| Validation reports `id must match plugin directory`  | Change `id` to match the folder name                                                                            |
-| It is not in the plugin list                         | It is not in the user plugins directory, or validation did not pass. Restart the backend after validating       |
-| Selected but did not run                             | Not authorized. Handle the "Authorize plugin action" prompt                                                     |
-| The `plugin` role is reported as unavailable         | In **Settings → LLM → Model Roles**, choose a model for it                                                      |
-| The model says "Saved", but there is no record       | It did not call a tool. Add `plugin-data-set` to `agent.tools.builtin`, and state in the prompt when to call it |
-| In a Chinese game, changing the prompt has no effect | You changed `PLUGIN.md`, but a Chinese game reads `PLUGIN.zh.md`                                                |
-| A setting shows in English in the interface          | There is no entry for it in `locales/zh.yaml`, or its `key` does not match                                      |
+| Symptom                                              | Cause and fix                                                                                                                       |
+| ---------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| Validation reports `id must match plugin directory`  | The written `id` differs from the folder name. Delete `id` (without it, the ID is the folder name), or change it to the folder name |
+| It is not in the plugin list                         | It is not in the user plugins directory, or validation did not pass. Restart the backend after validating                           |
+| Selected but did not run                             | Not authorized. Handle the "Authorize plugin action" prompt                                                                         |
+| The `plugin` role is reported as unavailable         | In **Settings → LLM → Model Roles**, choose a model for it                                                                          |
+| The model says "Saved", but there is no record       | It did not call a tool. Add `plugin-data-set` to `agent.tools.builtin`, and state in the prompt when to call it                     |
+| In a Chinese game, changing the prompt has no effect | You changed `PLUGIN.md`, but a Chinese game reads `PLUGIN.zh.md`                                                                    |
+| A setting shows in English in the interface          | There is no entry for it in `locales/zh.yaml`, or its `key` does not match                                                          |
 
 ## Next steps
 

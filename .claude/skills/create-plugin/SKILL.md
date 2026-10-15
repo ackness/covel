@@ -36,7 +36,7 @@ Without `-t` (or `--with-tools`) the scaffolder writes to the user plugin
 directory (`~/.covel/plugins`), not the repository. See
 [examples](references/example-plugins.md) for packages that show each pattern.
 
-Every mode starts `PLUGIN.md` and `package.json` at `0.1.0`; keep both versions equal when updating. Generated runtime case files include `$schema`; `name` and `runtimeId` are required, and unknown case/expectation/artifact fields fail before execution.
+Every mode starts `PLUGIN.md` at version `0.1.0`; the version lives only there (a `--with-tools` `package.json` has none). The default mode writes no `package.json`: the directory name is the plugin ID, and the loader runs the package's `.js` files as ES modules. Generated runtime case files include `$schema`; `name` and `runtimeId` are required, and unknown case/expectation/artifact fields fail before execution.
 
 The default analyst runs automatically in `post-turn` and consumes the current narrative binding. Function notes remain manual; generate keys through `ctx.random` and timestamps in code.
 
@@ -99,8 +99,11 @@ proposals or handler effects.
 
 ### 5. Package standalone plugins
 
-Standalone packages need `package.json` (`type: module`), the root manifest,
-executable ESM JavaScript, a README, and an authorized license. The installer does
+Standalone packages need the root manifest, executable ESM JavaScript, a README,
+and an authorized license. A `package.json` is optional; when present it says
+`"type": "module"` and carries no `version`. Without an `id` in `PLUGIN.md`, an
+installed package takes the name of its folder (the archive's top-level folder or
+the repository directory), then the `package.json` name. The installer does
 not install npm dependencies or run build scripts, and it rejects nonempty
 `dependencies`. The host provides `@covel/plugin-handlers-utils` and `zod` to
 every plugin: import them directly and list them only under `devDependencies`.

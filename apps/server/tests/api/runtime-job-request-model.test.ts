@@ -110,7 +110,6 @@ kind: plugin
 description: Detached job that calls a model from its handler
 version: 1.0.0
 runtime:
-  type: function
   schedule:
     stage: post-turn
     trigger:
@@ -283,7 +282,6 @@ kind: plugin
 description: Detached job calling a named slot from its handler
 version: 1.0.0
 runtime:
-  type: function
   schedule:
     stage: post-turn
     trigger:

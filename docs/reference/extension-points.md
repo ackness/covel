@@ -11,12 +11,11 @@
 分两步，和工具、Hook 一样：
 
 1. 在根 `PLUGIN.md` 的 `contributes.extensions` 里声明 `{point, id}`。
-2. 在 `entry` 里用相同的 `{point, id}` 调用 `covel.provideExtension()`。
+2. 在 `entry` 模块（默认 `server/index.js`）里用相同的 `{point, id}` 调用 `covel.provideExtension()`。
 
 加载器两边都核对：声明了没注册，或注册了没声明，插件都加载失败。
 
 ```yaml
-entry: ./server/index.js
 contributes:
   extensions:
     - point: prompt.segment@1
@@ -66,7 +65,7 @@ export default function (covel) {
 
 ## 依赖一个扩展点
 
-根 `requires` / `optional` 可以写扩展点或 UI 槽位。这表示“会话里要有人实现它”。规则如下：
+根 `requires` 可以写扩展点或 UI 槽位。这表示“会话里要有人实现它”。规则如下：
 
 - 解析器从 `contributes.extensions[].point` 和 `ui.slot@1` 的 `slot` 认出提供者。
 - 非空的 `contributes.prompt` 算作实现了 `prompt.segment@1`（由宿主代为实现）。

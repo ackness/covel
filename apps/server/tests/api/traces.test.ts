@@ -73,7 +73,7 @@ function makeEntry(
   overrides?: Partial<PluginRegistryEntry>,
 ): PluginRegistryEntry {
   const parsed: ParsedRuntimeMd = {
-    runtime: { type: "function" },
+    runtime: { function: {} },
     manifest: {
       name: "image-plugin",
       pluginId: "image-plugin",

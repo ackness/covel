@@ -16,7 +16,7 @@ async function fixture(hook: string, event: string) {
   roots.push(root);
   const files = {
     "probe/package.json": '{"type":"module"}',
-    "probe/PLUGIN.md": `---\nid: probe\nkind: plugin\ndescription: Probe\nruntime:\n  type: function\n  schedule: {trigger: {type: manual}}\n  function: {handler: ./handler.js}\n---\n`,
+    "probe/PLUGIN.md": `---\nid: probe\nkind: plugin\ndescription: Probe\nruntime:\n  schedule: {trigger: {type: manual}}\n  function: {handler: ./handler.js}\n---\n`,
     "probe/handler.js":
       'export default async ctx => { await ctx.pluginData.set("notes", "current", "saved"); return {outcome:"success"}; };',
     "guard/package.json": '{"type":"module"}',
@@ -79,7 +79,7 @@ it("executes response hooks before publishing agent output", async () => {
   );
   await writeFile(
     path.join(root, "probe/PLUGIN.md"),
-    "---\nid: probe\nkind: plugin\ndescription: Probe\nruntime:\n  type: agent\n  schedule: {trigger: {type: manual}}\n  io: {visibility: story}\n---\n",
+    "---\nid: probe\nkind: plugin\ndescription: Probe\nruntime:\n  schedule: {trigger: {type: manual}}\n  io: {visibility: story}\n---\n",
     "utf8",
   );
   const report = await runRuntimeDebug({

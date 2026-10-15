@@ -1,7 +1,6 @@
 ---
-id: world-time
 kind: core
-version: 0.0.3
+version: 0.0.4
 displayName: World Time
 description: >-
   Tracks world-defined calendars, phases and time direction, settling each story
@@ -10,19 +9,13 @@ author:
   name: Covel Contributors
   url: https://github.com/ackness/covel
 license: MIT
-provides:
-  - world-time-evolution@1
-  - world-time-context@1
 requires:
   - narrative-engine@1
-optional:
-  - world-time-context@1
 contracts:
   world-time-context@1:
     schema: ./schemas/world-time-context.schema.json
   world-time-evolution@1:
     schema: ./schemas/world-time-evolution.schema.json
-entry: ./server/index.js
 contributes:
   data:
     definitions:
@@ -42,9 +35,7 @@ contributes:
         example: ./examples/time-definition.json
         generate: offer
         source:
-          kind: yaml
           path: data/time.yaml
-          key: id
   commands:
     - name: time
       description: Show recorded world time without advancing the turn.

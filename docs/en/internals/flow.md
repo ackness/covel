@@ -567,12 +567,12 @@ plugins/my-plugin/
 
 **The root manifest `PLUGIN.md`** describes the whole package:
 
-| Field                                              | What it does                                                                   |
-| -------------------------------------------------- | ------------------------------------------------------------------------------ |
-| `id`, `kind`                                       | Who the package is                                                             |
-| `provides` / `requires` / `optional` / `conflicts` | The contracts it provides, needs, uses optionally, or cannot coexist with      |
-| `contracts`                                        | The schemas of the contracts                                                   |
-| `contributes`                                      | The tools, RPC actions, services, extensions, settings, data, and UI it brings |
+| Field                                 | What it does                                                                        |
+| ------------------------------------- | ----------------------------------------------------------------------------------- |
+| `id`, `kind`                          | Who the package is (the directory name and `plugin` when left out)                  |
+| `provides` / `requires` / `conflicts` | The contracts it provides (runtime outputs included), needs, or cannot coexist with |
+| `contracts`                           | The schemas of the contracts                                                        |
+| `contributes`                         | The tools, RPC actions, services, extensions, settings, data, and UI it brings      |
 
 - `contributes.commands` is the metadata for slash commands. Its action must also be declared in `contributes.actions`.
 - What the `entry` module actually registers must match the root manifest.

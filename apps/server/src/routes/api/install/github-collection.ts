@@ -46,21 +46,15 @@ import {
   digestEntries,
   downloadGithubEntries,
   findPluginDirectories,
+  packageDirectoryName,
   parseGithubUrl,
   resolveGithubRevision,
   selectPackageEntries,
   type GithubLocation,
 } from "./github-source.js";
-import {
-  findWorldDirectories,
-  inspectWorldBundle,
-  worldPackageName,
-} from "./github-world.js";
+import { findWorldDirectories, inspectWorldBundle } from "./github-world.js";
 import { withPackageMutation } from "./package-files.js";
-import {
-  readPluginFrontmatter,
-  validatePluginBundle,
-} from "./plugin-bundle.js";
+import { validatePluginBundle } from "./plugin-bundle.js";
 import {
   collectUpload,
   createCollectionExtractionBudget,
@@ -107,14 +101,14 @@ function discover(find: () => string[]): string[] {
   }
 }
 
-/** Read from the manifest the bundle inspector has already validated. */
-const pluginFacts = (entries: readonly ExtractedEntry[]) =>
+/** Read from the manifest the bundle validation resolves. */
+const pluginFacts = (
+  entries: readonly ExtractedEntry[],
+  reserved: ReadonlySet<string>,
+  directory: string | undefined,
+) =>
   collectionPluginFacts(
-    readPluginFrontmatter(
-      entries
-        .find((entry) => entry.relativePath === "PLUGIN.md")!
-        .content.toString("utf8"),
-    ),
+    validatePluginBundle(entries, reserved, directory).manifest.plugin,
   );
 const worldFacts = (entries: readonly ExtractedEntry[], packageName: string) =>
   collectionWorldFacts(
@@ -359,16 +353,17 @@ githubCollectionRoutes.post("/github/preview", async (c) => {
         continue;
       }
       const bundle = selectPackageEntries(member.archive, member.directory);
-      const packageName = worldPackageName(
-        repositoryUrl(member.location),
+      // A package that writes no `id` takes this name, plugin or world.
+      const directoryName = packageDirectoryName(
+        member.location.repo,
         member.directory,
       );
       let summary: Awaited<ReturnType<typeof inspectWorldBundle>>;
       try {
         summary =
           member.kind === "world"
-            ? await inspectWorldBundle(bundle, packageName)
-            : inspectBundle(bundle, reserved);
+            ? await inspectWorldBundle(bundle, directoryName)
+            : inspectBundle(bundle, reserved, directoryName);
       } catch (error) {
         // A manifest names its members, so a broken one breaks the collection.
         // A directory scan merely found this package: say why it is left out
@@ -379,8 +374,9 @@ githubCollectionRoutes.post("/github/preview", async (c) => {
         );
         continue;
       }
-      if (member.kind === "world") worlds.push(worldFacts(bundle, packageName));
-      else plugins.push(pluginFacts(bundle));
+      if (member.kind === "world")
+        worlds.push(worldFacts(bundle, directoryName));
+      else plugins.push(pluginFacts(bundle, reserved, directoryName));
       const preview = {
         ...summary,
         source: {
@@ -480,9 +476,19 @@ githubCollectionRoutes.post("/github/batch", async (c) => {
         kind === "world"
           ? await inspectWorldBundle(
               entries,
-              worldPackageName(preview.source.repository, preview.source.path),
+              packageDirectoryName(
+                preview.source.repository,
+                preview.source.path,
+              ),
             )
-          : inspectBundle(entries, reserved);
+          : inspectBundle(
+              entries,
+              reserved,
+              packageDirectoryName(
+                preview.source.repository,
+                preview.source.path,
+              ),
+            );
       if (summary.id !== preview.id)
         throw httpError(409, "Package identity changed");
       if (prepared.some((item) => item.kind === kind && item.id === summary.id))
@@ -544,16 +550,21 @@ githubCollectionRoutes.post("/collection", async (c) => {
             `A collection ZIP must contain every member; ${member.repository} is pinned in another repository`,
           );
         const bundle = selectPackageEntries(entries, member.path);
+        // A package that writes no `id` takes the name of its directory.
+        const packageName = packageDirectoryName("", member.path);
         if (kind === "world") {
           const denied = requireAccess(c, "world.write");
           if (denied) return denied;
-          const packageName = worldPackageName("", member.path);
           const { id } = await inspectWorldBundle(bundle, packageName);
           worlds.push(worldFacts(bundle, packageName));
           prepared.push({ kind, id, entries: bundle });
         } else {
-          const { pluginId } = validatePluginBundle(bundle, reserved);
-          plugins.push(pluginFacts(bundle));
+          const { pluginId, manifest } = validatePluginBundle(
+            bundle,
+            reserved,
+            packageName || undefined,
+          );
+          plugins.push(collectionPluginFacts(manifest.plugin));
           prepared.push({ kind, id: pluginId, entries: bundle });
         }
       }

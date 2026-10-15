@@ -1,19 +1,14 @@
 ---
-id: memory
 kind: core
-version: 0.0.39
+version: 0.0.40
 displayName: Story Memory
 description: >-
   Shows what the story remembers, including plot, scene, relationships, and hero
   status.
-tags:
-  - "cost:llm"
-  - "ui:right-panel"
 author:
   name: Covel Contributors
   url: https://github.com/ackness/covel
 license: MIT
-entry: ./server/index.js
 contributes:
   extensions:
     - point: prompt.segment@1
@@ -41,9 +36,7 @@ contributes:
         example: ./examples/blocks.json
         generate: default
         source:
-          kind: json
           path: data/memory-blocks.json
-          key: id
           localeArrayKeys: [label]
     blocks:
       schema: ./schemas/blocks.schema.json

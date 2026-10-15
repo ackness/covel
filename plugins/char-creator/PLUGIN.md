@@ -1,16 +1,13 @@
 ---
-id: char-creator
 kind: core
-version: 0.0.38
+version: 0.0.39
 displayName: Character Creator
 description: >-
   Helps create your hero and keeps important character details up to date during
   the story.
 tags:
   - "data:characters"
-  - "cost:llm"
   - "data:world-data"
-  - "ui:right-panel"
 author:
   name: Covel Contributors
   url: https://github.com/ackness/covel
@@ -22,7 +19,6 @@ requires:
   - session.opening@1
   - world-data-provider@1
   - narrative-engine@1
-entry: ./server/index.js
 contributes:
   extensions:
     - point: prompt.segment@1

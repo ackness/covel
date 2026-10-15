@@ -16,7 +16,6 @@ function compile(runtime: RuntimeAuthoringManifest) {
 describe("defaults the compiler fills in", () => {
   it("makes a runtime without a visibility a system runtime", () => {
     const manifest = compile({
-      type: "function",
       function: { handler: "./handler.js" },
       schedule: { stage: "post-turn" },
     });
@@ -30,7 +29,6 @@ describe("defaults the compiler fills in", () => {
 
   it("gives a system agent the plugin slot and the system loop limits", () => {
     const manifest = compile({
-      type: "agent",
       schedule: { stage: "post-turn" },
     });
     expect(manifest).toMatchObject({
@@ -49,7 +47,6 @@ describe("defaults the compiler fills in", () => {
 
   it("gives a story agent the story slot and the story loop limits", () => {
     const manifest = compile({
-      type: "agent",
       schedule: { stage: "narrative" },
       io: { visibility: "story" },
     });
@@ -64,7 +61,6 @@ describe("defaults the compiler fills in", () => {
 
   it("keeps every limit and slot the agent writes", () => {
     const manifest = compile({
-      type: "agent",
       schedule: { stage: "post-turn" },
       agent: {
         model: "utility",
@@ -82,7 +78,6 @@ describe("defaults the compiler fills in", () => {
   it("leaves the trigger out of a runtime that declares none: `auto`", () => {
     expect(
       compile({
-        type: "function",
         function: { handler: "./handler.js" },
         schedule: { stage: "post-turn" },
       }).trigger,
@@ -92,7 +87,6 @@ describe("defaults the compiler fills in", () => {
   it("moves the cadence into an `auto` trigger", () => {
     expect(
       compile({
-        type: "function",
         function: { handler: "./handler.js" },
         schedule: { stage: "post-turn", every: 3, trigger: { startTurn: 2 } },
       }).trigger,

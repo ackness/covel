@@ -616,7 +616,6 @@ describe("runtimeManifestInputSchema (compiled RuntimeManifest)", () => {
   it("is not the authoring format", () => {
     const authored = {
       description: "A sample runtime.",
-      type: "agent",
       schedule: { stage: "post-turn" },
     };
     expect(runtimeAuthoringManifestSchema.safeParse(authored).success).toBe(
@@ -753,4 +752,26 @@ it("runtime-case editor schema rejects misspelled expectations and missing runti
       ],
     }),
   ).toBe(false);
+});
+
+describe("the runtime type comes from the function block", () => {
+  it("reads a runtime without a function block as an agent and one with it as a function", () => {
+    const parse = (value: object) =>
+      runtimeAuthoringManifestSchema.safeParse(value).success;
+    expect(parse({ schedule: { stage: "post-turn" } })).toBe(true);
+    expect(parse({ schedule: { stage: "post-turn" }, function: {} })).toBe(
+      true,
+    );
+    expect(
+      parse({
+        schedule: { stage: "post-turn" },
+        function: {},
+        agent: { model: "utility" },
+      }),
+    ).toBe(false);
+    // `type` is no longer a field.
+    expect(parse({ type: "agent", schedule: { stage: "post-turn" } })).toBe(
+      false,
+    );
+  });
 });

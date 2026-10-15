@@ -73,20 +73,12 @@ export async function runValidateManifest(
         definition.manifests,
         (file) => readFileSync(file, "utf8"),
       );
-      // The installer shows the version in package.json and the host uses the
-      // one in PLUGIN.md. A package that states both must state one version.
-      const declared = definition.packageManifest.plugin.version;
+      // `package.json` is optional; the version is the one in PLUGIN.md.
       const packageJson = await fs
         .readFile(path.join(rootPath, "package.json"), "utf-8")
         .then(
-          (content) =>
-            JSON.parse(content) as { version?: unknown; type?: unknown },
+          (content) => JSON.parse(content) as { type?: unknown },
           () => undefined,
-        );
-      const packaged = packageJson?.version;
-      if (declared && typeof packaged === "string" && declared !== packaged)
-        throw new Error(
-          `${rootPath}: PLUGIN.md version ${declared} differs from package.json version ${packaged}`,
         );
       const moduleProblem =
         packageJson && packageModuleTypeProblem(packageJson);

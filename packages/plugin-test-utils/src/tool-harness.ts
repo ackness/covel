@@ -116,7 +116,6 @@ async function executeAndCommitResults(
       description: "Tool integration test",
     },
     {
-      type: "function",
       schedule: { trigger: { type: "manual" } },
       // loadRuntime below supplies this synthetic handler in memory.
       function: { handler: "./tool-harness.js" },

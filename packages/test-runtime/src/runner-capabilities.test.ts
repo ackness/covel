@@ -49,7 +49,7 @@ async function fixture(
     "probe/package.json": '{"type":"module"}',
     "probe/PLUGIN.md": `---\nid: probe\nkind: plugin\ndescription: Probe\n${mode === "committed" ? "entry: ./entry.js\ncontributes: {tools: [set-schema]}\n" : ""}---\n`,
     "probe/entry.js": schemaTool,
-    "probe/runtimes/root/RUNTIME.md": `---\ntype: function\nfunction: {handler: ./handler.js${mode === "committed" ? ", tools: {plugin: [set-schema]}" : ""}}\nschedule: {trigger: {type: manual}}\n---\n`,
+    "probe/runtimes/root/RUNTIME.md": `---\nfunction: {handler: ./handler.js${mode === "committed" ? ", tools: {plugin: [set-schema]}" : ""}}\nschedule: {trigger: {type: manual}}\n---\n`,
     "probe/runtimes/root/handler.js": `export default async ctx => {
       ${mode === "committed" ? 'await ctx.tools.call("set-schema", {});' : ""}
       return {outcome:"success",effects:{events:[{topic:"root.ready",data:{}}]}};
@@ -58,7 +58,6 @@ async function fixture(
     "support/PLUGIN.md": `---\nid: support\nkind: plugin\ndescription: Support\n${mode === "buffered" ? "entry: ./entry.js\ncontributes: {tools: [set-schema]}\n" : ""}---\n`,
     "support/entry.js": schemaTool,
     "support/runtimes/follower/RUNTIME.md": `---
-type: function
 function:
   handler: ./handler.js
   tools:

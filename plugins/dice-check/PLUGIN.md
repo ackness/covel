@@ -1,27 +1,16 @@
 ---
-id: dice-check
-kind: plugin
-version: 0.0.36
+version: 0.0.37
 displayName: Dice Check
 description: >-
   Dice checks for risky actions — pre-rolled dice pools, rule-based outcomes,
   and visible receipts.
-tags:
-  - "cost:function"
-  - "ui:message-block"
-  - "ui:right-panel"
 author:
   name: Covel Contributors
   url: https://github.com/ackness/covel
 license: MIT
-provides:
-  - action-check@1
-optional:
-  - tabletop-check@1
 contracts:
   action-check@1:
     schema: ./schemas/action-check.schema.json
-entry: ./server/index.js
 contributes:
   events:
     - topic: check.resolved

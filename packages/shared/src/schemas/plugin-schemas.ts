@@ -406,7 +406,7 @@ const pluginRelativeJsPath = z
 
 /** PLUGIN.md `entry`: the package's server entry module. */
 export const pluginEntryPathSchema = pluginRelativeJsPath.describe(
-  "Package-relative path of the server entry module. It registers tools, actions, services, hooks and extensions.",
+  "Package-relative path of the server entry module. It registers tools, actions, services, hooks and extensions. Defaults to `./server/index.js` when that file exists.",
 );
 
 // ── World projections ─────────────────────────────────────

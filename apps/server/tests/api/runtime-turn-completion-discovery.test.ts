@@ -11,7 +11,7 @@ import { buildAvailablePluginList } from "../../src/routes/api/session/plugins.j
 
 function makeEntry(manifests: readonly RuntimeManifest[]): PluginRegistryEntry {
   const parsed: ParsedRuntimeMd[] = manifests.map((manifest) => ({
-    runtime: { type: manifest.runtimeType ?? "agent" },
+    runtime: manifest.runtimeType === "function" ? { function: {} } : {},
     manifest,
     promptTemplate: "",
     rawFrontmatter: {},

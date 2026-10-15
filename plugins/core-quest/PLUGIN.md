@@ -1,25 +1,17 @@
 ---
-id: core-quest
-kind: plugin
-version: 0.0.37
+version: 0.0.38
 displayName: Quest Log
 description: >-
   Automatically registers and advances quests from the narrative so goals,
   progress, and rewards stay visible.
 tags:
   - "data:world-data"
-  - "cost:function"
-  - "ui:right-panel"
-  - "ui:message-block"
 author:
   name: Covel Contributors
   url: https://github.com/ackness/covel
 license: MIT
-provides:
-  - world-ir.vocabulary@1
 requires:
   - world-ir-provider@1
-entry: ./server/index.js
 contributes:
   data:
     quests:
@@ -39,9 +31,7 @@ contributes:
           lore uses.
         example: ./examples/quests.json
         source:
-          kind: yaml
           path: data/quests.yaml
-          key: id
   ui:
     right:
       - ./ui/quest-log-panel.json

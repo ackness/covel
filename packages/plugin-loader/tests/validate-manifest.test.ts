@@ -51,7 +51,6 @@ async function validate(...args: string[]) {
   return { status, stdout, stderr };
 }
 const runtime = {
-  type: "function",
   function: { handler: "./handler.js", timeoutMs: 90_000 },
   schedule: { trigger: { type: "manual" } },
 };
@@ -112,7 +111,7 @@ describe("manifest authoring CLI", () => {
   );
   it.each([
     { runtime: { ...runtime, function: { handler: "./missing.js" } } },
-    { runtime: { type: "function", function: { handler: "./handler.js" } } },
+    { runtime: { function: { handler: "./handler.js" } } },
     {
       runtime: {
         ...runtime,

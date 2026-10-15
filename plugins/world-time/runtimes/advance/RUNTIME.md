@@ -1,5 +1,4 @@
 ---
-type: agent
 description: >-
   Proposes elapsed time from this turn's narrative and world rules for
   deterministic settlement.

@@ -25,7 +25,7 @@ function child(
   fields: Record<string, unknown> = {},
 ) {
   return parseRuntimeMd(
-    `---\n${JSON.stringify({ type: "agent", schedule: { stage: "narrative" }, ...fields })}\n---\n`,
+    `---\n${JSON.stringify({ schedule: { stage: "narrative" }, ...fields })}\n---\n`,
     "probe/runtimes/run/RUNTIME.md",
     root.plugin!,
   );
@@ -108,7 +108,7 @@ describe("package declarations", () => {
     });
     const first = child(root);
     const second = parseRuntimeMd(
-      `---\n${JSON.stringify({ type: "agent", schedule: { stage: "post-turn" } })}\n---\n`,
+      `---\n${JSON.stringify({ schedule: { stage: "post-turn" } })}\n---\n`,
       "probe/runtimes/second/RUNTIME.md",
       root.plugin,
     );
@@ -144,7 +144,7 @@ describe("package declarations", () => {
   );
   it("keeps inline execution separate and validates command action ownership", () => {
     const root = declaration({
-      runtime: { type: "agent", schedule: { stage: "narrative" } },
+      runtime: { schedule: { stage: "narrative" } },
       contributes: { settings: [setting] },
     });
     expect(

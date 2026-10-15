@@ -1,18 +1,13 @@
 ---
-id: soundtrack
-kind: plugin
-version: 0.0.3
+version: 0.0.4
 displayName: Soundtrack
 description: >-
   Plays the background music a world ships, and follows the scene and the mood
   of the story.
-tags:
-  - "cost:function"
 author:
   name: Covel Contributors
   url: https://github.com/ackness/covel
 license: MIT
-entry: ./server/index.js
 contributes:
   extensions:
     - point: prompt.segment@1
@@ -49,9 +44,7 @@ contributes:
           A directory of music files (`.mp3` or `.wav`). The world supplies only
           the files; the index records are produced at import.
         source:
-          kind: media
           path: media/music
-          key: filename
     tracks:
       schema: ./schemas/tracks.schema.json
       description: Track list imported from world packages.
@@ -66,7 +59,6 @@ contributes:
           applies.
         example: ./examples/tracks.json
         source:
-          kind: yaml
           path: media/music.yaml
           key: registryId
 ---

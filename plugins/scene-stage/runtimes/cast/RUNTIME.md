@@ -1,13 +1,11 @@
 ---
-type: function
 description: Tracks who is present in the scene and who is currently speaking.
 schedule:
   stage: pre-turn
 io:
   output:
     contract: scene-cast@1
-function:
-  handler: ./handler.js
+function: {}
 ---
 
 The cast runtime runs before narration each turn. It scores the session's

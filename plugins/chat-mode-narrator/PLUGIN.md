@@ -1,7 +1,5 @@
 ---
-id: chat-mode-narrator
-kind: plugin
-version: 0.0.36
+version: 0.0.37
 displayName: Dialogue Narrator
 description: >-
   Makes the story feel more like character dialogue, suited for play focused on
@@ -10,29 +8,19 @@ tags:
   - "mode:dialogue"
   - "data:characters"
   - "data:relationship-graph"
-  - "cost:llm"
 author:
   name: Covel Contributors
   url: https://github.com/ackness/covel
 license: MIT
-provides:
-  - narrative-engine@1
 requires:
   - scene-cast@1
   - scene-stage@1
   - scene-prompts@1
 conflicts:
   - narrative-engine@1
-optional:
-  - graph-rag@1
-  - action-check@1
-  - world-time-context@1
-  - tabletop-check@1
-  - story-event-cue@1
 contracts:
   narrative-engine@1:
     schema: ./schemas/narrative-engine.schema.json
-entry: ./server/index.js
 contributes:
   extensions:
     - point: prompt.segment@1
@@ -125,7 +113,6 @@ contributes:
     - event: PostLLMResponse
     - event: TurnStop
 runtime:
-  type: agent
   schedule:
     stage: narrative
   io:

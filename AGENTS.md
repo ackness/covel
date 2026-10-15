@@ -237,7 +237,8 @@ bundled `worlds/` and `plugins/`.
 - `prompts/server/` — framework prompt templates; `docker/` — Compose stack and
   image.
 - `templates/` — scaffolds for `pnpm create-plugin`: `plugin-multi-runtime` (the
-  default; a standalone package with no dependencies and no install step) and
+  default; a standalone package with no `package.json`, no dependencies and no
+  install step) and
   `plugin-with-tools` (`--with-tools`; a workspace member under `plugins/` named
   `@covel/plugin-<name>` with `pnpm lint` / `pnpm test`).
   `packages/test-runtime/src/scaffold.test.ts` generates and runs every mode.
@@ -247,9 +248,12 @@ bundled `worlds/` and `plugins/`.
 - `scripts/` — dev, check, and release tooling. `scripts/tests/*.test.mjs` run
   under `node --test` through `pnpm check`.
 
-Each `plugins/<id>/` needs a root `PLUGIN.md` (plain YAML frontmatter; `id` equals
-the directory name), `package.json`, and `README.md`. Optional: `server/` (the
-`entry` module), `runtimes/<id>/RUNTIME.md` with its handler and guard, `schemas/`,
+Each `plugins/<id>/` needs a root `PLUGIN.md` (plain YAML frontmatter; the
+directory name is the ID, so `id` is left out), `package.json` (a workspace member
+with no `version`; the version lives only in `PLUGIN.md`), and `README.md`. A
+plugin outside the repository needs only `PLUGIN.md`. Optional: `server/index.js`
+(the default `entry` module), `runtimes/<id>/RUNTIME.md` with its handler (default
+`./handler.js`) and guard, `schemas/`,
 `tools/`, `hooks/`, `ui/`, `lib/`, `tests/`, `PLUGIN.zh.md` / `RUNTIME.zh.md` (the
 Simplified Chinese prompt body), and `locales/<locale>.yaml` (translations of
 labels, UI text and text in code; the main files are English; `locales/lock.json`
@@ -309,17 +313,23 @@ Input/Event → settle barrier → freeze registry generation → Trigger Router
 → Follow-up Events (may re-enter Router) and detached background jobs
 ```
 
-- **Plugin package**: the root `PLUGIN.md` declares `id`, `kind` (`core` /
-  `plugin`), versioned contracts (`provides` / `requires` / `optional` /
-  `conflicts`, IDs such as `narrative-engine@1`), an optional `entry` module, and
+- **Plugin package**: the root `PLUGIN.md` declares `kind` (`core` / `plugin`,
+  default `plugin`), versioned contracts (`requires` / `conflicts`, and `provides`
+  for contracts no runtime outputs; IDs such as `narrative-engine@1`), an optional
+  `entry` module, and
   package-level `contributes` (tools, actions, services, extensions, hooks,
   settings, data, ui, prompt, …). `entry` registrations and `contributes` must match
-  in both directions or the load fails. The loader compiles this authored format
-  into the internal `RuntimeManifest`; the two are not interchangeable.
+  in both directions or the load fails. The loader works out what an author leaves
+  out (`packages/plugin-loader/src/package-defaults.ts`): the ID from the directory,
+  `entry` from an existing `server/index.js`, `provides` from each runtime's
+  `io.output.contract`, the `ui:*` / `cost:*` tags; a contract a runtime refers to
+  but `requires` does not list is optional. It compiles this authored format into
+  the internal `RuntimeManifest`; the two are not interchangeable.
 - **Runtimes**: one inline `runtime` in the root file, or `runtimes/<id>/RUNTIME.md`
   files — never both, and a package with only entry/UI/extensions may have none.
-  `type` is `agent` (the file body is the system prompt; the LLM drives tool calls)
-  or `function` (a pure JS handler); the other fields are grouped under `schedule`,
+  A runtime with a `function` block is a function (a pure JS handler, default
+  `./handler.js` next to the manifest); one without is an `agent` (the file body is
+  the system prompt; the LLM drives tool calls); the fields are grouped under `schedule`,
   `io`, `agent`, `function`, `guard`, `effects`, `permissions`.
 - **Trigger modes** are the closed enum `auto` / `manual` / `event`
   (`TriggerType` in `packages/shared/src/types/plugin.ts`); `auto` is the default

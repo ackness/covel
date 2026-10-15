@@ -1,5 +1,4 @@
 ---
-type: agent
 description: >-
   Builds the character attribute structure and world reference data once at game
   start.

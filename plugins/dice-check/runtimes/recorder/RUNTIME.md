@@ -1,5 +1,4 @@
 ---
-type: function
 description: >-
   Records dice-check receipts emitted by the narrative, keeping an audit log and
   powering the in-message result block.
@@ -18,8 +17,7 @@ io:
         contract: tabletop-check@1
       select: /receipt
       required: false
-function:
-  handler: ./handler.js
+function: {}
 ---
 
 Dice check receipt recorder (function runtime).

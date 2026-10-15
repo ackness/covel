@@ -17,7 +17,6 @@ The source of the built-in plugins is in [plugins/](../../../plugins/). Optional
 
 ```text
 example/
-├── package.json
 ├── README.md
 ├── PLUGIN.md
 ├── PLUGIN.zh.md
@@ -35,7 +34,8 @@ example/
 
 Layout rules:
 
-- The root `PLUGIN.md` is required. Its `id` must match the package directory name. `framework` is kept for the framework itself and cannot be used as an `id`.
+- The root `PLUGIN.md` is required. The plugin ID is the package directory name; when you write `id`, it must match that name. `framework` is kept for the framework itself and cannot be used as an ID.
+- A `package.json` is optional. Without one, the package's `.js` files load as ES modules. When there is one, it must say `"type": "module"`; the host does not read its `version`, `author`, `license` or `homepage`, which are written only in `PLUGIN.md`.
 - If there is only one runtime, write it in the `runtime` section of the root file. The body of the root file is then its prompt.
 - If there are several runtimes, put each one in `runtimes/<id>/RUNTIME.md`. Its logical ID is `<pluginId>/<id>`. The body of each file is the prompt for that runtime.
 - You cannot mix the two layouts. A child runtime cannot declare package-level contributions.
@@ -66,20 +66,15 @@ How the loader handles these files:
 
 ```yaml
 ---
-id: example
-kind: plugin
 displayName: Example
 description: Records useful facts after each story turn.
-provides: [example.facts@1]
 requires: [narrative-engine@1]
-entry: ./server/index.js
 contributes:
   tools: [save-facts]
   data:
     facts:
       schema: ./schemas/facts.schema.json
 runtime:
-  type: agent
   schedule:
     stage: post-turn
   io:
@@ -95,31 +90,33 @@ runtime:
 Extract facts supported by runtime-inputs.narrative.value, then call save-facts.
 ```
 
+The ID of this package is its directory name, `example`; its entry is `server/index.js` (which registers `save-facts`); the runtime has no `function` block, so it is an agent; and the package provides `example.facts@1` because the runtime outputs it. None of these needs to be written; see [Defaults](#defaults).
+
 <!-- prettier-ignore -->
 | Root field | Meaning |
 | --- | --- |
-| `id`, `kind` | Package identity. `kind` is `core` (added to every game by default) or `plugin` (added only when chosen). |
-| `version`, `displayName`, `description`, `tags` | Metadata. Tags group and filter plugins in session prep; they do not determine runtime scheduling. |
+| `id` | The plugin ID. When left out, it is the package directory name; when written, it must match that name. |
+| `kind` | `core` (added to every game by default) or `plugin` (the value when left out; added only when chosen). |
+| `version`, `displayName`, `description`, `tags` | Metadata. Tags group and filter plugins in session prep; they do not determine runtime scheduling. Covel works out the `ui:*` and `cost:*` tags; authors write only the others, such as `mode:*`. See [Derived tags](#derived-tags). |
 | `covel` | The range of host versions the package works with, such as `">=0.0.45"`. A host outside that range does not install or load the package. |
 | `author`, `license`, `homepage` | Author information, shown only for display. See [Author information](#author-information). |
-| `provides` | Versioned contract strings, or `{contract, default: true}`. |
-| `requires` | Required contracts. The resolver adds a provider for each one. |
-| `optional` | Optional contracts. They do not force a provider to be activated. |
+| `provides` | Contracts that no runtime outputs (for example, ones a service provides), or contracts to mark as `{contract, default: true}`. The `io.output.contract` of each runtime is added on its own; do not write it. |
+| `requires` | Required contracts. The resolver adds a provider for each one. A contract that a runtime refers to but `requires` does not list is optional. |
 | `conflicts` | Makes the package mutually exclusive with other plugins that provide these contracts. |
 | `contracts` | Schema declarations for contracts, as `{contractId: {schema: ./path.json}}`. Contracts received by a `contributes.data` namespace do not need to be listed here. |
-| `entry` | The path, relative to the package root, of the module that does the registration. |
+| `entry` | The path, relative to the package root, of the module that does the registration. When left out, `server/index.js` is used if it exists. |
 | `contributes` | Package-level contributions. See [contributes fields](#contributes-fields). |
 | `runtime` | An optional declaration of a single runtime. |
 
 A contract is a versioned name, such as `narrative-engine@1`. Plugins find each other through it, not through plugin IDs. A few rules:
 
-- `runtime.io.output.contract` must appear in the `provides` of this package.
-- Within one package, two runtimes cannot produce the same contract.
+- The contracts this package provides are `provides` plus the `io.output.contract` of each runtime.
+- Within one package, two runtimes cannot produce the same contract (`ambiguous output contract`).
 - Different packages can provide the same contract. A consumer says whether it wants one provider or all of them, using `cardinality: one` (the default) or `all`.
 - Only an extension point that allows one provider, and an explicit `conflicts` entry, get a separate mutual-exclusion check.
 - `conflicts` can name only plugin contracts. If you write a kernel extension point or a UI slot, you get `invalid-conflict`, and the error points to the position of the `conflicts` field. How kernel extension points combine is decided by their mode.
 
-Session prep groups each plugin by its first declared tag, using the tag text as the heading. Plugins with no tags appear under “Untagged”. Each plugin appears once; all tags remain available for filtering. The `kind: core` badge says “Enabled by default” and does not indicate a lock. “Builtin” in the session list describes the source only.
+Session prep groups each plugin by its first tag (the tags the author writes come before the derived ones), using the tag text as the heading. Plugins with no tags appear under “Untagged”. Each plugin appears once; all tags remain available for filtering. The `kind: core` badge says “Enabled by default” and does not indicate a lock. “Builtin” in the session list describes the source only.
 
 ### contributes fields
 
@@ -173,7 +170,7 @@ homepage: https://example.com/tidefall
 - **Links must use `https`.** They cannot contain a user name or password. Addresses such as `http:`, `javascript:`, and `file:` are rejected when the manifest is validated. The host does not review these links, because they are third-party addresses the author provides. Before a player opens any of them, the interface shows the full address and the domain and says so. The link opens in the browser only after the player confirms. Domains are displayed in ASCII form. A look-alike domain written with other characters is shown as `xn--…`.
 - **Where they appear:** the world list (author · version), the world details, the world cards and plugin rows on the session-prep screen, and the installed plugins in Settings. The install preview shows only the author name, not the links. The screens used during play do not show these fields.
 - **Translation:** a plugin translates `author.about` and the `label` of each `author.links` entry in the `PLUGIN.md` section of `locales/<locale>.yaml`. Links are matched by position. A world translates the same two items in `world.<locale>.yaml`. Author names and licenses are not translated, and `pnpm i18n` does not count them as text to translate.
-- **Version number:** the list shows the `version` from the manifest. When a plugin also has a `package.json`, the two versions must be the same. `pnpm validate:plugin` checks this. The install preview reads `package.json`, while the host reads `PLUGIN.md`. A change to `version` makes existing sessions run the plugin's setup runtimes again, so the setup guard or handler must return a skip for work that is already done.
+- **Version number:** the list shows the `version` from the manifest. The version is written only in `PLUGIN.md`: the host, the install preview and the update check all read it, and a `version` in `package.json` is not read. A change to `version` makes existing sessions run the plugin's setup runtimes again, so the setup guard or handler must return a skip for work that is already done.
 
 Bundled plugins follow the same current data contracts as external packages. Dice receipts carry a `checks` array, and `pluginData.get()` returns the stored value directly. A narrative binding projected with `select: /narrativeOutput` carries a string. World rules use flat records with `schemaVersion`, `id`, and `content`, without a `{ rule, ... }` wrapper. NPC edge history permits one open version per relation; duplicate open versions are rejected without automatic repair. Portrait replacement matches an exact character ID or the current `npc-<blueprintId>` projection, never an arbitrary session prefix.
 
@@ -189,16 +186,15 @@ Authors of external plugins should follow the framework's [CHANGELOG](../../CHAN
 
 ## Runtime Field Groups
 
-| Field         | Main settings                                                              |
-| ------------- | -------------------------------------------------------------------------- |
-| `type`        | `agent` or `function`                                                      |
-| `schedule`    | `stage`, `every`, `trigger`, `needs`, `after`, `completion`, `manual`      |
-| `io`          | `inputs`, `selfData`, `payloadSchema`, `output`, `visibility`, `concealed` |
-| `agent`       | `model`, `llm`, `history`, `tools`, `advertiseEvents`, `loop`              |
-| `function`    | `handler`, and optionally `model`, `timeoutMs`, and `tools`                |
-| `guard`       | The guard module, relative to the runtime                                  |
-| `effects`     | Read and write resources, and `parallelSafe`                               |
-| `permissions` | Declaration of the permissions the execution needs                         |
+| Field         | Main settings                                                                                              |
+| ------------- | ---------------------------------------------------------------------------------------------------------- |
+| `schedule`    | `stage`, `every`, `trigger`, `needs`, `after`, `completion`, `manual`                                      |
+| `io`          | `inputs`, `selfData`, `payloadSchema`, `output`, `visibility`, `concealed`                                 |
+| `agent`       | `model`, `llm`, `history`, `tools`, `advertiseEvents`, `loop`                                              |
+| `function`    | A runtime with this block is a function, one without it an agent; `handler`, `model`, `timeoutMs`, `tools` |
+| `guard`       | The guard module, relative to the runtime                                                                  |
+| `effects`     | Read and write resources, and `parallelSafe`                                                               |
+| `permissions` | Declaration of the permissions the execution needs                                                         |
 
 The root `PLUGIN.md` can also have `permissions.http`. It covers the code of the `entry` module: in a community package, `covel.http` (used in tools, hooks, RPC, services, extensions and wires) reaches only the origins and methods listed in the `permissions.http` of the root file and of each runtime. A wire can also reach the endpoint of the slot it is serving. An undeclared request fails before it is sent: `http permission denied: …`.
 
@@ -230,12 +226,40 @@ Leave out a field whose value is the default. When you write one, `pnpm validate
 | `contributes.hooks[].enforce` | `normal` |
 | `contributes.prompt[].role` | `system` |
 
+Covel works out the fields below when they are left out. When one is written with the value Covel would work out, `pnpm validate:plugin` warns in the same way (`is the default value; remove it` or `is worked out from …; remove it`).
+
+<!-- prettier-ignore -->
+| Field | When left out |
+| --- | --- |
+| `id` | The package directory name |
+| `kind` | `plugin` |
+| `entry` | `server/index.js` when the package has it; otherwise no entry |
+| The runtime type | A function runtime when there is a `function` block; otherwise an agent |
+| `function.handler` | `./handler.js` next to the manifest |
+| `provides` | The `io.output.contract` of each runtime |
+| `ui:*` and `cost:*` in `tags` | Worked out from the package; see [Derived tags](#derived-tags) |
+| `contributes.data.*.authoring.source.key` | `id`; `filename` for a media directory |
+| The format of `contributes.data.*.authoring.source` | Worked out from `path`: `.yaml`/`.yml`, `.json`, or a media directory without an extension |
+
+#### Derived tags
+
+The tags the author writes come first, followed by the derived tags in this order. A written `ui:*` or `cost:*` tag is ignored.
+
+<!-- prettier-ignore -->
+| Tag | When it is added |
+| --- | --- |
+| `cost:llm` | There is an agent runtime, or a function runtime that writes `function.model` |
+| `cost:function` | There is a function runtime that calls no model; or there is no runtime, but there is an entry or `contributes.worldProjections` |
+| `ui:right-panel` | `contributes.ui.right` has a panel |
+| `ui:message-block` | `contributes.ui.message` has a message block |
+| `ui:manual-action` | There is a runtime with a `manual` trigger, or there are `contributes.actions` / `contributes.commands` |
+
 `io.visibility` has two values: `story` for the narrative runtime that provides the story text, and `system` for every other runtime.
 
 ### Two kinds of runtime
 
-- A **function runtime** must declare `function.handler`. That module must default-export a function. It cannot also set `agent`.
-- An **agent runtime** cannot set `function`.
+- A **function runtime** is a runtime with a `function` block. Its handler is the module that `function.handler` names, or `./handler.js` next to the manifest when it is left out; the module must default-export a function. It cannot also set `agent`. When `function.handler` is not written and there is no `handler.js` next to the manifest, the runtime cannot run: the loader leaves it out and says why, and `pnpm validate:plugin` and installation report it as an error.
+- An **agent runtime** is a runtime without a `function` block. The body of its file is its prompt.
 - `function.model` says which model slot (such as `memory`) the `ctx.gateway` calls in the handler use. Before a detached (background) job is claimed, the system uses this to check whether its credentials are ready. If you do not declare it, the check uses the system default preset. That can miss a slot binding set for a single request, and then the job waits in the queue until `maxQueueMs` runs out.
 - When `agent.model` is left out, an agent with `io.visibility: story` uses `story` and any other agent uses `plugin`.
 - `agent.model` and `function.model` only name a role (slot). A plugin cannot choose a provider, model, address, or protocol: the player's model settings decide them (see [Actual selection priority](./slots.md#actual-selection-priority)). An `llm.toml` in a plugin's directory is not read.
@@ -284,9 +308,10 @@ The runtime IDs written in `schedule.needs`, `schedule.after`, and `io.inputs.*.
 - The loader checks references to runtimes in other packages strictly. If it finds one, it refuses to load the package.
 - Writing only `after` does not activate a provider.
 
-The `schedule.needs[].contract` and `io.inputs.*.from.contract` values of a runtime must be listed in the root `requires` or `optional`. Inline runtimes and child runtimes are both checked this way.
+The contracts that a runtime's `schedule.needs[].contract` and `io.inputs.*.from.contract` refer to need no other declaration:
 
-- A contract that another runtime in the same package provides must also be declared. You can list it in `optional`. That does not require activating other plugins.
+- For a contract listed in the root `requires`, the resolver activates a provider.
+- A contract not listed in `requires` is optional: when the session has a provider, it binds as usual; when it has none, the gates apply, and a runtime whose required input or `needs` has no provider does not run. This is how a contract that another runtime in the same package provides is used.
 - `schedule.after` only orders work, and `from.kernel` is a kernel input. Neither one activates another package.
 
 ### Stages and scheduling order
@@ -466,7 +491,7 @@ When you publish a runtime's output contract, declare the public schema of the c
 
 - All providers of the same contract ID must publish the same schema.
 - The public schema covers both model output and guard skip output. For example, `world-init` publishes `world-data-provider@1` with support for authored schemas of fewer than 15 attributes; the requirement to generate at least 15 stays in the `initialize-world` tool parameters.
-- The `provides` of a replacement plugin must match the `io.output.contract` of its own runtime. Output from other installed plugins cannot satisfy the declaration in its place.
+- A replacement plugin provides a contract through the `io.output.contract` of its own runtime (`provides` includes it on its own). Output from other installed plugins cannot satisfy the declaration in its place.
 - A consumed contract that has no schema, or a provider that declares a contract but never produces it, causes a loading diagnostic.
 
 #### Where contracts are validated
@@ -860,7 +885,7 @@ When a manifest has a field the host does not know (for example an old field tha
 Only a whole field is left out: a field at the top of `PLUGIN.md`, an entry under `contributes` (including unsupported placements under `contributes.ui`), or a field at the top of the inline `runtime` or of a `RUNTIME.md`. Two cases still make the load fail:
 
 - An unknown key inside a known field, for example `permissions.fs`, `io.conceal` or `schedule.priority`. The host does not run a declaration it only half understands.
-- A field that looks like a misspelled field that limits or identifies the package, for example `permision`, `gaurd` or `covle`. These fields are `id`, `kind`, `version`, `covel`, `provides`, `requires`, `optional`, `conflicts`, `permissions`, `entry` and `runtime` at the root, and `type`, `guard`, `permissions`, `effects`, `schedule`, `io` and `function` on a runtime. The error says which field it looks like.
+- A field that looks like a misspelled field that limits or identifies the package, for example `permision`, `gaurd` or `covle`. These fields are `id`, `kind`, `version`, `covel`, `provides`, `requires`, `conflicts`, `permissions`, `entry` and `runtime` at the root, and `guard`, `permissions`, `effects`, `schedule`, `io` and `function` on a runtime. The error says which field it looks like.
 
 The directory-level check also warns when the plugin's root has an `llm.toml`: the file is not read, and it does not fail the check.
 

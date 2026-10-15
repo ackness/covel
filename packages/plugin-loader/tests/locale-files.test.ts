@@ -24,7 +24,6 @@ displayName: Inventory
 description: Keeps the player character's bag.
 provides: [narrative-engine@1]
 runtime:
-  type: agent
   schedule: {stage: narrative}
   io: {output: {contract: narrative-engine@1}}
   agent: {tools: {builtin: [plugin-data-set]}}

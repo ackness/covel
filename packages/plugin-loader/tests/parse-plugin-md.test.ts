@@ -64,13 +64,13 @@ describe("current authoring manifests", () => {
       md({
         ...root,
         version: "2.3.4",
-        runtime: { type: "agent", schedule: { trigger: { type: "manual" } } },
+        runtime: { schedule: { trigger: { type: "manual" } } },
       }),
       "probe/PLUGIN.md",
     );
     expect(compileInlineRuntime(parsed)!.manifest.version).toBe("2.3.4");
     const child = parseRuntimeMd(
-      md({ type: "agent", schedule: { trigger: { type: "manual" } } }),
+      md({ schedule: { trigger: { type: "manual" } } }),
       "probe/runtimes/worker/RUNTIME.md",
       parsed.plugin,
     );
@@ -82,7 +82,6 @@ describe("current authoring manifests", () => {
         ...root,
         provides: [{ contract: "probe@1", default: true }],
         runtime: {
-          type: "agent",
           schedule: {
             stage: "post-turn",
             trigger: { type: "auto" },
@@ -137,7 +136,7 @@ describe("current authoring manifests", () => {
     ]);
   });
   it("gives the runtime of a single-runtime package the tools the package contributes", () => {
-    const agent = { type: "agent", schedule: { stage: "post-turn" } };
+    const agent = { schedule: { stage: "post-turn" } };
     const compiled = (runtime: object) =>
       compileInlineRuntime(
         parsePluginMd(
@@ -180,7 +179,7 @@ describe("current authoring manifests", () => {
     // Each runtime of the package gets a different part: it names its tools.
     expect(
       parseRuntimeMd(
-        md({ type: "agent", schedule: { stage: "post-turn" } }),
+        md({ schedule: { stage: "post-turn" } }),
         "probe/runtimes/worker/RUNTIME.md",
         plugin,
       ).manifest.tools,
@@ -229,7 +228,6 @@ describe("current authoring manifests", () => {
     const plugin = parsePluginMd(md(root), "probe/PLUGIN.md").plugin!;
     const parsed = parseRuntimeMd(
       md({
-        type: "function",
         schedule: {
           trigger: { type: "manual" },
           manual: { execution: "background" },
@@ -249,7 +247,6 @@ describe("current authoring manifests", () => {
   });
   it("compiles a function tool allowlist and rejects an additional agent configuration", () => {
     const runtime = {
-      type: "function",
       schedule: { trigger: { type: "manual" } },
       function: {
         handler: "./handler.js",
@@ -281,7 +278,6 @@ describe("current authoring manifests", () => {
       md({
         ...root,
         runtime: {
-          type: "function",
           function: { handler: "./handler.js" },
           schedule: { stage: "post-turn" },
           io: {
@@ -340,13 +336,13 @@ describe("current authoring manifests", () => {
     { name: "child" },
     { entry: "./server.js" },
     { contributes: { tools: ["x"] } },
-    { type: "function" },
-    { type: "agent", function: { handler: "./x.js" } },
+    { function: {} },
+    { function: { handler: "./x.js" } },
   ])("rejects invalid runtime declaration %j", (fields) => {
     const plugin = parsePluginMd(md(root), "probe/PLUGIN.md").plugin!;
     expect(() =>
       parseRuntimeMd(
-        md({ type: "agent", ...fields }),
+        md({ ...fields }),
         "probe/runtimes/run/RUNTIME.md",
         plugin,
       ),
@@ -356,8 +352,8 @@ describe("current authoring manifests", () => {
     for (const fields of [
       { tags: ["role:narrator"] },
       { provides: ["probe"] },
-      { runtime: { type: "agent", agent: { unknown: true } } },
-      { runtime: { type: "agent", agent: { history: { maxTurns: -1 } } } },
+      { runtime: { agent: { unknown: true } } },
+      { runtime: { agent: { history: { maxTurns: -1 } } } },
     ])
       expect(() =>
         parsePluginMd(md({ ...root, ...fields }), "probe/PLUGIN.md"),

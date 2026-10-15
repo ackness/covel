@@ -11,12 +11,11 @@ For requests or follow-up work between packages, choose a service or event from 
 There are two steps, just as with tools and hooks:
 
 1. In the root `PLUGIN.md`, declare `{point, id}` under `contributes.extensions`.
-2. In `entry`, call `covel.provideExtension()` with the same `{point, id}`.
+2. In the `entry` module (`server/index.js` by default), call `covel.provideExtension()` with the same `{point, id}`.
 
 The loader checks both sides. If something is declared but not registered, or registered but not declared, the plugin fails to load.
 
 ```yaml
-entry: ./server/index.js
 contributes:
   extensions:
     - point: prompt.segment@1
@@ -66,7 +65,7 @@ Each extension point defines its own inputs, outputs, mode, timeout, and failure
 
 ## Depending on an extension point
 
-The root `requires` and `optional` can list extension points or UI slots. This means "someone in the session must implement it". The rules are:
+The root `requires` can list extension points or UI slots. This means "someone in the session must implement it". The rules are:
 
 - The resolver recognizes providers from `contributes.extensions[].point`, and from the `slot` of `ui.slot@1`.
 - A non-empty `contributes.prompt` counts as implementing `prompt.segment@1` (the host implements it on the plugin's behalf).

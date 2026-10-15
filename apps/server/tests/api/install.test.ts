@@ -183,7 +183,6 @@ id: test-plugin
 kind: plugin
 description: A test plugin
 runtime:
-  type: agent
   schedule:
     trigger:
       type: manual
@@ -193,6 +192,9 @@ runtime:
 
 Test plugin body.
 `;
+
+/** A manifest that leaves the ID to the directory or package.json. */
+const WITHOUT_ID = VALID_PLUGIN_MD.replaceAll("id: test-plugin\n", "");
 
 const VALID_PACKAGE_JSON = JSON.stringify(
   {
@@ -397,9 +399,9 @@ describe("POST /api/install/plugin", () => {
       "PLUGIN.md":
         "---\nid: multi-plugin\nkind: plugin\ndescription: Multi runtime fixture\n---\n",
       "runtimes/a/RUNTIME.md":
-        "---\ntype: agent\nschedule:\n  trigger: {type: manual}\n---\n",
+        "---\nschedule:\n  trigger: {type: manual}\n---\n",
       "runtimes/b/RUNTIME.md":
-        "---\ntype: agent\nschedule:\n  trigger: {type: manual}\n---\n",
+        "---\nschedule:\n  trigger: {type: manual}\n---\n",
     });
     const res = await postZip(app, "/api/install/plugin", zip);
     expect(res.status).toBe(201);
@@ -417,7 +419,7 @@ describe("POST /api/install/plugin", () => {
   }>([
     {
       name: "missing root",
-      files: { "runtimes/worker/RUNTIME.md": "---\ntype: agent\n---\n" },
+      files: { "runtimes/worker/RUNTIME.md": "---\n---\n" },
       error: /root PLUGIN/,
     },
     {
@@ -425,7 +427,7 @@ describe("POST /api/install/plugin", () => {
       files: {
         "PLUGIN.md":
           "---\nid: test-plugin\nkind: plugin\ndescription: Fixture\n---\n",
-        "runtimes/worker/PLUGIN.md": "---\ntype: agent\n---\n",
+        "runtimes/worker/PLUGIN.md": "---\n---\n",
       },
       error: /RUNTIME.md/,
     },
@@ -433,19 +435,9 @@ describe("POST /api/install/plugin", () => {
       name: "mixed inline and child",
       files: {
         "PLUGIN.md": VALID_PLUGIN_MD,
-        "runtimes/worker/RUNTIME.md": "---\ntype: agent\n---\n",
+        "runtimes/worker/RUNTIME.md": "---\n---\n",
       },
       error: /cannot coexist/,
-    },
-    {
-      name: "undeclared output",
-      files: {
-        "PLUGIN.md": VALID_PLUGIN_MD.replace(
-          "  type: agent",
-          "  type: agent\n  io:\n    output: {contract: undeclared@1}",
-        ),
-      },
-      error: /not declared/,
     },
   ])(
     "rejects invalid current-format bundle: $name",
@@ -480,15 +472,67 @@ describe("POST /api/install/plugin", () => {
     );
   });
 
-  it("rejects missing package.json", async () => {
+  it("installs a package without package.json", async () => {
     const app = createTestApp();
     const zip = await buildZip({
       "PLUGIN.md": VALID_PLUGIN_MD,
     });
     const res = await postZip(app, "/api/install/plugin", zip);
+    expect(res.status).toBe(201);
+    const body = (await res.json()) as { id: string };
+    expect(body.id).toBe("test-plugin");
+  });
+
+  it.each<{ name: string; files: Record<string, string>; id: string }>([
+    {
+      name: "the archive's top-level directory",
+      files: {
+        "probe-notes/PLUGIN.md": WITHOUT_ID,
+        "probe-notes/package.json": VALID_PACKAGE_JSON,
+      },
+      id: "probe-notes",
+    },
+    {
+      name: "the package.json name",
+      files: {
+        "PLUGIN.md": WITHOUT_ID,
+        "package.json": JSON.stringify({
+          name: "@someone/plugin-probe-notes",
+          type: "module",
+        }),
+      },
+      id: "probe-notes",
+    },
+  ])(
+    "takes the ID from $name when PLUGIN.md writes none",
+    async ({ files, id }) => {
+      const app = createTestApp();
+      const res = await postZip(
+        app,
+        "/api/install/plugin",
+        await buildZip(files),
+      );
+      expect(res.status).toBe(201);
+      const body = (await res.json()) as { id: string };
+      expect(body.id).toBe(id);
+      const installed = await readFile(
+        path.join(pluginsDir, id, "PLUGIN.md"),
+        "utf8",
+      );
+      expect(installed).not.toMatch(/^id:/m);
+    },
+  );
+
+  it("rejects a package whose ID cannot be worked out", async () => {
+    const app = createTestApp();
+    const res = await postZip(
+      app,
+      "/api/install/plugin",
+      await buildZip({ "PLUGIN.md": WITHOUT_ID }),
+    );
     expect(res.status).toBe(400);
     const body = (await res.json()) as { error: string };
-    expect(body.error).toMatch(/package\.json/);
+    expect(body.error).toMatch(/\bid\b/);
   });
 
   it("rejects missing PLUGIN.md", async () => {
@@ -585,20 +629,20 @@ describe("POST /api/install/plugin", () => {
     expect(body.error).toMatch(/exceeds/);
   });
 
-  it("rejects mismatched plugin id (package.json name ≠ PLUGIN.md name)", async () => {
+  it("installs under the written id, whatever package.json names", async () => {
     const app = createTestApp();
-    const mismatched = VALID_PLUGIN_MD.replace(
+    const renamed = VALID_PLUGIN_MD.replace(
       "id: test-plugin",
       "id: other-plugin",
     );
     const zip = await buildZip({
-      "PLUGIN.md": mismatched,
+      "PLUGIN.md": renamed,
       "package.json": VALID_PACKAGE_JSON,
     });
     const res = await postZip(app, "/api/install/plugin", zip);
-    expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: string };
-    expect(body.error).toMatch(/mismatch|plugin id/i);
+    expect(res.status).toBe(201);
+    const body = (await res.json()) as { id: string };
+    expect(body.id).toBe("other-plugin");
   });
 
   it("rejects a third-party package that claims a reserved builtin id (409)", async () => {
@@ -640,8 +684,8 @@ describe("POST /api/install/plugin", () => {
     expect(body.error).toMatch(/reserved/i);
   });
 
-  it("rejects a manifest whose root name diverges from the canonical package id ", async () => {
-    // Dir/package id says "innocent" but the loader would register "narrator".
+  it("checks the reserved IDs against the written id, not the package.json name", async () => {
+    // package.json says "innocent" but the loader would register "narrator".
     const app = createReservedTestApp(new Set(["narrator"]));
     const zip = await buildZip({
       "PLUGIN.md": VALID_PLUGIN_MD.replace("id: test-plugin", "id: narrator"),
@@ -652,9 +696,9 @@ describe("POST /api/install/plugin", () => {
       }),
     });
     const res = await postZip(app, "/api/install/plugin", zip);
-    expect(res.status).toBe(400);
+    expect(res.status).toBe(409);
     const body = (await res.json()) as { error: string };
-    expect(body.error).toMatch(/mismatch/i);
+    expect(body.error).toMatch(/reserved/i);
   });
 
   it("still accepts a non-reserved id when the reserved set is wired", async () => {

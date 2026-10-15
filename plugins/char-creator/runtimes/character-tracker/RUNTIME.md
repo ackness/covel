@@ -1,5 +1,4 @@
 ---
-type: agent
 description: >-
   Records newly appearing characters and updates changes to their condition,
   injuries, and equipment.

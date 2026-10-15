@@ -7,11 +7,12 @@ import { readPlainYamlFrontmatter } from "./plain-yaml-frontmatter.js";
 import path from "node:path";
 import {
   isRuntimeDisablingIssue,
+  pluginIdSchema,
   pluginManifestSchema,
   runtimeAuthoringManifestSchema,
   resolveI18nText,
 } from "@covel/shared";
-import type { PluginManifest } from "@covel/shared";
+import type { PluginManifest, PluginManifestInput } from "@covel/shared";
 import type {
   DisabledRuntime,
   IgnoredField,
@@ -185,7 +186,7 @@ export function parsePluginMd(
       parsed = pluginManifestSchema.safeParse(rest);
       if (!parsed.success) throw manifestError("plugin", parsed.error.issues);
     }
-    const plugin = withContractDefaults(parsed.data);
+    const plugin = withContractDefaults(withPackageId(parsed.data, filePath));
     const ignored = ignoredFields(filePath, lenient.ignored);
     return {
       sourcePath: filePath,
@@ -247,6 +248,25 @@ export function parseRuntimeMd(
   } catch (error) {
     return invalid(filePath, error);
   }
+}
+
+/**
+ * A package that writes no `id` takes the name of its directory: the one that
+ * holds `filePath`. A written `id` stays; the loader checks that it equals
+ * the directory the package was found in.
+ */
+function withPackageId(
+  input: PluginManifestInput,
+  filePath: string,
+): PluginManifest {
+  if (input.id !== undefined) return { ...input, id: input.id };
+  const directory = path.basename(path.dirname(filePath));
+  const id = pluginIdSchema.safeParse(directory);
+  if (!id.success)
+    throw new Error(
+      `id: not written, and the package directory name "${directory}" is no plugin ID (${id.error.issues[0]?.message ?? "invalid"}); rename the directory or write id`,
+    );
+  return { ...input, id: id.data };
 }
 
 /**

@@ -56,7 +56,7 @@ function makeParsedRuntimeMd(
   overrides?: Partial<RuntimeManifest>,
 ): ParsedRuntimeMd {
   return {
-    runtime: { type: overrides?.runtimeType ?? "agent" },
+    runtime: overrides?.runtimeType === "function" ? { function: {} } : {},
     manifest: makeRuntimeManifest(name, priority, overrides),
     promptTemplate: "",
     rawFrontmatter: {},

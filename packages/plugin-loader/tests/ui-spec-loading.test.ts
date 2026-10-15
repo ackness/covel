@@ -35,7 +35,7 @@ describe("UI spec loading", () => {
 id: test-ui-plugin
 kind: plugin
 description: Plugin with UI specs
-runtime: {type: agent, schedule: {stage: narrative}}
+runtime: {schedule: {stage: narrative}}
 contributes:
   ui:
     right: [./ui/panel.json]
@@ -75,7 +75,7 @@ Test prompt.
 id: no-ui-plugin
 kind: plugin
 description: No UI
-runtime: {type: agent, schedule: {stage: narrative}}
+runtime: {schedule: {stage: narrative}}
 ---
 
 Prompt.
@@ -93,7 +93,6 @@ id: ui-handler-plugin
 kind: plugin
 description: UI plus handler
 runtime:
-  type: function
   schedule: {stage: narrative}
   function: {handler: ./handler.mjs}
 contributes:
@@ -124,7 +123,7 @@ export default async function handler() { return { proposals: [] }; }
 id: evil-plugin
 kind: plugin
 description: Evil
-runtime: {type: agent, schedule: {stage: narrative}}
+runtime: {schedule: {stage: narrative}}
 contributes:
   ui:
     right: [../outside.json]

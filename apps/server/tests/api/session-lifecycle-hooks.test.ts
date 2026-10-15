@@ -155,7 +155,7 @@ function registerCommunityPlugin(
     },
     manifests: [
       {
-        runtime: { type: "function" as const },
+        runtime: { function: {} },
         manifest: {
           name: "community-plugin/runtime",
           pluginId: "community-plugin",

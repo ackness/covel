@@ -568,12 +568,12 @@ plugins/my-plugin/
 
 **根清单 `PLUGIN.md`** 描述整个包：
 
-| 字段                                               | 作用                                                   |
-| -------------------------------------------------- | ------------------------------------------------------ |
-| `id`、`kind`                                       | 包是谁                                                 |
-| `provides` / `requires` / `optional` / `conflicts` | 它提供、需要、可选使用、不能共存的契约                 |
-| `contracts`                                        | 契约的 schema                                          |
-| `contributes`                                      | 它带来的工具、RPC actions、服务、扩展、设置、数据和 UI |
+| 字段                                  | 作用                                                   |
+| ------------------------------------- | ------------------------------------------------------ |
+| `id`、`kind`                          | 包是谁（不写时是目录名和 `plugin`）                    |
+| `provides` / `requires` / `conflicts` | 它提供（含 runtime 输出的）、需要、不能共存的契约      |
+| `contracts`                           | 契约的 schema                                          |
+| `contributes`                         | 它带来的工具、RPC actions、服务、扩展、设置、数据和 UI |
 
 - `contributes.commands` 是斜杠命令的元数据，它的 action 必须同时声明在 `contributes.actions` 里。
 - `entry` 模块里实际注册的东西，必须和根清单一致。

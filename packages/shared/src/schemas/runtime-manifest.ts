@@ -15,7 +15,10 @@ import {
   pluginDataInjectDeclSchema,
   runtimeManifestInputSchema,
 } from "./plugin-schemas.js";
-import { AGENT_LOOP_DEFAULTS } from "./runtime-defaults.js";
+import {
+  AGENT_LOOP_DEFAULTS,
+  DEFAULT_FUNCTION_HANDLER,
+} from "./runtime-defaults.js";
 
 const loopDefault = (field: "timeoutMs" | "callTimeoutMs" | "maxRetries") =>
   `Defaults to ${AGENT_LOOP_DEFAULTS.system[field]}; ${AGENT_LOOP_DEFAULTS.story[field]} with \`io.visibility: story\`.`;
@@ -34,7 +37,7 @@ const runtimeRefSchema = z
     "Runtime ID in this package: `<pluginId>/<runtimeId>`, or the package ID for a single runtime.",
   );
 const contractRefSchema = contractIdSchema.describe(
-  "Contract ID. It must be listed in the package's `requires` or `optional`.",
+  "Contract ID. List it in the package's `requires` when a provider must be active; otherwise the runtime uses it when one is.",
 );
 const cardinalitySchema = z
   .enum(["one", "all"])
@@ -59,7 +62,7 @@ const afterSourceSchema = z.union([
   z.strictObject({ runtime: runtimeRefSchema }),
   z.strictObject({
     contract: contractIdSchema.describe(
-      "Contract ID. This runtime runs after the contract's active providers; the contract does not have to be listed in `requires` or `optional`.",
+      "Contract ID. This runtime runs after the contract's active providers; it never activates a provider.",
     ),
     cardinality: cardinalitySchema.optional(),
   }),
@@ -89,11 +92,6 @@ const needsSchema = z.union([
 ]);
 export const runtimeAuthoringManifestSchema = z
   .strictObject({
-    type: z
-      .enum(["agent", "function"])
-      .describe(
-        "`agent` drives model tool calls from the prompt body. `function` runs a JavaScript handler.",
-      ),
     description: textSchema
       .describe(
         "What the runtime does. Plain string; translations go in locale files.",
@@ -199,7 +197,7 @@ export const runtimeAuthoringManifestSchema = z
           .strictObject({
             contract: contractIdSchema
               .describe(
-                "Contract this runtime's output publishes. It must be listed in the package's `provides`.",
+                "Contract this runtime's output publishes. The package provides it; `provides` needs no entry for it.",
               )
               .optional(),
             schema: z
@@ -342,7 +340,7 @@ export const runtimeAuthoringManifestSchema = z
           .optional(),
       })
       .describe(
-        "Settings of an `agent` runtime. Not allowed on a `function` runtime.",
+        "Settings of an agent runtime, the kind of a runtime without a `function` block: it drives model tool calls from the prompt body.",
       )
       .optional(),
     function: z
@@ -351,8 +349,9 @@ export const runtimeAuthoringManifestSchema = z
           .string()
           .min(1)
           .describe(
-            "Path of the handler module. The module default-exports the handler function.",
-          ),
+            `Path of the handler module, relative to this manifest. The module default-exports the handler function. Defaults to \`${DEFAULT_FUNCTION_HANDLER}\` next to the manifest when that file exists.`,
+          )
+          .optional(),
         model: z
           .string()
           .meta({
@@ -372,7 +371,7 @@ export const runtimeAuthoringManifestSchema = z
           .optional(),
       })
       .describe(
-        "Settings of a `function` runtime. Required when `type` is `function`.",
+        "Makes this a function runtime, which runs a JavaScript handler instead of a model. `function: {}` takes every default. Not allowed with `agent`.",
       )
       .optional(),
     guard: z
@@ -391,17 +390,15 @@ export const runtimeAuthoringManifestSchema = z
       .optional(),
   })
   .superRefine((value, ctx) => {
-    if (value.type === "function" && value.agent)
+    // The `function` block makes a function runtime; every other runtime is
+    // an agent.
+    const runtimeType = value.function ? "function" : "agent";
+    if (value.function && value.agent)
       ctx.addIssue({
         code: "custom",
         path: ["agent"],
-        message: "Function runtime cannot declare agent",
-      });
-    if (value.type === "agent" && value.function)
-      ctx.addIssue({
-        code: "custom",
-        path: ["function"],
-        message: "Agent runtime cannot declare function",
+        message:
+          "A runtime with a function block runs a handler and cannot declare agent; remove one of the two",
       });
     if (value.io?.concealed && value.io.visibility === "story")
       ctx.addIssue({
@@ -413,16 +410,17 @@ export const runtimeAuthoringManifestSchema = z
     const inputs = Object.entries(value.io?.inputs ?? {});
     for (const issue of runtimeRuleIssues(
       {
-        runtimeType: value.type,
-        handler: value.function?.handler,
+        runtimeType,
+        handler: value.function
+          ? (value.function.handler ?? DEFAULT_FUNCTION_HANDLER)
+          : undefined,
         stage: value.schedule?.stage,
         trigger: value.schedule?.trigger,
         every: value.schedule?.every,
         needs: value.schedule?.needs,
         completion: value.schedule?.completion,
         execution: value.schedule?.manual?.execution,
-        builtinTools: (value.type === "function" ? value.function : value.agent)
-          ?.tools?.builtin,
+        builtinTools: (value.function ?? value.agent)?.tools?.builtin,
         visibility: value.io?.visibility,
         output: value.io?.output,
         requireExplicitCompletion:
@@ -436,11 +434,7 @@ export const runtimeAuthoringManifestSchema = z
       },
       {
         ...AUTHORING_RULE_FIELD_PATHS,
-        builtinTools: [
-          value.type === "function" ? "function" : "agent",
-          "tools",
-          "builtin",
-        ],
+        builtinTools: [runtimeType, "tools", "builtin"],
       },
       { authoring: true },
     ))

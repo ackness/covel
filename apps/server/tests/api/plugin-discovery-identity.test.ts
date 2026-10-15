@@ -36,7 +36,6 @@ async function writePlugin(dirName: string, manifestName: string) {
       "kind: plugin",
       "description: identity test fixture",
       "runtime:",
-      "  type: agent",
       "  schedule:",
       "    trigger: {type: manual}",
       "---",

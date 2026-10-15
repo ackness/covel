@@ -10,7 +10,7 @@ Push the plugin or world to a **public** GitHub repository. Both of these layout
 One package per repository      Several packages in one repository
 my-plugin/                      my-covel-stuff/
 ├── PLUGIN.md                   ├── plugins/
-├── package.json                │   ├── tavern-rumors/
+├── README.md                   │   ├── tavern-rumors/
 └── ...                         │   └── another-plugin/
                                 └── worlds/
                                     └── tidelamp/
@@ -20,6 +20,7 @@ A few limits:
 
 - The repository must be public. A private repository cannot be installed.
 - The code in the package must run as soon as it is installed. Covel does not install dependencies or run a build during installation.
+- A plugin may have no `package.json`. When a repository holds one plugin and its `PLUGIN.md` writes no `id`, the plugin ID is the repository name; in a subfolder, it is the name of that folder.
 - The plugin's `package.json` cannot have `dependencies`. Put any code you use directly in the package. Covel provides the plugin SDK and `zod`; if you need them while developing, list them under `devDependencies`.
 
 ## 2. How others install it
@@ -38,7 +39,7 @@ A link can point all the way to a subfolder, so the other person only sees that 
 
 ## 3. Release a new version
 
-1. After your changes are done, raise the version number in both `PLUGIN.md` and `package.json`.
+1. After your changes are done, raise `version` in `PLUGIN.md`.
 2. Run the [tests](./test.md) and a [trial install](./package.md).
 3. Push to GitHub.
 

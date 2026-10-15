@@ -1,5 +1,4 @@
 ---
-type: function
 description: Update memory blocks from the completed source turn.
 schedule:
   stage: post-turn

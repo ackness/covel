@@ -977,7 +977,6 @@ catalog 里的组件不够用时，插件可以带一份自己的 HTML。JSON sp
 - 保持简短：每个插件一到三条。细节留给插件自己的面板。
 
 ```yaml
-entry: ./server/index.js
 contributes:
   extensions:
     - point: ui.slot@1

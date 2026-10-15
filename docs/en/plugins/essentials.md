@@ -47,16 +47,13 @@ The generator does not ask questions. Its arguments decide what it generates:
 | `-t <dir>`         | Generate into the directory you give, not into `~/.covel/plugins`                        |
 | `--with-tools`     | Generate under the repository's `plugins/`: one runtime, plus `tools/` and unit tests    |
 
-A minimal plugin has only three files: `PLUGIN.md`, `package.json` and `README.md`. Here is a complete `PLUGIN.md`. After each turn's story, it asks the model to add one observation:
+A minimal plugin has only one file: `PLUGIN.md`. `README.md` is for maintainers and is optional; `package.json` is needed only when the plugin declares development dependencies or is a workspace member of the repository. Here is a complete `PLUGIN.md`. After each turn's story, it asks the model to add one observation:
 
 ```yaml
 ---
-id: my-plugin
-kind: plugin
 description: Adds a brief observation after narration.
 requires: [narrative-engine@1]
 runtime:
-  type: agent
   schedule:
     stage: post-turn
   io:
@@ -68,16 +65,16 @@ runtime:
 Write one observation grounded in runtime-inputs.narrative.value.
 ```
 
-Fields left out take their defaults: this runtime runs on its own every turn, uses the model of the `plugin` role, and its output is not story text. Leave out fields that match the default; `pnpm validate:plugin` reminds you when you write one. The defaults are in [plugin reference · Defaults](../reference/plugins.md#defaults).
+Covel works out the fields left out or gives them their defaults: the plugin ID is the folder name; there is no `function` block, so it is an agent; this runtime runs on its own every turn, uses the model of the `plugin` role, and its output is not story text. Leave out fields that match the default; `pnpm validate:plugin` reminds you when you write one. The defaults and the fields Covel works out are in [plugin reference · Defaults](../reference/plugins.md#defaults).
 
-Three rules that are easiest to get wrong:
+The rules that are easiest to get wrong:
 
-- `id` must be the same as the folder name.
+- The plugin ID is the folder name. When you write `id`, it must be the same as the folder name.
 - Each directory under `runtimes/` needs `RUNTIME.md`; put shared code in `lib/` at the package root. Missing manifests are reported to the author while the other runtimes remain loadable; see the [plugin reference](../reference/plugins.md).
 - With only one runtime, put it in the `runtime:` section of `PLUGIN.md`. With several, put each one in `runtimes/<name>/RUNTIME.md`. You cannot use both styles at once. If you do, validation reports `inline runtime and runtimes/ cannot coexist`.
-- When `PLUGIN.md` has a `version`, it must be the same as the `version` in `package.json`. `package.json` must also say `"type": "module"`: a plugin package is ESM only, and validation and installation both refuse a package without that line.
+- The version is written only as `version` in `PLUGIN.md`; `package.json` has no version. When a plugin has a `package.json`, it must say `"type": "module"`: a plugin package is ESM only, and validation and installation both refuse a package without that line. For a plugin without `package.json`, Covel still loads its `.js` files as ES modules.
 
-Every `pnpm create-plugin` mode starts both `PLUGIN.md` and `package.json` at version `0.1.0`. Update both when publishing a new version, then check with `pnpm validate:plugin <plugin-dir>`.
+Every `pnpm create-plugin` mode starts `PLUGIN.md` at version `0.1.0`. Change that one place when publishing a new version, then check with `pnpm validate:plugin <plugin-dir>`.
 
 After validation passes, select the plugin on the session-prep screen of the game and authorize it. Only then does it run. See the last step in [your first plugin](./first-plugin.md). For packaging and trial installs, see [package and try install](../ship/package.md).
 
@@ -85,7 +82,7 @@ After validation passes, select the plugin on the session-prep screen of the gam
 
 Everything a plugin contributes is written in the `contributes` section of `PLUGIN.md`. The names you register in code must match the names written here. If you have one too many or one too few, the plugin fails to load.
 
-The code is in the entry file. `PLUGIN.md` points to it with `entry`:
+The code is in the entry file. The entry file is `server/index.js` by default; put it there and you need no `entry`. When it is somewhere else, `PLUGIN.md` points to it with `entry`:
 
 | What you call in the entry file        | What to write in `contributes` |
 | -------------------------------------- | ------------------------------ |
@@ -168,6 +165,8 @@ runtime:
 | `required` (default `true`) | When the upstream fails or does not exist, this runtime does not run; with `false` it runs anyway   |
 
 In a prompt, the value read is `runtime-inputs.narrative.value`. In a function, it is `ctx.inputs.narrative.value`.
+
+Write in `requires` only the capabilities the plugin cannot work without. An input with `required: false` needs no entry in `requires`: when a provider is present, the runtime reads its result, and when none is, it runs anyway. The other way round, a capability that your runtime publishes with `io.output.contract` is provided by the plugin on its own; it needs no entry in `provides`.
 
 There are two more fields that control order only: `schedule.needs` requires the upstream to succeed, and `schedule.after` only requires the upstream to have finished. A required input (what an input is when `required` is left out) already includes the condition "upstream succeeded", so you do not need to write `needs` again.
 

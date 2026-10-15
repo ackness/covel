@@ -1,6 +1,6 @@
 # 第一个插件
 
-这一页带你做一个插件“酒馆传闻”：每个回合结束后，它读一遍刚写出的故事，把主角听到的传闻记下来，显示在侧栏的面板里。完成后，你会走过一个插件的完整流程：生成、校验、离线运行、修改、装进游戏。
+这一页先写一个只有一个文件的插件，再带你做一个插件“酒馆传闻”：每个回合结束后，它读一遍刚写出的故事，把主角听到的传闻记下来，显示在侧栏的面板里。完成后，你会走过一个插件的完整流程：生成、校验、离线运行、修改、装进游戏。
 
 全程约三十分钟。会用到命令行；要读懂生成的代码需要一点 JavaScript 基础，但这一页不要求你写代码。
 
@@ -12,7 +12,41 @@
 
 下面的命令都在 Covel 仓库的根目录运行。
 
-## 1. 生成插件
+## 1. 一个文件就是一个插件
+
+最小的插件只有一个 `PLUGIN.md`：一句说明、一个运行阶段和一段提示词。建一个文件夹，文件夹名就是插件的 ID：
+
+```bash
+mkdir -p ~/.covel/plugins/observer
+```
+
+在里面保存 `PLUGIN.md`：
+
+```yaml
+---
+description: Adds a short observation after each turn.
+runtime:
+  schedule: { stage: post-turn }
+---
+Write one short observation grounded in the latest narrative.
+```
+
+校验它：
+
+```bash
+pnpm validate:plugin ~/.covel/plugins/observer
+```
+
+```text
+✓ Static package validation: /Users/you/.covel/plugins/observer
+  languages: text en; instructions en
+```
+
+这已经是一个完整的插件。没写的都由 Covel 推出来：ID 是文件夹名 `observer`；没有 `function` 块，所以它是一个由模型驱动的 agent，正文就是提示词；它每回合在故事之后运行。它不需要 `package.json`。
+
+下面用脚手架生成一个更完整的起点：有面板、有函数、有测试用例。
+
+## 2. 生成插件
 
 ```bash
 pnpm create-plugin tavern-rumors
@@ -24,12 +58,11 @@ pnpm create-plugin tavern-rumors
 插件创建完成！路径：/Users/you/.covel/plugins/tavern-rumors
 ```
 
-## 2. 看看生成了什么
+## 3. 看看生成了什么
 
 ```text
 tavern-rumors/
-├── PLUGIN.md                    包的身份和它贡献的面板
-├── package.json
+├── PLUGIN.md                    包的版本和它贡献的面板
 ├── README.md
 ├── locales/
 │   └── zh.yaml                  名称和界面文字的中文译文
@@ -54,10 +87,11 @@ tavern-rumors/
 
 两者都把记录写进这个插件自己的 `notes` 数据空间，面板把这个空间里的内容显示出来。
 
+没有 `package.json`：插件的 ID 是文件夹名，版本写在 `PLUGIN.md` 里，`handler.js` 由 Covel 当作 ES module 加载。
+
 打开 `runtimes/analyst/RUNTIME.md`，看开头的 YAML：
 
 ```yaml
-type: agent
 schedule:
   stage: post-turn
 io:
@@ -78,7 +112,7 @@ agent:
 
 | 这一段                                   | 意思                                                                                               |
 | ---------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| `type: agent`                            | 这是一个由模型驱动的 runtime，文件的正文就是给模型的提示词                                         |
+| 没有 `function` 块                       | 这是一个由模型驱动的 runtime，文件的正文就是给模型的提示词                                         |
 | `schedule.stage: post-turn`              | 在叙事之后运行                                                                                     |
 | `io.inputs.narrator-output`              | 读取本回合的故事正文。它来自“任何提供 `narrative-engine@1` 的插件”，而不是某个具体的插件           |
 | `io.selfData`                            | 把自己已有的记录放进提示词，模型据此避免重复记录                                                   |
@@ -87,7 +121,7 @@ agent:
 
 模型只能使用这里列出的工具。它不能读写别的插件的数据，也不能绕过内核直接改存档。
 
-## 3. 校验
+## 4. 校验
 
 ```bash
 pnpm validate:plugin ~/.covel/plugins/tavern-rumors
@@ -109,7 +143,7 @@ pnpm validate:plugin ~/.covel/plugins/tavern-rumors
 .../tavern-rumors/runtimes/analyst/RUNTIME.md: schedule.stage: Invalid option: expected one of "setup"|"pre-turn"|"narrative"|"post-turn"|"audit"; correct this field using the current plugin manifest reference
 ```
 
-## 4. 离线运行
+## 5. 离线运行
 
 不启动游戏、不调用真实模型，就可以运行插件：
 
@@ -138,7 +172,7 @@ pnpm test:runtime -- tavern-rumors --pretty
 > [!TIP]
 > 这是开发时最快的反馈方式。每次改完清单或代码，先跑校验，再跑这一条，都通过了再进游戏。它不花模型费用。
 
-## 5. 改成你自己的插件
+## 6. 改成你自己的插件
 
 现在把这个通用的示例改成“记录传闻”。改三处。
 
@@ -163,9 +197,9 @@ Record each rumor the player hears: who said it, and what it claims. A rumor is 
 
 提示词用英文写。模型会按这一局游戏的语言输出，所以中文的游戏里记下来的传闻仍然是中文。
 
-改完后再跑一遍第 3 步和第 4 步，确认仍然通过。
+改完后再跑一遍第 4 步和第 5 步，确认仍然通过。
 
-## 6. 在游戏里运行
+## 7. 在游戏里运行
 
 启动 Covel：
 
@@ -198,7 +232,7 @@ pnpm dev
 
 | 现象                     | 原因和处理                                                                                                                               |
 | ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| 插件列表里没有它         | 它不在用户插件目录里，或者清单有错。运行第 3 步的校验，再重启一次后端                                                                    |
+| 插件列表里没有它         | 它不在用户插件目录里，或者清单有错。运行第 4 步的校验，再重启一次后端                                                                    |
 | 选中了但没有运行         | 没有授权。在游戏里处理“授权插件操作”的提示                                                                                               |
 | 面板一直是空的           | 这一回合的故事里没有传闻，或者模型没有调用工具。在调试页面 <http://localhost:5173/debug> 查看 `tavern-rumors/analyst` 这一步的请求和回复 |
 | 提示 `plugin` 用途不可用 | 在 **设置 → 模型 → 用途分配** 给它选一个模型，或者在准备页把这个任务改用别的用途                                                         |
@@ -208,6 +242,7 @@ pnpm dev
 
 | 概念         | 在这个插件里                                           |
 | ------------ | ------------------------------------------------------ |
+| 一个文件     | `observer` 只有一个 `PLUGIN.md`，其余由 Covel 推出     |
 | 两种 runtime | `analyst` 是 agent，`note` 是函数                      |
 | 阶段         | `analyst` 在 `post-turn` 自动运行                      |
 | 按能力找插件 | 通过 `narrative-engine@1` 读故事，不点名具体的叙事插件 |

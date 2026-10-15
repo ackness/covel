@@ -47,7 +47,7 @@ Fix: `tools.local` was removed — register the tool in the plugin's `entry`
 适用对象：
 
 - `tools/*.js` / `tools/*.ts`
-- `type: function` 的 `handler.js`
+- function runtime（有 `function` 块）的 `handler.js`
 - `hooks/*.js`
 - provider wire helper（建议放 `lib/*.js`）
 - trigger / guard helper

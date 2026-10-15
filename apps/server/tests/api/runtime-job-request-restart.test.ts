@@ -143,7 +143,6 @@ kind: plugin
 description: SQLite request restart fixture
 version: 1.0.0
 runtime:
-  type: function
   schedule:
     stage: post-turn
     trigger:

@@ -13,23 +13,15 @@ Many problems only show up this way: a file is missing from the package, data is
 
 Other people need to know three things: which version this is, what it does, and which version of Covel it needs.
 
-The scaffold starts `PLUGIN.md` and `package.json` at `0.1.0`. Check the version before publishing, and update both when releasing a new version:
+The scaffold starts `PLUGIN.md` at `0.1.0`. Check the version before publishing, and raise it with each release:
 
 ```yaml
-id: "tavern-rumors"
-kind: plugin
 version: 0.1.0
 covel: ">=0.0.51"
 ```
 
-- `version` is the version of your plugin. `version` in `package.json` must match it.
+- `version` is the version of your plugin. It is written only in `PLUGIN.md`; when the plugin has a `package.json`, that file has no version.
 - `covel` is the Covel version it needs. The scaffold already filled in the version from when it was created.
-
-If the two version numbers do not match, validation tells you directly:
-
-```text
-✗ .../tavern-rumors: PLUGIN.md version 0.2.0 differs from package.json version 0.1.0
-```
 
 Then update `README.md`, and at least make these points clear:
 
@@ -41,14 +33,14 @@ If you want players to know who made it, add `author`, `license`, and `homepage`
 
 ## 2. Pack it as a ZIP
 
-Go into the plugin folder and pack its contents. Pack the **contents** of the folder, not the folder itself wrapped in another folder:
+From the plugin directory, pack the whole plugin folder:
 
 ```bash
-cd ~/.covel/plugins/tavern-rumors
-zip -r ~/tavern-rumors.zip . -x "node_modules/*" ".*"
+cd ~/.covel/plugins
+zip -r ~/tavern-rumors.zip tavern-rumors -x "tavern-rumors/node_modules/*" "*/.*"
 ```
 
-Open the ZIP. At the top level, you should see `PLUGIN.md` and `package.json`.
+Open the ZIP. At the top level is the folder `tavern-rumors`, and `PLUGIN.md` is inside it. When `PLUGIN.md` writes no `id`, Covel uses this folder name as the plugin ID. You can also pack only the contents of the folder; then the plugin either writes `id` or has a `package.json` with a `name`. The rules are in [Plugin installation](../reference/plugin-installation.md).
 
 > [!IMPORTANT]
 > When installing, Covel does not install dependencies for you, and it does not run any build commands. The code in the package must be ready to run as it is. Covel provides the plugin SDK `@covel/plugin-handlers-utils` and `zod`: `import` them directly, without bundling them.

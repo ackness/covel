@@ -1,7 +1,5 @@
 ---
-id: character-blueprint
-kind: plugin
-version: 0.0.36
+version: 0.0.37
 displayName: Character Profiles
 description: >-
   Saves the world's preset character profiles along with their portraits,
@@ -10,17 +8,12 @@ tags:
   - "data:world-data"
   - "data:characters"
   - "data:media-assets"
-  - "cost:function"
-  - "ui:right-panel"
-  - "ui:manual-action"
 author:
   name: Covel Contributors
   url: https://github.com/ackness/covel
 license: MIT
 provides:
   - character-blueprint@1
-  - character-presence@1
-entry: ./server/index.js
 contributes:
   extensions:
     - point: prompt.segment@1
@@ -55,9 +48,7 @@ contributes:
         example: ./examples/blueprints.json
         generate: default
         source:
-          kind: json
           path: characters/main-cast.json
-          key: id
     presence:
       schema: ./schemas/presence.schema.json
       description: Importable character media presence records.
@@ -70,7 +61,6 @@ contributes:
           by content hash. Generate the portraits first, then generate this
           file; see docs/worlds/portraits.md.
         source:
-          kind: json
           path: media/presence.json
           key: characterId
     assets:
@@ -84,9 +74,7 @@ contributes:
           A directory of portrait image files. The world supplies only the
           files; the index records are produced at import.
         source:
-          kind: media
           path: media/portraits
-          key: filename
   ui:
     right:
       - ./ui/blueprints-panel.json

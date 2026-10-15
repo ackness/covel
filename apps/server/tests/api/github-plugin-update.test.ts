@@ -36,13 +36,8 @@ let archives: Map<string, Buffer>;
 let fetchMock: ReturnType<typeof vi.fn>;
 function files(version: string) {
   return {
-    "plugins/note/package.json": JSON.stringify({
-      name: "example-note",
-      version,
-      type: "module",
-    }),
-    "plugins/note/PLUGIN.md":
-      "---\nid: example-note\nkind: plugin\ndescription: Update fixture\nentry: ./server.js\n---\n",
+    // No package.json: PLUGIN.md carries the version.
+    "plugins/note/PLUGIN.md": `---\nid: example-note\nversion: ${version}\ndescription: Update fixture\nentry: ./server.js\n---\n`,
     "plugins/note/server.js": `throw new Error("Unapproved ${version} code executed");`,
     "README.md": "Repository description",
   };
@@ -169,11 +164,11 @@ it("ignores repository-only changes, stages selected files and applies before di
   const preview = await queue();
   expect(preview.changes).toEqual({
     added: ["new.txt"],
-    modified: ["package.json", "server.js"],
+    modified: ["PLUGIN.md", "server.js"],
     removed: ["obsolete.txt"],
   });
   expect(
-    await readFile(path.join(root, "example-note/package.json"), "utf8"),
+    await readFile(path.join(root, "example-note/PLUGIN.md"), "utf8"),
   ).toContain("1.0.0");
   const before = await (await request("plugins", undefined, "GET")).json();
   expect(before.items[0]).toMatchObject({
@@ -188,13 +183,12 @@ it("ignores repository-only changes, stages selected files and applies before di
   expect(boot.registry.get("example-note")?.source).toBe("community");
   expect(boot.registry.get("example-note")?.status).toBe("registered");
   expect(
-    await readFile(path.join(root, "example-note/package.json"), "utf8"),
+    await readFile(path.join(root, "example-note/PLUGIN.md"), "utf8"),
   ).toContain("1.1.0");
   expect((await readdir(path.join(root, "example-note"))).sort()).toEqual([
     ".covel-install.json",
     "PLUGIN.md",
     "new.txt",
-    "package.json",
     "server.js",
   ]);
   const after = await (await request("plugins", undefined, "GET")).json();
@@ -321,7 +315,7 @@ it.each(["modified", "added", "deleted", "link"])(
     if (kind === "deleted") await rm(file);
     if (kind === "link") {
       await rm(file);
-      await symlink(path.join(root, "example-note/package.json"), file);
+      await symlink(path.join(root, "example-note/PLUGIN.md"), file);
     }
     expect(
       (
@@ -332,7 +326,7 @@ it.each(["modified", "added", "deleted", "link"])(
       ).status,
     ).toBe(409);
     expect(
-      await readFile(path.join(root, "example-note/package.json"), "utf8"),
+      await readFile(path.join(root, "example-note/PLUGIN.md"), "utf8"),
     ).toContain("1.0.0");
   },
 );
@@ -371,12 +365,12 @@ it("restores the old package when promotion fails, then retries safely", async (
   });
   await applyPendingPackageUpdates(root);
   expect(
-    await readFile(path.join(root, "example-note/package.json"), "utf8"),
+    await readFile(path.join(root, "example-note/PLUGIN.md"), "utf8"),
   ).toContain("1.0.0");
   vi.mocked(rename).mockImplementation(actual.rename);
   await applyPendingPackageUpdates(root);
   expect(
-    await readFile(path.join(root, "example-note/package.json"), "utf8"),
+    await readFile(path.join(root, "example-note/PLUGIN.md"), "utf8"),
   ).toContain("1.1.0");
 });
 
@@ -398,7 +392,7 @@ it.each(["before-promotion", "after-promotion"])(
       );
     await applyPendingPackageUpdates(root);
     expect(
-      await readFile(path.join(root, "example-note/package.json"), "utf8"),
+      await readFile(path.join(root, "example-note/PLUGIN.md"), "utf8"),
     ).toContain("1.1.0");
     expect(await readdir(path.join(root, ".covel-updates"))).toEqual([]);
   },
@@ -467,7 +461,7 @@ it("rejects changes to the installation receipt or remote archive after preview"
     ).status,
   ).toBe(409);
   expect(
-    await readFile(path.join(root, "example-note/package.json"), "utf8"),
+    await readFile(path.join(root, "example-note/PLUGIN.md"), "utf8"),
   ).toContain("1.0.0");
 });
 
@@ -484,6 +478,6 @@ it("admits only one concurrent update transaction", async () => {
   ]);
   await applyPendingPackageUpdates(root);
   expect(
-    await readFile(path.join(root, "example-note/package.json"), "utf8"),
+    await readFile(path.join(root, "example-note/PLUGIN.md"), "utf8"),
   ).toContain("1.1.0");
 });

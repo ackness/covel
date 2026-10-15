@@ -10,17 +10,16 @@ In the path headings below, `[]` is a list item and `.*` is a map value.
 
 ## Top-level fields
 
-| Field         | Type                      | Required | Description                                                                                 |
-| ------------- | ------------------------- | -------- | ------------------------------------------------------------------------------------------- |
-| `type`        | `"agent"` or `"function"` | yes      | `agent` drives model tool calls from the prompt body. `function` runs a JavaScript handler. |
-| `description` | text                      | no       | What the runtime does. Plain string; translations go in locale files.                       |
-| `schedule`    | object                    | no       | When and in what order the runtime runs.                                                    |
-| `io`          | object                    | no       | What the runtime reads and produces.                                                        |
-| `agent`       | object                    | no       | Settings of an `agent` runtime. Not allowed on a `function` runtime.                        |
-| `function`    | object                    | no       | Settings of a `function` runtime. Required when `type` is `function`.                       |
-| `guard`       | string                    | no       | Path of the guard module. It runs before the runtime and can skip it.                       |
-| `effects`     | object                    | no       | Declared read and write sets, used to detect parallel hazards.                              |
-| `permissions` | object                    | no       | Declared permission upper bounds.                                                           |
+| Field         | Type   | Required | Description                                                                                                                                      |
+| ------------- | ------ | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `description` | text   | no       | What the runtime does. Plain string; translations go in locale files.                                                                            |
+| `schedule`    | object | no       | When and in what order the runtime runs.                                                                                                         |
+| `io`          | object | no       | What the runtime reads and produces.                                                                                                             |
+| `agent`       | object | no       | Settings of an agent runtime, the kind of a runtime without a `function` block: it drives model tool calls from the prompt body.                 |
+| `function`    | object | no       | Makes this a function runtime, which runs a JavaScript handler instead of a model. `function: {}` takes every default. Not allowed with `agent`. |
+| `guard`       | string | no       | Path of the guard module. It runs before the runtime and can skip it.                                                                            |
+| `effects`     | object | no       | Declared read and write sets, used to detect parallel hazards.                                                                                   |
+| `permissions` | object | no       | Declared permission upper bounds.                                                                                                                |
 
 ## `schedule`
 
@@ -53,11 +52,11 @@ In the path headings below, `[]` is a list item and `.*` is a map value.
 
 ## `schedule.needs[]` (form 2 of 2)
 
-| Field         | Type                    | Required | Description                                                                                                              |
-| ------------- | ----------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------ |
-| `contract`    | string                  | yes      | Contract ID. It must be listed in the package's `requires` or `optional`.                                                |
-| `cardinality` | `"one"` or `"all"`      | no       | `one` takes a single provider; `all` takes every provider. Defaults to `one`.                                            |
-| `scope`       | `"turn"` or `"session"` | no       | `turn` gates on the same execution. `session` gates on the persistent setup snapshot and is valid only on stage `setup`. |
+| Field         | Type                    | Required | Description                                                                                                                 |
+| ------------- | ----------------------- | -------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `contract`    | string                  | yes      | Contract ID. List it in the package's `requires` when a provider must be active; otherwise the runtime uses it when one is. |
+| `cardinality` | `"one"` or `"all"`      | no       | `one` takes a single provider; `all` takes every provider. Defaults to `one`.                                               |
+| `scope`       | `"turn"` or `"session"` | no       | `turn` gates on the same execution. `session` gates on the persistent setup snapshot and is valid only on stage `setup`.    |
 
 ## `schedule.after[]` (form 1 of 2)
 
@@ -67,10 +66,10 @@ In the path headings below, `[]` is a list item and `.*` is a map value.
 
 ## `schedule.after[]` (form 2 of 2)
 
-| Field         | Type               | Required | Description                                                                                                                                |
-| ------------- | ------------------ | -------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| `contract`    | string             | yes      | Contract ID. This runtime runs after the contract's active providers; the contract does not have to be listed in `requires` or `optional`. |
-| `cardinality` | `"one"` or `"all"` | no       | `one` takes a single provider; `all` takes every provider. Defaults to `one`.                                                              |
+| Field         | Type               | Required | Description                                                                                          |
+| ------------- | ------------------ | -------- | ---------------------------------------------------------------------------------------------------- |
+| `contract`    | string             | yes      | Contract ID. This runtime runs after the contract's active providers; it never activates a provider. |
+| `cardinality` | `"one"` or `"all"` | no       | `one` takes a single provider; `all` takes every provider. Defaults to `one`.                        |
 
 ## `schedule.completion`
 
@@ -120,10 +119,10 @@ In the path headings below, `[]` is a list item and `.*` is a map value.
 
 ## `io.inputs.*.from` (form 2 of 3)
 
-| Field         | Type               | Required | Description                                                                   |
-| ------------- | ------------------ | -------- | ----------------------------------------------------------------------------- |
-| `contract`    | string             | yes      | Contract ID. It must be listed in the package's `requires` or `optional`.     |
-| `cardinality` | `"one"` or `"all"` | no       | `one` takes a single provider; `all` takes every provider. Defaults to `one`. |
+| Field         | Type               | Required | Description                                                                                                                 |
+| ------------- | ------------------ | -------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `contract`    | string             | yes      | Contract ID. List it in the package's `requires` when a provider must be active; otherwise the runtime uses it when one is. |
+| `cardinality` | `"one"` or `"all"` | no       | `one` takes a single provider; `all` takes every provider. Defaults to `one`.                                               |
 
 ## `io.inputs.*.from` (form 3 of 3)
 
@@ -142,11 +141,11 @@ In the path headings below, `[]` is a list item and `.*` is a map value.
 
 ## `io.output`
 
-| Field      | Type   | Required | Description                                                                              |
-| ---------- | ------ | -------- | ---------------------------------------------------------------------------------------- |
-| `contract` | string | no       | Contract this runtime's output publishes. It must be listed in the package's `provides`. |
-| `schema`   | string | no       | Private schema that validates the runtime's output.                                      |
-| `recordAs` | string | no       | Export key under which the output is persisted for later executions. Requires `schema`.  |
+| Field      | Type   | Required | Description                                                                                          |
+| ---------- | ------ | -------- | ---------------------------------------------------------------------------------------------------- |
+| `contract` | string | no       | Contract this runtime's output publishes. The package provides it; `provides` needs no entry for it. |
+| `schema`   | string | no       | Private schema that validates the runtime's output.                                                  |
+| `recordAs` | string | no       | Export key under which the output is persisted for later executions. Requires `schema`.              |
 
 ## `agent`
 
@@ -210,12 +209,12 @@ In the path headings below, `[]` is a list item and `.*` is a map value.
 
 ## `function`
 
-| Field       | Type    | Required | Description                                                                                                                                                                |
-| ----------- | ------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `handler`   | string  | yes      | Path of the handler module. The module default-exports the handler function.                                                                                               |
-| `model`     | string  | no       | Model slot the handler's gateway calls route through. Declared so a detached job's credential readiness check judges the same slot the call resolves. Example: `"memory"`. |
-| `timeoutMs` | integer | no       | Time limit of the handler in ms.                                                                                                                                           |
-| `tools`     | object  | no       | Tools the handler may call through `ctx.tools.call`.                                                                                                                       |
+| Field       | Type    | Required | Description                                                                                                                                                                    |
+| ----------- | ------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `handler`   | string  | no       | Path of the handler module, relative to this manifest. The module default-exports the handler function. Defaults to `./handler.js` next to the manifest when that file exists. |
+| `model`     | string  | no       | Model slot the handler's gateway calls route through. Declared so a detached job's credential readiness check judges the same slot the call resolves. Example: `"memory"`.     |
+| `timeoutMs` | integer | no       | Time limit of the handler in ms.                                                                                                                                               |
+| `tools`     | object  | no       | Tools the handler may call through `ctx.tools.call`.                                                                                                                           |
 
 ## `function.tools`
 

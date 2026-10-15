@@ -62,7 +62,7 @@ async function runtimeFixture(
   await mkdir(directory, { recursive: true });
   await writeFile(
     path.join(directory, "RUNTIME.md"),
-    `---\ntype: function\ndescription: Probe\nfunction: {handler: ./handler.js${functionOptions}}\n${extra}\n---\n`,
+    `---\ndescription: Probe\nfunction: {handler: ./handler.js${functionOptions}}\n${extra}\n---\n`,
     "utf8",
   );
   await writeFile(
@@ -497,7 +497,7 @@ describe("runtime debug host integration", () => {
     );
     await writeFile(
       path.join(supportRoot, "runtimes", "follower", "RUNTIME.md"),
-      "---\ntype: function\ndescription: Support follower\nfunction: {handler: ./handler.js}\nschedule: {trigger: {type: event, topic: root.ready}, manual: {execution: background}}\n---\n",
+      "---\ndescription: Support follower\nfunction: {handler: ./handler.js}\nschedule: {trigger: {type: event, topic: root.ready}, manual: {execution: background}}\n---\n",
       "utf8",
     );
     await writeFile(

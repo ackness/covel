@@ -10,8 +10,7 @@
 
 ```text
 fact-index/
-├── PLUGIN.md                    包的身份、能力、共用的声明
-├── package.json
+├── PLUGIN.md                    包的说明、能力、共用的声明
 ├── README.md
 ├── server/index.js              可选：入口文件
 ├── schemas/facts.schema.json
@@ -27,10 +26,7 @@ fact-index/
 
 ```yaml
 ---
-id: fact-index
-kind: plugin
 description: Extracts and retrieves narrative facts.
-provides: [facts.index@1, facts.query@1]
 requires: [narrative-engine@1]
 contributes:
   data:
@@ -44,7 +40,6 @@ contributes:
 
 ```yaml
 ---
-type: agent
 schedule: { stage: post-turn }
 io:
   inputs:
@@ -59,17 +54,15 @@ io:
 Extract only the facts that `runtime-inputs.narrative.value` states.
 ```
 
-`runtimes/query/RUNTIME.md` 是一个手动触发的函数：
+`runtimes/query/RUNTIME.md` 是一个手动触发的函数。它有 `function` 块，代码在同一个文件夹的 `handler.js` 里：
 
 ```yaml
 ---
-type: function
 schedule:
   trigger: { type: manual }
 io:
   output: { contract: facts.query@1 }
 function:
-  handler: ./handler.js
   timeoutMs: 90000
 ---
 ```
@@ -78,8 +71,7 @@ function:
 
 | 这一段                      | 意思                                                                                             |
 | --------------------------- | ------------------------------------------------------------------------------------------------ |
-| `provides`                  | 这个插件对外提供的能力。别的插件可以 `requires` 它们                                             |
-| `io.output.contract`        | 这个 runtime 的输出就是这项能力的内容。它必须出现在 `provides` 里                                |
+| `io.output.contract`        | 这个 runtime 的输出就是这项能力的内容。插件因此提供这项能力，别的插件可以 `requires` 它          |
 | `io.output.schema`          | 输出要符合的形状。不符合时这次运行失败                                                           |
 | `io.output.recordAs`        | 把输出保存下来，取一个名字。以后的回合可以用 `scope: committed` 读到它                           |
 | `schedule.manual.execution` | 不写时是 `sync`：调用方等它完成；写 `background` 是放到后台，见[后台工作与失败](#后台工作与失败) |
@@ -87,6 +79,7 @@ function:
 规则：
 
 - 同一个插件里，不能有两个 runtime 输出同一项能力。
+- 插件提供的能力就是各个 runtime 的 `io.output.contract`，不用再写 `provides`。只有不由任何 runtime 输出的能力（例如由入口文件里的服务提供）才写进 `provides`。
 - 路径相对于文件所在的位置。`RUNTIME.md` 里的 `./handler.js` 在它自己的文件夹里；`PLUGIN.md` 里的路径从包的根目录算起。路径和符号链接都不能指到包外面。
 - `RUNTIME.md` 里不能写 `contributes`、`id` 这些属于整个包的字段。设置项、数据声明、工具清单都写在 `PLUGIN.md` 里，所有 runtime 共用。
 - 多 runtime 的插件里，每个 agent 用 `agent.tools.plugin` 列出自己要用的工具。
@@ -144,20 +137,18 @@ contributes:
           one sentence.
         example: ./examples/facts.json
         source:
-          kind: yaml
           path: data/facts.yaml
-          key: id
 ```
 
-| 字段         | 意思                                                                                                                                     |
-| ------------ | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| `title`      | 这类内容的名称，给作者看                                                                                                                 |
-| `hint`       | 怎样写好这类记录。用简短明确的英文句子                                                                                                   |
-| `summary`    | 给玩家看的一句简介。应用内的创作界面用它当选项说明                                                                                       |
-| `example`    | 一份合法的示例（JSON）。它会按上面的 `schema` 检查                                                                                       |
-| `source`     | 这份内容在世界包里的约定位置：`kind`、`path`、`key`，以及可选的 `visibility: hidden` 和 `lorebook: true`。图片等媒体目录用 `kind: media` |
-| `references` | 记录里哪些值写的是世界角色属性的 `id`。`pnpm validate:world` 会在开局前检查它们，写法见 [插件参考](../reference/plugins.md)              |
-| `generate`   | 允许应用内的世界生成器只凭 `hint` 和 `example` 生成这份内容，见下文                                                                      |
+| 字段         | 意思                                                                                                                                                                            |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `title`      | 这类内容的名称，给作者看                                                                                                                                                        |
+| `hint`       | 怎样写好这类记录。用简短明确的英文句子                                                                                                                                          |
+| `summary`    | 给玩家看的一句简介。应用内的创作界面用它当选项说明                                                                                                                              |
+| `example`    | 一份合法的示例（JSON）。它会按上面的 `schema` 检查                                                                                                                              |
+| `source`     | 这份内容在世界包里的约定位置：`path`，以及可选的 `key`（默认 `id`）、`visibility: hidden` 和 `lorebook: true`。文件格式由 `path` 推出：`.yaml`、`.json`，或没有扩展名的媒体目录 |
+| `references` | 记录里哪些值写的是世界角色属性的 `id`。`pnpm validate:world` 会在开局前检查它们，写法见 [插件参考](../reference/plugins.md)                                                     |
+| `generate`   | 允许应用内的世界生成器只凭 `hint` 和 `example` 生成这份内容，见下文                                                                                                             |
 
 `title` 是标签，所以清单里写英文，中文写在 `locales/zh.yaml`：
 
@@ -251,7 +242,6 @@ Authoring examples match their schemas.
 
 ```yaml
 function:
-  handler: ./handler.js
   model: memory
 ```
 
@@ -398,7 +388,7 @@ homepage: https://example.com/fact-index
 
 | 字段       | 意思                                                                                                               |
 | ---------- | ------------------------------------------------------------------------------------------------------------------ |
-| `version`  | 插件的版本。必须和 `package.json` 里的 `version` 相同，校验会检查                                                  |
+| `version`  | 插件的版本。只写在这里，`package.json` 不写版本                                                                    |
 | `covel`    | 适用的 Covel 版本范围。范围之外的 Covel 不安装也不加载它。写法见[合集 · 版本范围](../ship/collections.md#版本范围) |
 | `author`   | 作者名、主页、一段写给玩家的话、几个链接。链接只能是 `https`                                                       |
 | `license`  | 许可证                                                                                                             |
@@ -415,7 +405,7 @@ homepage: https://example.com/fact-index
 
 ### 检查包里的东西
 
-- `package.json` 里 `"type": "module"`。
+- 带 `package.json` 时，它写了 `"type": "module"`。不带也可以。
 - 用户目录里的插件必须自己能运行，不依赖 `npm install`。
 - 不要带上密钥、生成的数据和你电脑上的路径。
 
@@ -443,7 +433,7 @@ pnpm check
 | ------------------------------------------------------------ | --------------------------------------------------------------------------------- |
 | 校验报 `inline runtime and runtimes/ cannot coexist`         | `PLUGIN.md` 里还留着 `runtime:`。多 runtime 的包里删掉它                          |
 | 校验报 `contributes.hooks.0: Invalid input: expected object` | hook 要写成 `- event: PreToolUse`，不是一个字符串                                 |
-| 校验报 `output contract … is not declared in root provides`  | 把这项能力加进 `PLUGIN.md` 的 `provides`                                          |
+| 校验报 `ambiguous output contract …`                         | 两个 runtime 输出了同一项能力。每项能力只由一个 runtime 输出                      |
 | 世界包的数据没有导入                                         | 文件不在 `source.path` 的位置，或者别的插件声明了同一个路径，或者这个插件没有启用 |
 | `describe:authoring --check` 报示例不合格                    | `example` 文件不符合 `schema`                                                     |
 | 后台 runtime 一直排队                                        | 它调用了模型，却没有声明 `function.model`                                         |

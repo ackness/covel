@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import { runtimeAuthoringManifestSchema } from "../src/schemas/runtime-manifest.js";
 
 const runtime = (binding: object) => ({
-  type: "agent",
   schedule: { trigger: { type: "manual" } },
   io: { inputs: { prior: binding } },
 });
@@ -64,7 +63,6 @@ describe("runtimeAuthoringManifestSchema committed inputs", () => {
 describe("runtimeAuthoringManifestSchema concealed runtimes", () => {
   const concealed = (visibility?: string) =>
     runtimeAuthoringManifestSchema.safeParse({
-      type: "agent",
       schedule: { trigger: { type: "manual" } },
       io: { concealed: true, ...(visibility ? { visibility } : {}) },
     });

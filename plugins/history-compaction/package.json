@@ -1,6 +1,5 @@
 {
   "name": "@covel/plugin-history-compaction",
-  "version": "0.0.43",
   "private": true,
   "type": "module",
   "scripts": {

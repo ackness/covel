@@ -1043,7 +1043,7 @@ Authentication:
 
 What each endpoint accepts and returns:
 
-- `POST /api/install/plugin`: accepts a `.zip` with `PLUGIN.md` and `package.json` at the root, or a `.zip` with a multi-runtime layout. Returns `201 { ok, kind: "plugin", id, restartRequired: true, hasServerCode }`.
+- `POST /api/install/plugin`: accepts a `.zip` with `PLUGIN.md` at the root (`package.json` is optional, and a multi-runtime layout works too), or a `.zip` with a single top-level folder that holds `PLUGIN.md`. Returns `201 { ok, kind: "plugin", id, restartRequired: true, hasServerCode }`.
 - `POST /api/install/world`: accepts a `.zip` with `world.yaml` and `WORLD.md` at the root. Returns `201 { ok, kind: "world", id, restartRequired: false }`.
 - `POST /api/install/plugin/github/preview`: returns the fixed commit, the summary, and the signed preview.
 - `.../github/update/preview`: returns `{ status: "current" }`, `{ status: "pinned" }`, or `{ status: "available", ... }` plus a preview. The full contract of the update endpoints is in [Plugin install](./plugin-installation.md#http-contract) and [World install](./world-installation.md).
@@ -1063,11 +1063,11 @@ Rollback results for failed batch installations are documented in [Plugin instal
 - Validation reuses the existing descriptor, source, and schema validators. It does not use local overrides, and it does not run community plugin code.
 
 > [!IMPORTANT]
-> **Canonical plugin identity**: the only identity of a plugin is the `id` at the root of its manifest. That is the `pluginId` used at runtime.
+> **Plugin identity**: the only identity of a plugin is its ID. That is the `pluginId` used at runtime.
 >
-> - The package name in `package.json` takes part in the consistency check only after the exact `plugin-` prefix is removed (`@covel/plugin-foo` matches `id: foo`). A mismatch returns `400`.
-> - The check for reserved built-in IDs, the install directory, and the returned `id` all use this canonical ID. `@covel/plugin-narrator` with `id: narrator` hits a reserved ID and returns `409`.
-> - Plugin discovery at startup also requires the directory name to equal the root `id` of the manifest. A plugin that does not match is registered with `hostState: "error"`, and no runtime, tool, hook, or wire is loaded.
+> - At install time, the ID is the `id` in `PLUGIN.md`, else the name of the folder that holds the package, else the package name in `package.json` (without its scope and the exact `plugin-` prefix); see [plugin installation](./plugin-installation.md#what-the-installer-does-and-does-not-do). When `id` is written, the `package.json` name plays no part.
+> - The check for reserved built-in IDs, the install directory, and the returned `id` all use this ID. A package with no `id` and no top-level folder whose `package.json` names `@covel/plugin-narrator` hits a reserved ID and returns `409`.
+> - Plugin discovery at startup takes the directory name as the ID. When `PLUGIN.md` writes a different `id`, the plugin is registered with `hostState: "error"`, and no runtime, tool, hook, or wire is loaded.
 
 ### State query
 
@@ -3697,7 +3697,7 @@ Fields of `PluginSummary`:
 | `kind`, `source` | `core \| plugin` and `builtin \| community` |
 | `hostState`, `error?` | Host state `discovered \| installed \| loaded \| error`, and the load error |
 | `disabledRuntimes?`, `ignoredFields?` | Non-fatal load diagnostics, described below |
-| `provides`, `requires`, `optional`, `conflicts` | Package-level contract declarations |
+| `provides`, `requires`, `optional`, `conflicts` | Package-level contract declarations. `provides` includes the `io.output.contract` of each runtime; Covel works out `optional`: the contracts a runtime refers to that `requires` does not list |
 | `extensions` | Declared extension points, their IDs, order, and listener information |
 | `eventTopics` | Topics declared in `contributes.events` |
 | `runtimeCount`, `runtimes`, `tools`, `userSettings`, `tags` | The runtime summary, tools, and user settings |

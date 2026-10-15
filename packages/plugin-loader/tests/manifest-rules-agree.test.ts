@@ -73,7 +73,6 @@ async function load(dir: string) {
 }
 
 const staged = {
-  type: "function",
   function: { handler: "../../handler.js" },
   schedule: { stage: "narrative" },
 };
@@ -82,13 +81,12 @@ const staged = {
 const unrunnable = [
   {
     name: "an auto runtime without a stage",
-    runtime: { type: "agent", io: { output: { contract: "notes@1" } } },
+    runtime: { io: { output: { contract: "notes@1" } } },
     field: "schedule.stage",
   },
   {
     name: "an auto runtime with a cadence and no stage",
     runtime: {
-      type: "agent",
       schedule: { every: 3 },
       io: { output: { contract: "notes@1" } },
     },
@@ -97,7 +95,6 @@ const unrunnable = [
   {
     name: "a background manual runtime with a same-execution input",
     runtime: {
-      type: "function",
       function: { handler: "../../handler.js" },
       schedule: {
         trigger: { type: "manual" },
@@ -117,7 +114,7 @@ describe("a runtime that can never run", () => {
     "$name: loading leaves it out, validation and installation reject it",
     async ({ runtime, field }) => {
       const dir = await plugin(
-        { provides: ["notes@1"] },
+        {},
         {
           bad: runtime,
           good: staged,
@@ -134,7 +131,7 @@ describe("a runtime that can never run", () => {
         `${file}: ${field}:`,
       );
       // Nothing may count on what the left-out runtime would have provided.
-      expect(definition.packageManifest.plugin.provides).toEqual([]);
+      expect(definition.packageManifest.plugin.provides).toBeUndefined();
 
       const result = await validate(dir);
       expect(result.status).toBe(1);
@@ -155,9 +152,10 @@ describe("a runtime that can never run", () => {
   );
 
   it("leaves out an inline runtime and keeps the package", async () => {
+    // A written default-provider entry goes too.
     const dir = await plugin({
-      provides: ["notes@1"],
-      runtime: { type: "agent", io: { output: { contract: "notes@1" } } },
+      provides: [{ contract: "notes@1", default: true }],
+      runtime: { io: { output: { contract: "notes@1" } } },
     });
     const file = path.join(dir, "PLUGIN.md");
 
@@ -166,7 +164,7 @@ describe("a runtime that can never run", () => {
     expect(definition.disabledRuntimes[0]!.message).toContain(
       `${file}: runtime.schedule.stage:`,
     );
-    expect(definition.packageManifest.plugin.provides).toEqual([]);
+    expect(definition.packageManifest.plugin.provides).toBeUndefined();
 
     const result = await validate(dir);
     expect(result.status).toBe(1);
@@ -183,7 +181,7 @@ describe("a runtime that can never run", () => {
     const dir = await plugin(
       {},
       {
-        bad: { type: "agent", schedule: { stage: "pre-turn", extra: true } },
+        bad: { schedule: { stage: "pre-turn", extra: true } },
       },
     );
     await expect(load(dir)).rejects.toThrow("schedule");
@@ -206,7 +204,6 @@ const crossField = [
   {
     name: "a detached function with suspend",
     runtime: {
-      type: "function",
       schedule: { stage: "post-turn", completion: { mode: "detached" } },
       function: {
         handler: "../../handler.js",
@@ -300,7 +297,7 @@ describe("cross-field rules", () => {
   it.each(crossField)(
     "$name: the inline runtime error names PLUGIN.md and the author field",
     async ({ runtime, field }) => {
-      const dir = await plugin({ runtime: { type: "agent", ...runtime } });
+      const dir = await plugin({ runtime: { ...runtime } });
       const file = path.join(dir, "PLUGIN.md");
       const error = await load(dir).then(
         () => undefined,
@@ -320,7 +317,7 @@ describe("cross-field rules", () => {
       const dir = await plugin(
         {},
         {
-          one: { type: "agent", ...runtime },
+          one: { ...runtime },
         },
       );
       const file = path.join(dir, "runtimes/one/RUNTIME.md");
@@ -338,7 +335,6 @@ describe("cross-field rules", () => {
       {},
       {
         one: {
-          type: "agent",
           schedule: { stage: "post-turn" },
           io: { inputs: { digest: { from: { kernel: "turn-digest@1" } } } },
         },

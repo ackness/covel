@@ -24,7 +24,6 @@ id: producer
 kind: plugin
 description: Export fixture
 runtime:
-  type: function
   schedule:
     stage: narrative
     trigger:

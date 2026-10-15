@@ -32,7 +32,6 @@ kind: plugin
 description: unavailable plugin fixture
 requires: ${JSON.stringify(requires)}
 runtime:
-  type: function
   function:
     handler: ./server/handler.mjs
   schedule:

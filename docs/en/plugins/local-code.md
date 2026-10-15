@@ -24,7 +24,6 @@ After step 5, the folder contains these files:
 ```text
 notebook/
 ├── PLUGIN.md                  config and prompt
-├── package.json
 ├── README.md
 ├── server/
 │   └── index.js               entry file: registers tools and actions
@@ -36,33 +35,21 @@ notebook/
     └── runtime-cases.json     cases for offline runs
 ```
 
-`package.json` is the same as on the previous page. It has only three lines:
-
-```json
-{
-  "name": "notebook",
-  "version": "0.1.0",
-  "type": "module"
-}
-```
+No `package.json` is needed: Covel loads the plugin's `.js` files as ES modules, and the version is in `PLUGIN.md`.
 
 ## 2. Write `PLUGIN.md`
 
 ```yaml
 ---
-id: notebook
-kind: plugin
 version: 0.1.0
 description: Saves a brief note after narration.
 requires: [narrative-engine@1]
-entry: ./server/index.js
 contributes:
   tools: [save-note]
   data:
     notes:
       schema: ./schemas/note.schema.json
 runtime:
-  type: agent
   schedule: { stage: post-turn }
   io:
     inputs:
@@ -82,7 +69,7 @@ Compared with a plugin that has only a prompt, these parts are new:
 | This part                        | Meaning                                                                                                                                                   |
 | -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `version`                        | The plugin's version. A plugin with an entry file needs one, raised with each release; `pnpm validate:plugin` reminds you when it is missing              |
-| `entry`                          | The entry file. Covel runs it when it loads the plugin, and it registers the tools                                                                        |
+| `server/index.js`                | The entry file. Covel runs it when it loads the plugin, and it registers the tools. Put it here and you need no `entry`                                   |
 | `contributes.tools`              | The tools this plugin registers. The names must match the names registered in the entry file                                                              |
 | `contributes.data.notes`         | Declares the `notes` data space, and the shape (schema) of one record                                                                                     |
 | `agent.history: { maxTurns: 2 }` | The model sees the conversation of only the last 2 turns. See [controlling how much history the model sees](#controlling-how-much-history-the-model-sees) |
@@ -333,11 +320,10 @@ Notes:
 
 ## Write a function
 
-A fixed rule does not need a model. Change the runtime type to `function`, and point it at a code file:
+A fixed rule does not need a model. Give the runtime a `function` block, and it is a function instead of an agent:
 
 ```yaml
 runtime:
-  type: function
   schedule: { stage: post-turn }
   io:
     inputs:
@@ -345,10 +331,11 @@ runtime:
         from: { contract: narrative-engine@1 }
         select: /narrativeOutput
   function:
-    handler: ./handler.js
     timeoutMs: 30000
     tools: { builtin: [get-character] }
 ```
+
+The code is in `handler.js` next to the manifest by default; when it is somewhere else, point `function.handler` at it. When no other setting is needed, write `function: {}`.
 
 `handler.js` exports one function by default:
 

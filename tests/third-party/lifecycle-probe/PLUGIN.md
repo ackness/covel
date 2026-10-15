@@ -1,13 +1,7 @@
 ---
-id: lifecycle-probe
-kind: plugin
+version: 1.0.0
 displayName: Plugin Lifecycle Probe
 description: "Standalone third-party install, approval, runtime, and uninstall probe."
-provides:
-  - scene-prompts@1
-  - narrative-engine@1
-optional: [narrative-engine@1]
-entry: ./server/index.js
 contracts:
   lifecycle-probe.notes.initial@1:
     schema: ./schemas/note.schema.json

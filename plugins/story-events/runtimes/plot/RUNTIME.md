@@ -1,5 +1,4 @@
 ---
-type: agent
 description: >-
   Every few turns, reads this turn's narrative and world state to plant hidden
   follow-up events that happen later.

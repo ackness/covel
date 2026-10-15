@@ -64,7 +64,8 @@ describe("resume commit composition", () => {
         },
         manifests: [
           {
-            runtime: { type: manifest.runtimeType ?? ("agent" as const) },
+            runtime:
+              manifest.runtimeType === "function" ? { function: {} } : {},
             manifest,
             promptTemplate: "",
             rawFrontmatter: {},
@@ -254,7 +255,7 @@ describe("resume commit composition", () => {
           runtimeCount: manifests.length,
         },
         manifests: manifests.map((manifest) => ({
-          runtime: { type: "function" as const },
+          runtime: { function: {} },
           manifest,
           promptTemplate: "",
           rawFrontmatter: {},

@@ -31,7 +31,6 @@ async function fixture(multi: boolean, warnings = true) {
   };
   const update = async (hasWarnings: boolean) => {
     const runtime = {
-      type: "agent",
       ...(hasWarnings ? {} : { schedule: { stage: "post-turn" } }),
       io: { output: { contract: "partial-output@1" } },
     };
@@ -46,7 +45,6 @@ async function fixture(multi: boolean, warnings = true) {
     if (multi) {
       await writeManifest("runtimes/broken/RUNTIME.md", runtime);
       await writeManifest("runtimes/healthy/RUNTIME.md", {
-        type: "agent",
         schedule: { stage: "post-turn" },
         ...(hasWarnings ? { futureRuntimeFeature: true } : {}),
       });

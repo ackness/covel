@@ -979,7 +979,6 @@ The client shows it where the current layout keeps its status: below the text-ta
 - Keep it short: one to three entries per plugin. Leave the details to the plugin's own panel.
 
 ```yaml
-entry: ./server/index.js
 contributes:
   extensions:
     - point: ui.slot@1

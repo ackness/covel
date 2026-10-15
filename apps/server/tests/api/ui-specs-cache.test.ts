@@ -34,7 +34,6 @@ contributes:
     right:
       - ./ui/panel.json
 runtime:
-  type: function
   schedule:
     trigger:
       type: manual

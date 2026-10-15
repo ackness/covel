@@ -191,7 +191,7 @@ io:
       required: false
 ```
 
-- 根 `PLUGIN.md` 的 `optional` 要列出 `world-time-evolution@1`。
+- 不要把 `world-time-evolution@1` 写进根 `PLUGIN.md` 的 `requires`：不写时它是可选的，没有时间插件的会话里这个输入不存在。
 - 这个输入同时决定了顺序：读取它的 runtime 排在时间结算之后，所以读到的是本回合的值。
 - 用 `scope: committed` 读，或者在回合开始时读 `world-time-context@1`，得到的都是上一回合结束时的值。
 - 时间没有结算时，这个输入不存在，读取它的 runtime 照常运行。两种情况会这样：模型调用失败；或者这是一次递归的子叙事，时间由外层结算（这时输出只有 `reason`）。

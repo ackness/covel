@@ -13,7 +13,7 @@
 - `PLUGIN.md` 的 Markdown 正文是运行时提示词，用 English 写
 - `locales/zh.yaml` 是名称与说明的中文译文
 
-`PLUGIN.md` 和 `package.json` 的版本都从 `0.1.0` 开始。发布新版本时同时修改两处，再做静态校验。
+版本从 `0.1.0` 开始，只写在 `PLUGIN.md`；`package.json` 只让这个包成为 workspace 成员，不写版本。发布新版本时改 `PLUGIN.md` 的 `version`，再做静态校验。插件 ID 就是目录名，`server/index.js` 是默认的 `entry`，两者都不用写。
 
 `tests/runtime-cases.json` 带编辑器用的 `$schema`。用例必须写 `name` 和 `runtimeId`；未知字段（包括拼错的 `expect`）会在执行前报错。
 

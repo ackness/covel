@@ -1,20 +1,15 @@
 ---
-id: world-ir
-kind: plugin
-version: 0.0.36
+version: 0.0.37
 displayName: World Fact Extraction
 description: >-
   Extracts people, relationships, events, and clues from each story turn for
   codex, quest, and other features.
 tags:
   - "data:world-ir"
-  - "cost:llm"
 author:
   name: Covel Contributors
   url: https://github.com/ackness/covel
 license: MIT
-provides:
-  - world-ir-provider@1
 contracts:
   world-ir-provider@1:
     schema: ./schemas/world-ir.schema.json
@@ -24,16 +19,12 @@ contracts:
     schema: ./schemas/world-ir-vocabulary.schema.json
 requires:
   - narrative-engine@1
-optional:
-  - world-ir.vocabulary@1
-entry: ./server/index.js
 contributes:
   tools:
     - submit-world-facts
   hooks:
     - event: PostContextAssembly
 runtime:
-  type: agent
   schedule:
     stage: post-turn
   io:

@@ -1,10 +1,11 @@
 /**
  * Plugin install route.
  *
- * POST /api/install/plugin — multipart (field `file`), accepts a.zip containing
- *   a root-level PLUGIN.md + package.json, with optional runtimes/<sub>/RUNTIME.md
- *   entries (multi-runtime layout). Extracts to the user plugins dir and
- *   returns `{ ok, id, restartRequired: true }`.
+ * POST /api/install/plugin — multipart (field `file`), accepts a .zip of the
+ *   package: a root PLUGIN.md, or one top-level directory that holds it, with
+ *   optional runtimes/<sub>/RUNTIME.md entries (multi-runtime layout) and an
+ *   optional package.json. Extracts to the user plugins dir and returns
+ *   `{ ok, id, restartRequired: true }`.
  */
 
 import path from "node:path";
@@ -12,7 +13,10 @@ import { Hono } from "hono";
 import { resolveUserResourceDirs } from "../../../lib/user-resource-dirs.js";
 import { errorBody } from "../../../api-error.js";
 import { withPackageMutation } from "./package-files.js";
-import { validatePluginBundle } from "./plugin-bundle.js";
+import {
+  unwrapPackageDirectory,
+  validatePluginBundle,
+} from "./plugin-bundle.js";
 import {
   collectUpload,
   errorResponse,
@@ -38,15 +42,15 @@ pluginInstallRoutes.post("/plugin", async (c) => {
     const buffer = await collectUpload(file);
     // First extract + validate against a throwaway sentinel root (path-traversal check
     // uses a fixed root string — entries get re-resolved under the final dir later).
-    const entries = await readAllEntries(
-      buffer,
-      "/covel-plugin-install-sentinel",
+    // An archive of the package directory installs as that directory.
+    const { entries, directory } = unwrapPackageDirectory(
+      await readAllEntries(buffer, "/covel-plugin-install-sentinel"),
     );
     // Reserved builtin ids are injected by the bootstrap DI middleware. Absent
     // only in bare test harnesses that mount the install routes directly — fall
     // back to an empty set so the route still functions there.
     const reservedPluginIds = c.get("reservedPluginIds") ?? new Set<string>();
-    const summary = validatePluginBundle(entries, reservedPluginIds);
+    const summary = validatePluginBundle(entries, reservedPluginIds, directory);
 
     const root = resolveUserResourceDirs().plugins;
 

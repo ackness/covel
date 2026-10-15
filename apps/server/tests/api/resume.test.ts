@@ -253,7 +253,7 @@ function makeDefaultDeps(store: DataStore, overrides?: Partial<Deps>): Deps {
     },
     manifests: [
       {
-        runtime: { type: "agent" },
+        runtime: {},
         manifest: TEST_MANIFEST,
         promptTemplate: "Test prompt",
         rawFrontmatter: {},
@@ -313,7 +313,7 @@ describe("Resume Routes", () => {
         manifests: [
           ...entry.manifests,
           {
-            runtime: { type: "agent" },
+            runtime: {},
             manifest: { ...TEST_MANIFEST, name: "test-plugin/unrelated" },
             promptTemplate: "Unrelated runtime must not require approval here",
             rawFrontmatter: {},
@@ -1112,7 +1112,7 @@ describe("Resume Routes", () => {
         manifests: [
           ...entry.manifests,
           {
-            runtime: { type: "agent" },
+            runtime: {},
             manifest: { ...TEST_MANIFEST, name: siblingRuntimeId },
             promptTemplate: "Sibling runtime",
             rawFrontmatter: {},

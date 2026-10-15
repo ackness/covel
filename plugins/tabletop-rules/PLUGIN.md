@@ -1,7 +1,5 @@
 ---
-id: tabletop-rules
-kind: plugin
-version: 0.0.36
+version: 0.0.37
 displayName: Tabletop Rules
 description: >-
   Layer opening point allocation onto character creation and resolve attribute
@@ -10,9 +8,6 @@ author:
   name: Covel Contributors
   url: https://github.com/ackness/covel
 license: MIT
-provides:
-  - tabletop-check@1
-entry: ./server/index.js
 contracts:
   tabletop-check@1:
     schema: ./schemas/tabletop-check.schema.json
@@ -37,9 +32,7 @@ contributes:
           of this file.
         example: ./examples/rules.json
         source:
-          kind: json
           path: data/tabletop-rules.json
-          key: id
         references:
           - path: attributes[].id
             to: character-attribute

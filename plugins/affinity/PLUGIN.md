@@ -1,23 +1,17 @@
 ---
-id: affinity
-kind: plugin
-version: 0.0.37
+version: 0.0.38
 displayName: Affinity
 description: >-
   Tracks numeric player-to-NPC affinity, with scores, tiers, and recent changes
   in the right panel.
 tags:
   - "data:characters"
-  - "cost:llm"
-  - "ui:right-panel"
-  - "ui:message-block"
 author:
   name: Covel Contributors
   url: https://github.com/ackness/covel
 license: MIT
 requires:
   - world-ir-provider@1
-entry: ./server/index.js
 contributes:
   data:
     affinity:
@@ -36,9 +30,7 @@ contributes:
           by name. Keep `notes` to one or two sentences that explain the score.
         example: ./examples/affinity.json
         source:
-          kind: yaml
           path: data/affinity.yaml
-          key: id
   ui:
     right:
       - ./ui/affinity-panel.json
@@ -57,7 +49,6 @@ contributes:
   tools:
     - update-affinity
 runtime:
-  type: agent
   schedule:
     stage: post-turn
   io:

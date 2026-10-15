@@ -1,5 +1,4 @@
 ---
-type: agent
 description: Settles authored dimension rules against this narrative, including
   explicit no-change.
 schedule:

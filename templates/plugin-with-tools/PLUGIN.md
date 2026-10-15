@@ -1,15 +1,11 @@
 ---
-id: "{{pluginName}}"
-kind: plugin
 version: "0.1.0"
 description: "{{pluginDescription}}"
-entry: ./server/index.js
 requires: [narrative-engine@1]
 contributes:
   tools:
     - record-note
 runtime:
-  type: agent
   schedule:
     stage: post-turn
     needs:

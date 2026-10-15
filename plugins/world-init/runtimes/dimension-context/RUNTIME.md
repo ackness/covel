@@ -1,13 +1,11 @@
 ---
-type: function
 description: Publishes this turn's frozen dimension snapshot without a model call.
 schedule:
   stage: pre-turn
 io:
   output:
     contract: world.dimensions@1
-function:
-  handler: ./handler.js
+function: {}
 effects:
   reads:
     - "plugin-data:self:_dimensions"

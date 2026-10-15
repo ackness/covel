@@ -89,7 +89,7 @@ export const IR_RULE_FIELD_PATHS: RuntimeRuleFieldPaths = {
 export const AUTHORING_RULE_FIELD_PATHS: RuntimeRuleFieldPaths = {
   defaultProvider: ["provides"],
   outputContract: ["io", "output", "contract"],
-  runtimeType: ["type"],
+  runtimeType: ["function"],
   handler: ["function", "handler"],
   stage: ["schedule", "stage"],
   visibility: ["io", "visibility"],

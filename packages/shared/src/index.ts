@@ -562,7 +562,11 @@ export {
   satisfiesHostVersionRange,
 } from "./utils/host-version-range.js";
 
-export { pluginManifestSchema } from "./schemas/plugin-manifest.js";
+export {
+  authoringSourceKind,
+  pluginIdSchema,
+  pluginManifestSchema,
+} from "./schemas/plugin-manifest.js";
 export { FRAMEWORK_PLUGIN_ID } from "./framework-plugin-id.js";
 export {
   runtimeAuthoringManifestSchema,
@@ -570,6 +574,8 @@ export {
 } from "./schemas/runtime-manifest.js";
 export {
   AGENT_LOOP_DEFAULTS,
+  DEFAULT_FUNCTION_HANDLER,
+  DEFAULT_PLUGIN_ENTRY,
   DEFAULT_RUNTIME_VISIBILITY,
   defaultAgentLoop,
   defaultAgentModel,

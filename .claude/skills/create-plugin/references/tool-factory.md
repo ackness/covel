@@ -80,16 +80,12 @@ export default function (covel) {
 }
 ```
 
-**2. PLUGIN.md 里声明**——`entry` 指入口，`runtime.agent.tools.plugin` 列**工具名**（不是路径）：
+**2. PLUGIN.md 里声明**——入口默认是 `server/index.js`（放在别处才写 `entry`），`runtime.agent.tools.plugin` 列**工具名**（不是路径）：
 
 ```yaml
-id: sample-tool
-kind: plugin
-entry: ./server/index.js
 contributes:
   tools: [my-tool]
 runtime:
-  type: agent
   schedule:
     trigger: {type: manual}
   agent:

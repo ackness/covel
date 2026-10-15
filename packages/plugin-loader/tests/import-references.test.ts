@@ -34,7 +34,6 @@ contributes:
 it("enumerates entry, projection, function and guard paths with their owning manifests", () => {
   const child = parseRuntimeMd(
     `---
-type: function
 schedule: { trigger: { type: manual } }
 function: { handler: ./handler.mts }
 guard: ./guard.cts
@@ -84,7 +83,6 @@ id: inline
 kind: plugin
 description: Test fixture
 runtime:
-  type: function
   schedule: { trigger: { type: manual } }
   function: { handler: ./handler.js }
 ---

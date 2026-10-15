@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
@@ -29,21 +29,46 @@ const readYaml = (...segments: string[]): Record<string, unknown> =>
 const list = <T = string>(value: unknown): T[] =>
   Array.isArray(value) ? (value as T[]) : [];
 
+const frontmatter = (...segments: string[]) =>
+  parse(
+    readFileSync(path.join(ROOT, ...segments), "utf8").split(/^---$/m)[1]!,
+  ) ?? {};
+const contractOf = (entry: unknown) =>
+  typeof entry === "string" ? entry : (entry as { contract: string }).contract;
+
 const PLUGINS = bundled("plugins").map((id) => {
-  const source = readFileSync(path.join(ROOT, "plugins", id, "PLUGIN.md"));
-  const manifest = parse(source.toString("utf8").split(/^---$/m)[1]!);
+  const manifest = frontmatter("plugins", id, "PLUGIN.md");
+  // As the loader works them out: a package provides what it writes, then
+  // each runtime's output contract.
+  const runtimeDir = path.join(ROOT, "plugins", id, "runtimes");
+  const runtimes = [
+    manifest.runtime,
+    ...(manifest.runtime || !existsSync(runtimeDir)
+      ? []
+      : readdirSync(runtimeDir, { withFileTypes: true })
+          .filter((entry) => entry.isDirectory())
+          .map((entry) =>
+            frontmatter("plugins", id, "runtimes", entry.name, "RUNTIME.md"),
+          )),
+  ].filter(Boolean);
+  const provides: unknown[] = list(manifest.provides);
+  for (const runtime of runtimes) {
+    const contract = runtime.io?.output?.contract;
+    if (contract && !provides.map(contractOf).includes(contract))
+      provides.push(contract);
+  }
   return {
     id,
     displayName: id,
     description: "",
-    kind: manifest.kind,
+    kind: manifest.kind ?? "plugin",
     source: "builtin",
     hostState: "loaded",
     runtimeCount: 0,
     tags: list(manifest.tags),
-    provides: list(manifest.provides),
+    provides,
     requires: list(manifest.requires),
-    optional: list(manifest.optional),
+    optional: [],
     conflicts: list(manifest.conflicts),
     extensions: list(manifest.contributes?.extensions),
     eventTopics: list<{ topic: string }>(manifest.contributes?.events).map(

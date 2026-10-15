@@ -101,9 +101,9 @@
 
 安装使用与加载器相同的[清单与 runtime 目录规则](./plugins.md#包与运行时文件)，缺少 `RUNTIME.md` 的子目录会得到具体路径诊断。
 
-- 插件包目录必须同时有 `package.json` 和根 `PLUGIN.md`。 `package.json` 必须声明 `"type": "module"`，否则返回 400。
-- 根声明使用 `{ id, kind, contributes, runtime? }`。
-- 多 runtime 的包把执行声明放在 `runtimes/<sub>/RUNTIME.md`。子声明使用 `{ type, schedule, io, agent/function }`，不重复插件身份。
+- 插件包目录必须有根 `PLUGIN.md`。`package.json` 可以没有；有的话必须声明 `"type": "module"`，否则返回 400。安装器不读它的 `version`，版本只来自 `PLUGIN.md`。
+- 根声明使用 `{ description, contributes, runtime? }`，加上需要时的 `id`、`version` 等字段。
+- 多 runtime 的包把执行声明放在 `runtimes/<sub>/RUNTIME.md`。子声明使用 `{ schedule, io, agent/function }`，不重复插件身份。
 - 根 `runtime` 和子目录 runtime 不能同时声明。
 - 平铺的旧字段、缺少根声明，或者子目录里有 `PLUGIN.md`，都会被拒绝安装。桌面端从文件夹导入时同样拒绝。
 - 插件目录里已经有这种布局的包时，启动只把它登记为这个包自己的加载错误（`status: error`），其余插件照常加载。
@@ -114,7 +114,13 @@
 
 ### 安装器做什么，不做什么
 
-- 使用规范的插件 ID，不能覆盖内置插件的 ID。
+- 插件 ID 按下面的顺序取第一个合法的值，不能和内置插件的 ID 相同（不分大小写，冲突时返回 409）：
+  1. `PLUGIN.md` 写的 `id`。写了但不合法时返回 400。
+  2. 包所在的文件夹名：ZIP 里唯一的顶层文件夹（忽略 `__MACOSX/`），GitHub 上所选的子文件夹，或者包就在仓库根目录时的仓库名。
+  3. `package.json` 的 `name`，去掉 scope 和一个 `plugin-` 前缀（`@someone/plugin-notes` → `notes`）。
+
+  三者都没有合法值时返回 400，要求在 `PLUGIN.md` 写 `id`。
+
 - 清单和语言变体只接受普通的 YAML frontmatter，拒绝可执行的语言标记。
 - 安装器不执行脚本、包管理器、编译器或插件模块。
 - 所有插件安装入口（GitHub、ZIP、离线合集）和更新都要求运行文件自包含：`package.json` 的 `dependencies`、`optionalDependencies`、`peerDependencies` 必须省略或为空。`devDependencies` 不受这条限制。宿主给每个插件提供 `@covel/plugin-handlers-utils` 和 `zod`，插件不用声明它们为运行依赖；内置插件也只在 `devDependencies` 里写它们。
@@ -176,12 +182,12 @@ GitHub 源码归档带的一层外目录会被去掉，再提取指定的插件�
 
 ### 预览里有什么
 
-预览包含 ID、包版本、描述、作者名（`author`，清单没有声明时为 `null`）、代码存在提示、来源、签名 token 和 `expiresAt`。
+预览包含 ID、包版本（`PLUGIN.md` 的 `version`）、描述、作者名（`author`，清单没有声明时为 `null`）、代码存在提示、来源、签名 token 和 `expiresAt`。
 
 - 来源为 `{ repository, commit, path, digest, tracking }`。
 - `tracking` 为 `{ kind: "default-branch" }`、`{ kind: "branch", ref }` 或 `{ kind: "pinned", ref }`。仓库根链接跟踪默认分支；tree 链接先尝试解析为明确的分支；其余的 tag 和 commit 保持锁定。
 - `description` 返回 `I18nText`，保留 `locales/<locale>.yaml`（也支持 `.yml`）为 `PLUGIN.md` 提供的描述翻译。客户端按界面语言调用 `resolveI18nText`。
-- `hasServerCode` 使用加载器的模块路径枚举：entry、function handler、guard、世界投影 handler；也扫描代码文件（包括 `.mts`、`.cts`）。ZIP 安装响应返回同一字段。这是保守提示，不是完整的代码审计；测试或构建源码也可能触发它。
+- `hasServerCode` 使用加载器的模块路径枚举：entry（没写时是存在的 `server/index.js`）、function handler（没写时是 `RUNTIME.md` 旁边存在的 `handler.js`）、guard、世界投影 handler；也扫描代码文件（包括 `.mts`、`.cts`）。ZIP 安装响应返回同一字段。这是保守提示，不是完整的代码审计；测试或构建源码也可能触发它。
 - 适配的宿主版本由作者在清单的 `covel`、目录和 README 里声明。安装器只验证清单格式和这个范围，不判断 runtime 是否真的兼容。
 
 ### 签名和下载

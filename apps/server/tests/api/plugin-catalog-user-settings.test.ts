@@ -44,7 +44,7 @@ describe("plugin catalog settings", () => {
       ...entry(root),
       manifests: [
         {
-          runtime: { type: "agent" },
+          runtime: {},
           manifest: {
             name: "probe/run",
             pluginId: "probe",

@@ -10,27 +10,26 @@ In the path headings below, `[]` is a list item and `.*` is a map value.
 
 ## Top-level fields
 
-| Field         | Type                     | Required | Description                                                                                                                                                                                                  |
-| ------------- | ------------------------ | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `id`          | string                   | yes      | Stable package ID: lowercase letters, digits and hyphens. It must match the package directory name. `framework` is reserved. Example: `"dice-check"`.                                                        |
-| `kind`        | `"core"` or `"plugin"`   | yes      | Package kind. `core` marks a core plugin; other packages use `plugin`.                                                                                                                                       |
-| `version`     | string                   | no       | Package version. Setup runtimes rerun for existing sessions when it changes. A package without a version counts as `0.0.0`.                                                                                  |
-| `covel`       | string                   | no       | Host version range this package supports. A host outside it does not install or load the package. Example: `">=0.0.45"`.                                                                                     |
-| `displayName` | text                     | no       | Player-facing name. Plain string; translations go in locale files.                                                                                                                                           |
-| `description` | text                     | yes      | What the package does. Plain string; translations go in locale files.                                                                                                                                        |
-| `tags`        | list of string           | no       | Catalogue tags such as `ui:right-panel` or `cost:llm`. `role:` tags are rejected; use contracts.                                                                                                             |
-| `author`      | object                   | no       | Who made the package. Shown on the package's cards before play, never during play.                                                                                                                           |
-| `license`     | string                   | no       | License of the package: an SPDX identifier or a short name. Example: `"MIT"`, `"CC-BY-4.0"`.                                                                                                                 |
-| `homepage`    | string                   | no       | Page of the package itself, such as its repository or documentation. `https` only. Example: `"https://example.com/my-package"`.                                                                              |
-| `provides`    | list of string or object | no       | Versioned contracts this package provides, such as `narrative-engine@1`.                                                                                                                                     |
-| `requires`    | list of string           | no       | Contracts that must have an active provider. The resolver adds one when the package is active.                                                                                                               |
-| `optional`    | list of string           | no       | Contracts this package uses when a provider is active. They do not activate a provider.                                                                                                                      |
-| `conflicts`   | list of string           | no       | Contracts whose other providers cannot be active together with this package. Plugin contracts only.                                                                                                          |
-| `contracts`   | map of object            | no       | Public schema of each contract this package publishes or accepts, keyed by contract ID. A contract that a `contributes.data` namespace accepts needs no entry here: its schema is the one of that namespace. |
-| `entry`       | string                   | no       | Package-relative path of the server entry module. It registers tools, actions, services, hooks and extensions.                                                                                               |
-| `permissions` | object                   | no       | Upper bounds of the package's own code. `http` lists the origins and methods the entry module of a community package may reach through `covel.http`, in addition to those its runtimes declare.              |
-| `contributes` | object                   | no       | Package-level contributions. Every entry registration needs a declaration here, and every declaration needs an implementation.                                                                               |
-| `runtime`     | object                   | no       | The single inline runtime of this package; its prompt is the body of this file. Packages with several runtimes use `runtimes/<id>/RUNTIME.md` instead.                                                       |
+| Field         | Type                     | Required | Description                                                                                                                                                                                                                                      |
+| ------------- | ------------------------ | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `id`          | string                   | no       | Package ID: lowercase letters, digits and hyphens. Defaults to the name of the package directory; when written it must equal that name. `framework` is reserved. Example: `"dice-check"`.                                                        |
+| `kind`        | `"core"` or `"plugin"`   | no       | Package kind. `core` marks a core plugin, which every session requests by default. Defaults to `plugin`. Default: `"plugin"`.                                                                                                                    |
+| `version`     | string                   | no       | Package version. Setup runtimes rerun for existing sessions when it changes. A package without a version counts as `0.0.0`.                                                                                                                      |
+| `covel`       | string                   | no       | Host version range this package supports. A host outside it does not install or load the package. Example: `">=0.0.45"`.                                                                                                                         |
+| `displayName` | text                     | no       | Player-facing name. Plain string; translations go in locale files.                                                                                                                                                                               |
+| `description` | text                     | yes      | What the package does. Plain string; translations go in locale files.                                                                                                                                                                            |
+| `tags`        | list of string           | no       | Catalogue tags the loader cannot work out, such as `mode:dialogue` or `data:characters`. The loader adds the `ui:*` and `cost:*` tags from the package's panels and runtimes and ignores written ones. `role:` tags are rejected; use contracts. |
+| `author`      | object                   | no       | Who made the package. Shown on the package's cards before play, never during play.                                                                                                                                                               |
+| `license`     | string                   | no       | License of the package: an SPDX identifier or a short name. Example: `"MIT"`, `"CC-BY-4.0"`.                                                                                                                                                     |
+| `homepage`    | string                   | no       | Page of the package itself, such as its repository or documentation. `https` only. Example: `"https://example.com/my-package"`.                                                                                                                  |
+| `provides`    | list of string or object | no       | Versioned contracts this package provides that no runtime of it outputs, such as an extension or data contract. The contract of each runtime's `io.output.contract` is added by the loader; write it here only to mark the default provider.     |
+| `requires`    | list of string           | no       | Contracts that must have an active provider. The resolver adds one when the package is active. A contract a runtime reads and that is not listed here is optional: the runtime uses it when a provider is active.                                |
+| `conflicts`   | list of string           | no       | Contracts whose other providers cannot be active together with this package. Plugin contracts only.                                                                                                                                              |
+| `contracts`   | map of object            | no       | Public schema of each contract this package publishes or accepts, keyed by contract ID. A contract that a `contributes.data` namespace accepts needs no entry here: its schema is the one of that namespace.                                     |
+| `entry`       | string                   | no       | Package-relative path of the server entry module. It registers tools, actions, services, hooks and extensions. Defaults to `./server/index.js` when that file exists.                                                                            |
+| `permissions` | object                   | no       | Upper bounds of the package's own code. `http` lists the origins and methods the entry module of a community package may reach through `covel.http`, in addition to those its runtimes declare.                                                  |
+| `contributes` | object                   | no       | Package-level contributions. Every entry registration needs a declaration here, and every declaration needs an implementation.                                                                                                                   |
+| `runtime`     | object                   | no       | The single inline runtime of this package; its prompt is the body of this file. Packages with several runtimes use `runtimes/<id>/RUNTIME.md` instead.                                                                                           |
 
 ## `author`
 
@@ -188,14 +187,13 @@ In the path headings below, `[]` is a list item and `.*` is a map value.
 
 ## `contributes.data.*.authoring.source`
 
-| Field             | Type                              | Required | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
-| ----------------- | --------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `kind`            | `"yaml"` or `"json"` or `"media"` | yes      | Reader type of the source. `media` is a directory whose index this namespace receives.                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| `path`            | string                            | yes      | Conventional path of the source inside a world package. `<dir>/*.<ext>` names every such file of a directory, each one a source, read in file-name order. It may not name a path the kernel or the package itself owns: `world.yaml`, `WORLD.md`, `data/world.data.yaml`, `data/dimensions.yaml`, `data/lorebook.yaml`, `characters/characters.json`, `media/gallery.json`, `media/portraits.json`, `media/scenes.json` or `media/gallery/`, nor an edition of one. Example: `"data/quests.yaml"`, `"data/rules/*.yaml"`. |
-| `key`             | string                            | no       | Field that gives each record a stable key. Media sources use `filename`.                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| `localeArrayKeys` | list of string                    | no       | Additional stable identity fields for nested object lists in locale overlays, after the source key and id. Translations retain these keys when lists are reordered.                                                                                                                                                                                                                                                                                                                                                       |
-| `visibility`      | `"public"` or `"hidden"`          | no       | `hidden` for content the player must not see before the plugin reveals it. Defaults to `public`.                                                                                                                                                                                                                                                                                                                                                                                                                          |
-| `lorebook`        | boolean                           | no       | `true` also projects each record into the lorebook (`+lorebook`).                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| Field             | Type                     | Required | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| ----------------- | ------------------------ | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `path`            | string                   | yes      | Conventional path of the source inside a world package. The path sets how it is read: a `.yaml` or `.yml` file, a `.json` file, or a media directory (a path without an extension) whose index this namespace receives. `<dir>/*.<ext>` names every such file of a directory, each one a source, read in file-name order. It may not name a path the kernel or the package itself owns: `world.yaml`, `WORLD.md`, `data/world.data.yaml`, `data/dimensions.yaml`, `data/lorebook.yaml`, `characters/characters.json`, `media/gallery.json`, `media/portraits.json`, `media/scenes.json` or `media/gallery/`, nor an edition of one. Example: `"data/quests.yaml"`, `"data/rules/*.yaml"`. |
+| `key`             | string                   | no       | Field that gives each record a stable key. Defaults to `id`, and to `filename` for a media directory.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| `localeArrayKeys` | list of string           | no       | Additional stable identity fields for nested object lists in locale overlays, after the source key and id. Translations retain these keys when lists are reordered.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| `visibility`      | `"public"` or `"hidden"` | no       | `hidden` for content the player must not see before the plugin reveals it. Defaults to `public`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| `lorebook`        | boolean                  | no       | `true` also projects each record into the lorebook (`+lorebook`).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 
 ## `contributes.data.*.authoring.references[]`
 
@@ -252,17 +250,16 @@ In the path headings below, `[]` is a list item and `.*` is a map value.
 
 ## `runtime`
 
-| Field         | Type                      | Required | Description                                                                                 |
-| ------------- | ------------------------- | -------- | ------------------------------------------------------------------------------------------- |
-| `type`        | `"agent"` or `"function"` | yes      | `agent` drives model tool calls from the prompt body. `function` runs a JavaScript handler. |
-| `description` | text                      | no       | What the runtime does. Plain string; translations go in locale files.                       |
-| `schedule`    | object                    | no       | When and in what order the runtime runs.                                                    |
-| `io`          | object                    | no       | What the runtime reads and produces.                                                        |
-| `agent`       | object                    | no       | Settings of an `agent` runtime. Not allowed on a `function` runtime.                        |
-| `function`    | object                    | no       | Settings of a `function` runtime. Required when `type` is `function`.                       |
-| `guard`       | string                    | no       | Path of the guard module. It runs before the runtime and can skip it.                       |
-| `effects`     | object                    | no       | Declared read and write sets, used to detect parallel hazards.                              |
-| `permissions` | object                    | no       | Declared permission upper bounds.                                                           |
+| Field         | Type   | Required | Description                                                                                                                                      |
+| ------------- | ------ | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `description` | text   | no       | What the runtime does. Plain string; translations go in locale files.                                                                            |
+| `schedule`    | object | no       | When and in what order the runtime runs.                                                                                                         |
+| `io`          | object | no       | What the runtime reads and produces.                                                                                                             |
+| `agent`       | object | no       | Settings of an agent runtime, the kind of a runtime without a `function` block: it drives model tool calls from the prompt body.                 |
+| `function`    | object | no       | Makes this a function runtime, which runs a JavaScript handler instead of a model. `function: {}` takes every default. Not allowed with `agent`. |
+| `guard`       | string | no       | Path of the guard module. It runs before the runtime and can skip it.                                                                            |
+| `effects`     | object | no       | Declared read and write sets, used to detect parallel hazards.                                                                                   |
+| `permissions` | object | no       | Declared permission upper bounds.                                                                                                                |
 
 ## `runtime.schedule`
 
@@ -295,11 +292,11 @@ In the path headings below, `[]` is a list item and `.*` is a map value.
 
 ## `runtime.schedule.needs[]` (form 2 of 2)
 
-| Field         | Type                    | Required | Description                                                                                                              |
-| ------------- | ----------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------ |
-| `contract`    | string                  | yes      | Contract ID. It must be listed in the package's `requires` or `optional`.                                                |
-| `cardinality` | `"one"` or `"all"`      | no       | `one` takes a single provider; `all` takes every provider. Defaults to `one`.                                            |
-| `scope`       | `"turn"` or `"session"` | no       | `turn` gates on the same execution. `session` gates on the persistent setup snapshot and is valid only on stage `setup`. |
+| Field         | Type                    | Required | Description                                                                                                                 |
+| ------------- | ----------------------- | -------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `contract`    | string                  | yes      | Contract ID. List it in the package's `requires` when a provider must be active; otherwise the runtime uses it when one is. |
+| `cardinality` | `"one"` or `"all"`      | no       | `one` takes a single provider; `all` takes every provider. Defaults to `one`.                                               |
+| `scope`       | `"turn"` or `"session"` | no       | `turn` gates on the same execution. `session` gates on the persistent setup snapshot and is valid only on stage `setup`.    |
 
 ## `runtime.schedule.after[]` (form 1 of 2)
 
@@ -309,10 +306,10 @@ In the path headings below, `[]` is a list item and `.*` is a map value.
 
 ## `runtime.schedule.after[]` (form 2 of 2)
 
-| Field         | Type               | Required | Description                                                                                                                                |
-| ------------- | ------------------ | -------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| `contract`    | string             | yes      | Contract ID. This runtime runs after the contract's active providers; the contract does not have to be listed in `requires` or `optional`. |
-| `cardinality` | `"one"` or `"all"` | no       | `one` takes a single provider; `all` takes every provider. Defaults to `one`.                                                              |
+| Field         | Type               | Required | Description                                                                                          |
+| ------------- | ------------------ | -------- | ---------------------------------------------------------------------------------------------------- |
+| `contract`    | string             | yes      | Contract ID. This runtime runs after the contract's active providers; it never activates a provider. |
+| `cardinality` | `"one"` or `"all"` | no       | `one` takes a single provider; `all` takes every provider. Defaults to `one`.                        |
 
 ## `runtime.schedule.completion`
 
@@ -362,10 +359,10 @@ In the path headings below, `[]` is a list item and `.*` is a map value.
 
 ## `runtime.io.inputs.*.from` (form 2 of 3)
 
-| Field         | Type               | Required | Description                                                                   |
-| ------------- | ------------------ | -------- | ----------------------------------------------------------------------------- |
-| `contract`    | string             | yes      | Contract ID. It must be listed in the package's `requires` or `optional`.     |
-| `cardinality` | `"one"` or `"all"` | no       | `one` takes a single provider; `all` takes every provider. Defaults to `one`. |
+| Field         | Type               | Required | Description                                                                                                                 |
+| ------------- | ------------------ | -------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `contract`    | string             | yes      | Contract ID. List it in the package's `requires` when a provider must be active; otherwise the runtime uses it when one is. |
+| `cardinality` | `"one"` or `"all"` | no       | `one` takes a single provider; `all` takes every provider. Defaults to `one`.                                               |
 
 ## `runtime.io.inputs.*.from` (form 3 of 3)
 
@@ -384,11 +381,11 @@ In the path headings below, `[]` is a list item and `.*` is a map value.
 
 ## `runtime.io.output`
 
-| Field      | Type   | Required | Description                                                                              |
-| ---------- | ------ | -------- | ---------------------------------------------------------------------------------------- |
-| `contract` | string | no       | Contract this runtime's output publishes. It must be listed in the package's `provides`. |
-| `schema`   | string | no       | Private schema that validates the runtime's output.                                      |
-| `recordAs` | string | no       | Export key under which the output is persisted for later executions. Requires `schema`.  |
+| Field      | Type   | Required | Description                                                                                          |
+| ---------- | ------ | -------- | ---------------------------------------------------------------------------------------------------- |
+| `contract` | string | no       | Contract this runtime's output publishes. The package provides it; `provides` needs no entry for it. |
+| `schema`   | string | no       | Private schema that validates the runtime's output.                                                  |
+| `recordAs` | string | no       | Export key under which the output is persisted for later executions. Requires `schema`.              |
 
 ## `runtime.agent`
 
@@ -452,12 +449,12 @@ In the path headings below, `[]` is a list item and `.*` is a map value.
 
 ## `runtime.function`
 
-| Field       | Type    | Required | Description                                                                                                                                                                |
-| ----------- | ------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `handler`   | string  | yes      | Path of the handler module. The module default-exports the handler function.                                                                                               |
-| `model`     | string  | no       | Model slot the handler's gateway calls route through. Declared so a detached job's credential readiness check judges the same slot the call resolves. Example: `"memory"`. |
-| `timeoutMs` | integer | no       | Time limit of the handler in ms.                                                                                                                                           |
-| `tools`     | object  | no       | Tools the handler may call through `ctx.tools.call`.                                                                                                                       |
+| Field       | Type    | Required | Description                                                                                                                                                                    |
+| ----------- | ------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `handler`   | string  | no       | Path of the handler module, relative to this manifest. The module default-exports the handler function. Defaults to `./handler.js` next to the manifest when that file exists. |
+| `model`     | string  | no       | Model slot the handler's gateway calls route through. Declared so a detached job's credential readiness check judges the same slot the call resolves. Example: `"memory"`.     |
+| `timeoutMs` | integer | no       | Time limit of the handler in ms.                                                                                                                                               |
+| `tools`     | object  | no       | Tools the handler may call through `ctx.tools.call`.                                                                                                                           |
 
 ## `runtime.function.tools`
 

@@ -225,7 +225,7 @@ export default async function (ctx) {
       await mkdir(dir, { recursive: true });
       await writeFile(
         path.join(dir, "RUNTIME.md"),
-        `---\ntype: function\ndescription: Test default\nfunction:\n  handler: ./handler.js\n${declaration}\n---\n`,
+        `---\ndescription: Test default\nfunction:\n  handler: ./handler.js\n${declaration}\n---\n`,
       );
       await writeFile(path.join(dir, "handler.js"), handler);
     }
@@ -237,7 +237,7 @@ export default async function (ctx) {
     await mkdir(providerDir, { recursive: true });
     await writeFile(
       path.join(providerDir, "RUNTIME.md"),
-      "---\ntype: function\ndescription: Schema provider\nfunction:\n  handler: ./handler.js\n  tools:\n    plugin: [set-schema]\nschedule:\n  stage: setup\n  trigger: {type: auto}\nio:\n  output: {contract: world-data-provider@1}\n---\n",
+      "---\ndescription: Schema provider\nfunction:\n  handler: ./handler.js\n  tools:\n    plugin: [set-schema]\nschedule:\n  stage: setup\n  trigger: {type: auto}\nio:\n  output: {contract: world-data-provider@1}\n---\n",
     );
     // The public output contract has an explicit empty business value; the
     // character schema itself is committed through the tool's domain proposal.

@@ -1,5 +1,4 @@
 ---
-type: function
 description: Edits current values or explicitly resolves a pending settlement
   manually or by skipping.
 schedule:
@@ -14,8 +13,7 @@ io:
     worldIR:
       from: { contract: world-ir-provider@1 }
       required: false
-function:
-  handler: ./handler.js
+function: {}
 ---
 
 Manual runtime RPC. All writes use versioned dimension.update proposals.

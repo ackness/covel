@@ -1,5 +1,4 @@
 ---
-type: agent
 description: >-
   Reads the current narrator output and this plugin's notes, then records one
   actionable observation when useful. Agent-runtime starter.

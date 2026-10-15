@@ -34,9 +34,9 @@ it.each([
       await writeFile(target, content, "utf8");
     }
     try {
+      // The guides ship no package.json: the folder name is the ID and the
+      // version lives in PLUGIN.md.
       await write("PLUGIN.md", manifests[0]!);
-      await write("package.json", JSON.stringify({ name: id, type: "module" }));
-      await write("README.md", "Guide package fixture.");
       // The guides describe these support files separately. Manifest references
       // still use the exact paths and declarations extracted from the document.
       if (guide === "local-code.md") {
@@ -155,12 +155,12 @@ it("the skill's example local runtime binding validates inside its own package",
     "/sample-notes/PLUGIN.md",
   );
   const producer = parseRuntimeMd(
-    "---\ntype: function\nschedule: {trigger: {type: manual}}\nfunction: {handler: ./handler.js}\n---\n",
+    "---\nschedule: {trigger: {type: manual}}\nfunction: {handler: ./handler.js}\n---\n",
     "/sample-notes/runtimes/extract/RUNTIME.md",
     root.plugin,
   );
   const reader = parseRuntimeMd(
-    `---\ntype: function\nschedule: {trigger: {type: manual}}\nfunction: {handler: ./handler.js}\nio: {inputs: {facts: {from: {runtime: ${runtimeId}}}}}\n---\n`,
+    `---\nschedule: {trigger: {type: manual}}\nfunction: {handler: ./handler.js}\nio: {inputs: {facts: {from: {runtime: ${runtimeId}}}}}\n---\n`,
     "/sample-notes/runtimes/read/RUNTIME.md",
     root.plugin,
   );

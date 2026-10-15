@@ -31,7 +31,6 @@ async function fixture(
     layout === "inline" ? root : path.join(root, "runtimes/consumer");
   await mkdir(runtimeDir, { recursive: true });
   const runtime = {
-    type: "function",
     schedule: { trigger: { type: "manual" } },
     function: { handler: "./handler.js" },
     guard: "./guard.js",
@@ -42,7 +41,6 @@ async function fixture(
     md({
       ...plugin,
       entry: "./entry.js",
-      optional: ["external.output@1"],
       ...(layout === "inline" ? { runtime } : {}),
     }),
   );
@@ -184,7 +182,6 @@ for (const layout of ["inline", "child"] as const) {
 
     it("parser rejects committed select and retains normal turn select", () => {
       const runtime = (binding: object) => ({
-        type: "agent",
         schedule: { trigger: { type: "manual" } },
         io: { inputs: { prior: binding } },
       });
