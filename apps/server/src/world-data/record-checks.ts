@@ -20,6 +20,7 @@ import {
   recordLocation,
   sourceItems,
 } from "./session-import/utils.js";
+import { characterBlockRoutes } from "./conventions.js";
 import { readWorldDataSource } from "./source-reader.js";
 import { parseWorldDataTarget } from "./target-uri.js";
 import type { OrderedWorldDataSource } from "./types.js";
@@ -422,35 +423,73 @@ export async function checkWorldRecords(options: {
       target?.kind === "contract-data"
         ? referencesOf(options.catalogue, target.contract)
         : [];
+    // A character record holds the records of the contracts whose plugins
+    // name one of its fields: those are checked as records of that contract.
+    const blocks =
+      target?.kind === "characters"
+        ? characterBlockRoutes(options.catalogue).routes.map((route) => ({
+            field: route.field,
+            references: referencesOf(options.catalogue, route.contract),
+          }))
+        : [];
     const listed = Array.isArray(main.value);
     for (const [index, record] of sourceItems(main.value).entries()) {
       const location = recordLocation(source, record, index, listed);
       const at = location.pointer ?? "";
-      for (const { pluginId, reference } of references) {
-        const { attributes, dimensions } = options;
-        const check =
-          reference.to === "world-dimension"
-            ? dimensions &&
-              ((item: ReferringValue) =>
-                checkDimensionReference(item, pluginId, reference, dimensions))
-            : attributes &&
-              ((item: ReferringValue) =>
-                checkAttributeReference(item, pluginId, reference, attributes));
-        if (!check) continue;
-        const code =
-          reference.to === "world-dimension"
-            ? "dimension-reference"
-            : "attribute-reference";
-        for (const item of referringValues(record, reference.path, at))
-          for (const finding of check(item))
-            diagnostics.push({
-              level: "error",
-              code,
-              file,
-              sourceId: source.id,
-              ...finding,
-            });
-      }
+      const units = [
+        { value: record, at, references },
+        ...blocks.flatMap((block) =>
+          isRecord(record) && record[block.field] !== undefined
+            ? [
+                {
+                  value: record[block.field],
+                  at: at ? `${at}.${block.field}` : block.field,
+                  references: block.references,
+                },
+              ]
+            : [],
+        ),
+      ];
+      for (const unit of units)
+        for (const { pluginId, reference } of unit.references) {
+          const { attributes, dimensions } = options;
+          const check =
+            reference.to === "world-dimension"
+              ? dimensions &&
+                ((item: ReferringValue) =>
+                  checkDimensionReference(
+                    item,
+                    pluginId,
+                    reference,
+                    dimensions,
+                  ))
+              : attributes &&
+                ((item: ReferringValue) =>
+                  checkAttributeReference(
+                    item,
+                    pluginId,
+                    reference,
+                    attributes,
+                  ));
+          if (!check) continue;
+          const code =
+            reference.to === "world-dimension"
+              ? "dimension-reference"
+              : "attribute-reference";
+          for (const item of referringValues(
+            unit.value,
+            reference.path,
+            unit.at,
+          ))
+            for (const finding of check(item))
+              diagnostics.push({
+                level: "error",
+                code,
+                file,
+                sourceId: source.id,
+                ...finding,
+              });
+        }
       for (const { path: hidden, reason } of modelHiddenPaths(record)) {
         const field = hidden.slice(hidden.lastIndexOf(".") + 1);
         diagnostics.push({

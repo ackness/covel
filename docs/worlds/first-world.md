@@ -167,6 +167,8 @@ characterSchema:
 
 `type` 必须是 `characterSchema.types` 里列出的类型，`fields` 里的键必须是 `characterSchema.attributes` 里定义的属性。主角不写在这里：主角由玩家在开局时创建。
 
+想让叙事按固定的口吻和性格来演这个角色，可以在同一条记录里加 `blueprint`（扮演说明），并在这局游戏里启用“角色资料”插件。写法见[扮演说明](../reference/world-data.md#扮演说明blueprint)。
+
 > [!IMPORTANT]
 > 同一个人物、地点或物品在不同文件里出现时，名字和 ID 要完全一致，并且和 `WORLD.md` 里的写法相同。模型按名字把它们对应起来。
 

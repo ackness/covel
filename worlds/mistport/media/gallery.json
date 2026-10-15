@@ -24,7 +24,7 @@
       "relatedCharacters": [],
       "depiction": "setting-illustration",
       "spoilerLevel": "opening",
-      "sourceRefs": ["WORLD.md", "characters/main-cast.json"],
+      "sourceRefs": ["WORLD.md", "characters/characters.json"],
       "generation": {
         "tool": "built-in-imagegen",
         "prompt": "Create EXACTLY 1536x1024 landscape game-gallery environment for Mistport, a dark-fantasy fog-noir tidal city. Painterly photorealism, desaturated cold grey, teal, rust and old bronze, wet tactile stone and salted timber, dense grey-white sea fog, no visible sky. Eye-level view from a wet wooden main pier toward ancient stone steps newly exposed by ebbing tide, half-submerged near ruins only, broken masonry, mooring rope, shells and receding water lines. The next landing fades into fog within tens of meters; NO clear distant city or landscape. One abandoned unlit shielded tide-stone lamp hangs from a pier post, no flame. Investigative mood: foreground clues clear and sharp, pale mist creates depth, readable midtones rather than pitch darkness. Human-scale entry to risky exploration, open walkway for a character overlay, center-right focal stair, lower-left quieter space for description. No people, monsters, gore, text, watermarks, magical beams, electric neon, fire, or high-fantasy spectacle."
@@ -52,7 +52,7 @@
       "relatedCharacters": ["npc-su-yao"],
       "depiction": "possible-moment",
       "spoilerLevel": "opening",
-      "sourceRefs": ["WORLD.md", "characters/main-cast.json"],
+      "sourceRefs": ["WORLD.md", "characters/characters.json"],
       "generation": {
         "tool": "built-in-imagegen",
         "prompt": "Transform reference portrait into a cinematic investigative story still EXACTLY 1536x1024 landscape. Preserve SU YAO's exact reference identity: adult woman in twenties, black hair pinned in the same loose bun, pale face, serious thoughtful eyes, navy-black high-collared guild coat with aged-bronze embroidery and her round tide-stone appraisal mirror. Same realistic painterly fog-noir style, cold grey teal and restrained rust. New scene: a guild appraisal workroom, waist-up seated at a worn worktable beside a misted window, examining a small dull stone-and-metal relic fragment on a folded cloth through the mirror held carefully in one hand; other hand rests next to handwritten notes with no readable text. A small shielded cold tide-stone lamp softly lights mirror and knuckles, no flame and no bright beams. Her face shows careful professional concentration with subtle worry; normal opaque healthy skin. Near shelves hold plain boxes and practical measuring tools, background softly lost in grey light. One character only; recognizable portrait face, natural hands, atmospheric dimensional depth. No revealed relic power, no plot resolution, no monster, no modern machinery, no readable text, no watermark.",
@@ -77,7 +77,7 @@
       "spoilerLevel": "opening",
       "sourceRefs": [
         "WORLD.md",
-        "characters/main-cast.json",
+        "characters/characters.json",
         "media/portraits.json"
       ],
       "sha256": "ad8a24c76858d1ccf214bc663dcfcf0be2b46a1c052aaf9dbcc8f5bebb47e9c9",
@@ -99,7 +99,7 @@
       "spoilerLevel": "opening",
       "sourceRefs": [
         "WORLD.md",
-        "characters/main-cast.json",
+        "characters/characters.json",
         "media/portraits.json"
       ],
       "sha256": "c698e0744ff8de7a19e3a9dd82c33b3c4bd902f7696b85aa248f4d654ed202f2",
@@ -123,7 +123,7 @@
       "spoilerLevel": "opening",
       "sourceRefs": [
         "WORLD.md",
-        "characters/main-cast.json",
+        "characters/characters.json",
         "media/portraits.json"
       ],
       "sha256": "bdeabc070385dcfec7c0da926a5b49bfa080242414ecaf81db4437b9ab352c9e",
@@ -147,7 +147,7 @@
       "spoilerLevel": "opening",
       "sourceRefs": [
         "WORLD.md",
-        "characters/main-cast.json",
+        "characters/characters.json",
         "media/portraits.json"
       ],
       "sha256": "375692ca74391ad000fbf08dfbbe786ebdd691a3bf198ba552be6cb443eeb7f2",
@@ -171,7 +171,7 @@
       "spoilerLevel": "opening",
       "sourceRefs": [
         "WORLD.md",
-        "characters/main-cast.json",
+        "characters/characters.json",
         "media/portraits.json"
       ],
       "sha256": "38905b4b343d3276ed52af52dd5edd5f2df3470a88126382e3eff4934ec6dfaa",
@@ -195,7 +195,7 @@
       "spoilerLevel": "opening",
       "sourceRefs": [
         "WORLD.md",
-        "characters/main-cast.json",
+        "characters/characters.json",
         "media/portraits.json"
       ],
       "sha256": "3887c840b25bf081c442ca68f3ba57ede23b1f612621407a6a9606e8e4f2dc7d",
@@ -217,7 +217,7 @@
       "spoilerLevel": "opening",
       "sourceRefs": [
         "WORLD.md",
-        "characters/main-cast.json",
+        "characters/characters.json",
         "media/portraits.json"
       ],
       "sha256": "57af7b53ac21176093e5667482613aa316e243918896bfb228dc75c9f1b00e8d",

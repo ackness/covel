@@ -731,12 +731,13 @@ namespace 接收某个契约，就说明了这个契约的记录长什么样。�
 - 契约不是数据契约（例如 runtime 的输出契约）。
 - 两个 namespace 用不同的 schema 接收同一个契约。这时必须说明哪一份是公共的。
 
-接收世界数据的 namespace 还可以声明 `authoring`（`title`、`summary`、`hint`、`example`、`source`、`references`、`generate`）。它告诉世界作者怎样提供这份内容，以及应用内的生成器能不能生成它。
+接收世界数据的 namespace 还可以声明 `authoring`（`title`、`summary`、`hint`、`example`、`source` 或 `characterField`、`references`、`generate`）。它告诉世界作者怎样提供这份内容，以及应用内的生成器能不能生成它。
 
 请求期读取示例或准备可生成契约的 schema 失败时，只略过该契约并报告插件、namespace 和原因，不会停用整个插件或阻止其他内容生成。`pnpm describe:authoring --check` 仍把损坏的示例报给作者。
 
 - 只有列出了 `accepts` 的 namespace 才能声明它。
 - `source` 是世界包里放这份内容的约定路径（`kind`、`path`、`key`）。世界作者把文件放在这里就能导入，不用写 descriptor。`path` 的最后一段可以写成 `*.<扩展名>`（例如 `data/rules/*.yaml`）：目录里每个这样的文件都是一个 source，按文件名顺序导入。规则见[按约定导入](./world-data.md#按约定导入)。
+- `characterField` 代替 `source`：这份内容写在世界角色文件的每条角色记录里，字段名就是它的值（例如 `blueprint`）。内核按角色的 `id` 把它交给接收的插件。见[一个世界一份角色文件](./world-data.md#一个世界一份角色文件)。
 - `pnpm describe:authoring` 汇总所有已扫描插件的声明；加 `--check` 会按 namespace 的 schema 校验每份 `example`。
 - 字段见 [Plugin manifest 字段表](./schema/plugin-manifest.md)。
 

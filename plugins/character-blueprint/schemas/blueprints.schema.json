@@ -1,64 +1,65 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "plugin://character-blueprint/blueprints",
-  "$defs": {
-    "blueprint": {
+  "description": "Roleplay notes of one character, written in the character's record. The record gives the character's id, name, type, description and fields; the notes do not repeat them.",
+  "type": "object",
+  "properties": {
+    "tags": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "persona": {
       "type": "object",
-      "required": ["schemaVersion", "id", "name"],
       "properties": {
-        "schemaVersion": {
-          "const": 1
-        },
-        "id": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 128,
-          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]*$"
-        },
-        "name": {
-          "type": "string",
-          "minLength": 1
-        },
-        "role": {
-          "type": "string"
-        },
-        "description": {
-          "type": "string"
-        },
-        "aliases": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        "tags": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        "attributes": {
-          "type": "object"
-        },
-        "persona": {
-          "type": "object"
-        },
-        "instantiate": {
-          "type": "object",
-          "properties": {
-            "characterId": {
-              "type": "string",
-              "minLength": 1
-            },
-            "type": {
-              "type": "string"
-            }
-          },
-          "additionalProperties": true
-        }
+        "summary": { "type": "string" },
+        "traits": { "type": "array", "items": { "type": "string" } },
+        "goals": { "type": "array", "items": { "type": "string" } },
+        "fears": { "type": "array", "items": { "type": "string" } },
+        "secrets": { "type": "array", "items": { "type": "string" } },
+        "voice": { "type": "string" },
+        "style": { "type": "string" }
       },
-      "additionalProperties": true
+      "additionalProperties": false
+    },
+    "dialogueExamples": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["character"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "user": { "type": "string" },
+          "character": { "type": "string", "minLength": 1 }
+        },
+        "additionalProperties": false
+      }
+    },
+    "scenarioDefaults": {
+      "type": "object",
+      "properties": {
+        "opening": { "type": "string" },
+        "location": { "type": "string" },
+        "relationships": {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        },
+        "state": { "type": "object" }
+      }
+    },
+    "rules": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["text"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "text": { "type": "string", "minLength": 1 },
+          "priority": { "type": "number" },
+          "tags": { "type": "array", "items": { "type": "string" } }
+        },
+        "additionalProperties": false
+      }
     }
   },
-  "$ref": "#/$defs/blueprint"
+  "additionalProperties": false
 }

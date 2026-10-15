@@ -926,7 +926,7 @@ The backend is chosen with `STORE_BACKEND=memory|sqlite|pg`. The default is `sql
 - The framework checks the contract and the namespace schema, and delivers the data to the matching consumers that are enabled.
 - The framework does not know the specific IDs of the blueprint, portrait, or rules plugins, and it does not write a private wrapper for any plugin.
 - World-level characterSchema, lore, and metadata are domain imports. Business data is interpreted by the plugin that receives it.
-- For example: `character.blueprints@1` carries the raw blueprint records, and `memory.blocks@1` carries a definition of `{ id: "world", blocks: [...] }`.
+- For example: `memory.blocks@1` carries a definition of `{ id: "world", blocks: [...] }`. The records of `character.blueprints@1` are written in each record of the world's character file (in the field the receiving plugin declares), and the kernel delivers them by character ID.
 
 **Dynamic dimensions.** A world pack declares an open table of dimension definitions. For each session, exactly one provider manages the current values. The bundled `world-init` does this:
 

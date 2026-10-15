@@ -24,7 +24,7 @@ const world: GeneratedWorld = {
   locale: "en",
   lore: "original",
   packageContent: {
-    characters: [{ schemaVersion: 1, id: "keeper", name: "Keeper" }],
+    characters: [{ id: "keeper", name: "Keeper", type: "npc" }],
     lorebook: [],
     rules: [],
   },

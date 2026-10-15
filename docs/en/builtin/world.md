@@ -47,27 +47,27 @@ At the start, it guides you through creating the player character. It gives you 
 
 ## Character Profiles (`character-blueprint`)
 
-Keeps the people that the world author has written in advance: personality, way of speaking, secrets, and relationships with others. When one of these people appears in the story, the narrative plays them according to this profile. The profile's "secrets" are known only to the narrative. They are not stated directly until the plot reveals them.
+Keeps the roleplay notes the world author has written for the characters: personality, way of speaking, secrets, and relationships with others. While a character is in the game, the narrative plays them according to these notes. The notes' "secrets" are known only to the narrative. They are not stated directly until the plot reveals them. The characters themselves come from the world's character file and exist without this plugin too.
 
 **What you will see**
 
-- "Preset Characters" in the "Characters" tab on the right. It lists the world's preset people. It is read-only.
-- The "Character Portraits" tab: each character's avatar and portrait. You can upload an image to replace one. During play you cannot add or change character cards.
+- The "Character Portraits" tab: each character's avatar and portrait. You can upload an image to replace one.
+- The roleplay notes have no tab of their own: the characters are in the character list of the "Characters" tab. During play you cannot add or change roleplay notes.
 
 **When it is on**: optional. The Dialogue Mode pack includes it, and worlds with their own characters, such as Mistport, add it to their own packs. Traditional Story and Low Cost do not include it.
 
 > [!NOTE]
-> The preset characters' "secrets" and rules are stored in public plugin data. The character panel does not show them, but the "Database" tab on the right shows all of the public plugin data as it is. If you do not want to spoil the story for yourself, do not open that page.
+> The "secrets" and rules of the roleplay notes are stored in public plugin data. The character panel does not show them, but the "Database" tab on the right shows all of the public plugin data as it is. If you do not want to spoil the story for yourself, do not open that page.
 
 **What world authors can preset**
 
-| Content                   | File                        |
-| ------------------------- | --------------------------- |
-| Preset character profiles | `characters/main-cast.json` |
-| Portrait mapping          | `media/presence.json`       |
-| Portrait images           | `media/portraits/`          |
+| Content                        | File                                                                    |
+| ------------------------------ | ----------------------------------------------------------------------- |
+| The characters' roleplay notes | The `blueprint` field of each character in `characters/characters.json` |
+| Portrait mapping               | `media/presence.json`                                                   |
+| Portrait images                | `media/portraits/`                                                      |
 
-Do not write the portrait mapping by hand. It is produced when you generate portraits. For how to do that, see [Character portraits](../worlds/portraits.md). For fields and examples, see [World data](../reference/world-data.md). You can also run `pnpm describe:authoring` in the repository root.
+Do not write the portrait mapping by hand. It is produced when you generate portraits. For how to do that, see [Character portraits](../worlds/portraits.md). For fields and examples, see [World data](../reference/world-data.md#roleplay-notes-blueprint). You can also run `pnpm describe:authoring` in the repository root.
 
 **Works with**: a character's profile is given to the narrative only when that character is already in the session. Characters who are not present are not included. Each card can have up to 300 characters per line, and the total length is limited. If it does not fit, first delete the sample lines, then delete rules.
 

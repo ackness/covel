@@ -29,14 +29,14 @@ A world package can declare a `characterSchema` in `world.yaml`. When a session 
 - A character's `fields` are validated against the current schema.
 - The proposal that changes the schema is `character.schema.set`. Its content is `{types, attributes}`, and the kernel increments the version.
 
-For world files, initial character values and examples of import, see [world data](./world-data.md#world-character-schema) and [domain characters](./world-data.md#domain-characters-and-plugin-character-cards).
+For world files, initial character values and examples of import, see [world data](./world-data.md#world-character-schema) and [the character file](./world-data.md#one-character-file-per-world).
 
 Some boundaries:
 
 - Characters are created and updated only through character proposals and character tools.
 - The character panel reads the session's `session.characters`. The display of attributes reads the session's `characterSchema`.
-- A plugin's character card can keep its own original content, but the kernel's character records are not copied into any plugin's data.
-- `persona` and `scenarioDefaults` in a character card do not turn into a character's `fields` automatically. If you need them, provide `fields` explicitly. A field that the schema does not declare is not rejected because of this.
+- A world's character record can carry a plugin's data (such as roleplay notes), in the field the plugin declares. On import the kernel gives it to the receiving plugin, keyed by the character's `id`. It does not become the character's `fields` and does not stay in the character record.
+- The kernel's character records are not copied into any plugin's data.
 - A dimension's structure does not turn into character attributes automatically. Characters, the inventory, affinity and time are each maintained by their own plugin.
 
 Validation when an AI generates a world:
@@ -92,7 +92,7 @@ Before comparing names and aliases, `characterNameKey` normalizes the spelling:
 
 **Where aliases come from:**
 
-- The world author writes `aliases` in `characters/characters.json` (see [domain characters](./world-data.md#domain-characters-and-plugin-character-cards)). A language file can replace the whole list.
+- The world author writes `aliases` in `characters/characters.json` (see [the character file](./world-data.md#one-character-file-per-world)). A language file can replace the whole list.
 - When the story reveals a new name, the model adds it through the `aliases` parameter of `update-character` / `sync-characters.updates[]`. `create-character` also accepts `aliases`.
 - The `aliases` of the `character.upsert` proposal:
   - With `expectedVersion`, the aliases are appended after the existing ones. Two appends in the same turn are both kept, in the same way that `fields` are merged.

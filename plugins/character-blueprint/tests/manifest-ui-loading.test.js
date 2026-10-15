@@ -50,7 +50,7 @@ describe("character-blueprint manifest and UI loading", () => {
     });
   });
 
-  it("loads the preset and portrait panels", async () => {
+  it("loads the portrait panel; the notes have no panel of their own", async () => {
     const discovery = await discover();
     const ui = await loadPluginUiSpecs(
       discovery.rootPath,
@@ -58,16 +58,10 @@ describe("character-blueprint manifest and UI loading", () => {
       (await loadPluginDefinition(discovery)).packageManifest.manifest.ui,
     );
     expect(ui.diagnostics).toEqual([]);
-    const [blueprints, portraits] = ui.slots.right ?? [];
-
-    // Read-only display panel (no editing): relies on emptyState rather than
-    // alwaysRender, so a world without preset characters shows the empty hint.
-    expect(blueprints).toMatchObject({
-      id: "character-blueprint",
-      group: "character",
-      dataSource: { namespace: "blueprints" },
-    });
-    expect(blueprints?.emptyState).toBeDefined();
+    // The characters the notes belong to are listed by the character list;
+    // the notes themselves are for the narrator.
+    expect(ui.slots.right).toHaveLength(1);
+    const [portraits] = ui.slots.right ?? [];
     expect(portraits).toMatchObject({
       id: "character-presence",
       group: "character-art",

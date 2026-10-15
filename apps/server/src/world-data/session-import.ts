@@ -9,7 +9,10 @@ import {
   dimensionSettlementReceiptSchema,
   dimensionsJsonEqual,
 } from "@covel/shared";
-import { portableContractSources } from "./portable-contract-data.js";
+import {
+  portableCharacterSources,
+  portableContractSources,
+} from "./portable-contract-data.js";
 import type { WorldDataImportLedgerRecord } from "@covel/store";
 import type { WorldDataDiagnostic } from "./types.js";
 import {
@@ -118,11 +121,13 @@ function recordContent(world: WorldDataImportRecord | null | undefined): {
   dimensions: unknown;
   characterSchema: unknown;
   contractData: unknown;
+  characters: unknown;
 } {
   return {
     dimensions: world?.metadata?.dimensions,
     characterSchema: world?.metadata?.characterSchema,
     contractData: world?.metadata?.contractData,
+    characters: world?.metadata?.embeddedCharacters,
   };
 }
 
@@ -151,8 +156,15 @@ export async function prepareWorldDataImportForSession(
       conventionsFor(options.preflight),
     ))
   ) {
-    const sources = portableContractSources(record.contractData);
-    if (record.contractData === undefined && record.dimensions === undefined)
+    const sources = [
+      ...portableContractSources(record.contractData),
+      ...portableCharacterSources(record.characters),
+    ];
+    if (
+      record.contractData === undefined &&
+      record.dimensions === undefined &&
+      record.characters === undefined
+    )
       return { imported: false, diagnostics: collisions };
     const basePlan = await buildImportPlan({
       sessionId: options.sessionId,

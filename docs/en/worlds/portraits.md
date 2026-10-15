@@ -77,10 +77,10 @@ A few tips for writing `subject`:
 
 - Write it in English. Image models understand English more reliably.
 - Describe what sets this character apart from others: a signature prop, an expression, or a detail of the world.
-- Age and identity follow the character card. Looks and clothing details that the setting does not specify belong to the picture. Do not turn them into new settings and write them back into the world.
+- Age and identity follow the character's record in the character file. Looks and clothing details that the setting does not specify belong to the picture. Do not turn them into new settings and write them back into the world.
 
 > [!NOTE]
-> If the character is generated from a character card (a file such as `characters/main-cast.json`), its ID in the game is `npc-<the card's id>` by default, unless the card sets another ID. `characterId` holds that final ID.
+> `characterId` is the character's `id` in `characters/characters.json`, copied exactly: no prefix is added or removed.
 
 ### Different expressions and outfits of the same character
 

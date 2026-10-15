@@ -302,13 +302,7 @@ async function replacementPayload(ctx, payload) {
     "characterId",
   );
   const rows = await ctx.store.listPluginData(PRESENCE_NAMESPACE);
-  const row =
-    rows.find((row) => row.value?.characterId === characterId) ??
-    rows.find(
-      (row) =>
-        typeof row.value?.characterId === "string" &&
-        characterId === `npc-${row.value.characterId}`,
-    );
+  const row = rows.find((row) => row.value?.characterId === characterId);
   if (!row) throw new Error("Character portrait is unavailable");
   const presence = row.value;
   const variants = [...(presence.visuals?.variants ?? [])];

@@ -47,7 +47,7 @@ const worldDataSourceDescriptorBaseSchema = z
       .meta({
         description:
           "File or directory, relative to the world root. A variant `<name>.<locale>.<ext>` is used when it exists for the session locale.",
-        examples: ["characters/main-cast.json"],
+        examples: ["data/quests.yaml"],
       }),
     schema: z
       .string()

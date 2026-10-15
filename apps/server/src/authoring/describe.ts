@@ -54,6 +54,11 @@ export interface AuthoringContract {
     readonly id: string;
     readonly entry: AuthoringSourceEntry;
   };
+  /**
+   * The field of a record in the world's character file that holds one
+   * record of this contract, in place of a file of its own.
+   */
+  readonly characterField?: string;
   /** A valid example of the source value. */
   readonly example?: unknown;
   /** Set when the in-app world generator may produce this content. */
@@ -160,7 +165,7 @@ const KERNEL_TEXT: Readonly<
   characters: {
     title: "Characters",
     description:
-      "Character records of the session's world model. Types and fields follow `characterSchema` in `world.yaml`.",
+      "Character records of the session's world model: `id`, `name`, `aliases`, `type`, `description` and `fields`. Types and fields follow `characterSchema` in `world.yaml`. A record may also hold one record of a plugin's data, under the field that plugin names (a contract's `characterField`).",
   },
 };
 
@@ -263,6 +268,9 @@ export async function describeAuthoringSurface(
                     ) as AuthoringSourceEntry,
                   },
                 }
+              : {}),
+            ...(authoring?.characterField
+              ? { characterField: authoring.characterField }
               : {}),
             example,
             ...(authoring?.generate ? { generate: authoring.generate } : {}),

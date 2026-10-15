@@ -6,9 +6,11 @@ import path from "node:path";
 import {
   hiddenPluginDataNamespace,
   characterSchemaSetPayloadSchema,
+  KERNEL_CHARACTER_FIELDS,
   validateWorldModel,
   worldDimensionsSchema,
   type CharacterSchemaRecord,
+  type WorldDimensions,
 } from "@covel/shared";
 import type { CharacterRecord } from "@covel/store";
 import { ZodError } from "zod";
@@ -17,6 +19,10 @@ import { collectMediaSourceFiles } from "../media.js";
 import { checkRecordDimensionReferences } from "../record-checks.js";
 import { readWorldDataSource } from "../source-reader.js";
 import { characterRecordFromValue } from "../character-effects.js";
+import {
+  characterBlockRoutes,
+  type CharacterBlockRoute,
+} from "../conventions.js";
 import {
   resolveWorldDataSchema,
   type WorldDataSchemaRef,
@@ -42,7 +48,12 @@ import type {
   PluginDataTarget,
   WorldDataImportPreflightDeps,
 } from "./types.js";
-import { isRecord, recordLocation, sourceItems } from "./utils.js";
+import {
+  isRecord,
+  recordLocation,
+  sourceItems,
+  type RecordLocation,
+} from "./utils.js";
 import {
   checkLorebookRecord,
   checkProjectedLorebookRecord,
@@ -91,6 +102,118 @@ function valueToLorebookContent(value: unknown): string {
   return canonicalJson(value);
 }
 
+/** A field of character records and the active namespaces its records go to. */
+interface CharacterBlockTargets extends CharacterBlockRoute {
+  readonly targets: readonly PluginDataTarget[];
+}
+
+/** What a character source needs to hand the plugin data its records carry. */
+interface CharacterBlocks {
+  readonly routes: readonly CharacterBlockTargets[];
+  /** Fields that more than one contract names: read for none of them. */
+  readonly colliding: readonly string[];
+  /** Report a field no plugin reads: an authoring check of every plugin. */
+  readonly reportUnread: boolean;
+}
+
+/**
+ * The plugin data one character record carries. Each field a plugin names
+ * (`authoring.characterField`) holds one record of that plugin's data
+ * contract, keyed by the character's id, and goes to every active namespace
+ * that accepts the contract. A record that fails the receiver's schema is
+ * reported and left out; the character is imported either way.
+ */
+async function appendCharacterBlocks(options: {
+  writes: PlannedWrite[];
+  diagnostics: WorldDataDiagnostic[];
+  source: OrderedWorldDataSource;
+  sourceDigest: string;
+  characterId: string;
+  value: Record<string, unknown>;
+  location: RecordLocation;
+  blocks: CharacterBlocks;
+  deps?: WorldDataImportPreflightDeps;
+  dimensions?: WorldDimensions;
+}): Promise<void> {
+  const { source, location, blocks } = options;
+  const at = (field: string): RecordLocation => ({
+    label: `${location.label} field "${field}"`,
+    ...(location.path ? { path: location.path } : {}),
+    pointer: location.pointer ? `${location.pointer}.${field}` : field,
+  });
+  for (const route of blocks.routes) {
+    const block = options.value[route.field];
+    if (block === undefined) continue;
+    const where = at(route.field);
+    const catalogue = options.deps?.registry;
+    const findings =
+      catalogue && options.dimensions
+        ? checkRecordDimensionReferences({
+            record: block,
+            contract: route.contract,
+            catalogue,
+            dimensions: options.dimensions,
+            pointer: where.pointer ?? "",
+            pluginIds: route.targets.map((target) => target.pluginId),
+          })
+        : [];
+    if (findings.length > 0) {
+      options.diagnostics.push(
+        ...findings.map((finding) => ({
+          level: "error" as const,
+          code: "dimension-reference" as const,
+          sourceId: source.id,
+          ...(where.path ? { path: where.path } : {}),
+          ...finding,
+        })),
+      );
+      continue;
+    }
+    for (const target of route.targets) {
+      const error = await validatePluginDataValue({
+        target,
+        source,
+        value: block,
+        deps: options.deps,
+        record: where,
+      });
+      if (error) {
+        options.diagnostics.push(error);
+        continue;
+      }
+      options.writes.push({
+        kind: "plugin-data",
+        target: `contract:${route.contract}`,
+        source,
+        sourceDigest: options.sourceDigest,
+        pluginId: target.pluginId,
+        namespace: target.namespace,
+        key: options.characterId,
+        value: block,
+        derivedFrom: [options.characterId],
+      });
+    }
+  }
+  if (!blocks.reportUnread) return;
+  const known = new Set<string>([
+    ...KERNEL_CHARACTER_FIELDS,
+    ...blocks.routes.map((route) => route.field),
+    ...blocks.colliding,
+  ]);
+  for (const field of Object.keys(options.value)) {
+    if (known.has(field)) continue;
+    const where = at(field);
+    options.diagnostics.push({
+      level: "warning",
+      sourceId: source.id,
+      ...(where.path ? { path: where.path } : {}),
+      ...(where.pointer ? { pointer: where.pointer } : {}),
+      message: `${where.label} of source "${source.id}" is read by no plugin`,
+      hint: "A character record holds `id`, `name`, `aliases`, `type`, `description` and `fields`, and a field a plugin names for its data (`pnpm describe:authoring` lists them as `characterField`). Remove the field or correct its name.",
+    });
+  }
+}
+
 async function appendStructuredPlans(options: {
   writes: PlannedWrite[];
   diagnostics: WorldDataDiagnostic[];
@@ -105,6 +228,8 @@ async function appendStructuredPlans(options: {
   deps?: WorldDataImportPreflightDeps;
   includeKernelEffects?: boolean;
   characterSchema: CharacterSchemaRecord | null;
+  characterBlocks: CharacterBlocks;
+  dimensions?: WorldDimensions;
 }): Promise<void> {
   const { source, target } = options;
   if (target.kind === "world-metadata" || target.kind === "media") return;
@@ -276,6 +401,19 @@ async function appendStructuredPlans(options: {
         record,
         value,
       });
+      if (isRecord(value))
+        await appendCharacterBlocks({
+          writes: options.writes,
+          diagnostics: options.diagnostics,
+          source,
+          sourceDigest: options.sourceDigest,
+          characterId: record.id,
+          value,
+          location,
+          blocks: options.characterBlocks,
+          deps: options.deps,
+          dimensions: options.dimensions,
+        });
     }
 
     if (
@@ -319,6 +457,53 @@ function hiddenSourceError(
   if (source.descriptor.kind === "media" || source.descriptor.indexTo)
     return `hidden source "${source.id}" cannot be a media source or declare indexTo`;
   return null;
+}
+
+/**
+ * The plugin data fields of character records for this import: the fields
+ * the active plugins name, with the namespaces that receive each. Without a
+ * registry no plugin is known and the records are characters only.
+ */
+function resolveCharacterBlocks(
+  sources: readonly OrderedWorldDataSource[],
+  deps: WorldDataImportPreflightDeps | undefined,
+  diagnostics: WorldDataDiagnostic[],
+): CharacterBlocks {
+  const characterSource = sources.find(
+    (source) =>
+      parseWorldDataTarget(source.descriptor.to)?.kind === "characters",
+  );
+  if (!characterSource || !deps?.registry)
+    return { routes: [], colliding: [], reportUnread: false };
+  const { routes, collisions } = characterBlockRoutes(
+    deps.registry,
+    deps.activePlugins,
+  );
+  for (const collision of collisions)
+    diagnostics.push({
+      level: "warning",
+      sourceId: characterSource.id,
+      message: `the "${collision.field}" field of character records is not imported: more than one plugin names it for its data (${collision.claimants.join(", ")})`,
+      hint: "Turn off all but one of these plugins.",
+    });
+  return {
+    routes: routes.map((route) => {
+      const targets = resolveWorldDataTargets(
+        { kind: "contract-data", contract: route.contract, lorebook: false },
+        deps,
+        characterSource.id,
+        diagnostics,
+      ).filter(isPluginTarget);
+      for (const target of targets)
+        diagnostics.push(
+          ...preflightPluginTarget(target, characterSource, deps),
+        );
+      return { ...route, targets };
+    }),
+    colliding: collisions.map((collision) => collision.field),
+    // Only a check of the whole catalogue knows that no plugin reads a field.
+    reportUnread: deps.activePlugins === undefined,
+  };
 }
 
 export async function buildImportPlan(options: {
@@ -370,6 +555,11 @@ export async function buildImportPlan(options: {
   }
   const deferredProjectionOutputs: ImportPlan["deferredProjectionOutputs"][number][] =
     [];
+  const characterBlocks = resolveCharacterBlocks(
+    options.sources,
+    options.deps,
+    diagnostics,
+  );
 
   for (const source of options.sources) {
     const parsedTarget = parseWorldDataTarget(source.descriptor.to);
@@ -590,6 +780,8 @@ export async function buildImportPlan(options: {
         deps: options.deps,
         includeKernelEffects: target === targets[0],
         characterSchema,
+        characterBlocks,
+        ...(dimensions.success ? { dimensions: dimensions.data } : {}),
       });
     }
 

@@ -363,9 +363,9 @@ covel.provideExtension("prompt.segment@1", "character-sheets", {
 - 省略不代表值不存在。预览不冒充完整的 JSON。
 - 选了某个模板路径，也不意味着框架会自动全量展开所有行集。
 
-**给叙事的角色笔记。** 内置 `character-blueprint` 通过同一个扩展点提供 story 受众的 `<character-notes>` session 段：世界角色卡里写给扮演用的内容（口吻、举止、性格、目标、恐惧、秘密、关系、规则、示例台词）。
+**给叙事的角色笔记。** 内置 `character-blueprint` 通过同一个扩展点提供 story 受众的 `<character-notes>` session 段：世界角色文件里每个角色的扮演说明（`blueprint` 字段：口吻、举止、性格、目标、恐惧、秘密、关系、规则、示例台词）。
 
-- 只写角色在会话里的卡，按卡 ID 排序。
+- 只写会话里有的角色（玩家角色除外），按角色 ID 排序。
 - 在约 6000 token 的预算内逐档裁剪：先裁示例台词，再裁规则，口吻不裁。
 - 它是会话内稳定的文本，位于系统提示的稳定区；角色名册变化时才会变。
 - 字段和裁剪规则见[插件 README](../../plugins/character-blueprint/README.md#角色卡怎样进入叙事)。

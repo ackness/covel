@@ -1,7 +1,7 @@
 import { roleplayNoteSegments } from "../lib/roleplay-notes.js";
 
 export default function (covel) {
-  // The cards hold how the author wants each character played. The cast
+  // The notes hold how the author wants each character played. The cast
   // changes rarely, so the notes are session-stable text.
   covel.provideExtension("prompt.segment@1", "character-notes", {
     async handler(_input, ctx) {
@@ -22,12 +22,10 @@ export default function (covel) {
       for (const row of rows) {
         const record = row.value;
         if (!record || typeof record.characterId !== "string") continue;
+        const characterId = record.characterId;
         const canonical = ctx.world.characters.find(
-          (character) =>
-            character.id === record.characterId ||
-            character.id === `npc-${record.characterId}`,
+          (character) => character.id === characterId,
         );
-        const characterId = canonical?.id ?? record.characterId;
         const value = {
           characterId,
           ...(record.displayName || canonical?.name

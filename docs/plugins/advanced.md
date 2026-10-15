@@ -202,7 +202,7 @@ Authoring examples match their schemas.
 
 想把世界的其他内容换算成自己的数据，用 `contributes.worldProjections`，它的输出必须对应一个可导入的数据空间。完整规则见[世界数据参考](../reference/world-data.md)，字段见[插件清单字段表](../reference/schema/plugin-manifest.md)。
 
-角色卡这类业务格式归对应的插件所有。Covel 只处理通用的“来源 → 目标”和角色本身，不会为某个插件单独包装数据。
+角色卡这类业务格式归对应的插件所有。Covel 只处理通用的“来源 → 目标”和角色本身，不会为某个插件单独包装数据。插件给某个角色的数据可以写在世界的角色记录里：在接收的数据空间上声明 `authoring.characterField`，Covel 按角色 ID 把记录里这个字段交给你，见[一个世界一份角色文件](../reference/world-data.md#一个世界一份角色文件)。
 
 ## 服务与扩展
 

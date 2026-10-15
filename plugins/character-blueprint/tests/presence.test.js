@@ -283,35 +283,53 @@ describe("character-blueprint presence handler", () => {
   });
 });
 
-it.each(["hero", "npc-hero"])(
-  "replaces a current %s portrait without losing named variants or voice",
-  async (characterId) => {
-    const old = {
-      schemaVersion: 1,
-      characterId: "hero",
-      voice: { id: "c".repeat(64), mime: "audio/wav", size: 1 },
-      visuals: {
-        defaultVariant: "normal",
-        variants: [
-          { id: "normal", sprite: avatar },
-          { id: "smile", sprite: avatar },
+it("replaces a current portrait without losing named variants or voice", async () => {
+  const characterId = "hero";
+  const old = {
+    schemaVersion: 1,
+    characterId: "hero",
+    voice: { id: "c".repeat(64), mime: "audio/wav", size: 1 },
+    visuals: {
+      defaultVariant: "normal",
+      variants: [
+        { id: "normal", sprite: avatar },
+        { id: "smile", sprite: avatar },
+      ],
+    },
+  };
+  const next = { id: "d".repeat(64), mime: "image/png", size: 5 };
+  const result = await handler({
+    ...ctx({ action: "replacePortrait", characterId, ref: next }),
+    store: { listPluginData: async () => [{ key: "hero", value: old }] },
+  });
+  const value = getPendingProposals(result)[0].payload.value;
+  expect(value.characterId).toBe("hero");
+  expect(value.voice).toEqual(old.voice);
+  expect(value.visuals.variants).toEqual([
+    { id: "normal", sprite: next },
+    { id: "smile", sprite: avatar },
+  ]);
+});
+
+it("matches a portrait by the character's id only, without an npc- prefix", async () => {
+  await expect(
+    handler({
+      ...ctx({
+        action: "replacePortrait",
+        characterId: "npc-hero",
+        ref: avatar,
+      }),
+      store: {
+        listPluginData: async () => [
+          {
+            key: "hero",
+            value: { schemaVersion: 1, characterId: "hero", avatar },
+          },
         ],
       },
-    };
-    const next = { id: "d".repeat(64), mime: "image/png", size: 5 };
-    const result = await handler({
-      ...ctx({ action: "replacePortrait", characterId, ref: next }),
-      store: { listPluginData: async () => [{ key: "hero", value: old }] },
-    });
-    const value = getPendingProposals(result)[0].payload.value;
-    expect(value.characterId).toBe("hero");
-    expect(value.voice).toEqual(old.voice);
-    expect(value.visuals.variants).toEqual([
-      { id: "normal", sprite: next },
-      { id: "smile", sprite: avatar },
-    ]);
-  },
-);
+    }),
+  ).rejects.toThrow("Character portrait is unavailable");
+});
 
 it("rejects an arbitrary old session-prefixed portrait id", async () => {
   await expect(

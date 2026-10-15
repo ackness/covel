@@ -2268,7 +2268,7 @@ Notes:
 - When a world-data contract has no receiving plugin (not installed or not enabled), its contract writes are skipped and the session is still created. Active projections still run independently; sync preserves existing managed data for the skipped writes. The response's `worldDataNotices` carries a warning. Session preflight and later import or sync follow the same [receiver rules](./world-data.md#target-uri).
 - A plugin with a missing dependency: when no provider gives a contract it depends on (say the player turned the provider off), the session is still created and the plugin is turned off automatically. Such plugins that the player asked for, or that are `kind: core`, are still written into `activePlugins`; `GET /api/sessions/:id/plugins` lists them in `unavailable`, and they come back on their own once the dependency is back. Rules: [Session plugin selection](./plugins.md#session-plugin-selection).
 - `metadata.characterSchema`: when a local session is created in Web private mode, the same schema is written. If the preset is not valid, the session is not created.
-- `metadata.embeddedCharacters`: these are not a plugin's character cards. They do not make a copy of plugin data.
+- `metadata.embeddedCharacters`: the world's character records, imported like the character file. A field a plugin declares in a record (`characterField`) goes to the receiving plugin, keyed by the character ID; the character record itself is not copied into plugin data.
 - `metadata.embeddedLorebook`: AI-generated worlds with `server-store` / `return-only` use it to carry their material and rules.
 
 **Response 201:**
@@ -3540,6 +3540,7 @@ Returns the list of what can go into a world, for the world creation screen and 
 - `pnpm describe:authoring` prints the same data.
 - An unreadable or non-JSON example, or a missing, invalid, or conflicting schema for generatable content, skips only that contract. The optional `diagnostics` array returns `{ pluginId, namespace, message }` for each problem, also logged by the server; other contracts and plugins remain available.
 - The `locale` query parameter sets the language of display text such as `title`. If it is omitted, the server's default language is used.
+- A contract with `characterField` has no `source`: its records are written in that field of each record of the character file, and `example` is the one for one character.
 
 **Response excerpt:**
 

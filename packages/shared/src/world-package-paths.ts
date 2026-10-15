@@ -10,6 +10,24 @@ export const KERNEL_WORLD_DATA_PATHS = {
   characters: "characters/characters.json",
 } as const;
 
+/**
+ * Fields of a record in a world's character file that the kernel reads. Any
+ * other field holds data for a plugin: the plugin that names that field
+ * (`contributes.data.<ns>.authoring.characterField`) receives it.
+ */
+export const KERNEL_CHARACTER_FIELDS = [
+  "id",
+  "name",
+  "aliases",
+  "type",
+  "description",
+  "fields",
+  "version",
+  "createdAt",
+  "updatedAt",
+  "sessionId",
+] as const;
+
 export const RESERVED_WORLD_PACKAGE_PATHS: readonly string[] = [
   "world.yaml",
   "WORLD.md",

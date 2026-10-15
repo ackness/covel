@@ -136,7 +136,6 @@ session 建立 → GET /api/ui-specs?sessionId=<id>
 | --- | --- | --- | --- | --- | --- |
 | affinity | affinity | heart | affinity | affinity | 好感度面板（玩家↔NPC score 双向条 + tier 徽标 + 最近变化原因） |
 | char-creator | character | users | character | session.characters | 角色列表（类型由当前角色 schema 定义） |
-| character-blueprint | character-blueprint | id-card | character | blueprints | 预设角色（世界作者预置的登场角色模板，只读；作为 `character` 组的子 Tab） |
 | character-blueprint | character-presence | image | character-art | presence | 角色立绘画廊（`PortraitGallery`，只读展示 + 玩家可上传替换头像，`alwaysRender`） |
 | codex | codex | book-open | codex | entries | 知识图鉴 |
 | core-quest | core-quest | scroll-text | core-quest | quests | 任务日志（进行中含 objectives 勾选清单 / 已完成 / 已失败 分组） |
@@ -160,7 +159,7 @@ session 建立 → GET /api/ui-specs?sessionId=<id>
 几个分组的说明：
 
 - **`world-data` 组**（组名“世界资料”）汇集三份 spec：`world-init` 的 `world-overview` 和 `world-schema`，以及 `living-world-rules` 的 `living-world-rules`。它们合成一个外层页签，里面用横向子页签在总览、属性、世界规则之间切换。总览里的 `WorldDimensions` 直接读会话公开的当前值，不从 `entries` 或世界初值拼装；维度也不再同时写一份 constant lorebook。
-- **`character` 组**汇集 `char-creator` 的角色列表和 `character-blueprint` 的预设角色。前者读会话 World Model 的 `session.characters`，是当前存档的活状态；后者是导入的只读模板。角色的创建和导入都经 World Model 写入，不靠插件之间互相镜像角色。
+- **`character` 组**是 `char-creator` 的角色列表，读会话 World Model 的 `session.characters`，是当前存档的活状态。世界的角色从角色文件导入 World Model，插件给角色的数据（例如 `character-blueprint` 的扮演说明）按角色 ID 存在插件自己的 namespace 里。角色的创建和导入都经 World Model 写入，不靠插件之间互相镜像角色。
 - **`npc-graph`** 的面板用 `dataSource.bindings` 把自己的 `nodes` 和 `edges` 两个 namespace 接进面板状态，再作为属性传给 `GraphCanvas` 画出关系图（`react-force-graph-2d`，按需加载）。
 - **`memory`** 包注册了 `prompt.segment@1`、`memory.block-definitions@1` 服务和右侧面板。`runtimes/extract/RUNTIME.md` 读取冻结的 `turn-digest@1`，作为 `settle: before-next-execution` 的后台任务更新本插件的 `blocks` namespace。面板直接读这些块。它的提示词片段是回合级的，位于历史之后的回合上下文里。在禁用了这个插件的会话里，提取不运行，下一回合不等它的任务，记忆也不注入。
 
@@ -534,7 +533,7 @@ directive 可以写在组件 props 的任何动态值位置，也可以写在 `o
 **两种典型用法**：
 
 - 一个插件的多个面板：`world-init` 的 `world-overview` 和 `world-schema` 都声明 `group: "world-data"`。
-- 跨插件组合：`char-creator` 提供角色列表，`character-blueprint` 提供预设角色，两者都声明 `group: "character"`，自动汇集到同一个外层页签。
+- 跨插件组合：`world-init` 提供总览和属性，`living-world-rules` 提供世界规则，它们都声明 `group: "world-data"`，自动汇集到同一个外层页签。
 
 **合并规则**：
 

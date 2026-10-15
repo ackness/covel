@@ -28,7 +28,7 @@ pnpm describe:authoring
 
 - 世界包有哪些文件，各自的字段表在哪。
 - 内置数据目标：维度、角色。
-- 每一种可以预置的内容：标题、接收它的插件、写作提示、文件该放的路径（`path`）、一份合法示例。
+- 每一种可以预置的内容：标题、接收它的插件、写作提示、文件该放的路径（`path`）、一份合法示例。写在角色记录里的内容没有 `path`，给的是字段名（`characterField`，例如扮演说明的 `blueprint`）。
 - 插件目录：ID、简介、提供和依赖的契约、可以用 `pluginSettings` 预置的设置项。
 
 只使用这里列出的插件 ID、契约和设置项。需要机器可读的结果时加 `--json`；社区插件用 `--plugins <dir>` 一并扫描。
@@ -74,12 +74,13 @@ worlds/<id>/
 - `world.yaml` 和 descriptor 只写当前字段；按生成的字段表编写，不添加 `schemaVersion`。
 - 每个数据文件按第 2 步的写作提示和示例来写。
 - 多个文件提到同一个角色、物品或地点时，使用完全相同的 ID 和名字，并与 `WORLD.md` 一致。
+- 一个世界只有一份角色文件 `characters/characters.json`。插件给角色的内容（例如扮演说明）写在该角色记录里插件声明的字段下，不另建文件，也不重复记录里的名字、说明、类型和属性。见 `docs/reference/world-data.md` 的“一个世界一份角色文件”。
 - 玩家也能读到 `WORLD.md`（右侧“世界”页签）。暗线、谜底和主持指引写在独占一行的 `<!-- narrator-only -->` 与 `<!-- /narrator-only -->` 之间：模型照常读到，玩家看不到。设定、地点、人物介绍和开局留在标记外。各语言版本在同样的位置标记。这只是不剧透，读文件的人仍看得到；见 `docs/reference/world-data.md` 的“只给叙事者的正文”。
 - 角色类型和属性写在 `characterSchema: {types, attributes}`。
 - 所有 ID（world id、source id、记录 id）用 kebab-case 英文。
 - 避免泛化的奇幻套路，追求独特的设定。
 - 用户给了署名信息时，在 `world.yaml` 写 `author`（`name`，可选 `url`、`about`、`links`）、`license`、`homepage`；没给就不写，不要编造作者或链接。链接只能是 `https`。作者名和许可证不翻译，`about` 和链接的 `label` 可以在 `world.<locale>.yaml` 里翻译。字段见 `docs/reference/plugins.md` 的“作者信息”。
-- 每个文件只写一种语言（`world.yaml` 的 `defaultLocale`）。要加别的语言时，在文件旁边放 `<名字>.<locale>.<扩展名>`，只写译文、不重复结构：`world.en-US.yaml`、`data/dimensions.en-US.yaml`、`characters/main-cast.en-US.json`；`WORLD.en-US.md` 是整份正文。`<locale>` 写成完整写法（`en-US`），不要写成 `.en`，校验会报错。有了 `world.<locale>.yaml` 或 `WORLD.<locale>.md`，世界就有这种语言的版本，不需要在 `world.yaml` 里登记。主文件里不要写 `{ zh: …, en: … }` 这样的内联映射，校验会报错。
+- 每个文件只写一种语言（`world.yaml` 的 `defaultLocale`）。要加别的语言时，在文件旁边放 `<名字>.<locale>.<扩展名>`，只写译文、不重复结构：`world.en-US.yaml`、`data/dimensions.en-US.yaml`、`characters/characters.en-US.json`；`WORLD.en-US.md` 是整份正文。`<locale>` 写成完整写法（`en-US`），不要写成 `.en`，校验会报错。有了 `world.<locale>.yaml` 或 `WORLD.<locale>.md`，世界就有这种语言的版本，不需要在 `world.yaml` 里登记。主文件里不要写 `{ zh: …, en: … }` 这样的内联映射，校验会报错。
 - 写进本仓库 `worlds/` 的中文世界，`world.yaml` 的展示字段（`name`、`summary`、属性的 `name` / `description` 等）必须在 `world.en-US.yaml` 里有英文译文，仓库门禁会检查。`WORLD.md` 和 `data/` 里的内容用用户的语言即可。
 
 ### 5. 验证

@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import { KERNEL_WORLD_DATA_PATHS } from "@covel/shared";
 import type { WorldGenerationDataContract } from "@covel/create";
 import type { PluginRegistry } from "@covel/plugin-loader";
 import { describeAuthoringSurface } from "../authoring/describe.js";
@@ -29,6 +30,36 @@ function source(
     pathOrigin: { descriptorRoot: ".", origin: "world" },
     ...(value === undefined ? {} : { inlineValue: value }),
   };
+}
+
+/**
+ * The characters of a world that lives in a store (`embeddedCharacters`), as
+ * a source: the same planning as a world's character file, so the plugin
+ * data a character record carries reaches its receivers too.
+ */
+export function portableCharacterSources(
+  value: unknown,
+): readonly OrderedWorldDataSource[] {
+  if (value === undefined) return [];
+  if (!Array.isArray(value))
+    throw new Error("embeddedCharacters must be an array");
+  return [
+    {
+      id: "characters",
+      descriptor: {
+        kind: "json",
+        path: KERNEL_WORLD_DATA_PATHS.characters,
+        to: "characters",
+        key: "id",
+      },
+      order: 0,
+      resolvedOrder: 0,
+      origin: "world",
+      overridden: false,
+      pathOrigin: { descriptorRoot: ".", origin: "world" },
+      inlineValue: value,
+    },
+  ];
 }
 
 /** Portable records use the same schema, receiver and write planning as files. */
@@ -128,6 +159,7 @@ export async function worldGenerationDataContracts(
           ? {}
           : { pluginId: item.pluginId }),
         lorebook: declared?.to.endsWith("+lorebook") === true,
+        ...(item.characterField ? { characterField: item.characterField } : {}),
         ...(declared &&
         conventional &&
         (declared.kind === "yaml" || declared.kind === "json")

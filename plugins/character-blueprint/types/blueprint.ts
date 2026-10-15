@@ -1,9 +1,8 @@
-import type { PluginProposalPayloads } from "@covel/plugin-handlers-utils";
-type CharacterUpsertPayload = PluginProposalPayloads["character.upsert"];
-import type { MediaReference as MediaRef } from "@covel/plugin-handlers-utils";
-
-export type CharacterBlueprintRole =
-  "player" | "npc" | "companion" | (string & {});
+/**
+ * The roleplay notes of one character: the `blueprint` field of its record
+ * in the world's character file, stored in `blueprints` under the
+ * character's id. The record gives the name, type, description and fields.
+ */
 
 export interface CharacterBlueprintPersona {
   readonly summary?: string;
@@ -13,23 +12,21 @@ export interface CharacterBlueprintPersona {
   readonly secrets?: readonly string[];
   readonly voice?: string;
   readonly style?: string;
-  readonly notes?: readonly string[];
 }
 
 export interface CharacterBlueprintDialogueExample {
   readonly id?: string;
   readonly user?: string;
   readonly character: string;
-  readonly context?: string;
-  readonly tags?: readonly string[];
 }
 
 export interface CharacterBlueprintScenarioDefaults {
   readonly opening?: string;
   readonly location?: string;
-  readonly relationships?: Readonly<Record<string, unknown>>;
-  readonly inventory?: readonly string[];
+  /** By `player`, a character's id or a dimension entry's id. */
+  readonly relationships?: Readonly<Record<string, string>>;
   readonly state?: Readonly<Record<string, unknown>>;
+  readonly [field: string]: unknown;
 }
 
 export interface CharacterBlueprintRule {
@@ -39,63 +36,10 @@ export interface CharacterBlueprintRule {
   readonly tags?: readonly string[];
 }
 
-export interface CharacterBlueprintMediaRefs {
-  readonly portrait?: MediaRef;
-  readonly gallery?: readonly MediaRef[];
-  readonly voice?: MediaRef;
-  readonly themeAudio?: MediaRef;
-  readonly refs?: readonly MediaRef[];
-}
-
-export interface CharacterBlueprintInstantiation {
-  readonly characterId?: string;
-  readonly name?: string;
-  readonly type?: CharacterBlueprintRole;
-  readonly description?: string;
-  readonly fields?: Readonly<Record<string, unknown>>;
-}
-
 export interface CharacterBlueprint {
-  readonly schemaVersion: 1;
-  readonly id: string;
-  readonly name: string;
-  readonly role?: CharacterBlueprintRole;
-  readonly description?: string;
-  readonly source?: string;
-  readonly locale?: string;
-  readonly aliases?: readonly string[];
   readonly tags?: readonly string[];
-  readonly attributes?: Readonly<Record<string, unknown>>;
   readonly persona?: CharacterBlueprintPersona;
   readonly dialogueExamples?: readonly CharacterBlueprintDialogueExample[];
   readonly scenarioDefaults?: CharacterBlueprintScenarioDefaults;
   readonly rules?: readonly CharacterBlueprintRule[];
-  readonly media?: CharacterBlueprintMediaRefs;
-  readonly instantiate?: CharacterBlueprintInstantiation;
-  readonly metadata?: Readonly<Record<string, unknown>>;
-}
-
-export function characterBlueprintToCharacterUpsert(
-  blueprint: CharacterBlueprint,
-  opts: {
-    readonly sessionId?: string;
-    readonly now?: string;
-    readonly characterId?: string;
-  } = {},
-): CharacterUpsertPayload {
-  const instantiate = blueprint.instantiate;
-  const id =
-    opts.characterId ?? instantiate?.characterId ?? `npc-${blueprint.id}`;
-  const type = instantiate?.type ?? blueprint.role ?? "npc";
-  const description = instantiate?.description ?? blueprint.description;
-  const fields = instantiate?.fields ?? blueprint.attributes;
-  return {
-    id,
-    name: instantiate?.name ?? blueprint.name,
-    type,
-    ...(description !== undefined ? { description } : {}),
-    ...(fields !== undefined ? { fields } : {}),
-    version: 1,
-    ...(opts.now ? { createdAt: opts.now } : {}),
-  };
 }

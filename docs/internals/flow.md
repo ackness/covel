@@ -925,7 +925,7 @@ checkpoint，服务端 MemoryStore 只作为单次执行的临时工作区。
 - 框架校验 contract 和 namespace 的 schema，把数据分发给匹配的、已启用的消费者。
 - 框架不认识蓝图、立绘或规则插件的具体 ID，也不写某个插件的私有包装。
 - 世界级的 characterSchema、lore 和 metadata 是领域导入；业务数据由接收的插件自己解释。
-- 例如：`character.blueprints@1` 承载原始的蓝图记录，`memory.blocks@1` 承载 `{ id: "world", blocks: [...] }` 定义。
+- 例如：`memory.blocks@1` 承载 `{ id: "world", blocks: [...] }` 定义。`character.blueprints@1` 的记录写在世界角色文件的每条角色记录里（接收插件声明的字段），内核按角色 ID 分发。
 
 **动态维度。** 世界包声明一张开放的维度定义表，每个会话由唯一的提供者管理当前值。捆绑的 `world-init` 是这样做的：
 

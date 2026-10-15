@@ -294,16 +294,21 @@ describe("HTTP API e2e: haruka academy chat mode", () => {
     expect(characters.map((character) => character.id)).toEqual(
       expect.arrayContaining(["npc-kamishiro-mio", "npc-asakura-rin"]),
     );
+    // The roleplay notes in Mio's record reach the plugin under her id; the
+    // name stays in the record alone.
+    expect(characters.find((c) => c.id === "npc-kamishiro-mio")).toMatchObject({
+      name: "神代澪",
+    });
     const mioBlueprint = await store.getPluginData(
       sessionId,
       "character-blueprint",
       "blueprints",
-      "kamishiro-mio",
+      "npc-kamishiro-mio",
     );
     expect(mioBlueprint?.value).toMatchObject({
-      id: "kamishiro-mio",
-      name: "神代澪",
+      persona: expect.objectContaining({ voice: expect.any(String) }),
     });
+    expect(mioBlueprint?.value).not.toHaveProperty("name");
     const mioBlueprintMirror = await store.getPluginData(
       sessionId,
       "character-blueprint",
@@ -416,6 +421,23 @@ describe("HTTP API e2e: haruka academy chat mode", () => {
 
     expect(new Set(observedTurnIds).size).toBe(3);
     expect(mockLLM.narratorCalls).toBe(3);
+    // The narrative plays Mio from the roleplay notes in her character
+    // record: her voice, a secret and an example line, under her name.
+    const narratorPrompt = mockLLM.calls
+      .map((call) => call.messages[0]?.content)
+      .find(
+        (content): content is string =>
+          typeof content === "string" && content.includes("<character-notes>"),
+      );
+    expect(narratorPrompt).toContain(
+      "## 神代澪\n口吻：说话轻，句子完整，常先照顾对方感受，再说自己的请求。",
+    );
+    expect(narratorPrompt).toContain(
+      "她已经写好一篇以转学生为灵感的短篇开头，却不好意思承认。",
+    );
+    expect(narratorPrompt).toContain(
+      "不用谢。你刚转来，今天的教室和老师大概都会有点陌生。",
+    );
     expect(mockLLM.scenePromptCalls).toBe(3);
     // The last durable detached job must settle independently of the action stream.
     // The jobs settle on their own; the generous bound only matters when the

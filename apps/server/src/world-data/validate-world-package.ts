@@ -35,6 +35,7 @@ import { buildPluginSummary } from "../lib/plugin-descriptor.js";
 import { resolveSessionPluginPlan } from "../routes/api/session/plugins.js";
 import { worldPluginPlan } from "../routes/api/worlds/plugin-plan.js";
 import {
+  characterBlockRoutes,
   conventionCollisionDiagnostics,
   conventionCollisions,
   conventionsOfPlugins,
@@ -59,7 +60,7 @@ import {
 import { worldTranslationStatus } from "./locale-tooling.js";
 import { preflightWorldDataForSession } from "./session-import.js";
 import { readEffectiveDimensions } from "./session-import/dimensions.js";
-import { fileExists } from "./session-import/utils.js";
+import { fileExists, isRecord, sourceItems } from "./session-import/utils.js";
 import { readWorldDataSource } from "./source-reader.js";
 import { resolveWorldCover, resolveWorldThemeMusic } from "./gallery.js";
 import { parseWorldDataTarget } from "./target-uri.js";
@@ -1041,6 +1042,37 @@ async function checkWorldData(
         file: fileOf.get(source.id) ?? descriptorFile,
         sourceId: source.id,
         message: `a new session of this world starts without a plugin that accepts data contract "${target.contract}" (${listSome(receivers)}); the source is imported only after the player turns one on`,
+        hint: "Add the plugin to `pluginPolicy.plus`, or choose a `pluginPolicy.preset` whose pack has it.",
+      });
+    }
+  }
+
+  // The same for the plugin data that character records carry.
+  const { routes } = characterBlockRoutes(catalogue);
+  for (const source of descriptor.sources) {
+    if (parseWorldDataTarget(source.descriptor.to)?.kind !== "characters")
+      continue;
+    let records: readonly unknown[];
+    try {
+      records = sourceItems((await readWorldDataSource(source)).value);
+    } catch {
+      continue; // The preflight reports a file it cannot read.
+    }
+    for (const route of routes) {
+      if (
+        !records.some(
+          (record) => isRecord(record) && record[route.field] !== undefined,
+        )
+      )
+        continue;
+      const receivers = receiversOf(catalogue, route.contract);
+      if (receivers.some((id) => defaultPlugins.includes(id))) continue;
+      diagnostics.push({
+        level: "warning",
+        code: "unrequested-receiver",
+        file: fileOf.get(source.id) ?? source.descriptor.path,
+        sourceId: source.id,
+        message: `a new session of this world starts without a plugin that accepts data contract "${route.contract}" (${listSome(receivers)}); the "${route.field}" field of its characters is imported only after the player turns one on`,
         hint: "Add the plugin to `pluginPolicy.plus`, or choose a `pluginPolicy.preset` whose pack has it.",
       });
     }

@@ -596,15 +596,93 @@ describe("validateWorldPackage", () => {
           message: expect.stringContaining('"story-events"'),
         }),
       );
-      // Without its plugin, the cast file is read by no convention.
+      // Without its plugin, the roleplay notes in the character records are
+      // read by nobody; the records themselves are the kernel's.
       expect(diagnostics).toContainEqual(
         expect.objectContaining({
-          code: "data-file-unused",
-          file: "characters/main-cast.json",
+          level: "warning",
+          code: "world-data",
+          file: "characters/characters.json",
+          pointer: "[0].blueprint",
+          message: expect.stringContaining("is read by no plugin"),
         }),
       );
     },
   );
+
+  it("checks the plugin data in a character record against the plugin that names its field", async () => {
+    const characters = JSON.stringify([
+      {
+        id: "mara",
+        name: "Mara",
+        type: "npc",
+        blueprint: { persona: { voice: "Short sentences." } },
+      },
+      {
+        id: "rook",
+        name: "Rook",
+        type: "npc",
+        // The record gives the name: the notes may not repeat it.
+        blueprint: { name: "Rook", persona: { voice: "Loud." } },
+      },
+    ]);
+    const translation = JSON.stringify([
+      {
+        id: "mara",
+        name: "マラ",
+        blueprint: { persona: { voice: { text: "短く話す。" } } },
+      },
+    ]);
+    const files = {
+      "characters/characters.json": characters,
+      "characters/characters.ja-JP.json": translation,
+      "world.ja-JP.yaml": "name: サンプル\n",
+      "WORLD.ja-JP.md": "Lore.",
+    };
+    const diagnostics = await validate(await makeWorld(files));
+    expect(diagnostics.filter((item) => item.level === "error")).toContainEqual(
+      expect.objectContaining({
+        file: "characters/characters.json",
+        pointer: "[1].blueprint",
+        message: expect.stringContaining(
+          'for plugin "character-blueprint" namespace "blueprints", failed schema validation',
+        ),
+      }),
+    );
+    expect(
+      diagnostics.filter(
+        (item) => item.level === "error" && item.pointer === "[0].blueprint",
+      ),
+    ).toEqual([]);
+    // A translation keeps the structure of the notes it translates.
+    expect(diagnostics).toContainEqual(
+      expect.objectContaining({
+        code: "locale-overlay",
+        file: "characters/characters.ja-JP.json",
+        pointer: "[id=mara].blueprint.persona.voice",
+      }),
+    );
+    // A new session has no plugin for the notes unless the world asks for it.
+    const unrequested = (items: readonly WorldPackageDiagnostic[]) =>
+      items.filter((item) => item.code === "unrequested-receiver");
+    expect(unrequested(diagnostics)).toEqual([
+      expect.objectContaining({
+        level: "warning",
+        file: "characters/characters.json",
+        message: expect.stringContaining('the "blueprint" field'),
+      }),
+    ]);
+    expect(
+      unrequested(
+        await validate(
+          await makeWorld(
+            files,
+            `${MANIFEST}pluginPolicy:\n  plus: [character-blueprint]\n`,
+          ),
+        ),
+      ),
+    ).toEqual([]);
+  }, 30_000);
 
   it("reports a translation that the main file has no place for", async () => {
     const worldDir = path.join(
@@ -614,9 +692,9 @@ describe("validateWorldPackage", () => {
     await cp(path.join(repoRoot, "worlds/mistport"), worldDir, {
       recursive: true,
     });
-    // An id that the main cast file does not have, and a key that
+    // An id that the main character file does not have, and a key that
     // `world.yaml` does not have.
-    const castPath = path.join(worldDir, "characters/main-cast.en-US.json");
+    const castPath = path.join(worldDir, "characters/characters.en-US.json");
     const cast = JSON.parse(await readFile(castPath, "utf-8")) as Record<
       string,
       unknown
@@ -641,8 +719,8 @@ describe("validateWorldPackage", () => {
       }),
       expect.objectContaining({
         level: "warning",
-        file: "characters/main-cast.en-US.json",
-        sourceId: "blueprints",
+        file: "characters/characters.en-US.json",
+        sourceId: "characters",
         pointer: "[id=npc-nobody]",
       }),
     ]);

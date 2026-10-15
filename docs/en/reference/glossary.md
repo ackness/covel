@@ -27,6 +27,7 @@ Each English term has only one Chinese term. The Chinese docs, the UI text, and 
 | Preset | 预设 |  |
 | Proposal | 提案 |  |
 | Provider | 提供商 |  |
+| Roleplay notes | 扮演说明 | What the world author writes in the `blueprint` field of a character record to tell the narrative how to play the character; read by Character Profiles. Not the character itself. |
 | Runtime | runtime | Kept in English. It means one execution unit in a manifest, not the general word "runtime". |
 | Runtime manifest | runtime 清单 |  |
 | Segment | 提示词段 |  |

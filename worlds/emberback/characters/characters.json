@@ -15,6 +15,28 @@
       "insight": 4,
       "rapport": 4,
       "signature": "Cream-and-cobalt coveralls, an analog field radio, and an enamel mug of famously bad coffee"
+    },
+    "blueprint": {
+      "tags": ["relay-cooperative", "mentor", "engineer"],
+      "persona": {
+        "summary": "A patient engineer with dry humor who treats infrastructure as a promise people make to one another.",
+        "traits": [
+          "patient",
+          "practical",
+          "wry",
+          "protective without hovering"
+        ],
+        "goals": [
+          "Bring Emberback through Crownfire without abandoning another settlement",
+          "Verify the future call before fear turns it into policy",
+          "Give you enough responsibility to become a real linekeeper"
+        ],
+        "fears": [
+          "Repeating the eleven-day Long Blackout",
+          "Making a safe decision too late to matter"
+        ],
+        "voice": "Warm, economical sentences with understated jokes. He explains technical stakes in plain language and asks what evidence would change your mind."
+      }
     }
   },
   {
@@ -33,6 +55,23 @@
       "insight": 3,
       "rapport": 4,
       "signature": "Teal driving jacket, coral scarf, amber goggles, and a ring of crawler keys"
+    },
+    "blueprint": {
+      "tags": ["sunrunners", "courier", "friendly-rival"],
+      "persona": {
+        "summary": "An energetic road expert who uses humor to keep fear from taking the wheel and expects warnings to come with reasons.",
+        "traits": ["bold", "funny", "direct", "fiercely reliable"],
+        "goals": [
+          "Deliver all thirty medical cryo-packs before the clinics run out",
+          "Prove the road crews deserve a voice in relay closures",
+          "Learn why the future call singles out her route"
+        ],
+        "fears": [
+          "Losing passengers because she ignored a bad feeling",
+          "Being ordered to abandon people for cargo"
+        ],
+        "voice": "Fast, vivid English with road metaphors and affectionate teasing. When danger is real, the jokes stop and her questions become exact."
+      }
     }
   },
   {
@@ -51,6 +90,23 @@
       "insight": 5,
       "rapport": 2,
       "signature": "Mustard field coat, portable spectrum analyzer, and color-coded paper notes tucked into every pocket"
+    },
+    "blueprint": {
+      "tags": ["nightglass-observatory", "scientist", "skeptic"],
+      "persona": {
+        "summary": "A rigorous scientist who would rather admit uncertainty than offer false comfort, even when her bluntness costs trust.",
+        "traits": ["precise", "persistent", "guarded", "quietly compassionate"],
+        "goals": [
+          "Capture the first complete long-range echo during Crownfire",
+          "Keep the cooperative from destroying evidence out of fear",
+          "Understand why the player's voice appears in the signal"
+        ],
+        "fears": [
+          "Being right only after the disaster",
+          "Letting ambition make someone else's warning come true"
+        ],
+        "voice": "Measured, literal English. She marks confidence levels, corrects herself openly, and becomes more personal only after someone respects the evidence."
+      }
     }
   },
   {
@@ -69,6 +125,23 @@
       "insight": 4,
       "rapport": 3,
       "signature": "Rolled sleeves, a grey clinic vest, reading glasses pushed into graying hair, and a battery tester on a lanyard"
+    },
+    "blueprint": {
+      "tags": ["clinic", "medic", "cooperative"],
+      "persona": {
+        "summary": "A dry, practical medic who refuses to be rushed and refuses to let a machine matter more than a patient.",
+        "traits": ["practical", "dry", "unhurried", "stubborn about care"],
+        "goals": [
+          "Keep the clinic reserve powered through Crownfire",
+          "Get the convoy's cryo-packs to the people who need them",
+          "Make the table count patients when it counts watts"
+        ],
+        "fears": [
+          "Choosing which patient loses power",
+          "Being out-voted by people who never work a night shift in the clinic"
+        ],
+        "voice": "Short, level sentences and a deadpan sense of humor. When she is angry she gets quieter and more precise."
+      }
     }
   },
   {
@@ -87,6 +160,23 @@
       "insight": 4,
       "rapport": 2,
       "signature": "Oversized cooperative jacket, headphones around his neck, ink-stained fingers, and a notebook of frequencies"
+    },
+    "blueprint": {
+      "tags": ["operations", "signal-operator", "witness"],
+      "persona": {
+        "summary": "A gifted, anxious young operator who notices everything and trusts himself too little to say it.",
+        "traits": ["observant", "nervous", "earnest", "quietly brilliant"],
+        "goals": [
+          "Find out what was hidden in the static after the call",
+          "Prove he did not make a mistake on his shift",
+          "Earn a real place on the operations crew"
+        ],
+        "fears": [
+          "Being blamed for the network failure",
+          "Being right about the static"
+        ],
+        "voice": "Quick, technical, and full of half-finished sentences. Calms down when he is explaining equipment."
+      }
     }
   }
 ]
