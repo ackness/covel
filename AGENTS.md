@@ -117,7 +117,9 @@ Toolchain versions come from `mise.toml` (Node 26.10.0, pnpm 12.10.1, actionlint
 
 ```bash
 pnpm install --frozen-lockfile  # also builds @covel/plugin-handlers-utils (prepare)
-pnpm dev              # web (5173) + server (3001), SqliteStore (./data/covel.db)
+pnpm dev              # web (5173) + server (3001), SqliteStore (fallback: apps/server/data/covel.db)
+                      # explicit SQLITE_PATH wins; an existing COVEL_HOME (default ~/.covel) supplies data/covel.db
+                      # otherwise COVEL_DATA_ROOT/covel.db wins over the fallback; relative paths use apps/server/
                       # server watches plugins/**/*.{md,js,json,yaml}; editing a PLUGIN.md, handler or locale file restarts it
                       # at every start the server builds @covel/plugin-handlers-utils when its build is older than its source
 pnpm dev:web          # web only

@@ -30,11 +30,13 @@ The browser no longer re-implements the server's create, read, update, delete an
 
 `STORE_BACKEND` decides only the server's `DataStore`:
 
-| Value    | Use                                                                             | Notes                                                                                                           |
-| -------- | ------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| `memory` | Tests, and turn execution in browser-private mode                               | In-process only. Lost on restart. The health check reports `frontendMode: "local"`.                             |
-| `sqlite` | Desktop app, self-hosted web app, local development                             | The file path comes from `SQLITE_PATH`, default `./data/covel.db`. The driver is Node's built-in `node:sqlite`. |
-| `pg`     | Professional developers and users with special needs; multi-process deployments | `DATABASE_URL` must be set. Session locks use PostgreSQL advisory locks.                                        |
+| Value    | Use                                                                             | Notes                                                                                                                                   |
+| -------- | ------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `memory` | Tests, and turn execution in browser-private mode                               | In-process only. Lost on restart. The health check reports `frontendMode: "local"`.                                                     |
+| `sqlite` | Desktop app, self-hosted web app, local development                             | The file path comes from `SQLITE_PATH`; relative paths use the server's working directory. The driver is Node's built-in `node:sqlite`. |
+| `pg`     | Professional developers and users with special needs; multi-process deployments | `DATABASE_URL` must be set. Session locks use PostgreSQL advisory locks.                                                                |
+
+See [Environment variables](../reference/env-registry.md#plugin-extension-development-data) for path selection when running from source. Under `pnpm dev`, the server's working directory is `apps/server/`. With no path configuration and no existing Covel home, the database is `apps/server/data/covel.db`.
 
 There is no `STORE_BACKEND=idb`, and no `createStore({ backend: "idb" })`. If you write an unknown value (for example, `postgres` instead of `pg`), the service refuses to start, and the error lists the valid values. `MEDIA_BACKEND` and `VECTOR_BACKEND` work the same way.
 
@@ -377,9 +379,11 @@ The Dexie BrowserVault schema belongs to `apps/web`, and it is not reported exte
 
 - SQLite records the version in `PRAGMA user_version`; PostgreSQL records it in the single-row table `covel_schema_meta`.
 - The recorded version equals the current one: the database opens.
-- Another version is recorded, older or newer: the database is refused with `StoreSchemaVersionError` (`code: "store_schema_incompatible"`). The message tells the user to back up first, then switch to a new data directory, `SQLITE_PATH` or empty PostgreSQL database. The refusal comes before any table-creation statement, so the old database is not changed.
+- Another version is recorded, older or newer: the database is refused with `StoreSchemaVersionError` (`code: "store_schema_incompatible"`). The error's `database` field and message identify the refused database: the absolute file path for SQLite, or host, port and database name for PostgreSQL, without a username or password. The refusal comes before any table-creation statement, so the old database is not changed.
 - No version is recorded (a new database, or one written before this check existed): only the Covel tables that already exist are checked for every column of the current schema. A missing column is refused the same way; a missing table is fine, because startup creates it. When the check passes, the current version is recorded.
 - The desktop app shows this error on its startup screen, with the paths of the data directory and of `config.toml`.
+
+To reset a development database, use the actual path in the error. Stop the processes using it first. If the data is disposable, delete the file and its `-wal` and `-shm` files, then restart. To keep the data, back up and move these files aside together, or point `SQLITE_PATH` at a new file. For PostgreSQL, back up first, then point `DATABASE_URL` at a new, empty database.
 
 When a column of an existing table changes in a way an old database cannot follow (added, removed, renamed or retyped), raise `DATA_SCHEMA_VERSION` by one. `packages/store/tests/schema-version.test.ts` records the table-shape digests for each version; the test fails when the table shapes change and the digests are not updated.
 

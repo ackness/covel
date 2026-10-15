@@ -66,9 +66,11 @@ The environment variable `STORE_BACKEND` decides where the server keeps its data
 
 | Backend    | Value              | Use                                                                                                                                                                                                                                                                       |
 | ---------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| SQLite     | `sqlite` (default) | The desktop app and the self-hosted web app both use it, so ordinary players do not need to change it. Data is in `./data/covel.db` (the desktop app uses `<data_root>/covel.db`)                                                                                         |
+| SQLite     | `sqlite` (default) | The desktop app and the self-hosted web app both use it, so ordinary players do not need to change it. The file location comes from `SQLITE_PATH` (the desktop app uses `<data_root>/covel.db`)                                                                           |
 | Memory     | `memory`           | Tests, and turn runs in browser private mode (saves stay in the browser; meant for the official web app later). Data is lost when the process restarts                                                                                                                    |
 | PostgreSQL | `pg`               | For professional developers and users with special needs, such as multi-process deployments or an existing database. Needs `DATABASE_URL`. Same external behavior as SQLite (limits for several processes: [multi-instance limits](#limits-of-running-several-instances)) |
+
+Relative database paths use the server's working directory, which is `apps/server/` under `pnpm dev`. With no path configuration and no existing Covel home, the fallback is `apps/server/data/covel.db`. See [Environment variables](./env-registry.md#plugin-extension-development-data) for the full path selection rule.
 
 Two more points:
 
@@ -5907,7 +5909,7 @@ In the browser, you can also switch the storage mode:
 
 ### Self-hosted web app
 
-- **Server storage**: SQLite by default (`./data/covel.db`). Developers and users with special needs can switch to PostgreSQL. The Docker setup in this repository uses PostgreSQL.
+- **Server storage**: SQLite by default; see [Storage backends](#storage-backends) for the file location. Developers and users with special needs can switch to PostgreSQL. The default Docker setup in this repository uses SQLite, and a PostgreSQL setup is also available.
 - **Front-end storage**: remote is the default, and it uses the server's SQLite. Local mode uses the browser's IndexedDB.
 - **Data flow**:
   - Remote mode: the front end reads and writes the server's store through the API.
@@ -6011,16 +6013,16 @@ Each drain stage has a time limit. If tracked work has not finished, the resourc
 
 For the full list, see [`env-registry.md`](./env-registry.md).
 
-| Variable            | Description                  | Default           |
-| ------------------- | ---------------------------- | ----------------- |
-| `STORE_BACKEND`     | Storage backend type         | `sqlite`          |
-| `SQLITE_PATH`       | SQLite database path         | `./data/covel.db` |
-| `DATABASE_URL`      | PostgreSQL connection string | -                 |
-| `SERVER_PORT`       | Server port                  | `3001`            |
-| `DEPLOYMENT_TIER`   | Deployment tier              | `self`            |
-| `CORS_ORIGIN`       | Origins allowed by CORS      | -                 |
-| `ENABLE_DEBUG_PAGE` | Enable the debug page        | `false`           |
-| `RATE_LIMIT_RPM`    | Rate limit (requests/minute) | `60`              |
+| Variable            | Description                                                     | Default           |
+| ------------------- | --------------------------------------------------------------- | ----------------- |
+| `STORE_BACKEND`     | Storage backend type                                            | `sqlite`          |
+| `SQLITE_PATH`       | SQLite database path (relative to the server working directory) | `./data/covel.db` |
+| `DATABASE_URL`      | PostgreSQL connection string                                    | -                 |
+| `SERVER_PORT`       | Server port                                                     | `3001`            |
+| `DEPLOYMENT_TIER`   | Deployment tier                                                 | `self`            |
+| `CORS_ORIGIN`       | Origins allowed by CORS                                         | -                 |
+| `ENABLE_DEBUG_PAGE` | Enable the debug page                                           | `false`           |
+| `RATE_LIMIT_RPM`    | Rate limit (requests/minute)                                    | `60`              |
 
 ### Opening the effective configuration
 

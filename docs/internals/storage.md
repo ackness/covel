@@ -30,11 +30,13 @@ SQLite 是默认。桌面客户端和自部署网页版都用它，普通玩家�
 
 `STORE_BACKEND` 只决定服务端的 `DataStore`：
 
-| 值       | 用途                                     | 说明                                                                                 |
-| -------- | ---------------------------------------- | ------------------------------------------------------------------------------------ |
-| `memory` | 测试、浏览器私有模式下的回合执行         | 只在进程内，重启即丢失。健康检查报告 `frontendMode: "local"`。                       |
-| `sqlite` | 桌面客户端、自部署网页版、本地开发       | 文件路径取 `SQLITE_PATH`，默认 `./data/covel.db`。驱动是 Node 内置的 `node:sqlite`。 |
-| `pg`     | 专业开发者或有特殊需求的用户；多进程部署 | 必须设置 `DATABASE_URL`；会话锁用 PostgreSQL advisory lock。                         |
+| 值       | 用途                                     | 说明                                                                                       |
+| -------- | ---------------------------------------- | ------------------------------------------------------------------------------------------ |
+| `memory` | 测试、浏览器私有模式下的回合执行         | 只在进程内，重启即丢失。健康检查报告 `frontendMode: "local"`。                             |
+| `sqlite` | 桌面客户端、自部署网页版、本地开发       | 文件路径取 `SQLITE_PATH`，相对路径以服务端工作目录为准。驱动是 Node 内置的 `node:sqlite`。 |
+| `pg`     | 专业开发者或有特殊需求的用户；多进程部署 | 必须设置 `DATABASE_URL`；会话锁用 PostgreSQL advisory lock。                               |
+
+源码开发的路径选择见[环境变量](../reference/env-registry.md#plugin-extension-development-data)。`pnpm dev` 下服务端工作目录是 `apps/server/`，没有路径配置且 Covel 主目录不存在时，数据库在 `apps/server/data/covel.db`。
 
 没有 `STORE_BACKEND=idb`，也没有 `createStore({ backend: "idb" })`。写了不认识的值（比如把 `pg` 写成 `postgres`），服务会拒绝启动，错误信息里列出可用的值。`MEDIA_BACKEND` 和 `VECTOR_BACKEND` 也是这样。
 
@@ -377,9 +379,11 @@ Dexie BrowserVault 的 schema 归 `apps/web` 所有，不作为服务端 `DataSt
 
 - SQLite 把版本记在 `PRAGMA user_version`，PostgreSQL 记在单行表 `covel_schema_meta`。
 - 记录的版本和当前相同：正常打开。
-- 记录的是别的版本，不管更旧还是更新：拒绝打开，抛出 `StoreSchemaVersionError`（`code: "store_schema_incompatible"`）。错误信息让用户先备份，再换一个新的数据目录、`SQLITE_PATH` 或空的 PostgreSQL 数据库。拒绝发生在任何建表语句之前，旧库不会被改动。
+- 记录的是别的版本，不管更旧还是更新：拒绝打开，抛出 `StoreSchemaVersionError`（`code: "store_schema_incompatible"`）。错误的 `database` 字段和消息都指出被拒绝的数据库：SQLite 是文件的绝对路径，PostgreSQL 是主机、端口和库名，不含用户名或密码。拒绝发生在任何建表语句之前，旧库不会被改动。
 - 没有记录版本（新库，或加入这项检查之前写的库）：只检查已经存在的 Covel 表是否有当前 schema 的每一列。缺列就同样拒绝；缺整张表没关系，启动时会建。检查通过后写入当前版本。
 - 桌面版把这个错误显示在启动页上，并给出数据目录和 `config.toml` 的路径。
+
+开发数据库的重置以错误里的实际路径为准。先停掉使用它的进程；数据不需要保留时，可删除该文件及其 `-wal`、`-shm` 文件后重启。需要保留时，把这些文件一起备份并移走，或把 `SQLITE_PATH` 指向一个新文件。PostgreSQL 则先备份，再把 `DATABASE_URL` 指向一个新的空库。
 
 某张已有表的列发生了旧库跟不上的变化（增、删、改名、改类型）时，要把 `DATA_SCHEMA_VERSION` 加一。`packages/store/tests/schema-version.test.ts` 记录了每个版本对应的表结构摘要，表结构变了而摘要没更新，这个测试就会失败。
 
