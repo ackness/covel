@@ -281,7 +281,11 @@
     "worldDataNotices": {
       "title": "这个世界的部分数据没有进入这局游戏：",
       "hint": "给已关闭或正在等你批准的插件的数据，会在打开那个插件时导入。",
-      "hide": "隐藏"
+      "hide": "隐藏",
+      "dimensionsMissing": "世界维度（如关系、资源）：没有启用的插件保存它们，这局不记录。",
+      "receiverMissing": "“{{source}}”：没有启用的插件接收这份数据。",
+      "sourceNotImported": "“{{source}}”的数据没有导入（详情）",
+      "notImported": "有一部分数据没有导入（详情）"
     },
     "pendingApproval": {
       "title": "需要批准",

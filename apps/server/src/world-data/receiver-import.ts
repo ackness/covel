@@ -24,6 +24,7 @@ export function worldDataImportNotices(
           {
             level: diagnostic.level,
             ...(diagnostic.sourceId ? { sourceId: diagnostic.sourceId } : {}),
+            ...(diagnostic.code ? { code: diagnostic.code } : {}),
             message: diagnostic.message,
           },
         ],

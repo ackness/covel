@@ -55,6 +55,7 @@ export function resolveWorldDataTargets(
       level:
         registered || deps?.activePlugins !== undefined ? "warning" : "error",
       sourceId,
+      code: "receiver-missing",
       message: registered
         ? `No active receiver for data contract "${target.contract}"; contract writes skipped`
         : `No registered receiver for data contract "${target.contract}"; contract writes skipped`,

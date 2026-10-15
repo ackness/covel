@@ -19,7 +19,8 @@ export interface WorldDataDiagnostic {
   readonly code?:
     | "convention-collision"
     | "dimension-provider-missing"
-    | "dimension-reference";
+    | "dimension-reference"
+    | "receiver-missing";
   /** Set when a locale file's entry was ignored; `path` is that file. */
   readonly localeOverlay?: true;
 }

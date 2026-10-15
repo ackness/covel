@@ -281,7 +281,11 @@
     "worldDataNotices": {
       "title": "Some of this world's data is not in this game:",
       "hint": "Data for a plugin that is off, or waiting for your approval, arrives when you turn that plugin on.",
-      "hide": "Hide"
+      "hide": "Hide",
+      "dimensionsMissing": "World dimensions (such as relationships and resources): no enabled plugin keeps them, so this game does not track them.",
+      "receiverMissing": "\"{{source}}\": no enabled plugin receives this data.",
+      "sourceNotImported": "The data in \"{{source}}\" was not imported (details)",
+      "notImported": "Some data was not imported (details)"
     },
     "pendingApproval": {
       "title": "Needs approval",
