@@ -32,7 +32,7 @@ it("ignores shadowed packages while reloading the higher-priority renamed packag
       await mkdir(dir, { recursive: true });
       await writeFile(
         path.join(dir, "world.yaml"),
-        'schemaVersion: "1.0"\nid: shared-world\nname: Synthetic world\nsummary: Priority fixture.\ndefaultLocale: en-US\ndimensionSources:\n  tone: tone.yaml\n',
+        "id: shared-world\nname: Synthetic world\nsummary: Priority fixture.\ndefaultLocale: en-US\ndimensionSources:\n  tone: tone.yaml\n",
         "utf8",
       );
       await update(dir, index === 0 ? "mystery" : "fantasy");

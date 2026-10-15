@@ -63,7 +63,7 @@ export function validateWorldBundle(
     );
   }
 
-  const result = validateWorldManifest(raw);
+  const result = validateWorldManifest(raw, { ignoreUnknownRootFields: true });
   if (!result.valid) {
     throw httpError(
       400,

@@ -98,7 +98,7 @@ describe("POST /api/worlds/:id/translate", () => {
     await mkdir(dir, { recursive: true });
     await writeFile(
       path.join(dir, "world.yaml"),
-      `schemaVersion: "1.0"\nid: ${id}\nname: Ash Harbor\nsummary: A port that burns every winter.\ndefaultLocale: en-US\n`,
+      `id: ${id}\nname: Ash Harbor\nsummary: A port that burns every winter.\ndefaultLocale: en-US\n`,
     );
     await writeFile(
       path.join(dir, "WORLD.md"),
@@ -345,7 +345,6 @@ describe("POST /api/worlds/:id/translate", () => {
     await writeWorldPackage(userWorlds, {
       id: "made-here",
       manifest: {
-        schemaVersion: "1.0",
         id: "made-here",
         name: "Ash Harbor",
         summary: "A port that burns every winter.",

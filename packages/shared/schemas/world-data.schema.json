@@ -5,11 +5,6 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "type": "object",
   "properties": {
-    "schemaVersion": {
-      "type": "number",
-      "const": 1,
-      "description": "Descriptor format version."
-    },
     "sources": {
       "type": "object",
       "propertyNames": {
@@ -113,6 +108,6 @@
       "description": "Data sources keyed by source ID. A source ID starts with a letter and uses letters, digits, `_` or `-`."
     }
   },
-  "required": ["schemaVersion", "sources"],
+  "required": ["sources"],
   "additionalProperties": false
 }

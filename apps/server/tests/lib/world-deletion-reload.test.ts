@@ -42,8 +42,7 @@ const worldId = "reload-world";
 async function writeManifest(genre: string) {
   await writeFile(
     path.join(directory, "world.yaml"),
-    `schemaVersion: "1.0"
-id: ${worldId}
+    `id: ${worldId}
 name: Reload world
 summary: Synthetic deletion fixture.
 defaultLocale: en-US

@@ -58,8 +58,7 @@ async function makeWorld(options: {
   await mkdir(path.join(worldRoot, "data"), { recursive: true });
   await writeFile(
     path.join(worldRoot, "world.yaml"),
-    `schemaVersion: "1"
-id: ${worldId}
+    `id: ${worldId}
 name: Demo
 summary: Demo world
 defaultLocale: zh-CN
@@ -455,8 +454,7 @@ describe("world data session importer", () => {
 
   it("imports generic plugin-data records from JSON arrays", async () => {
     const { worldsDir, worldId } = await makeWorld({
-      descriptor: `schemaVersion: 1
-sources:
+      descriptor: `sources:
   facts:
     kind: json
     path: data/facts.json
@@ -496,8 +494,7 @@ sources:
 
   it("rejects a record over the one-value plugin-data limit", async () => {
     const { worldsDir, worldId } = await makeWorld({
-      descriptor: `schemaVersion: 1
-sources:
+      descriptor: `sources:
   facts:
     kind: json
     path: data/facts.json
@@ -533,8 +530,7 @@ sources:
 
   it("imports hidden sources into the receiver's reserved hidden namespace", async () => {
     const { worldsDir, worldId } = await makeWorld({
-      descriptor: `schemaVersion: 1
-sources:
+      descriptor: `sources:
   secrets:
     kind: json
     path: data/hidden/facts.json
@@ -582,8 +578,7 @@ sources:
     ["characters", /must target a data contract/],
   ])("rejects a hidden source targeting %s", async (to, message) => {
     const { worldsDir, worldId } = await makeWorld({
-      descriptor: `schemaVersion: 1
-sources:
+      descriptor: `sources:
   secrets:
     kind: json
     path: data/hidden/facts.json
@@ -619,8 +614,7 @@ sources:
 
   it("reads the source variant named with the exact locale and ignores a bare-language one", async () => {
     const { worldsDir, worldId } = await makeWorld({
-      descriptor: `schemaVersion: 1
-sources:
+      descriptor: `sources:
   facts:
     kind: json
     path: data/facts.json
@@ -663,8 +657,7 @@ sources:
 
   it("does not load a Simplified Chinese source variant for zh-Hant", async () => {
     const { worldsDir, worldId } = await makeWorld({
-      descriptor: `schemaVersion: 1
-sources:
+      descriptor: `sources:
   facts:
     kind: json
     path: data/facts.json
@@ -701,8 +694,7 @@ sources:
 
   it("falls back to the declared source when no locale variant exists", async () => {
     const { worldsDir, worldId } = await makeWorld({
-      descriptor: `schemaVersion: 1
-sources:
+      descriptor: `sources:
   facts:
     kind: json
     path: data/facts.json
@@ -739,8 +731,7 @@ sources:
   });
 
   it("ignores a locale overlay that is a symlink out of the world root", async () => {
-    const descriptor = `schemaVersion: 1
-sources:
+    const descriptor = `sources:
   facts:
     kind: json
     path: data/facts.json
@@ -794,8 +785,7 @@ sources:
     "skips uninstalled receivers and their explicit schema during %s",
     async (operation) => {
       const { worldsDir, worldId } = await makeWorld({
-        descriptor: `schemaVersion: 1
-sources:
+        descriptor: `sources:
   facts:
     kind: json
     path: data/fact.json
@@ -857,8 +847,7 @@ sources:
     "preserves previously imported data when its receiver is %s during sync",
     async (receiverState) => {
       const { worldsDir, worldId, worldRoot } = await makeWorld({
-        descriptor: `schemaVersion: 1
-sources:
+        descriptor: `sources:
   facts:
     kind: json
     path: data/fact.json
@@ -931,8 +920,7 @@ sources:
     async (receiverState) => {
       const sourceSchema = "schemas/fact.schema.json";
       const { worldsDir, worldId, worldRoot } = await makeWorld({
-        descriptor: `schemaVersion: 1
-sources:
+        descriptor: `sources:
   facts:
     kind: json
     path: data/fact.json
@@ -1064,8 +1052,7 @@ sources:
 
   it("skips sources targeting plugins outside final activePlugins (warning, not a session-blocking error)", async () => {
     const { worldsDir, worldId } = await makeWorld({
-      descriptor: `schemaVersion: 1
-sources:
+      descriptor: `sources:
   facts:
     kind: json
     path: data/fact.json
@@ -1117,8 +1104,7 @@ sources:
       }),
     );
     const { worldsDir, worldId } = await makeWorld({
-      descriptor: `schemaVersion: 1
-sources:
+      descriptor: `sources:
   facts:
     kind: json
     path: data/fact.json
@@ -1171,8 +1157,7 @@ sources:
       path.join(pluginRoot, "schemas/facts.schema.json"),
     );
     const { worldsDir, worldId } = await makeWorld({
-      descriptor: `schemaVersion: 1
-sources:
+      descriptor: `sources:
   facts:
     kind: json
     path: data/fact.json
@@ -1215,8 +1200,7 @@ sources:
       JSON.stringify({ type: "object" }),
     );
     const { worldsDir, worldId } = await makeWorld({
-      descriptor: `schemaVersion: 1
-sources:
+      descriptor: `sources:
   facts:
     kind: json
     path: data/fact.json
@@ -1247,8 +1231,7 @@ sources:
   });
 
   it("validates and rejects source values with world-local schema paths", async () => {
-    const descriptor = `schemaVersion: 1
-sources:
+    const descriptor = `sources:
   facts:
     kind: json
     path: data/facts.json
@@ -1319,8 +1302,7 @@ sources:
   });
 
   it("supports explicit draft-07 world-local schemas", async () => {
-    const descriptor = `schemaVersion: 1
-sources:
+    const descriptor = `sources:
   facts:
     kind: json
     path: data/fact.json
@@ -1368,8 +1350,7 @@ sources:
   });
 
   it("recompiles a world-local schema when the file changes", async () => {
-    const descriptor = `schemaVersion: 1
-sources:
+    const descriptor = `sources:
   facts:
     kind: json
     path: data/fact.json
@@ -1426,8 +1407,7 @@ sources:
 
   it("rejects invalid covel world dimensions during session import", async () => {
     const { worldsDir, worldId } = await makeWorld({
-      descriptor: `schemaVersion: 1
-sources:
+      descriptor: `sources:
   dimensions:
     kind: yaml
     path: data/dimensions.yaml
@@ -1453,8 +1433,7 @@ sources:
 
   it("leaves unclaimed media for GC when later store writes fail", async () => {
     const { worldsDir, worldId } = await makeWorld({
-      descriptor: `schemaVersion: 1
-sources:
+      descriptor: `sources:
   portraits:
     kind: media
     path: media/portraits
@@ -1504,8 +1483,7 @@ sources:
 
   it("materializes prepared media before the database transaction", async () => {
     const { worldsDir, worldId } = await makeWorld({
-      descriptor: `schemaVersion: 1
-sources:
+      descriptor: `sources:
   portraits:
     kind: media
     path: media/portraits
@@ -1580,8 +1558,7 @@ sources:
 
   it("writes character effects to the domain without mirroring to active plugin namespaces", async () => {
     const { worldsDir, worldId } = await makeWorld({
-      descriptor: `schemaVersion: 1
-sources:
+      descriptor: `sources:
   cast:
     kind: json
     path: data/cast.json
@@ -1630,8 +1607,7 @@ sources:
 
   it("creates character domain effects from concise contract records", async () => {
     const { worldsDir, worldId } = await makeWorld({
-      descriptor: `schemaVersion: 1
-sources:
+      descriptor: `sources:
   cast:
     kind: json
     path: data/cast.json
@@ -1692,8 +1668,7 @@ sources:
 
   it("uses persisted character IDs for skipExisting and sync ledger deletion", async () => {
     const { worldsDir, worldRoot, worldId } = await makeWorld({
-      descriptor: `schemaVersion: 1
-sources:
+      descriptor: `sources:
   cast:
     kind: json
     path: data/cast.json
@@ -1746,8 +1721,7 @@ sources:
 
   it("rejects invalid kernel records before writing any import rows", async () => {
     const { worldsDir, worldId } = await makeWorld({
-      descriptor: `schemaVersion: 1
-sources:
+      descriptor: `sources:
   lore:
     kind: json
     path: data/lore.json
@@ -1794,8 +1768,7 @@ sources:
 
   it("validates character effects and projected lorebook fields before import", async () => {
     const { worldsDir, worldId } = await makeWorld({
-      descriptor: `schemaVersion: 1
-sources:
+      descriptor: `sources:
   facts:
     kind: json
     path: data/facts.json
@@ -1848,8 +1821,7 @@ sources:
 
   it("syncs the rows that are not in conflict and keeps the ones that are", async () => {
     const { worldsDir, worldRoot, worldId } = await makeWorld({
-      descriptor: `schemaVersion: 1
-sources:
+      descriptor: `sources:
   cast:
     kind: json
     path: data/cast.json
@@ -1905,8 +1877,7 @@ sources:
 
   it("lists imported characters as the author wrote them, and a sync keeps each one's place", async () => {
     const { worldsDir, worldRoot, worldId } = await makeWorld({
-      descriptor: `schemaVersion: 1
-sources:
+      descriptor: `sources:
   cast:
     kind: json
     path: data/cast.json
@@ -1965,8 +1936,7 @@ sources:
 
   it("skips existing rows with merge skipExisting", async () => {
     const { worldsDir, worldId } = await makeWorld({
-      descriptor: `schemaVersion: 1
-sources:
+      descriptor: `sources:
   facts:
     kind: json
     path: data/fact.json
@@ -2010,8 +1980,7 @@ sources:
 
   it("imports plugin-data plus lorebook for +lorebook targets", async () => {
     const { worldsDir, worldId } = await makeWorld({
-      descriptor: `schemaVersion: 1
-sources:
+      descriptor: `sources:
   rules:
     kind: yaml
     path: data/rules.yaml
@@ -2063,8 +2032,7 @@ sources:
 
   it("keeps imported blueprint records separate from character domain effects", async () => {
     const { worldsDir, worldId } = await makeWorld({
-      descriptor: `schemaVersion: 1
-sources:
+      descriptor: `sources:
   cast:
     kind: json
     path: data/cast.json
@@ -2138,8 +2106,7 @@ sources:
       }),
     );
     const { worldsDir, worldId } = await makeWorld({
-      descriptor: `schemaVersion: 1
-sources:
+      descriptor: `sources:
   cast:
     kind: json
     path: data/cast.json
@@ -2180,8 +2147,7 @@ sources:
 
   it("skips disallowed media files before writing media index data", async () => {
     const { worldsDir, worldId } = await makeWorld({
-      descriptor: `schemaVersion: 1
-sources:
+      descriptor: `sources:
   portraits:
     kind: media
     path: media/portraits
@@ -2215,8 +2181,7 @@ sources:
 
   it("skips media index writes when the indexTo plugin is inactive (warning, media unaffected)", async () => {
     const { worldsDir, worldId } = await makeWorld({
-      descriptor: `schemaVersion: 1
-sources:
+      descriptor: `sources:
   portraits:
     kind: media
     path: media/portraits
@@ -2257,8 +2222,7 @@ sources:
     "preserves managed media and its references while the index receiver is %s",
     async (receiverState) => {
       const { worldsDir, worldRoot, worldId } = await makeWorld({
-        descriptor: `schemaVersion: 1
-sources:
+        descriptor: `sources:
   portraits:
     kind: media
     path: media/portraits
@@ -2332,8 +2296,7 @@ sources:
 
   it("sync deletion removes only the current session ref for shared imported media", async () => {
     const { worldsDir, worldRoot, worldId } = await makeWorld({
-      descriptor: `schemaVersion: 1
-sources:
+      descriptor: `sources:
   portraits:
     kind: media
     path: media/portraits
@@ -2383,8 +2346,7 @@ sources:
 
     await writeFile(
       path.join(worldRoot, "data/world.data.yaml"),
-      `schemaVersion: 1
-sources: {}
+      `sources: {}
 `,
     );
     const sync = await syncWorldDataForSession({
@@ -2431,8 +2393,7 @@ sources: {}
 
   it("sync keeps the reference of a picture the session's history still shows (F-165)", async () => {
     const { worldsDir, worldRoot, worldId } = await makeWorld({
-      descriptor: `schemaVersion: 1
-sources:
+      descriptor: `sources:
   portraits:
     kind: media
     path: media/portraits
@@ -2482,8 +2443,7 @@ sources:
     });
     await writeFile(
       path.join(worldRoot, "data/world.data.yaml"),
-      `schemaVersion: 1
-sources: {}
+      `sources: {}
 `,
     );
 
@@ -2513,8 +2473,7 @@ sources: {}
 
   it("sync keeps the reference another index row with identical bytes still needs (F-165)", async () => {
     const { worldsDir, worldRoot, worldId } = await makeWorld({
-      descriptor: `schemaVersion: 1
-sources:
+      descriptor: `sources:
   portraits:
     kind: media
     path: media/portraits
@@ -2563,8 +2522,7 @@ sources:
     // A later version drops the second source; its file had the same bytes.
     await writeFile(
       path.join(worldRoot, "data/world.data.yaml"),
-      `schemaVersion: 1
-sources:
+      `sources:
   portraits:
     kind: media
     path: media/portraits
@@ -2599,8 +2557,7 @@ sources:
 
   it("keeps media undeleted when a delete-sync transaction aborts", async () => {
     const { worldsDir, worldId, worldRoot } = await makeWorld({
-      descriptor: `schemaVersion: 1
-sources:
+      descriptor: `sources:
   portraits:
     kind: media
     path: media/portraits
@@ -2633,8 +2590,7 @@ sources:
     // Empty sources ⇒ the imported media's ledger goes to ledgersToDelete.
     await writeFile(
       path.join(worldRoot, "data/world.data.yaml"),
-      `schemaVersion: 1
-sources: {}
+      `sources: {}
 `,
     );
 
@@ -2944,8 +2900,7 @@ describe("world data sync compare-and-swap", () => {
   // aborts if it moved.
   async function seedManagedRow() {
     const { worldsDir, worldId, worldRoot } = await makeWorld({
-      descriptor: `schemaVersion: 1
-sources:
+      descriptor: `sources:
   facts:
     kind: json
     path: data/facts.json

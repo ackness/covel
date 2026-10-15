@@ -48,8 +48,7 @@ it.each(["yaml", "schema", "missing", "unreadable"])(
     const watcher = createWorldFileWatcher(root, store, bus, sessionLock);
     try {
       await mkdir(worldDir);
-      const manifest = `schemaVersion: "1.0"
-id: fixture-world
+      const manifest = `id: fixture-world
 name: Fixture world
 summary: Synthetic world for dimension recovery.
 defaultLocale: en-US

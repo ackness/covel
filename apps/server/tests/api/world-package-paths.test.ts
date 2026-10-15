@@ -71,7 +71,7 @@ async function makePackage(
   );
   await writeFile(
     path.join(dir, "data/world.data.yaml"),
-    "schemaVersion: 1\nsources:\n  lore:\n    kind: json\n    path: data/lore.json\n    to: lorebook\n    key: id\n",
+    "sources:\n  lore:\n    kind: json\n    path: data/lore.json\n    to: lorebook\n    key: id\n",
     "utf8",
   );
   await writeFile(

@@ -468,7 +468,9 @@ async function worldFiles(worldDir: string): Promise<WorldFiles> {
     string,
     unknown
   >;
-  const validation = validateWorldManifest(manifest);
+  const validation = validateWorldManifest(manifest, {
+    ignoreUnknownRootFields: true,
+  });
   const baseLocale =
     typeof manifest.defaultLocale === "string"
       ? manifest.defaultLocale

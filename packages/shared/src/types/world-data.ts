@@ -28,7 +28,6 @@ export interface WorldDataSourceDescriptor {
 }
 
 export interface WorldDataDescriptor {
-  readonly schemaVersion: 1;
   readonly sources: Readonly<Record<string, WorldDataSourceDescriptor>>;
 }
 

@@ -112,8 +112,7 @@ async function makeWorld(): Promise<{ worldsDir: string; worldDir: string }> {
   await mkdir(path.join(worldDir, "data/hidden"), { recursive: true });
   await writeFile(
     path.join(worldDir, "world.yaml"),
-    `schemaVersion: "1.0"
-id: hidden-demo
+    `id: hidden-demo
 name: Hidden Demo
 summary: A harbor with a secret.
 defaultLocale: en-US
@@ -133,8 +132,7 @@ worldData: data/world.data.yaml
   );
   await writeFile(
     path.join(worldDir, "data/world.data.yaml"),
-    `schemaVersion: 1
-sources:
+    `sources:
   time:
     kind: yaml
     path: data/time.yaml

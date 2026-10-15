@@ -32,7 +32,7 @@ describe("GET /api/worlds/:id/gallery", () => {
     await mkdir(path.join(dir, "data"), { recursive: true });
     await writeFile(
       path.join(dir, "world.yaml"),
-      `schemaVersion: "1.0"\nid: ${id}\nname: Ash Harbor\nsummary: A port.\ndefaultLocale: en-US\n${
+      `id: ${id}\nname: Ash Harbor\nsummary: A port.\ndefaultLocale: en-US\n${
         descriptor ? "worldData: data/world.data.yaml\n" : ""
       }`,
     );
@@ -138,7 +138,7 @@ describe("GET /api/worlds/:id/gallery", () => {
   it("serves only files the listing contains", async () => {
     const dir = await writeWorld(
       "ash-harbor",
-      "schemaVersion: 1\nsources:\n  scenes:\n    kind: media\n    path: media/scenes\n    to: media\n    indexTo: contract:image-index@1\n  drafts:\n    kind: media\n    path: media/drafts\n    to: media\n    indexTo: contract:image-index@1\n    enabled: false\n",
+      "sources:\n  scenes:\n    kind: media\n    path: media/scenes\n    to: media\n    indexTo: contract:image-index@1\n  drafts:\n    kind: media\n    path: media/drafts\n    to: media\n    indexTo: contract:image-index@1\n    enabled: false\n",
     );
     await mkdir(path.join(dir, "media/scenes"), { recursive: true });
     await mkdir(path.join(dir, "media/drafts"), { recursive: true });
@@ -242,7 +242,7 @@ describe("GET /api/worlds/:id/gallery", () => {
   it("lists the media sources when gallery.json cannot be read", async () => {
     const dir = await writeWorld(
       "ash-harbor",
-      "schemaVersion: 1\nsources:\n  scenes:\n    kind: media\n    path: media/scenes\n    to: media\n    indexTo: contract:image-index@1\n",
+      "sources:\n  scenes:\n    kind: media\n    path: media/scenes\n    to: media\n    indexTo: contract:image-index@1\n",
     );
     await mkdir(path.join(dir, "media/scenes"), { recursive: true });
     await writeFile(path.join(dir, "media/scenes/quay.png"), pngHeader(4, 4));
@@ -259,7 +259,7 @@ describe("GET /api/worlds/:id/gallery", () => {
       const dir = await writeWorld(id);
       await writeFile(
         path.join(dir, "world.yaml"),
-        `schemaVersion: "1.0"\nid: ${id}\nname: Ash Harbor\nsummary: A port.\ndefaultLocale: en-US\nthemeMusic: ${themeMusic}\n`,
+        `id: ${id}\nname: Ash Harbor\nsummary: A port.\ndefaultLocale: en-US\nthemeMusic: ${themeMusic}\n`,
       );
       await mkdir(path.join(dir, "media/music"), { recursive: true });
       await writeFile(path.join(dir, "media/music/theme.mp3"), "ID3 theme");
@@ -303,7 +303,7 @@ describe("GET /api/worlds/:id/gallery", () => {
     const dir = await writeWorld("ash-harbor");
     await writeFile(
       path.join(dir, "world.yaml"),
-      `schemaVersion: "1.0"\nid: ash-harbor\nname: Ash Harbor\nsummary: A port.\ndefaultLocale: en-US\ncover: media/art/front.png\naccentColor: "#c9a24b"\n`,
+      `id: ash-harbor\nname: Ash Harbor\nsummary: A port.\ndefaultLocale: en-US\ncover: media/art/front.png\naccentColor: "#c9a24b"\n`,
     );
     await mkdir(path.join(dir, "media/art"), { recursive: true });
     await writeFile(path.join(dir, "media/art/front.png"), pngHeader(30, 20));

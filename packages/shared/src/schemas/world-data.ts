@@ -147,7 +147,6 @@ export const worldDataSourceDescriptorSchema =
 
 export const worldDataDescriptorSchema = z
   .object({
-    schemaVersion: z.literal(1).describe("Descriptor format version."),
     sources: z
       .record(worldDataSourceIdSchema, worldDataSourceDescriptorSchema)
       .describe(
@@ -161,7 +160,6 @@ export const worldDataSourceDescriptorOverrideSchema =
 
 export const worldDataDescriptorOverrideSchema = z
   .object({
-    schemaVersion: z.literal(1),
     sources: z.record(
       worldDataSourceIdSchema,
       worldDataSourceDescriptorOverrideSchema,

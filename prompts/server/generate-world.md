@@ -33,7 +33,6 @@ finish the answer with ===END===.
 ## world.yaml Schema
 
 ```yaml
-schemaVersion: "1.0"
 id: <kebab-case, you decide>
 name: <world name>
 version: "0.1.0"
@@ -151,7 +150,7 @@ rules:
 - Do not use markdown code fences around a section.
 - ALL content in {{ language }}. Only IDs in kebab-case English.
 - Use only schema fields shown above. Do not add extra fields.
-- Quote schemaVersion and version as strings.
+- Quote version as a string.
 - Write a text value that contains quotation marks or a colon as a YAML block scalar (`content: |-` with the text on the next lines). Do not put it between double quotes.
 - Every dimension is a strict definition: name, optional description, schema, initialValue, optional updateRule. No fixed dimension ID whitelist exists.
 - initialValue must satisfy schema without coercion. Supported schema keywords: type (string/number/integer/boolean/null/object/array or a type array), title, description, enum, const, minimum/maximum/exclusiveMinimum/exclusiveMaximum, minLength/maxLength, items/minItems/maxItems, properties/required/additionalProperties, x-i18n. Do not use $ref, format, pattern or unsupported keywords.

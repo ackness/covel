@@ -67,6 +67,7 @@ export interface WorldPackageDiagnostic {
   /** Stable machine code, so callers can group or filter. */
   readonly code:
     | "manifest-invalid"
+    | "manifest-unknown-field"
     | "lore-missing"
     | "lore-fallback-missing"
     | "lore-narrator-only"
@@ -1106,7 +1107,9 @@ export async function validateWorldPackage(
       ],
     };
   }
-  const validation = validateWorldManifest(raw);
+  const validation = validateWorldManifest(raw, {
+    ignoreUnknownRootFields: true,
+  });
   if (!validation.valid)
     return {
       diagnostics: (validation.errors ?? []).map((issue) => ({
@@ -1130,6 +1133,14 @@ export async function validateWorldPackage(
   return {
     worldId: manifest.id,
     diagnostics: [
+      ...(validation.ignoredFields ?? []).map((field) => ({
+        level: "warning" as const,
+        code: "manifest-unknown-field" as const,
+        file: "world.yaml",
+        pointer: field,
+        message: `unknown field "${field}" is ignored`,
+        hint: "Remove the field or correct its name.",
+      })),
       ...inlineLocaleMapDiagnostics(
         "world.yaml",
         source.base,

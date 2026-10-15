@@ -15,7 +15,7 @@ Some terms used throughout this page:
 
 **The smallest world package** has two files:
 
-- `world.yaml`: the manifest of the world. Five fields are required: `schemaVersion`, `id`, `name`, `summary`, and `defaultLocale`.
+- `world.yaml`: the manifest of the world. Four fields are required: `id`, `name`, `summary`, and `defaultLocale`.
 - `WORLD.md`: the world lore text.
 
 When you add a kind of content later, put a file in the agreed location. You do not need to register it anywhere:
@@ -63,7 +63,6 @@ worlds/my-world/
 `world.yaml`:
 
 ```yaml
-schemaVersion: "1.0"
 id: my-world
 name: 我的世界
 summary: 一个示例世界。
@@ -86,7 +85,7 @@ defaultViewMode: stage
 
 - `worldData` is the path to the descriptor, relative to the world package root. Write it only when the world package has a descriptor.
 - For all the fields of `world.yaml`, see the generated [World manifest field table](./schema/world-manifest.md). For dimensions in a separate file, see [World dimensions field table](./schema/world-dimensions.md).
-- The manifest accepts only current fields. A field it does not know causes an error. It is never ignored quietly or replaced with another form.
+- The manifest reads the current fields. Unknown top-level fields are ignored, with warnings from the loader and `pnpm validate:world`. Unknown fields inside known declarations remain errors.
 
 ### How the lore reaches the story
 
@@ -568,7 +567,6 @@ Memory definitions tell the `memory` plugin which kinds of things this world sho
 When the file is at `data/memory-blocks.json`, it is read by convention. When you use a descriptor, write it like this:
 
 ```yaml
-schemaVersion: 1
 sources:
   memory-definitions:
     kind: json
@@ -639,7 +637,6 @@ For plugin authors: `path` is a path relative to the world package root. It can 
 The descriptor is a YAML file, usually called `data/world.data.yaml`. It lists each piece of data in `sources`:
 
 ```yaml
-schemaVersion: 1
 sources:
   dimensions:
     kind: yaml
@@ -675,7 +672,7 @@ The fields you use most often in each source:
 For a field-by-field explanation, see the generated [World data descriptor field table](./schema/world-data-descriptor.md).
 
 - The name of a source (the key under `sources`) must match `^[a-z][a-zA-Z0-9_-]{0,63}$`.
-- At the top level, the descriptor currently accepts only `schemaVersion: 1` and `sources`.
+- At the top level, write only `sources`, including in override descriptors. Unknown top-level fields are ignored with a warning. Unknown fields inside a source remain errors.
 
 **When to write `schema`:**
 
@@ -870,7 +867,6 @@ worldData: data/world.data.yaml
 
 ```yaml
 # data/world.data.yaml
-schemaVersion: 1
 sources:
   lore:
     kind: yaml
@@ -1089,7 +1085,6 @@ Characters come from two kinds of files, which do different jobs:
 All four built-in worlds include both. In a descriptor, write them like this:
 
 ```yaml
-schemaVersion: 1
 sources:
   cast:
     kind: json
@@ -1404,7 +1399,6 @@ Adding a local override to an existing world:
 `world.data.override.yaml`:
 
 ```yaml
-schemaVersion: 1
 sources:
   cast-extra:
     kind: json
@@ -1596,7 +1590,6 @@ To add plugin data to a world that already exists, publish an override package. 
 An override descriptor can add new sources. It can also override fields such as `path`, `enabled` and `merge` of an existing source:
 
 ```yaml
-schemaVersion: 1
 sources:
   social-links:
     kind: yaml
@@ -1644,6 +1637,7 @@ Output when it passes:
 | Diagnostic code | Level | Meaning |
 | --- | --- | --- |
 | `manifest-invalid` | error | `world.yaml` cannot be parsed or does not match the schema |
+| `manifest-unknown-field` | warning | `world.yaml` has an unknown top-level field, which loading ignores |
 | `lore-missing` | error | A declared language (`defaultLocale` / `supportedLocales`) has no lore file |
 | `lore-fallback-missing` | warning | There is no `WORLD.md`, so a session in an undeclared language gets empty lore |
 | `lore-narrator-only` | warning | The [narrator-only marker](#narrator-only-lore-narrator-only) is missing its end, missing its start, nested or written wrong. The lore after it is hidden from the player. |

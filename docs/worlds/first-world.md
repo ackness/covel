@@ -38,7 +38,6 @@ mkdir -p ~/.covel/worlds/tidelamp/data ~/.covel/worlds/tidelamp/characters
 这个文件说明世界的身份和它想要的玩法。新建 `~/.covel/worlds/tidelamp/world.yaml`：
 
 ```yaml
-schemaVersion: "1.0"
 id: tidelamp
 name: 潮灯镇
 version: 0.1.0

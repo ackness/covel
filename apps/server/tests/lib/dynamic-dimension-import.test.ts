@@ -23,7 +23,6 @@ const definition = (value: number) => ({
 });
 // What `world.yaml` needs besides its dimensions to load as a world.
 const manifest = {
-  schemaVersion: "1.0",
   id: "world",
   name: "World",
   summary: "A world for the dimension tests.",
