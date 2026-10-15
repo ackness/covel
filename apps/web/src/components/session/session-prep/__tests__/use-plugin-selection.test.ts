@@ -772,7 +772,7 @@ describe("usePluginSelection", () => {
         new Set(["teller", "supporter", "keeper"]),
       );
       expect(new Set(result.current.excludedPluginIds)).toEqual(
-        new Set(["helper", "world-pick", ...(kind === "core" ? ["dims"] : [])]),
+        new Set(["helper", "world-pick", "extra", "dims"]),
       );
       expect(result.current.activePluginPack).toBeNull();
       expect(result.current.unmetRequirements).toEqual([]);

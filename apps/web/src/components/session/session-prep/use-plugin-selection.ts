@@ -303,23 +303,35 @@ export function usePluginSelection(
         requiredContracts,
       }).active,
     );
+    // The world's defaults stay requested and are turned off the way a pack
+    // turns plugins off, so a pack chosen next lifts these exclusions and
+    // starts from the same set as on a fresh screen.
+    const defaults = defaultSelectedPluginIds(pluginPlan);
+    const initialPack = pluginPacks.find(
+      (pack) => pack.id === pluginPlan?.selectedPackId,
+    );
+    const defaultRequests = [...defaults].filter(
+      (id) => !initialPack?.requested.includes(id),
+    );
+    const offForMinimal = new Set(
+      [
+        ...defaults,
+        ...plugins
+          .filter((plugin) => plugin.kind === "core")
+          .map((plugin) => plugin.id),
+        ...worldRequiredPluginIds,
+      ].filter((id) => !minimal.has(id)),
+    );
     setActivePluginPackId(null);
     setPackRequestedPlugins(new Set());
-    setPackExcludedPlugins(new Set());
-    setOtherSelectedPlugins(new Set(story));
-    setExcludedPlugins(
-      new Set(
-        [
-          ...plugins
-            .filter((plugin) => plugin.kind === "core")
-            .map((plugin) => plugin.id),
-          ...worldRequiredPluginIds,
-        ].filter((id) => !minimal.has(id)),
-      ),
-    );
+    setPackExcludedPlugins(offForMinimal);
+    setOtherSelectedPlugins(new Set([...defaultRequests, ...story]));
+    setExcludedPlugins(new Set(offForMinimal));
   }, [
     plugins,
     candidates,
+    pluginPlan,
+    pluginPacks,
     selectedPluginIdSet,
     requiredContracts,
     worldRequiredPluginIds,
