@@ -12,6 +12,7 @@ import {
   worldPlayLocale,
 } from "@/lib/world-locale.js";
 import { isWorldDeletable } from "./world-deletion.js";
+import { WorldUpdateBadge } from "./world-update-badge.js";
 
 export interface WorldCardProps {
   world: WorldRecord;
@@ -118,7 +119,8 @@ export function WorldCard({
           <span className="ui-meta text-[11px] text-white/78 tabular-nums">
             № {String(index + 1).padStart(2, "0")} · {world.id}
           </span>
-          <div className="flex items-center gap-1.5">
+          <div className="flex flex-wrap items-center justify-end gap-1.5">
+            <WorldUpdateBadge world={world} t={t} />
             {languageBadge && languageName && (
               <span
                 className="ui-tag border-white/25 bg-black/28 text-white/88 backdrop-blur-sm"

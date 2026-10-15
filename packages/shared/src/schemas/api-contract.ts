@@ -504,6 +504,7 @@ export const worldWireRecordSchema = z
     metadata: z.record(z.string(), z.unknown()).optional(),
     createdAt: z.string(),
     updatedAt: z.string().optional(),
+    updateAvailable: z.boolean().optional(),
   })
   .strict();
 

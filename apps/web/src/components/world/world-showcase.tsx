@@ -23,6 +23,7 @@ import { worldVisual } from "@/lib/world-visuals.js";
 import { packageByline, worldPackageInfo } from "@/lib/package-info.js";
 import { worldLanguageName } from "@/lib/world-locale.js";
 import { isWorldDeletable } from "./world-deletion.js";
+import { WorldUpdateBadge } from "./world-update-badge.js";
 import {
   ShowcaseBackdrop,
   SlideIndicator,
@@ -100,6 +101,7 @@ function AllWorldsDialog({
                 <span className="ui-title line-clamp-1 block text-sm">
                   {text(world.name)}
                 </span>
+                <WorldUpdateBadge world={world} t={t} />
                 <span className="mt-0.5 line-clamp-1 block text-xs text-muted-foreground">
                   {(world.tags ?? []).slice(0, 3).join(" · ")}
                 </span>
@@ -262,6 +264,11 @@ function WorldRail({
                 <span className="ui-title absolute inset-x-3 bottom-3 text-base leading-snug text-white">
                   {text(world.name)}
                 </span>
+                <WorldUpdateBadge
+                  world={world}
+                  t={t}
+                  className="absolute left-3 top-3"
+                />
               </button>
             );
           })}
@@ -385,6 +392,7 @@ export function WorldShowcase({
             <h1 className="ui-title text-5xl leading-[1.1] md:text-6xl">
               {text(selected.name)}
             </h1>
+            <WorldUpdateBadge world={selected} t={t} />
             <p className="text-base leading-[1.8] text-white/88 line-clamp-4 wrap-break-word">
               {text(selected.description)}
             </p>

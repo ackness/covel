@@ -7,7 +7,7 @@ When to use it:
 - You made a world, and you also wrote a few plugins for it.
 - Your world needs a plugin that lives in someone else's repository.
 
-A collection matters only at install time. After installation, each world and plugin in it is independent, and each can be updated and uninstalled on its own.
+A collection matters only at install time. After installation, each world and plugin in it is independent, and each can be updated and uninstalled on its own. For the world list’s "Update available" badge and how to apply a package version, see [World installation and updates](../reference/world-installation.md#updates-and-data-protection).
 
 ## Make a Collection
 

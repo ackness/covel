@@ -117,7 +117,7 @@ export function resolveWorldMetadata(
     ...metadataPatch,
   };
   if (existingMetadata !== undefined) {
-    for (const key of ["source", "storage"]) {
+    for (const key of ["source", "storage", "packageDigest"]) {
       if (Object.hasOwn(existingMetadata, key))
         mergedMetadata[key] = existingMetadata[key];
       else delete mergedMetadata[key];

@@ -1613,6 +1613,7 @@ Lists all loaded worlds. Each item is a **summary** (`WorldSummary` from `@covel
 What the summary has and does not have:
 
 - It has no `lore` and no `dimensions`.
+- Optional top-level `updateAvailable` compares package files with the digest saved when the record was imported: `true` means different, `false` means identical. It is omitted when there is no package, no saved digest, or the package cannot currently be read. Each read checks again without writing the world record or querying GitHub.
 - `metadata` keeps only these keys: `source`, `storage`, `packageManaged`, `generated`, `cover`, `accentColor`, `supportedLocales`, `packageInfo`, `defaultViewMode`, `pluginSettings`, plus `name` / `description` inside `localizedText`.
 - The setting text for each language, `localizedText.lore`, is not in the summary.
 - For the other keys (`dimensions`, `embeddedCharacters`, `embeddedLorebook`, `characterSchema`, `pluginPolicy`, `worldData`, and so on), read the full record with `GET /api/worlds/:id`.
@@ -1654,7 +1655,7 @@ The list for the four built-in worlds is about 3.9 KB.
 
 #### `GET /api/worlds/:id`
 
-Reads the **full record** of one world: `lore`, `dimensions`, and all of `metadata`. The list returns only summaries. So any place that needs the setting text or the dimensions (the session-prep screen, the world details, the world editor) reads this one.
+Reads the **full record** of one world: `lore`, `dimensions`, and all of `metadata`. The list returns only summaries. So any place that needs the setting text or the dimensions (the session-prep screen, the world details, the world editor) reads this one. The response also carries optional `updateAvailable` under the same rules as the list.
 
 **Parameters:**
 
@@ -1830,9 +1831,9 @@ Behavior:
 
 #### `POST /api/worlds/:id/restore-package`
 
-Puts a package world that was edited in the app back to the version in its world package.
+Replaces a package world with the package version on disk. This applies an update indicated by `updateAvailable` or discards edits made in the app.
 
-- The server reads the world package again, replaces the world record with what it read, and removes `packageModified`. From then on startup loading and file reloads make the record follow the files again.
+- The server reads the world package again, replaces the record with its data and settings, removes `packageModified`, and updates `metadata.packageDigest`. If the package has not changed again, `updateAvailable` becomes `false`. Saved session data is kept. From then on startup loading and file reloads make the record follow the files again.
 - The world's origin (`metadata.source`, `metadata.storage`) and its creation time keep their values.
 - When dimension definitions changed, the sessions of this world receive a `world.dimensions.changed` notice. The values a session already has are not reset.
 - The request body may be an empty object.

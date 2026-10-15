@@ -1613,6 +1613,7 @@ Web 设置页根据 `operatorTokenRequired` 决定是否显示“运维访问”
 摘要里有什么、没有什么：
 
 - 没有 `lore` 和 `dimensions`。
+- 顶层可选的 `updateAvailable` 比较包文件与记录导入时保存的摘要：不同为 `true`，相同为 `false`。没有包、没有已保存摘要，或包当前不可读时省略。每次读取重新检查，不写世界记录，也不查询 GitHub。
 - `metadata` 只保留这些键：`source`、`storage`、`packageManaged`、`generated`、`cover`、`accentColor`、`supportedLocales`、`packageInfo`、`defaultViewMode`、`pluginSettings`，以及 `localizedText` 里的 `name` / `description`。
 - 各语言的设定正文 `localizedText.lore` 不在摘要里。
 - 其余键（`dimensions`、`embeddedCharacters`、`embeddedLorebook`、`characterSchema`、`pluginPolicy`、`worldData` 等）要用 `GET /api/worlds/:id` 读完整记录。
@@ -1654,7 +1655,7 @@ Web 设置页根据 `operatorTokenRequired` 决定是否显示“运维访问”
 
 #### `GET /api/worlds/:id`
 
-读取一个世界的**完整记录**：`lore`、`dimensions` 和全部 `metadata`。列表只返回摘要，所以需要设定正文或维度的地方（会话准备页、世界详情、世界编辑器）读这一条。
+读取一个世界的**完整记录**：`lore`、`dimensions` 和全部 `metadata`。列表只返回摘要，所以需要设定正文或维度的地方（会话准备页、世界详情、世界编辑器）读这一条。响应也带与列表相同规则的可选 `updateAvailable`。
 
 **参数:**
 
@@ -1830,9 +1831,9 @@ Web 设置页根据 `operatorTokenRequired` 决定是否显示“运维访问”
 
 #### `POST /api/worlds/:id/restore-package`
 
-把一个在应用里改过的包世界换回世界包里的版本。
+把包世界换成磁盘上的包版本，可应用 `updateAvailable` 提示的更新，也可撤销应用里的修改。
 
-- 服务端重新读取世界包，用读到的内容替换世界记录，并去掉 `packageModified`。之后启动加载和文件重载重新让记录跟随文件。
+- 服务端重新读取世界包，用读到的数据和设置替换世界记录，并去掉 `packageModified`、更新 `metadata.packageDigest`。包没有再变化时 `updateAvailable` 变为 `false`。已保存的会话数据保留。之后启动加载和文件重载重新让记录跟随文件。
 - 世界的来源（`metadata.source`、`metadata.storage`）和创建时间保持原值。
 - 维度定义变了时，使用这个世界的会话收到 `world.dimensions.changed` 通知。会话里已有的值不会被重置。
 - 请求体可以是空对象。

@@ -36,6 +36,8 @@ export interface WorldRecord {
   };
   createdAt: string;
   updatedAt?: string;
+  /** Current package files differ from the version imported into this record. */
+  updateAvailable?: boolean;
 }
 
 /**

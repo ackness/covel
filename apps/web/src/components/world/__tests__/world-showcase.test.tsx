@@ -7,7 +7,8 @@ import {
   type WorldRecord,
 } from "@/services/api.js";
 import { WorldShowcase } from "../world-showcase.js";
-import { WorldTileCard } from "../world-list-variants.js";
+import { WorldTileCard, WorldRowItem } from "../world-list-variants.js";
+import { WorldCard } from "../world-card.js";
 import type { WorldListViewProps } from "../world-list-view.js";
 
 vi.mock("@/services/api.js", async (importOriginal) => ({
@@ -65,6 +66,41 @@ const backdrop = (container: HTMLElement) =>
 const settle = () => act(async () => {});
 
 describe("world showcase", () => {
+  it("shows available package updates in the showcase", async () => {
+    renderShowcase([{ ...world("updated", "Updated"), updateAvailable: true }]);
+    await settle();
+    expect(screen.getByText(i18n.t("world.updateAvailable"))).toBeTruthy();
+  });
+
+  it.each([WorldCard, WorldTileCard, WorldRowItem])(
+    "shows an update badge only for changed packages in %s",
+    async (Card) => {
+      const props = {
+        index: 0,
+        isEntering: false,
+        dimmed: false,
+        storageLabel: "Built-in",
+        interfaceLocale: "en-US",
+        t: i18n.t,
+        onEnter: vi.fn(),
+        onViewDetails: vi.fn(),
+        onDelete: vi.fn(),
+      };
+      const current = world("card", "Card");
+      const view = render(
+        <Card {...props} world={{ ...current, updateAvailable: true }} />,
+      );
+      await settle();
+      expect(screen.getByText(i18n.t("world.updateAvailable"))).toBeTruthy();
+      view.rerender(
+        <Card {...props} world={{ ...current, updateAvailable: false }} />,
+      );
+      expect(screen.queryByText(i18n.t("world.updateAvailable"))).toBeNull();
+      view.rerender(<Card {...props} world={current} />);
+      expect(screen.queryByText(i18n.t("world.updateAvailable"))).toBeNull();
+    },
+  );
+
   beforeEach(() => {
     vi.useFakeTimers();
     vi.mocked(getWorldGallery).mockImplementation(async (worldId) => ({
