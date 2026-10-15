@@ -224,7 +224,7 @@ export function ChatMessages({
             {backdrop === "banner" &&
               messages.length > 0 &&
               sessionState.olderMessagesCursor == null && (
-                <ChapterBanner world={world} />
+                <ChapterBanner world={world} locale={session.locale} />
               )}
 
             {messages.length === 0 &&
@@ -233,6 +233,7 @@ export function ChatMessages({
                 <SessionCanvasHero
                   dimensions={sessionState.gameState.dimensions}
                   world={world}
+                  locale={session.locale}
                   onBegin={onBeginAdventure}
                   beginLabel={t("session.beginAdventure")}
                   hintLabel={t("session.beginAdventureHint")}

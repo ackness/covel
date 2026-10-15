@@ -18,7 +18,7 @@ import { useSlotConfig } from "@/hooks/use-slot-config.js";
 import { useSessionNavigation } from "@/hooks/use-session-navigation.js";
 import type { SessionPanel } from "@/lib/nav-events.js";
 import { useSettingsDialog } from "@/hooks/use-settings-dialog.js";
-import { resolveI18n } from "@/lib/catalog/helpers.js";
+import { worldDisplayText, worldPlayLocale } from "@/lib/world-locale.js";
 import { initDesktopBridge } from "@/lib/desktop-bridge.js";
 import { WorldSelectScreen } from "@/components/session/world-select-screen.js";
 import { SessionPrepScreen } from "@/components/session/session-prep-screen.js";
@@ -67,7 +67,7 @@ function SessionPage() {
 }
 
 function SessionScreen() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const {
     state,
     boot,
@@ -117,9 +117,16 @@ function SessionScreen() {
 
   // Update document.title for Electron window title sync
   useEffect(() => {
-    const worldName = state.world ? resolveI18n(state.world.name) : "";
+    const locale = state.world
+      ? (state.session?.locale ??
+        worldPlayLocale(state.world, i18n.language) ??
+        i18n.language)
+      : i18n.language;
+    const worldName = state.world
+      ? worldDisplayText(state.world, locale).name
+      : "";
     document.title = worldName ? `Covel \u2014 ${worldName}` : "Covel";
-  }, [state.world]);
+  }, [state.world, state.session?.locale, i18n.language]);
 
   // Desktop bridge: translate Electron menu events into app actions
   const navigateRef = useRef(navigate);

@@ -1,5 +1,5 @@
 import type { WorldRecord } from "@/services/api.js";
-import { text } from "@/components/world/editor-helpers.js";
+import { worldDisplayText } from "@/lib/world-locale.js";
 import { worldVisual } from "@/lib/world-visuals.js";
 
 /**
@@ -9,10 +9,12 @@ import { worldVisual } from "@/lib/world-visuals.js";
  */
 export function ChapterBanner({
   world,
+  locale,
 }: {
   readonly world: WorldRecord | null;
+  readonly locale: string;
 }) {
-  const name = text(world?.name);
+  const name = world ? worldDisplayText(world, locale).name : "";
   const tags = (world?.tags ?? []).slice(0, 3).join(" · ");
   return (
     <header className="ui-chapter-banner relative overflow-hidden">
