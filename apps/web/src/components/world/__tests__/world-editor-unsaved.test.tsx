@@ -143,6 +143,11 @@ describe("WorldEditor unsaved changes", () => {
         navigation === "push" ? history.push("/elsewhere") : history.back();
       await act(async () => leave());
       await waitFor(() => expect(mocks.requestConfirm).toHaveBeenCalledOnce());
+      // The router undoes a blocked back step with a forward step once the
+      // dialog closes. Leaving again before that step lands is undone by it.
+      if (navigation === "back") {
+        await waitFor(() => expect(window.location.pathname).toBe("/editor"));
+      }
       expect(history.location.pathname).toBe("/editor");
       expect(
         (
