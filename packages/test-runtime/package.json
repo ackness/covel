@@ -8,11 +8,6 @@
     "test-runtime": "./src/cli.ts",
     "test_runtime": "./src/cli.ts"
   },
-  "exports": {
-    ".": {
-      "import": "./src/index.ts"
-    }
-  },
   "scripts": {
     "test": "vitest run --passWithNoTests",
     "test:watch": "vitest",

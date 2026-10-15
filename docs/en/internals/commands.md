@@ -100,7 +100,7 @@ pnpm check:i18n       # web + plugin i18n coverage + plugin READMEs; tool defini
 pnpm check:prompts    # plugin and template prompts are English; each *.zh.md variant matches its English prompt;
                       # it also prints style and structure warnings, which do not fail it
 pnpm prompts:lock     # record an English / *.zh.md pair after both languages changed
-pnpm check:boundaries # workspace public entry points, declared deps, package direction
+pnpm check:boundaries # public entry points, declared deps, package direction, unused exports
 pnpm deps:check       # Fallow: unused/unlisted deps and unresolved imports (.fallowrc.jsonc)
 pnpm analyze          # Fallow report: dead code, duplication, complexity; exits non-zero
                       # while findings remain, so it is a report, not a gate
