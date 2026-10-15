@@ -118,19 +118,27 @@ test("package webview receives runtime outcomes and sanitized transport errors",
         },
       }),
     );
+    // The app reads plugin data per plugin when the panel specs load, and for
+    // the whole session when it recovers: the fixture's view is older than the
+    // stream's first event, so the page re-reads everything. The server knows
+    // no fixture plugin, so both reads carry its row; otherwise whichever
+    // answer lands last decides what the frame shows.
+    const fixtureRow = {
+      namespace: "fixture",
+      key: "current",
+      value: { value: "fixture state" },
+    };
     await page.route(`${mask}/plugin-data/${pluginId}{,/**}`, (route) =>
-      route.fulfill({
-        json: {
-          items: [
-            {
-              namespace: "fixture",
-              key: "current",
-              value: { value: "fixture state" },
-            },
-          ],
-        },
-      }),
+      route.fulfill({ json: { items: [fixtureRow] } }),
     );
+    await page.route(`${mask}/plugin-data`, async (route) => {
+      const response = await route.fetch();
+      const { items } = (await response.json()) as { items: unknown[] };
+      await route.fulfill({
+        response,
+        json: { items: [...items, { pluginId, ...fixtureRow }] },
+      });
+    });
     await page.route(`${mask}/plugin-rpc`, (route) => {
       requests.push(route.request().postDataJSON());
       if (outcome === "transport-error") {
