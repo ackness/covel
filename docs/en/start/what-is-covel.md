@@ -1,6 +1,6 @@
 # What Is Covel
 
-Covel is an AI RPG you can play right away, and it is also a framework for building games like it. You enter an action, and the model writes what happens next. States such as quests, inventory, affinity, and memory are updated with every turn, and they are saved.
+Covel is an AI RPG you can play right away, and it is also a framework for building games like it. You enter an action, and the model writes what happens next. Quests, inventory, affinity, and memory are updated and saved each turn.
 
 This page takes five minutes to explain what it is made of. When you finish it, you will know which chapter to read next.
 
@@ -43,7 +43,7 @@ Plugins cannot change the save directly. They can only propose "I want to change
 
 ![Text mode: story text, action suggestions, and the right-hand panel](/text-mode.webp)
 
-A world can declare its own default mode, and you can switch between them at any time during the game.
+A world can set its default story view, and you can switch views at any time during the game.
 
 ## What you need
 

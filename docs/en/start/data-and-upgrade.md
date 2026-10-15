@@ -85,10 +85,10 @@ When the desktop app starts, it checks whether a new stable version is available
 
 When something goes wrong, first look at the two files under `~/.covel/data/logs/`:
 
-- `desktop.log`: the window, startup, and supervision of the backend process.
+- `desktop.log`: logs for the window, startup, and backend process monitoring.
 - `server.log`: the output and request logs of the backend.
 
-Logs rotate by size. Each file is 10 MB by default, and 10 copies are kept. The details of model requests and tool calls in each turn are not written to these files. They are in the app's Debugger page.
+When a log file reaches its size limit, logging continues in a new file. Each file is 10 MB by default, and 10 copies are kept. The details of model requests and tool calls in each turn are not written to these files. They are in the app's Debugger page.
 
 ## Learn More
 

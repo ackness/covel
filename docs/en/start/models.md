@@ -28,7 +28,7 @@ First you add providers and models. Then you tell Covel which model each role us
 
 Open **Settings → LLM → Providers & Models**.
 
-1. Pick a built-in provider from the list, or add a custom provider. A built-in provider already has its official address. A custom provider needs an API address.
+1. Pick a built-in provider from the list, or add a custom provider. A built-in provider already has its official address filled in. For a custom provider, enter the API address.
 2. Enter the API key. For a local service that needs no key, you can leave it empty.
 3. Add the model ID. Type it the way the provider itself writes it. Covel sends it unchanged.
    - A provider that serves its own models uses a plain name, for example `qwen3.8-flash`. Do not put a vendor name in front of it.
@@ -75,7 +75,7 @@ To play with a subscription, you can use a third-party converter such as [Magpie
 3. Test the connection as in [step 2](#2-test-the-connection).
 
 > [!IMPORTANT]
-> Tools such as Magpie are third-party software. Covel does not develop or maintain them. Whether one works, how stable it is, and whether it fits the terms of your subscription are for the tool and the service to say. Problems that come from using them are not Covel's; report them to the tool's author.
+> Tools such as Magpie are third-party software. Covel does not develop or maintain them. Check the tool's and service's own documentation to learn whether it works, is stable, and meets your subscription's terms. Problems that come from using them are not Covel's; report them to the tool's author.
 >
 > Covel may support signing in with a subscription directly later. It does not yet.
 
