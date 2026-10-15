@@ -13,7 +13,7 @@
     {
       "label": "tides",
       "displayName": "Tide Lore",
-      "extractionHint": "Observations and rumors about ebb timing, fog-beast sightings, and safe/danger windows. The deep-withdrawal stage lives in the Deep Withdrawal dimension and the hero's fog-rot in character attributes; do not repeat them."
+      "extractionHint": "Observations and rumors about ebb timing, fog-beast sightings, and safe/danger windows. The deep-withdrawal stage lives in the Deep Withdrawal dimension and the player character's fog-rot in character attributes; do not repeat them."
     },
     {
       "label": "commitments",
