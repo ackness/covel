@@ -303,7 +303,6 @@
       "errors": "Ошибок: {{count}}",
       "failed": "Проверка не удалась",
       "retry": "Повторить попытку",
-      "moreTargets": "Ещё: {{count}}",
       "ready_one": "Будет импортировано объектов: {{count}}",
       "ready_few": "Будет импортировано объектов: {{count}}",
       "ready_many": "Будет импортировано объектов: {{count}}",
@@ -315,7 +314,14 @@
       "errors_one": "Ошибок: {{count}}",
       "errors_few": "Ошибок: {{count}}",
       "errors_many": "Ошибок: {{count}}",
-      "errors_other": "Ошибок: {{count}}"
+      "errors_other": "Ошибок: {{count}}",
+      "kind": {
+        "character": "Персонажи: {{count}}",
+        "lorebook": "Записи лора: {{count}}",
+        "media-index": "Изображения: {{count}}",
+        "plugin-data": "Данные плагинов: {{count}}",
+        "other": "Прочее: {{count}}"
+      }
     },
     "dbSchema": "Схема",
     "dbValues": "Значения",

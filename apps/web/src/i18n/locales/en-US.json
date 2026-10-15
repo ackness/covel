@@ -301,13 +301,24 @@
       "errors": "{{count}} error(s)",
       "failed": "Check failed",
       "retry": "Retry",
-      "moreTargets": "{{count}} more",
       "ready_one": "{{count}} item will be imported",
       "ready_other": "{{count}} items will be imported",
       "warnings_one": "{{count}} warning",
       "warnings_other": "{{count}} warnings",
       "errors_one": "{{count}} error",
-      "errors_other": "{{count}} errors"
+      "errors_other": "{{count}} errors",
+      "kind": {
+        "character_one": "{{count}} character",
+        "character_other": "{{count}} characters",
+        "lorebook_one": "{{count}} lore entry",
+        "lorebook_other": "{{count}} lore entries",
+        "media-index_one": "{{count}} image",
+        "media-index_other": "{{count}} images",
+        "plugin-data_one": "{{count}} plugin record",
+        "plugin-data_other": "{{count}} plugin records",
+        "other_one": "{{count}} other item",
+        "other_other": "{{count}} other items"
+      }
     },
     "dbSchema": "Schema",
     "dbValues": "Values",

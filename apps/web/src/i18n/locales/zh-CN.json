@@ -301,7 +301,13 @@
       "errors": "{{count}} 个错误",
       "failed": "检查失败",
       "retry": "重试",
-      "moreTargets": "另有 {{count}} 项"
+      "kind": {
+        "character": "角色 {{count}}",
+        "lorebook": "资料条目 {{count}}",
+        "media-index": "图片 {{count}}",
+        "plugin-data": "插件数据 {{count}}",
+        "other": "其他 {{count}}"
+      }
     },
     "dbSchema": "结构",
     "dbValues": "数据",

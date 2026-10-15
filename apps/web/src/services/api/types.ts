@@ -138,7 +138,8 @@ export interface WorldDataPreflightDiagnostic {
   code?:
     | "convention-collision"
     | "dimension-provider-missing"
-    | "dimension-reference";
+    | "dimension-reference"
+    | "receiver-missing";
 }
 
 export interface WorldDataPreflightTarget {

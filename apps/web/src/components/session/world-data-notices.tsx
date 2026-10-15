@@ -35,7 +35,7 @@ export function WorldDataNotices({
       <ul className="mt-1 list-disc pl-4">
         {notices.map((notice, index) => (
           <li key={`${notice.sourceId ?? ""}:${index}`}>
-            <NoticeText notice={notice} />
+            <WorldDataNoticeText notice={notice} />
           </li>
         ))}
       </ul>
@@ -50,7 +50,11 @@ export function WorldDataNotices({
  * A notice in the interface language. The importer's own message is English
  * and meant for the world's author, so it stays folded under "Details".
  */
-function NoticeText({ notice }: { readonly notice: WorldDataImportNotice }) {
+export function WorldDataNoticeText({
+  notice,
+}: {
+  readonly notice: Pick<WorldDataImportNotice, "code" | "sourceId" | "message">;
+}) {
   const { t } = useTranslation();
   const source = notice.sourceId ?? "";
   switch (notice.code) {
