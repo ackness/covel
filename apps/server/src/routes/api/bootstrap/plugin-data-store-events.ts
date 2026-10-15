@@ -1,3 +1,4 @@
+import { sessionEventBus } from "../session/session-events.js";
 import type { EventBus } from "@covel/events";
 import type { CovelMessage } from "@covel/shared";
 import type {
@@ -45,11 +46,12 @@ function publicChanges(
 }
 
 function emitPluginDataChangedEvent(
-  eventBus: EventBus,
+  eventBus: EventBus | undefined,
   pluginId: string,
   sessionId: string,
   rawChanges: readonly PluginDataChange[],
 ): void {
+  if (!eventBus) return;
   const changes = publicChanges(pluginId, rawChanges);
   if (changes.length === 0) return;
   eventBus.emit({
@@ -90,6 +92,11 @@ export function wrapStoreWithPluginDataEvents(
   baseStore: DataStore,
   eventBus: EventBus,
 ): DataStore {
+  const capture = async (sessionId: string): Promise<EventBus | undefined> => {
+    const session = await baseStore.getSession(sessionId);
+    if (!session) return undefined;
+    return sessionEventBus(eventBus, session);
+  };
   return new Proxy(baseStore, {
     get(target, prop, receiver) {
       // Durable control planes (runtime jobs, dimension records) write through
@@ -99,13 +106,14 @@ export function wrapStoreWithPluginDataEvents(
           record: PluginDataRecord,
           expectedUpdatedAt: string | null,
         ): Promise<boolean> => {
+          const scopedBus = await capture(record.sessionId);
           const swapped = await target.compareAndSetPluginData(
             record,
             expectedUpdatedAt,
           );
           if (swapped)
             emitPluginDataChangedEvent(
-              eventBus,
+              scopedBus,
               record.pluginId,
               record.sessionId,
               [
@@ -127,6 +135,7 @@ export function wrapStoreWithPluginDataEvents(
           pluginId: string,
           entries: readonly PluginDataBatchCasEntry[],
         ): Promise<boolean> => {
+          const scopedBus = await capture(sessionId);
           const swapped = await target.compareAndSetPluginDataBatch(
             sessionId,
             pluginId,
@@ -134,7 +143,7 @@ export function wrapStoreWithPluginDataEvents(
           );
           if (swapped)
             emitPluginDataChangedEvent(
-              eventBus,
+              scopedBus,
               pluginId,
               sessionId,
               entries.map((entry) => ({
@@ -150,9 +159,10 @@ export function wrapStoreWithPluginDataEvents(
 
       if (prop === "setPluginData") {
         return async (record: PluginDataRecord): Promise<void> => {
+          const scopedBus = await capture(record.sessionId);
           await target.setPluginData(record);
           emitPluginDataChangedEvent(
-            eventBus,
+            scopedBus,
             record.pluginId,
             record.sessionId,
             [
@@ -169,6 +179,11 @@ export function wrapStoreWithPluginDataEvents(
 
       if (prop === "setPluginDataBatch") {
         return async (records: readonly PluginDataRecord[]): Promise<void> => {
+          const audiences = new Map<string, EventBus | undefined>();
+          for (const record of records) {
+            if (!audiences.has(record.sessionId))
+              audiences.set(record.sessionId, await capture(record.sessionId));
+          }
           await target.setPluginDataBatch(records);
           // A batch may span sessions; each notification has one audience.
           const byPlugin = new Map<
@@ -203,7 +218,12 @@ export function wrapStoreWithPluginDataEvents(
             });
           }
           for (const { pluginId, sessionId, changes } of byPlugin.values()) {
-            emitPluginDataChangedEvent(eventBus, pluginId, sessionId, changes);
+            emitPluginDataChangedEvent(
+              audiences.get(sessionId),
+              pluginId,
+              sessionId,
+              changes,
+            );
           }
         };
       }
@@ -288,8 +308,9 @@ export function wrapStoreWithPluginDataEvents(
           namespace: string,
           key: string,
         ): Promise<void> => {
+          const scopedBus = await capture(sessionId);
           await target.deletePluginData(sessionId, pluginId, namespace, key);
-          emitPluginDataChangedEvent(eventBus, pluginId, sessionId, [
+          emitPluginDataChangedEvent(scopedBus, pluginId, sessionId, [
             {
               namespace,
               key,

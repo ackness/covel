@@ -1,3 +1,4 @@
+import { sessionEventBus } from "./session/session-events.js";
 /**
  * Abandon a suspension and settle what it held back.
  *
@@ -79,15 +80,16 @@ export async function abandonSuspension(
   suspension: SuspensionRecord,
 ): Promise<readonly QueuedRuntimeJob[]> {
   const { store } = deps;
+  const session = await store.getSession(suspension.sessionId);
+  const eventBus =
+    deps.eventBus && session
+      ? sessionEventBus(deps.eventBus, session)
+      : undefined;
   const plan = await planSuspensionAbandon(store, suspension);
-  const session =
-    plan.releasedRuntimeJobs.length > 0
-      ? await store.getSession(suspension.sessionId)
-      : null;
   let enqueue:
     | Omit<Parameters<typeof enqueueDeferredRuntimeJobs>[1], "descriptors">
     | undefined;
-  if (session) {
+  if (session && plan.releasedRuntimeJobs.length > 0) {
     deps.pluginRegistry.syncSessionActivations(
       session.id,
       session.activePlugins,
@@ -119,7 +121,7 @@ export async function abandonSuspension(
     });
   });
   await settleAbandonedSuspensionJobs(
-    { store, ...(deps.eventBus ? { eventBus: deps.eventBus } : {}) },
+    { store, ...(eventBus ? { eventBus } : {}) },
     suspension,
   );
   await publishDeferredRuntimeJobs(

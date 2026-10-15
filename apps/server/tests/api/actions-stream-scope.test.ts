@@ -1,3 +1,4 @@
+import { sessionEventBus } from "../../src/routes/api/session/session-events.js";
 /**
  * POST /api/actions — SSE forwarding scope regression test.
  *
@@ -129,7 +130,11 @@ describe("POST /api/actions — event forwarding is scoped to the lock tenure", 
       updatedAt: new Date().toISOString(),
     });
 
-    const eventBus = createEventBus(store);
+    const owner = (await store.getSession(SESSION_ID))!;
+    const eventBus = sessionEventBus(
+      createEventBus(store, { requireSessionIncarnation: true }),
+      owner,
+    );
 
     // Gate the post-lock tail: the recorder's `turn.completed` trace row is
     // written AFTER the session lock releases, so blocking it parks the

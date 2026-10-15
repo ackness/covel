@@ -1,3 +1,4 @@
+import { sessionEventBus } from "./session/session-events.js";
 /**
  * API Event routes — emit.
  *
@@ -81,7 +82,7 @@ eventRoutes.post("/emit", async (c) => {
     expectedSession: session,
     allowedStatuses: ["active"],
     mutate: async () => {
-      eventBus.emit(message);
+      sessionEventBus(eventBus, session).emit(message);
       // EventBus persistence is intentionally queued. Drain it before releasing
       // the lifecycle lock so delete/recreate cannot be followed by a late
       // audit row belonging to the old incarnation.

@@ -1,3 +1,4 @@
+import { sessionEventBus } from "../session/session-events.js";
 import { withSettledExecutionLock } from "./settled-request.js";
 import type { Context } from "hono";
 import { COMMUNITY_SERVER_CODE_ACTION } from "@covel/approval";
@@ -363,7 +364,9 @@ export async function dispatchPluginAction(
         liveCommand && liveInvocation
           ? await runTracedCommand({
               store,
-              ...(eventBus ? { eventBus } : {}),
+              ...(eventBus
+                ? { eventBus: sessionEventBus(eventBus, liveSession) }
+                : {}),
               sessionId,
               command: liveCommand,
               invocation: liveInvocation,

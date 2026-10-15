@@ -1,3 +1,6 @@
+import { createHash } from "node:crypto";
+import { scopeSessionEvents } from "./session/session-events.js";
+import { runtimeJobIncarnation } from "./plugin-rpc/runtime-job-worker.js";
 import {
   conventionsOfPlugins,
   setWorldDataConventions,
@@ -304,10 +307,10 @@ export async function bootstrapApi(
         "[bootstrap] event bus transport: pg listen/notify (cross-pod fan-out enabled)",
       );
     }
-    eventBus = createEventBus(
-      config.store,
-      eventTransport ? { transport: eventTransport } : undefined,
-    );
+    eventBus = createEventBus(config.store, {
+      transport: eventTransport,
+      requireSessionIncarnation: true,
+    });
     return await assembleApi(config, eventBus, owned);
   } catch (error) {
     await owned.closeTools?.();
@@ -641,12 +644,19 @@ async function assembleApi(
       readonly runtimeModelOverrides?: Readonly<Record<string, string>>;
     },
     expectedApprovalScope: string,
-  ) =>
-    createPluginRpcRuntimeTurnRunner({
+  ) => {
+    const incarnation = runtimeJobIncarnation(job.payload);
+    if (!incarnation)
+      throw new Error("Runtime job is missing its session incarnation");
+    return createPluginRpcRuntimeTurnRunner({
       memorySystem: bootstrapMemory?.memorySystem,
       pluginRegistry: registry,
       store,
-      eventBus,
+      eventBus: scopeSessionEvents(
+        eventBus,
+        job.sessionId,
+        createHash("sha256").update(incarnation).digest("hex"),
+      ),
       sessionLock,
       sessionId: job.sessionId,
       withSnapshot: (fn, beforeCapture) =>
@@ -683,6 +693,7 @@ async function assembleApi(
         (await resolveMediaImageFlow(store, extensions, job.sessionId))
           ?.assetRuntimeIds,
     });
+  };
 
   const executeRuntimeJob = createRuntimeJobExecutor({
     store,

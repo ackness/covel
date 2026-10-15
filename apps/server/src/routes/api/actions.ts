@@ -1,3 +1,4 @@
+import { sessionEventBus } from "./session/session-events.js";
 import {
   createBoundedSerialQueue,
   closeSseDelivery,
@@ -156,7 +157,7 @@ async function afterCommit(
 actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
   const store = c.get("store");
   const pluginRegistry = c.get("pluginRegistry");
-  const eventBus = c.get("eventBus");
+  const rootEventBus = c.get("eventBus");
   const mediaStore = c.get("mediaStore");
   const prepareToolsForSession = c.get("prepareToolsForSession"); // optional — see env.d.ts
 
@@ -213,6 +214,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
     );
   }
 
+  const eventBus = sessionEventBus(rootEventBus, session);
   const approval = preflightActionApprovals(c, session, body);
   if (approval) return approval;
   // A form's validator is its provider's server code: ask for that grant

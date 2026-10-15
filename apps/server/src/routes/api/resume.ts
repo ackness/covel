@@ -1,3 +1,4 @@
+import { sessionEventBus } from "./session/session-events.js";
 import { preflightRuntimeApprovals } from "./actions/approval-preflight.js";
 import { commitExecution } from "./commit-execution.js";
 import { resolveMediaImageFlow } from "./media-image-flow.js";
@@ -191,7 +192,8 @@ resumeRoutes.post("/:id/suspensions/:suspensionId/resume", async (c) => {
   }
 
   const hookPipeline = c.get("hookPipeline");
-  const eventBus = c.get("eventBus");
+  const rootEventBus = c.get("eventBus");
+  const eventBus = rootEventBus && sessionEventBus(rootEventBus, guard.session);
   const prepareToolsForSession = c.get("prepareToolsForSession"); // optional — see env.d.ts
 
   // The marker this request wrote when it claimed the suspension. Releasing
@@ -336,7 +338,7 @@ resumeRoutes.post("/:id/suspensions/:suspensionId/resume", async (c) => {
         await prepareToolsForSession?.(sessionId);
 
         const resumeDeps = {
-          ...buildResumeTurnExecutorDeps(c, emitter),
+          ...buildResumeTurnExecutorDeps(c, emitter, eventBus),
           hookScope,
         };
         const execution = await resumeSuspendedRuntime(

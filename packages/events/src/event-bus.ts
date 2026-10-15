@@ -139,11 +139,15 @@ export interface EventBusTransport {
   subscribe(handler: (payload: string) => void): void | (() => void);
   /** Optional for transports without owned resources. Called after bus drain. */
   close?(): Promise<void>;
+  /** Connection loss/reconnect: delivery may have missed even the final frame. */
+  onReset?(handler: () => void): () => void;
 }
 
 export interface EventBusOptions {
   /** Owned by the bus; close() releases it after pending work settles. */
   readonly transport?: EventBusTransport;
+  /** Session-serving hosts reject producers that have not captured an incarnation. */
+  readonly requireSessionIncarnation?: boolean;
 }
 
 // Exported so tests exercise the real limits instead of duplicating them.
@@ -203,6 +207,7 @@ interface TransportFrame {
   readonly ref?: {
     readonly sessionId: string;
     readonly eventId: string;
+    readonly sessionIncarnation?: string;
     readonly journal?: "trace";
   };
 }
@@ -228,6 +233,7 @@ function buildSubscriptionEvent(
   timestamp: string,
   epoch: string,
   seq: number,
+  sessionIncarnation?: string,
 ): SubscriptionEvent {
   // Allow payload to carry explicit subscription topic/type overrides,
   // stripped from the exposed payload.
@@ -243,7 +249,9 @@ function buildSubscriptionEvent(
     type: subType,
     sessionId,
     timestamp,
-    payload: cleanPayload,
+    ...(sessionIncarnation ? { sessionIncarnation } : {}),
+    // Invalidation is an internal control; keep it inline and independent of a deleted audit row.
+    payload: subType === "session.invalidated" ? {} : cleanPayload,
   };
 }
 
@@ -576,6 +584,7 @@ export function createEventBus(
       record.createdAt,
       state.epoch,
       state.seq,
+      frame.ref.sessionIncarnation,
     );
     retain(state, event);
     broadcast(event);
@@ -692,6 +701,17 @@ export function createEventBus(
     }
     if (frame.origin === originId) return; // self-echo
     const sessionId = frame.event?.sessionId ?? frame.ref!.sessionId;
+    const incarnation = frame.event
+      ? frame.event.sessionIncarnation
+      : frame.ref!.sessionIncarnation;
+    if (
+      options?.requireSessionIncarnation &&
+      (typeof incarnation !== "string" || !incarnation)
+    ) {
+      // Old/unscoped producers cannot be relabelled using current store state.
+      invalidateReplay(sessionId);
+      return;
+    }
     const stream = frame.stream;
     const rs = getReceiveState(frame.origin, sessionId, stream);
     if (frame.seq < rs.expected) return; // duplicate/late
@@ -720,10 +740,21 @@ export function createEventBus(
   }
 
   const unsubscribe = transport?.subscribe(handleTransportFrame);
+  const unsubscribeReset = transport?.onReset?.(() => {
+    if (closed) return;
+    for (const sessionId of [...sessions.keys()]) invalidateReplay(sessionId);
+  });
 
   const bus: EventBus = {
     emit(message: CovelMessage): void {
       if (closed) return;
+      if (
+        options?.requireSessionIncarnation &&
+        (typeof message.sessionIncarnation !== "string" ||
+          !message.sessionIncarnation)
+      ) {
+        throw new Error("Session events require a producer incarnation");
+      }
       // ── Subscription event creation ──────────────────────────
       const state = touchSession(message.sessionId);
       state.seq += 1;
@@ -735,6 +766,7 @@ export function createEventBus(
         message.timestamp,
         state.epoch,
         seq,
+        message.sessionIncarnation,
       );
       retain(state, subEvent);
       broadcast(subEvent);
@@ -767,6 +799,7 @@ export function createEventBus(
             ref: {
               sessionId: message.sessionId,
               eventId: message.id,
+              sessionIncarnation: message.sessionIncarnation,
               ...(message.topic === "trace"
                 ? { journal: "trace" as const }
                 : {}),
@@ -795,7 +828,11 @@ export function createEventBus(
       }
 
       // Persist to store for audit trail (non-blocking, bounded queue).
-      if (store && message.topic !== "trace") {
+      if (
+        store &&
+        message.topic !== "trace" &&
+        subEvent.type !== "session.invalidated"
+      ) {
         enqueuePersist({
           record: {
             id: message.id,
@@ -899,6 +936,7 @@ export function createEventBus(
       closed = true;
       try {
         unsubscribe?.();
+        unsubscribeReset?.();
       } catch (error) {
         // Intake is already disabled; a faulty adapter must not skip drain.
         console.warn("[EventBus] transport unsubscribe failed:", error);

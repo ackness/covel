@@ -1,3 +1,4 @@
+import { publicSessionIncarnation } from "../../src/routes/api/session/session-guard.js";
 import { describe, expect, it, vi } from "vitest";
 import type { EventBus } from "@covel/events";
 import type { DataStore, PluginDataRecord, SessionRecord } from "@covel/store";
@@ -27,10 +28,56 @@ function pluginDataChangedEmits(emit: ReturnType<typeof vi.fn>): unknown[] {
 }
 
 describe("wrapStoreWithPluginDataEvents", () => {
+  it("captures the transaction audience before a delayed post-commit flush", async () => {
+    const old: SessionRecord = {
+      id: "s1",
+      metadata: { sessionIncarnationNonce: "old" },
+      status: "active",
+      phase: "playing",
+      locale: "en-US",
+      activePlugins: [],
+      setupRuntimes: {},
+      completedPlayerTurns: 0,
+      createdAt: "2026-10-15T00:00:00Z",
+      updatedAt: "2026-10-15T00:00:00Z",
+    };
+    const replacement = {
+      ...old,
+      metadata: { sessionIncarnationNonce: "new" },
+    };
+    let live = old;
+    const emit = vi.fn();
+    const tx = {
+      getSession: async () => live,
+      setPluginData: async () => {},
+    };
+    const base = {
+      ...tx,
+      withTransaction: async (fn: (view: typeof tx) => Promise<void>) => {
+        await fn(tx);
+        live = replacement;
+      },
+    } as unknown as DataStore;
+    await wrapStoreWithPluginDataEvents(base, {
+      emit,
+    } as unknown as EventBus).withTransaction(async (view) => {
+      await view.setPluginData(makeRecord());
+    });
+    expect(emit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionIncarnation: publicSessionIncarnation(old),
+      }),
+    );
+  });
+
   it("announces compare-and-set writes that landed", async () => {
     const emit = vi.fn();
     let swap = true;
     const base = {
+      getSession: async (id: string) => ({
+        id,
+        metadata: { sessionIncarnationNonce: id },
+      }),
       compareAndSetPluginData: vi.fn(async () => swap),
       compareAndSetPluginDataBatch: vi.fn(async () => swap),
     } as unknown as DataStore;
@@ -72,6 +119,10 @@ describe("wrapStoreWithPluginDataEvents", () => {
   it("announces only the public projection of framework and hidden rows", async () => {
     const emit = vi.fn();
     const base = {
+      getSession: async (id: string) => ({
+        id,
+        metadata: { sessionIncarnationNonce: id },
+      }),
       setPluginDataBatch: vi.fn(
         async (_records: readonly PluginDataRecord[]) => {},
       ),
@@ -113,7 +164,13 @@ describe("wrapStoreWithPluginDataEvents", () => {
     async (transaction) => {
       const emit = vi.fn();
       const write = vi.fn(async (_records: readonly PluginDataRecord[]) => {});
-      const tx = { setPluginDataBatch: write };
+      const tx = {
+        getSession: async (id: string) => ({
+          id,
+          metadata: { sessionIncarnationNonce: id },
+        }),
+        setPluginDataBatch: write,
+      };
       const base = {
         ...tx,
         withTransaction: async (fn: (view: typeof tx) => Promise<void>) =>
@@ -161,6 +218,10 @@ describe("wrapStoreWithPluginDataEvents", () => {
     // The tx write must still surface plugin-data.changed, or the live UI never
     // refreshes until a page reload.
     const tx = {
+      getSession: async (id: string) => ({
+        id,
+        metadata: { sessionIncarnationNonce: id },
+      }),
       setPluginDataBatch: vi.fn(
         async (_records: readonly PluginDataRecord[]) => {},
       ),
@@ -187,6 +248,10 @@ describe("wrapStoreWithPluginDataEvents", () => {
     const eventBus = { emit } as unknown as EventBus;
 
     const tx = {
+      getSession: async (id: string) => ({
+        id,
+        metadata: { sessionIncarnationNonce: id },
+      }),
       setPluginData: vi.fn(async (_record: PluginDataRecord) => {}),
     };
     // Capture how many events reached the real bus at the COMMIT boundary (just
@@ -223,6 +288,10 @@ describe("wrapStoreWithPluginDataEvents", () => {
     const eventBus = { emit } as unknown as EventBus;
 
     const tx = {
+      getSession: async (id: string) => ({
+        id,
+        metadata: { sessionIncarnationNonce: id },
+      }),
       setPluginData: vi.fn(async (_record: PluginDataRecord) => {}),
     };
     // Real stores rethrow after rollback; a mid-chain proposal error is the
@@ -248,6 +317,10 @@ describe("wrapStoreWithPluginDataEvents", () => {
     const emit = vi.fn();
     const eventBus = { emit } as unknown as EventBus;
     const store = {
+      getSession: async (id: string) => ({
+        id,
+        metadata: { sessionIncarnationNonce: id },
+      }),
       setPluginDataBatch: vi.fn(
         async (_records: readonly PluginDataRecord[]) => {},
       ),

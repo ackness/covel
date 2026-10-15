@@ -1,3 +1,4 @@
+import { publicSessionIncarnation } from "./session-guard.js";
 import {
   provideRequestJobCredentials,
   withSettledSessionLock,
@@ -231,6 +232,7 @@ export function registerSessionPluginRoutes(
             updatedAt: new Date().toISOString(),
           });
         },
+        publicSessionIncarnation(session),
       );
       for (const previousPluginId of session.activePlugins) {
         if (!confirmed.includes(previousPluginId)) {
@@ -370,6 +372,7 @@ export function registerSessionPluginRoutes(
             updatedAt: new Date().toISOString(),
           });
         },
+        publicSessionIncarnation(session),
       );
       c.get("rpcApprovalGate").revoke(id, pluginId);
       c.get("uiSlots")?.invalidateSession(id);

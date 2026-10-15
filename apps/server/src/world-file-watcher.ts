@@ -1,3 +1,4 @@
+import { publicSessionIncarnation } from "./routes/api/session/session-guard.js";
 /**
  * World file watcher — monitors worlds/ directory for changes and
  * updates the DataStore + notifies active sessions via EventBus.
@@ -256,6 +257,7 @@ export function createWorldFileWatcher(
             changedKeys,
           },
           sessionId: session.id,
+          sessionIncarnation: publicSessionIncarnation(session),
           timestamp: now,
         });
       }

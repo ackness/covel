@@ -2,7 +2,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const postgresMocks = vi.hoisted(() => ({
   listen: vi.fn(
-    async (_channel: string, _handler: (payload: string) => void) => undefined,
+    async (
+      _channel: string,
+      _handler: (payload: string) => void,
+      _onlisten?: () => void,
+    ) => undefined,
   ),
   notify: vi.fn(async () => undefined),
   end: vi.fn(async () => undefined),
@@ -12,6 +16,7 @@ vi.mock("postgres", () => ({
   default: vi.fn(() => postgresMocks),
 }));
 
+import postgres from "postgres";
 import { createPgEventTransport } from "../../src/lib/pg-event-transport.js";
 
 describe("PgEventTransport", () => {
@@ -19,6 +24,20 @@ describe("PgEventTransport", () => {
     postgresMocks.listen.mockReset().mockResolvedValue(undefined);
     postgresMocks.notify.mockReset().mockResolvedValue(undefined);
     postgresMocks.end.mockClear();
+  });
+
+  it("signals connection loss and re-LISTEN, and releases reset handlers", async () => {
+    const transport = await createPgEventTransport("postgres://test");
+    const reset = vi.fn();
+    const off = transport.onReset!(reset);
+    const options = vi.mocked(postgres).mock.calls.at(-1)?.[1];
+    options?.onclose?.(1);
+    postgresMocks.listen.mock.calls.at(-1)?.[2]?.();
+    expect(reset).toHaveBeenCalledTimes(2);
+    off();
+    options?.onclose?.(1);
+    expect(reset).toHaveBeenCalledTimes(2);
+    await transport.close();
   });
 
   it("rejects publish when PostgreSQL NOTIFY fails", async () => {

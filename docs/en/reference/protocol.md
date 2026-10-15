@@ -669,6 +669,19 @@ Each connection on `/api/actions` and `/api/events/stream` has a bounded queue t
 
 Transport frames between processes require a nonempty `stream` identifying the sender generation. Frames without it are rejected; upgrade and restart all publishers together. Trace event payloads are read as flat objects: a nested `data` field is ordinary data and is never merged into the envelope. Old nested traces must be regenerated for the current debug view.
 
+**Session incarnation and subscription isolation**
+
+The subscription JSON envelope adds `sessionIncarnation`, the public equality tag also used by `Session.incarnation`. The host already stores a random nonce in session metadata at creation; recreating the same ID mints a new nonce. The tag is the SHA-256 of that identity. It exposes neither the nonce nor owner credentials, and is not an authorization token.
+
+- Producers capture the incarnation at execution admission, before a transaction write, or when starting a projection. Async work and oversized event references retain that tag. Sending must never relabel an old payload with the current session.
+- The server creates EventBus with `requireSessionIncarnation: true`. Untagged local producers throw; untagged remote frames are dropped and trigger reset. An independent host's general-purpose bus may carry non-session events, but those cannot enter session SSE.
+- A subscription registers a bounded event buffer before reading the session once and checking its owner. Connected, replay, live, and heartbeat frames do not read the database per frame. Replay admits only events of that incarnation.
+- Deletion publishes an internal, tagged `session.invalidated` control event through the same transport. Matching subscriptions close immediately, regardless of topic filters. The control event is not sent to clients or saved as an audit row under the deleted session.
+- Cross-process ordering holds only per origin. Every live frame with a different incarnation is dropped, and the subscription rechecks the session once and closes; it does not guess which incarnation is newer. A late old frame may make a new subscription reconnect, but cannot deliver old content to the new owner.
+- A transport disconnect, re-LISTEN, or known gap invalidates subscriptions. In live mode they recheck the session once, send reset only if it still matches, then close. A reset during handshake or replay closes directly so reconnection validates again. Even if deletion notification is lost, another incarnation's content cannot pass the equality check.
+
+Upgrade and restart all server processes together so they send tagged events. Existing session nonces remain valid; databases need no recreation.
+
 #### Event ID format: `${epoch}:${seq}` (H-05/H-06)
 
 The `id` of each subscription event is `${epoch}:${seq}`. It is both the `id:` line of SSE and the `lastEventId` cursor used on reconnect.

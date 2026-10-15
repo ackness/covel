@@ -37,6 +37,26 @@ describe("PluginRegistry EventBus Bridge", () => {
     registry = createPluginRegistry({ eventBus });
   });
 
+  it("retains the captured incarnation across asynchronous persistence", async () => {
+    const strictBus = createEventBus(undefined, {
+      requireSessionIncarnation: true,
+    });
+    const scopedRegistry = createPluginRegistry({ eventBus: strictBus });
+    scopedRegistry.register(makeEntry("alpha"));
+    await scopedRegistry.applyPersistedActivations(
+      "same-id",
+      ["alpha"],
+      async () => {
+        await Promise.resolve();
+      },
+      "captured-incarnation",
+    );
+    expect(
+      strictBus.getEventsAfter("same-id", 0).events[0]?.sessionIncarnation,
+    ).toBe("captured-incarnation");
+    await strictBus.close();
+  });
+
   it("should emit plugin.activated event on applyPersistedActivations()", async () => {
     const events: SubscriptionEvent[] = [];
     eventBus.onEmit((e) => events.push(e));

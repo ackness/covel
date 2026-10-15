@@ -1,3 +1,4 @@
+import { publicSessionIncarnation } from "../../src/routes/api/session/session-guard.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createEventBus } from "@covel/events";
 import { createMemoryStore } from "@covel/store/memory";
@@ -26,7 +27,7 @@ async function fixture(
     completedPlayerTurns: 1,
     setupRuntimes: {},
     activePlugins: ["alpha", "beta"],
-    metadata: {},
+    metadata: { sessionIncarnationNonce: "ui-incarnation" },
     createdAt: "2026-01-01",
     updatedAt: "2026-01-01",
   });
@@ -37,7 +38,11 @@ async function fixture(
   });
   const extensionHost = new PluginExtensionHost(services, [uiSlotV1]);
   const eventBus = createEventBus();
-  const changes: { type: string; payload: Record<string, unknown> }[] = [];
+  const changes: {
+    type: string;
+    payload: Record<string, unknown>;
+    sessionIncarnation?: string;
+  }[] = [];
   eventBus.onEmit((event) => {
     if (event.type.startsWith("ui.slot.")) changes.push(event);
   });
@@ -50,18 +55,76 @@ async function fixture(
     onProjection,
   });
   disposables.push(host);
+  const incarnation = publicSessionIncarnation(
+    (await store.getSession("session"))!,
+  );
   const emit = (type: string, payload: Record<string, unknown>) =>
     eventBus.emit({
       id: crypto.randomUUID(),
       type: "event",
       topic: "plugin",
       sessionId: "session",
+      sessionIncarnation: incarnation,
       timestamp: new Date().toISOString(),
       payload: { ...payload, _subType: type },
     });
   return { store, active, services, extensionHost, host, changes, emit };
 }
 describe("UI slot projection host", () => {
+  it("keeps an in-flight projection tagged with its original incarnation", async () => {
+    const f = await fixture();
+    const old = (await f.store.getSession("session"))!;
+    const started = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<void>();
+    f.extensionHost.register(
+      "alpha",
+      { point: uiSlotV1.id, id: "backdrop", slot: "stage.backdrop@1" },
+      {
+        handler: async () => {
+          started.resolve();
+          await release.promise;
+          return { name: "old-owner-content" };
+        },
+      },
+    );
+    const projected = f.host.get("session", { slot: "stage.backdrop@1" });
+    await started.promise;
+    await f.store.deleteSession("session");
+    await f.store.createSession({
+      ...old,
+      metadata: { sessionIncarnationNonce: "replacement" },
+    });
+    release.resolve();
+    await projected;
+    expect(f.changes).toContainEqual(
+      expect.objectContaining({
+        sessionIncarnation: publicSessionIncarnation(old),
+        payload: expect.objectContaining({
+          value: { name: "old-owner-content" },
+        }),
+      }),
+    );
+  });
+
+  it("does not reproject delayed old preview content into a replacement session", async () => {
+    const f = await fixture();
+    const old = (await f.store.getSession("session"))!;
+    const discover = vi.spyOn(f.services, "discoverExtensions");
+    await f.store.deleteSession("session");
+    await f.store.createSession({
+      ...old,
+      metadata: { sessionIncarnationNonce: "replacement" },
+    });
+    f.emit("domain-event.previewed", {
+      topic: "secret",
+      data: { text: "old-content" },
+      turnId: "old-turn",
+    });
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(discover).not.toHaveBeenCalled();
+    expect(f.changes).toEqual([]);
+  });
+
   it("chains summary providers in order and skips one that breaks the contract", async () => {
     const f = await fixture();
     const provide = (

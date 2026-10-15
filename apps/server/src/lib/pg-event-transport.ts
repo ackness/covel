@@ -36,19 +36,27 @@ export async function createPgEventTransport(
   databaseUrl: string,
 ): Promise<PgEventTransport> {
   const { default: postgres } = await import("postgres");
-  const sql = postgres(databaseUrl, { max: 1 });
+  const resetHandlers = new Set<() => void>();
+  const reset = () => {
+    for (const handler of resetHandlers) handler();
+  };
+  const sql = postgres(databaseUrl, { max: 1, onclose: reset });
   const handlers = new Set<(payload: string) => void>();
 
   try {
-    await sql.listen(CHANNEL, (payload) => {
-      for (const handler of handlers) {
-        try {
-          handler(payload);
-        } catch (err) {
-          console.error("[pg-event-transport] handler error:", err);
+    await sql.listen(
+      CHANNEL,
+      (payload) => {
+        for (const handler of handlers) {
+          try {
+            handler(payload);
+          } catch (err) {
+            console.error("[pg-event-transport] handler error:", err);
+          }
         }
-      }
-    });
+      },
+      reset,
+    );
   } catch (error) {
     // A failed subscription still owns a client and its reconnect timers.
     await sql.end({ timeout: 1 }).catch(() => undefined);
@@ -68,9 +76,16 @@ export async function createPgEventTransport(
         handlers.delete(handler);
       };
     },
+    onReset(handler: () => void): () => void {
+      resetHandlers.add(handler);
+      return () => {
+        resetHandlers.delete(handler);
+      };
+    },
     close(): Promise<void> {
       if (!closing) {
         handlers.clear();
+        resetHandlers.clear();
         closing = sql.end({ timeout: 1 });
       }
       return closing;

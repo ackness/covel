@@ -1,3 +1,4 @@
+import { publicSessionIncarnation } from "../session/session-guard.js";
 /**
  * Shared types + helpers for the world route modules (crud / dimensions /
  * data-sync). The world routes were split out of a single 543-line file; this
@@ -173,6 +174,7 @@ export async function notifyWorldDimensionsChanged(
         changedKeys: [...changedKeys],
       },
       sessionId: session.id,
+      sessionIncarnation: publicSessionIncarnation(session),
       timestamp: now,
     });
   }

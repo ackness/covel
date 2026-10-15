@@ -1,3 +1,7 @@
+import {
+  invalidateSessionEvents,
+  sessionEventBus,
+} from "./session/session-events.js";
 import { importWorldEmbeddedCharacters } from "./session/world-characters.js";
 import { withSettledSessionLock } from "./plugin-rpc/settled-request.js";
 import { characterSchemaSchema, sessionContentLocale } from "@covel/shared";
@@ -460,6 +464,8 @@ sessionRoutes.post("/", async (c) => {
       // row that survives still protects its bytes through the cleanup scan.
       creationCommitted = false;
       await store.deleteSession(id);
+      if (c.get("eventBus"))
+        invalidateSessionEvents(c.get("eventBus"), session);
       // This creation owns the session lifecycle lock; release only its claims.
       // Content-addressed bytes may be shared and are reclaimed by media GC.
       await c.get("mediaStore")?.releaseSession(id);
@@ -471,11 +477,16 @@ sessionRoutes.post("/", async (c) => {
     // finalisation deletes the row again before reaching this line), so the
     // persist callback only re-verifies the durable state before the
     // process-local mirror is reconciled.
-    await pluginRegistry.applyPersistedActivations(id, plugins, async () => {
-      if (!(await store.getSession(id))) {
-        throw new Error(`Session "${id}" vanished before plugin activation`);
-      }
-    });
+    await pluginRegistry.applyPersistedActivations(
+      id,
+      plugins,
+      async () => {
+        if (!(await store.getSession(id))) {
+          throw new Error(`Session "${id}" vanished before plugin activation`);
+        }
+      },
+      publicSessionIncarnation(session),
+    );
 
     // The create transaction and world-media finalisation can be lengthy.
     // Start the lifecycle lease only when the hook is actually about to run,
@@ -531,7 +542,8 @@ sessionRoutes.post("/", async (c) => {
             pipeline: c.get("hookPipeline"),
             sessionId: id,
             turnId: "",
-            eventBus: c.get("eventBus"),
+            eventBus:
+              c.get("eventBus") && sessionEventBus(c.get("eventBus"), session),
           },
           { sessionId: id, worldId: rawWorldId },
         ),
@@ -774,7 +786,7 @@ sessionRoutes.patch("/:id", async (c) => {
     c.get("clearCompactionFailures")?.(id);
     await fireSessionEnd(
       c.get("hookPipeline"),
-      c.get("eventBus"),
+      c.get("eventBus") && sessionEventBus(c.get("eventBus"), updated.merged),
       id,
       updated.hookScope,
       "ended",
