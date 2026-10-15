@@ -1,3 +1,0 @@
-### Fixed
-
-- **Temporary media references that a crashed world-data import left behind now expire.** `POST /api/media/cleanup` releases every temporary `media-pin:<uuid>` reference created 24 hours ago or earlier: a dry run lists them in the new `expiredRefs` field of the result, and a real run removes them, so their bytes can be reclaimed like any other unclaimed media. A younger reference keeps protecting its file, the limit is fixed, and nothing expires outside that opt-in endpoint. No stored schema changed. `MediaLifecyclePolicy` gains `expireRefs` and `MediaCleanupResult` gains `expiredRefs`. Rule: `docs/reference/media-store.md`.

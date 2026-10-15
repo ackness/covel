@@ -1,3 +1,0 @@
-### Fixed
-
-- **Worlds start even when their data receivers are not installed.** Session creation, preflight and later imports or sync skip the unavailable contract writes with warnings through the existing world-data notices. Active projections still receive the source; sources with no consumers skip schema checks and media import too. Sync preserves existing managed data, ledger rows and media references for skipped writes, while successfully read empty data still removes old records when receivers return. Author validation keeps its existing error rules. See [World data](../en/reference/world-data.md#contract-resolution-and-preflight).
