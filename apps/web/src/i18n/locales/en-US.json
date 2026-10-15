@@ -1773,8 +1773,8 @@
       "sessionBusy": "This session is busy. Wait for it to finish and try again.",
       "sessionNotFound": "This session no longer exists.",
       "excluded": "This plugin is excluded from the session.",
-      "missingProvider": "A required plugin feature is missing. Enable a plugin that provides it first.",
-      "ambiguousProvider": "Several plugins provide the same required feature. Choose one of them.",
+      "missingProvider": "A required plugin capability is missing. Enable a plugin that provides it first.",
+      "ambiguousProvider": "Several plugins provide the same required capability. Choose one of them.",
       "conflict": "This plugin conflicts with another enabled plugin.",
       "defaultReplaced": "Another selected plugin replaces this default provider.",
       "invalidConflict": "This plugin declares an unsupported conflict. Ask its author to correct it.",
@@ -1940,7 +1940,7 @@
       "enable": "Turn on {{plugins}} to get a story.",
       "install": "Install a narrative plugin under Settings → Install & manage, then restart the backend."
     },
-    "dependentsOff": "These plugins will be off because a feature they need is off:"
+    "dependentsOff": "These plugins will be off because a capability they need is off:"
   },
   "pluginJob": {
     "runtimesNotLoaded": "{{plugin}} was approved, but {{count}} of its tasks cannot be loaded and will not run.",

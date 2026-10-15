@@ -1711,8 +1711,8 @@
       "sessionBusy": "本局正在执行任务，请稍后重试。",
       "sessionNotFound": "此会话已不存在。",
       "excluded": "此插件已被排除在本局之外。",
-      "missingProvider": "缺少必需的插件功能，请先启用提供该功能的插件。",
-      "ambiguousProvider": "多个插件提供了同一项必需功能，请选择其中一个。",
+      "missingProvider": "缺少必需的插件能力，请先启用提供该能力的插件。",
+      "ambiguousProvider": "多个插件提供了同一项必需能力，请选择其中一个。",
       "conflict": "此插件与其他已启用的插件冲突。",
       "defaultReplaced": "另一个已选插件替代了此默认提供插件。",
       "invalidConflict": "此插件声明了不支持的冲突，请联系作者修正。",
@@ -1876,7 +1876,7 @@
       "enable": "打开 {{plugins}} 就能得到故事。",
       "install": "请在「设置 → 安装与管理」中安装一个叙事插件，安装后重启后端生效。"
     },
-    "dependentsOff": "以下插件需要的功能已关闭，开局后这些插件会停用："
+    "dependentsOff": "以下插件需要的能力已关闭，开局后这些插件会停用："
   },
   "pluginJob": {
     "runtimesNotLoaded": "{{plugin}} 已授权，但它有 {{count}} 个任务无法加载，不会运行。",
