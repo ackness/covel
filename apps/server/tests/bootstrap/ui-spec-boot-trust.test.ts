@@ -50,7 +50,6 @@ kind: plugin
 description: boot trust fixture
 ${importFlags.entry ? "entry: ./server/entry.mjs" : ""}
 runtime:
-  type: function
   function:
     handler: ./server/handler.mjs
   schedule:

@@ -14,7 +14,6 @@ export interface SessionPluginCandidate {
   readonly authorized: boolean;
   readonly provides?: PluginManifest["provides"];
   readonly requires?: readonly string[];
-  readonly optional?: readonly string[];
   readonly conflicts?: readonly string[];
   readonly extensions?: readonly ExtensionDeclaration[];
   /** Topics of `contributes.events`; one session has one declarer per topic. */

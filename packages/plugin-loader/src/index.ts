@@ -63,6 +63,14 @@ export {
   validatePluginDeclarations,
 } from "./declarations.js";
 export { multiRuntimeRootDiagnostics } from "./root-manifest-diagnostics.js";
+export {
+  isDerivedTag,
+  missingDefaultHandler,
+  packageProvides,
+  packageTags,
+  withDerivedPackageFields,
+  type PackageFileExists,
+} from "./package-defaults.js";
 
 // ── Registry ─────────────────────────────────────────────────────
 export { normalizeRuntimeManifest, getRuntimeSpec } from "./normalize.js";

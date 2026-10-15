@@ -5,11 +5,6 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "type": "object",
   "properties": {
-    "type": {
-      "type": "string",
-      "enum": ["agent", "function"],
-      "description": "`agent` drives model tool calls from the prompt body. `function` runs a JavaScript handler."
-    },
     "description": {
       "anyOf": [
         {
@@ -107,7 +102,7 @@
                   "contract": {
                     "type": "string",
                     "pattern": "^[a-z][a-z0-9.-]*@[1-9][0-9]*$",
-                    "description": "Contract ID. It must be listed in the package's `requires` or `optional`."
+                    "description": "Contract ID. List it in the package's `requires` when a provider must be active; otherwise the runtime uses it when one is."
                   },
                   "cardinality": {
                     "type": "string",
@@ -155,7 +150,7 @@
                       "contract": {
                         "type": "string",
                         "pattern": "^[a-z][a-z0-9.-]*@[1-9][0-9]*$",
-                        "description": "Contract ID. This runtime runs after the contract's active providers; the contract does not have to be listed in `requires` or `optional`."
+                        "description": "Contract ID. This runtime runs after the contract's active providers; it never activates a provider."
                       },
                       "cardinality": {
                         "type": "string",
@@ -268,7 +263,7 @@
                           "contract": {
                             "type": "string",
                             "pattern": "^[a-z][a-z0-9.-]*@[1-9][0-9]*$",
-                            "description": "Contract ID. It must be listed in the package's `requires` or `optional`."
+                            "description": "Contract ID. List it in the package's `requires` when a provider must be active; otherwise the runtime uses it when one is."
                           },
                           "cardinality": {
                             "type": "string",
@@ -371,7 +366,7 @@
             "contract": {
               "type": "string",
               "pattern": "^[a-z][a-z0-9.-]*@[1-9][0-9]*$",
-              "description": "Contract this runtime's output publishes. It must be listed in the package's `provides`."
+              "description": "Contract this runtime's output publishes. The package provides it; `provides` needs no entry for it."
             },
             "schema": {
               "type": "string",
@@ -573,7 +568,7 @@
         }
       },
       "additionalProperties": false,
-      "description": "Settings of an `agent` runtime. Not allowed on a `function` runtime."
+      "description": "Settings of an agent runtime, the kind of a runtime without a `function` block: it drives model tool calls from the prompt body."
     },
     "function": {
       "type": "object",
@@ -581,7 +576,7 @@
         "handler": {
           "type": "string",
           "minLength": 1,
-          "description": "Path of the handler module. The module default-exports the handler function."
+          "description": "Path of the handler module, relative to this manifest. The module default-exports the handler function. Defaults to `./handler.js` next to the manifest when that file exists."
         },
         "model": {
           "type": "string",
@@ -631,9 +626,8 @@
           "description": "Tools the handler may call through `ctx.tools.call`."
         }
       },
-      "required": ["handler"],
       "additionalProperties": false,
-      "description": "Settings of a `function` runtime. Required when `type` is `function`."
+      "description": "Makes this a function runtime, which runs a JavaScript handler instead of a model. `function: {}` takes every default. Not allowed with `agent`."
     },
     "guard": {
       "type": "string",
@@ -752,6 +746,5 @@
       "description": "Declared permission upper bounds."
     }
   },
-  "required": ["type"],
   "additionalProperties": false
 }

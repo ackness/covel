@@ -1,5 +1,6 @@
 import {
   KERNEL_WORLD_DATA_PATHS,
+  authoringSourceKind,
   canonicalizeLocale,
   compareText,
   isKnownLocale,
@@ -68,7 +69,6 @@ export const KERNEL_SOURCES: readonly ConventionalSource[] = [
 
 /** What a plugin says about the file of one data contract (`authoring.source`). */
 export interface AuthoringSourceDeclaration {
-  readonly kind: "yaml" | "json" | "media";
   readonly path: string;
   readonly key?: string;
   readonly localeArrayKeys?: readonly string[];
@@ -76,12 +76,21 @@ export interface AuthoringSourceDeclaration {
   readonly lorebook?: boolean;
 }
 
-/** The descriptor entry for a contract's file at the path its plugin names. */
+/**
+ * The descriptor entry for a contract's file at the path its plugin names.
+ * The path says how it is read; records are keyed by `id` unless the plugin
+ * names another field (`filename` for a media directory).
+ */
 export function pluginSourceEntry(
   contract: string,
   source: AuthoringSourceDeclaration,
 ): WorldDataSourceDescriptor {
-  if (source.kind === "media")
+  const kind = authoringSourceKind(source.path);
+  if (!kind)
+    throw new Error(
+      `authoring.source.path ${source.path} names neither a .yaml, .yml or .json file nor a media directory`,
+    );
+  if (kind === "media")
     return {
       kind: "media",
       path: source.path,
@@ -90,11 +99,11 @@ export function pluginSourceEntry(
       key: source.key ?? "filename",
     };
   return {
-    kind: source.kind,
+    kind,
     path: source.path,
     schema: `contract:${contract}`,
     to: `contract:${contract}${source.lorebook ? "+lorebook" : ""}`,
-    ...(source.key ? { key: source.key } : {}),
+    key: source.key ?? "id",
     ...(source.localeArrayKeys
       ? { localeArrayKeys: [...source.localeArrayKeys] }
       : {}),

@@ -178,7 +178,6 @@ describe("shared API contracts", () => {
     "accepts authored trigger declarations in discovery: $trigger.type",
     (input) => {
       const manifest = runtimeAuthoringManifestSchema.parse({
-        type: "agent",
         description: "Memory plugin",
         schedule: input,
       }).schedule;
@@ -215,7 +214,6 @@ describe("shared API contracts", () => {
     const trigger = { type: "auto", startTurn: 0 };
     expect(
       runtimeAuthoringManifestSchema.safeParse({
-        type: "agent",
         description: "Memory plugin",
         schedule: { stage: "pre-turn", trigger },
       }).success,

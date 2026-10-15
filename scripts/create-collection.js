@@ -66,7 +66,7 @@ what you want, and confirm once.
 ## Layout
 
 - \`covel-collection.yaml\` lists what the collection installs.
-- \`plugins/<id>/\` holds each plugin (\`PLUGIN.md\` and \`package.json\`).
+- \`plugins/<id>/\` holds each plugin: a \`PLUGIN.md\`, and a \`package.json\` only when the plugin needs one.
 - \`worlds/<id>/\` holds each world (\`world.yaml\` and \`WORLD.md\`).
 
 A world states the capabilities it needs in \`pluginPolicy.requires\`, as

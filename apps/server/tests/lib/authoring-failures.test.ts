@@ -33,12 +33,12 @@ contributes:
       schema: good.json
       version: 1
       accepts: [sample.good@1]
-      authoring: { title: Good, example: good-example.json, generate: offer, source: { kind: json, path: data/good.json, key: id } }
+      authoring: { title: Good, example: good-example.json, generate: offer, source: { path: data/good.json } }
     bad:
       schema: bad.json
       version: 1
       accepts: [sample.bad@1]
-      authoring: { title: Bad, example: bad-example.json, generate: offer, source: { kind: json, path: data/bad.json, key: id } }
+      authoring: { title: Bad, example: bad-example.json, generate: offer, source: { path: data/bad.json } }
 ---
 `,
   );

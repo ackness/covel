@@ -330,7 +330,7 @@ describe("plugin RPC detached-stage runner", () => {
           runtimeCount: 2,
         },
         manifests: [producerManifest(), current].map((manifest) => ({
-          runtime: { type: manifest.runtimeType ?? ("agent" as const) },
+          runtime: manifest.runtimeType === "function" ? { function: {} } : {},
           manifest,
           promptTemplate: "",
           rawFrontmatter: {},

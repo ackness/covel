@@ -10,7 +10,7 @@
 一个仓库只放一个包              一个仓库放好几个包
 my-plugin/                      my-covel-stuff/
 ├── PLUGIN.md                   ├── plugins/
-├── package.json                │   ├── tavern-rumors/
+├── README.md                   │   ├── tavern-rumors/
 └── ...                         │   └── another-plugin/
                                 └── worlds/
                                     └── tidelamp/
@@ -20,6 +20,7 @@ my-plugin/                      my-covel-stuff/
 
 - 仓库必须是公开的。私有仓库装不了。
 - 包里的代码必须拿来就能运行。Covel 安装时不装依赖、不运行构建。
+- 插件可以没有 `package.json`。仓库只放一个插件、`PLUGIN.md` 又没有写 `id` 时，插件 ID 是仓库名；放在子文件夹里时，是那个文件夹的名字。
 - 插件的 `package.json` 里不能有 `dependencies`。用到的代码请直接放进包里。插件 SDK 和 `zod` 由 Covel 提供，开发时要装它们，就写进 `devDependencies`。
 
 ## 2. 别人怎么装
@@ -38,7 +39,7 @@ my-plugin/                      my-covel-stuff/
 
 ## 3. 发新版本
 
-1. 改好之后，把 `PLUGIN.md` 和 `package.json` 里的版本号一起往上加。
+1. 改好之后，把 `PLUGIN.md` 里的 `version` 往上加。
 2. 跑一遍[测试](./test.md)和[试装](./package.md)。
 3. 推送到 GitHub。
 

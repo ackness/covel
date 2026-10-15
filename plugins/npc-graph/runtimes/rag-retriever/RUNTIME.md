@@ -1,5 +1,4 @@
 ---
-type: function
 description: >-
   When you mention someone, helps the story remember related people and
   relationships.
@@ -15,8 +14,7 @@ io:
       accepts: ./schemas/current-cast.json
   output:
     contract: graph-rag@1
-function:
-  handler: ./handler.js
+function: {}
 ---
 
 NPC graph retriever (function runtime).

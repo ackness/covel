@@ -8,8 +8,7 @@ A plugin is a folder. The simplest plugin has just one Markdown file with its co
 
 ```text
 my-plugin/
-├── PLUGIN.md            identity, the capabilities it provides and depends on, the tools and UI it contributes
-├── package.json
+├── PLUGIN.md            description, the capabilities it depends on, the tools and UI it contributes; the only required file
 ├── README.md
 ├── runtimes/            optional: one or more runtime units
 │   └── <name>/

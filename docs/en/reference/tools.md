@@ -74,34 +74,20 @@ When a runtime needs a capability, choose in this order:
 The plugin below has one tool, `echo-value`, which returns the value it receives as it is. It uses three things: an `entry` module, `covel.toolkit.tool()`, and `agent.tools.plugin` in the manifest.
 
 ```text
-plugins/echo-demo/
-├── package.json
+~/.covel/plugins/echo-demo/
 ├── PLUGIN.md
 └── server/index.js
 ```
 
-```json
-{
-  "name": "@covel/plugin-echo-demo",
-  "version": "0.0.1",
-  "private": true,
-  "type": "module"
-}
-```
-
-`package.json` is required for bundled plugins in the repository. If you only put the plugin in `~/.covel/plugins/echo-demo/` as a local user plugin, the loader requires only `PLUGIN.md` and the files it actually references.
+The plugin ID is the folder name, `echo-demo`; the entry module is `server/index.js` by default; no `package.json` is needed. To make it a bundled plugin under `plugins/` in the repository, add a `package.json` for the workspace with `name`, `private` and `"type": "module"`.
 
 ```yaml
 # PLUGIN.md
 ---
-id: echo-demo
-kind: plugin
 description: Echoes one short value for a smoke test.
-entry: ./server/index.js
 contributes:
   tools: [echo-value]
 runtime:
-  type: agent
   schedule:
     trigger: { type: manual }
   agent:
@@ -1448,7 +1434,7 @@ A community plugin goes through these stages:
 
 | Stage           | What happens                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **discovered**  | Dropped in as a zip and installed through `POST /api/install/plugin`. At install time it is checked that it does not pose as a built-in plugin: it cannot use a reserved built-in ID, and the names in `package.json` and `PLUGIN.md` must match.                                                                                                                                                                                                |
+| **discovered**  | Dropped in as a zip and installed through `POST /api/install/plugin`. At install time it is checked that it does not pose as a built-in plugin: it cannot use a reserved built-in ID.                                                                                                                                                                                                                                                            |
 | **approved**    | The first time it needs to run its code, the fixed `covel:plugin-server-code` is approved first. After the real actions are loaded and validated, the action approval follows. Server-code and `runtime:*` grants can only be given per session. A normal action can be approved "this time only" or "for this session." Managed environments also require the operator token, because community code runs inside the server process.            |
 | **import**      | After approval, `activatePluginServerCode` loads that plugin's server code on demand and runs its `entry` factory (`ensurePluginEntry`, triggered once at approval and once at RPC dispatch).                                                                                                                                                                                                                                                    |
 | **active**      | Tool calls at run time are allowed or refused by the approval rules in the table above.                                                                                                                                                                                                                                                                                                                                                          |
@@ -1695,7 +1681,7 @@ When the player needs to act, add `interaction` to the return value (see the [in
 A tool is connected in two steps: **register it in the `entry` module**, and then **declare it in the manifest of the runtime that uses it**.
 
 ```js
-// server/index.js — pointed to by `entry: ./server/index.js` in the root PLUGIN.md
+// server/index.js — the default entry module; the root PLUGIN.md needs no `entry`
 import makeMyTool from "../tools/my-tool.js";
 
 export default function (covel) {
@@ -1705,7 +1691,6 @@ export default function (covel) {
 
 ```yaml
 # RUNTIME.md; the root PLUGIN.md also declares contributes.tools: [my-tool-name]
-type: agent
 agent:
   tools:
     plugin: [my-tool-name]

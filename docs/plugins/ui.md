@@ -272,14 +272,12 @@ contributes:
 
 ```yaml
 ---
-type: function
 description: Counts the rumors after each turn and shows the total in the story.
 schedule:
   stage: post-turn
   after:
     - tavern-rumors/analyst
-function:
-  handler: ./handler.js
+function: {}
 ---
 ```
 

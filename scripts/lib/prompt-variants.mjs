@@ -122,7 +122,8 @@ function unreadTemplateVariants(pluginRoot, labelRoot) {
 function isModelPrompt(data, stem) {
   if ((data?.contributes?.prompt ?? []).length > 0) return true;
   const runtime = stem === "PLUGIN" ? data?.runtime : data;
-  return runtime !== undefined && (runtime?.type ?? "agent") === "agent";
+  // A runtime without a `function` block is an agent: its body is a prompt.
+  return runtime !== undefined && runtime?.function === undefined;
 }
 
 function toolNames(data) {

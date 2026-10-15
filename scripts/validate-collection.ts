@@ -12,7 +12,8 @@
 import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 import YAML from "yaml";
-import { readPlainYamlFrontmatter } from "../packages/plugin-loader/src/plain-yaml-frontmatter.js";
+import { discoverPluginAt } from "../packages/plugin-loader/src/discover.js";
+import { loadPluginDefinition } from "../packages/plugin-loader/src/load.js";
 import {
   COLLECTION_MANIFEST_FILE,
   checkCollection,
@@ -33,10 +34,14 @@ if (!directory) {
   process.exit(2);
 }
 
-/** Plain YAML frontmatter only, as the installer accepts it. */
+/**
+ * The loaded root manifest: its ID comes from the directory when it writes
+ * none, and it provides the contracts its runtimes output.
+ */
 async function readPluginManifest(pluginDir: string) {
-  const text = await readFile(path.join(pluginDir, "PLUGIN.md"), "utf-8");
-  return readPlainYamlFrontmatter(text).data;
+  const discovery = await discoverPluginAt(pluginDir);
+  if (!discovery) throw new Error(`no PLUGIN.md in ${pluginDir}`);
+  return (await loadPluginDefinition(discovery)).packageManifest.plugin;
 }
 
 async function bundledPlugins(): Promise<CollectionPluginFacts[]> {
@@ -95,7 +100,6 @@ for (const member of manifest.plugins) {
   }
   const pluginDir = path.join(directory, member.path);
   try {
-    await readFile(path.join(pluginDir, "package.json"), "utf-8");
     plugins.push(collectionPluginFacts(await readPluginManifest(pluginDir)));
   } catch (error) {
     fail(

@@ -35,7 +35,6 @@ contributes:
       position: post-history
       role: system
 runtime:
-  type: agent
   schedule: {stage: narrative}
   io: {output: {contract: narrative-engine@1}}
   agent: {tools: {builtin: [plugin-data-set]}}
@@ -173,7 +172,8 @@ PLUGIN.md:
   displayName: 行囊
   subtitle: 副标题
   runtime:
-    type: 代理
+    schedule:
+      stage: 叙事
   contributes:
     commands:
       - name: sell
@@ -190,7 +190,7 @@ runtimes/gone/RUNTIME.md:
     const { plugin } = (await loadPluginDefinition(discovery()))
       .packageManifest;
     // The manifest stays valid: the contract and the prompt are untouched.
-    expect(plugin.runtime?.type).toBe("agent");
+    expect(plugin.runtime?.schedule?.stage).toBe("narrative");
     expect(plugin.contributes?.prompt?.[0]?.content).toBe(
       "Call the tool once.",
     );
@@ -198,7 +198,7 @@ runtimes/gone/RUNTIME.md:
 
     const problems = (await validatePluginLabels(dir)).join("\n");
     expect(problems).toContain("subtitle is not a label");
-    expect(problems).toContain("runtime.type is not a label");
+    expect(problems).toContain("runtime.schedule.stage is not a label");
     expect(problems).toContain("[name=sell] has no entry with this id");
     expect(problems).toContain(
       "contributes.prompt is prompt text, not a label",

@@ -1,6 +1,5 @@
 {
   "name": "@covel/plugin-chat-mode-narrator",
-  "version": "0.0.36",
   "private": true,
   "type": "module",
   "scripts": {

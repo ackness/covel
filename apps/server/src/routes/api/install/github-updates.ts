@@ -84,6 +84,8 @@ export function createGithubUpdateRoutes(kind: "plugin" | "world") {
   const action = kind === "world" ? "world-update" : "update";
   // An installed world sits in the directory of its ID, which a world
   // without `id` keeps across updates.
+  // An update keeps the installed ID: a package that writes no `id` takes
+  // the name of the directory it is installed in.
   const inspect = (
     entries: readonly ExtractedEntry[],
     reserved: ReadonlySet<string>,
@@ -91,7 +93,7 @@ export function createGithubUpdateRoutes(kind: "plugin" | "world") {
   ) =>
     kind === "world"
       ? inspectWorldBundle(entries, installedId)
-      : inspectBundle(entries, reserved);
+      : inspectBundle(entries, reserved, installedId);
   const resourceRoot = () =>
     resolveUserResourceDirs()[kind === "world" ? "worlds" : "plugins"];
   githubUpdateRoutes.use("*", async (c, next) => {
@@ -204,8 +206,9 @@ export function createGithubUpdateRoutes(kind: "plugin" | "world") {
       const root = resourceRoot();
       // Check before download, and again under the mutation lock before staging.
       await readUnmodifiedPackage(path.join(root, plugin.id), previous);
+      const location = parseGithubUrl(plugin.source.repository);
       const archive = await downloadGithubEntries(
-        parseGithubUrl(plugin.source.repository),
+        location,
         plugin.source.commit,
         c.req.raw.signal,
       );

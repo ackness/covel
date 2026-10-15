@@ -80,7 +80,7 @@ async function setup(handlers: {
         runtimeCount: runtimes.size,
       },
       manifests: [...runtimes.values()].map((loaded) => ({
-        runtime: { type: "function" as const },
+        runtime: { function: {} },
         manifest: loaded.manifest,
         promptTemplate: "",
         rawFrontmatter: {},

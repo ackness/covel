@@ -1429,11 +1429,9 @@ pnpm describe:authoring --json       # machine-readable
 pnpm describe:authoring --plugins ~/.covel/plugins   # also scan community plugins
 ```
 
-**How a plugin receives world data.** Publish both the schema and the receiving declaration in the root `PLUGIN.md`:
+**How a plugin receives world data.** Publish both the schema and the receiving declaration in the root `PLUGIN.md`. Here is the manifest of the plugin `social-sim` (which is also its directory name):
 
 ```yaml
-id: social-sim
-kind: plugin
 description: Import relationship records.
 contracts:
   social.relationships@1:

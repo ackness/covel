@@ -1,7 +1,6 @@
 ---
-id: history-compaction
 kind: core
-version: 0.0.43
+version: 0.0.44
 displayName: History Compaction
 description: Maintains bounded segmented summaries of older conversation history.
 author:
@@ -11,7 +10,6 @@ license: MIT
 provides:
   - contract: history.compact@2
     default: true
-entry: ./server/index.js
 contributes:
   extensions:
     - point: history.compact@2

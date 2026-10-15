@@ -74,34 +74,20 @@
 下面的插件有一个工具 `echo-value`，把收到的值原样返回。它用到三样东西：`entry` 模块、`covel.toolkit.tool()`，以及清单里的 `agent.tools.plugin`。
 
 ```text
-plugins/echo-demo/
-├── package.json
+~/.covel/plugins/echo-demo/
 ├── PLUGIN.md
 └── server/index.js
 ```
 
-```json
-{
-  "name": "@covel/plugin-echo-demo",
-  "version": "0.0.1",
-  "private": true,
-  "type": "module"
-}
-```
-
-`package.json` 是仓库内置插件的要求。如果只是放在 `~/.covel/plugins/echo-demo/` 当本地用户插件，加载器只要求 `PLUGIN.md` 和它实际引用的文件。
+插件 ID 是文件夹名 `echo-demo`，入口模块默认是 `server/index.js`，不需要 `package.json`。放进仓库的 `plugins/` 当内置插件时，再加一个 workspace 用的 `package.json`，写 `name`、`private` 和 `"type": "module"`。
 
 ```yaml
 # PLUGIN.md
 ---
-id: echo-demo
-kind: plugin
 description: Echoes one short value for a smoke test.
-entry: ./server/index.js
 contributes:
   tools: [echo-value]
 runtime:
-  type: agent
   schedule:
     trigger: { type: manual }
   agent:
@@ -1446,7 +1432,7 @@ export default function ({ tool, z, shortId, shortIdBatch }) {
 
 | 阶段            | 发生什么                                                                                                                                                                                                                                                                    |
 | --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **discovered**  | 拖入 zip，经 `POST /api/install/plugin` 安装。安装时检查它没有冒充内置插件：不能用保留的内置 ID，`package.json` 和 `PLUGIN.md` 的名字必须一致。                                                                                                                             |
+| **discovered**  | 拖入 zip，经 `POST /api/install/plugin` 安装。安装时检查它没有冒充内置插件：不能用保留的内置 ID。                                                                                                                                                                           |
 | **approved**    | 第一次需要运行它的代码时，先审批固定的 `covel:plugin-server-code`。加载并验证真实的 action 之后，再做 action 审批。server-code 和 `runtime:*` 的授权只能按会话给；普通 action 可以选“仅这一次”或“这个会话”。托管环境还要求 operator token，因为社区代码在服务端进程内执行。 |
 | **import**      | 批准后，`activatePluginServerCode` 按需加载该插件的服务端代码，执行 `entry` 工厂（`ensurePluginEntry`；批准时和 RPC 派发时各触发一次）。                                                                                                                                    |
 | **active**      | 运行期的工具调用按上表的审批规则放行或拒绝。                                                                                                                                                                                                                                |
@@ -1693,7 +1679,7 @@ interface PluginToolResult<T> {
 工具分两步接入：**在 `entry` 模块里注册**，再**在使用它的 runtime 清单里声明**。
 
 ```js
-// server/index.js —— 由根 PLUGIN.md 的 `entry: ./server/index.js` 指向
+// server/index.js —— 默认的入口模块，根 PLUGIN.md 不用写 `entry`
 import makeMyTool from "../tools/my-tool.js";
 
 export default function (covel) {
@@ -1703,7 +1689,6 @@ export default function (covel) {
 
 ```yaml
 # RUNTIME.md；根 PLUGIN.md 同时声明 contributes.tools: [my-tool-name]
-type: agent
 agent:
   tools:
     plugin: [my-tool-name]

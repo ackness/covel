@@ -21,10 +21,7 @@ async function fixture(t, schema) {
 test("validates root events once regardless of runtime and locale manifests", async (t) => {
   const root = await fixture(t, '{"type":"object"}');
   await fs.mkdir(path.join(root, "runtimes/run"), { recursive: true });
-  await fs.writeFile(
-    path.join(root, "runtimes/run/RUNTIME.md"),
-    "---\ntype: function\n---\n",
-  );
+  await fs.writeFile(path.join(root, "runtimes/run/RUNTIME.md"), "---\n---\n");
   await fs.copyFile(
     path.join(root, "PLUGIN.md"),
     path.join(root, "PLUGIN.zh.md"),

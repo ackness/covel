@@ -8,7 +8,6 @@ import { checkPromptVariants } from "../lib/prompt-variants.mjs";
 const FRONTMATTER = `---
 id: demo
 runtime:
-  type: agent
   agent:
     tools:
       plugin:
@@ -112,7 +111,7 @@ test("requires a Chinese variant for a bundled prompt that a model reads", async
   );
 
   const documented = await fixture(t, {
-    "PLUGIN.md": ENGLISH.replace("type: agent", "type: function"),
+    "PLUGIN.md": ENGLISH.replaceAll("runtime:\n", "runtime:\n  function: {}\n"),
   });
   assert.deepEqual(documented.check({ requireChinese: true }), []);
 });

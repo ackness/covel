@@ -36,7 +36,6 @@ contributes:
     right:
       - ${specPath}
 runtime:
-  type: function
   schedule:
     trigger:
       type: manual

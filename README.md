@@ -69,7 +69,7 @@ A plugin is not necessarily one autonomous agent. It may contain one runtime, se
 | **Lifecycle hooks**       | Applies cross-cutting policy around scheduling, models, tools, and commits | `narrator` (draft review), `char-creator` (profile guard) |
 | **UI and data contracts** | Declares panels, memory blocks, schemas, or world-data targets             | `memory`, `character-blueprint`                           |
 
-Root `PLUGIN.md` declares package identity, versioned `provides` / `requires` / `optional` contracts, and shared `contributes` such as tools, events, UI, and settings. A single executable runtime goes under its explicit `runtime` field. A multi-runtime package instead places execution manifests under `runtimes/*/RUNTIME.md`:
+Root `PLUGIN.md` declares the versioned contracts a package `requires` and shared `contributes` such as tools, events, UI, and settings. The loader works out the rest: the ID is the directory name, the package provides each runtime's `io.output.contract`, and a runtime with a `function` block is a function while one without is an agent. The smallest plugin is a single `PLUGIN.md` with a description, a stage, and a prompt. A single executable runtime goes under its explicit `runtime` field. A multi-runtime package instead places execution manifests under `runtimes/*/RUNTIME.md`:
 
 ```text
 plugins/npc-graph/

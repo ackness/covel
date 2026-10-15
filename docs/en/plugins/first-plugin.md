@@ -1,6 +1,6 @@
 # Your first plugin
 
-This page walks you through a plugin called "Tavern Rumors." After each turn ends, it reads the story that was just written, records the rumors the protagonist heard, and shows them in a panel in the sidebar. When you finish, you will have gone through the full plugin workflow: generate, validate, run offline, change, and install into the game.
+This page first writes a plugin that is a single file, then walks you through a plugin called "Tavern Rumors." After each turn ends, it reads the story that was just written, records the rumors the protagonist heard, and shows them in a panel in the sidebar. When you finish, you will have gone through the full plugin workflow: generate, validate, run offline, change, and install into the game.
 
 It takes about thirty minutes. You use the command line. To read the generated code, you need some basic JavaScript, but this page does not ask you to write code.
 
@@ -12,7 +12,41 @@ It takes about thirty minutes. You use the command line. To read the generated c
 
 Run the commands below from the root of the Covel repository.
 
-## 1. Generate the plugin
+## 1. One file is a plugin
+
+The smallest plugin is a single `PLUGIN.md`: one sentence of description, one stage to run in, and a prompt. Make a folder. The folder name is the plugin ID:
+
+```bash
+mkdir -p ~/.covel/plugins/observer
+```
+
+Save `PLUGIN.md` in it:
+
+```yaml
+---
+description: Adds a short observation after each turn.
+runtime:
+  schedule: { stage: post-turn }
+---
+Write one short observation grounded in the latest narrative.
+```
+
+Validate it:
+
+```bash
+pnpm validate:plugin ~/.covel/plugins/observer
+```
+
+```text
+✓ Static package validation: /Users/you/.covel/plugins/observer
+  languages: text en; instructions en
+```
+
+This is already a complete plugin. Covel works out everything that is not written: the ID is the folder name, `observer`; there is no `function` block, so it is an agent driven by a model, and the body is its prompt; it runs after the story in each turn. It needs no `package.json`.
+
+Next, the scaffold generates a fuller starting point, with a panel, a function and test cases.
+
+## 2. Generate the plugin
 
 ```bash
 pnpm create-plugin tavern-rumors
@@ -24,12 +58,11 @@ The scaffold writes the plugin into the user plugin directory, which is `~/.cove
 插件创建完成！路径：/Users/you/.covel/plugins/tavern-rumors
 ```
 
-## 2. See what was generated
+## 3. See what was generated
 
 ```text
 tavern-rumors/
-├── PLUGIN.md                    package identity and the panel it contributes
-├── package.json
+├── PLUGIN.md                    package version and the panel it contributes
 ├── README.md
 ├── locales/
 │   └── zh.yaml                  Chinese translations of the name and interface text
@@ -54,10 +87,11 @@ This example has two runtimes, one for each of the two types:
 
 Both write their records into this plugin's own `notes` data space. The panel shows what is in that space.
 
+There is no `package.json`: the plugin ID is the folder name, the version is in `PLUGIN.md`, and Covel loads `handler.js` as an ES module.
+
 Open `runtimes/analyst/RUNTIME.md` and look at the YAML at the top:
 
 ```yaml
-type: agent
 schedule:
   stage: post-turn
 io:
@@ -78,7 +112,7 @@ agent:
 
 | This part                                | What it means                                                                                                                            |
 | ---------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| `type: agent`                            | This is a runtime driven by a model. The body of the file is the prompt for the model                                                    |
+| No `function` block                      | This is a runtime driven by a model. The body of the file is the prompt for the model                                                    |
 | `schedule.stage: post-turn`              | Runs after the narrative                                                                                                                 |
 | `io.inputs.narrator-output`              | Reads the story text of this turn. It comes from "any plugin that provides `narrative-engine@1`," not from one specific plugin           |
 | `io.selfData`                            | Puts the records it already has into the prompt, so the model can avoid recording the same thing twice                                   |
@@ -87,7 +121,7 @@ agent:
 
 The model can use only the tools listed here. It cannot read or write other plugins' data, and it cannot bypass the kernel to change the save directly.
 
-## 3. Validate
+## 4. Validate
 
 ```bash
 pnpm validate:plugin ~/.covel/plugins/tavern-rumors
@@ -109,7 +143,7 @@ Validation only reads the files. It does not run your code. It checks the fields
 .../tavern-rumors/runtimes/analyst/RUNTIME.md: schedule.stage: Invalid option: expected one of "setup"|"pre-turn"|"narrative"|"post-turn"|"audit"; correct this field using the current plugin manifest reference
 ```
 
-## 4. Run offline
+## 5. Run offline
 
 You can run the plugin without starting the game and without calling a real model:
 
@@ -138,7 +172,7 @@ When both cases show `"status": "passed"`, this means:
 > [!TIP]
 > This is the fastest feedback while you develop. After each change to the manifest or the code, run the validation first, then run this command. Only go into the game once both pass. It costs no model fees.
 
-## 5. Change it into your own plugin
+## 6. Change it into your own plugin
 
 Now change this generic example into a plugin that records rumors. You change three places.
 
@@ -163,9 +197,9 @@ Record each rumor the player hears: who said it, and what it claims. A rumor is 
 
 Write the prompt in English. The model outputs in the language of the game session, so a rumor recorded in a Chinese game is still written in Chinese.
 
-After the change, run steps 3 and 4 again, and confirm that they still pass.
+After the change, run steps 4 and 5 again, and confirm that they still pass.
 
-## 6. Run it in the game
+## 7. Run it in the game
 
 Start Covel:
 
@@ -198,7 +232,7 @@ At this point, your plugin has read the story, called a tool, written data, and 
 
 | Symptom                                      | Cause and fix                                                                                                                                                                                    |
 | -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| It is not in the plugin list                 | It is not in the user plugin directory, or its manifest has an error. Run the validation from step 3, then restart the backend once                                                              |
+| It is not in the plugin list                 | It is not in the user plugin directory, or its manifest has an error. Run the validation from step 4, then restart the backend once                                                              |
 | Selected, but it does not run                | It is not authorized. Handle the "Authorize plugin action" prompt in the game                                                                                                                    |
 | The panel stays empty                        | There was no rumor in this turn's story, or the model did not call the tool. Check the request and reply for the `tavern-rumors/analyst` step on the debug page at <http://localhost:5173/debug> |
 | The `plugin` role is reported as unavailable | Under **Settings → LLM → Model Roles**, choose a model for it, or change this task to use a different role on the session-prep screen                                                            |
@@ -208,6 +242,7 @@ At this point, your plugin has read the story, called a tool, written data, and 
 
 | Concept                        | In this plugin                                                                              |
 | ------------------------------ | ------------------------------------------------------------------------------------------- |
+| One file                       | `observer` is a single `PLUGIN.md`, and Covel works out the rest                            |
 | Two kinds of runtime           | `analyst` is an agent, `note` is a function                                                 |
 | Stage                          | `analyst` runs automatically at `post-turn`                                                 |
 | Finding a plugin by capability | Reads the story through `narrative-engine@1`, and does not name a specific narrative plugin |

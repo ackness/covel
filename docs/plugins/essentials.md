@@ -47,16 +47,13 @@ pnpm --filter @covel/plugin-my-plugin test
 | `-t <dir>`         | 生成到指定目录，而不是 `~/.covel/plugins`                           |
 | `--with-tools`     | 生成到仓库的 `plugins/` 下：一个 runtime，加 `tools/` 和单元测试    |
 
-一个最小的插件只有三个文件：`PLUGIN.md`、`package.json`、`README.md`。下面是一份完整的 `PLUGIN.md`，它在每回合的故事之后让模型补一句观察：
+一个最小的插件只有一个文件：`PLUGIN.md`。`README.md` 写给维护者看，可以不写；`package.json` 只在插件要声明开发依赖或作为仓库的 workspace 成员时才需要。下面是一份完整的 `PLUGIN.md`，它在每回合的故事之后让模型补一句观察：
 
 ```yaml
 ---
-id: my-plugin
-kind: plugin
 description: Adds a brief observation after narration.
 requires: [narrative-engine@1]
 runtime:
-  type: agent
   schedule:
     stage: post-turn
   io:
@@ -68,16 +65,16 @@ runtime:
 Write one observation grounded in runtime-inputs.narrative.value.
 ```
 
-没写的字段用默认值：这个 runtime 每回合自动运行，用 `plugin` 用途的模型，它的输出不是故事正文。和默认值一样的字段不用写，写了 `pnpm validate:plugin` 会提醒；默认值见[插件参考 · 默认值](../reference/plugins.md#默认值)。
+没写的字段由 Covel 推出或用默认值：插件 ID 是文件夹名；没有 `function` 块，所以它是 agent；这个 runtime 每回合自动运行，用 `plugin` 用途的模型，它的输出不是故事正文。和默认值一样的字段不用写，写了 `pnpm validate:plugin` 会提醒；默认值和 Covel 推出的字段见[插件参考 · 默认值](../reference/plugins.md#默认值)。
 
-三条最容易出错的规则：
+最容易出错的几条规则：
 
-- `id` 必须和文件夹的名字一样。
+- 插件 ID 就是文件夹名。写了 `id` 时，它必须和文件夹名一样。
 - `runtimes/` 下每个目录都要有 `RUNTIME.md`，共享代码放在根目录的 `lib/`。缺清单的路径会报给作者，其他 runtime 仍可加载；详见[插件规范](../reference/plugins.md)。
 - 只有一个 runtime 时，把它写在 `PLUGIN.md` 的 `runtime:` 里。有多个时，每个放在 `runtimes/<名字>/RUNTIME.md`。两种写法不能同时用，否则校验报 `inline runtime and runtimes/ cannot coexist`。
-- `PLUGIN.md` 写了 `version` 时，它必须和 `package.json` 里的 `version` 相同。 `package.json` 还必须写 `"type": "module"`：插件包只支持 ESM，缺了这一行校验和安装都会拒绝。
+- 版本只写在 `PLUGIN.md` 的 `version` 里，`package.json` 不写版本。插件带 `package.json` 时，它必须写 `"type": "module"`：插件包只支持 ESM，缺了这一行校验和安装都会拒绝。没有 `package.json` 的插件，Covel 照样把它的 `.js` 文件当作 ES module 加载。
 
-`pnpm create-plugin` 的每种模式都会把 `PLUGIN.md` 和 `package.json` 的版本设为 `0.1.0`。发布新版本时同时更新两处，再用 `pnpm validate:plugin <插件目录>` 检查。
+`pnpm create-plugin` 的每种模式都把 `PLUGIN.md` 的版本设为 `0.1.0`。发布新版本时改这一处，再用 `pnpm validate:plugin <插件目录>` 检查。
 
 校验通过后，在游戏的准备页选中插件并授权，它才会运行，见[第一个插件](./first-plugin.md)的最后一步。打包和安装见[打包并试装](../ship/package.md)。
 
@@ -85,7 +82,7 @@ Write one observation grounded in runtime-inputs.narrative.value.
 
 插件贡献的所有东西，都写在 `PLUGIN.md` 的 `contributes` 里。你在代码里注册的名字，必须和这里写的一样：多一个、少一个，插件都加载失败。
 
-代码写在入口文件里。`PLUGIN.md` 用 `entry` 指向它：
+代码写在入口文件里。入口文件默认是 `server/index.js`，放在那里就不用写 `entry`；放在别处时，`PLUGIN.md` 用 `entry` 指向它：
 
 | 你在入口文件里调用                     | 要在 `contributes` 里写 |
 | -------------------------------------- | ----------------------- |
@@ -168,6 +165,8 @@ runtime:
 | `required`（默认 `true`） | 上游失败或不存在时，这个 runtime 不运行；写 `false` 时照常运行 |
 
 读到的值在提示词里是 `runtime-inputs.narrative.value`，在函数里是 `ctx.inputs.narrative.value`。
+
+`requires` 只写缺了就不能用的能力。写了 `required: false` 的输入不用写进 `requires`：有提供者时读到它的结果，没有时照常运行。反过来，你的 runtime 用 `io.output.contract` 发布的能力，插件会自动提供，不用写进 `provides`。
 
 还有两个只管先后顺序的字段：`schedule.needs` 要求上游成功，`schedule.after` 只要求上游已经结束。必需的输入（不写 `required` 时就是）已经带有“上游成功”这个条件，不用再写一遍 `needs`。
 

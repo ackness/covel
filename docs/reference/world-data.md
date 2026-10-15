@@ -1429,11 +1429,9 @@ pnpm describe:authoring --json       # 机器可读
 pnpm describe:authoring --plugins ~/.covel/plugins   # 一并扫描社区插件
 ```
 
-**插件怎样接收世界数据。** 在根 `PLUGIN.md` 里同时发布 schema 和接收声明：
+**插件怎样接收世界数据。** 在根 `PLUGIN.md` 里同时发布 schema 和接收声明。下面是插件 `social-sim`（也就是它的目录名）的清单：
 
 ```yaml
-id: social-sim
-kind: plugin
 description: Import relationship records.
 contracts:
   social.relationships@1:

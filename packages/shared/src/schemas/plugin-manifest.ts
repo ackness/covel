@@ -40,6 +40,20 @@ const DATA_REFERENCE_PATH =
   /^(?:\*\*\.)?[A-Za-z_][A-Za-z0-9_]*(?:\[\])?(?:\.(?:\*\*\.)?[A-Za-z_][A-Za-z0-9_]*(?:\[\])?)*$/;
 
 /**
+ * How a world data source named by `authoring.source.path` is read: a `.yaml`
+ * or `.yml` file, a `.json` file, or a media directory (a path whose last
+ * segment has no extension). Undefined for any other file.
+ */
+export function authoringSourceKind(
+  path: string,
+): "yaml" | "json" | "media" | undefined {
+  const name = path.split("/").filter(Boolean).at(-1) ?? "";
+  if (/\.ya?ml$/i.test(name)) return "yaml";
+  if (/\.json$/i.test(name)) return "json";
+  return name.includes(".") ? undefined : "media";
+}
+
+/**
  * What a world author needs in order to supply one kind of world data. It
  * lives with the plugin that accepts the data, so authoring tools, skills and
  * the world generator learn about a new plugin without a central edit.
@@ -76,11 +90,6 @@ const dataAuthoringSchema = z
       .optional(),
     source: z
       .strictObject({
-        kind: z
-          .enum(["yaml", "json", "media"])
-          .describe(
-            "Reader type of the source. `media` is a directory whose index this namespace receives.",
-          ),
         path: z
           .string()
           .min(1)
@@ -94,16 +103,20 @@ const dataAuthoringSchema = z
           .refine((path) => !isReservedWorldPackagePath(path), {
             message: `source path must not name a file the kernel or the world package owns (${RESERVED_WORLD_PACKAGE_PATHS.join(", ")})`,
           })
+          .refine((path) => authoringSourceKind(path) !== undefined, {
+            message:
+              "source path must name a `.yaml`, `.yml` or `.json` file, or a media directory without an extension",
+          })
           .meta({
             description:
-              "Conventional path of the source inside a world package. `<dir>/*.<ext>` names every such file of a directory, each one a source, read in file-name order. It may not name a path the kernel or the package itself owns: `world.yaml`, `WORLD.md`, `data/world.data.yaml`, `data/dimensions.yaml`, `data/lorebook.yaml`, `characters/characters.json`, `media/gallery.json`, `media/portraits.json`, `media/scenes.json` or `media/gallery/`, nor an edition of one.",
+              "Conventional path of the source inside a world package. The path sets how it is read: a `.yaml` or `.yml` file, a `.json` file, or a media directory (a path without an extension) whose index this namespace receives. `<dir>/*.<ext>` names every such file of a directory, each one a source, read in file-name order. It may not name a path the kernel or the package itself owns: `world.yaml`, `WORLD.md`, `data/world.data.yaml`, `data/dimensions.yaml`, `data/lorebook.yaml`, `characters/characters.json`, `media/gallery.json`, `media/portraits.json`, `media/scenes.json` or `media/gallery/`, nor an edition of one.",
             examples: ["data/quests.yaml", "data/rules/*.yaml"],
           }),
         key: z
           .string()
           .min(1)
           .describe(
-            "Field that gives each record a stable key. Media sources use `filename`.",
+            "Field that gives each record a stable key. Defaults to `id`, and to `filename` for a media directory.",
           )
           .optional(),
         localeArrayKeys: z
@@ -126,13 +139,6 @@ const dataAuthoringSchema = z
           )
           .optional(),
       })
-      .refine(
-        (source) => source.kind !== "media" || !source.path.includes("*"),
-        {
-          message: "a media source names one directory, not `/*.<ext>`",
-          path: ["path"],
-        },
-      )
       .describe(
         "The world data source an author declares to supply this content.",
       )
@@ -215,7 +221,7 @@ const dataAuthoringSchema = z
       !authoring.generate ||
       (authoring.example !== undefined &&
         authoring.source !== undefined &&
-        authoring.source.kind !== "media" &&
+        authoringSourceKind(authoring.source.path) !== "media" &&
         (authoring.source.key ?? "id") === "id" &&
         authoring.source.visibility !== "hidden"),
     {
@@ -227,23 +233,31 @@ const dataAuthoringSchema = z
   .describe(
     "What a world author needs to supply this content. Authoring tools and the world generator read it.",
   );
+/** A package ID: lowercase letters, digits and hyphens; `framework` is reserved. */
+export const pluginIdSchema = z
+  .string()
+  .regex(/^[a-z][a-z0-9-]*$/, {
+    message:
+      "a plugin ID starts with a lowercase letter and has only lowercase letters, digits and hyphens",
+  })
+  .refine(
+    (id) => id !== FRAMEWORK_PLUGIN_ID,
+    `"${FRAMEWORK_PLUGIN_ID}" is reserved for the framework`,
+  );
+
 export const pluginManifestSchema = z.strictObject({
-  id: z
-    .string()
-    .regex(/^[a-z][a-z0-9-]*$/)
-    .refine(
-      (id) => id !== FRAMEWORK_PLUGIN_ID,
-      `"${FRAMEWORK_PLUGIN_ID}" is reserved for the framework`,
-    )
+  id: pluginIdSchema
     .meta({
       description:
-        "Stable package ID: lowercase letters, digits and hyphens. It must match the package directory name. `framework` is reserved.",
+        "Package ID: lowercase letters, digits and hyphens. Defaults to the name of the package directory; when written it must equal that name. `framework` is reserved.",
       examples: ["dice-check"],
-    }),
+    })
+    .optional(),
   kind: z
     .enum(["core", "plugin"])
+    .default("plugin")
     .describe(
-      "Package kind. `core` marks a core plugin; other packages use `plugin`.",
+      "Package kind. `core` marks a core plugin, which every session requests by default. Defaults to `plugin`.",
     ),
   version: z
     .string()
@@ -271,7 +285,7 @@ export const pluginManifestSchema = z.strictObject({
         ),
     )
     .describe(
-      "Catalogue tags such as `ui:right-panel` or `cost:llm`. `role:` tags are rejected; use contracts.",
+      "Catalogue tags the loader cannot work out, such as `mode:dialogue` or `data:characters`. The loader adds the `ui:*` and `cost:*` tags from the package's panels and runtimes and ignores written ones. `role:` tags are rejected; use contracts.",
     )
     .optional(),
   ...packageCreditFields,
@@ -293,19 +307,13 @@ export const pluginManifestSchema = z.strictObject({
       ]),
     )
     .describe(
-      "Versioned contracts this package provides, such as `narrative-engine@1`.",
+      "Versioned contracts this package provides that no runtime of it outputs, such as an extension or data contract. The contract of each runtime's `io.output.contract` is added by the loader; write it here only to mark the default provider.",
     )
     .optional(),
   requires: z
     .array(contractIdSchema)
     .describe(
-      "Contracts that must have an active provider. The resolver adds one when the package is active.",
-    )
-    .optional(),
-  optional: z
-    .array(contractIdSchema)
-    .describe(
-      "Contracts this package uses when a provider is active. They do not activate a provider.",
+      "Contracts that must have an active provider. The resolver adds one when the package is active. A contract a runtime reads and that is not listed here is optional: the runtime uses it when a provider is active.",
     )
     .optional(),
   conflicts: z

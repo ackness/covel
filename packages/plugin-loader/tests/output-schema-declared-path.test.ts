@@ -10,7 +10,7 @@ function makeFrontmatter(overrides: Record<string, unknown>): string {
     id: "test-plugin",
     kind: "plugin",
     description: "A test plugin",
-    runtime: { type: "agent", schedule: { stage: "narrative" }, io: overrides },
+    runtime: { schedule: { stage: "narrative" }, io: overrides },
   };
   const yaml = Object.entries(merged)
     .map(([k, v]) => `${k}: ${typeof v === "string" ? v : JSON.stringify(v)}`)

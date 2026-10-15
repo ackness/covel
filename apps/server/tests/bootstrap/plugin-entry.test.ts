@@ -760,7 +760,7 @@ describe("createBootstrapPluginEntries", () => {
     } as PluginDiscoveryResult);
     params.manifestCache.set(pluginId, [
       {
-        runtime: { type: "agent" },
+        runtime: {},
         manifest: subManifest,
         promptTemplate: "",
         rawFrontmatter: {},
@@ -770,7 +770,7 @@ describe("createBootstrapPluginEntries", () => {
     fs.mkdirSync(path.join(rootPath, "runtimes/worker"), { recursive: true });
     fs.writeFileSync(
       discovery.pluginMdPaths[0]!,
-      `---\ndescription: Worker\ntype: agent\nschedule:\n  trigger: {type: manual}\n---\n`,
+      `---\ndescription: Worker\nschedule:\n  trigger: {type: manual}\n---\n`,
     );
     const definition = await loadPluginDefinition(discovery);
     params.pluginRegistry.register({
@@ -817,7 +817,7 @@ describe("createBootstrapPluginEntries", () => {
     } as PluginDiscoveryResult);
     params.manifestCache.set(pluginId, [
       {
-        runtime: { type: "agent" },
+        runtime: {},
         manifest: subManifest,
         promptTemplate: "",
         rawFrontmatter: {},
@@ -827,7 +827,7 @@ describe("createBootstrapPluginEntries", () => {
     fs.mkdirSync(path.join(rootPath, "runtimes/worker"), { recursive: true });
     fs.writeFileSync(
       discovery.pluginMdPaths[0]!,
-      `---\ndescription: Worker\ntype: agent\nschedule:\n  trigger: {type: manual}\n---\n`,
+      `---\ndescription: Worker\nschedule:\n  trigger: {type: manual}\n---\n`,
     );
     const definition = await loadPluginDefinition(discovery);
     params.pluginRegistry.register({

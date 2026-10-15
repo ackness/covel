@@ -1,25 +1,17 @@
 ---
-id: inventory
-kind: plugin
-version: 0.0.37
+version: 0.0.38
 displayName: Inventory
 description: >-
   Records explicit item gains, losses, and equipment changes from each turn's
   narrative, with an always-available bag panel.
 tags:
   - "data:world-data"
-  - "cost:function"
-  - "ui:right-panel"
-  - "ui:message-block"
 author:
   name: Covel Contributors
   url: https://github.com/ackness/covel
 license: MIT
-provides:
-  - world-ir.vocabulary@1
 requires:
   - world-ir-provider@1
-entry: ./server/index.js
 contributes:
   commands:
     - name: bag
@@ -44,9 +36,7 @@ contributes:
           play are tracked automatically.
         example: ./examples/items.json
         source:
-          kind: yaml
           path: data/items.yaml
-          key: id
   ui:
     right:
       - ./ui/inventory-panel.json

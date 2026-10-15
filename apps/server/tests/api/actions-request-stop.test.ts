@@ -58,7 +58,7 @@ function makeEntry(loaded: LoadedRuntime): PluginRegistryEntry {
     },
     manifests: [
       {
-        runtime: { type: "agent" as const },
+        runtime: {},
         manifest: loaded.manifest,
         promptTemplate: loaded.promptTemplate,
         rawFrontmatter: {},

@@ -1,6 +1,5 @@
 {
   "name": "@covel/plugin-world-init",
-  "version": "0.0.39",
   "private": true,
   "type": "module",
   "scripts": {

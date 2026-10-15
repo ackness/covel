@@ -30,7 +30,7 @@
 
 叙事引擎（narrator / chat-mode-narrator）接入只需两步，自身不写任何骰子规则：
 
-1. 根 `optional` 声明 `action-check@1`，并在 `io.inputs` 按契约绑定 `checkContext`：
+1. 在 `io.inputs` 按契约绑定 `checkContext`（`required: false`，所以根清单不用声明这个契约）：
 
    ```yaml
    check-results:

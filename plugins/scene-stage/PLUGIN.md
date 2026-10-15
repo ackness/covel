@@ -1,7 +1,5 @@
 ---
-id: scene-stage
-kind: plugin
-version: 0.0.36
+version: 0.0.37
 displayName: Scene Stage
 description: >-
   Tracks the current scene, time of day, and who is on stage for the visual
@@ -9,17 +7,10 @@ description: >-
 tags:
   - "mode:dialogue"
   - "data:characters"
-  - "cost:function"
-  - "ui:right-panel"
 author:
   name: Covel Contributors
   url: https://github.com/ackness/covel
 license: MIT
-provides:
-  - stage-direction@1
-  - scene-stage@1
-  - scene-cast@1
-entry: ./server/index.js
 contracts:
   scene-cast@1:
     schema: ./schemas/scene-cast.schema.json
@@ -96,9 +87,7 @@ contributes:
           A directory of scene background image files. The world supplies only
           the files; the index records are produced at import.
         source:
-          kind: media
           path: media/scenes
-          key: filename
     scenes:
       schema: ./schemas/scenes.schema.json
       description: Scene background registry imported from world packages.
@@ -111,7 +100,6 @@ contributes:
           content hash. Generate the scene images first, then generate this
           file; see docs/worlds/scenes.md.
         source:
-          kind: json
           path: media/scenes.registry.json
           key: registryId
   ui:

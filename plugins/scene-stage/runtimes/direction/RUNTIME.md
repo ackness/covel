@@ -1,5 +1,4 @@
 ---
-type: function
 description: >-
   Applies structured stage directions for actor presence, position, focus,
   outfit, expression, and pose.
@@ -10,8 +9,7 @@ schedule:
 io:
   output:
     contract: stage-direction@1
-function:
-  handler: ./handler.js
+function: {}
 ---
 
 The direction runtime is the authoritative, persistent actor layout for stage

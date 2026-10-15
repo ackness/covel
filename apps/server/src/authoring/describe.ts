@@ -335,9 +335,11 @@ export async function validateAuthoringExamples(
           continue;
         }
         if (schema.kind !== "plugin" || !schema.validate) continue;
-        // A keyed list is imported record by record; anything else is one value.
+        // A file at the plugin's path holds keyed records (by `id` unless the
+        // plugin names another key), imported one by one; anything else is
+        // one value.
         const records =
-          authoring.source?.key && Array.isArray(value)
+          authoring.source && Array.isArray(value)
             ? sourceItems(value)
             : [value];
         records.forEach((record, index) => {

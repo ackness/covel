@@ -63,7 +63,7 @@ async function fixture(withRuntime = false, activateEntry = true) {
     api.registerWires({speech: [{id: 'voice', synthesize: async () => version}]});
     ${fail ? "throw new Error('fixture initialization failure');" : ""}
   }`;
-  const manifest = `---\nid: ${id}\nkind: plugin\ndescription: Fixture\nentry: ./entry.mjs\ncontributes:\n  tools: [value]\n  actions: [value]\n  services: [fixture.value@1]\n  hooks:\n    - event: TurnStart\n  wires: [voice]\n${withRuntime ? "runtime:\n  type: function\n  schedule:\n    trigger:\n      type: manual\n  function:\n    handler: ./handler.mjs\n  guard: ./guard.mjs\n" : ""}---\nFixture\n`;
+  const manifest = `---\nid: ${id}\nkind: plugin\ndescription: Fixture\nentry: ./entry.mjs\ncontributes:\n  tools: [value]\n  actions: [value]\n  services: [fixture.value@1]\n  hooks:\n    - event: TurnStart\n  wires: [voice]\n${withRuntime ? "runtime:\n  schedule:\n    trigger:\n      type: manual\n  function:\n    handler: ./handler.mjs\n  guard: ./guard.mjs\n" : ""}---\nFixture\n`;
   await fs.writeFile(path.join(root, "PLUGIN.md"), manifest);
   await fs.writeFile(path.join(root, "entry.mjs"), source(1));
   if (withRuntime) {
@@ -208,7 +208,7 @@ describe("plugin layout reload recovery", () => {
       const legacyManifest = path.join(runtimeDir, "PLUGIN.md");
       await fs.writeFile(
         layout === "legacy-runtime" ? legacyManifest : runtimeManifest,
-        "---\ntype: function\nschedule:\n  trigger:\n    type: manual\nfunction:\n  handler: ./handler.mjs\nguard: ./guard.mjs\n---\n",
+        "---\nschedule:\n  trigger:\n    type: manual\nfunction:\n  handler: ./handler.mjs\nguard: ./guard.mjs\n---\n",
       );
       if (layout === "legacy-runtime")
         await fs.writeFile(rootManifest, validRoot);

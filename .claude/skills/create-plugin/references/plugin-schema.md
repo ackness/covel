@@ -4,15 +4,14 @@ Root `PLUGIN.md` and child `RUNTIME.md` use strict YAML frontmatter. The main ch
 
 ## Package manifest
 
-Optional credits (`author`, `license`, `homepage`) are display data shown before play; links are `https` only. Fields and limits: `docs/reference/plugins.md` ("作者信息"). The scaffold starts both the manifest and `package.json` at version `0.1.0`; update both together. When the package has a `package.json`, its `version` equals the manifest `version`.
+Optional credits (`author`, `license`, `homepage`) are display data shown before play; links are `https` only. Fields and limits: `docs/reference/plugins.md` ("作者信息"). The scaffold starts the manifest at version `0.1.0`; the version lives only in `PLUGIN.md`, and a `package.json` (optional) carries none.
+
+The loader works out what an author leaves out; `pnpm validate:plugin` warns about a written value equal to it. `id` is the directory name, `kind` is `plugin`, `entry` is `./server/index.js` when that file exists, a runtime with a `function` block is a function and one without is an agent, `function.handler` is `./handler.js` next to the manifest, `provides` absorbs every runtime's `io.output.contract`, `ui:*` / `cost:*` tags are derived (write only tags such as `mode:*`), and `contributes.data.*.authoring.source` takes its format from `path` and `key: id`. Full list: [`docs/reference/plugins.md`](../../../../docs/reference/plugins.md#默认值).
 
 ```yaml
 ---
-id: sample-notes
-kind: plugin
 version: 0.1.0
 description: Save selected story notes.
-entry: ./server/index.js
 requires: [narrative-engine@1]
 contributes:
   tools: [save-note]
@@ -42,13 +41,12 @@ A hook handler is `async (ctx, payload) => ({action: "continue"})`. `ctx.locale`
 
 Every package has one root manifest. For a single runtime, add `runtime: { ... }` there and use the root Markdown body as its agent prompt. For multiple runtimes, omit root `runtime` and create `runtimes/<local-id>/RUNTIME.md`. The executable ID is `<plugin-id>/<local-id>`. Child manifests contain runtime fields only. Paths for package contributions are package-root relative; handler and runtime schema paths are runtime-directory relative.
 
-Contract IDs use lowercase letters, digits, dots or hyphens followed by `@<positive major>`, for example `narrative-engine@1`. Root `provides`, `requires`, `optional`, and `conflicts` use those contracts. An output producer declares `io.output.contract` and includes it in root `provides`; only one runtime per package may produce a given output contract. Root `contracts` maps public schema IDs to `{schema: ./schemas/file.json}`. A data namespace accepting world imports adds `accepts: [contract@1]` and uses the same schema path as that root contract.
+Contract IDs use lowercase letters, digits, dots or hyphens followed by `@<positive major>`, for example `narrative-engine@1`. Root `provides`, `requires`, and `conflicts` use those contracts. An output producer declares `io.output.contract`, and the package provides it without a `provides` entry; write `provides` only for a contract no runtime outputs (a service, say) or to mark `{contract, default: true}`. Only one runtime per package may produce a given output contract. A contract a runtime reads but root `requires` does not list is optional: it binds when a provider is active. Root `contracts` maps public schema IDs to `{schema: ./schemas/file.json}`. A data namespace accepting world imports adds `accepts: [contract@1]` and uses the same schema path as that root contract.
 
 ## Runtime manifest
 
 ```yaml
 ---
-type: function
 schedule:
   stage: post-turn
 io:
@@ -57,14 +55,13 @@ io:
       from: {contract: narrative-engine@1}
       select: /narrativeOutput
 function:
-  handler: ./handler.js
   timeoutMs: 30000
 ---
 ```
 
 Leave out a field whose value is its default; `pnpm validate:plugin` warns about one written anyway. The defaults: `schedule.trigger.type: auto`, `schedule.every: 1`, `io.visibility: system`, `from.cardinality: one`, `io.inputs.*.required: true`, `io.selfData[].format: summary` and `maxEntries: 50`, `schedule.manual.execution: sync`; for an agent, `agent.model` is `plugin` (`story` for a `story` runtime) and `agent.loop` is `timeoutMs: 120000`, `callTimeoutMs: 60000`, `maxRetries: 3` (`240000` / `120000` / `1` for a `story` runtime).
 
-`type` is `agent` or `function`. The trigger is `auto` (the default), `manual`, or `event`. An `auto` runtime declares `schedule.stage`: `setup`, `pre-turn`, `narrative`, `post-turn`, or `audit`; `schedule.every: N` runs it on every N-th logical turn, and `schedule.trigger` can add `startTurn`, `cooldownTurns`, and `maxTriggerCount`. Manual/event runtimes omit stage and may use `schedule.manual.execution: background`. Stage background work uses `schedule.completion` with a detached mode and bounded queue/execution deadlines. Dependencies belong in `schedule.needs` (success gating) and `schedule.after` (ordering only).
+A runtime with a `function` block is a function runtime (its handler defaults to `./handler.js`; write `function: {}` when nothing else is set); one without is an agent. The trigger is `auto` (the default), `manual`, or `event`. An `auto` runtime declares `schedule.stage`: `setup`, `pre-turn`, `narrative`, `post-turn`, or `audit`; `schedule.every: N` runs it on every N-th logical turn, and `schedule.trigger` can add `startTurn`, `cooldownTurns`, and `maxTriggerCount`. Manual/event runtimes omit stage and may use `schedule.manual.execution: background`. Stage background work uses `schedule.completion` with a detached mode and bounded queue/execution deadlines. Dependencies belong in `schedule.needs` (success gating) and `schedule.after` (ordering only).
 
 `io.inputs` binds named inputs from `{runtime: sample-notes/extract}` or `{contract: name@1}`. Within a multi-runtime package, write the complete `<pluginId>/<runtimeId>`; an inline runtime uses its package ID. See [reference scope](../../../../docs/reference/plugins.md#依赖和引用的范围). Required turn inputs imply a success dependency; optional inputs allow absence. `select` is a JSON Pointer into the successful upstream value. Function code reads `ctx.inputs.<name>.value`; agent prompts receive the `runtime-inputs` block. Committed outputs use `scope: committed` plus `recordAs`. A detached kernel digest uses `from: {kernel: turn-digest@1}`. Always-detached manual/event runtimes cannot bind same-execution turn outputs.
 

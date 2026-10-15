@@ -101,9 +101,9 @@ The settings page shows each plugin's ID and its path in the repository. Tick, r
 
 Installation uses the loader’s [manifest and runtime directory rules](./plugins.md#package-and-runtime-files). A runtime directory missing `RUNTIME.md` is reported with its path.
 
-- A plugin package directory must have both `package.json` and a root `PLUGIN.md`. `package.json` must declare `"type": "module"`; otherwise the install returns 400.
-- The root declaration uses `{ id, kind, contributes, runtime? }`.
-- A package with several runtimes puts each execution declaration in `runtimes/<sub>/RUNTIME.md`. A sub-declaration uses `{ type, schedule, io, agent/function }`, and it does not repeat the plugin's identity.
+- A plugin package directory must have a root `PLUGIN.md`. A `package.json` is optional; when there is one, it must declare `"type": "module"`, otherwise the install returns 400. The installer does not read its `version`; the version comes only from `PLUGIN.md`.
+- The root declaration uses `{ description, contributes, runtime? }`, plus `id`, `version` and other fields when needed.
+- A package with several runtimes puts each execution declaration in `runtimes/<sub>/RUNTIME.md`. A sub-declaration uses `{ schedule, io, agent/function }`, and it does not repeat the plugin's identity.
 - A root `runtime` and a subdirectory runtime cannot both be declared.
 - Flat legacy fields, a missing root declaration, or a `PLUGIN.md` inside a subdirectory are all rejected at install time. The desktop app rejects them too when importing from a folder.
 - When the plugin directory already has a package in this layout, startup records it only as that package's own load error (`status: error`). The other plugins load as usual.
@@ -114,7 +114,13 @@ In development mode, after adding a missing root `PLUGIN.md`, or changing a sub-
 
 ### What the installer does and does not do
 
-- It uses a canonical plugin ID, and it cannot overwrite the ID of a built-in plugin.
+- The plugin ID is the first valid value in this order, and it cannot be the ID of a built-in plugin (case does not matter; a clash returns 409):
+  1. The `id` that `PLUGIN.md` writes. A written `id` that is not valid returns 400.
+  2. The name of the folder that holds the package: the only top-level folder of a ZIP (ignoring `__MACOSX/`), the selected subfolder on GitHub, or the repository name when the package is at the repository root.
+  3. The `name` in `package.json`, without its scope and one `plugin-` prefix (`@someone/plugin-notes` → `notes`).
+
+  When none of the three gives a valid value, the install returns 400 and asks for an `id` in `PLUGIN.md`.
+
 - A manifest and its language variants accept only plain YAML frontmatter, and they reject executable language markers.
 - The installer does not run scripts, package managers, compilers, or plugin modules.
 - Every plugin installation path (GitHub, ZIP, offline collection) and update requires self-contained runtime files: `dependencies`, `optionalDependencies`, and `peerDependencies` in `package.json` must be absent or empty. `devDependencies` are allowed. The host provides `@covel/plugin-handlers-utils` and `zod` to every plugin, so a plugin does not declare them as runtime dependencies; bundled plugins list them only under `devDependencies` too.
@@ -176,12 +182,12 @@ A plugin's root manifest can declare a `covel` version range (for example `">=0.
 
 ### What the preview contains
 
-The preview includes the ID, package version, description, author name (`author`, `null` when the manifest does not declare one), a hint about whether code is present, the source, the signed token, and `expiresAt`.
+The preview includes the ID, package version (the `version` of `PLUGIN.md`), description, author name (`author`, `null` when the manifest does not declare one), a hint about whether code is present, the source, the signed token, and `expiresAt`.
 
 - The source is `{ repository, commit, path, digest, tracking }`.
 - `tracking` is `{ kind: "default-branch" }`, `{ kind: "branch", ref }`, or `{ kind: "pinned", ref }`. A repository root link tracks the default branch. A tree link first tries to resolve to an explicit branch. Anything else, such as a tag or a commit, stays locked.
 - `description` is `I18nText`, retaining description translations for `PLUGIN.md` from `locales/<locale>.yaml` (`.yml` also works). Clients call `resolveI18nText` with the UI language.
-- `hasServerCode` uses the loader’s module-path enumeration: entry, function handler, guard, and world projection handler. It also scans code files, including `.mts` and `.cts`. ZIP installation returns the same field. This is a conservative hint, not a complete code audit; test or build sources can also trigger it.
+- `hasServerCode` uses the loader’s module-path enumeration: entry (when not written, an existing `server/index.js`), function handler (when not written, an existing `handler.js` next to `RUNTIME.md`), guard, and world projection handler. It also scans code files, including `.mts` and `.cts`. ZIP installation returns the same field. This is a conservative hint, not a complete code audit; test or build sources can also trigger it.
 - The compatible host version is declared by the author in the manifest's `covel` field, in the directory, and in the README. The installer checks only the manifest format and this range. It does not judge whether the runtime is really compatible.
 
 ### Signing and download

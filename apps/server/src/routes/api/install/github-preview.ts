@@ -74,10 +74,13 @@ export function receiptEntry(
 export function inspectBundle(
   entries: readonly ExtractedEntry[],
   reserved: ReadonlySet<string>,
+  /** Name of the directory that holds the package; see `packageDirectoryName`. */
+  directory?: string,
 ) {
   const { pluginId, manifest, version, hasServerCode } = validatePluginBundle(
     entries,
     reserved,
+    directory,
   );
   const labels = entries
     .filter((entry) => /^locales\/[^/]+\.ya?ml$/.test(entry.relativePath))

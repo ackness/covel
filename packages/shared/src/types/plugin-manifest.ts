@@ -1,4 +1,11 @@
 import type { z } from "zod";
 import type { pluginManifestSchema } from "../schemas/plugin-manifest.js";
-/** Authoring contract stored only at the package root. */
-export type PluginManifest = z.infer<typeof pluginManifestSchema>;
+/** A root PLUGIN.md as written: `id` may be left out. */
+export type PluginManifestInput = z.infer<typeof pluginManifestSchema>;
+/**
+ * The package manifest after parsing: `id` comes from the package directory
+ * when the file does not write it.
+ */
+export type PluginManifest = Omit<PluginManifestInput, "id"> & {
+  id: string;
+};

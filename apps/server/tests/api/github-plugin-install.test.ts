@@ -17,14 +17,11 @@ import { closeTestApi } from "../helpers/close-api.js";
 
 const sha = "a".repeat(40);
 const repo = "https://github.com/example/plugins";
+// The version is in PLUGIN.md only; package.json names no version.
 const fixture = {
-  "package.json": JSON.stringify({
-    name: "example-note",
-    version: "1.0.0",
-    type: "module",
-  }),
+  "package.json": JSON.stringify({ name: "example-note", type: "module" }),
   "PLUGIN.md":
-    "---\nid: example-note\nkind: plugin\ndescription: Synthetic hook plugin\nentry: ./server/index.js\n---\n",
+    "---\nid: example-note\nversion: 1.0.0\ndescription: Synthetic hook plugin\nentry: ./server/index.js\n---\n",
   // Importing the module is forbidden during preview, install and discovery.
   "server/index.js":
     'throw new Error("Unapproved code executed");\nexport default function register() {}\n',
@@ -396,9 +393,9 @@ describe("GitHub plugin installation", () => {
       "plugins/note/PLUGIN.md": fixture["PLUGIN.md"],
       "plugins/note/server/index.js": fixture["server/index.js"],
       "plugins/note/runtimes/one/RUNTIME.md":
-        "---\ntype: agent\ndescription: One\nschedule:\n  trigger: { type: manual }\n---\n",
+        "---\ndescription: One\nschedule:\n  trigger: { type: manual }\n---\n",
       "plugins/note/runtimes/two/RUNTIME.md":
-        "---\ntype: agent\ndescription: Two\nschedule:\n  trigger: { type: manual }\n---\n",
+        "---\ndescription: Two\nschedule:\n  trigger: { type: manual }\n---\n",
       "outside.txt": "must not install",
     });
     const item = await preview(`${repo}/tree/v1/plugins/note`);
@@ -416,6 +413,23 @@ describe("GitHub plugin installation", () => {
         "utf8",
       ),
     ).toContain("description: Two");
+  });
+
+  it("names a package that writes no id after its folder, or the repository at the root", async () => {
+    // No id and no package.json: the folder or the repository names it.
+    const bare = {
+      "PLUGIN.md": "---\nversion: 1.0.0\ndescription: Bare plugin\n---\n",
+    };
+    archive = await zip(bare);
+    expect((await preview()).id).toBe("plugins");
+    archive = await zip({ "packs/quiet-notes/PLUGIN.md": bare["PLUGIN.md"] });
+    const item = await preview(`${repo}/tree/v1/packs/quiet-notes`);
+    expect(item).toMatchObject({ id: "quiet-notes", hasServerCode: false });
+    expect(
+      (await request("plugin/github", { token: item.token, acceptRisk: true }))
+        .status,
+    ).toBe(201);
+    expect(await readdir(root)).toEqual(["quiet-notes"]);
   });
 
   it("discovers repository or folder packages and installs them independently", async () => {

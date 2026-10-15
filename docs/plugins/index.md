@@ -8,8 +8,7 @@
 
 ```text
 my-plugin/
-├── PLUGIN.md            身份、它提供和依赖的能力、它贡献的工具和界面
-├── package.json
+├── PLUGIN.md            说明、它依赖的能力、它贡献的工具和界面；只有它是必需的
 ├── README.md
 ├── runtimes/            可选：一个或多个运行单元
 │   └── <名字>/

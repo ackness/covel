@@ -48,34 +48,22 @@ async function expectNarrativeBinding(pluginsDir: string, pluginId: string) {
   const providerId = "fixture-story";
   const providerRoot = path.join(pluginsDir, providerId);
   await mkdir(providerRoot);
-  await writeFile(
-    path.join(providerRoot, "package.json"),
-    JSON.stringify({
-      name: providerId,
-      version: "1.0.0",
-      type: "module",
-    }),
-  );
+  // The directory names the plugin; its output contract is what it provides.
   await writeFile(
     path.join(providerRoot, "PLUGIN.md"),
     `---
-id: ${providerId}
-kind: plugin
 version: 1.0.0
 description: Provides one narrative for the generated analyst.
-provides: [narrative-engine@1]
 contracts:
   narrative-engine@1:
     schema: ./output.json
 runtime:
-  type: function
   schedule:
     stage: narrative
   io:
     output:
       contract: narrative-engine@1
-  function:
-    handler: ./handler.js
+  function: {}
 ---
 `,
   );
@@ -247,11 +235,9 @@ describe("plugin scaffolding", () => {
           path.join(pluginRoot, "PLUGIN.md"),
           "utf8",
         );
-        const packageJson = JSON.parse(
-          await readFile(path.join(pluginRoot, "package.json"), "utf8"),
-        );
-        expect(packageJson.version).toBe("0.1.0");
-        expect(rootManifest).toContain(`version: "${packageJson.version}"`);
+        // The version lives only in PLUGIN.md, and the directory is the ID.
+        expect(rootManifest).toContain('version: "0.1.0"');
+        expect(rootManifest).not.toMatch(/^(id|kind):/m);
         const validation = await runNode(
           [
             "--import",
@@ -295,15 +281,17 @@ describe("plugin scaffolding", () => {
           await readFile(path.join(pluginRoot, "locales/zh.yaml"), "utf8"),
         ).toMatch(/^PLUGIN\.md:\n {2}description: .*[\u4e00-\u9fff]/m);
         if (mode !== "with-tools") {
-          // Plugins scaffolded outside the repo carry no install step: the
-          // author SDK is a workspace package, not an npm dependency.
+          // Plugins scaffolded outside the repo carry no install step and no
+          // package.json: the host loads their handlers as ES modules.
+          await expect(
+            readFile(path.join(pluginRoot, "package.json"), "utf8"),
+          ).rejects.toThrow();
+        } else {
+          // A workspace member: package.json names no version of its own.
           const manifest = JSON.parse(
             await readFile(path.join(pluginRoot, "package.json"), "utf8"),
           );
-          expect(manifest.scripts).toBeUndefined();
-          expect(manifest.dependencies).toBeUndefined();
-          expect(manifest.devDependencies).toBeUndefined();
-        } else {
+          expect(manifest.version).toBeUndefined();
           await mkdir(path.join(pluginRoot, "node_modules/@covel"), {
             recursive: true,
           });

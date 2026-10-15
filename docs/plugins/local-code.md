@@ -24,7 +24,6 @@ mkdir -p ~/.covel/plugins/notebook/{server,tools,schemas,tests}
 ```text
 notebook/
 ├── PLUGIN.md                  配置和提示词
-├── package.json
 ├── README.md
 ├── server/
 │   └── index.js               入口文件：注册工具和动作
@@ -36,33 +35,21 @@ notebook/
     └── runtime-cases.json     离线运行的用例
 ```
 
-`package.json` 和上一页一样，只有三行：
-
-```json
-{
-  "name": "notebook",
-  "version": "0.1.0",
-  "type": "module"
-}
-```
+不需要 `package.json`：Covel 把插件里的 `.js` 文件当作 ES module 加载，版本写在 `PLUGIN.md` 里。
 
 ## 2. 写 `PLUGIN.md`
 
 ```yaml
 ---
-id: notebook
-kind: plugin
 version: 0.1.0
 description: Saves a brief note after narration.
 requires: [narrative-engine@1]
-entry: ./server/index.js
 contributes:
   tools: [save-note]
   data:
     notes:
       schema: ./schemas/note.schema.json
 runtime:
-  type: agent
   schedule: { stage: post-turn }
   io:
     inputs:
@@ -82,7 +69,7 @@ Read `runtime-inputs.narrative.value`. Call `save-note` one time with one fact t
 | 这一段                           | 意思                                                                                   |
 | -------------------------------- | -------------------------------------------------------------------------------------- |
 | `version`                        | 插件的版本。有入口文件的插件要写，每次发布时调高；没写时 `pnpm validate:plugin` 会提醒 |
-| `entry`                          | 入口文件。Covel 加载插件时运行它，由它注册工具                                         |
+| `server/index.js`                | 入口文件。Covel 加载插件时运行它，由它注册工具。放在这里就不用写 `entry`               |
 | `contributes.tools`              | 这个插件注册了哪些工具。必须和入口文件里注册的名字一致                                 |
 | `contributes.data.notes`         | 声明 `notes` 这个数据空间，以及一条记录的形状（schema）                                |
 | `agent.history: { maxTurns: 2 }` | 只给模型看最近 2 个回合的对话。见[控制模型看到多少历史](#控制模型看到多少历史)         |
@@ -333,11 +320,10 @@ export default function register(covel) {
 
 ## 写一个函数
 
-确定的规则不需要模型。把 runtime 的类型换成 `function`，再指向一个代码文件：
+确定的规则不需要模型。给 runtime 写一个 `function` 块，它就是函数，不再是 agent：
 
 ```yaml
 runtime:
-  type: function
   schedule: { stage: post-turn }
   io:
     inputs:
@@ -345,10 +331,11 @@ runtime:
         from: { contract: narrative-engine@1 }
         select: /narrativeOutput
   function:
-    handler: ./handler.js
     timeoutMs: 30000
     tools: { builtin: [get-character] }
 ```
+
+代码默认在清单旁边的 `handler.js` 里，放在别处时用 `function.handler` 指向它。不需要别的设置时写 `function: {}`。
 
 `handler.js` 默认导出一个函数：
 

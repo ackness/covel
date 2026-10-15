@@ -56,7 +56,7 @@ describe("plugin flow routes", () => {
         trigger: args.trigger ?? { type: "auto" },
       };
       const parsed: ParsedRuntimeMd = {
-        runtime: { type: manifest.runtimeType ?? "agent" },
+        runtime: manifest.runtimeType === "function" ? { function: {} } : {},
         manifest,
         promptTemplate: "",
         rawFrontmatter: {},
@@ -174,7 +174,7 @@ describe("plugin flow routes", () => {
       },
     };
     const parsed: ParsedRuntimeMd = {
-      runtime: { type: manifest.runtimeType ?? "agent" },
+      runtime: manifest.runtimeType === "function" ? { function: {} } : {},
       manifest,
       promptTemplate: "",
       rawFrontmatter: {},

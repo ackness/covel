@@ -1,5 +1,4 @@
 ---
-type: function
 description: >-
   Pre-rolls three d20s each turn and hands the dice pool plus check rules to the
   narrative engine.
@@ -14,8 +13,7 @@ io:
       required: false
   output:
     contract: action-check@1
-function:
-  handler: ./handler.js
+function: {}
 ---
 
 Dice check pre-roller (function runtime).

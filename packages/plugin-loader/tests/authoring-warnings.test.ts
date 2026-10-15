@@ -29,12 +29,7 @@ async function plugin(
   const temp = await mkdtemp(path.join(os.tmpdir(), "covel-warnings-"));
   roots.push(temp);
   const dir = path.join(temp, "probe");
-  await writeManifest(dir, "PLUGIN.md", {
-    id: "probe",
-    kind: "plugin",
-    description: "Probe",
-    ...root,
-  });
+  await writeManifest(dir, "PLUGIN.md", { description: "Probe", ...root });
   await writeFile(
     path.join(dir, "handler.js"),
     "export default () => ({ outcome: 'success' });",
@@ -58,7 +53,6 @@ async function validate(dir: string) {
 }
 
 const agent = {
-  type: "agent",
   description: "Notes",
   schedule: { stage: "post-turn" },
 };
@@ -95,16 +89,19 @@ describe("validate:plugin warnings for a field written with its default", () => 
           },
         },
         record: {
-          type: "function",
           function: { handler: "../../handler.js" },
-          schedule: { trigger: { type: "manual" }, manual: { execution: "sync" } },
+          schedule: {
+            trigger: { type: "manual" },
+            manual: { execution: "sync" },
+          },
         },
       },
     );
     const result = await validate(dir);
     expect(result).toMatchObject({ status: 0, stderr: "" });
-    const fields = result.warnings.map((line) =>
-      line.replace(/^ {2}warning: .*?RUNTIME\.md: /, "").split(":")[0],
+    const fields = result.warnings.map(
+      (line) =>
+        line.replace(/^ {2}warning: .*?RUNTIME\.md: /, "").split(":")[0],
     );
     expect(fields.sort()).toEqual(
       [
@@ -128,12 +125,15 @@ describe("validate:plugin warnings for a field written with its default", () => 
 
   it("compares a story agent with the story defaults", async () => {
     const dir = await plugin(
-      { version: "1.0.0", provides: ["narrative-engine@1"] },
+      { version: "1.0.0" },
       {
         narrator: {
           ...agent,
           schedule: { stage: "narrative" },
-          io: { visibility: "story", output: { contract: "narrative-engine@1" } },
+          io: {
+            visibility: "story",
+            output: { contract: "narrative-engine@1" },
+          },
           agent: {
             model: "story",
             // A system agent's defaults are not a story agent's.
@@ -198,6 +198,122 @@ describe("validate:plugin warnings for a field written with its default", () => 
   });
 });
 
+describe("validate:plugin warnings for a field the loader works out", () => {
+  it("names each derived or defaulted package field and still passes", async () => {
+    const dir = await plugin(
+      {
+        id: "probe",
+        kind: "plugin",
+        version: "1.0.0",
+        entry: "./server/index.js",
+        tags: ["mode:dialogue", "ui:right-panel", "cost:llm"],
+        provides: ["notes@1", { contract: "summary@1", default: true }],
+        contributes: {
+          data: {
+            notes: {
+              schema: "./notes.json",
+              accepts: ["notes.records@1"],
+              authoring: {
+                title: "Notes",
+                source: { path: "data/notes.yaml", key: "id" },
+              },
+            },
+            art: {
+              schema: "./notes.json",
+              accepts: ["notes.art@1"],
+              authoring: {
+                title: "Art",
+                source: { path: "media/notes", key: "filename" },
+              },
+            },
+          },
+        },
+      },
+      {
+        notes: {
+          ...agent,
+          io: { output: { contract: "notes@1" } },
+        },
+        summary: {
+          function: { handler: "./handler.js" },
+          schedule: { stage: "post-turn" },
+          io: { output: { contract: "summary@1" } },
+        },
+      },
+    );
+    await writeFile(path.join(dir, "notes.json"), JSON.stringify({}));
+    await mkdir(path.join(dir, "server"), { recursive: true });
+    await writeFile(
+      path.join(dir, "server/index.js"),
+      "export default () => {};",
+    );
+    await writeFile(
+      path.join(dir, "runtimes/summary/handler.js"),
+      "export default () => ({ outcome: 'success' });",
+    );
+    const { status, stderr, warnings } = await validate(dir);
+    expect({ status, stderr }).toEqual({ status: 0, stderr: "" });
+    const fields = warnings.map(
+      (line) => /\.md: ([^:]+):/.exec(line)?.[1] ?? line,
+    );
+    expect(fields.sort()).toEqual(
+      [
+        "contributes.data.art.authoring.source.key",
+        "contributes.data.notes.authoring.source.key",
+        "entry",
+        "function.handler",
+        "id",
+        "kind",
+        "provides[0]",
+        "tags[1]",
+        "tags[2]",
+      ].sort(),
+    );
+    // A provider marked as the default stays as written.
+    expect(warnings.join("\n")).not.toContain("provides[1]");
+  });
+
+  it.each([
+    ["the runtime type", {}, { type: "agent", ...agent }, "type"],
+    ["optional contracts", { optional: ["notes@1"] }, agent, "optional"],
+    [
+      "a source kind",
+      {
+        contributes: {
+          data: {
+            notes: {
+              schema: "./notes.json",
+              accepts: ["notes.records@1"],
+              authoring: {
+                title: "Notes",
+                source: { kind: "yaml", path: "data/notes.yaml" },
+              },
+            },
+          },
+        },
+      },
+      agent,
+      "contributes.data.notes.authoring.source.kind",
+    ],
+  ] as const)(
+    "reports %s as a field this host no longer reads",
+    async (_name, root, runtime, field) => {
+      const dir = await plugin(root, { notes: runtime });
+      await writeFile(path.join(dir, "notes.json"), JSON.stringify({}));
+      // Loading leaves the field out and keeps the package.
+      const definition = await loadPluginDefinition(
+        (await discoverPluginAt(dir))!,
+      );
+      expect(definition.ignoredFields.map((item) => item.field)).toEqual([
+        field,
+      ]);
+      const { status, stderr } = await validate(dir);
+      expect(status).toBe(1);
+      expect(stderr).toContain(`${field}: unknown field`);
+    },
+  );
+});
+
 describe("validate:plugin warning for a missing version", () => {
   it("warns when a package with an entry module has no version", async () => {
     const dir = await plugin({ entry: "./server.js" });
@@ -213,7 +329,6 @@ describe("validate:plugin warning for a missing version", () => {
       {},
       {
         seed: {
-          type: "function",
           function: { handler: "../../handler.js" },
           schedule: { stage: "setup" },
         },

@@ -191,7 +191,7 @@ io:
       required: false
 ```
 
-- The `optional` list in the root `PLUGIN.md` must include `world-time-evolution@1`.
+- Do not list `world-time-evolution@1` in the `requires` of the root `PLUGIN.md`: left out, it is optional, and in a session without the time plugin this input is absent.
 - This input also decides the order. The runtime that reads it runs after the time is settled, so it reads the value for this turn.
 - If you read with `scope: committed`, or read `world-time-context@1` at the start of the turn, you get the value from the end of the previous turn.
 - When the time is not settled, this input does not exist, and the runtime that reads it still runs as usual. This happens in two cases: the model call fails, or this is a recursive sub-narrative whose time is settled by the outer layer (in that case the output only has `reason`).

@@ -3,18 +3,15 @@ import type { Copy, Item } from "../copy.js";
 import { asset, repoFile } from "../links.js";
 import { container, SectionHeading } from "./ui.js";
 
-// The zero-code example from docs/plugins/prompt-only.md, cut to
-// the lines that show what a plugin declares.
+// The smallest plugin from docs/plugins/prompt-only.md: one PLUGIN.md
+// with a description, a stage and a prompt.
 const MANIFEST: readonly (readonly [string, string?])[] = [
   ["---", "muted"],
-  ["id: observation"],
-  ["kind: plugin"],
-  ["requires: [narrative-engine@1]"],
+  ["description: Adds a short observation after each turn."],
   ["runtime:"],
-  ["  type: agent"],
   ["  schedule: { stage: post-turn }"],
   ["---", "muted"],
-  ["Describe one detail the player can observe", "prose"],
+  ["Write one short observation grounded", "prose"],
   ["in the latest narrative.", "prose"],
 ];
 

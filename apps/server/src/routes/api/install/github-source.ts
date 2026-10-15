@@ -185,28 +185,46 @@ export function selectPackageEntries(
     .map((e) => ({ ...e, relativePath: e.relativePath.slice(prefix.length) }));
 }
 
+/**
+ * The name a package (plugin or world) takes when its manifest writes no
+ * `id`: the last segment of its directory, or the repository's name for a
+ * package at the repository root. `repository` is the repository URL or
+ * name.
+ */
+export function packageDirectoryName(
+  repository: string,
+  directory: string,
+): string {
+  return (
+    directory.split("/").filter(Boolean).at(-1) ??
+    repository.split("/").filter(Boolean).at(-1) ??
+    ""
+  );
+}
+
 export function findPluginDirectories(
   entries: readonly ExtractedEntry[],
   directory: string,
 ): string[] {
   const selected = selectPackageEntries(entries, directory);
   const files = new Set(selected.map((e) => e.relativePath));
-  const isPlugin = (prefix: string) =>
-    files.has(`${prefix}package.json`) && files.has(`${prefix}PLUGIN.md`);
-  if (isPlugin("")) return [directory];
-  const dirs = [...files]
+  // A plugin is a directory with a root PLUGIN.md; package.json is optional.
+  if (files.has("PLUGIN.md")) return [directory];
+  const candidates = [...files]
     .filter(
       (p) =>
-        p.endsWith("/package.json") &&
+        p.endsWith("/PLUGIN.md") &&
         !p.split("/").some((s) => s.startsWith(".") || s === "node_modules"),
     )
-    .map((p) => p.slice(0, -"package.json".length))
-    .filter(isPlugin);
+    .map((p) => p.slice(0, -"PLUGIN.md".length))
+    .sort();
+  // A PLUGIN.md inside another plugin is part of that plugin.
+  const dirs = candidates.filter(
+    (dir) =>
+      !candidates.some((other) => other !== dir && dir.startsWith(other)),
+  );
   if (dirs.length === 0)
-    throw httpError(
-      400,
-      "No plugin found; expected package.json and root PLUGIN.md",
-    );
+    throw httpError(400, "No plugin found; expected a root PLUGIN.md");
   if (dirs.length > 20)
     throw httpError(
       400,

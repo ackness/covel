@@ -152,7 +152,7 @@ function fixture() {
       },
       manifests: [
         {
-          runtime: { type: "function" },
+          runtime: { function: {} },
           manifest: {
             name: `${id}/runtime`,
             pluginId: id,

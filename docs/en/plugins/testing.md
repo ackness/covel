@@ -44,7 +44,6 @@ It checks:
 - Whether the referenced files exist: code files, schemas, and interface files.
 - The built-in tool names and the tool names the plugin declares.
 - The capabilities that inputs reference, and the references between runtimes in the same package.
-- Whether `version` is the same in `PLUGIN.md` and `package.json`.
 - Whether there is a conflict between several runtimes.
 
 When there is an error, it gives the path of the file and the field:

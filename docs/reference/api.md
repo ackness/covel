@@ -1043,7 +1043,7 @@ setup runtime 挂起等玩家回答时，这次尝试不占重试次数。挂起
 
 各端点接受什么、返回什么：
 
-- `POST /api/install/plugin`：接受根目录有 `PLUGIN.md` + `package.json` 的 `.zip`，或多 runtime 布局的 `.zip`。返回 `201 { ok, kind: "plugin", id, restartRequired: true, hasServerCode }`。
+- `POST /api/install/plugin`：接受根目录有 `PLUGIN.md` 的 `.zip`（`package.json` 可选，多 runtime 布局也可以），或者只有一个顶层文件夹、`PLUGIN.md` 在那个文件夹里的 `.zip`。返回 `201 { ok, kind: "plugin", id, restartRequired: true, hasServerCode }`。
 - `POST /api/install/world`：接受根目录有 `world.yaml` + `WORLD.md` 的 `.zip`。返回 `201 { ok, kind: "world", id, restartRequired: false }`。
 - `POST /api/install/plugin/github/preview`：返回固定的提交、摘要和签名预览。
 - `.../github/update/preview`：返回 `{ status: "current" }`、`{ status: "pinned" }`，或 `{ status: "available", ... }` 加预览。更新端点的完整契约见[插件安装](./plugin-installation.md#http-契约)和[世界安装](./world-installation.md)。
@@ -1063,11 +1063,11 @@ setup runtime 挂起等玩家回答时，这次尝试不占重试次数。挂起
 - 校验复用现有的 descriptor、source 和 schema 校验器，不使用本机的 overrides，也不执行社区插件的代码。
 
 > [!IMPORTANT]
-> **canonical 插件身份**：插件的唯一身份是 manifest 根上的 `id`，它就是运行期的 `pluginId`。
+> **插件身份**：插件的唯一身份是它的 ID，也就是运行期的 `pluginId`。
 >
-> - `package.json` 的包名只在去掉精确的 `plugin-` 前缀后参与一致性校验（`@covel/plugin-foo` 对应 `id: foo`）。不一致返回 `400`。
-> - 内置保留 ID 的检查、安装目录和返回的 `id` 都使用这个 canonical ID。`@covel/plugin-narrator` + `id: narrator` 会命中保留 ID，返回 `409`。
-> - 启动时的插件发现同样要求目录名等于 manifest 根 `id`。不一致的插件注册为 `hostState: "error"`，不加载任何 runtime、tool、hook 或 wire。
+> - 安装时 ID 依次取 `PLUGIN.md` 的 `id`、包所在的文件夹名、`package.json` 的包名（去掉 scope 和精确的 `plugin-` 前缀），见[插件安装](./plugin-installation.md#安装器做什么不做什么)。写了 `id` 时，`package.json` 的包名不参与。
+> - 内置保留 ID 的检查、安装目录和返回的 `id` 都使用这个 ID。没有写 `id`、也没有顶层文件夹的包，`package.json` 写 `@covel/plugin-narrator` 时会命中保留 ID，返回 `409`。
+> - 启动时的插件发现把目录名作为 ID。`PLUGIN.md` 写了不同的 `id` 时，插件注册为 `hostState: "error"`，不加载任何 runtime、tool、hook 或 wire。
 
 ### 状态查询
 
@@ -3697,7 +3697,7 @@ runtime 报告失败时，它的原始错误保留在 `result.runtimeResults` �
 | `kind`, `source` | `core \| plugin` 与 `builtin \| community` |
 | `hostState`, `error?` | 宿主状态 `discovered \| installed \| loaded \| error`，以及加载错误 |
 | `disabledRuntimes?`, `ignoredFields?` | 不影响整个插件加载的诊断，见下 |
-| `provides`, `requires`, `optional`, `conflicts` | 包级 contract 声明 |
+| `provides`, `requires`, `optional`, `conflicts` | 包级 contract 声明。`provides` 含各 runtime 的 `io.output.contract`；`optional` 由 Covel 推出：runtime 引用了、却不在 `requires` 里的契约 |
 | `extensions` | 声明的扩展点、ID、顺序和监听信息 |
 | `eventTopics` | `contributes.events` 声明的 topic |
 | `runtimeCount`, `runtimes`, `tools`, `userSettings`, `tags` | runtime 摘要、工具和用户设置 |

@@ -30,7 +30,6 @@ async function install(
 ) {
   const runtimeDir = layout === "inline" ? "" : "runtimes/consumer/";
   const runtime = {
-    type: "function",
     schedule: { trigger: { type: "manual" } },
     function: { handler: "./handler.js" },
     guard: "./guard.js",
@@ -48,7 +47,6 @@ async function install(
       version: "1.0.0",
       description: "Probe",
       entry: "./entry.js",
-      optional: ["external.output@1"],
       ...(layout === "inline" ? { runtime } : {}),
     }),
   };

@@ -69,7 +69,7 @@ Covel 是一套 AI RPG 框架，也是一间可以直接游玩的工作室：NPC
 | **生命周期 hook**    | 在调度、模型、工具与提交边界执行横切策略   | `narrator`（草稿审查）、`char-creator`（角色资料保护） |
 | **UI 与数据契约**    | 声明面板、记忆块、schema 或 WorldData 目标 | `memory`、`character-blueprint`                        |
 
-根 `PLUGIN.md` 声明包身份、版本化的 `provides` / `requires` / `optional` 契约，以及工具、事件、UI、设置等共享 `contributes`。单 runtime 放在明确的 `runtime` 字段中；多 runtime 包则把执行清单放在 `runtimes/*/RUNTIME.md`：
+根 `PLUGIN.md` 声明包 `requires` 的版本化契约，以及工具、事件、UI、设置等共享 `contributes`。其余由加载器推出：ID 是目录名，包提供各 runtime 的 `io.output.contract`，有 `function` 块的 runtime 是函数，没有的是 agent。最小的插件只是一个 `PLUGIN.md`：一句说明、一个阶段和一段提示词。单 runtime 放在明确的 `runtime` 字段中；多 runtime 包则把执行清单放在 `runtimes/*/RUNTIME.md`：
 
 ```text
 plugins/npc-graph/

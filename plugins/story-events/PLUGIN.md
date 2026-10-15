@@ -1,7 +1,5 @@
 ---
-id: story-events
-kind: plugin
-version: 0.1.3
+version: 0.1.4
 displayName: Hidden Story Events
 description: >-
   Keeps world-authored hidden story events out of prompts and player views until
@@ -9,27 +7,15 @@ description: >-
   story planner can plant follow-up events during play.
 tags:
   - "data:world-data"
-  - "cost:function"
 author:
   name: Covel Contributors
   url: https://github.com/ackness/covel
 license: MIT
-provides:
-  - story-event-cue@1
-  - story-event.plan@1
-optional:
-  - narrative-engine@1
-  - world-time-context@1
-  - world.dimensions@1
-  - world-ir-provider@1
-  - story-event-cue@1
-  - story-event.plan@1
 contracts:
   story-event-cue@1:
     schema: ./schemas/story-event-cue.schema.json
   story-event.plan@1:
     schema: ./schemas/story-event-plan.schema.json
-entry: ./server/index.js
 contributes:
   tools:
     - plan-story-events
@@ -59,9 +45,7 @@ contributes:
           prose, and it must not spoil later events.
         example: ./examples/story-events.json
         source:
-          kind: yaml
           path: data/hidden/story-events.yaml
-          key: id
           visibility: hidden
         references:
           - path: when.**.dimension

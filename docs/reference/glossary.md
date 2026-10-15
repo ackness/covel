@@ -102,8 +102,8 @@
 
 一个带版本号的 ID，例如 `narrative-engine@1`，用来说明一个插件提供什么能力，或者需要什么能力。
 
-- 根 `PLUGIN.md` 用 `provides`、`requires`、`optional`、`conflicts` 列出契约。
-- runtime 用 `io.output.contract` 发布一个契约，用 `from: { contract }` 读取一个契约。
+- 根 `PLUGIN.md` 用 `requires`、`conflicts` 列出需要和不能共存的契约，用 `provides` 列出不由 runtime 输出的契约。
+- runtime 用 `io.output.contract` 发布一个契约（插件因此提供它），用 `from: { contract }` 读取一个契约。
 - 内核按契约找提供者，从不写死某个插件 ID。所以提供同一个契约的插件可以互相替换。
 - 只支持当前版本。不兼容的改动要换一个新 ID（`@2`）。
 

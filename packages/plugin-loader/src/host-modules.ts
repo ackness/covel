@@ -4,6 +4,10 @@
  * plugin module, bundled or installed, so a bundled plugin uses nothing an
  * installed one cannot. Every other bare import resolves as Node resolves it,
  * from the plugin's own directory.
+ *
+ * A plugin needs no `package.json`. Without one, the host loads the plugin's
+ * `.js` files as ES modules, whatever a `package.json` in a directory above
+ * the plugin says; with one, its `"type": "module"` decides as usual.
  */
 import fs from "node:fs";
 import { registerHooks } from "node:module";
@@ -31,11 +35,24 @@ export function isHostModule(specifier: string): boolean {
   );
 }
 
+/** The plugin root that holds the module at `url`, if any. */
+function pluginRootOf(url: string | undefined): string | undefined {
+  if (!url?.startsWith("file:")) return undefined;
+  const file = fileURLToPath(url);
+  for (const root of pluginRoots) if (isInside(root, file)) return root;
+  return undefined;
+}
+
 function isPluginModule(parentUrl: string | undefined): boolean {
-  if (!parentUrl?.startsWith("file:")) return false;
-  const parent = fileURLToPath(parentUrl);
-  for (const root of pluginRoots) if (isInside(root, parent)) return true;
-  return false;
+  return pluginRootOf(parentUrl) !== undefined;
+}
+
+/** A `.js` file of a plugin that has no `package.json` of its own. */
+function isPackageLessPluginScript(url: string): boolean {
+  if (!url.startsWith("file:") || !fileURLToPath(url).endsWith(".js"))
+    return false;
+  const root = pluginRootOf(url);
+  return root !== undefined && !fs.existsSync(path.join(root, "package.json"));
 }
 
 /**
@@ -63,6 +80,11 @@ export function provideHostModules(rootPath: string): void {
           parentURL: HOST_MODULE_PARENT_URL,
         });
       return nextResolve(specifier, context);
+    },
+    load(url, context, nextLoad) {
+      if (!isPackageLessPluginScript(url)) return nextLoad(url, context);
+      const loaded = nextLoad(url, { ...context, format: "module" });
+      return { ...loaded, format: "module" };
     },
   });
 }

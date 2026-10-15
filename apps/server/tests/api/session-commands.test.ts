@@ -72,7 +72,7 @@ function entry(manifests: readonly RuntimeManifest[]): PluginRegistryEntry {
     source: "builtin",
     loadedRuntimes: new Map(),
     manifests: manifests.map((runtime): ParsedRuntimeMd => ({
-      runtime: { type: runtime.runtimeType ?? "agent" },
+      runtime: runtime.runtimeType === "function" ? { function: {} } : {},
       manifest: runtime,
       promptTemplate: "",
       rawFrontmatter: {},

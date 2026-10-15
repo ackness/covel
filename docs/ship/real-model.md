@@ -229,7 +229,7 @@ pnpm e2e:verify --turns 20 \
 | `io.visibility: system`（默认）                         | 输出一栏显示 `keys=[...]`                                        |
 | `agent.loop.maxSteps: N`                                | 步数用完时，失败记录里有 `exhausted the tool loop after N steps` |
 | `agent.tools`、`contributes.tools`                      | Tool Calls 表里能看到实际的调用次数和成功率                      |
-| `type: function`                                        | 它在 Tool Calls 表里没有模型发起的调用                           |
+| 有 `function` 块（函数 runtime）                        | 它在 Tool Calls 表里没有模型发起的调用                           |
 
 ## 录制与回放
 

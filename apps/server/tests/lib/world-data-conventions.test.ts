@@ -38,7 +38,6 @@ contributes:
       authoring:
         title: Rival records
         source:
-          kind: yaml
           path: data/quests.yaml
           key: id
 ---
@@ -324,7 +323,7 @@ describe("world data conventions", () => {
                 accepts: ["rival.records@1"],
                 authoring: {
                   title: "Rival records",
-                  source: { kind: "yaml", path: "data/quests.yaml" },
+                  source: { path: "data/quests.yaml" },
                 },
               },
             },

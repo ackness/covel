@@ -78,7 +78,8 @@ describe("form provider authorization", () => {
         manifest: { ...fake, trigger: { type: "manual" as const } },
       };
       const parsed = {
-        runtime: { type: loaded.manifest.runtimeType ?? ("agent" as const) },
+        runtime:
+          loaded.manifest.runtimeType === "function" ? { function: {} } : {},
         manifest: loaded.manifest,
         promptTemplate: loaded.promptTemplate,
         rawFrontmatter: {},

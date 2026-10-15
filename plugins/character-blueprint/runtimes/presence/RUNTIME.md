@@ -1,5 +1,4 @@
 ---
-type: function
 description: Saves a character's portrait, sprite, and voice.
 schedule:
   trigger:
@@ -7,8 +6,7 @@ schedule:
 io:
   output:
     contract: character-presence@1
-function:
-  handler: ./handler.js
+function: {}
 ---
 
 # Character Presence

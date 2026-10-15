@@ -1,5 +1,4 @@
 ---
-type: agent
 description: Write a test record through an agent tool call
 schedule:
   trigger:

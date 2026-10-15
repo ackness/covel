@@ -7,11 +7,17 @@ import { resolvePluginDeclarations } from "./declarations.js";
 import { readMessageCatalogs } from "./locale-messages.js";
 import { pluginLanguages } from "./plugin-languages.js";
 import { readManifestLabels, type ManifestLabels } from "./locale-labels.js";
+import {
+  missingDefaultHandler,
+  withDerivedPackageFields,
+  type PackageFileExists,
+} from "./package-defaults.js";
 /**
  * Progressive plugin loading — three levels of detail.
  */
 
 import fs from "node:fs/promises";
+import { statSync } from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import {
@@ -230,6 +236,17 @@ async function assertInsideRoot(
   }
 }
 
+/** Whether a file exists under the package root, read synchronously. */
+function packageFileExists(rootPath: string): PackageFileExists {
+  return (relativePath) => {
+    try {
+      return statSync(path.join(rootPath, relativePath)).isFile();
+    } catch {
+      return false;
+    }
+  };
+}
+
 /**
  * Check whether a path exists and is a file.
  */
@@ -414,6 +431,13 @@ export async function loadPluginDefinition(
     const runtime = compileInlineRuntime(parsedPackage);
     if (runtime) manifests.push(runtime);
   }
+  const exists = packageFileExists(discovery.rootPath);
+  for (const parsed of [...manifests]) {
+    const disabled = missingDefaultHandler(discovery.rootPath, parsed, exists);
+    if (!disabled) continue;
+    disabledRuntimes.push(disabled);
+    manifests.splice(manifests.indexOf(parsed), 1);
+  }
   for (const disabled of disabledRuntimes)
     console.warn(`[plugin-loader] ${disabled.message}`);
   const ignoredFields = [parsedPackage, ...manifests].flatMap(
@@ -424,7 +448,11 @@ export async function loadPluginDefinition(
       `[plugin-loader] ${ignored.message}; this host does not know it and loads the package without it`,
     );
   const packageManifest = {
-    ...withoutDisabledOutputs(parsedPackage, disabledRuntimes),
+    ...withDerivedPackageFields(
+      withoutDisabledOutputs(parsedPackage, disabledRuntimes),
+      manifests,
+      exists,
+    ),
     contractSchemas,
   };
   const plugin = packageManifest.plugin;

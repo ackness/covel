@@ -20,7 +20,6 @@ import {
 const md = (value: object) => `---\n${JSON.stringify(value)}\n---\nPrompt.\n`;
 const root = { id: "probe", kind: "plugin", description: "Probe" };
 const staged = {
-  type: "function",
   function: { handler: "../../handler.js" },
   schedule: { stage: "narrative" },
 };
@@ -75,7 +74,6 @@ describe("unknown manifest fields", () => {
     [
       {
         runtime: {
-          type: "agent",
           schedule: { stage: "narrative" },
           priority: 3,
         },
@@ -157,7 +155,6 @@ describe("unknown manifest fields", () => {
     ["gaurd", "guard"],
     ["permission", "permissions"],
     ["efects", "effects"],
-    ["typ", "type"],
     ["schedul", "schedule"],
   ])("RUNTIME.md rejects %s, which looks like %s", (key, meant) => {
     expect(() => runtimeMd({ ...staged, [key]: {} })).toThrow(

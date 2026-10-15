@@ -9,7 +9,6 @@ describe("collection plugin contract completeness", () => {
   const consumer = collectionPluginFacts({
     id: "observer",
     requires: ["narrative-engine@1"],
-    optional: ["world-time-context@1"],
   });
 
   it("reports a missing plugin requirement even without a world", () => {

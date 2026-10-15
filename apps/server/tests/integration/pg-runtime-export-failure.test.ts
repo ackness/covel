@@ -54,7 +54,6 @@ describe.skipIf(!database)("PostgreSQL export failure isolation", () => {
             name: `probe/${id}`,
             pluginId: "probe",
             description: "Fault probe",
-            type: "function",
             pluginType: "plugin",
             outputKind: id === "story" ? "story" : "plugin",
             ...(id === "story"

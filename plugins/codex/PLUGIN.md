@@ -1,22 +1,17 @@
 ---
-id: codex
-kind: plugin
-version: 0.0.37
+version: 0.0.38
 displayName: Codex
 description: >-
   Automatically collects newly discovered places, people, items, and rumors for
   later review.
 tags:
   - "data:lorebook"
-  - "cost:llm"
-  - "ui:right-panel"
 author:
   name: Covel Contributors
   url: https://github.com/ackness/covel
 license: MIT
 requires:
   - world-ir-provider@1
-entry: ./server/index.js
 contributes:
   ui:
     right:
@@ -33,7 +28,6 @@ contributes:
   tools:
     - sync-codex-entries
 runtime:
-  type: agent
   schedule:
     stage: post-turn
   io:

@@ -136,7 +136,6 @@ contributes:
         title: World notes
         example: ./examples/notes.json
         source:
-          kind: json
           path: data/notes.json
           key: id
 ---

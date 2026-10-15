@@ -1,5 +1,4 @@
 ---
-type: agent
 description: >-
   Collects characters, groups, factions, and the relationships between them from
   the story.

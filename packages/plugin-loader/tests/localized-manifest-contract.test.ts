@@ -25,7 +25,6 @@ kind: plugin
 description: English description
 provides: [narrative-engine@1]
 runtime:
-  type: agent
   schedule: {stage: narrative}
   io: {output: {contract: narrative-engine@1}}
   agent: {tools: {builtin: [plugin-data-set]}}
@@ -38,7 +37,6 @@ kind: plugin
 description: 中文描述
 provides: [narrative-engine@1, image-generation@1]
 runtime:
-  type: agent
   schedule: {stage: pre-turn}
   io: {output: {contract: narrative-engine@1}}
   agent: {tools: {builtin: [plugin-data-set, emit-event]}}
@@ -99,7 +97,7 @@ runtime:
     const runtimeDir = path.join(dir, "runtimes", "story");
     await fs.mkdir(runtimeDir, { recursive: true });
     const runtime =
-      "---\ntype: agent\nschedule: {stage: narrative}\nagent: {tools: {builtin: [plugin-data-set]}}\n---\nCanonical body.\n";
+      "---\nschedule: {stage: narrative}\nagent: {tools: {builtin: [plugin-data-set]}}\n---\nCanonical body.\n";
     await fs.writeFile(path.join(runtimeDir, "RUNTIME.md"), runtime);
     await fs.writeFile(
       path.join(runtimeDir, "RUNTIME.zh.md"),

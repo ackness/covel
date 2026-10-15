@@ -53,7 +53,7 @@ function registerPlugin(
 ): void {
   const manifest = { ...makeManifest(pluginId), pluginType };
   const parsed: ParsedRuntimeMd = {
-    runtime: { type: "agent" },
+    runtime: {},
     manifest,
     promptTemplate: "",
     rawFrontmatter: {},

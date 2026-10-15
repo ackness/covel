@@ -13,23 +13,15 @@
 
 别人需要知道三件事：这是哪个版本，它做什么，它需要哪个版本的 Covel。
 
-脚手架已在 `PLUGIN.md` 和 `package.json` 写好 `0.1.0`。发布前检查版本号，升级时同时修改两处：
+脚手架已在 `PLUGIN.md` 写好 `0.1.0`。发布前检查版本号，每次发布时调高它：
 
 ```yaml
-id: "tavern-rumors"
-kind: plugin
 version: 0.1.0
 covel: ">=0.0.51"
 ```
 
-- `version` 是你这个插件的版本。`package.json` 里的 `version` 要和它一样。
+- `version` 是你这个插件的版本。它只写在 `PLUGIN.md` 里；插件带 `package.json` 时，那里不写版本。
 - `covel` 是它需要的 Covel 版本。脚手架已经替你填了创建时的版本。
-
-两个版本号不一致时，校验会直接告诉你：
-
-```text
-✗ .../tavern-rumors: PLUGIN.md version 0.2.0 differs from package.json version 0.1.0
-```
 
 然后改 `README.md`，至少写清楚：
 
@@ -41,14 +33,14 @@ covel: ">=0.0.51"
 
 ## 2. 打成 ZIP
 
-进入插件文件夹，把里面的内容打包。注意是打包**里面的内容**，不是把整个文件夹再套一层：
+在插件目录里把整个插件文件夹打包：
 
 ```bash
-cd ~/.covel/plugins/tavern-rumors
-zip -r ~/tavern-rumors.zip . -x "node_modules/*" ".*"
+cd ~/.covel/plugins
+zip -r ~/tavern-rumors.zip tavern-rumors -x "tavern-rumors/node_modules/*" "*/.*"
 ```
 
-打开 ZIP，第一层就应该能看到 `PLUGIN.md` 和 `package.json`。
+打开 ZIP，第一层是文件夹 `tavern-rumors`，里面是 `PLUGIN.md`。`PLUGIN.md` 没有写 `id` 时，Covel 用这个文件夹名作为插件 ID。只打包文件夹里面的内容也可以，这时插件要么写 `id`，要么带一个写了 `name` 的 `package.json`，规则见[安装插件](../reference/plugin-installation.md)。
 
 > [!IMPORTANT]
 > 安装时 Covel 不会替你安装依赖，也不会运行任何构建命令。包里的代码必须拿来就能运行。插件 SDK `@covel/plugin-handlers-utils` 和 `zod` 由 Covel 提供，直接 `import`，不用打包。

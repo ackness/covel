@@ -409,5 +409,5 @@ export type {
   PluginDiagnosticsSnapshot,
 } from "./plugin-diagnostics.js";
 
-export type { PluginManifest } from "./plugin-manifest.js";
+export type { PluginManifest, PluginManifestInput } from "./plugin-manifest.js";
 export type { RuntimeAuthoringManifest } from "./runtime-manifest.js";

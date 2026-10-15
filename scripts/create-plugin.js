@@ -334,18 +334,11 @@ function runCustomMultiRuntime(runtimes) {
     }
   }
 
-  const pluginVersion = JSON.parse(
-    readFileSync(join(targetDir, "package.json"), "utf-8"),
-  ).version;
-
-  // Custom runtimes do not include the demo's note panel.
-  // The agent stub reads the narrator's output, so the package names the contract.
-  const optional = runtimes.some((runtime) => runtime.type === "agent")
-    ? "optional: [narrative-engine@1]\n"
-    : "";
+  // Custom runtimes do not include the demo's note panel. The directory name
+  // is the plugin ID, and the loader works out the rest.
   writeFileSync(
     join(targetDir, "PLUGIN.md"),
-    `---\nid: ${pluginName}\ndescription: ${placeholders["{{pluginDescription}}"]}\nkind: plugin\nversion: "${pluginVersion}"\ncovel: "${placeholders["{{hostRange}}"]}"\n${optional}---\n`,
+    `---\nversion: "0.1.0"\ncovel: "${placeholders["{{hostRange}}"]}"\ndescription: ${placeholders["{{pluginDescription}}"]}\n---\n`,
     "utf-8",
   );
   mkdirSync(join(targetDir, "locales"), { recursive: true });
@@ -408,12 +401,10 @@ ${sections}`;
 
 function renderFunctionStubManifest(runtimeName) {
   return `---
-type: function
 description: ${runtimeName} function runtime, replace with the real responsibility.
 schedule:
   trigger: { type: manual }
-function:
-  handler: ./handler.js
+function: {}
 ---
 `;
 }
@@ -466,7 +457,6 @@ export default async function ${camelize(runtimeName)}Handler(ctx) {
 
 function renderAgentStubManifest(runtimeName) {
   return `---
-type: agent
 description: ${runtimeName} agent runtime, replace with the real responsibility.
 schedule:
   stage: post-turn

@@ -30,7 +30,6 @@ describe("guide manifest and UI loading", () => {
       name: "guide",
       pluginId: "guide",
       pluginType: "plugin",
-      entry: "./server/index.js",
       ui: { message: ["./ui/guide-block.json"] },
     });
     expect(parsed.manifest).not.toHaveProperty("stage");
@@ -110,10 +109,13 @@ describe("guide manifest and UI loading", () => {
     expect(chinese.promptTemplate).toContain(
       "叙事里已经做完的动作、已经回答的问题，不能再作为短句给出",
     );
+    const { packageManifest } = await loadPluginDefinition(discovery!);
+    // server/index.js is the entry without being named.
+    expect(packageManifest.manifest.entry).toBe("./server/index.js");
     const ui = await loadPluginUiSpecs(
       discovery!.rootPath,
       discovery!.id,
-      (await loadPluginDefinition(discovery!)).packageManifest.manifest.ui,
+      packageManifest.manifest.ui,
     );
     expect(ui.diagnostics).toEqual([]);
     expect(ui.slots.message).toHaveLength(1);

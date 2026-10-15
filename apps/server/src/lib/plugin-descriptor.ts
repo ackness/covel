@@ -58,19 +58,50 @@ function runtimeSummary(manifest: RuntimeManifest): PluginRuntimeSummary {
   };
 }
 
+/**
+ * Contracts the runtimes read (`io.inputs`, committed inputs, `needs`) that
+ * the package does not require: they are used when a provider is active.
+ */
+function optionalContracts(
+  manifests: readonly RuntimeManifest[],
+  requires: readonly string[],
+): string[] {
+  return uniqueSorted(
+    manifests.flatMap((manifest) => [
+      ...Object.values(manifest.inputs ?? {}).flatMap((binding) =>
+        "capability" in binding.from ? [binding.from.capability] : [],
+      ),
+      ...(manifest.input?.inject ?? []).flatMap((binding) =>
+        binding.kind === "runtime-export" && "capability" in binding.from
+          ? [binding.from.capability]
+          : [],
+      ),
+      ...(manifest.needs ?? []).flatMap((need) =>
+        typeof need === "object" && "capability" in need
+          ? [need.capability]
+          : [],
+      ),
+    ]),
+  ).filter((contract) => !requires.includes(contract));
+}
+
 /** What session plugin resolution reads from one entry. */
 export function pluginContractFacts(entry: PluginRegistryEntry) {
   const plugin = entry.packageManifest?.plugin;
   const declarations = pluginDeclarations(entry).map(
     ({ manifest }) => manifest,
   );
+  const requires = plugin?.requires ?? [];
   return {
     id: entry.id,
     kind: plugin?.kind ?? ("plugin" as const),
     source: getPluginTrustInfo(entry.id, entry.source).source,
     provides: plugin?.provides ?? [],
-    requires: plugin?.requires ?? [],
-    optional: plugin?.optional ?? [],
+    requires,
+    optional: optionalContracts(
+      pluginManifestRecords(entry).map(({ manifest }) => manifest),
+      requires,
+    ),
     conflicts: plugin?.conflicts ?? [],
     extensions: [
       ...(plugin?.contributes?.extensions ?? []),

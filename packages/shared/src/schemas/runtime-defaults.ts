@@ -9,6 +9,18 @@
 /** `io.visibility` of a runtime that does not write one. */
 export const DEFAULT_RUNTIME_VISIBILITY = "system";
 
+/**
+ * PLUGIN.md `entry` of a package that writes none: this file, relative to the
+ * package root, when it exists.
+ */
+export const DEFAULT_PLUGIN_ENTRY = "./server/index.js";
+
+/**
+ * `function.handler` of a function runtime that writes none: this file next
+ * to the manifest that declares the runtime, when it exists.
+ */
+export const DEFAULT_FUNCTION_HANDLER = "./handler.js";
+
 /** The visibilities a runtime may declare. */
 export type RuntimeVisibility = "story" | "system";
 

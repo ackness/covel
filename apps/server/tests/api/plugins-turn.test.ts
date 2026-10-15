@@ -52,7 +52,7 @@ function makeParsedManifest(
 ): ParsedRuntimeMd {
   const { name, description, pluginId, ...rest } = manifest;
   return {
-    runtime: { type: "agent" },
+    runtime: {},
     manifest: {
       name,
       pluginId: pluginId ?? name,

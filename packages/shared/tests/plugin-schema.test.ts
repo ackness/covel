@@ -199,11 +199,11 @@ describe("plugin manifest dataSchemas", () => {
       tags: ["mode:story"],
       provides: ["story@1"],
       requires: ["world@1"],
-      optional: ["audio@1"],
       conflicts: ["other-story@1"],
     };
     expect(pluginManifestSchema.parse(root)).toEqual(root);
     for (const field of [
+      "optional",
       "relations",
       "capabilities",
       "fallbackFor",
@@ -258,7 +258,7 @@ describe("plugin manifest dataSchemas", () => {
             accepts: ["probe.records@1"],
             authoring: {
               title: "Records",
-              source: { kind: "json", path: sourcePath },
+              source: { path: sourcePath },
             },
           },
         },
@@ -374,7 +374,6 @@ describe("kernel extension conflicts", () => {
         kind: "plugin",
         description: "Probe",
         requires: [contract],
-        optional: [contract],
       };
       expect(pluginManifestSchema.safeParse(root).success).toBe(true);
       const invalid = pluginManifestSchema.safeParse({
@@ -402,5 +401,50 @@ describe("validatePluginManifest", () => {
     expect(
       validatePluginManifest({ name: "probe", description: "x" }).valid,
     ).toBe(false);
+  });
+});
+
+describe("fields the author need not write", () => {
+  it("parses a package that writes only a description and one runtime stage", () => {
+    const parsed = pluginManifestSchema.parse({
+      description: "Adds a short observation after each turn.",
+      runtime: { schedule: { stage: "post-turn" } },
+    });
+    // The loader fills the id in from the directory name.
+    expect(parsed.id).toBeUndefined();
+    expect(parsed.kind).toBe("plugin");
+  });
+
+  it("works out a data source's kind from its path", () => {
+    const withPath = (sourcePath: string) =>
+      pluginManifestSchema.safeParse({
+        description: "Probe",
+        contributes: {
+          data: {
+            notes: {
+              schema: "./notes.json",
+              accepts: ["probe.notes@1"],
+              authoring: { title: "Notes", source: { path: sourcePath } },
+            },
+          },
+        },
+      });
+    for (const sourcePath of [
+      "data/notes.yaml",
+      "data/notes.yml",
+      "data/notes.json",
+      "media/notes",
+    ])
+      expect(withPath(sourcePath).success, sourcePath).toBe(true);
+    const text = withPath("data/notes.txt");
+    expect(text.success).toBe(false);
+    expect(text.error?.issues[0]?.path).toEqual([
+      "contributes",
+      "data",
+      "notes",
+      "authoring",
+      "source",
+      "path",
+    ]);
   });
 });

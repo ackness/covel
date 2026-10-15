@@ -48,7 +48,6 @@ version: 1.0.0
   await writeFile(
     join(dir, "runtimes", "source", "RUNTIME.md"),
     `---
-type: function
 description: Upstream producer
 schedule:
   stage: narrative
@@ -62,7 +61,6 @@ function:
   await writeFile(
     join(dir, "runtimes", "consumer", "RUNTIME.md"),
     `---
-type: function
 description: Downstream consumer gated on the upstream
 schedule:
   stage: post-turn

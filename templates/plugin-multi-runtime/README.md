@@ -27,7 +27,7 @@ cp -r {{pluginName}}/ ~/.covel/plugins/
 
 ## 测试
 
-这个插件不需要安装依赖：handler 是普通 ES module，运行所需的上下文由框架注入。`handler.js` 里的 `PluginFunctionHandler` JSDoc 标注只描述 `ctx` 与返回值的形状，类型来自 Covel 仓库内的 `@covel/plugin-handlers-utils`。
+这个插件不需要安装依赖，也没有 `package.json`：handler 是普通 ES module，宿主按 ES module 加载它，运行所需的上下文由框架注入。`handler.js` 里的 `PluginFunctionHandler` JSDoc 标注只描述 `ctx` 与返回值的形状，类型来自 Covel 仓库内的 `@covel/plugin-handlers-utils`。
 
 在 Covel 仓库根目录做静态校验（只检查声明，不执行 entry）：
 
@@ -44,7 +44,7 @@ pnpm test:runtime -- {{pluginName}} --pretty
 ## 文档分工
 
 - `README.md` 面向人类和开发者，说明插件用途、实现方式、运行时划分和维护信息。
-- 根 `PLUGIN.md` 声明包身份、契约与 `contributes`；子 `RUNTIME.md` 使用 `type`、`schedule`、`io`、`agent`/`function` 分组，其正文保存 agent 提示词。
+- 根 `PLUGIN.md` 声明版本、宿主范围与 `contributes`；插件 ID 就是目录名。子 `RUNTIME.md` 使用 `schedule`、`io`、`agent`/`function` 分组，其正文保存 agent 提示词。写了 `function` 块的 runtime 是函数 runtime，它的 handler 默认是同目录的 `handler.js`。
 - `PLUGIN.md`、`RUNTIME.md` 和 `ui/*.json` 只写 English：名称、说明、界面文字和提示词。中文（或其他语言）的名称与说明写在 `locales/<locale>.yaml`，按清单文件分节；界面文字的译文写在同一个文件的 `messages` 里，左边是 spec 里的 English 原文，右边是译文。
 - 提示词的简体中文版本是可选的 `RUNTIME.zh.md`：frontmatter 留空，正文写译文。有了它，中文会话读它而不是 English 正文，所以两份必须同步修改；没有它，所有会话都读 English 正文。
 
@@ -53,9 +53,9 @@ pnpm test:runtime -- {{pluginName}} --pretty
 - 改 `runtimes/note/handler.js`，把 `notes` 记录结构替换为你的插件状态。
 - 改 `runtimes/analyst/RUNTIME.md`，把“观察剧情并记录 actionable note”替换为你的实际任务。
 - 改 `runtimes/note/ui/panel.json`，调整面板布局或加入更多组件（参考 `docs/reference/ui-components.md`）。
-- 加新 runtime：在 `runtimes/` 下新建子目录，里面放 `RUNTIME.md`（agent 模式）或 `RUNTIME.md` + `handler.js`（function 模式）。
-- 与其他插件协作：在根 `PLUGIN.md` 用 `provides` / `requires` / `optional` 声明版本化契约，runtime 通过 `io.inputs` 的 `from: { contract }` 读取；不要引用其他包的 runtime ID 或数据 namespace。
-- 脚手架已在根 `PLUGIN.md` 写入 `covel: ">=<创建时的宿主版本>"`，范围之外的宿主不安装也不加载这个包。两处版本已统一为 `0.1.0`，发布新版本时同时修改 `PLUGIN.md` 和 `package.json` 的 `version`；在更早的版本上验证过就把下限调低，需要上限时写成 `">=0.0.45 <0.1.0"`。
+- 加新 runtime：在 `runtimes/` 下新建子目录，里面放 `RUNTIME.md`（agent 模式），或写了 `function: {}` 的 `RUNTIME.md` 加 `handler.js`（function 模式）。
+- 与其他插件协作：runtime 用 `io.output.contract` 发布契约，包自动提供它；用 `io.inputs` 的 `from: { contract }` 读取别的包的契约，没有提供者也能运行的不用声明，缺了就不能用的写进根 `PLUGIN.md` 的 `requires`。不要引用其他包的 runtime ID 或数据 namespace。
+- 脚手架已在根 `PLUGIN.md` 写入 `covel: ">=<创建时的宿主版本>"`，范围之外的宿主不安装也不加载这个包。版本从 `0.1.0` 开始，只写在 `PLUGIN.md`，发布新版本时改它的 `version`；在更早的版本上验证过就把下限调低，需要上限时写成 `">=0.0.45 <0.1.0"`。
 
 ## 参考
 

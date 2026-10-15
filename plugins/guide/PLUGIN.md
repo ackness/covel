@@ -1,23 +1,15 @@
 ---
-id: guide
-kind: plugin
-version: 0.0.37
+version: 0.0.38
 displayName: Action Suggestions
 description: >-
   After each story beat, recaps the relevant context, states the current
   decision, and suggests actions you can use right away.
-tags:
-  - "cost:llm"
-  - "ui:message-block"
 author:
   name: Covel Contributors
   url: https://github.com/ackness/covel
 license: MIT
-provides:
-  - scene-prompts@1
 requires:
   - narrative-engine@1
-entry: ./server/index.js
 contributes:
   extensions:
     - point: ui.slot@1
@@ -43,7 +35,6 @@ contributes:
   tools:
     - generate-guide
 runtime:
-  type: agent
   schedule:
     stage: post-turn
   io:

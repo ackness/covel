@@ -229,7 +229,7 @@ The biggest use of this script is to confirm that each runtime's actual behavior
 | `io.visibility: system` (the default)                   | The output column shows `keys=[...]`                                                        |
 | `agent.loop.maxSteps: N`                                | When the steps run out, the failure record contains `exhausted the tool loop after N steps` |
 | `agent.tools`, `contributes.tools`                      | The Tool Calls table shows the actual number of calls and the success rate                  |
-| `type: function`                                        | It has no model-initiated calls in the Tool Calls table                                     |
+| A `function` block (a function runtime)                 | It has no model-initiated calls in the Tool Calls table                                     |
 
 ## Recording and replay
 

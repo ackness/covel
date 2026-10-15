@@ -539,7 +539,7 @@ describe("POST /api/actions — deferred background followers (main path)", () =
         followerManifest,
         notesManifest,
       ].map((manifest) => ({
-        runtime: { type: "function" as const },
+        runtime: { function: {} },
         manifest,
         promptTemplate: "",
         rawFrontmatter: {},

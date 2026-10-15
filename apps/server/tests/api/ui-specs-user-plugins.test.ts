@@ -34,7 +34,6 @@ contributes:
     right:
       - ./ui/panel.json
 runtime:
-  type: function
   schedule:
     stage: post-turn
   function:
@@ -51,7 +50,6 @@ contributes:
     right:
       - ./ui/button.json
 runtime:
-  type: function
   schedule:
     trigger:
       type: manual

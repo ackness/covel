@@ -1,9 +1,7 @@
 ---
-id: service-provider-probe
-kind: plugin
+version: 1.0.0
 displayName: Service Provider Probe
 description: Provides a pure note formatting service for third-party composition tests.
-entry: ./server/index.js
 contributes:
   services:
     - probe.note-format@1

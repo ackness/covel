@@ -1,6 +1,7 @@
 import { providedContracts } from "./plugin-selection.js";
 import type { CollectionProblem } from "./schemas/collection.js";
 import { satisfiesHostVersionRange } from "./utils/host-version-range.js";
+import type { PluginManifest } from "./types/plugin-manifest.js";
 
 /** What a plugin contributes to resolving a set, read from its manifest. */
 export interface CollectionPluginFacts {
@@ -26,29 +27,25 @@ const strings = (value: unknown): string[] =>
     ? value.filter((item): item is string => typeof item === "string")
     : [];
 
-type ContractSource = Parameters<typeof providedContracts>[0];
-
-/** Facts from a root PLUGIN.md frontmatter that is already parsed as data. */
+/**
+ * Facts from a loaded root manifest. Its `id` and `provides` are the ones the
+ * loader works out: the directory name, and the contracts the runtimes
+ * output as well as the written ones.
+ */
 export function collectionPluginFacts(
-  manifest: Readonly<Record<string, unknown>>,
+  manifest: Pick<
+    PluginManifest,
+    "id" | "provides" | "requires" | "covel" | "contributes"
+  >,
 ): CollectionPluginFacts {
-  const contributes = isRecord(manifest.contributes)
-    ? manifest.contributes
-    : {};
   return {
-    id: String(manifest.id),
-    requires: strings(manifest.requires),
+    id: manifest.id,
+    requires: [...(manifest.requires ?? [])],
     contracts: providedContracts({
-      provides: Array.isArray(manifest.provides)
-        ? (manifest.provides as NonNullable<ContractSource["provides"]>)
-        : [],
-      extensions: Array.isArray(contributes.extensions)
-        ? (contributes.extensions as NonNullable<ContractSource["extensions"]>)
-        : [],
+      provides: manifest.provides ?? [],
+      extensions: manifest.contributes?.extensions ?? [],
     }),
-    ...(typeof manifest.covel === "string"
-      ? { hostRange: manifest.covel }
-      : {}),
+    ...(manifest.covel ? { hostRange: manifest.covel } : {}),
   };
 }
 

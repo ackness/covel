@@ -1,5 +1,4 @@
 ---
-type: function
 description: Tracks the current scene and time of day for the visual stage.
 schedule:
   trigger:
@@ -8,8 +7,7 @@ schedule:
 io:
   output:
     contract: scene-stage@1
-function:
-  handler: ./handler.js
+function: {}
 ---
 
 Scene Stage's resolver is a deterministic function runtime triggered by `scene.set`. It resolves the current location and time of day against the world's scene registry and publishes `stage/current` for the visual stage to consume. A location with no registry match has no backdrop (`source: "none"`) and the stage falls back to the world image.

@@ -46,18 +46,6 @@ export function findWorldDirectories(
     );
 }
 
-/**
- * The name a world package without `id` takes: the last segment of its
- * directory, or the repository's name for a package at the repository root.
- */
-export function worldPackageName(repository: string, directory: string) {
-  return (
-    directory.split("/").filter(Boolean).at(-1) ??
-    repository.split("/").filter(Boolean).at(-1) ??
-    ""
-  );
-}
-
 export async function inspectWorldBundle(
   entries: readonly ExtractedEntry[],
   packageName?: string,

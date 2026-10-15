@@ -1,7 +1,5 @@
 ---
-id: living-world-rules
-kind: plugin
-version: 0.0.37
+version: 0.0.38
 displayName: World Rules
 description: >-
   Shows the world's lasting rules, such as taboos, customs, and special setting
@@ -9,8 +7,6 @@ description: >-
 tags:
   - "data:world-data"
   - "data:lorebook"
-  - "cost:function"
-  - "ui:right-panel"
 author:
   name: Covel Contributors
   url: https://github.com/ackness/covel
@@ -36,9 +32,7 @@ contributes:
           already tracks.
         example: ./examples/rules.json
         source:
-          kind: yaml
           path: data/rules/*.yaml
-          key: id
           lorebook: true
   worldProjections:
     rules-from-world-ir:

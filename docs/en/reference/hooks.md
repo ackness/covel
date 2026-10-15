@@ -15,10 +15,9 @@ A hook does not hold gameplay. A gameplay rule belongs in a runtime or a tool.
 
 ## Declaring and registering
 
-There are two steps. The root `PLUGIN.md` lists the events you use, and the `entry` module registers the handlers. The two must match, or the plugin fails to load. One declaration can correspond to several handlers. Each handler is added with one call to `covel.on()`.
+There are two steps. The root `PLUGIN.md` lists the events you use, and the `entry` module (`server/index.js` by default) registers the handlers. The two must match, or the plugin fails to load. One declaration can correspond to several handlers. Each handler is added with one call to `covel.on()`.
 
 ```yaml
-entry: ./server/index.js
 contributes:
   hooks:
     - event: PreToolUse

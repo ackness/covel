@@ -1,5 +1,4 @@
 ---
-type: agent
 description: >-
   Guides you through creating your hero at the start and brings them into the
   story.

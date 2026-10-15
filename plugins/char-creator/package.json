@@ -1,6 +1,5 @@
 {
   "name": "@covel/plugin-char-creator",
-  "version": "0.0.38",
   "private": true,
   "type": "module",
   "scripts": {

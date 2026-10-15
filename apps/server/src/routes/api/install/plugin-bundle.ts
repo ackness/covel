@@ -1,6 +1,8 @@
 import path from "node:path";
 import { z } from "zod";
+import { pluginIdSchema } from "@covel/shared";
 import {
+  missingDefaultHandler,
   packageModuleTypeProblem,
   pluginImportReferences,
   type ParsedPluginMd,
@@ -12,6 +14,7 @@ import {
   parseRuntimeMd,
   validatePluginDeclarations,
   multiRuntimeRootDiagnostics,
+  withDerivedPackageFields,
   type ParsedRuntimeMd,
 } from "@covel/plugin-loader";
 import { assertHostVersionInRange } from "../../../lib/app-version.js";
@@ -37,23 +40,25 @@ export function readPluginFrontmatter(
 
 interface PluginManifestSummary {
   readonly pluginId: string;
+  /** The root manifest with its derived entry, contracts and tags. */
   readonly manifest: ParsedPluginMd;
+  /** The `version` of PLUGIN.md. */
   readonly version: string | null;
   readonly hasServerCode: boolean;
 }
 
+/** What installation reads from an optional `package.json`. */
 const installPackageSchema = z.object({
-  version: z.string().max(100).optional(),
+  name: z.unknown().optional(),
   type: z.unknown().optional(),
   dependencies: z.record(z.string(), z.unknown()).optional(),
   optionalDependencies: z.record(z.string(), z.unknown()).optional(),
   peerDependencies: z.record(z.string(), z.unknown()).optional(),
 });
+type InstallPackage = z.infer<typeof installPackageSchema>;
 
 /** All install paths require a self-contained release; development tools are allowed. */
-function validateRuntimeDependencies(
-  pkg: z.infer<typeof installPackageSchema>,
-): void {
+function validateRuntimeDependencies(pkg: InstallPackage): void {
   const declared = (
     ["dependencies", "optionalDependencies", "peerDependencies"] as const
   ).filter((field) => Object.keys(pkg[field] ?? {}).length > 0);
@@ -63,35 +68,109 @@ function validateRuntimeDependencies(
     );
 }
 
-function readPackageId(entries: readonly ExtractedEntry[]): string | null {
-  const pkg = entries.find((e) => e.relativePath === "package.json");
-  if (!pkg) return null;
+/** The package's `package.json`, when it has one. */
+function readPackageJson(
+  entries: readonly ExtractedEntry[],
+): InstallPackage | undefined {
+  const entry = entries.find((e) => e.relativePath === "package.json");
+  if (!entry) return undefined;
   try {
-    const json = JSON.parse(pkg.content.toString("utf-8")) as {
-      name?: unknown;
-    };
-    if (typeof json.name !== "string" || !json.name.trim()) return null;
-    // `@covel/plugin-foo` → `plugin-foo`; `narrator` stays.
-    const name = json.name.trim();
-    return name.split("/").at(-1) ?? name;
-  } catch {
-    return null;
+    return installPackageSchema.parse(
+      JSON.parse(entry.content.toString("utf-8")),
+    );
+  } catch (error) {
+    throw httpError(
+      400,
+      `package.json is not valid: ${error instanceof Error ? error.message : String(error)}`,
+    );
   }
 }
 
 /**
- * Canonical plugin ID for an npm basename: the Covel convention names the
- * package `@covel/plugin-<id>` while `PLUGIN.md` declares `id: <id>`, so a
- * single exact `plugin-` prefix is stripped for identity comparison. Nothing
- * else is normalized — the runtime identity IS the root manifest id.
+ * The plugin ID an npm package name suggests: the Covel convention names the
+ * package `@covel/plugin-<id>`, so the scope and a single exact `plugin-`
+ * prefix are dropped.
  */
-function canonicalFromPackageId(pkgId: string): string {
-  return pkgId.startsWith("plugin-") ? pkgId.slice("plugin-".length) : pkgId;
+function idFromPackageName(name: unknown): string | undefined {
+  if (typeof name !== "string" || !name.trim()) return undefined;
+  const base = name.trim().split("/").at(-1) ?? "";
+  return base.startsWith("plugin-") ? base.slice("plugin-".length) : base;
+}
+
+function validPluginId(id: string): boolean {
+  return id.length <= 64 && pluginIdSchema.safeParse(id).success;
+}
+
+/**
+ * The ID a package installs under. A written `id` is the ID. Without one it
+ * is the name of the directory that held the package (the top-level
+ * directory of the archive, the directory of a repository, or the repository
+ * itself), and without a usable directory name the `package.json` name.
+ */
+function installPluginId(
+  frontmatter: Readonly<Record<string, unknown>>,
+  directory: string | undefined,
+  packageJson: InstallPackage | undefined,
+): string {
+  if (frontmatter.id !== undefined) {
+    const written = String(frontmatter.id);
+    if (!validPluginId(written))
+      throw httpError(400, `invalid plugin id in PLUGIN.md: ${written}`);
+    return written;
+  }
+  const candidates = [directory, idFromPackageName(packageJson?.name)].filter(
+    (candidate): candidate is string => Boolean(candidate),
+  );
+  const id = candidates.find(validPluginId);
+  if (id) return id;
+  throw httpError(
+    400,
+    candidates.length
+      ? `PLUGIN.md writes no id, and neither ${candidates.map((c) => `"${c}"`).join(" nor ")} is a plugin ID (lowercase letters, digits and hyphens); write id in PLUGIN.md`
+      : "PLUGIN.md writes no id, and the package has no directory or package.json name to take it from; write id in PLUGIN.md",
+  );
+}
+
+/** macOS archives keep resource forks here; they are not package files. */
+const MACOS_METADATA = "__MACOSX/";
+
+/**
+ * An archive of the package directory holds the files under that directory.
+ * Its name stands in for an `id` the package does not write, and its files
+ * install as the package root. An archive with a root PLUGIN.md is the
+ * package root itself.
+ */
+export function unwrapPackageDirectory(entries: readonly ExtractedEntry[]): {
+  readonly entries: readonly ExtractedEntry[];
+  readonly directory?: string;
+} {
+  if (entries.some((entry) => entry.relativePath === "PLUGIN.md"))
+    return { entries };
+  const files = entries.filter(
+    (entry) => !entry.relativePath.startsWith(MACOS_METADATA),
+  );
+  const roots = new Set(files.map((entry) => entry.relativePath.split("/")[0]));
+  const [directory] = roots;
+  if (
+    roots.size !== 1 ||
+    !directory ||
+    !files.some((entry) => entry.relativePath === `${directory}/PLUGIN.md`)
+  )
+    return { entries };
+  return {
+    directory,
+    entries: files.map((entry) => ({
+      ...entry,
+      relativePath: entry.relativePath.slice(directory.length + 1),
+    })),
+  };
 }
 
 export function validatePluginBundle(
   entries: readonly ExtractedEntry[],
   reservedPluginIds: ReadonlySet<string>,
+  /** Name of the directory that held the package, when there was one. */
+  directory?: string,
 ): PluginManifestSummary {
   assertNoReservedInstallFiles(entries);
   // Validate translations too: discovery can select a localized manifest
@@ -104,17 +183,6 @@ export function validatePluginBundle(
     )
       readPluginFrontmatter(entry.content.toString("utf8"));
   }
-  const pkgId = readPackageId(entries);
-  if (!pkgId) {
-    throw httpError(400, 'package.json missing or has no valid "name" field');
-  }
-  if (!/^[a-z0-9][a-z0-9-_]{0,63}$/i.test(pkgId)) {
-    throw httpError(
-      400,
-      `invalid plugin id derived from package.json: ${pkgId}`,
-    );
-  }
-
   const manifestEntry = entries.find(
     (entry) => entry.relativePath === "PLUGIN.md",
   );
@@ -124,40 +192,40 @@ export function validatePluginBundle(
       "no root PLUGIN.md found; every plugin requires a root declaration",
     );
   }
+  const packageJson = readPackageJson(entries);
 
-  // Single canonical identity : the runtime, store, proposals, hooks and
-  // trust checks all key on the root manifest id — so THAT is the identity
-  // the reserved-ID check, install dir, and API response must use. The
-  // package.json basename only participates as a consistency check after
-  // stripping the exact `plugin-` prefix. The old code checked reserved IDs
-  // against the un-stripped npm basename (`plugin-narrator`), letting a
-  // bundle with `name: narrator` impersonate the builtin narrator.
-  const canonicalId = canonicalFromPackageId(pkgId);
-  if (!/^[a-z0-9][a-z0-9-_]{0,63}$/i.test(canonicalId)) {
-    throw httpError(400, `invalid canonical plugin id: ${canonicalId}`);
-  }
-  // The ID format check is case-insensitive, so compare case-insensitively too.
-  const lowerId = canonicalId.toLowerCase();
-  if ([...reservedPluginIds].some((id) => id.toLowerCase() === lowerId)) {
+  // One identity: the runtime, store, proposals, hooks and trust checks all
+  // key on the root manifest id, so the reserved-ID check, the install
+  // directory and the API response use it too.
+  const pluginId = installPluginId(
+    readPluginFrontmatter(manifestEntry.content.toString("utf8")),
+    directory,
+    packageJson,
+  );
+  if (
+    [...reservedPluginIds].some(
+      (id) => id.toLowerCase() === pluginId.toLowerCase(),
+    )
+  ) {
     throw httpError(
       409,
-      `plugin id "${canonicalId}" is reserved for a builtin plugin`,
+      `plugin id "${pluginId}" is reserved for a builtin plugin`,
     );
   }
 
   const runtimeFiles = new Map<string, string[]>();
   for (const entry of entries) {
     const match = /^runtimes\/([^/]+)\/(.+)$/.exec(entry.relativePath);
-    const directory = match?.[1];
+    const runtimeDirectory = match?.[1];
     const file = match?.[2];
-    if (!directory || !file) continue;
-    const files = runtimeFiles.get(directory) ?? [];
+    if (!runtimeDirectory || !file) continue;
+    const files = runtimeFiles.get(runtimeDirectory) ?? [];
     files.push(file);
-    runtimeFiles.set(directory, files);
+    runtimeFiles.set(runtimeDirectory, files);
   }
-  for (const [directory, files] of runtimeFiles) {
+  for (const [runtimeDirectory, files] of runtimeFiles) {
     const diagnostic = runtimeDirectoryDiagnostics(
-      `runtimes/${directory}`,
+      `runtimes/${runtimeDirectory}`,
       files,
     );
     const problem = diagnostic.error ?? diagnostic.warning;
@@ -166,36 +234,41 @@ export function validatePluginBundle(
   const children = entries.filter((entry) =>
     /^runtimes\/[^/]+\/RUNTIME\.md$/.test(entry.relativePath),
   );
+  const exists = (relativePath: string) =>
+    entries.some((entry) => entry.relativePath === relativePath);
   try {
-    const root = parsePluginMd(
+    // The package installs into a directory named after its ID, so a
+    // manifest without `id` takes that name.
+    const parsed = parsePluginMd(
       manifestEntry.content.toString("utf8"),
-      `${canonicalId}/PLUGIN.md`,
+      `${pluginId}/PLUGIN.md`,
     );
-    if (root.plugin!.id !== canonicalId)
-      throw new Error(
-        `plugin id mismatch: package.json resolves to "${canonicalId}" but PLUGIN.md declares "${root.plugin!.id}"`,
-      );
     // Refuse a package written for another host before any file is written.
-    assertHostVersionInRange(`Plugin ${canonicalId}`, root.plugin!.covel);
+    assertHostVersionInRange(`Plugin ${pluginId}`, parsed.plugin.covel);
     if (entries.some((entry) => entry.relativePath.startsWith("runtimes/"))) {
-      const diagnostics = multiRuntimeRootDiagnostics(root.rawFrontmatter);
+      const diagnostics = multiRuntimeRootDiagnostics(parsed.rawFrontmatter);
       if (diagnostics.length)
         throw new Error(diagnostics.map((d) => d.message).join("\n"));
     }
-    const inline = compileInlineRuntime(root);
+    const inline = compileInlineRuntime(parsed);
     const declarations: ParsedRuntimeMd[] = inline ? [inline] : [];
     for (const child of children)
       declarations.push(
         parseRuntimeMd(
           child.content.toString("utf8"),
-          `${canonicalId}/${child.relativePath}`,
-          root.plugin!,
+          `${pluginId}/${child.relativePath}`,
+          parsed.plugin,
         ),
       );
+    for (const declaration of declarations) {
+      const disabled = missingDefaultHandler(pluginId, declaration, exists);
+      if (disabled) throw new Error(disabled.message);
+    }
+    const root = withDerivedPackageFields(parsed, declarations, exists);
     validatePluginDeclarations(root);
     validatePluginFiles(root, declarations, (absolutePath) => {
       const relative = path
-        .relative(path.resolve(canonicalId), absolutePath)
+        .relative(path.resolve(pluginId), absolutePath)
         .split(path.sep)
         .join("/");
       const entry = entries.find(
@@ -204,31 +277,20 @@ export function validatePluginBundle(
       if (!entry) throw new Error("File not found");
       return entry.content.toString("utf8");
     });
-    const packaged = installPackageSchema.parse(
-      JSON.parse(
-        entries
-          .find((entry) => entry.relativePath === "package.json")!
-          .content.toString("utf8"),
-      ),
-    );
-    validateRuntimeDependencies(packaged);
-    if (
-      root.plugin.version &&
-      packaged.version &&
-      root.plugin.version !== packaged.version
-    )
-      throw new Error(
-        "PLUGIN.md and package.json must declare the same version",
-      );
-    const moduleProblem = packageModuleTypeProblem(packaged);
-    if (moduleProblem) throw new Error(moduleProblem);
+    // `package.json` is optional: a package without one is ESM and bundles
+    // no dependencies.
+    if (packageJson) {
+      validateRuntimeDependencies(packageJson);
+      const moduleProblem = packageModuleTypeProblem(packageJson);
+      if (moduleProblem) throw new Error(moduleProblem);
+    }
     // Localizations may change presentation only; identity and code declarations
     // are reconciled against the canonical document before installation.
     for (const entry of entries) {
       if (/^PLUGIN\.[a-zA-Z0-9-]+\.md$/.test(entry.relativePath)) {
         parsePluginMd(
           entry.content.toString("utf8"),
-          `${canonicalId}/${entry.relativePath}`,
+          `${pluginId}/${entry.relativePath}`,
           root.rawFrontmatter,
         );
       } else if (
@@ -239,7 +301,7 @@ export function validatePluginBundle(
           "RUNTIME.md",
         );
         const canonical = declarations.find(
-          (record) => record.sourcePath === `${canonicalId}/${canonicalPath}`,
+          (record) => record.sourcePath === `${pluginId}/${canonicalPath}`,
         );
         if (!canonical)
           throw new Error(
@@ -247,16 +309,18 @@ export function validatePluginBundle(
           );
         parseRuntimeMd(
           entry.content.toString("utf8"),
-          `${canonicalId}/${entry.relativePath}`,
-          root.plugin!,
+          `${pluginId}/${entry.relativePath}`,
+          root.plugin,
           canonical.rawFrontmatter,
         );
       }
     }
     return {
-      pluginId: canonicalId,
+      pluginId,
       manifest: root,
-      version: packaged.version ?? null,
+      version: root.plugin.version ?? null,
+      // The resolved entry counts: `server/index.js` is the entry of a
+      // package that names none.
       hasServerCode:
         pluginImportReferences(root, declarations).length > 0 ||
         entries.some((entry) =>

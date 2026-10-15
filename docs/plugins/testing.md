@@ -44,7 +44,6 @@ pnpm validate:plugin ~/.covel/plugins/my-plugin
 - 引用的文件是否存在：代码文件、schema、界面文件。
 - 内置工具名和自己声明的工具名。
 - 输入引用的能力，以及同一个包里 runtime 之间的引用。
-- `PLUGIN.md` 和 `package.json` 的 `version` 是否相同。
 - 几个 runtime 之间有没有冲突。
 
 出错时，它给出文件和字段的路径：

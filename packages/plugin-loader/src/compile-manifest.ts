@@ -1,4 +1,5 @@
 import {
+  DEFAULT_FUNCTION_HANDLER,
   DEFAULT_RUNTIME_VISIBILITY,
   defaultAgentLoop,
   defaultAgentModel,
@@ -41,13 +42,15 @@ export function compileRuntimeManifest(
   runtimeId: string,
 ): RuntimeManifest {
   const a = runtime.agent;
+  // The `function` block makes a function runtime; every other one is an agent.
+  const runtimeType = runtime.function ? "function" : "agent";
   // A package with one runtime has one place for its tools to go. When that
   // runtime names no plugin tools it gets the ones the package contributes;
   // `plugin: []` still means none. A runtime of a multi-runtime package
   // names its tools: each of them gets a different part.
   const contributed = plugin.contributes?.tools;
   const agentTools =
-    runtime.type === "agent" &&
+    runtimeType === "agent" &&
     runtimeId === plugin.id &&
     !a?.tools?.plugin &&
     contributed?.length
@@ -59,7 +62,7 @@ export function compileRuntimeManifest(
   // visibility; a function runtime has no loop and names a slot only when
   // its handler calls a model.
   const loopDefaults =
-    runtime.type === "agent" ? defaultAgentLoop(visibility) : undefined;
+    runtimeType === "agent" ? defaultAgentLoop(visibility) : undefined;
   const schedule = runtime.schedule;
   // `auto` is the default trigger and `every` its cadence.
   const trigger =
@@ -100,11 +103,14 @@ export function compileRuntimeManifest(
     version: plugin.version,
     description: runtime.description ?? plugin.description,
     pluginType: plugin.kind === "core" ? "core-plugin" : "plugin",
-    runtimeType: runtime.type,
-    handler: runtime.function?.handler,
+    runtimeType,
+    // The loader leaves the runtime out when the default file is missing.
+    handler: runtime.function
+      ? (runtime.function.handler ?? DEFAULT_FUNCTION_HANDLER)
+      : undefined,
     guard: runtime.guard,
     model:
-      runtime.type === "agent"
+      runtimeType === "agent"
         ? (a?.model ?? defaultAgentModel(visibility))
         : runtime.function?.model,
     llm: a?.llm,

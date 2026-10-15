@@ -14,7 +14,7 @@ function fixture(conflicts: boolean) {
   const registry = createPluginRegistry();
   for (const id of ["default", "first", "second"]) {
     const root = parsePluginMd(
-      `---\n${JSON.stringify({ id, kind: id === "default" ? "core" : "plugin", description: id, provides: id === "default" ? [{ contract: "allocation@1", default: true }] : ["allocation@1"], ...(conflicts ? { conflicts: ["allocation@1"] } : {}), runtime: { type: "agent", schedule: { stage: "setup" }, io: { output: { contract: "allocation@1" } } } })}\n---\n`,
+      `---\n${JSON.stringify({ id, kind: id === "default" ? "core" : "plugin", description: id, provides: id === "default" ? [{ contract: "allocation@1", default: true }] : ["allocation@1"], ...(conflicts ? { conflicts: ["allocation@1"] } : {}), runtime: { schedule: { stage: "setup" }, io: { output: { contract: "allocation@1" } } } })}\n---\n`,
       `${id}/PLUGIN.md`,
     );
     registry.register({

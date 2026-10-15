@@ -1,32 +1,21 @@
 ---
-id: world-init
 kind: core
-version: 0.0.39
+version: 0.0.40
 displayName: World Dimensions
 description: Initializes character attributes and authored dimensions,
   maintaining evolving state.
 tags:
   - "data:world-data"
   - "data:characters"
-  - "cost:llm"
-  - "ui:right-panel"
 author:
   name: Covel Contributors
   url: https://github.com/ackness/covel
 license: MIT
-provides:
-  - world-data-provider@1
-  - world.dimensions@1
-optional:
-  - narrative-engine@1
-  - world-ir-provider@1
-  - world-time-evolution@1
 contracts:
   world-data-provider@1:
     schema: ./runtimes/schema-gen/output.schema.json
   world.dimensions@1:
     schema: ./schemas/dimension-snapshot.schema.json
-entry: ./server/index.js
 contributes:
   extensions:
     - point: session.world-context@1

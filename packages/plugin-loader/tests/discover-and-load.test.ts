@@ -32,7 +32,6 @@ async function root(extra: object = {}) {
   return path.join(temp, "probe");
 }
 const agent = {
-  type: "agent",
   schedule: { stage: "narrative", trigger: { type: "auto" } },
 };
 describe("current package discovery and loading", () => {
@@ -158,12 +157,17 @@ describe("current package discovery and loading", () => {
     const [d] = await discoverPlugins(temp);
     await expect(loadPluginDefinition(d!)).rejects.toThrow("id must match");
   });
-  it("checks output contract membership and ambiguity", async () => {
-    await root({ provides: ["probe@1"] });
+  it("provides each runtime output contract and rejects two runtimes with one", async () => {
+    await root({ provides: [{ contract: "probe@1", default: true }] });
     const child = { ...agent, io: { output: { contract: "other@1" } } };
     await write(path.join(temp, "probe/runtimes/one/RUNTIME.md"), md(child));
     let [d] = await discoverPlugins(temp);
-    await expect(loadPluginDefinition(d!)).rejects.toThrow("not declared");
+    const loaded = await loadPluginDefinition(d!);
+    // A written entry keeps its default flag; the output is added.
+    expect(loaded.packageManifest.plugin.provides).toEqual([
+      { contract: "probe@1", default: true },
+      "other@1",
+    ]);
     child.io.output.contract = "probe@1";
     await write(path.join(temp, "probe/runtimes/one/RUNTIME.md"), md(child));
     await write(path.join(temp, "probe/runtimes/two/RUNTIME.md"), md(child));
@@ -171,7 +175,7 @@ describe("current package discovery and loading", () => {
     await expect(loadPluginDefinition(d!)).rejects.toThrow("ambiguous");
   });
   it.each(["needs", "input"])(
-    "rejects undeclared runtime %s contract dependencies",
+    "loads a runtime %s contract that the package does not require",
     async (kind) => {
       const runtime =
         kind === "needs"
@@ -192,17 +196,14 @@ describe("current package discovery and loading", () => {
             };
       await root({ runtime });
       const [d] = await discoverPlugins(temp);
-      await expect(loadPluginDefinition(d!)).rejects.toThrow(
-        /upstream@1 must be declared in root requires or optional/,
-      );
+      const loaded = await loadPluginDefinition(d!);
+      expect(loaded.packageManifest.plugin.requires).toBeUndefined();
       await root({ requires: ["upstream@1"], runtime });
-      await expect(loadPluginDefinition(d!)).resolves.toBeDefined();
-      await root({ optional: ["upstream@1"], runtime });
       await expect(loadPluginDefinition(d!)).resolves.toBeDefined();
     },
   );
-  it("checks child contracts, including own outputs, but excludes kernel inputs and pure ordering", async () => {
-    await root({ provides: ["own@1"] });
+  it("reads own child outputs, kernel inputs and pure ordering without declarations", async () => {
+    await root();
     await write(
       path.join(temp, "probe/runtimes/producer/RUNTIME.md"),
       md({ ...agent, io: { output: { contract: "own@1" } } }),
@@ -221,11 +222,8 @@ describe("current package discovery and loading", () => {
       }),
     );
     const [d] = await discoverPlugins(temp);
-    await expect(loadPluginDefinition(d!)).rejects.toThrow(
-      /own@1 must be declared/,
-    );
-    await root({ provides: ["own@1"], optional: ["own@1"] });
-    await expect(loadPluginDefinition(d!)).resolves.toBeDefined();
+    const loaded = await loadPluginDefinition(d!);
+    expect(loaded.packageManifest.plugin.provides).toEqual(["own@1"]);
   });
   it.each([
     { schedule: { stage: "narrative", needs: ["foreign/step"] } },
@@ -293,7 +291,6 @@ describe("current package discovery and loading", () => {
   it("rejects escaping runtime sources and handler paths", async () => {
     await root({
       runtime: {
-        type: "function",
         schedule: { trigger: { type: "manual" } },
         function: { handler: "../outside.js" },
       },
@@ -342,7 +339,6 @@ describe("current package discovery and loading", () => {
   it("rejects handler modules without a callable default export", async () => {
     await root({
       runtime: {
-        type: "function",
         schedule: { trigger: { type: "manual" } },
         function: { handler: "./handler.mjs" },
       },

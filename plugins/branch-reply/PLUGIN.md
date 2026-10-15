@@ -1,22 +1,11 @@
 ---
-id: branch-reply
-kind: plugin
-version: 0.0.36
+version: 0.0.37
 displayName: Reply Variants
 description: Offers several reply options so you can choose the one that fits best.
-tags:
-  - "cost:function"
-  - "ui:message-block"
-  - "ui:manual-action"
 author:
   name: Covel Contributors
   url: https://github.com/ackness/covel
 license: MIT
-provides:
-  - branch-reply@1
-optional:
-  - narrative-engine@1
-entry: ./server/index.js
 contributes:
   extensions:
     - point: prompt.history-transform@1
@@ -25,7 +14,6 @@ contributes:
     message:
       - ./ui/branch-reply-block.json
 runtime:
-  type: function
   schedule:
     stage: post-turn
   io:
@@ -37,8 +25,7 @@ runtime:
         required: false
     output:
       contract: branch-reply@1
-  function:
-    handler: ./handler.js
+  function: {}
   effects:
     parallelSafe: true
 ---

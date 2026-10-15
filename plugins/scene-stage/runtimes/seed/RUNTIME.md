@@ -1,5 +1,4 @@
 ---
-type: function
 description: >-
   Seeds the stage with the world registry's first scene at setup, so the stage
   is never blank before the narrative emits scene.set.
@@ -7,8 +6,7 @@ schedule:
   stage: setup
   trigger:
     maxTriggerCount: 1
-function:
-  handler: ./handler.js
+function: {}
 ---
 
 # Scene Stage opening seed

@@ -35,35 +35,29 @@ export function pluginImportReferences(
   return references;
 }
 
-/** Shared by discovery, author validation and installation; no code is imported. */
+/**
+ * Shared by discovery, author validation and installation; no code is
+ * imported. A contract a runtime reads needs no declaration: listed in
+ * `requires` it activates a provider, otherwise the runtime uses it when one
+ * is active.
+ */
 export function validateRuntimeDeclarations(
   packageManifest: ParsedPluginMd,
   manifests: readonly ParsedRuntimeMd[],
 ): void {
   const plugin = packageManifest.plugin;
-  const provided = new Set(
-    (plugin.provides ?? []).map((p) =>
-      typeof p === "string" ? p : p.contract,
-    ),
-  );
+  // The package provides each output contract; a consumer that binds the
+  // contract gets one runtime's output, so two runtimes cannot share one.
   const outputs = new Set<string>();
   for (const parsed of manifests) {
     const contract = parsed.runtime?.io?.output?.contract;
     if (!contract) continue;
-    if (!provided.has(contract))
-      throw new Error(
-        `${parsed.sourcePath}: output contract ${contract} is not declared in root provides`,
-      );
     if (outputs.has(contract))
       throw new Error(
         `${parsed.sourcePath}: ambiguous output contract ${contract}; only one runtime may provide it`,
       );
     outputs.add(contract);
   }
-  const dependencies = new Set([
-    ...(plugin.requires ?? []),
-    ...(plugin.optional ?? []),
-  ]);
   for (const parsed of manifests) {
     const runtimeReferences = [
       ...(["needs", "after"] as const).flatMap((field) =>
@@ -105,30 +99,6 @@ export function validateRuntimeDeclarations(
           `${parsed.sourcePath}: ${field} references runtime ${runtimeId} outside package ${plugin.id}; use a contract for cross-package dependencies`,
         );
       }
-    }
-    const references = [
-      ...(parsed.runtime?.schedule?.needs ?? []).flatMap((need) =>
-        typeof need === "object" && "contract" in need
-          ? [{ contract: need.contract, field: "schedule.needs" }]
-          : [],
-      ),
-      ...Object.entries(parsed.runtime?.io?.inputs ?? {}).flatMap(
-        ([name, input]) =>
-          "contract" in input.from
-            ? [
-                {
-                  contract: input.from.contract,
-                  field: `io.inputs.${name}.from.contract`,
-                },
-              ]
-            : [],
-      ),
-    ];
-    for (const { contract, field } of references) {
-      if (!dependencies.has(contract))
-        throw new Error(
-          `${parsed.sourcePath}: ${field} contract ${contract} must be declared in root requires or optional`,
-        );
     }
   }
 }
@@ -299,10 +269,12 @@ export function validatePluginFiles(
 }
 
 /**
- * A plugin package is ESM: its `package.json` says `"type": "module"`. Without
- * it Node reads the package's `.js` files as CommonJS, which the host loads
- * through another path: an `import` in them fails, and the development reload
- * never picks up a change. Returns what is wrong, or undefined.
+ * A plugin package is ESM. A package without `package.json` needs nothing:
+ * the host loads its `.js` files as ES modules (`provideHostModules`). One
+ * with a `package.json` must say `"type": "module"`; otherwise Node reads the
+ * package's `.js` files as CommonJS, which the host loads through another
+ * path: an `import` in them fails, and the development reload never picks up
+ * a change. Returns what is wrong, or undefined.
  */
 export function packageModuleTypeProblem(packageJson: {
   type?: unknown;

@@ -1,12 +1,10 @@
 ---
-type: function
 description: Records the current scene for the background music.
 schedule:
   trigger:
     type: event
     topic: scene.set
-function:
-  handler: ./handler.js
+function: {}
 ---
 
 Soundtrack's scene runtime is a deterministic function runtime triggered by `scene.set`. It records the scene name as `state/scene`, so a track that names scenes plays there. It does not choose a track: the `stage.music@1` slot does that (see `lib/soundtrack.js`).

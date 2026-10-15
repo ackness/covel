@@ -82,7 +82,6 @@ contributes:
 `;
 const child = `---
 description: Check shared context
-type: function
 function:
   handler: ./handler.mjs
 schedule:
@@ -378,13 +377,17 @@ describe("package declarations across framework consumers", () => {
     }
   });
 
-  it("treats a reserved plugin id case-insensitively", () => {
+  it("checks the reserved IDs against the ID a package without one takes", () => {
+    // No id and no directory: the package.json name gives the ID.
     const bundle = [
       {
         relativePath: "package.json",
-        content: Buffer.from('{"name":"@covel/plugin-Narrator"}'),
+        content: Buffer.from('{"name":"@covel/plugin-narrator"}'),
       },
-      { relativePath: "PLUGIN.md", content: Buffer.from(root) },
+      {
+        relativePath: "PLUGIN.md",
+        content: Buffer.from(root.replaceAll("id: inspector\n", "")),
+      },
     ];
     expect(() => validatePluginBundle(bundle, new Set(["narrator"]))).toThrow(
       /reserved for a builtin/,

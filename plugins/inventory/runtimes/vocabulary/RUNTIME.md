@@ -1,5 +1,4 @@
 ---
-type: function
 description: >-
   Publishes the names of the items in the bag before fact extraction so the same
   names are reused.
@@ -8,8 +7,7 @@ schedule:
 io:
   output:
     contract: world-ir.vocabulary@1
-function:
-  handler: ./handler.js
+function: {}
 ---
 
 Publishes up to 80 carried item names as `world-ir.vocabulary@1` entries of type `item`. Lost items (tombstones) are left out. The extractor uses the list to align names only; it is never evidence of a change.

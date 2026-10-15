@@ -93,7 +93,6 @@ describe("session plugin contract resolution", () => {
           p("self", {
             provides: ["own@1"],
             requires: ["own@1"],
-            optional: ["own@1"],
           }),
         ],
       }).active,
@@ -270,11 +269,12 @@ describe("session plugin contract resolution", () => {
       }),
     ]);
   });
-  it("does not activate optional recommendations", () =>
+  // A contract a package reads without requiring it activates no provider.
+  it("activates only what a package requires", () =>
     expect(
       resolveSessionPlugins({
         requested: ["a"],
-        plugins: [p("a", { optional: ["b@1"] }), p("b", { provides: ["b@1"] })],
+        plugins: [p("a"), p("b", { provides: ["b@1"] })],
       }).active,
     ).toEqual(["a"]));
 });

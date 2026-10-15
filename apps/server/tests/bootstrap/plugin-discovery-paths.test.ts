@@ -41,7 +41,6 @@ describe("registry runtime discovery paths", () => {
     const rootPath = path.join(dir, id);
     await mkdir(rootPath, { recursive: true });
     const runtimeDeclaration = {
-      type: "function",
       function: { handler: "./handler.js" },
       schedule: { trigger: { type: "manual" } },
     };
@@ -155,7 +154,6 @@ describe("a runtime that can never run", () => {
       await writeFile(
         path.join(rootPath, "runtimes", name, "RUNTIME.md"),
         `---\n${stringify({
-          type: "function",
           function: { handler: "../../handler.js" },
           ...(schedule ? { schedule } : {}),
           ...(output ? { io: { output } } : {}),
@@ -177,7 +175,7 @@ describe("a runtime that can never run", () => {
     expect(entry.runtimeManifestPaths).toEqual({
       "mixed/b-good": path.join(rootPath, "runtimes/b-good/RUNTIME.md"),
     });
-    expect(entry.packageManifest?.plugin.provides).toEqual([]);
+    expect(entry.packageManifest?.plugin.provides).toBeUndefined();
     expect(warn).toHaveBeenCalledWith(
       expect.stringContaining(
         `${path.join(rootPath, "runtimes/a-broken/RUNTIME.md")}: schedule.stage:`,

@@ -279,7 +279,6 @@ kind: plugin
 description: Atomic job fixture
 version: 1.0.0
 runtime:
-  type: function
   schedule:
     stage: post-turn
     trigger:

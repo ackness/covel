@@ -17,7 +17,6 @@
 
 ```text
 example/
-├── package.json
 ├── README.md
 ├── PLUGIN.md
 ├── PLUGIN.zh.md
@@ -35,7 +34,8 @@ example/
 
 布局规则：
 
-- 根 `PLUGIN.md` 必须有，它的 `id` 必须和包目录同名。`framework` 留给框架自己，不能用作 `id`。
+- 根 `PLUGIN.md` 必须有。插件 ID 就是包目录名；写了 `id` 时，它必须和目录同名。`framework` 留给框架自己，不能用作 ID。
+- `package.json` 可以没有。没有时，包里的 `.js` 文件按 ES module 加载。有的话必须写 `"type": "module"`；宿主不读它的 `version`、`author`、`license` 和 `homepage`，这些只写在 `PLUGIN.md` 里。
 - 只有一个 runtime 时，写在根文件的 `runtime` 里，根文件的正文就是它的提示词。
 - 有多个 runtime 时，每个放在 `runtimes/<id>/RUNTIME.md`，逻辑 ID 是 `<pluginId>/<id>`，各自文件的正文是各自的提示词。
 - 两种布局不能混用。子 runtime 不能声明包级贡献。
@@ -66,20 +66,15 @@ example/
 
 ```yaml
 ---
-id: example
-kind: plugin
 displayName: Example
 description: Records useful facts after each story turn.
-provides: [example.facts@1]
 requires: [narrative-engine@1]
-entry: ./server/index.js
 contributes:
   tools: [save-facts]
   data:
     facts:
       schema: ./schemas/facts.schema.json
 runtime:
-  type: agent
   schedule:
     stage: post-turn
   io:
@@ -95,31 +90,33 @@ runtime:
 Extract facts supported by runtime-inputs.narrative.value, then call save-facts.
 ```
 
+这个包的 ID 是目录名 `example`，入口是 `server/index.js`（它注册 `save-facts`），runtime 没有 `function` 块所以是 agent，包提供 `example.facts@1`，因为 runtime 输出它。这些都不用写，见[默认值](#默认值)。
+
 <!-- prettier-ignore -->
 | 根字段 | 含义 |
 | --- | --- |
-| `id`, `kind` | 包身份；`kind` 为 `core`（默认加入每一局）或 `plugin`（选了才启用） |
-| `version`, `displayName`, `description`, `tags` | 元数据；标签用于准备页的分组和筛选，不决定运行时调度 |
+| `id` | 插件 ID；不写时是包目录名，写了必须和目录名相同 |
+| `kind` | `core`（默认加入每一局）或 `plugin`（不写时的值，选了才启用） |
+| `version`, `displayName`, `description`, `tags` | 元数据；标签用于准备页的分组和筛选，不决定运行时调度。`ui:*` 和 `cost:*` 标签由 Covel 推出，作者只写其余的标签，如 `mode:*`，见[推出的标签](#推出的标签) |
 | `covel` | 适配的宿主版本范围，如 `">=0.0.45"`；范围之外的宿主不安装也不加载该包 |
 | `author`, `license`, `homepage` | 作者信息，只用于展示；见[作者信息](#作者信息) |
-| `provides` | 版本化契约字符串，或 `{contract, default: true}` |
-| `requires` | 必需契约，解析器补入提供者 |
-| `optional` | 可选契约，不强制激活提供者 |
+| `provides` | 没有 runtime 输出的契约（例如由服务提供），或要标成 `{contract, default: true}` 的契约。每个 runtime 的 `io.output.contract` 自动加入，不用写 |
+| `requires` | 必需契约，解析器补入提供者。runtime 引用了却没写进 `requires` 的契约是可选的 |
 | `conflicts` | 与提供这些契约的其他插件互斥 |
 | `contracts` | `{contractId: {schema: ./path.json}}` 契约 schema 声明；被 `contributes.data` 的 namespace 接收的契约不用写 |
-| `entry` | 包根相对的注册模块路径 |
+| `entry` | 包根相对的注册模块路径；不写时，存在 `server/index.js` 就用它 |
 | `contributes` | 包级贡献，见 [contributes 字段](#contributes-字段) |
 | `runtime` | 可选的单 runtime 声明 |
 
 契约是一个带版本的名字，形如 `narrative-engine@1`。插件之间靠它互相找到对方，而不是靠插件 ID。几条规则：
 
-- `runtime.io.output.contract` 必须出现在本包的 `provides` 里。
-- 同一个包里，两个 runtime 不能产出同一个契约。
+- 本包提供的契约是 `provides` 加上每个 runtime 的 `io.output.contract`。
+- 同一个包里，两个 runtime 不能产出同一个契约（`ambiguous output contract`）。
 - 不同的包可以提供同一个契约。消费者用 `cardinality: one`（默认）或 `all` 说明要一个还是全部。
 - 只允许一个提供者的扩展点，以及显式写出的 `conflicts`，另外做互斥检查。
 - `conflicts` 只能写插件契约。写内核扩展点或 UI 槽位会得到 `invalid-conflict`，并指出 `conflicts` 字段的位置。内核扩展点怎样组合由它的 mode 决定。
 
-准备页按插件声明的第一个标签分组，组名直接显示标签原文；没有标签的插件放入“无标签”。每个插件只出现一次，后续标签仍可用于筛选。`kind: core` 的徽章显示“默认启用”，不表示锁定；会话列表的“内置”只表示来源。
+准备页按插件的第一个标签分组（作者写的标签排在推出的标签前面），组名直接显示标签原文；没有标签的插件放入“无标签”。每个插件只出现一次，后续标签仍可用于筛选。`kind: core` 的徽章显示“默认启用”，不表示锁定；会话列表的“内置”只表示来源。
 
 ### contributes 字段
 
@@ -173,7 +170,7 @@ homepage: https://example.com/tidefall
 - **链接只接受 `https`**，不能带用户名和密码。`http:`、`javascript:`、`file:` 等地址在清单校验时被拒绝。这些链接是作者提供的第三方地址，宿主没有审核。玩家点开任何一个之前，界面先显示完整地址和域名并说明这一点，确认后才在浏览器中打开。域名以 ASCII 形式显示，用其他文字写成的仿冒域名会显示为 `xn--…`。
 - **展示位置**：世界列表（作者 · 版本）、世界详情、开局准备页的世界卡片和插件行、设置里的已安装插件。安装预览只显示作者名，不显示链接。进入游玩后的界面不显示这些内容。
 - **翻译**：插件在 `locales/<locale>.yaml` 的 `PLUGIN.md` 一节翻译 `author.about` 和 `author.links` 的 `label`（链接按顺序对应）。世界在 `world.<locale>.yaml` 里翻译同样两处。作者名和许可证不翻译，`pnpm i18n` 不把它们算作待翻译文本。
-- **版本号**：列表显示清单里的 `version`。插件同时带 `package.json` 时两处的版本必须相同，`pnpm validate:plugin` 会检查：安装预览读的是 `package.json`，宿主读的是 `PLUGIN.md`。`version` 变化会让已有会话重跑该插件的 setup runtime，所以 setup 的 guard 或 handler 必须对已完成的工作返回跳过。
+- **版本号**：列表显示清单里的 `version`。版本只写在 `PLUGIN.md` 里：宿主、安装预览和更新检查都读它，`package.json` 里的 `version` 不被读取。`version` 变化会让已有会话重跑该插件的 setup runtime，所以 setup 的 guard 或 handler 必须对已完成的工作返回跳过。
 
 内置插件也只读当前数据契约。骰子回执必须带 `checks` 数组，`pluginData.get()` 直接返回保存的值。经过 `select: /narrativeOutput` 投影的叙事输入是字符串。世界规则是带 `schemaVersion`、`id`、`content` 的扁平记录，不接受 `{ rule, ... }` 包装。NPC 关系的每个事实只能有一个开放版本；遇到重复开放版本会拒绝写入，不自动修复。立绘替换只匹配完整角色 ID 或当前的 `npc-<blueprintId>` 投影，不匹配任意会话前缀。
 
@@ -189,16 +186,15 @@ homepage: https://example.com/tidefall
 
 ## Runtime 分组字段
 
-| 字段          | 主要配置                                                                   |
-| ------------- | -------------------------------------------------------------------------- |
-| `type`        | `agent` 或 `function`                                                      |
-| `schedule`    | `stage`, `every`, `trigger`, `needs`, `after`, `completion`, `manual`      |
-| `io`          | `inputs`, `selfData`, `payloadSchema`, `output`, `visibility`, `concealed` |
-| `agent`       | `model`, `llm`, `history`, `tools`, `advertiseEvents`, `loop`              |
-| `function`    | `handler`、可选 `model`、`timeoutMs` 和 `tools`                            |
-| `guard`       | runtime 相对的 guard 模块                                                  |
-| `effects`     | 读写资源与 `parallelSafe`                                                  |
-| `permissions` | 执行权限声明                                                               |
+| 字段          | 主要配置                                                                                 |
+| ------------- | ---------------------------------------------------------------------------------------- |
+| `schedule`    | `stage`, `every`, `trigger`, `needs`, `after`, `completion`, `manual`                    |
+| `io`          | `inputs`, `selfData`, `payloadSchema`, `output`, `visibility`, `concealed`               |
+| `agent`       | `model`, `llm`, `history`, `tools`, `advertiseEvents`, `loop`                            |
+| `function`    | 有这个块的 runtime 是 function，没有的是 agent；`handler`、`model`、`timeoutMs`、`tools` |
+| `guard`       | runtime 相对的 guard 模块                                                                |
+| `effects`     | 读写资源与 `parallelSafe`                                                                |
+| `permissions` | 执行权限声明                                                                             |
 
 根 `PLUGIN.md` 也可以写 `permissions.http`。它管 `entry` 模块的代码：社区包的 `covel.http`（工具、钩子、RPC、服务、扩展、wire 里都用它）只能访问根文件和各 runtime 的 `permissions.http` 里列出的源和方法。wire 还能访问它正在服务的那个用途的端点。没有声明的请求在发出之前就失败：`http permission denied: …`。
 
@@ -230,12 +226,40 @@ permissions:
 | `contributes.hooks[].enforce` | `normal` |
 | `contributes.prompt[].role` | `system` |
 
+下面这些字段不写时由 Covel 推出。写了和推出的值一样时，`pnpm validate:plugin` 同样给出警告（`is the default value; remove it` 或 `is worked out from …; remove it`）。
+
+<!-- prettier-ignore -->
+| 字段 | 不写时 |
+| --- | --- |
+| `id` | 包目录名 |
+| `kind` | `plugin` |
+| `entry` | 包里有 `server/index.js` 时用它，否则没有入口 |
+| runtime 的类型 | 有 `function` 块是 function runtime，否则是 agent |
+| `function.handler` | 清单旁边的 `./handler.js` |
+| `provides` | 每个 runtime 的 `io.output.contract` |
+| `tags` 里的 `ui:*`、`cost:*` | 由包的内容推出，见[推出的标签](#推出的标签) |
+| `contributes.data.*.authoring.source.key` | `id`；媒体目录是 `filename` |
+| `contributes.data.*.authoring.source` 的格式 | 由 `path` 推出：`.yaml`/`.yml`、`.json`，或没有扩展名的媒体目录 |
+
+#### 推出的标签
+
+作者写的标签排在前面，后面依次加上推出的标签。作者写的 `ui:*`、`cost:*` 标签被忽略。
+
+<!-- prettier-ignore -->
+| 标签 | 什么时候加上 |
+| --- | --- |
+| `cost:llm` | 有 agent runtime，或有写了 `function.model` 的 function runtime |
+| `cost:function` | 有不调用模型的 function runtime；或者一个 runtime 都没有，但有入口或 `contributes.worldProjections` |
+| `ui:right-panel` | `contributes.ui.right` 有面板 |
+| `ui:message-block` | `contributes.ui.message` 有消息块 |
+| `ui:manual-action` | 有 `manual` 触发的 runtime，或者有 `contributes.actions` / `contributes.commands` |
+
 `io.visibility` 只有两个值：`story` 给提供故事正文的叙事 runtime，`system` 给其他所有 runtime。
 
 ### 两种 runtime
 
-- **Function runtime** 必须声明 `function.handler`，这个模块必须默认导出一个函数，不能同时配置 `agent`。
-- **Agent runtime** 不能配置 `function`。
+- **Function runtime** 是写了 `function` 块的 runtime。它的 handler 是 `function.handler` 指向的模块，不写时是清单旁边的 `./handler.js`；这个模块必须默认导出一个函数。不能同时配置 `agent`。没写 `function.handler`、旁边也没有 `handler.js` 时，这个 runtime 不能运行：加载器去掉它并说明原因，`pnpm validate:plugin` 和安装把它报为错误。
+- **Agent runtime** 是没有 `function` 块的 runtime。文件正文就是它的提示词。
 - `function.model` 说明 handler 里的 `ctx.gateway` 调用使用哪个模型 slot（如 `memory`）。后台（detached）任务在领取前用它判断凭证是否就绪。不声明时按系统默认 preset 判断，可能漏掉请求级的 slot 绑定，任务就会一直排队，直到 `maxQueueMs` 超时。
 - `agent.model` 不写时，`io.visibility: story` 的 agent 用 `story`，其他 agent 用 `plugin`。
 - `agent.model` 和 `function.model` 只写用途（slot）的名字。插件不能指定服务商、模型、地址或协议：这些由玩家的模型设置决定（见[实际选择优先级](./slots.md#实际选择优先级)）。插件目录里的 `llm.toml` 不会被读取。
@@ -284,9 +308,10 @@ guard 拿到的 `ctx` 和函数 handler 的一样，内置插件和社区插件�
 - 加载器严格检查跨包的 runtime 引用，发现就拒绝加载。
 - 只写 `after` 不会自动激活提供者。
 
-runtime 的 `schedule.needs[].contract` 和 `io.inputs.*.from.contract` 必须写进根 `requires` 或 `optional`。内联 runtime 和子 runtime 都这样检查。
+runtime 的 `schedule.needs[].contract` 和 `io.inputs.*.from.contract` 引用的契约不用另外声明：
 
-- 包内其他 runtime 提供的契约也要声明。可以列入 `optional`，不需要激活别的插件。
+- 写进根 `requires` 的契约，解析器会激活一个提供者。
+- 没写进 `requires` 的契约是可选的：会话里有提供者时照常绑定；没有时按门控处理，必需的输入或 `needs` 缺了提供者，这个 runtime 不运行。包内其他 runtime 提供的契约就是这样用的。
 - `schedule.after` 只排序，`from.kernel` 是内核输入。这两者都不会让别的包被激活。
 
 ### 阶段和调度顺序
@@ -466,7 +491,7 @@ CLI 和安装器的静态校验对 `scope: turn` 和 `scope: committed` 的输�
 
 - 同一个契约 ID 的所有提供者必须发布一致的 schema。
 - 公共 schema 同时覆盖模型输出和 guard 跳过输出。例如 `world-init` 的 `world-data-provider@1` 允许作者提供少于 15 项的属性结构；生成至少 15 项的要求留在 `initialize-world` 的工具参数中。
-- 替代插件的 `provides` 必须和它自己 runtime 的 `io.output.contract` 对齐。其他已安装插件的产出不能替它满足声明。
+- 替代插件靠它自己 runtime 的 `io.output.contract` 提供契约（`provides` 自动包含它）。其他已安装插件的产出不能替它满足声明。
 - 被消费的契约缺少 schema，或者提供者只有声明而没有产出，都会产生加载诊断。
 
 #### 契约在哪里被校验
@@ -860,7 +885,7 @@ namespace 声明 `search` 之后，它的记录进入框架的记忆检索（[`m
 只有整个字段会被去掉：`PLUGIN.md` 顶层的字段、`contributes` 下的一项（包括 `contributes.ui` 下不支持的位置）、内联 `runtime` 或 `RUNTIME.md` 顶层的字段。下面两种情况仍然让加载失败：
 
 - 已知字段里面的未知键，例如 `permissions.fs`、`io.conceal`、`schedule.priority`。宿主不运行一个只看懂一半的声明。
-- 像是限制或标识包的字段写错了，例如 `permision`、`gaurd`、`covle`。这些字段是根上的 `id`、`kind`、`version`、`covel`、`provides`、`requires`、`optional`、`conflicts`、`permissions`、`entry`、`runtime`，以及 runtime 的 `type`、`guard`、`permissions`、`effects`、`schedule`、`io`、`function`。报错会说它像哪个字段。
+- 像是限制或标识包的字段写错了，例如 `permision`、`gaurd`、`covle`。这些字段是根上的 `id`、`kind`、`version`、`covel`、`provides`、`requires`、`conflicts`、`permissions`、`entry`、`runtime`，以及 runtime 的 `guard`、`permissions`、`effects`、`schedule`、`io`、`function`。报错会说它像哪个字段。
 
 目录级检查还会在插件根目录有 `llm.toml` 时给出提醒：这个文件不会被读取，不影响通过。
 

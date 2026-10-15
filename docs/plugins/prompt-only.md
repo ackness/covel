@@ -1,6 +1,6 @@
 # 只有提示词的插件
 
-这一页带你做一个不写代码的插件：一个 `PLUGIN.md`，里面是几行配置和一段提示词。做完之后，你有一个每回合在故事之后补一句环境观察的插件“observation”，并且知道怎样给它加设置项、译文、记忆和内置工具。
+这一页带你做一个不写代码的插件：一个 `PLUGIN.md`，里面是几行配置和一段提示词。先写最小的版本，再一步步加上。做完之后，你有一个每回合在故事之后补一句环境观察的插件“observation”，并且知道怎样给它加设置项、译文、记忆和内置工具。
 
 适合这种做法的需求是：让模型多做一件事，并且这件事只需要 Covel 自带的工具。需要自己写工具或函数时，读[带本地代码的插件](./local-code.md)。
 
@@ -23,18 +23,52 @@ mkdir -p ~/.covel/plugins/observation/locales
 observation/
 ├── PLUGIN.md          配置和提示词
 ├── PLUGIN.zh.md       可选：提示词的简体中文版
-├── package.json
-├── README.md
+├── README.md          可选：写给维护者的说明
 └── locales/
     └── zh.yaml        可选：名称和设置项的中文
 ```
 
-## 2. 写 `PLUGIN.md`
+只有 `PLUGIN.md` 是必需的。不需要 `package.json`。
+
+## 2. 写最小的 `PLUGIN.md`
 
 ```yaml
 ---
-id: observation
-kind: plugin
+description: Adds a short observation after each turn.
+runtime:
+  schedule: { stage: post-turn }
+---
+Write one short observation grounded in the latest narrative.
+```
+
+两条 `---` 之间是配置，后面是给模型的提示词。
+
+| 这一段                      | 意思                                                                                         |
+| --------------------------- | -------------------------------------------------------------------------------------------- |
+| `description`               | 一句话说明这个插件做什么，准备页的插件列表里显示它                                           |
+| `schedule.stage: post-turn` | 在每回合的故事之后运行                                                                       |
+| 正文                        | 给模型的提示词                                                                               |
+| 没写的字段                  | 由 Covel 推出：ID 是文件夹名；没有 `function` 块，所以它是由模型驱动的 agent，正文就是提示词 |
+
+校验它：
+
+```bash
+pnpm validate:plugin ~/.covel/plugins/observation
+```
+
+```text
+✓ Static package validation: /Users/you/.covel/plugins/observation
+  languages: text en; instructions en
+```
+
+这已经是一个能用的插件。不过它没有读这一回合的故事，模型只能看到对话历史。下一步让它读故事正文，再给玩家一个设置项。
+
+## 3. 读这一回合的故事
+
+把 `PLUGIN.md` 改成：
+
+```yaml
+---
 displayName: Observation
 description: Adds a short observation grounded in the latest narrative.
 requires: [narrative-engine@1]
@@ -47,7 +81,6 @@ contributes:
       min: 1
       max: 4
 runtime:
-  type: agent
   schedule:
     stage: post-turn
   io:
@@ -63,31 +96,18 @@ Use at most {{ userSettings.length }} sentences.
 You must not add an event, a character, an item or a decision that the narrative did not state.
 ```
 
-两条 `---` 之间是配置，后面是给模型的提示词。
-
 | 这一段                           | 意思                                                                                                                                                           |
 | -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `id`                             | 必须和文件夹名一样                                                                                                                                             |
+| `displayName`                    | 玩家看到的名称                                                                                                                                                 |
 | `requires: [narrative-engine@1]` | 需要一个能写故事的插件。启用这个插件时，Covel 会确保有一个                                                                                                     |
 | `contributes.settings`           | 给玩家一个设置项：最多写几句，默认 2                                                                                                                           |
-| `runtime.type: agent`            | 这是一个由模型驱动的运行单元，正文就是它的提示词                                                                                                               |
 | `schedule.stage: post-turn`      | 在每回合的故事之后运行                                                                                                                                         |
 | `io.inputs.narrative`            | 读取这一回合的故事正文。提示词里用 `runtime-inputs.narrative.value` 引用它                                                                                     |
 | 没写的字段                       | 用默认值：这一回合没有故事（叙事失败了）时它不运行；它的输出是插件的结果，不是故事正文；它用 `plugin` 这个模型用途。见[默认值](../reference/plugins.md#默认值) |
 
-再写两个小文件。`package.json`：
+再写一个 `README.md` 给维护者看：这个插件做什么、玩家能看到什么、有哪些设置项。先写一行标题也可以。要发布给别人时，在配置里加上 `version`，见[打包](../ship/package.md)。
 
-```json
-{
-  "name": "observation",
-  "version": "0.1.0",
-  "type": "module"
-}
-```
-
-`README.md` 写给维护者看：这个插件做什么、玩家能看到什么、有哪些设置项。先写一行标题也可以。
-
-## 3. 校验
+## 4. 校验
 
 ```bash
 pnpm validate:plugin ~/.covel/plugins/observation
@@ -100,7 +120,7 @@ pnpm validate:plugin ~/.covel/plugins/observation
 
 第二行的意思是：界面文字只有英文，提示词只有英文。下面两步会把中文加上。
 
-## 4. 加中文的名称
+## 5. 加中文的名称
 
 配置里的名称、说明和标签用英文写。中文写在 `locales/zh.yaml` 里，结构和 `PLUGIN.md` 的配置一样，只写要翻译的那几项：
 
@@ -116,7 +136,7 @@ PLUGIN.md:
 
 列表里的项靠 `key` 对应。别的语言同样处理：加一个 `locales/<语言>.yaml`。
 
-## 5. 加中文的提示词（可选）
+## 6. 加中文的提示词（可选）
 
 不加也能用：所有语言的游戏都会读英文的提示词，模型仍然按这一局游戏的语言输出。
 
@@ -142,7 +162,7 @@ PLUGIN.md:
   languages: text en, zh; instructions en, zh
 ```
 
-## 6. 离线运行
+## 7. 离线运行
 
 ```bash
 pnpm test:runtime -- observation --pretty
@@ -163,7 +183,7 @@ pnpm test:runtime -- observation --pretty
 
 假模型不会写出真的观察。模型的表现要进游戏看。
 
-## 7. 在游戏里运行
+## 8. 在游戏里运行
 
 启动 `pnpm dev`，然后和[第一个插件](./first-plugin.md)的最后一步一样：在准备页展开“自定义插件与高级设置”，选中 `observation`，点“开始游戏”，在“授权插件操作”出现时授权它。
 
@@ -279,7 +299,7 @@ contributes:
 
 | 现象                                    | 原因和处理                                                                                    |
 | --------------------------------------- | --------------------------------------------------------------------------------------------- |
-| 校验报 `id must match plugin directory` | 把 `id` 改成和文件夹名一样                                                                    |
+| 校验报 `id must match plugin directory` | 写了的 `id` 和文件夹名不一样。删掉 `id`（不写时就是文件夹名），或者改成文件夹名               |
 | 插件列表里没有它                        | 它不在用户插件目录里，或者校验没通过。校验之后重启后端                                        |
 | 选中了但没有运行                        | 没有授权。处理“授权插件操作”的提示                                                            |
 | 提示 `plugin` 用途不可用                | 在 **设置 → 模型 → 用途分配** 给它选一个模型                                                  |

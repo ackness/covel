@@ -181,7 +181,7 @@ describe("test-runtime runtime loading helpers", () => {
       await fs.mkdir(path.join(rootPath, "runtimes/main"), { recursive: true });
       await fs.writeFile(
         discovery.pluginMdPaths[0]!,
-        "---\ntype: agent\ndescription: Main\nschedule: {trigger: {type: manual}}\n---\n",
+        "---\ndescription: Main\nschedule: {trigger: {type: manual}}\n---\n",
         "utf8",
       );
       const entry = await loadEntryTools(
@@ -231,7 +231,6 @@ contributes:
       await fs.writeFile(
         path.join(root, "runtimes/main/RUNTIME.md"),
         `---
-type: function
 description: Main
 function: {handler: ./handler.js}
 schedule: {trigger: {type: manual}}
