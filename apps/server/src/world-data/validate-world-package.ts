@@ -1032,7 +1032,7 @@ async function checkWorldData(
       if ("localeOverlay" in diagnostic && diagnostic.localeOverlay) continue;
       if (diagnostic.sourceId && unresolvedSources.has(diagnostic.sourceId))
         continue;
-      const identity = `${diagnostic.level}\u0000${diagnostic.sourceId ?? ""}\u0000${diagnostic.message}`;
+      const identity = `${diagnostic.level}\u0000${diagnostic.sourceId ?? ""}\u0000${"path" in diagnostic ? diagnostic.path : ""}\u0000${"pointer" in diagnostic ? diagnostic.pointer : ""}\u0000${diagnostic.message}`;
       const existing = seen.get(identity);
       if (existing) {
         existing.locales.push(locale);
@@ -1040,7 +1040,10 @@ async function checkWorldData(
       }
       seen.set(identity, {
         level: diagnostic.level,
-        code: "world-data",
+        code:
+          "code" in diagnostic && diagnostic.code === "dimension-reference"
+            ? "dimension-reference"
+            : "world-data",
         file:
           ("path" in diagnostic ? diagnostic.path : undefined) ??
           (diagnostic.sourceId
@@ -1066,18 +1069,29 @@ async function checkWorldData(
     ...(await checkLocaleFiles(worldDir, manifest, descriptor.sources)),
   );
   diagnostics.push(
-    ...(await checkWorldRecords({
-      worldDir,
-      sources: descriptor.sources,
-      catalogue,
-      attributes: manifest.characterSchema?.attributes,
-      // A world that declares no dimensions may have them generated when a
-      // session starts, so nothing is known to check against.
-      dimensions:
-        declaredDimensions && Object.keys(declaredDimensions).length > 0
-          ? declaredDimensions
-          : undefined,
-    })),
+    ...(
+      await checkWorldRecords({
+        worldDir,
+        sources: descriptor.sources,
+        catalogue,
+        attributes: manifest.characterSchema?.attributes,
+        // A world that declares no dimensions may have them generated when a
+        // session starts, so nothing is known to check against.
+        dimensions:
+          declaredDimensions && Object.keys(declaredDimensions).length > 0
+            ? declaredDimensions
+            : undefined,
+      })
+    ).filter(
+      (finding) =>
+        !diagnostics.some(
+          (existing) =>
+            existing.code === finding.code &&
+            existing.file === finding.file &&
+            existing.pointer === finding.pointer &&
+            existing.message === finding.message,
+        ),
+    ),
   );
   return diagnostics;
 }

@@ -9,6 +9,8 @@ import path from "node:path";
 import type { PluginRegistry } from "@covel/plugin-loader";
 import {
   modelHiddenPaths,
+  dimensionValueSchema,
+  validateDimensionValue,
   type DimensionValueSchema,
   type ModelHiddenReason,
   type WorldDimensions,
@@ -199,41 +201,48 @@ function typesOf(schema: DimensionValueSchema): readonly string[] {
 }
 
 /**
- * Why `segments` cannot reach a value the dimension's schema allows, or
- * undefined when they can (or the schema does not say). Only a place the
+ * Resolve the schema at `segments`, or explain an impossible path. An empty
+ * result means the schema cannot determine what is there. Only a place the
  * schema rules out is reported: a closed object without that property, an
  * index into something that is not a list, a key below a scalar.
  */
-function unreachablePath(
+function dimensionSchemaAt(
   schema: DimensionValueSchema,
   segments: readonly string[],
-): { readonly at: string; readonly reason: string } | undefined {
+): {
+  readonly schema?: DimensionValueSchema;
+  readonly unreachable?: { readonly at: string; readonly reason: string };
+} {
   let node: DimensionValueSchema | undefined = schema;
   const walked: string[] = [];
   for (const segment of segments) {
-    if (!node) return undefined;
+    if (!node) return {};
     const at = walked.length ? walked.join(".") : "the value";
     const types = typesOf(node);
     const list = types.includes("array");
     const object = types.includes("object");
     // Object keywords alone do not exclude arrays. If both containers are
     // possible, this conservative check cannot rule out a path through either.
-    if (!types.length || (list && object)) return undefined;
+    if (!types.length || (list && object)) return {};
     if (list) {
       if (!/^\d+$/.test(segment))
-        return { at, reason: `${at} is a list, read by index` };
+        return {
+          unreachable: { at, reason: `${at} is a list, read by index` },
+        };
       node = node.items;
     } else if (object) {
       if (node.properties && Object.hasOwn(node.properties, segment))
         node = node.properties[segment];
       else if (node.additionalProperties === false)
         return {
-          at,
-          reason: `${at} has no \`${segment}\`${
-            node.properties
-              ? `; it has ${Object.keys(node.properties).join(", ")}`
-              : ""
-          }`,
+          unreachable: {
+            at,
+            reason: `${at} has no \`${segment}\`${
+              node.properties
+                ? `; it has ${Object.keys(node.properties).join(", ")}`
+                : ""
+            }`,
+          },
         };
       else
         node =
@@ -242,13 +251,15 @@ function unreachablePath(
             : undefined;
     } else if (types.length) {
       return {
-        at,
-        reason: `${at} is of type ${types.join(" or ")} and has no fields`,
+        unreachable: {
+          at,
+          reason: `${at} is of type ${types.join(" or ")} and has no fields`,
+        },
       };
-    } else return undefined;
+    } else return {};
     walked.push(segment);
   }
-  return undefined;
+  return { schema: node };
 }
 
 function checkDimensionReference(
@@ -273,6 +284,7 @@ function checkDimensionReference(
       },
     ];
   const findings: Finding[] = [];
+  let valueSchema: DimensionValueSchema | undefined = dimension.schema;
   for (const field of reference.within ?? []) {
     const value = item.holder[field];
     const segments =
@@ -285,8 +297,16 @@ function checkDimensionReference(
             )
           ? value.map(String)
           : undefined;
-    if (!segments?.length) continue;
-    const unreachable = unreachablePath(dimension.schema, segments);
+    // An omitted or empty path selects the whole dimension. A malformed
+    // path is the record schema's finding, not a reason to check the root.
+    if (value === undefined) continue;
+    if (!segments) {
+      valueSchema = undefined;
+      continue;
+    }
+    const resolved = dimensionSchemaAt(dimension.schema, segments);
+    valueSchema = resolved.schema;
+    const unreachable = resolved.unreachable;
     if (!unreachable) continue;
     findings.push({
       pointer: siblingPointer(item.pointer, field),
@@ -294,7 +314,58 @@ function checkDimensionReference(
       hint: `Use a path that the \`schema\` of "${id}" allows.`,
     });
   }
+  // Unknown schemas/paths do not prove a candidate is invalid.
+  if (valueSchema && dimensionValueSchema.safeParse(valueSchema).success) {
+    for (const valuePath of reference.values ?? []) {
+      for (const candidate of referringValues(item.holder, valuePath, "")) {
+        for (const issue of validateDimensionValue(
+          valueSchema,
+          candidate.value,
+          { localized: "resolved" },
+        )) {
+          const nested = issue.path
+            .map((part) =>
+              typeof part === "number" ? `[${part}]` : `.${part}`,
+            )
+            .join("");
+          findings.push({
+            pointer: siblingPointer(item.pointer, candidate.pointer) + nested,
+            message: `candidate value for dimension "${id}" is invalid: ${issue.message}; plugin "${pluginId}" compares against this schema`,
+            hint: `Use a value allowed by the referenced dimension's schema.`,
+          });
+        }
+      }
+    }
+  }
   return findings;
+}
+
+/** Shared by package validation and import planning before any records commit. */
+export function checkRecordDimensionReferences(options: {
+  record: unknown;
+  contract: string;
+  catalogue: PluginCatalogue;
+  dimensions: WorldDimensions;
+  pointer: string;
+  pluginIds?: readonly string[];
+}): Finding[] {
+  if (Object.keys(options.dimensions).length === 0) return [];
+  return referencesOf(options.catalogue, options.contract).flatMap(
+    ({ pluginId, reference }) => {
+      if (
+        reference.to !== "world-dimension" ||
+        (options.pluginIds && !options.pluginIds.includes(pluginId))
+      )
+        return [];
+      return referringValues(
+        options.record,
+        reference.path,
+        options.pointer,
+      ).flatMap((item) =>
+        checkDimensionReference(item, pluginId, reference, options.dimensions),
+      );
+    },
+  );
 }
 
 /** What a `model-hidden-field` warning says, by the reason the field is hidden. */

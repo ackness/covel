@@ -729,6 +729,7 @@ authoring:
 - `to`: what the value names. `character-attribute` is the `id` of a top-level attribute of the world's `characterSchema`; `world-dimension` is the ID of a dimension the world declares.
 - `type` (optional, only for `character-attribute`): the named attribute must have this type.
 - `within` (optional): fields beside the value that must lie inside what it names. For `character-attribute`, number fields that must lie inside the `min` and `max` of that attribute. For `world-dimension`, a path into the dimension's value (`a.b`, or a list of keys); the dimension's `schema` must allow that place.
+- `values` (optional, only for `world-dimension`): paths to candidate values, read from the object holding the dimension ID, using the same syntax as `path`. For example, `equals` checks the whole value; `in[]` checks each list member. With `values`, `within` can name at most one field: candidates are checked against the schema at that path, or against the whole dimension when the field is absent or its path is empty. Checks include types, enums and the schema's other constraints. Missing candidate fields, indeterminate schema paths and unsupported schemas do not produce candidate-value errors.
 
 The bundled story-events declares the dimensions in its event conditions like this. A condition can nest `all` / `any` / `not` to any depth, so the path uses `**`:
 
@@ -737,7 +738,10 @@ references:
   - path: when.**.dimension
     to: world-dimension
     within: [path]
+    values: [equals, notEquals, "in[]"]
 ```
+
+`pnpm validate:world`, session import, preflight and sync all use this declaration. The framework reads only declared fields; it does not recognize condition operator names. Numeric comparison thresholds need not be possible dimension values, so do not declare thresholds such as `gte` as `values`.
 
 A value that does not fit is reported as an `attribute-reference` or `dimension-reference` error. Attributes are not checked in a world without a `characterSchema`, and dimensions are not checked in a world that declares none, because they are only generated when a session starts. Declare only what the plugin really cannot find or refuses at run time. Otherwise a valid world is reported by mistake.
 

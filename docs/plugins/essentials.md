@@ -232,6 +232,8 @@ io:
 
 如果导入的记录里有嵌套的列表，并且列表项不是用 `id` 而是用别的字段（例如 `label`）区分，声明 `authoring.source.localeArrayKeys: [label]`。这样主文件调整了列表顺序之后，译文仍然对得上同一条记录。
 
+记录引用维度并比较其值时，用 [`authoring.references` 的 `within` 和 `values`](../reference/plugins.md) 声明路径与候选值，让世界校验和导入在写入前发现错误。
+
 ### 想让记忆检索查到这份数据
 
 在数据空间的声明里加 `search: { text: <字段名> }`，见[可检索的数据](../reference/plugins.md#可检索的数据)。

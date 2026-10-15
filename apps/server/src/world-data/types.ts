@@ -16,7 +16,10 @@ export interface WorldDataDiagnostic {
   /** What the author can do about it. */
   readonly hint?: string;
   /** Set on a finding that is reported apart from the others. */
-  readonly code?: "convention-collision" | "dimension-provider-missing";
+  readonly code?:
+    | "convention-collision"
+    | "dimension-provider-missing"
+    | "dimension-reference";
   /** Set when a locale file's entry was ignored; `path` is that file. */
   readonly localeOverlay?: true;
 }

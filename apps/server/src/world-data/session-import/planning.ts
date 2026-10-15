@@ -7,12 +7,14 @@ import {
   hiddenPluginDataNamespace,
   characterSchemaSetPayloadSchema,
   validateWorldModel,
+  worldDimensionsSchema,
   type CharacterSchemaRecord,
 } from "@covel/shared";
 import type { CharacterRecord } from "@covel/store";
 import { ZodError } from "zod";
 import { canonicalJson, digestFile, sha256Hex } from "../digest.js";
 import { collectMediaSourceFiles } from "../media.js";
+import { checkRecordDimensionReferences } from "../record-checks.js";
 import { readWorldDataSource } from "../source-reader.js";
 import { characterRecordFromValue } from "../character-effects.js";
 import {
@@ -328,7 +330,10 @@ export async function buildImportPlan(options: {
   /** Session locale — selects `<name>.<lang>.<ext>` source variants when present. */
   locale?: string;
   characterSchema?: unknown;
+  dimensions?: unknown;
 }): Promise<ImportPlan> {
+  // Dimension declaration errors are reported by appendDimensionPlan.
+  const dimensions = worldDimensionsSchema.safeParse(options.dimensions ?? {});
   const writes: PlannedWrite[] = [];
   const diagnostics: WorldDataDiagnostic[] = [];
   const unreceivedSources = new Set<string>();
@@ -482,6 +487,40 @@ export async function buildImportPlan(options: {
     diagnostics.push(...schemaDiagnostics);
     if (schemaDiagnostics.some((diagnostic) => diagnostic.level === "error")) {
       continue;
+    }
+
+    const catalogue = options.deps?.registry;
+    if (
+      parsedTarget.kind === "contract-data" &&
+      catalogue &&
+      dimensions.success
+    ) {
+      const findings = sourceItems(read.value).flatMap((record, index) =>
+        checkRecordDimensionReferences({
+          record,
+          contract: parsedTarget.contract,
+          catalogue,
+          dimensions: dimensions.data,
+          pointer:
+            recordLocation(source, record, index, Array.isArray(read.value))
+              .pointer ?? "",
+          pluginIds: targets
+            .filter(isPluginTarget)
+            .map((target) => target.pluginId),
+        }),
+      );
+      diagnostics.push(
+        ...findings.map((finding) => ({
+          level: "error" as const,
+          code: "dimension-reference" as const,
+          sourceId: source.id,
+          path: read.path
+            ? path.relative(source.pathOrigin.descriptorRoot, read.path)
+            : undefined,
+          ...finding,
+        })),
+      );
+      if (findings.length) continue;
     }
 
     const sourceDigest =

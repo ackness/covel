@@ -502,6 +502,8 @@ await store.withTransaction(async (tx) => {
 
 ## World Data import
 
+Planning also validates the receiver's declared [dimension references and candidate values](./world-data.md). Any such error rejects the whole import plan, including otherwise valid records. Sync follows the same rule.
+
 When a session is created with `worldData`, the same `DataStore` transaction convention is used. The server first builds and validates the import plan, and then wraps the session row and the writes managed by the importer in one transaction:
 
 - `sessions`

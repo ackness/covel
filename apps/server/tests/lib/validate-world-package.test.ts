@@ -868,6 +868,46 @@ describe("validateWorldPackage", () => {
     expect(findings.filter((item) => item.level === "error")).toEqual([]);
   });
 
+  it("checks candidate values in a bundled world's nested conditions", async () => {
+    const parent = await mkdtemp(
+      path.join(tmpdir(), "covel-condition-values-"),
+    );
+    const worldDir = path.join(parent, "emberback");
+    await cp(path.join(repoRoot, "worlds/emberback"), worldDir, {
+      recursive: true,
+    });
+    const file = path.join(worldDir, "data/hidden/story-events.yaml");
+    const original = await readFile(file, "utf8");
+    expect(
+      (await validate(worldDir)).filter(
+        (item) => item.code === "dimension-reference",
+      ),
+    ).toEqual([]);
+    await writeFile(
+      file,
+      original.replace(
+        "in: [imminent, overhead]",
+        "in: [impossible-weather, impossible-weather]",
+      ),
+    );
+    expect(
+      (await validate(worldDir)).filter(
+        (item) => item.code === "dimension-reference",
+      ),
+    ).toEqual([
+      expect.objectContaining({
+        level: "error",
+        file: "data/hidden/story-events.yaml",
+        pointer: "[0].when.all[0].in[0]",
+        message: expect.stringContaining("enum"),
+      }),
+      expect.objectContaining({
+        pointer: "[0].when.all[0].in[1]",
+        message: expect.stringContaining("enum"),
+      }),
+    ]);
+  });
+
   it("warns about a record field that no model reads because it looks like a write time", async () => {
     const schema = `${MANIFEST}characterSchema:
   attributes:

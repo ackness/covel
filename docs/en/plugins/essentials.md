@@ -232,6 +232,8 @@ Declare `version`, `schema` and `accepts` for a data namespace in `contributes.d
 
 If an imported record contains a nested list, and the list items are told apart by a field other than `id` (for example `label`), declare `authoring.source.localeArrayKeys: [label]`. Then, after the author changes the order of the list in the main file, the translation still matches the same record.
 
+When a record references a dimension and compares its value, declare paths and candidate values with [`authoring.references` fields `within` and `values`](../reference/plugins.md), so world validation and import catch mistakes before writing records.
+
 ### When you want memory retrieval to find this data
 
 Add `search: { text: <field name> }` to the namespace declaration. See [searchable data](../reference/plugins.md#searchable-data).

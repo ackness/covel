@@ -328,6 +328,22 @@ describe("plugin manifest dataSchemas", () => {
       }),
     ).toBe(true);
     expect(parses({ path: "**.dimension", to: "world-dimension" })).toBe(true);
+    const dimension = { path: "when.**.dimension", to: "world-dimension" };
+    expect(
+      parses({ ...dimension, values: ["equals", "in[]", "choice.value"] }),
+    ).toBe(true);
+    expect(parses({ ...dimension, within: ["path"], values: ["equals"] })).toBe(
+      true,
+    );
+    expect(
+      parses({ ...dimension, within: ["path", "other"], values: ["equals"] }),
+    ).toBe(false);
+    expect(parses({ ...dimension, values: [] })).toBe(false);
+    expect(parses({ ...dimension, values: ["bad..path"] })).toBe(false);
+    expect(
+      parses({ ...dimension, to: "character-attribute", values: ["equals"] }),
+    ).toBe(false);
+
     // `**` must lead to a field, once at a time.
     expect(parses({ path: "when.**", to: "world-dimension" })).toBe(false);
     expect(

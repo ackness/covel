@@ -138,6 +138,8 @@ Every failure uses a non-2xx status code, plus this error envelope:
 
 `error` is always present. Endpoints that clients must handle by error code (such as `plugin-rpc` and `media`) also return `code`.
 
+`code` uses lowercase letters, digits and `_` or `-` separators. Plugin-selection errors keep solver codes such as `missing-provider`.
+
 Some errors are the same across the whole site:
 
 | Status code | Response body                                                          | When                                                |
@@ -1891,6 +1893,8 @@ Each dimension is handled by the rules below:
 ```
 
 #### `POST /api/worlds/:id/world-data/preflight`
+
+Preflight also checks receivers' declared [dimension references and candidate values](./world-data.md), reporting `dimension-reference` with the file and record location. Import and sync use the same check.
 
 Does a read-only preflight of one worldData import. It tells you how many entries will be imported and where they will go, but it writes nothing.
 
@@ -3846,6 +3850,8 @@ Turns off a plugin in this session.
 | ------ | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
 | 409    | `session_not_active` and similar | The session is not active, it has entered the deletion process, or it was replaced by a session with the same ID while waiting             |
 | 409    | `dimension_provider_required`    | The plugin being disabled is the dimension provider bound to the session, or disabling it would also remove it after solving while it runs |
+
+The game view maps known enable/disable failure codes to localized messages and uses a generic message for unknown errors. The notification details retain the server's original text and code.
 
 When an error happens, the session is not changed.
 
