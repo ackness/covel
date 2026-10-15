@@ -331,6 +331,8 @@ export function createPgMediaStoreFromClient(sql: Sql): MediaStore {
       }));
     },
 
+    // ponytail: metadata filtering loads all session assets into JS, as SQLite does.
+    // See the media-store/pg.ts row in docs/internals/technical-debt.md.
     async listByMetadata(sessionId, filter) {
       const rows = await sql<AssetRow[]>`
         SELECT id, mime, size, meta, owner_session_id, owner_plugin_id, created_at

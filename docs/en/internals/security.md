@@ -265,7 +265,9 @@ The `demo` and `commercial` tiers enforce two kinds of token:
 - One **owner token** per session. It is generated when the session is created, is stored only as a hash in `SessionRecord.metadata`, and is returned only once. Every session-level route requires it.
 - One **operator token** (`COVEL_DESKTOP_REST_TOKEN`). It is a master key, and it passes every owner check. Global and admin routes require it: creating, forking and listing sessions, writing worlds, AI and model routes, and enabling community server code. A fork makes a new session, so it asks the same question as creating one: the owner token alone cannot fork.
 
-If the hosted tiers lack an operator token or a media key, the server refuses to start. `commercial` also requires an explicit list of CORS origins (see [Host profile](#host-profile)). The `self` tier, the desktop app, and development environments do nothing of the kind: tokens are ignored, and single-user local play is not affected.
+If the hosted tiers lack an operator token or a media key, the server refuses to start. `commercial` also requires an explicit list of CORS origins (see [Host profile](#host-profile)). The desktop app and personal self-hosted `self` instances (the personal form) do not check session owner tokens. The browser-private form still checks them.
+
+The personal form trusts other processes on the same machine. Loopback listening and Host and Origin checks limit access from the local network and web pages, but cannot distinguish other local programs. Those programs can call token-free `/api/*` endpoints just as the desktop window does. When `COVEL_DESKTOP_REST_TOKEN` is set, routes that write server settings, access desktop configuration and keys, install or reload packages, or read and write raw config files still require the launch token in `Authorization: Bearer`. The [Host profile](#host-profile) rules `server.settings`, `host.config`, and `host.files` define the scope.
 
 The import of community server code (`entry`, handlers, hooks, wires, runtime JavaScript) is guarded by two-step approval: first `covel:plugin-server-code` is granted, then the specific operations.
 

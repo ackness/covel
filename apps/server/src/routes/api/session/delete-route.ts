@@ -74,6 +74,8 @@ export async function deleteSessionWithLifecycle(
   // Runs once the row is gone. Media claims go only now, so a DELETE that
   // fails leaves a session that can still read its own media.
   const finishDeletion = async (): Promise<void> => {
+    // ponytail: failed media release leaves claims held; no route reclaims them after deletion.
+    // See the session/delete-route.ts row in docs/internals/technical-debt.md.
     try {
       await c.get("mediaStore")?.releaseSession(id);
     } catch (error) {

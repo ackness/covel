@@ -1947,8 +1947,8 @@ describe("effects hazard (same-layer W/W, W/R, R/W detection)", () => {
 });
 
 describe("enablement resolver & permission approval (scenarios 19-25)", () => {
-  // ponytail: scenarios 12 and 19-25 are indexed, not asserted. The plan and
-  // confirm resolver and the persisted approval grants of 19-25 do not exist.
+  // ponytail: scenario 12 lacks saved-continuation spec/approval/effects revalidation; 19-25 remain todo.
+  // See the scheduling scenarios row in docs/internals/technical-debt.md.
   // needs: plan/confirm resolver upgrade with full requires-closure + late-setup wiring (05 §2.2, W-A)
   it.todo(
     "scenario 19: 启用 requires 未满足的插件时，变更计划列出完整闭包；否决则整单不应用；确认后全部同启且新插件走 late-setup 初始化 — 断言否决/确认两条路径",

@@ -791,6 +791,7 @@ After a namespace declares `search`, its records enter the framework's memory re
 
 **Switching the gameplay pack on the session-prep screen.**
 
+- Switching packs does not change the view mode. A pack's `defaultViewMode` is written into the world only during AI world generation.
 - Switching replaces the requests that the previous pack contributed, including the pack the world selected at the start.
 - A plugin that is in the initial default requests and is also requested by the initial pack belongs to that pack, even if it also matches the world's `preferredTags`. After a switch, it is kept only if the new pack also requests it. This lets the new pack's narrative engine replace the old pack's engine.
 - The other initial default requests, the world's `requested` list, and the requests the player added by hand are kept. An explicit exclusion still wins.

@@ -23,6 +23,8 @@
  * Deleting a session fires the change triggers of its rows. The registry lists
  * `record_changes` and `session_write_counters` after the tables they describe,
  * so the cascade removes what those triggers wrote.
+ * ponytail: PG locks each session counter until commit; deletes fire per row and change keys stay until session deletion.
+ * See the common/write-order-ddl.ts row in docs/internals/technical-debt.md.
  */
 
 /** A table whose changes `record_changes` keeps, and the identity it records. */

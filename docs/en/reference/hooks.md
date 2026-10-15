@@ -225,7 +225,7 @@ Payload: `{ result }`, the `RuntimeResult`.
 
 - It keeps the original result's `pluginId`, `runtimeId`, `runId`, and `turnId`, and the suspension fields of a suspended result.
 - Writes come only from the runtime itself: `pendingProposals`, `effects` and `completion` always take the original result's values, and whatever a hook adds is dropped. To stop a write, use `PreStateCommit`.
-- When a hook changes `status` (for example from failed to success), the result carries no writes. A failed function handler's writes buffered before it failed are not committed either.
+- When a hook changes `status` (for example from failed to success), the run's `pendingProposals`, `effects`, and `completion` are all discarded. A failed function handler's writes buffered before it failed are not committed either. A setup runtime changed from failed to success by a hook is not marked complete; it remains pending.
 - If the handler changed `output` but did not change `canonicalValue`, the kernel discards the old `canonicalValue`. This way, the values other runtimes read do not disagree with the rewritten output.
 - It then checks again against the runtime's `output.schema`. A function runtime checks `canonicalValue`. An agent checks `output` when a hook changed `output`. A result changed from failed or skipped to success has no `canonicalValue`, so its `output` is checked, the same check a normal success passes. If the check fails, the runtime fails with `output-schema-invalid`, and nothing is committed.
 

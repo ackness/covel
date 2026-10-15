@@ -19,8 +19,9 @@
  *
  * Backpressure: the outbox holds a bounded number of frames per session. A
  * NOTIFY that never returns (half-open connection) makes later frames drop
- * into a seq hole that receivers reset on, so this transport adds no timeout
- * of its own — a timeout would only move the backlog into the client's queue.
+ * into a seq hole that receivers detect only if a later frame arrives.
+ * ponytail: NOTIFY has no timeout; a half-open connection stalls queued sends.
+ * See the pg-event-transport.ts row in docs/internals/technical-debt.md.
  */
 
 import type { EventBusTransport } from "@covel/events";

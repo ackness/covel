@@ -84,13 +84,15 @@ Two more points:
 
 When you choose `pg`, the data is shared, and some coordination between processes is also in place. But not every feature becomes a shared service.
 
-| Feature                              | Memory / SQLite                                           | PostgreSQL with several instances                                                     |
-| ------------------------------------ | --------------------------------------------------------- | ------------------------------------------------------------------------------------- |
-| Write lock for a session             | A lock inside the process, for single-process deployments | An advisory lock on the shared database                                               |
-| Delivering events to SSE subscribers | Broadcast only within the current process                 | Forwarded through PG `LISTEN/NOTIFY`                                                  |
-| `steer` / `abort` for an active turn | Works on the execution handle the current process holds   | Still valid only inside the process                                                   |
-| Background job `_runtime_jobs`       | Whether a job survives depends on the storage backend     | Claimed through CAS and a renewable lease                                             |
-| Media binary data                    | Decided by the separate `MEDIA_BACKEND`                   | `mirror` stores it in PG; files in a local media backend are not shared automatically |
+<!-- prettier-ignore -->
+| Feature | Memory / SQLite | PostgreSQL with several instances |
+| --- | --- | --- |
+| Write lock for a session | A lock inside the process, for single-process deployments | An advisory lock on the shared database |
+| Delivering events to SSE subscribers | Broadcast only within the current process | Forwarded through PG `LISTEN/NOTIFY` |
+| Event cursors | Valid within the same process | Valid only on the instance that issued them. On another instance, the client must reread the session; subscribing with the old cursor receives `system.reset` |
+| `steer` / `abort` for an active turn | Works on the execution handle the current process holds | Still valid only inside the process |
+| Background job `_runtime_jobs` | Whether a job survives depends on the storage backend | Claimed through CAS and a renewable lease |
+| Media binary data | Decided by the separate `MEDIA_BACKEND` | `mirror` stores it in PG; files in a local media backend are not shared automatically |
 
 Details for the PostgreSQL column:
 
@@ -918,6 +920,7 @@ Limits that apply to both:
 - The control registry for a turn lives inside the process. In a multi-pod (PG) deployment, steer and abort can reach only the turn on the same pod. Checking execution status across processes does not change this.
 - An action request is registered as soon as it arrives, so it can be stopped while it waits. It becomes the session's current turn only after it obtains the session lock. From then on it covers preparation, model execution, commit, and cleanup, and is released only when the action completes. So a refresh does not wrongly report idle while the commit is still unfinished.
 - While a turn is running, a stop applies only to it, never to a request queued behind it for the lock. A queued request also does not overwrite the control registration of the current turn.
+- When no turn is running, `abort` stops every action request for that session still waiting in the current process.
 - A stop signal cannot undo a transaction that has already finished.
 
 ### Setup runtime control (retry / skip)
@@ -2298,6 +2301,8 @@ The response is the session record, plus a one-time `ownerToken`.
 | `phase`                | `'setup' \| 'playing'`                         | Whether the session is in opening setup or in normal play. It starts as `setup` if the active set has a setup runtime, otherwise `playing`. It becomes `playing` once all setup runtimes are done                                                                                         |
 | `completedPlayerTurns` | number                                         | The number of committed player turns in normal play. Interaction during setup is not counted. The same turn is never counted twice                                                                                                                                                        |
 | `setupRuntimes`        | `Record<runtimeId, SetupRuntimeState>`         | The state of each setup runtime. See the table below                                                                                                                                                                                                                                      |
+
+`worldDataNotices` is returned only in the session creation response. The server does not save it, so these notices disappear after a page refresh.
 
 When `ownerToken` must be sent:
 

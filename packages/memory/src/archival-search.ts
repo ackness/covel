@@ -27,6 +27,8 @@ import {
 import type { ArchivalStore } from "./store-contracts.js";
 import type { ArchivalSearchResult, ArchivalSearcher } from "./types.js";
 
+// ponytail: each keyword search loads the session's entire searchable archive before ranking.
+// See the archival-search.ts row in docs/internals/technical-debt.md.
 export function createKeywordArchivalSearcher(
   store: ArchivalStore,
   pluginData?: SearchablePluginDataResolver,
