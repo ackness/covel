@@ -213,3 +213,32 @@ describe("buildProviderUrl", () => {
     );
   });
 });
+
+describe("buildProviderUrl plaintext warning", () => {
+  it("warns for HTTP to a host that only starts like a loopback name", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      for (const baseUrl of [
+        "http://localhost.evil.example/v1",
+        "http://127.0.0.1.evil.example/v1",
+        "http://api.example.com/v1",
+      ]) {
+        warn.mockClear();
+        buildProviderUrl(baseUrl, "/chat/completions");
+        expect(warn, baseUrl).toHaveBeenCalledOnce();
+      }
+      for (const baseUrl of [
+        "https://api.example.com/v1",
+        "http://localhost:11434/v1",
+        "http://127.0.0.1:8080/v1",
+        "http://[::1]:8080/v1",
+      ]) {
+        warn.mockClear();
+        buildProviderUrl(baseUrl, "/chat/completions");
+        expect(warn, baseUrl).not.toHaveBeenCalled();
+      }
+    } finally {
+      warn.mockRestore();
+    }
+  });
+});
