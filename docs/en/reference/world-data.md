@@ -854,6 +854,7 @@ A plugin that is not enabled when the session is created gets no world data, for
 
 - It writes data only for joined plugins that have no import ledger rows for this world yet. Other plugins' data and ledger rows stay as they are; turning the same plugin off and on again does not overwrite what the game changed.
 - A community plugin's projection code runs only after it is approved for this game.
+- When the plugin that joins is the game's first plugin responsible for dimensions (`world.dimensions@1`), the dimensions the world declares are imported at once too. Turning on a second plugin responsible for dimensions is refused; see [World Model](./world-model.md#ownership-and-writing).
 - The response's `worldData` says which plugins received data, how many rows were written, and which data is still missing with the current plugins (`notices`). The game screen replaces its earlier notice with it.
 - If the import fails, the plugin stays enabled and `notices` carries an error.
 

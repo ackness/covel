@@ -48,6 +48,7 @@ import { DimensionActions } from "./session-prep/dimension-actions.js";
 import { ModelsCard } from "./session-prep/models-card.js";
 import { PluginSelectionCard } from "./session-prep/plugin-selection-card.js";
 import { SessionPluginNotices } from "./session-plugin-notices.js";
+import { pluginName } from "@/lib/plugin-notices.js";
 import type { SessionPrepScreenProps } from "./session-prep/types.js";
 import { worldDisplayText, worldPlayLocale } from "@/lib/world-locale.js";
 import { worldVisual } from "@/lib/world-visuals.js";
@@ -131,6 +132,7 @@ export function SessionPrepScreen({
     applyPack,
     resetToMinimal,
     togglePlugin,
+    turnOffPlugins,
     retryPluginPlan,
   } = usePluginSelection(world.id, plugins, prepareWorldForServer);
 
@@ -138,6 +140,7 @@ export function SessionPrepScreen({
     worldDataPreflight,
     worldDataPreflightStatus,
     worldDataPreflightError,
+    dimensionProviderConflict,
     runWorldDataPreflight,
   } = useWorldDataPreflight(world.id, enabledPluginIds, prepareWorldForServer);
 
@@ -148,6 +151,9 @@ export function SessionPrepScreen({
   const dimensionsLeftOut = worldDataPreflight?.diagnostics.some(
     (item) => item.code === "dimension-provider-missing",
   );
+  // A game keeps its dimensions with one plugin. The server names the
+  // candidates and refuses to start until the player keeps one of them.
+  const providerConflict = (dimensionProviderConflict?.length ?? 0) > 1;
   const { bindingState } = usePrepRuntimeBindings(
     world.id,
     enabledPluginSummaries,
@@ -315,7 +321,13 @@ export function SessionPrepScreen({
   const [resumingId, setResumingId] = useState<string | null>(null);
 
   const handleStart = useCallback(async () => {
-    if (isStarting || pluginPlanUnavailable || loreUnavailable) return;
+    if (
+      isStarting ||
+      pluginPlanUnavailable ||
+      loreUnavailable ||
+      providerConflict
+    )
+      return;
     setIsStarting(true);
     try {
       await onStart(
@@ -333,6 +345,7 @@ export function SessionPrepScreen({
     isStarting,
     pluginPlanUnavailable,
     loreUnavailable,
+    providerConflict,
     lore.value,
     originalLore,
     requestedPluginIds,
@@ -409,7 +422,10 @@ export function SessionPrepScreen({
                   size="sm"
                   className="h-10 shrink-0 px-5 font-bold uppercase tracking-widest"
                   disabled={
-                    isStarting || pluginPlanUnavailable || loreUnavailable
+                    isStarting ||
+                    pluginPlanUnavailable ||
+                    loreUnavailable ||
+                    providerConflict
                   }
                   onClick={() => void handleStart()}
                 >
@@ -562,6 +578,50 @@ export function SessionPrepScreen({
             </div>
           )}
 
+          {providerConflict && dimensionProviderConflict && (
+            <div
+              className="mb-5 flex items-start gap-2 rounded-(--radius-card) border border-amber-500/40 bg-amber-500/5 px-4 py-3 text-sm"
+              role="alert"
+              data-testid="dimension-provider-conflict"
+            >
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+              <div className="min-w-0">
+                <p className="font-medium">
+                  {t("session.dimensionProvider.conflictTitle")}
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {t("session.dimensionProvider.conflictDetail", {
+                    plugins: dimensionProviderConflict
+                      .map((id) => pluginName(plugins, id))
+                      .join(", "),
+                  })}
+                </p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {dimensionProviderConflict.map((id) => (
+                    <Button
+                      key={id}
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={isStarting}
+                      onClick={() =>
+                        turnOffPlugins(
+                          dimensionProviderConflict.filter(
+                            (other) => other !== id,
+                          ),
+                        )
+                      }
+                    >
+                      {t("session.dimensionProvider.keep", {
+                        plugin: pluginName(plugins, id),
+                      })}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
           {!pluginPlanUnavailable && (
             <SessionPluginNotices
               plugins={plugins.map((plugin) => ({
@@ -678,7 +738,12 @@ export function SessionPrepScreen({
       <div className="absolute inset-x-0 bottom-0 z-30 border-t border-border bg-background/92 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur-xl md:hidden">
         <Button
           className="h-12 w-full font-semibold uppercase tracking-wider shadow-(--shadow-pop)"
-          disabled={isStarting || pluginPlanUnavailable || loreUnavailable}
+          disabled={
+            isStarting ||
+            pluginPlanUnavailable ||
+            loreUnavailable ||
+            providerConflict
+          }
           onClick={() => void handleStart()}
         >
           {isStarting ? (

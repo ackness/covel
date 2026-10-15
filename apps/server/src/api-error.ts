@@ -6,6 +6,7 @@ import type {
   ApiOkResponse,
 } from "@covel/shared";
 import { SessionLockTimeoutError } from "./lib/session-lock.js";
+import { DimensionProviderConflictError } from "./world-data/dimension-provider-conflict.js";
 
 export type { ApiErrorResponse } from "@covel/shared";
 
@@ -186,11 +187,22 @@ export const SESSION_BUSY_CODE = "session_busy";
 export function classifyApiError(
   err: unknown,
   isDev: boolean,
-): { body: ApiErrorResponse; status: 500 | 503 } {
+): { body: ApiErrorResponse; status: 409 | 500 | 503 } {
   if (err instanceof SessionLockTimeoutError) {
     return {
       body: errorBody(SESSION_BUSY_MESSAGE, { code: SESSION_BUSY_CODE }),
       status: 503,
+    };
+  }
+  // The player resolves it by keeping one plugin; the message names plugin
+  // IDs only, so it is safe in every deployment.
+  if (err instanceof DimensionProviderConflictError) {
+    return {
+      body: errorBody(err.message, {
+        code: err.code,
+        details: { candidates: err.candidates },
+      }),
+      status: 409,
     };
   }
   const message = err instanceof Error ? err.message : String(err);
@@ -207,8 +219,9 @@ export function classifyApiError(
  * the raw message in dev, a generic string in prod (`isDev` false) so
  * stacks/paths never leak.
  *
- * One error is not a server fault and is mapped instead of being bucketed as a
- * 500: {@link SessionLockTimeoutError}. See below.
+ * Two errors are not server faults and are mapped instead of being bucketed
+ * as a 500: {@link SessionLockTimeoutError} (see below) and
+ * {@link DimensionProviderConflictError}, a plugin choice the player makes.
  */
 export function makeErrorHandler(
   logPrefix: string,
@@ -223,7 +236,10 @@ export function makeErrorHandler(
     // so it is a coded, retryable 503 rather than a generic 500. The raw
     // message names the session and internals, so only a fixed string crosses
     // the wire; the detail stays in the log.
-    if (err instanceof SessionLockTimeoutError) {
+    if (
+      err instanceof SessionLockTimeoutError ||
+      err instanceof DimensionProviderConflictError
+    ) {
       console.warn(
         `${logPrefix}: ${c.req.method} ${redactSensitiveQueryParams(c.req.url)} — ${message}`,
       );

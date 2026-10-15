@@ -419,6 +419,32 @@ describe("usePluginSelection", () => {
     expect(result.current.excludedPluginIds).toEqual(["alternative"]);
   });
 
+  it("turns several plugins off at once and keeps the rest", async () => {
+    // The dimension chooser keeps one provider and turns the others off.
+    const providers = [
+      CORE_PLUGIN,
+      plugin("dimensions-a", { provides: ["world.dimensions@1"] }),
+      plugin("dimensions-b", { provides: ["world.dimensions@1"] }),
+      plugin("dimensions-c", { provides: ["world.dimensions@1"] }),
+    ];
+    vi.mocked(api.getWorldPluginPlan).mockResolvedValue(
+      selectionPlan(["core", "dimensions-a", "dimensions-b", "dimensions-c"]),
+    );
+    const { result } = renderHook(() =>
+      usePluginSelection(PLAN.worldId, providers, prepareWorldForServer),
+    );
+    await waitFor(() => expect(result.current.pluginPlanLoading).toBe(false));
+
+    act(() => result.current.turnOffPlugins(["dimensions-a", "dimensions-c"]));
+    expect(new Set(result.current.enabledPluginIds)).toEqual(
+      new Set(["core", "dimensions-b"]),
+    );
+    expect(new Set(result.current.excludedPluginIds)).toEqual(
+      new Set(["dimensions-a", "dimensions-c"]),
+    );
+    expect(result.current.activePluginPack).toBeNull();
+  });
+
   it("replaces a core plugin and adds dependencies when enabling its alternative", async () => {
     vi.mocked(api.getWorldPluginPlan).mockResolvedValue(
       selectionPlan(["core"]),

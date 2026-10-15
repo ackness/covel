@@ -61,6 +61,20 @@ export async function pendingDimensionSettlements(args: {
   return { providerPluginId, receipts };
 }
 
+/** Why a turn cannot run with several plugins publishing world dimensions. */
+export function dimensionProviderConflictReason(
+  providers: readonly string[],
+): string {
+  return `Several plugins keep world dimensions (${providers.join(", ")}). Turn all but one of them off, then send your message again.`;
+}
+
+/**
+ * Whether the execution may run. A bound provider that is not running only
+ * pauses the dimensions: the story goes on, no runtime can write them (the
+ * commit refuses every writer but the bound provider), and they keep their
+ * values until it is back. Several providers, or another one taking the bound
+ * provider's place, stop the execution with a reason the player can act on.
+ */
 export async function dimensionExecutionBarrier(args: {
   readonly store?: DataStore;
   readonly sessionId: string;
@@ -75,12 +89,15 @@ export async function dimensionExecutionBarrier(args: {
         .map((runtime) => runtime.pluginId),
     ),
   ];
-  if (providers.length > 1) return "Conflicting dimension providers";
+  if (providers.length > 1) return dimensionProviderConflictReason(providers);
+  const provider = providers[0];
+  // No provider runs: nothing writes the dimensions, and no settlement can run.
+  if (!provider) return undefined;
   const session = await args.store.getSession(args.sessionId);
   const bound = session?.metadata?._dimensionProviderPluginId;
-  if (bound !== undefined && bound !== providers[0])
-    return "Dimension provider unavailable; restore it before continuing";
-  if (!args.willNarrate || !providers[0]) return undefined;
+  if (bound !== undefined && bound !== provider)
+    return `This session's dimensions belong to "${String(bound)}", which is not running. "${provider}" also keeps world dimensions and cannot take them over: turn it off to play on without dimension updates.`;
+  if (!args.willNarrate) return undefined;
   const pending = (
     await pendingDimensionSettlements({
       store: args.store,
