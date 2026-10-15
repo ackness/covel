@@ -314,6 +314,28 @@ export const pluginSummarySchema: z.ZodType<PluginSummary> = z
       })
       .strict()
       .optional(),
+    disabledRuntimes: z
+      .array(
+        z
+          .object({
+            sourcePath: z.string(),
+            message: z.string(),
+            outputContract: z.string().optional(),
+          })
+          .strict(),
+      )
+      .optional(),
+    ignoredFields: z
+      .array(
+        z
+          .object({
+            sourcePath: z.string(),
+            field: z.string(),
+            message: z.string(),
+          })
+          .strict(),
+      )
+      .optional(),
     runtimeCount: z.number().int().nonnegative(),
     version: z.string().optional(),
     ...packageCreditFields,

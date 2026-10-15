@@ -18,6 +18,7 @@ import {
   type RuntimePluginContract,
 } from "@covel/shared";
 import { pluginManifestRecords } from "../routes/misc-api/registry-projection.js";
+import { buildPluginLoadDiagnostics } from "./plugin-load-diagnostics.js";
 
 function uniqueSorted(values: Iterable<string>): string[] {
   return [...new Set(values)].sort((a, b) => compareText(a, b));
@@ -123,6 +124,7 @@ export function buildPluginSummary(
           ? "discovered"
           : "installed",
     ...(entry.error ? { error: entry.error } : {}),
+    ...buildPluginLoadDiagnostics(entry),
     ...(entry.registrationError
       ? { registrationError: { ...entry.registrationError } }
       : {}),

@@ -67,6 +67,7 @@ export type {
   PluginDetail,
   MissingWorldPlugin,
   PluginLoadError,
+  PluginLoadDiagnostics,
   PluginPack,
   PluginMutationResponse,
   PluginRuntimeSummary,

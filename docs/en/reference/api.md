@@ -3677,20 +3677,25 @@ Lists all the plugins the server has found. It returns `{ items: PluginSummary[]
 
 Fields of `PluginSummary`:
 
-| Field                                                       | Meaning                                                                                                   |
-| ----------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
-| `id`, `displayName`, `description`                          | The package's identity and its localizable description                                                    |
-| `kind`, `source`                                            | `core \| plugin` and `builtin \| community`                                                               |
-| `hostState`, `error?`                                       | Host state `discovered \| installed \| loaded \| error`, and the load error                               |
-| `provides`, `requires`, `optional`, `conflicts`             | Package-level contract declarations                                                                       |
-| `extensions`                                                | Declared extension points, their IDs, order, and listener information                                     |
-| `eventTopics`                                               | Topics declared in `contributes.events`                                                                   |
-| `runtimeCount`, `runtimes`, `tools`, `userSettings`, `tags` | The runtime summary, tools, and user settings                                                             |
-| `languages`                                                 | `{ text: string[], instructions: string[] }`, see below                                                   |
-| `version?`, `author?`, `license?`, `homepage?`              | The version and [author information](./plugins.md#author-information) from the manifest. For display only |
+<!-- prettier-ignore -->
+| Field | Meaning |
+| --- | --- |
+| `id`, `displayName`, `description` | The package's identity and its localizable description |
+| `kind`, `source` | `core \| plugin` and `builtin \| community` |
+| `hostState`, `error?` | Host state `discovered \| installed \| loaded \| error`, and the load error |
+| `disabledRuntimes?`, `ignoredFields?` | Non-fatal load diagnostics, described below |
+| `provides`, `requires`, `optional`, `conflicts` | Package-level contract declarations |
+| `extensions` | Declared extension points, their IDs, order, and listener information |
+| `eventTopics` | Topics declared in `contributes.events` |
+| `runtimeCount`, `runtimes`, `tools`, `userSettings`, `tags` | The runtime summary, tools, and user settings |
+| `languages` | `{ text: string[], instructions: string[] }`, see below |
+| `version?`, `author?`, `license?`, `homepage?` | The version and [author information](./plugins.md#author-information) from the manifest. For display only |
 
 Field notes:
 
+- `disabledRuntimes`: each item is `{ sourcePath, message, outputContract? }` for a runtime left out at load. It does not count toward `runtimeCount`, `runtimes`, or the package’s output contracts.
+- `ignoredFields`: each item is `{ sourcePath, field, message }` for an unknown field the host ignored. Both arrays are omitted when empty. `sourcePath` is relative to the plugin root (for example `runtimes/note/RUNTIME.md`); file paths in `message` also exclude the server’s installation directory. These warnings do not mark the whole package as `hostState: "error"`. After reload, they describe the currently registered version.
+- Plugin details, session plugin lists, and `plugins[]` in `GET /api/plugin-flows` return the same diagnostic fields. Flow `steps[]` only contains retained runtimes.
 - `eventTopics`: when a session resolves its plugin set, it uses this to make sure a topic has only one declaring plugin.
 - `languages.text`: the languages the plugin has text in. This covers labels, interface text, text in code, and translations in the translation catalog. `languages.instructions`: the languages it has instructions (prompt body) in. Both always include at least `en`.
 - `author.about` and the `label` of links can be maps split by language.

@@ -20,6 +20,7 @@ import { GithubPackageUpdater } from "./GithubPackageUpdater.js";
 import { pluginPackageInfo } from "@/lib/package-info.js";
 import { useSessionActions } from "@/stores/session-store.js";
 import { PackageCredits } from "@/components/shared/package-credits.js";
+import { PluginLoadWarnings } from "@/components/shared/plugin-load-warnings.js";
 import { GithubCollectionInstaller } from "./GithubCollectionInstaller.js";
 import type { PluginInstallation, PluginSummary } from "@covel/shared";
 
@@ -339,6 +340,9 @@ export function PackagesPane() {
                       : t("settings.packages.uninstall", "Uninstall")}
                   </Button>
                 </div>
+                <PluginLoadWarnings
+                  diagnostics={installed.find((plugin) => plugin.id === p.id)}
+                />
                 <GithubPackageUpdater
                   installation={p}
                   disabled={!!busy || !!removing || githubBusy || updateBusy}

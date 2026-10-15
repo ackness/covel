@@ -17,6 +17,7 @@ import {
 import { ProviderSlotSetting } from "./provider-slot-setting.js";
 import { pluginPackageInfo } from "@/lib/package-info.js";
 import { PackageCredits } from "@/components/shared/package-credits.js";
+import { PluginLoadWarnings } from "@/components/shared/plugin-load-warnings.js";
 import type * as api from "@/services/api.js";
 import { RuntimeCollectionFeatureBadges } from "../runtime-feature-badges.js";
 
@@ -141,6 +142,7 @@ export function PluginPackageRow({
           {description}
         </p>
       )}
+      <PluginLoadWarnings diagnostics={pkg} />
       <PackageCredits
         info={pluginPackageInfo(pkg)}
         packageName={displayName}
