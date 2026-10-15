@@ -521,6 +521,13 @@
       "missingProvider": "Ни один плагин не даёт нужные ему данные",
       "inputUnusable": "Полученные данные нельзя использовать",
       "dimensionsPaused": "Измерения мира приостановлены"
+    },
+    "pluginTags": {
+      "costLlm": "Вызывает модель",
+      "costFunction": "Без вызовов модели",
+      "uiRightPanel": "Боковая панель",
+      "uiMessageBlock": "Карточки в чате",
+      "uiManualAction": "Действия игрока"
     }
   },
   "blocks": {

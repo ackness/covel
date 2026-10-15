@@ -451,6 +451,13 @@
       "missingProvider": "没有插件提供它需要的输入",
       "inputUnusable": "它收到的输入不能用",
       "dimensionsPaused": "世界维度暂停了"
+    },
+    "pluginTags": {
+      "costLlm": "调用模型",
+      "costFunction": "不调用模型",
+      "uiRightPanel": "侧边面板",
+      "uiMessageBlock": "消息卡片",
+      "uiManualAction": "可手动使用"
     }
   },
   "blocks": {

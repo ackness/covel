@@ -7,6 +7,7 @@ import {
   defaultSelectedPluginIds,
   filterPlugins,
   groupPlugins,
+  pluginTagLabel,
   recommendationReason,
 } from "../session-plugin-selection.js";
 
@@ -98,7 +99,7 @@ describe("session plugin selection helpers", () => {
       ),
     ).toEqual(["chat-mode-narrator"]);
     expect(
-      groupPlugins(plugins, (group) => group).map((group) => group.id),
+      groupPlugins(plugins, (tag) => tag ?? "").map((group) => group.id),
     ).toContain("tag:mode:dialogue");
   });
 
@@ -114,21 +115,35 @@ describe("session plugin selection helpers", () => {
       plugin("plain", { kind: "core" }),
     ];
     expect(
-      groupPlugins(items, () => "No tags").map(({ id, label, plugins }) => ({
-        id,
-        label,
-        ids: plugins.map((item) => item.id),
-      })),
+      groupPlugins(items, (tag) => tag ?? "No tags").map(
+        ({ id, label, plugins }) => ({
+          id,
+          label,
+          ids: plugins.map((item) => item.id),
+        }),
+      ),
     ).toEqual([
       { id: "tag:mode:custom", label: "mode:custom", ids: ["custom"] },
       { id: "tag:role:guide", label: "role:guide", ids: ["guide"] },
       { id: "tag:untagged", label: "untagged", ids: ["tagged"] },
       { id: "untagged", label: "No tags", ids: ["plain"] },
     ]);
-    expect(groupPlugins([], () => "No tags")).toEqual([]);
+    expect(groupPlugins([], (tag) => tag ?? "No tags")).toEqual([]);
     expect(
-      groupPlugins(filterPlugins(items, "plain", new Set()), () => "No tags"),
+      groupPlugins(
+        filterPlugins(items, "plain", new Set()),
+        (tag) => tag ?? "No tags",
+      ),
     ).toHaveLength(1);
+  });
+
+  it("names derived tags in the player's words and keeps written ones", () => {
+    const t = (key: string) => `<${key}>`;
+    expect(pluginTagLabel("cost:llm", t)).toBe("<session.pluginTags.costLlm>");
+    expect(pluginTagLabel("ui:manual-action", t)).toBe(
+      "<session.pluginTags.uiManualAction>",
+    );
+    expect(pluginTagLabel("mode:dialogue", t)).toBe("mode:dialogue");
   });
 
   const labels = {

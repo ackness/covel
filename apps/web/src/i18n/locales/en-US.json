@@ -490,6 +490,13 @@
       "missingProvider": "No plugin provides an input it needs",
       "inputUnusable": "The input it received could not be used",
       "dimensionsPaused": "World dimensions are paused"
+    },
+    "pluginTags": {
+      "costLlm": "Calls a model",
+      "costFunction": "No model calls",
+      "uiRightPanel": "Side panel",
+      "uiMessageBlock": "Message cards",
+      "uiManualAction": "Player actions"
     }
   },
   "blocks": {

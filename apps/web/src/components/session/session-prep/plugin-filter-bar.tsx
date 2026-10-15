@@ -1,5 +1,6 @@
 import { Search } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { pluginTagLabel } from "@/lib/session-plugin-selection.js";
 
 interface PluginFilterBarProps {
   pluginSearch: string;
@@ -47,7 +48,7 @@ export function PluginFilterBar({
               onClick={() => onTogglePluginTag(tag)}
               aria-pressed={activePluginTags.has(tag)}
             >
-              {tag}
+              {pluginTagLabel(tag, t)}
             </button>
           ))}
         </div>

@@ -63,9 +63,34 @@ export function collectPluginTags(plugins: readonly PluginSummary[]): string[] {
   );
 }
 
+/** Tags Covel derives from a package's contents, by translation key. */
+const DERIVED_TAG_KEYS: Readonly<Record<string, string>> = {
+  "cost:llm": "costLlm",
+  "cost:function": "costFunction",
+  "ui:right-panel": "uiRightPanel",
+  "ui:message-block": "uiMessageBlock",
+  "ui:manual-action": "uiManualAction",
+};
+
+/**
+ * A tag in the player's words: a derived tag is translated, a tag the author
+ * wrote is shown as written.
+ */
+export function pluginTagLabel(
+  tag: string,
+  t: (key: string) => string,
+): string {
+  const key = DERIVED_TAG_KEYS[tag];
+  return key ? t(`session.pluginTags.${key}`) : tag;
+}
+
+/**
+ * Plugins grouped under their first tag. `labelForGroup` gets that tag, or
+ * `undefined` for the plugins without one.
+ */
 export function groupPlugins(
   plugins: readonly PluginSummary[],
-  labelForGroup: (groupId: string) => string,
+  labelForGroup: (tag: string | undefined) => string,
 ): PluginGroup[] {
   const grouped = new Map<string, PluginSummary[]>();
   for (const plugin of plugins) {
@@ -81,7 +106,7 @@ export function groupPlugins(
     )
     .map(([id, groupPlugins]) => ({
       id,
-      label: id === "untagged" ? labelForGroup(id) : id.slice(4),
+      label: labelForGroup(id === "untagged" ? undefined : id.slice(4)),
       plugins: groupPlugins.slice().sort((a, b) => a.id.localeCompare(b.id)),
     }));
 }

@@ -6,6 +6,7 @@ import {
   defaultSelectedPluginIds,
   filterPlugins,
   groupPlugins,
+  pluginTagLabel,
 } from "@/lib/session-plugin-selection.js";
 import {
   isBuiltinDefaultPackage,
@@ -250,8 +251,10 @@ export function usePluginSelection(
   );
   const pluginGroups = useMemo(
     () =>
-      groupPlugins(visiblePlugins, (groupId) =>
-        t(`session.pluginGroups.${groupId}`, groupId),
+      groupPlugins(visiblePlugins, (tag) =>
+        tag === undefined
+          ? t("session.pluginGroups.untagged")
+          : pluginTagLabel(tag, t),
       ),
     [visiblePlugins, t],
   );
