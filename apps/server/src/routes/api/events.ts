@@ -1,3 +1,4 @@
+import { sessionEventBus } from "./session/session-events.js";
 /**
  * API Event routes — emit.
  *
@@ -46,6 +47,15 @@ eventRoutes.post("/emit", async (c) => {
   );
   if (parsed instanceof Response) return parsed;
   const body = parsed.body;
+  if (
+    body.topic === "session.invalidated" ||
+    body.payload?._subType === "session.invalidated"
+  ) {
+    return c.json(
+      errorBody("Session invalidation is reserved for lifecycle control"),
+      400,
+    );
+  }
 
   // Audit 2026-07-16 L-3: on hosted tiers, gate event injection on the target
   // session's owner token so a non-production demo boot can't accept arbitrary
@@ -81,7 +91,7 @@ eventRoutes.post("/emit", async (c) => {
     expectedSession: session,
     allowedStatuses: ["active"],
     mutate: async () => {
-      eventBus.emit(message);
+      sessionEventBus(eventBus, session).emit(message);
       // EventBus persistence is intentionally queued. Drain it before releasing
       // the lifecycle lock so delete/recreate cannot be followed by a late
       // audit row belonging to the old incarnation.

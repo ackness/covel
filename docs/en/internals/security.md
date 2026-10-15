@@ -392,6 +392,8 @@ The application ships its own fonts (`@fontsource-variable/*`, SIL OFL 1.1), and
 - If an operation's SSE response is already open, a rejection is reported through `error.occurred`. The machine-readable error code is the same as for the JSON guard.
 - Background runtime jobs that run apart from the main flow keep their own admission lock and commit lock.
 
+**Subscription content.** An SSE connection admits events only from the session incarnation that passed owner authorization. Replay state is allocated only after that authorization. Producers capture the incarnation before async work; deletion controls bypass topic filters, and cross-origin reordering cannot deliver another incarnation to the old connection. See the [protocol](../reference/protocol.md) for handshake and reconnect rules.
+
 **Plugin data management.** Whether a plugin is enabled by default is not a data ownership boundary. Admin tools and scripts follow the same [plugin data write rules](../reference/api.md#plugin-data) for every plugin; `kind: core` provides no extra protection.
 
 **Reading execution state.** `GET /api/sessions/:id/execution` binds the session incarnation that passed owner authorization to the existing read barrier on the response side.

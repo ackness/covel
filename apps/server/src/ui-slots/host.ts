@@ -1,3 +1,4 @@
+import { publicSessionIncarnation } from "../routes/api/session/session-guard.js";
 import { createHash } from "node:crypto";
 import { ZodError } from "zod";
 import type { EventBus } from "@covel/events";
@@ -24,6 +25,7 @@ export interface UiSlotQuery {
   readonly key?: string;
 }
 interface SessionSlots {
+  incarnation?: string;
   readonly cache: Map<string, UiSlotSnapshot>;
   readonly events: Map<string, UiSlotProjectionInput["events"]>;
   readonly endedTurns: Set<string>;
@@ -110,6 +112,7 @@ export function createUiSlotHost(args: {
     sessionId: string,
     type: string,
     payload: Record<string, unknown>,
+    sessionIncarnation: string | undefined,
   ) => {
     if (closed) return;
     args.eventBus.emit({
@@ -117,6 +120,7 @@ export function createUiSlotHost(args: {
       type: "event",
       topic: "plugin",
       sessionId,
+      sessionIncarnation,
       timestamp: new Date().toISOString(),
       payload: { ...payload, _subType: type },
     });
@@ -141,6 +145,7 @@ export function createUiSlotHost(args: {
     sessionId: string,
     slots: readonly UiSlotName[],
     turnId?: string,
+    expectedIncarnation?: string,
   ) => {
     const state = sessionState(sessionId);
     if (closed || (turnId && state.endedTurns.has(turnId))) return;
@@ -148,6 +153,14 @@ export function createUiSlotHost(args: {
     if (!session) {
       sessions.delete(sessionId);
       return;
+    }
+    const incarnation = publicSessionIncarnation(session);
+    if (expectedIncarnation && expectedIncarnation !== incarnation) return;
+    if (state.incarnation !== incarnation) {
+      state.cache.clear();
+      state.events.clear();
+      state.endedTurns.clear();
+      state.incarnation = incarnation;
     }
     const world = await createWorldModelView(args.store, sessionId);
     const execution = args.extensionHost.createExecution({
@@ -207,12 +220,17 @@ export function createUiSlotHost(args: {
             .digest("hex");
           const snapshot: UiSlotSnapshot = { slot, ...entry, revision };
           if (turnId) {
-            emit(sessionId, "ui.slot.preview", { ...snapshot, turnId });
+            emit(
+              sessionId,
+              "ui.slot.preview",
+              { ...snapshot, turnId },
+              incarnation,
+            );
           } else {
             const key = cacheKey(slot, entry.key);
             if (state.cache.get(key)?.revision !== revision) {
               state.cache.set(key, snapshot);
-              emit(sessionId, "ui.slot.changed", snapshot);
+              emit(sessionId, "ui.slot.changed", snapshot, incarnation);
             }
           }
         }
@@ -247,7 +265,12 @@ export function createUiSlotHost(args: {
     state.timer.unref?.();
   };
   const handle = async (event: SubscriptionEvent) => {
-    if (closed || event.type.startsWith("ui.slot.")) return;
+    if (
+      closed ||
+      !event.sessionIncarnation ||
+      event.type.startsWith("ui.slot.")
+    )
+      return;
     if (
       event.type === "runtime.started" &&
       typeof event.payload.turnId === "string"
@@ -265,6 +288,18 @@ export function createUiSlotHost(args: {
     if (!relevant) return;
     const { sessionId, payload } = event;
     const state = sessionState(sessionId);
+    if (state.incarnation !== event.sessionIncarnation) {
+      const owner = await args.store.getSession(sessionId);
+      if (
+        !owner ||
+        publicSessionIncarnation(owner) !== event.sessionIncarnation
+      )
+        return;
+      state.cache.clear();
+      state.events.clear();
+      state.endedTurns.clear();
+      state.incarnation = event.sessionIncarnation;
+    }
     state.pending++;
     try {
       const turnId =
@@ -274,7 +309,12 @@ export function createUiSlotHost(args: {
         if (state.endedTurns.size > 128)
           state.endedTurns.delete(state.endedTurns.values().next().value!);
         state.events.delete(turnId);
-        emit(sessionId, "ui.slot.cleared", { turnId });
+        emit(
+          sessionId,
+          "ui.slot.cleared",
+          { turnId },
+          event.sessionIncarnation,
+        );
         schedule(sessionId, uiSlotNameSchema.options);
         return;
       }
@@ -282,6 +322,7 @@ export function createUiSlotHost(args: {
         sessionId,
         uiSlotV1.id,
       );
+      if (state.incarnation !== event.sessionIncarnation) return;
       const slots = new Set<UiSlotName>();
       for (const provider of providers) {
         const parsed = uiSlotNameSchema.safeParse(provider.slot);
@@ -338,7 +379,9 @@ export function createUiSlotHost(args: {
             },
           ].slice(-128),
         );
-        await enqueue(sessionId, () => project(sessionId, [...slots], turnId));
+        await enqueue(sessionId, () =>
+          project(sessionId, [...slots], turnId, event.sessionIncarnation),
+        );
       } else schedule(sessionId, [...slots]);
     } finally {
       state.pending--;
@@ -378,7 +421,7 @@ export function createUiSlotHost(args: {
       const state = sessions.get(sessionId);
       if (state?.timer) clearTimeout(state.timer);
       for (const turnId of state?.events.keys() ?? [])
-        emit(sessionId, "ui.slot.cleared", { turnId });
+        emit(sessionId, "ui.slot.cleared", { turnId }, state?.incarnation);
       sessions.delete(sessionId);
     },
     async close() {

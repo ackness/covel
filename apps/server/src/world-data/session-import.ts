@@ -1,4 +1,7 @@
-import { appendDimensionPlan } from "./session-import/dimensions.js";
+import {
+  activeDimensionProvider,
+  appendDimensionPlan,
+} from "./session-import/dimensions.js";
 import {
   DIMENSION_DATA_NAMESPACE,
   DIMENSION_SETTLEMENT_NAMESPACE,
@@ -122,6 +125,9 @@ export async function prepareWorldDataImportForSession(
   options: PrepareWorldDataImportForSessionOptions,
 ): Promise<PreparedWorldDataImport> {
   if (!options.worldId) return { imported: false, diagnostics: [] };
+  // A session keeps one dimension provider. Several are refused whether or
+  // not this world declares dimensions: every turn would stop on them.
+  activeDimensionProvider(options.preflight);
   const record = recordContent(options.world);
   const worldRoot = options.worldsDirs?.length
     ? await resolveWorldRoot(options.worldId, options.worldsDirs)
@@ -317,6 +323,8 @@ export async function importWorldDataForSession(
 export async function preflightWorldDataForSession(
   options: PreflightWorldDataForSessionOptions,
 ): Promise<PreflightWorldDataForSessionResult> {
+  // The same refusal as session creation, so the prep screen can ask first.
+  if (options.worldId) activeDimensionProvider(options.preflight);
   if (!options.worldId || !options.worldsDirs?.length) {
     const prepared = await prepareWorldDataImportForSession({
       ...options,

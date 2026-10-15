@@ -16,6 +16,7 @@ import {
   type SessionEvent,
 } from "@covel/shared";
 import type { StoreTransaction } from "@covel/store";
+import { dimensionProviderConflictReason } from "../turn-executor/dimension-barrier.js";
 
 interface DimensionFinalizationResult {
   readonly runtimeId: string;
@@ -102,7 +103,9 @@ export async function bindDimensionProvider(args: {
     (runtime) => runtime.outputContract === DIMENSION_CONTRACT,
   );
   const providers = [...new Set(publishers.map((runtime) => runtime.pluginId))];
-  if (providers.length > 1) throw new Error("Conflicting dimension providers");
+  // The execution barrier refuses this before any runtime runs.
+  if (providers.length > 1)
+    throw new Error(dimensionProviderConflictReason(providers));
   const provider = providers[0];
   if (!provider) return undefined;
   const session = await tx.getSession(sessionId);

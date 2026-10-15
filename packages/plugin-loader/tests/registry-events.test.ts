@@ -37,6 +37,27 @@ describe("PluginRegistry EventBus Bridge", () => {
     registry = createPluginRegistry({ eventBus });
   });
 
+  it("retains the captured incarnation across asynchronous persistence", async () => {
+    const strictBus = createEventBus(undefined, {
+      requireSessionIncarnation: true,
+      strictEmissions: true,
+    });
+    const scopedRegistry = createPluginRegistry({ eventBus: strictBus });
+    scopedRegistry.register(makeEntry("alpha"));
+    await scopedRegistry.applyPersistedActivations(
+      "same-id",
+      ["alpha"],
+      async () => {
+        await Promise.resolve();
+      },
+      "captured-incarnation",
+    );
+    expect(
+      strictBus.getEventsAfter("same-id", 0).events[0]?.sessionIncarnation,
+    ).toBe("captured-incarnation");
+    await strictBus.close();
+  });
+
   it("should emit plugin.activated event on applyPersistedActivations()", async () => {
     const events: SubscriptionEvent[] = [];
     eventBus.onEmit((e) => events.push(e));
@@ -46,6 +67,7 @@ describe("PluginRegistry EventBus Bridge", () => {
       "session-1",
       ["alpha"],
       async () => {},
+      "test-incarnation",
     );
 
     const activated = events.find((e) => e.type === "plugin.activated");
@@ -66,8 +88,14 @@ describe("PluginRegistry EventBus Bridge", () => {
       "session-1",
       ["alpha"],
       async () => {},
+      "test-incarnation",
     );
-    await registry.applyPersistedActivations("session-1", [], async () => {});
+    await registry.applyPersistedActivations(
+      "session-1",
+      [],
+      async () => {},
+      "test-incarnation",
+    );
 
     const deactivated = events.find((e) => e.type === "plugin.deactivated");
     expect(deactivated).toBeDefined();
@@ -87,14 +115,26 @@ describe("PluginRegistry EventBus Bridge", () => {
       "session-1",
       ["alpha"],
       async () => {},
+      "test-incarnation",
     );
     await registry.applyPersistedActivations(
       "session-1",
       ["alpha"],
       async () => {},
+      "test-incarnation",
     );
-    await registry.applyPersistedActivations("session-1", [], async () => {});
-    await registry.applyPersistedActivations("session-1", [], async () => {});
+    await registry.applyPersistedActivations(
+      "session-1",
+      [],
+      async () => {},
+      "test-incarnation",
+    );
+    await registry.applyPersistedActivations(
+      "session-1",
+      [],
+      async () => {},
+      "test-incarnation",
+    );
 
     expect(events.map((event) => event.type)).toEqual([
       "plugin.activated",
@@ -109,11 +149,13 @@ describe("PluginRegistry EventBus Bridge", () => {
       "session-1",
       ["beta"],
       async () => {},
+      "test-incarnation",
     );
     await noEventBusRegistry.applyPersistedActivations(
       "session-1",
       [],
       async () => {},
+      "test-incarnation",
     );
     // No errors thrown
     expect(noEventBusRegistry.get("beta")).toBeDefined();

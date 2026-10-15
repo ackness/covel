@@ -1,3 +1,5 @@
+import { publicSessionIncarnation } from "./session-guard.js";
+import { invalidateSessionEvents, sessionEventBus } from "./session-events.js";
 import { withMemoryIngestLock } from "../../../lib/memory-ingest-lock.js";
 import { withSettledSessionLock } from "../plugin-rpc/settled-request.js";
 import { randomUUID } from "node:crypto";
@@ -57,13 +59,18 @@ export async function deleteSessionWithLifecycle(
     // activations out of order. Both call sites have just established the
     // deletion (deleteSession resolved, or a fresh read returned null); the
     // persist callback re-verifies it.
-    await pluginRegistry.applyPersistedActivations(id, [], async () => {
-      if (await store.getSession(id)) {
-        throw new Error(
-          `Session "${id}" is still persisted; refusing to clear activations`,
-        );
-      }
-    });
+    await pluginRegistry.applyPersistedActivations(
+      id,
+      [],
+      async () => {
+        if (await store.getSession(id)) {
+          throw new Error(
+            `Session "${id}" is still persisted; refusing to clear activations`,
+          );
+        }
+      },
+      publicSessionIncarnation(expectedSession ?? guard.session),
+    );
     c.get("runtimeJobCredentials")?.clearSession(id);
     c.get("uiSlots")?.clearSession(id);
     c.get("rpcApprovalGate")?.revoke(id);
@@ -74,6 +81,8 @@ export async function deleteSessionWithLifecycle(
   // Runs once the row is gone. Media claims go only now, so a DELETE that
   // fails leaves a session that can still read its own media.
   const finishDeletion = async (): Promise<void> => {
+    const bus = c.get("eventBus");
+    if (bus) invalidateSessionEvents(bus, expectedSession ?? guard.session);
     // ponytail: failed media release leaves claims held; no route reclaims them after deletion.
     // See the session/delete-route.ts row in docs/internals/technical-debt.md.
     try {
@@ -233,7 +242,8 @@ export async function deleteSessionWithLifecycle(
     if (prepared.hookScope) {
       await fireSessionEnd(
         c.get("hookPipeline"),
-        c.get("eventBus"),
+        c.get("eventBus") &&
+          sessionEventBus(c.get("eventBus"), prepared.session),
         id,
         prepared.hookScope,
         "deleted",

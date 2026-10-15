@@ -147,11 +147,22 @@ type DimensionSnapshot = Readonly<Record<string, DimensionSnapshotEntry>>;
 - 读到的每一项不包含 `initialValue`、`updateRule`，也不包含它上次是按哪个回合更新的。
 - 值是原始 JSON。显示和查询时，只翻译 schema 明确标了 `x-i18n` 的节点。
 - 没有插件负责维度，或者维度还没初始化时，快照可以是空的。创建会话时没有启用负责维度的插件，世界声明的维度就不导入，会话照常开始，见[会话 API](./api.md#post-apisessions)。内核自己不保存维度。
-- 已经有插件负责维度、但它不可用或读取失败时，必须报错。不能改用世界包的初值，也不能假装是空的。
+- 负责维度的插件没有在运行时（没有安装、加载失败，或者缺依赖），游戏照常进行，维度暂停：
+  - 叙事读已保存的值，没有插件能写维度，也不登记结算义务。
+  - 会话视图照常返回已保存的值，游戏界面提示玩家维度暂停了。
+  - 这个插件回来后，维度接着变化。另一个负责维度的插件不能接手，开着它时回合会被拒绝。
+  - 不能改用世界包的初值，也不能假装是空的。
+- 负责维度的插件在运行、但读取失败时，必须报错。
 
 ### 属主与写入
 
 **谁负责。** 内置的 `world-init` 提供世界上下文（扩展点 `session.world-context@1`，只能有一个提供者）和 `world.dimensions@1`。框架按契约找到唯一负责的插件，不按插件 ID 判断。负责的插件 ID（`dimensionProviderPluginId`）由宿主填写；`dimensionRecovery` 里的 editor / tracker runtime ID 必须确实属于这个插件。
+
+**只能有一个。** 一局游戏的维度只由一个插件负责，框架不会替玩家挑。
+
+- 开局时选了好几个提供 `world.dimensions@1` 的插件：预检和创建会话返回 `409 dimension_provider_conflict`，`details.candidates` 列出这些插件。准备页让玩家留下其中一个，其余的关掉。
+- 游戏中再打开一个负责维度的插件，同样返回 409，见[启停插件](./api.md#put-apisessionsidpluginspluginid)。
+- 游戏中打开第一个负责维度的插件，世界的维度马上导入，见[开局后加入的接收插件](./world-data.md#开局后加入的接收插件)。
 
 **存在哪里。** 每个维度在负责插件的受保护区域 `_dimensions` 里是一条 `{definition, value, version, lastTrackedSource?}` 记录。
 

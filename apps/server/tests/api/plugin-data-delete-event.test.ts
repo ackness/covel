@@ -9,6 +9,8 @@ import { type DataStore } from "@covel/store";
 import { createMemoryStore } from "@covel/store/memory";
 import { wrapStoreWithPluginDataEvents } from "../../src/routes/api/bootstrap.js";
 
+import { seedSession } from "./sse-test-utils.js";
+
 interface SubEvent {
   type: string;
   payload: Record<string, unknown>;
@@ -23,6 +25,7 @@ describe("deletePluginData emits plugin-data.changed", () => {
 
   beforeEach(async () => {
     const baseStore: DataStore = createMemoryStore();
+    await seedSession(baseStore, sessionId);
     eventBus = createEventBus(baseStore);
     wrappedStore = wrapStoreWithPluginDataEvents(baseStore, eventBus);
 

@@ -20,6 +20,7 @@ import {
 import { settleActivatedRun } from "./runtime-response.js";
 import type { createPluginRpcRuntimeTurnRunner } from "./runtime-turn.js";
 import {
+  runtimeJobIncarnation,
   parseActivatedRuntimeJobPayload,
   parseStagedRuntimeJobPayload,
   publishRuntimeJobStatusEvent,
@@ -209,7 +210,11 @@ export function createRuntimeJobExecutor(deps: {
     for (const queued of followers) {
       if (handoff)
         deps.credentials?.register(queued.credentialKey, requestServices);
-      publishRuntimeJobStatusEvent(eventBus, queued.status);
+      publishRuntimeJobStatusEvent(
+        eventBus,
+        queued.status,
+        runtimeJobIncarnation(queued.job.payload) ?? "",
+      );
     }
   };
 

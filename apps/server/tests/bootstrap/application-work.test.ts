@@ -10,7 +10,7 @@ import {
 } from "../../src/routes/api/bootstrap.js";
 import { createApplicationWork } from "../../src/application-work.js";
 import { createServerResourceDrain } from "../../src/server-resources.js";
-import { emitSeq, seedSession } from "../api/sse-test-utils.js";
+import { seedSession } from "../api/sse-test-utils.js";
 
 let pluginsDir: string;
 let api: ApiBootstrapResult | undefined;
@@ -95,7 +95,7 @@ describe("production API request ownership", () => {
       await release.promise;
       return getSession(id);
     });
-    emitSeq(api.eventBus, "session", "state", 1);
+    api.eventBus.invalidateReplay!("session", "transport-gap");
     await entered.promise;
     const closeStore = vi.spyOn(store, "close");
     const closeBus = vi.spyOn(api.eventBus, "close");

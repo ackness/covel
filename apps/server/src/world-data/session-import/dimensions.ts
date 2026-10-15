@@ -10,6 +10,8 @@ import {
   worldDimensionsSchema,
 } from "@covel/shared";
 import { canonicalJson, sha256Hex } from "../digest.js";
+import type { PluginRegistry } from "@covel/plugin-loader";
+import { DimensionProviderConflictError } from "../dimension-provider-conflict.js";
 import type { OrderedWorldDataSource } from "../types.js";
 import type { ImportPlan, WorldDataImportPreflightDeps } from "./types.js";
 
@@ -20,6 +22,38 @@ function parseDimensions(value: unknown) {
   if (!parsed.success)
     throw new Error(`invalid world dimensions: ${parsed.error.message}`);
   return parsed.data;
+}
+
+/** Installed plugins of a set that provide `world.dimensions@1`, in registry order. */
+export function dimensionProvidersOf(
+  registry: Pick<PluginRegistry, "getAll"> | undefined,
+  activePlugins: readonly string[] | undefined,
+): string[] {
+  return [...(registry?.getAll() ?? [])]
+    .filter(
+      ([id, entry]) =>
+        entry.status !== "error" &&
+        (!activePlugins || activePlugins.includes(id)) &&
+        entry.packageManifest?.plugin?.provides?.some(
+          (provided) =>
+            (typeof provided === "string" ? provided : provided.contract) ===
+            DIMENSION_CONTRACT,
+        ),
+    )
+    .map(([id]) => id);
+}
+
+/**
+ * The one plugin that keeps the session's dimensions, if any.
+ *
+ * @throws {DimensionProviderConflictError} when several active plugins do.
+ */
+export function activeDimensionProvider(
+  deps: WorldDataImportPreflightDeps | undefined,
+): string | undefined {
+  const providers = dimensionProvidersOf(deps?.registry, deps?.activePlugins);
+  if (providers.length > 1) throw new DimensionProviderConflictError(providers);
+  return providers[0];
 }
 
 /**
@@ -37,18 +71,8 @@ export function appendDimensionPlan(
     parseDimensions(dimensions),
     locale,
   );
-  const providers = [...(deps?.registry?.getAll() ?? [])].filter(
-    ([id, entry]) =>
-      entry.status !== "error" &&
-      (!deps?.activePlugins || deps.activePlugins.includes(id)) &&
-      entry.packageManifest?.plugin?.provides?.some(
-        (provided) =>
-          (typeof provided === "string" ? provided : provided.contract) ===
-          DIMENSION_CONTRACT,
-      ),
-  );
-  if (providers.length > 1) throw new Error("Conflicting dimension providers");
-  if (!providers.length) {
+  const provider = activeDimensionProvider(deps);
+  if (!provider) {
     // The kernel keeps no dimensions of its own: without a provider they are
     // left out, and the session starts without them.
     const ids = Object.keys(definitions);
@@ -67,7 +91,6 @@ export function appendDimensionPlan(
       ],
     };
   }
-  const provider = providers[0]![0];
   const source: OrderedWorldDataSource = {
     id: "dimensions",
     origin: "world",

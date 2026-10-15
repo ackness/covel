@@ -1905,6 +1905,8 @@ Web 设置页根据 `operatorTokenRequired` 决定是否显示“运维访问”
 
 世界声明了维度，而这组插件里没有提供 `world.dimensions@1` 的，响应带一条 `code: "dimension-provider-missing"` 的 warning：这些维度不会导入。准备页据此提示玩家。
 
+这组插件里有不止一个提供 `world.dimensions@1` 的，返回 `409 { "code": "dimension_provider_conflict", "details": { "candidates": [...] } }`，不管世界有没有声明维度。一局游戏只用一个负责维度的插件，服务端不替玩家挑：准备页列出 `candidates`，让玩家留下一个。`sync-data` 和 `sync-dimensions` 遇到同样的情况也返回这个 409。
+
 **请求体:**
 
 ```json
@@ -2324,13 +2326,14 @@ Web 设置页根据 `operatorTokenRequired` 决定是否显示“运维访问”
 
 **错误:**
 
-| 状态码 | `code`                    | 什么时候                                                             |
-| ------ | ------------------------- | -------------------------------------------------------------------- |
-| 400    | `plugin_rejected`         | 玩家要的插件因冲突等原因被拒（不包括依赖缺失）；`details` 是这条拒绝 |
-| 401    | `operator_token_required` | 托管部署（`demo` / `commercial`）下创建会话没有带运维 token          |
-| 404    | `world_not_found`         | 提供了 `worldId`，但世界不存在                                       |
-| 409    | `world_deleting`          | 世界正在删除                                                         |
-| 409    | `session_already_exists`  | 客户端自定义的 `id` 已存在                                           |
+| 状态码 | `code`                        | 什么时候                                                                                              |
+| ------ | ----------------------------- | ----------------------------------------------------------------------------------------------------- |
+| 400    | `plugin_rejected`             | 玩家要的插件因冲突等原因被拒（不包括依赖缺失）；`details` 是这条拒绝                                  |
+| 401    | `operator_token_required`     | 托管部署（`demo` / `commercial`）下创建会话没有带运维 token                                           |
+| 404    | `world_not_found`             | 提供了 `worldId`，但世界不存在                                                                        |
+| 409    | `world_deleting`              | 世界正在删除                                                                                          |
+| 409    | `session_already_exists`      | 客户端自定义的 `id` 已存在                                                                            |
+| 409    | `dimension_provider_conflict` | 启用的插件里有不止一个提供 `world.dimensions@1` 的；`details.candidates` 列出它们。玩家留下一个再开局 |
 
 - `id` 已存在时的响应体是 `{ "error": "Session already exists: <id>", "code": "session_already_exists" }`。创建不会覆盖原会话，也不会把原会话的子记录当成新会话的数据。
 - 服务端在准备资源之前和提交会话时各检查一次世界。准备阶段不建立媒体归属；失败后留下的无引用字节由媒体 GC 回收，不会强删可能被其他会话使用的内容。
@@ -2392,7 +2395,8 @@ Web 设置页根据 `operatorTokenRequired` 决定是否显示“运维访问”
 - 回执摘要的 `version` 是回执的版本，不是某个维度的值版本。
 - 响应不包含维度规则、初值，也不包含完整回执的 `definitions` / `readVersions`。
 - 会话还没初始化维度时，`dimensions` 可以为空。
-- 已绑定的提供者缺失或读取失败时，端点明确报错，不会退回去读 `WorldRecord.metadata.dimensions`。
+- 已绑定的提供者没有在运行时（没有安装、加载失败，或者缺依赖），维度暂停：响应照常带已保存的 `dimensions` 和 `dimensionProviderPluginId`，但没有 `dimensionRecovery`，游戏界面提示玩家维度暂停了。
+- 已绑定的提供者在运行、但读取失败时，端点明确报错，不会退回去读 `WorldRecord.metadata.dimensions`。
 
 浏览器私有模式用相同的快照形状，并通过一次原子的 BrowserVault checkpoint 保存当前值、版本与结算义务。字段与冻结时序见 [World Model](./world-model.md#动态维度快照)。
 
@@ -3815,7 +3819,10 @@ runtime 报告失败时，它的原始错误保留在 `result.runtimeResults` �
 规则（启用和禁用相同）：
 
 - 启用、禁用与同一会话的其他写入共用会话锁，拿到锁后重新读取 `activePlugins`。先持久化成功，再更新进程内的注册表。这样并发请求不会互相覆盖，持久化失败也不会让内存和存储不一致。
-- 会话已绑定的维度 provider 必须保持启用。它持有这个会话的 `_dimensions` 数据，回合、快照和浏览器 checkpoint 都需要它。重新求解后的启用集合如果不再包含它，请求以 `409 { "code": "dimension_provider_required" }` 拒绝，会话的插件选择不变。
+- 会话已绑定的维度 provider 必须保持启用。它持有这个会话的 `_dimensions` 数据，快照和浏览器 checkpoint 都从它那里读。它在运行时，重新求解后的启用集合如果不再包含它，请求以 `409 { "code": "dimension_provider_required" }` 拒绝，会话的插件选择不变。
+- 已绑定的 provider 本来就没在运行（没有安装、加载失败，或者缺依赖）时，其他插件照常启用和禁用。它留在会话的插件选择里，维度暂停；它回来后维度接着变化。
+- 一局游戏只用一个负责维度的插件。这次改动让两个提供 `world.dimensions@1` 的插件同时启用，或者在已绑定的 provider 之外再启用一个时，请求以 `409 { "code": "dimension_provider_conflict", "details": { "candidates": [...] } }` 拒绝。会话里原来就有的冲突（例如插件更新后多声明了这个契约）不拦其他改动：回合会说明冲突，关掉其中一个就好。
+- 这次新加入的是会话里第一个负责维度的插件时，世界的维度随上面的补导入马上写入。
 
 #### `DELETE /api/sessions/:id/plugins/:pluginId`
 
@@ -3830,10 +3837,10 @@ runtime 报告失败时，它的原始错误保留在 `result.runtimeResults` �
 
 **错误:**
 
-| 状态码 | `code`                        | 什么时候                                                      |
-| ------ | ----------------------------- | ------------------------------------------------------------- |
-| 409    | `session_not_active` 等       | 会话不是 active、已进入删除流程，或等待期间被同 ID 的会话替换 |
-| 409    | `dimension_provider_required` | 禁用的是会话已绑定的维度 provider，或禁用后求解会连带移除它   |
+| 状态码 | `code`                        | 什么时候                                                              |
+| ------ | ----------------------------- | --------------------------------------------------------------------- |
+| 409    | `session_not_active` 等       | 会话不是 active、已进入删除流程，或等待期间被同 ID 的会话替换         |
+| 409    | `dimension_provider_required` | 禁用的是会话已绑定的维度 provider，或禁用后求解会连带移除正在运行的它 |
 
 出错时会话不被改动。
 

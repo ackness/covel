@@ -1,3 +1,4 @@
+import { sessionEventBus } from "./session/session-events.js";
 /**
  * Abandon a suspension and settle what it held back.
  *
@@ -163,6 +164,11 @@ export async function abandonSuspension(
   suspension: SuspensionRecord,
 ): Promise<readonly QueuedRuntimeJob[]> {
   const { store } = deps;
+  const session = await store.getSession(suspension.sessionId);
+  const eventBus =
+    deps.eventBus && session
+      ? sessionEventBus(deps.eventBus, session)
+      : undefined;
   const plan = await planSuspensionAbandon(store, suspension);
   const release = heldJobsRelease(deps, suspension.sessionId);
   const now = new Date().toISOString();
@@ -171,7 +177,7 @@ export async function abandonSuspension(
     await release.enqueueInTx(tx, plan.releasedRuntimeJobs);
   });
   await settleAbandonedSuspensionJobs(
-    { store, ...(deps.eventBus ? { eventBus: deps.eventBus } : {}) },
+    { store, ...(eventBus ? { eventBus } : {}) },
     suspension,
   );
   await settleAbandonedSetupAttempt(

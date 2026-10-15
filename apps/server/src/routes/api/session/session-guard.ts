@@ -124,9 +124,12 @@ export function sessionIncarnationIdentity(session: SessionRecord): string {
 
 /** Public equality tag; never expose the private incarnation or owner metadata. */
 export function publicSessionIncarnation(session: SessionRecord): string {
-  return createHash("sha256")
-    .update(sessionIncarnationIdentity(session))
-    .digest("hex");
+  return publicIncarnationTag(sessionIncarnationIdentity(session));
+}
+
+/** Hash a captured private identity from a session or durable job. */
+export function publicIncarnationTag(identity: string): string {
+  return createHash("sha256").update(identity).digest("hex");
 }
 
 /**

@@ -342,6 +342,7 @@ describe("plugin RPC detached-stage runner", () => {
         SESSION_ID,
         [PLUGIN_ID],
         async () => {},
+        "test-incarnation",
       );
       const raw = createInProcessSessionLock();
       const held = new Set<string>();
