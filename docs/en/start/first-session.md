@@ -60,7 +60,7 @@ Close Covel and open it again, then go back to the same world. The world lists y
 
 If previous sessions fail to load, the preparation page shows an error and a Retry button. Click Retry to load your saves again; you can still start a new game.
 
-At this point, you have completed one full game loop: choose a world, check the play style, finish the opening, act, save, and continue.
+You have now been through a whole game: choose a world, check the play style, finish the opening, act, save, and continue.
 
 ## When a turn does not finish as expected
 

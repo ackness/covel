@@ -21,7 +21,7 @@ pluginPolicy:
     - story-events
   pitch:
     label: 雾港调查剧
-    description: 以传统叙事推进齐老失踪案，并启用线索记忆、关系图谱、世界规则、预设角色与立绘。
+    description: 以传统叙事推进齐老失踪案，带有线索记忆、关系图谱、世界规则、预设角色与立绘。
     reason: 案情板、四方立场、深退潮与钥匙碎片每回合随剧情结算，配合潮时、雾蚀与七名核心角色，让长线调查的每个选择都留下痕迹。
 pluginSettings:
   story-events:
