@@ -201,6 +201,10 @@ export interface PluginLoadError {
   readonly errors: readonly string[];
 }
 
+/**
+ * A named plugin selection a player can pick before play: a built-in pack
+ * (`packs/builtin.yaml`), or the one a world presents with its own `pitch`.
+ */
 export interface PluginPack {
   readonly id: string;
   readonly label: I18nText;
@@ -211,6 +215,7 @@ export interface PluginPack {
   readonly excluded?: readonly string[];
   readonly tags: readonly string[];
   readonly reason?: I18nText;
+  /** `world`: a built-in pack shown with the world's `pitch`. */
   readonly source: "builtin" | "world";
   /**
    * The view a world made for this pack opens new sessions in. The world
@@ -219,12 +224,12 @@ export interface PluginPack {
   readonly defaultViewMode?: "stage" | "parsed";
 }
 
+/** A world's `pluginPolicy`, as the session preparation screen uses it. */
 export interface ResolvedWorldPluginPolicy {
-  readonly presetId?: string;
-  readonly preferredTags: readonly string[];
-  readonly avoidedTags: readonly string[];
-  readonly requested: readonly string[];
-  readonly recommended: readonly string[];
+  /** The built-in pack a new session starts from. */
+  readonly preset?: string;
+  /** Plugins the world adds to whichever pack the player picks. */
+  readonly plus: readonly string[];
   /** Contract IDs the world needs a provider for. */
   readonly requires: readonly string[];
 }
@@ -232,15 +237,15 @@ export interface ResolvedWorldPluginPolicy {
 /** A plugin a world requests that is not installed on this host. */
 export interface MissingWorldPlugin {
   readonly pluginId: string;
-  /** The pack that requests it; absent when the world policy requests it. */
+  /** The pack that requests it; absent when the world's `plus` lists it. */
   readonly packId?: string;
 }
 
 /**
  * Server-resolved plugin selection plan for one world and live registry.
  *
- * Every `requested` list (the policy's and each pack's) and `defaultPluginIds`
- * hold installed plugins only, so a client can submit them unchanged. Requests
+ * `policy.plus`, each pack's `requested` and `defaultPluginIds` hold
+ * installed plugins only, so a client can submit them unchanged. Requests
  * the registry cannot satisfy are reported in `missing` instead.
  */
 export interface WorldPluginPlan {

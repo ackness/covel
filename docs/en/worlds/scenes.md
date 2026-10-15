@@ -207,31 +207,12 @@ Rules when a picture is missing:
 
 ## 6. Make the world use these pictures
 
-**If the world has no `data/world.data.yaml`, you do not need to do anything.** `media/scenes/` and `media/scenes.registry.json` are fixed locations, and they are imported automatically.
-
-If the world has `data/world.data.yaml`, add these two entries. You need both:
-
-```yaml
-sources:
-  scenes:
-    kind: media
-    path: media/scenes
-    to: media
-    indexTo: contract:stage.scene-assets@1
-    key: filename
-  scenesRegistry:
-    kind: json
-    path: media/scenes.registry.json
-    schema: contract:stage.scenes@1
-    to: contract:stage.scenes@1
-    key: registryId
-    after: scenes
-```
+**You register nothing.** `media/scenes/` and `media/scenes.registry.json` are fixed locations, the scripts above write only there, and they are imported automatically. The same holds when the world has `data/world.data.yaml`: that file writes only what differs from the conventions. For the format, and how to write the sources for other locations, see the [world data reference](../reference/world-data.md#scene-backgrounds).
 
 > [!NOTE]
-> Once you write these entries, the file `media/scenes.registry.json` must exist, or the world fails validation. If the pictures are not ready yet, run `node scripts/emit-scenes.mjs <world ID>` once first. It writes an empty placeholder manifest with no scenes. After you make the pictures, run it again.
+> When the world's `data/world.data.yaml` names `media/scenes.registry.json`, the file must exist, or the world fails validation. If the pictures are not ready yet, run `node scripts/emit-scenes.mjs <world ID>` once first. It writes an empty placeholder manifest with no scenes. After you make the pictures, run it again.
 
-**This session needs the plugin that manages scenes turned on.** The built-in one is "Scene Stage" (`scene-stage`). It is included in the "Dialogue Mode" (`dialogue-mode`) pack, and not in "Traditional Story". Change `pluginPolicy.presetId` in `world.yaml` to `dialogue-mode`. Or, on the session-prep screen, open "Customize plugins and advanced settings" and select it there.
+**This session needs the plugin that manages scenes turned on.** The built-in one is "Scene Stage" (`scene-stage`). It is included in the "Dialogue Mode" (`dialogue-mode`) pack, and not in "Traditional Story". Change `pluginPolicy.preset` in `world.yaml` to `dialogue-mode`, or add `scene-stage` to `pluginPolicy.plus`. Or, on the session-prep screen, open "Customize plugins and advanced settings" and select it there.
 
 To have players start in stage view as soon as they enter the game, add this line to `world.yaml`:
 

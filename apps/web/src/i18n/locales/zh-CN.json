@@ -210,8 +210,7 @@
     "recommendationReasons": {
       "requiredByWorld": "世界必需",
       "requestedByWorld": "世界默认",
-      "packOptional": "组合包可选",
-      "recommendedByWorld": "世界推荐"
+      "packOptional": "组合包可选"
     },
     "exportDimensions": "导出维度",
     "importDimensions": "导入维度",

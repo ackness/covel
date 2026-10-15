@@ -18,7 +18,7 @@ export interface WorldCreationBrief {
   /**
    * The plugin pack the world is made for: the ID of a pack of the server's
    * catalogue (`packs/builtin.yaml`). It becomes the world's
-   * `pluginPolicy.presetId`, and the pack's `defaultViewMode` the world's.
+   * `pluginPolicy.preset`, and the pack's `defaultViewMode` the world's.
    */
   readonly pack?: string;
   /** Kernel-owned content: characters, lorebook, rules, opening resources. */

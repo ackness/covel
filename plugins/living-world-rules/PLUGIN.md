@@ -1,7 +1,7 @@
 ---
 id: living-world-rules
 kind: plugin
-version: 0.0.36
+version: 0.0.37
 displayName: World Rules
 description: >-
   Shows the world's lasting rules, such as taboos, customs, and special setting
@@ -37,7 +37,7 @@ contributes:
         example: ./examples/rules.json
         source:
           kind: yaml
-          path: data/rules/world-rules.yaml
+          path: data/rules/*.yaml
           key: id
           lorebook: true
   worldProjections:

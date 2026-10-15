@@ -135,12 +135,9 @@ function checkManifest(
   );
   const errors = briefResult.errors;
   warnings.push(...briefResult.warnings);
-  if (
-    yamlData.worldData !== undefined ||
-    yamlData.dimensionSources !== undefined
-  ) {
+  if (yamlData.worldData !== undefined) {
     errors.push(
-      "Generated worlds must contain inline data, not worldData or dimensionSources file references",
+      "Generated worlds must contain inline data, not a worldData file reference",
     );
   }
   if (errors.length > 0) return { errors };
@@ -539,7 +536,6 @@ function planParts(
                 {
                   ...manifest,
                   defaultLocale: locale,
-                  supportedLocales: [locale],
                 },
                 { lineWidth: 0 },
               )

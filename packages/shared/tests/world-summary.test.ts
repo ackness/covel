@@ -25,7 +25,7 @@ const full = {
     embeddedCharacters: [{ id: "c" }],
     embeddedLorebook: [{ id: "l" }],
     characterSchema: { fields: [] },
-    pluginPolicy: { requested: ["x"] },
+    pluginPolicy: { plus: ["x"] },
     worldData: { sources: [] },
   },
 };

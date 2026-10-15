@@ -313,6 +313,8 @@ export {
   attributeDefinitionSchema,
   characterSchemaSchema,
   worldManifestSchema,
+  worldIdSchema,
+  worldPluginPolicySchema,
   WORLD_ACCENT_PATTERN,
   worldAccentColorSchema,
   worldDimensionsSchema,
@@ -327,7 +329,11 @@ export {
   worldStartingConditionsSchema,
 } from "./schemas/world.js";
 
-export type { WorldManifestInput } from "./schemas/world.js";
+export type {
+  WorldManifestInput,
+  WorldManifest,
+  WorldPluginPolicy,
+} from "./schemas/world.js";
 export type {
   DimensionValueType,
   DimensionValueSchema,
@@ -411,6 +417,7 @@ export {
   worldDataVisibilitySchema,
   worldDataSourceDescriptorSchema,
   worldDataDescriptorSchema,
+  worldDataDescriptorEntrySchema,
   worldDataSourceDescriptorOverrideSchema,
   worldDataDescriptorOverrideSchema,
   worldDataDiagnosticCountsSchema,

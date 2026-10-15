@@ -253,31 +253,11 @@ If the world has a second language, the translated names are written in `media/p
 
 ## 5. Make the world use these images
 
-**If the world has no `data/world.data.yaml`, you do nothing.** `media/portraits/` and `media/presence.json` are agreed locations. Files placed there are imported automatically. A world built by following [your first world](./first-world.md) is in this situation.
-
-If the world has `data/world.data.yaml`, that file must list all data sources. So add these two entries:
-
-```yaml
-sources:
-  portraits:
-    kind: media
-    path: media/portraits
-    to: media
-    indexTo: contract:character.portrait-assets@1
-    key: filename
-  presence:
-    kind: json
-    path: media/presence.json
-    to: contract:character.portraits@1
-    key: characterId
-    after: portraits
-```
-
-The first entry stores the images in this session's media library. The second entry tells the game which image each character uses. For the meaning of the fields, see the [world data reference](../reference/world-data.md#character-presence-portraits).
+**You register nothing.** `media/portraits/` and `media/presence.json` are agreed locations, and the scripts above write only there. The images and the manifest placed there are imported automatically: the images go into this session's media library, and the manifest tells the game which image each character uses. The same holds when the world has `data/world.data.yaml`: that file writes only what differs from the conventions. For the format, and how to write the sources for other locations, see the [world data reference](../reference/world-data.md#character-presence-portraits).
 
 **This session must enable the plugin that shows portraits.** The built-in one is "Character Profiles" (`character-blueprint`). It is included in the "Dialogue Mode" gameplay pack (`dialogue-mode`). It is not in the "Traditional Story" pack (`traditional-story`). Use either of these two ways:
 
-- Change `pluginPolicy.presetId` in `world.yaml` to `dialogue-mode`.
+- Add `character-blueprint` to `pluginPolicy.plus` in `world.yaml`, or change `pluginPolicy.preset` to `dialogue-mode`.
 - Or, on the session-prep screen, expand "Customize plugins and advanced settings" and select "Character Profiles".
 
 If the plugin is not enabled, the images and their manifest are skipped, and a notice is shown when the session starts.

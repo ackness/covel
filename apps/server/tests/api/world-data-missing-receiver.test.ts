@@ -17,7 +17,7 @@ const worldsDirs = [path.join(repoRoot, "worlds")];
 
 describe("session creation without installed world-data receivers", () => {
   it.each(["haruka-academy", "lantern-barrow", "mistport"])(
-    "starts %s with only narrator installed and reports skipped data",
+    "starts %s with only narrator installed and leaves the plugins' data out",
     async (worldId) => {
       const registry = createPluginRegistry();
       const discovery = (
@@ -69,19 +69,14 @@ describe("session creation without installed world-data receivers", () => {
       const responseText = await response.text();
       expect(response.status, responseText).toBe(201);
       const body = JSON.parse(responseText);
+      // Without its plugin a file at a conventional path is no source: the
+      // session leaves it out, and the preparation screen names the world's
+      // missing plugins. What the session cannot keep is reported.
       expect(body.worldDataNotices).toEqual(
         expect.arrayContaining([
           expect.objectContaining({
             level: "warning",
-            sourceId: "cast",
-            message:
-              'No registered receiver for data contract "character.blueprints@1"; contract writes skipped',
-          }),
-          expect.objectContaining({
-            level: "warning",
-            sourceId: "portraits",
-            message:
-              'No registered receiver for data contract "character.portrait-assets@1"; contract writes skipped',
+            message: expect.stringContaining("world.dimensions@1"),
           }),
         ]),
       );

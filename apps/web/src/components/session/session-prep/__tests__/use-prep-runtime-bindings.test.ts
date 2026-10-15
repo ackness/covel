@@ -50,10 +50,7 @@ const plan: WorldPluginPlan = {
   worldId: "world-1",
   packs: [],
   policy: {
-    preferredTags: [],
-    avoidedTags: [],
-    requested: [],
-    recommended: [],
+    plus: [],
     requires: [],
   },
   defaultPluginIds: ["core", "guide"],

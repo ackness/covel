@@ -134,8 +134,8 @@ function manifestOf(record: WorldRecord): Entry {
 /**
  * The manifest of a package: `world.yaml` as its author wrote it, so that
  * fields the record does not keep (`version`) survive a revision. The data
- * is put inline, and the editions go back to the world's own language: a
- * revision replaces the package, and its locale files with it.
+ * is put inline. A revision replaces the package, and its locale files with
+ * it, so the revised world has its own language only.
  */
 async function manifestOfPackage(
   record: WorldRecord,
@@ -157,37 +157,26 @@ async function manifestOfPackage(
   if (!validation.valid) return fromRecord;
   const {
     worldData: _worldData,
-    dimensionSources: _dimensionSources,
-    supportedLocales: _supportedLocales,
     dimensions: _dimensions,
     ...manifest
   } = validation.data as Entry;
   return {
+    // A package that writes no `id` is named by its directory.
+    id: record.id,
     ...manifest,
-    // A package that lists its editions keeps the list, with one edition.
-    ...(_supportedLocales === undefined
-      ? {}
-      : { supportedLocales: [fromRecord.defaultLocale] }),
     ...(fromRecord.dimensions ? { dimensions: fromRecord.dimensions } : {}),
   };
 }
 
 /**
  * The manifest of a revised world, in the world's own language only. The
- * model is given one edition, but its answer (or a request such as "add an
- * English edition") can declare more, and a revision writes no locale files.
+ * model is given one edition, and a revision writes no locale files.
  */
 export function ownEditionManifest<T extends Record<string, unknown>>(
   manifest: T,
   locale: string,
 ): T {
-  return {
-    ...manifest,
-    defaultLocale: locale,
-    ...(manifest.supportedLocales === undefined
-      ? {}
-      : { supportedLocales: [locale] }),
-  };
+  return { ...manifest, defaultLocale: locale };
 }
 
 export async function worldSectionsOf(

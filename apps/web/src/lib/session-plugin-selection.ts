@@ -123,19 +123,18 @@ export function recommendationReason(
     requiredByWorld: string;
     requestedByWorld: string;
     packOptional: string;
-    recommendedByWorld: string;
   },
 ): string | null {
   const policy = plan?.policy;
   // "Required" is reserved for providers of a contract the world requires;
-  // a requested plugin is only the world's default selection.
+  // a plugin of the world's `plus` is only its default selection.
   const provided = pkg.provides.map((entry) =>
     typeof entry === "string" ? entry : entry.contract,
   );
   if (policy?.requires.some((contract) => provided.includes(contract))) {
     return labels.requiredByWorld;
   }
-  if (policy?.requested.includes(pkg.id)) {
+  if (policy?.plus.includes(pkg.id)) {
     return labels.requestedByWorld;
   }
   if (selectedPack?.requested.includes(pkg.id)) {
@@ -144,11 +143,5 @@ export function recommendationReason(
   if (selectedPack?.recommended.includes(pkg.id)) {
     return labels.packOptional;
   }
-  if (policy?.recommended.includes(pkg.id)) {
-    return labels.recommendedByWorld;
-  }
-  const tags = new Set(pkg.tags ?? []);
-  const matchedTag = policy?.preferredTags.find((tag) => tags.has(tag));
-  if (matchedTag) return matchedTag;
   return null;
 }

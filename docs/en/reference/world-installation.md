@@ -26,6 +26,7 @@ Once the install succeeds, the world is ready to use right away. No restart is n
 Rules:
 
 - When you install several worlds at once, each one must have a different ID.
+- When `world.yaml` has no `id`, the world's ID is the name of its folder; for a ZIP install, it is the ZIP file's name without `.zip`. When that name cannot be an ID (for example, it has spaces or capital letters), the install is refused; write an `id` in `world.yaml`.
 - A normal install does not overwrite anything. If an ID conflicts with an existing folder or a world in the database, the install is refused.
 - Only the world folders you selected are installed. No scripts are run, and no plugin is authorized for you.
 - Plugins under the same link are listed together with the world, and you can install them in one confirmation. The installer does not tick plugins for you, and it does not look for the plugins a world needs somewhere else. The exception is when the repository lists them in a [collection manifest](../ship/collections.md).

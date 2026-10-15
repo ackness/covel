@@ -19,7 +19,10 @@ import {
   worldHasData,
   type ConventionalSource,
 } from "./conventions.js";
-import { loadWorldDataDescriptor } from "./descriptor.js";
+import {
+  descriptorSourcePaths,
+  loadWorldDataDescriptor,
+} from "./descriptor.js";
 import {
   finalizeWorldDataMediaRefs,
   materializeMediaIndexWrites,
@@ -79,17 +82,19 @@ function conventionsFor(
 
 /**
  * Warnings for the package's files at a path that more than one of these
- * plugins names: without a descriptor such a file is read for none of them.
+ * plugins names: unless the descriptor lists such a file with its contract,
+ * it is read for none of them.
  */
 async function collisionsFor(
   worldRoot: string,
   manifest: { readonly worldData?: string },
   deps: WorldDataImportPreflightDeps | undefined,
 ): Promise<WorldDataDiagnostic[]> {
-  if (manifest.worldData || !deps?.registry) return [];
+  if (!deps?.registry) return [];
   return conventionCollisionDiagnostics(
     worldRoot,
     conventionCollisions(deps.registry, deps.activePlugins),
+    await descriptorSourcePaths(worldRoot, manifest.worldData),
   );
 }
 

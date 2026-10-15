@@ -119,7 +119,7 @@ Shows the rules that hold for the whole world over time: customs, taboos, laws, 
 
 **When it is on**: optional. All three built-in packs include it.
 
-**What world authors can preset**: `data/rules/world-rules.yaml`. Each rule states one thing the narrative must not break, in plain sentences that explain the rule and its consequences. Do not repeat numbers that dimensions already record. For fields, see [World data](../reference/world-data.md). You can also run `pnpm describe:authoring`.
+**What world authors can preset**: `.yaml` files under `data/rules/`, one set of rules per file, imported in file-name order. Each rule states one thing the narrative must not break, in plain sentences that explain the rule and its consequences. Do not repeat numbers that dimensions already record. For fields, see [World data](../reference/world-data.md). You can also run `pnpm describe:authoring`.
 
 ## Codex (`codex`)
 

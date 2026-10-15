@@ -84,17 +84,20 @@ const dataAuthoringSchema = z
         path: z
           .string()
           .min(1)
-          .regex(/^(?!\/)(?!.*(?:^|\/)\.\.(?:\/|$))[a-z0-9_./-]+$/i, {
-            message:
-              "source path must be a world-package-relative path (no leading `/`, no `..` segments)",
-          })
+          .regex(
+            /^(?!\/)(?!.*(?:^|\/)\.\.(?:\/|$))[a-z0-9_./-]+(?:\/\*\.[a-z0-9]+)?$/i,
+            {
+              message:
+                "source path must be a world-package-relative path (no leading `/`, no `..` segments), or a directory and `/*.<ext>`",
+            },
+          )
           .refine((path) => !isReservedWorldPackagePath(path), {
             message: `source path must not name a file the kernel or the world package owns (${RESERVED_WORLD_PACKAGE_PATHS.join(", ")})`,
           })
           .meta({
             description:
-              "Conventional path of the source inside a world package. It may not name a path the kernel or the package itself owns: `world.yaml`, `WORLD.md`, `data/world.data.yaml`, `data/dimensions.yaml`, `data/lorebook.yaml`, `characters/characters.json`, `media/gallery.json`, `media/portraits.json`, `media/scenes.json` or `media/gallery/`, nor an edition of one.",
-            examples: ["data/quests.yaml"],
+              "Conventional path of the source inside a world package. `<dir>/*.<ext>` names every such file of a directory, each one a source, read in file-name order. It may not name a path the kernel or the package itself owns: `world.yaml`, `WORLD.md`, `data/world.data.yaml`, `data/dimensions.yaml`, `data/lorebook.yaml`, `characters/characters.json`, `media/gallery.json`, `media/portraits.json`, `media/scenes.json` or `media/gallery/`, nor an edition of one.",
+            examples: ["data/quests.yaml", "data/rules/*.yaml"],
           }),
         key: z
           .string()
@@ -123,6 +126,13 @@ const dataAuthoringSchema = z
           )
           .optional(),
       })
+      .refine(
+        (source) => source.kind !== "media" || !source.path.includes("*"),
+        {
+          message: "a media source names one directory, not `/*.<ext>`",
+          path: ["path"],
+        },
+      )
       .describe(
         "The world data source an author declares to supply this content.",
       )

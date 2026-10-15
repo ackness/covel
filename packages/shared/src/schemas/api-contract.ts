@@ -406,11 +406,8 @@ export const worldPluginPlanSchema: z.ZodType<WorldPluginPlan> = z
     packs: z.array(pluginPackSchema),
     policy: z
       .object({
-        presetId: z.string().optional(),
-        preferredTags: z.array(z.string()),
-        avoidedTags: z.array(z.string()),
-        requested: z.array(z.string()),
-        recommended: z.array(z.string()),
+        preset: z.string().optional(),
+        plus: z.array(z.string()),
         requires: z.array(z.string()),
       })
       .strict(),

@@ -23,30 +23,32 @@ async function makeTempWorld(): Promise<string> {
 describe("world data loader", () => {
   it("loads exact-locale lore before short keys and compiles dimension overlays", async () => {
     const root = await makeTempWorld();
-    await mkdir(path.join(root, "dimensions"), { recursive: true });
+    await mkdir(path.join(root, "data"), { recursive: true });
     await writeFile(
       path.join(root, "world.yaml"),
       `id: russian-world
 name: Russian World
 summary: Locale files
 defaultLocale: ru_ru
-supportedLocales: [ru_ru, en-US]
-dimensionSources:
-  tone: dimensions/tone.yaml
 `,
     );
     await writeFile(path.join(root, "WORLD.md"), "canonical lore");
     await writeFile(path.join(root, "WORLD.ru.md"), "short Russian lore");
     await writeFile(path.join(root, "WORLD.ru-RU.md"), "exact Russian lore");
+    // `world.en-US.yaml` makes an en-US edition.
+    await writeFile(
+      path.join(root, "world.en-US.yaml"),
+      "name: Russian World\n",
+    );
     // The main file is the default locale. A locale file beside it holds
     // only the translated text.
     await writeFile(
-      path.join(root, "dimensions/tone.yaml"),
-      "name: тон\nschema: { type: string, x-i18n: true }\ninitialValue: спокойный\n",
+      path.join(root, "data/dimensions.yaml"),
+      "tone:\n  name: тон\n  schema: { type: string, x-i18n: true }\n  initialValue: спокойный\n",
     );
     await writeFile(
-      path.join(root, "dimensions/tone.en-US.yaml"),
-      "name: tone\ninitialValue: calm\n",
+      path.join(root, "data/dimensions.en-US.yaml"),
+      "tone:\n  name: tone\n  initialValue: calm\n",
     );
 
     const record = await loadSingleWorld(root);
@@ -64,27 +66,25 @@ dimensionSources:
 
   it("keeps Simplified Chinese text apart from a Traditional Chinese world", async () => {
     const root = await makeTempWorld();
-    await mkdir(path.join(root, "dimensions"), { recursive: true });
+    await mkdir(path.join(root, "data"), { recursive: true });
     await writeFile(
       path.join(root, "world.yaml"),
       `id: traditional-world
 name: Traditional World
 summary: Script-safe locale files
 defaultLocale: zh-Hant-TW
-supportedLocales: [zh-Hant-TW, zh-CN]
-dimensionSources:
-  tone: dimensions/tone.yaml
 `,
     );
     await writeFile(path.join(root, "WORLD.md"), "canonical lore");
+    // `WORLD.zh-CN.md` makes a zh-CN edition.
     await writeFile(path.join(root, "WORLD.zh-CN.md"), "simplified lore");
     await writeFile(
-      path.join(root, "dimensions/tone.yaml"),
-      "name: tone\nschema: { type: string, x-i18n: true }\ninitialValue: 繁體\n",
+      path.join(root, "data/dimensions.yaml"),
+      "tone:\n  name: tone\n  schema: { type: string, x-i18n: true }\n  initialValue: 繁體\n",
     );
     await writeFile(
-      path.join(root, "dimensions/tone.zh-CN.yaml"),
-      "initialValue: 简体\n",
+      path.join(root, "data/dimensions.zh-CN.yaml"),
+      "tone:\n  initialValue: 简体\n",
     );
 
     const record = await loadSingleWorld(root);
@@ -130,13 +130,12 @@ defaultLocale: x/../../../docs/reference/i18n
 name: Policy World
 summary: World with plugin policy
 defaultLocale: zh-CN
-supportedLocales: [zh-CN]
 pluginPolicy:
-  presetId: dialogue-mode
-  preferredTags:
-    - mode:dialogue
-  avoidedTags:
-    - mode:traditional-story
+  preset: dialogue-mode
+  plus:
+    - affinity
+  pitch:
+    label: 校园恋爱
 `,
     );
     await writeFile(path.join(root, "WORLD.md"), "# Policy World");
@@ -144,9 +143,53 @@ pluginPolicy:
     const record = await loadSingleWorld(root);
 
     expect(record?.metadata?.pluginPolicy).toEqual({
-      presetId: "dialogue-mode",
-      preferredTags: ["mode:dialogue"],
-      avoidedTags: ["mode:traditional-story"],
+      preset: "dialogue-mode",
+      plus: ["affinity"],
+      pitch: { label: "校园恋爱" },
+    });
+  });
+
+  it("loads an old pluginPolicy without it, and the rest of the world", async () => {
+    const root = await makeTempWorld();
+    await writeFile(
+      path.join(root, "world.yaml"),
+      `id: old-policy-world
+name: Old Policy World
+summary: World written for the previous pluginPolicy
+defaultLocale: en-US
+pluginPolicy:
+  presetId: dialogue-mode
+  requested: [affinity]
+  requires: [action-check@1]
+  packs:
+    - id: mine
+      label: Mine
+      requested: [affinity]
+`,
+    );
+    await writeFile(path.join(root, "WORLD.md"), "# Old Policy World");
+
+    const record = await loadSingleWorld(root);
+
+    expect(record?.id).toBe("old-policy-world");
+    expect(record?.metadata?.pluginPolicy).toBeUndefined();
+  });
+
+  it("loads a minimal world named by its directory", async () => {
+    const root = path.join(await makeTempWorld(), "minimal-world");
+    await mkdir(root);
+    await writeFile(
+      path.join(root, "world.yaml"),
+      "name: Minimal\nsummary: The fewest fields a world needs.\ndefaultLocale: en-US\n",
+    );
+    await writeFile(path.join(root, "WORLD.md"), "# Minimal");
+
+    const record = await loadSingleWorld(root);
+
+    expect(record).toMatchObject({
+      id: "minimal-world",
+      name: "Minimal",
+      locale: "en-US",
     });
   });
 
@@ -158,7 +201,6 @@ pluginPolicy:
 name: Settings World
 summary: World with plugin settings
 defaultLocale: zh-CN
-supportedLocales: [zh-CN]
 pluginSettings:
   story-events:
     planner: true
@@ -198,7 +240,6 @@ pluginSettings:
 name: Stage World
 summary: World declaring a stage default view mode
 defaultLocale: zh-CN
-supportedLocales: [zh-CN]
 defaultViewMode: stage
 `,
     );
@@ -217,7 +258,6 @@ defaultViewMode: stage
 name: No View Mode World
 summary: World without a declared default view mode
 defaultLocale: zh-CN
-supportedLocales: [zh-CN]
 `,
     );
     await writeFile(path.join(root, "WORLD.md"), "# No View Mode World");
@@ -646,10 +686,10 @@ worldData: data/world.data.yaml
     });
   });
 
-  it("loads bundled worlds through worldData descriptors and conventions", async () => {
+  it("loads bundled worlds by the conventions of the bundled plugins", async () => {
     const worldsRoot = path.resolve(import.meta.dirname, "../../../../worlds");
     // The server sets the conventions of its plugins before it loads worlds.
-    // emberback has no descriptor and is read by them.
+    // No bundled world has a descriptor: each is read by them.
     setWorldDataConventions(
       conventionsOfPlugins(
         await loadPluginCatalogue([path.resolve(worldsRoot, "../plugins")]),
@@ -680,8 +720,8 @@ worldData: data/world.data.yaml
     }
 
     for (const [worldId, ruleSourceId] of [
-      ["mistport", "tideRules"],
-      ["haruka-academy", "campusRules"],
+      ["mistport", "rules-tide-mystery"],
+      ["haruka-academy", "rules-campus-life"],
     ] as const) {
       const record = await load(worldId);
       expect(record?.metadata?.worldData).toMatchObject({
@@ -699,7 +739,7 @@ worldData: data/world.data.yaml
     expect(haruka?.metadata?.worldData).toMatchObject({
       sources: expect.arrayContaining([
         expect.objectContaining({
-          id: "cast",
+          id: "blueprints",
           target: "contract:character.blueprints@1",
         }),
       ]),

@@ -212,8 +212,7 @@
     "recommendationReasons": {
       "requiredByWorld": "Требуется миру",
       "requestedByWorld": "По умолчанию для мира",
-      "packOptional": "Необязательно для набора",
-      "recommendedByWorld": "Рекомендуется для мира"
+      "packOptional": "Необязательно для набора"
     },
     "exportDimensions": "Экспорт параметров",
     "importDimensions": "Импорт параметров",

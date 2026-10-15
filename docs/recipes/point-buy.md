@@ -54,12 +54,12 @@ characterSchema:
 
 ## 2. 启用两个插件
 
-在 `pluginPolicy.requested` 里加上它们：
+在 `pluginPolicy.plus` 里加上它们：
 
 ```yaml
 pluginPolicy:
-  presetId: traditional-story
-  requested:
+  preset: traditional-story
+  plus:
     - tabletop-rules
     - dice-check
 ```

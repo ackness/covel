@@ -8,24 +8,26 @@
 
 - **世界包**：一个文件夹，里面是 `world.yaml`、`WORLD.md` 和可选的数据、角色、图片。
 - **source**：世界包里的一份数据来源，通常是一个文件，媒体则是一个目录。
-- **descriptor**：一份可选的清单文件（`data/world.data.yaml`），逐条列出 source。大多数世界不需要它。
+- **descriptor**：一份可选的文件（`data/world.data.yaml`），改动约定的读法，或者加上约定之外的文件。大多数世界不需要它。
 - **会话**：玩家用这个世界开的一局游戏。世界包里的数据在创建会话时被复制进会话，之后各局各自变化。
 
 ## World Package
 
 **最小的世界包**是两个文件：
 
-- `world.yaml`：世界的清单。必填字段有四个：`id`、`name`、`summary`、`defaultLocale`。
+- `world.yaml`：世界的清单。必填字段有三个：`name`、`summary`、`defaultLocale`。
 - `WORLD.md`：世界观正文。
+
+世界的 ID 默认是文件夹的名字：`worlds/my-world/` 里的世界就是 `my-world`。
 
 之后每增加一种内容，就在约定的位置加一个文件，不需要再登记：
 
-| 文件                         | 内容                                                                                                                   |
-| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| `data/dimensions.yaml`       | 世界维度                                                                                                               |
-| `data/lorebook.yaml`         | 按关键词触发的设定条目                                                                                                 |
-| `characters/characters.json` | 领域角色记录                                                                                                           |
-| 插件声明的路径               | 该插件接收的数据，例如 `data/quests.yaml`（任务）、`characters/main-cast.json`（角色蓝图）、`media/portraits/`（立绘） |
+| 文件                         | 内容                                                                                                                                                                  |
+| ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `data/dimensions.yaml`       | 世界维度                                                                                                                                                              |
+| `data/lorebook.yaml`         | 按关键词触发的设定条目                                                                                                                                                |
+| `characters/characters.json` | 领域角色记录                                                                                                                                                          |
+| 插件声明的路径               | 该插件接收的数据，例如 `data/quests.yaml`（任务）、`characters/main-cast.json`（角色蓝图）、`media/portraits/`（立绘）、`data/rules/*.yaml`（世界规则，一个文件一组） |
 
 最后一行的路径由插件自己声明，装了什么插件就有什么约定路径。下面的命令列出当前版本的全部路径和每种数据的示例：
 
@@ -33,7 +35,7 @@
 pnpm describe:authoring
 ```
 
-这套约定的规则见[按约定导入](#按约定导入没有-descriptor)。
+这套约定的规则见[按约定导入](#按约定导入)。
 
 推荐结构：
 
@@ -42,10 +44,10 @@ worlds/my-world/
 ├── world.yaml
 ├── WORLD.md                         # 默认世界观（所有语言的兜底）；可加 WORLD.en-US.md 等语言版本
 ├── data/
-│   ├── world.data.yaml               # 可选：文件不在约定位置、或要指定顺序时才需要
+│   ├── world.data.yaml               # 可选：改动约定的读法、或加约定之外的文件时才需要
 │   ├── dimensions.yaml
 │   ├── memory-blocks.json            # 可选：题材记忆定义
-│   └── rules/                       # 可选：题材规则，导入 living-world-rules
+│   └── rules/                       # 可选：题材规则，每个 .yaml 一组，导入 living-world-rules
 ├── characters/
 │   ├── main-cast.json                # 可选：character.blueprints@1 插件内容
 │   └── characters.json               # 通用领域角色记录
@@ -63,26 +65,18 @@ worlds/my-world/
 `world.yaml`：
 
 ```yaml
-id: my-world
 name: 我的世界
 summary: 一个示例世界。
 defaultLocale: zh-CN
 pluginPolicy:
-  presetId: traditional-story
-  requested:
-    - pregame
-    - world-init
-    - char-creator
-  recommended:
-    - character-blueprint
-  preferredTags:
-    - mode:traditional-story
-  avoidedTags:
-    - mode:dialogue
-worldData: data/world.data.yaml # 可选：不写时按约定路径读取，见下文“按约定导入”
+  preset: traditional-story
+  plus:
+    - affinity
 defaultViewMode: stage
 ```
 
+- `id` 可以省略，这时用文件夹的名字。要和文件夹不同时才写它：小写字母、数字和 `-`，以字母开头。
+- `pluginPolicy` 选这个世界的插件，见[插件选择](#插件选择pluginpolicy)。
 - `worldData` 是 descriptor 的路径，相对世界包根目录。只有世界包带 descriptor 时才写它。
 - `world.yaml` 的全部字段见生成的 [World manifest 字段表](./schema/world-manifest.md)，外置维度文件见 [World dimensions 字段表](./schema/world-dimensions.md)。
 - 清单按当前字段读取。不认识的顶层字段会被忽略，加载器和 `pnpm validate:world` 会给出警告；已知字段内部的未知字段仍然报错。
@@ -91,7 +85,7 @@ defaultViewMode: stage
 
 `WORLD.md` 每个回合都会交给叙事模型，放在故事提示词的 `<world-lore>` 段里。
 
-- **语言**：世界声明了几种语言，就读取对应的 `WORLD.<locale>.md`。会话的语言在创建时固定，正文按它选择。
+- **语言**：世界有几种语言的版本，就读取对应的 `WORLD.<locale>.md`。哪些语言算一个版本，见[语言文件](#语言文件namelocaleext)。会话的语言在创建时固定，正文按它选择。
 - **编辑过的正文优先**：玩家在应用里改过世界正文时，默认语言用改过的版本。会话自己有一份正文（`loreOverride`）时用会话的，哪怕它是空的。
 - **长度上限**：约 8,000 token。这是估算值：中文一字约一个，其他文字四个字符约一个。超出时在最后一个放得下的整行之后截断。
 - [只给叙事者的正文](#只给叙事者的正文narrator-only)也算在长度里，因为模型会读。
@@ -267,26 +261,20 @@ schema:
 
 读取到的维度值始终是原始值，翻译只在显示和查询时按上面的标注进行。一个普通的 JSON 值 `{zh: 1, en: 2}` 不会被当成翻译。ID、属性名和枚举成员不翻译。
 
-#### 三种作者入口
+<a id="三种作者入口"></a>
 
-三种写法使用相同的声明格式，选一种即可：
+#### 两种作者入口
+
+两种写法使用相同的声明格式，选一种即可：
 
 1. 在 `world.yaml` 里直接写 `dimensions`。
-2. `dimensionSources`：每个维度 ID 指向一个文件（YAML 或 JSON，路径相对世界包根目录），文件内容是**这一项**的声明。
-3. 一份维度文件，内容是**整张维度表**。放在 `data/dimensions.yaml` 时按约定读取；用 descriptor 时写 `schema: covel://world/dimensions`、`to: world:metadata.dimensions`，见 [Descriptor](#descriptor)。
+2. 一份维度文件 `data/dimensions.yaml`，内容是**整张维度表**。它按约定读取，不用登记。
 
-```yaml
-# world.yaml；data/reputation.yaml 的内容为上例 reputation 下的声明
-dimensionSources:
-  reputation: data/reputation.yaml
-```
+两种写法同时存在时：
 
-几种写法同时存在时：
-
-- `dimensionSources` 的单项覆盖 `world.yaml` 里同 ID 的声明。
-- 写向 `world:metadata.dimensions` 的 source 按加载顺序替换整张表。
-- 只有最终生效的声明进入会话。被覆盖的那些不会各自初始化一遍。
-- 外部文件同样可以有语言文件，路径同样不能跑出世界包。
+- `data/dimensions.yaml` 替换 `world.yaml` 里的整张表，不逐项合并。
+- 只有最终生效的声明进入会话。被替换的那些不会各自初始化一遍。
+- 维度文件同样可以有语言文件。
 - 任何一份声明读取或校验失败，这次加载作废，继续使用上一份完整的世界。
 
 #### 初始化、演化与公共读取
@@ -325,12 +313,12 @@ dimensionSources:
 
 **生成的内容：**
 
-- 新建只创作一种语言。`defaultLocale` 和唯一的 `supportedLocales` 项都是请求的语言（缺省 `zh-CN`）。模型声称有、但没有真正生成的译本不会被采信。
+- 新建只创作一种语言。`defaultLocale` 是请求的语言（缺省 `zh-CN`），包里没有语言文件，所以世界只有这一个版本。模型声称有、但没有真正生成的译本不会被采信。
 - `characterSchema` 和其他合法的清单内容保留。
 - 补充角色时，按 `characterSchema` 校验整组角色。三次都不合法时放弃这部分，并返回一条 warning。
 - 修改已有世界时，校验的是合并后的全部角色。不合法就整包重试，最终失败，不会悄悄删掉已有角色。新建时的“只留一种语言”不会套用到修改上。
 
-**生成的世界包长什么样：** 和手写的一样按[约定路径](#按约定导入没有-descriptor)布局。
+**生成的世界包长什么样：** 和手写的一样按[约定路径](#按约定导入)布局。
 
 - 维度在 `data/dimensions.yaml`，角色在 `characters/characters.json`，资料库与规则在 `data/lorebook.yaml`。
 - 设定正文只有一份 `WORLD.md`，用世界自己的语言（`world.yaml` 的 `defaultLocale`）。`WORLD.<locale>.md` 是译文，新世界没有。
@@ -338,10 +326,10 @@ dimensionSources:
 
 **插件内容**由创作简报的 `contracts` 指定：
 
-- 生成器只为被选中的数据契约生成记录。每个契约的 schema、写作提示和示例取自接收插件的 `authoring` 声明（需声明 `generate`）。接收插件会被加入 `pluginPolicy.requested`。
+- 生成器只为被选中的数据契约生成记录。每个契约的 schema、写作提示和示例取自接收插件的 `authoring` 声明（需声明 `generate`）。接收插件不在所选玩法包里时，加入 `pluginPolicy.plus`；`kind: core` 的插件不加。
 - 未选中的契约不会进入提示词。模型为未选中的契约输出了记录，或漏掉了被选中的契约，这次尝试都算失败并重试。
 - 一个契约的记录写进接收插件声明的文件（`authoring.source` 的 `path` 与 `kind`，例如 `data/memory-blocks.json`、`data/time.yaml`）。一条记录就是文件内容，多条写成数组。
-- 下面两种情况，记录改写成 `data/contract-<n>.json`，并由 `data/world.data.yaml` 这个 descriptor 列出全部 source：
+- 下面两种情况，记录改写成 `data/contract-<n>.json`，由 descriptor `data/world.data.yaml` 把这些文件加为 source。其他文件都在约定路径上，descriptor 里没有它们：
   - 接收插件没有声明路径；
   - 声明的路径不能当作约定：已安装的插件里另有契约声明了同一个路径。
 - 接收方声明了 lorebook 投影时，目标写成 `contract:<id>+lorebook`。
@@ -350,7 +338,7 @@ dimensionSources:
 
 - `createWorld({ llm, concept, ... })` 生成并校验内容。成功时返回 `id`、`manifest`、`lore`、`locale`、`packageContent` 与 `warnings`；失败时返回 `success: false` 和 `errors`。`warnings` 包括数量低于简报目标的内容和被丢弃的无效维度。
 - 返回的 `manifest` 已经过 schema 校验并规范化，包含 locale 的规范写法和 `characterSchema.types` 等默认值。三种保存目标使用同一份结果。
-- 生成过程不写文件，也不接收 `outputDir`。生成的清单必须把数据写在清单里，不能引用还没生成的 `worldData` 或 `dimensionSources` 文件。
+- 生成过程不写文件，也不接收 `outputDir`。生成的清单必须把数据写在清单里，不能引用还没生成的 `worldData` 文件。
 - 简报生成的 `memoryDefinitions` 会转换成 `packageContent.contractData` 里的 `memory.blocks@1/world` 记录。写文件和不写文件两种模式用同一份数据，同一目标重复声明会被拒绝。
 - 需要文件包时显式调用 `await writeWorldPackage(outputDir, result, { dataContracts })`。它返回写出的相对路径，在一份独立的副本里把清单里的数据转换成文件引用，原生成结果不变。已有同名包会被拒绝；并发写同一个包只有一个成功。
 
@@ -367,14 +355,14 @@ dimensionSources:
 
 世界包不必用上所有能力，让题材决定插件组合和数据。仓库里的四个世界展示了不同的组合：
 
-| 示例                    | 玩家体验                                         | 主要能力                                                                                                                                                                                                                                                  | 适合参考的文件                                                                                                                     |
-| ----------------------- | ------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| `worlds/mistport`       | 黑暗奇幻调查，面向重剧情玩家                     | `mistport-investigation` 组合；演化维度「案情板 / 四方立场 / 深退潮 / 钥匙碎片」；`visibility: hidden` 的隐藏事件（`story-events`）；按语言选择的世界观、角色、规则与 presence；角色属性 schema、立绘、潮汐与势力规则                                     | `world.yaml`、`WORLD.md` / `WORLD.en-US.md`、`data/dimensions.yaml`、`data/rules/`、`characters/`、`media/`                        |
-| `worlds/haruka-academy` | 校园群像恋爱（GalGame），对话与视觉小说舞台      | `haruka-galgame` 组合（舞台、多回复、好感）；`defaultViewMode: stage`；好感种子与演化维度「心之路线 / 学园祭筹备 / 文艺部存续审查 / 约定 / 校园传闻」；隐藏个人线事件及其后续；透明立绘与日 / 夜场景注册表                                                | `world.yaml`、`WORLD.md`、`data/dimensions.yaml`、`data/affinity.yaml`、`data/rules/`、`characters/`、`media/scenes.registry.json` |
-| `worlds/emberback`      | 英文科幻救援，示范多语言（英文为主，另有中文版） | `emberback-rescue` 组合；骰子判定、任务、物品与好感种子；演化维度「Crownfire Countdown / Relay Grid / Signal Log / Medical Convoy」；隐藏事件及事件链                                                                                                     | `data/dimensions.yaml`、`data/quests.yaml`、`data/items.yaml`、`data/affinity.yaml`、`characters/`                                 |
-| `worlds/lantern-barrow` | 经典跑团地城探索（中英双语）                     | `classic-tabletop` 组合；`tabletop-rules` 开局配点（`contract:tabletop-rules.rules.initial@1`）与表单检定、`dice-check` 骰池；任务 / 物品 / 好感的 `.en-US` 变体；演化维度「古冢地图 / 古冢警戒 / 古冢之灯 / 名望」；隐藏遭遇及事件链（含 `.en-US` 变体） | `world.yaml`、`WORLD.md` / `WORLD.en-US.md`、`data/tabletop-rules.json`、`data/*.en-US.yaml`、`characters/*.en-US.json`            |
+| 示例                    | 玩家体验                                         | 主要能力                                                                                                                                                                                                                                                                                                                  | 适合参考的文件                                                                                                                     |
+| ----------------------- | ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `worlds/mistport`       | 黑暗奇幻调查，面向重剧情玩家                     | `traditional-story` 玩法包加角色蓝图与 `story-events`；演化维度「案情板 / 四方立场 / 深退潮 / 钥匙碎片」；`visibility: hidden` 的隐藏事件（`story-events`）；按语言选择的世界观、角色、规则与 presence；角色属性 schema、立绘、潮汐与势力规则                                                                             | `world.yaml`、`WORLD.md` / `WORLD.en-US.md`、`data/dimensions.yaml`、`data/rules/`、`characters/`、`media/`                        |
+| `worlds/haruka-academy` | 校园群像恋爱（GalGame），对话与视觉小说舞台      | `dialogue-mode` 玩法包（舞台、多回复）加好感与 `story-events`；`defaultViewMode: stage`；好感种子与演化维度「心之路线 / 学园祭筹备 / 文艺部存续审查 / 约定 / 校园传闻」；隐藏个人线事件及其后续；透明立绘与日 / 夜场景注册表                                                                                              | `world.yaml`、`WORLD.md`、`data/dimensions.yaml`、`data/affinity.yaml`、`data/rules/`、`characters/`、`media/scenes.registry.json` |
+| `worlds/emberback`      | 英文科幻救援，示范多语言（英文为主，另有中文版） | `traditional-story` 玩法包加判定、任务、物品、好感、角色蓝图与 `story-events`；骰子判定、任务、物品与好感种子；演化维度「Crownfire Countdown / Relay Grid / Signal Log / Medical Convoy」；隐藏事件及事件链                                                                                                               | `data/dimensions.yaml`、`data/quests.yaml`、`data/items.yaml`、`data/affinity.yaml`、`characters/`                                 |
+| `worlds/lantern-barrow` | 经典跑团地城探索（中英双语）                     | `traditional-story` 玩法包加跑团规则、判定、任务、物品、好感、角色蓝图与 `story-events`；`tabletop-rules` 开局配点（`contract:tabletop-rules.rules.initial@1`）与表单检定、`dice-check` 骰池；任务 / 物品 / 好感的 `.en-US` 变体；演化维度「古冢地图 / 古冢警戒 / 古冢之灯 / 名望」；隐藏遭遇及事件链（含 `.en-US` 变体） | `world.yaml`、`WORLD.md` / `WORLD.en-US.md`、`data/tabletop-rules.json`、`data/*.en-US.yaml`、`characters/*.en-US.json`            |
 
-- 雾港、遥风学园与提灯古冢用 `data/world.data.yaml` 列出 source。Emberback 没有 descriptor，按约定路径读取。两种写法效果相同。
+- 四个世界都没有 descriptor，所有文件都在约定路径上。规则文件放在 `data/rules/` 下，每个文件一组。
 - 四个世界都启用 `story-events`。雾港、Emberback 与提灯古冢另外以 `pluginSettings.story-events.planner: true` 开启剧情策划：在作者预设的隐藏事件之外，它会根据游玩中留下的线索，追加只触发一次的后续事件。遥风学园的恋爱路线由作者逐条编排，不开启剧情策划。
 - 做新世界时，先复制玩法最接近的那个世界的结构，再按后文各节增减角色、规则或媒体。
 
@@ -390,16 +378,33 @@ dimensionSources:
 
 `pluginPolicy` 说的是“这个世界希望用哪些插件”。它不会锁死任何插件：最终启用哪些，由 Covel 根据每个插件声明的能力和依赖、玩家的授权以及玩家自己的勾选算出来。
 
-| 字段                            | 说明                                                                                                                                                                   |
-| ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `presetId`                      | 默认组合包 ID，可引用 `packs[].id` 或内置组合包                                                                                                                        |
-| `preferredTags` / `avoidedTags` | 插件标签偏好                                                                                                                                                           |
-| `requires`                      | 世界必需的契约 ID（如 `action-check@1`），任何提供该契约的已安装插件都能满足                                                                                           |
-| `requested`                     | 世界建议作为初始选择的插件 ID                                                                                                                                          |
-| `recommended`                   | 额外推荐插件 ID                                                                                                                                                        |
-| `packs`                         | 自定义组合包，每项包含 `id/label`，可选 `description/requested/recommended/excluded/tags/reason`。`excluded` 是选中这个包时关掉的插件 ID，可以包括 `kind: core` 的插件 |
+写法是“一个内置玩法包，再加几个插件”：
 
-`presetId` 必须是内置组合包或这个世界 `packs` 里的 ID，否则 `pnpm validate:world` 报 `unknown-preset`。
+```yaml
+pluginPolicy:
+  preset: traditional-story # 新会话从这个玩法包开始
+  plus: # 这个世界另外要的插件
+    - dice-check
+    - core-quest
+  pitch: # 可选：准备页上这个世界自己的说法
+    label: 古冢探险
+    description: 跑团式的地城探索，带掷骰判定和任务。
+    reason: 每一步都要检定，灯油和名望都会记在面板上。
+```
+
+| 字段       | 说明                                                                                                                               |
+| ---------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `preset`   | 新会话从哪个内置玩法包开始，例如 `traditional-story`、`dialogue-mode`。玩法包列在 [`packs/builtin.yaml`](../../packs/builtin.yaml) |
+| `plus`     | 这个世界另外要的插件 ID。玩家换玩法包时，它们仍然保留。不要写 `kind: core` 的插件，每个会话本来就有                                |
+| `pitch`    | 准备页怎样介绍 `preset` 这个玩法包：`label`、`description`、`reason`，代替玩法包自己的说明。三项都可以翻译                         |
+| `packs`    | 玩家可以选的内置玩法包 ID，按这个顺序列出。不写时列出全部内置玩法包。写了时 `preset` 必须在其中                                    |
+| `requires` | 世界必需的契约 ID（如 `action-check@1`），任何提供该契约的已安装插件都能满足                                                       |
+
+新会话默认启用的插件是：`preset` 玩法包的 `requested`，加上 `plus`、core 插件和 `requires` 自动带上的依赖。
+
+- `preset` 只能是内置玩法包。世界不能自己定义玩法包；要一组不同的插件，就选最接近的玩法包，用 `plus` 补上差的。
+- 准备页先列 `preset` 的玩法包（带 `pitch` 时用世界的说法），再列 `packs` 里的其他玩法包。
+- `pnpm validate:world` 检查这些名字：`preset` 不是内置玩法包报 `unknown-preset`，`packs` 里的未知 ID 报 `unknown-pack`，`preset` 不在 `packs` 里报 `preset-not-offered`。
 
 `requires` 表达“这个世界离不开什么能力”。这里写契约（一种能力的名字加版本），不写插件：
 
@@ -407,8 +412,8 @@ dimensionSources:
 pluginPolicy:
   requires:
     - action-check@1 # 行动判定；内置的 dice-check 提供它，换一个判定插件也可以
-  requested:
-    - dice-check # 可选：初始选择，同时在有多个提供者时指定用哪一个
+  plus:
+    - dice-check # 可选：默认启用它，同时在有多个提供者时指定用哪一个
 ```
 
 - 只有一个已安装的插件提供它时，这个插件自动启用。
@@ -416,11 +421,12 @@ pluginPolicy:
 - 玩家仍然可以主动关掉提供者。这是玩家的选择，会话照常开始，准备页给出提示。
 - `requires` 只接受 `名字@版本` 形式的契约 ID。写成插件 ID 会在加载世界时报错。
 
-`requested` 写的是插件 ID，玩家的电脑上不一定装了它：
+`plus` 写的是插件 ID，玩家的电脑上不一定装了它：
 
-- `GET /api/worlds/:id/plugin-plan` 会把没安装的 ID 从世界策略和各组合包的 `requested` 中去掉，改列在 `missing`（来自组合包的带 `packId`）。
+- `GET /api/worlds/:id/plugin-plan` 会把没安装的 ID 从世界策略和各玩法包的 `requested` 中去掉，改列在 `missing`（来自玩法包的带 `packId`）。
 - 准备页据此提示缺少哪些插件。会话仍然可以创建，只是这些插件提供的玩法不会生效。
-- `recommended` 不参与默认选择，原样返回。
+
+`pluginPolicy` 里不认识的字段（例如旧写法的 `presetId`、`requested`、`recommended`、`preferredTags`）在加载时被忽略，并给出 `manifest-unknown-field` 警告。旧写法里那种由世界自己定义的 `packs`（每项是一个对象）让整个 `pluginPolicy` 无效：世界照常加载，只是没有插件选择，`pnpm validate:world` 报 `manifest-invalid`。
 
 ### 世界记录和世界包
 
@@ -507,7 +513,7 @@ seed 可以重复执行：每个世界包对应一条世界记录，有就更新
 - 文件系统不支持监听时，启动时记录一条 warning。维度还可以通过 `POST /api/worlds/:id/dimensions/import` 导入。
 - 实现见 `apps/server/src/world-file-watcher.ts`，安装响应见 [API 参考](./api.md#installed-resource-storage-and-vector-configuration)。
 
-**维度文件必须全部读得出来。** `dimensionSources` 和写向 `world:metadata.dimensions` 的 worldData source 遵循同一规则。 任何一个文件缺失、不可读、YAML 写错或校验失败，整个世界这次加载失败。此时保留上一份完整的记录，不发维度变更通知，也不做旧世界清理。修好文件后会继续自动重载。
+**维度文件必须读得出来。** `data/dimensions.yaml` 和写向 `world:metadata.dimensions` 的其他 source 遵循同一规则：文件不可读、YAML 写错或校验失败时，整个世界这次加载失败。此时保留上一份完整的记录，不发维度变更通知，也不做旧世界清理。修好文件后会继续自动重载。
 
 **删除 AI 生成并保存为文件的世界（`generated-file`）：**
 
@@ -587,9 +593,11 @@ sources:
 - 对象导入 `memory` 插件自己的 `definitions/world` 记录。记忆的内容保存在该插件的 `blocks` 里，并由它放进提示词。`world.yaml` 里没有记忆定义的专用字段。
 - 四个内置世界都用这个文件。
 
-## 按约定导入（没有 descriptor）
+<a id="按约定导入没有-descriptor"></a>
 
-`world.yaml` 没有 `worldData` 字段时，世界包按约定读取：约定路径上有文件（媒体则是目录），它就是一个 source。效果和在 descriptor 里写出同一条完全相同。
+## 按约定导入
+
+每个世界包都按约定读取：约定路径上有文件（媒体则是目录），它就是一个 source，不用登记。descriptor 只写和约定不同的地方，见[Descriptor](#descriptor)。
 
 约定来自两处：
 
@@ -597,7 +605,7 @@ sources:
   - `data/dimensions.yaml` → 维度（`world:metadata.dimensions`）
   - `data/lorebook.yaml` → 资料库（`lorebook`）
   - `characters/characters.json` → 角色（`characters`）
-- **插件**：每个数据契约在 `contributes.data.<ns>.authoring.source` 里声明的 `kind` / `path` / `key`。`pnpm describe:authoring` 把它们全部列出来，例如：
+- **插件**：每个数据契约在 `contributes.data.<ns>.authoring.source` 里声明的 `kind` / `path` / `key`。路径可以是一个目录里的一类文件，例如 `data/rules/*.yaml`：目录里每个这样的文件都是一个 source，按文件名顺序导入。`pnpm describe:authoring` 把它们全部列出来，例如：
 
 ```text
 ### Starting quests — `quests@1` (plugin `core-quest`)
@@ -619,49 +627,55 @@ Put the file at `data/quests.yaml`: it is imported without a descriptor. The sam
 规则：
 
 - 导入顺序是：维度，然后媒体，然后其余契约数据，最后是 `characters`。
-- 内置世界 `worlds/emberback` 就是这样读的：它没有 descriptor，13 个 source 全部来自约定路径。
-- 没有 descriptor 时，按这个会话**启用**的插件的约定读取。没启用的插件和加载失败的插件不影响读取。有 descriptor 时，只读取它列出的 source。
+- 四个内置世界都这样读：它们没有 descriptor，所有 source 都来自约定路径。
+- 按这个会话**启用**的插件的约定读取。没启用的插件和加载失败的插件不影响读取。
+- 每个约定 source 有一个 ID，descriptor 的 `after` 和 override 用它指代这个 source：内核的是 `dimensions`、`lorebook`、`characters`；插件的是它的 namespace，两个插件的 namespace 相同时是 `<插件 ID>-<namespace>`；目录里的文件是 `<约定 ID>-<文件名>`，例如 `data/rules/tide-mystery.yaml` 是 `rules-tide-mystery`。
 - 同一个会话启用的两个契约声明了同一个路径时，这个路径不算约定，这个文件不导入，世界包要用 descriptor 说明给谁。会话照常开始。服务端日志记一条 `[sessions]` 警告，世界数据预检返回一条 `convention-collision` 警告，`pnpm validate:world` 也会报出来（见[静态校验](#静态校验pnpm-validateworld)）。
 
-给插件作者：`path` 是相对世界包根目录的路径，只能由 ASCII 字母、数字和 `_`、`.`、`/`、`-` 组成，不能以 `/` 开头，也不能含 `..`。它也不能是内核或世界包自己的路径：`world.yaml`、`WORLD.md`、`data/world.data.yaml`、`data/dimensions.yaml`、`data/lorebook.yaml`、`characters/characters.json`、`media/gallery.json`、`media/portraits.json`、`media/scenes.json`、`media/gallery/` 目录，以及它们的语言版本（如 `world.zh-CN.yaml`），比较时不分大小写。不符合的插件清单在加载时校验失败。
+给插件作者：`path` 是相对世界包根目录的路径，只能由 ASCII 字母、数字和 `_`、`.`、`/`、`-` 组成，不能以 `/` 开头，也不能含 `..`。最后一段可以写成 `*.<扩展名>`，表示目录里这一类的每个文件（媒体 source 不行，它本来就是目录）。它也不能是内核或世界包自己的路径：`world.yaml`、`WORLD.md`、`data/world.data.yaml`、`data/dimensions.yaml`、`data/lorebook.yaml`、`characters/characters.json`、`media/gallery.json`、`media/portraits.json`、`media/scenes.json`、`media/gallery/` 目录，以及它们的语言版本（如 `world.zh-CN.yaml`），比较时不分大小写。不符合的插件清单在加载时校验失败。
 
 **什么时候仍然写 descriptor：**
 
-- 文件不在约定路径上，比如规则文件叫 `data/rules/tide-mystery.yaml`，或者想用中文文件名；
-- 一个契约有多个文件；
+- 文件不在约定路径上，比如想用中文文件名，或者一个契约要放在另一个路径；
+- 两个插件声明了同一个路径，要说明这个文件给谁；
 - 需要用 `after` 指定顺序；
-- 要关掉某个 source。
-
-> [!IMPORTANT]
-> 写了 `worldData` 之后只认 descriptor，约定不再生效。descriptor 要把所有 source 列全。
+- 要关掉某个约定 source，或者改它的某个字段（例如 `visibility`、`merge`）。
 
 **没被用到的文件。** `pnpm validate:world` 会检查 `data/`、`characters/`、`media/`（包括子目录）里有没有哪个文件没被任何 source 或框架功能用到，有就给出 `data-file-unused` 提醒。两种导入方式都检查。已有 source 的语言文件、本地 schema、维度文件、主题音乐和画廊图片不会被误报；README 是作者说明，也不参与检查。
 
 ## Descriptor
 
-descriptor 是一个 YAML 文件，通常叫 `data/world.data.yaml`，用 `sources` 列出每份数据：
+descriptor 是一个 YAML 文件，通常叫 `data/world.data.yaml`，在 `world.yaml` 里用 `worldData` 指向它。它不重复约定，只写不同的地方：
 
 ```yaml
 sources:
-  dimensions:
-    kind: yaml
-    path: data/dimensions.yaml
-    to: world:metadata.dimensions
+  # 改一个约定 source：path 和约定的相同，只写要改的字段
+  lorebook:
+    path: data/lorebook.yaml
+    merge: skipExisting
 
-  cast:
-    kind: json
-    path: characters/main-cast.json
-    to: contract:character.blueprints@1
+  # 关掉一个约定 source
+  portraits:
+    path: media/portraits
+    enabled: false
+
+  # 加一个约定之外的文件：写完整的 source
+  harbor-rules:
+    kind: yaml
+    path: data/港口规则.yaml
+    to: contract:world.rules@1+lorebook
     key: id
     after: dimensions
-
-  characters:
-    kind: json
-    path: characters/characters.json
-    to: characters
-    key: id
-    after: cast
 ```
+
+一条记录按 `path` 决定它做什么：
+
+- `path` 和某个约定 source 的路径相同：改这个 source。写了的字段换掉约定的字段，没写的保持约定的值。`enabled: false` 关掉它。这个 source 改用记录的名字作 ID。
+- 其他 `path`：加一个 source。这时要写完整，至少有 `kind`、`path`、`to`。
+- 改的那个约定 source 属于这一局没启用的插件时，这条记录什么也不做。
+- 两条记录写同一个 `path`，或者新加的 source 用了某个约定 source 的 ID，是错误。
+
+导入顺序先按种类：维度，媒体，其余数据，最后是 `characters`。同一种里约定 source 在前，descriptor 加的在后；`after` 在此基础上调整。玩家机器上的 [override](#third-party-extension) 在 descriptor 之后再改一次，按 source 的 ID 对应。
 
 每个 source 最常用的字段：
 
@@ -678,6 +692,7 @@ sources:
 
 - source 的名字（`sources` 下的键）必须匹配 `^[a-z][a-zA-Z0-9_-]{0,63}$`。
 - descriptor 顶层只写 `sources`；override descriptor 也一样。不认识的顶层字段会被忽略并给出警告，source 内部的未知字段仍然报错。
+- 改约定 source 的记录只要有 `path`。加 source 的记录和 override 新加的 source 一样，要写完整。
 
 **`schema` 什么时候写：**
 
@@ -765,6 +780,8 @@ sources:
 
 **主文件只写一种语言**，即 `world.yaml` 的 `defaultLocale`。其他语言放在主文件旁边的 `<name>.<locale>.<ext>` 里，只写译文，不重复结构。
 
+世界有哪些语言的版本，看根目录的文件：有 `world.<locale>.yaml` 或 `WORLD.<locale>.md`，世界就有这种语言的版本，再加上 `defaultLocale` 自己。`world.yaml` 里没有登记语言的字段。
+
 ```text
 world.yaml                     # 主文件，defaultLocale 的文本
 world.en-US.yaml               # 只有英文译文
@@ -795,7 +812,7 @@ characterSchema:
 
 **文件名：**
 
-- `<locale>` 要写成 `supportedLocales` 里的完整写法。世界声明了 `en-US`，文件就叫 `….en-US.…`。世界声明的就是 `fr` 时，`….fr.…` 才是准确的名字。
+- 一种语言只用一种写法。世界有 `world.en-US.yaml`，这个版本就叫 `en-US`，其他文件也写 `….en-US.…`。版本就叫 `fr` 时（`world.fr.yaml`），`….fr.…` 才是准确的名字。
 - 只写语言的 `….en.…` 不会被读取，也不会按“会话是 `en-US` 就读 `en`”来猜。
   - `pnpm validate:world` 报 `locale-file-name` 错误，并给出应改成的文件名。
   - 服务端加载时在日志里写出文件名和应有的名字。
@@ -815,15 +832,15 @@ characterSchema:
 
 **三类文件的读取方式：**
 
-| 文件                                                                                           | 读取方式                                                     | 结果                                               |
-| ---------------------------------------------------------------------------------------------- | ------------------------------------------------------------ | -------------------------------------------------- |
-| `world.yaml`、维度定义（`dimensionSources` 的文件、`to: world:metadata.dimensions` 的 source） | 所有语言文件一起读                                           | 文本带着所有语言，世界目录和面板标签按界面语言显示 |
-| 其他结构化 source（JSON / YAML）                                                               | 只合并会话语言的那一份：文件名里的 locale 与会话语言完全一致 | 单一语言的数据；会话里不保存多语言                 |
-| `markdown` / `text` / `media`                                                                  | 语言文件整份替换主文件                                       | 同上                                               |
+| 文件                                                                | 读取方式                                                     | 结果                                               |
+| ------------------------------------------------------------------- | ------------------------------------------------------------ | -------------------------------------------------- |
+| `world.yaml`、维度定义（`to: world:metadata.dimensions` 的 source） | 所有语言文件一起读                                           | 文本带着所有语言，世界目录和面板标签按界面语言显示 |
+| 其他结构化 source（JSON / YAML）                                    | 只合并会话语言的那一份：文件名里的 locale 与会话语言完全一致 | 单一语言的数据；会话里不保存多语言                 |
+| `markdown` / `text` / `media`                                       | 语言文件整份替换主文件                                       | 同上                                               |
 
 其他规则：
 
-- 会话语言在创建时确定，并且一定是世界声明的版本。文件名与它逐字对应：`zh-Hant-TW` 不会读取 `zh` 的文件。
+- 会话语言在创建时确定，并且一定是世界有的版本。文件名与它逐字对应：`zh-Hant-TW` 不会读取 `zh` 的文件。
 - 语言文件是 source 的一部分。改动任何一份都算这个 source 变了，[同步](#preflight-与-sync)能看到。
 - 主文件里不能把文本写成多语言对照（`name: { zh-CN: …, en-US: … }`）。`pnpm validate:world` 把它报为 `inline-locale-map` 错误。这样写的世界包要拆成主文件加语言文件。
 - 维度值里只有 schema 标了 `x-i18n: true` 的文本节点可以翻译。翻译其他节点会让该维度校验失败。
@@ -864,22 +881,7 @@ characterSchema:
 
 资料库（lorebook）适合放大量设定：一条条目只在玩家提到相关关键词时才进入提示词，不会每回合都占位置。
 
-文件放在 `data/lorebook.yaml` 时按约定读取。世界用了 descriptor 时这样写：
-
-```yaml
-# world.yaml
-worldData: data/world.data.yaml
-```
-
-```yaml
-# data/world.data.yaml
-sources:
-  lore:
-    kind: yaml
-    path: data/lorebook.yaml
-    to: lorebook
-    key: id
-```
+文件放在 `data/lorebook.yaml` 时按约定读取，不用登记。放在别的路径时，在 descriptor 里加一个 `to: lorebook`、`key: id` 的 source（见 [Descriptor](#descriptor)）。
 
 ```yaml
 # data/lorebook.yaml
@@ -1088,7 +1090,7 @@ characterSchema:
 | `characters/characters.json` | 领域角色：会话里真正存在的角色记录                 | 内核、角色面板、所有插件   |
 | `characters/main-cast.json`  | 角色卡：给模型的扮演说明（口吻、动机、秘密），可选 | 插件 `character-blueprint` |
 
-四个内置世界两种都带。在 descriptor 里这样写：
+四个内置世界两种都带，都放在约定路径上。写成 source 是这样：
 
 ```yaml
 sources:
@@ -1232,9 +1234,9 @@ sources:
 - 媒体单个文件最大 20 MB，一个 source 的目录合计最大 100 MB。
 - 可以导入的扩展名：`.png`、`.jpg`、`.jpeg`、`.webp`、`.mp3`、`.wav`、`.mp4`。
 - 预检要求对应契约的 schema 和接收声明已经注册。`character-blueprint` 的 `assets` 和 `presence` 分别接收 `character.portrait-assets@1` 与 `character.portraits@1`。
-- 把接收插件放进 `pluginPolicy.recommended`，玩家就可以选择它。没有启用时，跳过它的数据和媒体索引，并给出 warning；之后在游戏里启用它，数据补导入一次。
+- 接收插件不在 `preset` 的玩法包里时，把它放进 `pluginPolicy.plus`，新会话就会启用它。没有启用时，跳过它的数据和媒体索引，并给出 warning；之后在游戏里启用它，数据补导入一次。
 
-实际例子见 `worlds/mistport` 与 `worlds/haruka-academy`（`data/world.data.yaml` + `media/`）。
+实际例子见 `worlds/mistport` 与 `worlds/haruka-academy` 的 `media/`。
 
 ## Scene Backgrounds
 
@@ -1263,7 +1265,7 @@ sources:
 
 所以名字要写成叙事会用的说法，并避免让两个场景共用同一个短片段。
 
-**两条 source，都不能省。** 一条把图片导入媒体库，一条导入注册表。媒体 source 必须带 `key` 和 `indexTo`，否则图片不会被导入（见上方[媒体 source](#descriptor) 的说明）：
+**两条 source，都不能省。** 一条把图片导入媒体库，一条导入注册表。放在约定路径（`media/scenes/` 和 `media/scenes.registry.json`）时两条都按约定读取。写成 source 时，媒体 source 必须带 `key` 和 `indexTo`，否则图片不会被导入（见上方[媒体 source](#descriptor) 的说明）：
 
 ```yaml
 sources:
@@ -1283,7 +1285,7 @@ sources:
     after: dimensions
 ```
 
-实际写法见 `worlds/haruka-academy/data/world.data.yaml`。
+实际例子见 `worlds/haruka-academy/media/`。
 
 **`scenes.registry.json`** 由 `scripts/emit-scenes.mjs` 自动生成，不要手写。重新生成场景图之后必须重跑它，刷新哈希。
 
@@ -1293,7 +1295,7 @@ sources:
 和立绘的区别只有一点：立绘只需要每张图的索引；场景图除了索引，还要把整份注册表交给 `scene-stage`。
 
 > [!TIP]
-> **还没有图时。** `media/scenes.registry.json` 不存在会让世界数据校验失败，因为 source 引用了不存在的文件。对空的 `media/scenes/` 目录运行一次 `emit-scenes.mjs`，会得到一份合法的空注册表（`{schemaVersion: 1, registryId: "scene-registry", scenes: []}`），先把它放进世界包占位。`scenes` 为空时舞台显示世界头图，这不是错误。出图之后重跑 `emit-scenes.mjs` 覆盖即可，不用改 `world.data.yaml`。
+> **还没有图时。** `media/scenes.registry.json` 不存在会让世界数据校验失败，因为 source 引用了不存在的文件。对空的 `media/scenes/` 目录运行一次 `emit-scenes.mjs`，会得到一份合法的空注册表（`{schemaVersion: 1, registryId: "scene-registry", scenes: []}`），先把它放进世界包占位。`scenes` 为空时舞台显示世界头图，这不是错误。出图之后重跑 `emit-scenes.mjs` 覆盖即可。
 
 ## Background Music
 
@@ -1344,7 +1346,7 @@ moods:
 > [!NOTE]
 > 把 `soundtrack` 放进世界的 `pluginPolicy`，玩家启用它之后，这些数据才会导入并播放。
 
-**怎样声明。** 没有 descriptor 的世界，把文件放在上面两个约定路径即可。有 descriptor 的世界写两条 source。`registryId: music-registry` 是曲目表里的固定值，同时充当 `key`：
+**怎样声明。** 把文件放在上面两个约定路径即可。放在别处时在 descriptor 里写两条 source。`registryId: music-registry` 是曲目表里的固定值，同时充当 `key`：
 
 ```yaml
 sources:
@@ -1451,7 +1453,7 @@ contributes:
 
 1. 在 `PLUGIN.md` 写清楚 namespace、契约、数据形状和示例文件。
 2. 在 runtime 或工具里读取自己的数据。
-3. 给世界作者一段最小可用的 `data/world.data.yaml` 片段，并声明 `authoring.source`，让文件可以按约定路径读取。
+3. 声明 `authoring.source`，让世界作者把文件放在约定路径上就能导入，不用写 descriptor。
 
 **世界包这一侧。** 数据文件建议用数组，一条一个对象：
 
@@ -1574,13 +1576,15 @@ my-covel-pack/
             └── social/links.yaml
 ```
 
-`world.yaml` 通过 `pluginPolicy` 表达推荐组合：
+`world.yaml` 用 `pluginPolicy` 启用自己的插件：
 
 ```yaml
 pluginPolicy:
-  recommended: [social-sim]
-worldData: data/world.data.yaml
+  preset: dialogue-mode
+  plus: [social-sim]
 ```
+
+`social-sim` 声明了 `authoring.source` 时，`data/social/links.yaml` 放在它声明的路径上就能导入；否则在 `data/world.data.yaml` 里加一个 source，并在 `world.yaml` 写 `worldData`。
 
 ### Override 发布方式
 
@@ -1621,7 +1625,7 @@ pnpm validate:world --strict --plugins ~/.covel/plugins ~/.covel/worlds/my-world
 - 校验器不创建会话，不执行插件代码。
 - 它复用创建会话时的世界数据预检。所以这里通过的数据，创建会话时不会再因为记录内容而失败。
 - 插件从仓库的 `plugins/` 加上每个 `--plugins <dir>` 里找。
-- 世界声明了几种语言，预检就各跑一遍，因为[语言文件](#语言文件namelocaleext)会让不同语言读到不同的文本。主文件旁边的每个语言文件都会检查，不限于声明的语言。
+- 世界有几种语言的版本，预检就各跑一遍，因为[语言文件](#语言文件namelocaleext)会让不同语言读到不同的文本。主文件旁边的每个语言文件都会检查，不限于世界的版本。
 
 **不依赖 schema 的检查：**
 
@@ -1631,11 +1635,10 @@ pnpm validate:world --strict --plugins ~/.covel/plugins ~/.covel/worlds/my-world
 - 错误信息包含文件、记录序号和 key。导入之前发现错误就拒绝整个计划，其余合法的记录也不写。
 - 空的 source 给出 warning。
 - 接收插件用 [`authoring.references`](./plugins.md) 声明了“这个值是角色属性的 `id`”时，按世界的 `characterSchema` 检查这个值。属性不存在、类型不对或数值超出属性范围，报 `attribute-reference` 错误。世界没有写 `characterSchema` 时不检查。
-- 声明了“这个值是维度的 ID”时，按世界声明的维度（`world.yaml` 的 `dimensions`、`dimensionSources` 和 `data/dimensions.yaml` 合在一起）检查。维度不存在，或者旁边的路径走不到维度 `schema` 允许的位置，报 `dimension-reference` 错误。例如事件条件里把 `barrowAlarm` 写成 `barowAlarm`，这个事件永远不会触发。世界没有声明任何维度时不检查。
+- 声明了“这个值是维度的 ID”时，按世界声明的维度（`world.yaml` 的 `dimensions` 或 `data/dimensions.yaml`）检查。维度不存在，或者旁边的路径走不到维度 `schema` 允许的位置，报 `dimension-reference` 错误。例如事件条件里把 `barrowAlarm` 写成 `barowAlarm`，这个事件永远不会触发。世界没有声明任何维度时不检查。
 - 维度引用还可以声明 `values`，例如 `values: [equals, "in[]"]`。这些候选值必须符合所指位置的维度 schema，包括类型和枚举；错误同样报 `dimension-reference`。例如天气只允许 `sun` / `rain` 时，`equals: snow` 或 `in: [rain, snow]` 会指出错误值的位置。完整声明和保守检查规则见 [`authoring.references`](./plugins.md)。会话导入、预检和同步也检查启用接收插件声明的维度引用，使用已保存世界记录里的维度；发现错误时整份导入计划都不写入。
 - 记录或角色字段里，名字以 `At` 结尾或叫 `timestamp`、取值是 ISO 时间的字段，会被当成记账信息，模型读不到。每个这样的字段给出一条 `model-hidden-field` 提醒。要让模型看到剧情里的时间，请换一个名字（`date`、`diedOn`），或者不写成 ISO 时间。
 - 记录里名字是 `id` 或以 `Id` / `Ids` 结尾、取值是 UUID 的字段，也会被当成记账信息，模型读不到，同样给出一条 `model-hidden-field` 提醒。请换成人能读懂的 ID，用小写单词加连字符，例如 `npc-lin-yao`。
-- 即使没有任何约定的数据文件，`dimensionSources` 也会被检查。
 
 **诊断一览：**
 
@@ -1644,22 +1647,26 @@ pnpm validate:world --strict --plugins ~/.covel/plugins ~/.covel/worlds/my-world
 | --- | --- | --- |
 | `manifest-invalid` | error | `world.yaml` 无法解析或不符合 schema |
 | `manifest-unknown-field` | warning | `world.yaml` 有不认识的顶层字段，加载时忽略 |
-| `lore-missing` | error | 某个声明的语言（`defaultLocale` / `supportedLocales`）找不到正文文件 |
+| `default-value` | warning | 写了不用写的值，可以删掉：`characterSchema.types` 就是默认的 `[npc, companion]`，或者 `pluginPolicy.plus` 里有 `kind: core` 的插件 |
+| `lore-missing` | error | 世界的某个语言版本找不到正文文件 |
 | `lore-fallback-missing` | warning | 没有 `WORLD.md`，未声明语言的会话会拿到空的正文 |
 | `lore-narrator-only` | warning | [narrator-only 标记](#只给叙事者的正文narrator-only)没有结束、没有开始、嵌套或写错；后面的正文会对玩家隐藏 |
 | `unknown-plugin` | error 或 warning | `pluginPolicy` / `pluginSettings` 引用的插件 ID 不在已扫描目录中 |
-| `unknown-preset` | error | `pluginPolicy.presetId` 不是内置组合包，也不是这个世界 `packs` 里的 ID |
+| `unknown-preset` | error | `pluginPolicy.preset` 不是内置玩法包 |
+| `unknown-pack` | error | `pluginPolicy.packs` 里有不是内置玩法包的 ID |
+| `preset-not-offered` | error | 写了 `pluginPolicy.packs`，但 `preset` 不在其中 |
+| `pitch-without-preset` | warning | 写了 `pluginPolicy.pitch`，但没有 `preset`，这段说明不会显示 |
 | `unknown-setting` | warning | `pluginSettings` 的 key 不是该插件声明的设置项，值会被忽略 |
 | `invalid-setting` | error | `pluginSettings` 的值不符合该设置项声明的类型、范围或选项 |
 | `unprovided-contract` | error 或 warning | `pluginPolicy.requires` 的契约没有提供者 |
 | `unresolved-contract` | error 或 warning | source 使用的数据契约没有任何已扫描插件接收 |
 | `unrequested-receiver` | warning | 新开会话默认启用的插件里没有这个 source 的接收方；玩家手动开启接收插件之前，这个 source 不导入 |
-| `convention-collision` | error 或 warning | 世界没有 descriptor，而某个文件所在的路径有不止一个插件声明；同时启用这些插件的会话不导入它 |
+| `convention-collision` | error 或 warning | 某个文件所在的路径有不止一个插件声明，descriptor 也没有说明给谁；同时启用这些插件的会话不导入它 |
 | `world-data` | 与预检一致 | descriptor、source 顺序、文件读取、target、隐藏数据规则，以及按契约 schema 逐条校验的记录 |
-| `locale-file-name` | error | 语言文件的文件名只写了语言（`.en.`），没有写成世界声明的 locale（`.en-US.`）；这个文件不会被读取 |
+| `locale-file-name` | error | 语言文件的文件名只写了语言（`.en.`），没有写成世界版本的 locale（`.en-US.`）；这个文件不会被读取 |
 | `locale-overlay` | warning | 语言文件里有一条译文无处安放（主文件没有这个 key 或 id，或它改了非文本的值），这条被忽略 |
 | `locale-script` | warning | 非中日韩语言的语言文件里留有中日韩文字：没翻译的文本，或从主文件照抄的触发词 |
-| `edition-incomplete` | warning | `supportedLocales` 声明了某种语言，但该语言的版本缺少若干条译文；用这种语言开的会话会读到世界默认语言的原文 |
+| `edition-incomplete` | warning | 世界有某种语言的版本，但它缺少若干条译文；用这种语言开的会话会读到世界默认语言的原文 |
 | `inline-locale-map` | error | 主文件里把文本写成了多语言对照；主文件只写一种语言，译文放进语言文件 |
 | `data-file-unused` | warning | `data/`、`characters/` 或 `media/` 中的文件未被 source 或框架功能使用 |
 | `attribute-reference` | error | 记录里指向角色属性的值（由接收插件的 `authoring.references` 声明）在世界的 `characterSchema` 里不存在、类型不对或超出范围 |
@@ -1671,7 +1678,7 @@ pnpm validate:world --strict --plugins ~/.covel/plugins ~/.covel/worlds/my-world
 
 `unknown-plugin`、`unprovided-contract`、`unresolved-contract` 三项：拼写接近某个已知 ID 时是 error，并提示 “Did you mean”。否则默认是 warning，因为提供者可能是没被扫描的社区插件。加 `--strict` 后一律是 error。`pnpm release:preflight` 对内置世界使用 `--strict`。
 
-**新开会话默认启用的插件**，就是开局准备页默认勾选的插件：`pluginPolicy.requested`、`presetId` 选中的组合包里的 `requested`、带 `preferredTags` 标签的插件，再加上 core 插件和 `requires` 自动带上的依赖。已扫描的社区插件当作已经同意。`unrequested-receiver` 和 `convention-collision` 按这个集合判断：`convention-collision` 的声明者里有两个在这个集合里时是 error，否则是 warning。记录仍然按所有已扫描插件的 schema 校验，所以玩家手动开启的插件，它的数据也会检查。
+**新开会话默认启用的插件**，就是开局准备页默认勾选的插件：`preset` 玩法包里的 `requested` 和 `pluginPolicy.plus`，再加上 core 插件和 `requires` 自动带上的依赖。已扫描的社区插件当作已经同意。`unrequested-receiver` 和 `convention-collision` 按这个集合判断：`convention-collision` 的声明者里有两个在这个集合里时是 error，否则是 warning。记录仍然按所有已扫描插件的 schema 校验，所以玩家手动开启的插件，它的数据也会检查。
 
 **`prompt-size` 的三种情况**，都不阻止使用：
 

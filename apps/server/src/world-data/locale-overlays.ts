@@ -31,11 +31,11 @@ function parseStructured(file: string, text: string): unknown {
 }
 
 /**
- * The declared locale a translation file should have been named with, when
- * `tag` is only the language of it. A translation file uses the locale
- * exactly as `supportedLocales` writes it: `.en` would also answer a session
- * in any other region of that language, and a world would have two spellings
- * for one edition. A language the world declares as such (`fr`) is exact.
+ * The edition locale a translation file should have been named with, when
+ * `tag` is only the language of it. A translation file names the locale of
+ * its edition exactly: `.en` would also answer a session in any other region
+ * of that language, and a world would have two spellings for one edition. A
+ * language that is an edition as such (`fr`) is exact.
  */
 export function exactLocaleFor(
   tag: string,
@@ -50,12 +50,12 @@ export function exactLocaleFor(
   );
 }
 
-/** A translation file named with a bare language instead of the declared locale. */
+/** A translation file named with a bare language instead of the edition's locale. */
 export interface MisnamedLocaleFile {
   /** Relative to the world directory. */
   readonly file: string;
   readonly tag: string;
-  /** The declared locale the file should name. */
+  /** The edition locale the file should name. */
   readonly exact: string;
   /** The file name it should have, relative to the world directory. */
   readonly renamed: string;
@@ -63,7 +63,7 @@ export interface MisnamedLocaleFile {
 
 /** The finding about a misnamed file, as the validator and the loader word it. */
 export function misnamedLocaleMessage(item: MisnamedLocaleFile): string {
-  return `\`${path.basename(item.file)}\` names its language as "${item.tag}", but the world declares "${item.exact}"`;
+  return `\`${path.basename(item.file)}\` names its language as "${item.tag}", but the world's edition is "${item.exact}"`;
 }
 
 const BARE_LANGUAGE_FILE = /^(.+)\.([A-Za-z]{2,3})\.(md|ya?ml|json)$/;
@@ -71,7 +71,7 @@ const MAX_SCANNED_FILES = 5000;
 
 /**
  * Every translation file of a world package that names a bare language where
- * the world declares a region (`WORLD.en.md` for `en-US`). The validator
+ * the world's edition has a region (`WORLD.en.md` for `en-US`). The validator
  * reports them and the loader ignores them.
  */
 export async function findMisnamedLocaleFiles(
@@ -236,10 +236,54 @@ export async function compileLocaleOverlays(args: {
   return { value, overlays, issues };
 }
 
+/** `world.<tag>.yaml` or `WORLD.<tag>.md`: a file that makes an edition. */
+const EDITION_FILE = /^(?:world\.(.+)\.yaml|WORLD\.(.+)\.md)$/;
+
+/**
+ * The locales a world package has content for, its editions: the default
+ * locale, and each locale for which it has `world.<locale>.yaml` or
+ * `WORLD.<locale>.md` beside `world.yaml`. A file named with only the
+ * language of another edition (`WORLD.en.md` beside `world.en-US.yaml`) is a
+ * misnamed translation, not an edition. Default first, the rest sorted.
+ */
+export async function worldEditionLocales(
+  worldDir: string,
+  defaultLocale: string | undefined,
+): Promise<string[]> {
+  let names: string[] = [];
+  try {
+    names = await readdir(worldDir);
+  } catch {
+    // A world without a directory has its own language only.
+  }
+  const own = canonicalizeLocale(defaultLocale);
+  const found = new Set<string>();
+  for (const name of names) {
+    const match = EDITION_FILE.exec(name);
+    const locale = canonicalizeLocale(match?.[1] ?? match?.[2]);
+    if (locale && isKnownLocale(locale) && locale !== own) found.add(locale);
+  }
+  const all = [...(own ? [own] : []), ...found];
+  // `en` beside `en-US` is the language of an edition, not one of its own.
+  const languageOfAnother = (locale: string) =>
+    all.some(
+      (other) =>
+        other.toLowerCase() !== locale.toLowerCase() &&
+        localeLanguage(other) === locale.toLowerCase(),
+    );
+  return [
+    ...(own ? [own] : []),
+    ...[...found]
+      .filter((locale) => !languageOfAnother(locale))
+      .sort(compareText),
+  ];
+}
+
 /**
  * Read `world.yaml` with every `world.<locale>.yaml` overlay compiled in. The
  * main file is written in the world's default locale; the result has locale
- * maps wherever an overlay translates a text.
+ * maps wherever an overlay translates a text. A manifest without `id` gets
+ * the name of its directory, which is the world's ID then.
  */
 export async function readWorldManifestSource(worldDir: string): Promise<{
   /** `world.yaml` with its overlays compiled in. */
@@ -248,6 +292,8 @@ export async function readWorldManifestSource(worldDir: string): Promise<{
   base: unknown;
   overlays: readonly LocaleOverlayFile[];
   issues: LocaleOverlayFileIssue[];
+  /** The world's editions (`worldEditionLocales`). */
+  editions: readonly string[];
 }> {
   const base: unknown = parseYaml(
     await readFile(path.join(worldDir, "world.yaml"), "utf-8"),
@@ -258,29 +304,31 @@ export async function readWorldManifestSource(worldDir: string): Promise<{
     typeof (base as { defaultLocale?: unknown }).defaultLocale === "string"
       ? (base as { defaultLocale: string }).defaultLocale
       : undefined;
-  const supported = (base as { supportedLocales?: unknown } | null)
-    ?.supportedLocales;
-  const declared = [
-    ...new Set(
-      [baseLocale, ...(Array.isArray(supported) ? supported : [])].flatMap(
-        (item) =>
-          typeof item === "string" && canonicalizeLocale(item)
-            ? [canonicalizeLocale(item)!]
-            : [],
-      ),
-    ),
-  ];
+  const editions = await worldEditionLocales(worldDir, baseLocale);
   const compiled = await compileLocaleOverlays({
     root: worldDir,
     relativePath: "world.yaml",
     base,
     baseLocale,
-    declared,
+    declared: editions,
   });
   return {
-    raw: compiled.value,
+    raw: withDirectoryId(compiled.value, worldDir),
     base,
     overlays: compiled.overlays,
     issues: compiled.issues,
+    editions,
   };
+}
+
+/** A manifest object without `id` takes the name of the world's directory. */
+export function withDirectoryId(manifest: unknown, worldDir: string): unknown {
+  if (
+    manifest === null ||
+    typeof manifest !== "object" ||
+    Array.isArray(manifest) ||
+    (manifest as { id?: unknown }).id !== undefined
+  )
+    return manifest;
+  return { id: path.basename(worldDir), ...manifest };
 }

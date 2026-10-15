@@ -40,6 +40,7 @@ export type {
   WorldDataKey,
   WorldDataSourceDescriptor,
   WorldDataDescriptor,
+  WorldDataDescriptorFile,
   WorldDataDiagnosticCounts,
   WorldDataImportNotice,
   WorldDataReceiverImport,

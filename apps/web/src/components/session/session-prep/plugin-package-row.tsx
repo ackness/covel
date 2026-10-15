@@ -69,10 +69,6 @@ export function PluginPackageRow({
       "session.recommendationReasons.packOptional",
       "Pack optional",
     ),
-    recommendedByWorld: t(
-      "session.recommendationReasons.recommendedByWorld",
-      "Recommended by world",
-    ),
   });
   const runtimes = pkg.runtimes ?? [];
   const tools = pkg.tools ?? [];

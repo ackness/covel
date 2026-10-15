@@ -8,24 +8,26 @@ Some terms used throughout this page:
 
 - **World package**: a folder that holds `world.yaml`, `WORLD.md`, and optional data, characters and images.
 - **Source**: one data source in a world package. Usually a file. For media, it is a directory.
-- **Descriptor**: an optional manifest file (`data/world.data.yaml`) that lists each source one by one. Most worlds do not need it.
+- **Descriptor**: an optional file (`data/world.data.yaml`) that changes how a conventional file is read, or adds a file outside the conventions. Most worlds do not need it.
 - **Session**: one game that a player starts with this world. The world package's data is copied into the session when the session is created. After that, each session changes on its own.
 
 ## World Package
 
 **The smallest world package** has two files:
 
-- `world.yaml`: the manifest of the world. Four fields are required: `id`, `name`, `summary`, and `defaultLocale`.
+- `world.yaml`: the manifest of the world. Three fields are required: `name`, `summary`, and `defaultLocale`.
 - `WORLD.md`: the world lore text.
+
+The world's ID is the folder's name by default: the world in `worlds/my-world/` is `my-world`.
 
 When you add a kind of content later, put a file in the agreed location. You do not need to register it anywhere:
 
-| File                         | Content                                                                                                                                                    |
-| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `data/dimensions.yaml`       | World dimensions                                                                                                                                           |
-| `data/lorebook.yaml`         | Lore entries that are triggered by keywords                                                                                                                |
-| `characters/characters.json` | Domain character records                                                                                                                                   |
-| Path declared by a plugin    | Data that the plugin receives, for example `data/quests.yaml` (quests), `characters/main-cast.json` (character blueprints), `media/portraits/` (portraits) |
+| File                         | Content                                                                                                                                                                                                         |
+| ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `data/dimensions.yaml`       | World dimensions                                                                                                                                                                                                |
+| `data/lorebook.yaml`         | Lore entries that are triggered by keywords                                                                                                                                                                     |
+| `characters/characters.json` | Domain character records                                                                                                                                                                                        |
+| Path declared by a plugin    | Data that the plugin receives, for example `data/quests.yaml` (quests), `characters/main-cast.json` (character blueprints), `media/portraits/` (portraits), `data/rules/*.yaml` (world rules, one set per file) |
 
 A plugin declares the last row's paths itself. Each installed plugin brings its own agreed paths. The command below lists all the paths in the current version, with an example of each kind of data:
 
@@ -33,7 +35,7 @@ A plugin declares the last row's paths itself. Each installed plugin brings its 
 pnpm describe:authoring
 ```
 
-The rules for this convention are in [import by convention](#import-by-convention-no-descriptor).
+The rules for this convention are in [import by convention](#import-by-convention).
 
 Recommended structure:
 
@@ -42,10 +44,10 @@ worlds/my-world/
 ├── world.yaml
 ├── WORLD.md                         # default world lore (fallback for all languages); you can add language versions such as WORLD.en-US.md
 ├── data/
-│   ├── world.data.yaml               # optional: needed only when a file is not in the convention location, or when you set the order
+│   ├── world.data.yaml               # optional: needed only to change how a conventional file is read, or to add a file outside the conventions
 │   ├── dimensions.yaml
 │   ├── memory-blocks.json            # optional: genre memory definitions
-│   └── rules/                       # optional: genre rules, imported into living-world-rules
+│   └── rules/                       # optional: genre rules, one set per .yaml file, imported into living-world-rules
 ├── characters/
 │   ├── main-cast.json                # optional: character.blueprints@1 plugin content
 │   └── characters.json               # general domain character records
@@ -63,26 +65,18 @@ worlds/my-world/
 `world.yaml`:
 
 ```yaml
-id: my-world
 name: 我的世界
 summary: 一个示例世界。
 defaultLocale: zh-CN
 pluginPolicy:
-  presetId: traditional-story
-  requested:
-    - pregame
-    - world-init
-    - char-creator
-  recommended:
-    - character-blueprint
-  preferredTags:
-    - mode:traditional-story
-  avoidedTags:
-    - mode:dialogue
-worldData: data/world.data.yaml # optional: when omitted, the file is read from the convention path; see "Import by convention" below
+  preset: traditional-story
+  plus:
+    - affinity
 defaultViewMode: stage
 ```
 
+- `id` can be left out; the folder's name is used then. Write it only when it must differ from the folder: lowercase letters, digits and `-`, starting with a letter.
+- `pluginPolicy` chooses the plugins of this world. See [plugin selection](#plugin-selection-pluginpolicy).
 - `worldData` is the path to the descriptor, relative to the world package root. Write it only when the world package has a descriptor.
 - For all the fields of `world.yaml`, see the generated [World manifest field table](./schema/world-manifest.md). For dimensions in a separate file, see [World dimensions field table](./schema/world-dimensions.md).
 - The manifest reads the current fields. Unknown top-level fields are ignored, with warnings from the loader and `pnpm validate:world`. Unknown fields inside known declarations remain errors.
@@ -91,7 +85,7 @@ defaultViewMode: stage
 
 The model reads `WORLD.md` on every turn. It is placed in the `<world-lore>` section of the story prompt.
 
-- **Language**: if the world declares more than one language, Covel reads the matching `WORLD.<locale>.md`. The session's language is fixed when the session is created, and the lore is chosen by it.
+- **Language**: if the world has editions in more than one language, Covel reads the matching `WORLD.<locale>.md`. Which languages count as an edition is in [language files](#language-files-namelocaleext). The session's language is fixed when the session is created, and the lore is chosen by it.
 - **Edited lore comes first**: when a player has edited the world lore in the app, the edited version is used for the default language. If the session has its own lore (`loreOverride`), the session's copy is used, even when it is empty.
 - **Length limit**: about 8,000 tokens. This is an estimate: about one token per Chinese character, and about one token per four other characters. When the text is too long, it is cut after the last full line that fits.
 - [Narrator-only lore](#narrator-only-lore-narrator-only) also counts toward this limit, because the model reads it.
@@ -267,26 +261,20 @@ schema:
 
 A dimension value that is read is always the raw value. Translation is applied only when the value is shown or queried, according to the labels above. A plain JSON value such as `{zh: 1, en: 2}` is not treated as a translation. IDs, property names and enum members are not translated.
 
-#### Three ways for authors to declare dimensions
+<a id="three-ways-for-authors-to-declare-dimensions"></a>
 
-All three ways use the same declaration format. Pick one:
+#### Two ways for authors to declare dimensions
+
+Both ways use the same declaration format. Pick one:
 
 1. Write `dimensions` directly in `world.yaml`.
-2. `dimensionSources`: each dimension ID points to one file (YAML or JSON, with a path relative to the world package root). The file holds the declaration for **that one** dimension.
-3. One dimension file that holds the **whole dimension table**. When it is placed at `data/dimensions.yaml`, it is read by convention. When you use a descriptor, write `schema: covel://world/dimensions` and `to: world:metadata.dimensions`. See [Descriptor](#descriptor).
+2. One dimension file, `data/dimensions.yaml`, that holds the **whole dimension table**. It is read by convention; you do not register it.
 
-```yaml
-# world.yaml; the content of data/reputation.yaml is the declaration under reputation in the example above
-dimensionSources:
-  reputation: data/reputation.yaml
-```
+When both are used together:
 
-When several of these are used together:
-
-- A single item in `dimensionSources` overrides the declaration with the same ID in `world.yaml`.
-- A source written to `world:metadata.dimensions` replaces the whole table, in load order.
-- Only the final declarations go into a session. The ones that were overridden are not each initialized once.
-- An external file can also have language files. Its path must not leave the world package either.
+- `data/dimensions.yaml` replaces the whole table in `world.yaml`. The two are not merged item by item.
+- Only the final declarations go into a session. The ones that were replaced are not each initialized once.
+- The dimension file can also have language files.
 - If any declaration fails to read or validate, this load is thrown away, and the previous complete world stays in use.
 
 #### Initialization, evolution and public reads
@@ -325,12 +313,12 @@ The "AI create world" feature in the app and a world package written by hand use
 
 **What is generated:**
 
-- A new world is written in one language only. `defaultLocale` and the only entry in `supportedLocales` are both the requested language (the default is `zh-CN`). A translation that the model claims to have but did not really generate is not accepted.
+- A new world is written in one language only. `defaultLocale` is the requested language (the default is `zh-CN`), and the package has no language files, so the world has only this one edition. A translation that the model claims to have but did not really generate is not accepted.
 - `characterSchema` and other valid manifest content are kept.
 - When characters are added, the whole group of characters is validated against `characterSchema`. If it is still invalid after three attempts, that part is dropped, and a warning is returned.
 - When an existing world is edited, all the characters after the merge are validated. If they are not valid, the whole package is retried, and if that also fails, the edit fails. Existing characters are never deleted quietly. The "one language only" rule for new worlds does not apply to edits.
 
-**What the generated world package looks like:** it is laid out along the [convention paths](#import-by-convention-no-descriptor), the same as a hand-written one.
+**What the generated world package looks like:** it is laid out along the [convention paths](#import-by-convention), the same as a hand-written one.
 
 - Dimensions are in `data/dimensions.yaml`, characters are in `characters/characters.json`, and the lorebook and rules are in `data/lorebook.yaml`.
 - There is one `WORLD.md` for the setting text, written in the world's own language (`defaultLocale` in `world.yaml`). A `WORLD.<locale>.md` is a translation, and a new world does not have one.
@@ -338,10 +326,10 @@ The "AI create world" feature in the app and a world package written by hand use
 
 **Plugin content** is specified by the `contracts` in the creation brief:
 
-- The generator makes records only for the data contracts that are chosen. The schema, the writing prompt and the example of each contract come from the `authoring` declaration of the receiving plugin (it must declare `generate`). The receiving plugin is added to `pluginPolicy.requested`.
+- The generator makes records only for the data contracts that are chosen. The schema, the writing prompt and the example of each contract come from the `authoring` declaration of the receiving plugin (it must declare `generate`). When the receiving plugin is not in the chosen pack, it is added to `pluginPolicy.plus`; a `kind: core` plugin is not added.
 - A contract that is not chosen does not go into the prompt. If the model outputs records for a contract that was not chosen, or leaves out a contract that was chosen, that attempt counts as a failure and is retried.
 - The records of a contract are written to the file that the receiving plugin declares (the `path` and `kind` of `authoring.source`, for example `data/memory-blocks.json` or `data/time.yaml`). One record is the file content. Several records are written as an array.
-- In the two cases below, the records are rewritten to `data/contract-<n>.json`, and the descriptor `data/world.data.yaml` lists every source:
+- In the two cases below, the records are rewritten to `data/contract-<n>.json`, and the descriptor `data/world.data.yaml` adds these files as sources. Every other file is at a convention path and is not in the descriptor:
   - The receiving plugin does not declare a path.
   - The declared path cannot be used as a convention: another contract in an installed plugin declares the same path.
 - When the receiver declares a lorebook projection, the target is written as `contract:<id>+lorebook`.
@@ -350,7 +338,7 @@ The "AI create world" feature in the app and a world package written by hand use
 
 - `createWorld({ llm, concept, ... })` generates the content and validates it. On success it returns `id`, `manifest`, `lore`, `locale`, `packageContent` and `warnings`. On failure it returns `success: false` and `errors`. `warnings` include content below the brief's target count and invalid dimensions that were dropped.
 - The returned `manifest` has already been validated against the schema and normalized. It includes the canonical form of the locale and defaults such as `characterSchema.types`. All three save targets use the same result.
-- Generation does not write files, and it does not accept `outputDir`. A generated manifest must put its data inside the manifest. It cannot refer to a `worldData` or `dimensionSources` file that has not been generated.
+- Generation does not write files, and it does not accept `outputDir`. A generated manifest must put its data inside the manifest. It cannot refer to a `worldData` file that has not been generated.
 - The `memoryDefinitions` from the brief are converted into `memory.blocks@1/world` records in `packageContent.contractData`. Writing files and not writing files use the same data. Declaring the same target twice is rejected.
 - To get a package of files, call `await writeWorldPackage(outputDir, result, { dataContracts })` explicitly. It returns the relative paths that were written. It works on a separate copy, converting the data in the manifest into file references, and the original result does not change. An existing package with the same name is rejected. When two writes go to the same package at once, only one succeeds.
 
@@ -367,14 +355,14 @@ The "AI create world" feature in the app and a world package written by hand use
 
 A world package does not have to use every capability. Let the genre decide the plugin mix and the data. The four worlds in the repository show different mixes:
 
-| Example                 | Player experience                                                                                                       | Main capabilities                                                                                                                                                                                                                                                                                                                                                                           | Files to look at                                                                                                                   |
-| ----------------------- | ----------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| `worlds/mistport`       | A dark fantasy investigation, for players who want a heavy story                                                        | The `mistport-investigation` mix. Evolving dimensions 案情板 (case board), 四方立场 (four sides), 深退潮 (deep ebb) and 钥匙碎片 (key fragments). Hidden events with `visibility: hidden` (`story-events`). Lore, characters, rules and presence by language. Character attribute schema, portraits, and rules for tides and factions.                                                      | `world.yaml`, `WORLD.md` / `WORLD.en-US.md`, `data/dimensions.yaml`, `data/rules/`, `characters/`, `media/`                        |
-| `worlds/haruka-academy` | Campus romance with a group of characters (GalGame), with a dialogue and visual novel stage                             | The `haruka-galgame` mix (stage, multiple replies, affinity). `defaultViewMode: stage`. Affinity seeds and evolving dimensions 心之路线 (heart routes), 学园祭筹备 (festival preparation), 文艺部存续审查 (club review), 约定 (promises) and 校园传闻 (campus rumors). Hidden personal-route events and their follow-ups. Transparent portraits, and a day and night scene registry.        | `world.yaml`, `WORLD.md`, `data/dimensions.yaml`, `data/affinity.yaml`, `data/rules/`, `characters/`, `media/scenes.registry.json` |
-| `worlds/emberback`      | English science fiction rescue, showing how one world carries several languages (English first, with a Chinese edition) | The `emberback-rescue` mix. Dice checks, quests, items and affinity seeds. Evolving dimensions Crownfire Countdown, Relay Grid, Signal Log and Medical Convoy. Hidden events and event chains.                                                                                                                                                                                              | `data/dimensions.yaml`, `data/quests.yaml`, `data/items.yaml`, `data/affinity.yaml`, `characters/`                                 |
-| `worlds/lantern-barrow` | Classic tabletop dungeon exploration (Chinese and English)                                                              | The `classic-tabletop` mix. Starting point buy from `tabletop-rules` (`contract:tabletop-rules.rules.initial@1`), form checks and the `dice-check` dice pool. `.en-US` variants of quests, items and affinity. Evolving dimensions 古冢地图 (tomb map), 古冢警戒 (tomb alert), 古冢之灯 (tomb lantern) and 名望 (renown). Hidden encounters and event chains (including `.en-US` variants). | `world.yaml`, `WORLD.md` / `WORLD.en-US.md`, `data/tabletop-rules.json`, `data/*.en-US.yaml`, `characters/*.en-US.json`            |
+| Example                 | Player experience                                                                                                       | Main capabilities                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | Files to look at                                                                                                                   |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `worlds/mistport`       | A dark fantasy investigation, for players who want a heavy story                                                        | The `traditional-story` pack plus character blueprints and `story-events`. Evolving dimensions 案情板 (case board), 四方立场 (four sides), 深退潮 (deep ebb) and 钥匙碎片 (key fragments). Hidden events with `visibility: hidden` (`story-events`). Lore, characters, rules and presence by language. Character attribute schema, portraits, and rules for tides and factions.                                                                                                             | `world.yaml`, `WORLD.md` / `WORLD.en-US.md`, `data/dimensions.yaml`, `data/rules/`, `characters/`, `media/`                        |
+| `worlds/haruka-academy` | Campus romance with a group of characters (GalGame), with a dialogue and visual novel stage                             | The `dialogue-mode` pack (stage, multiple replies) plus affinity and `story-events`. `defaultViewMode: stage`. Affinity seeds and evolving dimensions 心之路线 (heart routes), 学园祭筹备 (festival preparation), 文艺部存续审查 (club review), 约定 (promises) and 校园传闻 (campus rumors). Hidden personal-route events and their follow-ups. Transparent portraits, and a day and night scene registry.                                                                                 | `world.yaml`, `WORLD.md`, `data/dimensions.yaml`, `data/affinity.yaml`, `data/rules/`, `characters/`, `media/scenes.registry.json` |
+| `worlds/emberback`      | English science fiction rescue, showing how one world carries several languages (English first, with a Chinese edition) | The `traditional-story` pack plus checks, quests, items, affinity, character blueprints and `story-events`. Dice checks, quests, items and affinity seeds. Evolving dimensions Crownfire Countdown, Relay Grid, Signal Log and Medical Convoy. Hidden events and event chains.                                                                                                                                                                                                              | `data/dimensions.yaml`, `data/quests.yaml`, `data/items.yaml`, `data/affinity.yaml`, `characters/`                                 |
+| `worlds/lantern-barrow` | Classic tabletop dungeon exploration (Chinese and English)                                                              | The `traditional-story` pack plus tabletop rules, checks, quests, items, affinity, character blueprints and `story-events`. Starting point buy from `tabletop-rules` (`contract:tabletop-rules.rules.initial@1`), form checks and the `dice-check` dice pool. `.en-US` variants of quests, items and affinity. Evolving dimensions 古冢地图 (tomb map), 古冢警戒 (tomb alert), 古冢之灯 (tomb lantern) and 名望 (renown). Hidden encounters and event chains (including `.en-US` variants). | `world.yaml`, `WORLD.md` / `WORLD.en-US.md`, `data/tabletop-rules.json`, `data/*.en-US.yaml`, `characters/*.en-US.json`            |
 
-- Mistport, Haruka Academy (遥风学园) and Lantern Barrow (提灯古冢) list their sources in `data/world.data.yaml`. Emberback has no descriptor and is read from its convention paths. Both ways have the same effect.
+- None of the four worlds has a descriptor; every file is at a convention path. Rule files sit under `data/rules/`, one set per file.
 - All four worlds enable `story-events`. Mistport, Emberback and Lantern Barrow also turn on story planning with `pluginSettings.story-events.planner: true`. Besides the hidden events the author sets up, it adds follow-up events that fire only once, based on clues left during play. Haruka Academy's romance routes are arranged one by one by the author, and it does not turn on story planning.
 - When you make a new world, first copy the structure of the world whose gameplay is closest to yours. Then add or remove characters, rules or media by following the sections below.
 
@@ -390,16 +378,33 @@ These fields change only how the world is shown. You can leave all of them out.
 
 `pluginPolicy` says which plugins this world would like to use. It does not lock in any plugin. Which ones are finally on is worked out by Covel, from the capabilities and dependencies each plugin declares, the player's authorization, and the player's own checkboxes.
 
-| Field                           | Description                                                                                                                                                                                                          |
-| ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `presetId`                      | The ID of the default pack. It can refer to a `packs[].id` or a built-in pack.                                                                                                                                       |
-| `preferredTags` / `avoidedTags` | Plugin tag preferences                                                                                                                                                                                               |
-| `requires`                      | Contract IDs the world needs (such as `action-check@1`). Any installed plugin that provides the contract can satisfy it.                                                                                             |
-| `requested`                     | Plugin IDs the world suggests as the starting selection                                                                                                                                                              |
-| `recommended`                   | Plugin IDs suggested in addition                                                                                                                                                                                     |
-| `packs`                         | Custom packs. Each item has `id/label`, and can optionally have `description/requested/recommended/excluded/tags/reason`. `excluded` lists the plugin IDs the pack turns off when chosen, `kind: core` ones included |
+You write it as "one built-in pack, plus a few plugins":
 
-`presetId` must be the ID of a built-in pack or of one of this world's `packs`. Otherwise `pnpm validate:world` reports `unknown-preset`.
+```yaml
+pluginPolicy:
+  preset: traditional-story # a new session starts from this pack
+  plus: # the plugins this world also wants
+    - dice-check
+    - core-quest
+  pitch: # optional: how this world presents the pack on the session-prep screen
+    label: 古冢探险
+    description: 跑团式的地城探索，带掷骰判定和任务。
+    reason: 每一步都要检定，灯油和名望都会记在面板上。
+```
+
+| Field      | Description                                                                                                                                                                  |
+| ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `preset`   | The built-in pack a new session starts from, for example `traditional-story` or `dialogue-mode`. The packs are listed in [`packs/builtin.yaml`](../../../packs/builtin.yaml) |
+| `plus`     | Plugin IDs this world also wants. They stay when the player switches packs. Do not list `kind: core` plugins; every session has them anyway                                  |
+| `pitch`    | How the session-prep screen presents the `preset` pack: `label`, `description` and `reason`, in place of the pack's own text. All three can be translated                    |
+| `packs`    | IDs of the built-in packs the player can choose from, listed in this order. When it is left out, every built-in pack is listed. When it is written, `preset` must be in it   |
+| `requires` | Contract IDs the world needs (such as `action-check@1`). Any installed plugin that provides the contract can satisfy it.                                                     |
+
+The plugins a new session enables by default are the `requested` list of the `preset` pack, plus `plus`, the core plugins and the dependencies that `requires` brings in.
+
+- `preset` can only be a built-in pack. A world cannot define its own pack; for a different set of plugins, choose the closest pack and add what is missing with `plus`.
+- The session-prep screen lists the `preset` pack first (in the world's words when there is a `pitch`), then the other packs in `packs`.
+- `pnpm validate:world` checks these names: a `preset` that is not a built-in pack is reported as `unknown-preset`, an unknown ID in `packs` as `unknown-pack`, and a `preset` that is not in `packs` as `preset-not-offered`.
 
 `requires` says "what capability this world cannot do without". Write a contract here (a capability name plus a version), not a plugin:
 
@@ -407,8 +412,8 @@ These fields change only how the world is shown. You can leave all of them out.
 pluginPolicy:
   requires:
     - action-check@1 # action checks; the built-in dice-check provides it, and you can use another check plugin
-  requested:
-    - dice-check # optional: the starting selection, and it chooses which provider to use when there are several
+  plus:
+    - dice-check # optional: turns it on by default, and chooses which provider to use when there are several
 ```
 
 - When only one installed plugin provides it, that plugin is turned on automatically.
@@ -416,11 +421,12 @@ pluginPolicy:
 - The player can still turn off a provider. That is the player's choice. The session starts as usual, and the session-prep screen shows a notice.
 - `requires` accepts only contract IDs in the form `name@version`. A plugin ID written here causes an error when the world loads.
 
-`requested` holds plugin IDs. The plugin may not be installed on the player's computer:
+`plus` holds plugin IDs. The plugin may not be installed on the player's computer:
 
 - `GET /api/worlds/:id/plugin-plan` removes the IDs that are not installed from the world policy and from each pack's `requested`. They are listed in `missing` instead (for packs, with a `packId`).
 - The session-prep screen uses this to show which plugins are missing. The session can still be created, but the gameplay those plugins provide will not work.
-- `recommended` does not take part in the default selection. It is returned as it is.
+
+Fields of `pluginPolicy` that Covel does not know (for example `presetId`, `requested`, `recommended` and `preferredTags` of the earlier form) are ignored when the world loads, with a `manifest-unknown-field` warning. `packs` written as objects (packs the world defined itself, as the earlier form allowed) make the whole `pluginPolicy` invalid: the world loads as usual, only without a plugin selection, and `pnpm validate:world` reports `manifest-invalid`.
 
 ### World records and world packages
 
@@ -507,7 +513,7 @@ For installing and updating from GitHub, see [world catalog and installation](./
 - When the file system does not support watching, a warning is logged at startup. Dimensions can also be imported through `POST /api/worlds/:id/dimensions/import`.
 - The implementation is in `apps/server/src/world-file-watcher.ts`. For the install response, see [API reference](./api.md#installed-resource-storage-and-vector-configuration).
 
-**Every dimension file must be readable.** Files in `dimensionSources` and worldData sources targeting `world:metadata.dimensions` follow the same rule. If any one file is missing, cannot be read, has a YAML error, or fails validation, the whole world fails to load this time. The previous complete record is kept, no dimension-change notice is sent, and the old world is not cleaned up. Automatic reloading continues once the file is fixed.
+**The dimension file must be readable.** `data/dimensions.yaml` and other sources targeting `world:metadata.dimensions` follow the same rule: if the file cannot be read, has a YAML error, or fails validation, the whole world fails to load this time. The previous complete record is kept, no dimension-change notice is sent, and the old world is not cleaned up. Automatic reloading continues once the file is fixed.
 
 **Deleting an AI-generated world that was saved as files (`generated-file`):**
 
@@ -587,9 +593,11 @@ sources:
 - The object is imported into the `definitions/world` record of the `memory` plugin itself. The memory content is stored in that plugin's `blocks`, and the plugin puts it into the prompt. `world.yaml` has no dedicated field for memory definitions.
 - All four built-in worlds use this file.
 
-## Import by convention (no descriptor)
+<a id="import-by-convention-no-descriptor"></a>
 
-When `world.yaml` has no `worldData` field, the world package is read by convention. If a file (or, for media, a directory) exists at a convention path, it is a source. The effect is exactly the same as writing the same entry in a descriptor.
+## Import by convention
+
+Every world package is read by convention. If a file (or, for media, a directory) exists at a convention path, it is a source, and you do not register it. A descriptor only writes what differs from the conventions. See [Descriptor](#descriptor).
 
 The conventions come from two places:
 
@@ -597,7 +605,7 @@ The conventions come from two places:
   - `data/dimensions.yaml` → dimensions (`world:metadata.dimensions`)
   - `data/lorebook.yaml` → lorebook (`lorebook`)
   - `characters/characters.json` → characters (`characters`)
-- **Plugins**: the `kind` / `path` / `key` that each data contract declares in `contributes.data.<ns>.authoring.source`. `pnpm describe:authoring` lists all of them. For example:
+- **Plugins**: the `kind` / `path` / `key` that each data contract declares in `contributes.data.<ns>.authoring.source`. A path can be one kind of file in a folder, for example `data/rules/*.yaml`: each such file in the folder is a source, imported in file-name order. `pnpm describe:authoring` lists all of them. For example:
 
 ```text
 ### Starting quests — `quests@1` (plugin `core-quest`)
@@ -619,49 +627,55 @@ Put the file at `data/quests.yaml`: it is imported without a descriptor. The sam
 Rules:
 
 - The import order is: dimensions, then media, then the other contract data, and last `characters`.
-- The built-in world `worlds/emberback` is read this way. It has no descriptor, and all 13 of its sources come from convention paths.
-- With no descriptor, the conventions of the plugins **enabled** in this session are used. A plugin that is not enabled, or that failed to load, does not affect what is read. With a descriptor, only the sources it lists are read.
+- All four built-in worlds are read this way: they have no descriptor, and every source comes from a convention path.
+- The conventions of the plugins **enabled** in this session are used. A plugin that is not enabled, or that failed to load, does not affect what is read.
+- Each conventional source has an ID, which a descriptor's `after` and an override use to name it: for the kernel, `dimensions`, `lorebook` and `characters`; for a plugin, its namespace, or `<plugin ID>-<namespace>` when two plugins use the same namespace; for a file in a folder, `<convention ID>-<file name>`, for example `rules-tide-mystery` for `data/rules/tide-mystery.yaml`.
 - When two contracts enabled in the same session declare the same path, that path is not a convention, the file is not imported, and the world package must use a descriptor to say which one it is for. The session still starts. The server log records a `[sessions]` warning, the world data preflight returns a `convention-collision` warning, and `pnpm validate:world` reports it too (see [Static validation](#static-validation-pnpm-validateworld)).
 
-For plugin authors: `path` is a path relative to the world package root. It can contain only ASCII letters, digits, `_`, `.`, `/` and `-`. It cannot start with `/`, and it cannot contain `..`. It also cannot be a path the kernel or the world package owns: `world.yaml`, `WORLD.md`, `data/world.data.yaml`, `data/dimensions.yaml`, `data/lorebook.yaml`, `characters/characters.json`, `media/gallery.json`, `media/portraits.json`, `media/scenes.json`, the `media/gallery/` folder, or a language version of one (such as `world.zh-CN.yaml`), compared without regard to case. A plugin manifest that does not follow this fails validation when it loads.
+For plugin authors: `path` is a path relative to the world package root. It can contain only ASCII letters, digits, `_`, `.`, `/` and `-`. It cannot start with `/`, and it cannot contain `..`. Its last segment can be `*.<extension>`, meaning every file of that kind in the folder (not for a media source, which is a folder already). It also cannot be a path the kernel or the world package owns: `world.yaml`, `WORLD.md`, `data/world.data.yaml`, `data/dimensions.yaml`, `data/lorebook.yaml`, `characters/characters.json`, `media/gallery.json`, `media/portraits.json`, `media/scenes.json`, the `media/gallery/` folder, or a language version of one (such as `world.zh-CN.yaml`), compared without regard to case. A plugin manifest that does not follow this fails validation when it loads.
 
 **When you still need a descriptor:**
 
-- The file is not at a convention path. For example, a rules file is named `data/rules/tide-mystery.yaml`, or you want a file name in Chinese.
-- One contract has several files.
+- The file is not at a convention path. For example, you want a file name in Chinese, or a contract's file in another place.
+- Two plugins declare the same path, and you need to say which one the file is for.
 - You need to set the order with `after`.
-- You want to turn off a source.
-
-> [!IMPORTANT]
-> Once `worldData` is written, only the descriptor is used, and the conventions no longer apply. The descriptor must list every source.
+- You want to turn off a conventional source, or change one of its fields (for example `visibility` or `merge`).
 
 **Unused files.** `pnpm validate:world` checks whether any file in `data/`, `characters/` and `media/` (including subfolders) is not used by any source or framework feature. If one is not, it gives a `data-file-unused` reminder. Both import methods are checked. Language files of a source that already exists, local schemas, dimension files, theme music and gallery images are not reported by mistake. A README is author documentation and is not checked.
 
 ## Descriptor
 
-The descriptor is a YAML file, usually called `data/world.data.yaml`. It lists each piece of data in `sources`:
+The descriptor is a YAML file, usually called `data/world.data.yaml`, that `world.yaml` points to with `worldData`. It does not repeat the conventions; it writes only what differs:
 
 ```yaml
 sources:
-  dimensions:
-    kind: yaml
-    path: data/dimensions.yaml
-    to: world:metadata.dimensions
+  # change a conventional source: same path as the convention, only the fields to change
+  lorebook:
+    path: data/lorebook.yaml
+    merge: skipExisting
 
-  cast:
-    kind: json
-    path: characters/main-cast.json
-    to: contract:character.blueprints@1
+  # turn off a conventional source
+  portraits:
+    path: media/portraits
+    enabled: false
+
+  # add a file outside the conventions: write the whole source
+  harbor-rules:
+    kind: yaml
+    path: data/港口规则.yaml
+    to: contract:world.rules@1+lorebook
     key: id
     after: dimensions
-
-  characters:
-    kind: json
-    path: characters/characters.json
-    to: characters
-    key: id
-    after: cast
 ```
+
+What an entry does depends on its `path`:
+
+- A `path` equal to the path of a conventional source changes that source. The fields written replace the convention's fields; the others keep the convention's values. `enabled: false` turns it off. The source then takes the entry's name as its ID.
+- Any other `path` adds a source. Write it in full then, with at least `kind`, `path` and `to`.
+- When the conventional source being changed belongs to a plugin this session has not enabled, the entry does nothing.
+- Two entries with the same `path`, or an added source that takes the ID of a conventional source, are errors.
+
+The import order goes by kind first: dimensions, media, other data, and last `characters`. Within a kind, conventional sources come first and those the descriptor adds come after; `after` adjusts from there. An [override](#third-party-extensions) on the player's machine changes things once more after the descriptor, matching sources by ID.
 
 The fields you use most often in each source:
 
@@ -678,6 +692,7 @@ For a field-by-field explanation, see the generated [World data descriptor field
 
 - The name of a source (the key under `sources`) must match `^[a-z][a-zA-Z0-9_-]{0,63}$`.
 - At the top level, write only `sources`, including in override descriptors. Unknown top-level fields are ignored with a warning. Unknown fields inside a source remain errors.
+- An entry that changes a conventional source needs only `path`. An entry that adds a source is written in full, like a source an override adds.
 
 **When to write `schema`:**
 
@@ -765,6 +780,8 @@ Planned events and author events are kept in different hidden areas, so syncing 
 
 **The main file is written in one language only**, the `defaultLocale` in `world.yaml`. Other languages go in `<name>.<locale>.<ext>` next to the main file. They hold only the translated text and do not repeat the structure.
 
+The files at the root say which editions a world has: with a `world.<locale>.yaml` or a `WORLD.<locale>.md`, the world has an edition in that language, in addition to `defaultLocale` itself. `world.yaml` has no field that lists languages.
+
 ```text
 world.yaml                     # main file, text in defaultLocale
 world.en-US.yaml               # English translation only
@@ -795,7 +812,7 @@ characterSchema:
 
 **File names:**
 
-- `<locale>` must be the full form written in `supportedLocales`. If the world declares `en-US`, the file is named `….en-US.…`. If the world declares `fr`, the exact name is `….fr.…`.
+- A language has one spelling only. When the world has `world.en-US.yaml`, that edition is `en-US`, and the other files are also named `….en-US.…`. When the edition is `fr` (`world.fr.yaml`), the exact name is `….fr.…`.
 - A language-only file such as `….en.…` is not read. Covel does not guess that `en` should be used when the session is `en-US`.
   - `pnpm validate:world` reports a `locale-file-name` error and gives the file name it should have.
   - When the server loads the world, it writes the file name and the correct name to the log.
@@ -815,15 +832,15 @@ characterSchema:
 
 **How the three kinds of file are read:**
 
-| File                                                                                                                | How it is read                                                                                                                      | Result                                                                                            |
-| ------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
-| `world.yaml`, dimension definitions (files in `dimensionSources`, and sources with `to: world:metadata.dimensions`) | All language files are read together                                                                                                | Text carries all the languages. The world list and the panel labels are shown in the UI language. |
-| Other structured sources (JSON / YAML)                                                                              | Only the one copy that matches the session language is merged. The locale in the file name must match the session language exactly. | Single-language data. Sessions do not store several languages.                                    |
-| `markdown` / `text` / `media`                                                                                       | A language file replaces the main file as a whole                                                                                   | Same as above                                                                                     |
+| File                                                                               | How it is read                                                                                                                      | Result                                                                                            |
+| ---------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| `world.yaml`, dimension definitions (sources with `to: world:metadata.dimensions`) | All language files are read together                                                                                                | Text carries all the languages. The world list and the panel labels are shown in the UI language. |
+| Other structured sources (JSON / YAML)                                             | Only the one copy that matches the session language is merged. The locale in the file name must match the session language exactly. | Single-language data. Sessions do not store several languages.                                    |
+| `markdown` / `text` / `media`                                                      | A language file replaces the main file as a whole                                                                                   | Same as above                                                                                     |
 
 Other rules:
 
-- The session language is fixed when the session is created, and it is always a version the world declares. The file name must match it exactly. `zh-Hant-TW` does not read the `zh` file.
+- The session language is fixed when the session is created, and it is always an edition the world has. The file name must match it exactly. `zh-Hant-TW` does not read the `zh` file.
 - Language files are part of a source. Changing any one of them counts as the source changing, and [sync](#preflight-and-sync) can see that.
 - A main file cannot write text as a multi-language map (`name: { zh-CN: …, en-US: … }`). `pnpm validate:world` reports this as an `inline-locale-map` error. A world package written this way must be split into a main file and language files.
 - In dimension values, only a text node that the schema marks with `x-i18n: true` can be translated. Translating any other node makes validation of that dimension fail.
@@ -864,22 +881,7 @@ A plugin that is not enabled when the session is created gets no world data, for
 
 A lorebook is good for a large amount of setting material. An entry enters the prompt only when the player mentions a related keyword, so it does not take up space on every turn.
 
-When the file is at `data/lorebook.yaml`, it is read by convention. When a world uses a descriptor, write it like this:
-
-```yaml
-# world.yaml
-worldData: data/world.data.yaml
-```
-
-```yaml
-# data/world.data.yaml
-sources:
-  lore:
-    kind: yaml
-    path: data/lorebook.yaml
-    to: lorebook
-    key: id
-```
+When the file is at `data/lorebook.yaml`, it is read by convention, and you do not register it. For another path, add a source with `to: lorebook` and `key: id` to the descriptor (see [Descriptor](#descriptor)).
 
 ```yaml
 # data/lorebook.yaml
@@ -1088,7 +1090,7 @@ Characters come from two kinds of files, which do different jobs:
 | `characters/characters.json` | Domain characters: the character records that actually exist in the session       | The kernel, the character panel, all plugins |
 | `characters/main-cast.json`  | Character cards: optional role-play notes for the model (voice, motives, secrets) | The `character-blueprint` plugin             |
 
-All four built-in worlds include both. In a descriptor, write them like this:
+All four built-in worlds include both, at the convention paths. Written as sources, they look like this:
 
 ```yaml
 sources:
@@ -1232,9 +1234,9 @@ sources:
 - A single media file can be at most 20 MB. The total of one source's directory can be at most 100 MB.
 - The extensions that can be imported are `.png`, `.jpg`, `.jpeg`, `.webp`, `.mp3`, `.wav` and `.mp4`.
 - The preflight check requires that the schema of the matching contract and the receiving declaration are registered. The `assets` and `presence` of `character-blueprint` receive `character.portrait-assets@1` and `character.portraits@1` respectively.
-- Put the receiving plugin in `pluginPolicy.recommended`, and the player can choose it. When it is not enabled, its data and media index are skipped, and a warning is given; when it is enabled later in the game, its data is imported once.
+- When the receiving plugin is not in the `preset` pack, put it in `pluginPolicy.plus`, and a new session turns it on. When it is not enabled, its data and media index are skipped, and a warning is given; when it is enabled later in the game, its data is imported once.
 
-For real examples, see `worlds/mistport` and `worlds/haruka-academy` (`data/world.data.yaml` + `media/`).
+For real examples, see `media/` of `worlds/mistport` and `worlds/haruka-academy`.
 
 ## Scene backgrounds
 
@@ -1263,7 +1265,7 @@ Fields of `media/scenes.json`:
 
 So write names in the words the narrative will use, and avoid letting two scenes share the same short fragment.
 
-**Both sources are required.** One imports the pictures into the media library, and one imports the registry. A media source must have `key` and `indexTo`. Otherwise the pictures are not imported (see the [media source](#descriptor) note above):
+**Both sources are required.** One imports the pictures into the media library, and one imports the registry. At the convention paths (`media/scenes/` and `media/scenes.registry.json`) both are read by convention. When you write them as sources, a media source must have `key` and `indexTo`. Otherwise the pictures are not imported (see the [media source](#descriptor) note above):
 
 ```yaml
 sources:
@@ -1283,7 +1285,7 @@ sources:
     after: dimensions
 ```
 
-For a working example, see `worlds/haruka-academy/data/world.data.yaml`.
+For a working example, see `worlds/haruka-academy/media/`.
 
 **`scenes.registry.json`** is generated automatically by `scripts/emit-scenes.mjs`. Do not write it by hand. After you regenerate the scene pictures, you must run the script again to refresh the hashes.
 
@@ -1293,7 +1295,7 @@ For a working example, see `worlds/haruka-academy/data/world.data.yaml`.
 The only difference from portraits: a portrait needs only the index of each image. A scene picture needs the index, and also has to hand the whole registry to `scene-stage`.
 
 > [!TIP]
-> **When there are no pictures yet.** If `media/scenes.registry.json` does not exist, world data validation fails, because the source refers to a file that is not there. Run `emit-scenes.mjs` once on an empty `media/scenes/` directory. It produces a valid empty registry (`{schemaVersion: 1, registryId: "scene-registry", scenes: []}`). Put it in the world package as a placeholder first. When `scenes` is empty, the stage shows the world's header picture. This is not an error. After you generate the pictures, run `emit-scenes.mjs` again to overwrite the file. You do not need to change `world.data.yaml`.
+> **When there are no pictures yet.** If `media/scenes.registry.json` does not exist, world data validation fails, because the source refers to a file that is not there. Run `emit-scenes.mjs` once on an empty `media/scenes/` directory. It produces a valid empty registry (`{schemaVersion: 1, registryId: "scene-registry", scenes: []}`). Put it in the world package as a placeholder first. When `scenes` is empty, the stage shows the world's header picture. This is not an error. After you generate the pictures, run `emit-scenes.mjs` again to overwrite the file.
 
 ## Background music
 
@@ -1344,7 +1346,7 @@ The mood comes from the `music.cue` event that the narrative sends. The scene co
 > [!NOTE]
 > Put `soundtrack` in the world's `pluginPolicy`. These data are imported and played only after the player turns the plugin on.
 
-**How to declare it.** A world without a descriptor just needs its files at the two convention paths above. A world with a descriptor writes two sources. `registryId: music-registry` is a fixed value in the track list, and it also serves as the `key`:
+**How to declare it.** Put the files at the two convention paths above. For other paths, write two sources in the descriptor. `registryId: music-registry` is a fixed value in the track list, and it also serves as the `key`:
 
 ```yaml
 sources:
@@ -1451,7 +1453,7 @@ A plugin author must also do three things:
 
 1. Write the namespace, the contract, the data shape and an example file clearly in `PLUGIN.md`.
 2. Read its own data in a runtime or a tool.
-3. Give world authors a minimal, working `data/world.data.yaml` fragment, and declare `authoring.source`, so the file can be read from a convention path.
+3. Declare `authoring.source`, so world authors can put the file at a convention path and have it imported without a descriptor.
 
 **The world package side.** It is best to use an array for data files, with one object per record:
 
@@ -1574,13 +1576,15 @@ my-covel-pack/
             └── social/links.yaml
 ```
 
-`world.yaml` expresses the recommended mix through `pluginPolicy`:
+`world.yaml` turns on its plugin with `pluginPolicy`:
 
 ```yaml
 pluginPolicy:
-  recommended: [social-sim]
-worldData: data/world.data.yaml
+  preset: dialogue-mode
+  plus: [social-sim]
 ```
+
+When `social-sim` declares `authoring.source`, `data/social/links.yaml` is imported from the path it declares; otherwise add a source to `data/world.data.yaml` and write `worldData` in `world.yaml`.
 
 ### How to publish an override
 
@@ -1621,7 +1625,7 @@ Output when it passes:
 - The validator does not create a session, and it does not run plugin code.
 - It reuses the world data preflight that runs when a session is created. So data that passes here will not fail later, when a session is created, because of the content of its records.
 - Plugins are looked for in the repository's `plugins/` and in each `--plugins <dir>`.
-- When a world declares several languages, preflight runs once for each. This is because [language files](#language-files-namelocaleext) make different languages read different text. Every language file next to the main file is checked, not only the declared languages.
+- When a world has editions in several languages, preflight runs once for each. This is because [language files](#language-files-namelocaleext) make different languages read different text. Every language file next to the main file is checked, not only the world's editions.
 
 **Checks that do not depend on the schema:**
 
@@ -1631,11 +1635,10 @@ Output when it passes:
 - Error messages include the file, the record number and the key. When an error is found before import, the whole plan is rejected, and the other valid records are not written either.
 - An empty source gives a warning.
 - When a receiving plugin declares with [`authoring.references`](./plugins.md) that a value is the `id` of a character attribute, the value is checked against the world's `characterSchema`. A missing attribute, a wrong type or a number outside the attribute's range is an `attribute-reference` error. A world without a `characterSchema` is not checked.
-- When it declares that a value is the ID of a dimension, the value is checked against the dimensions the world declares (`dimensions` and `dimensionSources` in `world.yaml`, and `data/dimensions.yaml`, together). A dimension that does not exist, or a path beside it that does not reach a place the dimension's `schema` allows, is a `dimension-reference` error. For example, an event condition that writes `barowAlarm` for `barrowAlarm` never fires. A world that declares no dimensions is not checked.
+- When it declares that a value is the ID of a dimension, the value is checked against the dimensions the world declares (`dimensions` in `world.yaml`, or `data/dimensions.yaml`). A dimension that does not exist, or a path beside it that does not reach a place the dimension's `schema` allows, is a `dimension-reference` error. For example, an event condition that writes `barowAlarm` for `barrowAlarm` never fires. A world that declares no dimensions is not checked.
 - Dimension references can also declare `values`, for example `values: [equals, "in[]"]`. Candidates must satisfy the dimension schema at the selected path, including types and enums; failures also report `dimension-reference`. If weather allows only `sun` / `rain`, `equals: snow` or `in: [rain, snow]` points out the invalid candidate. See [`authoring.references`](./plugins.md) for the declaration and conservative checking rules. Session import, preflight and sync also check active receivers' dimension references against the saved world record's dimensions; an error prevents every write in the import plan.
 - In a record or a character field, a field whose name ends in `At` or is `timestamp`, with an ISO time as its value, is treated as bookkeeping, and the model does not read it. Each such field gives a `model-hidden-field` warning. To let the model see a time of the story, use a different name (`date`, `diedOn`), or do not write it as an ISO time.
 - A field of a record whose name is `id` or ends in `Id` / `Ids`, with a UUID as its value, is also treated as bookkeeping. No model reads it, and it gets a `model-hidden-field` warning too. Use an ID a person can read, in lower-case words and hyphens, for example `npc-lin-yao`.
-- `dimensionSources` is checked even when there are no conventional data files at all.
 
 **Diagnostics at a glance:**
 
@@ -1644,22 +1647,26 @@ Output when it passes:
 | --- | --- | --- |
 | `manifest-invalid` | error | `world.yaml` cannot be parsed or does not match the schema |
 | `manifest-unknown-field` | warning | `world.yaml` has an unknown top-level field, which loading ignores |
-| `lore-missing` | error | A declared language (`defaultLocale` / `supportedLocales`) has no lore file |
+| `default-value` | warning | A value that need not be written and can be deleted: `characterSchema.types` is the default `[npc, companion]`, or `pluginPolicy.plus` lists a `kind: core` plugin |
+| `lore-missing` | error | One of the world's editions has no lore file |
 | `lore-fallback-missing` | warning | There is no `WORLD.md`, so a session in an undeclared language gets empty lore |
 | `lore-narrator-only` | warning | The [narrator-only marker](#narrator-only-lore-narrator-only) is missing its end, missing its start, nested or written wrong. The lore after it is hidden from the player. |
 | `unknown-plugin` | error or warning | A plugin ID referenced by `pluginPolicy` / `pluginSettings` is not in the scanned directories |
-| `unknown-preset` | error | `pluginPolicy.presetId` is neither a built-in pack nor an ID in this world's `packs` |
+| `unknown-preset` | error | `pluginPolicy.preset` is not a built-in pack |
+| `unknown-pack` | error | `pluginPolicy.packs` has an ID that is not a built-in pack |
+| `preset-not-offered` | error | `pluginPolicy.packs` is written, but `preset` is not in it |
+| `pitch-without-preset` | warning | `pluginPolicy.pitch` is written without a `preset`, so the text is never shown |
 | `unknown-setting` | warning | A key in `pluginSettings` is not a setting the plugin declares, so the value is ignored |
 | `invalid-setting` | error | A value in `pluginSettings` does not match the type, range or options the setting declares |
 | `unprovided-contract` | error or warning | A contract in `pluginPolicy.requires` has no provider |
 | `unresolved-contract` | error or warning | A data contract used by a source has no receiving plugin among the scanned plugins |
 | `unrequested-receiver` | warning | No plugin a new session enables by default receives this source. The source is not imported until the player turns a receiving plugin on. |
-| `convention-collision` | error or warning | The world has no descriptor, and more than one plugin declares the path of one of its files. A session that enables those plugins together does not import it. |
+| `convention-collision` | error or warning | More than one plugin declares the path of one of the world's files, and the descriptor does not say which one it is for. A session that enables those plugins together does not import it. |
 | `world-data` | same as preflight | The descriptor, source order, file reading, targets, hidden-data rules, and each record checked against its contract schema |
-| `locale-file-name` | error | A language file's name gives only the language (`.en.`) and not the locale the world declares (`.en-US.`). This file is not read. |
+| `locale-file-name` | error | A language file's name gives only the language (`.en.`) and not the locale of the world's edition (`.en-US.`). This file is not read. |
 | `locale-overlay` | warning | A translation in a language file has no place to go (the main file has no such key or ID, or it changed a value that is not text). That entry is ignored. |
 | `locale-script` | warning | A language file for a language other than Chinese, Japanese or Korean still contains CJK characters: untranslated text, or a trigger word copied from the main file. |
-| `edition-incomplete` | warning | `supportedLocales` declares a language, but that language's version is missing some translations. A session in that language reads the world's original default-language text. |
+| `edition-incomplete` | warning | The world has an edition in a language, but that edition is missing some translations. A session in that language reads the world's original default-language text. |
 | `inline-locale-map` | error | The main file writes text as a multi-language map. The main file should have one language, and the translations go in language files. |
 | `data-file-unused` | warning | A file in `data/`, `characters/` or `media/` is not used by any source or framework feature |
 | `attribute-reference` | error | A value in a record that names a character attribute (declared by the receiving plugin's `authoring.references`) is missing from the world's `characterSchema`, has the wrong type or is out of range |
@@ -1671,7 +1678,7 @@ Output when it passes:
 
 For `unknown-plugin`, `unprovided-contract` and `unresolved-contract`: a spelling close to a known ID is an error, and it suggests "Did you mean". Otherwise the default is a warning, because the provider may be a community plugin that was not scanned. With `--strict`, all of them are errors. `pnpm release:preflight` uses `--strict` for the built-in worlds.
 
-**The plugins a new session enables by default** are the ones the session preparation screen ticks by default: `pluginPolicy.requested`, the `requested` list of the pack that `presetId` selects, and plugins with a `preferredTags` tag, plus the core plugins and the dependencies that `requires` brings in. Scanned community plugins count as approved. `unrequested-receiver` and `convention-collision` are judged against this set: `convention-collision` is an error when two of its declarers are in the set, and a warning otherwise. Records are still checked against the schemas of every scanned plugin, so the data of a plugin the player turns on by hand is checked too.
+**The plugins a new session enables by default** are the ones the session preparation screen ticks by default: the `requested` list of the `preset` pack and `pluginPolicy.plus`, plus the core plugins and the dependencies that `requires` brings in. Scanned community plugins count as approved. `unrequested-receiver` and `convention-collision` are judged against this set: `convention-collision` is an error when two of its declarers are in the set, and a warning otherwise. Records are still checked against the schemas of every scanned plugin, so the data of a plugin the player turns on by hand is checked too.
 
 **The three cases of `prompt-size`.** None of them stops the world from being used:
 

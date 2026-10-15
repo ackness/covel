@@ -51,13 +51,22 @@ describe("validateWorldPackage", () => {
     expect(await validate(await makeWorld({}))).toEqual([]);
   });
 
-  it("rejects a translation file named with a bare language and gives the declared name", async () => {
-    const declared = `${MANIFEST}supportedLocales: [en-US, zh-CN]\n`;
+  it("names a world without id by its directory", async () => {
+    const worldDir = await makeWorld(
+      {},
+      "name: Sample World\nsummary: A world.\ndefaultLocale: en-US\n",
+    );
+    const result = await validateWorldPackage({ worldDir, pluginsDirs });
+    expect(result.worldId).toBe("sample-world");
+    expect(result.diagnostics).toEqual([]);
+  });
+
+  it("rejects a translation file named with a bare language and gives the edition's name", async () => {
     const bare = await validate(
-      await makeWorld(
-        { "WORLD.en-US.md": "Lore.", "data/items.zh.yaml": "[]" },
-        declared,
-      ),
+      await makeWorld({
+        "WORLD.zh-CN.md": "世界观。",
+        "data/items.zh.yaml": "[]",
+      }),
     );
     expect(bare.filter((item) => item.code === "locale-file-name")).toEqual([
       expect.objectContaining({
@@ -66,12 +75,12 @@ describe("validateWorldPackage", () => {
         hint: expect.stringContaining("`data/items.zh-CN.yaml`"),
       }),
     ]);
-    // The declared spelling is accepted.
+    // The edition's spelling is accepted.
     const exact = await validate(
-      await makeWorld(
-        { "WORLD.en-US.md": "Lore.", "data/items.zh-CN.yaml": "[]" },
-        declared,
-      ),
+      await makeWorld({
+        "WORLD.zh-CN.md": "世界观。",
+        "data/items.zh-CN.yaml": "[]",
+      }),
     );
     expect(exact.filter((item) => item.code === "locale-file-name")).toEqual(
       [],
@@ -263,7 +272,7 @@ describe("validateWorldPackage", () => {
   it("rejects unknown presets and invalid values of declared settings", async () => {
     const worldDir = await makeWorld(
       {},
-      `${MANIFEST}pluginPolicy:\n  presetId: missing-pack\npluginSettings:\n  story-events:\n    planner: "yes"\n`,
+      `${MANIFEST}pluginPolicy:\n  preset: missing-pack\npluginSettings:\n  story-events:\n    planner: "yes"\n`,
     );
     const diagnostics = await validate(worldDir);
     expect(diagnostics).toEqual(
@@ -271,7 +280,7 @@ describe("validateWorldPackage", () => {
         expect.objectContaining({
           level: "error",
           code: "unknown-preset",
-          pointer: "pluginPolicy.presetId",
+          pointer: "pluginPolicy.preset",
         }),
         expect.objectContaining({
           level: "error",
@@ -302,17 +311,81 @@ describe("validateWorldPackage", () => {
     );
   });
 
-  it("checks dimension sources even without conventional data files", async () => {
+  it("checks the packs a world offers against its preset and the built-in packs", async () => {
+    const policy = async (lines: string) =>
+      validate(await makeWorld({}, `${MANIFEST}pluginPolicy:\n${lines}`));
+    expect(
+      await policy(
+        "  preset: dialogue-mode\n  packs: [dialogue-mode, low-cost]\n",
+      ),
+    ).toEqual([]);
+    expect(
+      await policy(
+        "  preset: dialogue-mode\n  packs: [low-cost, no-such-pack]\n",
+      ),
+    ).toEqual([
+      expect.objectContaining({
+        level: "error",
+        code: "unknown-pack",
+        pointer: "pluginPolicy.packs[1]",
+      }),
+      expect.objectContaining({
+        level: "error",
+        code: "preset-not-offered",
+        pointer: "pluginPolicy.preset",
+      }),
+    ]);
+    expect(await policy("  pitch:\n    label: Mine\n")).toEqual([
+      expect.objectContaining({
+        level: "warning",
+        code: "pitch-without-preset",
+      }),
+    ]);
+  });
+
+  it("warns about a value written that is already the default", async () => {
+    const diagnostics = await validate(
+      await makeWorld(
+        {},
+        `${MANIFEST}pluginPolicy:\n  plus: [narrator]\ncharacterSchema:\n  types: [companion, npc]\n  attributes: []\n`,
+      ),
+    );
+    expect(diagnostics).toEqual([
+      expect.objectContaining({
+        level: "warning",
+        code: "default-value",
+        pointer: "characterSchema.types",
+      }),
+      expect.objectContaining({
+        level: "warning",
+        code: "default-value",
+        pointer: "pluginPolicy.plus[0]",
+      }),
+    ]);
+  });
+
+  it("loads a world with an old pluginPolicy without it and reports each old field", async () => {
     const worldDir = await makeWorld(
       {},
-      `${MANIFEST}dimensionSources:\n  climate: data/missing.yaml\n`,
+      `${MANIFEST}pluginPolicy:\n  presetId: traditional-story\n  requested: [dice-check]\n  packs:\n    - id: mine\n      requested: [dice-check]\n`,
     );
-    expect(await validate(worldDir)).toEqual(
+    const diagnostics = await validate(worldDir);
+    expect(diagnostics).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
+          level: "warning",
+          code: "manifest-unknown-field",
+          pointer: "pluginPolicy.presetId",
+        }),
+        expect.objectContaining({
+          level: "warning",
+          code: "manifest-unknown-field",
+          pointer: "pluginPolicy.requested",
+        }),
+        expect.objectContaining({
           level: "error",
-          code: "world-data",
-          pointer: "dimensionSources",
+          code: "manifest-invalid",
+          pointer: expect.stringMatching(/^pluginPolicy\.packs/),
         }),
       ]),
     );
@@ -373,14 +446,14 @@ describe("validateWorldPackage", () => {
   it("treats a near-miss plugin ID as a typo and suggests the real one", async () => {
     const worldDir = await makeWorld(
       {},
-      `${MANIFEST}pluginPolicy:\n  requested: [narrator, dice-chek]\n`,
+      `${MANIFEST}pluginPolicy:\n  plus: [inventory, dice-chek]\n`,
     );
     const diagnostics = await validate(worldDir);
     expect(diagnostics).toEqual([
       expect.objectContaining({
         level: "error",
         code: "unknown-plugin",
-        pointer: "pluginPolicy.requested[1]",
+        pointer: "pluginPolicy.plus[1]",
         hint: 'Did you mean "dice-check"?',
       }),
     ]);
@@ -389,7 +462,7 @@ describe("validateWorldPackage", () => {
   it("only warns about an unrelated unknown plugin unless strict", async () => {
     const worldDir = await makeWorld(
       {},
-      `${MANIFEST}pluginPolicy:\n  recommended: [some-community-plugin]\n`,
+      `${MANIFEST}pluginPolicy:\n  plus: [some-community-plugin]\n`,
     );
     expect(await validate(worldDir)).toEqual([
       expect.objectContaining({ level: "warning", code: "unknown-plugin" }),
@@ -414,12 +487,16 @@ describe("validateWorldPackage", () => {
     ]);
   });
 
-  it("requires lore for every declared locale and a fallback for the rest", async () => {
-    const declared = `${MANIFEST}supportedLocales: [en-US, zh-CN]\n`;
+  it("requires lore for every edition and a fallback for the rest", async () => {
     const parent = await mkdtemp(path.join(tmpdir(), "covel-validate-lore-"));
     const worldDir = path.join(parent, "sample-world");
     await mkdir(worldDir, { recursive: true });
-    await writeFile(path.join(worldDir, "world.yaml"), declared);
+    await writeFile(path.join(worldDir, "world.yaml"), MANIFEST);
+    // `world.zh-CN.yaml` makes a zh-CN edition.
+    await writeFile(
+      path.join(worldDir, "world.zh-CN.yaml"),
+      "name: 示例世界\n",
+    );
     await writeFile(path.join(worldDir, "WORLD.en-US.md"), "Lore.");
     // The manifest's own text has no Chinese either; that is another finding.
     const lore = async () =>
@@ -495,7 +572,7 @@ describe("validateWorldPackage", () => {
   });
 
   it.each(["haruka-academy", "lantern-barrow", "mistport"])(
-    "still rejects missing data contracts in strict author validation of %s",
+    "still rejects missing plugins in strict author validation of %s",
     async (worldId) => {
       const narratorOnly = await mkdtemp(
         path.join(tmpdir(), "covel-narrator-only-"),
@@ -515,9 +592,15 @@ describe("validateWorldPackage", () => {
       expect(diagnostics).toContainEqual(
         expect.objectContaining({
           level: "error",
-          code: "unresolved-contract",
-          sourceId: "cast",
-          message: expect.stringContaining('"character.blueprints@1"'),
+          code: "unknown-plugin",
+          message: expect.stringContaining('"story-events"'),
+        }),
+      );
+      // Without its plugin, the cast file is read by no convention.
+      expect(diagnostics).toContainEqual(
+        expect.objectContaining({
+          code: "data-file-unused",
+          file: "characters/main-cast.json",
         }),
       );
     },
@@ -559,7 +642,7 @@ describe("validateWorldPackage", () => {
       expect.objectContaining({
         level: "warning",
         file: "characters/main-cast.en-US.json",
-        sourceId: "cast",
+        sourceId: "blueprints",
         pointer: "[id=npc-nobody]",
       }),
     ]);
@@ -603,7 +686,7 @@ describe("validateWorldPackage", () => {
     ).toEqual([]);
   }, 30_000);
 
-  it("warns when a declared edition does not translate every text", async () => {
+  it("warns when an edition does not translate every text", async () => {
     const worldDir = path.join(
       await mkdtemp(path.join(tmpdir(), "covel-validate-edition-")),
       "lantern-barrow",
@@ -611,7 +694,7 @@ describe("validateWorldPackage", () => {
     await cp(path.join(repoRoot, "worlds/lantern-barrow"), worldDir, {
       recursive: true,
     });
-    // The world declares en-US; its quests lose their English file.
+    // The world has an en-US edition; its quests lose their English file.
     await rm(path.join(worldDir, "data/quests.en-US.yaml"));
 
     const editions = (await validate(worldDir, true)).filter(
@@ -625,7 +708,7 @@ describe("validateWorldPackage", () => {
         message: expect.stringContaining("a en-US session reads them in zh-CN"),
       }),
     ]);
-    // The shipped worlds are complete in every language they declare.
+    // The shipped worlds are complete in every edition they have.
     for (const world of [
       "mistport",
       "lantern-barrow",

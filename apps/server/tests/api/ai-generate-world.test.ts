@@ -40,7 +40,6 @@ name: 生成世界
 version: 0.1.0
 summary: 一个生成世界。
 defaultLocale: zh-CN
-supportedLocales: [zh-CN]
 tags: [test]
 requiredPlugins: []
 recommendedPlugins: []
@@ -561,19 +560,13 @@ describe("ai world generation route", () => {
   )(
     "$saveTarget returns the same normalized manifest fields (request locale: $locale)",
     async ({ saveTarget, locale, expectedLocale }) => {
-      const { WORLD_EDITIONS_KEY } = await import("@covel/shared");
       const yaml = WORLD_YAML.replace(
         "defaultLocale: zh-CN",
         "defaultLocale: zh_hant_tw",
-      )
-        .replace(
-          "supportedLocales: [zh-CN]",
-          "supportedLocales: [zh_hant_tw, en_us]",
-        )
-        .replace(
-          "tags: [test]",
-          "tags: [test]\ncharacterSchema:\n  attributes:\n    - id: affinity\n      name: 关系\n      type: number\n      category: social\npluginSettings:\n  memory:\n    cadence: 2",
-        );
+      ).replace(
+        "tags: [test]",
+        "tags: [test]\ncharacterSchema:\n  attributes:\n    - id: affinity\n      name: 关系\n      type: number\n      category: social\npluginSettings:\n  memory:\n    cadence: 2",
+      );
       app = createTestApp(
         store,
         new FixedLlm(
@@ -592,7 +585,6 @@ describe("ai world generation route", () => {
       expect(done.world).toMatchObject({
         locale: expectedLocale,
         metadata: {
-          [WORLD_EDITIONS_KEY]: [expectedLocale],
           characterSchema: {
             types: ["npc", "companion"],
             attributes: [
@@ -614,13 +606,14 @@ describe("ai world generation route", () => {
           },
         },
       });
+      // The world has the one edition its files hold.
+      expect(worldEditionLocales(done.world)).toEqual([expectedLocale]);
       if (saveTarget === "return-only") {
         expect(await store.getWorld(done.world.id)).toBeNull();
       } else {
         expect(await store.getWorld(done.world.id)).toMatchObject({
           locale: expectedLocale,
           metadata: {
-            [WORLD_EDITIONS_KEY]: [expectedLocale],
             characterSchema: { types: ["npc", "companion"] },
           },
         });
@@ -1242,11 +1235,11 @@ describe("ai world generation route", () => {
 
     // `low-cost` was not a choice when the two choices were fixed.
     const lowCost = await generate("low-cost");
-    expect(lowCost.pluginPolicy).toMatchObject({ presetId: "low-cost" });
+    expect(lowCost.pluginPolicy).toMatchObject({ preset: "low-cost" });
     expect(lowCost.defaultViewMode).toBeUndefined();
     // The stage view is the data of the dialogue pack.
     const dialogue = await generate("dialogue-mode");
-    expect(dialogue.pluginPolicy).toMatchObject({ presetId: "dialogue-mode" });
+    expect(dialogue.pluginPolicy).toMatchObject({ preset: "dialogue-mode" });
     expect(dialogue.defaultViewMode).toBe("stage");
   });
 
@@ -1621,8 +1614,8 @@ describe("ai world generation route", () => {
       async (target) => {
         // A revision writes no locale files, whatever the manifest claims.
         const declared = `===WORLD_YAML===\n${WORLD_YAML.replace(
-          "supportedLocales: [zh-CN]",
-          "supportedLocales: [zh-CN, en-US]",
+          "tags: [test]",
+          "tags: [test]\nsupportedLocales: [zh-CN, en-US]",
         )}\n===WORLD_MD===\nUNCHANGED\n===WORLD_PACKAGE_YAML===\nUNCHANGED\n===END===`;
         await generate(target, new SequenceLlm([...CREATED, declared]));
 

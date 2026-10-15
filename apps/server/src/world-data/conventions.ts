@@ -1,5 +1,13 @@
-import { KERNEL_WORLD_DATA_PATHS, compareText } from "@covel/shared";
-import { stat } from "node:fs/promises";
+import {
+  KERNEL_WORLD_DATA_PATHS,
+  canonicalizeLocale,
+  compareText,
+  isKnownLocale,
+  isReservedWorldPackagePath,
+  worldDataSourceIdRegex,
+} from "@covel/shared";
+import { readdir, stat } from "node:fs/promises";
+import path from "node:path";
 import type { PluginRegistry } from "@covel/plugin-loader";
 import type {
   WorldDataDescriptor,
@@ -13,12 +21,14 @@ import type { WorldDataDiagnostic } from "./types.js";
  *
  * A file at one of these paths is a data source without an entry in a
  * descriptor: `data/dimensions.yaml` holds the dimensions, `data/quests.yaml`
- * the records of the contract whose plugin names that path. A world with no
- * `worldData` in `world.yaml` is read by these conventions, and the result
- * is the descriptor that the same entries would give when written out.
+ * the records of the contract whose plugin names that path. A plugin may
+ * name every file of a directory (`data/rules/*.yaml`): each file is a source,
+ * in file-name order. Every world is read by these conventions; the result is
+ * the descriptor that the same entries would give when written out.
  *
- * A descriptor replaces the conventions for that world: it is the place for a
- * file with another name, a hidden source, an order between sources.
+ * A descriptor (`worldData` in `world.yaml`) adds to them: an entry with the
+ * path of a conventional source changes it, `enabled: false` turns it off,
+ * any other entry adds a source (see `descriptor.ts`).
  */
 export interface ConventionalSource {
   readonly id: string;
@@ -200,18 +210,26 @@ export function conventionCollisions(
 /**
  * A warning for each collision whose file or directory the package has: the
  * file is imported for none of the contracts that name it. Never an error: a
- * session still starts, without that file.
+ * session still starts, without that file. A path the world's descriptor
+ * lists as a source of its own (`named`) is not in doubt.
  */
 export async function conventionCollisionDiagnostics(
   worldRoot: string,
   collisions: readonly ConventionCollision[],
+  named: readonly string[] = [],
 ): Promise<WorldDataDiagnostic[]> {
   const diagnostics: WorldDataDiagnostic[] = [];
   for (const collision of collisions) {
-    const full = await resolveContainedPath(worldRoot, collision.path, {
-      rejectSymlinks: true,
-    });
-    if (!full || !(await stat(full).catch(() => undefined))) continue;
+    if (named.includes(collision.path)) continue;
+    if (isDirectoryConvention(collision.path)) {
+      const files = await directoryFiles(worldRoot, collision.path, new Set());
+      if (files.every((file) => named.includes(file))) continue;
+    } else {
+      const full = await resolveContainedPath(worldRoot, collision.path, {
+        rejectSymlinks: true,
+      });
+      if (!full || !(await stat(full).catch(() => undefined))) continue;
+    }
     diagnostics.push({
       level: "warning",
       code: "convention-collision",
@@ -241,15 +259,70 @@ export function worldDataConventions(): readonly ConventionalSource[] {
 }
 
 /**
- * Import order for conventional sources, which have no `after`: dimensions,
- * then media (records point at media files by name), then the rest in the
- * order given, the kernel's character records last.
+ * Default import order of sources, before `after`: dimensions, then media
+ * (records point at media files by name), then the rest in the order given,
+ * the kernel's character records last.
  */
-function rank(source: ConventionalSource): number {
-  if (source.entry.to === "world:metadata.dimensions") return 0;
-  if (source.entry.kind === "media") return 1;
-  if (source.entry.to === "characters") return 3;
+export function sourceRank(
+  entry: Pick<WorldDataSourceDescriptor, "to" | "kind">,
+): number {
+  if (entry.to === "world:metadata.dimensions") return 0;
+  if (entry.kind === "media") return 1;
+  if (entry.to === "characters") return 3;
   return 2;
+}
+
+/** `<dir>/*.<ext>`: a conventional path that names every such file of a directory. */
+const DIRECTORY_PATTERN = /^(.+)\/\*(\.[^./*]+)$/;
+
+export function isDirectoryConvention(conventionalPath: string): boolean {
+  return DIRECTORY_PATTERN.test(conventionalPath);
+}
+
+/** `rules-campus-life`: a source ID for one file of a directory convention. */
+function fileSourceId(id: string, stem: string, taken: Set<string>): string {
+  const base = `${id}-${stem.replace(/[^A-Za-z0-9_-]+/g, "-")}`.slice(0, 64);
+  let candidate = worldDataSourceIdRegex.test(base) ? base : id;
+  for (let n = 2; taken.has(candidate); n++)
+    candidate = `${base.slice(0, 60)}-${n}`;
+  taken.add(candidate);
+  return candidate;
+}
+
+/**
+ * The files of a directory convention, in file-name order. A translation
+ * file (`campus-life.en-US.yaml`) belongs to its main file, a path the kernel
+ * or another convention owns is not one of them, and neither is a hidden file.
+ */
+async function directoryFiles(
+  worldRoot: string,
+  pattern: string,
+  owned: ReadonlySet<string>,
+): Promise<string[]> {
+  const [, directory, extension] = DIRECTORY_PATTERN.exec(pattern)!;
+  const full = await resolveContainedPath(worldRoot, directory!, {
+    rejectSymlinks: true,
+  });
+  if (!full) return [];
+  let entries;
+  try {
+    entries = await readdir(full, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+  return entries
+    .filter((entry) => {
+      if (!entry.isFile() || entry.name.startsWith(".")) return false;
+      if (!entry.name.endsWith(extension!)) return false;
+      const stem = entry.name.slice(0, -extension!.length);
+      const tag = /\.([^.]+)$/.exec(stem)?.[1];
+      const locale = tag ? canonicalizeLocale(tag) : undefined;
+      if (locale && isKnownLocale(locale)) return false;
+      const file = `${directory}/${entry.name}`;
+      return !owned.has(file) && !isReservedWorldPackagePath(file);
+    })
+    .map((entry) => `${directory}/${entry.name}`)
+    .sort(compareText);
 }
 
 async function exists(
@@ -269,20 +342,48 @@ async function exists(
 }
 
 /**
- * The conventional sources whose file or directory the package has.
- * `known` is the list to read by: a caller that holds the plugin registry
- * passes its conventions; without it the list of the process is used.
+ * The conventional sources whose file or directory the package has, a
+ * directory convention given as one source per file. `known` is the list to
+ * read by: a caller that holds the plugin registry passes its conventions;
+ * without it the list of the process is used.
  */
 async function presentConventionalSources(
   worldRoot: string,
   known: readonly ConventionalSource[] = conventions,
 ): Promise<readonly ConventionalSource[]> {
+  const owned = new Set(
+    known
+      .map((source) => source.entry.path)
+      .filter((file) => !isDirectoryConvention(file)),
+  );
+  const taken = new Set(known.map((source) => source.id));
   const present: ConventionalSource[] = [];
-  for (const source of known)
-    if (await exists(worldRoot, source)) present.push(source);
+  for (const source of known) {
+    if (!isDirectoryConvention(source.entry.path)) {
+      if (await exists(worldRoot, source)) present.push(source);
+      continue;
+    }
+    for (const file of await directoryFiles(
+      worldRoot,
+      source.entry.path,
+      owned,
+    ))
+      present.push({
+        id: fileSourceId(
+          source.id,
+          path.basename(file, path.extname(file)),
+          taken,
+        ),
+        entry: { ...source.entry, path: file },
+      });
+  }
   return present
     .map((source, index) => ({ source, index }))
-    .sort((a, b) => rank(a.source) - rank(b.source) || a.index - b.index)
+    .sort(
+      (a, b) =>
+        sourceRank(a.source.entry) - sourceRank(b.source.entry) ||
+        a.index - b.index,
+    )
     .map(({ source }) => source);
 }
 

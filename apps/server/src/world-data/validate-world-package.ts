@@ -27,6 +27,7 @@ import {
   validateWorldManifest,
   type NarratorOnlyLoreIssue,
   type WorldDimensions,
+  type WorldPluginPolicy,
 } from "@covel/shared";
 import { discoverAndRegisterPlugins } from "../routes/api/bootstrap/plugin-discovery.js";
 import { resolveLocaleFilePath } from "../world-seed-loader.js";
@@ -40,7 +41,10 @@ import {
   setWorldDataConventions,
   worldHasData,
 } from "./conventions.js";
-import { loadWorldDataDescriptor } from "./descriptor.js";
+import {
+  descriptorSourcePaths,
+  loadWorldDataDescriptor,
+} from "./descriptor.js";
 import {
   checkWorldRecords,
   type ReferencedAttribute,
@@ -75,6 +79,10 @@ export interface WorldPackageDiagnostic {
     | "unknown-setting"
     | "invalid-setting"
     | "unknown-preset"
+    | "unknown-pack"
+    | "preset-not-offered"
+    | "pitch-without-preset"
+    | "default-value"
     | "unprovided-contract"
     | "unresolved-contract"
     | "unrequested-receiver"
@@ -94,7 +102,7 @@ export interface WorldPackageDiagnostic {
     | "locale-file-name";
   /** Path relative to the world directory. */
   readonly file?: string;
-  /** Location inside `file`, such as `pluginPolicy.requested[1]`. */
+  /** Location inside `file`, such as `pluginPolicy.plus[1]`. */
   readonly pointer?: string;
   readonly sourceId?: string;
   readonly locales?: readonly string[];
@@ -126,27 +134,16 @@ type CatalogueEntry = NonNullable<ReturnType<PluginRegistry["get"]>>;
 interface WorldManifestView {
   readonly id: string;
   readonly defaultLocale: string;
-  readonly supportedLocales?: readonly string[];
+  /** The world's editions, from its locale files; the default locale first. */
+  readonly editions: readonly string[];
   readonly worldData?: string;
   readonly dimensions?: unknown;
-  readonly dimensionSources?: Readonly<Record<string, string>>;
   readonly themeMusic?: string;
   readonly cover?: string;
   readonly characterSchema?: {
     readonly attributes: readonly ReferencedAttribute[];
   };
-  readonly pluginPolicy?: {
-    readonly presetId?: string;
-    readonly requested?: readonly string[];
-    readonly recommended?: readonly string[];
-    readonly requires?: readonly string[];
-    readonly packs?: readonly {
-      readonly id?: string;
-      readonly requested?: readonly string[];
-      readonly recommended?: readonly string[];
-      readonly excluded?: readonly string[];
-    }[];
-  };
+  readonly pluginPolicy?: WorldPluginPolicy;
   readonly pluginSettings?: Readonly<Record<string, Record<string, unknown>>>;
 }
 
@@ -210,22 +207,20 @@ const CONSTANT_LORE_TOKEN_WARNING = 2000;
 const DIMENSION_TOKEN_WARNING = 8000;
 
 function declaredLocales(manifest: WorldManifestView): readonly string[] {
-  return [
-    ...new Set([manifest.defaultLocale, ...(manifest.supportedLocales ?? [])]),
-  ];
+  return manifest.editions;
 }
 
 /**
- * A declared locale is a promise: a player who asks for it gets a session in
- * it. Texts the edition does not translate reach that session in the world's
- * own language, beside instructions that ask for the declared one.
+ * An edition is a promise: a player who asks for its locale gets a session
+ * in it. Texts the edition does not translate reach that session in the
+ * world's own language, beside instructions that ask for the edition's.
  */
 async function checkEditions(
   worldDir: string,
   manifest: WorldManifestView,
 ): Promise<WorldPackageDiagnostic[]> {
   const diagnostics: WorldPackageDiagnostic[] = [];
-  for (const locale of manifest.supportedLocales ?? []) {
+  for (const locale of manifest.editions) {
     if (locale === manifest.defaultLocale) continue;
     let status: Awaited<ReturnType<typeof worldTranslationStatus>>;
     try {
@@ -248,7 +243,7 @@ async function checkEditions(
         .join(
           ", ",
         )}); a ${locale} session reads them in ${manifest.defaultLocale}`,
-      hint: `Run \`pnpm i18n status ${path.basename(worldDir)} --locale ${locale} --missing\` to list them and \`pnpm i18n translate\` to fill them, or remove ${locale} from supportedLocales.`,
+      hint: `Run \`pnpm i18n status ${path.basename(worldDir)} --locale ${locale} --missing\` to list them and \`pnpm i18n translate\` to fill them. A world has a ${locale} edition while it has \`world.${locale}.yaml\` or \`WORLD.${locale}.md\`.`,
     });
   }
   return diagnostics;
@@ -272,12 +267,12 @@ async function checkThemeMusic(
   ];
 }
 
-/** `<name>.<language>.<ext>`: a translation file named with a bare language. */
 /**
- * A translation file is named with the locale exactly as `supportedLocales`
- * writes it (`WORLD.en-US.md`, `world.en-US.yaml`). A bare language (`.en`)
- * is turned down: it would also answer a session in any other region of that
- * language, and one world should not use two spellings for one edition.
+ * A translation file is named with the locale of its edition exactly
+ * (`WORLD.en-US.md`, `world.en-US.yaml`). A bare language (`.en`) beside an
+ * edition with a region is turned down: it would also answer a session in any
+ * other region of that language, and one world should not use two spellings
+ * for one edition.
  */
 async function checkLocaleFileNames(
   worldDir: string,
@@ -291,7 +286,7 @@ async function checkLocaleFileNames(
     file: item.file,
     locales: [item.exact],
     message: misnamedLocaleMessage(item),
-    hint: `Rename it to \`${item.renamed}\`. A translation file uses the locale exactly as \`supportedLocales\` writes it.`,
+    hint: `Rename it to \`${item.renamed}\`. A translation file names the locale of its edition exactly.`,
   }));
 }
 
@@ -382,6 +377,34 @@ async function checkLore(
   return diagnostics;
 }
 
+/** `characterSchema.types` when a world writes none. */
+const DEFAULT_CHARACTER_TYPES = ["npc", "companion"];
+
+/** Fields written with the value they have when left out. */
+function checkDefaultValues(written: unknown): WorldPackageDiagnostic[] {
+  const types =
+    written && typeof written === "object" && !Array.isArray(written)
+      ? (written as { characterSchema?: { types?: unknown } }).characterSchema
+          ?.types
+      : undefined;
+  if (
+    !Array.isArray(types) ||
+    types.length !== DEFAULT_CHARACTER_TYPES.length ||
+    !DEFAULT_CHARACTER_TYPES.every((type) => types.includes(type))
+  )
+    return [];
+  return [
+    {
+      level: "warning",
+      code: "default-value",
+      file: "world.yaml",
+      pointer: "characterSchema.types",
+      message: "this is the default value: `npc` and `companion`",
+      hint: "Leave `types` out; write it only for other character types.",
+    },
+  ];
+}
+
 function checkPluginReferences(
   manifest: WorldManifestView,
   catalogue: PluginCatalogue,
@@ -389,32 +412,63 @@ function checkPluginReferences(
 ): WorldPackageDiagnostic[] {
   const diagnostics: WorldPackageDiagnostic[] = [];
   const known = [...catalogue.getAll().keys()];
-  const preset = manifest.pluginPolicy?.presetId;
-  const presetIds = [
-    ...BUILTIN_PLUGIN_PACKS.map((pack) => pack.id),
-    ...(manifest.pluginPolicy?.packs ?? []).map((pack) => pack.id),
-  ];
-  if (preset && !presetIds.includes(preset))
+  const policy = manifest.pluginPolicy;
+  const packIds = BUILTIN_PLUGIN_PACKS.map((pack) => pack.id);
+  const preset = policy?.preset;
+  if (preset && !packIds.includes(preset))
     diagnostics.push({
       level: "error",
       code: "unknown-preset",
       file: "world.yaml",
-      pointer: "pluginPolicy.presetId",
-      message: `Unknown plugin preset "${preset}"`,
-      hint: `Choose one of: ${presetIds.filter(Boolean).join(", ")}.`,
+      pointer: "pluginPolicy.preset",
+      message: `Unknown plugin pack "${preset}"`,
+      hint: `Choose a built-in pack: ${packIds.join(", ")}.`,
     });
-  const references: { id: string; pointer: string }[] = [];
-  const collect = (ids: readonly string[] | undefined, pointer: string) =>
-    ids?.forEach((id, index) =>
-      references.push({ id, pointer: `${pointer}[${index}]` }),
-    );
-  collect(manifest.pluginPolicy?.requested, "pluginPolicy.requested");
-  collect(manifest.pluginPolicy?.recommended, "pluginPolicy.recommended");
-  manifest.pluginPolicy?.packs?.forEach((pack, index) => {
-    collect(pack.requested, `pluginPolicy.packs[${index}].requested`);
-    collect(pack.recommended, `pluginPolicy.packs[${index}].recommended`);
-    collect(pack.excluded, `pluginPolicy.packs[${index}].excluded`);
+  policy?.packs?.forEach((id, index) => {
+    if (packIds.includes(id)) return;
+    diagnostics.push({
+      level: "error",
+      code: "unknown-pack",
+      file: "world.yaml",
+      pointer: `pluginPolicy.packs[${index}]`,
+      message: `Unknown plugin pack "${id}"`,
+      hint: `Choose a built-in pack: ${packIds.join(", ")}.`,
+    });
   });
+  if (preset && policy?.packs && !policy.packs.includes(preset))
+    diagnostics.push({
+      level: "error",
+      code: "preset-not-offered",
+      file: "world.yaml",
+      pointer: "pluginPolicy.preset",
+      message: `the preset "${preset}" is not one of the packs \`packs\` offers`,
+      hint: "Add the preset to `packs`, or remove `packs` to offer every built-in pack.",
+    });
+  if (policy?.pitch && !preset)
+    diagnostics.push({
+      level: "warning",
+      code: "pitch-without-preset",
+      file: "world.yaml",
+      pointer: "pluginPolicy.pitch",
+      message: "`pitch` presents the preset pack, and this world names none",
+      hint: "Add `preset`, or remove `pitch`.",
+    });
+  policy?.plus?.forEach((id, index) => {
+    const entry = catalogue.get(id);
+    if (entry?.packageManifest?.plugin?.kind !== "core") return;
+    diagnostics.push({
+      level: "warning",
+      code: "default-value",
+      file: "world.yaml",
+      pointer: `pluginPolicy.plus[${index}]`,
+      message: `"${id}" is a \`kind: core\` plugin, which every session has already`,
+      hint: "Remove it from `plus`.",
+    });
+  });
+  const references: { id: string; pointer: string }[] = [];
+  policy?.plus?.forEach((id, index) =>
+    references.push({ id, pointer: `pluginPolicy.plus[${index}]` }),
+  );
   for (const id of Object.keys(manifest.pluginSettings ?? {}))
     references.push({ id, pointer: `pluginSettings.${id}` });
 
@@ -722,8 +776,6 @@ async function unclaimedDataFiles(
     const schema = source.descriptor.schema;
     if (schema && !schema.includes(":")) claimed.add(schema);
   }
-  for (const file of Object.values(manifest.dimensionSources ?? {}))
-    claimed.add(file);
   if (manifest.themeMusic) claimed.add(manifest.themeMusic);
   if (manifest.cover) claimed.add(manifest.cover);
   const directories = sources
@@ -808,28 +860,31 @@ function defaultSessionPlugins(
  */
 async function collisionDiagnostics(
   worldDir: string,
+  worldData: string | undefined,
   catalogue: PluginCatalogue,
   defaultPlugins: readonly string[],
 ): Promise<WorldPackageDiagnostic[]> {
   const collisions = conventionCollisions(catalogue);
-  return (await conventionCollisionDiagnostics(worldDir, collisions)).map(
-    (diagnostic) => {
-      const collision = collisions.find(
-        (item) => item.path === diagnostic.path,
-      );
-      const started =
-        collision?.claimants.filter((item) =>
-          defaultPlugins.includes(item.pluginId),
-        ).length ?? 0;
-      return {
-        level: started > 1 ? "error" : "warning",
-        code: "convention-collision",
-        file: diagnostic.path,
-        message: diagnostic.message,
-        hint: diagnostic.hint,
-      };
-    },
-  );
+  return (
+    await conventionCollisionDiagnostics(
+      worldDir,
+      collisions,
+      await descriptorSourcePaths(worldDir, worldData),
+    )
+  ).map((diagnostic) => {
+    const collision = collisions.find((item) => item.path === diagnostic.path);
+    const started =
+      collision?.claimants.filter((item) =>
+        defaultPlugins.includes(item.pluginId),
+      ).length ?? 0;
+    return {
+      level: started > 1 ? "error" : "warning",
+      code: "convention-collision",
+      file: diagnostic.path,
+      message: diagnostic.message,
+      hint: diagnostic.hint,
+    };
+  });
 }
 
 /** Plugins that accept a contract's records and loaded. */
@@ -888,14 +943,17 @@ async function checkWorldData(
       level: "error",
       code: "world-data",
       file: "world.yaml",
-      pointer: "dimensionSources",
+      pointer: "dimensions",
       message: error instanceof Error ? error.message : String(error),
-      hint: "Check each dimensionSources path and dimension definition.",
+      hint: "Check each dimension definition in `data/dimensions.yaml` or under `dimensions` in world.yaml.",
     });
   }
-  const collisions = manifest.worldData
-    ? []
-    : await collisionDiagnostics(worldDir, catalogue, defaultPlugins);
+  const collisions = await collisionDiagnostics(
+    worldDir,
+    manifest.worldData,
+    catalogue,
+    defaultPlugins,
+  );
   diagnostics.push(...collisions);
   if (!descriptor.diagnostics.some((item) => item.level === "error"))
     diagnostics.push(
@@ -983,7 +1041,7 @@ async function checkWorldData(
         file: fileOf.get(source.id) ?? descriptorFile,
         sourceId: source.id,
         message: `a new session of this world starts without a plugin that accepts data contract "${target.contract}" (${listSome(receivers)}); the source is imported only after the player turns one on`,
-        hint: "Add the plugin to `pluginPolicy.requested`, or to the `requested` list of the pack that `pluginPolicy.presetId` names.",
+        hint: "Add the plugin to `pluginPolicy.plus`, or choose a `pluginPolicy.preset` whose pack has it.",
       });
     }
   }
@@ -1135,7 +1193,10 @@ export async function validateWorldPackage(
       })),
     };
 
-  const manifest = validation.data as WorldManifestView;
+  const manifest = {
+    ...(validation.data as Omit<WorldManifestView, "editions">),
+    editions: source.editions,
+  };
   const catalogue = await loadPluginCatalogue(options.pluginsDirs);
   // A package without a descriptor is read by the conventions of the
   // scanned plugins, as the server reads it by those of the installed ones.
@@ -1155,6 +1216,15 @@ export async function validateWorldPackage(
         message: `unknown field "${field}" is ignored`,
         hint: "Remove the field or correct its name.",
       })),
+      ...(validation.droppedSections ?? []).map((issue) => ({
+        level: "error" as const,
+        code: "manifest-invalid" as const,
+        file: "world.yaml",
+        pointer: issue.path,
+        message: `${issue.message}; the world loads without its pluginPolicy`,
+        hint: "Write `pluginPolicy` as `preset`, `plus`, `pitch`, `packs` and `requires`.",
+      })),
+      ...checkDefaultValues(source.base),
       ...inlineLocaleMapDiagnostics(
         "world.yaml",
         source.base,

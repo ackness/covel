@@ -32,27 +32,26 @@ function i18nText(
   return entries.length > 0 ? Object.fromEntries(entries) : undefined;
 }
 
-function worldPack(value: unknown): PluginPack | undefined {
-  if (!isRecord(value) || typeof value.id !== "string" || !value.id) {
-    return undefined;
-  }
-  const label = i18nText(value.label) ?? value.id;
-  const description = i18nText(value.description);
-  const reason = i18nText(value.reason);
-  const excluded = stringArray(value.excluded);
+/** The preset pack as the world presents it: its `pitch` in place of the pack's text. */
+function pitched(pack: PluginPack, pitch: unknown): PluginPack {
+  if (!isRecord(pitch)) return pack;
+  const label = i18nText(pitch.label);
+  const description = i18nText(pitch.description);
+  const reason = i18nText(pitch.reason);
   return {
-    id: value.id,
-    label,
+    ...pack,
+    ...(label ? { label } : {}),
     ...(description ? { description } : {}),
-    requested: stringArray(value.requested),
-    recommended: stringArray(value.recommended),
-    ...(excluded.length > 0 ? { excluded } : {}),
-    tags: stringArray(value.tags),
     ...(reason ? { reason } : {}),
     source: "world",
   };
 }
 
+/**
+ * The world's policy and the packs its session preparation screen offers: the
+ * built-in packs `packs` names, in that order, or every built-in pack. The
+ * preset comes first, with the world's `pitch`.
+ */
 function resolvePolicy(
   metadata: Readonly<Record<string, unknown>> | undefined,
 ): {
@@ -60,25 +59,32 @@ function resolvePolicy(
   packs: PluginPack[];
 } {
   const raw = isRecord(metadata?.pluginPolicy) ? metadata.pluginPolicy : {};
-  const worldPacks = Array.isArray(raw.packs)
-    ? raw.packs
-        .map(worldPack)
-        .filter((pack): pack is PluginPack => Boolean(pack))
-    : [];
-  const worldPackIds = new Set(worldPacks.map((pack) => pack.id));
+  const preset =
+    typeof raw.preset === "string" &&
+    BUILTIN_PLUGIN_PACKS.some((pack) => pack.id === raw.preset)
+      ? raw.preset
+      : undefined;
+  const named = stringArray(raw.packs);
+  const offered =
+    named.length > 0
+      ? named.flatMap((id) => {
+          const pack = BUILTIN_PLUGIN_PACKS.find((item) => item.id === id);
+          return pack ? [pack] : [];
+        })
+      : [...BUILTIN_PLUGIN_PACKS];
+  const presetPack = BUILTIN_PLUGIN_PACKS.find((pack) => pack.id === preset);
   return {
     policy: {
-      ...(typeof raw.presetId === "string" ? { presetId: raw.presetId } : {}),
-      preferredTags: stringArray(raw.preferredTags),
-      avoidedTags: stringArray(raw.avoidedTags),
-      requested: stringArray(raw.requested),
-      recommended: stringArray(raw.recommended),
+      ...(preset ? { preset } : {}),
+      plus: stringArray(raw.plus),
       requires: stringArray(raw.requires),
     },
-    packs: [
-      ...worldPacks,
-      ...BUILTIN_PLUGIN_PACKS.filter((pack) => !worldPackIds.has(pack.id)),
-    ],
+    packs: presetPack
+      ? [
+          pitched(presetPack, raw.pitch),
+          ...offered.filter((pack) => pack.id !== presetPack.id),
+        ]
+      : offered,
   };
 }
 
@@ -105,7 +111,7 @@ function dropMissingRequests(
   return {
     policy: {
       ...resolved.policy,
-      requested: keepInstalled(resolved.policy.requested),
+      plus: keepInstalled(resolved.policy.plus),
     },
     packs: resolved.packs.map((pack) => ({
       ...pack,
@@ -123,31 +129,11 @@ function dropMissingRequests(
   };
 }
 
-function defaultPluginIds(
-  plugins: readonly PluginSummary[],
-  policy: ResolvedWorldPluginPolicy,
-  selectedPack: PluginPack | undefined,
-): string[] {
-  const requested = new Set([
-    ...policy.requested,
-    ...(selectedPack?.requested ?? []),
-  ]);
-  for (const plugin of plugins) {
-    if (
-      plugin.hostState === "error" ||
-      policy.avoidedTags.some((tag) => plugin.tags.includes(tag))
-    )
-      continue;
-    if (policy.preferredTags.some((tag) => plugin.tags.includes(tag)))
-      requested.add(plugin.id);
-  }
-  return [...requested];
-}
-
 /**
  * The packs, the policy and the plugins a new session of a world starts with
- * when the player changes nothing (`defaultPluginIds`), from the world's
- * `pluginPolicy` and the plugins of this host.
+ * when the player changes nothing (`defaultPluginIds`: the preset's plugins
+ * and the world's `plus`), from the world's `pluginPolicy` and the plugins of
+ * this host. `kind: core` plugins join at session creation.
  */
 export function worldPluginPlan(
   worldId: string,
@@ -158,15 +144,17 @@ export function worldPluginPlan(
     resolvePolicy(metadata),
     new Set(plugins.map((plugin) => plugin.id)),
   );
-  const selectedPack = policy.presetId
-    ? packs.find((pack) => pack.id === policy.presetId)
+  const selectedPack = policy.preset
+    ? packs.find((pack) => pack.id === policy.preset)
     : undefined;
   return {
     worldId,
     packs,
     policy,
     ...(selectedPack ? { selectedPackId: selectedPack.id } : {}),
-    defaultPluginIds: defaultPluginIds(plugins, policy, selectedPack),
+    defaultPluginIds: [
+      ...new Set([...(selectedPack?.requested ?? []), ...policy.plus]),
+    ],
     missing,
   };
 }

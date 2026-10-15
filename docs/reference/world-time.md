@@ -40,14 +40,13 @@ definition:
 
 文件的内容是 `{ id: world, definition: ... }`：`id` 固定写 `world`，`definition` 是时间的定义。
 
-世界用了 descriptor（`data/world.data.yaml`）时，要在里面列出这个文件：
+文件放在别的路径时，在 descriptor（`data/world.data.yaml`）里加一个 source：
 
 ```yaml
-schemaVersion: 1
 sources:
   timeDefinition:
     kind: yaml
-    path: data/time.yaml
+    path: data/calendar.yaml
     schema: contract:world.time-definition@1
     to: contract:world.time-definition@1
     key: id

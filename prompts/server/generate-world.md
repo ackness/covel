@@ -41,13 +41,10 @@ summary: <1-2 sentence summary>
 # embedded-YAML pass reformats it into `{ { locale } }`, which the template
 # interpolator can no longer expand.
 defaultLocale: "{{ locale }}"
-supportedLocales: ["{{ locale }}"]
 tags: [<you decide genre tags>]
+# Omit pluginPolicy when the Creation Brief chooses no plugin pack.
 pluginPolicy:
-  presetId: <the presetId of the Creation Brief's plugin pack; omit when none is chosen>
-  preferredTags: [] # optional plugin catalogue tags such as mode:dialogue
-  requested: [] # selected plugin IDs
-  recommended: [] # optional plugin IDs
+  preset: <the preset of the Creation Brief's plugin pack>
 
 # Omit defaultViewMode: the plugin pack decides it. A revision keeps the value
 # the current world.yaml has.

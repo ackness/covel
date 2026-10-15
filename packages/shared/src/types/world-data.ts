@@ -32,6 +32,20 @@ export interface WorldDataDescriptor {
 }
 
 /**
+ * A world's descriptor as written: each entry changes the conventional source
+ * with its `path`, or adds a source (then with `kind` and `to`).
+ */
+export interface WorldDataDescriptorFile {
+  readonly sources: Readonly<
+    Record<
+      string,
+      Partial<WorldDataSourceDescriptor> &
+        Pick<WorldDataSourceDescriptor, "path">
+    >
+  >;
+}
+
+/**
  * A world-data import finding the player is shown: data of the world that
  * did not reach the session, say because no enabled plugin receives it. The
  * message is the importer's, in English, like the session prep preflight.

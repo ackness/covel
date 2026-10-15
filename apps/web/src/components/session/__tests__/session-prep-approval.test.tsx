@@ -81,10 +81,7 @@ beforeEach(() => {
     worldId: world.id,
     packs: [],
     policy: {
-      preferredTags: [],
-      avoidedTags: [],
-      requested: ["community"],
-      recommended: [],
+      plus: ["community"],
       requires: [],
     },
     defaultPluginIds: ["builtin", "community"],

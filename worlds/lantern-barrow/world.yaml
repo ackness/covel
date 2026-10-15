@@ -4,9 +4,6 @@ name: 提灯古冢・初次远征
 version: 0.1.0
 summary: 守了百年的古冢之灯熄灭，守灯人失踪，青铜墓门洞开。在灰苇村的酒馆里组队、分配点数、掷骰下墓——经典跑团，从第一次远征开始。
 defaultLocale: zh-CN
-supportedLocales:
-  - zh-CN
-  - en-US
 tags:
   - fantasy
   - tabletop
@@ -20,63 +17,25 @@ license: MIT
 cover: media/gallery/lantern-barrow-hero.webp
 accentColor: "oklch(72% 0.12 75)"
 pluginPolicy:
-  packs:
-    - id: classic-tabletop
-      label: 经典跑团
-      description: 开局配点、表单检定与骰池判定、任务与背包、队友好感，以及地城探索、警戒与名望面板。
-      tags:
-        - mode:traditional-story
-      reason: 跑团的乐趣在于规则可见：属性是你分的，骰子是真掷的，每个房间、每次惊动墓穴的响动都会记在面板上。
-      requested:
-        - pregame
-        - world-init
-        - char-creator
-        - narrator
-        - tabletop-rules
-        - dice-check
-        - core-quest
-        - inventory
-        - affinity
-        - guide
-        - codex
-        - npc-graph
-        - living-world-rules
-        - character-blueprint
-        - story-events
-      recommended:
-        - branch-reply
-  presetId: classic-tabletop
-  preferredTags:
-    - mode:traditional-story
-  avoidedTags:
-    - mode:dialogue
-  requires:
-    - action-check@1
-  requested:
-    - pregame
-    - world-init
-    - char-creator
-    - narrator
+  preset: traditional-story
+  plus:
     - tabletop-rules
     - dice-check
-  recommended:
     - core-quest
     - inventory
     - affinity
-    - guide
-    - codex
-    - npc-graph
-    - living-world-rules
     - character-blueprint
     - story-events
-    - branch-reply
+  pitch:
+    label: 经典跑团
+    description: 开局配点、表单检定与骰池判定、任务与背包、队友好感，以及地城探索、警戒与名望面板。
+    reason: 跑团的乐趣在于规则可见：属性是你分的，骰子是真掷的，每个房间、每次惊动墓穴的响动都会记在面板上。
+  requires:
+    - action-check@1
 pluginSettings:
   story-events:
     planner: true
 characterSchema:
-  types:
-    - npc
-    - companion
   attributes:
     - id: persona
       name: 性格
@@ -162,4 +121,3 @@ characterSchema:
       defaultValue: 0
       category: social
       description: 对玩家的信任
-worldData: data/world.data.yaml

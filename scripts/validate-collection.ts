@@ -121,7 +121,12 @@ for (const member of manifest.worlds) {
       fail(`${member.path}/world.yaml does not match the world schema`);
       continue;
     }
-    worlds.push(collectionWorldFacts(world));
+    worlds.push(
+      collectionWorldFacts(
+        world,
+        path.basename(path.resolve(directory, member.path)),
+      ),
+    );
   } catch (error) {
     fail(
       `${member.path}: not a world package (${error instanceof Error ? error.message : String(error)})`,

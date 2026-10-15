@@ -7,7 +7,11 @@
 
 import type { ZodError, ZodType } from "zod";
 import { pluginManifestSchema } from "./plugin-manifest.js";
-import { worldManifestSchema, worldDimensionsSchema } from "./world.js";
+import {
+  worldManifestSchema,
+  worldDimensionsSchema,
+  worldPluginPolicySchema,
+} from "./world.js";
 import {
   dimensionIdSchema,
   worldDimensionDefinitionSchema,
@@ -19,8 +23,16 @@ export interface ManifestValidationResult<T = unknown> {
   readonly valid: boolean;
   readonly data?: T;
   readonly errors?: readonly ManifestValidationError[];
-  /** Unknown top-level fields left out by tolerant world-package loading. */
+  /**
+   * Unknown fields left out by tolerant world-package loading: top-level
+   * ones, and those inside `pluginPolicy` (`pluginPolicy.presetId`).
+   */
   readonly ignoredFields?: readonly string[];
+  /**
+   * Problems of a section that tolerant loading left out because it does not
+   * validate (`pluginPolicy`): the world loads without it.
+   */
+  readonly droppedSections?: readonly ManifestValidationError[];
 }
 
 export interface ManifestValidationError {
@@ -65,25 +77,60 @@ export function validatePluginManifest(
   return validate(pluginManifestSchema, data);
 }
 
+const isObject = (value: unknown): value is Record<string, unknown> =>
+  value !== null && typeof value === "object" && !Array.isArray(value);
+
 /**
  * Validate a world.yaml manifest object.
+ *
+ * `ignoreUnknownRootFields` is how a world package is loaded: an unknown
+ * top-level field, or an unknown field inside `pluginPolicy`, is left out
+ * and listed in `ignoredFields`; a `pluginPolicy` that still does not
+ * validate is left out and its problems listed in `droppedSections`. The
+ * world then loads with the plugins every session has.
  */
 export function validateWorldManifest(
   data: unknown,
   options?: { ignoreUnknownRootFields?: boolean },
 ): ManifestValidationResult {
-  if (!options?.ignoreUnknownRootFields)
+  if (!options?.ignoreUnknownRootFields || !isObject(data))
     return validate(worldManifestSchema, data);
-  const result = validate(worldManifestSchema.strip(), data);
-  const ignoredFields =
-    data && typeof data === "object" && !Array.isArray(data)
-      ? Object.keys(data).filter(
-          (key) => !Object.hasOwn(worldManifestSchema.shape, key),
+  const ignoredFields = Object.keys(data).filter(
+    (key) => !Object.hasOwn(worldManifestSchema.shape, key),
+  );
+  const droppedSections: ManifestValidationError[] = [];
+  let manifest = data;
+  if (data.pluginPolicy !== undefined) {
+    const { pluginPolicy: written, ...rest } = data;
+    const known = isObject(written)
+      ? Object.fromEntries(
+          Object.entries(written).filter(([key]) => {
+            if (Object.hasOwn(worldPluginPolicySchema.shape, key)) return true;
+            ignoredFields.push(`pluginPolicy.${key}`);
+            return false;
+          }),
         )
-      : [];
+      : written;
+    const policy = worldPluginPolicySchema.safeParse(known);
+    if (policy.success) manifest = { ...rest, pluginPolicy: known };
+    else {
+      manifest = rest;
+      droppedSections.push(
+        ...formatZodErrors(policy.error).map((issue) => ({
+          ...issue,
+          path:
+            issue.path === "(root)"
+              ? "pluginPolicy"
+              : `pluginPolicy.${issue.path}`,
+        })),
+      );
+    }
+  }
+  const result = validate(worldManifestSchema.strip(), manifest);
   return {
     ...result,
     ...(ignoredFields.length ? { ignoredFields } : {}),
+    ...(droppedSections.length ? { droppedSections } : {}),
   };
 }
 

@@ -19,6 +19,7 @@
 | Contract | 契约 | 带版本号的 ID，例如 `narrative-engine@1`。 |
 | Credits | 作者信息 | 一个包的 `author`、`license` 和 `homepage` 字段。 |
 | Deployment form | 部署形态 | 桌面客户端、自部署网页版、官方网页版。不是 `DEPLOYMENT_TIER`。 |
+| Edition | 语言版本 | 世界的一种语言：`defaultLocale`，以及根目录里每个 `world.<locale>.yaml` 或 `WORLD.<locale>.md` 的语言。 |
 | Kernel | 内核 |  |
 | Official web app | 官方网页版 |  |
 | Pack | 玩法包 |  |
@@ -156,7 +157,7 @@
 
 一组起了名字的插件（`requested` 和 `recommended` 两个集合，加上标签），合起来构成一种玩法，例如 `traditional-story`、`dialogue-mode`。
 
-玩家在开局准备页选一个玩法包，就一步换掉上一个玩法包带来的插件；世界自己要求的插件和玩家手动选的插件保持不变。世界可以用 `pluginPolicy.presetId` 指定默认的玩法包。
+玩家在开局准备页选一个玩法包，就一步换掉上一个玩法包带来的插件；世界自己要求的插件和玩家手动选的插件保持不变。世界用 `pluginPolicy.preset` 指定默认的玩法包，用 `pluginPolicy.plus` 加上自己要的插件。玩法包只有内置的那些（`packs/builtin.yaml`），世界不定义自己的玩法包。
 
 它和 **Preset** 不同：Preset 打包的是模型的选择，不是插件。
 
@@ -266,7 +267,7 @@
 
 ## World
 
-一个内容包（`worlds/<id>/`），里面有 `world.yaml`、`WORLD.md`，以及可选的数据来源（`data/world.data.yaml` 等），用来提供维度、角色设定、规则、场景和媒体索引。
+一个内容包（`worlds/<id>/`），里面有 `world.yaml`、`WORLD.md`，以及放在约定路径上的可选数据（`data/dimensions.yaml`、`data/rules/` 等），用来提供维度、角色设定、规则、场景和媒体索引。
 
 服务端启动时从两个地方加载世界：内置目录 `COVEL_WORLDS_DIR`，和用户世界目录（`COVEL_USER_WORLDS_DIR`，没有设置时是 `<COVEL_HOME>/worlds`，默认的 home 是 `~/.covel`）。一个世界可以开很多局游戏。加载过程见[启动加载与收敛](./world-data.md#启动加载与收敛seed--reconcile)。
 

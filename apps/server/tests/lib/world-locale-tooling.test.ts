@@ -1,17 +1,43 @@
 import { cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+} from "vitest";
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 import {
   worldTranslationStatus,
   writeWorldTranslations,
 } from "../../src/world-data/locale-tooling.js";
-import { validateWorldPackage } from "../../src/world-data/validate-world-package.js";
+import {
+  loadPluginCatalogue,
+  validateWorldPackage,
+} from "../../src/world-data/validate-world-package.js";
+import {
+  conventionsOfPlugins,
+  KERNEL_SOURCES,
+  setWorldDataConventions,
+} from "../../src/world-data/conventions.js";
 import { loadWorldDataDescriptor } from "../../src/world-data/descriptor.js";
 import { readWorldDataSource } from "../../src/world-data/source-reader.js";
 
 const repoRoot = path.resolve(import.meta.dirname, "../../../..");
+
+// The bundled worlds are read by the paths the bundled plugins name.
+beforeAll(async () => {
+  setWorldDataConventions(
+    conventionsOfPlugins(
+      await loadPluginCatalogue([path.join(repoRoot, "plugins")]),
+    ),
+  );
+});
+afterAll(() => setWorldDataConventions(KERNEL_SOURCES));
 
 /**
  * What a translator of a world needs: which texts each file has, which a

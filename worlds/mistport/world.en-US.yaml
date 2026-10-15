@@ -3,16 +3,15 @@ name: Mistport Chronicles
 summary: Three tide-bells, a missing Guildmaster, and a shattered Key draw you
   into a four-way struggle beneath Mistport's eternal fog.
 pluginPolicy:
-  packs:
-    - id: mistport-investigation
-      label: Mistport Investigation
-      description:
-        A traditional investigation of Qi's disappearance with clue memory,
-        relationship tracking, world rules, preset characters, and portraits.
-      reason: A Case Board, Faction Standing, the Deep Withdrawal, and the Key
-        Fragments settle after every turn alongside tide-time, fog-rot, and
-        seven core characters, so every choice in the long investigation leaves
-        a mark.
+  pitch:
+    label: Mistport Investigation
+    description:
+      A traditional investigation of Qi's disappearance with clue memory,
+      relationship tracking, world rules, preset characters, and portraits.
+    reason: A Case Board, Faction Standing, the Deep Withdrawal, and the Key
+      Fragments settle after every turn alongside tide-time, fog-rot, and
+      seven core characters, so every choice in the long investigation leaves
+      a mark.
 characterSchema:
   attributes:
     - id: persona

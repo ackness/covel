@@ -62,31 +62,27 @@ export function recordLocation(
 }
 
 export async function readWorldManifest(worldRoot: string): Promise<{
+  /** The written `id`, else the name of the world's directory. */
   id?: string;
   worldData?: string;
   dimensions?: unknown;
-  dimensionSources?: unknown;
   characterSchema?: unknown;
   defaultLocale?: string;
-  supportedLocales?: string[];
+  /** The world's editions, from its locale files (`worldEditionLocales`). */
+  editions?: readonly string[];
   themeMusic?: string;
   cover?: string;
 }> {
   // `world.<locale>.yaml` overlays are compiled in, as the world loader does.
-  const { raw } = await readWorldManifestSource(worldRoot);
+  const { raw, editions } = await readWorldManifestSource(worldRoot);
   return isRecord(raw)
     ? {
         id: typeof raw.id === "string" ? raw.id : undefined,
         dimensions: raw.dimensions,
-        dimensionSources: raw.dimensionSources,
         characterSchema: raw.characterSchema,
         defaultLocale:
           typeof raw.defaultLocale === "string" ? raw.defaultLocale : undefined,
-        supportedLocales: Array.isArray(raw.supportedLocales)
-          ? raw.supportedLocales.filter(
-              (locale): locale is string => typeof locale === "string",
-            )
-          : undefined,
+        editions,
         worldData:
           typeof raw.worldData === "string" ? raw.worldData : undefined,
         themeMusic:

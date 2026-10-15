@@ -82,7 +82,16 @@ async function assertWorldPackageUpdate(c: Context, id: string) {
 export function createGithubUpdateRoutes(kind: "plugin" | "world") {
   const githubUpdateRoutes = new Hono();
   const action = kind === "world" ? "world-update" : "update";
-  const inspect = kind === "world" ? inspectWorldBundle : inspectBundle;
+  // An installed world sits in the directory of its ID, which a world
+  // without `id` keeps across updates.
+  const inspect = (
+    entries: readonly ExtractedEntry[],
+    reserved: ReadonlySet<string>,
+    installedId: string,
+  ) =>
+    kind === "world"
+      ? inspectWorldBundle(entries, installedId)
+      : inspectBundle(entries, reserved);
   const resourceRoot = () =>
     resolveUserResourceDirs()[kind === "world" ? "worlds" : "plugins"];
   githubUpdateRoutes.use("*", async (c, next) => {
@@ -155,7 +164,7 @@ export function createGithubUpdateRoutes(kind: "plugin" | "world") {
         c.req.raw.signal,
       );
       const entries = selectPackageEntries(archive, source.path);
-      const summary = await inspect(entries, reserved);
+      const summary = await inspect(entries, reserved, id);
       if (summary.id !== id)
         throw httpError(
           409,
@@ -209,6 +218,7 @@ export function createGithubUpdateRoutes(kind: "plugin" | "world") {
       const summary = await inspect(
         entries,
         c.get("reservedPluginIds") ?? new Set<string>(),
+        plugin.id,
       );
       if (summary.id !== plugin.id)
         throw httpError(409, "Package identity changed");

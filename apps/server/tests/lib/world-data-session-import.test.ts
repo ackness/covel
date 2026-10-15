@@ -446,7 +446,7 @@ describe("world data session importer", () => {
     },
   );
 
-  it("skips time data with a warning when its receiver is disabled", async () => {
+  it("leaves time data out when its receiver is not active", async () => {
     const registry = await builtinPluginRegistry();
     const result = await preflightWorldDataForSession({
       sessionId: "preview",
@@ -458,13 +458,8 @@ describe("world data session importer", () => {
     expect(result.diagnostics.filter((item) => item.level === "error")).toEqual(
       [],
     );
-    expect(result.diagnostics).toContainEqual(
-      expect.objectContaining({
-        level: "warning",
-        message:
-          'No active receiver for data contract "world.time-definition@1"; contract writes skipped',
-      }),
-    );
+    // data/time.yaml is read by convention of world-time: without that plugin
+    // the file is no source, so nothing is planned for it.
     expect(
       result.targets.some((target) => target.pluginId === "world-time"),
     ).toBe(false);
@@ -2780,7 +2775,7 @@ describe("world data session importer", () => {
     // and portraits (media + presence); activate the plugins all its sources
     // target so the import is clean.
     const worldId = "mistport";
-    const ruleSourceId = "tideRules";
+    const ruleSourceId = "rules-tide-mystery";
     const activePlugins = [
       "world-init",
       "living-world-rules",

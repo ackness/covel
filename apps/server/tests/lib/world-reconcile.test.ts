@@ -160,7 +160,6 @@ describe("seedWorlds", () => {
 name: ${id}
 summary: seed test
 defaultLocale: zh-CN
-supportedLocales: [zh-CN]
 `,
       );
       await writeFile(path.join(dir, "WORLD.md"), `# ${id}`);

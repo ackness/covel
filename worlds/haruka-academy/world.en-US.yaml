@@ -4,17 +4,15 @@ summary: Transfer to a seaside private high school, choose a club, keep your
   promises, and answer unspoken feelings during a twenty-one-day festival
   countdown.
 pluginPolicy:
-  packs:
-    - id: haruka-galgame
-      label: Campus Romance · Visual Novel
-      description:
-        Full-screen stage with portraits and day/night scenes, selectable
-        replies, and live affection, heart routes, promises, rumors, and
-        festival prep that change with every conversation.
-      reason:
-        Across the twenty-one-day festival countdown, every promise kept or
-        broken and every rumor stays on the panels, and the five heart routes
-        advance only through moments that actually happen.
+  pitch:
+    label: Campus Romance · Visual Novel
+    description:
+      Full-screen stage with portraits and day/night scenes, selectable
+      replies, and live affection, heart routes, promises, rumors, and
+      festival prep that change with every conversation.
+    reason: Across the twenty-one-day festival countdown, every promise kept or
+      broken and every rumor stays on the panels, and the five heart routes
+      advance only through moments that actually happen.
 characterSchema:
   attributes:
     - id: persona

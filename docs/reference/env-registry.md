@@ -247,7 +247,7 @@ v0.0.42 调整了插件扩展契约，旧的开发数据不会自动升级。桌
 **同时检查用户目录。** 看一下用户插件目录（`COVEL_USER_PLUGINS_DIR`，默认 `$COVEL_HOME/plugins`）和用户世界目录（`COVEL_USER_WORLDS_DIR`，默认 `$COVEL_HOME/worlds`）：
 
 - 多 runtime 插件的子清单必须叫 `RUNTIME.md`，不是旧的子 `PLUGIN.md`。
-- 世界的 `pluginPolicy` 使用当前的 `requested`、`recommended` 和契约解析规则。
+- 世界的 `pluginPolicy` 使用当前的写法：`preset`、`plus`、`pitch`、`packs`、`requires`（见[世界数据](./world-data.md#插件选择pluginpolicy)）。
 - `worldData` 里指向插件数据的目标使用 `contract:<id>`。
 
 先备份旧目录，再把包更新到能通过当前校验。旧文件不会自动转换；没核对过的用户内容不需要覆盖。

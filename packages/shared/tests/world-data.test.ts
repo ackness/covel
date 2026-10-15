@@ -24,13 +24,9 @@ describe("world data schemas", () => {
       name: "Locale World",
       summary: "Locale test",
       defaultLocale: " ru_ru ",
-      supportedLocales: ["ru_ru", "zh_hant_tw"],
     });
     expect(canonical.success).toBe(true);
-    if (canonical.success) {
-      expect(canonical.data.defaultLocale).toBe("ru-RU");
-      expect(canonical.data.supportedLocales).toEqual(["ru-RU", "zh-Hant-TW"]);
-    }
+    if (canonical.success) expect(canonical.data.defaultLocale).toBe("ru-RU");
 
     const traversal = worldManifestSchema.safeParse({
       id: "unsafe-world",
@@ -41,29 +37,39 @@ describe("world data schemas", () => {
     expect(traversal.success).toBe(false);
   });
 
-  it("allows world.yaml to declare pluginPolicy presets and tag preferences", () => {
-    const result = worldManifestSchema.safeParse({
+  it("allows world.yaml to name a built-in pack, its own plugins and a pitch", () => {
+    const world = {
       id: "policy-world",
       name: "Policy World",
       summary: "World with plugin policy",
       defaultLocale: "zh-CN",
-      supportedLocales: ["zh-CN"],
       tags: ["school"],
+    };
+    const result = worldManifestSchema.safeParse({
+      ...world,
       pluginPolicy: {
-        presetId: "dialogue-mode",
-        preferredTags: ["mode:dialogue", "role:character"],
-        avoidedTags: ["mode:traditional-story"],
-        packs: [
-          {
-            id: "custom-dialogue",
-            label: "Custom Dialogue",
-            requested: ["chat-mode-narrator", "scene-cast"],
-          },
-        ],
+        preset: "dialogue-mode",
+        plus: ["affinity", "story-events"],
+        pitch: {
+          label: "Campus",
+          description: "Dialogue with a route board.",
+          reason: "Relationships drive the story.",
+        },
+        packs: ["dialogue-mode", "low-cost"],
+        requires: ["narrative-engine@1"],
       },
     });
-
     expect(result.success).toBe(true);
+
+    // A pack is named, not copied into the world.
+    expect(
+      worldManifestSchema.safeParse({
+        ...world,
+        pluginPolicy: {
+          packs: [{ id: "custom-dialogue", requested: ["narrator"] }],
+        },
+      }).success,
+    ).toBe(false);
   });
 
   it("validates a minimal descriptor", () => {
@@ -161,11 +167,23 @@ describe("world data schemas", () => {
     expect(validateWorldManifest({ ...manifest, id: 1 }, options).valid).toBe(
       false,
     );
-    expect(
-      validateWorldManifest(
-        { ...manifest, pluginPolicy: { typo: [] } },
-        options,
-      ).valid,
-    ).toBe(false);
+    // An unknown key of pluginPolicy is reported and left out too…
+    const typo = validateWorldManifest(
+      { ...manifest, pluginPolicy: { typo: [], plus: ["affinity"] } },
+      options,
+    );
+    expect(typo.valid).toBe(true);
+    expect(typo.ignoredFields).toEqual(["schemaVersion", "pluginPolicy.typo"]);
+    expect(typo.data).toMatchObject({ pluginPolicy: { plus: ["affinity"] } });
+    // …while a known one written wrong drops the section with an error.
+    const wrong = validateWorldManifest(
+      { ...manifest, pluginPolicy: { plus: "affinity" } },
+      options,
+    );
+    expect(wrong.valid).toBe(true);
+    expect(wrong.data).not.toHaveProperty("pluginPolicy");
+    expect(wrong.droppedSections).toEqual([
+      expect.objectContaining({ path: "pluginPolicy.plus" }),
+    ]);
   });
 });

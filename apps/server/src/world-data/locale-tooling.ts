@@ -119,7 +119,10 @@ const IDENTIFIER_KEYS: ReadonlySet<string> = new Set([
   "sceneId",
   "worldData",
   "defaultLocale",
-  "presetId",
+  "preset",
+  "plus",
+  "packs",
+  "requires",
   "version",
   "budgetClass",
   "owner",
@@ -493,7 +496,8 @@ async function worldFiles(worldDir: string): Promise<WorldFiles> {
     const descriptor = await loadWorldDataDescriptor({
       worldRoot: worldDir,
       worldDataPath: worldData,
-      worldId: String(manifest.id),
+      worldId:
+        typeof manifest.id === "string" ? manifest.id : path.basename(worldDir),
     });
     for (const source of descriptor.sources) {
       const { kind, path: file, key, localeArrayKeys = [] } = source.descriptor;

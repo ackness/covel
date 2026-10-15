@@ -54,12 +54,12 @@ Make the `description` clear about what the attribute covers. The model uses it 
 
 ## 2. Turn on the two plugins
 
-Add them to `pluginPolicy.requested`:
+Add them to `pluginPolicy.plus`:
 
 ```yaml
 pluginPolicy:
-  presetId: traditional-story
-  requested:
+  preset: traditional-story
+  plus:
     - tabletop-rules
     - dice-check
 ```

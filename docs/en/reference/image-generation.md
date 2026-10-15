@@ -33,7 +33,7 @@ flowchart LR
 
 **World and stage**
 
-- A world package's `pluginPolicy` only expresses "which plugins are recommended and which are excluded". The plugins that finally run are decided by the contracts the plugins declare and by the session's authorization.
+- A world package's `pluginPolicy` only says which plugins a session selects by default (`preset`, `plus`) and which contracts the world cannot do without (`requires`). The plugins that finally run are decided by the contracts the plugins declare and by the session's authorization.
 - The scene stage depends on the `scene-stage@1` contract. It does not depend on having some image-generation plugin installed.
 - Prepared material is imported through the data contracts that the enabled plugins expose. Existing images can be shown without a generation model being configured.
 - `character-blueprint` saves and displays character media. It does not generate images.

@@ -1,13 +1,8 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { parse as parseYaml } from "yaml";
 import { z } from "zod";
-import {
-  i18nTextSchema,
-  WORLD_LOCALIZED_TEXT_KEY,
-  worldManifestSchema,
-} from "@covel/shared";
+import { i18nTextSchema, WORLD_LOCALIZED_TEXT_KEY } from "@covel/shared";
 import { loadWorldDataSummary } from "../../../world-data/world-load.js";
 import { loadSingleWorld } from "../../../world-seed-loader.js";
 import { validateWorldBundle } from "./worlds.js";
@@ -51,20 +46,29 @@ export function findWorldDirectories(
     );
 }
 
-export async function inspectWorldBundle(entries: readonly ExtractedEntry[]) {
-  const { worldId } = validateWorldBundle(entries);
-  const manifest = worldManifestSchema.parse(
-    parseYaml(
-      entries
-        .find((entry) => entry.relativePath === "world.yaml")!
-        .content.toString("utf8"),
-    ),
+/**
+ * The name a world package without `id` takes: the last segment of its
+ * directory, or the repository's name for a package at the repository root.
+ */
+export function worldPackageName(repository: string, directory: string) {
+  return (
+    directory.split("/").filter(Boolean).at(-1) ??
+    repository.split("/").filter(Boolean).at(-1) ??
+    ""
   );
+}
+
+export async function inspectWorldBundle(
+  entries: readonly ExtractedEntry[],
+  packageName?: string,
+) {
+  const { worldId, manifest } = validateWorldBundle(entries, packageName);
   // Validate referenced dimensions and world data using the real loader in an
   // isolated directory. No scripts or package managers are executed.
   const temp = await mkdtemp(path.join(os.tmpdir(), "covel-world-preview-"));
   try {
-    const directory = path.join(temp, "world");
+    // Named by its ID, as installed: a world without `id` takes the name.
+    const directory = path.join(temp, worldId);
     await materializeEntries(directory, entries);
     const summary = await loadWorldDataSummary({
       worldRoot: directory,

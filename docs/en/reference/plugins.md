@@ -711,6 +711,7 @@ A namespace that receives world data can also declare `authoring` (`title`, `sum
 If reading an example or preparing a generatable contract schema fails during a request, only that contract is skipped, with its plugin, namespace, and reason reported. The plugin remains enabled and other content can still be generated. `pnpm describe:authoring --check` continues to report broken examples to authors.
 
 - Only a namespace that lists `accepts` can declare it.
+- `source` is the convention path in a world package for this content (`kind`, `path`, `key`). A world author who puts the file there has it imported without writing a descriptor. The last segment of `path` can be `*.<extension>` (for example `data/rules/*.yaml`): each such file in the folder is a source, imported in file-name order. The rules are in [import by convention](./world-data.md#import-by-convention).
 - `pnpm describe:authoring` summarizes the declarations of all scanned plugins. Adding `--check` validates each `example` against its namespace's schema.
 - For the fields, see the [Plugin manifest field table](./schema/plugin-manifest.md).
 
@@ -804,7 +805,7 @@ After a namespace declares `search`, its records enter the framework's memory re
 
 **How a world and a gameplay pack give the initial request.**
 
-- A world's `pluginPolicy` uses `presetId`, `preferredTags`, `avoidedTags`, `requested`, `recommended`, and `packs`. A gameplay pack uses `requested` and `recommended`.
+- A world's `pluginPolicy` picks a built-in pack with `preset` and adds the plugins it wants with `plus`; see [plugin selection](./world-data.md#plugin-selection-pluginpolicy). A gameplay pack uses `requested` and `recommended`. The initial explicit requests are the `preset` pack's `requested` plus `plus`.
 - A built-in gameplay pack (`packs/builtin.yaml`) can also have `defaultViewMode` (`stage` or `parsed`). When a world is created with AI for this pack, the generated world gets this `defaultViewMode`. The framework makes no decision by pack ID: the choices of AI world creation are all the packs of this catalogue; see `packs` in [`GET /api/framework/authoring`](./api.md#get-apiframeworkauthoring).
 - A recommendation is not enabled automatically, and it does not override the player's explicit exclusion.
 - `defaultPluginIds` from `GET /api/worlds/:id/plugin-plan` is the initial set of explicit requests. The session-prep screen and the create endpoint then use the same resolver to compute the active set.
@@ -814,12 +815,12 @@ After a namespace declares `search`, its records enter the framework's memory re
 
 - Switching packs does not change the view mode. A pack's `defaultViewMode` is written into the world only during AI world generation.
 - Switching replaces the requests that the previous pack contributed, including the pack the world selected at the start.
-- A plugin that is in the initial default requests and is also requested by the initial pack belongs to that pack, even if it also matches the world's `preferredTags`. After a switch, it is kept only if the new pack also requests it. This lets the new pack's narrative engine replace the old pack's engine.
-- The other initial default requests, the world's `requested` list, and the requests the player added by hand are kept. An explicit exclusion still wins.
+- A plugin in the initial default requests that the initial pack requests belongs to that pack. After a switch, it is kept only if the new pack also requests it. This lets the new pack's narrative engine replace the old pack's engine.
+- The world's `plus` and the requests the player added by hand are kept. An explicit exclusion still wins.
 - A manual change clears the highlight on the pack card. The source of the old pack is still remembered, though, so the next switch does not add the old pack's plugins back. A plugin in a pack that the player re-enables by hand is kept as a manual choice.
-- The resolver still checks the world's `requires` on its own. Do not treat `requested` as a required item that cannot be canceled.
+- The resolver still checks the world's `requires` on its own. Do not treat `plus` as a required item that cannot be canceled.
 - A gameplay pack can have `excluded`: choosing the pack turns those plugins off, `kind: core` ones included, and the player can turn them back on. Switching to the next pack lifts only the exclusions the previous pack added; the player's own exclusions stay. The exclusions of the pack the world selects at the start apply from the beginning. A plugin that is not installed does not appear in `excluded`.
-- The "Back to the minimal set" button keeps only the narrative plugins (the selected ones, or the core ones when none is selected) and the plugins that these and the world's `requires` pull in. It adds no extra requirement for a `world.dimensions@1` provider. Every other core plugin and every plugin the world `requested` is excluded, and the pack highlight is cleared.
+- The "Back to the minimal set" button keeps only the narrative plugins (the selected ones, or the core ones when none is selected) and the plugins that these and the world's `requires` pull in. It adds no extra requirement for a `world.dimensions@1` provider. Every other core plugin and every plugin in the world's `plus` is excluded, and the pack highlight is cleared.
 
 **A save keeps the set the player confirmed.**
 

@@ -54,9 +54,9 @@ it("accepts records only for contracts the brief requests, and requires each req
   ]);
 });
 
-it("requests the receiving plugin of every selected contract", () => {
+it("adds the receiving plugin of every selected contract", () => {
   const manifest: Record<string, unknown> = {
-    pluginPolicy: { requested: ["narrator"] },
+    pluginPolicy: { plus: ["narrator"] },
   };
   expect(
     applyCreationBriefToManifest(manifest, brief, [
@@ -64,7 +64,7 @@ it("requests the receiving plugin of every selected contract", () => {
     ]),
   ).toEqual({ errors: [], warnings: [] });
   expect(manifest.pluginPolicy).toEqual({
-    requested: ["narrator", "custom-plugin"],
+    plus: ["narrator", "custom-plugin"],
   });
 });
 

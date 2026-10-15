@@ -133,7 +133,7 @@ describe("dynamic dimension author import and sync", () => {
     ).toEqual([]);
   });
 
-  it("resolves external over inline and descriptor replacement, then protects progress even with force", async () => {
+  it("takes data/dimensions.yaml over inline dimensions, then protects progress even with force", async () => {
     const args = await fixture();
     const root = await mkdtemp(path.join(tmpdir(), "covel-dimension-import-"));
     roots.push(root);
@@ -144,26 +144,6 @@ describe("dynamic dimension author import and sync", () => {
       JSON.stringify({
         ...manifest,
         dimensions: { stamina: definition(1), replaced: definition(1) },
-        dimensionSources: { stamina: "data/stamina.yaml" },
-        worldData: "data/world.data.yaml",
-      }),
-    );
-    await writeFile(
-      path.join(world, "data/stamina.yaml"),
-      JSON.stringify(definition(2)),
-    );
-    await writeFile(
-      path.join(world, "data/world.data.yaml"),
-      JSON.stringify({
-        schemaVersion: 1,
-        sources: {
-          dims: {
-            kind: "yaml",
-            path: "data/dimensions.yaml",
-            schema: "covel://world/dimensions",
-            to: "world:metadata.dimensions",
-          },
-        },
       }),
     );
     await writeFile(
@@ -354,24 +334,21 @@ describe("dynamic dimension author import and sync", () => {
     });
     await args.store.close();
   });
-  it("imports and syncs inline/external worlds with no worldData descriptor", async () => {
+  it("imports and syncs a world's inline dimensions with no worldData descriptor", async () => {
     const args = await fixture();
     const root = await mkdtemp(path.join(tmpdir(), "covel-dimension-inline-"));
     roots.push(root);
     const world = path.join(root, "world");
     await mkdir(world);
-    await writeFile(
-      path.join(world, "world.yaml"),
-      JSON.stringify({
-        ...manifest,
-        dimensions: { stamina: definition(1) },
-        dimensionSources: { stamina: "stamina.yaml" },
-      }),
-    );
-    await writeFile(
-      path.join(world, "stamina.yaml"),
-      JSON.stringify(definition(2)),
-    );
+    const writeManifest = (version: number) =>
+      writeFile(
+        path.join(world, "world.yaml"),
+        JSON.stringify({
+          ...manifest,
+          dimensions: { stamina: definition(version) },
+        }),
+      );
+    await writeManifest(1);
     const options = { ...args, worldsDirs: [root] };
     await loadRecord(args.store, world);
     await importWorldDataForSession(options);
@@ -382,11 +359,8 @@ describe("dynamic dimension author import and sync", () => {
         "_dimensions",
         "stamina",
       ))!.value,
-    ).toMatchObject({ value: 2, version: 1 });
-    await writeFile(
-      path.join(world, "stamina.yaml"),
-      JSON.stringify(definition(3)),
-    );
+    ).toMatchObject({ value: 1, version: 1 });
+    await writeManifest(3);
     await loadRecord(args.store, world);
     await syncWorldDataForSession({ ...options, dryRun: false });
     expect(

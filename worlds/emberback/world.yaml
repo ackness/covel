@@ -5,9 +5,6 @@ version: 1.2.0
 summary: A lonely relay on a tidally locked world receives a distress call in
   your own voice—sent from seventy-two hours in the future.
 defaultLocale: en-US
-supportedLocales:
-  - en-US
-  - zh-CN
 tags:
   - science-fiction
   - frontier
@@ -20,60 +17,28 @@ license: MIT
 cover: media/gallery/world-cover.webp
 accentColor: "oklch(72% 0.14 50)"
 pluginPolicy:
-  packs:
-    - id: emberback-rescue
-      label: Emberback Rescue
-      description: >-
-        A traditional story with dice checks, quests, a field inventory, crew
-        relationships, and live panels for the storm, the power grid, the signal
-        log, and the convoy.
-      tags:
-        - mode:traditional-story
-      reason: >-
-        Every choice in the three hours before Crownfire spends something —
-        time, charge, cargo, or trust — and the panels show exactly what is
-        left.
-      requested:
-        - pregame
-        - world-init
-        - char-creator
-        - narrator
-        - dice-check
-        - core-quest
-        - inventory
-        - affinity
-        - guide
-        - codex
-        - npc-graph
-        - living-world-rules
-        - character-blueprint
-        - story-events
-      recommended:
-        - branch-reply
-  presetId: emberback-rescue
-  preferredTags:
-    - mode:traditional-story
-  avoidedTags:
-    - mode:dialogue
-  requested:
+  preset: traditional-story
+  plus:
     - dice-check
     - core-quest
     - inventory
     - affinity
-  recommended:
-    - npc-graph
-    - codex
-    - guide
     - character-blueprint
-    - living-world-rules
     - story-events
+  pitch:
+    label: Emberback Rescue
+    description: >-
+      A traditional story with dice checks, quests, a field inventory, crew
+      relationships, and live panels for the storm, the power grid, the signal
+      log, and the convoy.
+    reason: >-
+      Every choice in the three hours before Crownfire spends something —
+      time, charge, cargo, or trust — and the panels show exactly what is
+      left.
 pluginSettings:
   story-events:
     planner: true
 characterSchema:
-  types:
-    - npc
-    - companion
   attributes:
     - id: grit
       name: Grit

@@ -4,8 +4,8 @@ import { PLUGIN_IDS, type PluginId, type Visual } from "./copy.js";
 // copied from the packs that ship in the repository (requested and
 // recommended), minus the setup plugins every session runs (pregame,
 // world-init, char-creator):
-// - stage: worlds/haruka-academy/world.yaml `haruka-galgame`
-// - tabletop: worlds/lantern-barrow/world.yaml `classic-tabletop`
+// - stage: worlds/haruka-academy/world.yaml, `dialogue-mode` plus its `plus`
+// - tabletop: worlds/lantern-barrow/world.yaml, `traditional-story` plus its `plus`
 // - story: packs/builtin.yaml `traditional-story`
 
 export const PACKS: Record<Visual, readonly PluginId[]> = {
@@ -33,7 +33,6 @@ export const PACKS: Record<Visual, readonly PluginId[]> = {
     "living-world-rules",
     "character-blueprint",
     "story-events",
-    "branch-reply",
   ],
   story: [
     "narrator",

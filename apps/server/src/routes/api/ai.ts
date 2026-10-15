@@ -196,7 +196,6 @@ function storageMetadata(
 function recordForStoreOnly(record: WorldRecord, saveTarget: SaveTarget) {
   const metadata = { ...record.metadata };
   delete metadata.source;
-  delete metadata.dimensionSources;
   delete metadata.worldDataPath;
   delete metadata.worldData;
   return {

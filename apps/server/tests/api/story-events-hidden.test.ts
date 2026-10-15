@@ -116,8 +116,6 @@ async function makeWorld(): Promise<{ worldsDir: string; worldDir: string }> {
 name: Hidden Demo
 summary: A harbor with a secret.
 defaultLocale: en-US
-supportedLocales:
-  - en-US
 dimensions:
   location:
     name: Location

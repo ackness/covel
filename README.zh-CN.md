@@ -107,7 +107,7 @@ worlds/my-world/
     └── 角色 presence 与场景索引
 ```
 
-`pluginPolicy` 选择预设，并以 `requested`、`recommended` 声明插件；版本化契约负责解析依赖，推荐项仍由玩家选择。`requires` 列出世界离不开的契约（如 `action-check@1`）：任何提供该契约的已安装插件都能满足，没有提供者时无法开始游戏。`pluginSettings` 提供低于玩家覆盖优先级的世界默认值。通过 WorldData 导入 `memory.blocks@1`，可以加入线索、嫌疑人、信号日志、倒计时等题材记忆定义，无需修改 memory 插件。
+`pluginPolicy` 用 `preset` 选一个内置玩法包，用 `plus` 加上世界还要的插件；版本化契约负责解析依赖，玩家开局前仍可改选。`requires` 列出世界离不开的契约（如 `action-check@1`）：任何提供该契约的已安装插件都能满足，没有提供者时无法开始游戏。`pluginSettings` 提供低于玩家覆盖优先级的世界默认值。通过 WorldData 导入 `memory.blocks@1`，可以加入线索、嫌疑人、信号日志、倒计时等题材记忆定义，无需修改 memory 插件。
 
 `WorldData` 是统一导入协议，不是第二种世界格式。source 可以是 YAML、JSON、Markdown、文本或媒体，目标可以是通用角色/资料库，也可以是明确接受 WorldData 的插件 namespace。应用内 AI 构筑器生成的也是同一套标准包：它会根据结构化创作简报生成 manifest、世界观、维度、主要角色、资料库和规则。文件型世界包可以携带完整媒体；浏览器或 store 中的 AI 世界保留可移植文本回退，媒体仍由文件或资源存储承载。
 
@@ -124,7 +124,7 @@ worlds/my-world/characters/main-cast.ja.json
 worlds/my-world/data/rules/core.ja.yaml
 ```
 
-世界包通过 `defaultLocale` 与 `supportedLocales` 声明语言。某个语言版本没翻译的文字回退到世界自己的语言，因此只完成部分翻译也不会影响游玩，`pnpm validate:world` 会列出还缺什么。四个内置世界都带中英两个版本：**Emberback Relay** 用英文写成（`defaultLocale: en-US`），其余三个用中文写成。世界没有玩家的语言时，可以在应用里翻译，也可以用 `pnpm i18n translate`。
+世界包用 `defaultLocale` 声明自己的语言，每个 `world.<locale>.yaml` 或 `WORLD.<locale>.md` 再加一个语言版本。某个语言版本没翻译的文字回退到世界自己的语言，因此只完成部分翻译也不会影响游玩，`pnpm validate:world` 会列出还缺什么。四个内置世界都带中英两个版本：**Emberback Relay** 用英文写成（`defaultLocale: en-US`），其余三个用中文写成。世界没有玩家的语言时，可以在应用里翻译，也可以用 `pnpm i18n translate`。
 
 玩家、世界作者和插件作者都可以按照 [i18n 指南](./docs/reference/i18n.md)自行加入新的语言支持。`apps/web/src/i18n/locales/` 中的完整 JSON 词典会在构建时自动发现并加入 Web 语言选项，无需手工注册；新增词典后需要重新构建，未随包提供对应翻译的 Electron 原生文案会回退英文。若要本地化内容，按需补充语言文件：插件里的 `locales/<lang>.yaml`，世界里的 `world.<lang>.yaml`、`WORLD.<lang>.md` 以及 `data/rules/core.<lang>.yaml` 这样的数据文件。插件提示词保持英文，可附带一份中文变体；模型按会话语言输出。只翻译自然语言内容，稳定 ID、契约、工具、路径和调度配置继续以权威定义为准。完成后可运行 `pnpm check:i18n` 校验。
 

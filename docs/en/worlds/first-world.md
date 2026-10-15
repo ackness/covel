@@ -1,6 +1,6 @@
 # Your first world
 
-This page takes you through writing a small world package by hand. It is called "潮灯镇" (Tidelamp). You will validate it, and then start a game with it in Covel. When you finish, you have a world made of four files that you can keep expanding.
+This page takes you through writing a world package by hand. It is called "潮灯镇" (Tidelamp). First you make the smallest world, with two files, validate it and start a game; then you add gameplay, a lorebook and a character step by step. When you finish, you have a world made of four files that you can keep expanding.
 
 It takes about twenty minutes. You do not need to write code.
 
@@ -27,52 +27,28 @@ tidelamp/
 
 ## 1. Create the folder
 
-Worlds go in the user worlds folder. By default that is `~/.covel/worlds/`. Name the folder the same as the world ID. Use only lowercase letters, digits, and hyphens, and start with a letter.
+Worlds go in the user worlds folder. By default that is `~/.covel/worlds/`. The folder's name is the world's ID: use only lowercase letters, digits, and hyphens, and start with a letter.
 
 ```bash
-mkdir -p ~/.covel/worlds/tidelamp/data ~/.covel/worlds/tidelamp/characters
+mkdir -p ~/.covel/worlds/tidelamp
 ```
 
 ## 2. Write `world.yaml`
 
-This file states the world's identity and the gameplay it wants. Create `~/.covel/worlds/tidelamp/world.yaml`:
+This file states what the world is called and which language it is written in. Create `~/.covel/worlds/tidelamp/world.yaml`:
 
 ```yaml
-id: tidelamp
 name: 潮灯镇
-version: 0.1.0
 summary: 每逢大退潮，海床上会露出一条通往旧灯塔的石路。今夜潮水退得比任何一年都远，熄了四十年的灯塔亮了。
 defaultLocale: zh-CN
-tags:
-  - mystery
-  - coastal
-pluginPolicy:
-  presetId: traditional-story
-characterSchema:
-  types:
-    - npc
-  attributes:
-    - id: resolve
-      name: 胆识
-      type: number
-      category: stats
-      min: 1
-      max: 5
-      defaultValue: 3
-      description: 面对未知时能不能稳住。
 ```
 
-Here is what each part says:
+| Field             | What it does                                                                 |
+| ----------------- | ---------------------------------------------------------------------------- |
+| `name`, `summary` | The name and the short description shown on the world card                   |
+| `defaultLocale`   | The language the world is written in. Every file here uses this one language |
 
-| Field                   | What it does                                                                                                      |
-| ----------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| `id`                    | The world's ID. Two worlds in the same folder cannot use the same ID                                              |
-| `name`, `summary`       | The name and the short description shown on the world card                                                        |
-| `defaultLocale`         | The language the world is written in. Every file here uses this one language                                      |
-| `pluginPolicy.presetId` | The gameplay pack used by default when a game starts. `traditional-story` is the built-in traditional story set   |
-| `characterSchema`       | The types and attributes of characters in this world. Here, one attribute is defined: "胆识" (nerve), from 1 to 5 |
-
-There are four built-in gameplay packs: `traditional-story` (Traditional Story), `dialogue-mode` (Dialogue Mode), `low-cost` (Low Cost, which saves tokens), and `narrative-only` (Narrative Only).
+These three fields are all that is required. The world's ID is the folder's name, `tidelamp`; you do not write it in the file.
 
 ## 3. Write `WORLD.md`
 
@@ -109,7 +85,56 @@ Two things are worth noting:
 > [!TIP]
 > A good length for the main text is 800 to 1500 characters. It goes into the prompt on every turn. If it is too long, it costs more and gets cut short. Put details that do not need to appear on every turn into the lorebook in the next step.
 
-## 4. Add a lorebook
+## 4. Validate and play a first game
+
+The two files are already a complete world. Run this in the root folder of the Covel repository:
+
+```bash
+pnpm validate:world ~/.covel/worlds/tidelamp
+```
+
+When it passes, it prints one line:
+
+```text
+✓ /Users/you/.covel/worlds/tidelamp/world.yaml
+```
+
+Start Covel (use `pnpm dev` when running from source; if it is already running, restart it once), and open the world selection page. You will see "潮灯镇" (Tidelamp) in the list. Click "Enter", then "Start Game".
+
+This world has not chosen any gameplay yet, so the game has only the core plugins every game has: the narrator tells the story, and you create the protagonist when the game starts. The first part of the story should begin at the inn on the harbor on the night of the great low tide.
+
+## 5. Choose gameplay and character attributes
+
+Go back to `world.yaml` and add two sections at the end:
+
+```yaml
+name: 潮灯镇
+summary: 每逢大退潮，海床上会露出一条通往旧灯塔的石路。今夜潮水退得比任何一年都远，熄了四十年的灯塔亮了。
+defaultLocale: zh-CN
+pluginPolicy:
+  preset: traditional-story
+characterSchema:
+  types:
+    - npc
+  attributes:
+    - id: resolve
+      name: 胆识
+      type: number
+      category: stats
+      min: 1
+      max: 5
+      defaultValue: 3
+      description: 面对未知时能不能稳住。
+```
+
+| Field                 | What it does                                                                                                      |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `pluginPolicy.preset` | The gameplay pack used by default when a game starts. `traditional-story` is the built-in traditional story set   |
+| `characterSchema`     | The types and attributes of characters in this world. Here, one attribute is defined: "胆识" (nerve), from 1 to 5 |
+
+There are four built-in gameplay packs: `traditional-story` (Traditional Story), `dialogue-mode` (Dialogue Mode), `low-cost` (Low Cost, which saves tokens), and `narrative-only` (Narrative Only).
+
+## 6. Add a lorebook
 
 Lorebook entries are given to the model only when they are mentioned. Each entry has a set of trigger words. When one of these words appears during play, that entry's content goes into the prompt. Create `~/.covel/worlds/tidelamp/data/lorebook.yaml`:
 
@@ -124,7 +149,7 @@ Lorebook entries are given to the model only when they are mentioned. Each entry
 
 Put the file at the standard path `data/lorebook.yaml`, and it is imported automatically. You do not need to register it anywhere else.
 
-## 5. Add a preset character
+## 7. Add a preset character
 
 Create `~/.covel/worlds/tidelamp/characters/characters.json`:
 
@@ -145,18 +170,10 @@ Create `~/.covel/worlds/tidelamp/characters/characters.json`:
 > [!IMPORTANT]
 > When the same person, place, or item appears in more than one file, the name and the ID must match exactly, and must be written the same way as in `WORLD.md`. The model matches them by name.
 
-## 6. Validate
-
-Run this in the root folder of the Covel repository:
+## 8. Validate again and play
 
 ```bash
 pnpm validate:world ~/.covel/worlds/tidelamp
-```
-
-When it passes, it prints one line:
-
-```text
-✓ /Users/you/.covel/worlds/tidelamp/world.yaml
 ```
 
 The validator checks the manifest fields, the main world text, the plugin IDs, and every record in each data file. When there is an error, it gives the file, the location, and the reason. For example, if you write `category: stat` instead of `category: stats`:
@@ -169,13 +186,7 @@ The validator checks the manifest fields, the main world text, the plugin IDs, a
 
 Fix what it points to, and run it again until it passes.
 
-## 7. Open it in the game
-
-Start Covel (use `pnpm dev` when running from source; if it is already running, restart it once), and open the world selection page. You will see "潮灯镇" (Tidelamp) in the list.
-
-Click "Enter". On the session-prep screen, check that the gameplay pack is "Traditional Story." Then click "Start Game". After you create the protagonist, the first part of the story should begin at the inn on the harbor on the night of the great low tide.
-
-Try these things to confirm that each file is working:
+Restart Covel and enter "潮灯镇" again. This time the session-prep screen has the "Traditional Story" gameplay pack selected; click "Start Game". Try these things to confirm that each file is working:
 
 | What you do                                   | What you should see                                                              | Which file it comes from               |
 | --------------------------------------------- | -------------------------------------------------------------------------------- | -------------------------------------- |
@@ -186,19 +197,19 @@ Try these things to confirm that each file is working:
 
 ## When it does not work as expected
 
-| Symptom                                                 | Cause and fix                                                                                                                               |
-| ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| The world is not in the world list                      | The folder is not in the user worlds folder, or `world.yaml` has an error. Run the validation command to check                              |
-| Validation reports `Multiple world packages declare id` | Two folders in the same parent folder use the same `id`. This usually happens when you copy a folder and forget to change the ID            |
-| Validation reports `Unrecognized key`                   | You wrote a field that the manifest does not have. Check it against the [world manifest field table](../reference/schema/world-manifest.md) |
-| The opening does not match `WORLD.md`                   | The "Opening" section is not specific enough. Add the time, the place, and the protagonist's situation                                      |
-| The model reveals the secret too early                  | In the hidden thread, state until when the secret must not be revealed                                                                      |
+| Symptom                                                 | Cause and fix                                                                                                                                 |
+| ------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| The world is not in the world list                      | The folder is not in the user worlds folder, or `world.yaml` has an error. Run the validation command to check                                |
+| Validation reports `Multiple world packages declare id` | Two worlds in the same parent folder use the same ID. This usually happens when you copy a folder that writes an `id` and forget to change it |
+| Validation reports `Unrecognized key`                   | You wrote a field that the manifest does not have. Check it against the [world manifest field table](../reference/schema/world-manifest.md)   |
+| The opening does not match `WORLD.md`                   | The "Opening" section is not specific enough. Add the time, the place, and the protagonist's situation                                        |
+| The model reveals the secret too early                  | In the hidden thread, state until when the secret must not be revealed                                                                        |
 
 ## Next steps
 
 You now have a world you can play. You can keep going in these directions:
 
-- **Try a different style of play.** Change `presetId` to `dialogue-mode`. Or add `dice-check`, `core-quest`, `inventory`, and `affinity` to `pluginPolicy.requested`, so the world becomes an adventure with checks and quests.
+- **Try a different style of play.** Change `preset` to `dialogue-mode`. Or add `dice-check`, `core-quest`, `inventory`, and `affinity` to `pluginPolicy.plus`, so the world becomes an adventure with checks and quests.
 - **Add more preset content.** Run `pnpm describe:authoring` in the repository. It lists every kind of content you can preset in the current version, the path each file goes in, and a valid example.
 - **See a finished world.** The repository's `worlds/` folder has four complete worlds. `worlds/emberback` is a reference that uses checks, quests, inventory, and affinity.
 - **Add pictures.** See [world portraits](./portraits.md) and [world scenes](./scenes.md).

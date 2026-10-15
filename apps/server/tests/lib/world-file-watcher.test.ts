@@ -17,7 +17,7 @@ it.each(["fixture-world", "physical-folder"])(
   async (directoryName) => {
     const root = await mkdtemp(path.join(os.tmpdir(), "covel-world-watch-"));
     const worldDir = path.join(root, directoryName);
-    const dimensionsDir = path.join(worldDir, "dimensions");
+    const dimensionsDir = path.join(worldDir, "data");
     const store = createMemoryStore();
     const sessionLock = createInProcessSessionLock();
     const bus = createEventBus(store);
@@ -32,16 +32,13 @@ name: Fixture world
 version: "0.1.0"
 summary: A world for file watcher tests.
 defaultLocale: en-US
-supportedLocales: [en-US]
-dimensionSources:
-  tone: dimensions/tone.yaml
 `,
         "utf8",
       );
-      const dimensionFile = path.join(dimensionsDir, "tone.yaml");
+      const dimensionFile = path.join(dimensionsDir, "dimensions.yaml");
       await writeFile(
         dimensionFile,
-        "name: tone\nschema: {}\ninitialValue:\n  genres:\n    - mystery\n  contentRating: teen\n",
+        "tone:\n  name: tone\n  schema: {}\n  initialValue:\n    genres:\n      - mystery\n    contentRating: teen\n",
         "utf8",
       );
       const storage = {
@@ -82,7 +79,7 @@ dimensionSources:
       });
 
       const changed =
-        "name: tone\nschema: {}\ninitialValue:\n  genres:\n    - adventure\n  contentRating: teen\n";
+        "tone:\n  name: tone\n  schema: {}\n  initialValue:\n    genres:\n      - adventure\n    contentRating: teen\n";
       watcher.start();
       await writeFile(dimensionFile, changed, "utf8");
 

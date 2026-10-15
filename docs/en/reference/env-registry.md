@@ -247,7 +247,7 @@ v0.0.42 changed the plugin extension contract. Old development data is not upgra
 **Also check the user folders.** Look at the user plugin folder (`COVEL_USER_PLUGINS_DIR`, default `$COVEL_HOME/plugins`) and the user world folder (`COVEL_USER_WORLDS_DIR`, default `$COVEL_HOME/worlds`):
 
 - The sub-manifest of a plugin with several runtimes must be named `RUNTIME.md`, not the old sub-`PLUGIN.md`.
-- A world's `pluginPolicy` uses the current `requested`, `recommended`, and contract resolution rules.
+- A world's `pluginPolicy` uses the current form: `preset`, `plus`, `pitch`, `packs` and `requires` (see [world data](./world-data.md#plugin-selection-pluginpolicy)).
 - A target in `worldData` that points to plugin data uses `contract:<id>`.
 
 Back up the old folders first. Then update the packages until they pass the current validation. Old files are not converted automatically. User content that has not been checked does not need to be overwritten.

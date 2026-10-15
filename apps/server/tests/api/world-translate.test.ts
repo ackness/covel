@@ -299,7 +299,7 @@ describe("POST /api/worlds/:id/translate", () => {
     },
   );
 
-  it("writes the edition beside the world's files and declares it", async () => {
+  it("writes the edition beside the world's files, which makes it one", async () => {
     const dir = await writeWorld(userWorlds, "ash-harbor");
 
     const events = await readSse(
@@ -322,9 +322,9 @@ describe("POST /api/worlds/:id/translate", () => {
     expect(await readFile(path.join(dir, "WORLD.ja-JP.md"), "utf8")).toContain(
       "【# Ash Harbor",
     );
-    // A session may now use the edition.
-    expect(await readFile(path.join(dir, "world.yaml"), "utf8")).toContain(
-      "supportedLocales:\n  - en-US\n  - ja-JP\n",
+    // A session may now use the edition; world.yaml is not changed.
+    expect(await readFile(path.join(dir, "world.yaml"), "utf8")).not.toContain(
+      "ja-JP",
     );
     expect(done.world.metadata?.supportedLocales).toEqual(["en-US", "ja-JP"]);
     expect(
@@ -350,8 +350,6 @@ describe("POST /api/worlds/:id/translate", () => {
         summary: "A port that burns every winter.",
         version: "0.1.0",
         defaultLocale: "en-US",
-        supportedLocales: ["en-US"],
-        pluginPolicy: { requested: [], recommended: [] },
       },
       locale: "en-US",
       lore: "# Ash Harbor\n\nThe harbor burns every winter.\n",

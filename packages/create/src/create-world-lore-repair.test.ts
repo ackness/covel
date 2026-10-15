@@ -12,10 +12,7 @@ version: "0.1.0"
 summary: 一个用于验证定向修复流程的世界。
 defaultLocale: zh-CN
 supportedLocales: [zh-CN]
-tags: [repair]
-pluginPolicy:
-  requested: []
-  recommended: []`;
+tags: [repair]`;
 
 const CLEAN_LORE = `# 修复世界
 

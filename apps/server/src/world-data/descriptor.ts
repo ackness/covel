@@ -8,10 +8,12 @@ import {
 } from "@covel/shared";
 import type {
   WorldDataDescriptor,
+  WorldDataDescriptorFile,
   WorldDataSourceDescriptor,
 } from "@covel/shared";
 import {
   conventionalDescriptor,
+  sourceRank,
   type ConventionalSource,
 } from "./conventions.js";
 import { resolveContainedPath } from "./safe-path.js";
@@ -29,7 +31,7 @@ async function readDescriptorFile(
   relativePath: string,
   options?: { override?: boolean },
 ): Promise<{
-  descriptor?: WorldDataDescriptor;
+  descriptor?: WorldDataDescriptorFile;
   path?: string;
   diagnostics: WorldDataDiagnostic[];
 }> {
@@ -82,7 +84,7 @@ async function readDescriptorFile(
       return { path: fullPath, diagnostics };
     }
     return {
-      descriptor: validation.data as WorldDataDescriptor,
+      descriptor: validation.data as WorldDataDescriptorFile,
       path: fullPath,
       diagnostics,
     };
@@ -125,37 +127,178 @@ function withDefaultSchema(
     : source;
 }
 
+/** The form two source paths are compared in: without `./` and a trailing `/`. */
+function samePath(left: string, right: string): boolean {
+  const normal = (value: string) =>
+    value
+      .split("/")
+      .filter((segment) => segment !== "" && segment !== ".")
+      .join("/");
+  return normal(left) === normal(right);
+}
+
+function issuesOf(error: {
+  readonly issues: readonly {
+    readonly path: readonly PropertyKey[];
+    readonly message: string;
+  }[];
+}): string {
+  return error.issues
+    .map(
+      (issue) =>
+        `${issue.path.map(String).join(".") || "<root>"}: ${issue.message}`,
+    )
+    .join("; ");
+}
+
+/**
+ * The conventional sources with the world's descriptor applied. An entry
+ * whose `path` is that of a conventional source changes it: the fields it
+ * writes replace the conventional ones, and the source takes the entry's ID.
+ * `enabled: false` turns it off. Any other entry adds a source and must be a
+ * whole one (`kind`, `path`, `to`). An entry that names the path of a
+ * conventional source this plugin set does not read changes nothing.
+ */
+function applyDescriptor(
+  conventional: WorldDataDescriptor | undefined,
+  written: WorldDataDescriptorFile | undefined,
+  descriptorPath: string | undefined,
+  scoped: boolean,
+): {
+  sources: [string, WorldDataSourceDescriptor][];
+  diagnostics: WorldDataDiagnostic[];
+} {
+  const diagnostics: WorldDataDiagnostic[] = [];
+  const sources: [string, WorldDataSourceDescriptor][] = Object.entries(
+    conventional?.sources ?? {},
+  );
+  const changed = new Set<number>();
+  for (const [id, entry] of Object.entries(written?.sources ?? {})) {
+    const index = sources.findIndex(([, source]) =>
+      samePath(source.path, entry.path),
+    );
+    const existing = index >= 0 ? sources[index] : undefined;
+    if (existing && changed.has(index)) {
+      diagnostics.push({
+        level: "error",
+        sourceId: id,
+        path: descriptorPath,
+        message: `source "${id}" names ${entry.path}, which another entry of the descriptor already changes`,
+        hint: "Keep one entry for each path.",
+      });
+      continue;
+    }
+    if (!existing && (entry.kind === undefined || entry.to === undefined)) {
+      // Without its plugin the file is not a source of this session; the
+      // entry has nothing to change. Without a plugin set, it is a mistake.
+      diagnostics.push({
+        level: scoped ? "info" : "warning",
+        sourceId: id,
+        path: descriptorPath,
+        message: `source "${id}" changes ${entry.path}, which no plugin reads by convention here; the entry changes nothing`,
+        hint: "Correct `path`, or write `kind` and `to` to add the file as a source of its own.",
+      });
+      continue;
+    }
+    const merged = worldDataSourceDescriptorSchema.safeParse({
+      ...existing?.[1],
+      ...entry,
+    });
+    if (!merged.success) {
+      diagnostics.push({
+        level: "error",
+        sourceId: id,
+        path: descriptorPath,
+        pointer: `sources.${id}`,
+        message: `sources.${id}: ${issuesOf(merged.error)}`,
+      });
+      continue;
+    }
+    const source = merged.data as WorldDataSourceDescriptor;
+    if (existing) {
+      sources[index] = [id, source];
+      changed.add(index);
+    } else sources.push([id, source]);
+  }
+  const seen = new Set<string>();
+  const unique = sources.filter(([id]) => {
+    if (!seen.has(id)) {
+      seen.add(id);
+      return true;
+    }
+    diagnostics.push({
+      level: "error",
+      sourceId: id,
+      path: descriptorPath,
+      message: `source ID "${id}" is also the ID of a conventional source; give the entry another ID`,
+    });
+    return false;
+  });
+  // The default order: dimensions, media, the rest, character records; the
+  // conventional sources first within each. `after` reorders from there.
+  return {
+    sources: unique
+      .map((source, order) => ({ source, order }))
+      .sort(
+        (a, b) =>
+          sourceRank(a.source[1]) - sourceRank(b.source[1]) ||
+          a.order - b.order,
+      )
+      .map(({ source }) => source),
+    diagnostics,
+  };
+}
+
+/**
+ * The paths a world's descriptor adds as sources of their own (entries with
+ * `kind` and `to`). Such an entry says which contract a file is for, so a
+ * path two plugins name is no longer in doubt.
+ */
+export async function descriptorSourcePaths(
+  worldRoot: string,
+  worldDataPath: string | undefined,
+): Promise<readonly string[]> {
+  if (!worldDataPath) return [];
+  const read = await readDescriptorFile(worldRoot, worldDataPath);
+  return Object.values(read.descriptor?.sources ?? {})
+    .filter((entry) => entry.kind !== undefined && entry.to !== undefined)
+    .map((entry) => entry.path);
+}
+
 /**
  * The sources of a world package, in import order.
  *
- * `worldDataPath` is the descriptor that `world.yaml` names. Without one the
- * package is read by convention: each file at a well-known path is a source
- * (see `conventions.ts`).
+ * Every package is read by convention: each file at a well-known path is a
+ * source (see `conventions.ts`). `worldDataPath` is the descriptor that
+ * `world.yaml` names; it changes, turns off or adds sources (`applyDescriptor`).
  */
 export async function loadWorldDataDescriptor(options: {
   worldRoot: string;
   worldDataPath?: string;
   worldId: string;
   covelHome?: string;
-  /** The conventions to read by; the process's list when absent. */
+  /**
+   * The conventions to read by: a session's plugins. The process's list
+   * when absent.
+   */
   conventions?: readonly ConventionalSource[];
 }): Promise<LoadedWorldDataDescriptor> {
   const diagnostics: WorldDataDiagnostic[] = [];
-  const base = options.worldDataPath
+  const written = options.worldDataPath
     ? await readDescriptorFile(options.worldRoot, options.worldDataPath)
-    : {
-        descriptor: await conventionalDescriptor(
-          options.worldRoot,
-          options.conventions,
-        ),
-        diagnostics: [],
-      };
-  diagnostics.push(...base.diagnostics);
-  if (!base.descriptor) return { sources: [], diagnostics };
+    : undefined;
+  diagnostics.push(...(written?.diagnostics ?? []));
+  const applied = applyDescriptor(
+    await conventionalDescriptor(options.worldRoot, options.conventions),
+    written?.descriptor,
+    options.worldDataPath,
+    options.conventions !== undefined,
+  );
+  diagnostics.push(...applied.diagnostics);
 
   const merged = new Map<string, MergedWorldDataSource>();
   let order = 0;
-  for (const [id, descriptor] of Object.entries(base.descriptor.sources)) {
+  for (const [id, descriptor] of applied.sources) {
     const origin = {
       descriptorRoot: options.worldRoot,
       origin: "world" as const,

@@ -18,14 +18,12 @@ const WORLD_MANIFEST_ROOT_KEYS = new Set([
   "version",
   "summary",
   "defaultLocale",
-  "supportedLocales",
   "tags",
   "pluginPolicy",
   "pluginSettings",
   "worldData",
   "characterSchema",
   "dimensions",
-  "dimensionSources",
   "defaultViewMode",
 ]);
 
