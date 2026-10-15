@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Badge } from "@/components/ui/badge.js";
+import { PluginLoadWarnings } from "@/components/shared/plugin-load-warnings.js";
 import { resolveI18n } from "@/lib/catalog/helpers.js";
 import { RuntimeStageBadges } from "../runtime-stage-badges.js";
 import { RuntimeModelBindings } from "./runtime-model-bindings.js";
@@ -134,6 +135,8 @@ export function SessionPluginItem({
           setupRuntimes={setupRuntimes}
         />
       </div>
+
+      <PluginLoadWarnings diagnostics={plugin} />
 
       {plugin.approvalRequired && (
         <p

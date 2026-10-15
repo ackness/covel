@@ -1742,6 +1742,12 @@
     "noSlots": "no slots",
     "config": "Config",
     "loadError": "Load Error",
+    "loadWarnings": {
+      "label": "Plugin load warnings",
+      "runtime": "Some features are unavailable; the rest can still be used: {{path}}",
+      "field": "Unrecognized field {{field}} was ignored ({{path}}). The plugin is still available.",
+      "details": "Show reason"
+    },
     "unknownError": "Unknown error",
     "setupBlocked": "Setup failed",
     "setupRetry": "Retry",

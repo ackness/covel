@@ -53,6 +53,60 @@ describe("PackagesPane installed plugin management", () => {
     vi.unstubAllGlobals();
   });
 
+  it("keeps usable community plugins listed with their load warnings", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        if (url === "/api/install/worlds") return Response.json({ items: [] });
+        if (url === "/api/install/plugins")
+          return Response.json({
+            items: [
+              {
+                id: "partial",
+                version: null,
+                source: null,
+                pendingUpdate: null,
+              },
+            ],
+          });
+        if (url === "/api/plugins")
+          return Response.json({
+            items: [
+              {
+                ...brokenPlugin,
+                id: "partial",
+                displayName: "Partial plugin",
+                hostState: "installed",
+                error: undefined,
+                disabledRuntimes: [
+                  {
+                    sourcePath: "PLUGIN.md",
+                    message: "PLUGIN.md: runtime.schedule.stage: required",
+                  },
+                ],
+                ignoredFields: [
+                  {
+                    sourcePath: "PLUGIN.md",
+                    field: "futureFeature",
+                    message: "PLUGIN.md: futureFeature: unknown field",
+                  },
+                ],
+              },
+            ],
+          });
+        throw new Error(`Unexpected request: ${url}`);
+      }),
+    );
+    render(<PackagesPane />);
+    const name = await screen.findByText("Partial plugin");
+    const row = name.closest("li")!;
+    const warnings = within(row).getByRole("list", {
+      name: "Plugin load warnings",
+    });
+    expect(within(warnings).getAllByRole("listitem")).toHaveLength(2);
+    expect(within(row).getByRole("button", { name: "Uninstall" })).toBeTruthy();
+  });
+
   it("F-191 confirms uninstalling failed community plugins", async () => {
     const fetchMock = vi
       .fn()

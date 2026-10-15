@@ -42,8 +42,22 @@ export interface PluginToolSummary {
   readonly runtimeId?: string;
 }
 
+/** Non-fatal load warnings. Paths are relative to the plugin root. */
+export interface PluginLoadDiagnostics {
+  readonly disabledRuntimes?: readonly {
+    readonly sourcePath: string;
+    readonly message: string;
+    readonly outputContract?: string;
+  }[];
+  readonly ignoredFields?: readonly {
+    readonly sourcePath: string;
+    readonly field: string;
+    readonly message: string;
+  }[];
+}
+
 /** Registry-level plugin view used by lists, settings, and session prep. */
-export interface PluginSummary {
+export interface PluginSummary extends PluginLoadDiagnostics {
   readonly id: string;
   readonly displayName: I18nText;
   readonly description: I18nText;

@@ -1,7 +1,13 @@
 import { compareText } from "@covel/shared";
 import type { PluginRegistry } from "@covel/plugin-loader";
 import path from "node:path";
-import type { EffectiveTurnCompletion, I18nText, Stage } from "@covel/shared";
+import type {
+  EffectiveTurnCompletion,
+  I18nText,
+  PluginLoadDiagnostics,
+  Stage,
+} from "@covel/shared";
+import { buildPluginLoadDiagnostics } from "../../lib/plugin-load-diagnostics.js";
 import {
   effectiveTurnCompletion,
   getRuntimeSpec,
@@ -44,13 +50,15 @@ const FLOW_SEGMENTS: ReadonlyArray<{ id: FlowSegmentId; labelText: I18nText }> =
   ];
 
 export function buildPluginFlowResponse(registry: PluginRegistry) {
-  const plugins: Array<{
-    id: string;
-    name: I18nText;
-    description: I18nText;
-    pluginType: string;
-    runtimeIds: string[];
-  }> = [];
+  const plugins: Array<
+    PluginLoadDiagnostics & {
+      id: string;
+      name: I18nText;
+      description: I18nText;
+      pluginType: string;
+      runtimeIds: string[];
+    }
+  > = [];
 
   const steps: Array<{
     id: string;
@@ -106,6 +114,7 @@ export function buildPluginFlowResponse(registry: PluginRegistry) {
       description: pluginDescription,
       pluginType: summary.pluginType,
       runtimeIds: manifests.map((item) => item.manifest.name),
+      ...buildPluginLoadDiagnostics(entry),
     });
 
     for (const parsed of manifests) {

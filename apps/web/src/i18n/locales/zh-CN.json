@@ -1690,6 +1690,12 @@
     "noSlots": "无可用模型用途",
     "config": "配置",
     "loadError": "加载失败",
+    "loadWarnings": {
+      "label": "插件加载提醒",
+      "runtime": "部分功能不可用，其他功能仍可使用：{{path}}",
+      "field": "已忽略无法识别的字段 {{field}}（{{path}}），插件仍可使用。",
+      "details": "查看原因"
+    },
     "unknownError": "未知错误",
     "setupBlocked": "初始化失败",
     "setupRetry": "重试",

@@ -3681,20 +3681,25 @@ runtime 报告失败时，它的原始错误保留在 `result.runtimeResults` �
 
 `PluginSummary` 的字段：
 
-| 字段                                                        | 含义                                                                |
-| ----------------------------------------------------------- | ------------------------------------------------------------------- |
-| `id`, `displayName`, `description`                          | 包的身份和可本地化的描述                                            |
-| `kind`, `source`                                            | `core \| plugin` 与 `builtin \| community`                          |
-| `hostState`, `error?`                                       | 宿主状态 `discovered \| installed \| loaded \| error`，以及加载错误 |
-| `provides`, `requires`, `optional`, `conflicts`             | 包级 contract 声明                                                  |
-| `extensions`                                                | 声明的扩展点、ID、顺序和监听信息                                    |
-| `eventTopics`                                               | `contributes.events` 声明的 topic                                   |
-| `runtimeCount`, `runtimes`, `tools`, `userSettings`, `tags` | runtime 摘要、工具和用户设置                                        |
-| `languages`                                                 | `{ text: string[], instructions: string[] }`，见下                  |
-| `version?`, `author?`, `license?`, `homepage?`              | 清单里的版本和[作者信息](./plugins.md#作者信息)，只用于展示         |
+<!-- prettier-ignore -->
+| 字段 | 含义 |
+| --- | --- |
+| `id`, `displayName`, `description` | 包的身份和可本地化的描述 |
+| `kind`, `source` | `core \| plugin` 与 `builtin \| community` |
+| `hostState`, `error?` | 宿主状态 `discovered \| installed \| loaded \| error`，以及加载错误 |
+| `disabledRuntimes?`, `ignoredFields?` | 不影响整个插件加载的诊断，见下 |
+| `provides`, `requires`, `optional`, `conflicts` | 包级 contract 声明 |
+| `extensions` | 声明的扩展点、ID、顺序和监听信息 |
+| `eventTopics` | `contributes.events` 声明的 topic |
+| `runtimeCount`, `runtimes`, `tools`, `userSettings`, `tags` | runtime 摘要、工具和用户设置 |
+| `languages` | `{ text: string[], instructions: string[] }`，见下 |
+| `version?`, `author?`, `license?`, `homepage?` | 清单里的版本和[作者信息](./plugins.md#作者信息)，只用于展示 |
 
 字段说明：
 
+- `disabledRuntimes`：每项是 `{ sourcePath, message, outputContract? }`，对应加载时去掉的 runtime；它不计入 `runtimeCount`、`runtimes` 或包的输出契约。
+- `ignoredFields`：每项是 `{ sourcePath, field, message }`，对应宿主忽略的未知字段。两组诊断没有项目时不返回。`sourcePath` 相对于插件根目录（例如 `runtimes/note/RUNTIME.md`）；`message` 中的文件路径也不含服务器安装目录。它们不把整个包标成 `hostState: "error"`，重载后反映当前注册的一版。
+- 插件详情、会话插件列表和 `GET /api/plugin-flows` 的 `plugins[]` 返回相同的诊断字段；流程的 `steps[]` 只包含保留的 runtime。
 - `eventTopics`：会话解析插件集合时用它保证一个 topic 只有一个声明者。
 - `languages.text`：插件有文字的语言，包括标签、界面文字、代码里的文字，以及翻译目录里的译文。`languages.instructions`：有指令（prompt 正文）的语言。两者都至少包含 `en`。
 - `author.about` 和链接的 `label` 可能是按语言分的 map。

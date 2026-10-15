@@ -2,6 +2,7 @@ import { useState } from "react";
 import { ChevronRight, Link, Lock, Puzzle, Wrench, Zap } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Badge } from "@/components/ui/badge.js";
+import { PluginLoadWarnings } from "@/components/shared/plugin-load-warnings.js";
 import { text } from "@/components/world/editor-helpers.js";
 import { RuntimeStageBadges } from "../runtime-stage-badges.js";
 import { RuntimeModelBindings } from "./runtime-model-bindings.js";
@@ -112,6 +113,8 @@ export function PluginItem({
           </button>
         )}
       </div>
+
+      <PluginLoadWarnings diagnostics={pkg} />
 
       {advanced && (
         <div className="flex flex-wrap items-center gap-1 px-2.5 pb-2">
