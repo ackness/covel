@@ -1,6 +1,6 @@
 # Your first game session
 
-This page takes you from choosing a world to writing your first action, and then confirms that you can continue the saved game. When you finish, you will have a game that you can pick up again after restarting the app.
+This page guides you through choosing a world, writing your first action, and checking that you can continue the saved game. When you finish, you will have a game that you can pick up again after restarting the app.
 
 ## Before you start
 
@@ -52,7 +52,7 @@ During one turn, you will see these things, in order:
 > [!TIP]
 > Wait for "Turn complete" before you send the next message. The story text being finished does not mean the turn is over. Plugins are still updating the state after it.
 
-To see the story from another angle, switch between the parsed view and the stage view.
+To change how the story is displayed, switch between the parsed view and the stage view.
 
 ## 5. Check that you can continue
 

@@ -92,7 +92,7 @@ Adds one step after character creation: assigning points to the player character
 - An "Attribute checks" panel on the right. Click "Request an attribute check", fill in "Attempted action", choose "Attribute" and "Difficulty", then click "Resolve check". The result comes with a dice record, and retrying or restarting does not roll the dice again.
 - Ordinary turns do not show this check form.
 
-If the world has no attributes that can be allocated (for example, a world that is only dialogue), the allocation step is skipped quietly. The button in the panel tells you that this world cannot run checks.
+If the world has no attributes to assign points to (for example, a dialogue-only world), the point-buy step is skipped. The button in the panel tells you that this world cannot run checks.
 
 ### When it is on
 
@@ -233,7 +233,7 @@ World authors can set up plots that happen only when certain conditions are met.
 
 There is no dedicated panel. You only meet these events in the story, as if they were turns the story took on its own.
 
-If the narrative leaves an event out, it is reminded again on the next turn. Each event is reminded only once.
+If the narrative leaves an event out, a reminder is sent on the next turn. Each event gets only one reminder.
 
 ### When it is on
 

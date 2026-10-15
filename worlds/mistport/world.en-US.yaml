@@ -16,9 +16,9 @@ characterSchema:
   attributes:
     - id: persona
       name: Personality
-      description: The hero's personality and how they speak (voice follows from
-        personality) — e.g. "taciturn, wary, decisive when it counts." Shapes
-        how the narrator portrays the character and their dialogue.
+      description: The player character's personality and how they speak (voice
+        follows from personality) — e.g. "taciturn, wary, decisive when it counts."
+        Shapes how the narrative portrays your character and dialogue.
     - id: origin
       name: Origin
       description:
@@ -28,8 +28,8 @@ characterSchema:
     - id: motive
       name: Driving Motive
       description:
-        "Your personal reason to risk investigating Qi: a debt, curiosity,
-        redemption, profit, or a missing person of your own."
+        "Your personal reason to risk investigating Qi's disappearance: repaying
+        a debt, seeking knowledge, redemption, coin, or searching for someone lost."
     - id: faction
       name: Faction
       description: Affiliated faction or guild
@@ -68,7 +68,7 @@ characterSchema:
         Tide-Force
     - id: stealth
       name: Fogcraft
-      description: Skill at controlling sound and light, navigating, and evading fog beasts
+      description: Skill at muffling sound and light, finding the way, and evading fog beasts
     - id: diplomacy
       name: Diplomacy
       description: Skill at negotiation, reading people, and navigating the four factions
@@ -77,7 +77,7 @@ characterSchema:
       description: Skill at self-defense and fighting in confined ruins
     - id: permit
       name: Undertow Permit
-      description: Whether the character holds a Council-recognized Undertow permit
+      description: Whether you hold a Council-recognized Undertow permit
     - id: equipment
       name: Equipment
       description: Fog-lamps, silenced tools, waterproof rope, and other usable gear

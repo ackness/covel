@@ -17,10 +17,10 @@ characterSchema:
   attributes:
     - id: persona
       name: Personality
-      description: The hero's personality and how they speak (voice follows from
-        personality) — e.g. "cautious and reserved, terse when nervous, polite
-        but opinionated." Shapes how the narrator portrays the character and
-        their dialogue.
+      description: The player character's personality and how they speak (voice
+        follows from personality) — e.g. "cautious and reserved, terse when nervous,
+        polite but opinionated." Shapes how the narrative portrays your character and
+        dialogue.
     - id: club
       name: Club
       description: Club membership
@@ -41,7 +41,7 @@ characterSchema:
       description: Current psychological pressure
     - id: publicCloseness
       name: Public Closeness
-      description: How close to the player in public
+      description: How close the character appears to the player in front of others
     - id: favoriteTopic
       name: Favorite Topic
       description: Topics they enjoy talking about

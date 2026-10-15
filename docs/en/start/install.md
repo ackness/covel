@@ -1,6 +1,6 @@
 # Install and first launch
 
-This page walks you through installing the desktop app and opening it. When you finish, you will be on the world selection page, with four bundled worlds listed.
+This page walks you through installing the desktop app and opening it. When you finish, you will see four bundled worlds on the world selection page.
 
 ## Before you start
 

@@ -26,7 +26,7 @@ More unsettling still: the fog is thickening. The most sensitive Tide-Readers ca
 
 **The Salt Fangs** — they control the Undertow's black market with roots sunk deep into the lower tiers. Their second-in-command, **Iron Meg**, runs operations with an iron fist and one unbreakable rule: never sell an unappraised, dangerous relic to a civilian who doesn't know what they're buying. The Salt Fangs and the Council live in a cold war of mutual infiltration and back-alley violence, neither able to destroy the other. The lower tiers have a saying: Meg's grip on the market is not only about coin.
 
-**The Congregation of the Mist** — a religious movement risen in recent years that worships "the Mist Lord," believing the fog itself is a living, conscious entity and the Undertow ruins are fragments of its body. They draw in the desperate and dispossessed with the promise that fog-rot is not a curse but a transcendence. The Council brands them a cult; their following grows at an unsettling pace — especially after their youngest Mist-Speaker, Frost, predicted the timing of ebbs and the location of ruins again and again, every time correct.
+**The Congregation of the Mist** — a religious movement risen in recent years that worships "the Mist Lord," believing the fog itself is a living, conscious entity and the Undertow ruins are fragments of its body. They draw in the desperate and dispossessed with the promise that fog-rot is not a curse but a transcendence. The Council brands them a cult; their following grows at an unsettling pace — especially after their youngest Mist-Speaker, Frost, predicted the timing of ebbs and the location of ruins time after time without failing once.
 
 ## Key Figures
 
@@ -43,7 +43,7 @@ More unsettling still: the fog is thickening. The most sensitive Tide-Readers ca
 The player is not a singular savior named by prophecy, but a new variable capable of bending seven existing lives off course. The opening naturally supports two origins:
 
 - **New Tide-Reader apprentice** — the entrance trial left a faint tide-mark on your wrist. Su Yao examined you and Lin Yuanzhou is your peer. You may enter the Guild Tower lawfully, but are expected to obey its sealed archives and appraisal discipline.
-- **Undertow local** — you know the Drawdown Steps, the pier hatch, and fog-lamp hand signs. Qi once appraised a relic for you or your family without charge. Before vanishing, he left Su a note asking for “someone who remembers routes and does not trust maps.” You have no permit, but reach the Salt Fangs and the Congregation more easily.
+- **Undertow local** — you know the Drawdown Steps, the pier hatch, and fog-lamp hand signs. Qi once appraised a relic for you or your family without charge. Before vanishing, he left Su a note asking for “someone who remembers routes and does not trust maps.” You have no permit, but find it easier to approach the Salt Fangs and the Congregation.
 
 <!-- narrator-only -->
 

@@ -10,5 +10,5 @@ definition:
   evolution:
     prompt:
       Count tide phases, not real-world hours. Brief continuous conversation
-      may remain in the phase; waiting for tides or exploring across districts
-      advances it. Deep ebb is a story event, not a routine phase.
+      may remain in the phase; waiting out the tide or exploring across districts
+      advances it. A deep withdrawal is a story event, not a routine phase.

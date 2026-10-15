@@ -234,7 +234,7 @@ describe("MediaLibraryPane", () => {
     render(<MediaLibraryPane />);
 
     expect(
-      await screen.findByText(/not available on this server/),
+      await screen.findByText(/unavailable on this server/),
     ).toBeTruthy();
     expect(screen.queryByRole("button", { name: /^Delete/ })).toBeNull();
   });

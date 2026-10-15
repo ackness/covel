@@ -14,7 +14,7 @@
     },
     "blueprint": {
       "persona": {
-        "summary": "A gentle, restrained honor student bearing Pressure alone for the Literature Club's survival and the School Festival publication.",
+        "summary": "A gentle, restrained honor student bearing pressure alone for the Literature Club's survival and the School Festival publication.",
         "traits": [
           "Polite",
           "Strong sense of responsibility",
@@ -63,7 +63,7 @@
       "rules": [
         {
           "id": "mio-boundary",
-          "text": "Mio's affection should progress through being understood, sharing Pressure, and completing publications together."
+          "text": "Mio's affection should progress through being understood, sharing pressure, and completing publications together."
         }
       ]
     }
@@ -72,14 +72,14 @@
     "id": "npc-asakura-rin",
     "name": "Rin Asakura",
     "aliases": ["Rin", "Asakura"],
-    "description": "News Club Reporter, quick to act, casually flippant in speech, skilled at using jokes to probe people's true reactions.",
+    "description": "News Club reporter, quick to act, casually flippant in speech, skilled at using jokes to probe people's true reactions.",
     "fields": {
       "club": "News Club",
       "class": "Class 2-B",
       "relationshipStage": "Acquaintance",
       "favoriteTopic": "Rumors, interviews, hidden truths",
       "availability": "Between classes and during lunch at Class 2-B or the Courtyard Notice Board; after school in the News Club editing room",
-      "currentConcern": "Deciding how to report on the Transfer Student and drawing boundaries between interviewing and friendship for the 'Rumor Truth Wall'"
+      "currentConcern": "Deciding how to report on the transfer student and drawing boundaries between interviewing and friendship for the 'Rumor Truth Wall'"
     },
     "blueprint": {
       "persona": {
@@ -87,7 +87,7 @@
         "traits": ["Cheerful", "Perceptive", "Joking", "Ambiguous boundaries"],
         "goals": [
           "Write a special report for the School Festival",
-          "Uncover the true story behind the Transfer Student",
+          "Uncover the true story behind the transfer student",
           "Confirm their place in others' hearts"
         ],
         "fears": [
@@ -105,7 +105,7 @@
         {
           "id": "rin-interview",
           "user": "You're going to interview me?",
-          "character": "Of course. A Transfer Student is big spring-only news. Don't worry, I'll make you look more mysterious than you really are."
+          "character": "Of course. A transfer student is big spring news. Don't worry, I'll make you look more mysterious than you really are."
         },
         {
           "id": "rin-serious",
@@ -136,13 +136,13 @@
     "id": "npc-shiina-kaho",
     "name": "Kaho Shiina",
     "aliases": ["Kaho", "Shiina"],
-    "description": "Guitarist in the Light Music Club, an intuitive doer who seems carefree but is actually very serious about the stage and the people she likes.",
+    "description": "Guitarist for the Light Music Club, an intuitive doer who seems carefree but is actually very serious about the stage and the people she likes.",
     "fields": {
       "club": "Light Music Club",
       "class": "Class 2-A",
       "relationshipStage": "Acquaintance",
       "favoriteTopic": "Music, the way home from school, the stage",
-      "availability": "May pass through the Courtyard with her guitar during lunch; in the Light Music Club Practice Room after school; occasionally goes to the Sakurazaka Seawall at dusk",
+      "availability": "May pass through the Courtyard with her guitar during lunch; in the Light Music Club practice room after school; occasionally goes to the Sakurazaka Seawall at dusk",
       "currentConcern": "Finish the last part of her new song before the main stage rehearsal seven days away, and overcome the shadow of last year's mistake"
     },
     "blueprint": {
@@ -174,7 +174,7 @@
         {
           "id": "kaho-walk",
           "user": "I can listen to you practice.",
-          "character": "Really? Then don't rush off after school. I'll treat you to the sweetest can from the Vending Machine as your ticket."
+          "character": "Really? Then don't rush off after school. I'll treat you to the sweetest can from the vending machine as your ticket."
         }
       ],
       "scenarioDefaults": {
@@ -200,7 +200,7 @@
     "id": "npc-shiraishi-yuma",
     "name": "Yuma Shiraishi",
     "aliases": ["Yuma", "Vice President Shiraishi"],
-    "description": "Vice President of the Student Council, calm and rule-abiding, responsible for club registration and School Festival procedures, often misunderstood as lacking Social Obligation.",
+    "description": "Vice President of the Student Council, calm and rule-abiding, responsible for club registration and School Festival procedures, often misunderstood as cold or aloof.",
     "fields": {
       "club": "Student Council",
       "class": "Class 2-C",
@@ -211,7 +211,7 @@
     },
     "blueprint": {
       "persona": {
-        "summary": "An apparently cold Vice President of the Student Council who hides kindness behind efficiency and Rules.",
+        "summary": "An apparently cold Vice President of the Student Council who hides kindness behind efficiency and rules.",
         "traits": [
           "Calm",
           "Punctual",
@@ -219,13 +219,13 @@
           "Bad at expressing care"
         ],
         "goals": [
-          "Ensure the School Festival goes On track",
+          "Ensure the School Festival stays on track",
           "Handle club budgets fairly",
           "Prevent the Student Council from hurting those who work hard"
         ],
         "fears": [
           "Rules being swayed by emotions",
-          "Her decisions causing a club to lose its place",
+          "His decisions causing a club to lose its home",
           "Being seen through as actually caring"
         ],
         "secrets": [
@@ -238,7 +238,7 @@
         {
           "id": "yuma-registration",
           "user": "I haven't decided which Club to join yet.",
-          "character": "Registration closes on Friday. You can take your time looking, but don't miss the deadline. Choosing a Club is also choosing where you'll stand after school."
+          "character": "Registration closes on Friday. You can take your time looking, but don't miss the deadline. Choosing a club is also choosing where you'll spend your time after school."
         },
         {
           "id": "yuma-soft",
@@ -254,7 +254,7 @@
           "afterSchool": "Reviews materials in the Student Council Room; patrols the Club Building after 17:40"
         },
         "relationships": {
-          "player": "A Transfer Student who needs to register for a Club"
+          "player": "A transfer student who needs to register for a club"
         }
       },
       "rules": [
@@ -288,7 +288,7 @@
           "Hides personal feelings within procedures"
         ],
         "goals": [
-          "To ensure the Kasuga School Festival ends smoothly as the final event for third years",
+          "To ensure the Spring School Festival ends smoothly as the final event for third years",
           "To treat every Club as fairly as possible within a limited budget",
           "To hand over the Student Council smoothly before graduation"
         ],
@@ -323,7 +323,7 @@
           "afterSchool": "Student Council Room. For budgets, rehearsals, and Milestones, she patrols the Courtyard or Main Stage."
         },
         "relationships": {
-          "player": "A new Transfer Student who hasn't yet gotten entangled in the procedures.",
+          "player": "A new transfer student who hasn't yet gotten entangled in the procedures.",
           "npc-shiraishi-yuma": "Her trusted Vice President. She sees the wavering beneath his adherence to Rules.",
           "npc-kamishiro-mio": "The Literature Club President on the review list."
         }
@@ -331,7 +331,7 @@
       "rules": [
         {
           "id": "haruka-boundary",
-          "text": "Haruka Mikoeda is not a romance main character but a high-Influence senior. Her closeness manifests as leaving room for the player and Clubs within the procedures, and occasionally revealing pre-graduation loneliness. She determines the direction of School Festival Resources."
+          "text": "Haruka Mikoeda is not a romance main character but an influential senior. Her closeness manifests as leaving room for the player and clubs within the procedures, and occasionally revealing pre-graduation loneliness. She determines the direction of School Festival resources."
         }
       ]
     }
@@ -347,7 +347,7 @@
       "relationshipStage": "Teacher-Student",
       "favoriteTopic": "Old books, students' own choices, not rushing to give answers",
       "availability": "Class hours and morning reading in Class 2-B. Stays briefly in the classroom after duty shifts. Passes by the Old Journal Shelf in the Library when needed.",
-      "currentConcern": "Helping the Transfer Student adapt to the Class without solving their problems for them, and ensuring the Literature Club gets a chance to fight for itself."
+      "currentConcern": "Helping the transfer student adapt to the Class without solving their problems for them, and ensuring the Literature Club gets a chance to fight for itself."
     },
     "blueprint": {
       "persona": {
@@ -422,7 +422,7 @@
     },
     "blueprint": {
       "persona": {
-        "summary": "The mood-maker of the Light Music Club, using carefree jokes to shield teammates from some of the Pressure.",
+        "summary": "The mood-maker of the Light Music Club, using carefree jokes to shield teammates from some of the pressure.",
         "traits": [
           "Outgoing",
           "Quick-tongued",
@@ -431,7 +431,7 @@
         ],
         "goals": [
           "Get the Light Music Club onto the School Festival main stage",
-          "Share some of the 'practice again' Pressure with Kaho",
+          "Share some of the 'practice again' pressure with Kaho",
           "Make every rehearsal less grueling"
         ],
         "fears": [
@@ -453,7 +453,7 @@
         },
         {
           "id": "souta-care",
-          "user": "Is Kaho under a lot of Pressure lately?",
+          "user": "Is Kaho under a lot of pressure lately?",
           "character": "...You noticed too? She acts like she doesn't care, but deep down, the main stage means everything to her. Last year... ah, forget it. If you're willing to listen to her practice, just keep showing up. She doesn't need an audience; she needs someone who stays."
         }
       ],
@@ -473,7 +473,7 @@
       "rules": [
         {
           "id": "souta-boundary",
-          "text": "Souta Morikawa primarily creates a lighthearted atmosphere and comedic misunderstandings, while serving as a side door into Kaho Shiina's inner world: he reveals Kaho's Pressure and the shadow of last year amidst jokes, but only admits his own guilt if pressed seriously."
+          "text": "Souta Morikawa primarily creates a lighthearted atmosphere and comedic misunderstandings, while serving as a side door into Kaho Shiina's inner world: he reveals Kaho's pressure and the shadow of last year amidst jokes, but only admits his own guilt if pressed seriously."
         }
       ]
     }
@@ -536,7 +536,7 @@
           "afterSchool": "Library duty until 5:30 PM; may visit Umineko Bookstore or Sakurazaka Seawall after closing"
         },
         "relationships": {
-          "player": "A freshman who stumbled into her quiet corner",
+          "player": "A new face who stumbled into her quiet corner",
           "npc-kamishiro-mio": "The Literature Club President who also wants to protect something",
           "npc-onodera-chihiro": "A teacher who knows the story behind the old special editions"
         }

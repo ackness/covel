@@ -17,7 +17,7 @@ Open **Settings → Install & manage**.
 2. Parse the link. The plugins and world packages in that folder are listed together.
 3. Check the items you want to install, confirm the ID, version, and source, read the code risk notice, and confirm once to install.
 
-The items you check are installed as one unit, plugins first and then worlds. If any one of them fails, everything installed in this run is removed, so you are not left with a half-finished install.
+Selected packages are installed together, plugins first and then worlds. If any one of them fails, everything installed in this run is removed, so you are not left with a half-finished install.
 
 Local ZIP packages are imported on the same page.
 
@@ -31,7 +31,7 @@ Local ZIP packages are imported on the same page.
 | World package      | Right away. It appears when you go back to the world selection page                                                      |
 | Plugin             | You need to restart the backend once. In the desktop app, follow the prompt and click "Restart now". Your saves are kept |
 
-After a restart, a plugin needs two more steps before it runs:
+After restarting the backend, complete two more steps before the plugin can run:
 
 1. **Enable it**: select it in the plugin list on the world's session-prep screen, or have the world's gameplay pack include it.
 2. **Authorize it**: the first time a community plugin needs to run code, the "Authorize plugin action" prompt appears. After you authorize it, it starts working. If you choose "Not now", the plugin stays paused, and the rest of the game keeps running as usual.

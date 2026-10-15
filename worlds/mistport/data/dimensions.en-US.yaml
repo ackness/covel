@@ -236,20 +236,20 @@ geography:
             description:
               The only large berth; ferries and cargo ships dock here, and
               newcomers first set foot in Mistport.
-          - name: Tide-Bell Tower
+          - name: Clocktower
             description:
-              A tide-driven clocktower tolling every six hours; a triple strike
-              signals a deep-withdrawal alert.
+              A tide-driven mechanical clocktower tolling every six hours; a triple
+              strike signals a deep-withdrawal alert.
           - name: The Salt Market
             description:
               A half-open bazaar in Mid-Harbor's back alleys where the Salt Fangs
               move goods and recruit; only Salt Chips hear the real prices.
-          - name: Quiet-Fog Inn
+          - name: The Soundless Inn
             description:
               A low-ceilinged explorers' inn insulated with sound-eating fog
               fungus. Its keeper asks no origins, but hangs every missing
               guest's fog-lamp above the door.
-          - name: Tide-Seal Gate
+          - name: Seal Tide Gate
             description:
               The checkpoint between Mid-Harbor and the Undertow steps, where
               Grey Falcon inspects permits and seizes open flames or undeclared
@@ -275,7 +275,7 @@ geography:
               where Iron Meg keeps the relic fragments she gathers.
           - name: Drawdown Steps
             description:
-              The long stair descending from the Tide-Seal Gate, each step marked
+              The long stair descending from the Seal Tide Gate, each step marked
               for evacuation. A deep withdrawal begins below step ninety; once
               the return bell sounds, roughly half an hour remains.
           - name: Echo Gallery

@@ -93,7 +93,7 @@
       "ambiguous-provider": "有多个插件提供 {{contract}}：{{plugins}}。请在下方插件列表中启用其中一个。",
       "excluded": "你关闭了提供 {{contract}} 的 {{plugins}}。游戏可以开始，但世界的这部分玩法不会生效。",
       "approval-required": "{{plugins}} 提供 {{contract}}，开始游戏后会请求你的授权。",
-      "dimensions": "你开启的插件里没有能保存这个世界维度的，游戏会在没有维度的情况下开始。开启一个保存世界维度的插件就能用上它们。"
+      "dimensions": "已开启的插件都无法保存这个世界的维度，游戏会在没有维度的情况下开始。开启一个能保存世界维度的插件就能用上它们。"
     },
     "dimensionProvider": {
       "conflictTitle": "选一个插件保存这个世界的维度",
@@ -122,14 +122,14 @@
     "configureKeys": "配置服务商与模型",
     "startGame": "开始游戏",
     "selectWorld": "选择一个世界",
-    "worldSelectDesc": "每一个世界都自成一体 —— 独立的基调、角色与规则。挑一个，从这里开始。",
+    "worldSelectDesc": "每个世界都有自己的基调、角色与规则。挑一个，开始游戏。",
     "loadingWorlds": "正在加载世界...",
     "worldsHeaderEyebrow": "{{count}} 个世界 可选",
     "worldsHeaderEyebrow_one": "{{count}} 个世界 可选",
     "aiCreateTeaser": "与世界构筑 Agent 一起生成设定、角色、规则和资料库。",
     "enter": "进入",
     "worldsEmptyTitle": "还没有可用的世界",
-    "worldsEmptyDesc": "让 AI 生成一个新世界,或把世界包放入 worlds/ 目录。",
+    "worldsEmptyDesc": "让 AI 生成一个新世界，或把世界包放入 worlds/ 目录。",
     "worldsEmptyViewExamples": "查看示例",
     "pluginsLoaded": "{{count}} 个插件已加载",
     "noPluginsLoaded": "未加载插件",
@@ -280,7 +280,7 @@
     "memoryStoreWarning": "重启后数据将丢失",
     "worldDataNotices": {
       "title": "这个世界的部分数据没有进入这局游戏：",
-      "hint": "给已关闭或正在等你批准的插件的数据，会在打开那个插件时导入。",
+      "hint": "插件已关闭或正在等待你批准时，分配给它的数据会在启用后导入。",
       "hide": "隐藏",
       "dimensionsMissing": "世界维度（如关系、资源）：没有启用的插件保存它们，这局不记录。",
       "receiverMissing": "“{{source}}”：没有启用的插件接收这份数据。",
@@ -382,7 +382,7 @@
       "rebuilding": "正在重建…",
       "failed": "没有重建，原来的索引保持不变：{{reason}}"
     },
-    "reasonInterrupted": "此任务在完成前已中断，没有提交结果。此处保留当时的执行记录。",
+    "reasonInterrupted": "此任务在完成前已中断，没有保存结果。这里保留了当时的执行记录。",
     "retryTask": "重试此任务",
     "executionHistory": "历史记录",
     "retryFailedTasks": "重试失败任务（{{count}}）",
@@ -403,7 +403,7 @@
       "interrupted": "执行中断，等待恢复",
       "completed": "本轮已完成"
     },
-    "stoppedDetail": "本轮生成内容未写入存档，可使用原输入重新尝试。",
+    "stoppedDetail": "本回合生成的内容未写入存档，可以用原来的输入重试。",
     "submittedInteraction": "已完成的交互 · 展开查看",
     "advancedPluginSettings": "自定义插件与高级设置",
     "minimalPluginSet": "回到最小集合",
@@ -583,7 +583,7 @@
     "aiAgentGreeting": "告诉我这个世界最核心的幻想。我会把它展开成一致的设定、开局压力、角色关系、世界规则和可复用资料。",
     "aiPromptLabel": "核心创意",
     "aiPromptPlaceholder": "描述你想要的世界，例如：一个蒸汽朋克风格的空中城市...",
-    "aiPromptPlaceholderFull": "描述你想要的世界，例如：一个蒸汽朋克风格的空中城市，居民依靠飞艇在云层间的岛屿间贸易...",
+    "aiPromptPlaceholderFull": "描述你想要的世界，例如：一个蒸汽朋克风格的空中城市，居民依靠飞艇，在云中的岛屿之间贸易……",
     "aiPromptExamples": [
       "一个蒸汽朋克风格的空中城市，居民依靠飞艇在云层间的岛屿间贸易",
       "赛博朋克末世，人类与AI共存的地下城市，充满霓虹灯和黑客文化",
@@ -670,7 +670,7 @@
     "restorePackageConfirm": "这个世界的数据和设置，包括你在应用里的修改，会被包文件现在的内容替换。已保存的会话数据保留；没有设置会话专用背景的会话，下一回合会读到恢复后的世界背景。",
     "restorePackageFailed": "没能恢复包里的版本。",
     "translateHint": "这个世界是用{{worldLanguage}}写的，而会话只能使用世界已有的语言。你可以给它加一个{{language}}版本。",
-    "translateConfirm": "你的模型会翻译这个世界的全部文字：名称、设定、规则和角色。这会消耗模型调用；机器翻译的人名地名和语气，事后需要看一遍。",
+    "translateConfirm": "你的模型会翻译这个世界的全部文字：名称、设定、规则和角色。这会消耗模型调用；翻译完成后，请检查人名、地名和语气。",
     "translating": "正在翻译…",
     "translateStart": "开始翻译",
     "translateAction": "翻译成{{language}}",
@@ -720,7 +720,7 @@
     "backupHide": "收起",
     "backupDownload": "下载",
     "backupUnreadable": "这份副本读不出来。",
-    "serverKeyAvailable": "服务器默认模型已有实例 API Key。此处填写的个人 Key 保存在当前设备。",
+    "serverKeyAvailable": "服务器默认模型已有实例 API 密钥。此处填写的个人密钥保存在当前设备。",
     "keyOverriddenByEnv": "环境变量（shell、.env 或 .env.llm）为该服务商设置了另一个 Key，优先于此处保存的 Key。取消该环境变量后才会使用保存的 Key。",
     "modelBindingMissing": "所选模型不可用，请重新选择模型或重置此用途。",
     "resetModelBinding": "重置模型绑定",
@@ -728,7 +728,7 @@
     "storageLocal": "本地",
     "storageRemote": "远程",
     "configuredDesc": "llm.toml 已配置。管理 API 密钥和高级参数。",
-    "unconfiguredDesc": "配置模型插槽、API 密钥和高级参数。所有数据仅存储在浏览器本地。",
+    "unconfiguredDesc": "配置模型用途、API 密钥和高级参数。所有数据仅保存在当前浏览器中。",
     "configuredByToml": "TOML 定义基础用途和备用策略。本地选择覆盖模型；重新加载 TOML 会保留本地选择。",
     "slotPingMovedHint": "模型连通性测试位于“服务商与模型”页面。",
     "language": "界面语言",
@@ -738,7 +738,7 @@
     "appearanceModern": "Modern · 现代",
     "appearancePaper": "Paper · 纸本",
     "themeLibraryTitle": "主题库",
-    "themeLibraryDesc": "导入自定义主题包，自动保存在本地，并在外观选择器里长期复用。",
+    "themeLibraryDesc": "导入自定义主题包后，会自动保存在本地，之后可随时在外观选择器里使用。",
     "themeImportButton": "导入主题",
     "themeImportHint": "主题 CSS 需要以 html[data-theme=\"your-theme\"] 为选择器，并覆盖语义 token。",
     "themeImported": "已导入 {{name}}",
@@ -778,7 +778,7 @@
     "selectPreset": "选择模型方案",
     "noPresetFallback": "未单独指定（使用默认模型）",
     "keysConfiguredDesc": "填写 llm.toml 中各服务商对应的 API 密钥；也可通过 keys.env 配置。",
-    "keysLocalDesc": "密钥仅保存在当前浏览器中，服务端不会持久化这些密钥。",
+    "keysLocalDesc": "密钥只保存在当前浏览器中，服务端不会保存。",
     "keyConfigured": "已配置",
     "keyUnconfigured": "未配置",
     "pingTest": "连通测试",
@@ -839,7 +839,7 @@
       },
       "uiScheme": {
         "label": "配色模式",
-        "description": "选择浅色或深色；仅支持单一模式的主题会自动锁定为对应模式。"
+        "description": "选择浅色或深色。主题只支持一种模式时，会固定使用该模式。"
       },
       "uiThemeManager": {
         "label": "主题库",
@@ -859,7 +859,7 @@
       },
       "developerView": {
         "label": "开发者视图",
-        "description": "在侧边栏显示原始的“数据库”页签。它会列出插件存下的每一行数据，包括只给叙述者看的内容。"
+        "description": "在侧边栏显示“数据库”页签，列出插件保存的每一行原始数据，包括只给叙述者看的内容。"
       },
       "expandTurnUpdates": {
         "label": "展开本回合更新",
@@ -1003,7 +1003,7 @@
     "desktopRestart": "重启服务器",
     "desktopApplyConfigChanges": "应用配置变更",
     "desktopRestartElectronOnly": "此操作仅在 Electron 桌面端可用",
-    "desktopRestartHint": "重启本地后端并刷新界面：会重新加载插件代码 / 提示词 / UI、llm.toml 与 keys.env。修改这些文件或调试插件后点此即可。正在进行的回合会断开。",
+    "desktopRestartHint": "重启本地后端并刷新界面，重新加载插件代码、提示词、UI、llm.toml 与 keys.env。修改这些文件或调试插件后可点击此按钮。正在进行的回合会断开。",
     "desktopRestartWebHint": "当前非桌面端运行。请刷新浏览器手动重载。",
     "desktopRefresh": "刷新信息",
     "desktopTutorial": "教程",
@@ -1177,7 +1177,7 @@
     "modelOutputLimit": "参考模型上限：{{value}}",
     "overrideCount": "已覆盖 {{count}} 项",
     "usingDefaults": "全部使用默认值",
-    "providerCatalogHint": "选择服务商后，只需配置一次连接信息，即可在同一列表中维护它提供的全部模型。",
+    "providerCatalogHint": "选择服务商并配置一次连接信息后，就能在同一列表中管理它提供的全部模型。",
     "searchProviders": "搜索服务商或模型",
     "modelCountShort": "{{count}} 个模型",
     "fromLlmToml": "来自 llm.toml",
@@ -1204,7 +1204,7 @@
     "capabilityEstimatedShort": "使用协议基础能力",
     "reasoningEffort": "思考强度",
     "reasoningBudget": "预算 {{count}} tokens",
-    "reasoningBudgetHint": "这些档位是应用的思考预算预设，并非模型原生档位；实际思考长度可短于预算。",
+    "reasoningBudgetHint": "这些档位是应用预设的思考预算，并非模型原生档位；实际思考长度可能短于预算。",
     "reasoningEffortHint": "已按 {{family}} 的接口规则列出当前模型支持的档位。",
     "reasoningUnavailable": "尚未识别到可调节的思考档位，可以继承设置或选择服务商默认。",
     "deepseekReasoningSamplingHint": "DeepSeek 开启思考时会忽略温度、Top P、频率惩罚和存在惩罚。",
@@ -1244,7 +1244,7 @@
     "requestedOutputLimit": "请求输出限制",
     "contextWindowHint": "输入与预留输出共用的上下文总预算。留空沿用模型配置；应按服务商实际限制填写。",
     "modelMaxOutputTokens": "模型最大输出能力（token）",
-    "modelMaxOutputTokensHint": "服务商允许的最大输出能力，不是每次请求的输出量。资料库不准确时在此覆盖。",
+    "modelMaxOutputTokensHint": "服务商允许的输出上限，不是每次请求的输出量。资料库的上限不准确时，可在这里修改。",
     "tokenLimitInvalid": "请输入 1 到 {{max}} 之间的整数。",
     "effectiveOutputBudget": "有效输出预算",
     "remainingInputBudget": "剩余输入预算",
@@ -1289,7 +1289,7 @@
       "inspect": "解析",
       "inspecting": "解析中…",
       "cancel": "取消",
-      "multiple": "勾选要安装的内容。所选内容作为一个整体安装：要么全部装上，任何一个失败则全部不装。",
+      "multiple": "勾选要安装的内容。所选内容会一起安装；只要有一个失败，就全部不安装。",
       "riskTitle": "安装前请确认风险",
       "codeRisk": "此包包含代码。允许执行后，第三方代码在 Covel 后端运行，没有进程沙箱隔离，可能访问后端的文件、环境变量和网络。声明的权限无法完整隔离任意 JavaScript。",
       "contentRisk": "插件内容可能影响模型行为、发送给服务商的数据和 API 费用。文件检查不代表安全审计。",
@@ -1316,9 +1316,9 @@
       "installed": "已安装的世界包"
     },
     "deleteProviderTitle": "删除服务商？",
-    "deleteProviderConfirm": "同时删除此服务商的模型配置、已保存的 API 密钥和指向这些模型的角色绑定。",
+    "deleteProviderConfirm": "同时删除此服务商的模型配置和已保存的 API 密钥，并取消这些模型的用途分配。",
     "deleteModelTitle": "删除模型配置？",
-    "deleteModelConfirm": "同时移除指向此模型配置的角色绑定。服务商的 API 密钥会保留。",
+    "deleteModelConfirm": "同时取消此模型配置的用途分配。服务商的 API 密钥会保留。",
     "deleteThemeTitle": "删除主题？",
     "deleteThemeConfirm": "此自定义主题将被删除。再次使用需要重新导入。",
     "exportReadOnlyHint": "设置尚未成功加载，导出仅包含当前可读取的值，可能不完整；原始备份可在下方查看和下载。",
@@ -1354,7 +1354,7 @@
     "previewTitle": "阅读预览",
     "previewText": "雾渐渐散去，远处的灯火照亮了街道。**每一次选择**，都让故事继续向前。\n\n你翻开旅途中的下一页，新的冒险正在等待。",
     "customizeTitle": "精细调整",
-    "customizeDesc": "在当前主题之上微调。颜色只作用于{{scheme}}模式，字体与尺寸两种模式通用。",
+    "customizeDesc": "微调当前主题。颜色只作用于{{scheme}}模式，字体与尺寸两种模式通用。",
     "customizedCount": "已自定义 {{count}} 项",
     "usingThemeDefaults": "使用主题默认",
     "resetAll": "全部重置",
@@ -1362,7 +1362,7 @@
     "resetToken": "恢复主题默认值",
     "followTheme": "跟随主题",
     "saveAsThemeTitle": "另存为主题包",
-    "saveAsThemeHint": "把当前主题和你的所有调整烘焙成一个独立主题，可导出分享，也可以再手写 CSS 加特效。",
+    "saveAsThemeHint": "把当前主题和你的所有调整保存为一个独立主题，可以导出分享，也可以手写 CSS 添加特效。",
     "saveAsTheme": "另存为",
     "themeNamePlaceholder": "主题名称",
     "saveThemeFailed": "主题保存失败。",
@@ -1657,12 +1657,12 @@
       },
       "panel": {
         "label": "面板",
-        "description": "现代应用风格：左侧图标导航、对话流正文、卡片式信息栏。",
+        "description": "现代应用风格：左侧用图标导航，正文以对话形式呈现，信息栏使用卡片。",
         "groupLabel": "面板"
       },
       "aurora": {
         "label": "极光",
-        "description": "玻璃拟态 + 流动极光 — 演示动画、模糊、发光与状态驱动特效，可直接当模板抄。",
+        "description": "玻璃质感与流动极光，演示动画、模糊、发光与随状态变化的特效，可直接用作模板。",
         "groupLabel": "经典"
       },
       "book": {
@@ -1712,7 +1712,7 @@
       "sessionNotFound": "此会话已不存在。",
       "excluded": "此插件已被排除在本局之外。",
       "missingProvider": "缺少必需的插件能力，请先启用提供该能力的插件。",
-      "ambiguousProvider": "多个插件提供了同一必需能力，请选择其中一个。",
+      "ambiguousProvider": "多个插件提供了同一项必需能力，请选择其中一个。",
       "conflict": "此插件与其他已启用的插件冲突。",
       "defaultReplaced": "另一个已选插件替代了此默认提供插件。",
       "invalidConflict": "此插件声明了不支持的冲突，请联系作者修正。",
@@ -1876,7 +1876,7 @@
       "enable": "打开 {{plugins}} 就能得到故事。",
       "install": "请在「设置 → 安装与管理」中安装一个叙事插件，安装后重启后端生效。"
     },
-    "dependentsOff": "下面这些插件需要的东西被关掉了，开局后它们会停用："
+    "dependentsOff": "以下插件需要的能力已关闭，开局后这些插件会停用："
   },
   "pluginJob": {
     "runtimesNotLoaded": "{{plugin}} 已授权，但它有 {{count}} 个任务无法加载，不会运行。",

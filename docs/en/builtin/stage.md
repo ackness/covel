@@ -1,6 +1,6 @@
 # Stage and Sound
 
-This page covers two things: stage mode, which is a full-screen picture like a visual novel, and the two built-in plugins that make this picture more complete, Scene Stage and Soundtrack.
+This page covers stage mode, a full-screen view like a visual novel. It also covers the two built-in plugins that make the view more complete: Scene Stage and Soundtrack.
 
 | Plugin                      | In short                                                                                   |
 | --------------------------- | ------------------------------------------------------------------------------------------ |
@@ -116,7 +116,7 @@ tracks:
     theme: true
 ```
 
-When choosing a track, earlier tracks come first. It uses the first match in this order:
+Tracks near the top of the list take priority. The first matching track is chosen in this order:
 
 1. A track that matches the current mood and also belongs to the current scene.
 2. A track that matches the current mood, with no scene limit.

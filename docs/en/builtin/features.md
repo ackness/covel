@@ -16,7 +16,7 @@ Find it under "Settings", in "Appearance". "Style" decides the layout and visual
 
 In "Theme Library" you can "Import theme". Imported themes are saved on this device and appear in the Style list. To make your own theme, see [Themes](../recipes/themes.md).
 
-The settings search shows keyboard focus. Configuration sources use segmented buttons with a selected state; model capability and dark-mode toggles announce their current state. Results of saving and importing are announced too. When a theme supports only one color mode, its toggle explains why it is unavailable.
+The settings search shows keyboard focus. Configuration sources use segmented buttons that show the selected option. Screen readers announce the current state of model capability and dark-mode toggles. Results of saving and importing are announced too. When a theme supports only one color mode, its toggle explains why it is unavailable.
 
 ## AI Create World
 
@@ -73,7 +73,7 @@ In "Settings", "Interface Language" decides the language of buttons and labels. 
 
 The interface language and the story language are different things. The content language of a game is set when it starts, and it must be a language the world already has. If a world only has another language, you are asked "Continue with a <language> world?" before entering. You can also click "Translate to <language>" on the world's detail page to add a language version of the world.
 
-Translation is done by the model you configured, so it uses model calls. Check the names of people and places, and the tone, yourself afterwards, since machine translation can get them wrong. For the language rules, see [Internationalization](../reference/i18n.md).
+Translation is done by the model you configured, so it uses model calls. After translation, check the names of people and places and the tone yourself, since machine translation can get them wrong. For the language rules, see [Internationalization](../reference/i18n.md).
 
 ## Install plugins and worlds
 

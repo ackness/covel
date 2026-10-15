@@ -27,7 +27,7 @@ When you start a game, you do not need to choose plugins one by one. A **gamepla
 
 The first three packs also include Pre-Game Setup, World Dimensions and Character Creator, and they recommend turning on Story Memory. Narrative Only turns off the other plugins that are on by default: there is no opening form, character creation or world dimensions, and no world time, Story Memory or history compaction. The world's declared dimensions are not imported, and the session starts as usual.
 
-The "Back to the minimal set" button on the session-prep screen gets you to such a set in one click: only the narrative plugins and the plugins that they and the world require.
+The "Back to the minimal set" button on the session-prep screen selects this combination in one click: only narrative plugins and any plugins they or the world require.
 
 A world can have its own gameplay pack. For example, "Lantern Barrow" (提灯古冢) has a "Classic Tabletop" pack. It builds on Traditional Story and adds Tabletop Rules, Dice Check, Quest Log, Inventory and Affinity. After you pick a pack, you can still add or remove plugins under "Customize plugins and advanced settings" on the session-prep screen.
 
@@ -80,7 +80,7 @@ Plugins marked "On by default" are added to every game automatically, and you ca
 
 ## The four built-in worlds
 
-Mistport, Haruka Academy and Lantern Barrow each show one play style: Mistport shows traditional narrative, Haruka Academy shows stage mode, and Lantern Barrow shows tabletop rules. Emberback is written in English and shows how one world can carry several languages.
+Mistport, Haruka Academy and Lantern Barrow each show one play style: Mistport shows traditional narrative, Haruka Academy shows stage mode, and Lantern Barrow shows tabletop rules. Emberback is written in English and shows how a world can offer editions in several languages.
 
 | World                                                        | Gameplay                                                        | What is worth a look                                                                    |
 | ------------------------------------------------------------ | --------------------------------------------------------------- | --------------------------------------------------------------------------------------- |

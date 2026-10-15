@@ -4,7 +4,7 @@
       "id": "literature-clubroom",
       "name": "Spring in the Literature Club",
       "description": "Manuscripts, old club journals and a sea breeze await the next editing session on the old clubhouse's third floor.",
-      "background": "The Literature Club keeps old journals and handwritten drafts in a third-floor room of the aging clubhouse. With too few members, it faces a merger review; its festival anthology, Spring Mint, carries the hope of remaining together.",
+      "background": "The Literature Club keeps old journals and handwritten drafts in a third-floor room of the aging clubhouse. With too few members, it faces a merger review; its festival special issue, Spring Mint, carries the hope of keeping the club together.",
       "storyContext": "The room supports proofreading, interviews, shared work and quiet pauses. The illustration does not decide whether the anthology succeeds or the club keeps its room.",
       "location": "Haruka Academy · Third-floor Literature Club",
       "visualNotes": [
@@ -16,8 +16,8 @@
     {
       "id": "mio-manuscript-afternoon",
       "name": "An Afternoon of Proofreading",
-      "description": "Atmospheric vignette: Mio sorts festival anthology drafts, leaving the player's response and relationship open.",
-      "background": "Mio is both class representative of 2-B and Literature Club president, accustomed to considering others first. Preparing the festival anthology gives her reason to share small tasks and remember work done together.",
+      "description": "Atmospheric vignette: Mio sorts festival special issue drafts, leaving the player's response and relationship open.",
+      "background": "Mio is both Class President of Class 2-B and Literature Club President, accustomed to considering others first. Preparing the festival special issue gives her reason to share small tasks and remember work done together.",
       "storyContext": "This is a possible shared proofreading moment. The empty chair leaves a place for the player without assigning their appearance, a romance or a prior promise.",
       "location": "Haruka Academy · Literature Club worktable",
       "visualNotes": [
@@ -30,7 +30,7 @@
       "id": "kamishiro-mio",
       "name": "Mio Kamishiro",
       "description": "Mio holds books and papers against a dark sailor uniform, her shoulder-length black hair framing a gentle smile.",
-      "background": "Mio is Class 2-B’s representative and Literature Club president. With the club under merger review, she carries responsibility for the Spring Mint festival anthology and the clubroom’s survival.",
+      "background": "Mio is Class 2-B’s Class President and Literature Club President. With the club under merger review, she carries responsibility for the Spring Mint festival special issue and the clubroom’s survival.",
       "storyContext": "For first introductions, class arrangements and club conversations. Her courtesy and smile do not establish an intimate relationship.",
       "visualNotes": [
         "Books and manuscript pages identify her role; illegible pages are not a completed anthology."
@@ -40,7 +40,7 @@
       "id": "asakura-rin",
       "name": "Rin Asakura",
       "description": "Rin winks and smiles, with a flower clip in her reddish bob and a camera and interview notebook in hand.",
-      "background": "Rin is a Class 2-B student and newspaper reporter. Interviews let her approach people; the festival’s rumor fact-check wall also makes the limits of publication part of her work.",
+      "background": "Rin is a Class 2-B student and News Club reporter. Interviews let her approach people; the festival’s Rumor Truth Wall also makes the limits of publication part of her work.",
       "storyContext": "Her playful default portrait suits interview invitations and everyday conversation. The smile does not mean she already knows the player’s secrets.",
       "visualNotes": [
         "Camera, notebook, armband and flower clip preserve her identity."
@@ -60,7 +60,7 @@
       "id": "shiraishi-yuma",
       "name": "Yuma Shiraishi",
       "description": "Bespectacled Yuma wears a tidy uniform and holds a clipboard with a quiet, serious expression.",
-      "background": "Yuma is a Class 2-C student and council vice president, responsible for club registration, budgets and festival procedures. He often expresses care through reminders and rules.",
+      "background": "Yuma is a Class 2-C student and Student Council Vice President, responsible for club registration, budgets, and festival procedures. He often expresses care through reminders and rules.",
       "storyContext": "For club registration and council business. The clipboard establishes no review result, and his serious expression does not imply hostility toward the player.",
       "visualNotes": [
         "Glasses, striped tie and clipboard are his main identifying details."
@@ -70,7 +70,7 @@
       "id": "mikoeda-haruka",
       "name": "Haruka Mikoeda",
       "description": "Haruka holds a blue folder, her long hair partly tied back and a council badge on her uniform, with a composed expression.",
-      "background": "Haruka is the third-year student council president, coordinating festival resources and procedures. Gentle and precise, she brings disagreements back to practical arrangements.",
+      "background": "Haruka is the third-year Student Council President, coordinating festival resources and procedures. Gentle and precise, she brings disagreements back to practical arrangements.",
       "storyContext": "For budgeting, room allocation and festival coordination. Her authored role is supportive; the portrait adds no romance route or private promise.",
       "visualNotes": [
         "Partly tied hair, council badge and blue folder preserve the original portrait."
@@ -80,7 +80,7 @@
       "id": "onodera-chihiro",
       "name": "Chihiro Onodera",
       "description": "Chihiro wears her hair in a low bun and a beige cardigan, holding up chalk while supporting an open book.",
-      "background": "Chihiro is Class 2-B’s homeroom and language teacher and the Literature Club’s former adviser. She respects student autonomy and understands the pressures on small clubs.",
+      "background": "Chihiro is Class 2-B’s homeroom and language teacher and the Literature Club’s former advisor. She respects student autonomy and understands the pressures on small clubs.",
       "storyContext": "For the transfer student’s introduction, lessons and gentle guidance. She offers support while students make their own club choices.",
       "visualNotes": [
         "Her adult face, chalk and book establish her role as a teacher."
@@ -100,7 +100,7 @@
       "id": "toujou-akane",
       "name": "Akane Toujou",
       "description": "Akane has long straight dark hair and holds a blue hardback with a purple floral detail visible beside it, her gaze quiet.",
-      "background": "Akane is the third-year library committee chair and a regular at Umineko Bookstore. She values old publications and club memories, expressing care through seats, books and quiet company.",
+      "background": "Akane is the third-year Head Librarian and a regular at Umineko Bookstore. She values old publications and club memories, expressing care through seats, books and quiet company.",
       "storyContext": "She enters the story naturally when the player visits the library. The portrait does not presume a reserved seat for the player or a disclosure of family history.",
       "visualNotes": [
         "The book and flower are visual details; the source does not establish the flower’s origin, giver or symbolism."
@@ -110,7 +110,7 @@
       "id": "asakura-rin-uniform-serious",
       "name": "Rin Asakura · Listening Seriously",
       "description": "Rin opens both eyes and softens her playful smile while keeping the camera and notebook.",
-      "background": "Rin is a Class 2-B student and newspaper reporter. Interviews let her approach people; the festival’s rumor fact-check wall also makes the limits of publication part of her work.",
+      "background": "Rin is a Class 2-B student and News Club reporter. Interviews let her approach people; the festival’s Rumor Truth Wall also makes the limits of publication part of her work.",
       "storyContext": "Suits serious listening and discussion of reporting boundaries. The expression alone does not establish that a story was withheld or published.",
       "visualNotes": [
         "Camera, notebook, armband and flower clip preserve her identity."

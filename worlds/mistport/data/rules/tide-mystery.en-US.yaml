@@ -17,7 +17,7 @@
     - tide
 - id: mistport-opening-leads
   title: The First Step After Three Bells
-  content: Do not unload the whole conspiracy at the opening. Su Yao's torn letter, the missing Appraisal Report 74 in the Sealed Archive, and the newly exposed Echo Gallery beyond the Tide-Seal Gate are three cross-checkable beginnings; the Salt Fangs' hatch and a Council permit carry different costs. Give every scene at least one concrete lead to act on, and let Lin Yuanzhou, Iron Meg, Grey Falcon, or Frost push the investigation toward the next place through their own needs.
+  content: Do not unload the whole conspiracy at the opening. Su Yao's torn letter, the missing Appraisal Report 74 in the Sealed Archive, and the newly exposed Echo Gallery beyond the Seal Tide Gate are three cross-checkable beginnings; the Salt Fangs' hatch and a Council permit carry different costs. Give every scene at least one concrete lead to act on, and let Lin Yuanzhou, Iron Meg, Grey Falcon, or Frost push the investigation toward the next place through their own needs.
   keys:
     - triple strike
     - Qi's disappearance
@@ -26,7 +26,7 @@
     - Echo Gallery
 - id: mistport-tide-clock
   title: The Tide Clock
-  content: Flood tide, ebb tide, the tolling of the bell tower, and the Tide-Seal Decree all change which places can be entered. Action choices should make the current tide-time explicit, letting time pressure shape the route of exploration; the deep-ebb warning (a triple strike) is a rare window of opportunity — and of danger.
+  content: Flood tide, ebb tide, the tolling of the bell tower, and the Seal Tide Decree all change which places can be entered. Action choices should make the current tide-time explicit, letting time pressure shape the route of exploration; the deep-withdrawal alert (a triple strike) is a rare window of opportunity — and of danger.
   keys:
     - flood tide
     - ebb
@@ -44,7 +44,7 @@
     - risk
 - id: mistport-fog-rot
   title: Tide-Force and Fog-Rot
-  content: Channeling the tide-force or using an active relic always has a price. Gains in power should come with accumulating fog-rot, bodily mutation, or the erosion of the mind — never a costless boost; fog-rot is irreversible, and the deeper into the Undertow, the more the price shows itself.
+  content: Channeling Tide-Force or using an active relic always has a price. Gains in power should come with accumulating fog-rot, bodily mutation, or the erosion of the mind — never a costless boost; fog-rot is irreversible, and the deeper into the Undertow, the more the price shows itself.
   keys:
     - tide-force
     - fog-rot
