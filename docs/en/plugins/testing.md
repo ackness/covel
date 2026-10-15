@@ -202,6 +202,7 @@ Key points:
 
 The exports of `@covel/plugin-test-utils`:
 
+<!-- prettier-ignore -->
 | Export                                                                 | Use                                                                                                                 |
 | ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
 | `makeManualFunctionContext`                                            | Builds the `ctx` for a function                                                                                     |
@@ -211,6 +212,8 @@ The exports of `@covel/plugin-test-utils`:
 | `MockLLM`                                                              | A fake model. It records each call. It supports one default reply and a list of replies used in order               |
 | `makeTurnInput` / `makeTriggerContext` / `makeRuntimeResult`           | Saves you writing test data. `makeTurnInput` defaults to `locale: "zh-CN"`, the same as the real game               |
 | `expectAssetGenerated`                                                 | Asserts that `effects.assetGenerations` in the result has one valid media reference                                 |
+
+`makeRandom().int(min, max)` shares the host's argument checks and throws the same `RangeError` for invalid ranges, whether or not the game uses a seed. See [`ctx.random`](../reference/plugins.md#random-numbers-ctxrandom) for the rules.
 
 Real tests you can follow:
 

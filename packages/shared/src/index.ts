@@ -563,7 +563,11 @@ export {
 
 export * from "./schemas/catalog.js";
 
-export { compareText, estimateTokens } from "@covel/plugin-handlers-utils";
+export {
+  compareText,
+  estimateTokens,
+  validateRandomIntRange,
+} from "@covel/plugin-handlers-utils";
 
 export { FRAMEWORK_TOOL_NAMES } from "@covel/plugin-handlers-utils";
 

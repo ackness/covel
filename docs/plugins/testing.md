@@ -202,6 +202,7 @@ it("writes one note", async () => {
 
 `@covel/plugin-test-utils` 的导出：
 
+<!-- prettier-ignore -->
 | 导出                                                                   | 用途                                                                       |
 | ---------------------------------------------------------------------- | -------------------------------------------------------------------------- |
 | `makeManualFunctionContext`                                            | 造一个函数用的 `ctx`                                                       |
@@ -211,6 +212,8 @@ it("writes one note", async () => {
 | `MockLLM`                                                              | 假模型。记录每次调用；支持一个默认回复和一串按顺序使用的回复               |
 | `makeTurnInput` / `makeTriggerContext` / `makeRuntimeResult`           | 少写一些测试数据。`makeTurnInput` 默认带 `locale: "zh-CN"`，和真实游戏一致 |
 | `expectAssetGenerated`                                                 | 断言结果的 `effects.assetGenerations` 里有一个合法的媒体引用               |
+
+`makeRandom().int(min, max)` 与宿主共用参数检查，范围错误抛相同的 `RangeError`，无论游戏是否设置种子。检查规则见 [`ctx.random`](../reference/plugins.md#随机数ctxrandom)。
 
 可以照着写的真实测试：
 

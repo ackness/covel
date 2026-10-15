@@ -7,6 +7,7 @@ import type {
   FunctionStoreView,
   PluginRandom,
 } from "@covel/plugin-handlers-utils";
+import { validateRandomIntRange } from "@covel/plugin-handlers-utils";
 export interface ManualFunctionContextOptions extends Partial<
   Omit<FunctionHandlerContext, "pluginId" | "store">
 > {
@@ -20,6 +21,7 @@ export function makeRandom(seed = 1): PluginRandom {
   let state = seed >>> 0;
   return {
     int(min, max) {
+      validateRandomIntRange(min, max);
       state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
       return min + Math.floor((state / 2 ** 32) * (max - min));
     },

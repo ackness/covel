@@ -88,6 +88,33 @@ describe("ctx.random", () => {
     expect(() => random.int(0.5, 3)).toThrow(RangeError);
   });
 
+  it("uses the same range errors and boundary with and without a seed", () => {
+    const random = createPluginRandom({
+      sessionId: "run",
+      pluginId: "dice",
+      stream: "dice/roller",
+    });
+    for (const seed of ["", "seed-a"]) {
+      vi.stubEnv("COVEL_RANDOM_SEED", seed);
+      for (const [min, max] of [
+        [1, 1],
+        [1.5, 3],
+        [0, 2 ** 48],
+      ] as const) {
+        expect(() => random.int(min, max)).toThrowError(RangeError);
+        expect(() => random.int(min, max)).toThrowError(
+          new RangeError(
+            `ctx.random.int needs safe integers with min < max: ${min}, ${max}`,
+          ),
+        );
+      }
+      const value = random.int(0, 2 ** 48 - 1);
+      expect(Number.isSafeInteger(value)).toBe(true);
+      expect(value).toBeGreaterThanOrEqual(0);
+      expect(value).toBeLessThan(2 ** 48 - 1);
+    }
+  });
+
   it("is on the context of every tool call, on the calling runtime's stream", () => {
     vi.stubEnv("COVEL_RANDOM_SEED", "seed-a");
     const caller = {

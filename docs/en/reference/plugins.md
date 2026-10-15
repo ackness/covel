@@ -538,6 +538,7 @@ When the session no longer exists, `getSession()` throws and the current executi
 `ctx.random` is a random source provided by the host. The context of every function handler, agent guard, plugin tool, and RPC action has it, and its type marks it as always present.
 
 - Use `ctx.random.int(min, max)` for dice and any other random draws in the game. It returns an integer with `min <= n < max`. It is the same as `randomInt` from `node:crypto`.
+- The SDK's `validateRandomIntRange(min, max)` is shared by the host and `makeRandom`: both bounds must be safe integers, `min < max`, and the range width must be strictly less than `2 ** 48`, otherwise it throws `RangeError`. The argument rules and error messages are identical with or without a seed.
 - Do not use `node:crypto` or `Math.random` directly.
 - Normally it is just `randomInt`. When the test server is started with `COVEL_RANDOM_SEED`, the nth number drawn by the same runtime (or the same RPC action) is the same on every run. A scripted session can therefore be repeated (see [Environment variables](./env-registry.md#runtime-contract) and [Recording and replay](../ship/real-model.md#recording-and-replay)).
 - `shortId` and `shortIdBatch` must get it as their fourth argument. The random part of an ID can then also be repeated. The SDK has no other random source to fall back on.
