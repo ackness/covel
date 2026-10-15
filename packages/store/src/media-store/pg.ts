@@ -171,13 +171,6 @@ export function createPgMediaStoreFromClient(sql: Sql): MediaStore {
       return hasBody(id);
     },
 
-    async resolveUrl(ref) {
-      if (ref.url) return ref.url;
-      const row = await selectMetadata(ref.id);
-      if (!row) throw new Error(`Media asset not found: ${ref.id}`);
-      return `pg://media/${ref.id}`;
-    },
-
     async delete(id) {
       await sql.begin(async (tx) => {
         // Serialize lifecycle changes for one content id across processes. With

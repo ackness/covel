@@ -147,25 +147,9 @@ export function runMediaStoreContractTests(
       expect(persisted?.meta).toEqual({ nested: { value: 1 } });
     });
 
-    it("resolves a readable URL for stored media", async () => {
+    it("does not expose a backend URL resolver", async () => {
       const store = await createStore();
-      const ref = await store.put(PNG, "image/png");
-
-      const url = await store.resolveUrl(ref);
-      expect(url).toMatch(
-        /^(memory:\/\/media\/|file:\/\/|pg:\/\/media\/|s3:\/\/|https?:\/\/|blob:)/,
-      );
-      if (!url.startsWith("blob:")) {
-        expect(url).toContain(ref.id);
-      }
-    });
-
-    it("prefers a MediaRef url when provided", async () => {
-      const store = await createStore();
-      const ref = await store.put(PNG, "image/png");
-      const url = "https://example.test/signed";
-
-      await expect(store.resolveUrl({ ...ref, url })).resolves.toBe(url);
+      expect(store).not.toHaveProperty("resolveUrl");
     });
 
     it("accepts Blob input and returns content-addressed bytes", async () => {

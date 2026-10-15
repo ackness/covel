@@ -34,13 +34,11 @@ describe("PgMediaStore query projections", () => {
     const store = createPgMediaStoreFromClient(sql);
 
     await store.lookup("asset-1");
-    await store.resolveUrl({ id: "asset-1", mime: "image/png", size: 3 });
     await store.exists("asset-1");
 
-    expect(queries).toHaveLength(3);
+    expect(queries).toHaveLength(2);
     expect(queries[0]).not.toMatch(/SELECT .*\bbody\b/i);
-    expect(queries[1]).not.toMatch(/SELECT .*\bbody\b/i);
-    expect(queries[2]).toMatch(/^SELECT body IS NOT NULL AS has_body/i);
+    expect(queries[1]).toMatch(/^SELECT body IS NOT NULL AS has_body/i);
   });
 
   it("loads only the body column for get", async () => {

@@ -30,7 +30,6 @@ import {
 } from "node:fs/promises";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { Readable } from "node:stream";
-import { pathToFileURL } from "node:url";
 import { createTables } from "../sqlite/sqlite-store-mappers.js";
 import type { SqliteMediaStoreOptions } from "./types.js";
 import {
@@ -338,13 +337,6 @@ function initializeSqliteMediaStore(
     async exists(id) {
       const row = select.get(id) as { path: string } | undefined;
       return row !== undefined && existsSync(filePath(row.path));
-    },
-
-    async resolveUrl(ref) {
-      if (ref.url) return ref.url;
-      const row = select.get(ref.id) as { path: string } | undefined;
-      if (!row) throw new Error(`Media asset not found: ${ref.id}`);
-      return pathToFileURL(filePath(row.path)).toString();
     },
 
     async delete(id) {

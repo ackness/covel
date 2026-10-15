@@ -100,9 +100,6 @@ function createMockMediaStore(options: MockMediaStoreOptions = {}): {
     async exists(id) {
       return assets.has(id);
     },
-    async resolveUrl() {
-      return "/api/media/test";
-    },
     async delete(id) {
       assets.delete(id);
     },

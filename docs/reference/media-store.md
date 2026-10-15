@@ -23,7 +23,6 @@ interface MediaStore {
   ): Promise<MediaRef>;
   get(ref: MediaRef): Promise<Uint8Array | Blob>;
   exists(id: string): Promise<boolean>;
-  resolveUrl(ref: MediaRef): Promise<string>;
   delete(id: string): Promise<void>;
   lookup(id: string): Promise<MediaAssetLookup | null>;
   recordOwnership(
@@ -54,6 +53,8 @@ interface MediaStore {
 ```
 
 类型定义在 `packages/shared/src/types/media.ts`。
+
+插件使用 `ctx.media.put()` 存入字节、`ctx.media.get()` 读取字节、`ctx.media.ingestUrl()` 下载并存入媒体。`get()` 只允许读取本会话拥有或引用的文件。给界面显示媒体时，传入 `MediaRef`，由框架处理读取。
 
 **文件 ID 就是内容的哈希**
 
@@ -260,6 +261,8 @@ SQLite 的 `media_assets.path` 保存相对 `mediaRoot` 的路径（`ab/cd/<sha2
 `delete()` 先移除指向这个文件的所有引用，再删除文件。SQL 后端把两步放在一个事务里。特别是，另一个 SQLite 进程不可能在“清引用”和“删文件”之间插入一条新引用。
 
 **签名 URL：`GET /api/sessions/:id/media-token`**
+
+浏览器需要可访问的 URL 时，通过这个端点获取。`MediaStore` 和插件的 `ctx.media` 不提供 URL 解析方法。
 
 - 在托管部署（`demo` / `commercial`）下，以及生产环境使用 MemoryStore 时（包括 `self` 的浏览器私有模式），需要会话归属者的凭据。
 - 和其他会话路由一样，运维凭据也可以授权这个请求。

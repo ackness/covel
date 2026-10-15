@@ -1,10 +1,13 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "vitest";
 import { createSqliteMediaStore } from "../src/media-store/sqlite.js";
+
+function mediaFile(root: string, id: string): string {
+  return path.join(root, id.slice(0, 2), id.slice(2, 4), `${id}.bin`);
+}
 
 describe.each(["media", "custom-media"])(
   "SQLite relocation with %s",
@@ -28,19 +31,13 @@ describe.each(["media", "custom-media"])(
         try {
           const bytes = new Uint8Array([1, 2, 3]);
           const ref = await store.put(bytes, "image/png");
-          const oldFile = fileURLToPath(await store.resolveUrl(ref));
+          const oldFile = mediaFile(path.join(oldRoot, directory), ref.id);
           await store.close?.();
           fs.cpSync(oldRoot, newRoot, { recursive: true });
           if (removeOld) fs.rmSync(oldRoot, { recursive: true });
           store = open(newRoot);
-          const newFile = path.join(
-            newRoot,
-            directory,
-            ref.id.slice(0, 2),
-            ref.id.slice(2, 4),
-            `${ref.id}.bin`,
-          );
-          expect(fileURLToPath(await store.resolveUrl(ref))).toBe(newFile);
+          const newFile = mediaFile(path.join(newRoot, directory), ref.id);
+          expect(fs.readFileSync(newFile)).toEqual(Buffer.from(bytes));
           expect(await store.exists(ref.id)).toBe(true);
           expect(await store.get(ref)).toEqual(bytes);
           expect(
@@ -69,10 +66,8 @@ describe.each(["media", "custom-media"])(
           expect(fs.existsSync(newFile)).toBe(false);
           expect(fs.existsSync(oldFile)).toBe(!removeOld);
           const fresh = await store.put(new Uint8Array([4, 5]), "image/png");
-          const freshFile = fileURLToPath(await store.resolveUrl(fresh));
-          expect(
-            freshFile.startsWith(path.join(newRoot, directory) + path.sep),
-          ).toBe(true);
+          const freshFile = mediaFile(path.join(newRoot, directory), fresh.id);
+          expect(fs.readFileSync(freshFile)).toEqual(Buffer.from([4, 5]));
           await store.cleanup(new Set(), { maxBytes: 0, dryRun: false });
           expect(fs.existsSync(freshFile)).toBe(false);
           expect(fs.existsSync(oldRoot)).toBe(!removeOld);
@@ -93,13 +88,13 @@ it("rejects stored absolute paths without reading, repairing or deleting the old
   try {
     const bytes = new Uint8Array([6, 7, 8]);
     const ref = await store.put(bytes, "image/png");
-    const file = fileURLToPath(await store.resolveUrl(ref));
+    const file = mediaFile(path.join(root, "media"), ref.id);
     db.prepare("UPDATE media_assets SET path = ? WHERE id = ?").run(
       file,
       ref.id,
     );
     await expect(store.get(ref)).rejects.toThrow("Invalid relative media path");
-    await expect(store.resolveUrl(ref)).rejects.toThrow(
+    await expect(store.openReadStream!(ref)).rejects.toThrow(
       "Invalid relative media path",
     );
     await expect(store.delete(ref.id)).rejects.toThrow(
