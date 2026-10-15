@@ -10,8 +10,30 @@ import {
   encodeBase64Json,
   encodePluginUserSettingsHeader,
   PluginUserSettingsHeaderTooLargeError,
+  needsProviderKeys,
 } from "../api/model-settings.js";
 import { PLUGIN_USER_SETTINGS_HEADER_MAX_BYTES } from "@covel/shared/plugin-user-settings-header";
+
+describe("memory index provider keys", () => {
+  it.each([
+    "/api/sessions/session-1/memory-index/rebuild",
+    "/api/sessions/session-1/memory-index/rebuild?retry=1",
+  ])("attaches provider keys to the rebuild route (%s)", (url) => {
+    expect(needsProviderKeys(url)).toBe(true);
+  });
+
+  it.each([
+    "/api/sessions/session-1/memory-index",
+    "/api/sessions/session-1/memory-index?status=1",
+    "/api/sessions/session-1/memory-index/rebuild-other",
+    "/api/sessions/session-1/memory-index/rebuild/extra",
+  ])(
+    "does not attach provider keys to other memory index routes (%s)",
+    (url) => {
+      expect(needsProviderKeys(url)).toBe(false);
+    },
+  );
+});
 
 /** Mirror of the server's decode (`apps/server/src/lib/base64-json.ts`). */
 function decodeAsServerWould(header: string): unknown {

@@ -106,5 +106,8 @@ describe("search-tools contract", () => {
     const desc = buildSearchToolsDescription(12, "mega-plugin");
     expect(desc).toContain("12");
     expect(desc).toContain("mega-plugin");
+    expect(desc).toContain("builtin tools");
+    expect(desc).toContain("this plugin's own tools");
+    expect(desc).not.toContain('from plugin "mega-plugin"');
   });
 });

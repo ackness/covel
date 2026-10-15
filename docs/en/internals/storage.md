@@ -482,7 +482,7 @@ Both backends declare the same indexes (PostgreSQL's names carry a `pg_` prefix)
 
 MemoryStore, SQLite, PostgreSQL and browser checkpoints all keep these identities. So browser persistence and the server share the domain shape, but they do not share the server's table structures or each backend's create, read, update and delete implementations.
 
-**Model routing.** Model routing looks at only three things: the slot settings, the request override, and the session's `runtimeModelOverrides`. A session does not carry a `presetId`, and this field is absent from session records, checkpoints and snapshots. Arbitrary session metadata cannot be used to choose a model. The identity and lock time of the embedding model are persisted on create and update, and all three backends agree.
+**Model routing.** Model routing looks at only three things: the slot settings, the request override, and the session's `runtimeModelOverrides`. A session does not carry a `presetId`, and this field is absent from session records, checkpoints and snapshots. Arbitrary session metadata cannot be used to choose a model. The identity and lock time of the embedding model are persisted on create and update, and all three backends agree. Taking the first lock or rebuilding a vector index also updates the session’s `embeddingModelId` and `embeddingLockedAt`; clearing the index clears both fields.
 
 ## Current Snapshot Contract
 

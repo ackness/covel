@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createMemoryStore } from "@covel/store/memory";
 import type { DataStore } from "@covel/store";
 import type { JsonValue, RuntimeManifest } from "@covel/shared";
@@ -85,6 +85,26 @@ async function playTurn(
 }
 
 describe("runtime trigger ledger", () => {
+  beforeEach(() => {
+    const RealDate = Date;
+    let now = RealDate.parse("2026-01-01T00:00:00.000Z");
+    // History orders equal timestamps by random message ID. Give every
+    // clock read its own millisecond so these turns have a stable order.
+    vi.stubGlobal(
+      "Date",
+      class extends RealDate {
+        constructor(value?: string | number) {
+          super(value ?? now++);
+        }
+
+        static override now(): number {
+          return now++;
+        }
+      },
+    );
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
   it("runs a never-triggered runtime before a long cooldown starts", async () => {
     const store = createMemoryStore();
     const now = new Date().toISOString();
