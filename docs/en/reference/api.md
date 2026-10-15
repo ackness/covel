@@ -3633,7 +3633,7 @@ Returns an index of the framework's capabilities. Third-party developers, extern
         "runtime-export",
         "kernel"
       ],
-      "uiSlots": ["right", "message", "left"]
+      "uiSlots": ["right", "message"]
     },
     "scheduling": {
       "effectsPolicy": "warn"

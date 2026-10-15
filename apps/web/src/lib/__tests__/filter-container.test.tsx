@@ -7,7 +7,7 @@
  *    input, click tabs, and assert the filtered card list updates.
  */
 
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import {
   render,
   screen,
@@ -16,12 +16,22 @@ import {
   cleanup,
 } from "@testing-library/react";
 import { afterEach } from "vitest";
-import { JSONUIProvider } from "@json-render/react";
+import { JSONUIProvider, Renderer, useStateStore } from "@json-render/react";
 import { covelRegistry, __filterContainerInternals } from "../catalog.js";
+
+import { pluginPanelViewToSpec } from "../plugin-panel-spec.js";
+import { covelDirectives } from "../json-render-directives.js";
+import worldSchemaPanel from "../../../../../plugins/world-init/runtimes/schema-gen/ui/world-schema.json";
+import codexPanel from "../../../../../plugins/codex/ui/codex-panel.json";
+import questPanel from "../../../../../plugins/core-quest/ui/quest-log-panel.json";
+import rulesPanel from "../../../../../plugins/living-world-rules/ui/living-world-rules-panel.json";
 
 const { resolvePath, valueToHaystack, filterItems } =
   __filterContainerInternals;
 
+vi.mock("@/stores/session-store.js", () => ({
+  useSession: () => ({ state: { pendingInteractionDrafts: [] } }),
+}));
 afterEach(cleanup);
 
 const FIXTURE_ITEMS = [
@@ -242,45 +252,48 @@ const FILTER_TABS = [
   },
 ];
 
-const ITEM_PROP_MAP = {
-  title: "value/title",
-  content: "value/content",
-  category: "value/category",
-  tags: "value/tags",
-  rarity: "value/rarity",
+const ITEM_TEMPLATE = {
+  component: "EntryCard",
+  props: {
+    title: { $item: "value/title" },
+    content: { $item: "value/content" },
+    category: { $item: "value/category" },
+    tags: { $item: "value/tags" },
+    rarity: { $item: "value/rarity" },
+  },
 };
 
 function renderFilterContainer(overrides: Record<string, unknown> = {}) {
-  const FilterContainer = covelRegistry.FilterContainer!;
+  const spec = pluginPanelViewToSpec({
+    component: "FilterContainer",
+    props: {
+      items: { $state: "/entries" },
+      searchPlaceholder: { zh: "搜索…", en: "Search…" },
+      searchFields: ["value/title", "value/content", "value/tags"],
+      filterField: "value/category",
+      filterTabs: FILTER_TABS,
+      itemTemplate: ITEM_TEMPLATE,
+      itemKeyField: "key",
+      ...overrides,
+    },
+  });
   return render(
-    <JSONUIProvider registry={covelRegistry}>
-      <FilterContainer
-        element={{
-          type: "FilterContainer",
-          props: {
-            items: FIXTURE_ITEMS,
-            searchPlaceholder: { zh: "搜索…", en: "Search…" },
-            searchFields: ["value/title", "value/content", "value/tags"],
-            filterField: "value/category",
-            filterTabs: FILTER_TABS,
-            itemComponent: "EntryCard",
-            itemPropMap: ITEM_PROP_MAP,
-            itemKeyField: "key",
-            ...overrides,
-          },
-        }}
-        emit={() => {}}
-        on={() => ({
-          emit: () => {},
-          shouldPreventDefault: false,
-          bound: false,
-        })}
-      />
+    <JSONUIProvider
+      registry={covelRegistry}
+      initialState={{ entries: FIXTURE_ITEMS }}
+      directives={covelDirectives}
+    >
+      <Renderer spec={spec} registry={covelRegistry} />
     </JSONUIProvider>,
   );
 }
 
 describe("FilterContainer component", () => {
+  it("treats malformed optional paths as absent", () => {
+    renderFilterContainer({ filterField: { invalid: true }, itemKeyField: 42 });
+    expect(screen.getByText("Goblin Scout")).toBeDefined();
+  });
+
   it("renders all items by default", () => {
     renderFilterContainer();
     expect(screen.getByText("Goblin Scout")).toBeDefined();
@@ -364,11 +377,6 @@ describe("FilterContainer component", () => {
     expect(screen.queryByRole("tablist")).toBeNull();
   });
 
-  it("renders an error hint when itemComponent is unknown", () => {
-    renderFilterContainer({ itemComponent: "DefinitelyNotRegistered" });
-    expect(screen.getByText(/not found in registry/)).toBeDefined();
-  });
-
   it("renders per-tab count suffixes when showCounts is true", () => {
     renderFilterContainer({ showCounts: true });
     const tablist = screen.getByRole("tablist");
@@ -434,9 +442,16 @@ describe("FilterContainer component", () => {
     expect(screen.getByText("4 条")).toBeDefined();
   });
 
-  it("forwards itemLiteralProps to every rendered item", () => {
+  it("applies literal template props to every row", () => {
     renderFilterContainer({
-      itemLiteralProps: { collapsible: true, defaultExpanded: false },
+      itemTemplate: {
+        ...ITEM_TEMPLATE,
+        props: {
+          ...ITEM_TEMPLATE.props,
+          collapsible: true,
+          defaultExpanded: false,
+        },
+      },
     });
     // When collapsible+!defaultExpanded, content is hidden — so we should NOT
     // see any of the body content text. The titles are still visible.
@@ -472,5 +487,255 @@ describe("Tabs standalone", () => {
 
     const monsterTab = screen.getByRole("tab", { name: /怪物/ });
     expect(monsterTab.getAttribute("aria-selected")).toBe("true");
+  });
+});
+
+describe("FilterContainer row scopes", () => {
+  it("renders row subtrees, translated maps and actions through search and tabs", () => {
+    const select = vi.fn();
+    const view = {
+      component: "FilterContainer",
+      props: {
+        items: { $state: "/entries" },
+        searchFields: ["value/title"],
+        searchPlaceholder: "Find",
+        filterField: "value/category",
+        filterTabs: FILTER_TABS,
+        itemKeyField: "key",
+        itemTemplate: {
+          component: "Row",
+          children: [
+            { component: "Text", props: { content: { $item: "value/title" } } },
+            {
+              component: "Badge",
+              props: {
+                label: {
+                  $map: { $item: "value/category" },
+                  labels: { monster: { en: "Monster", zh: "怪兽" } },
+                  fallback: {
+                    $concat: ["Other: ", { $item: "value/category" }],
+                  },
+                },
+              },
+            },
+            {
+              component: "Button",
+              props: { label: { $concat: ["Select ", { $index: true }] } },
+              on: {
+                click: {
+                  action: "select",
+                  params: {
+                    payload: {
+                      id: { $item: "key" },
+                      title: { $item: "value/title" },
+                      index: { $index: true },
+                    },
+                  },
+                },
+              },
+            },
+          ],
+        },
+      },
+    };
+    render(
+      <JSONUIProvider
+        registry={covelRegistry}
+        initialState={{ entries: FIXTURE_ITEMS }}
+        handlers={{ select }}
+        directives={covelDirectives}
+      >
+        <Renderer spec={pluginPanelViewToSpec(view)} registry={covelRegistry} />
+      </JSONUIProvider>,
+    );
+    expect(screen.getAllByText("怪兽")).toHaveLength(2);
+    expect(screen.getByText("Other: item")).toBeDefined();
+    fireEvent.click(screen.getByRole("tab", { name: /怪物/ }));
+    fireEvent.change(screen.getByPlaceholderText("Find"), {
+      target: { value: "ember" },
+    });
+    expect(screen.queryByText("Goblin Scout")).toBeNull();
+    expect(screen.getAllByText("怪兽")).toHaveLength(1);
+    fireEvent.click(screen.getByRole("button", { name: "Select 3" }));
+    expect(select).toHaveBeenCalledWith({
+      payload: { id: "e4", title: "Ember Wraith", index: 3 },
+    });
+  });
+
+  it("keeps original array paths for nested repeat and editable row bindings after filtering", () => {
+    const select = vi.fn();
+    const view = {
+      component: "Stack",
+      repeat: { statePath: "/groups" },
+      children: [
+        {
+          component: "FilterContainer",
+          props: {
+            items: { $item: "rows" },
+            searchFields: ["name"],
+            searchPlaceholder: "Find",
+            itemTemplate: {
+              component: "Stack",
+              children: [
+                {
+                  component: "Input",
+                  props: { value: { $bindItem: "name" }, placeholder: "Name" },
+                },
+                {
+                  component: "Stack",
+                  repeat: { statePath: { $item: "tags" } },
+                  children: [
+                    {
+                      component: "Button",
+                      props: { label: { $item: "text" } },
+                      on: {
+                        click: {
+                          action: "select",
+                          params: { payload: { $item: "" } },
+                        },
+                      },
+                    },
+                  ],
+                },
+              ],
+            },
+          },
+        },
+      ],
+    };
+    render(
+      <JSONUIProvider
+        registry={covelRegistry}
+        initialState={{
+          groups: [
+            {
+              rows: [
+                { name: "first", tags: [{ text: "one" }] },
+                { name: "second", tags: [{ text: "two" }] },
+              ],
+            },
+          ],
+        }}
+        handlers={{ select }}
+      >
+        <Renderer spec={pluginPanelViewToSpec(view)} registry={covelRegistry} />
+      </JSONUIProvider>,
+    );
+    fireEvent.change(screen.getByPlaceholderText("Find"), {
+      target: { value: "second" },
+    });
+    expect(screen.queryByRole("button", { name: "one" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "two" }));
+    // Direct $item action params follow json-render's state-path semantics.
+    expect(select).toHaveBeenCalledWith({ payload: "/groups/0/rows/1/tags/0" });
+    fireEvent.change(screen.getByPlaceholderText("Name"), {
+      target: { value: "second edited" },
+    });
+    fireEvent.change(screen.getByPlaceholderText("Find"), {
+      target: { value: "" },
+    });
+    expect(
+      screen
+        .getAllByPlaceholderText("Name")
+        .map((input) => (input as HTMLInputElement).value),
+    ).toEqual(["first", "second edited"]);
+  });
+
+  it("preserves row component state by key when source rows reorder", () => {
+    function Reorder() {
+      const { set } = useStateStore();
+      return (
+        <button onClick={() => set("/entries", [...FIXTURE_ITEMS].reverse())}>
+          Reverse
+        </button>
+      );
+    }
+    const spec = pluginPanelViewToSpec({
+      component: "FilterContainer",
+      props: {
+        items: { $state: "/entries" },
+        itemKeyField: "key",
+        itemTemplate: {
+          ...ITEM_TEMPLATE,
+          props: {
+            ...ITEM_TEMPLATE.props,
+            collapsible: true,
+            defaultExpanded: false,
+          },
+        },
+      },
+    });
+    render(
+      <JSONUIProvider
+        registry={covelRegistry}
+        initialState={{ entries: FIXTURE_ITEMS }}
+      >
+        <Reorder />
+        <Renderer spec={spec} registry={covelRegistry} />
+      </JSONUIProvider>,
+    );
+    fireEvent.click(screen.getByText("Goblin Scout"));
+    expect(screen.getByText(FIXTURE_ITEMS[0]!.value.content)).toBeDefined();
+    fireEvent.click(screen.getByRole("button", { name: "Reverse" }));
+    expect(screen.getByText(FIXTURE_ITEMS[0]!.value.content)).toBeDefined();
+    expect(screen.queryByText(FIXTURE_ITEMS[3]!.value.content)).toBeNull();
+  });
+
+  it("renders mapped type/category badges from the bundled character-schema panel", () => {
+    render(
+      <JSONUIProvider
+        registry={covelRegistry}
+        initialState={{
+          attributes: [
+            { id: "hp", name: "Health", type: "number", category: "stats" },
+          ],
+        }}
+        directives={covelDirectives}
+      >
+        <Renderer
+          spec={pluginPanelViewToSpec(worldSchemaPanel.view)}
+          registry={covelRegistry}
+        />
+      </JSONUIProvider>,
+    );
+    expect(screen.getByText("Number")).toBeDefined();
+    expect(screen.getByText("Stats")).toBeDefined();
+    expect(screen.queryByText("number")).toBeNull();
+  });
+
+  it.each([
+    [
+      "codex",
+      codexPanel.view,
+      { title: "Known creature", category: "monster", content: "Details" },
+      "Known creature",
+      "Monsters",
+    ],
+    [
+      "quests",
+      questPanel.view,
+      { name: "Find the key", status: "active", description: "Details" },
+      "Find the key",
+      "Active",
+    ],
+    [
+      "rules",
+      rulesPanel.view,
+      { title: "Quiet nights", kind: "constant", content: "Details" },
+      "Quiet nights",
+      "Constant",
+    ],
+  ])("renders migrated %s rows", (_name, view, value, title, badge) => {
+    render(
+      <JSONUIProvider
+        registry={covelRegistry}
+        initialState={{ entries: [{ key: "row", value }] }}
+        directives={covelDirectives}
+      >
+        <Renderer spec={pluginPanelViewToSpec(view)} registry={covelRegistry} />
+      </JSONUIProvider>,
+    );
+    expect(screen.getByText(title as string)).toBeDefined();
+    expect(screen.getAllByText(badge as string).length).toBeGreaterThan(0);
   });
 });

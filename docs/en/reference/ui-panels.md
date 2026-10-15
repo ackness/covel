@@ -103,7 +103,7 @@ The right-side panels are the main place where plugins show their state. First, 
 ```
 session created → GET /api/ui-specs?sessionId=<id>
   → server filters by the session's active set (session plugin scope)
-  → { right: [...], message: [...], left: [...] }
+  → { right: [...], message: [...], diagnostics: [...] }
   → tabs are generated from right[] (icon + label)
   → each tab maps to one json-render Renderer
   → pluginData[pluginId][namespace] is injected as state
@@ -129,7 +129,7 @@ The Database panel's manual refresh, its retry after a failure, and its automati
 
 ### Currently Registered Panels
 
-The second column is the panel ID, which is the `id` in the UI spec. Every right-side and left-side panel of a built-in plugin must be listed in this table (a test checks this).
+The second column is the panel ID, which is the `id` in the UI spec. Every right-side panel of a built-in plugin must be listed in this table (a test checks this).
 
 <!-- prettier-ignore -->
 | Plugin/runtime | Panel ID | Icon | group | Data namespace | Description |
@@ -213,7 +213,7 @@ contributes:
       - ./ui/my-panel.json
 ```
 
-When this page says `ui.right`, `ui.message` or `ui.left`, it means these keys under `contributes.ui`.
+When this page says `ui.right` or `ui.message`, it means these keys under `contributes.ui`. These are the two supported placements; a right panel can also select the stage decision area with `surfaces`. Other placements, including the removed `left`, are ignored with a log message at load and reported as unknown fields by `pnpm validate:plugin`.
 
 ### JSON Spec Format
 
@@ -408,7 +408,8 @@ messages:
 Rules:
 
 - **Which properties count as text.** Properties named `label`, `title`, `content`, `message`, `text`, `description`, `placeholder`, `footer`, `tooltip`, `hint`, `help`, `summary` or `subtitle`, and properties whose names end in `Label`, `Title`, `Message`, `Text`, `Placeholder`, `Description`, `Hint` or `Tooltip` (`shortLabel`, `groupLabel`, `searchPlaceholder`, `emptyMessage`, and so on).
-- **Translations apply only to these properties.** So a translation file cannot change component names, actions or data paths. The contents of `on` (action parameters), `dataSource` and `*PropMap` are data, and they are not translated.
+- **Translations apply only to these properties.** So a translation file cannot change component names, actions or data paths. The contents of `on` (action parameters), `dataSource` and `watch` are data, and they are not translated.
+- **Display labels for data values.** `$map.labels` values and string fallbacks are text too; see [Value-label mapping](./ui-components.md#value-label-mapping). Text inside row templates follows the same rules.
 - **When the same English sentence needs two translations**, put the property name and `|` in front of the key. `shortLabel|Codex` applies only to `shortLabel`, and `Codex` is used everywhere else.
 - **Text with no translation is shown in English.** Placeholders in a translation (such as `{{count}}`) must match the original.
 - **When the English original changes, the old translation no longer matches.** The interface falls back to English, and `pnpm validate:plugin` reports the translation as an error. You do not need to record separately whether a translation is out of date.

@@ -39,7 +39,7 @@ describe("plugin UI text translations", () => {
         },
         {
           component: "EntryList",
-          props: { itemPropMap: { title: "value/title" } },
+          props: { title: { $item: "value/title" } },
         },
       ],
     },
@@ -108,6 +108,73 @@ messages:
     // The same English text as the button label, sent to a runtime as data.
     expect(spec.view.children[0]!.on).toEqual(SPEC.view.children[0]!.on);
     expect(spec.view.children[1]!.props).toEqual(SPEC.view.children[1]!.props);
+  });
+
+  it("compiles and validates map labels and fallback without translating keys or data", async () => {
+    const spec = {
+      view: {
+        component: "FilterContainer",
+        props: {
+          items: { $state: "/entries" },
+          itemTemplate: {
+            component: "Badge",
+            props: {
+              label: {
+                $map: { $item: "value/status" },
+                labels: { active: "Active", en: "English" },
+                fallback: "Unknown",
+              },
+            },
+          },
+        },
+      },
+    };
+    await write("ui/panel.json", JSON.stringify(spec));
+    await write(
+      "locales/zh.yaml",
+      "messages:\n  Active: 进行中\n  English: 英文\n  fallback|Unknown: 未知\n",
+    );
+    expect(await load()).toMatchObject({
+      view: {
+        props: {
+          itemTemplate: {
+            props: {
+              label: {
+                $map: { $item: "value/status" },
+                labels: {
+                  active: { en: "Active", zh: "进行中" },
+                  en: { en: "English", zh: "英文" },
+                },
+                fallback: { en: "Unknown", zh: "未知" },
+              },
+            },
+          },
+        },
+      },
+    });
+    expect(await validatePluginLabels(dir)).toEqual([]);
+    expect(await missingTranslations(dir, "zh")).toEqual([]);
+    expect(await missingTranslations(dir, "ja")).toEqual([
+      { file: "ui/panel.json", where: "label", text: "Active" },
+      { file: "ui/panel.json", where: "label", text: "English" },
+      { file: "ui/panel.json", where: "fallback", text: "Unknown" },
+    ]);
+  });
+
+  it("keeps malformed label arrays invalid when translations are present", async () => {
+    await write(
+      "ui/panel.json",
+      JSON.stringify({
+        view: {
+          component: "Badge",
+          props: {
+            label: { $map: "0", labels: ["Active"] },
+          },
+        },
+      }),
+    );
+    await write("locales/zh.yaml", "messages:\n  Active: 进行中\n");
+    await expect(load()).rejects.toThrow("view.props.label.labels");
   });
 
   it("does not change the spec it is given", () => {

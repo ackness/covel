@@ -388,7 +388,7 @@ Input/Event → settle barrier → freeze registry generation → Trigger Router
   form the kernel-owned World Model: read-only through `ctx.world`, written through
   proposals.
 - **Plugin UI** is declarative: `contributes.ui` lists json-render specs for
-  `right` / `message` / `left`, `ui.slot@1` extensions fill kernel slots, and custom
+  `right` / `message`, `ui.slot@1` extensions fill kernel slots, and custom
   HTML runs in a sandboxed webview. `GET /api/ui-specs` aggregates the specs and
   `plugin-data.changed` SSE events drive re-renders.
 - **Model slots**: named `[covel.<slot>]` routes (`story`, `utility`, `plugin`,

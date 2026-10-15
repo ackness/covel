@@ -192,6 +192,25 @@ describe("manifest authoring CLI", () => {
 
   it.each([
     [
+      "an unknown template component",
+      {
+        component: "FilterContainer",
+        props: {
+          items: { $state: "/entries" },
+          itemTemplate: { component: "Kard" },
+        },
+      },
+      "view.props.itemTemplate.component: unknown component Kard",
+    ],
+    [
+      "invalid map labels",
+      {
+        component: "Badge",
+        props: { label: { $map: "active", labels: ["Active"] } },
+      },
+      "view.props.label.labels:",
+    ],
+    [
       "an unknown component",
       { component: "Stack", children: [{ component: "Kard" }] },
       "view.children[0].component: unknown component Kard; use a component name from docs/reference/ui-components.md",

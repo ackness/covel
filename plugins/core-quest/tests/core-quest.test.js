@@ -779,6 +779,10 @@ describe("core-quest plugin manifest", () => {
   it("loads UI spec JSON with panel metadata", () => {
     expect(loadedUi.diagnostics).toEqual([]);
     expect(loadedUi.slots.right).toHaveLength(1);
+    expect(loadedUi.slots.right[0].view.props.itemTemplate).toMatchObject({
+      component: "EntryCard",
+      props: { title: { $item: "value/name" } },
+    });
     expect(loadedUi.slots.right?.[0].id).toBe("core-quest");
     expect(loadedUi.slots.right?.[0].icon).toBe("scroll-text");
     expect(loadedUi.slots.message).toHaveLength(1);

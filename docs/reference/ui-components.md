@@ -7,7 +7,7 @@
 ## Authoring tip
 
 - **组件从哪来。** `apps/web/src/lib/catalog.tsx` 导出 `covelRegistry`，各个渲染器按职责放在 `apps/web/src/lib/catalog/` 下。插件只能用注册在这里的组件：词汇由框架定，插件用它来组合。
-- **在插件里引用。** 在 `ui/*.json` 里写 `"component": "<Name>"`，名字和下文完全一致。spec 文件通过 `PLUGIN.md` 的 `contributes.ui.right` / `ui.message` / `ui.left` 被发现。
+- **在插件里引用。** 在 `ui/*.json` 里写 `"component": "<Name>"`，名字和下文完全一致。spec 文件通过 `PLUGIN.md` 的 `contributes.ui.right` / `ui.message` 被发现。
 - **文字与校验。** spec 里写 English，译文写在 `locales/<locale>.yaml` 的 `messages` 一节（见 [ui-panels.md](./ui-panels.md#插件-ui-文本规范)）。运行 `pnpm check:i18n`：它包含 `check-plugin-i18n`，会拒绝 spec 里的中文，并要求内置插件的每条界面文字都有中文译文。
 - **找出这一页还没写到的组件。** 完整的清单随时可以搜出来：
 
@@ -89,7 +89,7 @@
 | `CharacterFieldsView` | 按 schema 显示一个角色的 `fields` 对象。它读会话 World Model 的 `characterSchema`，按类别分组（bio/stats/abilities/equipment/social）。 | `value`（角色的 `fields` 对象）                                                                                                                                                                            |
 | `CharacterAvatar`     | 按角色 ID 从 `character.visual@1` 取的头像，点击放大。                                                                                  | `characterId`，可选的 `size`（默认 `28`）                                                                                                                                                                  |
 
-`EntryCard` 的 `category` 和 `rarity` 是提供者定义的数据键，没有内置枚举或默认稀有度。`categoryOptions` 是 `{ value, label, icon?, color? }` 数组：用 `value` 匹配类别，`label` 按 UI 语言解析，图标和颜色可由条目的 `icon` / `color` 覆盖。`rarityOptions` 是 `{ value, tone?, color? }` 数组：匹配稀有度后，`tone` 控制边线（`muted` / `primary` / `info` / `success` / `warning` / `danger`），`color` 控制类别徽标（`red` / `amber` / `blue` / `green` / `purple` / `cyan`）。缺少匹配项时显示原类别键、通用书本图标和中性色。使用 `FilterContainer` 时，把这两组数组放在 `itemLiteralProps`；数据键仍由 `itemPropMap` 传入。spec 的 `label` 只写英文，译文放在插件的 `locales/<locale>.yaml` 的 `messages` 中，不需要把双语名称写进模型数据。
+`EntryCard` 的 `category` 和 `rarity` 是提供者定义的数据键，没有内置枚举或默认稀有度。`categoryOptions` 是 `{ value, label, icon?, color? }` 数组：用 `value` 匹配类别，`label` 按 UI 语言解析，图标和颜色可由条目的 `icon` / `color` 覆盖。`rarityOptions` 是 `{ value, tone?, color? }` 数组：匹配稀有度后，`tone` 控制边线（`muted` / `primary` / `info` / `success` / `warning` / `danger`），`color` 控制类别徽标（`red` / `amber` / `blue` / `green` / `purple` / `cyan`）。缺少匹配项时显示原类别键、通用书本图标和中性色。使用 `FilterContainer` 时，把这两组数组放在行模板的 `EntryCard.props` 中；数据键用 `$item` 绑定。spec 的 `label` 只写英文，译文放在插件的 `locales/<locale>.yaml` 的 `messages` 中，不需要把双语名称写进模型数据。
 
 ### Interactive
 
@@ -105,7 +105,7 @@
 | `Switch`          | 布尔开关。                                                                                                                                          | `label` _(I18nText)_、`checked`（用 `$bindState` 绑定）                                                                                                                                                                                                                            |
 | `FilterBar`       | 横向的切换组（多选一）。                                                                                                                            | `options`（`[{ value, label, icon? }]`）、`value`                                                                                                                                                                                                                                  |
 | `Tabs`            | 页签条。用 `$bindState` 绑定当前值；可选的 `counts` 在标签后面加上 `(N)`。                                                                          | `tabs`（`[{ value, label, icon?, color? }]`）、`value`、`counts`（`Record<value, number>`）                                                                                                                                                                                        |
-| `FilterContainer` | 自带状态的容器：搜索词和当前页签由它自己保存，过滤后的每一行用一个已注册的组件来渲染。实现见 `apps/web/src/lib/catalog/interactive-renderers.tsx`。 | `items`、`searchPlaceholder`、`searchFields`（path[]）、`filterField`、`filterTabs`、`itemComponent`（注册表里的组件名）、`itemPropMap`（`{ propName: itemPath }`）、`itemLiteralProps`、`itemKeyField`、`emptyMessage`、`showCounts`、`footer`（字符串或 `{ component, props }`） |
+| `FilterContainer` | 保存搜索词和当前页签，为过滤后的每行渲染一个子树。 | `items`（数组绑定）、`itemTemplate`（节点）、`searchPlaceholder`、`searchFields`（path[]）、`filterField`、`filterTabs`、`itemKeyField`、`emptyMessage`、`showCounts`、`footer`（字符串或 `{ component, props }`） |
 
 可访问性：
 
@@ -113,6 +113,96 @@
 - `Switch` 用原生的、不会提交表单的按钮，带 `role="switch"`，标签就是它的可访问名称。Tab 聚焦它，Space 或 Enter 切换它绑定的 `checked` 值。
 - 请给控件写一个说明性的标签。placeholder 不能代替标签。
 - 这些控件遵守所在面板的交互锁，spec 里没有新增 `disabled` 属性。
+
+### FilterContainer 行模板
+
+把每行的界面放进 `props.itemTemplate`，可以组合布局、按钮、徽标和其他目录组件：
+
+```json
+{
+  "component": "FilterContainer",
+  "props": {
+    "items": {
+      "$state": "/entries"
+    },
+    "searchFields": [
+      "value/title"
+    ],
+    "searchPlaceholder": "Search…",
+    "filterField": "value/status",
+    "filterTabs": [
+      {
+        "value": "all",
+        "label": "All"
+      },
+      {
+        "value": "active",
+        "label": "Active"
+      }
+    ],
+    "itemKeyField": "key",
+    "itemTemplate": {
+      "component": "Row",
+      "children": [
+        {
+          "component": "Text",
+          "props": {
+            "content": {
+              "$item": "value/title"
+            }
+          }
+        },
+        {
+          "component": "Badge",
+          "props": {
+            "label": {
+              "$map": {
+                "$item": "value/status"
+              },
+              "labels": {
+                "active": "Active",
+                "done": "Done"
+              },
+              "fallback": "Unknown"
+            }
+          }
+        },
+        {
+          "component": "Button",
+          "props": {
+            "label": "Open"
+          },
+          "on": {
+            "click": {
+              "action": "invokeRuntime",
+              "params": {
+                "runtimeId": "notes/open",
+                "payload": {
+                  "key": {
+                    "$item": "key"
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}
+```
+
+`items` 绑定状态中的数组：用 `{ "$state": "/entries" }`，在外层重复项中用 `{ "$item": "rows" }`。对应的 `$bindState` / `$bindItem` 写法也可用。缺失或非数组数据按空列表显示。
+
+模板里的 `$item` 读取当前行，`$index` 是原数组里从零开始的索引；搜索和页签过滤不会重排索引。`$bindItem` 和嵌套 `repeat` 仍指向原行。`itemKeyField` 为每行提供稳定身份，建议写唯一键（通常是 `key`）。不写时用原索引。
+
+行模板和普通节点使用相同的状态、动作处理器和锁定规则。不要在 `FilterContainer` 本身写 `children` 或 `repeat`。旧的 `itemComponent`、`itemPropMap`、`itemLiteralProps` 已删除：把组件与固定属性放进模板，把字段路径改成 `$item` 表达式。
+
+### 值标签映射
+
+`{ "$map": <值表达式>, "labels": { "<值>": "<文字>" }, "fallback": <可选表达式> }` 把数据键转换成显示文字。字符串、数字和布尔值按字符串键精确匹配；只查 `labels` 自己声明的键。找不到时计算 `fallback`，省略时保留原值。空标签仍是有效的匹配。
+
+`labels` 的值和字符串 `fallback` 可在插件的 `locales/<locale>.yaml` 中翻译。作用域前缀分别用 `label|` 和 `fallback|`；没有译文时显示英文。值表达式、映射键和动作参数不翻译。这样模型数据只保存 `active` 等键，界面按 UI 语言显示标签。
 
 ### Form
 
@@ -173,6 +263,12 @@
 | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------- |
 | `AssetRender`      | 显示一份 `AssetGenerateView` 提案。它按 `view.modality` 交给对应的渲染器（图片 / 音频 / 通用链接）。                                       | `view`（`AssetGenerateView`）、`sessionId?`（覆盖“当前会话”的查找） |
 | `AssetTurnSidebar` | 把一个回合里记录的每个生成资源都显示出来（来自 `state.assetsByTurn`，由 `asset.generated` SSE 处理器填入）。回合里没有资源时什么都不显示。 | `turnId`、`sessionId?`                                              |
+
+## 组件目录的边界
+
+json-render 提供布局、文字、表单、媒体、数值条、关系图和可组合的重复行。目录有意保持有限：通用表格、统计图、自定义动画或计时器，以及名单外的图标，需要在 `webview` 面板里自行实现，见[自己画界面](../plugins/ui.md#8-自己画界面)。`webview` 仍受同一套沙箱和动作权限限制。
+
+已有的 `WorldDimensions` 表格、宿主 Markdown 表格、组件加载动画和舞台过渡仍可使用；它们不是可自由配置的通用表格或动画接口。图表图片、动画图片和视频也可以直接用媒体组件显示。
 
 ## Summary
 

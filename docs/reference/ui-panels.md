@@ -103,7 +103,7 @@
 ```
 session 建立 → GET /api/ui-specs?sessionId=<id>
   → server 按会话激活集（session plugin scope）过滤
-  → { right: [...], message: [...], left: [...] }
+  → { right: [...], message: [...], diagnostics: [...] }
   → 按 right[] 动态生成 Tab（icon + label）
   → 每个 Tab 对应一个 json-render Renderer
   → pluginData[pluginId][namespace] 注入为 state
@@ -129,7 +129,7 @@ session 建立 → GET /api/ui-specs?sessionId=<id>
 
 ### 当前注册的面板
 
-第二列是面板 ID，也就是 UI spec 里的 `id`。内置插件的每个右侧和左侧面板都必须列在这张表里（有测试检查）。
+第二列是面板 ID，也就是 UI spec 里的 `id`。内置插件的每个右侧面板都必须列在这张表里（有测试检查）。
 
 <!-- prettier-ignore -->
 | 插件/runtime | 面板 ID | 图标 | group | 数据 namespace | 描述 |
@@ -213,7 +213,7 @@ contributes:
       - ./ui/my-panel.json
 ```
 
-本页说的 `ui.right`、`ui.message`、`ui.left` 都是指 `contributes.ui` 下的这几个键。
+本页说的 `ui.right`、`ui.message` 都是指 `contributes.ui` 下的键。只支持这两个位置；舞台决策区通过右侧面板的 `surfaces` 选择。清单里的其他位置（包括已删除的 `left`）在加载时被忽略并记入日志，`pnpm validate:plugin` 则报未知字段错误。
 
 ### JSON Spec 格式
 
@@ -408,7 +408,8 @@ messages:
 规则：
 
 - **哪些属性算文字。** 名为 `label`、`title`、`content`、`message`、`text`、`description`、`placeholder`、`footer`、`tooltip`、`hint`、`help`、`summary`、`subtitle` 的属性；以及名字以 `Label`、`Title`、`Message`、`Text`、`Placeholder`、`Description`、`Hint`、`Tooltip` 结尾的属性（`shortLabel`、`groupLabel`、`searchPlaceholder`、`emptyMessage`……）。
-- **译文只作用于这些属性。** 所以翻译文件改不了组件名、action 和数据路径。`on`（action 的参数）、`dataSource` 和 `*PropMap` 里的内容是数据，不翻译。
+- **译文只作用于这些属性。** 所以翻译文件改不了组件名、action 和数据路径。`on`、`watch`（action 的参数）和 `dataSource` 里的内容是数据，不翻译。
+- **数据值的显示标签。** `$map.labels` 的值和字符串 `fallback` 也是文字，规则见[值标签映射](./ui-components.md#值标签映射)。行模板里的文字照常翻译。
 - **同一句 English 需要两种译法时**，在 key 前加属性名和 `|`：`shortLabel|Codex` 只用于 `shortLabel`，其他位置用 `Codex`。
 - **没有译文的文字显示 English。** 译文里的占位符（`{{count}}`）必须和原文一致。
 - **English 原文改了，旧译文就不再匹配。** 界面回到 English，`pnpm validate:plugin` 把这条译文报为错误。不需要另外记录“译文是否过期”。

@@ -63,83 +63,99 @@
           "color": "cyan"
         }
       ],
-      "itemComponent": "EntryCard",
       "itemKeyField": "key",
-      "itemPropMap": {
-        "title": "value/title",
-        "category": "value/category",
-        "content": "value/content",
-        "tags": "value/tags",
-        "rarity": "value/rarity",
-        "icon": "value/categoryMeta/icon",
-        "color": "value/categoryMeta/color",
-        "isNew": "value/isNew"
-      },
-      "itemLiteralProps": {
-        "collapsible": true,
-        "defaultExpanded": false,
-        "categoryOptions": [
-          {
-            "value": "monster",
-            "label": "Monsters",
-            "icon": "skull",
-            "color": "red"
-          },
-          {
-            "value": "item",
-            "label": "Items",
-            "icon": "gem",
-            "color": "amber"
-          },
-          {
-            "value": "location",
-            "label": "Locations",
-            "icon": "map-pin",
-            "color": "blue"
-          },
-          {
-            "value": "lore",
-            "label": "Lore",
-            "icon": "scroll-text",
-            "color": "purple"
-          },
-          {
-            "value": "character",
-            "label": "Characters",
-            "icon": "users",
-            "color": "green"
-          },
-          {
-            "value": "skill",
-            "label": "Skills",
-            "icon": "sparkles",
-            "color": "cyan"
-          }
-        ],
-        "rarityOptions": [
-          {
-            "value": "common",
-            "tone": "muted"
-          },
-          {
-            "value": "uncommon",
-            "tone": "info",
-            "color": "blue"
-          },
-          {
-            "value": "rare",
-            "tone": "info",
-            "color": "purple"
-          },
-          {
-            "value": "legendary",
-            "tone": "warning",
-            "color": "amber"
-          }
-        ]
-      },
       "footer": "{{count}} entries collected",
-      "emptyMessage": "No matching entries"
+      "emptyMessage": "No matching entries",
+      "itemTemplate": {
+        "component": "EntryCard",
+        "props": {
+          "collapsible": true,
+          "defaultExpanded": false,
+          "categoryOptions": [
+            {
+              "value": "monster",
+              "label": "Monsters",
+              "icon": "skull",
+              "color": "red"
+            },
+            {
+              "value": "item",
+              "label": "Items",
+              "icon": "gem",
+              "color": "amber"
+            },
+            {
+              "value": "location",
+              "label": "Locations",
+              "icon": "map-pin",
+              "color": "blue"
+            },
+            {
+              "value": "lore",
+              "label": "Lore",
+              "icon": "scroll-text",
+              "color": "purple"
+            },
+            {
+              "value": "character",
+              "label": "Characters",
+              "icon": "users",
+              "color": "green"
+            },
+            {
+              "value": "skill",
+              "label": "Skills",
+              "icon": "sparkles",
+              "color": "cyan"
+            }
+          ],
+          "rarityOptions": [
+            {
+              "value": "common",
+              "tone": "muted"
+            },
+            {
+              "value": "uncommon",
+              "tone": "info",
+              "color": "blue"
+            },
+            {
+              "value": "rare",
+              "tone": "info",
+              "color": "purple"
+            },
+            {
+              "value": "legendary",
+              "tone": "warning",
+              "color": "amber"
+            }
+          ],
+          "title": {
+            "$item": "value/title"
+          },
+          "category": {
+            "$item": "value/category"
+          },
+          "content": {
+            "$item": "value/content"
+          },
+          "tags": {
+            "$item": "value/tags"
+          },
+          "rarity": {
+            "$item": "value/rarity"
+          },
+          "icon": {
+            "$item": "value/categoryMeta/icon"
+          },
+          "color": {
+            "$item": "value/categoryMeta/color"
+          },
+          "isNew": {
+            "$item": "value/isNew"
+          }
+        }
+      }
     }
   }
 }

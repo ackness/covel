@@ -5,7 +5,7 @@
  * newer field keeps working; `pnpm validate:plugin` reports the same field as
  * an error. Only a whole field is left out: one at the top of PLUGIN.md, of a
  * RUNTIME.md or of the inline `runtime`, or a whole entry under
- * `contributes`. Every field the host keeps then means exactly what it says.
+ * `contributes` (including UI placements). Every field the host keeps then means exactly what it says.
  *
  * Two kinds of unknown key still reject the manifest, because leaving them
  * out could widen what the author declared:
@@ -54,6 +54,8 @@ const OPEN_LOCATIONS = {
       ],
     },
     { path: ["contributes"], guarded: [] },
+    // An unsupported placement removes only that panel, never the package.
+    { path: ["contributes", "ui"], guarded: [] },
     { path: ["runtime"], guarded: GUARDED_RUNTIME_FIELDS },
   ],
   runtime: [{ path: [], guarded: GUARDED_RUNTIME_FIELDS }],

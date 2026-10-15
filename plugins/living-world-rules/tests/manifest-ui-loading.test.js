@@ -58,6 +58,10 @@ describe("living-world-rules manifest and UI loading", () => {
     );
     expect(ui.diagnostics).toEqual([]);
     expect(ui.slots.right).toHaveLength(1);
+    expect(ui.slots.right[0].view.children[1].props.itemTemplate).toMatchObject({
+      component: "EntryCard",
+      props: { title: { $item: "value/title" }, category: { $item: "value/kind" } },
+    });
     // Read-only display panel (no editing): relies on emptyState rather than
     // alwaysRender, so a world without declared rules shows the empty hint.
     expect(ui.slots.right?.[0]).toMatchObject({

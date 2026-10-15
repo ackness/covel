@@ -218,7 +218,6 @@ In the path headings below, `[]` is a list item and `.*` is a map value.
 | --------- | -------------- | -------- | ----------------------------------------------------- |
 | `right`   | list of string | no       | Paths of UI specs for right-panel tabs.               |
 | `message` | list of string | no       | Paths of UI specs rendered inside the message stream. |
-| `left`    | list of string | no       | Paths of UI specs for the left panel.                 |
 
 ## `contributes.worldProjections.*`
 

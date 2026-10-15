@@ -7,7 +7,7 @@ A plugin's UI is a JSON document (a UI spec), and it can only be built from the 
 ## Authoring tip
 
 - **Where the components come from.** `apps/web/src/lib/catalog.tsx` exports `covelRegistry`. Each renderer lives under `apps/web/src/lib/catalog/`, grouped by responsibility. A plugin can only use components registered here. The framework sets the vocabulary, and plugins combine it.
-- **Referencing them in a plugin.** In `ui/*.json`, write `"component": "<Name>"`, with the name exactly as below. Spec files are discovered through `contributes.ui.right` / `ui.message` / `ui.left` in `PLUGIN.md`.
+- **Referencing them in a plugin.** In `ui/*.json`, write `"component": "<Name>"`, with the name exactly as below. Spec files are discovered through `contributes.ui.right` / `ui.message` in `PLUGIN.md`.
 - **Text and validation.** Write the spec in English, and put translations in the `messages` section of `locales/<locale>.yaml` (see [ui-panels.md](./ui-panels.md#plugin-ui-text-rules)). Run `pnpm check:i18n`. It includes `check-plugin-i18n`, which rejects Chinese in a spec, and requires every interface text of a built-in plugin to have a Chinese translation.
 - **Finding components this page does not cover yet.** The full list can be searched at any time:
 
@@ -89,7 +89,7 @@ PascalCase forms such as `BookOpen` are normalized to the same name. An unknown 
 | `CharacterFieldsView` | Shows a character's `fields` object according to the schema. It reads the `characterSchema` of the session's World Model, and groups fields by category (bio/stats/abilities/equipment/social). | `value` (the character's `fields` object)                                                                                                                                                               |
 | `CharacterAvatar`     | An avatar taken from `character.visual@1` by character ID. Click to enlarge.                                                                                                                    | `characterId`, and optional `size` (default `28`)                                                                                                                                                       |
 
-`EntryCard` treats `category` and `rarity` as provider-defined data keys, with no built-in enums or default rarity. `categoryOptions` is an array of `{ value, label, icon?, color? }`: `value` matches the category, `label` resolves in the UI language, and per-entry `icon` / `color` override the option. `rarityOptions` is an array of `{ value, tone?, color? }`: after matching rarity, `tone` controls the marker (`muted` / `primary` / `info` / `success` / `warning` / `danger`) and `color` controls the category badge (`red` / `amber` / `blue` / `green` / `purple` / `cyan`). Without a match, the card shows the raw category key, a generic book icon and neutral colors. With `FilterContainer`, place these arrays in `itemLiteralProps`; keep data keys in `itemPropMap`. Write spec labels in English and translate them in the plugin’s `locales/<locale>.yaml` `messages` section, without adding bilingual names to model data.
+`EntryCard` treats `category` and `rarity` as provider-defined data keys, with no built-in enums or default rarity. `categoryOptions` is an array of `{ value, label, icon?, color? }`: `value` matches the category, `label` resolves in the UI language, and per-entry `icon` / `color` override the option. `rarityOptions` is an array of `{ value, tone?, color? }`: after matching rarity, `tone` controls the marker (`muted` / `primary` / `info` / `success` / `warning` / `danger`) and `color` controls the category badge (`red` / `amber` / `blue` / `green` / `purple` / `cyan`). Without a match, the card shows the raw category key, a generic book icon and neutral colors. With `FilterContainer`, place these arrays in the row template’s `EntryCard.props` and bind data keys with `$item`. Write spec labels in English and translate them in the plugin’s `locales/<locale>.yaml` `messages` section, without adding bilingual names to model data.
 
 ### Interactive
 
@@ -105,7 +105,7 @@ PascalCase forms such as `BookOpen` are normalized to the same name. An unknown 
 | `Switch`          | A boolean toggle.                                                                                                                                                                                                              | `label` _(I18nText)_, `checked` (bound with `$bindState`)                                                                                                                                                                                                                                         |
 | `FilterBar`       | A horizontal group of toggles (pick one).                                                                                                                                                                                      | `options` (`[{ value, label, icon? }]`), `value`                                                                                                                                                                                                                                                  |
 | `Tabs`            | A tab strip. Binds the current value with `$bindState`. The optional `counts` adds `(N)` after a label.                                                                                                                        | `tabs` (`[{ value, label, icon?, color? }]`), `value`, `counts` (`Record<value, number>`)                                                                                                                                                                                                         |
-| `FilterContainer` | A container with its own state: it keeps the search term and the current tab itself, and renders each filtered row with a registered component. The implementation is in `apps/web/src/lib/catalog/interactive-renderers.tsx`. | `items`, `searchPlaceholder`, `searchFields` (path[]), `filterField`, `filterTabs`, `itemComponent` (a component name in the registry), `itemPropMap` (`{ propName: itemPath }`), `itemLiteralProps`, `itemKeyField`, `emptyMessage`, `showCounts`, `footer` (a string or `{ component, props }`) |
+| `FilterContainer` | Keeps search and tab state and renders a subtree for each filtered row. | `items` (array binding), `itemTemplate` (node), `searchPlaceholder`, `searchFields` (path[]), `filterField`, `filterTabs`, `itemKeyField`, `emptyMessage`, `showCounts`, `footer` (string or `{ component, props }`) |
 
 Accessibility:
 
@@ -113,6 +113,96 @@ Accessibility:
 - `Switch` uses a native button that does not submit a form, with `role="switch"`. The label is its accessible name. Tab focuses it, and Space or Enter toggles its bound `checked` value.
 - Give each control a descriptive label. A placeholder cannot replace a label.
 - These controls follow the interaction lock of the panel they are in. The spec does not add a new `disabled` property.
+
+### FilterContainer row templates
+
+Put each row's UI in `props.itemTemplate`. It can combine layouts, buttons, badges and other catalog components:
+
+```json
+{
+  "component": "FilterContainer",
+  "props": {
+    "items": {
+      "$state": "/entries"
+    },
+    "searchFields": [
+      "value/title"
+    ],
+    "searchPlaceholder": "Search…",
+    "filterField": "value/status",
+    "filterTabs": [
+      {
+        "value": "all",
+        "label": "All"
+      },
+      {
+        "value": "active",
+        "label": "Active"
+      }
+    ],
+    "itemKeyField": "key",
+    "itemTemplate": {
+      "component": "Row",
+      "children": [
+        {
+          "component": "Text",
+          "props": {
+            "content": {
+              "$item": "value/title"
+            }
+          }
+        },
+        {
+          "component": "Badge",
+          "props": {
+            "label": {
+              "$map": {
+                "$item": "value/status"
+              },
+              "labels": {
+                "active": "Active",
+                "done": "Done"
+              },
+              "fallback": "Unknown"
+            }
+          }
+        },
+        {
+          "component": "Button",
+          "props": {
+            "label": "Open"
+          },
+          "on": {
+            "click": {
+              "action": "invokeRuntime",
+              "params": {
+                "runtimeId": "notes/open",
+                "payload": {
+                  "key": {
+                    "$item": "key"
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}
+```
+
+`items` binds an array in state: use `{ "$state": "/entries" }`, or `{ "$item": "rows" }` inside an outer repeat. The matching `$bindState` / `$bindItem` forms also work. Missing or non-array data displays an empty list.
+
+Inside the template, `$item` reads the current row and `$index` is its zero-based index in the original array. Search and tab filters do not renumber it. `$bindItem` and nested `repeat` still address the original row. Use `itemKeyField` with a unique key (usually `key`) to preserve row identity; without it, the original index is used.
+
+Templates use the same state, action handlers and locking rules as ordinary nodes. Do not put `children` or `repeat` on `FilterContainer` itself. `itemComponent`, `itemPropMap` and `itemLiteralProps` have been removed: move the component and literal props into the template and replace field paths with `$item` expressions.
+
+### Value-label mapping
+
+`{ "$map": <value expression>, "labels": { "<value>": "<text>" }, "fallback": <optional expression> }` turns a data key into display text. Strings, numbers and booleans match exact string keys; only keys declared on `labels` are checked. A missing key evaluates `fallback`, or preserves the original value when it is omitted. An empty label is still a match.
+
+Translate label values and string fallbacks in the plugin's `locales/<locale>.yaml`. Use `label|` and `fallback|` for scoped translations; missing translations display English. Value expressions, mapping keys and action parameters are not translated. Model data keeps keys such as `active`, while the UI shows labels in its own language.
 
 ### Form
 
@@ -173,6 +263,12 @@ See [form tools](./tools.md#create-form) and [plugin testing](../plugins/testing
 | ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
 | `AssetRender`      | Shows an `AssetGenerateView` proposal. It hands the asset to the matching renderer by `view.modality` (image / audio / generic link).                                  | `view` (`AssetGenerateView`), `sessionId?` (overrides the lookup of the "current session") |
 | `AssetTurnSidebar` | Shows every generated asset recorded in a turn (from `state.assetsByTurn`, filled in by the `asset.generated` SSE handler). Shows nothing when the turn has no assets. | `turnId`, `sessionId?`                                                                     |
+
+## Catalog boundaries
+
+json-render covers layouts, text, forms, media, meters, relationship graphs and composable repeated rows. The catalog is deliberately limited: implement general tables, statistical charts, custom animation or timers, and icons outside the list in a `webview` panel; see [Draw your own interface](../plugins/ui.md#8-draw-your-own-interface). Webviews still follow the sandbox and action permission rules.
+
+Existing `WorldDimensions` tables, host Markdown tables, component loading animations and stage transitions remain available; they are not general table or animation authoring interfaces. Chart images, animated images and videos can also be displayed directly with media components.
 
 ## Summary
 

@@ -32,32 +32,38 @@
           "items": {
             "$state": "/entries"
           },
-          "itemComponent": "EntryCard",
           "itemKeyField": "key",
-          "itemPropMap": {
-            "title": "value/title",
-            "content": "value/content",
-            "category": "value/kind"
-          },
-          "itemLiteralProps": {
-            "collapsible": true,
-            "defaultExpanded": false,
-            "categoryOptions": [
-              {
-                "value": "constant",
-                "label": "Constant"
+          "emptyMessage": "No rules",
+          "itemTemplate": {
+            "component": "EntryCard",
+            "props": {
+              "collapsible": true,
+              "defaultExpanded": false,
+              "categoryOptions": [
+                {
+                  "value": "constant",
+                  "label": "Constant"
+                },
+                {
+                  "value": "triggered",
+                  "label": "Triggered"
+                },
+                {
+                  "value": "evolving",
+                  "label": "Evolving"
+                }
+              ],
+              "title": {
+                "$item": "value/title"
               },
-              {
-                "value": "triggered",
-                "label": "Triggered"
+              "content": {
+                "$item": "value/content"
               },
-              {
-                "value": "evolving",
-                "label": "Evolving"
+              "category": {
+                "$item": "value/kind"
               }
-            ]
-          },
-          "emptyMessage": "No rules"
+            }
+          }
         }
       }
     ]

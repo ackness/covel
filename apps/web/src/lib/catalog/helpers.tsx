@@ -234,13 +234,13 @@ export function valueToHaystack(value: unknown): string {
  * Exported in test-only form via __testables (see bottom of catalog.tsx) so the
  * filter logic can be unit-tested without driving React.
  */
-export function filterItems(
-  items: unknown[],
+export function filterItems<T>(
+  items: T[],
   searchQuery: string,
   searchFields: string[],
   filterField: string | undefined,
   activeFilter: string,
-): unknown[] {
+): T[] {
   const query = searchQuery.trim().toLowerCase();
   return items.filter((item) => {
     if (filterField && activeFilter && activeFilter !== "all") {

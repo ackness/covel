@@ -200,6 +200,27 @@ describe("unknown manifest fields", () => {
       expect(result.stderr).toContain(line);
   });
 
+  it("ignores unsupported UI placements at load and reports them during validation", async () => {
+    const dir = await fixture({
+      contributes: {
+        ui: { left: ["./missing.json"], future: ["./future.json"] },
+      },
+    });
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const definition = await loadPluginDefinition(
+      (await discoverPluginAt(dir))!,
+    );
+    expect(definition.packageManifest.manifest.ui).toEqual({});
+    expect(definition.ignoredFields.map((field) => field.field)).toEqual([
+      "contributes.ui.left",
+      "contributes.ui.future",
+    ]);
+    const result = await validate(dir);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("contributes.ui.left: unknown field");
+    expect(result.stderr).not.toContain("cannot read");
+  });
+
   it("a guarded misspelling fails the load and validation alike", async () => {
     const dir = await fixture({ permision: { http: [] } });
     vi.spyOn(console, "warn").mockImplementation(() => {});

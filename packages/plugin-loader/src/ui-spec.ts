@@ -74,7 +74,7 @@ export async function loadPluginUiSpec(
   return spec;
 }
 
-export type PluginUiSlot = "right" | "message" | "left";
+export type PluginUiSlot = "right" | "message";
 
 /** One declared UI spec the host does not show. */
 export interface PluginUiSpecDiagnostic {
@@ -110,7 +110,7 @@ export async function loadPluginUiSpecs(
     Record<PluginUiSlot, Readonly<Record<string, unknown>>[]>
   > = {};
   const diagnostics: PluginUiSpecDiagnostic[] = [];
-  for (const slot of ["right", "message", "left"] as const)
+  for (const slot of ["right", "message"] as const)
     for (const [specIndex, declaredPath] of (ui?.[slot] ?? []).entries()) {
       try {
         if (!declaredPath.endsWith(".json"))

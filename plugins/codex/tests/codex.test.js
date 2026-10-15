@@ -412,6 +412,10 @@ describe("codex plugin manifest", () => {
   it("should load UI spec JSON with panel metadata", () => {
     expect(loadedUi.diagnostics).toEqual([]);
     expect(loadedUi.slots.right).toHaveLength(1);
+    expect(loadedUi.slots.right[0].view.props.itemTemplate).toMatchObject({
+      component: "EntryCard",
+      props: { title: { $item: "value/title" } },
+    });
     expect(loadedUi.slots.right?.[0].id).toBe("codex");
     expect(loadedUi.slots.right?.[0].icon).toBe("book-open");
   });

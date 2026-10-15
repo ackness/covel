@@ -158,6 +158,34 @@ describe("plugin-panel spec helpers", () => {
     expect(content?.slots).toEqual({ content: [expect.any(String)] });
   });
 
+  it("finds components inside row templates and leaves data expressions unresolved", () => {
+    const view = {
+      component: "FilterContainer",
+      props: {
+        items: { $state: "/entries" },
+        itemTemplate: {
+          component: "Card",
+          slots: {
+            header: [
+              { component: "Badge", props: { label: { $item: "status" } } },
+            ],
+          },
+        },
+      },
+    };
+    expect(specUsesComponent(view, "Badge")).toBe(true);
+    const spec = pluginPanelViewToSpec(view)!;
+    const root = spec.elements[spec.root]!;
+    expect(root.props).toEqual({ items: { $bindState: "/entries" } });
+    expect(Object.values(spec.elements)).toContainEqual(
+      expect.objectContaining({
+        type: "Badge",
+        props: { label: { $item: "status" } },
+      }),
+    );
+    expect(view.props.itemTemplate.component).toBe("Card");
+  });
+
   it("returns null for non-object views", () => {
     expect(pluginPanelViewToSpec(null)).toBeNull();
     expect(pluginPanelViewToSpec("Stack")).toBeNull();

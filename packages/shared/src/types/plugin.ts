@@ -150,9 +150,7 @@ export interface KernelInjectDecl {
 }
 
 export type InputInjectDecl =
-  | PluginDataInjectDecl
-  | RuntimeExportInjectDecl
-  | KernelInjectDecl;
+  PluginDataInjectDecl | RuntimeExportInjectDecl | KernelInjectDecl;
 
 export interface InputConfig {
   /**
@@ -341,24 +339,21 @@ export type { HookEventName, HookEnforce, HookDeclaration } from "./hooks.js";
  * UI slot type — where plugin UI contributions appear in the frontend.
  * - `right`: Right sidebar panel tabs (status panels, dashboards)
  * - `message`: Inline blocks in the chat message area
- * - `left`: Left sidebar content (settings, quick actions)
  */
-export type UISlotType = "right" | "message" | "left";
+export type UISlotType = "right" | "message";
 
 /**
- * UI contribution spec — declares which JSON/TSX files a plugin contributes
+ * UI contribution spec — declares which JSON files a plugin contributes
  * to each UI slot. Mirrors the tools declaration pattern.
  *
  * Paths are relative to the plugin/runtime root directory.
- * File extension determines rendering: .json → json-render, .tsx/.js → custom React.
+ * Each JSON spec declares a catalog view or a sandboxed HTML webview.
  */
 export interface UISpec {
   /** Right sidebar panel specs. */
   readonly right?: readonly string[];
   /** Message area block specs. */
   readonly message?: readonly string[];
-  /** Left sidebar content specs. */
-  readonly left?: readonly string[];
 }
 
 // ── Slash commands ──────────────────────────────────────────────

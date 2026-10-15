@@ -109,8 +109,8 @@ export const EntryCard: ComponentRenderer = ({ element }) => {
     typeof rarityOption?.color === "string" ? rarityOption.color : "";
   const externalIcon = element.props?.icon as string | undefined;
   const externalColor = element.props?.color as string | undefined;
-  // Generic feature flags — any plugin can set these via itemLiteralProps
-  // or itemPropMap. collapsible toggles a chevron that hides body/tags;
+  // Generic feature flags — any plugin can set these in its template.
+  // collapsible toggles a chevron that hides body/tags;
   // isNew renders a purple "NEW" sparkle next to the title.
   const collapsible = (element.props?.collapsible as boolean) ?? false;
   const defaultExpanded = (element.props?.defaultExpanded as boolean) ?? true;
