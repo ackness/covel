@@ -69,12 +69,12 @@ function:
 
 这里新出现的东西：
 
-| 这一段                      | 意思                                                                                             |
-| --------------------------- | ------------------------------------------------------------------------------------------------ |
-| `io.output.contract`        | 这个 runtime 的输出就是这项能力的内容。插件因此提供这项能力，别的插件可以 `requires` 它          |
-| `io.output.schema`          | 输出要符合的形状。不符合时这次运行失败                                                           |
-| `io.output.recordAs`        | 把输出保存下来，取一个名字。以后的回合可以用 `scope: committed` 读到它                           |
-| `schedule.manual.execution` | 不写时是 `sync`：调用方等它完成；写 `background` 是放到后台，见[后台工作与失败](#后台工作与失败) |
+| 这一段                | 意思                                                                                    |
+| --------------------- | --------------------------------------------------------------------------------------- |
+| `io.output.contract`  | 这个 runtime 的输出就是这项能力的内容。插件因此提供这项能力，别的插件可以 `requires` 它 |
+| `io.output.schema`    | 输出要符合的形状。不符合时这次运行失败                                                  |
+| `io.output.recordAs`  | 把输出保存下来，取一个名字。以后的回合可以用 `scope: committed` 读到它                  |
+| `schedule.background` | 不写时调用方等它完成；写 `true` 是放到后台，见[后台工作与失败](#后台工作与失败)         |
 
 规则：
 
@@ -228,11 +228,11 @@ Authoring examples match their schemas.
 
 有三种让 runtime 不挡住回合的写法：
 
-| 写法                                      | 效果                                                                      |
-| ----------------------------------------- | ------------------------------------------------------------------------- |
-| `schedule.completion: { mode: detached }` | 回合先结束，这个 runtime 在后台继续。只能用在 `post-turn` 和 `audit` 阶段 |
-| 再加 `settle: before-next-execution`      | 后台继续，但玩家的下一个行动会等它完成                                    |
-| `schedule.manual.execution: background`   | 手动触发的 runtime 放到后台，调用方立刻拿到一个任务编号                   |
+| 写法                                  | 效果                                                                      |
+| ------------------------------------- | ------------------------------------------------------------------------- |
+| `schedule.detached: true`             | 回合先结束，这个 runtime 在后台继续。只能用在 `post-turn` 和 `audit` 阶段 |
+| `schedule.detached: { settle: true }` | 后台继续，但玩家的下一个行动会等它完成                                    |
+| `schedule.background: true`           | 手动或事件触发的 runtime 放到后台，调用方立刻拿到一个任务编号             |
 
 由事件触发的 runtime 写 `schedule.trigger: { type: event, topic: ... }`。
 
@@ -251,17 +251,14 @@ function:
 
 ### 时限
 
-| 类型  | 字段                             | 意思                                                                         |
-| ----- | -------------------------------- | ---------------------------------------------------------------------------- |
-| 函数  | `function.timeoutMs`             | 一次运行的总时限。调用外部接口的时间也算在里面                               |
-| agent | `agent.loop.timeoutMs`           | 一次运行的总时限。默认 120 秒，`story` runtime 240 秒                        |
-| agent | `agent.loop.callTimeoutMs`       | 单次模型调用的时限（不是流式输出的调用）。默认 60 秒，`story` runtime 120 秒 |
-| agent | `agent.loop.firstTokenTimeoutMs` | 流式调用里，等第一个字的时限                                                 |
-| agent | `agent.loop.idleTimeoutMs`       | 流式调用里，两次输出之间最长的静默。默认 120 秒                              |
-| agent | `agent.loop.maxRetries`          | 模型调用拿不到回复时重试几次。默认 3，`story` runtime 1；最大 5              |
-| agent | `agent.loop.loopDetection`       | 模型连续重复同一个调用多少次算打转。默认 3                                   |
+| 类型  | 字段                       | 意思                                                                         |
+| ----- | -------------------------- | ---------------------------------------------------------------------------- |
+| 函数  | `function.timeoutMs`       | 一次运行的总时限。调用外部接口的时间也算在里面                               |
+| agent | `agent.loop.timeoutMs`     | 一次运行的总时限。默认 120 秒，`story` runtime 240 秒                        |
+| agent | `agent.loop.callTimeoutMs` | 单次模型调用的时限（不是流式输出的调用）。默认 60 秒，`story` runtime 120 秒 |
+| agent | `agent.loop.maxRetries`    | 模型调用拿不到回复时重试几次。默认 3，`story` runtime 1；最大 5              |
 
-没有写 `firstTokenTimeoutMs` 时，每次尝试等第一个字的时间会自动缩短，给剩下的重试留出时间。第一个字本来就慢的模型要显式设置它，并把 `timeoutMs` 调大。完整的规则见[插件字段参考](../reference/plugins.md)。
+完整的规则见[插件字段参考](../reference/plugins.md#超时和重试agentloop)。
 
 ### 失败时
 
@@ -329,8 +326,7 @@ Hook 让你在固定的时刻插一脚：工具调用之前、模型调用之前
 
 ```yaml
 contributes:
-  hooks:
-    - event: PreToolUse
+  hooks: [PreToolUse]
 ```
 
 在入口文件里注册。两边必须一致：
@@ -427,19 +423,38 @@ pnpm check
 
 测试要覆盖的重点：数据形状的边界、不能读写别人的数据、重复调用、失败之后没有留下半截数据、同一次运行里先写后读。写法见[插件测试](./testing.md)。打包和安装见[打包并试装](../ship/package.md)。
 
+## 不常用的字段
+
+下面这些字段内置插件都没有用到，有特殊需要时再写：
+
+| 字段                                                     | 意思                                                                                    |
+| -------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| `agent.loop.maxSteps`                                    | 工具调用最多几步                                                                        |
+| `agent.loop.firstTokenTimeoutMs`                         | 流式调用里，等第一个字的时限。第一个字本来就慢的模型要写它，并把 `timeoutMs` 调大       |
+| `agent.loop.idleTimeoutMs`                               | 流式调用里，两次输出之间最长的静默。默认 120 秒                                         |
+| `agent.loop.loopDetection`                               | 模型连续重复同一个调用多少次算打转。默认 3                                              |
+| `agent.loop.maxRecursionDepth`                           | `ctx.recursiveCall()` 最多嵌套几层。默认 10                                             |
+| `contributes.events[].advertise: false`                  | 写故事的模型看不到这个事件，它只给界面和代码用                                          |
+| `contributes.prompt[].position: {depth: N}`              | 按消息深度把静态提示词段插进历史                                                        |
+| `contributes.commands[].context`                         | 命令调用 action 时带上的宿主信息                                                        |
+| `contributes.commands[].arguments[].variadic`、`choices` | 把剩下的词都收进最后一个参数；列出参数可选的值                                          |
+| `contributes.wires`                                      | 入口文件用 `registerWires` 注册的服务商 wire                                            |
+| `contributes.settings[].type`                            | 除了 `number`、`toggle`、`select`，还有 `text`、`textarea`、`integer`、`slider`、`slot` |
+
+全部高级字段见[插件参考 · 高级字段](../reference/plugins.md#高级字段)。
+
 ## 没有按预期工作时
 
-| 现象                                                         | 原因和处理                                                                        |
-| ------------------------------------------------------------ | --------------------------------------------------------------------------------- |
-| 校验报 `inline runtime and runtimes/ cannot coexist`         | `PLUGIN.md` 里还留着 `runtime:`。多 runtime 的包里删掉它                          |
-| 校验报 `contributes.hooks.0: Invalid input: expected object` | hook 要写成 `- event: PreToolUse`，不是一个字符串                                 |
-| 校验报 `ambiguous output contract …`                         | 两个 runtime 输出了同一项能力。每项能力只由一个 runtime 输出                      |
-| 世界包的数据没有导入                                         | 文件不在 `source.path` 的位置，或者别的插件声明了同一个路径，或者这个插件没有启用 |
-| `describe:authoring --check` 报示例不合格                    | `example` 文件不符合 `schema`                                                     |
-| 后台 runtime 一直排队                                        | 它调用了模型，却没有声明 `function.model`                                         |
-| 请求外部接口被拒绝                                           | 地址没有写进 `permissions.http`，或者不是 `https`                                 |
-| hook 注册了却从不生效                                        | 在 `payload` 里找 runtime 的名字。改成读 `ctx.runtimeId`                          |
-| 升级版本后开局步骤又跑了一遍                                 | 正常。让开局 runtime 的 guard 对已完成的工作返回 `{ skip: true }`                 |
+| 现象                                                 | 原因和处理                                                                        |
+| ---------------------------------------------------- | --------------------------------------------------------------------------------- |
+| 校验报 `inline runtime and runtimes/ cannot coexist` | `PLUGIN.md` 里还留着 `runtime:`。多 runtime 的包里删掉它                          |
+| 校验报 `ambiguous output contract …`                 | 两个 runtime 输出了同一项能力。每项能力只由一个 runtime 输出                      |
+| 世界包的数据没有导入                                 | 文件不在 `source.path` 的位置，或者别的插件声明了同一个路径，或者这个插件没有启用 |
+| `describe:authoring --check` 报示例不合格            | `example` 文件不符合 `schema`                                                     |
+| 后台 runtime 一直排队                                | 它调用了模型，却没有声明 `function.model`                                         |
+| 请求外部接口被拒绝                                   | 地址没有写进 `permissions.http`，或者不是 `https`                                 |
+| hook 注册了却从不生效                                | 在 `payload` 里找 runtime 的名字。改成读 `ctx.runtimeId`                          |
+| 升级版本后开局步骤又跑了一遍                         | 正常。让开局 runtime 的 guard 对已完成的工作返回 `{ skip: true }`                 |
 
 ## 接下来
 

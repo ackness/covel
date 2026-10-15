@@ -96,10 +96,7 @@ const unrunnable = [
     name: "a background manual runtime with a same-execution input",
     runtime: {
       function: { handler: "../../handler.js" },
-      schedule: {
-        trigger: { type: "manual" },
-        manual: { execution: "background" },
-      },
+      schedule: { trigger: { type: "manual" }, background: true },
       io: {
         inputs: { prose: { from: { runtime: "probe/good" } } },
         output: { contract: "notes@1" },
@@ -193,10 +190,7 @@ const crossField = [
   {
     name: "a background manual agent with suspend",
     runtime: {
-      schedule: {
-        trigger: { type: "manual" },
-        manual: { execution: "background" },
-      },
+      schedule: { trigger: { type: "manual" }, background: true },
       agent: { tools: { builtin: ["suspend"] } },
     },
     field: "agent.tools.builtin",
@@ -204,7 +198,7 @@ const crossField = [
   {
     name: "a detached function with suspend",
     runtime: {
-      schedule: { stage: "post-turn", completion: { mode: "detached" } },
+      schedule: { stage: "post-turn", detached: true },
       function: {
         handler: "../../handler.js",
         tools: { builtin: ["suspend"] },
@@ -225,14 +219,14 @@ const crossField = [
   {
     name: "detached completion on the narrative stage",
     runtime: {
-      schedule: { stage: "narrative", completion: { mode: "detached" } },
+      schedule: { stage: "narrative", detached: true },
     },
     field: "schedule.stage",
   },
   {
     name: "detached completion on a story runtime",
     runtime: {
-      schedule: { stage: "post-turn", completion: { mode: "detached" } },
+      schedule: { stage: "post-turn", detached: { maxQueueMs: 1000 } },
       io: { visibility: "story" },
     },
     field: "io.visibility",
@@ -242,9 +236,9 @@ const crossField = [
     runtime: {
       schedule: { stage: "narrative" },
       io: { visibility: "story" },
-      agent: { loop: { completion: { require: "explicit" } } },
+      agent: { completion: { require: "explicit" } },
     },
-    field: "agent.loop.completion.require",
+    field: "agent.completion.require",
   },
   {
     name: "recordAs without an output schema",
@@ -270,14 +264,22 @@ const crossField = [
     field: "schedule.trigger.topic",
   },
   {
-    name: "settle options without detached completion",
+    name: "a settle wait without settle",
     runtime: {
-      schedule: {
-        stage: "post-turn",
-        completion: { settle: "before-next-execution" },
+      schedule: { stage: "post-turn", detached: { maxSettleWaitMs: 1000 } },
+    },
+    field: "schedule.detached.maxSettleWaitMs",
+  },
+  {
+    name: "finishWith beside the long completion form",
+    runtime: {
+      schedule: { stage: "post-turn" },
+      agent: {
+        finishWith: "save",
+        completion: { require: "tool-use", afterTools: ["save"] },
       },
     },
-    field: "schedule.completion.mode",
+    field: "agent.finishWith",
   },
   {
     name: "options on a kernel input",

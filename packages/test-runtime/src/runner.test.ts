@@ -262,7 +262,7 @@ describe("runtime debug host integration", () => {
       pluginRoot,
       "follower",
       'return {outcome: "failed", error: "expected provider failure"};',
-      "schedule: {trigger: {type: event, topic: root.ready}, manual: {execution: background}}",
+      "schedule: {trigger: {type: event, topic: root.ready}, background: true}",
     );
     await mkdir(path.join(pluginRoot, "tests"));
     await writeFile(
@@ -325,7 +325,7 @@ describe("runtime debug host integration", () => {
           pluginRoot,
           "follower",
           'return {outcome: "skipped", skipReason: "nothing to do"};',
-          "schedule: {trigger: {type: event, topic: root.ready}, manual: {execution: background}}",
+          "schedule: {trigger: {type: event, topic: root.ready}, background: true}",
         );
       }
       await mkdir(path.join(pluginRoot, "tests"));
@@ -417,7 +417,7 @@ describe("runtime debug host integration", () => {
       await ctx.tools.call("plugin-data-set", {namespace: "notes", key: "follower", value: ctx.triggerEvent.data});
       return {outcome: "success", effects: {events: [{topic: "next.ready", data: {source: "follower"}}]}};
     `,
-      "schedule: {trigger: {type: event, topic: root.ready}, manual: {execution: background}}",
+      "schedule: {trigger: {type: event, topic: root.ready}, background: true}",
       ", tools: {builtin: [plugin-data-set]}",
     );
     await runtimeFixture(
@@ -427,7 +427,7 @@ describe("runtime debug host integration", () => {
       await ctx.pluginData.set("notes", "next", {shouldNotRun: true});
       return {outcome: "success", value: null};
     `,
-      "schedule: {trigger: {type: event, topic: next.ready}, manual: {execution: background}}",
+      "schedule: {trigger: {type: event, topic: next.ready}, background: true}",
     );
     const report = await runRuntimeDebug({
       runtimeId: "probe/root",
@@ -468,7 +468,7 @@ describe("runtime debug host integration", () => {
       pluginRoot,
       "follower",
       'await ctx.recursiveCall({manualTrigger: {runtimeId: "probe/child"}}); return {outcome: "success", value: {count: ctx.userSettings.count}};',
-      "schedule: {trigger: {type: event, topic: root.ready}, manual: {execution: background}}",
+      "schedule: {trigger: {type: event, topic: root.ready}, background: true}",
     );
     await runtimeFixture(
       pluginRoot,
@@ -497,7 +497,7 @@ describe("runtime debug host integration", () => {
     );
     await writeFile(
       path.join(supportRoot, "runtimes", "follower", "RUNTIME.md"),
-      "---\ndescription: Support follower\nfunction: {handler: ./handler.js}\nschedule: {trigger: {type: event, topic: root.ready}, manual: {execution: background}}\n---\n",
+      "---\ndescription: Support follower\nfunction: {handler: ./handler.js}\nschedule: {trigger: {type: event, topic: root.ready}, background: true}\n---\n",
       "utf8",
     );
     await writeFile(
@@ -654,7 +654,7 @@ describe("runtime debug host integration", () => {
       await ctx.pluginData.set("notes", "follower", {mustNotRun: true});
       return {outcome: "success", value: null};
     `,
-      "schedule: {trigger: {type: event, topic: root.ready}, manual: {execution: background}}",
+      "schedule: {trigger: {type: event, topic: root.ready}, background: true}",
     );
     const report = await runRuntimeDebug({
       runtimeId: "probe/root",

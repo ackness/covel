@@ -885,7 +885,7 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 
 回合执行的唯一入口是 [`POST /api/actions`](#post-apiactions)（SSE 桥接）。没有会话级的回合端点。
 
-有些 runtime 不需要回合等它跑完：安全的叶节点 runtime 声明 `schedule.completion.mode: detached` 后，会在原回合的事务里进入持久化队列，成为后台作业（runtime job）。下面的端点管理这些作业：
+有些 runtime 不需要回合等它跑完：安全的叶节点 runtime 声明 `schedule.detached: true` 后，会在原回合的事务里进入持久化队列，成为后台作业（runtime job）。下面的端点管理这些作业：
 
 | 方法 | 路径                                           | 描述                                                         |
 | ---- | ---------------------------------------------- | ------------------------------------------------------------ |
@@ -1203,7 +1203,7 @@ setup runtime 挂起等玩家回答时，这次尝试不占重试次数。挂起
 
 记忆怎么产生、怎么用：
 
-- 后台提取是一个 detached runtime，声明了 `before-next-execution` 屏障，所以下一次执行会等它完成。
+- 后台提取是一个 detached runtime，声明了 `settle: true`，所以下一次执行会等它完成。
 - 已提交的记忆块通过 `prompt.segment@1` 进入后续提示词。
 
 插件自己读写数据：
@@ -2586,14 +2586,14 @@ Web 设置页根据 `operatorTokenRequired` 决定是否显示“运维访问”
 - `session.completedPlayerTurns` 是已提交的正式玩家回合数。setup 阶段的执行会保存 `turn_results`，但不计入。`phase` 变成 `playing` 之后，第一个成功的玩家回合把它推进到 `1`。
 - 服务端用 `commitExecution` 在一个事务里提交顶层执行和递归子执行的结果、journal 与挂起。事务里对每个结果先规范化、再提交状态；事务提交之后才发布 SessionEvent。
 - runtime 的输出里有 `pendingInputs` 时，玩家的回答通过 `POST /api/actions` 的 `submit_interaction` 提交。同一个请求既保存回答，又运行读取它的回合。
-- `schedule.completion.mode: detached` 只对通过安全检查的 `post-turn` / `audit` function 叶节点生效：
+- `schedule.detached` 只对通过安全检查的 `post-turn` / `audit` function 叶节点生效：
   - 它的上游结果、来源执行、模型和设置在原始回合里冻结；
   - 排队记录与原始回合在同一个事务里提交；
   - 静态检查认为不安全的声明仍在前台执行，并产生一条诊断。
 
 ### Staged Runtime 后台作业
 
-这组端点管理调度器因 `schedule.completion.mode: detached` 创建的后台作业（`_runtime_jobs`）。它与 plugin-rpc 的 `execution: background` / `_jobs` 协议是两套东西，互不影响。
+这组端点管理调度器因 `schedule.detached` 创建的后台作业（`_runtime_jobs`）。它与 plugin-rpc 的 `schedule.background` / `_jobs` 协议是两套东西，互不影响。
 
 - 鉴权方式与其他会话端点相同（owner token）。
 - 成功作业的 `result` 包含后台回合、执行和 runtime 的身份、耗时，以及 runtime 的 `output`。
@@ -2932,10 +2932,10 @@ Submission 里的其他键会被丢弃。来源插件、字段定义和模板只
 
 手动运行一次目标 runtime。它走完整的回合流程：组装 prompt、工具循环、提交 proposal。由事件触发的下游 runtime 会在同一回合内接着运行；同一事件有多个订阅者时按 `name` 排序。
 
-运行方式由 runtime 清单里的 `schedule.manual.execution` 决定：
+运行方式由 runtime 清单里的 `schedule.background` 决定：
 
-- `sync`（默认）：等 runtime 跑完并提交 proposal，然后返回汇总 JSON。
-- `background`：在会话锁内排入一条持久后台任务（`_runtime_jobs`，`origin.activation: "manual"`），立即返回 `202` 和 `jobId`。
+- 不写（默认）：等 runtime 跑完并提交 proposal，然后返回汇总 JSON。
+- `true`：在会话锁内排入一条持久后台任务（`_runtime_jobs`，`origin.activation: "manual"`），立即返回 `202` 和 `jobId`。
   - 后台 worker 认领并执行任务，在同一个事务里提交写入和任务终态。
   - 状态通过 `job-status.updated` 事件和 `_runtime_jobs` 的 `plugin-data.changed` 事件推送。
   - 入口 runtime 发出的后台 follower 在同一个提交事务里排成事件任务（`origin.activation: "event"`），记录在父任务的 `result.deferredJobs` 里。
@@ -4227,7 +4227,7 @@ runtime 可以中途停下来等玩家提供数据，这叫挂起。本节的端
 - 挂起时，“从哪里继续”的记录与本次的 proposal、日志和会话时钟在同一个事务里保存。提交成功后才广播 `turn.suspended`。所以提交回滚时，不会留下能恢复却没有来历的挂起项，也不会发出多余的事件。
 - 原执行的 `logicalTurnId` 和 `countPolicy` 随挂起项一起保存。恢复成功时，在提交 proposal 的同一个事务里给玩家回合数加一次。
 - 同一个逻辑回合有多个并行挂起项时，等最后一个恢复完才计数。重试不会重复计数。
-- 挂起项被放弃、过期或作废时，按回合正常结束的方式收尾：它是这个逻辑回合最后一个还在等待的挂起项时，玩家回合数加一，回合扣下的后台作业（`schedule.completion.mode: detached`）照常入队。这些和删除记录在同一个事务里完成。正在被另一个请求恢复的挂起项也算“还在等待”。
+- 挂起项被放弃、过期或作废时，按回合正常结束的方式收尾：它是这个逻辑回合最后一个还在等待的挂起项时，玩家回合数加一，回合扣下的后台作业（`schedule.detached`）照常入队。这些和删除记录在同一个事务里完成。正在被另一个请求恢复的挂起项也算“还在等待”。
 - 挂起的执行上报过的进度作业（`ctx.progress`）停在 `waiting-input`。恢复成功提交后，它们以 `succeeded` 结束；挂起项被放弃、过期或作废时，以 `cancelled` 结束。恢复失败可以重试时，它们继续等待。
 
 ##### 恢复 setup runtime

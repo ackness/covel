@@ -1,6 +1,6 @@
 ---
 kind: core
-version: 0.0.40
+version: 0.0.41
 displayName: World Dimensions
 description: Initializes character attributes and authored dimensions,
   maintaining evolving state.
@@ -18,12 +18,9 @@ contracts:
     schema: ./schemas/dimension-snapshot.schema.json
 contributes:
   extensions:
-    - point: session.world-context@1
-      id: world-context
-    - point: prompt.segment@1
-      id: dimensions
-    - point: prompt.segment@1
-      id: dimension-rules
+    - session.world-context@1/world-context
+    - prompt.segment@1/dimensions
+    - prompt.segment@1/dimension-rules
   ui:
     right:
       - ./runtimes/schema-gen/ui/world-overview.json
@@ -33,7 +30,7 @@ contributes:
     - dimension-rule-get
     - update-dimensions
   hooks:
-    - event: PreLLMCall
+    - PreLLMCall
 ---
 
 # World Setup

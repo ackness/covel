@@ -1,6 +1,6 @@
 ---
 kind: core
-version: 0.0.39
+version: 0.0.40
 displayName: Character Creator
 description: >-
   Helps create your hero and keeps important character details up to date during
@@ -21,8 +21,7 @@ requires:
   - narrative-engine@1
 contributes:
   extensions:
-    - point: prompt.segment@1
-      id: character-roster
+    - prompt.segment@1/character-roster
   ui:
     right:
       - ./ui/character-panel.json
@@ -31,8 +30,8 @@ contributes:
   forms:
     - player-name
   hooks:
-    - event: PreLLMCall
-    - event: PreToolUse
+    - PreLLMCall
+    - PreToolUse
 ---
 
 # Character Creator

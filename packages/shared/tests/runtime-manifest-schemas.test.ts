@@ -134,10 +134,10 @@ const compiledPositives: readonly Fixture[] = [
       stage: "post-turn",
       turnCompletion: {
         mode: "detached",
+        settle: true,
+        maxSettleWaitMs: 30_000,
         maxQueueMs: 30_000,
         maxExecutionMs: 90_000,
-        overlap: "serial",
-        stalePolicy: "reject",
       },
     },
   },
@@ -488,17 +488,17 @@ const malformedRejections: readonly Fixture[] = [
       handler: "./handler.js",
       turnCompletion: {
         mode: "detached",
-        settle: "before-next-execution",
+        settle: true,
         maxSettleWaitMs: 120_001,
       },
     },
   },
   {
-    name: "turnCompletion unsupported overlap policy",
+    name: "turnCompletion with the removed overlap policy",
     manifest: {
       ...base,
       stage: "post-turn",
-      turnCompletion: { mode: "detached", overlap: "parallel" },
+      turnCompletion: { mode: "detached", overlap: "serial" },
     },
   },
   {

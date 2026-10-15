@@ -352,17 +352,17 @@ The staged detached worker also reports its persistent state with this event:
 - The web app uses the persistent job's `backgroundTurnId` to attach the reasoning of a recovered worker to the task of the turn it came from. The worker has its own trace ID. That ID must not create another turn the player can see, and it must not create a "job interrupted" notice. Trace and job recovery can arrive in either order. The state and failure details come from the persistent job. When recovery runs more than once, the reasoning is not duplicated.
 
 > [!NOTE]
-> This channel coexists with the framework's reserved namespace `_runtime_jobs`. Both manual / event `execution: background` and staged `turnCompletion: detached` are recorded there. `job-status.updated` is the live display and recovery mechanism for them. It cannot replace the transaction for domain results.
+> This channel coexists with the framework's reserved namespace `_runtime_jobs`. Both manual / event `schedule.background: true` and staged `schedule.detached` are recorded there. `job-status.updated` is the live display and recovery mechanism for them. It cannot replace the transaction for domain results.
 
 ### Background tasks (reserved namespace `_runtime_jobs`)
 
 Every background runtime uses `_runtime_jobs/<jobId>` as its reliable source of state. There are three origins:
 
-| `origin.activation` | Origin                                                                                                                         |
-| ------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| `"stage"`           | A scheduled job with `turnCompletion.mode: detached`                                                                           |
-| `"manual"`          | A plugin-rpc `execution: background`, or a manual activation with `expectsBackgroundFollower`                                  |
-| `"event"`           | A follower with `execution: background` in an event chain, queued in the commit transaction of the execution that triggered it |
+| `origin.activation` | Origin                                                                                                                       |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `"stage"`           | A scheduled job with `turnCompletion.mode: detached`                                                                         |
+| `"manual"`          | A plugin-rpc `schedule.background`, or a manual activation with `expectsBackgroundFollower`                                  |
+| `"event"`           | A follower with `schedule.background` in an event chain, queued in the commit transaction of the execution that triggered it |
 
 - Plugins cannot write to this namespace.
 - The queued record is saved in the same transaction as the original turn's proposals, journal, and session clock.
@@ -406,7 +406,7 @@ Every background runtime uses `_runtime_jobs/<jobId>` as its reliable source of 
 - Maintenance does not take up execution capacity. On shutdown it waits for the actual scan and lock callbacks to exit.
 
 > [!NOTE]
-> If you later extend the states, or add overlap or stalePolicy, you must upgrade the schema version, the legal state transition graph, the SSE state mapping, and the client recovery logic together. There is currently no way to express a new policy with an old value.
+> If you later extend the states, or give background jobs a policy such as running in parallel or expiring, you must upgrade the schema version, the legal state transition graph, the SSE state mapping, and the client recovery logic together. There is currently no way to express a new policy with an old value.
 
 **What is removed when reading**
 
@@ -575,7 +575,7 @@ A committed `interaction.requested` and `ui.rendered` are also pushed through th
 
 - Plugin memory, like other plugin data, sends `plugin-data.changed` after it commits. Which content is updated is decided by the owning plugin's namespace. There is no separate "working memory changed" event.
 - The success and failure states of a detached extraction are recovered through the general job and execution records.
-- Later executions read the committed snapshot after the `before-next-execution` barrier.
+- Later executions wait for the jobs with `settle: true` to finish, then read the committed snapshot.
 
 **Events that go only to the trace**
 
@@ -984,16 +984,16 @@ This is the single channel for sending "structured instructions" to a plugin. It
 
 **Response branches:**
 
-| Status code | Success `status` / error `code`                                                                      | Trigger                                                                                                                                                                      |
-| ----------- | ---------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 200         | `ok`                                                                                                 | Action or command level succeeded, or runtime level succeeded in sync mode                                                                                                   |
-| 202         | `approval-required`                                                                                  | First call by a community-trust plugin (action, command, or runtime level)                                                                                                   |
-| 202         | `accepted`                                                                                           | Runtime level with `execution: background` or `expectsBackgroundFollower`. Includes `jobId` and `turnId`. The state follows through `job-status.updated` and `_runtime_jobs` |
-| 400         | Generic error envelope                                                                               | Validation of the kind/field combination, the arguments, or the payload failed                                                                                               |
-| 404         | `unknown_action` / `runtime_not_active` / `command_not_active`                                       | The action is not registered / the runtime is not active / the command is not in the current session catalog                                                                 |
-| 409         | `approval_scope_changed` / `session_not_active` / `session_deleting` / `session_incarnation_changed` | While waiting for the lock, the authorization or session generation changed, or the session is paused, ended, or being deleted. The client should refresh and start again    |
-| 429         | `queue_full`                                                                                         | Pending approvals exceed the cap                                                                                                                                             |
-| 500         | `runtime_execution_failed` / `background_enqueue_failed` / `turn_commit_failed`                      | Sync execution threw / enqueuing failed. (In background mode, an internal runtime exception goes through SSE, not HTTP)                                                      |
+| Status code | Success `status` / error `code`                                                                      | Trigger                                                                                                                                                                          |
+| ----------- | ---------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 200         | `ok`                                                                                                 | Action or command level succeeded, or runtime level succeeded in sync mode                                                                                                       |
+| 202         | `approval-required`                                                                                  | First call by a community-trust plugin (action, command, or runtime level)                                                                                                       |
+| 202         | `accepted`                                                                                           | Runtime level with `schedule.background: true` or `expectsBackgroundFollower`. Includes `jobId` and `turnId`. The state follows through `job-status.updated` and `_runtime_jobs` |
+| 400         | Generic error envelope                                                                               | Validation of the kind/field combination, the arguments, or the payload failed                                                                                                   |
+| 404         | `unknown_action` / `runtime_not_active` / `command_not_active`                                       | The action is not registered / the runtime is not active / the command is not in the current session catalog                                                                     |
+| 409         | `approval_scope_changed` / `session_not_active` / `session_deleting` / `session_incarnation_changed` | While waiting for the lock, the authorization or session generation changed, or the session is paused, ended, or being deleted. The client should refresh and start again        |
+| 429         | `queue_full`                                                                                         | Pending approvals exceed the cap                                                                                                                                                 |
+| 500         | `runtime_execution_failed` / `background_enqueue_failed` / `turn_commit_failed`                      | Sync execution threw / enqueuing failed. (In background mode, an internal runtime exception goes through SSE, not HTTP)                                                          |
 
 Every non-2xx answer uses `{ error, code?, details? }`. It does not return a business `status`.
 

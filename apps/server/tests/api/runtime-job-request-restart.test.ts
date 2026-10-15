@@ -147,8 +147,7 @@ runtime:
     stage: post-turn
     trigger:
       type: auto
-    completion:
-      mode: detached
+    detached: true
   function:
     handler: ./handler.js
   io:

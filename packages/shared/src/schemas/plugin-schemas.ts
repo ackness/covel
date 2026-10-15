@@ -6,17 +6,22 @@
 
 import { z } from "zod";
 
+/** A versioned extension point or UI slot name, such as `prompt.segment@1`. */
+const extensionPointPattern = "[a-z][a-z0-9.-]*@[1-9][0-9]*";
+/** The ID of an extension within its package. */
+const extensionIdPattern = "[a-zA-Z0-9][\\w.-]*";
+
 export const extensionDeclarationSchema = z.strictObject({
   point: z
     .string()
-    .regex(/^[a-z][a-z0-9.-]*@[1-9][0-9]*$/)
+    .regex(new RegExp(`^${extensionPointPattern}$`))
     .meta({
       description: "Extension point this entry provides.",
       examples: ["prompt.segment@1"],
     }),
   id: z
     .string()
-    .regex(/^[a-zA-Z0-9][\w.-]*$/)
+    .regex(new RegExp(`^${extensionIdPattern}$`))
     .describe("ID of this extension within the package."),
   order: z
     .number()
@@ -27,7 +32,7 @@ export const extensionDeclarationSchema = z.strictObject({
     .optional(),
   slot: z
     .string()
-    .regex(/^[a-z][a-z0-9.-]*@[1-9][0-9]*$/)
+    .regex(new RegExp(`^${extensionPointPattern}$`))
     .describe("UI slot providers only: the kernel UI slot this entry fills.")
     .optional(),
   watch: z
@@ -394,6 +399,88 @@ export const hookDeclarationSchema = z
   })
   .strict();
 
+// ── Contribution shorthands ──────────────────────────────────────
+
+/**
+ * A declaration written either as a string or as an object. The string is
+ * the common case and expands to the object; the object stays for the fields
+ * the string cannot say. An invalid entry reports the problem of the form it
+ * was written in, not a bare "invalid input".
+ */
+function shorthandOrObject<
+  Short extends z.ZodType<string>,
+  Full extends z.ZodType<object>,
+>(
+  short: Short,
+  full: Full,
+  expand: (value: z.output<Short>) => z.output<Full>,
+  expected: string,
+) {
+  return z
+    .union([short, full], {
+      error: (issue) => {
+        const input = (issue as { input?: unknown }).input;
+        const branches =
+          (issue as { errors?: { message: string; path: PropertyKey[] }[][] })
+            .errors ?? [];
+        const branch =
+          typeof input === "string"
+            ? branches[0]
+            : input && typeof input === "object" && !Array.isArray(input)
+              ? branches[1]
+              : undefined;
+        if (!branch?.length) return expected;
+        return branch
+          .map(({ path, message }) =>
+            path.length ? `${path.map(String).join(".")}: ${message}` : message,
+          )
+          .join("; ");
+      },
+    })
+    .transform((value): z.output<Full> =>
+      typeof value === "string"
+        ? expand(value as z.output<Short>)
+        : (value as z.output<Full>),
+    );
+}
+
+const hookEventSchema = hookDeclarationSchema.shape.event;
+
+/** `contributes.hooks[]`: an event name, or `{ event, enforce }`. */
+export const pluginHookContributionSchema = shorthandOrObject(
+  hookEventSchema.describe(
+    "Lifecycle event the entry registers a handler for, in the default `normal` phase.",
+  ),
+  hookDeclarationSchema
+    .pick({ event: true, enforce: true })
+    .describe("A hook in another phase: `{ event, enforce }`."),
+  (event) => ({ event }),
+  "expected a hook event name, such as PreToolUse, or { event, enforce }",
+);
+
+/** `contributes.extensions[]`: `<point>/<id>`, or the object form. */
+export const pluginExtensionContributionSchema = shorthandOrObject(
+  z
+    .string()
+    .regex(new RegExp(`^${extensionPointPattern}/${extensionIdPattern}$`), {
+      message:
+        "an extension written as a string is `<point>/<id>`, such as `prompt.segment@1/notes`",
+    })
+    .meta({
+      description:
+        "`<point>/<id>`: the extension point and the ID of this extension in the package, for an entry that sets nothing else.",
+      examples: ["prompt.segment@1/notes"],
+    }),
+  extensionDeclarationSchema.describe(
+    "An extension that sets more than its point and ID, such as the `slot` of a `ui.slot@1` provider.",
+  ),
+  (value) => {
+    const slash = value.indexOf("/");
+    return { point: value.slice(0, slash), id: value.slice(slash + 1) };
+  },
+  "expected `<point>/<id>`, such as prompt.segment@1/notes, or { point, id, ... }",
+);
+
 // ── Plugin entry path ─────────────────────────────────────
 
 const pluginRelativeJsPath = z
@@ -615,59 +702,49 @@ const runtimeHistoryPolicySchema = z.strictObject({
     ),
 });
 
+/** The options of a detached runtime, as an author writes them. */
+export const detachedOptionsSchema = z.strictObject({
+  settle: z
+    .boolean()
+    .describe(
+      "`true` makes the next player action wait until this runtime's job has finished, for at most `maxSettleWaitMs`. Defaults to `false`.",
+    )
+    .optional(),
+  maxSettleWaitMs: z
+    .number()
+    .int()
+    .positive()
+    .max(MAX_SETTLE_WAIT_MS)
+    .describe(
+      `Longest time in ms the next action waits for the job, at most ${MAX_SETTLE_WAIT_MS}. Requires \`settle: true\`.`,
+    )
+    .optional(),
+  maxQueueMs: z
+    .number()
+    .int()
+    .positive()
+    .describe("Longest time in ms the job may wait in the queue.")
+    .optional(),
+  maxExecutionMs: z
+    .number()
+    .int()
+    .positive()
+    .describe("Longest time in ms the job may run.")
+    .optional(),
+});
+
 /**
- * Scheduler-driven turn-barrier policy. Kept separate from `execution`, whose
- * existing meaning is manual/event activation mode.
+ * Scheduler-driven turn-barrier policy of the compiled IR. Kept separate from
+ * `execution`, whose meaning is the manual/event activation mode.
  */
-export const turnCompletionConfigSchema = z
-  .object({
-    mode: z
-      .enum(["await", "detached"])
-      .describe(
-        "`await` makes the turn wait for this runtime. `detached` lets the turn finish first; it is valid only on `post-turn` and `audit` stages. Defaults to `await`.",
-      )
-      .optional(),
-    settle: z
-      .literal("before-next-execution")
-      .describe(
-        "Makes the next player action wait until this detached runtime settles.",
-      )
-      .optional(),
-    maxSettleWaitMs: z
-      .number()
-      .int()
-      .positive()
-      .max(MAX_SETTLE_WAIT_MS)
-      .describe(
-        "Longest time in ms the next action waits for settlement. Requires `settle`.",
-      )
-      .optional(),
-    maxQueueMs: z
-      .number()
-      .int()
-      .positive()
-      .describe("Longest time in ms a detached job may wait in the queue.")
-      .optional(),
-    maxExecutionMs: z
-      .number()
-      .int()
-      .positive()
-      .describe("Longest time in ms a detached job may run.")
-      .optional(),
-    overlap: z
-      .literal("serial")
-      .describe(
-        "Overlap policy for detached jobs of this runtime. Only `serial` is supported.",
-      )
-      .optional(),
-    stalePolicy: z
-      .literal("reject")
-      .describe(
-        "Policy for a detached job that has become stale. Only `reject` is supported.",
-      )
-      .optional(),
-  })
-  .strict();
+export const turnCompletionConfigSchema = detachedOptionsSchema.extend({
+  mode: z
+    .enum(["await", "detached"])
+    .describe(
+      "`await` makes the turn wait for this runtime. `detached` lets the turn finish first. Defaults to `await`.",
+    )
+    .optional(),
+});
 
 /**
  * `after` entry — weak ordering, no gate. A bare string is shorthand for
@@ -830,7 +907,9 @@ interface ManifestCrossFieldView {
   readonly stage?: string;
   readonly outputKind?: string;
   readonly requireExplicitCompletion?: boolean;
-  readonly turnCompletion?: RuntimeRuleView["completion"];
+  readonly turnCompletion?: NonNullable<RuntimeRuleView["detached"]> & {
+    readonly mode?: string;
+  };
   readonly trigger?: RuntimeRuleView["trigger"] & { readonly every?: number };
   readonly needs?: RuntimeRuleView["needs"];
   readonly output?: RuntimeRuleView["output"];
@@ -843,13 +922,15 @@ function addIrRuleIssues(
   m: ManifestCrossFieldView,
   ctx: z.RefinementCtx,
 ): void {
-  const { outputKind, turnCompletion, tools, ...rest } = m;
+  const { outputKind, turnCompletion, execution, tools, ...rest } = m;
+  const { mode, ...detachedOptions } = turnCompletion ?? {};
   for (const issue of runtimeRuleIssues(
     {
       ...rest,
       every: m.trigger?.every,
       visibility: outputKind,
-      completion: turnCompletion,
+      ...(mode === "detached" ? { detached: detachedOptions } : {}),
+      background: execution === "background",
       builtinTools: tools?.builtin,
     },
     IR_RULE_FIELD_PATHS,
@@ -858,6 +939,15 @@ function addIrRuleIssues(
       code: "custom",
       path: [...issue.path],
       message: issue.message,
+    });
+  // Only the IR spells the mode out: an authored runtime writes the options
+  // inside `schedule.detached`.
+  if (mode !== "detached" && Object.keys(detachedOptions).length > 0)
+    ctx.addIssue({
+      code: "custom",
+      path: ["turnCompletion", "mode"],
+      message:
+        "the detached options of turnCompletion require turnCompletion.mode 'detached'",
     });
 }
 

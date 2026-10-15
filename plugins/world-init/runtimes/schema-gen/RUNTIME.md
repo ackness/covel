@@ -16,11 +16,10 @@ agent:
   tools:
     plugin:
       - initialize-world
-  loop:
-    completion:
-      require: tool-use
-      afterTools:
-        - initialize-world
+  completion:
+    require: tool-use
+    afterTools:
+      - initialize-world
 guard: ../../guard.js
 ---
 

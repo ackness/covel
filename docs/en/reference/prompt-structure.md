@@ -281,8 +281,8 @@ api.provideExtension("prompt.segment@1", "status", {
 
 The `agent` group of a runtime can declare two request preferences:
 
-- `llm.reasoningEffort: disabled`
-- `llm.toolChoice: { name: submit-facts }` (a named tool), or `llm.toolChoice: required` (a declared tool must be called, and the model chooses which)
+- `agent.reasoning: false`
+- `agent.toolChoice: { name: submit-facts }` (a named tool), or `agent.toolChoice: required` (a declared tool must be called, and the model chooses which)
 
 **When to force a tool.** A bookkeeping runtime after the narrative receives a conversation whose latest text is the story text. If the tool is not forced, the model tends to just continue the plot.
 

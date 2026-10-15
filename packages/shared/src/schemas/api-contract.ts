@@ -273,12 +273,10 @@ const effectiveTurnCompletionSchema = z.discriminatedUnion("mode", [
   z
     .object({
       mode: z.literal("detached"),
-      settle: z.literal("before-next-execution").optional(),
+      settle: z.boolean().optional(),
       maxSettleWaitMs: z.number().int().positive().optional(),
       maxQueueMs: z.number().int().positive().optional(),
       maxExecutionMs: z.number().int().positive().optional(),
-      overlap: z.literal("serial"),
-      stalePolicy: z.literal("reject"),
     })
     .strict(),
 ]);

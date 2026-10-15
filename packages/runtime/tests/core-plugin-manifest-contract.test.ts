@@ -191,7 +191,7 @@ describe("core plugin manifest contract", () => {
       requireToolUse: true,
       llm: {
         reasoningEffort: "disabled",
-        toolChoice: { name: "generate-guide" },
+        toolChoice: "required",
       },
       completeAfterTools: ["generate-guide"],
       maxRetries: 3,
@@ -247,9 +247,11 @@ describe("core plugin manifest contract", () => {
     expect(
       requireRuntime(manifests, "world-init/dimension-tracker").llm,
     ).toEqual({ reasoningEffort: "disabled", toolChoice: "required" });
+    // finishWith makes the model call a tool on every step; the finishing
+    // tool is the only one the runtime sees.
     expect(worldIr.llm).toEqual({
       reasoningEffort: "disabled",
-      toolChoice: { name: "submit-world-facts" },
+      toolChoice: "required",
     });
     for (const downstream of structuredDownstreams) {
       expect(downstream.needs).toBeUndefined();

@@ -2,17 +2,14 @@
 description: Update memory blocks from the completed source turn.
 schedule:
   stage: post-turn
-  completion:
-    mode: detached
-    settle: before-next-execution
+  detached:
+    settle: true
     # 30s settle wait: a working default based on short-flow real-model tests.
     # Full latency distribution and timeout rate measurement not yet complete.
     # Future tuning may adjust this based on production telemetry (08 §4.3).
     maxSettleWaitMs: 30000
     maxQueueMs: 300000
     maxExecutionMs: 120000
-    overlap: serial
-    stalePolicy: reject
 io:
   inputs:
     turn:

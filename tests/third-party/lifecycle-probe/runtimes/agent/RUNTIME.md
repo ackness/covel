@@ -7,13 +7,13 @@ agent:
   tools:
     plugin:
       - lifecycle-probe-record
+  completion:
+    require: explicit
+    afterTools:
+      - lifecycle-probe-record
   loop:
     maxSteps: 2
     maxRetries: 0
-    completion:
-      require: explicit
-      afterTools:
-        - lifecycle-probe-record
 ---
 
 Test style: {{ userSettings.voice }}.

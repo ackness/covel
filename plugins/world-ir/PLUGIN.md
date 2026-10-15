@@ -1,5 +1,5 @@
 ---
-version: 0.0.37
+version: 0.0.38
 displayName: World Fact Extraction
 description: >-
   Extracts people, relationships, events, and clues from each story turn for
@@ -23,7 +23,7 @@ contributes:
   tools:
     - submit-world-facts
   hooks:
-    - event: PostContextAssembly
+    - PostContextAssembly
 runtime:
   schedule:
     stage: post-turn
@@ -44,15 +44,8 @@ runtime:
       recordAs: world-ir-v1
       contract: world-ir-provider@1
   agent:
-    llm:
-      reasoningEffort: disabled
-      toolChoice:
-        name: submit-world-facts
-    loop:
-      completion:
-        require: tool-use
-        afterTools:
-          - submit-world-facts
+    reasoning: false
+    finishWith: submit-world-facts
   effects:
     reads:
       - "narrative:*"

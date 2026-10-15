@@ -18,8 +18,6 @@ import {
   runtimeAuthoringManifestSchema,
 } from "./runtime-manifest.js";
 import {
-  extensionDeclarationSchema,
-  hookDeclarationSchema,
   permissionsDeclSchema,
   pluginCommandsSchema,
   pluginDataSchemaDeclSchema,
@@ -27,6 +25,8 @@ import {
   pluginDisplayNameSchema,
   pluginEntryPathSchema,
   pluginEventsSchema,
+  pluginExtensionContributionSchema,
+  pluginHookContributionSchema,
   pluginUiPathsSchema,
   pluginUserSettingsSchema,
   worldProjectionMapSchema,
@@ -151,7 +151,8 @@ const dataAuthoringSchema = z
           "characterField must start with a lowercase letter and hold only letters and digits",
       })
       .refine(
-        (field) => !(KERNEL_CHARACTER_FIELDS as readonly string[]).includes(field),
+        (field) =>
+          !(KERNEL_CHARACTER_FIELDS as readonly string[]).includes(field),
         {
           message: `characterField must not name a field the kernel reads from a character record (${KERNEL_CHARACTER_FIELDS.join(", ")})`,
         },
@@ -400,12 +401,16 @@ export const pluginManifestSchema = z.strictObject({
         )
         .optional(),
       extensions: z
-        .array(extensionDeclarationSchema)
-        .describe("Extensions the entry provides with `provideExtension`.")
+        .array(pluginExtensionContributionSchema)
+        .describe(
+          "Extensions the entry provides with `provideExtension`: `<point>/<id>`, or an object for one that sets more, such as a UI slot provider.",
+        )
         .optional(),
       hooks: z
-        .array(hookDeclarationSchema.pick({ event: true, enforce: true }))
-        .describe("Lifecycle hooks the entry registers.")
+        .array(pluginHookContributionSchema)
+        .describe(
+          "Lifecycle hooks the entry registers: an event name, or `{ event, enforce }` for a phase other than `normal`.",
+        )
         .optional(),
       wires: z
         .array(z.string().min(1))

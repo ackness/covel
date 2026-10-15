@@ -1,5 +1,5 @@
 ---
-version: 0.0.37
+version: 0.0.38
 displayName: Character Profiles
 description: >-
   Saves the world's preset character profiles along with their portraits,
@@ -16,12 +16,10 @@ provides:
   - character-blueprint@1
 contributes:
   extensions:
-    - point: prompt.segment@1
-      id: character-notes
+    - prompt.segment@1/character-notes
     - point: ui.slot@1
       id: visuals
       slot: character.visual@1
-      order: 0
       watch:
         - presence
   data:

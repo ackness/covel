@@ -1,5 +1,5 @@
 ---
-version: 0.0.37
+version: 0.0.38
 displayName: Dice Check
 description: >-
   Dice checks for risky actions — pre-rolled dice pools, rule-based outcomes,
@@ -25,8 +25,8 @@ contributes:
         check table gives. Do not report the d20, the DC or the total: the
         system adds them. Risk-free actions never roll or emit.
   hooks:
-    - event: PreToolUse
-    - event: PostToolUse
+    - PreToolUse
+    - PostToolUse
   ui:
     message:
       - ./runtimes/recorder/ui/check-message.json

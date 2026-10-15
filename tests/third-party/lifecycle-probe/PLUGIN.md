@@ -49,10 +49,8 @@ contributes:
     - lifecycle-probe-record
     - lifecycle-probe-cards
   hooks:
-    - event: TurnStart
-      enforce: normal
-    - event: SessionEnd
-      enforce: normal
+    - TurnStart
+    - SessionEnd
   actions:
     - probe-status
 ---

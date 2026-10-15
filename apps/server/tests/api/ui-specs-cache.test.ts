@@ -37,8 +37,6 @@ runtime:
   schedule:
     trigger:
       type: manual
-    manual:
-      execution: sync
   function:
     handler: ./handler.js
 ---

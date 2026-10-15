@@ -423,58 +423,68 @@
         "extensions": {
           "type": "array",
           "items": {
-            "type": "object",
-            "properties": {
-              "point": {
+            "anyOf": [
+              {
                 "type": "string",
-                "pattern": "^[a-z][a-z0-9.-]*@[1-9][0-9]*$",
-                "description": "Extension point this entry provides.",
-                "examples": ["prompt.segment@1"]
+                "pattern": "^[a-z][a-z0-9.-]*@[1-9][0-9]*\\/[a-zA-Z0-9][\\w.-]*$",
+                "description": "`<point>/<id>`: the extension point and the ID of this extension in the package, for an entry that sets nothing else.",
+                "examples": ["prompt.segment@1/notes"]
               },
-              "id": {
-                "type": "string",
-                "pattern": "^[a-zA-Z0-9][\\w.-]*$",
-                "description": "ID of this extension within the package."
-              },
-              "order": {
-                "type": "integer",
-                "minimum": -9007199254740991,
-                "maximum": 9007199254740991,
-                "description": "Sort order among providers of the same point. Lower values come first. Defaults to 0."
-              },
-              "slot": {
-                "type": "string",
-                "pattern": "^[a-z][a-z0-9.-]*@[1-9][0-9]*$",
-                "description": "UI slot providers only: the kernel UI slot this entry fills."
-              },
-              "watch": {
-                "type": "array",
-                "items": {
-                  "type": "string",
-                  "minLength": 1
+              {
+                "type": "object",
+                "properties": {
+                  "point": {
+                    "type": "string",
+                    "pattern": "^[a-z][a-z0-9.-]*@[1-9][0-9]*$",
+                    "description": "Extension point this entry provides.",
+                    "examples": ["prompt.segment@1"]
+                  },
+                  "id": {
+                    "type": "string",
+                    "pattern": "^[a-zA-Z0-9][\\w.-]*$",
+                    "description": "ID of this extension within the package."
+                  },
+                  "order": {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991,
+                    "description": "Sort order among providers of the same point. Lower values come first. Defaults to 0."
+                  },
+                  "slot": {
+                    "type": "string",
+                    "pattern": "^[a-z][a-z0-9.-]*@[1-9][0-9]*$",
+                    "description": "UI slot providers only: the kernel UI slot this entry fills."
+                  },
+                  "watch": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "description": "UI slot providers only: own data namespaces whose changes refresh the slot."
+                  },
+                  "preview": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "description": "UI slot providers only: event topics whose in-turn preview refreshes the slot."
+                  }
                 },
-                "description": "UI slot providers only: own data namespaces whose changes refresh the slot."
-              },
-              "preview": {
-                "type": "array",
-                "items": {
-                  "type": "string",
-                  "minLength": 1
-                },
-                "description": "UI slot providers only: event topics whose in-turn preview refreshes the slot."
+                "required": ["point", "id"],
+                "additionalProperties": false,
+                "description": "An extension that sets more than its point and ID, such as the `slot` of a `ui.slot@1` provider."
               }
-            },
-            "required": ["point", "id"],
-            "additionalProperties": false
+            ]
           },
-          "description": "Extensions the entry provides with `provideExtension`."
+          "description": "Extensions the entry provides with `provideExtension`: `<point>/<id>`, or an object for one that sets more, such as a UI slot provider."
         },
         "hooks": {
           "type": "array",
           "items": {
-            "type": "object",
-            "properties": {
-              "event": {
+            "anyOf": [
+              {
                 "type": "string",
                 "enum": [
                   "SessionStart",
@@ -494,18 +504,46 @@
                   "TurnStop",
                   "SessionEnd"
                 ],
-                "description": "Lifecycle event the hook handles."
+                "description": "Lifecycle event the entry registers a handler for, in the default `normal` phase."
               },
-              "enforce": {
-                "type": "string",
-                "enum": ["pre", "normal", "post"],
-                "description": "Phase the hook runs in. Defaults to `normal`."
+              {
+                "type": "object",
+                "properties": {
+                  "event": {
+                    "type": "string",
+                    "enum": [
+                      "SessionStart",
+                      "TurnStart",
+                      "PreCompaction",
+                      "PostCompaction",
+                      "PreSchedule",
+                      "PreRuntime",
+                      "PostContextAssembly",
+                      "PreLLMCall",
+                      "PostLLMResponse",
+                      "PostRuntime",
+                      "PreToolUse",
+                      "PostToolUse",
+                      "PreStateCommit",
+                      "PostStateCommit",
+                      "TurnStop",
+                      "SessionEnd"
+                    ],
+                    "description": "Lifecycle event the hook handles."
+                  },
+                  "enforce": {
+                    "type": "string",
+                    "enum": ["pre", "normal", "post"],
+                    "description": "Phase the hook runs in. Defaults to `normal`."
+                  }
+                },
+                "required": ["event"],
+                "additionalProperties": false,
+                "description": "A hook in another phase: `{ event, enforce }`."
               }
-            },
-            "required": ["event"],
-            "additionalProperties": false
+            ]
           },
-          "description": "Lifecycle hooks the entry registers."
+          "description": "Lifecycle hooks the entry registers: an event name, or `{ event, enforce }` for a phase other than `normal`."
         },
         "wires": {
           "type": "array",
@@ -1188,63 +1226,45 @@
               },
               "description": "Upstream runtimes or contracts that run first. Sets order only; it does not gate and does not activate a provider."
             },
-            "completion": {
-              "type": "object",
-              "properties": {
-                "mode": {
-                  "type": "string",
-                  "enum": ["await", "detached"],
-                  "description": "`await` makes the turn wait for this runtime. `detached` lets the turn finish first; it is valid only on `post-turn` and `audit` stages. Defaults to `await`."
+            "detached": {
+              "anyOf": [
+                {
+                  "type": "boolean"
                 },
-                "settle": {
-                  "type": "string",
-                  "const": "before-next-execution",
-                  "description": "Makes the next player action wait until this detached runtime settles."
-                },
-                "maxSettleWaitMs": {
-                  "type": "integer",
-                  "exclusiveMinimum": 0,
-                  "maximum": 120000,
-                  "description": "Longest time in ms the next action waits for settlement. Requires `settle`."
-                },
-                "maxQueueMs": {
-                  "type": "integer",
-                  "exclusiveMinimum": 0,
-                  "maximum": 9007199254740991,
-                  "description": "Longest time in ms a detached job may wait in the queue."
-                },
-                "maxExecutionMs": {
-                  "type": "integer",
-                  "exclusiveMinimum": 0,
-                  "maximum": 9007199254740991,
-                  "description": "Longest time in ms a detached job may run."
-                },
-                "overlap": {
-                  "type": "string",
-                  "const": "serial",
-                  "description": "Overlap policy for detached jobs of this runtime. Only `serial` is supported."
-                },
-                "stalePolicy": {
-                  "type": "string",
-                  "const": "reject",
-                  "description": "Policy for a detached job that has become stale. Only `reject` is supported."
+                {
+                  "type": "object",
+                  "properties": {
+                    "settle": {
+                      "type": "boolean",
+                      "description": "`true` makes the next player action wait until this runtime's job has finished, for at most `maxSettleWaitMs`. Defaults to `false`."
+                    },
+                    "maxSettleWaitMs": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 120000,
+                      "description": "Longest time in ms the next action waits for the job, at most 120000. Requires `settle: true`."
+                    },
+                    "maxQueueMs": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991,
+                      "description": "Longest time in ms the job may wait in the queue."
+                    },
+                    "maxExecutionMs": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991,
+                      "description": "Longest time in ms the job may run."
+                    }
+                  },
+                  "additionalProperties": false
                 }
-              },
-              "additionalProperties": false,
-              "description": "Whether the turn waits for this runtime."
+              ],
+              "description": "`true` lets the turn finish before this runtime does: it runs afterwards as a durable background job. Only on stage `post-turn` or `audit`. An object sets the job's options and also makes it detached. Defaults to `false`: the turn waits."
             },
-            "manual": {
-              "type": "object",
-              "properties": {
-                "execution": {
-                  "type": "string",
-                  "enum": ["sync", "background"],
-                  "description": "`sync` awaits the result. `background` queues a durable job and returns its ID."
-                }
-              },
-              "required": ["execution"],
-              "additionalProperties": false,
-              "description": "Execution mode for `manual` and `event` activation."
+            "background": {
+              "type": "boolean",
+              "description": "`true` runs a `manual` or `event` activation as a durable background job: the caller gets a job ID at once. Defaults to `false`: the caller waits for the result."
             }
           },
           "additionalProperties": false,
@@ -1422,38 +1442,30 @@
               "description": "Model slot the agent uses. Defaults to `story` with `io.visibility: story`, otherwise `plugin`.",
               "examples": ["utility"]
             },
-            "llm": {
-              "type": "object",
-              "properties": {
-                "reasoningEffort": {
+            "toolChoice": {
+              "anyOf": [
+                {
                   "type": "string",
-                  "const": "disabled",
-                  "description": "`disabled` turns model reasoning off for this runtime."
+                  "const": "required"
                 },
-                "toolChoice": {
-                  "anyOf": [
-                    {
+                {
+                  "type": "object",
+                  "properties": {
+                    "name": {
                       "type": "string",
-                      "const": "required"
-                    },
-                    {
-                      "type": "object",
-                      "properties": {
-                        "name": {
-                          "type": "string",
-                          "minLength": 1,
-                          "description": "Name of the tool to force."
-                        }
-                      },
-                      "required": ["name"],
-                      "additionalProperties": false
+                      "minLength": 1,
+                      "description": "Name of the tool to force."
                     }
-                  ],
-                  "description": "`required` forces a tool call on every step. `{ name }` forces one named tool."
+                  },
+                  "required": ["name"],
+                  "additionalProperties": false
                 }
-              },
-              "additionalProperties": false,
-              "description": "Model call options for this runtime."
+              ],
+              "description": "`required` makes the model call a tool on every step. `{ name }` makes it call that one tool. Without it, the model chooses."
+            },
+            "reasoning": {
+              "type": "boolean",
+              "description": "`false` turns model reasoning off for this runtime. Defaults to `true`: the model's own reasoning setting applies."
             },
             "history": {
               "type": "object",
@@ -1513,6 +1525,30 @@
               "type": "boolean",
               "description": "`true` lists the session's event directory in the prompt so the model knows which topics it may emit."
             },
+            "finishWith": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Tool that ends the run: the run completes after a successful call to it, and fails if it ends without one. The model must call a tool on every step (`toolChoice: required`) unless `toolChoice` says otherwise. Not with `completion`, which is the long form for several tools or explicit completion."
+            },
+            "completion": {
+              "type": "object",
+              "properties": {
+                "require": {
+                  "type": "string",
+                  "enum": ["explicit", "tool-use"],
+                  "description": "`explicit` needs a completing tool or `runtime-done`. `tool-use` needs a successful tool named in `afterTools`, or any successful business tool when `afterTools` is empty. Failed calls and `runtime-done` do not count."
+                },
+                "afterTools": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "The runtime completes after a successful call to one of these tools."
+                }
+              },
+              "additionalProperties": false,
+              "description": "How the agent run ends. For one completing tool, `finishWith` is shorter."
+            },
             "loop": {
               "type": "object",
               "properties": {
@@ -1563,29 +1599,10 @@
                   "minimum": 0,
                   "maximum": 50,
                   "description": "Maximum depth of nested `ctx.recursiveCall()`. Defaults to 10."
-                },
-                "completion": {
-                  "type": "object",
-                  "properties": {
-                    "require": {
-                      "type": "string",
-                      "enum": ["explicit", "tool-use"],
-                      "description": "`explicit` needs a completing tool or `runtime-done`. `tool-use` needs a successful tool named in `afterTools`, or any successful business tool when `afterTools` is empty. Failed calls and `runtime-done` do not count."
-                    },
-                    "afterTools": {
-                      "type": "array",
-                      "items": {
-                        "type": "string"
-                      },
-                      "description": "The runtime completes after a successful call to one of these tools."
-                    }
-                  },
-                  "additionalProperties": false,
-                  "description": "How the agent loop ends."
                 }
               },
               "additionalProperties": false,
-              "description": "Limits and completion rules of the agent loop."
+              "description": "Time, retry and step limits of the agent loop."
             }
           },
           "additionalProperties": false,

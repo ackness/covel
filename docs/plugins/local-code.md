@@ -58,8 +58,7 @@ runtime:
         select: /narrativeOutput
   agent:
     history: { maxTurns: 2 }
-    loop:
-      completion: { afterTools: [save-note] }
+    finishWith: save-note
 ---
 Read `runtime-inputs.narrative.value`. Call `save-note` one time with one fact that the narrative states.
 ```
@@ -73,7 +72,7 @@ Read `runtime-inputs.narrative.value`. Call `save-note` one time with one fact t
 | `contributes.tools`              | 这个插件注册了哪些工具。必须和入口文件里注册的名字一致                                 |
 | `contributes.data.notes`         | 声明 `notes` 这个数据空间，以及一条记录的形状（schema）                                |
 | `agent.history: { maxTurns: 2 }` | 只给模型看最近 2 个回合的对话。见[控制模型看到多少历史](#控制模型看到多少历史)         |
-| `loop.completion.afterTools`     | `save-note` 成功之后，这个 agent 立刻结束，不再多问模型一次                            |
+| `agent.finishWith`               | `save-note` 成功之后，这个 agent 立刻结束，不再多问模型一次                            |
 
 这个插件只有一个 runtime，所以不用写 `agent.tools.plugin`：它自动得到 `contributes.tools` 里的全部工具。
 
@@ -315,7 +314,7 @@ export default function register(covel) {
 
 - 界面传来的 `payload` 是外部输入，使用之前要检查。
 - 动作的写入是立刻生效的。它不属于某个回合，后面的步骤失败了也不会撤销。要“全部成功才保存”，用手动触发的函数 runtime。
-- 动作要很快做完。超过 30 秒这次动作就算失败：`ctx.signal` 中止，之后的 `ctx.store` 调用都会被拒绝。耗时的工作交给 `schedule.manual.execution: background` 的 runtime。
+- 动作要很快做完。超过 30 秒这次动作就算失败：`ctx.signal` 中止，之后的 `ctx.store` 调用都会被拒绝。耗时的工作交给写了 `schedule.background: true` 的 runtime。
 - 离线运行不支持动作。运行时它会提示 `Unsupported rpc: notebook/inspect-note. Verify with the server.`，这不是错误。动作要在真实的服务端上验证。
 
 ## 写一个函数

@@ -24,17 +24,15 @@ io:
 agent:
   history:
     maxTurns: 0
-  llm:
-    reasoningEffort: disabled
-    toolChoice: required
+  reasoning: false
+  toolChoice: required
   tools:
     plugin:
       - upsert-npc-graph
-  loop:
-    completion:
-      require: explicit
-      afterTools:
-        - upsert-npc-graph
+  completion:
+    require: explicit
+    afterTools:
+      - upsert-npc-graph
 ---
 
 You are the NPC Graph Analyst. You maintain the character-relationship graph of this session. Spot new characters, groups, and factions in the narrative, and update the relational facts among them.

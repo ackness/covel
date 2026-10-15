@@ -20,12 +20,12 @@ agent:
   tools:
     plugin:
       - create-character-form
+  completion:
+    require: tool-use
+    afterTools:
+      - create-character-form
   loop:
     timeoutMs: 180000
-    completion:
-      require: tool-use
-      afterTools:
-        - create-character-form
 guard: ./guard.js
 ---
 

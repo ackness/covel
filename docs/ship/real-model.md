@@ -117,7 +117,7 @@ pnpm e2e:verify --enable-plugins memory --plugin memory
 | `startTurn` 比当前回合大，或者 `every` 不整除当前回合      | 这一回合不运行（`SKIP`）                                                                                  |
 | `auto`，没有 `every`、冷却和次数上限                       | 每个回合都必须运行（严格的 `PASS` / `FAIL`）                                                              |
 | 带 `every`、`cooldownTurns` 或 `maxTriggerCount` 的 `auto` | 整局里至少运行 1 次。没轮到的回合记 `WAIT`，第 7 步统一检查                                               |
-| `schedule.completion.mode: detached`                       | 回合里记 `DEFER`。第 6 步等后台任务清空，要求每个任务成功或被主动取消                                     |
+| `schedule.detached: true`                                  | 回合里记 `DEFER`。第 6 步等后台任务清空，要求每个任务成功或被主动取消                                     |
 | `stage: setup`                                             | 第 6 步检查这一局的记录里它是不是已完成。开局的工作可能发生在表单提交之后，所以逐回合的报告里不一定看得到 |
 
 ### 脚本怎样填表单
@@ -222,7 +222,7 @@ pnpm e2e:verify --turns 20 \
 | `stage: pre-turn` / `narrative` / `post-turn` / `audit` | 只在正式回合运行                                                 |
 | `auto`（默认），有 `stage`                              | 每个回合都必须运行                                               |
 | `auto`，有 `stage` 和 `every`                           | 在允许的回合里至少运行 1 次                                      |
-| `schedule.completion.mode: detached`                    | 回合里记 `DEFER`，第 6 步检查后台任务成功                        |
+| `schedule.detached: true`                               | 回合里记 `DEFER`，第 6 步检查后台任务成功                        |
 | 没有 `stage`                                            | 不按阶段调度。自己被触发时记 `FIRE`                              |
 | 插件没有在这一局启用                                    | 全程 `SKIP`                                                      |
 | `io.visibility: story`                                  | Runtime Timeline 的输出一栏显示 `narrative(<字符数>c)`           |

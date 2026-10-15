@@ -64,7 +64,12 @@ describe("validate:plugin warnings for a field written with its default", () => 
       {
         notes: {
           ...agent,
-          schedule: { stage: "post-turn", every: 1, trigger: { type: "auto" } },
+          schedule: {
+            stage: "post-turn",
+            every: 1,
+            trigger: { type: "auto" },
+            detached: false,
+          },
           io: {
             visibility: "system",
             inputs: {
@@ -85,15 +90,17 @@ describe("validate:plugin warnings for a field written with its default", () => 
           },
           agent: {
             model: "plugin",
+            reasoning: true,
             loop: { timeoutMs: 120000, callTimeoutMs: 60000, maxRetries: 3 },
           },
         },
         record: {
           function: { handler: "../../handler.js" },
-          schedule: {
-            trigger: { type: "manual" },
-            manual: { execution: "sync" },
-          },
+          schedule: { trigger: { type: "manual" }, background: false },
+        },
+        sweep: {
+          function: { handler: "../../handler.js" },
+          schedule: { stage: "audit", detached: { settle: false } },
         },
       },
     );
@@ -109,14 +116,17 @@ describe("validate:plugin warnings for a field written with its default", () => 
         "agent.loop.maxRetries",
         "agent.loop.timeoutMs",
         "agent.model",
+        "agent.reasoning",
         "io.inputs.narrative.from.cardinality",
         "io.inputs.narrative.required",
         "io.inputs.narrative.scope",
         "io.selfData[0].format",
         "io.selfData[0].maxEntries",
         "io.visibility",
+        "schedule.background",
+        "schedule.detached",
+        "schedule.detached.settle",
         "schedule.every",
-        "schedule.manual.execution",
         "schedule.trigger.type",
       ].sort(),
     );
@@ -181,6 +191,55 @@ describe("validate:plugin warnings for a field written with its default", () => 
     expect(text).toContain("PLUGIN.md: contributes.data.notes.version");
     expect(text).toContain("PLUGIN.md: contributes.prompt[0].role");
     expect(text).toContain("PLUGIN.md: runtime.io.visibility");
+  });
+
+  it("names a declaration that has a shorter form", async () => {
+    const dir = await plugin(
+      {
+        version: "1.0.0",
+        entry: "./server.js",
+        contributes: {
+          hooks: [{ event: "TurnStart" }],
+          extensions: [
+            { point: "prompt.segment@1", id: "notes", order: 0 },
+            { point: "prompt.segment@1", id: "rules" },
+          ],
+        },
+      },
+      {
+        notes: {
+          ...agent,
+          agent: {
+            toolChoice: "required",
+            completion: { require: "tool-use", afterTools: ["save"] },
+          },
+        },
+        tally: {
+          ...agent,
+          agent: { finishWith: "save", toolChoice: "required" },
+        },
+      },
+    );
+    await writeFile(path.join(dir, "server.js"), "export default () => {};");
+    const { status, stderr, warnings } = await validate(dir);
+    expect({ status, stderr }).toEqual({ status: 0, stderr: "" });
+    const text = warnings.join("\n");
+    expect(text).toContain(
+      "PLUGIN.md: contributes.hooks[0]: write TurnStart; it means the same",
+    );
+    expect(text).toContain(
+      "PLUGIN.md: contributes.extensions[0].order: 0 is the default value",
+    );
+    expect(text).toContain(
+      "PLUGIN.md: contributes.extensions[1]: write prompt.segment@1/rules; it means the same",
+    );
+    expect(text).toContain(
+      "notes/RUNTIME.md: agent.completion: write finishWith: save in place of completion and toolChoice; it means the same",
+    );
+    expect(text).toContain(
+      'tally/RUNTIME.md: agent.toolChoice: "required" is the default value',
+    );
+    expect(warnings).toHaveLength(5);
   });
 
   it("stays quiet about a value that differs from the default", async () => {

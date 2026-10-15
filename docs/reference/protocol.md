@@ -352,17 +352,17 @@ staged detached worker 也用这个事件报告持久状态：
 - 网页端用持久作业的 `backgroundTurnId`，把恢复出来的 worker 推理内容挂到它来源回合的任务上。worker 另有自己的 trace ID，这个 ID 不能产生另一个玩家可见的回合，也不能产生“任务中断”的提示。trace 和作业的恢复可以按任意顺序到达；状态和失败详情以持久作业为准；重复恢复时推理内容不会重复。
 
 > [!NOTE]
-> 这条通道和框架保留的 namespace `_runtime_jobs` 并存。manual / event 的 `execution: background` 和 staged 的 `turnCompletion: detached` 都记录在里面。`job-status.updated` 是它的实时显示和恢复手段，不能代替领域结果的事务。
+> 这条通道和框架保留的 namespace `_runtime_jobs` 并存。manual / event 的 `schedule.background: true` 和 staged 的 `schedule.detached` 都记录在里面。`job-status.updated` 是它的实时显示和恢复手段，不能代替领域结果的事务。
 
 ### 后台任务（保留命名空间 `_runtime_jobs`）
 
 所有后台 runtime 都以 `_runtime_jobs/<jobId>` 作为可靠的状态来源。一共三种来源：
 
-| `origin.activation` | 来源                                                                             |
-| ------------------- | -------------------------------------------------------------------------------- |
-| `"stage"`           | `turnCompletion.mode: detached` 的调度作业                                       |
-| `"manual"`          | plugin-rpc 的 `execution: background` 或 `expectsBackgroundFollower` 的手动激活  |
-| `"event"`           | 事件链里 `execution: background` 的 follower，在触发它的那次执行的提交事务里排队 |
+| `origin.activation` | 来源                                                                           |
+| ------------------- | ------------------------------------------------------------------------------ |
+| `"stage"`           | `turnCompletion.mode: detached` 的调度作业                                     |
+| `"manual"`          | plugin-rpc 的 `schedule.background` 或 `expectsBackgroundFollower` 的手动激活  |
+| `"event"`           | 事件链里 `schedule.background` 的 follower，在触发它的那次执行的提交事务里排队 |
 
 - 插件不能写这个命名空间。
 - queued 记录和原始回合的 proposal、journal、会话时钟在同一个事务里保存。
@@ -406,7 +406,7 @@ staged detached worker 也用这个事件报告持久状态：
 - 维护不占用执行的容量。关闭时等待实际的扫描和锁回调退出。
 
 > [!NOTE]
-> 以后扩展状态，或者增加 overlap / stalePolicy 时，必须同时升级 schema version、合法的状态迁移图、SSE 的状态对应和客户端的恢复逻辑。目前没有“用旧值表达新策略”的兼容做法。
+> 以后扩展状态，或者给后台作业增加并行、过期之类的策略时，必须同时升级 schema version、合法的状态迁移图、SSE 的状态对应和客户端的恢复逻辑。目前没有“用旧值表达新策略”的兼容做法。
 
 **读取时去掉了什么**
 
@@ -575,7 +575,7 @@ Gemini 原生的思考强度、`providerOptions.google.thinkingConfig`、`cached
 
 - 插件记忆和其他插件数据一样，提交之后发出 `plugin-data.changed`，更新哪些内容由所属插件的 namespace 决定。没有专门的“工作记忆变更”事件。
 - detached 提取的失败和完成状态，通过通用的 job 和执行记录恢复。
-- 后面的执行在 `before-next-execution` 屏障之后读取已提交的快照。
+- 后面的执行等 `settle: true` 的作业完成之后，读取已提交的快照。
 
 **只进 trace 的事件**
 
@@ -984,16 +984,16 @@ data: {
 
 **响应分支：**
 
-| 状态码 | 成功 `status` / 错误 `code`                                                                          | 触发                                                                                                                                    |
-| ------ | ---------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
-| 200    | `ok`                                                                                                 | action / command 级成功，或 runtime 级 sync 模式成功                                                                                    |
-| 202    | `approval-required`                                                                                  | community-trust 首次调用(action、command 或 runtime 级)                                                                                 |
-| 202    | `accepted`                                                                                           | runtime 级 `execution: background` 或 `expectsBackgroundFollower`，含 `jobId` + `turnId`；状态走 `job-status.updated` + `_runtime_jobs` |
-| 400    | 通用错误信封                                                                                         | kind/字段组合、参数或 payload 校验失败                                                                                                  |
-| 404    | `unknown_action` / `runtime_not_active` / `command_not_active`                                       | action 未注册 / runtime 未激活 / command 不在当前会话目录                                                                               |
-| 409    | `approval_scope_changed` / `session_not_active` / `session_deleting` / `session_incarnation_changed` | 等锁期间授权/会话代次变化，或 session 已暂停、结束、删除中；客户端应刷新后重新发起                                                      |
-| 429    | `queue_full`                                                                                         | pending approvals 超过 cap                                                                                                              |
-| 500    | `runtime_execution_failed` / `background_enqueue_failed` / `turn_commit_failed`                      | sync 执行异常 / 入队失败(background 模式下 runtime 内部异常走 SSE,不进 HTTP)                                                            |
+| 状态码 | 成功 `status` / 错误 `code`                                                                          | 触发                                                                                                                                        |
+| ------ | ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| 200    | `ok`                                                                                                 | action / command 级成功，或 runtime 级 sync 模式成功                                                                                        |
+| 202    | `approval-required`                                                                                  | community-trust 首次调用(action、command 或 runtime 级)                                                                                     |
+| 202    | `accepted`                                                                                           | runtime 级 `schedule.background: true` 或 `expectsBackgroundFollower`，含 `jobId` + `turnId`；状态走 `job-status.updated` + `_runtime_jobs` |
+| 400    | 通用错误信封                                                                                         | kind/字段组合、参数或 payload 校验失败                                                                                                      |
+| 404    | `unknown_action` / `runtime_not_active` / `command_not_active`                                       | action 未注册 / runtime 未激活 / command 不在当前会话目录                                                                                   |
+| 409    | `approval_scope_changed` / `session_not_active` / `session_deleting` / `session_incarnation_changed` | 等锁期间授权/会话代次变化，或 session 已暂停、结束、删除中；客户端应刷新后重新发起                                                          |
+| 429    | `queue_full`                                                                                         | pending approvals 超过 cap                                                                                                                  |
+| 500    | `runtime_execution_failed` / `background_enqueue_failed` / `turn_commit_failed`                      | sync 执行异常 / 入队失败(background 模式下 runtime 内部异常走 SSE,不进 HTTP)                                                                |
 
 所有非 2xx 的回答都使用 `{ error, code?, details? }`，不返回业务的 `status`。
 

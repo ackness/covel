@@ -20,17 +20,11 @@ io:
 agent:
   history:
     maxTurns: 0
-  llm:
-    reasoningEffort: disabled
-    toolChoice: required
+  reasoning: false
   tools:
     plugin:
       - advance-world-time
-  loop:
-    completion:
-      require: tool-use
-      afterTools:
-        - advance-world-time
+  finishWith: advance-world-time
 guard: ./guard.js
 ---
 

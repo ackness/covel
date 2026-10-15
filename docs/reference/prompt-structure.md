@@ -281,8 +281,8 @@ api.provideExtension("prompt.segment@1", "status", {
 
 runtime 的 `agent` 分组可以声明两种请求偏好：
 
-- `llm.reasoningEffort: disabled`
-- `llm.toolChoice: { name: submit-facts }`（指定工具），或 `llm.toolChoice: required`（必须调用某个已声明的工具，由模型选）
+- `agent.reasoning: false`
+- `agent.toolChoice: { name: submit-facts }`（指定工具），或 `agent.toolChoice: required`（必须调用某个已声明的工具，由模型选）
 
 **什么时候强制工具。** 叙事之后的记账 runtime 收到的对话是故事正文。不强制工具时，模型容易直接续写剧情。
 

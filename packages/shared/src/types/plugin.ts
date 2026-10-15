@@ -68,25 +68,22 @@ export interface TriggerConfig {
 export type TurnCompletionMode = "await" | "detached";
 
 /**
- * Author-declared policy for staged runtimes. `detached` lets the foreground
- * turn complete after this runtime has been durably queued; it does not change
- * manual/event activation, which continues to use {@link RuntimeManifest.execution}.
- *
- * The initial contract intentionally exposes only fail-closed policies. More
- * overlap and stale-result modes can be added without adding top-level flags.
+ * Turn-barrier policy of a staged runtime, compiled from the author's
+ * `schedule.detached`. `detached` lets the foreground turn complete after
+ * this runtime has been durably queued; it does not change manual/event
+ * activation, which uses {@link RuntimeManifest.execution}. Jobs of one
+ * runtime run one at a time in source-turn order, and a job whose session
+ * moved on does not commit.
  */
 export interface TurnCompletionConfig {
   readonly mode?: TurnCompletionMode;
-  /** Maximum time the job may remain queued before it expires. */
-  readonly settle?: "before-next-execution";
+  /** The next execution waits for the job, for at most `maxSettleWaitMs`. */
+  readonly settle?: boolean;
   readonly maxSettleWaitMs?: number;
+  /** Maximum time the job may remain queued before it expires. */
   readonly maxQueueMs?: number;
   /** Maximum time a claimed detached execution may run before it expires. */
   readonly maxExecutionMs?: number;
-  /** Same-runtime detached jobs are serialized in source-turn order. */
-  readonly overlap?: "serial";
-  /** A result based on a stale session revision must not commit. */
-  readonly stalePolicy?: "reject";
 }
 
 // ── Input declarations ───────────────────────────────────────────

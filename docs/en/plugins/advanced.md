@@ -69,12 +69,12 @@ function:
 
 What is new here:
 
-| This part                   | Meaning                                                                                                                                                                |
-| --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `io.output.contract`        | The output of this runtime is the content of this capability. The plugin then provides it, and other plugins can `requires` it.                                        |
-| `io.output.schema`          | The shape the output must match. If it does not match, this run fails.                                                                                                 |
-| `io.output.recordAs`        | Saves the output under a name. Later turns can read it with `scope: committed`.                                                                                        |
-| `schedule.manual.execution` | Left out, it is `sync`: the caller waits for it to finish. `background` moves it to the background. See [Background work and failures](#background-work-and-failures). |
+| This part             | Meaning                                                                                                                                            |
+| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `io.output.contract`  | The output of this runtime is the content of this capability. The plugin then provides it, and other plugins can `requires` it.                    |
+| `io.output.schema`    | The shape the output must match. If it does not match, this run fails.                                                                             |
+| `io.output.recordAs`  | Saves the output under a name. Later turns can read it with `scope: committed`.                                                                    |
+| `schedule.background` | Left out, the caller waits for it to finish. `true` moves it to the background. See [Background work and failures](#background-work-and-failures). |
 
 Rules:
 
@@ -228,11 +228,11 @@ For the inputs and outputs of each extension point, how several providers are co
 
 There are three ways to keep a runtime from blocking the turn:
 
-| Setting                                   | Effect                                                                                                                     |
-| ----------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| `schedule.completion: { mode: detached }` | The turn ends first, and this runtime keeps running in the background. Only allowed in the `post-turn` and `audit` stages. |
-| Add `settle: before-next-execution`       | Keeps running in the background, but the player's next action waits for it to finish.                                      |
-| `schedule.manual.execution: background`   | A manually triggered runtime moves to the background, and the caller gets a task number right away.                        |
+| Setting                               | Effect                                                                                                                     |
+| ------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `schedule.detached: true`             | The turn ends first, and this runtime keeps running in the background. Only allowed in the `post-turn` and `audit` stages. |
+| `schedule.detached: { settle: true }` | Keeps running in the background, but the player's next action waits for it to finish.                                      |
+| `schedule.background: true`           | A runtime triggered manually or by an event moves to the background, and the caller gets a task number right away.         |
 
 A runtime triggered by an event is written with `schedule.trigger: { type: event, topic: ... }`.
 
@@ -251,17 +251,14 @@ A plugin can only name a role. Which model is used, and where the request goes, 
 
 ### Time limits
 
-| Type     | Field                            | Meaning                                                                                                                             |
-| -------- | -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| Function | `function.timeoutMs`             | The total time limit for one run. Time spent calling external APIs counts toward it.                                                |
-| Agent    | `agent.loop.timeoutMs`           | The total time limit for one run. The default is 120 seconds, 240 seconds for a `story` runtime.                                    |
-| Agent    | `agent.loop.callTimeoutMs`       | The time limit for a single model call (a call that is not streamed). The default is 60 seconds, 120 seconds for a `story` runtime. |
-| Agent    | `agent.loop.firstTokenTimeoutMs` | In a streamed call, the time to wait for the first token                                                                            |
-| Agent    | `agent.loop.idleTimeoutMs`       | In a streamed call, the longest silence between two outputs. The default is 120 seconds.                                            |
-| Agent    | `agent.loop.maxRetries`          | How many times to retry when a model call gets no reply. The default is 3, 1 for a `story` runtime, and the maximum is 5.           |
-| Agent    | `agent.loop.loopDetection`       | How many times the model can repeat the same call in a row before it counts as going in circles. The default is 3.                  |
+| Type     | Field                      | Meaning                                                                                                                             |
+| -------- | -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| Function | `function.timeoutMs`       | The total time limit for one run. Time spent calling external APIs counts toward it.                                                |
+| Agent    | `agent.loop.timeoutMs`     | The total time limit for one run. The default is 120 seconds, 240 seconds for a `story` runtime.                                    |
+| Agent    | `agent.loop.callTimeoutMs` | The time limit for a single model call (a call that is not streamed). The default is 60 seconds, 120 seconds for a `story` runtime. |
+| Agent    | `agent.loop.maxRetries`    | How many times to retry when a model call gets no reply. The default is 3, 1 for a `story` runtime, and the maximum is 5.           |
 
-When you do not write `firstTokenTimeoutMs`, the time each attempt waits for the first token is shortened automatically. This leaves time for the remaining retries. A model that is slow to produce its first token must set this value explicitly and also increase `timeoutMs`. For the full rules, see the [Plugin fields reference](../reference/plugins.md).
+For the full rules, see the [Plugin fields reference](../reference/plugins.md#timeouts-and-retries-agentloop).
 
 ### When something fails
 
@@ -329,8 +326,7 @@ List the moments you want to listen to in `PLUGIN.md`:
 
 ```yaml
 contributes:
-  hooks:
-    - event: PreToolUse
+  hooks: [PreToolUse]
 ```
 
 Register them in the entry file. The two must match:
@@ -427,19 +423,38 @@ pnpm check
 
 The key things your tests should cover: the boundaries of the data shape, not being able to read or write other plugins' data, repeated calls, not leaving half-written data after a failure, and writing then reading within the same run. For how to write them, see [Plugin testing](./testing.md). For packaging and trial installs, see [Package and try install](../ship/package.md).
 
+## Rarely needed fields
+
+No bundled plugin uses the fields below. Write them only when you have a special need:
+
+| Field                                                    | Meaning                                                                                                                           |
+| -------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `agent.loop.maxSteps`                                    | The most tool-call steps                                                                                                          |
+| `agent.loop.firstTokenTimeoutMs`                         | In a streamed call, the time to wait for the first token. A model that is slow to produce it needs this, and a larger `timeoutMs` |
+| `agent.loop.idleTimeoutMs`                               | In a streamed call, the longest silence between two outputs. The default is 120 seconds.                                          |
+| `agent.loop.loopDetection`                               | How many times the model can repeat the same call in a row before it counts as going in circles. The default is 3.                |
+| `agent.loop.maxRecursionDepth`                           | How deep `ctx.recursiveCall()` may nest. The default is 10.                                                                       |
+| `contributes.events[].advertise: false`                  | The model that writes the story does not see this event; only the UI and code use it                                              |
+| `contributes.prompt[].position: {depth: N}`              | Inserts a static prompt section into the history by message depth                                                                 |
+| `contributes.commands[].context`                         | Host information a command passes to its action                                                                                   |
+| `contributes.commands[].arguments[].variadic`, `choices` | Collects the remaining words into the last argument; lists the values an argument may take                                        |
+| `contributes.wires`                                      | Provider wires the entry file registers with `registerWires`                                                                      |
+| `contributes.settings[].type`                            | Besides `number`, `toggle` and `select`: `text`, `textarea`, `integer`, `slider`, `slot`                                          |
+
+Every advanced field is in [Plugin reference · Advanced fields](../reference/plugins.md#advanced-fields).
+
 ## When something does not work as expected
 
-| Symptom                                                                  | Cause and fix                                                                                              |
-| ------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------- |
-| Validation reports `inline runtime and runtimes/ cannot coexist`         | `PLUGIN.md` still has `runtime:`. Remove it from a package that has several runtimes.                      |
-| Validation reports `contributes.hooks.0: Invalid input: expected object` | A hook must be written as `- event: PreToolUse`, not as a plain string.                                    |
-| Validation reports `ambiguous output contract …`                         | Two runtimes output the same capability. Each capability is output by one runtime only.                    |
-| The world package's data is not imported                                 | The file is not at `source.path`, or another plugin declares the same path, or this plugin is not enabled. |
-| `describe:authoring --check` reports an example as invalid               | The `example` file does not match the `schema`.                                                            |
-| A background runtime stays in the queue                                  | It calls a model but does not declare `function.model`.                                                    |
-| A request to an external API is refused                                  | The address is not in `permissions.http`, or it is not `https`.                                            |
-| A hook is registered but never takes effect                              | It looks for the runtime's name in `payload`. Change it to read `ctx.runtimeId`.                           |
-| The opening steps run again after a version upgrade                      | This is normal. Make the opening runtime's guard return `{ skip: true }` for work already done.            |
+| Symptom                                                          | Cause and fix                                                                                              |
+| ---------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| Validation reports `inline runtime and runtimes/ cannot coexist` | `PLUGIN.md` still has `runtime:`. Remove it from a package that has several runtimes.                      |
+| Validation reports `ambiguous output contract …`                 | Two runtimes output the same capability. Each capability is output by one runtime only.                    |
+| The world package's data is not imported                         | The file is not at `source.path`, or another plugin declares the same path, or this plugin is not enabled. |
+| `describe:authoring --check` reports an example as invalid       | The `example` file does not match the `schema`.                                                            |
+| A background runtime stays in the queue                          | It calls a model but does not declare `function.model`.                                                    |
+| A request to an external API is refused                          | The address is not in `permissions.http`, or it is not `https`.                                            |
+| A hook is registered but never takes effect                      | It looks for the runtime's name in `payload`. Change it to read `ctx.runtimeId`.                           |
+| The opening steps run again after a version upgrade              | This is normal. Make the opening runtime's guard return `{ skip: true }` for work already done.            |
 
 ## Next steps
 

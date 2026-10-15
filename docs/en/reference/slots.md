@@ -357,8 +357,8 @@ A function runtime does not read `runtimeModelOverrides`. Image and speech funct
 
 **Memory extraction**
 
-- Memory is extracted by the post-turn function runtime of the `memory` plugin. It reads the frozen `turn-digest@1` and runs as a background job with `completion.mode: detached`.
-- `settle: before-next-execution` makes the next run wait for queued jobs to finish before it reads the new snapshot. The longest wait is set by `maxSettleWaitMs`.
+- Memory is extracted by the post-turn function runtime of the `memory` plugin. It reads the frozen `turn-digest@1` and runs as a background job with `schedule.detached`.
+- `settle: true` makes the next run wait for queued jobs to finish before it reads the new snapshot. The longest wait is set by `maxSettleWaitMs`.
 - The job uses the `memory` role through the gateway of the current request. By default, `reasoningEffort: disabled`. The model binding, parameter overrides, and authorization in the request are still resolved as usual.
 - If a model call fails, the committed story is not rolled back. A failed or cancelled extraction does not commit part of the memories.
 - A successful extraction writes to the `blocks` namespace of the `memory` plugin's own data. The panel reads this data directly. The prompt is injected by its `prompt.segment@1` extension.
@@ -469,7 +469,7 @@ protocol = "openai-chat-v1"
 reasoningEffort = "disabled"
 ```
 
-- The values are the same as in the interface and in the runtime's `llm.reasoningEffort`.
+- The values are the same as in the interface. A runtime does not pick a level; it can only turn reasoning off with `agent.reasoning: false`.
 - You write one general level, and the adapter translates it into each vendor's own field. This works like the top-level [`reasoning`](https://ai-sdk.dev/docs/ai-sdk-core/reasoning) option in the AI SDK.
 - If a model does not support a level, a warning is logged, and the provider's default behavior is used.
 - This is the same default value as the thinking level you set for the model on the "Providers & Models" page.

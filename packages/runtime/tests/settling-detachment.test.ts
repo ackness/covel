@@ -15,7 +15,7 @@ const manifest = (overrides: Partial<RuntimeManifest> = {}): RuntimeManifest =>
     handler: "./handler.js",
     outputKind: "system",
     trigger: { type: "auto" },
-    turnCompletion: { mode: "detached", settle: "before-next-execution" },
+    turnCompletion: { mode: "detached", settle: true },
     effects: {
       reads: ["plugin-data:self:blocks"],
       writes: ["plugin-data:self:blocks"],

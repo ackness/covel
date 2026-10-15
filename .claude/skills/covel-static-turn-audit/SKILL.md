@@ -61,7 +61,7 @@ Read `flow.md`, `design-principles.md`, `docs/reference/glossary.md`, `docs/refe
 
 Write down what the reasoning ranges over before reasoning. Take every item from this baseline's code and manifests, never from memory or an earlier audit.
 
-- **Runtimes.** The active set as `resolveSessionPlugins` (`packages/shared/src/plugin-selection.ts`) computes it. For each runtime: `type`, trigger, `schedule.stage`, `needs` / `after` / `io.inputs` and which inputs are required, `schedule.completion`, declared `effects`, tools, `io.visibility`.
+- **Runtimes.** The active set as `resolveSessionPlugins` (`packages/shared/src/plugin-selection.ts`) computes it. For each runtime: `type`, trigger, `schedule.stage`, `needs` / `after` / `io.inputs` and which inputs are required, `schedule.detached` / `schedule.background`, declared `effects`, tools, `io.visibility`.
 - **Schedule.** DAG levels per stage (`setup`, then `pre-turn` → `narrative` → `post-turn` → `audit`). Stage-less runtimes (`manual` / `event`) apart, each with what activates it.
 - **Outcome set.** Every way one runtime execution can end, read from the places `packages/runtime/src/` assigns a terminal status: `agent-loop/`, `function-runtime/`, `turn-executor/runtime-finalization.ts`, and the gates in `schedule/input-bindings.ts`. Expect at least: accepted output; output that fails validation; a required tool that never succeeds; step budget spent; loop detected; each timeout; provider error after retries; a hook that rejects or terminates; player abort; suspension; a function handler's `success` / `skipped` / `suspended` / `failed`, a throw, or an invalid result; a guard that skips; a gate skip.
 - **State.** The session clock (`status`, `phase`, `completedPlayerTurns`, `setupRuntimes`), `logicalTurn` and execution `origin`, trigger ledger counts, committed outputs, plugin data, queued jobs, suspensions.
@@ -139,7 +139,7 @@ Write the detailed files first and the README last. The README is rewritten from
 
 ```bash
 git rev-parse HEAD && git status --short
-rg -n --sort path "^\s*(stage|every|needs|after|mode|settle|visibility):|^\s+type: (auto|manual|event)$" plugins -g PLUGIN.md -g RUNTIME.md -g '!**/_archive/**'
+rg -n --sort path "^\s*(stage|every|needs|after|detached|background|settle|visibility):|^\s+type: (auto|manual|event)$" plugins -g PLUGIN.md -g RUNTIME.md -g '!**/_archive/**'
 rg -n "selectTriggeredRuntimes|scheduleTriggeredRuntimes|runEventChain|markPreGameCompletion|finalizeExecution|withSettledExecutionLock" apps packages -g '!*.test.*'
 rg -n "status: \"(success|failed|skipped|suspended)\"|skipReason: \"|outcome: \"" packages/runtime/src/agent-loop packages/runtime/src/function-runtime packages/runtime/src/turn-executor packages/runtime/src/schedule -g '!*.test.*'
 ```
