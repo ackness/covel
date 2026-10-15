@@ -19,6 +19,11 @@ import {
 import { buildSessionCommandList } from "./commands.js";
 import { importWorldDataForJoinedPlugins } from "../../../world-data/receiver-import.js";
 import {
+  boundDimensionProviderConflict,
+  DimensionProviderConflictError,
+} from "../../../world-data/dimension-provider-conflict.js";
+import { dimensionProvidersOf } from "../../../world-data/session-import/dimensions.js";
+import {
   resolveSessionParam,
   rotateSessionApprovalScope,
   sessionApprovalScope,
@@ -28,24 +33,52 @@ import {
 import type { SessionRouteEnv } from "./route-env.js";
 import { requireAccess } from "../../../host-profile.js";
 
-/**
- * A session keeps its dimension data under the provider it bound, and turns,
- * snapshots and browser checkpoints all require that provider to be active.
- * A selection change must not take it out of the active set.
- */
-function droppedDimensionProvider(
-  session: {
-    readonly activePlugins: readonly string[];
-    readonly metadata?: Readonly<Record<string, unknown>>;
-  },
-  active: readonly string[],
-): string | undefined {
+type DimensionSession = {
+  readonly activePlugins: readonly string[];
+  readonly metadata?: Readonly<Record<string, unknown>>;
+};
+
+/** The provider the session's dimension data is kept under, while confirmed. */
+function boundDimensionProvider(session: DimensionSession): string | undefined {
   const bound = session.metadata?._dimensionProviderPluginId;
-  return typeof bound === "string" &&
-    session.activePlugins.includes(bound) &&
-    !active.includes(bound)
+  return typeof bound === "string" && session.activePlugins.includes(bound)
     ? bound
     : undefined;
+}
+
+/**
+ * A session keeps its dimension data under the provider it bound, and its
+ * snapshots and browser checkpoints read them from there. The player cannot
+ * turn that provider off, and a change cannot take it out of the running set.
+ * One that is already unavailable (not installed, failed to load, missing a
+ * dependency) only pauses the dimensions; other changes go ahead without it.
+ */
+function droppedDimensionProvider(
+  session: DimensionSession,
+  runningBefore: ReadonlySet<string>,
+  active: readonly string[],
+  disabling?: string,
+): string | undefined {
+  const bound = boundDimensionProvider(session);
+  if (!bound) return undefined;
+  if (bound === disabling) return bound;
+  return runningBefore.has(bound) && !active.includes(bound)
+    ? bound
+    : undefined;
+}
+
+/**
+ * The confirmed set keeps the bound provider while it is unavailable, so its
+ * dimensions come back with it.
+ */
+function keepBoundDimensionProvider(
+  session: DimensionSession,
+  confirmed: readonly string[],
+): string[] {
+  const bound = boundDimensionProvider(session);
+  return bound && !confirmed.includes(bound)
+    ? [...confirmed, bound]
+    : [...confirmed];
 }
 
 function dimensionProviderRequired(pluginId: string) {
@@ -53,6 +86,33 @@ function dimensionProviderRequired(pluginId: string) {
     `This change would disable "${pluginId}", which holds this session's dimensions and must stay enabled`,
     { code: "dimension_provider_required" },
   );
+}
+
+/**
+ * Several dimension providers this change would bring together, or another
+ * one beside the provider the session bound (running or not). A conflict the
+ * session already had (say a plugin update added the contract) does not block
+ * other changes: the turn names it, and turning one of them off resolves it.
+ */
+function dimensionProviderConflict(
+  session: DimensionSession,
+  runningBefore: ReadonlySet<string>,
+  active: readonly string[],
+  registry: Parameters<typeof dimensionProvidersOf>[0],
+): DimensionProviderConflictError | undefined {
+  const bound = boundDimensionProvider(session);
+  const others = dimensionProvidersOf(registry, active).filter(
+    (id) => id !== bound,
+  );
+  const candidates = bound ? [bound, ...others] : others;
+  if (
+    candidates.length < 2 ||
+    candidates.every((id) => id === bound || runningBefore.has(id))
+  )
+    return undefined;
+  return bound
+    ? boundDimensionProviderConflict(bound, others)
+    : new DimensionProviderConflictError(candidates);
 }
 
 export function registerSessionPluginRoutes(
@@ -207,11 +267,33 @@ export function registerSessionPluginRoutes(
       const previouslyActive = new Set(
         runnablePluginIds(session.activePlugins, pluginRegistry),
       );
-      const droppedProvider = droppedDimensionProvider(session, active);
+      const droppedProvider = droppedDimensionProvider(
+        session,
+        previouslyActive,
+        active,
+      );
       if (droppedProvider)
         return c.json(dimensionProviderRequired(droppedProvider), 409);
-      // Dependents turned off for a missing dependency stay confirmed.
-      const confirmed = confirmedPluginIds(plan, requested, pluginRegistry);
+      const providerConflict = dimensionProviderConflict(
+        session,
+        previouslyActive,
+        active,
+        pluginRegistry,
+      );
+      if (providerConflict)
+        return c.json(
+          errorBody(providerConflict.message, {
+            code: providerConflict.code,
+            details: { candidates: providerConflict.candidates },
+          }),
+          409,
+        );
+      // Dependents turned off for a missing dependency stay confirmed, and
+      // so does the provider that holds the session's dimensions.
+      const confirmed = keepBoundDimensionProvider(
+        session,
+        confirmedPluginIds(plan, requested, pluginRegistry),
+      );
       // Single mutation point: persist the authoritative activePlugins set
       // first; the registry mirror only reconciles after the store write
       // succeeds (a rejected write leaves memory untouched).
@@ -347,12 +429,21 @@ export function registerSessionPluginRoutes(
         ),
       });
       const active = plan.active;
-      const droppedProvider = droppedDimensionProvider(session, active);
+      const droppedProvider = droppedDimensionProvider(
+        session,
+        new Set(runnablePluginIds(session.activePlugins, pluginRegistry)),
+        active,
+        pluginId,
+      );
       if (droppedProvider)
         return c.json(dimensionProviderRequired(droppedProvider), 409);
       // Plugins that need the disabled one stay confirmed but off, and the
-      // plugin list tells the player why.
-      const confirmed = confirmedPluginIds(plan, requested, pluginRegistry);
+      // plugin list tells the player why. The provider that holds the
+      // session's dimensions stays confirmed too.
+      const confirmed = keepBoundDimensionProvider(
+        session,
+        confirmedPluginIds(plan, requested, pluginRegistry),
+      );
       // Single mutation point: the scope rotation and activePlugins write
       // land durably before the registry mirror drops the plugin.
       await pluginRegistry.applyPersistedActivations(

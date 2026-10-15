@@ -51,8 +51,14 @@ export function registerSessionViewRoute(routes: Hono<SessionRouteEnv>): void {
     );
 
     const extensionHost = c.get("pluginExtensions");
+    // A bound provider that is not running only pauses the dimensions: the
+    // view shows the values it left, and nothing edits or settles them until
+    // it is back.
+    const providerRunning =
+      snapshot.dimensionProviderPluginId !== undefined &&
+      runnable.includes(snapshot.dimensionProviderPluginId);
     const context =
-      snapshot.dimensionProviderPluginId && extensionHost
+      providerRunning && extensionHost
         ? await extensionHost
             .createExecution({
               sessionId: id,
@@ -73,7 +79,7 @@ export function registerSessionViewRoute(routes: Hono<SessionRouteEnv>): void {
             .run(sessionWorldContextV1, {})
         : undefined;
     if (
-      snapshot.dimensionProviderPluginId &&
+      providerRunning &&
       context?.dimensionProviderPluginId !== snapshot.dimensionProviderPluginId
     )
       throw new Error("Authoritative dimension context unavailable");

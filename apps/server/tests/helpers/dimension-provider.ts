@@ -3,11 +3,16 @@ import {
   discoverPlugins,
   loadPluginDefinition,
   type PluginRegistry,
+  type PluginRegistryEntry,
 } from "@covel/plugin-loader";
 
-/** Authored-dimension fixtures must include an actual active authority. */
+/**
+ * Authored-dimension fixtures must include an actual active authority. Route
+ * tests pass `builtin`, the trust the bundled package has at startup.
+ */
 export async function registerDimensionProvider(
   registry: PluginRegistry,
+  source?: PluginRegistryEntry["source"],
 ): Promise<void> {
   const discovery = (
     await discoverPlugins(
@@ -29,5 +34,6 @@ export async function registerDimensionProvider(
     packageManifest,
     loadedRuntimes: new Map(),
     status: "registered",
+    ...(source ? { source } : {}),
   });
 }

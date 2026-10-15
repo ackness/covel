@@ -93,6 +93,12 @@
       "approval-required": "{{plugins}} provides {{contract}} and will ask for your approval after the game starts.",
       "dimensions": "No plugin you turned on keeps this world's dimensions ({{contract}}), so the game starts without them. Turn on a plugin that provides it to use them."
     },
+    "dimensionProvider": {
+      "conflictTitle": "Choose the plugin that keeps this world's dimensions",
+      "conflictDetail": "{{plugins}} all keep world dimensions, and a game uses one of them. Keep one; the others are turned off for this game.",
+      "keep": "Keep {{plugin}}",
+      "paused": "World dimensions are paused: {{plugin}} is not running. They keep their current values and the story goes on; they change again once {{plugin}} is back."
+    },
     "history": "Previous Sessions",
     "worldLore": "World Document",
     "worldTab": "World",

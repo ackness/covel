@@ -734,6 +734,76 @@ describe("story gate on the dimension provider", () => {
     ).toMatchObject({ status: "skipped" });
     expect(seen).toEqual([]);
   });
+
+  it("narrates while the bound provider is not running, with its dimensions as they were", async () => {
+    // The session bound "owner", which is uninstalled now: only the story
+    // plugin runs, and no world-context provider answers.
+    const store = await setup();
+    const seen: unknown[] = [];
+    const result = await executeTurn(
+      { origin: "player", sessionId: "s", turnId: "t", playerMessage: "go" },
+      manifests(false).filter((manifest) => manifest.pluginId === "story"),
+      {
+        store,
+        // No plugin provides an extension: each point gives back its input.
+        extensionExecution: {
+          run: async (_point: unknown, input: unknown) => input,
+        } as never,
+        llm: {
+          generate: async () => {
+            throw new Error("Function runtimes do not use the LLM");
+          },
+        },
+        loadRuntime: async (manifest) => ({
+          manifest,
+          promptTemplate: "",
+          handler: async (ctx): Promise<HandlerResult> => {
+            seen.push(ctx.world?.dimensions.reputation?.value);
+            return { outcome: "success", value: { narrativeOutput: "ok" } };
+          },
+        }),
+      },
+    );
+    expect(result.abortReason).toBeUndefined();
+    expect(
+      result.runtimeResults.find((entry) => entry.runtimeId === "story/auto"),
+    ).toMatchObject({ status: "success" });
+    expect(seen).toEqual([0]);
+  });
+});
+
+describe("dimension execution barrier", () => {
+  const provider = (pluginId: string) =>
+    ({
+      name: `${pluginId}/context`,
+      pluginId,
+      outputKind: "system",
+      outputContract: DIMENSION_CONTRACT,
+    }) as RuntimeManifest;
+  const story = runtimes.filter((runtime) => runtime.pluginId === "story");
+  const barrier = async (active: readonly RuntimeManifest[]) =>
+    dimensionExecutionBarrier({
+      store: await setup(),
+      sessionId: "s",
+      runtimes: active,
+      willNarrate: true,
+    });
+
+  it("lets the story run when the bound provider is not running", async () => {
+    expect(await barrier(story)).toBeUndefined();
+  });
+
+  it("names a provider that would take the bound one's place", async () => {
+    const reason = await barrier([...story, provider("other")]);
+    expect(reason).toContain('"owner"');
+    expect(reason).toContain('"other"');
+  });
+
+  it("names every provider when several run", async () => {
+    expect(
+      await barrier([...story, provider("owner"), provider("other")]),
+    ).toContain("(owner, other)");
+  });
 });
 
 describe("settlement receipt retention", () => {

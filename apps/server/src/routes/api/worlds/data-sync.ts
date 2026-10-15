@@ -5,6 +5,9 @@
  *   POST /worlds/:id/world-data/preflight — read-only import plan.
  *   POST /worlds/:id/sync-data            — reconcile session worldData rows.
  *   POST /worlds/:id/sync-dimensions      — re-import dimensions into a session.
+ *
+ * Several active dimension providers answer `409 dimension_provider_conflict`
+ * (the global error handler) on all three.
  */
 
 import { Hono } from "hono";
@@ -17,6 +20,7 @@ import {
   syncWorldDataForSession,
   preflightWorldDataForSession,
 } from "../../../world-data/session-import.js";
+import { DimensionProviderConflictError } from "../../../world-data/dimension-provider-conflict.js";
 import {
   checkSessionOwner,
   sessionApprovalScope,
@@ -343,6 +347,8 @@ worldDataSyncRoutes.post("/:id/sync-dimensions", async (c) => {
     });
     if (locked instanceof Response) return locked;
   } catch (err) {
+    // A plugin choice the player makes: the global handler answers it.
+    if (err instanceof DimensionProviderConflictError) throw err;
     const message = err instanceof Error ? err.message : String(err);
     console.error(
       `[sync-dimensions] failed for session ${sessionId} (world ${id}):`,
