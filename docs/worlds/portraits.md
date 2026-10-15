@@ -242,7 +242,7 @@ node scripts/emit-presence.mjs tidelamp
 wrote worlds/tidelamp/media/presence.json with 1 presence record(s)
 ```
 
-`presence.json` 记录每个角色用哪张图。它不是按文件名、而是按图片内容算出的一串校验码来指认图片的，所以这个文件不要手写，也不要手改。
+`presence.json` 记录每个角色用哪张图。它靠图片内容算出的一串校验码来指认图片，不按文件名。所以这个文件不要手写，也不要手改。
 
 > [!IMPORTANT]
 > 只要 `media/portraits/` 里的任何一张图变了（重新生成、重新压缩、替换），就要重新运行这条命令。否则清单里记的还是旧图的校验码，游戏里就找不到图。

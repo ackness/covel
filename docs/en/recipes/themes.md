@@ -13,13 +13,13 @@ Both routes produce the same kind of thing, called a **theme package**: a file t
 
 Open **Settings → Appearance**, and you will see these items:
 
-| Name on screen | What it is                                                                                                                                                                      |
-| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Style          | A set of cards, one for each style. The built-in styles are "Panel", "Book", "Stage" and "Classic". The styles differ not only in color but also in the layout of the interface |
-| Colours        | Several color sets within one style. "Classic" has four: "Paper", "Modern", "Abyss" and "Aurora"                                                                                |
-| Color scheme   | Light or dark. Some themes have only one, and then the switch is locked automatically                                                                                           |
-| Fine tuning    | On top of the current theme, change colors, fonts and sizes one item at a time                                                                                                  |
-| Theme Library  | The themes you have imported and saved are here. You can apply, export and delete them                                                                                          |
+| Name on screen | What it is                                                                                                                                                     |
+| -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Style          | A set of cards, one for each style. The built-in styles are "Panel", "Book", "Stage" and "Classic". Each style has its own colors and its own interface layout |
+| Colours        | Several color sets within one style. "Classic" has four: "Paper", "Modern", "Abyss" and "Aurora"                                                               |
+| Color scheme   | Light or dark. Some themes have only one, and then the switch is locked automatically                                                                          |
+| Fine tuning    | On top of the current theme, change colors, fonts and sizes one item at a time                                                                                 |
+| Theme Library  | The themes you have imported and saved are here. You can apply, export and delete them                                                                         |
 
 Every color set is a complete theme package. A theme you make will also end up as one color set under a style, or as a style of its own.
 

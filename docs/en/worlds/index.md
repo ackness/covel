@@ -15,7 +15,7 @@ my-world/
 └── media/               optional: cover, portraits, scene pictures
 ```
 
-Only the first two files are required. The rest are added on as you go. You can play without portraits, and you can play without preset characters.
+Only the first two files are required. The rest are optional. You can play without portraits, and you can play without preset characters.
 
 | File          | The question it answers                                                                                        |
 | ------------- | -------------------------------------------------------------------------------------------------------------- |
