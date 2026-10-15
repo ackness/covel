@@ -1,0 +1,37 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "userMessage": "covel-request:214a4035c84ae74198412ee547d85ae07f103987f58774a7cf8b7f378e63ec0c",
+        "model": "codex/gpt-6-luna",
+        "turnIndex": 0,
+        "hasToolResult": false
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "name": "update-dimensions",
+            "arguments": "{\"followsClock\":[],\"updates\":[{\"id\":\"delveMap\",\"reason\":\"本回合只在酒馆发现账纸和脚印，没有进入、看见或从可靠来源得知新的具名房间。\"}]}",
+            "id": "call_49ca38307ffb403e94e04bc60dda2fb5"
+          }
+        ],
+        "usage": {
+          "completion_tokens": 64,
+          "completion_tokens_details": {
+            "reasoning_tokens": 0
+          },
+          "prompt_tokens": 7798,
+          "prompt_tokens_details": {
+            "cache_write_tokens": 0,
+            "cached_tokens": 0
+          },
+          "total_tokens": 7862
+        }
+      },
+      "metadata": {
+        "systemHash": "0a70f4b1",
+        "toolsHash": "2a7f6aca"
+      }
+    }
+  ]
+}

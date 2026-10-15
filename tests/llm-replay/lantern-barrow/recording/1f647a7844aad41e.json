@@ -1,0 +1,37 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "userMessage": "covel-request:1f647a7844aad41e1a28ac176f323b04cd2916aa5e2ccce24620a0185a2d63d8",
+        "model": "codex/gpt-6-luna",
+        "turnIndex": 0,
+        "hasToolResult": false
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "name": "update-affinity",
+            "arguments": "{\"changes\":[{\"name\":\"布兰诺克・黑尔\",\"delta\":2,\"reason\":\"你向他展示账纸与泥印，并听取他区分两条线索的判断\"},{\"name\":\"雷恩修女\",\"delta\":2,\"reason\":\"你和她分享线索，并听取她核实印记、查看墓门的打算\"}]}",
+            "id": "call_8232dada2df140cc8b79fdbb26c85040"
+          }
+        ],
+        "usage": {
+          "completion_tokens": 92,
+          "completion_tokens_details": {
+            "reasoning_tokens": 0
+          },
+          "prompt_tokens": 6726,
+          "prompt_tokens_details": {
+            "cache_write_tokens": 0,
+            "cached_tokens": 0
+          },
+          "total_tokens": 6818
+        }
+      },
+      "metadata": {
+        "systemHash": "640ef30a",
+        "toolsHash": "681c9917"
+      }
+    }
+  ]
+}

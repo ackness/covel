@@ -1,0 +1,37 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "userMessage": "covel-request:057d372427ae82160b4fe64c7eb1429280c6f0c68c28f94a13e3da3d915b371d",
+        "model": "codex/gpt-6-luna",
+        "turnIndex": 0,
+        "hasToolResult": false
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "name": "submit-world-facts",
+            "arguments": "{\"summary\":\"你向布兰诺克和雷恩展示账纸与泥印线索；布兰诺克提醒不要混同账纸指向村长与脚印指向沼泽这两件事。雷恩想先核实印记并查看墓门封印，布兰诺克正等你表态。\",\"entities\":[],\"relations\":[],\"events\":[{\"id\":\"show-clues\",\"type\":\"interaction\",\"participantIds\":[\"e2e测试角色\",\"布兰诺克-黑尔\",\"雷恩修女\"],\"description\":\"你向布兰诺克和雷恩展示账纸与泥印线索。\",\"attributes\":{\"action\":\"展示线索\",\"object\":\"账纸与带芦苇纤维的泥印\"}}],\"statements\":[{\"id\":\"ledger-clue\",\"type\":\"discovery\",\"content\":\"账纸记载灯油和灯芯曾在古灯熄灭前三天送往山脚小屋，旁边有模糊的村长家徽记状印痕。\",\"subjectIds\":[\"e2e测试角色\"]},{\"id\":\"footprint-clue\",\"type\":\"discovery\",\"content\":\"带芦苇纤维的脚印来自沼泽一带，在告示前中断；留下脚印的人留意过账纸。\",\"subjectIds\":[\"e2e测试角色\"]},{\"id\":\"companions-assessments\",\"type\":\"discovery\",\"content\":\"布兰诺克认为账纸指向村长、脚印指向沼泽，两条线索不应被当作同一件事；他二十年前未能带所有人出来。雷恩尚不确定印记属于村长家还是污迹，并希望查看墓门封印及灯铭文。\",\"subjectIds\":[\"布兰诺克-黑尔\",\"雷恩修女\"]}]}",
+            "id": "call_f37981b34500480eb0d22c49d6fb851c"
+          }
+        ],
+        "usage": {
+          "completion_tokens": 411,
+          "completion_tokens_details": {
+            "reasoning_tokens": 0
+          },
+          "prompt_tokens": 7035,
+          "prompt_tokens_details": {
+            "cache_write_tokens": 0,
+            "cached_tokens": 0
+          },
+          "total_tokens": 7446
+        }
+      },
+      "metadata": {
+        "systemHash": "f9f69e3a",
+        "toolsHash": "8768d054"
+      }
+    }
+  ]
+}

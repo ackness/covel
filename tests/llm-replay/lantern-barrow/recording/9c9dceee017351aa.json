@@ -1,0 +1,37 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "userMessage": "covel-request:9c9dceee017351aad41f78e598db807023fbf66f6cae89e21efb30f1d35f5fb8",
+        "model": "codex/gpt-6-luna",
+        "turnIndex": 0,
+        "hasToolResult": false
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "name": "generate-guide",
+            "arguments": "{\"scene\":\"酒馆里的旧账线索\",\"recap\":\"你在酒馆发现一张残缺旧账纸，记有灯油与灯芯送往山脚小屋的日期，最近一笔在灯灭前三天，旁边留有像村长徽记的模糊印痕。吧台泥地上的芦苇纤维脚印正被雨水冲淡；梅瑞尔暗示纸张来源更重要，布兰诺克和雷恩也注意到了线索。\",\"decision\":\"你要如何追查旧账纸、模糊印痕或那道正在消失的脚印？\",\"prompts\":[{\"kind\":\"ask\",\"text\":\"我追问梅瑞尔，旧账纸是从谁手里来的。\"},{\"kind\":\"observe\",\"text\":\"我仔细辨认账纸上的印痕和残存字迹。\"},{\"kind\":\"act\",\"text\":\"我趁脚印尚未被冲净，检查后门外的泥地。\"},{\"kind\":\"social\",\"text\":\"我请雷恩看看印痕是否与拓片上的符号相似。\"}]}",
+            "id": "call_835c44630bd24f7887b486b69dd76e70"
+          }
+        ],
+        "usage": {
+          "completion_tokens": 260,
+          "completion_tokens_details": {
+            "reasoning_tokens": 0
+          },
+          "prompt_tokens": 6124,
+          "prompt_tokens_details": {
+            "cache_write_tokens": 0,
+            "cached_tokens": 0
+          },
+          "total_tokens": 6384
+        }
+      },
+      "metadata": {
+        "systemHash": "222d9770",
+        "toolsHash": "ae89d990"
+      }
+    }
+  ]
+}

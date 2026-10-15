@@ -1,0 +1,37 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "userMessage": "covel-request:9315a0f0c3f8612b8ad1bf44c3da9dae6e79b945684d06d3e5a24744ad7edec7",
+        "model": "codex/gpt-6-luna",
+        "turnIndex": 0,
+        "hasToolResult": false
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "name": "update-affinity",
+            "arguments": "{\"changes\":[{\"name\":\"梅瑞尔・沃斯\",\"delta\":2,\"reason\":\"你留意旧账纸并查看线索时，梅瑞尔向你暗示了账纸来源更有价值。\"}]}",
+            "id": "call_0164e7ca0bc74a8e98a838cd295fd47d"
+          }
+        ],
+        "usage": {
+          "completion_tokens": 62,
+          "completion_tokens_details": {
+            "reasoning_tokens": 0
+          },
+          "prompt_tokens": 6813,
+          "prompt_tokens_details": {
+            "cache_write_tokens": 0,
+            "cached_tokens": 0
+          },
+          "total_tokens": 6875
+        }
+      },
+      "metadata": {
+        "systemHash": "06ac72fb",
+        "toolsHash": "681c9917"
+      }
+    }
+  ]
+}

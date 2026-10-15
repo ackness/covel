@@ -1,0 +1,37 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "userMessage": "covel-request:77371238fd8c2529b70c8efd55b0e656cb6ad499be98f99e0ec31971b6a5a02e",
+        "model": "codex/gpt-6-luna",
+        "turnIndex": 0,
+        "hasToolResult": false
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "name": "generate-guide",
+            "arguments": "{\"scene\":\"同伴商议下一步\",\"recap\":\"你与布兰诺克、雷恩分享了账纸上的送灯油记录、模糊印痕和沼泽泥印。布兰诺克建议先问清墓门，雷恩想辨认印记并查看墓门封印；梅瑞尔望向村长家所在的街口，泥印已被雨水冲淡。\",\"decision\":\"你要和同伴商定先查哪条线索，或立即采取什么行动？\",\"prompts\":[{\"kind\":\"social\",\"text\":\"我赞同雷恩，先辨认账纸上的村长家印记\"},{\"kind\":\"act\",\"text\":\"我和雷恩、布兰诺克一起前往古冢查看墓门封印\"},{\"kind\":\"ask\",\"text\":\"我请布兰诺克说清二十年前墓门发生了什么\"},{\"kind\":\"act\",\"text\":\"我带同伴去村长家，当面询问送往山脚小屋的记录\"}]}",
+            "id": "call_bd7955d19cb64b4288cc17f18cd31f8a"
+          }
+        ],
+        "usage": {
+          "completion_tokens": 235,
+          "completion_tokens_details": {
+            "reasoning_tokens": 0
+          },
+          "prompt_tokens": 6469,
+          "prompt_tokens_details": {
+            "cache_write_tokens": 0,
+            "cached_tokens": 3584
+          },
+          "total_tokens": 6704
+        }
+      },
+      "metadata": {
+        "systemHash": "222d9770",
+        "toolsHash": "ae89d990"
+      }
+    }
+  ]
+}

@@ -1,0 +1,37 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "userMessage": "covel-request:38311b9982749d417a2f17a7b4ac858037fdc303717281b759f25cf8defbd6d1",
+        "model": "codex/gpt-6-luna",
+        "turnIndex": 0,
+        "hasToolResult": false
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "name": "runtime-done",
+            "arguments": "{\"reason\":\"本回合叙事没有玩家与 NPC 发生明确互动；NPC 的陈述和提议不足以构成玩家互动，好感不变。\"}",
+            "id": "call_851d2693b8c44076ac29f00939e49ccc"
+          }
+        ],
+        "usage": {
+          "completion_tokens": 51,
+          "completion_tokens_details": {
+            "reasoning_tokens": 0
+          },
+          "prompt_tokens": 6700,
+          "prompt_tokens_details": {
+            "cache_write_tokens": 0,
+            "cached_tokens": 0
+          },
+          "total_tokens": 6751
+        }
+      },
+      "metadata": {
+        "systemHash": "50a4b2aa",
+        "toolsHash": "681c9917"
+      }
+    }
+  ]
+}

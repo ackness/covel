@@ -1,0 +1,37 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "userMessage": "covel-request:7c31870567b0d8de90bf2955c88103859266ca62013f26bf59ffd9178836b7c1",
+        "model": "codex/gpt-6-luna",
+        "turnIndex": 0,
+        "hasToolResult": false
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "name": "update-dimensions",
+            "arguments": "{\"followsClock\":[],\"updates\":[]}",
+            "id": "call_ee0b2e9d67ce411a8f9f363550685898"
+          }
+        ],
+        "usage": {
+          "completion_tokens": 24,
+          "completion_tokens_details": {
+            "reasoning_tokens": 0
+          },
+          "prompt_tokens": 7665,
+          "prompt_tokens_details": {
+            "cache_write_tokens": 0,
+            "cached_tokens": 0
+          },
+          "total_tokens": 7689
+        }
+      },
+      "metadata": {
+        "systemHash": "cc52a1d3",
+        "toolsHash": "2a7f6aca"
+      }
+    }
+  ]
+}

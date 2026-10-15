@@ -1,0 +1,37 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "userMessage": "covel-request:1f7c53c6499d004353bc66874102cea479f8416cd167f5acef07250760573305",
+        "model": "codex/gpt-6-luna",
+        "turnIndex": 0,
+        "hasToolResult": false
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "name": "advance-world-time",
+            "arguments": "{\"amount\":1,\"unit\":\"phase\",\"reason\":\"在酒馆周围查看账纸、脚印并留意同伴反应，推进了一段调查。\"}",
+            "id": "call_44bb0bc5f326413ba6b2a88f35cd97c4"
+          }
+        ],
+        "usage": {
+          "completion_tokens": 50,
+          "completion_tokens_details": {
+            "reasoning_tokens": 0
+          },
+          "prompt_tokens": 5349,
+          "prompt_tokens_details": {
+            "cache_write_tokens": 0,
+            "cached_tokens": 0
+          },
+          "total_tokens": 5399
+        }
+      },
+      "metadata": {
+        "systemHash": "eb339d1e",
+        "toolsHash": "a10dfc75"
+      }
+    }
+  ]
+}

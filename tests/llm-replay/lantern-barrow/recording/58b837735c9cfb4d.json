@@ -1,0 +1,37 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "userMessage": "covel-request:58b837735c9cfb4d0a3a394806e40ab55df1f08ef97841c062293341f029a0f9",
+        "model": "codex/gpt-6-luna",
+        "turnIndex": 0,
+        "hasToolResult": false
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "name": "submit-world-facts",
+            "arguments": "{\"schemaVersion\":1,\"summary\":\"梅瑞尔提出三十枚银币的报酬，要求带回伊索德，并提醒村长对灯熄灭一事未必知情。布兰诺克警告墓门从里面开；雷恩修女表示愿意同行并能读古灯铭文、处理伤口，眼下等你决定先与谁交谈。\",\"entities\":[{\"id\":\"三十枚银币\",\"type\":\"concept\",\"name\":\"三十枚银币\",\"description\":\"梅瑞尔提出带回伊索德可得三十枚银币。\"}],\"relations\":[],\"events\":[{\"id\":\"雷恩愿同行\",\"type\":\"interaction\",\"participantIds\":[\"雷恩修女\",\"e2e测试角色\"],\"description\":\"雷恩修女表示愿意去古冢。\",\"attributes\":{\"action\":\"表示愿意同行\",\"target\":\"古冢\"}}],\"statements\":[{\"id\":\"梅瑞尔委托报酬\",\"type\":\"quest\",\"content\":\"梅瑞尔提出带回伊索德可获三十枚银币。\",\"subjectIds\":[\"梅瑞尔-沃斯\",\"守灯人伊索德\"]},{\"id\":\"墓门警告\",\"type\":\"lore\",\"content\":\"布兰诺克称墓门从里面开，进去的人得知道怎么出来。\",\"subjectIds\":[\"布兰诺克-黑尔\"]},{\"id\":\"雷恩能力\",\"type\":\"lore\",\"content\":\"雷恩修女能读古灯铭文并会处理伤口，但还没看过墓门上的封印。\",\"subjectIds\":[\"雷恩修女\"]},{\"id\":\"磨坊歌声传闻\",\"type\":\"rumor\",\"content\":\"酒馆里有人提到磨坊主的女儿听见了歌声。\",\"subjectIds\":[\"梅瑞尔-沃斯\"]}]}",
+            "id": "call_bbc826212ea147159a47ee5ee98fc469"
+          }
+        ],
+        "usage": {
+          "completion_tokens": 408,
+          "completion_tokens_details": {
+            "reasoning_tokens": 0
+          },
+          "prompt_tokens": 7022,
+          "prompt_tokens_details": {
+            "cache_write_tokens": 0,
+            "cached_tokens": 0
+          },
+          "total_tokens": 7430
+        }
+      },
+      "metadata": {
+        "systemHash": "f9f69e3a",
+        "toolsHash": "8768d054"
+      }
+    }
+  ]
+}

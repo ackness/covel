@@ -1,0 +1,37 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "userMessage": "covel-request:ad961ebf4b0132458e1b748f02b82a92d012a1d4026e7b816db1b36554705222",
+        "model": "codex/gpt-6-luna",
+        "turnIndex": 0,
+        "hasToolResult": false
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "name": "sync-characters",
+            "arguments": "{\"creates\":[{\"name\":\"赤脚女孩\",\"type\":\"npc\",\"description\":\"闭着眼从街对面的屋子走进雨里，跟着远处的哼唱念出一个名字，朝北面的山路迈去。\"}],\"updates\":[]}",
+            "id": "call_e68816b0873f43f8afdcc1704916bf57"
+          }
+        ],
+        "usage": {
+          "completion_tokens": 70,
+          "completion_tokens_details": {
+            "reasoning_tokens": 0
+          },
+          "prompt_tokens": 7181,
+          "prompt_tokens_details": {
+            "cache_write_tokens": 0,
+            "cached_tokens": 0
+          },
+          "total_tokens": 7251
+        }
+      },
+      "metadata": {
+        "systemHash": "008445ae",
+        "toolsHash": "d273592b"
+      }
+    }
+  ]
+}

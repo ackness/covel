@@ -1,0 +1,31 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "userMessage": "covel-request:5b650a0d05910fb4b28234cc0160a31bdba74ebc0809273180c8fde50f22a3de",
+        "model": "codex/gpt-6-luna",
+        "turnIndex": 0,
+        "hasToolResult": false
+      },
+      "response": {
+        "content": "你环顾酒馆。炉火把湿漉漉的斗篷烘出一股泥土味，窗缝里灌进来的冷风却让烛焰不时偏向古冢的方向。\n\n告示下方钉着一张旧账纸，边角被人撕掉，剩下的几行写着灯油、灯芯和送往山脚小屋的日期。最近一笔记在灯灭前三天，字迹匆忙，旁边还压着一个模糊的印痕，像是村长家的徽记。纸张没有署名。\n\n你又注意到吧台旁的泥地上有一道半干的黑泥脚印，鞋底带着细密的芦苇纤维，不像常进村的人留下的。脚印从后门方向来，到告示前便断了；门外雨水正把痕迹一点点冲淡。\n\n梅瑞尔顺着你的视线看向账纸，脸上的笑意淡了些。她把抹布搭在肩上，声音压低：“那张纸不值钱，知道它从哪儿来的，才值钱。”角落里，布兰诺克也抬起了头。窗边的雷恩则将拓片收进怀里，注意到那枚模糊印痕时，眉间微微一紧。",
+        "usage": {
+          "completion_tokens": 421,
+          "completion_tokens_details": {
+            "reasoning_tokens": 101
+          },
+          "prompt_tokens": 13410,
+          "prompt_tokens_details": {
+            "cache_write_tokens": 0,
+            "cached_tokens": 0
+          },
+          "total_tokens": 13831
+        }
+      },
+      "metadata": {
+        "systemHash": "8560f78f",
+        "toolsHash": "1166c035"
+      }
+    }
+  ]
+}
