@@ -467,7 +467,15 @@
     "retryScopeLimited_one": "Only the selected failed tasks will run again. The story and other completed results are preserved. Each batch handles up to {{count}} task. Retry the remaining tasks afterward.",
     "retryScopeLimited_other": "Only the selected failed tasks will run again. The story and other completed results are preserved. Each batch handles up to {{count}} tasks. Retry the remaining tasks afterward.",
     "previousPluginContent": "{{title}} · expand to review",
-    "pluginContent": "Plugin content"
+    "pluginContent": "Plugin content",
+    "skipReason": {
+      "setupIncomplete": "Setup is not finished",
+      "upstreamFailed": "A task it depends on did not succeed",
+      "inputMissing": "An input it needs is missing",
+      "missingProvider": "No plugin provides an input it needs",
+      "inputUnusable": "The input it received could not be used",
+      "dimensionsPaused": "World dimensions are paused"
+    }
   },
   "blocks": {
     "actionPlaceholder": "Or type your own action...",

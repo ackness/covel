@@ -433,7 +433,15 @@
     "activeTask": "{{label}}…",
     "panelUnavailable": "当前会话没有这个面板。",
     "previousPluginContent": "{{title}} · 展开查看",
-    "pluginContent": "插件内容"
+    "pluginContent": "插件内容",
+    "skipReason": {
+      "setupIncomplete": "开局准备还没完成",
+      "upstreamFailed": "它依赖的任务没有成功",
+      "inputMissing": "缺少它需要的输入",
+      "missingProvider": "没有插件提供它需要的输入",
+      "inputUnusable": "它收到的输入不能用",
+      "dimensionsPaused": "世界维度暂停了"
+    }
   },
   "blocks": {
     "actionPlaceholder": "或输入自定义行动...",

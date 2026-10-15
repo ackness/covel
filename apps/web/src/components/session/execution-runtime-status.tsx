@@ -126,6 +126,38 @@ export function resolveI18nSentinel(
   return t(key) as string;
 }
 
+/** Why the framework skipped a runtime, from the code the stream carries. */
+const SKIP_REASON_KEYS: Readonly<Record<string, string>> = {
+  "setup-incomplete": "setupIncomplete",
+  "upstream-failed": "upstreamFailed",
+  "input-missing": "inputMissing",
+  "export-missing": "inputMissing",
+  "missing-provider": "missingProvider",
+  "dimension-snapshot-unavailable": "dimensionsPaused",
+  "cardinality-conflict": "inputUnusable",
+  "input-schema-invalid": "inputUnusable",
+  "input-schema-incompatible": "inputUnusable",
+  "contract-output-invalid": "inputUnusable",
+  "invalid-detached-contract": "inputUnusable",
+  "media-ownership-invalid": "inputUnusable",
+  "export-schema-invalid": "inputUnusable",
+};
+
+/**
+ * The player-facing reason a runtime was skipped. Codes are translated; any
+ * other text (an `__i18n:` sentinel or a plain reason) is shown as before.
+ */
+export function skipReasonText(
+  reason: string | undefined,
+  t: (key: string, opts?: Record<string, unknown>) => string,
+): string | undefined {
+  if (!reason) return reason;
+  const key = Object.hasOwn(SKIP_REASON_KEYS, reason)
+    ? SKIP_REASON_KEYS[reason]
+    : undefined;
+  return key ? t(`session.skipReason.${key}`) : resolveI18nSentinel(reason, t);
+}
+
 export function RuntimeChip({
   rt,
   canRetry,
@@ -191,9 +223,9 @@ export function RuntimeChip({
       {rt.status === "skipped" && rt.detail && (
         <span
           className="max-w-60 truncate text-[10px]"
-          title={resolveI18nSentinel(rt.detail, t)}
+          title={skipReasonText(rt.detail, t)}
         >
-          {resolveI18nSentinel(rt.detail, t)}
+          {skipReasonText(rt.detail, t)}
         </span>
       )}
       {rt.detail === "[cached]" && (
