@@ -576,6 +576,7 @@ export function GameView({
           />
           {stageActive ? (
             <StageView
+              composerDraft={{ value: inputValue, onChange: setInputValue }}
               panelState={rightPanelState}
               key={session.id}
               session={session}

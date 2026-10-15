@@ -352,6 +352,7 @@
     "unsavedNarrative": "未保存",
     "unsavedNarrativeDetail": "这段文字没有保存，离开会话后会消失。",
     "recoveryHydratingDetail": "正在取回最新保存的结果，随后即可继续游玩。",
+    "continueStoppedOpening": "继续",
     "recoveryRetry": "重试未完成回合",
     "recoveryRefresh": "检查状态",
     "recoveryStop": "停止任务",

@@ -27,6 +27,7 @@ export interface StageChoicesProps {
     choices: readonly StageChoiceItem[],
     onDraftMessage: (text: string) => void,
   ) => ReactNode;
+  readonly composerDraft?: { value: string; onChange: (value: string) => void };
   readonly visible: boolean;
   readonly executing: boolean;
   readonly interactionChoices: readonly StageInteractionChoice[];
@@ -51,6 +52,7 @@ const CATEGORY_TONES = ["info", "success", "warning", "primary"] as const;
 
 export function StageChoices({
   extensions,
+  composerDraft,
   visible,
   executing,
   interactionChoices,
@@ -60,7 +62,9 @@ export function StageChoices({
   onSendMessage,
 }: StageChoicesProps): ReactElement | null {
   const { t } = useTranslation();
-  const [draft, setDraft] = useState("");
+  const [localDraft, setLocalDraft] = useState("");
+  const draft = composerDraft?.value ?? localDraft;
+  const setDraft = composerDraft?.onChange ?? setLocalDraft;
   const [optionsEl, setOptionsEl] = useState<HTMLElement | null>(null);
   useChoiceHotkeys(optionsEl, visible && !executing);
   const { items, groups, context } = mergeChoices(

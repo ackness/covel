@@ -58,6 +58,7 @@ import {
 } from "./stage-selectors.js";
 
 export interface StageViewProps {
+  readonly composerDraft?: { value: string; onChange: (value: string) => void };
   readonly panelState: Pick<
     RightPanelState,
     "rightSpecs" | "specsStatus" | "retrySpecs"
@@ -291,6 +292,7 @@ export function StageView(props: StageViewProps): ReactElement {
         />
       )}
       <StageChoices
+        composerDraft={props.composerDraft}
         extensions={(choices, onDraftMessage) => (
           <StagePluginPanels
             panelState={props.panelState}

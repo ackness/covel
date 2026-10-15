@@ -15,6 +15,8 @@ import { getDataService } from "@/services/data-service.js";
 import { WorldEditor } from "../world-editor.js";
 
 afterEach(cleanup);
+// Navigation itself is covered with the real router in world-editor-unsaved.
+vi.mock("@tanstack/react-router", () => ({ useBlocker: () => {} }));
 
 const dataService = vi.hoisted(() => ({ updateWorld: vi.fn() }));
 vi.mock("@/services/data-service.js", async (importOriginal) => ({

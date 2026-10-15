@@ -153,6 +153,7 @@ export const initialState: SessionState = {
   session: null,
   messages: [],
   unsavedNarratives: [],
+  restoredInput: null,
   olderMessagesCursor: null,
   initialEventCursor: null,
   worldSessions: [],
@@ -190,6 +191,7 @@ const SESSION_RESET: Partial<SessionState> = {
   session: null,
   messages: [],
   unsavedNarratives: [],
+  restoredInput: null,
   olderMessagesCursor: null,
   initialEventCursor: null,
   statePatches: [],
@@ -700,6 +702,22 @@ export function reducer(
         ),
       };
     }
+    case "RESTORE_STOPPED_INPUT": {
+      const input = state.messages.find(
+        (message) =>
+          message.role === "user" && message.requestId === action.requestId,
+      );
+      if (!input) return state;
+      return {
+        ...state,
+        messages: state.messages.filter((message) => message !== input),
+        restoredInput: { requestId: action.requestId, content: input.content },
+      };
+    }
+    case "CLEAR_RESTORED_INPUT":
+      return state.restoredInput?.requestId === action.requestId
+        ? { ...state, restoredInput: null }
+        : state;
     case "BACKFILL_TURN_ID": {
       const target = state.messages.find(
         (message) =>

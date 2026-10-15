@@ -366,6 +366,7 @@
     "unsavedNarrative": "Не сохранено",
     "unsavedNarrativeDetail": "Этот текст не сохранён. Он останется здесь, пока вы не выйдете из сессии.",
     "recoveryHydratingDetail": "Получаем последний сохранённый результат перед продолжением игры.",
+    "continueStoppedOpening": "Продолжить",
     "recoveryRetry": "Повторить незавершённый ход",
     "recoveryRefresh": "Проверить состояние",
     "recoveryStop": "Остановить задачу",

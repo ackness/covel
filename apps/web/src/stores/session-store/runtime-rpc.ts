@@ -1,4 +1,5 @@
 import i18n from "i18next";
+import { PLAYER_ABORT_REASON } from "@covel/shared";
 import * as api from "@/services/api";
 import { ApiError } from "@/services/api/request.js";
 import {
@@ -261,7 +262,22 @@ export function runActionStream(
       request,
       (envelope) => {
         if (!isCurrent()) return;
-        if (!claimedTurn && envelope.turnId) {
+        // No turn was recorded: return this request's echo and avoid
+        // adopting an unrelated earlier turn through the recovery poll.
+        const stoppedBeforeStart =
+          envelope.type === "execution.completed" &&
+          envelope.payload.committed === false &&
+          envelope.payload.abortReason === PLAYER_ABORT_REASON &&
+          !executionStarted &&
+          (request.type === "send_message" ||
+            request.type === "execute_command");
+        if (stoppedBeforeStart) {
+          dispatch({
+            type: "RESTORE_STOPPED_INPUT",
+            requestId: request.requestId,
+          });
+        }
+        if (!stoppedBeforeStart && !claimedTurn && envelope.turnId) {
           claimedTurn = true;
           dispatch({
             type: "BACKFILL_TURN_ID",
@@ -277,7 +293,7 @@ export function runActionStream(
           terminalReceived = true;
           recoveryRequired =
             envelope.type === "execution.completed"
-              ? envelope.payload.committed === false
+              ? envelope.payload.committed === false && !stoppedBeforeStart
               : executionStarted;
         }
         handleSseEvent(envelope);

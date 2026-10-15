@@ -204,7 +204,8 @@ Control during a turn uses HTTP endpoints, not SSE events (see [api.md § Contro
 When the client receives this value, it treats the end as caused by the player, not as an error:
 
 - It drops the streamed placeholder message for this turn that was not committed. The server never commits a half-finished narrative, and keeping it would make it disappear after a refresh.
-- It shows "Stopped; turn not committed" and a clear retry action. It does not show the general error message.
+- It shows "Stopped; turn not committed" and a clear retry action. It does not show the general error message. For a stopped opening continuation, "Continue" in the recovery notice uses the confirmed `retry_turn` action without a page refresh.
+- If the request ends with a player stop before any `execution.started`, the echoed player message returns to the input box. The client preserves newer draft text and does not query the previous turn for a recovery action.
 - Other `abortReason` values (for example, a TurnStart hook aborted the turn) are still shown as errors.
 
 ### Session lifecycle events

@@ -44,7 +44,9 @@ export function ExecutionRecoveryNotice({
               ? retry.payload.runtimeIds.length
               : 0,
           })
-        : t("session.recoveryRetry");
+        : stopped && retry?.type === "retry_turn"
+          ? t("session.continueStoppedOpening")
+          : t("session.recoveryRetry");
   const title = stalled
     ? "session.recoveryUnconfirmed"
     : unknown

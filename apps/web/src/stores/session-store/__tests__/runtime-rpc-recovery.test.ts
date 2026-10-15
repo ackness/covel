@@ -9,7 +9,7 @@ import {
   createSseEventHandler,
   type SseEventHandlerDeps,
 } from "../sse-handler.js";
-import type { SessionAction } from "../types.js";
+import type { SessionAction, SessionState } from "../types.js";
 import { claimSessionAction } from "../runtime-refs.js";
 
 const { sendAction } = vi.hoisted(() => ({ sendAction: vi.fn() }));
@@ -376,4 +376,87 @@ it("does not assign a rejected echo to a subsequent action without an echo", asy
   expect(state.messages).toHaveLength(1);
   expect(state.messages[0]?.turnId).toBeUndefined();
   expect(state.messages[0]?.requestId).toBe("rejected-request");
+});
+
+describe("stop before turn start", () => {
+  it.each(["send_message", "execute_command"] as const)(
+    "returns only the %s echo, without recovering a previous turn",
+    async (type) => {
+      let state: SessionState = {
+        ...initialState,
+        executing: true,
+        messages: [
+          {
+            id: "old",
+            role: "user" as const,
+            content: "Older input",
+            timestamp: "now",
+            requestId: "older-request",
+          },
+          {
+            id: "input",
+            role: "user" as const,
+            content: "Look around",
+            timestamp: "now",
+            requestId: request.requestId,
+          },
+        ],
+      };
+      const dispatch = vi.fn((action: SessionAction) => {
+        state = reducer(state, action);
+      });
+      const pending = runActionStream(
+        {
+          ...request,
+          ...(type === "send_message"
+            ? { type, payload: { content: "Look around" } }
+            : { type, payload: { command: "/look" } }),
+        },
+        vi.fn(),
+        dispatch,
+      );
+      const [, onEvent, , onDone] = sendAction.mock.calls[0]!;
+      const terminal = envelope("execution.completed", {
+        committed: false,
+        abortReason: "aborted-by-player",
+      });
+      onEvent(terminal);
+      onEvent(terminal);
+      onDone();
+      await pending;
+      expect(state.messages.map((message) => message.id)).toEqual(["old"]);
+      expect(state.restoredInput).toEqual({
+        requestId: request.requestId,
+        content: "Look around",
+      });
+      expect(dispatch).not.toHaveBeenCalledWith(
+        expect.objectContaining({ type: "SET_EXECUTION_RECOVERY" }),
+      );
+      expect(dispatch).not.toHaveBeenCalledWith(
+        expect.objectContaining({ type: "BACKFILL_TURN_ID" }),
+      );
+      dispatch({ type: "RESET_SESSION" });
+      expect(state.restoredInput).toBeNull();
+    },
+  );
+
+  it("keeps recovery for a stopped opening after the setup turn started", async () => {
+    const run = start();
+    run.onEvent(envelope("execution.started"));
+    run.onEvent({
+      ...envelope("execution.completed", {
+        committed: false,
+        abortReason: "aborted-by-player",
+      }),
+      turnId: "opening",
+    });
+    run.onDone();
+    await run.pending;
+    expect(run.dispatch).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "SET_EXECUTION_RECOVERY" }),
+    );
+    expect(run.dispatch).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: "RESTORE_STOPPED_INPUT" }),
+    );
+  });
 });

@@ -1,6 +1,17 @@
 import { useReducer, useRef } from "react";
-import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  render,
+  renderHook,
+  fireEvent,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { ExecutionRecoveryNotice } from "@/components/session/execution-recovery-notice.js";
+import i18n from "@/i18n/index.js";
+import { runActionStream } from "../runtime-rpc.js";
 import type { SessionState } from "../types.js";
 import { initialState, reducer } from "../reducer.js";
 import { useSessionRuntimeRefs } from "../runtime-refs.js";
@@ -12,6 +23,7 @@ import {
 import type { DataService } from "@/services/data-service.js";
 
 const api = vi.hoisted(() => ({
+  sendAction: vi.fn(),
   getSessionExecution: vi.fn(),
   getSessionView: vi.fn(),
   getSession: vi.fn(),
@@ -725,5 +737,106 @@ describe("a status the server could not check (F-203)", () => {
       result.current.state.executionSteps.map((step) => step.status),
     ).not.toContain("failed");
     expect(workspace.hydrate).not.toHaveBeenCalled();
+  });
+});
+
+it("offers Continue for a live stopped opening with no runtime steps, using the guarded recovery action", async () => {
+  await i18n.changeLanguage("en-US");
+  const stopped = {
+    state: "failed" as const,
+    turnId: "opening",
+    abortReason: "aborted-by-player",
+    retry: { type: "retry_turn" as const, payload: {} },
+  };
+  api.getSessionExecution.mockResolvedValue(stopped);
+  api.getSessionView.mockResolvedValue({
+    ...snapshot("completed"),
+    execution: stopped,
+    messages: [],
+    executionSteps: [],
+  });
+  const runKernelAction = vi.fn();
+  let startStream!: () => Promise<void>;
+  function LiveOpening() {
+    const [state, dispatch] = useReducer(reducer, {
+      ...initialState,
+      session,
+      executing: true,
+    });
+    const refs = useSessionRuntimeRefs(state);
+    const handle = createSseEventHandler({
+      dispatch,
+      ds: {} as DataService,
+      ...refs,
+    });
+    useExecutionRecovery({ state, dispatch, ...refs, workspace });
+    const { retryInterruptedTurn } = useExecutionRecoveryActions({
+      stateRef: refs.stateRef,
+      dispatch,
+      runKernelAction,
+      resumeSessionById: vi.fn(),
+    });
+    startStream = () =>
+      runActionStream(
+        {
+          requestId: "start",
+          sessionId: "s",
+          type: "start_session",
+          payload: {},
+        },
+        handle,
+        dispatch,
+        { sessionIdRef: refs.sessionIdRef },
+      );
+    return (
+      <ExecutionRecoveryNotice
+        recovery={state.executionRecovery}
+        onRetry={retryInterruptedTurn}
+        onRefresh={vi.fn()}
+        onStop={vi.fn()}
+      />
+    );
+  }
+  render(<LiveOpening />);
+  let pending!: Promise<void>;
+  act(() => {
+    pending = startStream();
+  });
+  const [, onEvent, , onDone] = api.sendAction.mock.calls[0]!;
+  await act(async () => {
+    const envelope = {
+      sessionId: "s",
+      requestId: "start",
+      traceId: "trace",
+      flowId: "flow",
+      seq: 1,
+      timestamp: session.createdAt,
+    };
+    onEvent({
+      ...envelope,
+      turnId: "setup",
+      type: "execution.started",
+      payload: {},
+    });
+    onEvent({
+      ...envelope,
+      seq: 2,
+      turnId: "opening",
+      type: "execution.completed",
+      payload: { committed: false, abortReason: "aborted-by-player" },
+    });
+    onDone();
+    await pending;
+  });
+  const button = await screen.findByRole("button", { name: "Continue" });
+  expect(screen.getByText("Stopped; turn not committed")).toBeTruthy();
+  expect(runKernelAction).not.toHaveBeenCalled();
+  fireEvent.click(button);
+  fireEvent.click(button);
+  expect(runKernelAction).toHaveBeenCalledExactlyOnceWith({
+    sessionId: "s",
+    requestId: expect.any(String),
+    type: "retry_turn",
+    payload: { recoverFromTurnId: "opening" },
   });
 });
