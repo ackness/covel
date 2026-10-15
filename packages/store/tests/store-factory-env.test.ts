@@ -109,7 +109,10 @@ describe("store factory env wiring", () => {
     const store = await createMediaStoreFromEnv();
     expect(store).toBeDefined();
     const ref = await store!.put(new Uint8Array([1, 2, 3]), "image/png");
-    expect(await store!.resolveUrl(ref)).toBe(`memory://media/${ref.id}`);
+    expect(await store!.get(ref)).toEqual(new Uint8Array([1, 2, 3]));
+    // Separate memory stores have no shared persisted assets.
+    const anotherStore = await createMediaStoreFromEnv();
+    expect(await anotherStore!.exists(ref.id)).toBe(false);
   });
 
   it("uses MEDIA_BACKEND=none to disable media storage", async () => {

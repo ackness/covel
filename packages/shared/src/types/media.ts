@@ -126,7 +126,6 @@ export interface MediaStore {
   ): Promise<MediaRef>;
   get(ref: MediaRef): Promise<Uint8Array | Blob>;
   exists(id: string): Promise<boolean>;
-  resolveUrl(ref: MediaRef): Promise<string>;
   /**
    * Remove the asset with every ownership and reference claim on it, whoever
    * holds them. Callers decide beforehand whether deleting a claimed asset is

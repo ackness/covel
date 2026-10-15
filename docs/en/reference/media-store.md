@@ -23,7 +23,6 @@ interface MediaStore {
   ): Promise<MediaRef>;
   get(ref: MediaRef): Promise<Uint8Array | Blob>;
   exists(id: string): Promise<boolean>;
-  resolveUrl(ref: MediaRef): Promise<string>;
   delete(id: string): Promise<void>;
   lookup(id: string): Promise<MediaAssetLookup | null>;
   recordOwnership(
@@ -54,6 +53,8 @@ interface MediaStore {
 ```
 
 The types are defined in `packages/shared/src/types/media.ts`.
+
+Plugins use `ctx.media.put()` to store bytes, `ctx.media.get()` to read bytes, and `ctx.media.ingestUrl()` to download and store media. `get()` only reads files that the calling session owns or references. To display media in the UI, pass a `MediaRef` and let the framework handle reading it.
 
 **A file's ID is a hash of its content**
 
@@ -260,6 +261,8 @@ The UNIQUE constraint on `media_refs` does not include `plugin_id`. The plugin I
 `delete()` first removes every reference that points to the file, and then deletes the file. The SQL backends put both steps in one transaction. In particular, another SQLite process cannot insert a new reference between "clear the references" and "delete the file".
 
 **Signed URL: `GET /api/sessions/:id/media-token`**
+
+When a browser needs a fetchable URL, it obtains one through this endpoint. Neither `MediaStore` nor the plugin's `ctx.media` provides a URL resolver.
 
 - On hosted deployments (`demo` / `commercial`), and when production uses MemoryStore (including the `self` browser-private mode), the session owner's credentials are required.
 - As with other session routes, operator credentials can also authorize this request.

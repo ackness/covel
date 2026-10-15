@@ -59,9 +59,6 @@ function createStore(): MediaStoreLike & {
     async listByMetadata() {
       return [];
     },
-    async resolveUrl(ref) {
-      return `https://media.example.test/${ref.id}`;
-    },
     async recordOwnership(id, sessionId, pluginId) {
       ownerships.push({
         id,
@@ -158,7 +155,16 @@ function createUtils(
 }
 
 describe("createRuntimeMediaContext", () => {
-  it("forwards put to the media store and authorises get/resolveUrl for the owner", async () => {
+  it("does not expose a URL resolver to plugins", () => {
+    const media = createRuntimeMediaContext(
+      createStore(),
+      undefined,
+      TEST_OWNER,
+    );
+    expect(media).not.toHaveProperty("resolveUrl");
+  });
+
+  it("forwards put to the media store and authorises get for the owner", async () => {
     const store = createStore();
     const media = createRuntimeMediaContext(store, undefined, TEST_OWNER);
     const ref = await media.put(
@@ -172,9 +178,6 @@ describe("createRuntimeMediaContext", () => {
       size: 3,
     });
     expect(await media.get(ref)).toEqual(new Uint8Array(3));
-    // resolveUrl returns an opaque placeholder so plugins cannot bypass
-    // the HTTP token gate by handing out backend-native URLs (e.g. file://).
-    expect(await media.resolveUrl(ref)).toBe("media:media-1");
     expect(store.ownerships).toEqual([
       {
         id: "media-1",
@@ -217,7 +220,7 @@ describe("createRuntimeMediaContext", () => {
     expect(store.refs).toEqual([]);
   });
 
-  it("rejects get/resolveUrl for a session that neither owns nor references the asset", async () => {
+  it("rejects get for a session that neither owns nor references the asset", async () => {
     const store = createStore();
     const ownerMedia = createRuntimeMediaContext(store, undefined, TEST_OWNER);
     const ref = await ownerMedia.put(
@@ -231,18 +234,14 @@ describe("createRuntimeMediaContext", () => {
     });
 
     await expect(otherMedia.get(ref)).rejects.toThrow(/not accessible/);
-    await expect(otherMedia.resolveUrl(ref)).rejects.toThrow(/not accessible/);
   });
 
-  it("throws on get/resolveUrl when the asset is unknown", async () => {
+  it("throws on get when the asset is unknown", async () => {
     const store = createStore();
     const media = createRuntimeMediaContext(store, undefined, TEST_OWNER);
 
     await expect(
       media.get({ id: "never-existed", mime: "image/png", size: 0 }),
-    ).rejects.toThrow(/not accessible/);
-    await expect(
-      media.resolveUrl({ id: "never-existed", mime: "image/png", size: 0 }),
     ).rejects.toThrow(/not accessible/);
   });
 
@@ -263,7 +262,6 @@ describe("createRuntimeMediaContext", () => {
     });
 
     expect(await forkedMedia.get(ref)).toEqual(new Uint8Array(3));
-    expect(await forkedMedia.resolveUrl(ref)).toBe(`media:${ref.id}`);
   });
 
   it("grants the deduped second session its own ref at put-time so it can read the asset", async () => {

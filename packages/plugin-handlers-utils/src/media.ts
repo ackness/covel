@@ -39,7 +39,6 @@ export interface PluginMedia {
     meta?: Readonly<Record<string, unknown>>,
   ): Promise<PluginMediaRef>;
   get(ref: PluginMediaRef): Promise<Uint8Array | Blob>;
-  resolveUrl(ref: PluginMediaRef): Promise<string>;
   ingestUrl(
     url: string,
     opts?: PluginIngestUrlOptions,

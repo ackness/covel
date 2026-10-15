@@ -537,7 +537,18 @@ describe("a setup runtime's suspension that ends without an answer (F-188)", () 
 
     expect(await store.getSuspension(suspension.id)).toBeNull();
     expect(await store.listSuspensions(input.sessionId)).toHaveLength(1);
-    expect(await attemptStates(store)).toEqual(["failed", "suspended"]);
+    const attempts = await store.listSetupAttempts(input.sessionId, {
+      runtimeId: setup.name,
+    });
+    // Attempts can start in the same millisecond and sort by execution ID.
+    expect(
+      Object.fromEntries(
+        attempts.map((attempt) => [attempt.executionId, attempt.state]),
+      ),
+    ).toEqual({
+      [suspension.pendingContinuation.executionContext.executionId]: "failed",
+      [again.commit.executionContext.executionId]: "suspended",
+    });
     expect(
       (await store.getSession(input.sessionId))?.setupRuntimes[setup.name]
         ?.state,

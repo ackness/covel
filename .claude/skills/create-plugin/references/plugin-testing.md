@@ -122,7 +122,6 @@ describe("image-generator handler", () => {
       media: {
         put: vi.fn().mockResolvedValue(mediaRef),
         get: vi.fn(),
-        resolveUrl: vi.fn(),
         ingestUrl: vi.fn(),
       },
       logger: {

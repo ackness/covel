@@ -110,13 +110,6 @@ export function createMemoryMediaStore(): MediaStore {
       return assets.has(id);
     },
 
-    async resolveUrl(ref) {
-      if (ref.url) return ref.url;
-      if (!assets.has(ref.id))
-        throw new Error(`Media asset not found: ${ref.id}`);
-      return `memory://media/${ref.id}`;
-    },
-
     async delete(id) {
       assets.delete(id);
       owners.delete(id);

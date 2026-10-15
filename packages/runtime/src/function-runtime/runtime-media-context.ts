@@ -21,17 +21,14 @@ import type {
  * no commit-time follow-up is required to make the owner discoverable in
  * `media_refs`.
  *
- * `get`/`resolveUrl` reject when the calling session neither owns the asset
- * nor has an explicit ref. `resolveUrl` further refuses to expose the
- * backend-native URL (e.g. `file://…` for SQLite) because that would bypass
- * the HTTP token gate; plugin-facing callers must use the framework's
- * media-token endpoint to obtain a fetchable URL.
+ * `get` rejects when the calling session neither owns the asset nor has
+ * an explicit ref. Browser clients obtain fetchable URLs through the
+ * framework's media-token endpoint.
  */
 export type MediaStoreLike = Pick<
   MediaStore,
   | "put"
   | "get"
-  | "resolveUrl"
   | "recordOwnership"
   | "lookup"
   | "isReferencedBy"
@@ -206,17 +203,6 @@ export function createRuntimeMediaContext(
     async get(ref) {
       await assertReadable(mediaStore, ref.id, sessionId);
       return mediaStore.get(ref);
-    },
-    async resolveUrl(ref) {
-      await assertReadable(mediaStore, ref.id, sessionId);
-      // Deliberately do NOT return the backend-native URL: `MediaStore`
-      // implementations may hand out `file://…` (SQLite) or other
-      // direct-access URLs that bypass the `/api/media/:id?token=…`
-      // gate. Plugin code that needs a fetchable URL must mint a
-      // session-scoped media token via the framework helper instead;
-      // this opaque placeholder makes the indirection explicit so any
-      // accidental `<img src={…}>` use surfaces immediately.
-      return `media:${ref.id}`;
     },
     async ingestUrl(url, opts) {
       return writeOne((batch) => batch.ingestUrl(url, opts));

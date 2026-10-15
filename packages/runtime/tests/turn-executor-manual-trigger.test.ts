@@ -368,9 +368,6 @@ describe("executeTurn: manual trigger", () => {
           async get() {
             return new Uint8Array();
           },
-          async resolveUrl() {
-            return "https://media.example.test/media-1";
-          },
           async recordOwnership() {
             /* no-op for this test */
           },
