@@ -112,6 +112,8 @@ export function describeWorldChange(
     areas.push("plugin policy and settings");
 
   const handled = new Set([
+    // Package bookkeeping changes with every edited file, not with settings.
+    "packageDigest",
     "dimensions",
     "pluginPolicy",
     "pluginSettings",

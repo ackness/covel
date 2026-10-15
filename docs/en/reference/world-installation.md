@@ -98,7 +98,7 @@ After the record is deleted, the staging directory is renamed to `.covel-uninsta
 - You have added, deleted, or changed files of this world locally.
 - You have edited this world in Covel. In that case the world record is marked `packageModified`. Later updates no longer overwrite it, and startup loading and file watching do not overwrite it either. You can keep using this edited version.
 
-To follow the original package again, click "Restore the package version" on the world's detail page, then check for updates. Your edits are replaced with what the package files hold now. The rules are in [World records and world packages](./world-data.md#world-records-and-world-packages).
+When files on disk change while the world record keeps its older content, the world list shows "Update available". This also covers bundled worlds changed by an app upgrade. To apply the package on disk, open world details and choose "Restore the package version". It replaces world data and settings while keeping saved sessions. This is separate from checking GitHub for a newer release in Settings. See [World records and world packages](./world-data.md#world-records-and-world-packages).
 
 > [!CAUTION]
 > Deleting a world affects the sessions that were started with it. Do not treat "delete and reinstall" as an update that keeps your data.

@@ -17,6 +17,7 @@
 
 import { readGeneratedWorldMarker } from "@covel/create";
 import { worldRecordFromManifest } from "./world-data/world-record.js";
+import { worldPackageDigest } from "./world-data/package-digest.js";
 import { readReceipt } from "./routes/api/install/package-files.js";
 import type { SessionLock } from "./lib/session-lock.js";
 import { isWorldDeleting, worldOperationLockId } from "./world-lifecycle.js";
@@ -208,6 +209,7 @@ export async function loadSingleWorld(
 ): Promise<WorldRecord | null> {
   const yamlPath = await resolveSafePath(worldDir, "world.yaml");
   if (!yamlPath) return null;
+  const packageDigest = await worldPackageDigest(worldDir);
 
   // The main file is one language; `world.<locale>.yaml` overlays add the
   // translations, compiled here into locale maps for the catalog.
@@ -304,6 +306,7 @@ export async function loadSingleWorld(
           }
         : {}),
       source: options?.source ?? (packageReceipt ? "generated-file" : "file"),
+      ...(packageDigest ? { packageDigest } : {}),
       ...(options?.storage ? { storage: options.storage } : {}),
       // Written by the world generator: the app may rewrite this package
       // while it holds only the files the marker lists.

@@ -430,7 +430,12 @@ Covel plays the **world record** in the database. The files of a world package a
 - New sessions, the world-data preflight and sync use the dimensions and the character schema (`characterSchema`) of the world record. They do not read these from the package files.
 - What the world record does not keep is read from the package: the characters, lorebook entries and plugin data in `data/`, and the images in `media/`. The app has no place to edit them, so there is only one copy of them.
 - Once a player edits a world that came from a world package in the app (the world editor, importing dimensions, or `PATCH /api/worlds/:id`), the record is marked `packageModified`. From then on the seed, file reloads and updates no longer overwrite it with the files, and a new version of the package is not used automatically.
-- To go back to the package's version, click "Restore the package version" on the world's detail page ([`POST /api/worlds/:id/restore-package`](./api.md#post-apiworldsidrestore-package)). The edits are replaced with what the package files hold now, and the record follows the files again. Saved session data is preserved. Sessions without their own lore (`loreOverride`) read the restored world lore on the next turn.
+- When package files differ from the last import, the world list shows "Update available". Both bundled and installed packages are checked; a world created only in the app has no badge. Checking reads files without overwriting the world record.
+- To apply the update or go back to the package's version, click "Restore the package version" on the world's detail page ([`POST /api/worlds/:id/restore-package`](./api.md#post-apiworldsidrestore-package)). World data and settings, including edits made in the app, are replaced with what the package files hold now. The record follows the files again and the "Update available" badge disappears. Saved session data is preserved. Sessions without their own lore (`loreOverride`) read the restored world lore on the next turn.
+
+Loading a package saves a SHA-256 digest of its file paths and contents in `metadata.packageDigest`. The manifest, lore, translations, data and media all count. Install receipts, generation markers (`.covel-*`), `.git`, `.DS_Store` and symbolic links do not. Ordinary edits keep the digest; restoring the package version writes a new one. Development records without a saved digest need one package restore before later changes can be compared.
+
+Update checks first compare the same files by relative path, size and modification time (`mtimeMs`), sorted by relative path. An unchanged signature reuses the content digest in memory without rereading media or other files for hashing; a changed signature triggers a new hash. The cache keeps one entry per real package directory, up to the 256 most recently used directories. The world record still saves a content digest, so a timestamp change alone does not show an update.
 
 ### Loading at startup and reconciling (seed & reconcile)
 
@@ -514,7 +519,7 @@ For installing and updating from GitHub, see [world catalog and installation](./
 
 **What stays the same when a world record is edited:**
 
-- The world's `metadata.source` and `metadata.storage` keep their original values through a normal update request (PATCH). Editing or browser sync does not change which files the world belongs to.
+- The world's `metadata.source`, `metadata.storage` and `metadata.packageDigest` keep their original values through a normal update request (PATCH). Editing or browser sync does not change which files the world belongs to.
 - A world that came from a world package (`metadata.source` is `file` or `generated-file`, or it has `packageManaged`) is marked `packageModified` when it is edited. See [World records and world packages](#world-records-and-world-packages).
 - Dimensions follow `metadata.dimensions`. The top-level `dimensions` is a way to read the same content. When only top-level dimensions are given, they are written to `metadata.dimensions`. When `metadata.dimensions` is replaced or cleared, the top level is updated too. All three database backends behave the same way.
 

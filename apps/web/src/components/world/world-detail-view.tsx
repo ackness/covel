@@ -32,7 +32,7 @@ import {
 } from "./world-translate-panel.js";
 import {
   WorldPackageRestore,
-  isWorldPackageEdited,
+  canRestoreWorldPackage,
 } from "./world-package-restore.js";
 export interface WorldDetailViewProps {
   /** The list's summary: it paints the header while the full record loads. */
@@ -208,7 +208,7 @@ export function WorldDetailView({
           t={t}
         />
 
-        {full && onRevised && isWorldPackageEdited(full) && (
+        {full && onRevised && canRestoreWorldPackage(full) && (
           <WorldPackageRestore world={full} onRestored={onRevised} />
         )}
         {full && onRevised && isWorldTranslatable(full, interfaceLocale) && (

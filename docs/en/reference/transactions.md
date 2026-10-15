@@ -8,6 +8,8 @@ There are three key points:
 - All writes of one execution (a turn, a manual run, or a background job) are put into one transaction and committed together.
 - The three backends (Memory, SQLite, PostgreSQL) behave the same from the outside. They handle concurrency differently.
 
+A world package digest is saved with the world record’s metadata and needs no new database column. [Package update checks](./world-data.md#world-records-and-world-packages) only read files; restoring replaces the record and digest under the world write lock without changing existing sessions.
+
 World package files are outside the database transaction. Generation, revision, and translation coordinate files and world records through staging, package preflight, directory replacement, and failure recovery; the [API write-back rules](./api.md#post-apiworldsidtranslate) describe what survives a failure.
 
 ## Contract

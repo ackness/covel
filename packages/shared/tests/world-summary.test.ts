@@ -31,6 +31,16 @@ const full = {
 };
 
 describe("summarizeWorld", () => {
+  it("keeps the live update status but omits the stored package fingerprint", () => {
+    const summary = summarizeWorld({
+      ...full,
+      updateAvailable: true,
+      metadata: { ...full.metadata, packageDigest: "sha256:imported" },
+    });
+    expect(summary.metadata).not.toHaveProperty("packageDigest");
+    expect(worldSummarySchema.parse(summary).updateAvailable).toBe(true);
+  });
+
   it("drops the lore, the dimensions and the large metadata", () => {
     const summary = summarizeWorld(full);
     expect(summary).not.toHaveProperty("lore");

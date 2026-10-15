@@ -5,9 +5,18 @@
  * the player restores the package version.
  */
 
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Hono } from "hono";
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import {
+  mkdtemp,
+  mkdir,
+  open,
+  rm,
+  stat,
+  symlink,
+  utimes,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { createRpcApprovalGate } from "@covel/approval";
@@ -26,6 +35,11 @@ import {
 } from "../../src/lib/session-lock.js";
 import { seedWorlds } from "../../src/world-seed-loader.js";
 import { registerDimensionProvider } from "../helpers/dimension-provider.js";
+
+vi.mock("node:fs/promises", async (importOriginal) => {
+  const fs = await importOriginal<typeof import("node:fs/promises")>();
+  return { ...fs, open: vi.fn(fs.open) };
+});
 
 const stamina = (initialValue: number) => ({
   name: "Stamina",
@@ -78,6 +92,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  vi.clearAllMocks();
   await store.close();
   await rm(root, { recursive: true, force: true });
 });
@@ -111,6 +126,170 @@ async function staminaOf(sessionId: string) {
 }
 
 describe("the world record is the source of truth", () => {
+  it.each(["mtime", "size"])(
+    "reuses package hashes for list/detail reads and invalidates them on a file %s change",
+    async (changedStat) => {
+      const media = path.join(root, "pkg", "media", "cover.webp");
+      await mkdir(path.dirname(media));
+      await writeFile(media, "original");
+      await seedWorlds(store, root, sessionLock);
+      const imported = (await store.getWorld("pkg"))?.metadata?.packageDigest;
+      const initial = await stat(media);
+      const touched = new Date(initial.mtimeMs + 2000);
+      await utimes(media, initial.atime, touched);
+      const list = async () => {
+        const response = await app.request("/api/worlds");
+        expect(response.status).toBe(200);
+        return (await response.json()).items[0];
+      };
+
+      // A stat-only change rehashes once but keeps the content-based status.
+      vi.mocked(open).mockClear();
+      for (const world of await Promise.all([list(), list()]))
+        expect(world).toMatchObject({ updateAvailable: false });
+      expect(open).toHaveBeenCalledTimes(2); // Manifest + media, not host receipts.
+      vi.mocked(open).mockClear();
+      expect(await list()).toMatchObject({ updateAvailable: false });
+      const detail = await app.request("/api/worlds/pkg");
+      expect(await detail.json()).toMatchObject({ updateAvailable: false });
+      expect(open).not.toHaveBeenCalled();
+
+      await writeFile(
+        media,
+        changedStat === "mtime" ? "modified" : "longer content",
+      );
+      await utimes(
+        media,
+        initial.atime,
+        changedStat === "mtime" ? new Date(initial.mtimeMs + 4000) : touched,
+      );
+      expect(await list()).toMatchObject({ updateAvailable: true });
+      expect(open).toHaveBeenCalledTimes(2);
+      expect((await store.getWorld("pkg"))?.metadata?.packageDigest).toBe(
+        imported,
+      );
+    },
+  );
+
+  it.each(["file", "generated-file"])(
+    "reports package updates for %s worlds and clears them after restore",
+    async (source) => {
+      const seeded = (await store.getWorld("pkg"))!;
+      await store.upsertWorld({
+        ...seeded,
+        metadata: { ...seeded.metadata, source },
+      });
+      const listed = async () => {
+        const response = await app.request("/api/worlds");
+        expect(response.status).toBe(200);
+        return (await response.json()).items.find(
+          (world: { id: string }) => world.id === "pkg",
+        );
+      };
+      expect(await listed()).toMatchObject({ updateAvailable: false });
+      expect(seeded.metadata?.packageDigest).toMatch(/^sha256:/);
+      await startSession("kept");
+      const session = await store.getSession("kept");
+      await editDimensions(5);
+      expect(await listed()).toMatchObject({ updateAvailable: false });
+
+      await writeFile(path.join(root, "pkg", "world.yaml"), manifest("New", 3));
+      await seedWorlds(store, root, sessionLock);
+      expect(await listed()).toMatchObject({
+        name: "Pkg",
+        updateAvailable: true,
+      });
+      expect(await (await app.request("/api/worlds/pkg")).json()).toMatchObject(
+        {
+          updateAvailable: true,
+        },
+      );
+      expect((await store.getWorld("pkg"))?.metadata?.packageDigest).toBe(
+        seeded.metadata?.packageDigest,
+      );
+
+      const response = await app.request(
+        "/api/worlds/pkg/restore-package",
+        json({}),
+      );
+      expect(response.status).toBe(200);
+      expect(await response.json()).toMatchObject({
+        name: "New",
+        updateAvailable: false,
+      });
+      expect(await listed()).toMatchObject({ updateAvailable: false });
+      expect(await store.getSession("kept")).toEqual(session);
+      expect((await staminaOf("kept")).value).toBe(1);
+    },
+  );
+
+  it.each(["WORLD.md", "data/notes.json", "media/cover.webp"])(
+    "detects additions, edits and removals of %s without a version bump",
+    async (file) => {
+      const filename = path.join(root, "pkg", file);
+      await mkdir(path.dirname(filename), { recursive: true });
+      await editDimensions(5);
+      const available = async () =>
+        (await (await app.request("/api/worlds/pkg")).json()).updateAvailable;
+      await writeFile(filename, "first");
+      expect(await available()).toBe(true);
+      await app.request("/api/worlds/pkg/restore-package", json({}));
+      expect(await available()).toBe(false);
+      await writeFile(filename, "other");
+      expect(await available()).toBe(true);
+      await writeFile(filename, "first");
+      expect(await available()).toBe(false);
+      await rm(filename);
+      expect(await available()).toBe(true);
+    },
+  );
+
+  it("omits update status for missing packages and worlds made in the app", async () => {
+    const created = await app.request(
+      "/api/worlds",
+      json({ id: "stored", name: "Stored" }),
+    );
+    expect(created.status).toBe(201);
+    await rm(path.join(root, "pkg"), { recursive: true });
+    const response = await app.request("/api/worlds");
+    expect(response.status).toBe(200);
+    const { items } = await response.json();
+    expect(items).toHaveLength(2);
+    for (const item of items)
+      expect(item).not.toHaveProperty("updateAvailable");
+  });
+
+  it("keeps the imported fingerprint when a metadata patch tries to replace it", async () => {
+    const seeded = (await store.getWorld("pkg"))!;
+    const response = await app.request("/api/worlds/pkg", {
+      ...json({ metadata: { packageDigest: "forged" } }),
+      method: "PATCH",
+    });
+    expect(response.status).toBe(200);
+    expect((await store.getWorld("pkg"))?.metadata?.packageDigest).toBe(
+      seeded.metadata?.packageDigest,
+    );
+  });
+
+  it("ignores host bookkeeping and never follows symlinks outside the package", async () => {
+    await writeFile(path.join(root, "pkg", ".covel-install.json"), "{}");
+    await writeFile(path.join(root, "pkg", ".covel-generated.json"), "{}");
+    await writeFile(path.join(root, "pkg", ".DS_Store"), "metadata");
+    await mkdir(path.join(root, "pkg", ".git"));
+    await writeFile(path.join(root, "pkg", ".git", "config"), "metadata");
+    await writeFile(path.join(root, "outside.txt"), "outside");
+    await symlink(
+      path.join(root, "outside.txt"),
+      path.join(root, "pkg", "linked.txt"),
+    );
+    await symlink(root, path.join(root, "pkg", "linked-directory"));
+    vi.mocked(open).mockClear();
+    const response = await app.request("/api/worlds/pkg");
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ updateAvailable: false });
+    expect(open).not.toHaveBeenCalled();
+  });
+
   it("starts a new session with the dimensions saved in the app, not the package's", async () => {
     await editDimensions(5);
     // The files change too, but nothing loaded them into the record.

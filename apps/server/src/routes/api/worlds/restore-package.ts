@@ -23,6 +23,7 @@ import {
   notifyWorldDimensionsChanged,
 } from "./shared.js";
 import { requireAccess } from "../../../host-profile.js";
+import { withWorldPackageUpdate } from "./package-update.js";
 
 export const worldRestorePackageRoutes = new Hono<WorldEnv>();
 
@@ -71,6 +72,8 @@ worldRestorePackageRoutes.post("/:id/restore-package", async (c) => {
       change.dimensionKeys,
       now,
     );
-    return c.json(restored);
+    return c.json(
+      await withWorldPackageUpdate(restored, c.get("worldsDirs") ?? []),
+    );
   });
 });

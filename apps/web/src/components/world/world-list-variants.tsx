@@ -7,6 +7,7 @@ import { worldVisual } from "@/lib/world-visuals.js";
 import { packageByline, worldPackageInfo } from "@/lib/package-info.js";
 import { worldLanguageBadge, worldLanguageName } from "@/lib/world-locale.js";
 import { isWorldDeletable } from "./world-deletion.js";
+import { WorldUpdateBadge } from "./world-update-badge.js";
 import type { WorldCardProps } from "./world-card.js";
 import {
   ShowcaseBackdrop,
@@ -149,6 +150,7 @@ export function WorldTileCard({
       </WorldCardCover>
       <div className="flex flex-1 flex-col gap-2.5 p-4">
         <h2 className="ui-title text-lg leading-snug">{text(world.name)}</h2>
+        <WorldUpdateBadge world={world} t={t} />
         <p className="flex-1 text-[13px] leading-relaxed text-muted-foreground line-clamp-3 wrap-break-word">
           {text(world.description)}
         </p>
@@ -240,6 +242,7 @@ export function WorldContinueBanner({
           {t("session.continueLatest")}
         </span>
         <h2 className="ui-title text-2xl leading-snug">{text(world.name)}</h2>
+        <WorldUpdateBadge world={world} t={t} />
         <WorldGalleryStrip
           items={pictures}
           limit={5}
@@ -307,6 +310,7 @@ export function WorldRowItem({
       </span>
       <div className="min-w-0 space-y-2">
         <h2 className="ui-title text-2xl leading-snug">{text(world.name)}</h2>
+        <WorldUpdateBadge world={world} t={t} />
         <p className="max-w-xl text-[14.5px] leading-[1.75] text-muted-foreground line-clamp-3 wrap-break-word">
           {text(world.description)}
         </p>

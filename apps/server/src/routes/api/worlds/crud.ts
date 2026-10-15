@@ -19,6 +19,7 @@ import {
   resolveWorldMetadata,
 } from "./shared.js";
 import { requireAccess } from "../../../host-profile.js";
+import { withWorldPackageUpdate } from "./package-update.js";
 
 export const worldCrudRoutes = new Hono<WorldEnv>();
 
@@ -28,7 +29,15 @@ export const worldCrudRoutes = new Hono<WorldEnv>();
 worldCrudRoutes.get("/", async (c) => {
   const store = c.get("store");
   const worlds = await store.listWorlds();
-  return c.json({ items: worlds.map(summarizeWorld) });
+  const items = [];
+  for (const world of worlds) {
+    items.push(
+      summarizeWorld(
+        await withWorldPackageUpdate(world, c.get("worldsDirs") ?? []),
+      ),
+    );
+  }
+  return c.json({ items });
 });
 
 // GET /worlds/:id
@@ -39,7 +48,7 @@ worldCrudRoutes.get("/:id", async (c) => {
   if (!world) {
     return c.json(errorBody("World not found"), 404);
   }
-  return c.json(world);
+  return c.json(await withWorldPackageUpdate(world, c.get("worldsDirs") ?? []));
 });
 
 // POST /worlds
@@ -130,7 +139,9 @@ worldCrudRoutes.patch("/:id", async (c) => {
     };
 
     await store.upsertWorld(updated);
-    return c.json(updated);
+    return c.json(
+      await withWorldPackageUpdate(updated, c.get("worldsDirs") ?? []),
+    );
   });
 });
 

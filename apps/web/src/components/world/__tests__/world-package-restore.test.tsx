@@ -16,7 +16,7 @@ vi.mock("@/lib/confirm-channel.js", () => confirm);
 const storage = vi.hoisted(() => ({ getStorageMode: vi.fn(() => "server") }));
 vi.mock("@/services/data-service.js", () => storage);
 
-const { WorldPackageRestore, isWorldPackageEdited } =
+const { WorldPackageRestore, canRestoreWorldPackage } =
   await import("../world-package-restore.js");
 
 const world = {
@@ -38,17 +38,63 @@ afterEach(() => {
 });
 
 describe("WorldPackageRestore", () => {
+  it("offers the changed package even when the world has no app edits", () => {
+    const updated = {
+      ...world,
+      metadata: { source: "file" },
+      updateAvailable: true,
+    };
+    expect(canRestoreWorldPackage(updated)).toBe(true);
+    storage.getStorageMode.mockReturnValueOnce("local");
+    expect(canRestoreWorldPackage(updated)).toBe(false);
+  });
+
+  it("explains what an available update replaces and keeps before applying it", async () => {
+    confirm.requestConfirm.mockResolvedValue(true);
+    const restored = {
+      ...world,
+      updateAvailable: false,
+      metadata: { source: "file" },
+    };
+    api.restoreWorldPackage.mockResolvedValue(restored);
+    const onRestored = vi.fn();
+    render(
+      <WorldPackageRestore
+        world={{ ...world, updateAvailable: true }}
+        onRestored={onRestored}
+      />,
+    );
+    expect(screen.getByRole("note").textContent).toContain(
+      "World data and settings are replaced",
+    );
+    expect(screen.getByRole("note").textContent).toContain(
+      "saved sessions are kept",
+    );
+    await act(async () => {
+      fireEvent.click(
+        screen.getByRole("button", { name: "Restore the package version" }),
+      );
+    });
+    expect(confirm.requestConfirm).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: expect.stringContaining("data and settings"),
+        destructive: true,
+      }),
+    );
+    expect(onRestored).toHaveBeenCalledWith(restored);
+  });
+
   it("is shown for a package world edited on the server only", () => {
-    expect(isWorldPackageEdited(world)).toBe(true);
+    expect(canRestoreWorldPackage(world)).toBe(true);
     expect(
-      isWorldPackageEdited({
+      canRestoreWorldPackage({
         ...world,
         metadata: { source: "file" },
       } as WorldRecord),
     ).toBe(false);
     // A browser copy has no package on the server to go back to.
     storage.getStorageMode.mockReturnValueOnce("local");
-    expect(isWorldPackageEdited(world)).toBe(false);
+    expect(canRestoreWorldPackage(world)).toBe(false);
   });
 
   it("asks first, then hands back the package version", async () => {

@@ -7,13 +7,13 @@ import type { WorldRecord } from "@/services/api.js";
 import { getStorageMode } from "@/services/data-service.js";
 
 /**
- * Whether the world is a package world edited in the app, on the server. The
- * record keeps the edits: changes to the package files no longer reach it
- * until the player restores the package version.
+ * A server world can return to its package after an app edit or apply changed
+ * package files. Browser-local copies have no restore action on the server.
  */
-export function isWorldPackageEdited(world: WorldRecord): boolean {
+export function canRestoreWorldPackage(world: WorldRecord): boolean {
   return (
-    getStorageMode() !== "local" && world.metadata?.packageModified === true
+    getStorageMode() !== "local" &&
+    (world.metadata?.packageModified === true || world.updateAvailable === true)
   );
 }
 
@@ -58,7 +58,13 @@ export function WorldPackageRestore({
       role="note"
       className="max-w-3xl space-y-2 rounded border border-border bg-muted/40 px-3 py-2 text-sm text-muted-foreground"
     >
-      <p>{t("world.packageEditedHint")}</p>
+      <p>
+        {t(
+          world.updateAvailable
+            ? "world.packageUpdateHint"
+            : "world.packageEditedHint",
+        )}
+      </p>
       <Button
         variant="outline"
         size="sm"
