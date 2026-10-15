@@ -2931,10 +2931,10 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
         }
         try {
           // We don't actually need to recurse — calling with a delta that
-          // points at a non-existent runtime resolves to a TurnResult with
+          // points at a non-existent runtime in this package resolves to a TurnResult with
           // an `abortReason`; that still proves the function is wired.
           const nested = await ctx.recursiveCall(
-            { manualTrigger: { runtimeId: "nonexistent/leaf" } },
+            { manualTrigger: { runtimeId: `${ctx.pluginId}/nonexistent` } },
             { reason: "p1-recursive-smoke-test" },
           );
           recursiveCallObserved = "invoked";

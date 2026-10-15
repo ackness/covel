@@ -199,7 +199,7 @@ export async function executeOneRuntime(
       // code is untyped JS at runtime, so identity, settings, model overrides
       // and kernel-only inputs (retry seeds, detached-stage context) are
       // never read from the delta — the nested execution inherits them.
-      const delta = readRecursiveCallDelta(rawDelta);
+      const delta = readRecursiveCallDelta(rawDelta, manifest.pluginId);
 
       const nestedInput: RecursiveTurnInput = {
         ...input,
@@ -741,9 +741,13 @@ export async function executeOneRuntime(
 
 /**
  * Copy the allow-listed fields of a plugin's `recursiveCall` delta. Unknown
- * keys are ignored; an allowed field of the wrong type is an author error.
+ * keys are ignored; invalid fields and targets outside the caller's package
+ * are author errors.
  */
-export function readRecursiveCallDelta(raw: unknown): RecursiveCallDelta {
+export function readRecursiveCallDelta(
+  raw: unknown,
+  pluginId: string,
+): RecursiveCallDelta {
   if (raw === undefined || raw === null) return {};
   if (typeof raw !== "object" || Array.isArray(raw))
     throw new TypeError("recursiveCall delta must be an object");
@@ -759,6 +763,10 @@ export function readRecursiveCallDelta(raw: unknown): RecursiveCallDelta {
     if (typeof runtimeId !== "string" || runtimeId.length === 0)
       throw new TypeError(
         "recursiveCall manualTrigger.runtimeId must be a non-empty string",
+      );
+    if (runtimeId !== pluginId && !runtimeId.startsWith(`${pluginId}/`))
+      throw new Error(
+        `recursiveCall cannot target runtime "${runtimeId}" outside plugin "${pluginId}"; use services or events for cross-package communication`,
       );
     if (
       payload !== undefined &&

@@ -1465,6 +1465,7 @@ What tools and guards can get:
 
 - The toolkit for every entry factory provides only pure helper functions, and it does not inject a store. A tool reads the state of the current session and plugin through `context.store` in `execute(params, context)`. RPC and function runtimes each use their own scoped store.
 - An agent guard gets the same context as a function handler: the read-only store, `ctx.world`, `ctx.inputs`, `pluginData`, logger, gateway, utils, media, and `recursiveCall`. Bundled and community plugins get the same, except that a community plugin's `utils` reaches only the addresses its `permissions.http` declares. Once the guard returns or times out, all of these stop working.
+- The [same-package rule for `recursiveCall`](./plugins.md#nested-calls-ctxrecursivecall) also applies to guards. Use [services or events](./plugin-extensions.md#choose-a-way-to-communicate) across packages.
 
 **Which language the text in a tool uses.** `context.locale` is the session's content language, and `context.messages` holds the translations in this plugin's `locales/` directory.
 

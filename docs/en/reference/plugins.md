@@ -520,6 +520,14 @@ An agent's side effects come only from its tools. What the model can write is de
 
 `ctx.session.lastPlayerInput` may come from an earlier turn. Having this record does not mean that a form was submitted in this turn.
 
+#### Nested calls (`ctx.recursiveCall`)
+
+`ctx.recursiveCall({ playerMessage, manualTrigger: { runtimeId, payload } })` starts a nested run inside the current execution. Its effects commit with the parent's. Only these fields are read; the session, locale, settings and model come from the parent, and other fields are ignored.
+
+`manualTrigger.runtimeId` may only name a runtime in the caller's own package: the package ID for an inline runtime, or `<pluginId>/<runtimeId>` for a multi-runtime package. A target in another package throws before the nested execution starts. The error names the target runtime and the caller's package ID. Bundled and community plugins follow the same rule.
+
+Use [services](./plugin-extensions.md#registering-and-calling-public-functions) for requests and responses across packages, or [events](./plugin-extensions.md#how-events-trigger-downstream-work) to trigger work in another package.
+
 #### The session view (`store.getSession()`)
 
 `ctx.store.getSession()` (`context.store.getSession()` in a tool or an action) returns `PluginSessionView`, a read-only view of the current session, not the session record itself:

@@ -26,6 +26,8 @@ Start by finding your need in the table and reading the matching interface:
 
 The details that do not fit in the table come next.
 
+`ctx.recursiveCall` is for [nested calls within one package](./plugins.md#nested-calls-ctxrecursivecall). Use a service to request a result from another package, or an event to trigger its follow-up work.
+
 ### Services are only for function runtimes
 
 `ctx.services` is currently open only to function runtimes. The framework does not expose every public service to every agent. If an agent needs the result of a service, it has two options:
