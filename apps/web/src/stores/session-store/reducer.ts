@@ -357,6 +357,22 @@ export function reducer(
         ...capLiveMessages(state, [...state.messages, action.message]),
       };
     }
+    case "ADD_STEER_MESSAGE": {
+      // The commit saves the interjection before the story text of its turn,
+      // so it goes above the text still streaming: a reload shows the same.
+      const streaming = state.messages.findIndex((m) =>
+        m.id.startsWith(`${STREAM_ID_PREFIX}${action.message.turnId}_`),
+      );
+      const messages =
+        streaming < 0
+          ? [...state.messages, action.message]
+          : [
+              ...state.messages.slice(0, streaming),
+              action.message,
+              ...state.messages.slice(streaming),
+            ];
+      return { ...state, ...capLiveMessages(state, messages) };
+    }
     case "COMPLETE_MESSAGE": {
       // Replace the streaming placeholder with the final message content and
       // drop its live streaming buffer (the authoritative full text now lives

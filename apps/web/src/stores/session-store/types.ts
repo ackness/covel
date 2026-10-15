@@ -314,6 +314,8 @@ export type SessionAction =
   | { type: "SET_SESSION"; session: api.SessionRecord }
   | { type: "SET_WORLD_SESSIONS"; sessions: api.SessionRecord[] }
   | { type: "ADD_MESSAGE"; message: StreamMessage }
+  /** A player interjection, shown where the turn's commit saves it. */
+  | { type: "ADD_STEER_MESSAGE"; message: StreamMessage & { turnId: string } }
   | {
       type: "COMPLETE_MESSAGE";
       turnId: string;

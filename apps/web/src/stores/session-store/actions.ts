@@ -323,7 +323,7 @@ export function useBuildSessionActions({
       const id = crypto.randomUUID();
       const ts = new Date().toISOString();
       dispatch({
-        type: "ADD_MESSAGE",
+        type: "ADD_STEER_MESSAGE",
         message: {
           id,
           role: "user",
