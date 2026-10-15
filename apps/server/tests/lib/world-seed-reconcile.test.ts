@@ -18,7 +18,6 @@ beforeEach(async () => {
 name: ${id}
 summary: Synthetic world
 defaultLocale: en-US
-supportedLocales: [en-US]
 `,
       "utf8",
     );
@@ -68,13 +67,13 @@ it("keeps worlds when a root is unreadable, then reconciles a complete scan", as
 it("keeps the last good override when a higher-priority package fails to load", async () => {
   const user = path.join(root, "user-root");
   const packageDir = path.join(user, "override");
-  await mkdir(packageDir, { recursive: true });
+  await mkdir(path.join(packageDir, "data"), { recursive: true });
   const manifest =
-    "id: healthy\nname: User world\nsummary: Override fixture\ndefaultLocale: en-US\ndimensionSources:\n  tone: tone.yaml\n";
+    "id: healthy\nname: User world\nsummary: Override fixture\ndefaultLocale: en-US\n";
   await writeFile(path.join(packageDir, "world.yaml"), manifest, "utf8");
   await writeFile(
-    path.join(packageDir, "tone.yaml"),
-    "name: tone\nschema: {}\ninitialValue:\n  genres:\n    - fantasy\n  contentRating: teen\n",
+    path.join(packageDir, "data/dimensions.yaml"),
+    "tone:\n  name: tone\n  schema: {}\n  initialValue:\n    genres:\n      - fantasy\n    contentRating: teen\n",
     "utf8",
   );
   const store = createMemoryStore();
@@ -84,8 +83,8 @@ it("keeps the last good override when a higher-priority package fails to load", 
     const before = await store.getWorld("healthy");
     expect(before?.name).toBe("User world");
     await writeFile(
-      path.join(packageDir, "tone.yaml"),
-      "genres: invalid\n",
+      path.join(packageDir, "data/dimensions.yaml"),
+      "tone:\n  genres: invalid\n",
       "utf8",
     );
     await seedAndReconcileWorlds(store, [root, user], sessionLock);

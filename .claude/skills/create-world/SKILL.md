@@ -35,9 +35,11 @@ pnpm describe:authoring
 
 ### 3. 选玩法和内容
 
-- 按玩法选 `pluginPolicy.presetId`：传统叙事 `traditional-story`，对话/校园/群像 `dialogue-mode`，省 token `low-cost`。
-- 从第 2 步的内容列表里挑与概念相符的。要预置某种内容，就把接收它的插件写进 `pluginPolicy.requested`。
+- 按玩法选一个内置玩法包写进 `pluginPolicy.preset`：传统叙事 `traditional-story`，对话/校园/群像 `dialogue-mode`，省 token `low-cost`。世界不能自己定义玩法包。
+- 从第 2 步的内容列表里挑与概念相符的。要预置某种内容，接收它的插件不在所选玩法包里时，把它写进 `pluginPolicy.plus`；`kind: core` 的插件不写。
+- 想让准备页用这个世界自己的说法介绍玩法，写 `pluginPolicy.pitch`（`label`、`description`、`reason`）。字段见 `docs/reference/world-data.md` 的“插件选择”。
 - 视觉小说世界再声明 `defaultViewMode: stage`。立绘和场景图是渐进增强，没有也能运行。
+- `world.yaml` 不写 `id`：世界的 ID 就是 `worlds/` 下的文件夹名。`characterSchema.types` 和默认的 `[npc, companion]` 相同时不写。
 - 世界自带封面图时，才在 `world.yaml` 写 `cover: media/<目录>/<文件>`（图片必须存在，校验会查）和 `accentColor`；没有图就两项都不写，界面会用默认背景和按世界 ID 派生的颜色。
 
 成品参考（直接读这些目录，它们随框架同步更新）：
@@ -64,7 +66,7 @@ worlds/<id>/
 └── characters/, media/   # 同上，按第 2 步的 path
 ```
 
-文件放在第 2 步给出的路径上就会被导入，不需要 `data/world.data.yaml`，`world.yaml` 里也不写 `worldData`。只有文件不在约定路径上、一种内容有多个文件、或要指定导入顺序时才写 descriptor（见 `docs/reference/world-data.md` 的“按约定导入”）；写了之后只认 descriptor，要把所有 source 列全。
+文件放在第 2 步给出的路径上就会被导入，不需要 `data/world.data.yaml`，`world.yaml` 里也不写 `worldData`。路径是 `data/rules/*.yaml` 这种形式时，目录里每个文件都是一个 source。只有文件不在约定路径上、两个插件声明了同一个路径、要指定导入顺序、或要关掉或改动某个约定 source 时才写 descriptor；它只写和约定不同的地方（见 `docs/reference/world-data.md` 的“按约定导入”和“Descriptor”）。
 
 要求：
 
@@ -77,7 +79,7 @@ worlds/<id>/
 - 所有 ID（world id、source id、记录 id）用 kebab-case 英文。
 - 避免泛化的奇幻套路，追求独特的设定。
 - 用户给了署名信息时，在 `world.yaml` 写 `author`（`name`，可选 `url`、`about`、`links`）、`license`、`homepage`；没给就不写，不要编造作者或链接。链接只能是 `https`。作者名和许可证不翻译，`about` 和链接的 `label` 可以在 `world.<locale>.yaml` 里翻译。字段见 `docs/reference/plugins.md` 的“作者信息”。
-- 每个文件只写一种语言（`world.yaml` 的 `defaultLocale`）。要加别的语言时，在文件旁边放 `<名字>.<locale>.<扩展名>`，只写译文、不重复结构：`world.en-US.yaml`、`data/dimensions.en-US.yaml`、`characters/main-cast.en-US.json`；`WORLD.en-US.md` 是整份正文。`<locale>` 写成 `supportedLocales` 里的完整写法（`en-US`），不要写成 `.en`，校验会报错。主文件里不要写 `{ zh: …, en: … }` 这样的内联映射，校验会报错。
+- 每个文件只写一种语言（`world.yaml` 的 `defaultLocale`）。要加别的语言时，在文件旁边放 `<名字>.<locale>.<扩展名>`，只写译文、不重复结构：`world.en-US.yaml`、`data/dimensions.en-US.yaml`、`characters/main-cast.en-US.json`；`WORLD.en-US.md` 是整份正文。`<locale>` 写成完整写法（`en-US`），不要写成 `.en`，校验会报错。有了 `world.<locale>.yaml` 或 `WORLD.<locale>.md`，世界就有这种语言的版本，不需要在 `world.yaml` 里登记。主文件里不要写 `{ zh: …, en: … }` 这样的内联映射，校验会报错。
 - 写进本仓库 `worlds/` 的中文世界，`world.yaml` 的展示字段（`name`、`summary`、属性的 `name` / `description` 等）必须在 `world.en-US.yaml` 里有英文译文，仓库门禁会检查。`WORLD.md` 和 `data/` 里的内容用用户的语言即可。
 
 ### 5. 验证

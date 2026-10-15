@@ -31,7 +31,8 @@ import { createWorldFileWatcher } from "../../src/world-file-watcher.js";
 import { loadSingleWorld, seedWorlds } from "../../src/world-seed-loader.js";
 import { seedAndReconcileWorlds } from "../../src/world-seed-reconcile.js";
 
-it.each(["yaml", "schema", "missing", "unreadable"])(
+// A missing data/dimensions.yaml is no failure: the world has no dimensions.
+it.each(["yaml", "schema"])(
   "preserves the last complete world on %s dimension failure and recovers after repair",
   async (failure) => {
     const root = await mkdtemp(
@@ -39,7 +40,7 @@ it.each(["yaml", "schema", "missing", "unreadable"])(
     );
     const worldDir = path.join(root, "fixture-world");
     const manifestFile = path.join(worldDir, "world.yaml");
-    const toneFile = path.join(worldDir, "tone.yaml");
+    const toneFile = path.join(worldDir, "data/dimensions.yaml");
     const store = createMemoryStore();
     const sessionLock = createInProcessSessionLock();
     const bus = createEventBus(store);
@@ -47,28 +48,16 @@ it.each(["yaml", "schema", "missing", "unreadable"])(
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const watcher = createWorldFileWatcher(root, store, bus, sessionLock);
     try {
-      await mkdir(worldDir);
+      await mkdir(path.join(worldDir, "data"), { recursive: true });
       const manifest = `id: fixture-world
 name: Fixture world
 summary: Synthetic world for dimension recovery.
 defaultLocale: en-US
-supportedLocales:
-  - en-US
-dimensions:
-  tone:
-    name: tone
-    schema: {}
-    initialValue:
-      genres:
-        - fantasy
-      contentRating: teen
-dimensionSources:
-  tone: tone.yaml
 `;
       await writeFile(manifestFile, manifest, "utf8");
       await writeFile(
         toneFile,
-        "name: tone\nschema: {}\ninitialValue:\n  genres:\n    - mystery\n  contentRating: teen\n",
+        "tone:\n  name: tone\n  schema: {}\n  initialValue:\n    genres:\n      - mystery\n    contentRating: teen\n",
         "utf8",
       );
       await seedWorlds(store, root, sessionLock);
@@ -86,22 +75,17 @@ dimensionSources:
       });
       await store.upsertWorld({ ...before, id: "absent-package" });
       watcher.start();
-      if (failure === "missing" || failure === "unreadable") {
-        await rm(toneFile);
-        if (failure === "unreadable") {
-          await mkdir(toneFile);
-          // Node's Linux recursive watcher can omit a rapid file-to-directory
-          // replacement. Save the manifest to trigger a reload of the bad source.
-          await writeFile(manifestFile, manifest, "utf8");
-        }
-      } else {
-        await writeFile(
-          toneFile,
-          failure === "yaml" ? "genres: [unterminated\n" : "genres: invalid\n",
-          "utf8",
-        );
-      }
-      changes.notify!("change", path.join("fixture-world", "tone.yaml"));
+      await writeFile(
+        toneFile,
+        failure === "yaml"
+          ? "tone: [unterminated\n"
+          : "tone:\n  genres: invalid\n",
+        "utf8",
+      );
+      changes.notify!(
+        "change",
+        path.join("fixture-world", "data/dimensions.yaml"),
+      );
       await vi.waitFor(() => expect(warn).toHaveBeenCalled(), {
         timeout: 5000,
       });
@@ -111,16 +95,15 @@ dimensionSources:
       expect(await store.getWorld("absent-package")).not.toBeNull();
       expect(emit).not.toHaveBeenCalled();
 
-      if (failure === "unreadable") await rm(toneFile, { recursive: true });
       await writeFile(
         toneFile,
-        "name: tone\nschema: {}\ninitialValue:\n  genres:\n    - adventure\n  contentRating: teen\n",
+        "tone:\n  name: tone\n  schema: {}\n  initialValue:\n    genres:\n      - adventure\n    contentRating: teen\n",
         "utf8",
       );
-      if (failure === "unreadable") {
-        await writeFile(manifestFile, manifest, "utf8");
-      }
-      changes.notify!("change", path.join("fixture-world", "tone.yaml"));
+      changes.notify!(
+        "change",
+        path.join("fixture-world", "data/dimensions.yaml"),
+      );
       await vi.waitFor(
         async () => {
           expect(await store.getWorld("fixture-world")).toMatchObject({

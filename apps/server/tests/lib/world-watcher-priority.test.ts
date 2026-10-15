@@ -23,16 +23,16 @@ it("ignores shadowed packages while reloading the higher-priority renamed packag
   );
   const update = (dir: string, genre: string) =>
     writeFile(
-      path.join(dir, "tone.yaml"),
-      `name: tone\nschema: {}\ninitialValue:\n  genres: [${genre}]\n  contentRating: teen\n`,
+      path.join(dir, "data/dimensions.yaml"),
+      `tone:\n  name: tone\n  schema: {}\n  initialValue:\n    genres: [${genre}]\n    contentRating: teen\n`,
       "utf8",
     );
   try {
     for (const [index, dir] of packages.entries()) {
-      await mkdir(dir, { recursive: true });
+      await mkdir(path.join(dir, "data"), { recursive: true });
       await writeFile(
         path.join(dir, "world.yaml"),
-        "id: shared-world\nname: Synthetic world\nsummary: Priority fixture.\ndefaultLocale: en-US\ndimensionSources:\n  tone: tone.yaml\n",
+        "id: shared-world\nname: Synthetic world\nsummary: Priority fixture.\ndefaultLocale: en-US\n",
         "utf8",
       );
       await update(dir, index === 0 ? "mystery" : "fantasy");

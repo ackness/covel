@@ -176,23 +176,18 @@ contributes:
       await mkdtemp(path.join(tmpdir(), "covel-described-world-")),
       "described-world",
     );
+    // Each file at the path its plugin names is a source: no descriptor.
+    // A directory convention (`data/rules/*.yaml`) takes any file name.
     await writeFiles(worldDir, {
       "world.yaml": `id: described-world
 name: Described World
 summary: Built from the describe output.
 defaultLocale: en-US
-worldData: data/world.data.yaml
 `,
       "WORLD.md": "Lore.",
-      "data/world.data.yaml": stringifyYaml({
-        schemaVersion: 1,
-        sources: Object.fromEntries(
-          authored.map((item) => [item.source!.id, item.source!.entry]),
-        ),
-      }),
       ...Object.fromEntries(
         authored.map((item) => [
-          item.source!.entry.path,
+          item.source!.entry.path.replace("*", "example"),
           item.source!.entry.kind === "json"
             ? JSON.stringify(item.example)
             : stringifyYaml(item.example),

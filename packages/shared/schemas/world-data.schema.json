@@ -102,10 +102,10 @@
             "description": "`hidden` imports into the receiving plugin's hidden namespace. The data stays out of prompts and player-visible surfaces until the plugin reveals it. Requires a `contract:` destination. Defaults to `public`."
           }
         },
-        "required": ["kind", "path", "to"],
+        "required": ["path"],
         "additionalProperties": false
       },
-      "description": "Data sources keyed by source ID. A source ID starts with a letter and uses letters, digits, `_` or `-`."
+      "description": "Changes to the conventional sources and further sources, keyed by source ID. An entry whose `path` is that of a conventional source changes it; any other entry adds a source and needs `kind` and `to`. A source ID starts with a letter and uses letters, digits, `_` or `-`."
     }
   },
   "required": ["sources"],

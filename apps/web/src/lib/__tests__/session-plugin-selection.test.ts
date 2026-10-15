@@ -65,10 +65,8 @@ const plan: WorldPluginPlan = {
   packs: [dialoguePack],
   selectedPackId: dialoguePack.id,
   policy: {
-    preferredTags: ["mode:dialogue"],
-    avoidedTags: [],
-    requested: ["pregame"],
-    recommended: ["chat-mode-narrator"],
+    preset: dialoguePack.id,
+    plus: ["pregame"],
     requires: [],
   },
   defaultPluginIds: ["pregame", "chat-mode-narrator", "scene-cast"],
@@ -138,7 +136,6 @@ describe("session plugin selection helpers", () => {
     requiredByWorld: "世界必需",
     requestedByWorld: "世界默认",
     packOptional: "组合包可选",
-    recommendedByWorld: "世界推荐",
   };
 
   it("explains recommendations from the resolved policy and pack", () => {
@@ -148,7 +145,7 @@ describe("session plugin selection helpers", () => {
   });
 
   it("calls a plugin required only when it provides a contract the world requires", () => {
-    // Requested by the world, yet nothing depends on it: a default, not a need.
+    // Added by the world, yet nothing depends on it: a default, not a need.
     expect(recommendationReason(plugins[0]!, plan, null, labels)).toBe(
       "世界默认",
     );

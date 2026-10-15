@@ -93,7 +93,7 @@ export function usePluginSelection(
         // Publish defaults with the plan so consumers never observe a ready
         // plan alongside the temporary core-only selection. A default the
         // initial pack also requests belongs to the pack, so the next pack can
-        // replace it even when the world's preferred tags selected it too.
+        // replace it even when the world's `plus` names it too.
         const initialPack = plan.packs.find(
           (pack) => pack.id === plan.selectedPackId,
         );

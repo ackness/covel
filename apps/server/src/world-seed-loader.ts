@@ -2,17 +2,13 @@
  * World seed loader — reads worlds/ directory and upserts into the DataStore.
  *
  * Each world package has:
- *   world.yaml  — manifest (id, name, summary, dimensions, tags, …)
+ *   world.yaml  — manifest (name, summary, defaultLocale, tags, …; the ID is
+ *                 the directory name unless `id` is written)
  *   WORLD.md    — default lore (fallback)
- *   WORLD.en-US.md — English lore (optional, locale-specific; the locale is
- *                    written exactly as the world's supportedLocales writes it)
+ *   WORLD.en-US.md — English lore (optional; with `world.en-US.yaml` it is
+ *                    what gives the world an `en-US` edition)
  *
  * Lore resolution: WORLD.<defaultLocale>.md → WORLD.md → empty string
- *
- * External dimension files:
- *   world.yaml `dimensionSources` maps dimension keys to relative file paths.
- *   Each file contains a validated dimension definition.
- *   Path traversal is prevented — all paths must resolve within the world directory.
  */
 
 import { readGeneratedWorldMarker } from "@covel/create";
@@ -23,20 +19,17 @@ import type { SessionLock } from "./lib/session-lock.js";
 import { isWorldDeleting, worldOperationLockId } from "./world-lifecycle.js";
 import { access, readFile, readdir } from "node:fs/promises";
 import path from "node:path";
-import { parse as parseYaml } from "yaml";
 import {
   validateWorldManifest,
   worldAccentColorSchema,
-  validateDimensionData,
   formatValidationErrors,
-  dimensionIdSchema,
   canonicalizeLocale,
+  WORLD_EDITIONS_KEY,
   WORLD_LOCALIZED_TEXT_KEY,
 } from "@covel/shared";
 import type { DataStore, WorldRecord } from "@covel/store";
 import { resolveContainedPath } from "./world-data/safe-path.js";
 import {
-  compileLocaleOverlays,
   findMisnamedLocaleFiles,
   misnamedLocaleMessage,
   readWorldManifestSource,
@@ -51,9 +44,9 @@ import {
 /**
  * Resolve a locale-aware file inside the world directory.
  * Priority: the file named with `defaultLocale` exactly → base file. A
- * translation file is named with the locale as the world's `supportedLocales`
- * writes it, and a session reads an edition the world declares, so a bare
- * language (`WORLD.en.md` for `en-US`) is never tried.
+ * translation file is named with the locale of its edition, and a session
+ * reads an edition the world has, so a bare language (`WORLD.en.md` for
+ * `en-US`) is never tried.
  */
 export async function resolveLocaleFilePath(
   worldDir: string,
@@ -99,95 +92,6 @@ async function resolveSafePath(
   return resolveContainedPath(worldDir, relativePath, {
     rejectSymlinks: true,
   });
-}
-
-/**
- * Load external dimension files referenced by `dimensionSources` in world.yaml.
- * Each file contains one dimension definition (name, schema, initialValue, rule).
- * External files take precedence over inline dimensions for the same key.
- *
- * Translations: `<name>.<locale>.<ext>` beside a file is a sparse overlay of
- * it. Every overlay is compiled into locale maps; `defaultLocale` names the
- * language of the main file.
- */
-export async function loadExternalDimensions(
-  worldDir: string,
-  sources: Record<string, string>,
-  worldId: string,
-  defaultLocale?: string,
-  declared: readonly string[] = defaultLocale ? [defaultLocale] : [],
-  /**
-   * Optional sink for the specific failure reason. Session import surfaces
-   * these to the author instead of a bare "sources failed validation".
-   */
-  onDiagnostic?: (message: string) => void,
-): Promise<Record<string, unknown> | null> {
-  const result: Record<string, unknown> = {};
-  const fail = (message: string): null => {
-    console.warn(message);
-    onDiagnostic?.(message);
-    return null;
-  };
-
-  for (const [key, relativePath] of Object.entries(sources)) {
-    // Validate dimension key
-    if (!dimensionIdSchema.safeParse(key).success) {
-      return fail(
-        `[world-seed] ${worldId}: invalid dimension ID "${key}" in dimensionSources`,
-      );
-    }
-
-    // Path traversal check on the declared path
-    if (!(await resolveSafePath(worldDir, relativePath))) {
-      return fail(
-        `[world-seed] ${worldId}: path traversal detected for "${key}": ${relativePath}`,
-      );
-    }
-
-    const resolvedPath = await resolveSafePath(worldDir, relativePath);
-    if (!resolvedPath || !(await fileExists(resolvedPath))) {
-      return fail(
-        `[world-seed] ${worldId}: dimension file not found for "${key}": ${relativePath}`,
-      );
-    }
-
-    try {
-      const content = await readFile(resolvedPath, "utf-8");
-      // `<name>.<locale>.<ext>` beside the file holds its translations.
-      const compiled = await compileLocaleOverlays({
-        root: worldDir,
-        relativePath,
-        base: parseYaml(content),
-        baseLocale: defaultLocale,
-        declared: [
-          ...new Set([...(defaultLocale ? [defaultLocale] : []), ...declared]),
-        ],
-      });
-      for (const issue of compiled.issues)
-        console.warn(
-          `[world-seed] ${worldId}: ${issue.file}: ${issue.path} ${issue.message}`,
-        );
-      const data = compiled.value;
-
-      // All authored dimensions use the same definition contract.
-      const validation = validateDimensionData(key, data);
-      if (!validation.valid) {
-        return fail(
-          `[world-seed] ${worldId}: invalid dimension file "${relativePath}" for "${key}":\n${formatValidationErrors(validation.errors!)}`,
-        );
-      }
-
-      result[key] = validation.data;
-    } catch (err) {
-      return fail(
-        `[world-seed] ${worldId}: failed to load dimension file "${relativePath}": ${
-          err instanceof Error ? err.message : String(err)
-        }`,
-      );
-    }
-  }
-
-  return result;
 }
 
 /**
@@ -241,6 +145,10 @@ export async function loadSingleWorld(
     console.warn(
       `[world-seed] ${path.basename(worldDir)}: world.yaml: ${field}: unknown field ignored`,
     );
+  if (validation.droppedSections?.length)
+    console.warn(
+      `[world-seed] ${path.basename(worldDir)}: world.yaml: pluginPolicy ignored; sessions start with the plugins every session has:\n${formatValidationErrors(validation.droppedSections)}`,
+    );
   if (!validation.valid) {
     const dirName = path.basename(worldDir);
     console.warn(
@@ -252,39 +160,17 @@ export async function loadSingleWorld(
   const manifest = validation.data as Record<string, unknown>;
   const worldId = manifest.id as string;
   const defaultLocale = manifest.defaultLocale as string | undefined;
-  const dimensionSources = manifest.dimensionSources as
-    Record<string, string> | undefined;
   const worldDataPath = manifest.worldData as string | undefined;
-
-  // Merge inline + external dimensions (external wins for same key)
-  const inlineDims = (manifest.dimensions as Record<string, unknown>) ?? {};
-  const externalDims = dimensionSources
-    ? await loadExternalDimensions(
-        worldDir,
-        dimensionSources,
-        worldId,
-        defaultLocale,
-        (manifest.supportedLocales as string[] | undefined) ?? [],
-      )
-    : {};
-  // A declared source is required. Partial reads must not erase the last
-  // valid dimensions or authorize reconciliation against an incomplete scan.
-  if (externalDims === null) return null;
-  const mergedDimensions = { ...inlineDims, ...externalDims };
+  const editions = source.editions;
+  const inlineDimensions =
+    (manifest.dimensions as Record<string, unknown>) ?? {};
 
   const lore = await readLore(worldDir, defaultLocale);
   const loreEditions = Object.fromEntries(
     await Promise.all(
-      [
-        ...new Set([
-          defaultLocale,
-          ...((manifest.supportedLocales as string[] | undefined) ?? []),
-        ]),
-      ]
-        .filter((locale): locale is string => typeof locale === "string")
-        .map(
-          async (locale) => [locale, await readLore(worldDir, locale)] as const,
-        ),
+      editions.map(
+        async (locale) => [locale, await readLore(worldDir, locale)] as const,
+      ),
     ),
   );
   const now = new Date().toISOString();
@@ -314,7 +200,9 @@ export async function loadSingleWorld(
         ? { generated: true }
         : {}),
       dimensions:
-        Object.keys(mergedDimensions).length > 0 ? mergedDimensions : undefined,
+        Object.keys(inlineDimensions).length > 0 ? inlineDimensions : undefined,
+      // The locales the world has content for; a session is in one of them.
+      ...(editions.length > 1 ? { [WORLD_EDITIONS_KEY]: editions } : {}),
     },
     now,
   );
@@ -345,17 +233,12 @@ export async function loadSingleWorld(
 
   // A translation file named with a bare language is never read. The seed
   // loader only says so; an installer rejects the package on the error.
-  const misnamed = await findMisnamedLocaleFiles(worldDir, [
-    ...new Set([
-      ...(defaultLocale ? [defaultLocale] : []),
-      ...((manifest.supportedLocales as string[] | undefined) ?? []),
-    ]),
-  ]);
+  const misnamed = await findMisnamedLocaleFiles(worldDir, editions);
   const misnamedDiagnostics: WorldDataDiagnostic[] = misnamed.map((item) => ({
     level: "error",
     path: item.file,
     message: `${misnamedLocaleMessage(item)}; the file is ignored`,
-    hint: `Rename it to \`${item.renamed}\`. A translation file uses the locale exactly as \`supportedLocales\` writes it.`,
+    hint: `Rename it to \`${item.renamed}\`. A translation file names the locale of its edition exactly.`,
   }));
   for (const item of misnamed)
     console.warn(

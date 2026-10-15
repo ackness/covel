@@ -151,10 +151,8 @@ describe("shared API contracts", () => {
         worldId: "world-1",
         packs: [],
         policy: {
-          preferredTags: [],
-          avoidedTags: [],
-          requested: [],
-          recommended: [],
+          preset: "traditional-story",
+          plus: ["dice-check"],
           requires: ["action-check@1"],
         },
         defaultPluginIds: ["memory"],

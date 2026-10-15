@@ -27,7 +27,6 @@ function files(id = "test-world", version = "1.0.0") {
       name: { "en-US": "Test", "zh-CN": "测试" },
       summary: "A world",
       defaultLocale: "en-US",
-      supportedLocales: ["en-US", "zh-CN"],
     }),
     [`worlds/${id}/WORLD.md`]: "A lighthouse waits for a keeper.",
   };
@@ -163,6 +162,26 @@ it("discovers multiple worlds and installs only the selected directory without r
     "worlds/test-world",
   );
 });
+it("names a world without `id` after its directory", async () => {
+  const unnamed = files("harbor-keeper");
+  const manifest = JSON.parse(unnamed["worlds/harbor-keeper/world.yaml"]!);
+  delete manifest.id;
+  unnamed["worlds/harbor-keeper/world.yaml"] = JSON.stringify(manifest);
+  archive = await zip(unnamed);
+  const [item] = await preview();
+  expect(item?.id).toBe("harbor-keeper");
+  const response = await request("world/github", {
+    token: item!.token,
+    acceptRisk: true,
+  });
+  expect(await response.json()).toMatchObject({
+    kind: "world",
+    id: "harbor-keeper",
+  });
+  expect(await readdir(root)).toEqual(["harbor-keeper"]);
+  expect(await store.getWorld("harbor-keeper")).not.toBeNull();
+});
+
 it("requires consent and prevents cross-kind token replay and duplicate installation", async () => {
   const [item] = await preview();
   expect((await request("world/github", { token: item!.token })).status).toBe(

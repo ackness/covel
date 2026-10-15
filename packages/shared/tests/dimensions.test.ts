@@ -39,7 +39,6 @@ describe("authored dimension definitions", () => {
       summary: "Wall",
       defaultLocale: "en-US",
       dimensions: { cityWall: wall },
-      dimensionSources: { discoveries: "discoveries.yaml" },
     });
     expect(manifest.dimensions?.cityWall?.initialValue).toBe(100);
   });

@@ -27,13 +27,9 @@ name: 灯潮港
 version: "0.1.0"
 summary: 一座靠回收潮汐灯火维生的港城，灯火正在一盏盏熄灭。
 defaultLocale: "zh-CN"
-supportedLocales: ["zh-CN"]
 tags: [mystery, harbor]
 pluginPolicy:
-  presetId: traditional-story
-  preferredTags: []
-  requested: []
-  recommended: []
+  preset: traditional-story
 dimensions:
   setting:
     name: 港城概况

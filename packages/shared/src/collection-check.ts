@@ -15,7 +15,7 @@ export interface CollectionPluginFacts {
 export interface CollectionWorldFacts {
   readonly id: string;
   readonly requires: readonly string[];
-  /** Plugin IDs requested by the policy and by every pack. */
+  /** Plugin IDs the world adds to its pack (`pluginPolicy.plus`). */
   readonly requested: readonly string[];
 }
 
@@ -52,21 +52,20 @@ export function collectionPluginFacts(
   };
 }
 
-/** Facts from a world.yaml that is already parsed as data. */
+/**
+ * Facts from a world.yaml that is already parsed as data. `directoryName`
+ * is the world's ID when the manifest writes none. The built-in packs it
+ * names come with every host, so only its `plus` plugins are requests.
+ */
 export function collectionWorldFacts(
   manifest: Readonly<Record<string, unknown>>,
+  directoryName?: string,
 ): CollectionWorldFacts {
   const policy = isRecord(manifest.pluginPolicy) ? manifest.pluginPolicy : {};
-  const packs = Array.isArray(policy.packs)
-    ? policy.packs.filter(isRecord)
-    : [];
   return {
-    id: String(manifest.id),
+    id: typeof manifest.id === "string" ? manifest.id : String(directoryName),
     requires: strings(policy.requires),
-    requested: [
-      ...strings(policy.requested),
-      ...packs.flatMap((pack) => strings(pack.requested)),
-    ],
+    requested: strings(policy.plus),
   };
 }
 
@@ -153,7 +152,7 @@ export function checkCollection(args: {
         problems.push({
           level: "warning",
           packageId: world.id,
-          message: `World ${world.id} requires ${contract}, which ${providers.join(", ")} all provide. Request one of them in the world's pluginPolicy, or players must choose.`,
+          message: `World ${world.id} requires ${contract}, which ${providers.join(", ")} all provide. Add one of them to the world's pluginPolicy.plus, or players must choose.`,
         });
     }
     for (const pluginId of new Set(world.requested))

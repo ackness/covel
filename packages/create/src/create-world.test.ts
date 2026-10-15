@@ -55,11 +55,7 @@ name: 测试世界
 version: 0.1.0
 summary: 一个用于生成器测试的世界。
 defaultLocale: zh-CN
-supportedLocales: [zh-CN]
 tags: [test]
-pluginPolicy:
-  requested: []
-  recommended: []
 dimensions:
   geography:
     name: geography
@@ -253,15 +249,10 @@ describe("createWorld", () => {
     const yaml = WORLD_YAML.replace(
       "defaultLocale: zh-CN",
       "defaultLocale: zh_hant_tw",
-    )
-      .replace(
-        "supportedLocales: [zh-CN]",
-        "supportedLocales: [zh_hant_tw, en_us]",
-      )
-      .replace(
-        "tags: [test]",
-        "tags: [test]\ncharacterSchema:\n  attributes:\n    - id: affinity\n      name: 关系\n      type: number\n      category: social\npluginSettings:\n  memory:\n    cadence: 2",
-      );
+    ).replace(
+      "tags: [test]",
+      "tags: [test]\ncharacterSchema:\n  attributes:\n    - id: affinity\n      name: 关系\n      type: number\n      category: social\npluginSettings:\n  memory:\n    cadence: 2",
+    );
     const result = await createWorld({
       llm: new FixedLlm(
         `===WORLD_YAML===\n${yaml}\n===WORLD_MD===\n${WORLD_LORE}\n===END===`,
@@ -275,7 +266,6 @@ describe("createWorld", () => {
     expect(result.locale).toBe("zh-Hant-TW");
     expect(result.manifest).toMatchObject({
       defaultLocale: "zh-Hant-TW",
-      supportedLocales: ["zh-Hant-TW"],
       characterSchema: {
         types: ["npc", "companion"],
         attributes: [
@@ -294,10 +284,12 @@ describe("createWorld", () => {
   });
 
   it("binds new manifest and export editions to the canonical request locale", async () => {
+    // The model also lists languages: the world's editions come from its
+    // files, so the old field is dropped.
     const yaml = WORLD_YAML.replace(
       "defaultLocale: zh-CN",
       "defaultLocale: en-US",
-    ).replace("supportedLocales: [zh-CN]", "supportedLocales: [en-US, ru-RU]");
+    ).replace("tags: [test]", "tags: [test]\nsupportedLocales: [en-US, ru-RU]");
     const result = await createWorld({
       llm: new FixedLlm(
         `===WORLD_YAML===\n${yaml}\n===WORLD_MD===\n${WORLD_LORE}\n===END===`,
@@ -307,16 +299,14 @@ describe("createWorld", () => {
     });
     if (!result.success) throw new Error(result.errors.join("; "));
     expect(result.locale).toBe("zh-CN");
-    expect(result.manifest).toMatchObject({
-      defaultLocale: "zh-CN",
-      supportedLocales: ["zh-CN"],
-    });
+    expect(result.manifest).toMatchObject({ defaultLocale: "zh-CN" });
+    expect(result.manifest).not.toHaveProperty("supportedLocales");
     await writeWorldPackage(tmp, result);
-    expect(
-      parseYaml(
-        await readFile(path.join(tmp, result.id, "world.yaml"), "utf8"),
-      ),
-    ).toMatchObject({ defaultLocale: "zh-CN", supportedLocales: ["zh-CN"] });
+    const written = parseYaml(
+      await readFile(path.join(tmp, result.id, "world.yaml"), "utf8"),
+    );
+    expect(written).toMatchObject({ defaultLocale: "zh-CN" });
+    expect(written).not.toHaveProperty("supportedLocales");
     expect(await readdir(path.join(tmp, result.id))).not.toContain(
       "WORLD.en-US.md",
     );
@@ -802,11 +792,7 @@ name: 测试世界
 version: 0.1
 summary: 一个用于生成器测试的世界。
 defaultLocale: zh-CN
-supportedLocales: [zh-CN]
 tags: [test]
-pluginPolicy:
-  requested: []
-  recommended: []
 extraRoot: ignored
 dimensions:
   factions:
@@ -1007,10 +993,10 @@ contractData:
       path.join(tmp, "test-world", "data/lorebook.yaml"),
       "utf8",
     );
-    expect(manifest).toContain("presetId: dialogue-mode");
+    expect(manifest).toContain("preset: dialogue-mode");
     expect(manifest).toContain("defaultViewMode: stage");
     expect(manifest).not.toContain("memoryBlocks:");
-    expect(manifest).toMatch(/requested:[\s\S]*- memory/);
+    expect(manifest).toMatch(/plus:[\s\S]*- memory/);
     expect(descriptor).toContain("to: contract:memory.blocks@1");
     expect(descriptor).not.toContain("schemaVersion:");
     expect(
@@ -1024,8 +1010,10 @@ contractData:
       id: "world",
       blocks: [{ label: "time_debt" }, { label: "erased_clues" }],
     });
-    expect(descriptor).toContain("to: characters");
-    expect(descriptor).toContain("to: lorebook");
+    // Characters and lore are at their conventional paths: the descriptor
+    // only adds the file no plugin names.
+    expect(descriptor).not.toContain("to: characters");
+    expect(descriptor).not.toContain("to: lorebook");
     expect(characters).toHaveLength(3);
     expect(lorebook).toContain("sourceKind: rule");
   });
@@ -1037,8 +1025,8 @@ describe("createWorld plugin pack", () => {
       // The model writes a preset and a view of its own; the brief decides.
       llm: new FixedLlm(
         `===WORLD_YAML===\n${WORLD_YAML.replace(
-          "pluginPolicy:\n",
-          "pluginPolicy:\n  presetId: traditional-story\n",
+          "tags: [test]",
+          "tags: [test]\npluginPolicy:\n  preset: traditional-story",
         )}defaultViewMode: stage\n===WORLD_MD===\n${WORLD_LORE}\n===END===`,
       ),
       concept: "Clockwork city",
@@ -1051,7 +1039,7 @@ describe("createWorld plugin pack", () => {
     const stage = await generate({ pack: "dialogue-mode" });
     if (!stage.success) throw new Error(stage.errors.join("; "));
     expect(stage.manifest).toMatchObject({
-      pluginPolicy: { presetId: "dialogue-mode" },
+      pluginPolicy: { preset: "dialogue-mode" },
       defaultViewMode: "stage",
     });
 
@@ -1060,14 +1048,14 @@ describe("createWorld plugin pack", () => {
     const plain = await generate({ pack: "tea-house" });
     if (!plain.success) throw new Error(plain.errors.join("; "));
     expect(plain.manifest.pluginPolicy).toMatchObject({
-      presetId: "tea-house",
+      preset: "tea-house",
     });
     expect(plain.manifest).not.toHaveProperty("defaultViewMode");
 
     // Without a pack the world names none.
     const none = await generate({ content: [] });
     if (!none.success) throw new Error(none.errors.join("; "));
-    expect(none.manifest.pluginPolicy).not.toHaveProperty("presetId");
+    expect(none.manifest).not.toHaveProperty("pluginPolicy");
     expect(none.manifest).not.toHaveProperty("defaultViewMode");
   });
 
@@ -1128,7 +1116,7 @@ describe("buildWorldPrompt", () => {
     );
     // The pack as the catalogue describes it, in the world's language.
     expect(prompt).toContain(
-      "Plugin pack: 对话模式 (presetId dialogue-mode). 对话优先叙事。",
+      "Plugin pack: 对话模式 (preset dialogue-mode). 对话优先叙事。",
     );
     expect(prompt).toContain("CREATE: 3-5 interconnected main character");
     expect(prompt).toContain("OMIT: 4-8 focused setting entries");
@@ -1173,12 +1161,9 @@ describe("createWorld revision", () => {
     }
   }
 
-  it("does not clamp existing revision editions to the request locale", async () => {
+  it("keeps a revised world in its own language whatever the request locale", async () => {
     const yaml =
-      WORLD_YAML.replace(
-        "supportedLocales: [zh-CN]",
-        "supportedLocales: [zh-CN, en-US]",
-      ) +
+      WORLD_YAML +
       `characterSchema:\n  attributes:\n    - { id: affinity, name: Affinity, type: number, category: social }\n`;
     const result = await createWorld({
       llm: new RecordingLlm([sections("UNCHANGED", "UNCHANGED", "UNCHANGED")]),
@@ -1193,7 +1178,6 @@ describe("createWorld revision", () => {
     expect(result.locale).toBe("en-US");
     expect(result.manifest).toMatchObject({
       defaultLocale: "zh-CN",
-      supportedLocales: ["zh-CN", "en-US"],
       characterSchema: { types: ["npc", "companion"] },
     });
   });

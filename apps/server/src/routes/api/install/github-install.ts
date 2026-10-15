@@ -10,6 +10,7 @@ import {
   httpError,
   materializeEntries,
   readInstallationJson,
+  type ExtractedEntry,
 } from "./shared.js";
 import {
   inspectBundle,
@@ -28,7 +29,11 @@ import {
   selectPackageEntries,
 } from "./github-source.js";
 
-import { findWorldDirectories, inspectWorldBundle } from "./github-world.js";
+import {
+  findWorldDirectories,
+  inspectWorldBundle,
+  worldPackageName,
+} from "./github-world.js";
 import { activateWorldPackage } from "./worlds.js";
 import { requireAccess } from "../../../host-profile.js";
 
@@ -37,7 +42,17 @@ export function createGithubInstallRoutes(kind: "plugin" | "world") {
   const action = kind === "world" ? "world-install" : "install";
   const findDirectories =
     kind === "world" ? findWorldDirectories : findPluginDirectories;
-  const inspect = kind === "world" ? inspectWorldBundle : inspectBundle;
+  const inspect = (
+    bundle: readonly ExtractedEntry[],
+    reserved: ReadonlySet<string>,
+    source: { readonly repository: string; readonly path: string },
+  ) =>
+    kind === "world"
+      ? inspectWorldBundle(
+          bundle,
+          worldPackageName(source.repository, source.path),
+        )
+      : inspectBundle(bundle, reserved);
   githubPluginRoutes.use("*", async (c, next) => {
     if (kind === "world") {
       const denied = requireAccess(c, "world.write");
@@ -63,12 +78,16 @@ export function createGithubInstallRoutes(kind: "plugin" | "world") {
       );
       const reserved = c.get("reservedPluginIds") ?? new Set<string>();
       const items = [];
+      const repository = `https://github.com/${location.owner}/${location.repo}`;
       for (const directory of findDirectories(entries, location.directory)) {
         const bundle = selectPackageEntries(entries, directory);
         const preview = {
-          ...(await inspect(bundle, reserved)),
+          ...(await inspect(bundle, reserved, {
+            repository,
+            path: directory,
+          })),
           source: {
-            repository: `https://github.com/${location.owner}/${location.repo}`,
+            repository,
             commit,
             path: directory,
             digest: digestEntries(bundle),
@@ -112,6 +131,7 @@ export function createGithubInstallRoutes(kind: "plugin" | "world") {
       const summary = await inspect(
         entries,
         c.get("reservedPluginIds") ?? new Set<string>(),
+        preview.source,
       );
       if (summary.id !== preview.id)
         throw httpError(409, "Package identity changed");

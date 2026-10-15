@@ -1,5 +1,4 @@
 import {
-  WORLD_EDITIONS_KEY,
   WORLD_LOCALIZED_TEXT_KEY,
   WORLD_PACKAGE_INFO_KEY,
   packageInfoOf,
@@ -7,7 +6,11 @@ import {
 } from "@covel/shared";
 import type { WorldRecord } from "@covel/store";
 
-/** Project a validated manifest into the common file/store world record. */
+/**
+ * Project a validated manifest into the common file/store world record. The
+ * editions of a package (`WORLD_EDITIONS_KEY`) come from its files; the
+ * loader passes them in `metadata`.
+ */
 export function worldRecordFromManifest(
   manifest: Readonly<Record<string, unknown>>,
   lore: string,
@@ -43,7 +46,6 @@ export function worldRecordFromManifest(
     metadata: {
       dimensions:
         dimensions && Object.keys(dimensions).length ? dimensions : undefined,
-      dimensionSources: manifest.dimensionSources,
       pluginPolicy: manifest.pluginPolicy,
       pluginSettings: manifest.pluginSettings,
       worldDataPath: manifest.worldData,
@@ -54,10 +56,6 @@ export function worldRecordFromManifest(
       ...(manifest.themeMusic ? { themeMusic: manifest.themeMusic } : {}),
       ...(manifest.cover ? { cover: manifest.cover } : {}),
       ...(manifest.accentColor ? { accentColor: manifest.accentColor } : {}),
-      // The locales the world has content for; a session is in one of them.
-      ...(Array.isArray(manifest.supportedLocales)
-        ? { [WORLD_EDITIONS_KEY]: manifest.supportedLocales }
-        : {}),
       ...(Object.keys(localizedText).length
         ? { [WORLD_LOCALIZED_TEXT_KEY]: localizedText }
         : {}),

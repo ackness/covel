@@ -77,7 +77,7 @@ export interface AuthoringPlugin {
 
 /**
  * A plugin pack of the server's catalogue. A world names one in
- * `pluginPolicy.presetId`; the world generator offers them as choices.
+ * `pluginPolicy.preset`; the world generator offers them as choices.
  */
 export interface AuthoringPack {
   readonly id: string;
@@ -117,13 +117,13 @@ const WORLD_FILES: AuthoringSurface["files"] = [
   {
     path: "world.yaml",
     purpose:
-      "World manifest: identity, locales, plugin selection, character schema. Written in one language, the `defaultLocale`.",
+      "World manifest: name, summary, `defaultLocale`, plugin selection, character schema. Written in one language, the `defaultLocale`. The world's ID defaults to the name of its directory.",
     reference: "docs/reference/schema/world-manifest.md",
   },
   {
     path: "<file>.<locale>.<ext>",
     purpose:
-      "Translation of the YAML or JSON file beside it, for example `world.en-US.yaml` or `data/dimensions.en-US.yaml`, with the locale written exactly as `supportedLocales` writes it. It holds only translated text under the same keys and ids; it does not repeat structure. Never write a locale map inside a main file.",
+      "Translation of the YAML or JSON file beside it, for example `world.en-US.yaml` or `data/dimensions.en-US.yaml`, with the whole locale (`en-US`, not `en`). It holds only translated text under the same keys and ids; it does not repeat structure. A world has an edition in each locale it has `world.<locale>.yaml` or `WORLD.<locale>.md` for. Never write a locale map inside a main file.",
     reference: "docs/reference/world-data.md",
   },
   {
@@ -134,7 +134,7 @@ const WORLD_FILES: AuthoringSurface["files"] = [
   {
     path: "data/world.data.yaml",
     purpose:
-      "Optional world data descriptor. Without it, every file at a path listed below is a data source. Write one for a file at another path, several files of one kind, or an order between sources; `worldData` in `world.yaml` names it, and then only the sources it lists are imported.",
+      "Optional world data descriptor; `worldData` in `world.yaml` names it. Every file at a path listed below is a data source without it. An entry with the path of such a file changes that source (`enabled: false` turns it off); any other entry adds a source and needs `kind` and `to`.",
     reference: "docs/reference/schema/world-data-descriptor.md",
   },
   {
@@ -164,7 +164,7 @@ const KERNEL_TEXT: Readonly<
   },
 };
 
-// The same list the importer reads a package without a descriptor by.
+// The same list the importer reads every package by.
 const KERNEL_DESTINATIONS: readonly AuthoringDestination[] = KERNEL_SOURCES.map(
   (source) => ({
     ...KERNEL_TEXT[source.id]!,

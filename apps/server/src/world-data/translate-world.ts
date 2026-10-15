@@ -1,6 +1,5 @@
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { parseDocument } from "yaml";
 import {
   extractGlossary,
   translateTexts,
@@ -207,26 +206,20 @@ export async function translateWorldPackage(
 }
 
 /**
- * State in `world.yaml` that the world has an edition in `locale`, so that a
- * session may use it. Comments and the order of the file are kept.
+ * Make sure the world has an edition in `locale`. A world has one while it
+ * has `world.<locale>.yaml` or `WORLD.<locale>.md`; when a translation wrote
+ * neither, an empty `world.<locale>.yaml` is written. Returns the file
+ * written, if any.
  */
-export async function declareWorldEdition(
+export async function ensureWorldEdition(
   worldDir: string,
   locale: string,
-): Promise<boolean> {
-  const file = path.join(worldDir, "world.yaml");
-  const document = parseDocument(await readFile(file, "utf-8"));
+): Promise<string | undefined> {
   const wanted = canonicalizeLocale(locale) ?? locale;
-  const base = document.get("defaultLocale");
-  const declared = document.toJS()?.supportedLocales;
-  const editions: string[] = Array.isArray(declared)
-    ? declared.filter((item): item is string => typeof item === "string")
-    : typeof base === "string"
-      ? [base]
-      : [];
-  if (editions.some((item) => (canonicalizeLocale(item) ?? item) === wanted))
-    return false;
-  document.set("supportedLocales", [...editions, wanted]);
-  await writeFile(file, document.toString({ lineWidth: 0 }));
-  return true;
+  for (const file of [`world.${wanted}.yaml`, `WORLD.${wanted}.md`])
+    if (await stat(path.join(worldDir, file)).catch(() => undefined))
+      return undefined;
+  const file = `world.${wanted}.yaml`;
+  await writeFile(path.join(worldDir, file), "{}\n");
+  return file;
 }

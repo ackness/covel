@@ -711,6 +711,7 @@ namespace 接收某个契约，就说明了这个契约的记录长什么样。�
 请求期读取示例或准备可生成契约的 schema 失败时，只略过该契约并报告插件、namespace 和原因，不会停用整个插件或阻止其他内容生成。`pnpm describe:authoring --check` 仍把损坏的示例报给作者。
 
 - 只有列出了 `accepts` 的 namespace 才能声明它。
+- `source` 是世界包里放这份内容的约定路径（`kind`、`path`、`key`）。世界作者把文件放在这里就能导入，不用写 descriptor。`path` 的最后一段可以写成 `*.<扩展名>`（例如 `data/rules/*.yaml`）：目录里每个这样的文件都是一个 source，按文件名顺序导入。规则见[按约定导入](./world-data.md#按约定导入)。
 - `pnpm describe:authoring` 汇总所有已扫描插件的声明；加 `--check` 会按 namespace 的 schema 校验每份 `example`。
 - 字段见 [Plugin manifest 字段表](./schema/plugin-manifest.md)。
 
@@ -804,7 +805,7 @@ namespace 声明 `search` 之后，它的记录进入框架的记忆检索（[`m
 
 **世界和玩法包怎样给出初始请求。**
 
-- 世界的 `pluginPolicy` 使用 `presetId/preferredTags/avoidedTags/requested/recommended/packs`。玩法包使用 `requested/recommended`。
+- 世界的 `pluginPolicy` 用 `preset` 选一个内置玩法包，用 `plus` 加上自己要的插件，见[插件选择](./world-data.md#插件选择pluginpolicy)。玩法包使用 `requested/recommended`。初始的显式请求是 `preset` 玩法包的 `requested` 加上 `plus`。
 - 内置玩法包（`packs/builtin.yaml`）还可以写 `defaultViewMode`（`stage` 或 `parsed`）。AI 创建世界时选了这个玩法包，生成的世界就带上这个 `defaultViewMode`。框架不按玩法包的 ID 做判断：AI 创建世界的选项就是这份目录里的全部玩法包，见 [`GET /api/framework/authoring`](./api.md#get-apiframeworkauthoring) 的 `packs`。
 - 推荐项不自动启用，也不会覆盖玩家的显式排除。
 - `GET /api/worlds/:id/plugin-plan` 的 `defaultPluginIds` 是初始的显式请求。准备页和创建端再用同一个解析器计算活动集合。
@@ -814,12 +815,12 @@ namespace 声明 `search` 之后，它的记录进入框架的记忆检索（[`m
 
 - 切换玩法包不会改变视图模式。玩法包的 `defaultViewMode` 只在 AI 生成世界时写进世界。
 - 切换会替换上一个包贡献的请求，包括世界初始选中的包。
-- 初始默认请求里同时被初始包请求的插件归该包所有，即使它也命中世界的 `preferredTags`。切换后只有新包也请求它才保留，所以新包的叙事引擎能替换旧包的引擎。
-- 其他初始默认请求、世界的 `requested` 和玩家手动添加的请求保留。显式排除继续优先。
+- 初始默认请求里被初始包请求的插件归该包所有。切换后只有新包也请求它才保留，所以新包的叙事引擎能替换旧包的引擎。
+- 世界的 `plus` 和玩家手动添加的请求保留。显式排除继续优先。
 - 手动修改会清除包卡片的高亮，但旧包的来源仍然记着，下一次切换不会把旧包累加进来。手动重新启用的包内插件作为手选保留。
-- 世界的 `requires` 仍由解析器独立校验。不能把 `requested` 当作不可取消的必需项。
+- 世界的 `requires` 仍由解析器独立校验。不能把 `plus` 当作不可取消的必需项。
 - 玩法包可以带 `excluded`：选中这个包时关掉其中的插件，`kind: core` 的也一样，玩家可以再打开。切换到下一个包时只撤销上一个包加的排除，玩家自己的排除保留。世界初始选中的包，它的排除从一开始就生效。没有安装的插件不出现在 `excluded` 里。
-- “回到最小集合”按钮只留叙事插件（已选的；一个都没选时用 core 里的），以及它们和世界的 `requires` 拉进来的插件。不会额外要求 `world.dimensions@1` 的提供者；其余的 core 插件和世界 `requested` 的插件都被排除，玩法包的高亮清除。
+- “回到最小集合”按钮只留叙事插件（已选的；一个都没选时用 core 里的），以及它们和世界的 `requires` 拉进来的插件。不会额外要求 `world.dimensions@1` 的提供者；其余的 core 插件和世界 `plus` 的插件都被排除，玩法包的高亮清除。
 
 **存档固定玩家确认的那一组。**
 

@@ -13,6 +13,7 @@ import {
   type PluginManifest,
   type WorldPluginPlan,
 } from "@covel/shared";
+import { BUILTIN_PLUGIN_PACKS } from "../../src/config/plugin-packs.js";
 import { buildPluginSummary } from "../../src/lib/plugin-descriptor.js";
 import { worldPluginPlanRoutes } from "../../src/routes/api/worlds/plugin-plan.js";
 import {
@@ -80,112 +81,80 @@ describe("GET /api/worlds/:id/plugin-plan", () => {
     expect(response.status).toBe(200);
     return response.json();
   }
-  it("returns explicit requests from the preset and preferred tags without promoting core defaults", async () => {
+  it("starts from the preset pack, presented with the world's pitch, and adds plus", async () => {
+    registry.register(entry("chat-mode-narrator"));
     const result = await plan({
-      presetId: "custom",
-      preferredTags: ["mode:dialogue"],
-      avoidedTags: ["mode:traditional"],
-      packs: [
-        {
-          id: "custom",
-          label: { "zh-CN": "自定义", invalid: 42 },
-          requested: ["dialogue"],
-          recommended: ["traditional"],
-        },
-      ],
+      preset: "dialogue-mode",
+      plus: ["traditional"],
+      pitch: { label: { "zh-CN": "自定义", invalid: 42 }, reason: "Because" },
     });
-    expect(result.selectedPackId).toBe("custom");
-    expect(result.defaultPluginIds).toEqual(["dialogue"]);
+    expect(result.selectedPackId).toBe("dialogue-mode");
+    expect(result.policy).toEqual({
+      preset: "dialogue-mode",
+      plus: ["traditional"],
+      requires: [],
+    });
     expect(result.packs[0]).toMatchObject({
+      id: "dialogue-mode",
       label: { "zh-CN": "自定义" },
-      requested: ["dialogue"],
-      recommended: ["traditional"],
+      reason: "Because",
+      source: "world",
+      requested: ["chat-mode-narrator"],
     });
+    expect(result.defaultPluginIds).toEqual([
+      "chat-mode-narrator",
+      "traditional",
+    ]);
+    // Core plugins join at session creation; the plan does not list them.
     expect(
       resolveSessionPluginPlan(result.defaultPluginIds, registry).active,
-    ).toEqual(["dialogue", "core"]);
+    ).toEqual(["chat-mode-narrator", "traditional", "core"]);
   });
-  it("keeps recommendations inactive until explicitly requested", async () => {
+  it("offers the built-in packs that packs names, the preset first", async () => {
     const result = await plan({
-      recommended: ["dialogue"],
-      presetId: "recommendations",
-      packs: [
-        { id: "recommendations", requested: [], recommended: ["traditional"] },
-      ],
+      preset: "low-cost",
+      packs: ["dialogue-mode", "low-cost"],
     });
-    expect(result.defaultPluginIds).toEqual([]);
-    expect(result.policy.recommended).toEqual(["dialogue"]);
-  });
-  it("preserves explicit requests despite avoided tag preferences", async () => {
-    const result = await plan({
-      requested: ["traditional"],
-      preferredTags: ["mode:dialogue"],
-      avoidedTags: ["mode:traditional"],
-    });
-    expect(result.defaultPluginIds).toEqual(["traditional", "dialogue"]);
-  });
-  it("reports requested plugins the registry lacks instead of passing them on", async () => {
-    const result = await plan({
-      presetId: "custom",
-      requested: ["dialogue", "absent-from-policy"],
-      packs: [
-        {
-          id: "custom",
-          label: "Custom",
-          requested: ["traditional", "absent-from-pack"],
-          recommended: ["absent-recommended"],
-        },
-      ],
-    });
-    expect(result.policy.requested).toEqual(["dialogue"]);
-    expect(result.packs[0]).toMatchObject({
-      requested: ["traditional"],
-      recommended: ["absent-recommended"],
-    });
-    expect(result.defaultPluginIds).toEqual(["dialogue", "traditional"]);
-    // Builtin packs name plugins this test registry does not hold either.
-    expect(
-      result.missing.filter((item) => (item.packId ?? "custom") === "custom"),
-    ).toEqual([
-      { pluginId: "absent-from-policy" },
-      { pluginId: "absent-from-pack", packId: "custom" },
+    expect(result.packs.map((pack) => pack.id)).toEqual([
+      "low-cost",
+      "dialogue-mode",
     ]);
+    expect(result.packs[0]?.source).toBe("builtin");
+  });
+  it("offers every built-in pack and selects none without a preset", async () => {
+    const result = await plan({ plus: ["dialogue"] });
+    expect(result.selectedPackId).toBeUndefined();
+    expect(result.packs.map((pack) => pack.id)).toEqual(
+      BUILTIN_PLUGIN_PACKS.map((pack) => pack.id),
+    );
+    expect(result.defaultPluginIds).toEqual(["dialogue"]);
+  });
+  it("ignores a preset that is not a built-in pack", async () => {
+    const result = await plan({ preset: "custom", plus: ["dialogue"] });
+    expect(result.selectedPackId).toBeUndefined();
+    expect(result.policy.preset).toBeUndefined();
+    expect(result.defaultPluginIds).toEqual(["dialogue"]);
+  });
+  it("reports plugins the registry lacks instead of passing them on", async () => {
+    const result = await plan({
+      preset: "dialogue-mode",
+      plus: ["dialogue", "absent-from-policy"],
+    });
+    expect(result.policy.plus).toEqual(["dialogue"]);
+    expect(result.packs[0]?.requested).toEqual([]);
+    expect(result.defaultPluginIds).toEqual(["dialogue"]);
+    expect(result.missing).toContainEqual({ pluginId: "absent-from-policy" });
+    expect(result.missing).toContainEqual({
+      pluginId: "chat-mode-narrator",
+      packId: "dialogue-mode",
+    });
     // What the plan hands out is accepted by session creation as it is.
     expect(
       unknownPluginIds(
-        [...result.defaultPluginIds, ...result.policy.requested],
+        [...result.defaultPluginIds, ...result.policy.plus],
         registry,
       ),
     ).toEqual([]);
-  });
-  it("hands out a pack's exclusions of installed plugins, core ones included", async () => {
-    const result = await plan({
-      presetId: "lean",
-      packs: [
-        {
-          id: "lean",
-          label: "Lean",
-          requested: ["traditional"],
-          excluded: ["core", "absent-excluded"],
-        },
-      ],
-    });
-    const lean = result.packs.find((pack) => pack.id === "lean");
-    expect(lean?.excluded).toEqual(["core"]);
-    // Excluding a plugin this host lacks changes nothing, so it is no miss.
-    expect(result.missing).not.toContainEqual(
-      expect.objectContaining({ pluginId: "absent-excluded" }),
-    );
-    expect(
-      resolveSessionPluginPlan(result.defaultPluginIds, registry, {
-        excluded: lean?.excluded,
-      }).active,
-    ).toEqual(["traditional"]);
-    // The builtin narrative-only pack turns the other core plugins off.
-    const narrativeOnly = result.packs.find(
-      (pack) => pack.id === "narrative-only",
-    );
-    expect(narrativeOnly?.source).toBe("builtin");
   });
 
   it("offers only the narrator and excludes installed world-init in Narrative Only", async () => {
@@ -193,11 +162,15 @@ describe("GET /api/worlds/:id/plugin-plan", () => {
     registry.register(
       entry("world-init", { kind: "core", provides: ["world.dimensions@1"] }),
     );
-    const result = await plan({ presetId: "narrative-only" });
+    const result = await plan({ preset: "narrative-only" });
     const pack = result.packs.find((item) => item.id === "narrative-only");
     expect(result.defaultPluginIds).toEqual(["narrator"]);
     expect(pack?.requested).toEqual(["narrator"]);
-    expect(pack?.excluded).toContain("world-init");
+    // Turning off a plugin this host lacks changes nothing, so it is no miss.
+    expect(pack?.excluded).toEqual(["world-init"]);
+    expect(
+      result.missing.filter((item) => item.packId === "narrative-only"),
+    ).toEqual([]);
     expect(
       resolveSessionPluginPlan(result.defaultPluginIds, registry, {
         excluded: pack?.excluded,
@@ -252,7 +225,7 @@ describe("GET /api/worlds/:id/plugin-plan", () => {
         ),
       );
       registry.register(entry("dependency", { provides: ["helper@1"] }));
-      const result = await plan({ requested: ["replacement"] });
+      const result = await plan({ plus: ["replacement"] });
       expect(result.defaultPluginIds).toEqual(["replacement"]);
       const resolved = resolveSessionPluginPlan(
         result.defaultPluginIds,

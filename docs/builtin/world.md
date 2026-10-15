@@ -119,7 +119,7 @@
 
 **什么时候启用**：可选。三个内置方案都包含它。
 
-**世界作者可以预置什么**：`data/rules/world-rules.yaml`，每条规则写一件叙事不能违背的事，用平实的句子说清规则和后果。不要把已经由维度记录的数值再写一遍。字段见[世界数据](../reference/world-data.md)，也可以运行 `pnpm describe:authoring`。
+**世界作者可以预置什么**：`data/rules/` 下的 `.yaml` 文件，一个文件一组规则，按文件名顺序导入。每条规则写一件叙事不能违背的事，用平实的句子说清规则和后果。不要把已经由维度记录的数值再写一遍。字段见[世界数据](../reference/world-data.md)，也可以运行 `pnpm describe:authoring`。
 
 ## 设定图鉴（`codex`）
 

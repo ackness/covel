@@ -4,9 +4,6 @@ name: 雾港・裂潮纪
 version: 0.3.0
 summary: 潮钟三鸣，失踪的公会长与一把破碎的钥匙，把你卷入永雾港城的四方暗战。
 defaultLocale: zh-CN
-supportedLocales:
-  - zh-CN
-  - en-US
 tags:
   - dark-fantasy
   - mystery
@@ -18,52 +15,18 @@ license: MIT
 cover: media/gallery/world-cover.webp
 accentColor: "oklch(72% 0.1 185)"
 pluginPolicy:
-  packs:
-    - id: mistport-investigation
-      label: 雾港调查剧
-      description: 以传统叙事推进齐老失踪案，并启用线索记忆、关系图谱、世界规则、预设角色与立绘。
-      tags:
-        - mode:traditional-story
-        - data:characters
-      reason: 案情板、四方立场、深退潮与钥匙碎片每回合随剧情结算，配合潮时、雾蚀与七名核心角色，让长线调查的每个选择都留下痕迹。
-      requested:
-        - pregame
-        - world-init
-        - char-creator
-        - narrator
-        - guide
-        - codex
-        - npc-graph
-        - memory
-        - living-world-rules
-        - character-blueprint
-        - story-events
-      recommended: []
-  presetId: mistport-investigation
-  preferredTags:
-    - mode:traditional-story
-  avoidedTags:
-    - mode:dialogue
-  requested:
-    - pregame
-    - world-init
-    - char-creator
-    - narrator
-  recommended:
-    - guide
-    - codex
-    - npc-graph
-    - memory
-    - living-world-rules
+  preset: traditional-story
+  plus:
     - character-blueprint
     - story-events
+  pitch:
+    label: 雾港调查剧
+    description: 以传统叙事推进齐老失踪案，并启用线索记忆、关系图谱、世界规则、预设角色与立绘。
+    reason: 案情板、四方立场、深退潮与钥匙碎片每回合随剧情结算，配合潮时、雾蚀与七名核心角色，让长线调查的每个选择都留下痕迹。
 pluginSettings:
   story-events:
     planner: true
 characterSchema:
-  types:
-    - npc
-    - companion
   attributes:
     - id: persona
       name: 性格
@@ -199,4 +162,3 @@ characterSchema:
       type: string
       category: social
       description: 对玩家的态度
-worldData: data/world.data.yaml

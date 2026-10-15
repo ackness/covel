@@ -1424,7 +1424,9 @@ Notes on each endpoint:
 
 - `GET /api/plugins`: the data comes from a snapshot of the registry. Plugins that failed to load are also returned, as an item with `status: "error"`. In that `error` text the server's absolute plugin-directory path is written as `<plugin>` (for example `<plugin>/PLUGIN.md: …`); the full original message goes only to the server log.
 - `GET /api/worlds/:id/plugin-plan`: the server resolves the world's plugin policy, the packs, and the default selection.
-  - Each `requested` and `defaultPluginIds` list contains only installed plugins.
+  - `policy` is `{ preset?, plus, requires }`. `packs` lists the `preset` pack first; when the world writes a `pitch`, that pack's `label`, `description` and `reason` are the world's words and its `source` is `"world"`. Then come the packs in the world's `pluginPolicy.packs`, or every built-in pack when it is not written. `selectedPackId` is `preset`.
+  - `defaultPluginIds` is the `preset` pack's `requested` plus `plus`.
+  - Each `requested`, `plus` and `defaultPluginIds` list contains only installed plugins.
   - A plugin the world requests but the host does not have is listed in `missing: [{ pluginId, packId? }]`.
 - `GET /api/ui-specs`: with `sessionId`, it returns only the plugins active in that session. Without it, it returns all plugins. See [below](#get-apiui-specs) for details.
 - `GET /api/llm-config`: if parsing `llm.toml` fails, it falls back to the default config and adds an `error` field.
@@ -1676,13 +1678,9 @@ Reads the **full record** of one world: `lore`, `dimensions`, and all of `metada
     "source": "file",
     "dimensions": {},
     "pluginPolicy": {
-      "presetId": "traditional-story",
-      "requested": ["pregame", "world-init", "char-creator"],
-      "recommended": ["narrator", "guide"],
-      "preferredTags": ["mode:traditional-story"],
-      "avoidedTags": ["mode:dialogue"]
+      "preset": "traditional-story",
+      "plus": ["character-blueprint", "story-events"]
     },
-    "worldDataPath": "data/world.data.yaml",
     "worldData": {
       "schemaVersion": 1,
       "sources": [
@@ -2037,7 +2035,7 @@ The server does these things:
 1. It finds which text is still missing in this language.
 2. It asks the configured model to translate. First it lists the names and terms in the world. Then it translates the name fields. Then it translates the story text. One name always gets one translation.
 3. It writes the translation to language files next to the main files in the world package: `world.<locale>.yaml`, `WORLD.<locale>.md`, and `data/*.<locale>.yaml`.
-4. It adds this language to `supportedLocales` in `world.yaml`.
+4. When the translation has neither `world.<locale>.yaml` nor `WORLD.<locale>.md`, it writes an empty `world.<locale>.yaml`. With either file present, the world has an edition in this language; `world.yaml` does not change.
 
 After that, a session created in this language uses this version.
 
@@ -2062,7 +2060,7 @@ After that, a session created in this language uses this version.
 **When it writes:**
 
 - While the model is generating, the server does not hold the world operation lock and does not write any language file.
-- The lock is taken only at publish time. Inside it, the server checks the world's creation time and the package's real path and directory identity, writes language files and `supportedLocales` in a staging copy, then replaces the directory and saves the record after read-back preflight passes. Edits saved while the model was working are kept.
+- The lock is taken only at publish time. Inside it, the server checks the world's creation time and the package's real path and directory identity, writes language files in a staging copy, then replaces the directory and saves the record after read-back preflight passes. Edits saved while the model was working are kept.
 - A file-write or read-back failure discards the copy; a record-save failure restores the original package. The copy preserves media, authored files, and the generation marker.
 - If the world is being deleted, has been deleted, or has been rebuilt with the same ID, the request receives an SSE `error`. The old request does not write files into the new package, and it does not clean up the new package's files.
 
@@ -2235,7 +2233,7 @@ Creates a new game session.
 
 - The session's content language must be a language version the world actually has. If the world has this language (or another region with the same language and script), that version is used. Otherwise the world's own language is used.
 - When the actual language differs from the one requested, the response also has `requestedLocale` (the language you asked for). The client uses it to tell the player that this world has no version in that language, so the story will be in the world's language.
-- The world's language versions come from `supportedLocales` in `world.yaml`. If it is not declared, only `defaultLocale` is available. Worlds generated in the app have only the one language they were generated in.
+- The world's language versions are `defaultLocale` plus the language of each `world.<locale>.yaml` or `WORLD.<locale>.md` at the package root; loading records them in `metadata.supportedLocales` of the world record. Worlds generated in the app have only the one language they were generated in.
 - The language is locked after creation. Later turns, manual runtimes, and background jobs all use it, and a request cannot change it.
 
 **World background (`loreOverride`):**
@@ -2252,7 +2250,7 @@ Creates a new game session.
 
 | Field                         | Effect                                                                                                                                                                                      |
 | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `metadata.pluginPolicy`       | The plugin set policy for the setup screen. Its fields are `presetId` / `preferredTags` / `avoidedTags` / `requested` / `recommended` / `requires` / `packs`                                |
+| `metadata.pluginPolicy`       | The plugin set policy for the setup screen. Its fields are `preset` / `plus` / `pitch` / `packs` / `requires`; see [plugin selection](./world-data.md#plugin-selection-pluginpolicy)        |
 | `pluginPolicy.requires`       | Contract IDs the world requires. See the notes below                                                                                                                                        |
 | `metadata.packageInfo`        | The world package's `version` and [author information](./plugins.md#author-information) (`author`, `license`, `homepage`). Used only to show on the world card. It does not go into prompts |
 | `metadata.characterSchema`    | When the session is created, the character schema (`types` / `attributes`) is written. The kernel manages its version                                                                       |
@@ -3538,7 +3536,7 @@ Other rules:
 Returns the list of what can go into a world, for the world creation screen and for development agents. It reflects the plugins the server has loaded right now.
 
 - All of the content comes from the `contributes.data.*.authoring` declarations in plugin manifests. There is no hard-coded plugin list.
-- `packs` lists every gameplay pack of the server's pack catalogue (`packs/builtin.yaml`): `id`, `label`, `description`, `tags`, `requested`, `recommended`, and `defaultViewMode` when the pack has one. A world writes one of these `id`s in `pluginPolicy.presetId`; AI world creation offers them as choices.
+- `packs` lists every gameplay pack of the server's pack catalogue (`packs/builtin.yaml`): `id`, `label`, `description`, `tags`, `requested`, `recommended`, and `defaultViewMode` when the pack has one. A world writes one of these `id`s in `pluginPolicy.preset`; AI world creation offers them as choices.
 - `pnpm describe:authoring` prints the same data.
 - An unreadable or non-JSON example, or a missing, invalid, or conflicting schema for generatable content, skips only that contract. The optional `diagnostics` array returns `{ pluginId, namespace, message }` for each problem, also logged by the server; other contracts and plugins remain available.
 - The `locale` query parameter sets the language of display text such as `title`. If it is omitted, the server's default language is used.
@@ -3628,7 +3626,7 @@ Returns the list of what can go into a world, for the world creation screen and 
 | `contracts`    | Each data contract that a plugin receives: the receiving plugin, the title, writing hints, the entries that can go directly into `world.data.yaml`, and an example |
 | `generate`     | Appears only when the in-app generator can produce this content: `offer` lists it as an option, and `default` lists it and selects it by default                   |
 | `plugins`      | The plugin catalog: ID, name, description, the contracts it provides and requires, and the settings that can be preset with `pluginSettings`                       |
-| `packs`        | The gameplay pack catalogue: the packs a world can write in `pluginPolicy.presetId`, and `defaultViewMode` when the pack has one                                   |
+| `packs`        | The gameplay pack catalogue: the packs a world can write in `pluginPolicy.preset`, and `defaultViewMode` when the pack has one                                     |
 
 #### `GET /api/framework/capabilities`
 
@@ -5134,12 +5132,12 @@ If `idleTimeoutMs` is out of range, the server returns `400`. The app's own sett
 
 Fields of `brief`:
 
-| Field                    | Type     | Description                                                                                                                                                                                                                                                                                                                                     |
-| ------------------------ | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `pack`                   | string   | The gameplay pack the world is made for: an ID of the server's pack catalogue (`packs/builtin.yaml`); the choices are `packs` in [`GET /api/framework/authoring`](#get-apiframeworkauthoring). It is written into the world's `pluginPolicy.presetId`; when the pack has `defaultViewMode`, the world gets it too. Leave it out to name no pack |
-| `content`                | string[] | Kernel content. Allowed values: `characters`, `lorebook`, `rules`, `opening-kit`                                                                                                                                                                                                                                                                |
-| `contracts`              | string[] | Plugin content. Contains data contract IDs                                                                                                                                                                                                                                                                                                      |
-| `additionalInstructions` | string   | Extra requirements for the world package (up to 2000 characters), such as character relationships, taboos, pacing, or content to avoid                                                                                                                                                                                                          |
+| Field                    | Type     | Description                                                                                                                                                                                                                                                                                                                                   |
+| ------------------------ | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pack`                   | string   | The gameplay pack the world is made for: an ID of the server's pack catalogue (`packs/builtin.yaml`); the choices are `packs` in [`GET /api/framework/authoring`](#get-apiframeworkauthoring). It is written into the world's `pluginPolicy.preset`; when the pack has `defaultViewMode`, the world gets it too. Leave it out to name no pack |
+| `content`                | string[] | Kernel content. Allowed values: `characters`, `lorebook`, `rules`, `opening-kit`                                                                                                                                                                                                                                                              |
+| `contracts`              | string[] | Plugin content. Contains data contract IDs                                                                                                                                                                                                                                                                                                    |
+| `additionalInstructions` | string   | Extra requirements for the world package (up to 2000 characters), such as character relationships, taboos, pacing, or content to avoid                                                                                                                                                                                                        |
 
 A `pack` that is not in the catalogue returns `400`. The allowed values for `contracts` come from the contracts marked with `generate` in `GET /api/framework/authoring`. Any other value returns `400`. Contracts that fail preparation are absent from the choices; generation and revision continue with the remaining content, and `done.warnings` identifies the skipped plugin, namespace, and contract.
 
@@ -5154,7 +5152,7 @@ Values for `saveTarget`:
 - The `server-file` directory is chosen in this order: `COVEL_USER_WORLDS_DIR`, `$COVEL_HOME/worlds`, `~/.covel/worlds`. This matches the world package install entry point. `COVEL_WORLDS_DIR` is used only for built-in world packages.
 - `server-store` and `return-only` assemble the record from the structured result validated by the generator; they do not write package files.
 - For these two modes, the saved `WorldRecord.metadata` is handled as follows:
-  - It removes the file-path fields `worldDataPath`, `worldData`, and `dimensionSources`.
+  - It removes the file-path fields `worldDataPath` and `worldData`.
   - It keeps the normalized `metadata.dimensions`.
   - It carries the validated character, lorebook, and rule text in `metadata.embeddedCharacters` and `metadata.embeddedLorebook`.
 - When a session is created, a file-based world reads the data sources in the world package first. If there is no world package directory, it uses the content carried with the record. This way, a world saved in the database or in the browser does not lose its supplementary content.
@@ -5187,7 +5185,7 @@ When every file is at its expected path, the world package does not need an extr
 
 Language and characters:
 
-- The new world's `defaultLocale` and its only `supportedLocales` entry are fixed to the normalized request `locale` (default `zh-CN`). Every save target and file export uses this one declaration.
+- The new world's `defaultLocale` is fixed to the normalized request `locale` (default `zh-CN`), and the world has only this one edition. Every save target and file export is the same.
 - The character part validates the whole set against the character schema in the generated manifest: the declared types, the field constraints, and only one `player`. If validation fails, the retry and discard rules below apply.
 
 ##### Validation and retries

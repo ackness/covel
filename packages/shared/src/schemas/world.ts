@@ -8,7 +8,7 @@
 import { z } from "zod";
 import { canonicalizeLocale } from "../utils/locale-registry.js";
 import type { AttributeDefinition } from "../types/character-schema.js";
-import { dimensionIdSchema, worldDimensionsSchema } from "./dimensions.js";
+import { worldDimensionsSchema } from "./dimensions.js";
 import { packageCreditFields } from "./package-info.js";
 export { worldDimensionsSchema } from "./dimensions.js";
 
@@ -227,84 +227,51 @@ export const worldStartingConditionsSchema = z
 
 // ── World Manifest (world.yaml root) ────────────────────────────
 
-const pluginPackSchema = z
+const packIdSchema = z
+  .string()
+  .min(1)
+  .regex(/^[a-z][a-z0-9-]*$/, {
+    message: 'a pack id must be lowercase with hyphens (e.g. "dialogue-mode")',
+  });
+
+const pluginPitchSchema = z
   .object({
-    id: z
-      .string()
-      .min(1)
-      .regex(/^[a-z][a-z0-9-]*$/, {
-        message:
-          'plugin pack id must be lowercase with hyphens (e.g. "dialogue-mode")',
-      })
-      .describe(
-        "Stable pack ID: lowercase letters, digits and hyphens. `presetId` refers to it.",
-      ),
-    label: i18nTextSchema.describe("Display name of the pack."),
+    label: i18nTextSchema
+      .describe("Name of this world's selection, shown on the pack card.")
+      .optional(),
     description: i18nTextSchema
-      .describe("What the pack offers. Shown to the player.")
-      .optional(),
-    requested: z
-      .array(z.string().min(1))
-      .describe("Plugin IDs the pack enables.")
-      .optional(),
-    recommended: z
-      .array(z.string().min(1))
-      .describe(
-        "Plugin IDs the pack suggests. They are not enabled automatically.",
-      )
-      .optional(),
-    excluded: z
-      .array(z.string().min(1))
-      .describe(
-        "Plugin IDs the pack turns off, `kind: core` ones included. The player can turn them back on.",
-      )
-      .optional(),
-    tags: z
-      .array(z.string().min(1))
-      .describe(
-        "Catalogue tags that describe the pack, such as `mode:traditional-story`.",
-      )
+      .describe("What the selection offers. Shown to the player.")
       .optional(),
     reason: i18nTextSchema
-      .describe("Why this pack suits the world. Shown to the player.")
+      .describe("Why the selection suits the world. Shown to the player.")
       .optional(),
   })
   .strict();
 
-const pluginPolicySchema = z
+export const worldPluginPolicySchema = z
   .object({
-    presetId: z
-      .string()
-      .min(1)
+    preset: packIdSchema
       .describe(
-        "ID of the pack that seeds the initial plugin selection: a built-in pack or one declared in `packs`.",
+        "ID of the built-in pack a new session starts from, such as `traditional-story` or `dialogue-mode` (`packs/builtin.yaml`).",
+      )
+      .optional(),
+    plus: z
+      .array(z.string().min(1))
+      .describe(
+        "Plugin IDs this world adds to whichever pack the player picks. Never list a `kind: core` plugin: every session has those already.",
+      )
+      .optional(),
+    pitch: pluginPitchSchema
+      .describe(
+        "How the session preparation screen presents `preset` for this world: its own label, description and reason in place of the pack's.",
       )
       .optional(),
     packs: z
-      .array(pluginPackSchema)
+      .array(packIdSchema)
+      .min(1)
       .describe(
-        "Packs defined by this world. A pack is a named plugin selection the player can choose before play.",
+        "IDs of the built-in packs the player may choose from, in this order. Without it every built-in pack is offered. `preset` must be one of them.",
       )
-      .optional(),
-    preferredTags: z
-      .array(z.string().min(1))
-      .describe(
-        "Plugin tags this world prefers, such as `mode:traditional-story`.",
-      )
-      .optional(),
-    avoidedTags: z
-      .array(z.string().min(1))
-      .describe("Plugin tags this world avoids, such as `mode:dialogue`.")
-      .optional(),
-    requested: z
-      .array(z.string().min(1))
-      .describe(
-        "Plugin IDs to enable by default. The player can still exclude them.",
-      )
-      .optional(),
-    recommended: z
-      .array(z.string().min(1))
-      .describe("Plugin IDs to suggest. They are not enabled automatically.")
       .optional(),
     // Contract IDs, not plugin IDs: any installed provider satisfies them.
     requires: z
@@ -315,11 +282,13 @@ const pluginPolicySchema = z
         }),
       )
       .describe(
-        "Contract IDs the world needs, such as `action-check@1`. Any installed provider satisfies one. A missing or ambiguous provider blocks session creation.",
+        "Contract IDs the world needs, such as `action-check@1`. Any installed provider satisfies one. Without one, a session starts without that part of the world and tells the player.",
       )
       .optional(),
   })
   .strict();
+
+export type WorldPluginPolicy = z.infer<typeof worldPluginPolicySchema>;
 
 // ── Character attribute schema (world-declared) ─────────────────
 //
@@ -474,19 +443,24 @@ export const worldAccentColorSchema = z
     },
   );
 
+/** A world ID: what `id` holds, or the directory name it defaults to. */
+export const worldIdSchema = z
+  .string()
+  .min(1)
+  .regex(/^[a-z][a-z0-9-]*$/, {
+    message:
+      'a world id must be lowercase with hyphens (e.g. "my-world"); without `id`, the name of the world\'s directory is the id',
+  });
+
 export const worldManifestSchema = z
   .object({
-    id: z
-      .string()
-      .min(1)
-      .regex(/^[a-z][a-z0-9-]*$/, {
-        message: 'id must be lowercase with hyphens (e.g. "my-world")',
-      })
+    id: worldIdSchema
       .meta({
         description:
-          "Stable world ID: lowercase letters, digits and hyphens, starting with a letter.",
+          "Stable world ID: lowercase letters, digits and hyphens, starting with a letter. Defaults to the name of the world's directory.",
         examples: ["my-world"],
-      }),
+      })
+      .optional(),
     name: i18nTextSchema.describe("Display name of the world."),
     version: z
       .string()
@@ -503,17 +477,12 @@ export const worldManifestSchema = z
         "Default content locale as a BCP 47 tag. A session uses it when the request sets no locale.",
       examples: ["zh-CN", "en-US"],
     }),
-    supportedLocales: z
-      .array(localeCodeSchema)
-      .min(1)
-      .describe("Locales this world provides content for.")
-      .optional(),
     tags: z
       .array(z.string())
       .describe("Free-form catalogue tags, such as genre.")
       .optional(),
     ...packageCreditFields,
-    pluginPolicy: pluginPolicySchema
+    pluginPolicy: worldPluginPolicySchema
       .describe(
         "Which plugins a session of this world starts with. It states intent and locks nothing; the player can change the selection.",
       )
@@ -523,7 +492,7 @@ export const worldManifestSchema = z
       .min(1)
       .meta({
         description:
-          "Path of the world data descriptor, relative to the world root. Without it the package is read by convention: each file at a well-known path (`data/dimensions.yaml`, `data/lorebook.yaml`, `characters/characters.json`, and the path each installed plugin names for its data) is a source.",
+          "Path of the world data descriptor, relative to the world root. Every package is read by convention: each file at a well-known path (`data/dimensions.yaml`, `data/lorebook.yaml`, `characters/characters.json`, and the path each installed plugin names for its data) is a source. The descriptor adds to that: an entry with the path of a conventional source changes it (`enabled: false` turns it off), any other entry adds a source.",
         examples: ["data/world.data.yaml"],
       })
       .optional(),
@@ -542,13 +511,6 @@ export const worldManifestSchema = z
     dimensions: worldDimensionsSchema
       .describe(
         "Dynamic world dimensions keyed by dimension ID. Each entry is one full definition.",
-      )
-      .optional(),
-    /** Map of dimension key → relative file path for external dimension files. */
-    dimensionSources: z
-      .record(dimensionIdSchema, z.string().min(1))
-      .describe(
-        "Dimension ID → path of an external file that holds that one definition, relative to the world root.",
       )
       .optional(),
     /**
@@ -602,3 +564,4 @@ export const worldManifestSchema = z
   .strict();
 
 export type WorldManifestInput = z.input<typeof worldManifestSchema>;
+export type WorldManifest = z.output<typeof worldManifestSchema>;

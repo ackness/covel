@@ -37,7 +37,7 @@ import { parseIdleTimeoutMs } from "../../../world-data/authoring-timeout.js";
 import { writeWorldTranslations } from "../../../world-data/locale-tooling.js";
 import { resolveWorldRoot } from "../../../world-data/session-import/utils.js";
 import {
-  declareWorldEdition,
+  ensureWorldEdition,
   prepareWorldTranslation,
   untranslatedWorldTexts,
   type TranslateWorldStep,
@@ -270,10 +270,12 @@ worldTranslateRoutes.post(
                 locale,
                 result.translations,
               );
-              if (pristine) await recordGeneratedWorldFiles(staging, written);
-              await declareWorldEdition(staging, locale);
+              const edition = await ensureWorldEdition(staging, locale);
               if (pristine)
-                await recordGeneratedWorldFiles(staging, ["world.yaml"]);
+                await recordGeneratedWorldFiles(staging, [
+                  ...written,
+                  ...(edition ? [edition] : []),
+                ]);
               const loaded = await loadWorldForPublication(staging);
               const next = withNewEdition(loaded, current, locale);
               signal.throwIfAborted();

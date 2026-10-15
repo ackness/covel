@@ -4,9 +4,6 @@ name: 遥风学园・春日薄荷
 version: 0.3.0
 summary: 转入海边私立高中，在二十一天的学园祭倒计时里选择社团、守住约定，也回应那些没能说出口的喜欢。
 defaultLocale: zh-CN
-supportedLocales:
-  - zh-CN
-  - en-US
 defaultViewMode: stage
 tags:
   - school
@@ -24,46 +21,14 @@ license: MIT
 cover: media/gallery/world-cover.webp
 accentColor: "oklch(72% 0.15 350)"
 pluginPolicy:
-  packs:
-    - id: haruka-galgame
-      label: 学园恋爱 · 视觉小说
-      description: 全屏舞台、立绘与日夜场景，多条回复可选，好感度与心之路线、约定、传闻和学园祭筹备随对话实时变化。
-      tags:
-        - mode:dialogue
-      reason: 二十一天的学园祭倒计时里，每一次赴约、失约和传闻都会留在面板上，五条心之路线只靠真实发生的事件推进。
-      requested:
-        - pregame
-        - world-init
-        - char-creator
-        - chat-mode-narrator
-        - scene-stage
-        - guide
-        - character-blueprint
-        - living-world-rules
-        - branch-reply
-        - affinity
-        - story-events
-      recommended:
-        - npc-graph
-  presetId: haruka-galgame
-  preferredTags:
-    - mode:dialogue
-  avoidedTags:
-    - mode:traditional-story
-  requested:
-    - pregame
-    - world-init
-    - char-creator
-  recommended:
-    - chat-mode-narrator
-    - scene-stage
-    - guide
-    - character-blueprint
-    - living-world-rules
-    - branch-reply
+  preset: dialogue-mode
+  plus:
     - affinity
     - story-events
-    - npc-graph
+  pitch:
+    label: 学园恋爱 · 视觉小说
+    description: 全屏舞台、立绘与日夜场景，多条回复可选，好感度与心之路线、约定、传闻和学园祭筹备随对话实时变化。
+    reason: 二十一天的学园祭倒计时里，每一次赴约、失约和传闻都会留在面板上，五条心之路线只靠真实发生的事件推进。
 pluginSettings:
   chat-mode-narrator:
     dialogueRatio: 80
@@ -71,9 +36,6 @@ pluginSettings:
   scene-stage:
     activeSpeakerCount: 2
 characterSchema:
-  types:
-    - npc
-    - companion
   attributes:
     - id: persona
       name: 性格
@@ -142,4 +104,3 @@ characterSchema:
       type: string
       category: social
       description: 角色此刻最在意的校园事件、关系或未完成目标。
-worldData: data/world.data.yaml

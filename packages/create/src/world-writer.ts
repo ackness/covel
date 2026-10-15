@@ -455,6 +455,8 @@ export async function writeWorldDataFiles(
   }
 
   const written: string[] = [];
+  // Every file at a conventional path is a source without a descriptor;
+  // the descriptor only adds the files at a path no plugin names.
   const sources: Record<string, Record<string, unknown>> = {};
   const write = async (file: string, kind: "yaml" | "json", value: unknown) => {
     const full = packageFile(worldDir, file);
@@ -471,36 +473,15 @@ export async function writeWorldDataFiles(
 
   if (hasDimensions) {
     await write(GENERATED_DIMENSIONS_PATH, "yaml", inline);
-    sources.dimensions = {
-      kind: "yaml",
-      path: GENERATED_DIMENSIONS_PATH,
-      schema: "covel://world/dimensions",
-      to: "world:metadata.dimensions",
-    };
     delete manifest.dimensions;
-    delete manifest.dimensionSources;
   }
 
   if (characters.length > 0) {
     await write(GENERATED_CHARACTERS_PATH, "json", characters);
-    sources.characters = {
-      kind: "json",
-      path: GENERATED_CHARACTERS_PATH,
-      to: "characters",
-      key: "id",
-      ...(hasDimensions ? { after: "dimensions" } : {}),
-    };
   }
 
   if (lorebook.length > 0) {
     await write(GENERATED_LOREBOOK_PATH, "yaml", lorebook);
-    sources.lorebook = {
-      kind: "yaml",
-      path: GENERATED_LOREBOOK_PATH,
-      to: "lorebook",
-      key: "id",
-      ...(hasDimensions ? { after: "dimensions" } : {}),
-    };
   }
 
   // The records of one contract go into one file: the one its plugin names,
@@ -520,7 +501,6 @@ export async function writeWorldDataFiles(
     taken.add(key);
     return true;
   };
-  let needsDescriptor = false;
   for (const [index, [contract, records]] of [...byContract].entries()) {
     const declared = dataContracts.find(
       (item) => item.contract === contract,
@@ -532,9 +512,20 @@ export async function writeWorldDataFiles(
       if (claim(generated)) file = generated;
     }
     const kind = named?.kind ?? "json";
-    if (!named) needsDescriptor = true;
     const values = records.map((record) => record.value);
     await write(file, kind, values.length === 1 ? values[0] : values);
+    // A file at the path its plugin names is read by convention, unless
+    // another contract names that path too: then neither reads it by
+    // convention, and the descriptor says whose it is.
+    const shared =
+      named &&
+      dataContracts.some(
+        (item) =>
+          item.contract !== contract &&
+          item.source !== undefined &&
+          fileKey(item.source.path) === fileKey(named.path),
+      );
+    if (named && !shared) continue;
     sources[`contract${index}`] = {
       kind,
       path: file,
@@ -547,7 +538,7 @@ export async function writeWorldDataFiles(
     };
   }
 
-  if (needsDescriptor) {
+  if (Object.keys(sources).length > 0) {
     await write(GENERATED_WORLD_DATA_PATH, "yaml", {
       sources,
     });

@@ -256,10 +256,11 @@ export async function listWorldGalleryFiles(
 ): Promise<WorldGalleryFile[]> {
   const manifest = await readWorldManifest(options.worldRoot);
   return (
-    (await listManifestFiles(options, manifest.defaultLocale, [
-      ...(manifest.defaultLocale ? [manifest.defaultLocale] : []),
-      ...(manifest.supportedLocales ?? []),
-    ])) ?? (await listSourceFiles(options, manifest.worldData))
+    (await listManifestFiles(
+      options,
+      manifest.defaultLocale,
+      manifest.editions ?? [],
+    )) ?? (await listSourceFiles(options, manifest.worldData))
   );
 }
 

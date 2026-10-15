@@ -122,7 +122,11 @@ export async function worldGenerationDataContracts(
         title: item.title,
         ...(item.hint ? { hint: item.hint } : {}),
         ...(item.example !== undefined ? { example: item.example } : {}),
-        pluginId: item.pluginId,
+        // A session has every `kind: core` plugin already.
+        ...(registry.get(item.pluginId)?.packageManifest?.plugin?.kind ===
+        "core"
+          ? {}
+          : { pluginId: item.pluginId }),
         lorebook: declared?.to.endsWith("+lorebook") === true,
         ...(declared &&
         conventional &&

@@ -4,4 +4,4 @@
 
 ### Breaking
 
-- **`POST /api/ai/generate-world` takes `brief.pack` instead of `brief.experienceMode`.** The value is the ID of a pack of the catalogue; an unknown ID returns `400`. A brief without `pack` names no pack: the world gets no `pluginPolicy.presetId` (it used to get `traditional-story`). Documented in `docs/reference/api.md`.
+- **`POST /api/ai/generate-world` takes `brief.pack` instead of `brief.experienceMode`.** The value is the ID of a pack of the catalogue; an unknown ID returns `400`. A brief without `pack` names no pack: the world gets no `pluginPolicy.preset` (it used to get `traditional-story`). Documented in `docs/reference/api.md`.

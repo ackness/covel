@@ -61,11 +61,10 @@ dimensions:
 > [!NOTE]
 > 开发会话里如果存有多语言对照形式的维度值，需要重新创建这个会话。
 
-**三种写法用同一种声明格式**：写在 `world.yaml` 里、`dimensionSources` 的单项文件、以及整张表的维度文件（`covel://world/dimensions → world:metadata.dimensions`）。
+**两种写法用同一种声明格式**：写在 `world.yaml` 里，或者写成整张表的维度文件 `data/dimensions.yaml`（`covel://world/dimensions → world:metadata.dimensions`）。
 
-- 外部文件里同名的声明优先于 `world.yaml` 里的。
-- descriptor 里的维度 source 替换整张表。
-- 单项文件的内容是一项完整的声明，不是一个值。
+- 维度文件替换 `world.yaml` 里的整张表。
+- 每一项的内容都是一项完整的声明，不是一个值。
 
 ## 由时钟推导的字段
 
@@ -168,7 +167,7 @@ crownfire:
 - 不管用哪种写法声明，都记进导入账本。
 - 作者的声明没变时，保留这局游戏的进度。
 - 修改或删除一个已经演化、被手改过、或者还有待结算回合的维度，会报告冲突。用 `force` 也不会重置它。
-- `sync-dimensions` 只同步维度，改不了资料库、角色或其他插件数据。没有 descriptor 的世界也可以用它同步写在 `world.yaml` 里和外部文件里的声明。
+- `sync-dimensions` 只同步维度，改不了资料库、角色或其他插件数据。写在 `world.yaml` 里和维度文件里的声明都可以用它同步。
 
 完整的同步规则见 [Preflight 与 Sync](./world-data.md#preflight-与-sync)。
 

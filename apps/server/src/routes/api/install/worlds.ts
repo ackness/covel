@@ -14,7 +14,11 @@ import { Hono, type Context } from "hono";
 import { resolveUserResourceDirs } from "../../../lib/user-resource-dirs.js";
 import { parse as parseYaml } from "yaml";
 import { errorBody } from "../../../api-error.js";
-import { validateWorldManifest, formatValidationErrors } from "@covel/shared";
+import {
+  formatValidationErrors,
+  validateWorldManifest,
+  type WorldManifest,
+} from "@covel/shared";
 import {
   SAFE_WORLD_ID_RE,
   SAFE_WORLD_ID_DESC,
@@ -36,6 +40,8 @@ export const worldInstallRoutes = new Hono();
 
 interface WorldManifestSummary {
   readonly worldId: string;
+  /** `world.yaml` as the loader reads it: fields it does not know left out. */
+  readonly manifest: WorldManifest;
 }
 
 function findWorldYaml(
@@ -44,8 +50,14 @@ function findWorldYaml(
   return entries.find((e) => e.relativePath === "world.yaml") ?? null;
 }
 
+/**
+ * Check a world package and name it. A `world.yaml` without `id` takes
+ * `packageName`: the directory or file the package came in, as a world in a
+ * worlds directory takes the name of its directory.
+ */
 export function validateWorldBundle(
   entries: readonly ExtractedEntry[],
+  packageName?: string,
 ): WorldManifestSummary {
   assertNoReservedInstallFiles(entries);
   const yamlEntry = findWorldYaml(entries);
@@ -71,12 +83,20 @@ export function validateWorldBundle(
     );
   }
 
-  const manifest = result.data as { id?: unknown };
+  const manifest = result.data as WorldManifest;
+  if (manifest.id === undefined) {
+    if (!packageName || !SAFE_WORLD_ID_RE.test(packageName))
+      throw httpError(
+        400,
+        `world.yaml has no \`id\`, and the package name "${packageName ?? ""}" cannot be one: add an \`id\` that matches ${SAFE_WORLD_ID_DESC}`,
+      );
+    return { worldId: packageName, manifest };
+  }
   if (typeof manifest.id !== "string" || !SAFE_WORLD_ID_RE.test(manifest.id)) {
     throw httpError(400, `world.yaml \`id\` must match ${SAFE_WORLD_ID_DESC}`);
   }
 
-  return { worldId: manifest.id };
+  return { worldId: manifest.id, manifest };
 }
 
 worldInstallRoutes.post("/world", async (c) => {
@@ -97,7 +117,12 @@ worldInstallRoutes.post("/world", async (c) => {
       buffer,
       "/covel-world-install-sentinel",
     );
-    const summary = validateWorldBundle(entries);
+    // A world without `id` is named by its file: `my-world.zip` → `my-world`.
+    const fileName =
+      "name" in file && typeof file.name === "string"
+        ? path.parse(file.name).name
+        : undefined;
+    const summary = validateWorldBundle(entries, fileName);
 
     await activateWorldPackage(c, summary.worldId, entries);
 

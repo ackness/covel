@@ -20,8 +20,6 @@ const world: GeneratedWorld = {
     summary: "A world for marker testing",
     version: "0.1.0",
     defaultLocale: "en",
-    supportedLocales: ["en"],
-    pluginPolicy: { requested: [], recommended: [] },
   },
   locale: "en",
   lore: "original",

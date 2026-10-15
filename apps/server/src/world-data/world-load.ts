@@ -1,6 +1,7 @@
 import { homedir } from "node:os";
 import path from "node:path";
 import {
+  WORLD_EDITIONS_KEY,
   worldDimensionsSchema,
   type WorldDataMetadataSummary,
 } from "@covel/shared";
@@ -106,7 +107,7 @@ async function summarizeSource(
     });
   }
 
-  const editions = metadata.supportedLocales;
+  const editions = metadata[WORLD_EDITIONS_KEY];
   const declaredLocales = [
     ...new Set([
       ...(defaultLocale ? [defaultLocale] : []),

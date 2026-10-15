@@ -9,5 +9,5 @@ export function isBuiltinDefaultPackage(
 export function requiredPluginIdsForWorld(
   plan: api.WorldPluginPlan | null,
 ): Set<string> {
-  return new Set(plan?.policy.requested ?? []);
+  return new Set(plan?.policy.plus ?? []);
 }

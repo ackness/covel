@@ -145,12 +145,24 @@ export const worldDataSourceDescriptorSchema =
     }
   });
 
+/**
+ * One entry of a world's descriptor. Its `path` decides what it is: the path
+ * of a conventional source makes it a change to that source (only the fields
+ * written change, `enabled: false` turns the source off); any other path adds
+ * a source, which then needs `kind` and `to` as well.
+ */
+export const worldDataDescriptorEntrySchema =
+  worldDataSourceDescriptorBaseSchema
+    .partial()
+    .required({ path: true })
+    .strict();
+
 export const worldDataDescriptorSchema = z
   .object({
     sources: z
-      .record(worldDataSourceIdSchema, worldDataSourceDescriptorSchema)
+      .record(worldDataSourceIdSchema, worldDataDescriptorEntrySchema)
       .describe(
-        "Data sources keyed by source ID. A source ID starts with a letter and uses letters, digits, `_` or `-`.",
+        "Changes to the conventional sources and further sources, keyed by source ID. An entry whose `path` is that of a conventional source changes it; any other entry adds a source and needs `kind` and `to`. A source ID starts with a letter and uses letters, digits, `_` or `-`.",
       ),
   })
   .strict();

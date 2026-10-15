@@ -62,10 +62,7 @@ const PLAN: WorldPluginPlan = {
   worldId: "world-1",
   packs: [],
   policy: {
-    preferredTags: [],
-    avoidedTags: [],
-    requested: ["world-required"],
-    recommended: [],
+    plus: ["world-required"],
     requires: [],
   },
   defaultPluginIds: ["core", "world-required"],
@@ -75,7 +72,7 @@ const PLAN: WorldPluginPlan = {
 function selectionPlan(defaultPluginIds: string[]): WorldPluginPlan {
   return {
     ...PLAN,
-    policy: { ...PLAN.policy, requested: [] },
+    policy: { ...PLAN.policy, plus: [] },
     defaultPluginIds,
   };
 }
@@ -144,11 +141,7 @@ describe("usePluginSelection", () => {
   it("separates the initial pack from world defaults and preserves explicitly excluded world requests", async () => {
     vi.mocked(api.getWorldPluginPlan).mockResolvedValue({
       ...selectionPlan(["alternative", "world", "preferred"]),
-      policy: {
-        ...PLAN.policy,
-        requested: ["world"],
-        preferredTags: ["preferred"],
-      },
+      policy: { ...PLAN.policy, plus: ["world", "preferred"] },
       packs: PACKS,
       selectedPackId: "alternative",
     });
@@ -163,38 +156,6 @@ describe("usePluginSelection", () => {
     );
     expect(result.current.selectedPluginIdSet.has("alternative")).toBe(false);
     expect(result.current.excludedPluginIds).toEqual(["world"]);
-  });
-
-  it("lets the next pack replace an engine that the initial pack and the world's preferred tags both selected", async () => {
-    vi.mocked(api.getWorldPluginPlan).mockResolvedValue({
-      ...selectionPlan(["alternative", "preferred"]),
-      policy: {
-        ...PLAN.policy,
-        requested: [],
-        preferredTags: ["mode:alternative"],
-      },
-      packs: PACKS,
-      selectedPackId: "alternative",
-    });
-    const plugins = PACK_PLUGINS.map((pkg) =>
-      pkg.id === "alternative" || pkg.id === "preferred"
-        ? { ...pkg, tags: ["mode:alternative"] }
-        : pkg,
-    );
-    const { result } = renderHook(() =>
-      usePluginSelection(PLAN.worldId, plugins, prepareWorldForServer),
-    );
-    await waitFor(() => expect(result.current.pluginPlanLoading).toBe(false));
-    expect(result.current.selectedPluginIdSet.has("alternative")).toBe(true);
-
-    act(() => result.current.applyPack("small"));
-    // The preferred default outside the pack stays; the pack's engine goes.
-    expect(new Set(result.current.requestedPluginIds)).toEqual(
-      new Set(["core", "preferred"]),
-    );
-    expect(result.current.selectedPluginIdSet.has("core")).toBe(true);
-    expect(result.current.selectedPluginIdSet.has("alternative")).toBe(false);
-    expect(result.current.activePluginPack?.id).toBe("small");
   });
 
   it("keeps an explicit exclusion when a later pack requests the plugin", async () => {
@@ -315,7 +276,7 @@ describe("usePluginSelection", () => {
   it("lists only requested community packages, including world requests outside the defaults", async () => {
     vi.mocked(api.getWorldPluginPlan).mockResolvedValue({
       ...selectionPlan([]),
-      policy: { ...PLAN.policy, requested: ["community"] },
+      policy: { ...PLAN.policy, plus: ["community"] },
     });
     const plugins = [
       CORE_PLUGIN,
@@ -616,7 +577,7 @@ describe("usePluginSelection", () => {
   it("adds the provider of a world-required contract and reports turning it off", async () => {
     vi.mocked(api.getWorldPluginPlan).mockResolvedValue({
       ...selectionPlan(["core"]),
-      policy: { ...PLAN.policy, requested: [], requires: ["dependency@1"] },
+      policy: { ...PLAN.policy, plus: [], requires: ["dependency@1"] },
     });
     const { result } = renderHook(() =>
       usePluginSelection(PLAN.worldId, PLUGINS, prepareWorldForServer),
@@ -773,7 +734,7 @@ describe("usePluginSelection", () => {
         ...PLAN,
         policy: {
           ...PLAN.policy,
-          requested: ["world-pick"],
+          plus: ["world-pick"],
           requires: ["need@1"],
         },
         defaultPluginIds: ["world-pick", "extra", "dims"],

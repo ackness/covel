@@ -23,12 +23,12 @@ pnpm validate:world worlds/<id>
 检查内容:
 
 - `world.yaml` 按生产 schema 校验。
-- 每个声明的语言(`defaultLocale` 与 `supportedLocales`)都能解析到 lore 文件;缺 `WORLD.md` 兜底时给 warning。
-- `pluginPolicy` 与 `pluginSettings` 里的插件 ID 在已扫描的插件目录中存在;拼写接近已知 ID 时直接判为 error 并给出 "Did you mean"。
+- 世界的每个语言版本(`defaultLocale`,以及根目录每个 `world.<locale>.yaml` / `WORLD.<locale>.md` 的语言)都能解析到 lore 文件;缺 `WORLD.md` 兜底时给 warning。
+- `pluginPolicy` 与 `pluginSettings` 里的插件 ID 在已扫描的插件目录中存在;拼写接近已知 ID 时直接判为 error 并给出 "Did you mean"。`pluginPolicy.preset` 和 `packs` 必须是内置玩法包。
 - `pluginSettings` 的 key 是该插件声明过的设置项。
 - `pluginPolicy.requires` 的契约有提供者。
 - descriptor、source 顺序(`after` 指向不存在的 source 会报错)、文件读取。
-- 每个 `contract:` source 的每条记录,按接收插件公开的 schema 校验;每个声明的语言各校验一遍,因为不同语言会选到不同的变体文件。
+- 每个 `contract:` source 的每条记录,按接收插件公开的 schema 校验;每个语言版本各校验一遍,因为不同语言会选到不同的变体文件。
 - 语言变体文件与默认文件的 `key` 集合一致,缺记录或多记录给 warning。
 
 选项:
@@ -40,7 +40,7 @@ pnpm validate:world worlds/<id>
 
 ```
 ✗ worlds/<id>/world.yaml
-  error   world.yaml · pluginPolicy.requested[1]
+  error   world.yaml · pluginPolicy.plus[1]
           plugin "dice-chek" is not in the scanned plugin directories
           Did you mean "dice-check"?
   error   data/memory-blocks.json · source "memory"

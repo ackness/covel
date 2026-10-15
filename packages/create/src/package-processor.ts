@@ -386,16 +386,19 @@ export function applyCreationBriefToManifest(
   const pack = selectedPack(brief, packs);
   if (brief.pack !== undefined && !pack)
     errors.push(`brief names an unknown plugin pack: ${brief.pack}`);
-  if (pack) policy.presetId = pack.id;
-  else delete policy.presetId;
-  // Requested content is only used when its receiving plugin is active.
+  if (pack) policy.preset = pack.id;
+  else delete policy.preset;
+  // Requested content is only used when its receiving plugin is active: the
+  // world adds the receivers its pack does not have.
   const receivers = selectedDataContracts(brief, dataContracts)
     .map((item) => item.pluginId)
-    .filter((id): id is string => typeof id === "string");
+    .filter(
+      (id): id is string =>
+        typeof id === "string" && !pack?.requested.includes(id),
+    );
   if (receivers.length > 0)
-    policy.requested = [
-      ...new Set([...(strings(policy.requested) ?? []), ...receivers]),
-    ];
+    policy.plus = [...new Set([...(strings(policy.plus) ?? []), ...receivers])];
+  if (Object.keys(policy).length === 0) delete manifest.pluginPolicy;
   if (pack?.defaultViewMode) manifest.defaultViewMode = pack.defaultViewMode;
   else delete manifest.defaultViewMode;
 

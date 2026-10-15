@@ -48,10 +48,9 @@ function worldFiles(id = "barrow") {
       name: { "en-US": "Barrow", "zh-CN": "古冢" },
       summary: "A tabletop world",
       defaultLocale: "en-US",
-      supportedLocales: ["en-US", "zh-CN"],
       pluginPolicy: {
         requires: ["action-check@1"],
-        requested: ["barrow-dice"],
+        plus: ["barrow-dice"],
       },
     }),
     [`worlds/${id}/WORLD.md`]: "A lantern has gone out.",

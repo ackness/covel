@@ -18,7 +18,7 @@ vi.mock("@/services/api.js", () => ({
 }));
 
 // The bundled catalogue itself: synthetic plugins cannot show that a world's
-// preferred tags and its default pack select the same narrative engine.
+// `plus` and its default pack leave one narrative engine after a pack switch.
 const ROOT = path.resolve(import.meta.dirname, "../../../../../../..");
 const bundled = (dir: string): string[] =>
   readdirSync(path.join(ROOT, dir), { withFileTypes: true })
@@ -61,40 +61,30 @@ const BUILTIN_PACKS = list<PluginPack>(readYaml("packs", "builtin.yaml"));
 function bundledPlan(worldId: string): WorldPluginPlan {
   const raw = (readYaml("worlds", worldId, "world.yaml").pluginPolicy ??
     {}) as Record<string, unknown>;
-  const worldPacks = list<PluginPack>(raw.packs).map((pack) => ({
-    ...pack,
-    source: "world" as const,
-  }));
-  const packs = [
-    ...worldPacks,
-    ...BUILTIN_PACKS.filter(
-      (pack) => !worldPacks.some((item) => item.id === pack.id),
-    ),
-  ];
+  const named = list(raw.packs);
+  const offered = named.length
+    ? BUILTIN_PACKS.filter((pack) => named.includes(pack.id))
+    : BUILTIN_PACKS;
+  const presetPack = BUILTIN_PACKS.find((pack) => pack.id === raw.preset);
+  const packs = presetPack
+    ? [
+        { ...presetPack, source: "world" as const },
+        ...offered.filter((pack) => pack.id !== presetPack.id),
+      ]
+    : offered;
   const policy = {
-    ...(typeof raw.presetId === "string" ? { presetId: raw.presetId } : {}),
-    preferredTags: list(raw.preferredTags),
-    avoidedTags: list(raw.avoidedTags),
-    requested: list(raw.requested),
-    recommended: list(raw.recommended),
+    ...(presetPack ? { preset: presetPack.id } : {}),
+    plus: list(raw.plus),
     requires: list(raw.requires),
   };
-  const selectedPack = packs.find((pack) => pack.id === policy.presetId);
-  const defaults = new Set([
-    ...policy.requested,
-    ...(selectedPack?.requested ?? []),
-  ]);
-  for (const plugin of PLUGINS) {
-    if (policy.avoidedTags.some((tag) => plugin.tags.includes(tag))) continue;
-    if (policy.preferredTags.some((tag) => plugin.tags.includes(tag)))
-      defaults.add(plugin.id);
-  }
   return {
     worldId,
     packs,
     policy,
-    ...(selectedPack ? { selectedPackId: selectedPack.id } : {}),
-    defaultPluginIds: [...defaults],
+    ...(presetPack ? { selectedPackId: presetPack.id } : {}),
+    defaultPluginIds: [
+      ...new Set([...(presetPack?.requested ?? []), ...policy.plus]),
+    ],
     missing: [],
   };
 }

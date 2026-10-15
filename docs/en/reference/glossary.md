@@ -19,6 +19,7 @@ Each English term has only one Chinese term. The Chinese docs, the UI text, and 
 | Contract | 契约 | A versioned ID, for example `narrative-engine@1`. |
 | Credits | 作者信息 | The `author`, `license`, and `homepage` fields of a package. |
 | Deployment form | 部署形态 | The desktop app, the self-hosted web app, the official web app. Not `DEPLOYMENT_TIER`. |
+| Edition | 语言版本 | One language of a world: `defaultLocale`, and the language of each `world.<locale>.yaml` or `WORLD.<locale>.md` at the root. |
 | Kernel | 内核 |  |
 | Official web app | 官方网页版 |  |
 | Pack | 玩法包 |  |
@@ -158,7 +159,7 @@ See: [storage](../internals/storage.md), [storage mode notes](./api.md#storage-m
 
 A named group of plugins (two sets, `requested` and `recommended`, plus tags) that together make up a way of playing, for example `traditional-story` or `dialogue-mode`.
 
-When a player picks a gameplay pack on the session-prep screen, it replaces the plugins brought in by the previous pack in one step. Plugins the world itself requires, and plugins the player picked by hand, stay the same. A world can use `pluginPolicy.presetId` to set its default gameplay pack.
+When a player picks a gameplay pack on the session-prep screen, it replaces the plugins brought in by the previous pack in one step. Plugins the world itself requires, and plugins the player picked by hand, stay the same. A world sets its default gameplay pack with `pluginPolicy.preset` and adds the plugins it wants with `pluginPolicy.plus`. The packs are the built-in ones only (`packs/builtin.yaml`); a world does not define packs of its own.
 
 It is different from a **Preset**. A Preset packages a model choice, not plugins.
 
@@ -268,7 +269,7 @@ See: [turn pipeline](../internals/flow.md), [SSE protocol](./protocol.md).
 
 ## World
 
-A content package (`worlds/<id>/`) that contains `world.yaml`, `WORLD.md`, and optional data sources (such as `data/world.data.yaml`). It provides dimensions, character settings, rules, scenes, and a media index.
+A content package (`worlds/<id>/`) that contains `world.yaml`, `WORLD.md`, and optional data at the convention paths (such as `data/dimensions.yaml` and `data/rules/`). It provides dimensions, character settings, rules, scenes, and a media index.
 
 The server loads worlds at startup from two places: the built-in directory `COVEL_WORLDS_DIR`, and the user worlds directory (`COVEL_USER_WORLDS_DIR`, which defaults to `<COVEL_HOME>/worlds` when not set; the default home is `~/.covel`). One world can have many games. For the loading process, see [startup loading and reconciliation](./world-data.md#loading-at-startup-and-reconciling-seed--reconcile).
 

@@ -51,7 +51,11 @@ import {
   selectPackageEntries,
   type GithubLocation,
 } from "./github-source.js";
-import { findWorldDirectories, inspectWorldBundle } from "./github-world.js";
+import {
+  findWorldDirectories,
+  inspectWorldBundle,
+  worldPackageName,
+} from "./github-world.js";
 import { withPackageMutation } from "./package-files.js";
 import {
   readPluginFrontmatter,
@@ -112,13 +116,14 @@ const pluginFacts = (entries: readonly ExtractedEntry[]) =>
         .content.toString("utf8"),
     ),
   );
-const worldFacts = (entries: readonly ExtractedEntry[]) =>
+const worldFacts = (entries: readonly ExtractedEntry[], packageName: string) =>
   collectionWorldFacts(
     parseYaml(
       entries
         .find((entry) => entry.relativePath === "world.yaml")!
         .content.toString("utf8"),
     ) as Record<string, unknown>,
+    packageName,
   );
 
 /** Plugins this host already has, as far as resolving a set is concerned. */
@@ -354,11 +359,15 @@ githubCollectionRoutes.post("/github/preview", async (c) => {
         continue;
       }
       const bundle = selectPackageEntries(member.archive, member.directory);
+      const packageName = worldPackageName(
+        repositoryUrl(member.location),
+        member.directory,
+      );
       let summary: Awaited<ReturnType<typeof inspectWorldBundle>>;
       try {
         summary =
           member.kind === "world"
-            ? await inspectWorldBundle(bundle)
+            ? await inspectWorldBundle(bundle, packageName)
             : inspectBundle(bundle, reserved);
       } catch (error) {
         // A manifest names its members, so a broken one breaks the collection.
@@ -370,7 +379,7 @@ githubCollectionRoutes.post("/github/preview", async (c) => {
         );
         continue;
       }
-      if (member.kind === "world") worlds.push(worldFacts(bundle));
+      if (member.kind === "world") worlds.push(worldFacts(bundle, packageName));
       else plugins.push(pluginFacts(bundle));
       const preview = {
         ...summary,
@@ -469,7 +478,10 @@ githubCollectionRoutes.post("/github/batch", async (c) => {
         );
       const summary =
         kind === "world"
-          ? await inspectWorldBundle(entries)
+          ? await inspectWorldBundle(
+              entries,
+              worldPackageName(preview.source.repository, preview.source.path),
+            )
           : inspectBundle(entries, reserved);
       if (summary.id !== preview.id)
         throw httpError(409, "Package identity changed");
@@ -535,8 +547,9 @@ githubCollectionRoutes.post("/collection", async (c) => {
         if (kind === "world") {
           const denied = requireAccess(c, "world.write");
           if (denied) return denied;
-          const { id } = await inspectWorldBundle(bundle);
-          worlds.push(worldFacts(bundle));
+          const packageName = worldPackageName("", member.path);
+          const { id } = await inspectWorldBundle(bundle, packageName);
+          worlds.push(worldFacts(bundle, packageName));
           prepared.push({ kind, id, entries: bundle });
         } else {
           const { pluginId } = validatePluginBundle(bundle, reserved);

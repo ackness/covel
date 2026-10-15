@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
@@ -17,7 +17,6 @@ import {
   loadPluginCatalogue,
   validateWorldPackage,
 } from "../../src/world-data/validate-world-package.js";
-import type { WorldDataSourceDescriptor } from "@covel/shared";
 
 const REPO = path.resolve(import.meta.dirname, "../../../..");
 const PLUGINS = path.join(REPO, "plugins");
@@ -58,8 +57,8 @@ contributes:
 
 /**
  * A world package needs no descriptor for a file at a well-known path. The
- * paths are the kernel's and those the plugins name for their data, and what
- * they give is the descriptor entry an author would have written.
+ * paths are the kernel's and those the plugins name for their data; a
+ * descriptor changes, turns off or adds sources.
  */
 describe("world data conventions", () => {
   let roots: string[] = [];
@@ -94,39 +93,50 @@ describe("world data conventions", () => {
     roots = [];
   });
 
-  it("gives the entry an author writes for the same file", async () => {
-    // The bundled worlds write their descriptors out. Every source of theirs
-    // that is at a conventional path must be what the convention gives.
-    const conventions = new Map(
-      conventionsOfPlugins(await loadPluginCatalogue([PLUGINS])).map(
-        (source) => [source.entry.path, source.entry],
-      ),
-    );
-    const fields = (entry: WorldDataSourceDescriptor) => ({
-      kind: entry.kind,
-      to: entry.to,
-      key: entry.key,
-      indexTo: entry.indexTo,
-      schema: entry.schema,
-      visibility: entry.visibility,
-    });
-    let compared = 0;
-    for (const id of ["haruka-academy", "lantern-barrow", "mistport"]) {
-      const { sources } = await loadWorldDataDescriptor({
-        worldRoot: path.join(REPO, "worlds", id),
+  it("reads the bundled worlds by convention alone, every rule file included", async () => {
+    for (const id of [
+      "emberback",
+      "haruka-academy",
+      "lantern-barrow",
+      "mistport",
+    ]) {
+      const worldRoot = path.join(REPO, "worlds", id);
+      const { sources, diagnostics } = await loadWorldDataDescriptor({
+        worldRoot,
         worldId: id,
-        worldDataPath: "data/world.data.yaml",
       });
-      for (const source of sources) {
-        const convention = conventions.get(source.descriptor.path);
-        if (!convention) continue;
-        expect(fields(source.descriptor), `${id}: ${source.id}`).toEqual(
-          fields(convention),
-        );
-        compared += 1;
-      }
+      expect(diagnostics, id).toEqual([]);
+      const rules = (await readdir(path.join(worldRoot, "data/rules")))
+        .filter((file) => !/\.[a-z]{2}-[A-Z]{2}\.yaml$/.test(file))
+        .map((file) => `data/rules/${file}`);
+      expect(rules.length, id).toBeGreaterThan(0);
+      for (const file of rules)
+        expect(
+          sources.find((source) => source.descriptor.path === file)?.descriptor
+            .to,
+          `${id}: ${file}`,
+        ).toBe("contract:world.rules@1+lorebook");
     }
-    expect(compared).toBeGreaterThan(15);
+  });
+
+  it("reads every file of a directory convention in file-name order", async () => {
+    const root = await world({
+      "data/rules/b-later.yaml": "[]\n",
+      "data/rules/a-first.yaml": "[]\n",
+      // A translation belongs to its main file; it is no source.
+      "data/rules/a-first.zh-CN.yaml": "[]\n",
+      "data/rules/notes.json": "{}\n",
+    });
+    const { sources } = await loadWorldDataDescriptor({
+      worldRoot: root,
+      worldId: "small",
+    });
+    expect(
+      sources.map((source) => [source.id, source.descriptor.path]),
+    ).toEqual([
+      ["rules-a-first", "data/rules/a-first.yaml"],
+      ["rules-b-later", "data/rules/b-later.yaml"],
+    ]);
   });
 
   it("reads a package without a descriptor by its files", async () => {
@@ -167,14 +177,14 @@ describe("world data conventions", () => {
     ).toEqual([]);
   });
 
-  it("uses the descriptor alone when the package names one", async () => {
+  it("adds the sources of a descriptor to the conventional ones", async () => {
     const root = await world({
       "world.yaml":
         "id: small\nname: Small\nsummary: A small world.\ndefaultLocale: en-US\nworldData: data/world.data.yaml\n",
       "data/world.data.yaml":
         "sources:\n  log:\n    kind: yaml\n    path: data/log.yaml\n    to: contract:quests@1\n    key: id\n",
       "data/log.yaml": "[]\n",
-      // Conventional, and not listed: the descriptor decides.
+      // Conventional, and not listed: still read.
       "data/items.yaml": "[]\n",
     });
     const { sources } = await loadWorldDataDescriptor({
@@ -182,9 +192,51 @@ describe("world data conventions", () => {
       worldId: "small",
       worldDataPath: "data/world.data.yaml",
     });
-    expect(sources.map((source) => source.id)).toEqual(["log"]);
+    expect(sources.map((source) => source.id)).toEqual(["items", "log"]);
     // `schema` is the contract of the destination when it is not written.
-    expect(sources[0]!.descriptor.schema).toBe("contract:quests@1");
+    expect(sources[1]!.descriptor.schema).toBe("contract:quests@1");
+  });
+
+  it("changes or turns off a conventional source by an entry with its path", async () => {
+    const root = await world({
+      "data/world.data.yaml": [
+        "sources:",
+        "  gear:",
+        "    path: data/items.yaml",
+        "    visibility: hidden",
+        "  questLog:",
+        "    path: data/quests.yaml",
+        "    enabled: false",
+        "  stray:",
+        "    path: data/elsewhere.yaml",
+        "    key: id",
+        "",
+      ].join("\n"),
+      "data/items.yaml": "[]\n",
+      "data/quests.yaml": "[]\n",
+    });
+    const { sources, diagnostics } = await loadWorldDataDescriptor({
+      worldRoot: root,
+      worldId: "small",
+      worldDataPath: "data/world.data.yaml",
+    });
+    // The entry's fields win and its ID names the source; the rest stays.
+    expect(sources.map((source) => source.id)).toEqual(["gear"]);
+    expect(sources[0]!.descriptor).toMatchObject({
+      kind: "yaml",
+      path: "data/items.yaml",
+      to: "contract:inventory.items@1",
+      key: "id",
+      visibility: "hidden",
+    });
+    // An entry for a path no convention reads must be a whole source.
+    expect(diagnostics).toEqual([
+      expect.objectContaining({
+        level: "warning",
+        sourceId: "stray",
+        message: expect.stringContaining("changes nothing"),
+      }),
+    ]);
   });
 
   it("warns about a data file that no convention names", async () => {
@@ -390,7 +442,7 @@ describe("world data conventions", () => {
     expect(await codes(manifest)).toEqual([
       ["warning", "unrequested-receiver", "data/quests.yaml"],
     ]);
-    const requested = `${manifest}pluginPolicy:\n  requested:\n    - core-quest\n`;
+    const requested = `${manifest}pluginPolicy:\n  plus:\n    - core-quest\n`;
     expect(await codes(requested)).toEqual([]);
 
     // A scanned plugin names the same file.
@@ -409,5 +461,20 @@ describe("world data conventions", () => {
     expect(
       await codes(`${requested}    - rival-log\n`, [rivalDir, PLUGINS]),
     ).toEqual([["error", "convention-collision", "data/quests.yaml"]]);
+    // A descriptor that says which contract the file is for settles it.
+    const settled = await world({
+      "world.yaml": `${requested}    - rival-log\nworldData: data/world.data.yaml\n`,
+      "data/world.data.yaml":
+        "sources:\n  quests:\n    kind: yaml\n    path: data/quests.yaml\n    to: contract:quests@1\n    key: id\n",
+      "data/quests.yaml": quests,
+    });
+    expect(
+      (
+        await validateWorldPackage({
+          worldDir: settled,
+          pluginsDirs: [rivalDir, PLUGINS],
+        })
+      ).diagnostics.filter((item) => item.code === "convention-collision"),
+    ).toEqual([]);
   });
 });

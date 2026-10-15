@@ -156,12 +156,13 @@ async function postZip(
   app: Hono,
   url: string,
   zipBuffer: Buffer,
+  fileName = "upload.zip",
 ): Promise<Response> {
   const form = new FormData();
   form.append(
     "file",
     new Blob([new Uint8Array(zipBuffer)], { type: "application/zip" }),
-    "upload.zip",
+    fileName,
   );
   return app.request(url, { method: "POST", body: form });
 }
@@ -208,8 +209,6 @@ name: Test World
 version: "0.1.0"
 summary: A synthetic world for install tests.
 defaultLocale: en
-supportedLocales:
-  - en
 tags:
   - test
 `;
@@ -773,6 +772,39 @@ describe("POST /api/install/world", () => {
       await store.close();
     },
   );
+
+  it("names a world without `id` after the ZIP file", async () => {
+    const store = createMemoryStore();
+    const app = createTestApp(store);
+    const zip = await buildZip({
+      "world.yaml": VALID_WORLD_YAML.replace("id: test-world\n", ""),
+      "WORLD.md": VALID_WORLD_MD,
+    });
+
+    const refused = await postZip(
+      app,
+      "/api/install/world",
+      zip,
+      "Quiet Harbor.zip",
+    );
+    expect(refused.status).toBe(400);
+    expect(await refused.text()).toContain("has no `id`");
+    expect(await readdir(worldsDir)).toEqual([]);
+
+    const res = await postZip(
+      app,
+      "/api/install/world",
+      zip,
+      "quiet-harbor.zip",
+    );
+    expect(res.status).toBe(201);
+    expect(await res.json()).toMatchObject({ id: "quiet-harbor" });
+    expect(await dirExists(path.join(worldsDir, "quiet-harbor"))).toBe(true);
+    expect(await store.getWorld("quiet-harbor")).toMatchObject({
+      name: "Test World",
+    });
+    await store.close();
+  });
 
   it("rolls back the new directory when activation fails so the upload can be retried", async () => {
     const store = createMemoryStore();

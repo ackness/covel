@@ -1,9 +1,6 @@
-import { z } from "zod";
-import { loadExternalDimensions } from "../../world-seed-loader.js";
 import { readWorldDataSource } from "../source-reader.js";
 import { parseWorldDataTarget } from "../target-uri.js";
 import {
-  dimensionIdSchema,
   DIMENSION_CONTRACT,
   DIMENSION_DATA_NAMESPACE,
   resolveWorldDimensionsLocale,
@@ -125,17 +122,18 @@ export function appendDimensionPlan(
 
 /**
  * Match world loading precedence, but validate only dimension declarations
- * here. The result is resolved for the session's content locale: a session
- * stores one language, never the package's locale maps.
+ * here: the `dimensions` of `world.yaml`, replaced by a dimensions source
+ * (`data/dimensions.yaml`) when the package has one. The result is resolved
+ * for the session's content locale: a session stores one language, never
+ * the package's locale maps.
  */
 export async function readEffectiveDimensions(args: {
   worldRoot: string;
   manifest: {
-    id?: string;
     dimensions?: unknown;
-    dimensionSources?: unknown;
     defaultLocale?: string;
-    supportedLocales?: readonly string[];
+    /** The world's editions; without them, its default locale only. */
+    editions?: readonly string[];
   };
   sources?: readonly OrderedWorldDataSource[];
   locale?: string;
@@ -143,33 +141,10 @@ export async function readEffectiveDimensions(args: {
   const declared = [
     ...new Set([
       ...(args.manifest.defaultLocale ? [args.manifest.defaultLocale] : []),
-      ...(args.manifest.supportedLocales ?? []),
+      ...(args.manifest.editions ?? []),
     ]),
   ];
   let definitions = parseDimensions(args.manifest.dimensions);
-  const paths = z
-    .record(dimensionIdSchema, z.string().min(1))
-    .parse(
-      args.manifest.dimensionSources === undefined
-        ? {}
-        : args.manifest.dimensionSources,
-    );
-  let externalDiagnostic: string | undefined;
-  const external = await loadExternalDimensions(
-    args.worldRoot,
-    paths,
-    args.manifest.id ?? "world",
-    args.manifest.defaultLocale,
-    declared,
-    (message) => {
-      externalDiagnostic = message;
-    },
-  );
-  if (external === null)
-    throw new Error(
-      `Dimension sources failed validation${externalDiagnostic ? `: ${externalDiagnostic}` : ""}`,
-    );
-  definitions = parseDimensions({ ...definitions, ...external });
   for (const source of args.sources ?? []) {
     const target = parseWorldDataTarget(source.descriptor.to);
     if (

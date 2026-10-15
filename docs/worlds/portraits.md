@@ -253,31 +253,11 @@ wrote worlds/tidelamp/media/presence.json with 1 presence record(s)
 
 ## 5. 让世界用上这些图
 
-**世界没有 `data/world.data.yaml` 时，什么都不用做。** `media/portraits/` 和 `media/presence.json` 是约定好的位置，放在那里就会被自动导入。按[第一个世界](./first-world.md)做出来的世界就是这种情况。
-
-世界有 `data/world.data.yaml` 时，那个文件里要列出全部数据来源，所以要加上这两条：
-
-```yaml
-sources:
-  portraits:
-    kind: media
-    path: media/portraits
-    to: media
-    indexTo: contract:character.portrait-assets@1
-    key: filename
-  presence:
-    kind: json
-    path: media/presence.json
-    to: contract:character.portraits@1
-    key: characterId
-    after: portraits
-```
-
-第一条把图片存进这一局的媒体库，第二条告诉游戏哪个角色用哪张图。字段的含义见[世界数据参考](../reference/world-data.md#character-presence-portraits)。
+**什么都不用登记。** `media/portraits/` 和 `media/presence.json` 是约定好的位置，上面的脚本也只写这两处。放在那里的图片和清单会被自动导入：图片存进这一局的媒体库，清单告诉游戏哪个角色用哪张图。世界有 `data/world.data.yaml` 时也一样，那个文件只写和约定不同的地方。格式和放在别处时的写法见[世界数据参考](../reference/world-data.md#character-presence-portraits)。
 
 **这一局要启用显示立绘的插件。** 内置的是“角色资料”（`character-blueprint`）。它包含在“对话模式”（`dialogue-mode`）这个玩法包里；“传统故事模式”（`traditional-story`）里没有它。两种办法任选：
 
-- 把 `world.yaml` 里的 `pluginPolicy.presetId` 改成 `dialogue-mode`。
+- 在 `world.yaml` 的 `pluginPolicy.plus` 里加上 `character-blueprint`，或者把 `pluginPolicy.preset` 改成 `dialogue-mode`。
 - 或者在开局的准备页展开“自定义插件与高级设置”，选中“角色资料”。
 
 没有启用时，图片和对应清单会被跳过，开局时给出一条提醒。

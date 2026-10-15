@@ -1,6 +1,6 @@
 # 第一个世界
 
-这一页带你手写一个最小的世界包“潮灯镇”，校验它，并在 Covel 里用它开一局。完成后，你会有一个由四个文件组成、可以继续扩充的世界。
+这一页带你手写一个世界包“潮灯镇”。先用两个文件做出最小的世界，校验它并开一局；再一步步加上玩法、资料库和角色。完成后，你会有一个由四个文件组成、可以继续扩充的世界。
 
 全程约二十分钟。不需要写代码。
 
@@ -27,52 +27,28 @@ tidelamp/
 
 ## 1. 创建文件夹
 
-世界放在用户世界目录里，默认是 `~/.covel/worlds/`。给文件夹起一个和世界 ID 相同的名字：只用小写字母、数字和连字符，并且以字母开头。
+世界放在用户世界目录里，默认是 `~/.covel/worlds/`。文件夹的名字就是世界的 ID：只用小写字母、数字和连字符，并且以字母开头。
 
 ```bash
-mkdir -p ~/.covel/worlds/tidelamp/data ~/.covel/worlds/tidelamp/characters
+mkdir -p ~/.covel/worlds/tidelamp
 ```
 
 ## 2. 写 `world.yaml`
 
-这个文件说明世界的身份和它想要的玩法。新建 `~/.covel/worlds/tidelamp/world.yaml`：
+这个文件说明世界叫什么、用什么语言写。新建 `~/.covel/worlds/tidelamp/world.yaml`：
 
 ```yaml
-id: tidelamp
 name: 潮灯镇
-version: 0.1.0
 summary: 每逢大退潮，海床上会露出一条通往旧灯塔的石路。今夜潮水退得比任何一年都远，熄了四十年的灯塔亮了。
 defaultLocale: zh-CN
-tags:
-  - mystery
-  - coastal
-pluginPolicy:
-  presetId: traditional-story
-characterSchema:
-  types:
-    - npc
-  attributes:
-    - id: resolve
-      name: 胆识
-      type: number
-      category: stats
-      min: 1
-      max: 5
-      defaultValue: 3
-      description: 面对未知时能不能稳住。
 ```
 
-逐段看它说了什么：
+| 字段              | 作用                                                   |
+| ----------------- | ------------------------------------------------------ |
+| `name`、`summary` | 世界卡片上显示的名字和简介                             |
+| `defaultLocale`   | 这个世界是用什么语言写的。这里的所有文件都用这一种语言 |
 
-| 字段                    | 作用                                                             |
-| ----------------------- | ---------------------------------------------------------------- |
-| `id`                    | 世界的 ID。同一个目录里不能有两个世界使用相同的 ID               |
-| `name`、`summary`       | 世界卡片上显示的名字和简介                                       |
-| `defaultLocale`         | 这个世界是用什么语言写的。这里的所有文件都用这一种语言           |
-| `pluginPolicy.presetId` | 开局默认的玩法包。`traditional-story` 是内置的传统叙事组合       |
-| `characterSchema`       | 这个世界的角色有哪些类型和属性。这里只定义了一个 1 到 5 的“胆识” |
-
-内置的玩法包有四个：`traditional-story`（传统叙事）、`dialogue-mode`（角色对话）、`low-cost`（省 token）、`narrative-only`（只要叙事）。
+这三个字段是必填的全部。世界的 ID 就是文件夹的名字 `tidelamp`，不用写进文件。
 
 ## 3. 写 `WORLD.md`
 
@@ -109,7 +85,56 @@ characterSchema:
 > [!TIP]
 > 正文写 800 到 1500 字比较合适。它每个回合都会进入提示词，太长既费钱，也会被截断。不需要每回合都出现的细节，放进下一步的资料库。
 
-## 4. 加一份资料库
+## 4. 校验并开第一局
+
+两个文件已经是一个完整的世界。在 Covel 仓库的根目录运行：
+
+```bash
+pnpm validate:world ~/.covel/worlds/tidelamp
+```
+
+通过时输出一行：
+
+```text
+✓ /Users/you/.covel/worlds/tidelamp/world.yaml
+```
+
+启动 Covel（源码运行用 `pnpm dev`；已经在运行的话重启一次），打开世界选择页。你会在列表里看到“潮灯镇”。点“进入”，然后“开始游戏”。
+
+这个世界还没有选玩法，这一局只有每局都有的核心插件：叙事者讲故事，开局时由你创建主角。第一段故事应该从大退潮之夜的码头客栈讲起。
+
+## 5. 选玩法和角色属性
+
+回到 `world.yaml`，在后面加上两段：
+
+```yaml
+name: 潮灯镇
+summary: 每逢大退潮，海床上会露出一条通往旧灯塔的石路。今夜潮水退得比任何一年都远，熄了四十年的灯塔亮了。
+defaultLocale: zh-CN
+pluginPolicy:
+  preset: traditional-story
+characterSchema:
+  types:
+    - npc
+  attributes:
+    - id: resolve
+      name: 胆识
+      type: number
+      category: stats
+      min: 1
+      max: 5
+      defaultValue: 3
+      description: 面对未知时能不能稳住。
+```
+
+| 字段                  | 作用                                                             |
+| --------------------- | ---------------------------------------------------------------- |
+| `pluginPolicy.preset` | 开局默认的玩法包。`traditional-story` 是内置的传统叙事组合       |
+| `characterSchema`     | 这个世界的角色有哪些类型和属性。这里只定义了一个 1 到 5 的“胆识” |
+
+内置的玩法包有四个：`traditional-story`（传统叙事）、`dialogue-mode`（角色对话）、`low-cost`（省 token）、`narrative-only`（只要叙事）。
+
+## 6. 加一份资料库
 
 资料库里的条目只在被提到时才交给模型。每条有一组触发词，游玩中出现这些词时，对应的内容才会进入提示词。新建 `~/.covel/worlds/tidelamp/data/lorebook.yaml`：
 
@@ -124,7 +149,7 @@ characterSchema:
 
 文件放在 `data/lorebook.yaml` 这个约定的路径上，就会被自动导入，不需要在别处登记。
 
-## 5. 预置一个角色
+## 7. 预置一个角色
 
 新建 `~/.covel/worlds/tidelamp/characters/characters.json`：
 
@@ -145,18 +170,10 @@ characterSchema:
 > [!IMPORTANT]
 > 同一个人物、地点或物品在不同文件里出现时，名字和 ID 要完全一致，并且和 `WORLD.md` 里的写法相同。模型按名字把它们对应起来。
 
-## 6. 校验
-
-在 Covel 仓库的根目录运行：
+## 8. 再校验一次，开一局
 
 ```bash
 pnpm validate:world ~/.covel/worlds/tidelamp
-```
-
-通过时输出一行：
-
-```text
-✓ /Users/you/.covel/worlds/tidelamp/world.yaml
 ```
 
 校验器检查清单字段、世界观正文、插件 ID 和每个数据文件里的每条记录。有错误时，它给出文件、位置和原因。例如把 `category: stats` 误写成 `category: stat`：
@@ -169,13 +186,7 @@ pnpm validate:world ~/.covel/worlds/tidelamp
 
 按提示改完再运行，直到通过。
 
-## 7. 在游戏里打开它
-
-启动 Covel（源码运行用 `pnpm dev`；已经在运行的话重启一次），打开世界选择页。你会在列表里看到“潮灯镇”。
-
-点“进入”，在准备页确认玩法包是“传统故事模式”，然后“开始游戏”。创建主角之后，第一段故事应该从大退潮之夜的码头客栈讲起。
-
-试着做这几件事，确认每个文件都在起作用：
+重启 Covel，再进入“潮灯镇”。这次准备页选中的玩法包是“传统故事模式”，点“开始游戏”。试着做这几件事，确认每个文件都在起作用：
 
 | 做什么               | 应该看到                         | 来自哪个文件                  |
 | -------------------- | -------------------------------- | ----------------------------- |
@@ -189,7 +200,7 @@ pnpm validate:world ~/.covel/worlds/tidelamp
 | 现象                                        | 原因和处理                                                                        |
 | ------------------------------------------- | --------------------------------------------------------------------------------- |
 | 世界列表里没有它                            | 文件夹不在用户世界目录里，或者 `world.yaml` 有错。运行校验命令查看                |
-| 校验报 `Multiple world packages declare id` | 同一个目录里有两个文件夹使用了相同的 `id`，通常是复制文件夹后忘了改               |
+| 校验报 `Multiple world packages declare id` | 同一个目录里有两个世界使用了相同的 ID，通常是复制了一个写了 `id` 的文件夹后忘了改 |
 | 校验报 `Unrecognized key`                   | 写了清单里没有的字段，对照[世界清单字段表](../reference/schema/world-manifest.md) |
 | 开场和 `WORLD.md` 对不上                    | “开局”一节写得不够具体，补上时间、地点和主角的处境                                |
 | 模型过早说破了谜底                          | 在暗线里写明什么时候之前不要说破                                                  |
@@ -198,7 +209,7 @@ pnpm validate:world ~/.covel/worlds/tidelamp
 
 你已经有了一个可以玩的世界。可以沿着这些方向继续：
 
-- **换一种玩法。** 把 `presetId` 换成 `dialogue-mode`，或者在 `pluginPolicy.requested` 里加上 `dice-check`、`core-quest`、`inventory`、`affinity`，让它变成一场带判定和任务的冒险。
+- **换一种玩法。** 把 `preset` 换成 `dialogue-mode`，或者在 `pluginPolicy.plus` 里加上 `dice-check`、`core-quest`、`inventory`、`affinity`，让它变成一场带判定和任务的冒险。
 - **预置更多内容。** 在仓库里运行 `pnpm describe:authoring`，它列出当前版本能预置的每一种内容、文件该放的路径和一份合法的示例。
 - **看成品。** 仓库的 `worlds/` 目录里有四个完整的世界，`worlds/emberback` 是带判定、任务、行囊和好感的参考。
 - **加上画面。** 见[世界立绘](./portraits.md)和[世界场景](./scenes.md)。

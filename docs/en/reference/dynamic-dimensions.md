@@ -61,11 +61,10 @@ A keyword the server does not recognize causes a clear error. It is never silent
 > [!NOTE]
 > A development session that stores a dimension value in the multi-language form must be created again.
 
-**Three ways to write it use the same declaration format**: in `world.yaml`, in a single-item file from `dimensionSources`, and in a whole-table dimension file (`covel://world/dimensions → world:metadata.dimensions`).
+**Two ways to write it use the same declaration format**: in `world.yaml`, or in a whole-table dimension file, `data/dimensions.yaml` (`covel://world/dimensions → world:metadata.dimensions`).
 
-- If an external file declares the same ID as `world.yaml`, the external file's declaration wins.
-- A dimension source in the descriptor replaces the whole table.
-- The content of a single-item file is one complete declaration, not a value.
+- The dimension file replaces the whole table in `world.yaml`.
+- The content of each item is one complete declaration, not a value.
 
 ## Fields derived from the clock
 
@@ -168,7 +167,7 @@ There is no expression language. A world file contains no code.
 - No matter which way a dimension is declared, the declaration is recorded in the import ledger.
 - If the author's declaration has not changed, this game's progress is kept.
 - Changing or deleting a dimension that has already evolved, was edited by hand, or still has turns waiting for settlement is reported as a conflict. Using `force` does not reset it.
-- `sync-dimensions` syncs only dimensions. It cannot change the lorebook, characters, or other plugin data. A world without a descriptor can also use it to sync declarations written in `world.yaml` and in external files.
+- `sync-dimensions` syncs only dimensions. It cannot change the lorebook, characters, or other plugin data. It syncs declarations written in `world.yaml` and in the dimension file alike.
 
 For the full sync rules, see [Preflight and Sync](./world-data.md#preflight-and-sync).
 

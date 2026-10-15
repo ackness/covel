@@ -210,8 +210,7 @@
     "recommendationReasons": {
       "requiredByWorld": "Required by world",
       "requestedByWorld": "World default",
-      "packOptional": "Pack optional",
-      "recommendedByWorld": "Recommended by world"
+      "packOptional": "Pack optional"
     },
     "exportDimensions": "Export Dimensions",
     "importDimensions": "Import Dimensions",

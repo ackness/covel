@@ -40,14 +40,13 @@ definition:
 
 The content of the file is `{ id: world, definition: ... }`. `id` is always written as `world`, and `definition` is the definition of the time.
 
-When a world uses a descriptor (`data/world.data.yaml`), list this file in it:
+When the file is at another path, add a source to the descriptor (`data/world.data.yaml`):
 
 ```yaml
-schemaVersion: 1
 sources:
   timeDefinition:
     kind: yaml
-    path: data/time.yaml
+    path: data/calendar.yaml
     schema: contract:world.time-definition@1
     to: contract:world.time-definition@1
     key: id

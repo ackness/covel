@@ -182,7 +182,6 @@ name: 提灯古冢
 version: 0.1.0
 summary: 灯灭了。
 defaultLocale: zh-CN
-supportedLocales: [zh-CN, en-US]
 dimensions:
   alarm:
     name: 警戒
@@ -248,8 +247,9 @@ name: 提灯古冢
 version: 0.1.0
 summary: 灯灭了。
 defaultLocale: zh-CN
-supportedLocales: [zh-CN, en-US]
 `;
+    // The world has an en-US edition: `.en` names only its language.
+    const edition = { "world.en-US.yaml": "summary: The lamp is out.\n" };
 
     it("is not read for the edition it would have meant", async () => {
       const root = await world({
@@ -266,67 +266,52 @@ supportedLocales: [zh-CN, en-US]
       ).toEqual([]);
     });
 
-    it.each(["external", "worldData"])(
-      "ignores bare-language dimension overlays for %s in catalog and session reads",
-      async (kind) => {
-        const definition =
-          "name: 警戒\nschema: { type: number }\ninitialValue: 0\n";
-        const root = await world({
-          "world.yaml":
-            manifest +
-            (kind === "external"
-              ? "dimensionSources:\n  alarm: alarm.yaml\n"
-              : ""),
-          ...(kind === "external"
-            ? {
-                "alarm.yaml": definition,
-                "alarm.en.yaml": "name: Wrong\n",
-              }
-            : {
-                "data/dimensions.yaml":
-                  "alarm:\n  " + definition.replaceAll("\n", "\n  "),
-                "data/dimensions.en.yaml": "alarm:\n  name: Wrong\n",
-              }),
-        });
-        let diagnostics: readonly { message: string }[] = [];
-        const record = await loadSingleWorld(root, {
-          onWorldDataDiagnostics: (items) => {
-            diagnostics = items;
+    it("ignores bare-language dimension overlays in catalog and session reads", async () => {
+      const definition =
+        "name: 警戒\nschema: { type: number }\ninitialValue: 0\n";
+      const root = await world({
+        "world.yaml": manifest,
+        ...edition,
+        "data/dimensions.yaml":
+          "alarm:\n  " + definition.replaceAll("\n", "\n  "),
+        "data/dimensions.en.yaml": "alarm:\n  name: Wrong\n",
+      });
+      let diagnostics: readonly { message: string }[] = [];
+      const record = await loadSingleWorld(root, {
+        onWorldDataDiagnostics: (items) => {
+          diagnostics = items;
+        },
+      });
+      expect(JSON.stringify(record?.metadata?.dimensions)).not.toContain(
+        "Wrong",
+      );
+      expect(
+        diagnostics.some((item) =>
+          item.message.includes("the file is ignored"),
+        ),
+      ).toBe(true);
+      const input = source(root, "data/dimensions.yaml");
+      const dimensions = await readEffectiveDimensions({
+        worldRoot: root,
+        manifest: await readWorldManifest(root),
+        sources: [
+          {
+            ...input,
+            descriptor: {
+              ...input.descriptor,
+              to: "world:metadata.dimensions",
+            },
           },
-        });
-        expect(JSON.stringify(record?.metadata?.dimensions)).not.toContain(
-          "Wrong",
-        );
-        expect(
-          diagnostics.some((item) =>
-            item.message.includes("the file is ignored"),
-          ),
-        ).toBe(true);
-        const input = source(root, "data/dimensions.yaml");
-        const dimensions = await readEffectiveDimensions({
-          worldRoot: root,
-          manifest: await readWorldManifest(root),
-          sources:
-            kind === "external"
-              ? []
-              : [
-                  {
-                    ...input,
-                    descriptor: {
-                      ...input.descriptor,
-                      to: "world:metadata.dimensions",
-                    },
-                  },
-                ],
-          locale: "en-US",
-        });
-        expect(dimensions.alarm?.name).toBe("警戒");
-      },
-    );
+        ],
+        locale: "en-US",
+      });
+      expect(dimensions.alarm?.name).toBe("警戒");
+    });
 
     it("ignores bare-language gallery overlays", async () => {
       const root = await world({
         "world.yaml": manifest,
+        ...edition,
         "media/gallery.json": JSON.stringify({
           images: [
             { id: "cover", filename: "gallery/cover.png", name: "原图" },
@@ -348,6 +333,7 @@ supportedLocales: [zh-CN, en-US]
     it("leaves the lore and the manifest in the main language", async () => {
       const root = await world({
         "world.yaml": manifest,
+        ...edition,
         "world.en.yaml": "name: Lantern Barrow\n",
         "WORLD.md": "# 提灯古冢\n",
         "WORLD.en.md": "# Lantern Barrow\n",
@@ -363,6 +349,7 @@ supportedLocales: [zh-CN, en-US]
     it("is reported to an installer as an error naming the expected file", async () => {
       const root = await world({
         "world.yaml": manifest,
+        ...edition,
         "WORLD.md": "# 提灯古冢\n",
         "WORLD.en.md": "# Lantern Barrow\n",
       });

@@ -144,7 +144,8 @@ describe("world package format fields", () => {
       worldId: "sample-world",
       worldDataPath: "data/world.data.yaml",
     });
-    expect(loaded.sources).toEqual([]);
+    // The descriptor changes nothing: the file is read by its convention.
+    expect(loaded.sources.map((source) => source.id)).toEqual(["lorebook"]);
     expect(loaded.diagnostics).toEqual([
       expect.objectContaining({ level: "error", sourceId: "lore" }),
     ]);
