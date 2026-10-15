@@ -165,87 +165,6 @@ function ensureRuntimePackages() {
   }
 }
 
-// Plugins' handler.js / guard.js import workspace packages that are NOT in
-// @covel/server's dependency tree — e.g. @covel/plugin-handlers-utils is used
-// only by plugin handlers, never by the server. `pnpm deploy --filter
-// @covel/server` therefore omits them, and the staged plugins fail to load at
-// runtime with ERR_MODULE_NOT_FOUND. Collect every @covel/* runtime dep
-// declared by a bundled plugin (plus their transitive @covel deps) and copy any
-// the server deploy didn't already provide.
-function ensurePluginWorkspaceDeps() {
-  const nodeModulesDir = path.join(serverStaging, "node_modules");
-  const pluginsDir = path.join(projectRoot, "plugins");
-  if (!fs.existsSync(pluginsDir)) return;
-
-  const covelDepsOf = (pkgJsonPath) => {
-    if (!fs.existsSync(pkgJsonPath)) return [];
-    const pkg = JSON.parse(fs.readFileSync(pkgJsonPath, "utf-8"));
-    // Runtime deps only — devDependencies (e.g. @covel/plugin-test-utils) never
-    // load in the packaged sidecar.
-    return Object.keys(pkg.dependencies ?? {}).filter((name) =>
-      name.startsWith("@covel/"),
-    );
-  };
-
-  // @covel/* are workspace packages — resolve to their source dir. A package
-  // depended on ONLY by plugins (e.g. @covel/plugin-handlers-utils) has no
-  // root/server node_modules symlink, so resolveInstalledPackagePath misses it;
-  // the source under packages/<name> (or apps/<name>) is the reliable origin.
-  const resolveWorkspaceSource = (name) => {
-    const short = name.slice("@covel/".length);
-    for (const dir of ["packages", "apps"]) {
-      const candidate = path.join(projectRoot, dir, short);
-      if (fs.existsSync(path.join(candidate, "package.json"))) return candidate;
-    }
-    return resolveInstalledPackagePath(name);
-  };
-
-  // A plugin-only dependency may publish runtime imports from dist/ (not src/).
-  // Keep built output when copying workspace packages into the sidecar.
-  const SKIP = new Set(["node_modules", ".turbo", "coverage", "tests"]);
-
-  const queue = [];
-  for (const entry of fs.readdirSync(pluginsDir)) {
-    queue.push(...covelDepsOf(path.join(pluginsDir, entry, "package.json")));
-  }
-
-  const seen = new Set();
-  while (queue.length > 0) {
-    const name = queue.shift();
-    if (seen.has(name)) continue;
-    seen.add(name);
-
-    const source = resolveWorkspaceSource(name);
-    if (!source) {
-      console.warn(`  ⚠ plugin workspace dep not resolvable: ${name}`);
-      continue;
-    }
-    // Follow this package's own @covel deps so transitive ones are staged too.
-    queue.push(...covelDepsOf(path.join(source, "package.json")));
-
-    const target = path.join(nodeModulesDir, ...name.split("/"));
-    if (fs.existsSync(target)) continue; // server deploy already provided it
-    fs.mkdirSync(path.dirname(target), { recursive: true });
-    fs.cpSync(fs.realpathSync(source), target, {
-      recursive: true,
-      filter: (src) => !SKIP.has(path.basename(src)),
-    });
-    const pkg = JSON.parse(
-      fs.readFileSync(path.join(target, "package.json"), "utf-8"),
-    );
-    for (const [subpath, exported] of Object.entries(pkg.exports ?? {})) {
-      const entry = typeof exported === "string" ? exported : exported?.import;
-      if (typeof entry !== "string" || !entry.startsWith("./dist/")) continue;
-      if (!fs.existsSync(path.join(target, entry))) {
-        throw new Error(
-          `Plugin workspace dependency ${name} is missing built export ${subpath}: ${entry}`,
-        );
-      }
-    }
-    console.log(`  ✓ staged plugin workspace dep: ${name}`);
-  }
-}
-
 function verifyStagedServerRuntime() {
   const checks = [
     path.join(serverStaging, "src/index.js"),
@@ -255,6 +174,13 @@ function verifyStagedServerRuntime() {
       serverStaging,
       "node_modules/@covel/ai-provider/data/model-db.json",
     ),
+    // Plugins import the author SDK and zod through the host: plugin-loader
+    // resolves them for every plugin, bundled or installed.
+    path.join(
+      serverStaging,
+      "node_modules/@covel/plugin-handlers-utils/dist/index.js",
+    ),
+    path.join(serverStaging, "node_modules/zod/package.json"),
   ];
   const missing = checks.filter((target) => !fs.existsSync(target));
   if (missing.length > 0) {
@@ -342,7 +268,6 @@ ensureRuntimePackages();
 // Plugins import workspace packages outside @covel/server's dependency tree
 // (e.g. @covel/plugin-handlers-utils) — stage them so handler/guard imports
 // resolve in the packaged sidecar instead of ERR_MODULE_NOT_FOUND.
-ensurePluginWorkspaceDeps();
 
 // Copy the committed snapshot explicitly so workspace packlist differences do
 // not remove the baseline database from an installer.
