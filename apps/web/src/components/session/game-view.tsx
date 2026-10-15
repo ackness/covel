@@ -481,7 +481,9 @@ export function GameView({
           {/* Header — hidden while the stage is immersive so it fills the
               viewport. Fades back in on exit (rails snap; chrome fades). */}
           {!(immersive && viewMode === "stage") && (
-            <div className="animate-in fade-in-0 duration-200">
+            // Above the notice bars below it (z-10), so the header's menus
+            // open over them.
+            <div className="relative z-20 animate-in fade-in-0 duration-200">
               <GameViewHeader
                 executionState={executionState}
                 t={t}

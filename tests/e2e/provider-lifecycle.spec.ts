@@ -166,6 +166,10 @@ test("failed provider creation keeps its draft and deleting its last model retai
     .getByRole("group", { name: "synthetic-model", exact: true })
     .getByRole("button", { name: "Delete", exact: true })
     .click();
+  await page
+    .getByRole("dialog", { name: "Delete model configuration?" })
+    .getByRole("button", { name: "Delete", exact: true })
+    .click();
   await expect
     .poll(async () => (await savedEntries(page))["llm.providers"]?.[0]?.models)
     .toEqual([]);
@@ -200,7 +204,7 @@ test("an import finishing after a connection edit reports a conflict and preserv
     .poll(async () => (await savedEntries(page))["llm.providers"])
     .toEqual([profile]);
   await settings
-    .getByRole("button", { name: /import-fixture.*1 models/ })
+    .getByRole("button", { name: /import-fixture.*1 model\b/ })
     .click();
   await page.evaluate(() => {
     const read = File.prototype.text;
@@ -306,9 +310,7 @@ for (const { provider, model, protocol, baseUrl } of [
     await expect(
       add.getByRole("combobox", { name: "Evaluation API", exact: true }),
     ).toHaveValue(protocol);
-    await add
-      .getByRole("button", { name: "Add 1 models", exact: true })
-      .click();
+    await add.getByRole("button", { name: "Add 1 model", exact: true }).click();
     await expect(add).toHaveCount(0);
     const profiles = (await savedEntries(page))["llm.providers"];
     const profile = profiles.find(

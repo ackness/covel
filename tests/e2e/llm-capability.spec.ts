@@ -238,7 +238,7 @@ test("frontend plugin models expose persistent generation settings independently
     json: { available: true, count: 1, updatedAt: "2026-09-19T00:00:00.000Z" },
   });
   await expect(
-    dialog.getByText("1 models (LiteLLM)", { exact: true }),
+    dialog.getByText("1 model (LiteLLM)", { exact: true }),
   ).toBeVisible();
   await expect(contextLimit).toHaveValue("64000");
   await page.keyboard.press("Tab");

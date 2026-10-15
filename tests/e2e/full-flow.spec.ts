@@ -112,7 +112,7 @@ test.describe("Covel Full Flow", () => {
 
     // The toggle sits in the top bar or, in rail layouts, the nav rail.
     const themeToggle = page
-      .getByRole("button", { name: /toggle theme|切换主题/i })
+      .getByRole("button", { name: /dark mode|深色模式/i })
       .filter({ visible: true })
       .first();
     await expect(themeToggle).toBeVisible();
