@@ -343,7 +343,7 @@ export default function register(covel) {
 }
 ```
 
-- Which runtime the event is about is read from `ctx.pluginId` and `ctx.runtimeId`. `payload` does not contain them. If you read `payload.runtimeId`, it never matches, and the hook does nothing.
+- To tell which runtime the hook is about, read `ctx.pluginId` and `ctx.runtimeId`. `payload` does not contain them. If you read `payload.runtimeId`, it never matches, and the hook does nothing.
 - `ctx.locale` is the language of this game session. When you add text to a prompt, use `instructionLocaleFor(ctx.locale)` to choose the language. Do not guess it from the prompt text.
 - `ctx.getOwnSettings()` reads this plugin's own settings.
 

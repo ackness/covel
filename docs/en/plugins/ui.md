@@ -1,6 +1,6 @@
 # Add UI to a Plugin
 
-This page explains how to make a plugin show content in the game: a panel in the sidebar, a block inside the story text, a set of choices, a form, and a fully custom interface. The reader is an author who already has a plugin that runs and now wants players to see it.
+This page explains how to make a plugin show content in the game: a panel in the sidebar, a block inside the story text, a set of choices, a form, and a fully custom interface. It is written for an author who already has a plugin that runs and now wants players to see it.
 
 By the end, you will have changed the "tavern rumors" panel from [Your First Plugin](./first-plugin.md) into your own design, and added a block of story-text content to it. Most interfaces need only JSON. You do not need to write any front-end code.
 

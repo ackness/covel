@@ -1,6 +1,6 @@
 # 用真实模型验证
 
-这一页讲怎样用一条命令，在一个运行中的 Covel 服务端上自动玩几个回合，并检查每个插件有没有按它的配置运行。命令是 `pnpm e2e:verify`。它不打开浏览器，全程通过服务端接口进行。读完之后，你能跑通它、读懂它的报告，并且知道怎样把一局录下来反复回放。
+这一页讲怎样用一条命令，在一个运行中的 Covel 服务端上自动玩几个回合，并检查每个插件有没有按它的配置运行。命令是 `pnpm e2e:verify`。它不打开浏览器，全程走服务端接口。读完之后，你能跑通它、读懂它的报告，并且知道怎样把一局录下来反复回放。
 
 它适合这些时候：
 
@@ -45,7 +45,7 @@ pnpm e2e:verify
 | 2    | Plugin Flow Discovery | 向服务端要全部插件和 runtime 的清单                                         |
 | 3    | World Selection       | 选定世界                                                                    |
 | 4    | Session Creation      | 像准备页一样建一局游戏，并读回这一局实际启用了哪些插件                      |
-| 5    | Turn Execution        | 依次进行开局、创建角色、然后是 N 个回合，每回合对照期望                     |
+| 5    | Turn Execution        | 依次跑开局、创建角色，然后是 N 个回合，每回合对照期望                       |
 | 6    | Final Session View    | 检查开局步骤和后台任务都已结束，列出每个 runtime 实际用的模型，保存调试记录 |
 | 7    | Summary               | 汇总，给出 `PASS` 或 `FAIL`                                                 |
 
@@ -84,7 +84,7 @@ pnpm e2e:verify --enable-plugins memory --plugin memory
 | Trigger Verification      | 对每个 runtime 比较“应该运行吗”和“实际运行了吗”                            |
 | Detected interaction form | 开局阶段出现的表单，以及脚本怎样填写它                                     |
 
-完成最后一个开局步骤的那次请求会接着进行开场回合，所以这时会报告两次执行：先是开局，再是开场。
+完成最后一个开局步骤的那次请求会接着跑开场回合，所以这时会报告两次执行：先是开局，再是开场。
 
 回合没有保存成功（`execution.completed.committed` 是 `false`）时，这一回合判为 `FAIL`。
 

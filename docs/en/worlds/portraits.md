@@ -242,7 +242,7 @@ node scripts/emit-presence.mjs tidelamp
 wrote worlds/tidelamp/media/presence.json with 1 presence record(s)
 ```
 
-`presence.json` records which image each character uses. It identifies images not by file name, but by a checksum calculated from the image content. So do not write this file by hand, and do not edit it by hand.
+`presence.json` records which image each character uses. It identifies images by a checksum calculated from the image content, not by file name. So do not write this file by hand, and do not edit it by hand.
 
 > [!IMPORTANT]
 > Whenever any image in `media/portraits/` changes (regenerated, recompressed, or replaced), run this command again. Otherwise the manifest still records the checksum of the old image, and the game cannot find the image.

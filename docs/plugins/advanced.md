@@ -343,7 +343,7 @@ export default function register(covel) {
 }
 ```
 
-- 这件事说的是哪个 runtime，从 `ctx.pluginId` 和 `ctx.runtimeId` 读。`payload` 里没有它们：读 `payload.runtimeId` 永远对不上，这个 hook 就什么都不做。
+- 要判断 hook 说的是哪个 runtime，就读 `ctx.pluginId` 和 `ctx.runtimeId`。`payload` 里没有它们：读 `payload.runtimeId` 永远对不上，这个 hook 就什么都不做。
 - `ctx.locale` 是这一局游戏的语言。往提示词里加文字时，用 `instructionLocaleFor(ctx.locale)` 决定用哪种语言，不要从提示词的文字去猜。
 - `ctx.getOwnSettings()` 读这个插件自己的设置。
 
