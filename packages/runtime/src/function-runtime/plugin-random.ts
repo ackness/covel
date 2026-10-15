@@ -1,9 +1,6 @@
 import { createHmac, randomInt } from "node:crypto";
-import { readEnvString } from "@covel/shared";
+import { readEnvString, validateRandomIntRange } from "@covel/shared";
 import type { PluginRandom } from "@covel/shared/plugin-runtime";
-
-/** `randomInt` of node:crypto accepts no wider range. */
-const MAX_RANGE = 2 ** 48;
 
 /**
  * How many numbers each stream of a session has given. Only a seeded server
@@ -39,17 +36,9 @@ export function createPluginRandom(scope: {
 }): PluginRandom {
   return Object.freeze({
     int(min: number, max: number): number {
+      validateRandomIntRange(min, max);
       const seed = readEnvString("COVEL_RANDOM_SEED");
       if (seed === undefined) return randomInt(min, max);
-      if (
-        !Number.isSafeInteger(min) ||
-        !Number.isSafeInteger(max) ||
-        max <= min ||
-        max - min > MAX_RANGE
-      )
-        throw new RangeError(
-          `ctx.random.int needs safe integers with min < max: ${min}, ${max}`,
-        );
       const key = streamKey(scope.sessionId, scope.pluginId, scope.stream);
       const index = drawn.get(key) ?? 0;
       drawn.set(key, index + 1);

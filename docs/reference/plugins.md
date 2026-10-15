@@ -538,6 +538,7 @@ Agent 的副作用只来自工具：模型能写什么，以 `agent.tools` 白�
 `ctx.random` 是宿主提供的随机源。函数 handler、agent guard、插件工具和 RPC action 的上下文里一定有它，类型上也是必有的字段。
 
 - 骰子和其他游戏内的随机取数用 `ctx.random.int(min, max)`。它返回 `min <= n < max` 的整数，和 `node:crypto` 的 `randomInt` 相同。
+- SDK 的 `validateRandomIntRange(min, max)` 是宿主和 `makeRandom` 共用的检查：两端必须是安全整数，`min < max`，区间宽度严格小于 `2 ** 48`，否则抛 `RangeError`。无论是否设置种子，参数规则和错误信息都相同。
 - 不要直接用 `node:crypto` 或 `Math.random`。
 - 平时它就是 `randomInt`。测试服务端设置 `COVEL_RANDOM_SEED` 后，同一个 runtime（或同一个 RPC action）取的第 n 个数每次运行都相同，脚本会话因此可以重复（见[环境变量](./env-registry.md#runtime-contract)和[录制与回放](../ship/real-model.md#录制与回放)）。
 - `shortId` / `shortIdBatch` 的第四个参数必须传它，ID 的随机部分也随之可以重复。SDK 里没有别的随机来源可以退回。

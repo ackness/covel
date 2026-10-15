@@ -387,6 +387,8 @@ export function makeProposal<
   };
 }
 
+export { validateRandomIntRange } from "./random.js";
+
 export type {
   FunctionStoreView,
   PluginTurnMessage,
