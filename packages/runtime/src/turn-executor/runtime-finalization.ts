@@ -5,6 +5,8 @@ import {
   type RuntimeResult,
   type TurnInput,
 } from "@covel/shared";
+import { classifyProviderFailure } from "@covel/ai-provider";
+import { LLMRetryError } from "../retry/retry-common.js";
 import { isDeepStrictEqual } from "node:util";
 import { validateOutput } from "@covel/tools";
 import {
@@ -215,6 +217,24 @@ export async function finalizeRuntimeResult(
         output: null,
         error: `contract-output-invalid (${manifest.outputContract}): ${contractError}`,
       };
+  }
+  // Classify the original exception while its structured provider details still
+  // exist. Retry wrappers keep that exception in cause; error text cannot
+  // distinguish a quota 429 from an ordinary rate limit.
+  if (
+    finalized.status === "failed" &&
+    finalized.error === result.error &&
+    options.cause !== undefined &&
+    !signal?.aborted
+  ) {
+    const cause =
+      options.cause instanceof LLMRetryError
+        ? options.cause.cause
+        : options.cause;
+    finalized = {
+      ...finalized,
+      errorKind: classifyProviderFailure(cause).kind,
+    };
   }
   finalized = withAgentFailureTarget(finalized, options.lastTarget);
   if (manifest.outputKind === "story" && finalized.status === "success") {

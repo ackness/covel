@@ -82,6 +82,7 @@ function RuntimeFailureNotice({
             ) : (
               <ActionableErrorNotice
                 error={resolvedDetail}
+                providerFailureKind={rt.errorKind}
                 kind={isIncomplete ? "incomplete" : undefined}
                 layout="panel"
               />

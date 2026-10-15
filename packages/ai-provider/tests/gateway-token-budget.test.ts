@@ -228,30 +228,25 @@ describe("gateway target output budgets", () => {
 
   it.each(
     (["generate", "stream"] as const).flatMap((mode) =>
-      [429, 401, 403, 402].map((status) => ({ mode, status })),
+      // 401 and 402 skip a same-account backup: gateway-account-fallback.test.ts.
+      [429, 403].map((status) => ({ mode, status })),
     ),
-  )(
-    "$mode falls back on HTTP $status",
-    async ({ mode, status }) => {
-      const { gateway, calls } = setup(status);
-      const input = { messages: [{ role: "user" as const, content: "hi" }] };
-      if (mode === "generate") await gateway.generateText(input);
-      else
-        for await (const _event of gateway.streamText(input)) {
-          /* drain */
-        }
-      expect(calls.map((call) => call.model)).toEqual(["primary", "backup"]);
-    },
-  );
+  )("$mode falls back on HTTP $status", async ({ mode, status }) => {
+    const { gateway, calls } = setup(status);
+    const input = { messages: [{ role: "user" as const, content: "hi" }] };
+    if (mode === "generate") await gateway.generateText(input);
+    else
+      for await (const _event of gateway.streamText(input)) {
+        /* drain */
+      }
+    expect(calls.map((call) => call.model)).toEqual(["primary", "backup"]);
+  });
 
-  it.each([400])(
-    "preserves terminal HTTP %s failures",
-    async (status) => {
-      const { gateway, calls } = setup(status);
-      await expect(
-        gateway.generateText({ messages: [{ role: "user", content: "hi" }] }),
-      ).rejects.toMatchObject({ statusCode: status, model: "primary" });
-      expect(calls).toHaveLength(1);
-    },
-  );
+  it.each([400])("preserves terminal HTTP %s failures", async (status) => {
+    const { gateway, calls } = setup(status);
+    await expect(
+      gateway.generateText({ messages: [{ role: "user", content: "hi" }] }),
+    ).rejects.toMatchObject({ statusCode: status, model: "primary" });
+    expect(calls).toHaveLength(1);
+  });
 });

@@ -1,3 +1,5 @@
+import type { ProviderFailureKind } from "../llm-failure-kind.js";
+
 /**
  * Covel Session Protocol — server→client event vocabulary + session snapshot.
  *
@@ -140,6 +142,7 @@ export interface RuntimeLifecyclePayload {
 
 export interface RuntimeFailedPayload extends RuntimeLifecyclePayload {
   readonly error?: string;
+  readonly errorKind?: ProviderFailureKind;
 }
 
 export interface AssetProgressPayload {
