@@ -45,7 +45,7 @@ function runtime(
     description: "test runtime",
     stage: "post-turn",
     runtimeType: "function",
-    outputKind: "plugin",
+    outputKind: "system",
     pluginType: "plugin",
     handler: "./handler.js",
     trigger,

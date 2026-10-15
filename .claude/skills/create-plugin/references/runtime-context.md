@@ -9,13 +9,11 @@ Function handlers default-export `async function (ctx)`. Type a handler with `Pl
 ```yaml
 schedule:
   stage: post-turn
-  trigger: {type: auto}
 io:
   inputs:
     narrative:
-      from: {contract: narrative-engine@1, cardinality: one}
+      from: {contract: narrative-engine@1}
       select: /narrativeOutput
-      required: true
 ```
 
 Read `ctx.inputs.narrative.value`; an `all` binding contains `items[].value`. These slots also carry source provenance. Committed bindings use `scope: committed` and `recordAs`; the producer uses `io.output.recordAs`. Detached memory work receives a frozen `turn-digest@1` input. Do not reconstruct upstream output from another plugin's private data.

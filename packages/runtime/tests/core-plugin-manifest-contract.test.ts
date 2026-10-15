@@ -84,12 +84,12 @@ describe("core plugin manifest contract", () => {
     // tools it used to declare.
     expect(schemaGen.tools?.builtin).toBeUndefined();
 
+    expect(playerInit.trigger).toBeUndefined(); // `auto`, the default
     expect(playerInit).toMatchObject({
       pluginType: "core-plugin",
       stage: "setup",
       model: "plugin",
       guard: "./guard.js",
-      trigger: { type: "auto" },
       requireToolUse: true,
       completeAfterTools: ["create-character-form"],
       maxRetries: 3,
@@ -138,16 +138,18 @@ describe("core plugin manifest contract", () => {
       stage: "pre-turn",
       runtimeType: "function",
       handler: "./handler.js",
-      trigger: { type: "scheduled", interval: 1 },
     });
+    // `auto`, the default trigger, every turn.
+    expect(retriever.trigger).toBeUndefined();
 
     expect(narrator).toMatchObject({
       pluginType: "core-plugin",
       stage: "narrative",
       model: "story",
       outputKind: "story",
-      trigger: { type: "auto" },
     });
+    // `auto`, the default trigger: nothing to compile.
+    expect(narrator.trigger).toBeUndefined();
     expect(narrator.inputs).toMatchObject({
       "npc-relationships": {
         from: { capability: "graph-rag@1" },
@@ -177,10 +179,11 @@ describe("core plugin manifest contract", () => {
     expect(getRuntimeSpec(guide).stage).toBe("post-turn");
     // A required typed binding is both its DAG edge and same-turn gate.
     expect(guide.needs ?? []).toEqual([]);
-    expect(guide.inputs?.narrative).toMatchObject({
-      from: { capability: "narrative-engine@1", cardinality: "one" },
+    // `cardinality: one` and `required: true` are the defaults, left out.
+    expect(guide.inputs?.narrative).toEqual({
+      from: { capability: "narrative-engine@1" },
       select: "/narrativeOutput",
-      required: true,
+      accepts: "./schemas/narrative-output.schema.json",
     });
     expect(guide).toMatchObject({
       model: "plugin",
@@ -229,10 +232,10 @@ describe("core plugin manifest contract", () => {
     // conversion. State plugins consume its same-turn typed output and no
     // longer duplicate raw narrator injections.
     expect(worldIr.outputContract).toBe("world-ir-provider@1");
-    expect(worldIr.inputs?.narrative).toMatchObject({
-      from: { capability: "narrative-engine@1", cardinality: "one" },
+    expect(worldIr.inputs?.narrative).toEqual({
+      from: { capability: "narrative-engine@1" },
       select: "/narrativeOutput",
-      required: true,
+      accepts: "./schemas/narrative-output.schema.json",
     });
     expect(worldIr.output).toEqual({
       schema: "contract:world-ir@1",
@@ -250,10 +253,9 @@ describe("core plugin manifest contract", () => {
     });
     for (const downstream of structuredDownstreams) {
       expect(downstream.needs).toBeUndefined();
-      expect(downstream.inputs?.worldIR).toMatchObject({
-        from: { capability: "world-ir-provider@1", cardinality: "one" },
+      expect(downstream.inputs?.worldIR).toEqual({
+        from: { capability: "world-ir-provider@1" },
         accepts: "contract:world-ir@1",
-        required: true,
       });
     }
 

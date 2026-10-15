@@ -63,11 +63,14 @@ it.each([
         );
       }
       let diagnostics = "";
+      let report = "";
       const status = await runValidateManifest([root], {
-        stdout: { write: () => {} },
+        stdout: { write: (message) => (report += message) },
         stderr: { write: (message) => (diagnostics += message) },
       });
       expect(status, diagnostics).toBe(0);
+      // A guide example writes no field with its default value.
+      expect(report).not.toContain("warning:");
     } finally {
       await rm(temporary, { recursive: true, force: true });
     }

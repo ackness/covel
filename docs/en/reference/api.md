@@ -903,7 +903,7 @@ Both endpoints return `409` when no turn is in progress. `abort` stops the playe
 `steer` (interject):
 
 - The message is merged into the story runtime's next LLM call. When the turn commits, it is saved in the same transaction to the conversation history and the chat log; when the turn does not commit, it is not saved.
-- It applies only to runtimes with `outputKind: story`. A plugin runtime runs a structured task and does not accept interjections.
+- It applies only to runtimes with `outputKind: story`. Any other runtime runs a structured task and does not accept interjections.
 - When an interjection arrives while the final response is streaming, the story runtime adds one more LLM call before it wraps up, to take it in. This call is limited by maxSteps.
 
 `abort` (stop):
@@ -3635,8 +3635,8 @@ Returns an index of the framework's capabilities. Third-party developers, extern
   "schemaVersion": 1,
   "framework": {
     "pluginManifest": {
-      "triggerTypes": ["auto", "manual", "scheduled", "event"],
-      "outputKinds": ["story", "plugin", "system"],
+      "triggerTypes": ["auto", "manual", "event"],
+      "outputKinds": ["story", "system"],
       "runtimeTypes": ["agent", "function"],
       "executionModes": ["sync", "background"],
       "turnCompletionModes": ["await", "detached"],
@@ -3678,7 +3678,7 @@ Returns an index of the framework's capabilities. Third-party developers, extern
 ```
 
 > [!NOTE]
-> **Values of `triggerTypes`**: the only trigger types available are `auto` / `manual` / `scheduled` / `event`. `triggerTypes` lists all four. For details, see [reference/plugins.md → Runtime grouped fields](./plugins.md#runtime-field-groups).
+> **Values of `triggerTypes`**: the only trigger types available are `auto` / `manual` / `event`. `triggerTypes` lists all three. The cadence of an `auto` runtime is written in `schedule.every` and given in `trigger.every` of the runtime summary. For details, see [reference/plugins.md → Runtime grouped fields](./plugins.md#runtime-field-groups).
 
 #### `GET /api/plugins`
 

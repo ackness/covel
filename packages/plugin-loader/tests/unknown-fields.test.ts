@@ -121,7 +121,7 @@ describe("unknown manifest fields", () => {
       '"hide" inside a declaration',
     ],
     [
-      { runtime: { ...staged, io: { visibility: "plugin", conceal: true } } },
+      { runtime: { ...staged, io: { visibility: "system", conceal: true } } },
       '"conceal" inside a declaration',
     ],
   ])(

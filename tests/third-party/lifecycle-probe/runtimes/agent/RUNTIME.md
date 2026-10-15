@@ -4,10 +4,7 @@ description: Write a test record through an agent tool call
 schedule:
   trigger:
     type: manual
-io:
-  visibility: plugin
 agent:
-  model: plugin
   tools:
     plugin:
       - lifecycle-probe-record

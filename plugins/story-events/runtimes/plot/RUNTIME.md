@@ -5,48 +5,38 @@ description: >-
   follow-up events that happen later.
 schedule:
   stage: post-turn
+  every: 3
   trigger:
-    type: scheduled
-    interval: 3
     startTurn: 2
 io:
   inputs:
     narrative:
       from:
         contract: narrative-engine@1
-        cardinality: one
       select: /narrativeOutput
-      required: true
       accepts: ./narrative.schema.json
     storyEvents:
       from:
         contract: story-event-cue@1
-        cardinality: one
       select: /ledger
-      required: true
     dimensions:
       from:
         contract: world.dimensions@1
-        cardinality: one
       required: false
     worldTime:
       from:
         contract: world-time-context@1
-        cardinality: one
       required: false
     worldIR:
       from:
         contract: world-ir-provider@1
-        cardinality: one
       accepts: "contract:world-ir@1"
       required: false
   output:
     contract: story-event.plan@1
     schema: ../../schemas/story-event-plan.schema.json
-  visibility: system
   concealed: true
 agent:
-  model: plugin
   llm:
     reasoningEffort: disabled
     toolChoice: required
@@ -54,9 +44,6 @@ agent:
     plugin:
       - plan-story-events
   loop:
-    timeoutMs: 120000
-    callTimeoutMs: 60000
-    maxRetries: 3
     completion:
       require: tool-use
       afterTools:

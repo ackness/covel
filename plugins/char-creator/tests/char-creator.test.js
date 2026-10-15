@@ -103,7 +103,7 @@ describe("char-creator plugin", () => {
     it("uses an auto trigger with a guard to gate re-runs", () => {
       // Pre-Game runtimes use `trigger: { type: 'auto' }` and rely on
       // the guard + preGameDone output to opt-out after completion.
-      expect(manifest.trigger?.type).toBe("auto");
+      expect(manifest.trigger).toBeUndefined(); // `auto`, the default
       expect(manifest.guard).toBeTruthy();
     });
 
@@ -135,8 +135,8 @@ describe("char-creator plugin", () => {
     });
 
     it("runs every turn in the post-turn stage", () => {
-      expect(manifest.trigger?.type).toBe("scheduled");
-      expect(manifest.trigger?.interval).toBe(1);
+      // `auto`, the default, at most once per player turn.
+      expect(manifest.trigger).toEqual({ type: "auto", cooldownTurns: 1 });
       // Band selection is stage-driven: post-turn runs in the main loop, after
       // the narrative stage.
       expect(manifest.stage).toBe("post-turn");

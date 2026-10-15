@@ -561,6 +561,14 @@ export {
   runtimeAuthoringManifestSchema,
   contractIdSchema,
 } from "./schemas/runtime-manifest.js";
+export {
+  AGENT_LOOP_DEFAULTS,
+  DEFAULT_RUNTIME_VISIBILITY,
+  defaultAgentLoop,
+  defaultAgentModel,
+  type AgentLoopDefaults,
+  type RuntimeVisibility,
+} from "./schemas/runtime-defaults.js";
 
 export * from "./schemas/catalog.js";
 

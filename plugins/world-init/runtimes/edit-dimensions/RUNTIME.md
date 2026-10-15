@@ -8,13 +8,12 @@ schedule:
 io:
   inputs:
     narrative:
-      from: { contract: narrative-engine@1, cardinality: one }
+      from: { contract: narrative-engine@1 }
       select: /narrativeOutput
       required: false
     worldIR:
-      from: { contract: world-ir-provider@1, cardinality: one }
+      from: { contract: world-ir-provider@1 }
       required: false
-  visibility: system
 function:
   handler: ./handler.js
 ---

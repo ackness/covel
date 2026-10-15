@@ -79,7 +79,7 @@ function makeEntry(
       pluginId: "image-plugin",
       description: "Image plugin runtime",
       pluginType: "plugin",
-      outputKind: "plugin",
+      outputKind: "system",
       runtimeType: "function",
       trigger: { type: "manual" },
       input: {

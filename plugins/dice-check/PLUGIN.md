@@ -1,7 +1,7 @@
 ---
 id: dice-check
 kind: plugin
-version: 0.0.35
+version: 0.0.36
 displayName: Dice Check
 description: >-
   Dice checks for risky actions — pre-rolled dice pools, rule-based outcomes,
@@ -37,9 +37,7 @@ contributes:
         system adds them. Risk-free actions never roll or emit.
   hooks:
     - event: PreToolUse
-      enforce: normal
     - event: PostToolUse
-      enforce: normal
   ui:
     message:
       - ./runtimes/recorder/ui/check-message.json

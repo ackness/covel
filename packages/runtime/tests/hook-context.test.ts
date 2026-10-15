@@ -50,7 +50,7 @@ it("gives every hook the session locale, and the runtime identity in the context
     pluginId: "ledger",
     runtimeType: "function",
     stage: "post-turn",
-    outputKind: "plugin",
+    outputKind: "system",
     trigger: { type: "auto" },
   };
   const hookPipeline = createHookPipeline();

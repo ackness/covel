@@ -412,9 +412,6 @@ type: function
 description: ${runtimeName} function runtime, replace with the real responsibility.
 schedule:
   trigger: { type: manual }
-  manual: { execution: sync }
-io:
-  visibility: plugin
 function:
   handler: ./handler.js
 ---
@@ -473,7 +470,6 @@ type: agent
 description: ${runtimeName} agent runtime, replace with the real responsibility.
 schedule:
   stage: post-turn
-  trigger: { type: auto }
 io:
   inputs:
     narrator-output:
@@ -481,21 +477,12 @@ io:
         contract: narrative-engine@1
       select: /narrativeOutput
       required: false
-  visibility: plugin
   selfData:
     - namespace: notes
       as: <existing-notes>
-      format: summary
-      maxEntries: 50
 agent:
-  model: plugin
   tools:
     builtin: [plugin-data-set]
-  loop:
-    timeoutMs: 60000
-    callTimeoutMs: 45000
-    firstTokenTimeoutMs: 30000
-    maxRetries: 1
 ---
 
 You are the ${runtimeName} runtime in the ${pluginName} plugin. Your job is to turn narrative information relevant to this plugin into one maintainable plugin note.

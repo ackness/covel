@@ -40,8 +40,6 @@ runtime:
       type: manual
     manual:
       execution: sync
-  io:
-    visibility: plugin
   function:
     handler: ./handler.js
 ---

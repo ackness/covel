@@ -51,25 +51,24 @@ Contract IDs use lowercase letters, digits, dots or hyphens followed by `@<posit
 type: function
 schedule:
   stage: post-turn
-  trigger: {type: auto}
 io:
   inputs:
     narrative:
-      from: {contract: narrative-engine@1, cardinality: one}
+      from: {contract: narrative-engine@1}
       select: /narrativeOutput
-      required: true
-  visibility: plugin
 function:
   handler: ./handler.js
   timeoutMs: 30000
 ---
 ```
 
-`type` is `agent` or `function`. Stage runtimes (`auto`/`scheduled`) declare `schedule.stage`: `setup`, `pre-turn`, `narrative`, `post-turn`, or `audit`. Manual/event runtimes omit stage and may use `schedule.manual.execution: background`. Stage background work uses `schedule.completion` with a detached mode and bounded queue/execution deadlines. Dependencies belong in `schedule.needs` (success gating) and `schedule.after` (ordering only).
+Leave out a field whose value is its default; `pnpm validate:plugin` warns about one written anyway. The defaults: `schedule.trigger.type: auto`, `schedule.every: 1`, `io.visibility: system`, `from.cardinality: one`, `io.inputs.*.required: true`, `io.selfData[].format: summary` and `maxEntries: 50`, `schedule.manual.execution: sync`; for an agent, `agent.model` is `plugin` (`story` for a `story` runtime) and `agent.loop` is `timeoutMs: 120000`, `callTimeoutMs: 60000`, `maxRetries: 3` (`240000` / `120000` / `1` for a `story` runtime).
+
+`type` is `agent` or `function`. The trigger is `auto` (the default), `manual`, or `event`. An `auto` runtime declares `schedule.stage`: `setup`, `pre-turn`, `narrative`, `post-turn`, or `audit`; `schedule.every: N` runs it on every N-th logical turn, and `schedule.trigger` can add `startTurn`, `cooldownTurns`, and `maxTriggerCount`. Manual/event runtimes omit stage and may use `schedule.manual.execution: background`. Stage background work uses `schedule.completion` with a detached mode and bounded queue/execution deadlines. Dependencies belong in `schedule.needs` (success gating) and `schedule.after` (ordering only).
 
 `io.inputs` binds named inputs from `{runtime: sample-notes/extract}` or `{contract: name@1}`. Within a multi-runtime package, write the complete `<pluginId>/<runtimeId>`; an inline runtime uses its package ID. See [reference scope](../../../../docs/reference/plugins.md#依赖和引用的范围). Required turn inputs imply a success dependency; optional inputs allow absence. `select` is a JSON Pointer into the successful upstream value. Function code reads `ctx.inputs.<name>.value`; agent prompts receive the `runtime-inputs` block. Committed outputs use `scope: committed` plus `recordAs`. A detached kernel digest uses `from: {kernel: turn-digest@1}`. Always-detached manual/event runtimes cannot bind same-execution turn outputs.
 
-`io.selfData` contains own-plugin namespace injections, without a `kind` field. `io.payloadSchema` validates invocation payloads. `io.output` supports `contract`, `schema`, and `recordAs`. `io.visibility` is `story`, `plugin`, or `system`.
+`io.selfData` contains own-plugin namespace injections, without a `kind` field. `io.payloadSchema` validates invocation payloads. `io.output` supports `contract`, `schema`, and `recordAs`. `io.visibility` is `story` (the main narrative provider) or `system` (every other runtime, the default).
 
 Agents group settings in `agent`: `model`, `llm`, `tools`, `advertiseEvents`, and `loop`. `agent.loop` holds timeout/step/retry limits and `completion: {require: tool-use|explicit, afterTools: [...]}`. An agent writes only through the tools in `agent.tools`: `pluginData`, `statePatches`, notifications or topic events written in its final JSON do nothing. `io.concealed: true` keeps a runtime's prompts, replies and returned text out of traces, the stream and the conversation, and cannot be combined with `visibility: story`. Functions group `handler` and `timeoutMs` in `function`. HTTP allowlists and effect declarations remain runtime-level `permissions` and `effects`. Guard modules use runtime-level `guard`.
 

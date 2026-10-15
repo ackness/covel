@@ -421,7 +421,7 @@ describe("main-loop dependency-cycle SCC", () => {
         runtimeType: "function",
         handler: "./h.js",
         trigger: { type: "auto" },
-        outputKind: "plugin",
+        outputKind: "system",
         outputContract: undefined,
         ...extra,
       }) as RuntimeManifest;
@@ -539,7 +539,7 @@ describe("needs(scope: session) positive gate (setup selection)", () => {
       runtimeType: "function",
       handler: "./h.js",
       trigger: { type: "auto" },
-      outputKind: "plugin",
+      outputKind: "system",
       version: "1.0.0",
       ...extra,
     }) as unknown as RuntimeManifest;

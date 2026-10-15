@@ -60,8 +60,6 @@ tavern-rumors/
 type: agent
 schedule:
   stage: post-turn
-  trigger:
-    type: auto
 io:
   inputs:
     narrator-output:
@@ -72,24 +70,20 @@ io:
   selfData:
     - namespace: notes
       as: <existing-notes>
-      format: summary
-      maxEntries: 50
-  visibility: plugin
 agent:
-  model: plugin
   tools:
     builtin:
       - plugin-data-set
 ```
 
-| 这一段                                   | 意思                                                                                     |
-| ---------------------------------------- | ---------------------------------------------------------------------------------------- |
-| `type: agent`                            | 这是一个由模型驱动的 runtime，文件的正文就是给模型的提示词                               |
-| `schedule.stage: post-turn`              | 在叙事之后运行                                                                           |
-| `io.inputs.narrator-output`              | 读取本回合的故事正文。它来自“任何提供 `narrative-engine@1` 的插件”，而不是某个具体的插件 |
-| `io.selfData`                            | 把自己已有的记录放进提示词，模型据此避免重复记录                                         |
-| `agent.model: plugin`                    | 使用 `plugin` 这个模型用途                                                               |
-| `agent.tools.builtin: [plugin-data-set]` | 模型只能调用这一个工具：往自己的数据空间写一条记录                                       |
+| 这一段                                   | 意思                                                                                               |
+| ---------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| `type: agent`                            | 这是一个由模型驱动的 runtime，文件的正文就是给模型的提示词                                         |
+| `schedule.stage: post-turn`              | 在叙事之后运行                                                                                     |
+| `io.inputs.narrator-output`              | 读取本回合的故事正文。它来自“任何提供 `narrative-engine@1` 的插件”，而不是某个具体的插件           |
+| `io.selfData`                            | 把自己已有的记录放进提示词，模型据此避免重复记录                                                   |
+| 没写的字段                               | 用默认值：它用 `plugin` 这个模型用途，输出不是故事正文。见[默认值](../reference/plugins.md#默认值) |
+| `agent.tools.builtin: [plugin-data-set]` | 模型只能调用这一个工具：往自己的数据空间写一条记录                                                 |
 
 模型只能使用这里列出的工具。它不能读写别的插件的数据，也不能绕过内核直接改存档。
 

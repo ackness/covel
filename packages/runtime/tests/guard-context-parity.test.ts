@@ -114,7 +114,7 @@ function manifest(runtimeType: "function" | "agent"): RuntimeManifest {
     stage: "narrative",
     runtimeType,
     trigger: { type: "auto" },
-    outputKind: "plugin",
+    outputKind: "system",
     permissions: { http: [{ origin: "https://allowed.example.com" }] },
   } as RuntimeManifest;
 }

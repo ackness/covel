@@ -5,8 +5,6 @@ description: >-
   story.
 schedule:
   stage: setup
-  trigger:
-    type: auto
   after:
     - contract: session.opening@1
     - contract: world-data-provider@1
@@ -19,16 +17,12 @@ io:
       required: false
   output:
     contract: character-creation@1
-  visibility: system
 agent:
-  model: plugin
   tools:
     plugin:
       - create-character-form
   loop:
     timeoutMs: 180000
-    callTimeoutMs: 60000
-    maxRetries: 3
     completion:
       require: tool-use
       afterTools:

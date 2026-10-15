@@ -1,7 +1,7 @@
 ---
 id: memory
 kind: core
-version: 0.0.38
+version: 0.0.39
 displayName: Story Memory
 description: >-
   Shows what the story remembers, including plot, scene, relationships, and hero
@@ -25,7 +25,6 @@ contributes:
     - memory.block-definitions@1
   data:
     definitions:
-      version: 1
       accepts:
         - memory.blocks@1
       schema: ./schemas/block-definitions.schema.json
@@ -47,10 +46,8 @@ contributes:
           key: id
           localeArrayKeys: [label]
     blocks:
-      version: 1
       schema: ./schemas/blocks.schema.json
     facts:
-      version: 1
       schema: ./schemas/facts.schema.json
       search:
         text: text

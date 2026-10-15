@@ -104,7 +104,7 @@ describe("turn-executor message.completed trace emission", () => {
       pluginId: "plugin-worker",
       description: "Plugin runtime for message.completed negative test.",
       stage: "pre-turn",
-      outputKind: "plugin",
+      outputKind: "system",
     };
     const loaded: LoadedRuntime = {
       manifest,

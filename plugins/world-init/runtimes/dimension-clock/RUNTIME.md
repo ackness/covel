@@ -4,8 +4,6 @@ description: Computes the dimension values that the world declares as derived
   from the clock, without a model call.
 schedule:
   stage: post-turn
-  trigger:
-    type: auto
   after:
     - world-init/dimension-tracker
 io:
@@ -13,10 +11,8 @@ io:
     worldTime:
       from:
         contract: world-time-evolution@1
-        cardinality: one
       select: /summary
       required: false
-  visibility: system
 function:
   handler: ./handler.js
 ---

@@ -376,14 +376,14 @@ export interface AssembledContextView {
   readonly messages: readonly LLMMessage[];
   /**
    * Read-only `outputKind` of the runtime whose context was assembled
-   * (`story` / `plugin` / `system`). Surfaced so PostContextAssembly handlers
+   * (`story` / `system`). Surfaced so PostContextAssembly handlers
    * can shape only the runtimes they care about (e.g. a narration director
    * that only touches story prompts) without hardcoding plugin ids — the
    * framework/plugin isolation rule. Optional and never rewritten by the hook;
    * purely informational. Absent when the caller does not supply it, keeping
    * the field a non-breaking addition.
    */
-  readonly outputKind?: "story" | "plugin" | "system";
+  readonly outputKind?: "story" | "system";
   /** Locale-resolved source template; informational and never hook-rewritten. */
   readonly promptTemplate?: string;
   /** Authoritative resolved inputs, before prompt serialization. */

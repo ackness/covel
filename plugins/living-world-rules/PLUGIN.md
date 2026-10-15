@@ -1,7 +1,7 @@
 ---
 id: living-world-rules
 kind: plugin
-version: 0.0.35
+version: 0.0.36
 displayName: World Rules
 description: >-
   Shows the world's lasting rules, such as taboos, customs, and special setting
@@ -23,7 +23,6 @@ contributes:
     rules:
       schema: ./schemas/rules.schema.json
       description: Importable world info rules that can also project to lorebook.
-      version: 1
       accepts:
         - world.rules@1
       authoring:

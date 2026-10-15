@@ -41,8 +41,8 @@ describe("branch-reply manifest and UI loading", () => {
       outputKind: "system",
       stage: "post-turn",
       handler: "./handler.js",
-      // Auto-seed runs after narrative; manual actions still use plugin RPC.
-      trigger: { type: "auto" },
+      // Auto-seed runs after narrative (`auto`, the default trigger); manual
+      // actions still use plugin RPC.
       outputContract: "branch-reply@1",
       effects: { parallelSafe: true },
     });

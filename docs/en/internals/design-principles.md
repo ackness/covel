@@ -116,7 +116,7 @@ Creators often call these "modes", and they also talk about a third one, "hybrid
 This way the Kernel needs only two building blocks, yet creators can express any gameplay that combines "fixed rules with narrative". For a dice example and how it is written, see [Plugins with local code](../plugins/local-code.md).
 
 > [!NOTE]
-> "Writing style / mode" here means the **execution method**. The **Trigger mode** in the glossary is something else. It describes when a runtime runs: `auto` / `scheduled` / `manual` / `event`. Do not mix the two up.
+> "Writing style / mode" here means the **execution method**. The **Trigger mode** in the glossary is something else. It describes when a runtime runs: `auto` / `manual` / `event`. Do not mix the two up.
 
 ## The boundary of what can be expressed
 

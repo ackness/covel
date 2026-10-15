@@ -118,26 +118,22 @@ const hasUniqueItems = <T>(items: readonly T[]): boolean =>
 // ── Trigger ──────────────────────────────────────────────────────
 
 /**
- * Production trigger types — the reserved `conditional` / `error-retry` (which
- * never fire; no condition engine, the scheduler never surfaces upstream
- * failures) are now REJECTED at load, not just disabled downstream. A
- * third-party manifest declaring one was already non-functional (its runtime
- * never triggered); failing the load surfaces that instead of silently dropping.
+ * Trigger types. `auto` runs in its stage every turn, or every `every`-th
+ * logical turn; `manual` and `event` are activated. Any other value is
+ * rejected at load.
  */
-export const triggerTypeSchema = z.enum([
-  "auto",
-  "manual",
-  "scheduled",
-  "event",
-]);
+export const triggerTypeSchema = z.enum(["auto", "manual", "event"]);
 
-const triggerConfigShape = {
-  interval: z
-    .number()
-    .int()
-    .positive()
-    .describe("Interval in turns. For `scheduled` only.")
-    .optional(),
+const everySchema = z
+  .number()
+  .int()
+  .positive()
+  .describe(
+    "`auto` only: run on the logical turns that are a multiple of this number. Defaults to 1, every turn.",
+  );
+
+/** Trigger options an author writes under `schedule.trigger`. */
+const triggerOptionsShape = {
   topic: z
     .string()
     .describe("Event topic to subscribe to. Required for `event`.")
@@ -164,14 +160,31 @@ const triggerConfigShape = {
     .optional(),
 };
 
+/** The compiled trigger of a runtime (`RuntimeManifest.trigger`), as the API reports it. */
 export const triggerConfigSchema = z
   .object({
     type: triggerTypeSchema.describe(
-      "`auto` runs every turn in its stage. `scheduled` runs every `interval` turns. `manual` runs on an explicit RPC call. `event` runs when `topic` is emitted.",
+      "`auto` runs in its stage every turn, or every `every`-th turn. `manual` runs on an explicit RPC call. `event` runs when `topic` is emitted.",
     ),
-    ...triggerConfigShape,
+    every: everySchema.optional(),
+    ...triggerOptionsShape,
   })
   .strict();
+
+/** `schedule.trigger` of RUNTIME.md: the type defaults to `auto`. */
+export const authoringTriggerSchema = z
+  .object({
+    type: triggerTypeSchema
+      .describe(
+        "`auto` runs in its stage every turn, or every `schedule.every`-th turn. `manual` runs on an explicit RPC call. `event` runs when `topic` is emitted. Defaults to `auto`.",
+      )
+      .optional(),
+    ...triggerOptionsShape,
+  })
+  .strict();
+
+/** `schedule.every` of RUNTIME.md. */
+export const authoringEverySchema = everySchema;
 
 // ── Input ────────────────────────────────────────────────────────
 
@@ -276,7 +289,7 @@ const inputConfigSchema = z
 
 // ── Output ───────────────────────────────────────────────────────
 
-export const outputKindSchema = z.enum(["story", "plugin", "system"]);
+export const outputKindSchema = z.enum(["story", "system"]);
 
 const outputConfigSchema = z
   .object({
@@ -819,7 +832,7 @@ interface ManifestCrossFieldView {
   readonly outputKind?: string;
   readonly requireExplicitCompletion?: boolean;
   readonly turnCompletion?: RuntimeRuleView["completion"];
-  readonly trigger?: RuntimeRuleView["trigger"];
+  readonly trigger?: RuntimeRuleView["trigger"] & { readonly every?: number };
   readonly needs?: RuntimeRuleView["needs"];
   readonly output?: RuntimeRuleView["output"];
   readonly execution?: string;
@@ -835,6 +848,7 @@ function addIrRuleIssues(
   for (const issue of runtimeRuleIssues(
     {
       ...rest,
+      every: m.trigger?.every,
       visibility: outputKind,
       completion: turnCompletion,
       builtinTools: tools?.builtin,

@@ -262,7 +262,7 @@ export interface PluginFunctionContext {
   /**
    * The scheduler's logical turn: committed main-loop player turns plus one.
    * Setup and the opening continuation share turn 1 with the first message;
-   * `startTurn` and `interval` gates count in these units.
+   * `startTurn` and `every` gates count in these units.
    */
   readonly logicalTurn?: number;
   readonly locale?: string;

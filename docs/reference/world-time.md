@@ -187,7 +187,7 @@ evolution:
 io:
   inputs:
     worldTime:
-      from: { contract: world-time-evolution@1, cardinality: one }
+      from: { contract: world-time-evolution@1 }
       select: /summary
       required: false
 ```
@@ -207,7 +207,7 @@ io:
 io:
   inputs:
     worldTime:
-      from: { contract: world-time-context@1, cardinality: one }
+      from: { contract: world-time-context@1 }
       required: false
 ```
 

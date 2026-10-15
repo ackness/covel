@@ -16,7 +16,7 @@ const once: RuntimeManifest = {
   runtimeType: "function",
   stage: "post-turn",
   trigger: { type: "auto", maxTriggerCount: 1 },
-  outputKind: "plugin",
+  outputKind: "system",
 };
 const cooled: RuntimeManifest = {
   pluginId: "tracker",
@@ -25,7 +25,7 @@ const cooled: RuntimeManifest = {
   runtimeType: "function",
   stage: "post-turn",
   trigger: { type: "auto", cooldownTurns: 2 },
-  outputKind: "plugin",
+  outputKind: "system",
 };
 
 async function playTurn(

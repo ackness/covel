@@ -32,8 +32,8 @@ function runtimeSummary(manifest: RuntimeManifest): PluginRuntimeSummary {
     ...(stage !== undefined ? { stage } : {}),
     trigger: {
       type: manifest.trigger?.type ?? "auto",
-      ...(manifest.trigger?.interval !== undefined
-        ? { interval: manifest.trigger.interval }
+      ...(manifest.trigger?.every !== undefined
+        ? { every: manifest.trigger.every }
         : {}),
       ...(manifest.trigger?.cooldownTurns !== undefined
         ? { cooldownTurns: manifest.trigger.cooldownTurns }
@@ -51,7 +51,7 @@ function runtimeSummary(manifest: RuntimeManifest): PluginRuntimeSummary {
     execution: manifest.execution ?? "sync",
     turnCompletion: effectiveTurnCompletion(manifest),
     ...(manifest.model ? { model: manifest.model } : {}),
-    outputKind: manifest.outputKind ?? "plugin",
+    outputKind: manifest.outputKind ?? "system",
     ...(manifest.outputContract
       ? { outputContract: manifest.outputContract }
       : {}),

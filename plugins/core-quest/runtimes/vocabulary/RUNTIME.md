@@ -5,12 +5,9 @@ description: >-
   the same names are reused.
 schedule:
   stage: pre-turn
-  trigger:
-    type: auto
 io:
   output:
     contract: world-ir.vocabulary@1
-  visibility: system
 function:
   handler: ./handler.js
 ---

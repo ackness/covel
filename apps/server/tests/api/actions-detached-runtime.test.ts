@@ -70,7 +70,7 @@ describe("POST /api/actions — scheduler-detached runtime", () => {
         runtimeType: "function",
         handler: "./leaf.js",
         stage: "post-turn",
-        outputKind: "plugin",
+        outputKind: "system",
         trigger: { type: "auto" },
         needs: [{ capability: "narrative-engine" }],
         inputs: {

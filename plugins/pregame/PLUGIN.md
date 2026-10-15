@@ -1,7 +1,7 @@
 ---
 id: pregame
 kind: core
-version: 0.0.35
+version: 0.0.36
 displayName: Pre-Game Setup
 description: >-
   Reads the world details at the start and prepares the first step of the
@@ -21,13 +21,11 @@ runtime:
   schedule:
     stage: setup
     trigger:
-      type: auto
       maxTriggerCount: 1
   io:
     output:
       contract: session.opening@1
       schema: ./schemas/opening.schema.json
-    visibility: system
   function:
     handler: ./handler.js
 ---

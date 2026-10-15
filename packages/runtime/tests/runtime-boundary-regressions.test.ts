@@ -25,7 +25,7 @@ const base: RuntimeManifest = {
   pluginId: "probe",
   stage: "post-turn",
   runtimeType: "function",
-  outputKind: "plugin",
+  outputKind: "system",
   trigger: { type: "auto" },
   maxRetries: 0,
 };

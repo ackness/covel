@@ -118,7 +118,6 @@ async function executeAndCommitResults(
     {
       type: "function",
       schedule: { trigger: { type: "manual" } },
-      io: { visibility: "plugin" },
       // loadRuntime below supplies this synthetic handler in memory.
       function: { handler: "./tool-harness.js" },
     },

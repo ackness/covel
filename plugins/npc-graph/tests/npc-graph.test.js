@@ -87,13 +87,13 @@ describe("npc-graph manifests", () => {
     expect(extractor.maxRetries).toBe(3);
     expect(extractor.outputContract).toBe("npc-graph@1");
     expect(extractor.tools?.plugin).toEqual(["upsert-npc-graph"]);
-    expect(extractor.trigger?.type).toBe("scheduled");
-    expect(extractor.trigger?.interval).toBe(1);
+    // Every turn (`auto`, the default), at most once per player turn.
+    expect(extractor.trigger).toEqual({ type: "auto", cooldownTurns: 1 });
     expect(extractor.needs).toBeUndefined();
     expect(extractor.inputs?.worldIR).toEqual({
-      from: { capability: "world-ir-provider@1", cardinality: "one" },
+      // `cardinality: one` and `required: true` are the defaults.
+      from: { capability: "world-ir-provider@1" },
       accepts: "contract:world-ir@1",
-      required: true,
     });
   });
 

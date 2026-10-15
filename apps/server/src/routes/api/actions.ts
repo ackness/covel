@@ -591,7 +591,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
           const outputKindByRuntime = new Map(
             activeRuntimes.map((runtime) => [
               runtime.name,
-              runtime.outputKind ?? "plugin",
+              runtime.outputKind ?? "system",
             ]),
           );
 
@@ -834,7 +834,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
               await writeEvent("narrative.delta", {
                 runtimeId: delta.runtimeId,
                 pluginId: delta.pluginId,
-                kind: outputKindByRuntime.get(delta.runtimeId) ?? "plugin",
+                kind: outputKindByRuntime.get(delta.runtimeId) ?? "system",
                 delta: delta.textDelta,
                 ...(delta.reset ? { reset: true } : {}),
               });
@@ -844,7 +844,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
                 await trace.runtimeStarted(info);
               } finally {
                 const kind =
-                  outputKindByRuntime.get(info.runtimeId) ?? "plugin";
+                  outputKindByRuntime.get(info.runtimeId) ?? "system";
                 await writeEvent("runtime.started", {
                   ...info,
                   kind,

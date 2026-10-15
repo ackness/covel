@@ -116,7 +116,7 @@ Covel 的一切都从这一条出发。仓库根目录的 [AGENTS.md](../../AGEN
 这样 Kernel 只需要两块积木，创作者却能表达任意“既有规则、又有叙事”的玩法。掷骰的范例和具体写法见[带本地代码的插件](../plugins/local-code.md)。
 
 > [!NOTE]
-> 这里的“写法 / 模式”指**执行方式**。术语表里的 **Trigger mode** 是另一回事，它指 runtime 何时运行：`auto` / `scheduled` / `manual` / `event`。不要混用。
+> 这里的“写法 / 模式”指**执行方式**。术语表里的 **Trigger mode** 是另一回事，它指 runtime 何时运行：`auto` / `manual` / `event`。不要混用。
 
 ## 可表达的边界
 

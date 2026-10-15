@@ -5,8 +5,6 @@ schedule:
   trigger:
     type: event
     topic: map.location-selected
-io:
-  visibility: plugin
 function:
   handler: ./handler.js
 ---

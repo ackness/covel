@@ -1,7 +1,7 @@
 ---
 id: world-time
 kind: core
-version: 0.0.2
+version: 0.0.3
 displayName: World Time
 description: >-
   Tracks world-defined calendars, phases and time direction, settling each story
@@ -26,7 +26,6 @@ entry: ./server/index.js
 contributes:
   data:
     definitions:
-      version: 1
       schema: schemas/time-definition.schema.json
       description: How time is counted and how fast it passes in this world.
       accepts:

@@ -68,7 +68,7 @@ function plugin(overrides: Partial<PluginSummary> = {}): PluginSummary {
         trigger: { type: "auto" },
         execution: "sync",
         turnCompletion: { mode: "await" },
-        outputKind: "plugin",
+        outputKind: "system",
         outputContract: "memory-panel",
       },
     ],

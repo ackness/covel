@@ -44,10 +44,6 @@ describe("guide manifest and UI loading", () => {
       requireToolUse: true,
       completeAfterTools: ["generate-guide"],
       maxRetries: 3,
-      trigger: {
-        type: "scheduled",
-        interval: 1,
-      },
       tools: {
         plugin: ["generate-guide"],
       },
@@ -68,21 +64,13 @@ describe("guide manifest and UI loading", () => {
       stage: "post-turn",
       model: "plugin",
       outputKind: "system",
-      trigger: {
-        type: "scheduled",
-        interval: 1,
-      },
       // Engine-agnostic: the required typed binding is both the DAG gate and
       // the prompt input, so third-party narrative providers work by capability.
       inputs: {
         narrative: {
-          from: {
-            capability: "narrative-engine@1",
-            cardinality: "one",
-          },
+          from: { capability: "narrative-engine@1" },
           select: "/narrativeOutput",
           accepts: "./schemas/narrative-output.schema.json",
-          required: true,
         },
       },
     });

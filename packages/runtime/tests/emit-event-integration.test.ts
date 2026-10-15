@@ -95,7 +95,7 @@ describe("emit-event: tool-loop accumulation + finalize merge into effects.event
       pluginId: "plug",
       description: "Emits domain events via emit-event",
       stage: "narrative",
-      outputKind: "plugin",
+      outputKind: "system",
       tools: { builtin: ["emit-event"] },
       trigger: { type: "auto" },
     } as RuntimeManifest;
@@ -195,7 +195,7 @@ describe("emit-event: segment 5 directory injection (plan task 5)", () => {
       pluginId: "plug",
       description: "Emits domain events via emit-event",
       stage: "narrative",
-      outputKind: "plugin",
+      outputKind: "system",
       tools: { builtin: ["emit-event"] },
       trigger: { type: "auto" },
       advertiseEvents: true,
@@ -293,7 +293,7 @@ describe("emit-event: same-turn duplicate topic no-op (plan task 1)", () => {
       pluginId: "plug",
       description: "Emits domain events via emit-event",
       stage: "narrative",
-      outputKind: "plugin",
+      outputKind: "system",
       tools: { builtin: ["emit-event"] },
       trigger: { type: "auto" },
     } as RuntimeManifest;

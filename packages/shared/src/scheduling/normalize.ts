@@ -6,7 +6,7 @@
  * band and the DAG orders within it (see packages/runtime/src/schedule).
  *
  * `execution: background` folds here. Every manifest single-declares `stage` +
- * `needs`/`after`, and setup runtimes declare `trigger: auto`; there is no
+ * `needs`/`after`, and a runtime without a trigger is `auto`; there is no
  * alternative spelling to reconcile.
  */
 
@@ -87,9 +87,9 @@ function normalizeTurnCompletionPolicy(
  * Normalize one runtime manifest into the loader-level IR node.
  *
  * Stage resolution: `stage` is taken as declared. `event` / `manual` runtimes
- * declare none (fan-out orders them by name). An authored `auto` /
- * `scheduled` runtime without one never reaches the IR: the loader leaves it
- * out of its package and reports why.
+ * declare none (fan-out orders them by name). An authored `auto` runtime
+ * without one never reaches the IR: the loader leaves it out of its package
+ * and reports why.
  */
 export function normalizeRuntimeManifest(
   manifest: RuntimeManifest,

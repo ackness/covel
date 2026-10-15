@@ -288,7 +288,6 @@ describe("npc-graph core plugin write-read-inject path", () => {
       // Matches the real PLUGIN.md so the injected `npcContext` field resolves
       // from the materialized handler value.
       handler: "./handler.js",
-      trigger: { type: "scheduled", interval: 1 },
     });
     const narrator = manifest("narrator", {
       pluginId: "narrator",

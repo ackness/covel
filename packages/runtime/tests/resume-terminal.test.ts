@@ -45,7 +45,7 @@ function fixture(runtimeType: "agent" | "function" = "agent", recover = false) {
     name: "probe/main",
     pluginId: "probe",
     stage: "narrative",
-    outputKind: "plugin",
+    outputKind: "system",
     runtimeType,
     trigger: { type: "auto" },
     maxRetries: 0,

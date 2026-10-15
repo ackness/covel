@@ -231,7 +231,7 @@ The generation parameters page shows parameters that match the model's actual ca
 For one call, the role is chosen in this order:
 
 1. An explicit choice made by the runtime, including the session's `runtimeModelOverrides`. It decides which role or preset to use.
-2. If there is no explicit choice, the role the runtime names itself (`agent.model` / `function.model`). If it names none, the `default` binding of the current request is used when there is one, otherwise the system's default role.
+2. If there is no explicit choice, the role the runtime names itself (`agent.model` / `function.model`). An agent that names none uses `story` when it has `io.visibility: story` and `plugin` otherwise. For a function that names none, the `default` binding of the current request is used when there is one, otherwise the system's default role.
 3. That role is resolved first with the UI role binding in the current request. Without a binding, it is resolved with the system `llm.toml`, and the fallback of an available text role.
 
 Extra rules:

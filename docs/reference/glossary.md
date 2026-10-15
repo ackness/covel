@@ -247,12 +247,12 @@
 
 ## Trigger mode
 
-一个 runtime 怎样决定这个回合要不要运行：`auto`、`scheduled`、`manual` 或 `event`。只有这四种，清单里写了别的值会在加载时被拒绝。
+一个 runtime 怎样决定这个回合要不要运行：`auto`（默认）、`manual` 或 `event`。只有这三种，清单里写了别的值会在加载时被拒绝。
 
 它和两样东西配合使用：
 
-- `stage`：`auto` / `scheduled` 的 runtime 属于哪个阶段。`event` / `manual` 的 runtime 不写阶段。
-- `scheduled` 的子字段：`interval`、`cooldownTurns`、`maxTriggerCount`、`startTurn`。
+- `stage`：`auto` 的 runtime 属于哪个阶段。`event` / `manual` 的 runtime 不写阶段。
+- `auto` 的节奏：`schedule.every`（每几个回合运行一次），以及 `schedule.trigger` 里的 `cooldownTurns`、`maxTriggerCount`、`startTurn`。
 
 详见：[插件字段参考](./plugins.md)。
 

@@ -292,7 +292,7 @@ const pluginRuntimeSummarySchema: z.ZodType<PluginRuntimeSummary> = z
     execution: z.enum(["sync", "background"]),
     turnCompletion: effectiveTurnCompletionSchema,
     model: z.string().optional(),
-    outputKind: z.enum(["story", "plugin", "system"]),
+    outputKind: z.enum(["story", "system"]),
     outputContract: z.string().optional(),
   })
   .strict();

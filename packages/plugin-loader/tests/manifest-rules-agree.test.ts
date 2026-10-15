@@ -86,10 +86,10 @@ const unrunnable = [
     field: "schedule.stage",
   },
   {
-    name: "a scheduled runtime without a stage",
+    name: "an auto runtime with a cadence and no stage",
     runtime: {
       type: "agent",
-      schedule: { trigger: { type: "scheduled", interval: 3 } },
+      schedule: { every: 3 },
       io: { output: { contract: "notes@1" } },
     },
     field: "schedule.stage",

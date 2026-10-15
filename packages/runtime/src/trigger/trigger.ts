@@ -38,7 +38,10 @@ export function shouldTrigger(
 
   switch (type) {
     case "auto":
-      return true;
+      // Read the logical-turn number N (= completedPlayerTurns + 1), not the
+      // raw player-message count. `every: 2` fires on logical turns 2, 4,
+      // 6 — setup interactions never shift the cadence (scenario 13).
+      return logicalTurn % (trigger?.every ?? 1) === 0;
 
     case "manual":
       // Dead in the production selection path: selectTriggeredRuntimes picks
@@ -46,14 +49,6 @@ export function shouldTrigger(
       // (an explicit plugin-rpc call IS the trigger decision). Kept for direct
       // callers (tests, event fan-out reuse) — see AGENTS.md "Trigger modes".
       return context.isManualTrigger;
-
-    case "scheduled": {
-      // Read the logical-turn number N (= completedPlayerTurns + 1), not the
-      // raw player-message count. `interval: 2` fires on logical turns 2, 4,
-      // 6 — setup interactions never shift the cadence (scenario 13).
-      const interval = trigger?.interval ?? 1;
-      return logicalTurn % interval === 0;
-    }
 
     case "event":
       return (

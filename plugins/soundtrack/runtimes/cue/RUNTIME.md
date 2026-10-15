@@ -5,8 +5,6 @@ schedule:
   trigger:
     type: event
     topic: music.cue
-io:
-  visibility: system
 function:
   handler: ./handler.js
 ---

@@ -32,7 +32,7 @@ type ResultOutput = Record<string, unknown>;
 
 function makeRuntime(
   name: string,
-  outputKind: RuntimeManifest["outputKind"] = "plugin",
+  outputKind: RuntimeManifest["outputKind"] = "system",
 ): RuntimeManifest {
   return {
     name,

@@ -63,7 +63,7 @@ const plugins: PluginSummary[] = ["builtin", "community"].map((id) => ({
       trigger: { type: "auto" },
       execution: "sync",
       turnCompletion: { mode: "await" },
-      outputKind: id === "community" ? "story" : "plugin",
+      outputKind: id === "community" ? "story" : "system",
       outputContract: undefined,
       tags: [],
     },

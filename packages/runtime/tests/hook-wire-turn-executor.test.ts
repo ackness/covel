@@ -394,7 +394,7 @@ describe("Turn executor hook wire-in", () => {
             replace: { result: { ...payload.result, output: rewritten } },
           }),
         });
-        const manifest = makeManifest({ outputKind: "plugin" });
+        const manifest = makeManifest({ outputKind: "system" });
         const baseDeps = await makeDeps(llm, pipeline);
         const deps: TurnExecutorDeps = {
           ...baseDeps,

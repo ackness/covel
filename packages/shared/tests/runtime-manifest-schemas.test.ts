@@ -108,7 +108,7 @@ const compiledPositives: readonly Fixture[] = [
     manifest: {
       ...base,
       stage: "post-turn",
-      trigger: { type: "scheduled", interval: 1 },
+      trigger: { type: "auto", every: 1 },
       needs: [{ capability: "narrative-engine" }],
     },
   },
@@ -155,7 +155,7 @@ const fullPositive: Fixture = {
   name: "every scheduling, io and policy field",
   manifest: {
     ...base,
-    trigger: { type: "scheduled", interval: 1 },
+    trigger: { type: "auto", every: 2 },
     ...newShapeFields,
   },
 };
@@ -243,9 +243,25 @@ const structuralRejections: readonly Fixture[] = [
     manifest: {
       ...base,
       stage: "post-turn",
-      trigger: { type: "scheduled", interval: 1 },
+      trigger: { type: "auto" },
       upstreamRequired: [{ capability: "narrative-engine" }],
     },
+  },
+  {
+    name: "scheduled trigger (not in the enum)",
+    manifest: { ...base, stage: "narrative", trigger: { type: "scheduled" } },
+  },
+  {
+    name: "trigger interval (unknown field)",
+    manifest: {
+      ...base,
+      stage: "narrative",
+      trigger: { type: "auto", interval: 2 },
+    },
+  },
+  {
+    name: "plugin output kind (not in the enum)",
+    manifest: { ...base, stage: "narrative", outputKind: "plugin" },
   },
   {
     name: "conditional trigger (not in the enum)",
@@ -260,7 +276,7 @@ const structuralRejections: readonly Fixture[] = [
     manifest: {
       ...base,
       stage: "post-turn",
-      trigger: { type: "scheduled", interval: 1 },
+      trigger: { type: "auto" },
       jobStatus: { legacyViews: [{ namespace: "tracks" }] },
     },
   },
@@ -269,7 +285,7 @@ const structuralRejections: readonly Fixture[] = [
     manifest: {
       ...base,
       stage: "post-turn",
-      trigger: { type: "scheduled", interval: 1 },
+      trigger: { type: "auto" },
       needs: [{ runtime: "narrator", cardinality: "one" }],
     },
   },
@@ -278,7 +294,7 @@ const structuralRejections: readonly Fixture[] = [
     manifest: {
       ...base,
       stage: "post-turn",
-      trigger: { type: "scheduled", interval: 1 },
+      trigger: { type: "auto" },
       after: [{ runtime: "narrator", scope: "turn" }],
     },
   },
@@ -321,12 +337,20 @@ const crossFieldRejections: readonly Fixture[] = [
     manifest: { ...base, stage: "post-turn", trigger: { type: "manual" } },
   },
   {
-    name: "stage setup with interval",
+    name: "stage setup with every",
     zodOnly: true,
     manifest: {
       ...base,
       stage: "setup",
-      trigger: { type: "auto", interval: 2 },
+      trigger: { type: "auto", every: 2 },
+    },
+  },
+  {
+    name: "event trigger with every",
+    zodOnly: true,
+    manifest: {
+      ...base,
+      trigger: { type: "event", topic: "scene.set", every: 2 },
     },
   },
   {
@@ -335,7 +359,7 @@ const crossFieldRejections: readonly Fixture[] = [
     manifest: {
       ...base,
       stage: "post-turn",
-      trigger: { type: "scheduled", interval: 1 },
+      trigger: { type: "auto" },
       output: { recordAs: "codexEntries" },
     },
   },

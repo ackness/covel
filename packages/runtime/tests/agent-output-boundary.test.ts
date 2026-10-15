@@ -6,7 +6,7 @@ const manifest = {
   name: "probe/agent",
   pluginId: "probe",
   runtimeType: "agent",
-  outputKind: "plugin",
+  outputKind: "system",
   stage: "setup",
   trigger: { type: "auto" },
 } as RuntimeManifest;

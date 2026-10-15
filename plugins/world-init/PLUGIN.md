@@ -1,7 +1,7 @@
 ---
 id: world-init
 kind: core
-version: 0.0.38
+version: 0.0.39
 displayName: World Dimensions
 description: Initializes character attributes and authored dimensions,
   maintaining evolving state.
@@ -45,7 +45,6 @@ contributes:
     - update-dimensions
   hooks:
     - event: PreLLMCall
-      enforce: normal
 ---
 
 # World Setup

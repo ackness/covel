@@ -13,7 +13,7 @@ const manifest = (overrides: Partial<RuntimeManifest> = {}): RuntimeManifest =>
     stage: "post-turn",
     runtimeType: "function",
     handler: "./handler.js",
-    outputKind: "plugin",
+    outputKind: "system",
     trigger: { type: "auto" },
     turnCompletion: { mode: "detached", settle: "before-next-execution" },
     effects: {

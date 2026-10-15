@@ -425,7 +425,7 @@ export async function finalizeExecution(
 
   const outputKindByRuntime = new Map<string, string>();
   for (const rt of runtimes) {
-    outputKindByRuntime.set(rt.name, rt.outputKind ?? "plugin");
+    outputKindByRuntime.set(rt.name, rt.outputKind ?? "system");
   }
   const activePluginIds =
     args.activePluginIds ?? new Set(runtimes.map((rt) => rt.pluginId));
@@ -584,7 +584,7 @@ export async function finalizeExecution(
     ...(deferPostCommit ? { deferPostCommit } : {}),
   });
   const kindOf = (result: FinalizableResult): string =>
-    outputKindByRuntime.get(result.runtimeId) ?? "plugin";
+    outputKindByRuntime.get(result.runtimeId) ?? "system";
 
   // A committed story must not be lost to an optional runtime's rejected
   // write. When the execution produced a story, every other non-setup runtime

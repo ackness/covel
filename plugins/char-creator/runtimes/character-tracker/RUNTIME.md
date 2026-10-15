@@ -6,8 +6,6 @@ description: >-
 schedule:
   stage: post-turn
   trigger:
-    type: scheduled
-    interval: 1
     cooldownTurns: 1
   needs:
     - contract: narrative-engine@1
@@ -18,9 +16,7 @@ io:
         contract: narrative-engine@1
       select: /narrativeOutput
       required: false
-  visibility: system
 agent:
-  model: plugin
   history:
     maxTurns: 1
   llm:
@@ -31,9 +27,7 @@ agent:
       - sync-characters
       - get-character
   loop:
-    timeoutMs: 120000
     callTimeoutMs: 30000
-    maxRetries: 3
     completion:
       require: explicit
       afterTools:

@@ -5,8 +5,8 @@
  * `NormalizedRuntimeSpec` (per-manifest, no session resolution), and the
  * session scheduler resolves the active set into a `SessionExecutionPlan`
  * (providers resolved, DAG layered). Schedulers, validators, and traces
- * consume only this IR; every manifest-shape normalization (e.g. the
- * scheduled→auto fold for setup) is centralized at the loader exit.
+ * consume only this IR; every manifest-shape normalization is centralized
+ * at the loader exit.
  */
 
 import type { TriggerConfig } from "./plugin.js";

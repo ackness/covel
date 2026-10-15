@@ -52,6 +52,7 @@ notebook/
 ---
 id: notebook
 kind: plugin
+version: 0.1.0
 description: Saves a brief note after narration.
 requires: [narrative-engine@1]
 entry: ./server/index.js
@@ -59,7 +60,6 @@ contributes:
   tools: [save-note]
   data:
     notes:
-      version: 1
       schema: ./schemas/note.schema.json
 runtime:
   type: agent
@@ -69,10 +69,7 @@ runtime:
       narrative:
         from: { contract: narrative-engine@1 }
         select: /narrativeOutput
-        required: true
-    visibility: plugin
   agent:
-    model: plugin
     history: { maxTurns: 2 }
     loop:
       completion: { afterTools: [save-note] }
@@ -84,6 +81,7 @@ Compared with a plugin that has only a prompt, these parts are new:
 
 | This part                        | Meaning                                                                                                                                                   |
 | -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `version`                        | The plugin's version. A plugin with an entry file needs one, raised with each release; `pnpm validate:plugin` reminds you when it is missing              |
 | `entry`                          | The entry file. Covel runs it when it loads the plugin, and it registers the tools                                                                        |
 | `contributes.tools`              | The tools this plugin registers. The names must match the names registered in the entry file                                                              |
 | `contributes.data.notes`         | Declares the `notes` data space, and the shape (schema) of one record                                                                                     |
@@ -344,10 +342,8 @@ runtime:
   io:
     inputs:
       narrative:
-        from: { contract: narrative-engine@1, cardinality: one }
+        from: { contract: narrative-engine@1 }
         select: /narrativeOutput
-        required: true
-    visibility: plugin
   function:
     handler: ./handler.js
     timeoutMs: 30000
@@ -382,23 +378,23 @@ Putting effects inside `value` has no effect. On failure, return `{ outcome: "fa
 
 Things a function often uses:
 
-| Form                                                                          | What it does                                                                                                                                 |
-| ----------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ctx.inputs.<名字>.value`                                                     | An input you declared                                                                                                                        |
-| `ctx.playerMessage`                                                           | The player's input for this turn                                                                                                             |
-| `ctx.manualPayload`                                                           | The data the UI sends with a manual trigger                                                                                                  |
-| `ctx.pluginData.get/list/set`                                                 | Reads and writes your own data                                                                                                               |
-| `ctx.world`                                                                   | Characters, character field definitions, lorebook. Read-only                                                                                 |
-| `ctx.userSettings`                                                            | The player's settings                                                                                                                        |
-| `ctx.random`                                                                  | Random numbers. Use only this for dice rolls                                                                                                 |
-| `ctx.locale`                                                                  | The language of this game                                                                                                                    |
-| `ctx.tools.call(name, args)`                                                  | Calls a tool listed in `function.tools`                                                                                                      |
-| `ctx.logger`                                                                  | Writes to the plugin log                                                                                                                     |
-| `ctx.signal`                                                                  | Gets notified when the run is cancelled                                                                                                      |
+| Form                                                                          | What it does                                                                                                                                                                                                                             |
+| ----------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ctx.inputs.<名字>.value`                                                     | An input you declared                                                                                                                                                                                                                    |
+| `ctx.playerMessage`                                                           | The player's input for this turn                                                                                                                                                                                                         |
+| `ctx.manualPayload`                                                           | The data the UI sends with a manual trigger                                                                                                                                                                                              |
+| `ctx.pluginData.get/list/set`                                                 | Reads and writes your own data                                                                                                                                                                                                           |
+| `ctx.world`                                                                   | Characters, character field definitions, lorebook. Read-only                                                                                                                                                                             |
+| `ctx.userSettings`                                                            | The player's settings                                                                                                                                                                                                                    |
+| `ctx.random`                                                                  | Random numbers. Use only this for dice rolls                                                                                                                                                                                             |
+| `ctx.locale`                                                                  | The language of this game                                                                                                                                                                                                                |
+| `ctx.tools.call(name, args)`                                                  | Calls a tool listed in `function.tools`                                                                                                                                                                                                  |
+| `ctx.logger`                                                                  | Writes to the plugin log                                                                                                                                                                                                                 |
+| `ctx.signal`                                                                  | Gets notified when the run is cancelled                                                                                                                                                                                                  |
 | `ctx.recursiveCall({ playerMessage, manualTrigger: { runtimeId, payload } })` | Calls a runtime in your own package within this turn; see [nested calls](../reference/plugins.md#nested-calls-ctxrecursivecall). Use [services or events](../reference/plugin-extensions.md#choose-a-way-to-communicate) across packages |
-| `ctx.recursionDepth`                                                          | Above 0 when `recursiveCall` runs this one nested. Check it before doing what belongs to the top level only                                  |
-| `ctx.execution?.sourceTurnId`                                                 | When an old turn is retried, the ID of that turn. Key rolls and reveals by it, and a retry does not draw again                               |
-| `ctx.store.getSession()`                                                      | This game's phase, turn count, language, and the progress of the opening steps (read-only)                                                   |
+| `ctx.recursionDepth`                                                          | Above 0 when `recursiveCall` runs this one nested. Check it before doing what belongs to the top level only                                                                                                                              |
+| `ctx.execution?.sourceTurnId`                                                 | When an old turn is retried, the ID of that turn. Key rolls and reveals by it, and a retry does not draw again                                                                                                                           |
+| `ctx.store.getSession()`                                                      | This game's phase, turn count, language, and the progress of the opening steps (read-only)                                                                                                                                               |
 
 - Every field above is in the `PluginFunctionContext` type, so the type comment at the top lets the editor suggest and check them.
 - The tools a function can call are listed in `function.tools`. The function's time limit is `function.timeoutMs`. Do not write these two under `agent`: a function runtime cannot have an `agent` setting.

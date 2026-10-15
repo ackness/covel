@@ -1,7 +1,7 @@
 ---
 id: character-blueprint
 kind: plugin
-version: 0.0.35
+version: 0.0.36
 displayName: Character Profiles
 description: >-
   Saves the world's preset character profiles along with their portraits,
@@ -35,7 +35,6 @@ contributes:
     blueprints:
       schema: ./schemas/blueprints.schema.json
       description: Importable world character blueprints.
-      version: 1
       accepts:
         - character.blueprints@1
       authoring:
@@ -62,7 +61,6 @@ contributes:
     presence:
       schema: ./schemas/presence.schema.json
       description: Importable character media presence records.
-      version: 1
       accepts:
         - character.portraits@1
       authoring:
@@ -78,7 +76,6 @@ contributes:
     assets:
       schema: ./schemas/assets.schema.json
       description: Media asset index records imported from world packages.
-      version: 1
       accepts:
         - character.portrait-assets@1
       authoring:

@@ -347,9 +347,9 @@ describe("codex plugin manifest", () => {
 
   it("should consume typed WorldIR and inject existing plugin data", () => {
     expect(manifest.inputs?.worldIR).toEqual({
-      from: { capability: "world-ir-provider@1", cardinality: "one" },
+      // `cardinality: one` and `required: true` are the defaults.
+      from: { capability: "world-ir-provider@1" },
       accepts: "contract:world-ir@1",
-      required: true,
     });
     expect(declaration.requires).toContain("world-ir-provider@1");
 
@@ -400,7 +400,7 @@ describe("codex plugin manifest", () => {
     // Post 2026-04 refactor: codex runs every turn so no narrative is lost
     // between discovery passes. The typed worldIR binding creates both the
     // same-turn dependency edge and the required failure gate.
-    expect(manifest.trigger?.type).toBe("auto");
+    expect(manifest.trigger).toBeUndefined(); // `auto`, the default
     expect(manifest.needs).toBeUndefined();
   });
 

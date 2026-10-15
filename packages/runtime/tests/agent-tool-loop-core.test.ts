@@ -46,7 +46,7 @@ function manifest(overrides?: Partial<RuntimeManifest>): RuntimeManifest {
     pluginId: "plug",
     description: "loop core fixture",
     stage: "narrative",
-    outputKind: "plugin",
+    outputKind: "system",
     trigger: { type: "auto" },
     tools: { plugin: ["mark"] },
     ...overrides,

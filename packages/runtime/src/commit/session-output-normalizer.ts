@@ -78,12 +78,12 @@ export function normalizeOutput(
   effects: RuntimeEffects = {},
 ): Proposal[] {
   const proposals: Proposal[] = [];
-  const kind = outputKind ?? "plugin";
+  const kind = outputKind ?? "system";
 
   // narrative.append — from narrativeOutput.
   //
-  // Only `story` runtimes may append to the narrative feed. `system` and
-  // `plugin` runtimes that happen to return `narrativeOutput` (e.g. a
+  // Only `story` runtimes may append to the narrative feed. `system`
+  // runtimes that happen to return `narrativeOutput` (e.g. a
   // tool-less LLM response on a non-story plugin) must NOT pollute the
   // chat stream — their text is still available via RuntimeResult.output
   // for trace and debug consumers. This blocks the guide failure

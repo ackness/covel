@@ -13,7 +13,6 @@ const MANIFEST: readonly (readonly [string, string?])[] = [
   ["runtime:"],
   ["  type: agent"],
   ["  schedule: { stage: post-turn }"],
-  ["  io: { visibility: plugin }"],
   ["---", "muted"],
   ["Describe one detail the player can observe", "prose"],
   ["in the latest narrative.", "prose"],

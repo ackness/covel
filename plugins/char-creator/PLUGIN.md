@@ -1,7 +1,7 @@
 ---
 id: char-creator
 kind: core
-version: 0.0.37
+version: 0.0.38
 displayName: Character Creator
 description: >-
   Helps create your hero and keeps important character details up to date during
@@ -36,9 +36,7 @@ contributes:
     - player-name
   hooks:
     - event: PreLLMCall
-      enforce: normal
     - event: PreToolUse
-      enforce: normal
 ---
 
 # Character Creator

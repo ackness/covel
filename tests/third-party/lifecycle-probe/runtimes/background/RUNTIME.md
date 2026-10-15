@@ -6,8 +6,6 @@ schedule:
     type: manual
   manual:
     execution: background
-io:
-  visibility: plugin
 function:
   handler: ./handler.js
 ---

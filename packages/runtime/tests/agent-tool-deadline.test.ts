@@ -30,7 +30,7 @@ function options(
       pluginId: "probe",
       description: "Probe",
       stage: "narrative",
-      outputKind: "plugin",
+      outputKind: "system",
       trigger: { type: "auto" },
       tools: { plugin: ["probe"] },
       completeAfterTools: ["probe"],

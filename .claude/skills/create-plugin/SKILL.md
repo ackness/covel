@@ -46,7 +46,9 @@ Read [manifest fields](references/plugin-schema.md) first. Root `PLUGIN.md` is
 required and holds `id`, `kind`, package contracts, and `contributes`. A single
 inline `runtime` or child `runtimes/<id>/RUNTIME.md` files supply executable
 behavior; child `PLUGIN.md` files and old flat authoring fields are rejected.
-Declare scheduling with `stage` plus `needs` / `after` edges, and `io.visibility`.
+Declare scheduling with `stage` plus `needs` / `after` edges; set
+`io.visibility: story` only on a narrative provider (every other runtime is
+`system`, the default). Leave out fields written with their default value.
 
 Write `PLUGIN.md`, `RUNTIME.md` and `ui/*.json` in English: labels, tool
 descriptions, UI text, and the prompt body. Put label translations

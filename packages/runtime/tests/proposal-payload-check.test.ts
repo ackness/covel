@@ -27,7 +27,7 @@ const TURN_ID = "turn-check";
 
 function runtime(
   name: string,
-  outputKind: RuntimeManifest["outputKind"] = "plugin",
+  outputKind: RuntimeManifest["outputKind"] = "system",
 ): RuntimeManifest {
   return {
     name,
@@ -128,7 +128,7 @@ describe("proposal payload schemas", () => {
       });
     }
     expect(
-      checkProposalPayload("narrative.append", { kind: "plugin" }),
+      checkProposalPayload("narrative.append", { kind: "system" }),
     ).toMatchObject({
       ok: false,
       error: expect.stringMatching(/^narrative\.append: invalid payload/),
@@ -140,7 +140,7 @@ describe("finalizeExecution checks every proposal before it commits", () => {
   it.each([
     [
       "a narrative without content",
-      rawProposal("narrative.append", { kind: "plugin" }),
+      rawProposal("narrative.append", { kind: "system" }),
     ],
     [
       "a plugin-data value JSON cannot hold",

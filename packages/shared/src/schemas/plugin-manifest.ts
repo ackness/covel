@@ -366,7 +366,10 @@ export const pluginManifestSchema = z.strictObject({
                 .number()
                 .int()
                 .positive()
-                .describe("Schema version of the namespace."),
+                .default(1)
+                .describe(
+                  "Schema version of the namespace. Defaults to 1; raise it when the record shape changes.",
+                ),
               accepts: z
                 .array(contractIdSchema)
                 .describe(

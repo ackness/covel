@@ -5,7 +5,6 @@ import {
   Database,
   Hand,
   Image,
-  Puzzle,
   Radio,
   Shield,
   Timer,
@@ -19,7 +18,7 @@ import { Badge } from "@/components/ui/badge.js";
 export interface RuntimeFeatureMetadata {
   readonly kind?: string;
   readonly runtimeType?: string;
-  readonly trigger?: { readonly type?: string };
+  readonly trigger?: { readonly type?: string; readonly every?: number };
   readonly outputKind?: string;
   readonly capabilities?: readonly string[];
   readonly turnCompletion?: { readonly mode?: string };
@@ -37,8 +36,7 @@ type RuntimeFeatureKind =
   | "narrative"
   | "media"
   | "data"
-  | "system"
-  | "auxiliary";
+  | "system";
 
 export interface RuntimeFeature {
   readonly kind: RuntimeFeatureKind;
@@ -49,18 +47,19 @@ export interface RuntimeFeature {
 }
 
 function triggerFeature(
-  triggerType: string | undefined,
+  trigger: RuntimeFeatureMetadata["trigger"],
 ): RuntimeFeature | undefined {
-  switch (triggerType) {
+  switch (trigger?.type) {
     case "manual":
       return feature("manual", "Hand", "amber");
     case "event":
       return feature("event", "Radio", "violet");
-    case "scheduled":
-      return feature("scheduled", "Timer", "neutral");
     case "auto":
     case undefined:
-      return feature("automatic", "Zap", "neutral");
+      // An `auto` runtime with a cadence runs on a schedule, not every turn.
+      return (trigger?.every ?? 1) > 1
+        ? feature("scheduled", "Timer", "neutral")
+        : feature("automatic", "Zap", "neutral");
     default:
       return undefined;
   }
@@ -73,7 +72,6 @@ const ICONS = {
   Database,
   Hand,
   Image,
-  Puzzle,
   Radio,
   Shield,
   Timer,
@@ -101,11 +99,8 @@ function outputFeature(
   if (runtime.outputKind === "story") {
     return feature("narrative", "BookOpen", "blue");
   }
-  if (runtime.outputKind === "system") {
-    return feature("system", "Shield", "neutral");
-  }
-  return runtime.outputKind === "plugin"
-    ? feature("auxiliary", "Puzzle", "neutral")
+  return runtime.outputKind === "system"
+    ? feature("system", "Shield", "neutral")
     : undefined;
 }
 
@@ -114,7 +109,7 @@ export function deriveRuntimeFeatures(
   runtime: RuntimeFeatureMetadata,
 ): readonly RuntimeFeature[] {
   const runtimeType = runtime.runtimeType ?? runtime.kind ?? "agent";
-  const trigger = triggerFeature(runtime.trigger?.type);
+  const trigger = triggerFeature(runtime.trigger);
   const output = outputFeature(runtime);
   return [
     ...(runtime.turnCompletion?.mode === "detached" ||

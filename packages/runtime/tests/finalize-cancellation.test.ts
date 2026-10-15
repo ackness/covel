@@ -21,7 +21,7 @@ const execution = {
       name: "fixture",
       pluginId: "fixture",
       description: "fixture",
-      outputKind: "plugin" as const,
+      outputKind: "system" as const,
     },
   ],
   results: [

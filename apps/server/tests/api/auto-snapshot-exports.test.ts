@@ -96,7 +96,7 @@ describe.each(["memory", "sqlite"])(
                 pluginId: "producer",
                 description: "Producer runtime",
                 version: "1.0.0",
-                outputKind: "plugin",
+                outputKind: "system",
                 output: { recordAs: "config", schema: "./output.json" },
               },
             ],

@@ -167,7 +167,7 @@ Model settings made in the UI are stored only in `llm.providers`. Startup and re
 
 ### Choose a plugin runtime model for one world or session
 
-**Model Roles** maps each slot to the provider and model used on this device. For example, the `plugin` slot may point to `ali-coding-plan / qwen3.8-flash`. A plugin manifest declares only its default slot, such as `model: plugin`; it does not pin a concrete model like `deepseek-v4-flash` inside the world.
+**Model Roles** maps each slot to the provider and model used on this device. For example, the `plugin` slot may point to `ali-coding-plan / qwen3.8-flash`. A plugin manifest declares only a slot name, such as `model: memory` (an agent that leaves it out uses `plugin`); it does not pin a concrete model like `deepseek-v4-flash` inside the world.
 
 On the configuration page shown before a session starts, each agent runtime in the plugin list can pick a slot:
 

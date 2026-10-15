@@ -231,7 +231,7 @@ model    = "glm-5"
 一次调用用哪个用途，按下面的顺序决定：
 
 1. 运行时的明确选择，包括会话的 `runtimeModelOverrides`。它决定用哪个用途或预设。
-2. 没有明确选择时，runtime 自己写的用途名（`agent.model` / `function.model`）。没写时，当前请求绑定了 `default` 就用它，否则用系统的默认用途。
+2. 没有明确选择时，runtime 自己写的用途名（`agent.model` / `function.model`）。agent 没写时，`io.visibility: story` 的用 `story`，其他用 `plugin`。function 没写时，当前请求绑定了 `default` 就用它，否则用系统的默认用途。
 3. 这个用途先按当前请求里的 UI 用途绑定解析，没有绑定时按系统 `llm.toml` 的定义，以及可用文本用途的回退。
 
 补充规则：

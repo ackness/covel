@@ -47,7 +47,7 @@ function rt(
     runtimeType: "function",
     handler: "./h.js",
     trigger: opts.trigger ?? { type: "auto" },
-    outputKind: "plugin",
+    outputKind: "system",
     outputContract: opts.outputContract,
     ...(opts.inputs ? { inputs: opts.inputs } : {}),
     ...(opts.execution ? { execution: opts.execution } : {}),

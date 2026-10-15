@@ -8,7 +8,6 @@ schedule:
 io:
   output:
     contract: scene-stage@1
-  visibility: system
 function:
   handler: ./handler.js
 ---

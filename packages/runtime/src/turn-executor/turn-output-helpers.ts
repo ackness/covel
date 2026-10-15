@@ -173,13 +173,17 @@ export function extractRequiredFields(
   );
 }
 
+/**
+ * Whether the free text a non-story agent writes after its tool calls is
+ * dropped. A runtime without a declared visibility is a `system` runtime.
+ */
 export function shouldSuppressToolLoopNarrative(args: {
   outputKind?: string;
   executedToolCalls: readonly ExecutedToolCallState[];
   parsedAsJson: boolean;
 }): boolean {
   return (
-    args.outputKind === "system" &&
+    (args.outputKind ?? "system") === "system" &&
     args.executedToolCalls.length > 0 &&
     !args.parsedAsJson
   );

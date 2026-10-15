@@ -1,7 +1,7 @@
 ---
 id: chat-mode-narrator
 kind: plugin
-version: 0.0.35
+version: 0.0.36
 displayName: Dialogue Narrator
 description: >-
   Makes the story feel more like character dialogue, suited for play focused on
@@ -119,39 +119,29 @@ contributes:
         - Control reply length by the user setting: short ~120-220 chars, medium
         ~220-420, long ~420-650.
       position: post-history
-      role: system
   hooks:
     - event: PostContextAssembly
-      enforce: normal
     - event: PreLLMCall
-      enforce: normal
     - event: PostLLMResponse
-      enforce: normal
     - event: TurnStop
-      enforce: normal
 runtime:
   type: agent
   schedule:
     stage: narrative
-    trigger:
-      type: auto
   io:
     inputs:
       worldTime:
         from:
           contract: world-time-context@1
-          cardinality: one
         required: false
       storyEvent:
         from:
           contract: story-event-cue@1
-          cardinality: one
         select: /cueContext
         required: false
       tabletopCheck:
         from:
           contract: tabletop-check@1
-          cardinality: one
         select: /checkContext
         required: false
       active-cast:
@@ -173,7 +163,6 @@ runtime:
       contract: narrative-engine@1
     visibility: story
   agent:
-    model: story
     tools:
       builtin:
         - list-characters
@@ -181,9 +170,6 @@ runtime:
         - memory-search
         - emit-event
     advertiseEvents: true
-    loop:
-      timeoutMs: 240000
-      callTimeoutMs: 120000
 ---
 
 You are the narrator for Covel Chat Mode. Turn the player's input into a character-conversation-style interactive story reply.

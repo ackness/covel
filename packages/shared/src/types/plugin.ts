@@ -33,21 +33,21 @@ export interface RuntimeHistoryPolicy {
 /**
  * Runtime trigger modes.
  *
- * The four production modes (the historical `conditional` / `error-retry`
- * values were removed from the enum — manifests declaring them are rejected
- * at load):
- * - `auto`      — every turn.
- * - `manual`    — only on an explicit `POST /plugin-rpc` request.
- * - `scheduled` — every N turns (`interval`), bounded by `maxTriggerCount`.
- * - `event`     — when a subscribed `topic` is emitted within the turn's
- *                 event fan-out (see `turn-event-chain.ts`).
+ * The three production modes (values outside the enum are rejected at load):
+ * - `auto`   — every turn of its stage, or every `every`-th logical turn.
+ * - `manual` — only on an explicit `POST /plugin-rpc` request.
+ * - `event`  — when a subscribed `topic` is emitted within the turn's
+ *              event fan-out (see `turn-event-chain.ts`).
  */
-export type TriggerType = "auto" | "manual" | "scheduled" | "event";
+export type TriggerType = "auto" | "manual" | "event";
 
 export interface TriggerConfig {
   readonly type: TriggerType;
-  /** Interval in turns for `scheduled` mode. */
-  readonly interval?: number;
+  /**
+   * `auto` only: run on the logical turns that are a multiple of this
+   * number. Authored as `schedule.every`; defaults to 1 (every turn).
+   */
+  readonly every?: number;
   /** Event topic for `event` mode. */
   readonly topic?: string;
   /** Max trigger count within a session. */
@@ -166,12 +166,12 @@ export interface InputConfig {
 // ── Output declarations ──────────────────────────────────────────
 
 /**
- * How the framework treats this runtime's output in the UI.
+ * How the framework treats this runtime's output.
  * - `story` — main narrative content, shown in the chat stream.
- * - `plugin` (default) — auxiliary content, may be hidden from main chat.
- * - `system` — system-level output, not shown to the player.
+ * - `system` (default) — everything else; its free text is not shown to the
+ *   player.
  */
-export type OutputKind = "story" | "plugin" | "system";
+export type OutputKind = "story" | "system";
 
 export interface OutputConfig {
   /** Relative path to output.schema.json. */
@@ -451,6 +451,11 @@ export interface RuntimeManifest {
    * Guard output is merged into the runtime result's `output` field.
    */
   readonly guard?: string;
+  /**
+   * Model slot. The loader gives an agent that names none the slot of its
+   * visibility (`story` → `story`, otherwise `plugin`); see
+   * `defaultAgentModel` in `@covel/shared`.
+   */
   readonly model?: string;
   /** Per-call preferences; explicit slot/preset reasoning settings take priority. */
   readonly llm?: import("./llm-adapter.js").LLMRequestDefaults;
@@ -461,7 +466,10 @@ export interface RuntimeManifest {
   readonly history?: RuntimeHistoryPolicy;
   /**
    * Per-runtime hard timeout in ms.
-   * Overrides the executor default for agent runtimes.
+   * Overrides the executor default for agent runtimes. The loader fills the
+   * authored default of an agent (`AGENT_LOOP_DEFAULTS` in `@covel/shared`);
+   * the fallbacks described on these fields apply to a manifest built
+   * without the loader.
    */
   readonly timeoutMs?: number;
   /**
@@ -547,7 +555,7 @@ export interface RuntimeManifest {
   readonly pluginType?: PluginType;
   /**
    * How the framework treats this runtime's output in the UI.
-   * Defaults to `'plugin'`. Only `'story'` outputs are shown in the main chat stream.
+   * Defaults to `'system'`. Only `'story'` outputs are shown in the main chat stream.
    */
   readonly outputKind?: OutputKind;
   /**
@@ -560,7 +568,7 @@ export interface RuntimeManifest {
   readonly outputContract?: string;
   readonly defaultProvider?: boolean;
   /**
-   * Named scheduling stage. Required for `auto` / `scheduled` runtimes under
+   * Named scheduling stage. Required for `auto` runtimes under
    * the strict authoring schema; forbidden for `event` / `manual`. Selects
    * the band the runtime runs in; order *within* the band comes from the
    * dependency edges below.

@@ -71,12 +71,9 @@ runtime:
   type: function
   schedule:
     stage: narrative
-    trigger:
-      type: auto
   io:
     output:
       contract: narrative-engine@1
-    visibility: plugin
   function:
     handler: ./handler.js
 ---
@@ -270,6 +267,8 @@ describe("plugin scaffolding", () => {
         expect(validation.status, validation.stdout + validation.stderr).toBe(
           0,
         );
+        // A generated manifest writes no field with its default value.
+        expect(validation.stdout).not.toContain("warning:");
         const caseFile = JSON.parse(
           await readFile(
             path.join(pluginRoot, "tests/runtime-cases.json"),

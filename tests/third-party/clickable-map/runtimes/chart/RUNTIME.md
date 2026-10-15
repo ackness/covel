@@ -5,8 +5,6 @@ schedule:
   trigger:
     type: event
     topic: map.opened
-io:
-  visibility: plugin
 function:
   handler: ./handler.js
 ---

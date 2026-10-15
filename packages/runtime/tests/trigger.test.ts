@@ -24,7 +24,7 @@ function makeContext(overrides?: Partial<TriggerContext>): TriggerContext {
     isManualTrigger: false,
     ...overrides,
   };
-  // scheduled / startTurn gate on `logicalTurn`; these cases express the turn
+  // every / startTurn gate on `logicalTurn`; these cases express the turn
   // number via `turnNumber`, so mirror it unless a test sets logicalTurn.
   return {
     ...merged,
@@ -61,19 +61,19 @@ describe("shouldTrigger", () => {
     expect(shouldTrigger(manifest, ctx)).toBe(true);
   });
 
-  // 5. scheduled, on interval
-  it("should return true for scheduled trigger when turnNumber is on interval", () => {
+  // 5. auto with a cadence, on the cadence
+  it("should return true for an auto trigger when turnNumber is on its cadence", () => {
     const manifest = makeManifest({
-      trigger: { type: "scheduled", interval: 3 },
+      trigger: { type: "auto", every: 3 },
     });
     const ctx = makeContext({ turnNumber: 6 });
     expect(shouldTrigger(manifest, ctx)).toBe(true);
   });
 
-  // 6. scheduled, off interval
-  it("should return false for scheduled trigger when turnNumber is off interval", () => {
+  // 6. auto with a cadence, off the cadence
+  it("should return false for an auto trigger when turnNumber is off its cadence", () => {
     const manifest = makeManifest({
-      trigger: { type: "scheduled", interval: 3 },
+      trigger: { type: "auto", every: 3 },
     });
     const ctx = makeContext({ turnNumber: 7 });
     expect(shouldTrigger(manifest, ctx)).toBe(false);

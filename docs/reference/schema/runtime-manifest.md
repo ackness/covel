@@ -24,25 +24,25 @@ In the path headings below, `[]` is a list item and `.*` is a map value.
 
 ## `schedule`
 
-| Field        | Type                                                                     | Required | Description                                                                                                                             |
-| ------------ | ------------------------------------------------------------------------ | -------- | --------------------------------------------------------------------------------------------------------------------------------------- |
-| `stage`      | `"setup"` or `"pre-turn"` or `"narrative"` or `"post-turn"` or `"audit"` | no       | Stage the runtime runs in. Required for `auto` and `scheduled` triggers. Order: `setup`, `pre-turn`, `narrative`, `post-turn`, `audit`. |
-| `trigger`    | object                                                                   | no       | When the runtime is activated.                                                                                                          |
-| `needs`      | list of string or object                                                 | no       | Upstream runtimes or contracts that must succeed first. Sets order and gates this runtime.                                              |
-| `after`      | list of string or object                                                 | no       | Upstream runtimes or contracts that run first. Sets order only; it does not gate and does not activate a provider.                      |
-| `completion` | object                                                                   | no       | Whether the turn waits for this runtime.                                                                                                |
-| `manual`     | object                                                                   | no       | Execution mode for `manual` and `event` activation.                                                                                     |
+| Field        | Type                                                                     | Required | Description                                                                                                                            |
+| ------------ | ------------------------------------------------------------------------ | -------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `stage`      | `"setup"` or `"pre-turn"` or `"narrative"` or `"post-turn"` or `"audit"` | no       | Stage the runtime runs in. Required for an `auto` trigger, the default. Order: `setup`, `pre-turn`, `narrative`, `post-turn`, `audit`. |
+| `every`      | integer                                                                  | no       | `auto` only: run on the logical turns that are a multiple of this number. Defaults to 1, every turn.                                   |
+| `trigger`    | object                                                                   | no       | When the runtime is activated. Leave it out for an `auto` runtime without options.                                                     |
+| `needs`      | list of string or object                                                 | no       | Upstream runtimes or contracts that must succeed first. Sets order and gates this runtime.                                             |
+| `after`      | list of string or object                                                 | no       | Upstream runtimes or contracts that run first. Sets order only; it does not gate and does not activate a provider.                     |
+| `completion` | object                                                                   | no       | Whether the turn waits for this runtime.                                                                                               |
+| `manual`     | object                                                                   | no       | Execution mode for `manual` and `event` activation.                                                                                    |
 
 ## `schedule.trigger`
 
-| Field             | Type                                                 | Required | Description                                                                                                                                                |
-| ----------------- | ---------------------------------------------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `type`            | `"auto"` or `"manual"` or `"scheduled"` or `"event"` | yes      | `auto` runs every turn in its stage. `scheduled` runs every `interval` turns. `manual` runs on an explicit RPC call. `event` runs when `topic` is emitted. |
-| `interval`        | integer                                              | no       | Interval in turns. For `scheduled` only.                                                                                                                   |
-| `topic`           | string                                               | no       | Event topic to subscribe to. Required for `event`.                                                                                                         |
-| `maxTriggerCount` | integer                                              | no       | Maximum number of triggers in one session.                                                                                                                 |
-| `cooldownTurns`   | integer                                              | no       | Minimum number of turns between two triggers.                                                                                                              |
-| `startTurn`       | integer                                              | no       | First logical turn at which the runtime may trigger. When unset, it triggers as soon as its stage opens.                                                   |
+| Field             | Type                                | Required | Description                                                                                                                                                              |
+| ----------------- | ----------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `type`            | `"auto"` or `"manual"` or `"event"` | no       | `auto` runs in its stage every turn, or every `schedule.every`-th turn. `manual` runs on an explicit RPC call. `event` runs when `topic` is emitted. Defaults to `auto`. |
+| `topic`           | string                              | no       | Event topic to subscribe to. Required for `event`.                                                                                                                       |
+| `maxTriggerCount` | integer                             | no       | Maximum number of triggers in one session.                                                                                                                               |
+| `cooldownTurns`   | integer                             | no       | Minimum number of turns between two triggers.                                                                                                                            |
+| `startTurn`       | integer                             | no       | First logical turn at which the runtime may trigger. When unset, it triggers as soon as its stage opens.                                                                 |
 
 ## `schedule.needs[]` (form 1 of 2)
 
@@ -56,7 +56,7 @@ In the path headings below, `[]` is a list item and `.*` is a map value.
 | Field         | Type                    | Required | Description                                                                                                              |
 | ------------- | ----------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------ |
 | `contract`    | string                  | yes      | Contract ID. It must be listed in the package's `requires` or `optional`.                                                |
-| `cardinality` | `"one"` or `"all"`      | no       | `one` takes a single provider; `all` takes every provider.                                                               |
+| `cardinality` | `"one"` or `"all"`      | no       | `one` takes a single provider; `all` takes every provider. Defaults to `one`.                                            |
 | `scope`       | `"turn"` or `"session"` | no       | `turn` gates on the same execution. `session` gates on the persistent setup snapshot and is valid only on stage `setup`. |
 
 ## `schedule.after[]` (form 1 of 2)
@@ -70,7 +70,7 @@ In the path headings below, `[]` is a list item and `.*` is a map value.
 | Field         | Type               | Required | Description                                                                                                                                |
 | ------------- | ------------------ | -------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
 | `contract`    | string             | yes      | Contract ID. This runtime runs after the contract's active providers; the contract does not have to be listed in `requires` or `optional`. |
-| `cardinality` | `"one"` or `"all"` | no       | `one` takes a single provider; `all` takes every provider.                                                                                 |
+| `cardinality` | `"one"` or `"all"` | no       | `one` takes a single provider; `all` takes every provider. Defaults to `one`.                                                              |
 
 ## `schedule.completion`
 
@@ -92,14 +92,14 @@ In the path headings below, `[]` is a list item and `.*` is a map value.
 
 ## `io`
 
-| Field           | Type                                  | Required | Description                                                                                                                                                                                                                                                        |
-| --------------- | ------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `inputs`        | map of object                         | no       | Typed input bindings keyed by local name. An agent reads them at `runtime-inputs.<name>.value`.                                                                                                                                                                    |
-| `selfData`      | list of object                        | no       | Own plugin data inlined into the agent prompt.                                                                                                                                                                                                                     |
-| `payloadSchema` | string                                | no       | Schema that validates the activation payload.                                                                                                                                                                                                                      |
-| `output`        | object                                | no       | What the runtime produces.                                                                                                                                                                                                                                         |
-| `visibility`    | `"story"` or `"plugin"` or `"system"` | no       | Output kind the kernel dispatches on: `story` for the main narrative provider, `plugin` for plugin output, `system` for system output.                                                                                                                             |
-| `concealed`     | boolean                               | no       | `true` for a runtime that handles hidden content. Its prompt, model reply, tool arguments, results and output are removed from traces, live streams and API results, and text it returns is not written to the conversation. Not allowed with `visibility: story`. |
+| Field           | Type                    | Required | Description                                                                                                                                                                                                                                                        |
+| --------------- | ----------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `inputs`        | map of object           | no       | Typed input bindings keyed by local name. An agent reads them at `runtime-inputs.<name>.value`.                                                                                                                                                                    |
+| `selfData`      | list of object          | no       | Own plugin data inlined into the agent prompt.                                                                                                                                                                                                                     |
+| `payloadSchema` | string                  | no       | Schema that validates the activation payload.                                                                                                                                                                                                                      |
+| `output`        | object                  | no       | What the runtime produces.                                                                                                                                                                                                                                         |
+| `visibility`    | `"story"` or `"system"` | no       | Output kind the kernel dispatches on: `story` for the main narrative provider, `system` for every other runtime. Defaults to `system`.                                                                                                                             |
+| `concealed`     | boolean                 | no       | `true` for a runtime that handles hidden content. Its prompt, model reply, tool arguments, results and output are removed from traces, live streams and API results, and text it returns is not written to the conversation. Not allowed with `visibility: story`. |
 
 ## `io.inputs.*`
 
@@ -108,7 +108,7 @@ In the path headings below, `[]` is a list item and `.*` is a map value.
 | `from`     | object                    | yes      | Producer of the value: a runtime in this package, a contract, or a kernel input. A kernel input takes no other field.                                                         |
 | `scope`    | `"turn"` or `"committed"` | no       | `turn` reads the same execution's upstream result. `committed` reads the latest committed export and needs `recordAs`. Defaults to `turn`.                                    |
 | `select`   | string                    | no       | JSON Pointer applied to the upstream value. Declaring `select` with `scope: committed` is rejected; committed inputs read the complete export. Example: `"/narrativeOutput"`. |
-| `required` | boolean                   | no       | `true` stops this runtime when the upstream value is missing or failed.                                                                                                       |
+| `required` | boolean                   | no       | `true` stops this runtime when the upstream value is missing or failed. Defaults to `true`.                                                                                   |
 | `accepts`  | string                    | no       | Schema the bound value must satisfy: a local path or `contract:<contractId>`. It adds to the public contract check.                                                           |
 | `recordAs` | string                    | no       | Export key to read from the producer. Required with `scope: committed`.                                                                                                       |
 
@@ -120,10 +120,10 @@ In the path headings below, `[]` is a list item and `.*` is a map value.
 
 ## `io.inputs.*.from` (form 2 of 3)
 
-| Field         | Type               | Required | Description                                                               |
-| ------------- | ------------------ | -------- | ------------------------------------------------------------------------- |
-| `contract`    | string             | yes      | Contract ID. It must be listed in the package's `requires` or `optional`. |
-| `cardinality` | `"one"` or `"all"` | no       | `one` takes a single provider; `all` takes every provider.                |
+| Field         | Type               | Required | Description                                                                   |
+| ------------- | ------------------ | -------- | ----------------------------------------------------------------------------- |
+| `contract`    | string             | yes      | Contract ID. It must be listed in the package's `requires` or `optional`.     |
+| `cardinality` | `"one"` or `"all"` | no       | `one` takes a single provider; `all` takes every provider. Defaults to `one`. |
 
 ## `io.inputs.*.from` (form 3 of 3)
 
@@ -150,14 +150,14 @@ In the path headings below, `[]` is a list item and `.*` is a map value.
 
 ## `agent`
 
-| Field             | Type    | Required | Description                                                                                           |
-| ----------------- | ------- | -------- | ----------------------------------------------------------------------------------------------------- |
-| `model`           | string  | no       | Model slot the agent uses. Example: `"plugin"`.                                                       |
-| `llm`             | object  | no       | Model call options for this runtime.                                                                  |
-| `history`         | object  | no       | Bounds the agent's prompt history. When omitted, the runtime sees the shared session history.         |
-| `tools`           | object  | no       | Tools the agent's model may call.                                                                     |
-| `advertiseEvents` | boolean | no       | `true` lists the session's event directory in the prompt so the model knows which topics it may emit. |
-| `loop`            | object  | no       | Limits and completion rules of the agent loop.                                                        |
+| Field             | Type    | Required | Description                                                                                                           |
+| ----------------- | ------- | -------- | --------------------------------------------------------------------------------------------------------------------- |
+| `model`           | string  | no       | Model slot the agent uses. Defaults to `story` with `io.visibility: story`, otherwise `plugin`. Example: `"utility"`. |
+| `llm`             | object  | no       | Model call options for this runtime.                                                                                  |
+| `history`         | object  | no       | Bounds the agent's prompt history. When omitted, the runtime sees the shared session history.                         |
+| `tools`           | object  | no       | Tools the agent's model may call.                                                                                     |
+| `advertiseEvents` | boolean | no       | `true` lists the session's event directory in the prompt so the model knows which topics it may emit.                 |
+| `loop`            | object  | no       | Limits and completion rules of the agent loop.                                                                        |
 
 ## `agent.llm`
 
@@ -192,11 +192,11 @@ In the path headings below, `[]` is a list item and `.*` is a map value.
 | Field                 | Type    | Required | Description                                                                                                                                                                                         |
 | --------------------- | ------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `maxSteps`            | integer | no       | Maximum number of tool-call steps. Use 1 or 2 for a runtime that calls one tool and stops.                                                                                                          |
-| `timeoutMs`           | integer | no       | Time limit of the runtime in ms. The time a streamed model call spends writing does not count.                                                                                                      |
-| `callTimeoutMs`       | integer | no       | Time limit of one model call that is not streamed, in ms.                                                                                                                                           |
+| `timeoutMs`           | integer | no       | Time limit of the runtime in ms. The time a streamed model call spends writing does not count. Defaults to 120000; 240000 with `io.visibility: story`.                                              |
+| `callTimeoutMs`       | integer | no       | Time limit of one model call that is not streamed, in ms. Defaults to 60000; 120000 with `io.visibility: story`.                                                                                    |
 | `firstTokenTimeoutMs` | integer | no       | Time limit for the first streamed token in ms, the same for every attempt. Without it an attempt waits at most 120000, and no longer than leaves room in `timeoutMs` for the retries still allowed. |
 | `idleTimeoutMs`       | integer | no       | Longest silence of a streamed model call that has started to write, in ms. A model that keeps writing is not cut off. Defaults to 120000.                                                           |
-| `maxRetries`          | integer | no       | Retries on a transient model failure. Defaults to 1; `0` disables retry.                                                                                                                            |
+| `maxRetries`          | integer | no       | Retries on a transient model failure; `0` disables retry. Defaults to 3; 1 with `io.visibility: story`.                                                                                             |
 | `loopDetection`       | integer | no       | Number of repeated tool calls that counts as a loop. Defaults to 3; `0` disables detection.                                                                                                         |
 | `maxRecursionDepth`   | integer | no       | Maximum depth of nested `ctx.recursiveCall()`. Defaults to 10.                                                                                                                                      |
 | `completion`          | object  | no       | How the agent loop ends.                                                                                                                                                                            |

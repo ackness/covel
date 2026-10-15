@@ -7,7 +7,6 @@ schedule:
 io:
   output:
     contract: character-presence@1
-  visibility: system
 function:
   handler: ./handler.js
 ---

@@ -39,8 +39,6 @@ runtime:
   schedule:
     trigger:
       type: manual
-  io:
-    visibility: plugin
   function:
     handler: ./handler.js
 ---

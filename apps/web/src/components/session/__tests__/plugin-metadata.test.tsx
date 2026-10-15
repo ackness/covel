@@ -34,7 +34,7 @@ function plugin(
         trigger: { type: trigger },
         execution: "sync",
         turnCompletion: { mode: "await" },
-        outputKind: "plugin",
+        outputKind: "system",
         outputContract: undefined,
       },
     ],

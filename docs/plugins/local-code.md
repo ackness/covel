@@ -52,6 +52,7 @@ notebook/
 ---
 id: notebook
 kind: plugin
+version: 0.1.0
 description: Saves a brief note after narration.
 requires: [narrative-engine@1]
 entry: ./server/index.js
@@ -59,7 +60,6 @@ contributes:
   tools: [save-note]
   data:
     notes:
-      version: 1
       schema: ./schemas/note.schema.json
 runtime:
   type: agent
@@ -69,10 +69,7 @@ runtime:
       narrative:
         from: { contract: narrative-engine@1 }
         select: /narrativeOutput
-        required: true
-    visibility: plugin
   agent:
-    model: plugin
     history: { maxTurns: 2 }
     loop:
       completion: { afterTools: [save-note] }
@@ -82,13 +79,14 @@ Read `runtime-inputs.narrative.value`. Call `save-note` one time with one fact t
 
 和只有提示词的插件相比，多了这几处：
 
-| 这一段                           | 意思                                                                           |
-| -------------------------------- | ------------------------------------------------------------------------------ |
-| `entry`                          | 入口文件。Covel 加载插件时运行它，由它注册工具                                 |
-| `contributes.tools`              | 这个插件注册了哪些工具。必须和入口文件里注册的名字一致                         |
-| `contributes.data.notes`         | 声明 `notes` 这个数据空间，以及一条记录的形状（schema）                        |
-| `agent.history: { maxTurns: 2 }` | 只给模型看最近 2 个回合的对话。见[控制模型看到多少历史](#控制模型看到多少历史) |
-| `loop.completion.afterTools`     | `save-note` 成功之后，这个 agent 立刻结束，不再多问模型一次                    |
+| 这一段                           | 意思                                                                                   |
+| -------------------------------- | -------------------------------------------------------------------------------------- |
+| `version`                        | 插件的版本。有入口文件的插件要写，每次发布时调高；没写时 `pnpm validate:plugin` 会提醒 |
+| `entry`                          | 入口文件。Covel 加载插件时运行它，由它注册工具                                         |
+| `contributes.tools`              | 这个插件注册了哪些工具。必须和入口文件里注册的名字一致                                 |
+| `contributes.data.notes`         | 声明 `notes` 这个数据空间，以及一条记录的形状（schema）                                |
+| `agent.history: { maxTurns: 2 }` | 只给模型看最近 2 个回合的对话。见[控制模型看到多少历史](#控制模型看到多少历史)         |
+| `loop.completion.afterTools`     | `save-note` 成功之后，这个 agent 立刻结束，不再多问模型一次                            |
 
 这个插件只有一个 runtime，所以不用写 `agent.tools.plugin`：它自动得到 `contributes.tools` 里的全部工具。
 
@@ -344,10 +342,8 @@ runtime:
   io:
     inputs:
       narrative:
-        from: { contract: narrative-engine@1, cardinality: one }
+        from: { contract: narrative-engine@1 }
         select: /narrativeOutput
-        required: true
-    visibility: plugin
   function:
     handler: ./handler.js
     timeoutMs: 30000
@@ -382,23 +378,23 @@ export default async function handler(ctx) {
 
 函数里常用的东西：
 
-| 写法                                                                          | 作用                                                                                     |
-| ----------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| `ctx.inputs.<名字>.value`                                                     | 你声明的输入                                                                             |
-| `ctx.playerMessage`                                                           | 玩家这一回合的输入                                                                       |
-| `ctx.manualPayload`                                                           | 手动触发时界面传来的数据                                                                 |
-| `ctx.pluginData.get/list/set`                                                 | 读写自己的数据                                                                           |
-| `ctx.world`                                                                   | 角色、角色的字段定义、资料库。只读                                                       |
-| `ctx.userSettings`                                                            | 玩家的设置项                                                                             |
-| `ctx.random`                                                                  | 随机数。掷骰只用它                                                                       |
-| `ctx.locale`                                                                  | 这一局游戏的语言                                                                         |
-| `ctx.tools.call(name, args)`                                                  | 调用 `function.tools` 里列出的工具                                                       |
-| `ctx.logger`                                                                  | 写插件日志                                                                               |
-| `ctx.signal`                                                                  | 运行被取消时得到通知                                                                     |
+| 写法                                                                          | 作用                                                                                                                                                                       |
+| ----------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ctx.inputs.<名字>.value`                                                     | 你声明的输入                                                                                                                                                               |
+| `ctx.playerMessage`                                                           | 玩家这一回合的输入                                                                                                                                                         |
+| `ctx.manualPayload`                                                           | 手动触发时界面传来的数据                                                                                                                                                   |
+| `ctx.pluginData.get/list/set`                                                 | 读写自己的数据                                                                                                                                                             |
+| `ctx.world`                                                                   | 角色、角色的字段定义、资料库。只读                                                                                                                                         |
+| `ctx.userSettings`                                                            | 玩家的设置项                                                                                                                                                               |
+| `ctx.random`                                                                  | 随机数。掷骰只用它                                                                                                                                                         |
+| `ctx.locale`                                                                  | 这一局游戏的语言                                                                                                                                                           |
+| `ctx.tools.call(name, args)`                                                  | 调用 `function.tools` 里列出的工具                                                                                                                                         |
+| `ctx.logger`                                                                  | 写插件日志                                                                                                                                                                 |
+| `ctx.signal`                                                                  | 运行被取消时得到通知                                                                                                                                                       |
 | `ctx.recursiveCall({ playerMessage, manualTrigger: { runtimeId, payload } })` | 在这一回合里调用自己包里的 runtime，见[嵌套调用](../reference/plugins.md#嵌套调用ctxrecursivecall)。跨包协作用[服务或事件](../reference/plugin-extensions.md#选择通信方式) |
-| `ctx.recursionDepth`                                                          | 被 `recursiveCall` 嵌套运行时大于 0。只该在顶层做的事，先判断它                          |
-| `ctx.execution?.sourceTurnId`                                                 | 重试旧回合时是那个回合的 ID。掷骰、揭示用它做键，重试就不会重新抽                        |
-| `ctx.store.getSession()`                                                      | 这一局的阶段、回合数、语言和开局步骤的进度（只读）                                       |
+| `ctx.recursionDepth`                                                          | 被 `recursiveCall` 嵌套运行时大于 0。只该在顶层做的事，先判断它                                                                                                            |
+| `ctx.execution?.sourceTurnId`                                                 | 重试旧回合时是那个回合的 ID。掷骰、揭示用它做键，重试就不会重新抽                                                                                                          |
+| `ctx.store.getSession()`                                                      | 这一局的阶段、回合数、语言和开局步骤的进度（只读）                                                                                                                         |
 
 - 上面每个字段都写在 `PluginFunctionContext` 类型里，开头那行类型注释就能让编辑器提示和检查它们。
 - 函数能调用的工具写在 `function.tools` 里。函数的时限是 `function.timeoutMs`。这两项不要写进 `agent` 里：函数 runtime 不能有 `agent` 配置。

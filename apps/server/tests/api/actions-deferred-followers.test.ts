@@ -55,7 +55,7 @@ function makeManifest(args: {
     description: "test function runtime",
     ...(args.stage ? { stage: args.stage } : {}),
     runtimeType: "function",
-    outputKind: "plugin",
+    outputKind: "system",
     pluginType: "plugin",
     handler: "./handler.js",
     trigger: args.trigger,

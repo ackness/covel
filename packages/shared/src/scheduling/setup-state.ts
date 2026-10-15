@@ -38,9 +38,7 @@ export function isMainLoopRuntime(manifest: RuntimeManifest): boolean {
 
 /**
  * Retry budget for a setup runtime = its `maxTriggerCount` (undefined ⇒
- * unbounded, never blocks). Read from the normalized trigger so the legacy
- * `scheduled interval:1 maxTriggerCount:1` idiom (folded to `auto`) resolves
- * identically to a directly-declared `auto maxTriggerCount:1`.
+ * unbounded, never blocks), read from the normalized trigger.
  */
 export function setupRetryBudget(
   manifest: RuntimeManifest,

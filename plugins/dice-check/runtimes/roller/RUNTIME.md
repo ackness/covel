@@ -5,20 +5,15 @@ description: >-
   narrative engine.
 schedule:
   stage: pre-turn
-  trigger:
-    type: scheduled
-    interval: 1
 io:
   inputs:
     tabletopCheck:
       from:
         contract: tabletop-check@1
-        cardinality: one
       select: /receipt
       required: false
   output:
     contract: action-check@1
-  visibility: system
 function:
   handler: ./handler.js
 ---

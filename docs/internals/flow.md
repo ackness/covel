@@ -155,7 +155,7 @@ stateDiagram-v2
 
 - 目标已完成：依赖直接满足。
 - 目标是 `blocked` 或不在本会话启用的插件里：留给玩家处理。
-- 契约依赖写 `cardinality: one`：只要有一个提供者已完成、被阻塞或能先完成，就不算成环。写 `all`：等每个待完成的提供者。
+- 契约依赖是 `cardinality: one`（默认）时：只要有一个提供者已完成、被阻塞或能先完成，就不算成环。是 `all` 时：等每个待完成的提供者。
 - 只有任何顺序都无法放行的成员，才在执行前标为 `blocked`，原因是 `setup-session-cycle`。
 
 #### 从准备进入游玩
@@ -163,7 +163,7 @@ stateDiagram-v2
 - **切换时机。** 所有准备 runtime 都报告完成后，内核在准备阶段的提交事务里把 `phase` 从 `'setup'` 改成 `'playing'`。这个事务里 `completedPlayerTurns` 仍是 0。提交失败时，`phase` 的切换和 `setupRuntimes` 一起回滚。
 - **没有单独的通知。** `phase` 切换不推送独立的 SSE 事件，也没有对应的提案类型。客户端从会话响应或快照读出当前的 `phase`、`completedPlayerTurns` 和 `setupRuntimes`。
 - **紧接着写开场（Setup completion followup）。** 最后一个准备输入（例如角色表单）提交后，`/api/actions` 的同一个请求先提交准备阶段，再用新的 `turnId` 和独立的事务马上运行一次主循环。玩家因此直接看到第一段正式叙事。同一条 SSE 流、trace 和快照覆盖这两次执行。
-- **开场不计回合数。** 这次接力执行的 `origin` 是 `continuation`，不计入 `completedPlayerTurns`。它保持 0，直到第一条主循环玩家消息提交后才变成 1。所以开场叙事和第一回合共用 `logicalTurn = 1`，`startTurn` 和 `interval` 都按这个数计算。
+- **开场不计回合数。** 这次接力执行的 `origin` 是 `continuation`，不计入 `completedPlayerTurns`。它保持 0，直到第一条主循环玩家消息提交后才变成 1。所以开场叙事和第一回合共用 `logicalTurn = 1`，`startTurn` 和 `every` 都按这个数计算。
 
 #### 逻辑回合数
 
@@ -264,7 +264,7 @@ flowchart TB
     Capture --> Exec[executeTurn]
     Exec --> StartEvt["SSE: execution.started"]
     StartEvt --> Hook1[TurnStart hook]
-    Hook1 --> Filter["selectTriggeredRuntimes<br/>manual: 按名字匹配（绕过 shouldTrigger）<br/>setup runtime: 按 setupRuntimes 镜像取 pending<br/>其余: shouldTrigger（auto / scheduled / event<br/>+ startTurn / maxTriggerCount / cooldownTurns）"]
+    Hook1 --> Filter["selectTriggeredRuntimes<br/>manual: 按名字匹配（绕过 shouldTrigger）<br/>setup runtime: 按 setupRuntimes 镜像取 pending<br/>其余: shouldTrigger（auto + every / event<br/>+ startTurn / maxTriggerCount / cooldownTurns）"]
     Filter --> PreSched["PreSchedule hook<br/>(可收窄本回合 runtime 集)"]
     PreSched --> Band{"phase?"}
     Band -->|setup| SetupBand["setup stage<br/>DAG（needs / after / inputs）"]
@@ -612,15 +612,13 @@ plugins/my-plugin/
 io:
   inputs:
     narrative:
-      from: { contract: narrative-engine@1, cardinality: one }
-      scope: turn
+      from: { contract: narrative-engine@1 }
       select: /narrativeOutput
-      required: true
 ```
 
 - 阶段屏障保证 `narrative` 阶段结束后才运行 `post-turn`。
 - 同一个阶段里，互不依赖的 runtime 并行，输入和声明的依赖决定先后。
-- 缺少 `required` 的输入，消费者不运行。
+- 输入默认是必需的（`required` 默认 `true`，`scope` 默认 `turn`）：缺了它，消费者不运行。
 - 可选输入要明确写 `required: false`，这样一个暂时缺席的提供者不会变成必需的依赖。
 
 **runtime 读到的数据是哪一刻的。**
@@ -658,23 +656,21 @@ io:
                     ┌─────────┴──────────┐
                     │   trigger.type     │
                     ├────────────────────┤
-                    │ auto    → true     │
-                    │ scheduled → 逻辑回合 % interval == 0 │
+                    │ auto    → 逻辑回合 % every == 0（every 默认 1）│
                     │ event   → topic in pendingEvents  │
                     └────────────────────┘
 
-  trigger 枚举就是 auto / manual / scheduled / event 四种，
+  trigger 枚举就是 auto / manual / event 三种，不写时是 auto，
   其余取值的 manifest 在加载时被 loader 拒绝，不进入触发决策。
 ```
 
 用一句话说每种触发方式：
 
-| `trigger.type` | 什么时候运行                                 |
-| -------------- | -------------------------------------------- |
-| `auto`         | 每回合                                       |
-| `scheduled`    | 逻辑回合数能被 `interval` 整除的回合         |
-| `event`        | 它订阅的事件在待处理事件里                   |
-| `manual`       | 只在被 plugin-rpc 点名时，不看上面的任何门槛 |
+| `trigger.type` | 什么时候运行                                                 |
+| -------------- | ------------------------------------------------------------ |
+| `auto`         | 每回合；写了 `schedule.every` 时，逻辑回合数能被它整除的回合 |
+| `event`        | 它订阅的事件在待处理事件里                                   |
+| `manual`       | 只在被 plugin-rpc 点名时，不看上面的任何门槛                 |
 
 ## 五、前端交互设计
 

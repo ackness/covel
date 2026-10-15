@@ -77,7 +77,6 @@ contributes:
   tools: [save-facts]
   data:
     facts:
-      version: 1
       schema: ./schemas/facts.schema.json
 runtime:
   type: agent
@@ -86,13 +85,10 @@ runtime:
   io:
     inputs:
       narrative:
-        from: { contract: narrative-engine@1, cardinality: one }
+        from: { contract: narrative-engine@1 }
         select: /narrativeOutput
-        required: true
     output: { contract: example.facts@1 }
-    visibility: plugin
   agent:
-    model: plugin
     loop:
       completion: { require: tool-use, afterTools: [save-facts] }
 ---
@@ -119,7 +115,7 @@ A contract is a versioned name, such as `narrative-engine@1`. Plugins find each 
 
 - `runtime.io.output.contract` must appear in the `provides` of this package.
 - Within one package, two runtimes cannot produce the same contract.
-- Different packages can provide the same contract. A consumer says whether it wants one provider or all of them, using `cardinality: one` or `all`.
+- Different packages can provide the same contract. A consumer says whether it wants one provider or all of them, using `cardinality: one` (the default) or `all`.
 - Only an extension point that allows one provider, and an explicit `conflicts` entry, get a separate mutual-exclusion check.
 - `conflicts` can name only plugin contracts. If you write a kernel extension point or a UI slot, you get `invalid-conflict`, and the error points to the position of the `conflicts` field. How kernel extension points combine is decided by their mode.
 
@@ -196,7 +192,7 @@ Authors of external plugins should follow the framework's [CHANGELOG](../../CHAN
 | Field         | Main settings                                                              |
 | ------------- | -------------------------------------------------------------------------- |
 | `type`        | `agent` or `function`                                                      |
-| `schedule`    | `stage`, `trigger`, `needs`, `after`, `completion`, `manual`               |
+| `schedule`    | `stage`, `every`, `trigger`, `needs`, `after`, `completion`, `manual`      |
 | `io`          | `inputs`, `selfData`, `payloadSchema`, `output`, `visibility`, `concealed` |
 | `agent`       | `model`, `llm`, `history`, `tools`, `advertiseEvents`, `loop`              |
 | `function`    | `handler`, and optionally `model`, `timeoutMs`, and `tools`                |
@@ -213,11 +209,35 @@ permissions:
       methods: [POST]
 ```
 
+### Defaults
+
+Leave out a field whose value is the default. When you write one, `pnpm validate:plugin` gives a warning (`is the default value; remove it`) and the package still passes.
+
+<!-- prettier-ignore -->
+| Field | When left out |
+| --- | --- |
+| `schedule.trigger.type` | `auto` |
+| `schedule.every` | `1`: runs every turn |
+| `schedule.manual.execution` | `sync` |
+| `io.visibility` | `system` |
+| `cardinality` (`needs`, `after`, `io.inputs.*.from`) | `one` |
+| `io.inputs.*.required` | `true` |
+| `io.inputs.*.scope` | `turn` |
+| `io.selfData[].format`, `maxEntries` | `summary`, `50` |
+| `agent.model` | `story` for a runtime with `io.visibility: story`, `plugin` for any other |
+| `agent.loop.timeoutMs`, `callTimeoutMs`, `maxRetries` | a runtime with `io.visibility: story`: 240000, 120000, 1; any other: 120000, 60000, 3 |
+| `contributes.data.*.version` | `1` |
+| `contributes.hooks[].enforce` | `normal` |
+| `contributes.prompt[].role` | `system` |
+
+`io.visibility` has two values: `story` for the narrative runtime that provides the story text, and `system` for every other runtime.
+
 ### Two kinds of runtime
 
 - A **function runtime** must declare `function.handler`. That module must default-export a function. It cannot also set `agent`.
 - An **agent runtime** cannot set `function`.
 - `function.model` says which model slot (such as `memory`) the `ctx.gateway` calls in the handler use. Before a detached (background) job is claimed, the system uses this to check whether its credentials are ready. If you do not declare it, the check uses the system default preset. That can miss a slot binding set for a single request, and then the job waits in the queue until `maxQueueMs` runs out.
+- When `agent.model` is left out, an agent with `io.visibility: story` uses `story` and any other agent uses `plugin`.
 - `agent.model` and `function.model` only name a role (slot). A plugin cannot choose a provider, model, address, or protocol: the player's model settings decide them (see [Actual selection priority](./slots.md#actual-selection-priority)). An `llm.toml` in a plugin's directory is not read.
 
 ### Which tools an agent can use
@@ -298,13 +318,16 @@ The completion state of a setup runtime is recorded against the `version` in the
 - A session that is still in the setup stage runs it again during setup.
 - A session that has already moved into the main loop runs it again before pre-turn, through the late-setup channel. Its retry budget is recalculated.
 
-So the guard of a setup runtime must return `{ skip: true }` for work that is already done. For example, when the protagonist already exists or the schema is already written. Otherwise an upgrade makes the player see the welcome message or the form again. A plugin that does not declare `version` is treated as `0.0.0`, so an upgrade never makes it run again.
+So the guard of a setup runtime must return `{ skip: true }` for work that is already done. For example, when the protagonist already exists or the schema is already written. Otherwise an upgrade makes the player see the welcome message or the form again. A plugin that does not declare `version` is treated as `0.0.0`, so an upgrade never makes it run again. When a package with an `entry` or a setup runtime has no `version`, `pnpm validate:plugin` gives a warning.
 
 ### Triggers
 
-The trigger types are `auto`, `scheduled`, `manual`, and `event`.
+The trigger types are `auto` (the default), `manual`, and `event`.
 
-- A runtime that enters the main loop automatically should declare a stage. `manual` and `event` runtimes are triggered separately, by a request or by an event.
+- An `auto` runtime must declare a stage and runs in that stage every turn. It needs no `schedule.trigger`.
+- `schedule.every: N` makes an `auto` runtime run only on the logical turns that are a multiple of N. For example, `every: 3` runs on turns 3, 6 and 9.
+- `schedule.trigger` can also set `startTurn` (the first turn it may run), `cooldownTurns` (the least number of turns between two runs) and `maxTriggerCount` (the most runs in one session). When it sets only these, `type` can be left out too.
+- `manual` and `event` runtimes are triggered separately, by a request or by an event. They declare no stage and cannot set `every`. A setup runtime cannot set `every`, `startTurn` or `cooldownTurns`.
 - `schedule.manual.execution: background` makes a manual run execute in the background. Such a manual or event runtime has no upstream in the same execution, so it cannot read a `scope: turn` input; use `scope: committed` or a kernel input instead.
 - `schedule.completion` controls whether the turn waits for the runtime to finish. The manifest validation and the runtime admission check enforce the specific limits.
 
@@ -321,7 +344,7 @@ An extraction runtime that reads only this turn's input should declare it, so th
 
 ### Timeouts, retries, and completion conditions (`agent.loop`)
 
-An agent's timeouts, retries, and step limits are all in `agent.loop`.
+An agent's timeouts, retries, and step limits are all in `agent.loop`. When they are left out, the defaults follow `io.visibility`: a `story` runtime has `timeoutMs` 240 seconds, `callTimeoutMs` 120 seconds and `maxRetries` 1; any other runtime has 120 seconds, 60 seconds and 3.
 
 **A streaming call is limited by how long it goes without output.**
 
@@ -356,7 +379,7 @@ So when a provider accepts the request but never produces any text, there is sti
 
 **A non-streaming call** gives no progress signal, so `callTimeoutMs` limits the total duration of a single call.
 
-**`maxRetries`** (default 1, maximum 5) is the number of retries when a model call gets no reply.
+**`maxRetries`** (default 1 for a `story` runtime and 3 for any other, maximum 5) is the number of retries when a model call gets no reply.
 
 - Retried: a call timeout, a network error, rate limiting, 5xx errors, a generation error reported by the provider, the mid-output interruption described above, and a cut-off reply.
 - Not retried: 4xx errors and output that does not match the schema.
@@ -368,7 +391,6 @@ The budget decides how many retries can actually be used:
 - A non-streaming call with `callTimeoutMs` of 60 seconds and `timeoutMs` of 120 seconds leaves room for only one more try when a call hangs and never returns. A streaming call retries according to the first-output wait rule above.
 - A 5xx error that uses up every transport-level retry leaves room for only two rounds.
 - Failures that return quickly and use only one HTTP request (the connection drops partway through a reply, or a generation error) are the ones that can use more attempts.
-- The built-in bookkeeping agent and the opening agent are set to 3.
 
 **Completion conditions.**
 
@@ -394,9 +416,8 @@ The budget decides how many retries can actually be used:
 io:
   inputs:
     narrative:
-      from: { contract: narrative-engine@1, cardinality: one }
+      from: { contract: narrative-engine@1 }
       select: /narrativeOutput
-      required: true
       accepts: ./schemas/narrative.schema.json
     previous:
       from: { runtime: example/extract }
@@ -408,8 +429,6 @@ io:
   selfData:
     - namespace: facts
       as: <known-facts>
-      format: summary
-      maxEntries: 50
   output:
     contract: example.facts@1
     schema: ./schemas/output.schema.json
@@ -508,15 +527,15 @@ An agent's side effects come only from its tools. What the model can write is de
 
 #### Turn information in the handler context
 
-| Field                            | Meaning                                                                                                                                                                                                                                                                        |
-| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `ctx.playerMessage`              | The text of the current input, as a string                                                                                                                                                                                                                                     |
-| `ctx.logicalTurn`                | The scheduler's logical turn: the number of committed main-loop player turns, plus one. It is in the context of function handlers and plugin tools. Setup, the opening continuation, and the first player message are all turn 1. `startTurn` and `interval` also count by it. |
-| `turnNumber` in the tool context | The number of player messages recorded in the session, including the form submission during setup                                                                                                                                                                              |
-| `ctx.session.lastPlayerInput`    | The most recent `PlayerInputSubmission \| null` when the source execution starts. It includes `id/sessionId/turnId/formId/values/createdAt`.                                                                                                                                   |
-| `ctx.execution.origin`           | Why this execution runs: `player`, `continuation`, `manual`, `background`, `recursive`, or `resume`                                                                                                                                                                            |
-| `ctx.execution.sourceTurnId`     | When a committed turn is retried, the ID of that turn. Use it as a key so a retry reuses the earlier rolls and reveals instead of drawing again                                                                                                                                |
-| `ctx.recursionDepth`             | `0` for a top-level execution, one more for each level of `ctx.recursiveCall`                                                                                                                                                                                                  |
+| Field                            | Meaning                                                                                                                                                                                                                                                                     |
+| -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ctx.playerMessage`              | The text of the current input, as a string                                                                                                                                                                                                                                  |
+| `ctx.logicalTurn`                | The scheduler's logical turn: the number of committed main-loop player turns, plus one. It is in the context of function handlers and plugin tools. Setup, the opening continuation, and the first player message are all turn 1. `startTurn` and `every` also count by it. |
+| `turnNumber` in the tool context | The number of player messages recorded in the session, including the form submission during setup                                                                                                                                                                           |
+| `ctx.session.lastPlayerInput`    | The most recent `PlayerInputSubmission \| null` when the source execution starts. It includes `id/sessionId/turnId/formId/values/createdAt`.                                                                                                                                |
+| `ctx.execution.origin`           | Why this execution runs: `player`, `continuation`, `manual`, `background`, `recursive`, or `resume`                                                                                                                                                                         |
+| `ctx.execution.sourceTurnId`     | When a committed turn is retried, the ID of that turn. Use it as a key so a retry reuses the earlier rolls and reveals instead of drawing again                                                                                                                             |
+| `ctx.recursionDepth`             | `0` for a top-level execution, one more for each level of `ctx.recursiveCall`                                                                                                                                                                                               |
 
 `ctx.session.lastPlayerInput` may come from an earlier turn. Having this record does not mean that a form was submitted in this turn.
 
@@ -678,7 +697,6 @@ For the full state and interfaces, see [World Model](./world-model.md#turn-timin
 contributes:
   data:
     facts:
-      version: 1
       schema: ./schemas/facts.schema.json
       accepts: [example.facts@1]
 ```
@@ -733,7 +751,6 @@ A world data source can declare `localeArrayKeys` (for example, `[label]`) in ad
 contributes:
   data:
     facts:
-      version: 1
       schema: ./schemas/facts.schema.json
       search:
         text: text
@@ -826,7 +843,7 @@ Loading, `pnpm validate:plugin` and installation use one copy of the manifest ru
 
 Some errors stop one runtime from ever running and leave the rest of the package unaffected:
 
-- An automatic or scheduled runtime has no `schedule.stage`. The framework does not guess a default stage.
+- An `auto` runtime has no `schedule.stage`. The framework does not guess a default stage.
 - A manual or event runtime that runs in the background reads an input from the same execution (see [Triggers](#triggers)).
 
 When a package placed in the plugin directory by hand has such an error, the loader leaves out only that runtime and writes the file, the field and the reason to the server log. The package's other runtimes, tools and panels load as usual, and its output contract no longer counts as provided by the package. `pnpm validate:plugin` and installation report it as an error.

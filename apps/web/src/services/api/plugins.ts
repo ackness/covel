@@ -70,7 +70,7 @@ export interface PluginFlowStep {
   label: string;
   stage?: Stage;
   segmentId: FlowSegmentId;
-  trigger: { type: string };
+  trigger: { type: string; every?: number };
   runtimeType?: string;
   outputKind?: string;
   outputContract?: string;
@@ -105,7 +105,7 @@ export async function fetchPluginFlows(): Promise<PluginFlowResponse> {
     runtimeName?: string;
     stage?: Stage;
     segmentId: FlowSegmentId;
-    trigger?: { type?: string };
+    trigger?: { type?: string; every?: number };
     runtimeType?: string;
     outputKind?: string;
     outputContract?: string;
@@ -129,7 +129,12 @@ export async function fetchPluginFlows(): Promise<PluginFlowResponse> {
       label: step.runtimeName ?? step.runtimeId,
       ...(step.stage !== undefined ? { stage: step.stage } : {}),
       segmentId: step.segmentId,
-      trigger: { type: step.trigger?.type ?? "auto" },
+      trigger: {
+        type: step.trigger?.type ?? "auto",
+        ...(step.trigger?.every !== undefined
+          ? { every: step.trigger.every }
+          : {}),
+      },
       runtimeType: step.runtimeType,
       outputKind: step.outputKind,
       outputContract: step.outputContract,
