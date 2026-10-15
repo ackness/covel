@@ -476,13 +476,6 @@ export const worldAccentColorSchema = z
 
 export const worldManifestSchema = z
   .object({
-    schemaVersion: z
-      .string()
-      .min(1)
-      .meta({
-        description: "Version of the `world.yaml` format.",
-        examples: ["1.0"],
-      }),
     id: z
       .string()
       .min(1)

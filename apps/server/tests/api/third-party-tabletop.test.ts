@@ -1,12 +1,5 @@
 import { closeTestApi } from "../helpers/close-api.js";
-import {
-  mkdtemp,
-  mkdir,
-  readFile,
-  writeFile,
-  cp,
-  rm,
-} from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, writeFile, cp, rm } from "node:fs/promises";
 import { parse as parseYaml } from "yaml";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -317,8 +310,7 @@ export default async function (ctx) {
     );
     await writeFile(
       path.join(worldRoot, "world.data.yaml"),
-      `schemaVersion: 1
-sources:
+      `sources:
   tabletop:
     kind: json
     path: rules.json

@@ -50,8 +50,7 @@ const PACKS: PluginPack[] = [
   },
 ];
 
-const WORLD_YAML = `schemaVersion: "1.0"
-id: test-world
+const WORLD_YAML = `id: test-world
 name: 测试世界
 version: 0.1.0
 summary: 一个用于生成器测试的世界。
@@ -876,7 +875,8 @@ dimensions:
       path.join(tmp, "test-world", "data/dimensions.yaml"),
       "utf8",
     );
-    expect(manifest).toContain('schemaVersion: "1"');
+    expect(manifest).not.toContain("schemaVersion:");
+    expect(manifest).toContain('version: "0.1"');
     expect(manifest).not.toContain("extraRoot:");
     expect(dimensions).toContain("type: Guild");
     expect(dimensions).toContain("influence: Important");
@@ -1012,6 +1012,7 @@ contractData:
     expect(manifest).not.toContain("memoryBlocks:");
     expect(manifest).toMatch(/requested:[\s\S]*- memory/);
     expect(descriptor).toContain("to: contract:memory.blocks@1");
+    expect(descriptor).not.toContain("schemaVersion:");
     expect(
       JSON.parse(
         await readFile(

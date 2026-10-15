@@ -547,7 +547,6 @@ export async function writeWorldDataFiles(
 
   if (needsDescriptor) {
     await write(GENERATED_WORLD_DATA_PATH, "yaml", {
-      schemaVersion: 1,
       sources,
     });
     manifest.worldData = GENERATED_WORLD_DATA_PATH;

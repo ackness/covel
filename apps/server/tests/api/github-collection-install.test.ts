@@ -43,7 +43,6 @@ function pluginFiles(id: string, directory = `plugins/${id}`) {
 function worldFiles(id = "barrow") {
   return {
     [`worlds/${id}/world.yaml`]: JSON.stringify({
-      schemaVersion: "1.0",
       id,
       version: "1.0.0",
       name: { "en-US": "Barrow", "zh-CN": "古冢" },

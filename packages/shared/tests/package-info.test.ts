@@ -27,7 +27,6 @@ describe("package credits", () => {
     ).toMatchObject(credits);
     expect(
       worldManifestSchema.parse({
-        schemaVersion: "1.0",
         id: "demo",
         name: "Demo",
         summary: "A demo world.",

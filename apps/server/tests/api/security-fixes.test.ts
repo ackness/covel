@@ -412,8 +412,7 @@ async function makeWorldPackage(options: {
   await mkdir(path.join(worldRoot, "data"), { recursive: true });
   await writeFile(
     path.join(worldRoot, "world.yaml"),
-    `schemaVersion: "1"
-id: ${options.id}
+    `id: ${options.id}
 name: API Test World
 summary: Test world
 defaultLocale: zh-CN
@@ -676,8 +675,7 @@ describe("[HIGH] Session creation rolls back when world-data import fails", () =
   it("deletes the failed session and releases its media claims for GC", async () => {
     const world = await makeWorldPackage({
       id: "media-finalize-world",
-      descriptor: `schemaVersion: 1
-sources:
+      descriptor: `sources:
   portraits:
     kind: media
     path: media/portraits
@@ -748,8 +746,7 @@ sources:
   it("releases prepared media when world deletion wins before session admission", async () => {
     const world = await makeWorldPackage({
       id: "deleted-before-create",
-      descriptor: `schemaVersion: 1
-sources:
+      descriptor: `sources:
   portraits:
     kind: media
     path: media/portraits

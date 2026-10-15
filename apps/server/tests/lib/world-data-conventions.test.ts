@@ -71,7 +71,7 @@ describe("world data conventions", () => {
     const root = path.join(home, "small");
     for (const [file, content] of Object.entries({
       "world.yaml":
-        'schemaVersion: "1.0"\nid: small\nname: Small\nsummary: A small world.\ndefaultLocale: en-US\n',
+        "id: small\nname: Small\nsummary: A small world.\ndefaultLocale: en-US\n",
       "WORLD.md": "A small world.\n",
       ...files,
     })) {
@@ -170,9 +170,9 @@ describe("world data conventions", () => {
   it("uses the descriptor alone when the package names one", async () => {
     const root = await world({
       "world.yaml":
-        'schemaVersion: "1.0"\nid: small\nname: Small\nsummary: A small world.\ndefaultLocale: en-US\nworldData: data/world.data.yaml\n',
+        "id: small\nname: Small\nsummary: A small world.\ndefaultLocale: en-US\nworldData: data/world.data.yaml\n",
       "data/world.data.yaml":
-        "schemaVersion: 1\nsources:\n  log:\n    kind: yaml\n    path: data/log.yaml\n    to: contract:quests@1\n    key: id\n",
+        "sources:\n  log:\n    kind: yaml\n    path: data/log.yaml\n    to: contract:quests@1\n    key: id\n",
       "data/log.yaml": "[]\n",
       // Conventional, and not listed: the descriptor decides.
       "data/items.yaml": "[]\n",
@@ -384,7 +384,7 @@ describe("world data conventions", () => {
         .map((item) => [item.level, item.code, item.file]);
     };
     const manifest =
-      'schemaVersion: "1.0"\nid: small\nname: Small\nsummary: A small world.\ndefaultLocale: en-US\n';
+      "id: small\nname: Small\nsummary: A small world.\ndefaultLocale: en-US\n";
 
     // The quest log is not among the plugins a session starts with.
     expect(await codes(manifest)).toEqual([

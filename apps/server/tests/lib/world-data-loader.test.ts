@@ -26,8 +26,7 @@ describe("world data loader", () => {
     await mkdir(path.join(root, "dimensions"), { recursive: true });
     await writeFile(
       path.join(root, "world.yaml"),
-      `schemaVersion: "1"
-id: russian-world
+      `id: russian-world
 name: Russian World
 summary: Locale files
 defaultLocale: ru_ru
@@ -68,8 +67,7 @@ dimensionSources:
     await mkdir(path.join(root, "dimensions"), { recursive: true });
     await writeFile(
       path.join(root, "world.yaml"),
-      `schemaVersion: "1"
-id: traditional-world
+      `id: traditional-world
 name: Traditional World
 summary: Script-safe locale files
 defaultLocale: zh-Hant-TW
@@ -112,8 +110,7 @@ dimensionSources:
     const root = await makeTempWorld();
     await writeFile(
       path.join(root, "world.yaml"),
-      `schemaVersion: "1"
-id: unsafe-world
+      `id: unsafe-world
 name: Unsafe World
 summary: Unsafe locale
 defaultLocale: x/../../../docs/reference/i18n
@@ -129,8 +126,7 @@ defaultLocale: x/../../../docs/reference/i18n
     const root = await makeTempWorld();
     await writeFile(
       path.join(root, "world.yaml"),
-      `schemaVersion: "1.0"
-id: policy-world
+      `id: policy-world
 name: Policy World
 summary: World with plugin policy
 defaultLocale: zh-CN
@@ -158,8 +154,7 @@ pluginPolicy:
     const root = await makeTempWorld();
     await writeFile(
       path.join(root, "world.yaml"),
-      `schemaVersion: "1.0"
-id: settings-world
+      `id: settings-world
 name: Settings World
 summary: World with plugin settings
 defaultLocale: zh-CN
@@ -186,21 +181,20 @@ pluginSettings:
     "requiredPlugins: []",
     "recommendedPlugins: []",
     "characterBlueprintSources: []",
-  ])("rejects removed world manifest field %s", async (removed) => {
+  ])("ignores removed world manifest field %s", async (removed) => {
     const root = await makeTempWorld();
     await writeFile(
       path.join(root, "world.yaml"),
-      `schemaVersion: "1"\nid: current-world\nname: Current\nsummary: Strict world contract\ndefaultLocale: en-US\n${removed}\n`,
+      `id: current-world\nname: Current\nsummary: Strict world contract\ndefaultLocale: en-US\n${removed}\n`,
     );
-    expect(await loadSingleWorld(root)).toBeNull();
+    expect(await loadSingleWorld(root)).toMatchObject({ id: "current-world" });
   });
 
   it("passes defaultViewMode from world.yaml into world metadata", async () => {
     const root = await makeTempWorld();
     await writeFile(
       path.join(root, "world.yaml"),
-      `schemaVersion: "1.0"
-id: stage-world
+      `id: stage-world
 name: Stage World
 summary: World declaring a stage default view mode
 defaultLocale: zh-CN
@@ -219,8 +213,7 @@ defaultViewMode: stage
     const root = await makeTempWorld();
     await writeFile(
       path.join(root, "world.yaml"),
-      `schemaVersion: "1.0"
-id: no-view-mode-world
+      `id: no-view-mode-world
 name: No View Mode World
 summary: World without a declared default view mode
 defaultLocale: zh-CN
@@ -239,8 +232,7 @@ supportedLocales: [zh-CN]
     await mkdir(path.join(root, "data"), { recursive: true });
     await writeFile(
       path.join(root, "data/world.data.yaml"),
-      `schemaVersion: 1
-sources:
+      `sources:
   dimensions:
     kind: yaml
     path: data/dimensions.yaml
@@ -293,8 +285,7 @@ sources:
     });
     await writeFile(
       path.join(root, "data/world.data.yaml"),
-      `schemaVersion: 1
-sources:
+      `sources:
   dimensions:
     kind: yaml
     path: data/dimensions.yaml
@@ -307,8 +298,7 @@ sources:
     );
     await writeFile(
       path.join(home, "world-overrides/demo/world.data.override.yaml"),
-      `schemaVersion: 1
-sources:
+      `sources:
   dimensions:
     path: data/dimensions.override.yaml
 `,
@@ -349,8 +339,7 @@ sources:
     );
     await writeFile(
       path.join(root, "data/world.data.yaml"),
-      `schemaVersion: 1
-sources:
+      `sources:
   bad:
     kind: yaml
     path: data/link.yaml
@@ -378,8 +367,7 @@ sources:
     await mkdir(path.join(home, "world-overrides/demo"), { recursive: true });
     await writeFile(
       path.join(root, "data/world.data.yaml"),
-      `schemaVersion: 1
-sources:
+      `sources:
   dimensions:
     kind: yaml
     path: data/dimensions.yaml
@@ -392,8 +380,7 @@ sources:
     );
     await writeFile(
       path.join(home, "world-overrides/demo/world.data.override.yaml"),
-      `schemaVersion: 1
-sources:
+      `sources:
   broken:
     path: data/missing.yaml
 `,
@@ -418,8 +405,7 @@ sources:
     await mkdir(path.join(root, "data"), { recursive: true });
     await writeFile(
       path.join(root, "data/world.data.yaml"),
-      `schemaVersion: 1
-sources:
+      `sources:
   dimensions:
     kind: yaml
     path: data/dimensions.yaml
@@ -452,8 +438,7 @@ sources:
     await mkdir(path.join(root, "schemas"), { recursive: true });
     await writeFile(
       path.join(root, "data/world.data.yaml"),
-      `schemaVersion: 1
-sources:
+      `sources:
   facts:
     kind: json
     path: data/fact.json
@@ -502,8 +487,7 @@ sources:
     );
     await writeFile(
       path.join(root, "data/world.data.yaml"),
-      `schemaVersion: 1
-sources:
+      `sources:
   facts:
     kind: json
     path: data/fact.json
@@ -537,8 +521,7 @@ sources:
     await mkdir(path.join(root, "data"), { recursive: true });
     await writeFile(
       path.join(root, "data/world.data.yaml"),
-      `schemaVersion: 1
-sources:
+      `sources:
   bad:
     kind: yaml
     path: data/bad.yaml
@@ -565,8 +548,7 @@ sources:
     await mkdir(path.join(root, "data"), { recursive: true });
     await writeFile(
       path.join(root, "data/world.data.yaml"),
-      `schemaVersion: 1
-sources:
+      `sources:
   custom:
     kind: yaml
     path: data/custom.yaml
@@ -599,8 +581,7 @@ sources:
     await writeFile(path.join(root, "media/a.png"), "not really png");
     await writeFile(
       path.join(root, "data/world.data.yaml"),
-      `schemaVersion: 1
-sources:
+      `sources:
   portraits:
     kind: media
     path: media
@@ -628,8 +609,7 @@ sources:
     await mkdir(path.join(root, "data"), { recursive: true });
     await writeFile(
       path.join(root, "world.yaml"),
-      `schemaVersion: "1"
-id: demo-world
+      `id: demo-world
 name: Demo
 summary: Demo world
 defaultLocale: zh-CN
@@ -638,8 +618,7 @@ worldData: data/world.data.yaml
     );
     await writeFile(
       path.join(root, "data/world.data.yaml"),
-      `schemaVersion: 1
-sources:
+      `sources:
   dimensions:
     kind: yaml
     path: data/dimensions.yaml

@@ -35,8 +35,7 @@ import { aiRoutes } from "../../src/routes/api/ai.js";
 import { loadSingleWorld } from "../../src/world-seed-loader.js";
 import { createApplicationWork } from "../../src/application-work.js";
 
-const WORLD_YAML = `schemaVersion: "1.0"
-id: generated-world
+const WORLD_YAML = `id: generated-world
 name: 生成世界
 version: 0.1.0
 summary: 一个生成世界。
@@ -207,7 +206,6 @@ describe("ai world generation route", () => {
     id: "writeback-world",
     locale: "en-US",
     manifest: {
-      schemaVersion: "1.0",
       id: "writeback-world",
       name: "Harbor",
       summary: "A harbor",

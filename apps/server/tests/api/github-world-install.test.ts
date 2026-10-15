@@ -22,7 +22,6 @@ const lock = createInProcessSessionLock();
 function files(id = "test-world", version = "1.0.0") {
   return {
     [`worlds/${id}/world.yaml`]: JSON.stringify({
-      schemaVersion: "1.0",
       id,
       version,
       name: { "en-US": "Test", "zh-CN": "测试" },

@@ -22,8 +22,7 @@ import { seedAppSettings } from "./helpers/player.js";
 const PROVIDER = "fake";
 const PRESET = "fake-world-author";
 
-const WORLD_YAML = `schemaVersion: "1.0"
-id: lantern-tide
+const WORLD_YAML = `id: lantern-tide
 name: 灯潮港
 version: "0.1.0"
 summary: 一座靠回收潮汐灯火维生的港城，灯火正在一盏盏熄灭。

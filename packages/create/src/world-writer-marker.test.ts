@@ -15,7 +15,6 @@ import {
 const world: GeneratedWorld = {
   id: "marked-world",
   manifest: {
-    schemaVersion: "1.0",
     id: "marked-world",
     name: "Marked world",
     summary: "A world for marker testing",

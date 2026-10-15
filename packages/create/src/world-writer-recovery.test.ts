@@ -30,7 +30,6 @@ vi.mock("node:fs/promises", async (importOriginal) => {
 const world: GeneratedWorld = {
   id: "recovery-world",
   manifest: {
-    schemaVersion: "1.0",
     id: "recovery-world",
     name: "Recovery world",
     summary: "A world for recovery testing",

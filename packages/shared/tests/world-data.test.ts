@@ -1,13 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
   worldDataDescriptorSchema,
+  worldDataDescriptorOverrideSchema,
   worldManifestSchema,
+  validateWorldManifest,
 } from "../src/index.js";
 
 describe("world data schemas", () => {
   it("allows world.yaml to point at a world data descriptor", () => {
     const result = worldManifestSchema.safeParse({
-      schemaVersion: "1",
       id: "haruka-academy",
       name: "Haruka Academy",
       summary: "A school world",
@@ -19,7 +20,6 @@ describe("world data schemas", () => {
 
   it("canonicalizes locale fields and rejects path-like locale input", () => {
     const canonical = worldManifestSchema.safeParse({
-      schemaVersion: "1",
       id: "locale-world",
       name: "Locale World",
       summary: "Locale test",
@@ -33,7 +33,6 @@ describe("world data schemas", () => {
     }
 
     const traversal = worldManifestSchema.safeParse({
-      schemaVersion: "1",
       id: "unsafe-world",
       name: "Unsafe World",
       summary: "Unsafe locale",
@@ -44,7 +43,6 @@ describe("world data schemas", () => {
 
   it("allows world.yaml to declare pluginPolicy presets and tag preferences", () => {
     const result = worldManifestSchema.safeParse({
-      schemaVersion: "1.0",
       id: "policy-world",
       name: "Policy World",
       summary: "World with plugin policy",
@@ -68,9 +66,8 @@ describe("world data schemas", () => {
     expect(result.success).toBe(true);
   });
 
-  it("validates a minimal v1 descriptor", () => {
+  it("validates a minimal descriptor", () => {
     const result = worldDataDescriptorSchema.safeParse({
-      schemaVersion: 1,
       sources: {
         dimensions: {
           kind: "yaml",
@@ -93,7 +90,6 @@ describe("world data schemas", () => {
 
   it("rejects numeric-like source ids", () => {
     const result = worldDataDescriptorSchema.safeParse({
-      schemaVersion: 1,
       sources: {
         "1": {
           kind: "yaml",
@@ -107,7 +103,6 @@ describe("world data schemas", () => {
 
   it("rejects unknown source fields", () => {
     const result = worldDataDescriptorSchema.safeParse({
-      schemaVersion: 1,
       sources: {
         foo: {
           kind: "yaml",
@@ -118,5 +113,59 @@ describe("world data schemas", () => {
       },
     });
     expect(result.success).toBe(false);
+  });
+
+  it("accepts descriptor overrides without a format version", () => {
+    expect(
+      worldDataDescriptorOverrideSchema.safeParse({
+        sources: { cast: { enabled: false } },
+      }).success,
+    ).toBe(true);
+  });
+
+  it("keeps removed format fields outside the authoring contract", () => {
+    expect(
+      worldManifestSchema.safeParse({
+        schemaVersion: "1.0",
+        id: "old-world",
+        name: "Old World",
+        summary: "A world with an unused field",
+        defaultLocale: "en-US",
+      }).success,
+    ).toBe(false);
+    expect(
+      worldDataDescriptorSchema.safeParse({ schemaVersion: 1, sources: {} })
+        .success,
+    ).toBe(false);
+    expect(
+      worldDataDescriptorOverrideSchema.safeParse({
+        schemaVersion: 1,
+        sources: {},
+      }).success,
+    ).toBe(false);
+  });
+
+  it("keeps known fields strict when loading ignores unknown root fields", () => {
+    const manifest = {
+      id: "sample-world",
+      name: "Sample",
+      summary: "A small world",
+      defaultLocale: "en-US",
+      schemaVersion: "1.0",
+    };
+    const options = { ignoreUnknownRootFields: true };
+    const result = validateWorldManifest(manifest, options);
+    expect(result.valid).toBe(true);
+    expect(result.ignoredFields).toEqual(["schemaVersion"]);
+    expect(result.data).not.toHaveProperty("schemaVersion");
+    expect(validateWorldManifest({ ...manifest, id: 1 }, options).valid).toBe(
+      false,
+    );
+    expect(
+      validateWorldManifest(
+        { ...manifest, pluginPolicy: { typo: [] } },
+        options,
+      ).valid,
+    ).toBe(false);
   });
 });

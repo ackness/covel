@@ -35,7 +35,6 @@ const stamina = (initialValue: number) => ({
 
 function manifest(name: string, initialValue: number) {
   return JSON.stringify({
-    schemaVersion: "1.0",
     id: "pkg",
     name,
     summary: "A package world.",

@@ -232,7 +232,13 @@ export async function loadSingleWorld(
     }
   }
 
-  const validation = validateWorldManifest(raw);
+  const validation = validateWorldManifest(raw, {
+    ignoreUnknownRootFields: true,
+  });
+  for (const field of validation.ignoredFields ?? [])
+    console.warn(
+      `[world-seed] ${path.basename(worldDir)}: world.yaml: ${field}: unknown field ignored`,
+    );
   if (!validation.valid) {
     const dirName = path.basename(worldDir);
     console.warn(

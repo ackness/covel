@@ -79,11 +79,11 @@ describe("world data of a community receiver approved after creation", () => {
     await mkdir(worldRoot, { recursive: true });
     await writeFile(
       path.join(worldRoot, "world.yaml"),
-      'schemaVersion: "1"\nid: notes-world\nname: Notes\nsummary: Notes\ndefaultLocale: en-US\nworldData: world.data.yaml\n',
+      "id: notes-world\nname: Notes\nsummary: Notes\ndefaultLocale: en-US\nworldData: world.data.yaml\n",
     );
     await writeFile(
       path.join(worldRoot, "world.data.yaml"),
-      `schemaVersion: 1\nsources:\n  facts:\n    kind: json\n    path: facts.json\n    to: contract:${CONTRACT}\n    key: id\n`,
+      `sources:\n  facts:\n    kind: json\n    path: facts.json\n    to: contract:${CONTRACT}\n    key: id\n`,
     );
     await writeFile(
       path.join(worldRoot, "facts.json"),
