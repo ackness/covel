@@ -244,7 +244,7 @@ ANTHROPIC_API_KEY=sk-ant-xxxxxxxxxxxx
 
 **密钥在界面里怎样表示。** Electron 界面通过 `covel:keys:load` IPC 读取 `keys.env` 的明文密钥，保存在 SettingsStore 内存中，用于构造 `X-Provider-Keys` 请求头，不写入桌面页面的 `localStorage`。保存通过 `covel:keys:save` 传递补丁：未修改的密钥保留，新值写入，`null` 删除。主进程优先通过 sidecar 的 `PUT /api/config/keys` 写入；开发模式没有 sidecar 或 sidecar 不可用时，直接写文件。
 
-`GET /api/config/keys` 只返回服务商名，不返回密钥。当前 Electron 界面不调用它：`json-file` 后端使用 IPC；普通浏览器使用 `localStorage`。显式选择 `json-file` 的 REST 传输的集成方才会把这个列表表示为“服务端已有密钥”的内存标记，标记不会进入 `X-Provider-Keys`。详见 [设置存储](./settings-store.md)。
+`GET /api/config/keys` 只返回服务商名，不返回密钥。当前 Electron 界面不调用它：`json-file` 后端只支持 IPC；普通浏览器使用 `localStorage`。详见 [设置存储](./settings-store.md)。
 
 **`keys.env` 读不了时。** GET 返回 `500 keys_file_unreadable`，PUT 返回 `409 keys_file_unreadable`，原文件保留。写入同样是同目录临时文件加改名替换。
 

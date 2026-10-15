@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import {
   COVEL_FEATURE_FLAGS,
@@ -235,22 +235,20 @@ describe("env registry", () => {
     expect(env.deploymentTier).toBe("commercial");
   });
 
-  it("rejects an unknown DEPLOYMENT_TIER fail-safe to the most restrictive tier", () => {
-    const spy = vi.spyOn(console, "warn").mockImplementation(() => {});
-    const env = readRuntimeEnv({ DEPLOYMENT_TIER: "Commercial-typo" });
-    expect(env.deploymentTier).toBe("commercial");
-    expect(spy).toHaveBeenCalledWith(
-      expect.stringContaining("Commercial-typo"),
-    );
-    spy.mockRestore();
+  it("throws on an unknown DEPLOYMENT_TIER, naming the variable and the accepted values", () => {
+    for (const value of ["Commercial-typo", "slef", "T1"]) {
+      expect(() => readRuntimeEnv({ DEPLOYMENT_TIER: value })).toThrow(
+        `Unknown DEPLOYMENT_TIER "${value}". Accepted values: self, demo, commercial.`,
+      );
+    }
   });
 
-  it("rejects the documentation-only T1 label fail-safe to commercial", () => {
-    const spy = vi.spyOn(console, "warn").mockImplementation(() => {});
-    expect(readRuntimeEnv({ DEPLOYMENT_TIER: "T1" }).deploymentTier).toBe(
-      "commercial",
+  it("reads an unset or empty DEPLOYMENT_TIER as self", () => {
+    expect(readRuntimeEnv({}).deploymentTier).toBe("self");
+    expect(readRuntimeEnv({ DEPLOYMENT_TIER: "" }).deploymentTier).toBe("self");
+    expect(readRuntimeEnv({ DEPLOYMENT_TIER: " Demo " }).deploymentTier).toBe(
+      "demo",
     );
-    spy.mockRestore();
   });
 
   it("accepts true and 1 for COVEL_DESKTOP_REST", () => {

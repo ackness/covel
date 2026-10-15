@@ -203,8 +203,7 @@ const VALID_PACKAGE_JSON = JSON.stringify(
   2,
 );
 
-const VALID_WORLD_YAML = `schemaVersion: "1.0"
-id: test-world
+const VALID_WORLD_YAML = `id: test-world
 name: Test World
 version: "0.1.0"
 summary: A synthetic world for install tests.

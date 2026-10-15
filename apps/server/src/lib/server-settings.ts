@@ -43,6 +43,11 @@ export class ServerSettingsValidationError extends Error {
  * consulted after every commit.
  */
 export interface ServerSettings {
+  /**
+   * True when a player's stored values count and a player may write them:
+   * the host profile's `retention.playerServerSettings`.
+   */
+  readonly playerWritable: boolean;
   /** Read the database into the cache. Await once before the first use. */
   load(): Promise<void>;
   /** The stored value of a key, or undefined. Starts a refresh when stale. */
@@ -58,9 +63,15 @@ export interface ServerSettings {
   write(patch: ServerSettingsPatch): Promise<void>;
 }
 
+export interface ServerSettingsOptions {
+  /** See {@link ServerSettings.playerWritable}. */
+  readonly playerWritable: boolean;
+  readonly now?: () => number;
+}
+
 export function createServerSettings(
   store: ServerSettingsBackend,
-  now: () => number = Date.now,
+  { playerWritable, now = Date.now }: ServerSettingsOptions,
 ): ServerSettings {
   let cache = new Map<string, unknown>();
   let loadedAt = Number.NEGATIVE_INFINITY;
@@ -87,10 +98,14 @@ export function createServerSettings(
 
   function info(key: string): ServerSettingInfo | undefined {
     const definition = serverSettingDefinition(key);
-    return definition && describeServerSetting(definition, cache.get(key));
+    return (
+      definition &&
+      describeServerSetting(definition, cache.get(key), playerWritable)
+    );
   }
 
   return {
+    playerWritable,
     load,
 
     stored(key) {
@@ -103,7 +118,11 @@ export function createServerSettings(
         settings: Object.fromEntries(
           SERVER_SETTINGS.map((definition) => [
             definition.key,
-            describeServerSetting(definition, cache.get(definition.key)),
+            describeServerSetting(
+              definition,
+              cache.get(definition.key),
+              playerWritable,
+            ),
           ]),
         ),
       };

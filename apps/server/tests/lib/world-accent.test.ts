@@ -13,7 +13,6 @@ async function makeWorld(extra: Record<string, unknown>): Promise<string> {
   await writeFile(
     path.join(root, "world.yaml"),
     stringify({
-      schemaVersion: "1.0",
       id: "accent-world",
       name: "Accent World",
       summary: "A world with an optional accent colour.",

@@ -1,17 +1,20 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
 import { Hono } from "hono";
+import { readRuntimeEnv } from "@covel/shared";
 import { createHostGuardMiddleware } from "../../src/middleware/host-guard.js";
+import { deriveHostProfile } from "../../src/host-profile.js";
 
-function app(
-  env: { deploymentTier: string; allowedHosts: string[] } = {
-    deploymentTier: "self",
-    allowedHosts: [],
-  },
-) {
+/** The network policy the host profile derives from these variables. */
+function network(vars: Record<string, string> = {}) {
+  return deriveHostProfile(readRuntimeEnv(vars), { storeBackend: "sqlite" })
+    .network;
+}
+
+function app(policy = network()) {
   const writes: string[] = [];
   const hono = new Hono();
-  hono.use("*", createHostGuardMiddleware(env));
+  hono.use("*", createHostGuardMiddleware(policy));
   hono.get("/api/sessions", (c) => c.json({ items: [] }));
   hono.post("/api/sessions", async (c) => {
     writes.push(await c.req.text());
@@ -71,10 +74,9 @@ describe("host guard", () => {
   });
 
   it("answers the names listed in COVEL_ALLOWED_HOSTS", async () => {
-    const { hono } = app({
-      deploymentTier: "self",
-      allowedHosts: ["Covel.Home.Test", "192.168.1.20:3001"],
-    });
+    const { hono } = app(
+      network({ COVEL_ALLOWED_HOSTS: "Covel.Home.Test, 192.168.1.20:3001" }),
+    );
     expect((await get(hono, "covel.home.test")).status).toBe(200);
     expect((await get(hono, "192.168.1.20:8080")).status).toBe(200);
     expect((await get(hono, "other.home.test")).status).toBe(403);
@@ -87,7 +89,7 @@ describe("host guard", () => {
   it.each(["demo", "commercial"])(
     "is off on the %s tier, which uses its own authentication policy",
     async (deploymentTier) => {
-      const { hono } = app({ deploymentTier, allowedHosts: [] });
+      const { hono } = app(network({ DEPLOYMENT_TIER: deploymentTier }));
       expect((await get(hono, "covel.onrender.example")).status).toBe(200);
     },
   );

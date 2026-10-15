@@ -20,7 +20,7 @@ import type {
   VectorBackend,
 } from "@covel/store";
 import { describeStorageCapabilities } from "@covel/store/capabilities";
-import { isOwnerAuthEnforced } from "./session/session-guard.js";
+import { hostProfileOf } from "../../host-profile.js";
 
 const bootId = crypto.randomUUID();
 
@@ -51,7 +51,7 @@ export function createHealthRoutes(
       bootId,
       timestamp: new Date().toISOString(),
       // Lets a client offer the operator token entry only where one is checked.
-      operatorTokenRequired: isOwnerAuthEnforced(),
+      operatorTokenRequired: hostProfileOf(c).form === "hosted",
       storage,
       vector: storage.vector,
     });

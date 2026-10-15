@@ -274,7 +274,7 @@
     "suspensionOutdated": "This request is out of date and has been withdrawn",
     "suspensionOutdatedMovedOn": "The story has moved on since it was asked.",
     "suspensionOutdatedPlugin": "The plugin that asked it has been updated since.",
-    "suspensionOutdatedSuperseded": "The same plugin has asked a newer one.",
+    "suspensionOutdatedDataChanged": "Something it would change was changed since it was asked.",
     "memoryUpdateFailed": "Story memory update failed",
     "memoryUpdateFailedHint": "This turn was saved. Check the memory model assignment and provider settings; memory will be attempted again after the next turn.",
     "memoryUpdateErrorDetails": "Error details",

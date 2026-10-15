@@ -30,7 +30,7 @@ import {
 
 import { findWorldDirectories, inspectWorldBundle } from "./github-world.js";
 import { activateWorldPackage } from "./worlds.js";
-import { checkWorldWriteAccess } from "../worlds/world-write-guard.js";
+import { requireAccess } from "../../../host-profile.js";
 
 export function createGithubInstallRoutes(kind: "plugin" | "world") {
   const githubPluginRoutes = new Hono();
@@ -40,7 +40,7 @@ export function createGithubInstallRoutes(kind: "plugin" | "world") {
   const inspect = kind === "world" ? inspectWorldBundle : inspectBundle;
   githubPluginRoutes.use("*", async (c, next) => {
     if (kind === "world") {
-      const denied = checkWorldWriteAccess(c);
+      const denied = requireAccess(c, "world.write");
       if (denied) return denied;
     }
     await next();

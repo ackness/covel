@@ -48,6 +48,7 @@ export interface ExecutionCommitPlan extends Pick<
   | "journalMessages"
   | "runtimeTriggers"
   | "suspensions"
+  | "writeBaseline"
   | "turnIds"
   | "activePluginIds"
   | "hookSettings"
@@ -377,6 +378,7 @@ export async function resumeSuspendedRuntime(
         ...(setup.setupRan ? { setupRan: setup.setupRan } : {}),
         outputSchemas: captured.outputSchemas,
         resolvedSuspensionId: suspension.id,
+        writeBaseline: suspension.pendingContinuation.takenUnder.writes,
         resumedExecution: {
           executionId: inherited.executionId,
           pluginId: suspension.pluginId,

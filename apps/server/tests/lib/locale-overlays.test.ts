@@ -177,7 +177,6 @@ blocks:
   it("compiles every overlay into locale maps for the catalog", async () => {
     const root = await world({
       "world.yaml": `
-schemaVersion: "1.0"
 id: lamp
 name: 提灯古冢
 version: 0.1.0
@@ -244,7 +243,6 @@ dimensions:
 
   describe("a file named with a bare language", () => {
     const manifest = `
-schemaVersion: "1.0"
 id: lamp
 name: 提灯古冢
 version: 0.1.0

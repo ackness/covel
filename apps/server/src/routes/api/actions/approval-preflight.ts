@@ -8,11 +8,9 @@ import type { SessionRecord } from "@covel/store";
 import type { RuntimeManifest, ValidatedActionRequest } from "@covel/shared";
 import { errorBody } from "../../../api-error.js";
 import { pluginManifestRecords } from "../../misc-api/registry-projection.js";
-import {
-  checkHostedOperator,
-  sessionApprovalScope,
-} from "../session/session-guard.js";
+import { sessionApprovalScope } from "../session/session-guard.js";
 import { runnablePluginIds } from "../session/plugins.js";
+import { requireAccess } from "../../../host-profile.js";
 
 /** Ask before opening the stream or making any turn/domain writes. */
 export function preflightActionApprovals(
@@ -75,7 +73,7 @@ function preflightApprovals(
       registry.get(manifest.pluginId)?.source,
     );
     if (trust.autoLoad) continue;
-    const denied = checkHostedOperator(c);
+    const denied = requireAccess(c, "plugin.community");
     if (denied) return denied;
     const scope = sessionApprovalScope(session, manifest.pluginId);
     for (const action of [

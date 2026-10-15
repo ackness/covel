@@ -100,6 +100,33 @@ describe("resuming an out-of-date suspension", () => {
     );
   });
 
+  it("says when what it would change was changed since it was asked", async () => {
+    resumeSuspension.mockRejectedValue(
+      new ApiError(
+        409,
+        "/api/sessions/session-1/suspensions/susp-1/resume",
+        JSON.stringify({
+          error: "This request is out of date.",
+          code: "suspension_outdated",
+          details: { reason: "data-changed" },
+        }),
+      ),
+    );
+    const { dispatch, resume } = fixture();
+
+    await resume();
+
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "REMOVE_SUSPENSION",
+      suspensionId: "susp-1",
+    });
+    expect(emitToast).toHaveBeenCalledWith(
+      "info",
+      expect.any(String),
+      "提出它之后，它要改的内容已经被改过了。",
+    );
+  });
+
   it("still fails a resume the server rejected for another reason", async () => {
     resumeSuspension.mockRejectedValue(
       new ApiError(

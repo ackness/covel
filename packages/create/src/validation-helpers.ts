@@ -13,7 +13,6 @@ import { resolveI18nText, validateDimensionData } from "@covel/shared";
 // no picture, so a model-written path would name a file that does not exist.
 // The app shows its default background for a world without a cover.
 const WORLD_MANIFEST_ROOT_KEYS = new Set([
-  "schemaVersion",
   "id",
   "name",
   "version",
@@ -63,11 +62,9 @@ export function normalizeGeneratedManifest(
     }
   }
 
-  for (const key of ["schemaVersion", "version"] as const) {
-    if (manifest[key] !== undefined && typeof manifest[key] !== "string") {
-      manifest[key] = String(manifest[key]);
-      repairs.push(`stringified ${key}`);
-    }
+  if (manifest.version !== undefined && typeof manifest.version !== "string") {
+    manifest.version = String(manifest.version);
+    repairs.push("stringified version");
   }
 
   // Authored dimension values are validated against their own schemas, never

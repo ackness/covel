@@ -29,11 +29,13 @@ import {
  *     so sequential resumes for the same session do not interleave with turn
  *     execution.
  *
- * Out of date: a suspension records the player turns in the history and its
- * plugin's version when it was taken. A resume that finds the history moved
- * on, the plugin updated, or a later suspension of the same runtime voids it
- * (settled like an abandon) and answers 409 `suspension_outdated` instead of
- * running the continuation on stale state.
+ * Out of date: a suspension records the player turns in the history, its
+ * plugin's version and the records its buffered proposals write when it was
+ * taken. A resume that finds the history moved on, the plugin updated, or one
+ * of those records changed voids it (settled like an abandon) and answers 409
+ * `suspension_outdated` instead of running the continuation on stale state.
+ * The records are compared again first in the commit transaction, so a write
+ * that lands while the runtime runs voids it too, with nothing committed.
  *
  * Expiry: the suspension-touching routes opportunistically fire a
  * time-gated, best-effort global sweep of stale (unresolved, older-than-TTL)
@@ -123,9 +125,29 @@ const OUTDATED_MESSAGES: Readonly<Record<SuspensionOutdatedReason, string>> = {
     "This request is out of date: the story has moved on since it was asked. It has been withdrawn.",
   "plugin-updated":
     "This request is out of date: its plugin was updated since it was asked. It has been withdrawn.",
-  superseded:
-    "This request is out of date: the same plugin has asked a newer one. It has been withdrawn.",
+  "data-changed":
+    "This request is out of date: what it would change was changed since it was asked. It has been withdrawn.",
 };
+
+/** Void an out-of-date suspension like an abandon and tell the player why. */
+async function voidOutdatedSuspension(
+  c: Parameters<typeof requestSuspensionAbandonDeps>[0],
+  playerSettings: Parameters<typeof requestSuspensionAbandonDeps>[1],
+  suspension: SuspensionRecord,
+  reason: SuspensionOutdatedReason,
+): Promise<Response> {
+  await abandonSuspension(
+    requestSuspensionAbandonDeps(c, playerSettings),
+    suspension,
+  );
+  return c.json(
+    errorBody(OUTDATED_MESSAGES[reason], {
+      code: "suspension_outdated",
+      details: { reason },
+    }),
+    409,
+  );
+}
 
 // ── Route ────────────────────────────────────────────────────────
 
@@ -282,16 +304,11 @@ resumeRoutes.post("/:id/suspensions/:suspensionId/resume", async (c) => {
         effectiveManifest,
       );
       if (outdated) {
-        await abandonSuspension(
-          requestSuspensionAbandonDeps(c, decodedUserSettings.settings),
+        return voidOutdatedSuspension(
+          c,
+          decodedUserSettings.settings,
           liveSuspension,
-        );
-        return c.json(
-          errorBody(OUTDATED_MESSAGES[outdated], {
-            code: "suspension_outdated",
-            details: { reason: outdated },
-          }),
-          409,
+          outdated,
         );
       }
 
@@ -423,6 +440,17 @@ resumeRoutes.post("/:id/suspensions/:suspensionId/resume", async (c) => {
           emitter,
         });
 
+        // A record the buffered proposals write changed while the runtime
+        // ran (the commit compared them first and wrote nothing): void it.
+        if (outcome.code === "suspension-data-changed") {
+          ownClaim = undefined;
+          return voidOutdatedSuspension(
+            c,
+            decodedUserSettings.settings,
+            liveSuspension,
+            "data-changed",
+          );
+        }
         if (outcome.status !== "committed") {
           await releaseClaim();
           const detail =

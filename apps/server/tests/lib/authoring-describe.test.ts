@@ -177,8 +177,7 @@ contributes:
       "described-world",
     );
     await writeFiles(worldDir, {
-      "world.yaml": `schemaVersion: "1.0"
-id: described-world
+      "world.yaml": `id: described-world
 name: Described World
 summary: Built from the describe output.
 defaultLocale: en-US

@@ -452,7 +452,7 @@ describe("runtime debug host integration", () => {
     ]);
   });
 
-  it("preserves per-plugin settings across followers and cross-plugin recursion", async () => {
+  it("preserves per-plugin settings across followers and their recursion", async () => {
     const { root, pluginRoot } = await pluginFixture();
     await writeFile(
       path.join(pluginRoot, "PLUGIN.md"),
@@ -467,7 +467,7 @@ describe("runtime debug host integration", () => {
     await runtimeFixture(
       pluginRoot,
       "follower",
-      'return {outcome: "success", value: {count: ctx.userSettings.count}};',
+      'await ctx.recursiveCall({manualTrigger: {runtimeId: "probe/child"}}); return {outcome: "success", value: {count: ctx.userSettings.count}};',
       "schedule: {trigger: {type: event, topic: root.ready}, manual: {execution: background}}",
     );
     await runtimeFixture(
@@ -480,6 +480,11 @@ describe("runtime debug host integration", () => {
     await mkdir(path.join(supportRoot, "runtimes", "follower"), {
       recursive: true,
     });
+    await runtimeFixture(
+      supportRoot,
+      "child",
+      'return {outcome: "success", value: {count: ctx.userSettings.count}};',
+    );
     await writeFile(
       path.join(supportRoot, "package.json"),
       '{"type":"module"}',
@@ -497,7 +502,7 @@ describe("runtime debug host integration", () => {
     );
     await writeFile(
       path.join(supportRoot, "runtimes", "follower", "handler.js"),
-      'export default async function(ctx) { await ctx.recursiveCall({manualTrigger: {runtimeId: "probe/child"}}); return {outcome: "success", value: {count: ctx.userSettings.count}}; }\n',
+      'export default async function(ctx) { await ctx.recursiveCall({manualTrigger: {runtimeId: "support/child"}}); return {outcome: "success", value: {count: ctx.userSettings.count}}; }\n',
       "utf8",
     );
 
@@ -519,9 +524,12 @@ describe("runtime debug host integration", () => {
       ),
     ).toEqual({ "probe/follower": 99, "support/follower": 10 });
     expect(
-      report.runtimeResults.find(({ runtimeId }) => runtimeId === "probe/child")
-        ?.output,
-    ).toEqual({ count: 99 });
+      Object.fromEntries(
+        report.runtimeResults
+          .filter(({ runtimeId }) => runtimeId.endsWith("/child"))
+          .map(({ runtimeId, output }) => [runtimeId, output?.count]),
+      ),
+    ).toEqual({ "probe/child": 99, "support/child": 10 });
   });
 
   it.each([false, true])(

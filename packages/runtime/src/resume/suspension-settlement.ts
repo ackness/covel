@@ -18,6 +18,11 @@ import type {
   ExecutionContext,
   RuntimeManifest,
 } from "@covel/shared";
+import {
+  isBudgetedAttempt,
+  resolvePendingOrBlocked,
+  setupRetryBudget,
+} from "@covel/shared";
 import type {
   DataStore,
   StoreTransaction,
@@ -25,8 +30,15 @@ import type {
   SuspensionRecord,
 } from "@covel/store";
 import type { EventBus } from "@covel/events";
-import { applySessionClockTx } from "../commit/session-clock.js";
+import {
+  applySessionClockTx,
+  updateSetupRuntimeStates,
+} from "../commit/session-clock.js";
 import { finalizeSuspendedJobStatuses } from "../job-status/job-status.js";
+import {
+  changedSuspensionWrites,
+  type SuspensionWriteReader,
+} from "./suspension-baseline.js";
 
 /**
  * Whether a suspension still waits for an answer: unresolved, or claimed by a
@@ -69,11 +81,20 @@ export async function countPlayerTurns(
   return (await store.getTurnMessageStats(sessionId)).playerMessageCount;
 }
 
+/**
+ * The basis a runtime records when it suspends. The commit that saves the
+ * suspension fills in the player turns (`executeTurn`) and the records its
+ * buffered proposals write (`finalizeExecution`).
+ */
 export function suspensionBasis(
   manifest: RuntimeManifest,
   playerTurns: number,
 ): SuspensionBasis {
-  return { playerTurns, pluginVersion: suspensionPluginVersion(manifest) };
+  return {
+    playerTurns,
+    pluginVersion: suspensionPluginVersion(manifest),
+    writes: [],
+  };
 }
 
 /**
@@ -83,14 +104,18 @@ export function suspensionBasis(
  * - `session-moved-on`: the player's history changed since the suspension
  *   (a later player turn, or a rewind), so its buffered writes could
  *   overwrite newer state;
- * - `superseded`: the same runtime suspended again later; a runtime has one
- *   suspension that can be resumed.
+ * - `data-changed`: a record its buffered proposals write was changed since
+ *   (by a background job or a manual run, for example); committing them would
+ *   put back what the runtime saw when it stopped.
+ *
+ * A runtime never has two pending suspensions: saving a new one voids the
+ * older one in the same transaction (`finalizeExecution`).
  */
 export type SuspensionOutdatedReason =
-  "plugin-updated" | "session-moved-on" | "superseded";
+  "plugin-updated" | "session-moved-on" | "data-changed";
 
 export async function suspensionOutdatedReason(
-  store: Pick<DataStore, "getTurnMessageStats" | "listSuspensions">,
+  store: Pick<DataStore, "getTurnMessageStats"> & SuspensionWriteReader,
   suspension: SuspensionRecord,
   manifest: RuntimeManifest,
 ): Promise<SuspensionOutdatedReason | undefined> {
@@ -101,13 +126,12 @@ export async function suspensionOutdatedReason(
     (await countPlayerTurns(store, suspension.sessionId)) !== basis.playerTurns
   )
     return "session-moved-on";
-  const later = (await store.listSuspensions(suspension.sessionId)).some(
-    (other) =>
-      other.id !== suspension.id &&
-      other.runtimeId === suspension.runtimeId &&
-      other.createdAt > suspension.createdAt,
+  const changed = await changedSuspensionWrites(
+    store,
+    suspension.sessionId,
+    basis.writes,
   );
-  return later ? "superseded" : undefined;
+  return changed.length > 0 ? "data-changed" : undefined;
 }
 
 /** What abandoning one suspension settles. */
@@ -172,6 +196,83 @@ export async function applySuspensionAbandonTx(
     sessionId: suspension.sessionId,
     executionContext,
     update: { now },
+  });
+}
+
+/** The error a setup attempt ends with when its suspension ends unanswered. */
+export const ABANDONED_SETUP_ATTEMPT_ERROR =
+  "The suspension ended without an answer";
+
+/**
+ * A suspended setup runtime holds its attempt open (`suspended`, which spends
+ * none of the retry budget). When the suspension ends without a resume, the
+ * attempt ends `failed` and the runtime's state is worked out again: pending,
+ * or blocked once that attempt used up its budget (never while a newer
+ * suspension of the runtime still waits). The runtime stays not done,
+ * so the next turn runs it again, or the player retries or skips it, as after
+ * any failed attempt. A runtime that is not a setup runtime, or whose attempt
+ * already ended, is left alone.
+ *
+ * `manifest` is the runtime's active manifest, for its retry budget; without
+ * one the budget is unbounded. Like every setup-attempt write, this runs after
+ * the transaction that removed the suspension.
+ */
+export async function settleAbandonedSetupAttempt(
+  store: Pick<
+    DataStore,
+    "listSetupAttempts" | "updateSetupAttempt" | "getSession" | "updateSession"
+  >,
+  suspension: SuspensionRecord,
+  manifest: RuntimeManifest | undefined,
+  now: string,
+): Promise<void> {
+  const { sessionId, runtimeId } = suspension;
+  const executionId =
+    suspension.pendingContinuation.executionContext.executionId;
+  const attempt = (
+    await store.listSetupAttempts(sessionId, { runtimeId })
+  ).find(
+    (candidate) =>
+      candidate.executionId === executionId && candidate.state === "suspended",
+  );
+  if (!attempt) return;
+  await store.updateSetupAttempt(
+    sessionId,
+    runtimeId,
+    attempt.generation,
+    executionId,
+    { state: "failed", finishedAt: now, error: ABANDONED_SETUP_ATTEMPT_ERROR },
+  );
+  const generation = await store.listSetupAttempts(sessionId, {
+    runtimeId,
+    generation: attempt.generation,
+  });
+  const spent = generation.filter((candidate) =>
+    isBudgetedAttempt(candidate.state),
+  ).length;
+  // Another attempt has not ended: a newer suspension that replaced this one
+  // and waits for the player, or the run that is saving it. The runtime is
+  // not blocked under it; that attempt settles the runtime itself.
+  const stillWaiting = generation.some(
+    (candidate) =>
+      candidate.state === "suspended" || candidate.state === "started",
+  );
+  await updateSetupRuntimeStates(store, sessionId, now, (current) => {
+    const mirror = current[runtimeId];
+    // Completed or skipped since, or already a later generation: keep it.
+    if (!mirror || mirror.state === "done") return {};
+    if (mirror.generation !== attempt.generation) return {};
+    return {
+      [runtimeId]: resolvePendingOrBlocked({
+        attempts: spent,
+        budget:
+          manifest && !stillWaiting ? setupRetryBudget(manifest) : undefined,
+        pluginVersion: attempt.pluginVersion,
+        generation: attempt.generation,
+        now,
+        lastError: ABANDONED_SETUP_ATTEMPT_ERROR,
+      }),
+    };
   });
 }
 

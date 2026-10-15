@@ -69,8 +69,10 @@ export const TRACE_RETENTION_SERVER_SETTING: ServerSettingDefinition<
 
 /**
  * Precedence: the operator's `COVEL_TRACE_RETENTION_DAYS`, then the player's
- * setting, then {@link DEFAULT_TRACE_RETENTION_DAYS}. A hosted tier ignores the
- * player's value: retention there belongs to the operator.
+ * setting, then {@link DEFAULT_TRACE_RETENTION_DAYS}. The host passes the
+ * player's value only where its host profile lets a player choose (one
+ * player owns the server); on a hosted tier retention belongs to the operator
+ * and the host passes none.
  */
 export function resolveTraceRetention(
   playerDays?: number,
@@ -88,8 +90,8 @@ let playerSource: (() => number | undefined) | undefined;
 
 /**
  * The host registers where the player's choice lives (the server's own
- * settings store). Without a source only the environment and the default
- * apply.
+ * settings store), or none where its host profile gives players no say.
+ * Without a source only the environment and the default apply.
  */
 export function setTraceRetentionPlayerSource(
   source: (() => number | undefined) | undefined,

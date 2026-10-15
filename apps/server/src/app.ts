@@ -29,7 +29,11 @@ import {
   createGatewayAdapter,
   createPluginRuntimeGateway,
 } from "@covel/runtime";
-import { fetchWithRetry, validateBaseUrlForPlugin } from "@covel/ai-provider";
+import {
+  configureProviderHostPolicy,
+  fetchWithRetry,
+  validateBaseUrlForPlugin,
+} from "@covel/ai-provider";
 import { setTranslationsDirectory } from "@covel/plugin-loader";
 import { bootstrapApi } from "./routes/api/bootstrap.js";
 import { hasServerRuntimeJobCredentials } from "./runtime-job-readiness.js";
@@ -44,11 +48,7 @@ import { recoverWorldPackageDeletions } from "./routes/api/worlds/file-package.j
 import { isWorldDeleting } from "./world-lifecycle.js";
 import { seedAndReconcileWorlds } from "./world-seed-reconcile.js";
 import { createWorldFileWatcher } from "./world-file-watcher.js";
-import { createModelDbRoutes } from "./routes/model-db.js";
-import { createMiscApiRoutes } from "./routes/misc-api.js";
-import { createConfigApiRoutes } from "./routes/config-api.js";
-import { createRawConfigApiRoutes } from "./routes/raw-config-api.js";
-import { createAppUpdateRoutes } from "./routes/app-update.js";
+import { mountApiRoutes } from "./host-routes.js";
 import { createPerRequestLlmMiddleware } from "./middleware/per-request-llm.js";
 import { createRequestBodyLimitMiddleware } from "./middleware/request-body-limit.js";
 import { createOriginGuardMiddleware } from "./middleware/origin-guard.js";
@@ -59,7 +59,7 @@ import {
   makeErrorHandler,
   redactSensitiveQueryParamsInText,
 } from "./api-error.js";
-import { validateSecurityPosture } from "./security-posture.js";
+import { hostProfileMiddleware, resolveHostProfile } from "./host-profile.js";
 import {
   providerApiKeysFromEnv,
   parseProviderKeysEnv,
@@ -114,13 +114,21 @@ function resolvePreferredMemorySlot(slotRegistry: {
 }
 
 const app = new Hono();
+// An unknown DEPLOYMENT_TIER (or STORE_BACKEND, MEDIA_BACKEND, ...) throws
+// here, which stops the start with the variable and its accepted values.
 const env = readRuntimeEnv();
 
-// Fail fast on an unsafe hosted posture before any route is
-// wired or the caller starts listening. No-op for self-deploy/desktop.
-validateSecurityPosture(env);
+// The deployment form, decided once before any route is wired or the caller
+// starts listening (host-profile.ts). It refuses a hosted tier without its
+// secrets and settings the chosen form would silently ignore. Routes ask it
+// through `hostProfileOf(c)`; the provider layer gets its part here.
+export const hostProfile = resolveHostProfile(env, {
+  storeBackend: resolveBackendFromEnv(),
+});
+configureProviderHostPolicy(hostProfile.credentials.provider);
 
 const applicationWork = createApplicationWork();
+app.use("*", hostProfileMiddleware(hostProfile));
 app.use("*", applicationWork.middleware);
 
 // ── Global error handler ────────────────────────────────────────
@@ -148,7 +156,7 @@ app.use("*", secureHeaders());
 // Before any route or static file: on the token-less self tier, a request
 // must name this server by a loopback name or a COVEL_ALLOWED_HOSTS entry,
 // which refuses DNS-rebound pages (see middleware/host-guard.ts).
-app.use("*", createHostGuardMiddleware(env));
+app.use("*", createHostGuardMiddleware(hostProfile.network));
 app.use("*", createRequestBodyLimitMiddleware());
 
 // Guard any /api/debug/* or /api/internal/* route in production so that an
@@ -337,6 +345,7 @@ async function initializeServer(): Promise<void> {
       pluginUtils,
       store,
       storeBackend,
+      hostProfile,
       mediaStore,
       mediaBackend: env.mediaBackend,
       vectorBackend: env.vectorBackend,
@@ -372,12 +381,7 @@ async function initializeServer(): Promise<void> {
     }
 
     // ── Mount routes ─────────────────────────────────────────────────
-    app.route("/", api.app);
-    app.route("/", createModelDbRoutes(ai));
-    app.route("/", createMiscApiRoutes(ai, api.registry, store, apiKeys));
-    app.route("/", createConfigApiRoutes({ apiKeys, externalApiKeys }));
-    app.route("/", createRawConfigApiRoutes({ ai }));
-    app.route("/", createAppUpdateRoutes());
+    mountApiRoutes(app, { api, ai, store, apiKeys, externalApiKeys });
 
     // ── Static file serving (production) ─────────────────────────────
     if (env.serveStatic) {

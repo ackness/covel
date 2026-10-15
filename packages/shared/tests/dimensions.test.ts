@@ -34,7 +34,6 @@ describe("authored dimension definitions", () => {
     });
     expect(validateDimensionData("cityWall", wall).valid).toBe(true);
     const manifest = worldManifestSchema.parse({
-      schemaVersion: "1.0",
       id: "wall",
       name: "Wall",
       summary: "Wall",

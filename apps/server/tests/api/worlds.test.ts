@@ -93,8 +93,7 @@ async function makeWorldDataFixture() {
   await mkdir(path.join(worldRoot, "data"), { recursive: true });
   await writeFile(
     path.join(worldRoot, "world.yaml"),
-    `schemaVersion: "1"
-id: preflight-world
+    `id: preflight-world
 name: Preflight World
 summary: Preflight world
 defaultLocale: zh-CN
@@ -103,8 +102,7 @@ worldData: data/world.data.yaml
   );
   await writeFile(
     path.join(worldRoot, "data/world.data.yaml"),
-    `schemaVersion: 1
-sources:
+    `sources:
   facts:
     kind: json
     path: data/facts.json
@@ -127,8 +125,7 @@ async function makeMediaWorldDataFixture() {
   await mkdir(path.join(worldRoot, "media/portraits"), { recursive: true });
   await writeFile(
     path.join(worldRoot, "world.yaml"),
-    `schemaVersion: "1"
-id: media-world
+    `id: media-world
 name: Media World
 summary: Media world
 defaultLocale: zh-CN
@@ -137,8 +134,7 @@ worldData: data/world.data.yaml
   );
   await writeFile(
     descriptorPath,
-    `schemaVersion: 1
-sources:
+    `sources:
   portraits:
     kind: media
     path: media/portraits
@@ -768,8 +764,7 @@ describe("world routes", () => {
 
     await writeFile(
       descriptorPath,
-      `schemaVersion: 1
-sources: {}
+      `sources: {}
 `,
     );
     const removeA = await app.request("/api/worlds/media-world/sync-data", {

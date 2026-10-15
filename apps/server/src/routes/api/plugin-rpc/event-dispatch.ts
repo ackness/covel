@@ -6,10 +6,7 @@ import { getPluginTrustInfo } from "@covel/plugin-loader";
 import type { SessionRecord } from "@covel/store";
 import { errorBody } from "../../../api-error.js";
 import { loadSessionPluginUserSettings } from "../plugin-user-settings.js";
-import {
-  checkHostedOperator,
-  sessionApprovalScope,
-} from "../session/session-guard.js";
+import { sessionApprovalScope } from "../session/session-guard.js";
 import { RuntimeJobQueueFullError } from "./jobs.js";
 import { enqueueEventFollowers } from "./runtime-job-enqueue.js";
 import {
@@ -20,6 +17,7 @@ import {
   announceQueuedRuntimeJobs,
   withSettledSessionLock,
 } from "./settled-request.js";
+import { requireAccess } from "../../../host-profile.js";
 
 /**
  * Event-level plugin RPC: a plugin's own UI emits one of the domain events
@@ -102,7 +100,7 @@ export async function dispatchPluginEvent(
   const entry = pluginRegistry.get(body.pluginId);
   const trustInfo = getPluginTrustInfo(body.pluginId, entry?.source);
   if (trustInfo.source === "community") {
-    const operatorDenied = checkHostedOperator(c);
+    const operatorDenied = requireAccess(c, "plugin.community");
     if (operatorDenied) return operatorDenied;
   }
   const gate = c.get("rpcApprovalGate");
@@ -158,7 +156,7 @@ export async function dispatchPluginEvent(
       pluginRegistry.get(runtime.pluginId)?.source,
     ).source;
     if (source !== "community") continue;
-    const operatorDenied = checkHostedOperator(c);
+    const operatorDenied = requireAccess(c, "plugin.community");
     if (operatorDenied) return operatorDenied;
     const scope = sessionApprovalScope(session, runtime.pluginId);
     const needsServerCode = !gate.hasGrant(

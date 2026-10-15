@@ -149,6 +149,7 @@ stateDiagram-v2
 - 重试次数（`maxTriggerCount`）用完不算完成：该 runtime 变成 `blocked`，会话停在准备阶段，等玩家重试或豁免。框架不会跳过坏掉的准备步骤继续往下走。`blocked` 的 runtime 要先经 `retry` 端点解封。
 - 读取已保存表单的准备 runtime，不能因为同一份提交每次都失败。提交无法使用时，要把它作废并重新发出表单（带 `notice` 和上次的值），否则会话会永远停在准备阶段。
 - 挂起的准备 runtime 在恢复（resume）后给出完成信号时，`done` 状态和 `phase` 的切换随恢复的那次提交一起写入。
+- 准备 runtime 挂起等玩家时不消耗重试次数。挂起项被放弃、过期或作废时，这次尝试记为失败，runtime 回到 `pending`，次数用完时进入 `blocked`。
 
 准备 runtime 之间可以用 `needs(scope: session)` 声明依赖，它读的是已经保存的 `done` 状态：
 
@@ -210,6 +211,7 @@ stateDiagram-v2
   - 玩家在界面上重试或放弃一个准备 runtime。
   - 执行记录。`turn_results` 和各 runtime 的输出在提交之前写入，`turn_results` 先记为 `pending`，提交之后再结算成 `committed` 或 `failed`。
 - `turn.suspended` 只在提交之后发出。
+- 保存挂起记录时，同一个 runtime 还在等待的旧挂起项在同一个事务里作废。恢复的提交事务先核对挂起时记下的记录内容，有变化就什么都不写。
 - 自动快照在全部提案提交后才拍，保证对话位置、角色、状态和插件数据属于同一个已提交的回合。
 - `execution.completed.committed` 是客户端的终态信号：前端据此确认或撤回它先显示出来的内容。
 - 提交之后的事件发布逐个独立进行，任何一个失败都不回滚已经写入的数据。失败时宿主记一条 `commit.fanout.failed` trace，让该会话的订阅流收到 `system.reset`（`reason: "publish-failed"`）后完整重读，并在 `execution.completed` 上带 `resync: true`。
@@ -363,6 +365,8 @@ flowchart LR
 - 直接修改角色、状态或交互。
 
 **回合里有挂起时。** 回合里有 runtime 挂起时，这些作业先不入队，随挂起项一起保存，回合也先不计数。结束这个回合的那个出口把作业入队、给回合计数：最后一个挂起项恢复成功，或者它被放弃、过期、因过时而作废。规则见[挂起与回合计数](../reference/api.md#挂起与回合计数)。
+
+**挂起之后的写入。** 挂起期间，后台作业和手动运行照常提交。挂起项记下了它保存的写入要改的每条记录当时的内容。其中一条之后被改过，恢复就被拒绝，挂起项作废，旧的写入不会盖掉新的。规则见[过时的挂起项](../reference/api.md#过时的挂起项)。
 
 **时间限制。**
 

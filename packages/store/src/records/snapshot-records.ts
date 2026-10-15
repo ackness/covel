@@ -199,6 +199,36 @@ export function settledSuspensionContinuation(
   };
 }
 
+/**
+ * A record that a suspension's buffered proposals write: a plugin data key,
+ * a state field, a character, the character schema or a lorebook entry.
+ */
+export type SuspensionWriteTarget =
+  | {
+      readonly kind: "plugin-data";
+      readonly pluginId: string;
+      readonly namespace: string;
+      readonly key: string;
+    }
+  | { readonly kind: "state"; readonly table: string; readonly field: string }
+  | { readonly kind: "character"; readonly id: string }
+  | { readonly kind: "character-schema" }
+  | {
+      readonly kind: "lorebook";
+      readonly pluginId: string;
+      readonly id: string;
+    };
+
+/** One record a suspension will write, as it was when the suspension was taken. */
+export interface SuspensionWriteBaseline {
+  readonly target: SuspensionWriteTarget;
+  /**
+   * Digest of the record's content then (`readSuspensionWriteDigest`), or
+   * null when the record did not exist.
+   */
+  readonly digest: string | null;
+}
+
 /** The session and plugin state a suspension was taken under. */
 export interface SuspensionBasis {
   /**
@@ -208,6 +238,12 @@ export interface SuspensionBasis {
   readonly playerTurns: number;
   /** Version of the plugin that owns the suspended runtime (`0.0.0` when it declares none). */
   readonly pluginVersion: string;
+  /**
+   * Every record the buffered proposals write, read in the transaction that
+   * saved the suspension. A resume that finds one of them changed commits
+   * nothing.
+   */
+  readonly writes: readonly SuspensionWriteBaseline[];
 }
 
 export interface SuspensionRecord {

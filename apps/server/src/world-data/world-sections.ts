@@ -5,6 +5,7 @@ import type { WorldSections } from "@covel/create";
 import {
   DEFAULT_LOCALE,
   resolveWorldDimensionsLocale,
+  validateWorldManifest,
   type WorldDimensions,
 } from "@covel/shared";
 import type { WorldRecord } from "@covel/store";
@@ -21,9 +22,6 @@ import { parseWorldDataTarget } from "./target-uri.js";
  * content comes from the package files when the world has a directory, and
  * from the record's metadata for a world that lives in a store or a browser.
  */
-
-/** The `world.yaml` format version that the generator writes. */
-const MANIFEST_VERSION = "1.0";
 
 type Entry = Record<string, unknown>;
 
@@ -114,7 +112,6 @@ function manifestOf(record: WorldRecord): Entry {
       ? {}
       : { [key]: metadata[key] };
   return {
-    schemaVersion: MANIFEST_VERSION,
     id: record.id,
     name: record.name,
     summary: record.description,
@@ -154,13 +151,17 @@ async function manifestOfPackage(
     return fromRecord;
   }
   if (!isEntry(written)) return fromRecord;
+  const validation = validateWorldManifest(written, {
+    ignoreUnknownRootFields: true,
+  });
+  if (!validation.valid) return fromRecord;
   const {
     worldData: _worldData,
     dimensionSources: _dimensionSources,
     supportedLocales: _supportedLocales,
     dimensions: _dimensions,
     ...manifest
-  } = written;
+  } = validation.data as Entry;
   return {
     ...manifest,
     // A package that lists its editions keeps the list, with one edition.

@@ -14,8 +14,7 @@ const repoRoot = path.resolve(
 );
 const pluginsDirs = [path.join(repoRoot, "plugins")];
 
-const MANIFEST = `schemaVersion: "1.0"
-id: sample-world
+const MANIFEST = `id: sample-world
 name: Sample World
 summary: A world for validator tests.
 defaultLocale: en-US
@@ -287,7 +286,7 @@ describe("validateWorldPackage", () => {
     const worldDir = await makeWorld(
       {
         "data/world.data.yaml":
-          "schemaVersion: 1\nsources:\n  dimensions:\n    kind: json\n    path: data/dimensions.json\n    to: world:metadata.dimensions\n",
+          "sources:\n  dimensions:\n    kind: json\n    path: data/dimensions.json\n    to: world:metadata.dimensions\n",
         "data/dimensions.json": JSON.stringify({
           archive: {
             name: "Archive",
@@ -338,7 +337,7 @@ describe("validateWorldPackage", () => {
     const worldDir = await makeWorld(
       {
         "data/world.data.yaml":
-          "schemaVersion: 1\nsources:\n  lore:\n    kind: json\n    path: data/known.json\n    to: lorebook\n    key: id\n",
+          "sources:\n  lore:\n    kind: json\n    path: data/known.json\n    to: lorebook\n    key: id\n",
         "data/known.json": JSON.stringify([
           { id: "known", content: "Known lore." },
         ]),
@@ -359,14 +358,15 @@ describe("validateWorldPackage", () => {
     ]);
   });
 
-  it("reports a manifest schema error with its field path", async () => {
+  it("warns about an unknown manifest root field with its field path", async () => {
     const worldDir = await makeWorld({}, `${MANIFEST}unknownField: true\n`);
     const diagnostics = await validate(worldDir);
     expect(diagnostics).toHaveLength(1);
     expect(diagnostics[0]).toMatchObject({
-      level: "error",
-      code: "manifest-invalid",
+      level: "warning",
+      code: "manifest-unknown-field",
       file: "world.yaml",
+      pointer: "unknownField",
     });
   });
 
@@ -446,8 +446,7 @@ describe("validateWorldPackage", () => {
   it("validates seed records against the receiving plugin's contract schema", async () => {
     const worldDir = await makeWorld(
       {
-        "data/world.data.yaml": `schemaVersion: 1
-sources:
+        "data/world.data.yaml": `sources:
   memory:
     kind: json
     path: data/memory-blocks.json
@@ -474,8 +473,7 @@ sources:
   it("reports a data contract no scanned plugin accepts", async () => {
     const worldDir = await makeWorld(
       {
-        "data/world.data.yaml": `schemaVersion: 1
-sources:
+        "data/world.data.yaml": `sources:
   memory:
     kind: json
     path: data/memory-blocks.json

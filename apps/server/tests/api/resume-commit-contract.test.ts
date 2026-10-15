@@ -81,7 +81,7 @@ describe("resume commit composition", () => {
         resumeSchema: {},
         createdAt: now,
         pendingContinuation: {
-          takenUnder: { playerTurns: 0, pluginVersion: "1.0.0" },
+          takenUnder: { playerTurns: 0, pluginVersion: "1.0.0", writes: [] },
           executionContext: {
             executionId: "original-run",
             origin: "manual",
@@ -270,7 +270,7 @@ describe("resume commit composition", () => {
         resumeSchema: {},
         createdAt: now,
         pendingContinuation: {
-          takenUnder: { playerTurns: 0, pluginVersion: "1.0.0" },
+          takenUnder: { playerTurns: 0, pluginVersion: "1.0.0", writes: [] },
           executionContext: {
             executionId: "original-run",
             origin: "player",

@@ -4,7 +4,7 @@
 
 ### Changed
 
-- **An out-of-date suspension is withdrawn instead of resumed.** When the player has played another turn, the plugin changed version, or the same runtime suspended again, `POST /api/sessions/:id/suspensions/:suspensionId/resume` voids the suspension and answers `409` with `code: "suspension_outdated"`; the web client removes it and tells the player. Rules: `docs/reference/api.md` (Out-of-date suspended items).
+- **An out-of-date suspension is withdrawn instead of resumed.** When the player has played another turn or the plugin changed version, `POST /api/sessions/:id/suspensions/:suspensionId/resume` voids the suspension and answers `409` with `code: "suspension_outdated"`; the web client removes it and tells the player. Rules: `docs/reference/api.md` (Out-of-date suspended items).
 
 ### Fixed
 

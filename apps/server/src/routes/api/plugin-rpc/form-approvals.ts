@@ -6,10 +6,8 @@ import { findCommittedInteraction } from "@covel/runtime";
 import type { SessionRecord } from "@covel/store";
 import { errorBody } from "../../../api-error.js";
 import { runnablePluginIds } from "../session/plugins.js";
-import {
-  checkHostedOperator,
-  sessionApprovalScope,
-} from "../session/session-guard.js";
+import { sessionApprovalScope } from "../session/session-guard.js";
+import { requireAccess } from "../../../host-profile.js";
 
 const submissionTargets = z.object({
   turnId: z.string().min(1),
@@ -88,7 +86,7 @@ export async function preflightFormApprovals(
     const entry = registry.get(pluginId)!;
     const trust = getPluginTrustInfo(pluginId, entry.source);
     if (trust.autoLoad) continue;
-    const denied = checkHostedOperator(c);
+    const denied = requireAccess(c, "plugin.community");
     if (denied) return denied;
     const scope = sessionApprovalScope(session, pluginId);
     if (

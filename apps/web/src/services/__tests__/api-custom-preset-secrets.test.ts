@@ -7,7 +7,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   LOCAL_STORAGE_KEYS_KEY,
   LOCAL_STORAGE_SETTINGS_KEY,
-  SERVER_MANAGED_SECRET,
 } from "@covel/settings";
 
 const localStorageMock = (() => {
@@ -163,17 +162,6 @@ describe("custom preset secret channel", () => {
       },
     });
   });
-  it("never sends the REST server-managed marker as an API key", async () => {
-    await getSettings().set("keys.server-only", SERVER_MANAGED_SECRET);
-
-    const encoded = buildProviderKeysHeader()["X-Provider-Keys"];
-    const keys = encoded
-      ? (JSON.parse(atob(encoded)) as Record<string, string>)
-      : {};
-    expect(keys["server-only"]).toBeUndefined();
-    expect(Object.values(keys)).not.toContain(SERVER_MANAGED_SECRET);
-  });
-
   it("uses a 1x default and persists positive decimal provider multipliers", async () => {
     expect(getProviderPriceMultiplier("openai")).toBe(1);
 
@@ -368,19 +356,6 @@ describe("current-only model settings", () => {
     expect(getSlotConfig()).toEqual({ story: { presetId: "shared-id" } });
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(readSettingsBlob()).toEqual(before);
-  });
-
-  it("never sends a server-managed marker for a configured connection", async () => {
-    await setProviderProfiles([
-      {
-        id: "fixture",
-        name: "Fixture",
-        baseUrl: "",
-        models: [{ ref: "current", modelId: "current" }],
-      },
-    ]);
-    await getSettings().set("keys.fixture", SERVER_MANAGED_SECRET);
-    expect(buildProviderKeysHeader()).toEqual({});
   });
 });
 

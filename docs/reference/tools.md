@@ -752,7 +752,7 @@ JSON Schema 只能检查字段的形状，检查不了“这个结果和骰子�
 **注意事项**：
 
 - `resumeSchema` 必须能被 `JSON.stringify`，因为现场要写进存储。
-- 一个 runtime 只有最新的那次挂起能恢复。同一个 runtime 之后又挂起过、玩家之后又玩了回合，或者插件换了版本，旧的挂起项在恢复时被作废，见[过时的挂起项](./api.md#过时的挂起项)。恢复接口按挂起项的 ID 查找。
+- 一个 runtime 同时只有一条待恢复的挂起项：它再次挂起时，旧的那条立刻作废。玩家之后又玩了回合、插件换了版本，或者挂起项要改的记录之后被别的执行（例如后台作业或手动运行）改过，挂起项在恢复时被作废，见[过时的挂起项](./api.md#过时的挂起项)。恢复接口按挂起项的 ID 查找。
 - `@covel/tools` 的 `createDefaultToolRegistry` 把它注册为内置工具。agent 仍要在 `agent.tools.builtin` 里列出 `suspend` 才能调用。
 - 后台运行的 runtime 不能挂起，因为没有玩家在等它。声明了 `schedule.manual.execution: background` 或 `schedule.completion.mode: detached` 的 runtime 在 `agent.tools.builtin` 里列出 `suspend`，加载时被拒绝。后台作业里的 runtime 真的挂起了（function handler 返回挂起，或者后台运行触发的事件 runtime 调用了 `suspend`），作业记为 `failed`，什么也不提交。
 - 恢复是接着被挂起的那次执行继续：
@@ -1463,6 +1463,7 @@ export default function ({ tool, z, shortId, shortIdBatch }) {
 
 - 所有 entry 工厂的 toolkit 都只提供纯辅助函数，不注入 store。工具通过 `execute(params, context)` 的 `context.store` 读取当前会话和插件的状态。RPC 和函数 runtime 各用自己限定范围的 store。
 - agent guard 和函数 handler 拿到同样的上下文：只读的 store、`ctx.world`、`ctx.inputs`、`pluginData`、logger、gateway、utils、媒体和 `recursiveCall`。内置插件和社区插件拿到的一样，只是社区插件的 `utils` 只能访问 `permissions.http` 声明的地址。guard 返回或超时之后，这些能力全部失效。
+- `recursiveCall` 的[包内调用规则](./plugins.md#嵌套调用ctxrecursivecall)同样适用于 guard。跨包协作用[服务或事件](./plugin-extensions.md#选择通信方式)。
 
 **工具里的文字用哪种语言。** `context.locale` 是会话的内容语言，`context.messages` 是本插件 `locales/` 里的译文。
 

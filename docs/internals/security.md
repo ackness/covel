@@ -11,6 +11,54 @@
 
 下文多次提到“部署档位”（`DEPLOYMENT_TIER`）。`self` 是默认值，指桌面客户端和自己部署给自己用的实例。`demo` 是给公开网页实例用的档位，为以后的官方网页版准备；官方网页版现在还不支持。`commercial` 是给以后可能有的商业版预留的最严格档位：现在没有账号、租户隔离和配额，这个仓库也不为它更新。`demo` 和 `commercial` 都要求令牌，合称托管档位。
 
+## Host profile
+
+服务端在启动时只做一次判断：把部署档位、实际用的存储和几个开关合成一份宿主配置（host profile，`apps/server/src/host-profile.ts`），放进每个请求。路由的权限检查、媒体路由、服务端设置、请求自带的模型设置和 trace 保留期都问它，不再各自读环境变量。`@covel/ai-provider` 在启动时拿到属于它的那部分（`configureProviderHostPolicy`）。桌面客户端启动服务端时固定传 `DEPLOYMENT_TIER=self`。
+
+宿主配置有三种形态：
+
+- **personal**：`self` 档位，数据存在服务端。桌面客户端、自己部署给自己用的网页版、`pnpm dev` 都是它。路由不要令牌，只有桌面壳设了启动令牌时，配置和文件接口要它。网络边界是回环监听加上 Host 检查。
+- **browser-private**：`self` 档位、`NODE_ENV=production`、实际存储是 MemoryStore。玩家数据存在各自的浏览器里，服务端只有临时副本。会话要 owner token，写共享世界要 operator token，谁都可以创建会话。以后的官方网页版建立在这个形态上，现在还不支持。
+- **hosted**：`demo` / `commercial`，见 [Hosted auth](#hosted-auth)。
+
+每条路由说明自己要做哪些“动作”，宿主配置决定每种形态怎样回答。表里的 operator 指 operator token（`COVEL_DESKTOP_REST_TOKEN`），可以放在 `Authorization: Bearer`、`X-Session-Token` 或 `?session_token=` 里；“operator（Bearer）”只认 `Authorization: Bearer`。“桌面令牌”指设置了 `COVEL_DESKTOP_REST_TOKEN` 时要带上它，没设置时开放。
+
+<!-- prettier-ignore -->
+| 动作 | 包括 | personal | browser-private | hosted |
+| --- | --- | --- | --- | --- |
+| `session.access` | 读写一个会话 | 开放 | owner token | owner token |
+| `session.create` | 创建会话，从快照分叉出新会话 | 开放 | 开放 | operator |
+| `session.list` | 列出所有会话 | 开放 | 空列表（`ENABLE_DEBUG_PAGE` 时开放） | operator，否则空列表 |
+| `world.write` | 写共享的世界目录 | 开放 | operator | operator |
+| `world.generate` | 用服务端的模型生成、修改、翻译世界 | 开放 | 开放 | operator |
+| `plugin.community` | 批准、启用、运行社区插件的服务端代码 | 开放 | 开放 | operator |
+| `server.diagnostics` | 模型端点、配置路径、加载错误、哪些密钥已配置 | 开放 | 开放 | operator，否则省略这些字段 |
+| `model.probe` | 列出供应商的模型、测试一个模型 | 开放 | 开放 | operator |
+| `model-db.refresh` | 下载新的模型数据库 | 开放 | 开放 | operator |
+| `server.settings` | 写服务端设置 | 桌面令牌 | 桌面令牌 | 拒绝 |
+| `host.config` | 桌面壳的设置、密钥、代理、数据目录、更新检查 | 桌面令牌 | 桌面令牌 | operator（Bearer） |
+| `host.files` | 安装、卸载、重载包，读写原始配置文件 | 桌面令牌；生产环境没有令牌时要 `COVEL_INSTALL_API_ENABLED=1` | 同左 | operator（Bearer） |
+| `media.cleanup` | 删除没有会话引用的媒体 | 开放 | 开放 | `demo`：operator；`commercial`：拒绝 |
+| `media.library` | 跨会话的媒体库 | 开放 | 拒绝（503） | 拒绝（503） |
+
+browser-private 一列里，`plugin.community`、`server.diagnostics`、`model.probe`、`model-db.refresh`、`server.settings` 和 `host.config` 现在和 personal 一样。官方网页版上线前要把它们对访客关上，改的就是 `host-profile.ts` 里这一列。
+
+除了这些动作，宿主配置还决定：
+
+- **网络**：只有 `self` 做 Host 检查（`network.checkHost`），托管档位靠令牌。
+- **请求自带的模型设置**：`self` 上可以改模型的全部能力，托管档位只能收窄（`credentials.capabilityOverrides`）。
+- **供应商请求**：`self` 上用户配置的模型地址可以解析到局域网（见 [Self-tier exemption](#self-tier-exemption-core-provider-path-only)），不属于任何会话的请求也能选用社区插件的 wire；托管档位都不行（`credentials.provider`）。
+- **保留期**：只有 `self` 上玩家存的服务端设置（比如 trace 保留多久）算数；托管档位上它们归运营者。
+
+服务端在这些情况下拒绝启动，错误信息写明是哪个变量：
+
+- `DEPLOYMENT_TIER` 不是 `self`、`demo`、`commercial` 之一（大小写和首尾空格不计）。
+- 托管档位没有 `COVEL_MEDIA_TOKEN_SECRET` 或 `COVEL_DESKTOP_REST_TOKEN`；`commercial` 没有列出 `CORS_ORIGIN`。
+- 托管档位设了 `COVEL_ALLOWED_HOSTS`：Host 检查只在 `self` 上运行，这个值不起作用。
+- `commercial` 设了 `COVEL_MEDIA_CLEANUP_ENABLED`：这个档位上清理接口始终关闭。
+
+`apps/server/tests/bootstrap/route-access.test.ts` 列出服务端的每一条 API 路由和它要的动作。新加的路由在写进这张表之前，测试不会通过。测试还用一份把所有动作都关上的宿主配置去请求每条路由，自己读环境变量做判断的路由会被发现；除了 `host-profile.ts`，服务端和核心包里的代码都不能读这几个部署变量。
+
 ## Outbound requests (SSRF guard)
 
 服务端替玩家向模型供应商发请求。SSRF 防护要保证这些请求不会被引到内网或本机上的服务。
@@ -215,9 +263,9 @@ Web 客户端只发送它的请求用得到的供应商的密钥：
 `demo` 和 `commercial` 档位强制两种令牌：
 
 - 每个会话一个 **owner token**。它在创建会话时生成，只以哈希形式存在 `SessionRecord.metadata` 里，只返回一次。所有会话级路由都要它。
-- 一个 **operator token**（`COVEL_DESKTOP_REST_TOKEN`）。它同时是万能钥匙，能通过任何 owner 检查。全局和管理类路由要它：创建和列出会话、写世界、AI 和模型路由、启用社区服务端代码。
+- 一个 **operator token**（`COVEL_DESKTOP_REST_TOKEN`）。它同时是万能钥匙，能通过任何 owner 检查。全局和管理类路由要它：创建、分叉和列出会话，写世界、AI 和模型路由、启用社区服务端代码。分叉会造出一个新会话，所以和创建会话问的是同一个问题：只有 owner token 不能分叉。
 
-托管档位缺少 operator token 或媒体密钥时，`validateSecurityPosture`（`apps/server/src/security-posture.ts`）会让启动失败；`commercial` 还要求明确列出 CORS 源。`self` 档位、桌面客户端和开发环境严格地什么都不做：令牌被忽略，单用户本地游玩不受影响。
+托管档位缺少 operator token 或媒体密钥时，服务端拒绝启动；`commercial` 还要求明确列出 CORS 源（见 [Host profile](#host-profile)）。`self` 档位、桌面客户端和开发环境严格地什么都不做：令牌被忽略，单用户本地游玩不受影响。
 
 社区服务端代码（`entry`、handler、hook、wire、运行时 JavaScript）的 import 由两阶段批准把守：先授予 `covel:plugin-server-code`，再授予具体操作。
 

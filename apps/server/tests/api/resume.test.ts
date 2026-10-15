@@ -14,7 +14,8 @@ import {
   type RpcApprovalGate,
 } from "@covel/approval";
 import type { BudgetOptions } from "@covel/context";
-import { type DataStore } from "@covel/store";
+import { type DataStore, type SuspensionRecord } from "@covel/store";
+import { readSuspensionWriteDigest } from "@covel/store/session";
 import { createMemoryStore } from "@covel/store/memory";
 import { __resetSweepClockForTests } from "../../src/routes/api/suspension-sweep.js";
 import {
@@ -129,7 +130,8 @@ async function createSuspension(
     resumeSchema: unknown;
     createdAt: string;
     executionContext: ExecutionContext;
-    takenUnder: { playerTurns: number; pluginVersion: string };
+    takenUnder: SuspensionRecord["pendingContinuation"]["takenUnder"];
+    pendingProposals: SuspensionRecord["pendingContinuation"]["pendingProposals"];
   }>,
 ) {
   const suspension = {
@@ -148,6 +150,7 @@ async function createSuspension(
       takenUnder: overrides?.takenUnder ?? {
         playerTurns: 0,
         pluginVersion: "0.0.0",
+        writes: [],
       },
       executionContext: {
         executionId: crypto.randomUUID(),
@@ -164,7 +167,7 @@ async function createSuspension(
         },
       ],
       toolCallsSoFar: [],
-      pendingProposals: [],
+      pendingProposals: overrides?.pendingProposals ?? [],
       ...(overrides?.executionContext
         ? { executionContext: overrides.executionContext }
         : {}),
@@ -1380,6 +1383,49 @@ describe("Resume Routes", () => {
       expect(retrieved).toBeNull();
     });
 
+    it("ends a suspended setup attempt as failed so the runtime can be retried or skipped (F-188)", async () => {
+      const executionContext = {
+        executionId: "execution-setup",
+        origin: "player" as const,
+        countPolicy: "complete-player-turn" as const,
+        logicalTurnId: "logical-setup",
+      };
+      await createSuspension(store, { executionContext });
+      await store.insertSetupAttempt({
+        sessionId: "sess-1",
+        runtimeId: "test-plugin",
+        pluginVersion: "0.0.0",
+        generation: 1,
+        executionId: "execution-setup",
+        state: "suspended",
+        startedAt: new Date().toISOString(),
+      });
+      await store.updateSession("sess-1", {
+        setupRuntimes: {
+          "test-plugin": {
+            state: "pending",
+            pluginVersion: "0.0.0",
+            generation: 1,
+            attempts: 0,
+          },
+        },
+      });
+      const app = createTestApp(makeDefaultDeps(store));
+
+      const res = await app.request("/api/sessions/sess-1/suspensions/susp-1", {
+        method: "DELETE",
+      });
+
+      expect(res.status).toBe(200);
+      const attempts = await store.listSetupAttempts("sess-1", {
+        runtimeId: "test-plugin",
+      });
+      expect(attempts.map((attempt) => attempt.state)).toEqual(["failed"]);
+      expect(
+        (await store.getSession("sess-1"))?.setupRuntimes["test-plugin"],
+      ).toMatchObject({ state: "pending", attempts: 1 });
+    });
+
     it("ends the turn when the abandoned suspension was its last pending one (F-015)", async () => {
       const logicalTurnId = "logical-abandoned";
       const executionContext = {
@@ -1429,7 +1475,7 @@ describe("Resume Routes", () => {
 
     it("voids a suspension taken under another plugin version and tells the player", async () => {
       await createSuspension(store, {
-        takenUnder: { playerTurns: 0, pluginVersion: "0.9.0" },
+        takenUnder: { playerTurns: 0, pluginVersion: "0.9.0", writes: [] },
       });
       const generate = vi.fn();
       const app = createTestApp(
@@ -1466,6 +1512,125 @@ describe("Resume Routes", () => {
       expect(status).toBe(409);
       expect(body.details?.reason).toBe("session-moved-on");
       expect(await store.getSuspension("susp-1")).toBeNull();
+    });
+
+    describe("when a record its buffered writes target changed (F-016)", () => {
+      const stageTarget = {
+        kind: "plugin-data" as const,
+        pluginId: "test-plugin",
+        namespace: "quest",
+        key: "stage",
+      };
+      const row = (key: string, value: unknown) => {
+        const now = new Date().toISOString();
+        return {
+          id: `sess-1:test-plugin:quest:${key}`,
+          sessionId: "sess-1",
+          pluginId: "test-plugin",
+          namespace: "quest",
+          key,
+          value,
+          createdAt: now,
+          updatedAt: now,
+        };
+      };
+      /** A suspension whose continuation would write `quest/stage`. */
+      async function suspensionWritingStage() {
+        await store.setPluginData(row("stage", { step: "start" }));
+        await createSuspension(store, {
+          takenUnder: {
+            playerTurns: 0,
+            pluginVersion: "0.0.0",
+            writes: [
+              {
+                target: stageTarget,
+                digest: await readSuspensionWriteDigest(
+                  store,
+                  "sess-1",
+                  stageTarget,
+                ),
+              },
+            ],
+          },
+          pendingProposals: [
+            {
+              id: "buffered-stage",
+              type: "plugin.data",
+              source: { pluginId: "test-plugin", runtimeId: "test-plugin" },
+              turnId: "turn-1",
+              sessionId: "sess-1",
+              payload: {
+                namespace: "quest",
+                key: "stage",
+                value: { step: "asked" },
+              },
+              timestamp: new Date().toISOString(),
+            },
+          ],
+        });
+      }
+      const stage = async () =>
+        (await store.getPluginData("sess-1", "test-plugin", "quest", "stage"))
+          ?.value;
+
+      it("voids it after a background job wrote the same key, keeping that write", async () => {
+        await suspensionWritingStage();
+        // A detached job of an earlier turn commits after the suspension.
+        await store.setPluginData(row("stage", { step: "background" }));
+        const generate = vi.fn();
+        const app = createTestApp(
+          makeDefaultDeps(store, { llmAdapter: { generate } as never }),
+        );
+
+        const { status, body } = await resumeOutdated(app);
+
+        expect(status).toBe(409);
+        expect(body.code).toBe("suspension_outdated");
+        expect(body.details?.reason).toBe("data-changed");
+        expect(generate).not.toHaveBeenCalled();
+        expect(await stage()).toEqual({ step: "background" });
+        expect(await store.getSuspension("susp-1")).toBeNull();
+      });
+
+      it("voids it when the key changes while the continuation runs, committing nothing", async () => {
+        await suspensionWritingStage();
+        const generate = vi.fn(async () => {
+          await store.setPluginData(row("stage", { step: "manual" }));
+          return {
+            content: '{"narrativeOutput": "Resume complete."}',
+            toolCalls: [],
+            finishReason: "stop",
+            usage: { inputTokens: 5, outputTokens: 5 },
+          };
+        });
+        const app = createTestApp(
+          makeDefaultDeps(store, { llmAdapter: { generate } as never }),
+        );
+
+        const { status, body } = await resumeOutdated(app);
+
+        expect(status).toBe(409);
+        expect(body.details?.reason).toBe("data-changed");
+        expect(generate).toHaveBeenCalled();
+        expect(await stage()).toEqual({ step: "manual" });
+        expect(await store.getSuspension("susp-1")).toBeNull();
+        expect(await store.listMessages("sess-1")).not.toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ content: "Resume complete." }),
+          ]),
+        );
+      });
+
+      it("resumes when only another key changed", async () => {
+        await suspensionWritingStage();
+        await store.setPluginData(row("log", ["met the archivist"]));
+        const app = createTestApp(makeDefaultDeps(store));
+
+        const { status } = await resumeOutdated(app);
+
+        expect(status).toBe(200);
+        expect(await stage()).toEqual({ step: "asked" });
+      });
     });
 
     it("returns 404 when suspension belongs to a different session", async () => {

@@ -27,8 +27,7 @@ it.each(["fixture-world", "physical-folder"])(
       await mkdir(dimensionsDir, { recursive: true });
       await writeFile(
         path.join(worldDir, "world.yaml"),
-        `schemaVersion: "1.0"
-id: fixture-world
+        `id: fixture-world
 name: Fixture world
 version: "0.1.0"
 summary: A world for file watcher tests.
@@ -202,7 +201,7 @@ it("keeps the complete world and emits no notification after a dimension source 
     await mkdir(path.join(dir, "data"), { recursive: true });
     await writeFile(
       path.join(dir, "world.yaml"),
-      'schemaVersion: "1.0"\nid: fixture\nname: Fixture\nsummary: Fixture\ndefaultLocale: en-US\n',
+      "id: fixture\nname: Fixture\nsummary: Fixture\ndefaultLocale: en-US\n",
     );
     const file = path.join(dir, "data/dimensions.yaml");
     await writeFile(

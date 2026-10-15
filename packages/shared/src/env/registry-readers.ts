@@ -121,15 +121,14 @@ export function providerApiKeyEnvName(providerId: string): string | null {
   return providerIdToApiKeyEnvName(providerId);
 }
 
-const DEPLOYMENT_TIERS = ["self", "demo", "commercial"] as const;
+export const DEPLOYMENT_TIERS = ["self", "demo", "commercial"] as const;
 export type DeploymentTier = (typeof DEPLOYMENT_TIERS)[number];
 
 /**
- * DEPLOYMENT_TIER gates owner-token enforcement (session-guard.ts) and the
- * media cleanup endpoint (media.ts) — a typo or case mismatch (e.g.
- * "Commercial") must not silently downgrade a hosted deployment to the open
- * "self" posture. Reject unknown values fail-safe to the most restrictive
- * tier rather than passing the raw string through.
+ * DEPLOYMENT_TIER chooses the server's deployment form (the server turns it
+ * into its host profile at start). Case and surrounding spaces do not count;
+ * any other value is an error, so a misspelled tier stops the start with a
+ * message instead of quietly picking a form the operator did not ask for.
  */
 function readDeploymentTier(source: EnvSource): DeploymentTier {
   const raw = readEnvString("DEPLOYMENT_TIER", undefined, source);
@@ -138,10 +137,9 @@ function readDeploymentTier(source: EnvSource): DeploymentTier {
   if ((DEPLOYMENT_TIERS as readonly string[]).includes(normalized)) {
     return normalized as DeploymentTier;
   }
-  console.warn(
-    `[env] Unknown DEPLOYMENT_TIER "${raw}" — falling back to "commercial" (most restrictive). Expected one of: ${DEPLOYMENT_TIERS.join(", ")}.`,
+  throw new Error(
+    `Unknown DEPLOYMENT_TIER "${raw}". Accepted values: ${DEPLOYMENT_TIERS.join(", ")}.`,
   );
-  return "commercial";
 }
 
 function readSqlitePath(source: EnvSource): string {
@@ -199,6 +197,7 @@ export function readRuntimeEnv(source: EnvSource = defaultSource()) {
     corsOrigins: readEnvCsv("CORS_ORIGIN", source),
     debugRoutes: isEnvTruthy("ENABLE_DEBUG_PAGE", source),
     installApiEnabled: isEnvTruthy("COVEL_INSTALL_API_ENABLED", source),
+    mediaCleanupEnabled: isEnvTruthy("COVEL_MEDIA_CLEANUP_ENABLED", source),
     rateLimitRpm: readEnvInt("RATE_LIMIT_RPM", 60, source),
     trustedProxyIps: readEnvString("TRUSTED_PROXY_IPS", undefined, source),
     covelHome: readEnvString("COVEL_HOME", undefined, source),

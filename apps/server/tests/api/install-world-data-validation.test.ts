@@ -17,15 +17,13 @@ import { installRoutes } from "../../src/routes/api/install.js";
 import { loadSingleWorld, seedWorlds } from "../../src/world-seed-loader.js";
 
 const id = "world-data-install-probe";
-const manifest = `schemaVersion: "1.0"
-id: ${id}
+const manifest = `id: ${id}
 name: Synthetic World
 summary: World data install validation fixture.
 defaultLocale: en-US
 worldData: data/world.data.yaml
 `;
-const descriptor = `schemaVersion: 1
-sources:
+const descriptor = `sources:
   probe:
     kind: json
     path: data/probe.json
@@ -157,7 +155,7 @@ describe("world ZIP activation worldData validation", () => {
     await mkdir(overrideDir, { recursive: true });
     await writeFile(
       path.join(overrideDir, "world.data.override.yaml"),
-      `schemaVersion: 1\nsources:\n  probe:\n    path: repaired.json\n`,
+      `sources:\n  probe:\n    path: repaired.json\n`,
     );
     await writeFile(
       path.join(overrideDir, "repaired.json"),

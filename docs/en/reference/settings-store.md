@@ -246,11 +246,11 @@ The debug page reads session data at three moments: the first selection of a ses
 - A late response from another session does not replace the current data.
 - An automatic refresh merges only the latest trace page, and keeps the older pages already loaded and the pagination cursor.
 
-**Transport of the JSON file backend.** The IPC transport of `createJsonFileBackend({ ipc, fetchImpl, getAuthHeaders })` is supplied explicitly by the host; the backend does not probe `globalThis.covelIpc` itself.
+**Transport of the JSON file backend.** `createJsonFileBackend({ ipc })` requires an IPC transport supplied explicitly by the host; the backend does not probe `globalThis.covelIpc` itself.
 
 - The Web app selects this adapter only when `getCovelIpc()` exists; a browser uses localStorage.
-- An explicit integration may choose the adapter's REST transport.
-- The behaviour of version conflicts, secret isolation, and load failures is unchanged.
+- This adapter reads and writes settings and secrets only through IPC; it has no REST transport.
+- Settings writes carry an expected revision, secrets use a separate channel, and read failures propagate to the caller.
 
 ## Current provider configuration
 
@@ -264,7 +264,6 @@ Which key belongs to what:
 - Each connection uses `keys.<profile.id>`.
 - Neither model configuration nor the flattened request configuration contains an API key.
 - A connection does not borrow the key of another connection or of the same provider family.
-- The marker for a server-managed secret is never sent as an API key.
 - Server presets continue to use the key of the provider they belong to.
 - The flattened `customPresets` structure in a request is still part of the current server routing contract.
 

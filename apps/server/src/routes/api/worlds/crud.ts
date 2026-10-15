@@ -13,12 +13,12 @@ import type { WorldRecord } from "@covel/store";
 import { errorBody, readJsonBody } from "../../../api-error.js";
 import { deleteWorldWithLifecycle } from "./delete-route.js";
 import { withWritableWorld } from "./mutation-guard.js";
-import { checkWorldWriteAccess } from "./world-write-guard.js";
 import {
   type WorldEnv,
   editedWorldMetadata,
   resolveWorldMetadata,
 } from "./shared.js";
+import { requireAccess } from "../../../host-profile.js";
 
 export const worldCrudRoutes = new Hono<WorldEnv>();
 
@@ -44,7 +44,7 @@ worldCrudRoutes.get("/:id", async (c) => {
 
 // POST /worlds
 worldCrudRoutes.post("/", async (c) => {
-  const denied = checkWorldWriteAccess(c);
+  const denied = requireAccess(c, "world.write");
   if (denied) return denied;
   const store = c.get("store");
   const parsed = await readJsonBody<Record<string, unknown>>(c);
@@ -93,7 +93,7 @@ worldCrudRoutes.post("/", async (c) => {
 
 // PATCH /worlds/:id — partial update (overlay lore, tags, etc.)
 worldCrudRoutes.patch("/:id", async (c) => {
-  const denied = checkWorldWriteAccess(c);
+  const denied = requireAccess(c, "world.write");
   if (denied) return denied;
   const store = c.get("store");
   const id = c.req.param("id");

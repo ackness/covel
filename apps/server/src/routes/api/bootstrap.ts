@@ -100,6 +100,7 @@ import {
 import { installTraceRetentionSource } from "../../lib/trace-retention-source.js";
 import { createServerSettings } from "../../lib/server-settings.js";
 import { createServerSettingsRoutes } from "./server-settings.js";
+import { deriveHostProfile, type HostProfile } from "../../host-profile.js";
 import {
   createRuntimeJobWorker,
   parseActivatedRuntimeJobPayload,
@@ -188,6 +189,13 @@ export interface ApiBootstrapConfig {
    * than re-deriving it from environment variables.
    */
   readonly storeBackend: StoreBackend;
+  /**
+   * The deployment form the host resolved at start (`app.ts`). Every route
+   * asks it through `hostProfileOf(c)`. Optional so a test can assemble the
+   * API without one: requests then get the profile the environment and
+   * `storeBackend` give at the time of the request.
+   */
+  readonly hostProfile?: HostProfile;
   /**
    * Optional embedding-lock helper. When provided, route handlers that
    * begin a turn (start_session, send_message, …) call it to lazily
@@ -802,6 +810,7 @@ async function assembleApi(
   app.onError(makeErrorHandler("[api] Route error", isDev));
 
   app.use("*", async (c, next) => {
+    if (config.hostProfile) c.set("hostProfile", config.hostProfile);
     c.set("store", store);
     c.set("storeBackend", config.storeBackend);
     c.set("eventBus", eventBus);
@@ -926,8 +935,14 @@ async function assembleApi(
   app.route("/api/media", mediaRoutes); // SPEC §5.1 (g): signed-URL access to MediaStore
 
   // The settings the server acts on. Loaded before the first sweep or commit
-  // reads one, so a stored choice is in force from the start.
-  const serverSettings = createServerSettings(store);
+  // reads one, so a stored choice is in force from the start. Whether a
+  // player's stored values count is the host profile's decision.
+  const serverSettings = createServerSettings(store, {
+    playerWritable: (
+      config.hostProfile ??
+      deriveHostProfile(runtimeEnv, { storeBackend: config.storeBackend })
+    ).retention.playerServerSettings,
+  });
   await serverSettings.load();
   installTraceRetentionSource(serverSettings);
   app.route(

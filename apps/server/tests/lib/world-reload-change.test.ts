@@ -15,7 +15,7 @@ async function loadWithLore(lore: string, summary = "A port.") {
   await mkdir(dir, { recursive: true });
   await writeFile(
     path.join(dir, "world.yaml"),
-    `schemaVersion: "1.0"\nid: ash-harbor\nname: Ash Harbor\nsummary: ${summary}\ndefaultLocale: en-US\n`,
+    `id: ash-harbor\nname: Ash Harbor\nsummary: ${summary}\ndefaultLocale: en-US\n`,
   );
   await writeFile(path.join(dir, "WORLD.md"), lore);
   return (await loadSingleWorld(dir))!;

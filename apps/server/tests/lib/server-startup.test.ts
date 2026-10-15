@@ -54,6 +54,53 @@ afterEach(async () => {
   await rm(home, { recursive: true, force: true });
 }, 60_000);
 
+describe("host profile at start", () => {
+  it("refuses to start with a misspelled DEPLOYMENT_TIER, before any store opens", async () => {
+    vi.stubEnv("DEPLOYMENT_TIER", "slef");
+    startupImport = import("../../src/app.js");
+    await expect(startupImport).rejects.toThrow(
+      'Unknown DEPLOYMENT_TIER "slef". Accepted values: self, demo, commercial.',
+    );
+    expect(fakes.store).not.toHaveBeenCalled();
+    expect(fakes.bootstrap).not.toHaveBeenCalled();
+  }, 60_000);
+
+  it("refuses to start a hosted tier with a setting it would ignore", async () => {
+    vi.stubEnv("DEPLOYMENT_TIER", "demo");
+    vi.stubEnv("COVEL_MEDIA_TOKEN_SECRET", "a-real-secret");
+    vi.stubEnv("COVEL_DESKTOP_REST_TOKEN", "operator-secret");
+    vi.stubEnv("COVEL_ALLOWED_HOSTS", "game.example.com");
+    startupImport = import("../../src/app.js");
+    await expect(startupImport).rejects.toThrow(
+      /\[host-profile\] Refusing to start with DEPLOYMENT_TIER=demo:[\s\S]*COVEL_ALLOWED_HOSTS/,
+    );
+    expect(fakes.store).not.toHaveBeenCalled();
+  }, 60_000);
+
+  it("passes the start's profile to the API and the provider layer", async () => {
+    const stop = new Error("Stop after bootstrap received the profile");
+    fakes.store.mockResolvedValue({ close: async () => {} });
+    fakes.media.mockResolvedValue({ close: async () => {} });
+    fakes.pool.mockImplementation(() => ({ end: async () => {} }));
+    fakes.bootstrap.mockImplementation(async () => {
+      throw stop;
+    });
+    startupImport = import("../../src/app.js");
+    await expect(startupImport).rejects.toBe(stop);
+    expect(fakes.bootstrap).toHaveBeenCalledWith(
+      expect.objectContaining({
+        hostProfile: expect.objectContaining({
+          tier: "self",
+          form: "personal",
+        }),
+      }),
+    );
+    const { providerHostPolicy, PERSONAL_PROVIDER_HOST_POLICY } =
+      await import("@covel/ai-provider");
+    expect(providerHostPolicy()).toEqual(PERSONAL_PROVIDER_HOST_POLICY);
+  }, 60_000);
+});
+
 describe("production composition root startup failure", () => {
   it("cleans staging and restores pending world deletion before plugin bootstrap and update application", async () => {
     const worlds = join(home, "user-worlds");

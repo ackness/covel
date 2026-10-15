@@ -943,7 +943,7 @@ describe("resumeSuspendedRuntime", () => {
         required: ["name"],
       },
       pendingContinuation: {
-        takenUnder: { playerTurns: 0, pluginVersion: "1.0.0" },
+        takenUnder: { playerTurns: 0, pluginVersion: "1.0.0", writes: [] },
         executionContext: {
           executionId: crypto.randomUUID(),
           origin: "player",
@@ -1181,7 +1181,7 @@ describe("resumeSuspendedRuntime", () => {
     // The transcript of a runtime that ran after this turn's story: the
     // player's message and the cue after the story are both of this turn.
     const continuation = (currentTurnUserMessages?: number) => ({
-      takenUnder: { playerTurns: 0, pluginVersion: "1.0.0" },
+      takenUnder: { playerTurns: 0, pluginVersion: "1.0.0", writes: [] },
       executionContext: {
         executionId: crypto.randomUUID(),
         origin: "player" as const,
@@ -1544,7 +1544,7 @@ describe("resumeSuspendedRuntime", () => {
       reason: "Function suspend",
       resumeSchema: {},
       pendingContinuation: {
-        takenUnder: { playerTurns: 0, pluginVersion: "1.0.0" },
+        takenUnder: { playerTurns: 0, pluginVersion: "1.0.0", writes: [] },
         messages: [{ role: "system", content: "system prompt" }],
         toolCallsSoFar: [],
         pendingProposals: [],

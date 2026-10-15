@@ -294,7 +294,6 @@ export async function conventionalDescriptor(
   const sources = await presentConventionalSources(worldRoot, known);
   if (sources.length === 0) return undefined;
   return {
-    schemaVersion: 1,
     sources: Object.fromEntries(
       sources.map((source) => [source.id, source.entry]),
     ),

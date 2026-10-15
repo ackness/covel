@@ -531,10 +531,10 @@ Gemini 原生的思考强度、`providerOptions.google.thinkingConfig`、`cached
 
 ### Suspend / Resume 事件
 
-| 事件类型         | 方向 | 描述                                                                                                                          | 负载                                                        |
-| ---------------- | ---- | ----------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
-| `turn.suspended` | S→C  | runtime 创建 suspension artifact；`finalizeExecution` 将记录与同一 execution 的写入提交成功后才发出。回滚不保留记录也不发事件 | `{ sessionId, turnId, suspensionId, reason, resumeSchema }` |
-| `turn.resumed`   | S→C  | suspension 资源的 `resume` 动作成功后由路由发出                                                                               | `{ sessionId, turnId, suspensionId }`                       |
+| 事件类型         | 方向 | 描述                                                                                                                                                                                                     | 负载                                                                                          |
+| ---------------- | ---- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| `turn.suspended` | S→C  | runtime 创建 suspension artifact；`finalizeExecution` 将记录与同一 execution 的写入提交成功后才发出。回滚不保留记录也不发事件。同一个 runtime 的旧挂起项在这次提交里作废，不另发事件，客户端收到后去掉它 | `{ sessionId, turnId, suspensionId, pluginId, runtimeId, suspendedAt, reason, resumeSchema }` |
+| `turn.resumed`   | S→C  | suspension 资源的 `resume` 动作成功后由路由发出                                                                                                                                                          | `{ sessionId, turnId, suspensionId }`                                                         |
 
 ### Snapshot / Fork 事件
 

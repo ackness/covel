@@ -287,7 +287,11 @@ describe("agent tool deadline", () => {
                 resumeSchema: {},
                 createdAt: new Date().toISOString(),
                 pendingContinuation: {
-                  takenUnder: { playerTurns: 0, pluginVersion: "1.0.0" },
+                  takenUnder: {
+                    playerTurns: 0,
+                    pluginVersion: "1.0.0",
+                    writes: [],
+                  },
                   executionContext: opts.executionContext,
                   messages: [],
                   toolCallsSoFar: [],

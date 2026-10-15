@@ -186,6 +186,7 @@ PostgreSQL 一列的细节：
 - 没有保存哈希的历史会话一律拒绝。
 - `GET /api/sessions` 只对带运维 token 的调用方返回内容，其他人拿到空列表。
 - `POST /api/sessions` 创建会话需要运维 token，缺失时返回 `401 { code: "operator_token_required" }`。
+- `POST /api/sessions/:id/fork` 也会创建会话，所以问的是同一个问题：只带 owner token 不能分叉，要运维 token，缺失时同样返回 `401 { code: "operator_token_required" }`。
 
 > [!NOTE]
 > 创建会话要运维 token，这是“只有一个运维方”的门禁。完整的用户身份、租户隔离和配额还没有实现。
@@ -212,7 +213,7 @@ PostgreSQL 一列的细节：
 
 - 可以通过任何会话的 owner 检查。管理工具和 e2e harness 用它。
 - 在托管层级，它还是下面这些操作的凭证：
-  - 创建会话
+  - 创建会话、分叉会话
   - 世界写入、维度导入
   - AI 世界生成
   - 模型探测和刷新
@@ -221,7 +222,7 @@ PostgreSQL 一列的细节：
 
 community 插件的 ESM 代码会在服务器进程里注册全局能力，所以托管层级激活它时同时要求 owner token 和运维 token。这是目前“只有一个运维方”的信任模型，不提供多租户的代码沙箱。
 
-`DEPLOYMENT_TIER=demo|commercial` 启动时如果没有配置这个 token，`validateSecurityPosture` 会直接拒绝启动。
+`DEPLOYMENT_TIER=demo|commercial` 启动时如果没有配置这个 token，服务端会直接拒绝启动。这些规则都来自启动时定下的宿主配置，每条路由要什么见 [安全边界](../internals/security.md#host-profile)。
 
 纯 Web 客户端可以在 **设置 → 运维访问** 里输入或清除这个 token：
 
@@ -935,6 +936,8 @@ setup runtime 反复失败、用完重试预算（`maxTriggerCount`）后进入 
 - `blocked` 的 runtime 不会被 `start_session` 重新执行，要先用下面的端点解封。
 - Web 的“重试”按钮先对每个 `blocked` 的 runtime 调用 `retry`，再发 `start_session`。
 
+setup runtime 挂起等玩家回答时，这次尝试不占重试次数。挂起项被放弃、过期或作废时，这次尝试记为失败，runtime 回到 `pending`（用完次数时进入 `blocked`），可以照常重试或跳过。
+
 这两个端点使用和其他会话端点相同的 owner token 鉴权。
 
 | 方法 | 路径                                       | 描述                                                             |
@@ -1270,6 +1273,7 @@ setup runtime 反复失败、用完重试预算（`maxTriggerCount`）后进入 
 
 - 新会话（child）拷贝快照里的状态，以及截至 cursor 的消息。
 - 响应里一次性返回 child 的 `ownerToken`。
+- 分叉和创建会话走同一个授权检查：托管层级要运维 token；`self` 和生产 MemoryStore 上，能访问这个会话的人就能分叉。
 
 自动快照被刷新时：
 
@@ -4182,17 +4186,22 @@ runtime 可以中途停下来等玩家提供数据，这叫挂起。本节的端
 
 ##### 过时的挂起项
 
-挂起时会记下两样东西：这时历史里有几个玩家回合，以及提出它的插件是哪个版本。恢复前，服务端先检查挂起项是否已经过时。过时的挂起项不会再运行，因为它保存的写入可能盖掉更新的状态。
+挂起时会记下三样东西：这时历史里有几个玩家回合，提出它的插件是哪个版本，以及它保存的写入要改的每条记录当时的内容。恢复前，服务端先检查挂起项是否已经过时。过时的挂起项不会再运行，因为它保存的写入可能盖掉更新的状态。
 
-| `details.reason`   | 什么时候                                                       |
-| ------------------ | -------------------------------------------------------------- |
-| `session-moved-on` | 挂起之后历史里的玩家回合数变了（玩家又玩了一回合，或回退过）   |
-| `plugin-updated`   | 提出它的插件换了版本                                           |
-| `superseded`       | 同一个 runtime 之后又挂起过；一个 runtime 只有最新的那条能恢复 |
+| `details.reason`   | 什么时候                                                                     |
+| ------------------ | ---------------------------------------------------------------------------- |
+| `session-moved-on` | 挂起之后历史里的玩家回合数变了（玩家又玩了一回合，或回退过）                 |
+| `plugin-updated`   | 提出它的插件换了版本                                                         |
+| `data-changed`     | 它要改的某条记录在挂起之后被改过，例如后台作业或手动运行写了同一个插件数据键 |
 
 服务端按[放弃](#delete-apisessionsidsuspensionssuspensionid)的方式作废它，然后返回 `409`，`code` 是 `suspension_outdated`，`error` 是给玩家看的说明。网页端收到后把它从等待列表里移除，并提示玩家这个请求已经过时。
 
-后台作业或手动运行在挂起之后写入的内容不算会话前进，不会让挂起项过时。
+`data-changed` 的规则：
+
+- 比较的记录是：插件数据的一个键、一个状态字段、一个角色、角色 schema、一条 lorebook 条目。只比较内容，别的键被写过不影响恢复。维度变更不在这里比较，它们提交时自己核对版本。
+- runtime 恢复运行期间，记录也可能被改。提交事务开始时会再比较一次；有变化就什么都不写，同样作废挂起项并返回这个 `409`。
+
+一个 runtime 同时只有一条待恢复的挂起项。它再次挂起时，旧的那条在保存新挂起项的同一个事务里按放弃的方式作废，不另发事件。网页端收到新的 `turn.suspended` 时，去掉同一个 runtime 的旧挂起项。
 
 ##### 挂起与回合计数
 

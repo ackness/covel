@@ -298,22 +298,29 @@ describe("single runtime recovery scope", () => {
     "limits recursive execution only for recovery (scoped=%s)",
     async (scoped) => {
       const { result, calls } = await run(
-        [manifest("target"), manifest("leaf")],
-        "target",
+        [
+          manifest("probe/target", { pluginId: "probe" }),
+          manifest("probe/leaf", { pluginId: "probe" }),
+        ],
+        "probe/target",
         {
-          target: async (ctx) => {
-            await ctx.recursiveCall({ manualTrigger: { runtimeId: "leaf" } });
+          "probe/target": async (ctx) => {
+            await ctx.recursiveCall({
+              manualTrigger: { runtimeId: "probe/leaf" },
+            });
             return { ok: true };
           },
-          leaf: async () => ({ nested: true }),
+          "probe/leaf": async () => ({ nested: true }),
         },
         [],
         scoped,
-        { target: { events: [{ topic: "changed", data: {} }] } },
+        { "probe/target": { events: [{ topic: "changed", data: {} }] } },
       );
-      expect(calls).toEqual(scoped ? ["target"] : ["target", "leaf"]);
+      expect(calls).toEqual(
+        scoped ? ["probe/target"] : ["probe/target", "probe/leaf"],
+      );
       const target = result.runtimeResults.find(
-        (row) => row.runtimeId === "target",
+        (row) => row.runtimeId === "probe/target",
       );
       expect(target?.status).toBe(scoped ? "failed" : "success");
       if (scoped) expect(target?.error).toContain("scoped recovery");
