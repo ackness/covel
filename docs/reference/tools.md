@@ -339,6 +339,7 @@ plugin 工具封装插件自己的业务。它的 schema、文案和数据结构
 
 角色创建用专用的 `create-character-form` 工具。它只收集必填的姓名，以及世界声明的字符串或枚举属性。
 
+- 建角时，schema 声明的字符串姓名属性（`name`、`characterName`、`playerName`、`姓名`）使用表单提交的角色名，覆盖 schema 的默认姓名。
 - 模型不能为它指定校验器：参数里没有 `validation`，传了也会被丢弃。工具自己挂上 `char-creator` 注册的 `player-name` 校验器，拒绝和世界里已有角色的名字或别名相同的角色名（见 [World Model](./world-model.md)）。其余字段约束由工具和提交接口校验。
 - 一张已被接受的角色表单不会让会话卡在 setup：
   - 世界属性的默认值不符合它自己的类型时，建角时不写入这个默认值。
@@ -1102,6 +1103,8 @@ Attributes:
 | description  | I18nText       |      | 属性说明（字符串或 locale → string 记录）                             |
 
 **输出**: `{success, attributeCount, dimensionCount, worldSchema, preGameDone:true}`
+
+生成的 `defaultValue` 是每个新玩家和 NPC 的起始值，不是某个设定人物的示例。姓名、身份、背景等字段归入 `bio`，使用中性或空值。工具会把生成的 `bio` 字符串默认值清为空字符串，数组清为空数组，对象和 map 清为空对象，枚举则移除默认值；嵌套的个人信息采用同样的规则。数值和布尔默认值保留。世界作者提供的 schema 由 guard 原样采用，不经过这一步处理。
 
 维度定义用谁的：
 
