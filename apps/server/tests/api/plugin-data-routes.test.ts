@@ -356,94 +356,121 @@ describe("Plugin Data REST API routes", () => {
   });
 });
 
-describe("Plugin Data write guards", () => {
-  let store: DataStore;
-  let registry: PluginRegistry;
-  let app: Hono;
-  const sessionId = "sess-guards";
-  const pluginId = "test-plugin";
-  const corePluginId = "world-init";
+describe.each(["plugin", "core-plugin"] as const)(
+  "Plugin Data write guards (%s)",
+  (pluginType) => {
+    let store: DataStore;
+    let registry: PluginRegistry;
+    let app: Hono;
+    const sessionId = "sess-guards";
+    const pluginId = "test-plugin";
 
-  beforeEach(async () => {
-    store = createMemoryStore();
-    registry = createPluginRegistry();
-    registerPlugin(registry, pluginId);
-    registerPlugin(registry, corePluginId, "core-plugin");
-    registry.syncSessionActivations(sessionId, [pluginId, corePluginId]);
-    app = buildApp(store, registry);
+    beforeEach(async () => {
+      store = createMemoryStore();
+      registry = createPluginRegistry();
+      registerPlugin(registry, pluginId, pluginType);
+      registry.syncSessionActivations(sessionId, [pluginId]);
+      app = buildApp(store, registry);
 
-    await store.createSession({
-      phase: "playing",
-      setupRuntimes: {},
-      metadata: {
-        approvalScopeNonce: globalThis.crypto.randomUUID(),
-        sessionIncarnationNonce: globalThis.crypto.randomUUID(),
-      },
-      id: sessionId,
-      worldId: "cloudmere",
-      status: "active",
-      completedPlayerTurns: 1,
+      await store.createSession({
+        phase: "playing",
+        setupRuntimes: {},
+        metadata: {
+          approvalScopeNonce: globalThis.crypto.randomUUID(),
+          sessionIncarnationNonce: globalThis.crypto.randomUUID(),
+        },
+        id: sessionId,
+        worldId: "cloudmere",
+        status: "active",
+        completedPlayerTurns: 1,
 
-      locale: "zh-CN",
-      activePlugins: [pluginId, corePluginId],
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+        locale: "zh-CN",
+        activePlugins: [pluginId],
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
     });
-  });
 
-  const put = (plugin: string, namespace: string, key: string) =>
-    app.request(
-      `/api/sessions/${sessionId}/plugin-data/${plugin}/${namespace}/${key}`,
-      {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ value: { forged: true } }),
+    const put = (plugin: string, namespace: string, key: string) =>
+      app.request(
+        `/api/sessions/${sessionId}/plugin-data/${plugin}/${namespace}/${key}`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ value: { mode: "dark" } }),
+        },
+      );
+
+    it.each(["_jobs", "_runtime_jobs", "_logs", "_memory", "_future"])(
+      "rejects writes to reserved namespace %s",
+      async (namespace) => {
+        // `_jobs` drives background-job scheduling: a player-issued write there
+        // could fabricate or rewrite a job record.
+        const res = await put(pluginId, namespace, "job-1");
+        expect(res.status).toBe(403);
+        expect((await res.json()).error).toMatch(/reserved/i);
+        expect(
+          await store.getPluginData(sessionId, pluginId, namespace, "job-1"),
+        ).toBeFalsy();
       },
     );
 
-  it.each(["_jobs", "_runtime_jobs", "_logs", "_memory", "_future"])(
-    "rejects writes to reserved namespace %s",
-    async (namespace) => {
-      // `_jobs` drives background-job scheduling: a player-issued write there
-      // could fabricate or rewrite a job record.
-      const res = await put(pluginId, namespace, "job-1");
+    it("rejects deletes from framework-reserved `_` namespaces", async () => {
+      const res = await app.request(
+        `/api/sessions/${sessionId}/plugin-data/${pluginId}/_logs/entry-1`,
+        { method: "DELETE" },
+      );
       expect(res.status).toBe(403);
-      expect((await res.json()).error).toMatch(/reserved/i);
+    });
+
+    it("allows writes to an active plugin's namespace", async () => {
+      const res = await put(pluginId, "entries", "k1");
+      expect(res.status).toBe(200);
       expect(
-        await store.getPluginData(sessionId, pluginId, namespace, "job-1"),
-      ).toBeFalsy();
-    },
-  );
+        await store.getPluginData(sessionId, pluginId, "entries", "k1"),
+      ).toMatchObject({ value: { mode: "dark" } });
+    });
 
-  it("rejects deletes from framework-reserved `_` namespaces", async () => {
-    const res = await app.request(
-      `/api/sessions/${sessionId}/plugin-data/${pluginId}/_logs/entry-1`,
-      { method: "DELETE" },
-    );
-    expect(res.status).toBe(403);
-  });
-
-  it("rejects writes to a core plugin's namespace", async () => {
-    // A forged world-init schema entry would redefine the world's character
-    // attributes for every later turn.
-    const res = await put(corePluginId, "schema", "character-attributes");
-    expect(res.status).toBe(403);
-    expect((await res.json()).error).toMatch(/core plugin/i);
-    expect(
-      await store.getPluginData(
+    const seedEntry = () =>
+      store.setPluginData({
+        id: "pd-guard",
         sessionId,
-        corePluginId,
-        "schema",
-        "character-attributes",
-      ),
-    ).toBeFalsy();
-  });
+        pluginId,
+        namespace: "entries",
+        key: "k1",
+        value: { original: true },
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
 
-  it("still allows ordinary plugin writes", async () => {
-    const res = await put(pluginId, "entries", "k1");
-    expect(res.status).toBe(200);
-    expect(
-      await store.getPluginData(sessionId, pluginId, "entries", "k1"),
-    ).toBeDefined();
-  });
-});
+    it("allows deletes from an active plugin's namespace", async () => {
+      await seedEntry();
+      const res = await app.request(
+        `/api/sessions/${sessionId}/plugin-data/${pluginId}/entries/k1`,
+        { method: "DELETE" },
+      );
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ ok: true });
+      expect(
+        await store.getPluginData(sessionId, pluginId, "entries", "k1"),
+      ).toBeFalsy();
+    });
+
+    it("rejects writes and deletes after the plugin is disabled", async () => {
+      await seedEntry();
+      await store.updateSession(sessionId, { activePlugins: [] });
+      const putRes = await put(pluginId, "entries", "k1");
+      const deleteRes = await app.request(
+        `/api/sessions/${sessionId}/plugin-data/${pluginId}/entries/k1`,
+        { method: "DELETE" },
+      );
+      for (const res of [putRes, deleteRes]) {
+        expect(res.status).toBe(403);
+        expect((await res.json()).error).toMatch(/not active/i);
+      }
+      expect(
+        await store.getPluginData(sessionId, pluginId, "entries", "k1"),
+      ).toMatchObject({ value: { original: true } });
+    });
+  },
+);

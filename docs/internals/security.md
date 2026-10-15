@@ -342,6 +342,8 @@ default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-sr
 - 如果一个操作的 SSE 响应已经打开，进入被拒时会通过 `error.occurred` 报告，机器可读的错误码与 JSON 守卫相同。
 - 脱离主流程的后台运行时作业保留它们各自的准入锁和提交锁。
 
+**插件数据管理。** 插件的默认启用状态不是数据所有权边界。管理工具和脚本遵守统一的[插件数据写入规则](../reference/api.md#插件数据plugin-data)，`kind: core` 不提供额外保护。
+
 **读取执行状态。** `GET /api/sessions/:id/execution` 把通过 owner 授权的那个会话代次，绑定到已有的响应侧读取屏障上。
 
 - 如果查询进行中，这个会话消失了，或者用同一个公开 ID 重建了，响应会被换成 `409 session_incarnation_changed`。新会话的重试输入不会返回给旧请求。

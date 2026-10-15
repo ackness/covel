@@ -61,20 +61,6 @@ function validatePluginAccess(
   return null;
 }
 
-/** Core plugin state is changed through its declared tools and proposal pipeline. */
-function corePluginWriteError(
-  registry: PluginRegistry,
-  pluginId: string,
-): string | null {
-  const entry = registry.get(pluginId);
-  const pluginType =
-    entry?.packageManifest?.manifest.pluginType ?? entry?.summary?.pluginType;
-  if (pluginType === "core-plugin") {
-    return `Plugin "${pluginId}" is a core plugin; its data is framework-owned and cannot be written through this API`;
-  }
-  return null;
-}
-
 // GET /session/:id/plugin-data — every readable row of the session's active plugins
 // in one response (the client's full restore). Same row filter and value
 // projection as the per-plugin and per-namespace reads; plugins that are
@@ -197,8 +183,6 @@ pluginDataRoutes.put(
 
     const reservedErr = reservedPluginDataNamespaceError(namespace);
     if (reservedErr) return c.json(errorBody(reservedErr), 403);
-    const coreErr = corePluginWriteError(registry, pluginId);
-    if (coreErr) return c.json(errorBody(coreErr), 403);
 
     const jsonBody = await readJsonBody(c);
     if (jsonBody instanceof Response) return jsonBody;
@@ -272,8 +256,6 @@ pluginDataRoutes.delete(
 
     const reservedErr = reservedPluginDataNamespaceError(namespace);
     if (reservedErr) return c.json(errorBody(reservedErr), 403);
-    const coreErr = corePluginWriteError(registry, pluginId);
-    if (coreErr) return c.json(errorBody(coreErr), 403);
 
     return withLockedSessionMutation({
       c,
