@@ -50,7 +50,7 @@ const CUSTOM_WORLD = {
   metadata: { source: "server-store" },
 } as WorldRecord;
 
-function renderScreen(onWorldDeleted = vi.fn()) {
+function renderScreen(onWorldDeleted = vi.fn(), onRefreshWorlds = vi.fn()) {
   render(
     <>
       {/* The app shell mounts the host that shows the delete prompt. */}
@@ -63,6 +63,7 @@ function renderScreen(onWorldDeleted = vi.fn()) {
         onSettingsOpenChange={() => {}}
         onSelectWorld={() => {}}
         onWorldDeleted={onWorldDeleted}
+        onRefreshWorlds={onRefreshWorlds}
       />
     </>,
   );
@@ -161,5 +162,17 @@ describe("world select — deleting player-created worlds", () => {
         2,
       ),
     );
+  });
+
+  it("fetches the list again on focus and on the way back from details", async () => {
+    const refresh = vi.fn();
+    renderScreen(vi.fn(), refresh);
+    act(() => {
+      window.dispatchEvent(new Event("focus"));
+    });
+    expect(refresh).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getAllByRole("button", { name: "查看详情" })[1]!);
+    act(() => emitWorldListRequest());
+    await waitFor(() => expect(refresh).toHaveBeenCalledTimes(2));
   });
 });

@@ -50,6 +50,11 @@ interface WorldSelectScreenProps {
   onResumeSession?: (session: SessionRecord) => void;
   onOpenOnboarding?: () => void;
   onWorldUpdated?: (world: WorldSummary) => void;
+  /**
+   * Fetch the list again: on the way back to it and when the window regains
+   * the focus, so a world package edited meanwhile shows its update.
+   */
+  onRefreshWorlds?: () => void;
   onWorldCreated?: (world: WorldSummary) => void;
   onWorldDeleted?: (worldId: string) => void;
 }
@@ -94,6 +99,7 @@ export function WorldSelectScreen({
   onResumeSession,
   onOpenOnboarding,
   onWorldUpdated,
+  onRefreshWorlds,
   onWorldCreated,
   onWorldDeleted,
 }: WorldSelectScreenProps) {
@@ -174,14 +180,29 @@ export function WorldSelectScreen({
   function handleBack() {
     setMode("list");
     setSelectedWorldId(null);
+    onRefreshWorlds?.();
   }
+
+  const refreshOnFocus = useEffectEvent(() => onRefreshWorlds?.());
+  useEffect(() => {
+    const onFocus = () => refreshOnFocus();
+    const onVisible = () => {
+      if (document.visibilityState === "visible") refreshOnFocus();
+    };
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, []);
 
   // The topbar's World item: the detail view returns to the list (the
   // editor handles it itself, asking first when it has changes).
   const showList = useEffectEvent(() => {
     if (mode === "detail") handleBack();
   });
-  useEffect(() => onWorldListRequest(showList), []);
+  useEffect(() => onWorldListRequest(() => showList()), []);
 
   function handleEditFromDetail() {
     setMode("edit");

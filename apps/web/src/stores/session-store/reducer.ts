@@ -296,6 +296,12 @@ export function reducer(
           : [...state.worlds, added],
       };
     }
+    case "SET_WORLDS":
+      return {
+        ...state,
+        worlds: action.worlds,
+        world: sessionWorld(state.world, state.session, action.worlds),
+      };
     case "REMOVE_WORLD":
       return {
         ...state,

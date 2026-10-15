@@ -81,6 +81,7 @@ function SessionScreen() {
     deleteSession,
     backToWorldSelect,
     updateWorldLocal,
+    refreshWorlds,
     addWorldLocal,
     removeWorldLocal,
   } = useSession();
@@ -364,6 +365,7 @@ function SessionScreen() {
         onSelectWorld={selectWorld}
         onResumeSession={(session) => void resumeSession(session)}
         onWorldUpdated={updateWorldLocal}
+        onRefreshWorlds={() => void refreshWorlds()}
         onWorldCreated={addWorldLocal}
         onWorldDeleted={removeWorldLocal}
       />

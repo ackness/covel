@@ -309,6 +309,7 @@ export type SessionAction =
   | { type: "SET_WORLD"; world: api.WorldSummary }
   | { type: "ADD_WORLD"; world: api.WorldSummary }
   | { type: "UPDATE_WORLD"; world: api.WorldSummary }
+  | { type: "SET_WORLDS"; worlds: api.WorldSummary[] }
   | { type: "REMOVE_WORLD"; worldId: string }
   | { type: "SET_SESSION"; session: api.SessionRecord }
   | { type: "SET_WORLD_SESSIONS"; sessions: api.SessionRecord[] }

@@ -134,7 +134,10 @@ export function WorldEditorLoader({
   const loaded = record.world !== null;
   const exit = useEffectEvent(() => (onExit ?? onCancel)());
   // While the record loads there is nothing to lose.
-  useEffect(() => (loaded ? undefined : onWorldListRequest(exit)), [loaded]);
+  useEffect(
+    () => (loaded ? undefined : onWorldListRequest(() => exit())),
+    [loaded],
+  );
   if (!record.world) {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-3 text-sm text-muted-foreground">

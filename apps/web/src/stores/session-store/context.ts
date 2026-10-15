@@ -51,6 +51,8 @@ export interface SessionActions {
   resetSession: () => void;
   backToWorldSelect: () => void;
   updateWorldLocal: (world: api.WorldSummary) => void;
+  /** Fetch the world list again. */
+  refreshWorlds: () => Promise<void>;
   addWorldLocal: (world: api.WorldSummary) => void;
   removeWorldLocal: (worldId: string) => void;
   loadSessionPlugins: () => Promise<void>;
