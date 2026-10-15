@@ -172,7 +172,9 @@ export function buildPluginSummary(
     conflicts: facts.conflicts,
     extensions: facts.extensions,
     eventTopics: facts.eventTopics,
-    tags: uniqueSorted(entry.summary.tags ?? []),
+    // Kept in the loader's order: the prep screen groups by the first tag,
+    // and a tag the author wrote comes before the derived ones.
+    tags: [...new Set(entry.summary.tags ?? [])],
     runtimes,
     tools,
     userSettings: [...(plugin?.contributes?.settings ?? [])],
