@@ -22,9 +22,9 @@ interface PluginSelectionCardProps {
   pluginPlan: api.WorldPluginPlan | null;
   pluginPlanLoading: boolean;
   plugins: api.PluginSummary[];
-  selectedPluginIds: string[];
+  enabledPluginIds: string[];
   selectedPluginIdSet: ReadonlySet<string>;
-  selectedPluginSummaries: api.PluginSummary[];
+  enabledPluginSummaries: api.PluginSummary[];
   expanded: boolean;
   onToggleExpanded: () => void;
   pluginPacks: readonly PluginPack[];
@@ -109,9 +109,9 @@ export function PluginSelectionCard({
   pluginPlan,
   pluginPlanLoading,
   plugins,
-  selectedPluginIds,
+  enabledPluginIds,
   selectedPluginIdSet,
-  selectedPluginSummaries,
+  enabledPluginSummaries,
   expanded,
   onToggleExpanded,
   pluginPacks,
@@ -139,7 +139,7 @@ export function PluginSelectionCard({
   selectedFlowSteps,
 }: PluginSelectionCardProps) {
   const { t } = useTranslation();
-  const totalRuntimes = selectedPluginSummaries.reduce(
+  const totalRuntimes = enabledPluginSummaries.reduce(
     (sum, pkg) => sum + (pkg.runtimes?.length ?? 0),
     0,
   );
@@ -151,7 +151,7 @@ export function PluginSelectionCard({
         onToggle={onToggleExpanded}
         contentId="plugin-selection-card-content"
         summary={t("session.pluginsSelectionSummary", {
-          selectedCount: selectedPluginIds.length,
+          selectedCount: enabledPluginIds.length,
           pluginCount: plugins.length,
           runtimeCount: totalRuntimes,
         })}
@@ -159,7 +159,7 @@ export function PluginSelectionCard({
         <Puzzle className="w-4 h-4" />
         {t("session.plugins", "Loaded Plugins")}
         <Badge variant="secondary" className="text-xs ml-1">
-          {selectedPluginIds.length}/{plugins.length}
+          {enabledPluginIds.length}/{plugins.length}
         </Badge>
       </CollapsibleCardHeader>
       {expanded && (

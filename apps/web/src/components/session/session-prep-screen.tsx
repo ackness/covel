@@ -108,8 +108,9 @@ export function SessionPrepScreen({
   const {
     corePluginIds,
     lockedPluginIds,
-    selectedPluginSummaries,
-    selectedPluginIds,
+    enabledPluginSummaries,
+    enabledPluginIds,
+    pendingApproval,
     requestedPluginIds,
     excludedPluginIds,
     selectedPluginIdSet,
@@ -138,7 +139,7 @@ export function SessionPrepScreen({
     worldDataPreflightStatus,
     worldDataPreflightError,
     runWorldDataPreflight,
-  } = useWorldDataPreflight(world.id, selectedPluginIds, prepareWorldForServer);
+  } = useWorldDataPreflight(world.id, enabledPluginIds, prepareWorldForServer);
 
   const pluginPlanUnavailable =
     pluginPlanLoading || pluginPlanError !== null || pluginPlan === null;
@@ -149,7 +150,7 @@ export function SessionPrepScreen({
   );
   const { bindingState } = usePrepRuntimeBindings(
     world.id,
-    selectedPluginSummaries,
+    enabledPluginSummaries,
     resolvedSlots,
     !pluginPlanUnavailable,
   );
@@ -278,7 +279,7 @@ export function SessionPrepScreen({
       ),
     );
     return flowData.steps
-      .filter((step) => selectedPluginIdSet.has(step.pluginId))
+      .filter((step) => enabledPluginIds.includes(step.pluginId))
       .map((step) => {
         const runtime = runtimeMetadata.get(step.pluginId)?.get(step.runtimeId);
         if (!runtime) return step;
@@ -292,7 +293,7 @@ export function SessionPrepScreen({
             runtime.turnCompletion ?? { mode: "await" },
         };
       });
-  }, [flowData, plugins, selectedPluginIdSet]);
+  }, [flowData, plugins, enabledPluginIds]);
 
   const resolveSelectedDeclaredSlot = useCallback(
     (slotId: string) =>
@@ -334,7 +335,6 @@ export function SessionPrepScreen({
     loreUnavailable,
     lore.value,
     originalLore,
-    selectedPluginIds,
     requestedPluginIds,
     excludedPluginIds,
     onStart,
@@ -566,8 +566,9 @@ export function SessionPrepScreen({
             <SessionPluginNotices
               plugins={plugins.map((plugin) => ({
                 ...plugin,
-                active: selectedPluginIdSet.has(plugin.id),
+                active: enabledPluginIds.includes(plugin.id),
               }))}
+              pendingApproval={pendingApproval}
               unavailable={dependentsOff}
               offTitle={t("plugin.dependentsOff")}
               busy={isStarting}
@@ -638,9 +639,9 @@ export function SessionPrepScreen({
                 pluginPlan={pluginPlan}
                 pluginPlanLoading={pluginPlanLoading}
                 plugins={plugins}
-                selectedPluginIds={selectedPluginIds}
+                enabledPluginIds={enabledPluginIds}
                 selectedPluginIdSet={selectedPluginIdSet}
-                selectedPluginSummaries={selectedPluginSummaries}
+                enabledPluginSummaries={enabledPluginSummaries}
                 expanded={pluginSectionExpanded}
                 onToggleExpanded={() =>
                   setPluginSectionExpanded(!pluginSectionExpanded)

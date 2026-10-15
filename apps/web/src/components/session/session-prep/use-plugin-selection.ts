@@ -17,8 +17,10 @@ export interface UsePluginSelectionResult {
   corePluginIds: ReadonlySet<string>;
   lockedPluginIds: ReadonlySet<string>;
   selectedPlugins: ReadonlySet<string>;
-  selectedPluginSummaries: api.PluginSummary[];
-  selectedPluginIds: string[];
+  enabledPluginSummaries: api.PluginSummary[];
+  enabledPluginIds: string[];
+  /** Selected community plugins waiting for this new session's approval. */
+  pendingApproval: readonly import("@covel/shared").PluginResolutionRejection[];
   requestedPluginIds: string[];
   excludedPluginIds: string[];
   selectedPluginIdSet: ReadonlySet<string>;
@@ -177,21 +179,16 @@ export function usePluginSelection(
       requiredContracts,
     ],
   );
-  // Approval-gated explicit requests stay selectable so creation can request consent.
-  const selectedPluginIds = useMemo(
-    () => [
-      ...new Set([
-        ...resolution.active,
-        ...resolution.rejected
-          .filter(
-            (item) =>
-              item.code === "approval-required" &&
-              selectedPlugins.has(item.pluginId),
-          )
-          .map((item) => item.pluginId),
-      ]),
-    ],
-    [resolution, selectedPlugins],
+  const enabledPluginIds = resolution.active;
+  const pendingApproval = useMemo(
+    () =>
+      resolution.rejected.filter(
+        (item) =>
+          item.code === "approval-required" &&
+          (selectedPlugins.has(item.pluginId) ||
+            worldRequiredPluginIds.has(item.pluginId)),
+      ),
+    [resolution, selectedPlugins, worldRequiredPluginIds],
   );
   const dependentsOff = useMemo(
     () =>
@@ -202,13 +199,19 @@ export function usePluginSelection(
     [resolution, selectedPlugins, worldRequiredPluginIds, candidates],
   );
   const selectedPluginIdSet = useMemo(
-    () => new Set(selectedPluginIds),
-    [selectedPluginIds],
+    // Keep pending requests checked so they can be deselected and submitted
+    // for consent, without counting them as enabled in preflight or summaries.
+    () =>
+      new Set([
+        ...enabledPluginIds,
+        ...pendingApproval.map((item) => item.pluginId),
+      ]),
+    [enabledPluginIds, pendingApproval],
   );
   const lockedPluginIds = useMemo(() => new Set<string>(), []);
-  const selectedPluginSummaries = useMemo(
-    () => plugins.filter((plugin) => selectedPluginIdSet.has(plugin.id)),
-    [plugins, selectedPluginIdSet],
+  const enabledPluginSummaries = useMemo(
+    () => plugins.filter((plugin) => enabledPluginIds.includes(plugin.id)),
+    [plugins, enabledPluginIds],
   );
   const pluginPacks = pluginPlan?.packs ?? [];
   const [activePluginPackId, setActivePluginPackId] = useState<string | null>(
@@ -384,8 +387,9 @@ export function usePluginSelection(
     corePluginIds,
     lockedPluginIds,
     selectedPlugins: selectedPluginIdSet,
-    selectedPluginSummaries,
-    selectedPluginIds,
+    enabledPluginSummaries,
+    enabledPluginIds,
+    pendingApproval,
     requestedPluginIds: [
       ...new Set([...selectedPlugins, ...worldRequiredPluginIds]),
     ].filter((id) => !excludedPlugins.has(id)),

@@ -16,6 +16,8 @@ interface SessionPluginNoticesProps {
   readonly plugins: readonly (PluginSummary & { readonly active: boolean })[];
   /** Plugins that are off, with why: the session's or the selection's. */
   readonly unavailable: readonly PluginResolutionRejection[];
+  /** Prep selections kept for consent after creation; they are not active. */
+  readonly pendingApproval?: readonly PluginResolutionRejection[];
   /** The heading of the list of plugins that are off. */
   readonly offTitle: string;
   readonly busy: boolean;
@@ -37,15 +39,19 @@ const boxClass = {
 export function SessionPluginNotices({
   plugins,
   unavailable,
+  pendingApproval = [],
   offTitle,
   busy,
   onTurnOn,
   variant,
 }: SessionPluginNoticesProps) {
   const { t } = useTranslation();
+  const pendingIds = new Set(pendingApproval.map((item) => item.pluginId));
   const inactive = (ids: Iterable<string>) =>
     [...new Set(ids)].filter(
-      (id) => plugins.find((plugin) => plugin.id === id)?.active === false,
+      (id) =>
+        !pendingIds.has(id) &&
+        plugins.find((plugin) => plugin.id === id)?.active === false,
     );
   const fixes = inactive(
     unavailable
@@ -61,6 +67,9 @@ export function SessionPluginNotices({
   const storyCandidates = inactive(
     storyPlugins(plugins).map((plugin) => plugin.id),
   );
+  const storyPending = storyPlugins(plugins).some((plugin) =>
+    pendingIds.has(plugin.id),
+  );
   const turnOn = (ids: readonly string[]) =>
     ids.map((id) => (
       <button
@@ -75,6 +84,21 @@ export function SessionPluginNotices({
     ));
   return (
     <>
+      {pendingApproval.length > 0 && (
+        <div
+          role="status"
+          data-testid="pending-approval-plugins"
+          className={boxClass[variant]}
+        >
+          <p className="font-medium">{t("session.pendingApproval.title")}</p>
+          <ul className="mt-1 list-disc pl-4">
+            {pendingApproval.map((item) => (
+              <li key={item.pluginId}>{pluginOffReason(t, item, plugins)}</li>
+            ))}
+          </ul>
+          <p className="mt-1">{t("session.pendingApproval.detail")}</p>
+        </div>
+      )}
       {unavailable.length > 0 && (
         <div
           role="status"
@@ -111,6 +135,8 @@ export function SessionPluginNotices({
               </span>
               {turnOn(storyCandidates)}
             </div>
+          ) : storyPending ? (
+            <p>{t("plugin.noStory.approvalRequired")}</p>
           ) : (
             <p>{t("plugin.noStory.install")}</p>
           )}

@@ -194,7 +194,7 @@
     "loreSummary": "{{count}} 字符",
     "loreSummaryHint": "{{count}} 字符 · 点此编辑世界观文档",
     "pluginsSummary": "{{pluginCount}} 个插件，共 {{runtimeCount}} 个运行任务",
-    "pluginsSelectionSummary": "已选择 {{selectedCount}}/{{pluginCount}} 个插件 · 共 {{runtimeCount}} 个运行任务",
+    "pluginsSelectionSummary": "已启用 {{selectedCount}}/{{pluginCount}} 个插件 · 共 {{runtimeCount}} 个运行任务",
     "tagsCount": "{{count}} 个标签",
     "pluginsSelected": "个插件已选择",
     "searchPlugins": "搜索插件、标签、能力",
@@ -277,6 +277,10 @@
       "title": "这个世界的部分数据没有进入这局游戏：",
       "hint": "给已关闭或正在等你批准的插件的数据，会在打开那个插件时导入。",
       "hide": "隐藏"
+    },
+    "pendingApproval": {
+      "title": "需要批准",
+      "detail": "可以直接开局。这些插件会保持停用，直到你批准它们为本局游戏运行服务端代码。批准并启用后，它们接收的世界数据会导入一次，不影响其他插件的数据。"
     },
     "worldDataPreflight": {
       "title": "世界数据",
@@ -1789,6 +1793,7 @@
       "failed": "插件任务失败，请重试。"
     },
     "off": {
+      "approvalRequired": "{{plugin}} 需要批准才能运行服务端代码。",
       "needsProvider": "{{plugin}} 已停用：它需要 {{contract}}。打开 {{providers}} 就能用。",
       "noProvider": "{{plugin}} 已停用：它需要 {{contract}}，但没有已安装的插件提供它。请在「设置 → 安装与管理」中安装一个，安装后重启后端生效。",
       "notInstalled": "{{plugin}} 没有安装，或者加载失败。",
@@ -1797,6 +1802,7 @@
       "turnOn": "打开 {{plugin}}"
     },
     "noStory": {
+      "approvalRequired": "所选的叙事插件需要在开局后批准。",
       "title": "没有开启叙事插件",
       "detail": "回合不会产生故事：开启的插件里没有负责叙事的。",
       "enable": "打开 {{plugins}} 就能得到故事。",

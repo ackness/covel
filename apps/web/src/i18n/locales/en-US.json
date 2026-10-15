@@ -194,7 +194,7 @@
     "loreSummary": "{{count}} chars",
     "loreSummaryHint": "{{count}} characters · click to edit world lore",
     "pluginsSummary": "{{pluginCount}} plugins, {{runtimeCount}} runtimes",
-    "pluginsSelectionSummary": "{{selectedCount}}/{{pluginCount}} plugins selected · {{runtimeCount}} runtimes",
+    "pluginsSelectionSummary": "{{selectedCount}}/{{pluginCount}} plugins enabled · {{runtimeCount}} runtimes",
     "tagsCount": "{{count}} tags",
     "pluginsSelected": "plugins selected",
     "searchPlugins": "Search plugins, tags, capabilities",
@@ -277,6 +277,10 @@
       "title": "Some of this world's data is not in this game:",
       "hint": "Data for a plugin that is off, or waiting for your approval, arrives when you turn that plugin on.",
       "hide": "Hide"
+    },
+    "pendingApproval": {
+      "title": "Needs approval",
+      "detail": "You can start now. These plugins stay off until you approve their server code for this game. When approved and enabled, any world data they receive is imported once; other plugins’ data is unchanged."
     },
     "worldDataPreflight": {
       "title": "World Data",
@@ -1843,6 +1847,7 @@
       "failed": "The plugin task failed. Try again."
     },
     "off": {
+      "approvalRequired": "{{plugin}} needs approval to run its server code.",
       "needsProvider": "{{plugin}} is off: it needs {{contract}}. Turn on {{providers}} to use it.",
       "noProvider": "{{plugin}} is off: it needs {{contract}}, and no installed plugin provides it. Install one under Settings → Install & manage, then restart the backend.",
       "notInstalled": "{{plugin}} is not installed, or it failed to load.",
@@ -1851,6 +1856,7 @@
       "turnOn": "Turn on {{plugin}}"
     },
     "noStory": {
+      "approvalRequired": "The selected narrative plugin needs approval after you start the game.",
       "title": "No narrative plugin is on",
       "detail": "Turns will not tell a story: none of the enabled plugins writes narration.",
       "enable": "Turn on {{plugins}} to get a story.",

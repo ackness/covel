@@ -33,10 +33,10 @@ vi.mock("@/hooks/use-slot-config.js", () => ({
 }));
 vi.mock("../session-prep/use-plugin-selection.js", () => ({
   usePluginSelection: () => ({
-    selectedPluginIds: ["fixture-plugin"],
+    enabledPluginIds: ["fixture-plugin"],
     requestedPluginIds: ["fixture-plugin"],
     excludedPluginIds: [],
-    selectedPluginSummaries: [],
+    enabledPluginSummaries: [],
     selectedPluginIdSet: new Set(),
     pluginPlan: {},
     pluginPlanLoading: false,
