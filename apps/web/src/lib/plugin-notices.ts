@@ -5,7 +5,7 @@ import {
   type PluginResolutionRejection,
   type PluginSummary,
 } from "@covel/shared";
-import { resolveDisplayText } from "./i18n-text.js";
+import { formatList, resolveDisplayText } from "./i18n-text.js";
 
 type NoticePlugin = Pick<
   PluginSummary,
@@ -52,7 +52,7 @@ export function pluginOffReason(
       ? t("plugin.off.needsProvider", {
           plugin,
           contract: item.contract,
-          providers: providers.join(", "),
+          providers: formatList(providers, "or"),
         })
       : t("plugin.off.noProvider", { plugin, contract: item.contract });
   }

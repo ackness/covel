@@ -158,7 +158,7 @@ describe("session prep when the world relies on something missing", () => {
     expect(notice.textContent).toContain(
       "Choose the plugin that keeps this world's dimensions",
     );
-    expect(notice.textContent).toContain("world-init, rival-dimensions");
+    expect(notice.textContent).toContain("world-init and rival-dimensions");
     // The server would refuse the start until one is kept.
     for (const button of startButtons())
       expect(button).toHaveProperty("disabled", true);

@@ -8,7 +8,6 @@ import {
 import { useTranslation } from "react-i18next";
 import { z } from "zod";
 import {
-  DIMENSION_CONTRACT,
   localizedWorldText,
   playerVisibleLore,
   withNarratorOnlyLore,
@@ -49,6 +48,7 @@ import { ModelsCard } from "./session-prep/models-card.js";
 import { PluginSelectionCard } from "./session-prep/plugin-selection-card.js";
 import { SessionPluginNotices } from "./session-plugin-notices.js";
 import { pluginName } from "@/lib/plugin-notices.js";
+import { formatList } from "@/lib/i18n-text.js";
 import type { SessionPrepScreenProps } from "./session-prep/types.js";
 import { worldDisplayText, worldPlayLocale } from "@/lib/world-locale.js";
 import { worldVisual } from "@/lib/world-visuals.js";
@@ -561,16 +561,19 @@ export function SessionPrepScreen({
                         }`,
                         {
                           contract: item.contract,
-                          plugins: (item.candidates ?? []).join(", "),
+                          plugins: formatList(
+                            (item.candidates ?? []).map((id) =>
+                              pluginName(plugins, id),
+                            ),
+                            item.code === "ambiguous-provider" ? "or" : "and",
+                          ),
                         },
                       )}
                     </li>
                   ))}
                   {dimensionsLeftOut && (
                     <li className="wrap-break-word">
-                      {t("session.worldRequirements.dimensions", {
-                        contract: DIMENSION_CONTRACT,
-                      })}
+                      {t("session.worldRequirements.dimensions")}
                     </li>
                   )}
                 </ul>
@@ -591,9 +594,11 @@ export function SessionPrepScreen({
                 </p>
                 <p className="mt-1 text-xs text-muted-foreground">
                   {t("session.dimensionProvider.conflictDetail", {
-                    plugins: dimensionProviderConflict
-                      .map((id) => pluginName(plugins, id))
-                      .join(", "),
+                    plugins: formatList(
+                      dimensionProviderConflict.map((id) =>
+                        pluginName(plugins, id),
+                      ),
+                    ),
                   })}
                 </p>
                 <div className="mt-2 flex flex-wrap gap-2">

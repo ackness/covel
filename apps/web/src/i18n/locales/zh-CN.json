@@ -93,7 +93,7 @@
       "ambiguous-provider": "有多个插件提供 {{contract}}：{{plugins}}。请在下方插件列表中启用其中一个。",
       "excluded": "你关闭了提供 {{contract}} 的 {{plugins}}。游戏可以开始，但世界的这部分玩法不会生效。",
       "approval-required": "{{plugins}} 提供 {{contract}}，开始游戏后会请求你的授权。",
-      "dimensions": "你开启的插件里没有能保存这个世界维度的（{{contract}}），游戏会在没有维度的情况下开始。开启一个提供它的插件就能用上维度。"
+      "dimensions": "你开启的插件里没有能保存这个世界维度的，游戏会在没有维度的情况下开始。开启一个保存世界维度的插件就能用上它们。"
     },
     "dimensionProvider": {
       "conflictTitle": "选一个插件保存这个世界的维度",
@@ -917,7 +917,7 @@
       "title": "插件与世界包管理",
       "description": "从 GitHub 或 ZIP 安装插件及世界包。插件变更和待更新资源包在重启后端后生效。",
       "pluginLabel": "插件包",
-      "pluginHint": ".zip，需包含 PLUGIN.md（或 runtimes/<sub>/PLUGIN.md）+ package.json",
+      "pluginHint": ".zip，根目录（或唯一的顶层文件夹）里要有 PLUGIN.md",
       "worldLabel": "世界包",
       "worldHint": ".zip，需包含 world.yaml 与 WORLD.md",
       "collectionLabel": "合集包",

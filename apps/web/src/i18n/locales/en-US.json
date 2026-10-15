@@ -91,7 +91,7 @@
       "ambiguous-provider": "Several plugins provide {{contract}}: {{plugins}}. Enable one of them in the plugin list below.",
       "excluded": "You turned off {{plugins}}, which provides {{contract}}. The game can start, but that part of the world will not work.",
       "approval-required": "{{plugins}} provides {{contract}} and will ask for your approval after the game starts.",
-      "dimensions": "No plugin you turned on keeps this world's dimensions ({{contract}}), so the game starts without them. Turn on a plugin that provides it to use them."
+      "dimensions": "No plugin you turned on keeps this world's dimensions, so the game starts without them. Turn on a plugin that keeps world dimensions to use them."
     },
     "dimensionProvider": {
       "conflictTitle": "Choose the plugin that keeps this world's dimensions",
@@ -951,7 +951,7 @@
       "title": "Plugin and world packages",
       "description": "Install plugins and worlds from GitHub or ZIP. Plugin changes and staged updates take effect after backend restart.",
       "pluginLabel": "Plugin package",
-      "pluginHint": ".zip containing PLUGIN.md (or runtimes/<sub>/PLUGIN.md) + package.json",
+      "pluginHint": ".zip with PLUGIN.md at the root (or in its only top-level folder)",
       "worldLabel": "World package",
       "worldHint": ".zip containing world.yaml and WORLD.md",
       "collectionLabel": "Collection package",
