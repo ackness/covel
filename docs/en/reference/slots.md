@@ -313,7 +313,7 @@ Switching to a fallback model:
 
 - An HTTP 429 (rate limit) allows a switch to a configured fallback model.
 - An account failure (no balance left, or a key that is wrong or not allowed to use this model; see `quota` / `auth` below) also allows a switch. It belongs only to the account at this provider, so the fallback target may still work. With no fallback model configured, the call fails and the player is told why.
-- After an account failure, the same call skips backups with the same provider, effective base URL, and key, even when the model differs. Configured backups with a different provider, endpoint, or key are still tried. If all remaining targets are skipped, the last attempted failure is kept. Skipped targets consume no requests.
+- After a refused key (401) or a balance or billing failure, the same call skips backups with the same provider, effective base URL, and key, even when the model differs. A 403 or a rate limit can apply to one model only, so a same-account backup still runs then. Configured backups with a different provider, endpoint, or key are still tried. If all remaining targets are skipped, the last attempted failure is kept. Skipped targets consume no requests.
 - Other 4xx errors keep their original failure path.
 - Once streamed content has been output, switching is not allowed. This prevents mixing the results of two models.
 

@@ -9,7 +9,7 @@
  */
 
 import { AiProviderError } from "./errors.js";
-import { assertLlmRequestBudget, isAccountFailure } from "@covel/shared";
+import { assertLlmRequestBudget } from "@covel/shared";
 import { classifyProviderFailure } from "./provider-failure.js";
 import type { ProviderResolution } from "./provider-registry.js";
 import {
@@ -25,6 +25,19 @@ import type {
   ProviderProtocol,
   ResolvedTarget,
 } from "./types.js";
+
+/**
+ * A refused key (401) or an empty balance fails every model of the account, so
+ * a backup with the same provider, base URL and key is skipped. A 403 or a rate
+ * limit can apply to one model only, so such a backup still runs.
+ */
+function failsWholeAccount(error: unknown): boolean {
+  const failure = classifyProviderFailure(error);
+  return (
+    failure.kind === "quota" ||
+    (failure.kind === "auth" && failure.statusCode === 401)
+  );
+}
 
 /** Per-call account failures; credentials never enter diagnostics or traces. */
 export function createFailedAccountTracker() {
@@ -53,8 +66,7 @@ export function createFailedAccountTracker() {
       resolved: ProviderResolution,
       error: unknown,
     ): void {
-      if (isAccountFailure(classifyProviderFailure(error).kind))
-        accounts.push(identity(provider, resolved));
+      if (failsWholeAccount(error)) accounts.push(identity(provider, resolved));
     },
   };
 }

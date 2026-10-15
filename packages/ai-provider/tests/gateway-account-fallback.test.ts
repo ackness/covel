@@ -191,6 +191,12 @@ describe.each(["text", "object", "stream"] as const)(
       expect(calls).toEqual(["primary", "independent", "last"]);
     });
 
+    it("does not skip the same account after HTTP 403, which can be one model", async () => {
+      const { run, calls } = setup(403, "none");
+      await run(mode);
+      expect(calls).toEqual(["primary", "duplicate"]);
+    });
+
     it("does not skip the same account for a transient provider failure", async () => {
       const { run, calls } = setup(503, "none");
       await run(mode);
