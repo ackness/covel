@@ -43,6 +43,7 @@ it("keeps the opening scene usable with world labels when dimensions are malform
   const onBegin = vi.fn();
   render(
     <SessionCanvasHero
+      locale="en-US"
       world={
         {
           id: "harbor",

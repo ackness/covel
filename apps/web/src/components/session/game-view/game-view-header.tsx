@@ -24,7 +24,7 @@ import type { StageBackdropModel } from "@covel/shared";
 import { Button } from "@/components/ui/button.js";
 import { Toggle } from "@/components/ui/toggle.js";
 import type { SessionRecord, WorldRecord } from "@/services/api.js";
-import { text } from "@/components/world/editor-helpers.js";
+import { worldDisplayText } from "@/lib/world-locale.js";
 import { sessionTurnLabel } from "@/lib/session-display.js";
 import { worldVisual } from "@/lib/world-visuals.js";
 import { useThemeLayout } from "@/theme-system/use-theme-layout.js";
@@ -42,6 +42,7 @@ interface GameViewHeaderProps {
   t: TFunction;
   sessionId: string;
   sessionPhase: SessionRecord["phase"];
+  locale: SessionRecord["locale"];
   /** Committed player turns, shown beside the world name. */
   turnCount: number;
   world: WorldRecord | null;
@@ -71,6 +72,7 @@ export function GameViewHeader({
   t,
   sessionId,
   sessionPhase,
+  locale,
   turnCount,
   world,
   executing,
@@ -93,7 +95,9 @@ export function GameViewHeader({
   const scene = useUiSlot(sessionId, "stage.backdrop@1")?.value as
     StageBackdropModel | undefined;
   const sceneLabel = scene?.name ?? "";
-  const worldName = text(world?.name) || t("session.breadcrumbGame");
+  const worldName =
+    (world && worldDisplayText(world, locale).name) ||
+    t("session.breadcrumbGame");
   const turnLabel =
     sessionPhase === "setup"
       ? t("session.stateSetup")

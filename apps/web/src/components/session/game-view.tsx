@@ -485,6 +485,7 @@ export function GameView({
                 t={t}
                 sessionId={session.id}
                 sessionPhase={session.phase}
+                locale={session.locale}
                 turnCount={session.completedPlayerTurns}
                 world={world}
                 executing={executing}

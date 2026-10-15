@@ -27,6 +27,7 @@ it.each([
       <>
         <SessionCanvasHero
           world={null}
+          locale={locale}
           onBegin={vi.fn()}
           beginLabel="Start"
           hintLabel="Welcome"

@@ -5,10 +5,12 @@ import { Flame } from "lucide-react";
 import { Button } from "@/components/ui/button.js";
 import { resolveI18n } from "@/lib/catalog/helpers.js";
 import { worldVisual } from "@/lib/world-visuals.js";
+import { worldDisplayText } from "@/lib/world-locale.js";
 import type { WorldRecord } from "@/services/api.js";
 
 interface SessionCanvasHeroProps {
   world: WorldRecord | null;
+  locale: string;
   dimensions?: unknown;
   onBegin: () => void;
   beginLabel: string;
@@ -17,15 +19,15 @@ interface SessionCanvasHeroProps {
 
 export function SessionCanvasHero({
   world,
+  locale,
   dimensions,
   onBegin,
   beginLabel,
   hintLabel,
 }: SessionCanvasHeroProps) {
-  const { t, i18n } = useTranslation();
-  const locale = i18n.language;
-
-  const worldName = world ? resolveI18n(world.name, locale) : "";
+  const { t } = useTranslation();
+  const displayText = world ? worldDisplayText(world, locale) : undefined;
+  const worldName = displayText?.name ?? "";
   const parsedDimensions = dimensionSnapshotSchema.safeParse(dimensions ?? {});
   const entry = parsedDimensions.success
     ? parsedDimensions.data.startingConditions
@@ -51,7 +53,7 @@ export function SessionCanvasHero({
     }
     return [];
   })();
-  const summary = world ? resolveI18n(world.description, locale) : "";
+  const summary = displayText?.description ?? "";
   const visual = worldVisual(world);
 
   return (
