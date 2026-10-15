@@ -169,6 +169,8 @@ Covel is still in early development, and it targets only the current contracts. 
 > [!WARNING]
 > These libraries currently make no promise of a persistence migration across versions. When the store schema or the vector progress table changes, the affected development data must be created again. Do not treat "old data can still be read" or "old entry points still work" as a guarantee.
 
-`pnpm check:boundaries` checks three things in the production source: the public entry points of the workspace, the dependency declarations, and the direction of the packages. When a new cross-package dependency is needed, review it together with the responsibility split on this page.
+`pnpm check:boundaries` checks public entry points, dependency declarations, and package direction in production source. Every export in `packages/*` must also have a source importer outside its package (including tests, scaffolds, and scripts), or a reason for keeping it in the check script. Review new cross-package dependencies together with the responsibilities on this page.
+
+`test-runtime` provides a CLI only, with no package import entry. Run runtime cases with `pnpm test:runtime`.
 
 The web app reads theme and color scheme preferences from SettingsStore, resolves the displayed selection, and applies it through its appearance helpers. Display fallbacks leave saved preferences unchanged.

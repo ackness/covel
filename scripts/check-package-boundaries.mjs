@@ -3,6 +3,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { packageImports } from "./lib/package-imports.mjs";
+import { unusedPackageExports } from "./lib/package-exports.mjs";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
 const layers = {
@@ -160,6 +161,17 @@ for (const workspace of workspaces) {
     }
   }
 }
+errors.push(
+  ...unusedPackageExports(root, workspaces, {
+    "@covel/plugin-handlers-utils/image-generation":
+      "Public plugin SDK entry for community image providers.",
+    "@covel/plugin-handlers-utils/extension-points":
+      "Public plugin SDK entry for community extension providers.",
+    "@covel/plugin-handlers-utils/plugin-api":
+      "Public plugin SDK entry for community entry modules.",
+  }),
+);
+
 if (errors.length) {
   console.error(errors.join("\n"));
   process.exitCode = 1;
