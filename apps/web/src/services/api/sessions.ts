@@ -19,6 +19,7 @@ import { emitToast } from "@/lib/toast-channel";
 import { actionApprovalSchema, type ActionApproval } from "./actions.js";
 import { buildSlotConfigHeaderInternal } from "./model-settings.js";
 import { isNotFound, request, requestResponse } from "./request.js";
+import { requestPluginToggle } from "./plugin-toggle.js";
 import { ignoreError } from "../../lib/ignore-error.js";
 import { verifyCreatedSessionCredential } from "./session-credential-cleanup.js";
 import {
@@ -64,7 +65,7 @@ export async function enableSessionPlugin(
   sessionId: string,
   pluginId: string,
 ): Promise<EnableSessionPluginResponse> {
-  return request<EnableSessionPluginResponse>(
+  return requestPluginToggle<EnableSessionPluginResponse>(
     `/api/sessions/${encodeURIComponent(sessionId)}/plugins/${encodeURIComponent(pluginId)}`,
     {
       method: "PUT",
@@ -78,7 +79,7 @@ export async function disableSessionPlugin(
   sessionId: string,
   pluginId: string,
 ): Promise<PluginMutationResponse> {
-  return request<PluginMutationResponse>(
+  return requestPluginToggle<PluginMutationResponse>(
     `/api/sessions/${encodeURIComponent(sessionId)}/plugins/${encodeURIComponent(pluginId)}`,
     { method: "DELETE" },
   );

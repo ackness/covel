@@ -159,6 +159,13 @@ const dataAuthoringSchema = z
                 "Fields beside the referring value that must lie inside what it names. For `character-attribute`, number fields inside the attribute's `min` and `max`; for `world-dimension`, a path into the dimension's value (`a.b`, or a list of keys) that its schema allows.",
               )
               .optional(),
+            values: z
+              .array(z.string().regex(DATA_REFERENCE_PATH))
+              .min(1)
+              .describe(
+                "Sibling paths holding candidate values of a world dimension. Uses the same path syntax as `path`; `in[]` checks each list member, while `equals` checks the whole value. Checked against the schema at the single `within` path, or the root when absent. Only with `to: world-dimension`; at most one `within` field when set.",
+              )
+              .optional(),
           })
           .refine(
             (reference) =>
@@ -167,6 +174,17 @@ const dataAuthoringSchema = z
             {
               path: ["type"],
               message: "type is only for `to: character-attribute`",
+            },
+          )
+          .refine(
+            (reference) =>
+              reference.values === undefined ||
+              (reference.to === "world-dimension" &&
+                (reference.within?.length ?? 0) <= 1),
+            {
+              path: ["values"],
+              message:
+                "values requires `to: world-dimension` and at most one `within` field",
             },
           ),
       )

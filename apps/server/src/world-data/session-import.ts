@@ -154,6 +154,7 @@ export async function prepareWorldDataImportForSession(
       worldId: options.worldId,
       sources,
       characterSchema: record.characterSchema,
+      dimensions: record.dimensions,
       deps: options.preflight,
       now: options.now,
       locale: options.locale,
@@ -196,6 +197,7 @@ export async function prepareWorldDataImportForSession(
     worldId: options.worldId,
     sources: descriptor.sources,
     characterSchema: record.characterSchema,
+    dimensions: record.dimensions,
     deps: options.preflight,
     now: options.now,
     locale: options.locale,
@@ -404,6 +406,7 @@ export async function preflightWorldDataForSession(
     worldId: options.worldId,
     sources: descriptor.sources,
     characterSchema: record.characterSchema,
+    dimensions: record.dimensions,
     deps: {
       ...options.preflight,
       // A preflight endpoint is observational: importing arbitrary plugin
@@ -579,6 +582,7 @@ export async function prepareWorldDataSyncForSession(
     worldId: options.worldId,
     sources: descriptor.sources,
     characterSchema: record.characterSchema,
+    dimensions: record.dimensions,
     deps: {
       ...options.preflight,
       activePlugins: options.preflight?.activePlugins ?? session?.activePlugins,

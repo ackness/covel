@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import {
+  cp,
   mkdtemp,
   mkdir,
   readFile,
@@ -267,6 +268,74 @@ describe("world data session importer", () => {
       ).toBeNull();
     },
   );
+
+  it("rejects a bundled world's invalid condition candidates before writing any records", async () => {
+    const catalogue = await builtinPluginRegistry();
+    const worldsDir = await mkdtemp(
+      path.join(tmpdir(), "covel-condition-import-"),
+    );
+    const worldRoot = path.join(worldsDir, "emberback");
+    await cp(
+      path.resolve(import.meta.dirname, "../../../../worlds/emberback"),
+      worldRoot,
+      { recursive: true },
+    );
+    const file = path.join(worldRoot, "data/hidden/story-events.yaml");
+    const original = await readFile(file, "utf8");
+    const world = await loadSingleWorld(worldRoot);
+    const activePlugins = ["world-init", "story-events"];
+    const store = await makeStore(activePlugins);
+    if (!world) throw new Error("Bundled world did not load");
+    await store.createWorld(world);
+    const options = {
+      store,
+      sessionId: "sess-1",
+      worldId: "emberback",
+      world,
+      worldsDirs: [worldsDir],
+      now: NOW,
+      preflight: { registry: catalogue, activePlugins },
+      locale: "en-US",
+    };
+    expect(
+      (await preflightWorldDataForSession(options)).diagnostics.filter(
+        (item) => item.level === "error",
+      ),
+    ).toEqual([]);
+    await writeFile(
+      file,
+      original.replace(
+        "in: [imminent, overhead]",
+        "in: [imminent, impossible-weather]",
+      ),
+    );
+    expect(
+      (await preflightWorldDataForSession(options)).diagnostics,
+    ).toContainEqual(
+      expect.objectContaining({
+        code: "dimension-reference",
+        level: "error",
+        pointer: "[0].when.all[0].in[1]",
+      }),
+    );
+    await expect(importWorldDataForSession(options)).rejects.toThrow(/enum/);
+    expect(
+      await store.listPluginData("sess-1", "story-events", "_hidden.events"),
+    ).toEqual([]);
+    expect(
+      await store.listPluginData("sess-1", "world-init", "_dimensions"),
+    ).toEqual([]);
+    await writeFile(file, original);
+    await importWorldDataForSession(options);
+    expect(
+      await store.getPluginData(
+        "sess-1",
+        "story-events",
+        "_hidden.events",
+        "second-echo",
+      ),
+    ).not.toBeNull();
+  });
 
   it("imports Emberback's station time, which its storm countdown is counted against", async () => {
     const registry = await builtinPluginRegistry();

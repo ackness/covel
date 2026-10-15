@@ -132,7 +132,10 @@ export interface WorldDataPreflightDiagnostic {
   pointer?: string;
   message: string;
   /** Set on a finding the prep screen reports on its own. */
-  code?: "convention-collision" | "dimension-provider-missing";
+  code?:
+    | "convention-collision"
+    | "dimension-provider-missing"
+    | "dimension-reference";
 }
 
 export interface WorldDataPreflightTarget {

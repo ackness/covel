@@ -68,6 +68,7 @@ contributes:
           - path: when.**.dimension
             to: world-dimension
             within: [path]
+            values: [equals, notEquals, "in[]"]
 ---
 
 Deterministic hidden story events. World packages import events through a

@@ -849,6 +849,15 @@
                             "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
                           },
                           "description": "Fields beside the referring value that must lie inside what it names. For `character-attribute`, number fields inside the attribute's `min` and `max`; for `world-dimension`, a path into the dimension's value (`a.b`, or a list of keys) that its schema allows."
+                        },
+                        "values": {
+                          "minItems": 1,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "pattern": "^(?:\\*\\*\\.)?[A-Za-z_][A-Za-z0-9_]*(?:\\[\\])?(?:\\.(?:\\*\\*\\.)?[A-Za-z_][A-Za-z0-9_]*(?:\\[\\])?)*$"
+                          },
+                          "description": "Sibling paths holding candidate values of a world dimension. Uses the same path syntax as `path`; `in[]` checks each list member, while `equals` checks the whole value. Checked against the schema at the single `within` path, or the root when absent. Only with `to: world-dimension`; at most one `within` field when set."
                         }
                       },
                       "required": ["path", "to"],

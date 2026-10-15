@@ -264,7 +264,7 @@ Turning it on adds model calls. The worlds `lantern-barrow`, `emberback` and `mi
 
 This data must be imported as hidden data, or players could see it. A condition can check dimensions, world time, whether another event has happened, or the turn number. You can combine them with `all`, `any` and `not`. Write `payload` as a short hint for the narrative, not as finished text. Do not reveal later events in it. For how to import data, see [World data](../reference/world-data.md).
 
-A misspelled dimension ID or path inside a dimension in a condition means the event never fires. `pnpm validate:world` reports them as `dimension-reference` errors.
+A misspelled dimension ID, an invalid path inside a dimension, or a candidate in `equals` / `notEquals` / `in` that does not satisfy the dimension schema produces a `dimension-reference` error. Both `pnpm validate:world` and session import check these fields; see [world data](../reference/world-data.md).
 
 ## Overview of when they are on
 

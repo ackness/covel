@@ -223,3 +223,13 @@ describe("shared API contracts", () => {
     ).toBe(false);
   });
 });
+
+it.each([
+  "dimension_provider_required",
+  "missing-provider",
+  "single-provider-conflict",
+])("preserves the plugin toggle error code %s", (code) => {
+  expect(apiErrorResponseSchema.parse({ error: "Rejected", code }).code).toBe(
+    code,
+  );
+});

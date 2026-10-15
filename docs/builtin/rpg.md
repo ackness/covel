@@ -264,7 +264,7 @@ d20 加上属性修正，达到目标值就成功。自然 20 是大成功，自
 
 这份数据必须作为隐藏数据导入，否则玩家也能看到。条件可以读维度、世界时间、另一个事件有没有发生，或者回合数，也可以用 `all`、`any`、`not` 组合。`payload` 写成给叙事的简要提示，不要写成成品文字，也不要剧透后面的事件。数据怎么导入见[世界数据](../reference/world-data.md)。
 
-条件里写错的维度 ID 或维度里的路径会让事件永远不触发。`pnpm validate:world` 会把它们报成 `dimension-reference` 错误。
+条件里写错的维度 ID、维度里的路径，或 `equals` / `notEquals` / `in` 中不符合维度 schema 的候选值，都会报成 `dimension-reference` 错误。`pnpm validate:world` 和会话导入都检查这些内容，详见[世界数据](../reference/world-data.md)。
 
 ## 什么时候启用的总览
 

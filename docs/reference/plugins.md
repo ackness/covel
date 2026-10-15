@@ -711,6 +711,7 @@ authoring:
 - `to`：值指向什么。`character-attribute` 是世界 `characterSchema` 顶层属性的 `id`；`world-dimension` 是世界声明的一个维度的 ID。
 - `type`（可选，只用于 `character-attribute`）：被指向的属性必须是这个类型。
 - `within`（可选）：和这个值同级、必须落在它所指的东西之内的字段。对 `character-attribute`，是必须落在该属性 `min` 和 `max` 之内的数字字段；对 `world-dimension`，是指向维度值内部某个位置的路径（`a.b`，或者一个键的列表），这个位置必须是维度的 `schema` 允许的。
+- `values`（可选，只用于 `world-dimension`）：从维度 ID 所在对象读取候选值的路径，语法同 `path`。例如 `equals` 检查整个值，`in[]` 逐项检查列表。声明它时，`within` 最多只能有一个字段：按该字段指向的 schema 检查候选值；字段缺省或路径为空时检查整个维度。检查包括类型、枚举和 schema 的其他约束。缺少候选字段、无法确定路径的 schema 或不支持的 schema 不报候选值错误。
 
 内置的 story-events 这样声明事件条件里的维度。条件可以用 `all` / `any` / `not` 嵌套任意多层，所以路径里用了 `**`：
 
@@ -719,7 +720,10 @@ references:
   - path: when.**.dimension
     to: world-dimension
     within: [path]
+    values: [equals, notEquals, "in[]"]
 ```
+
+`pnpm validate:world` 和会话导入、预检、同步都使用这份声明。框架只读取声明的字段，不识别条件运算符名称。数值比较的阈值不一定是维度可取的值，所以不要把 `gte` 等阈值声明成 `values`。
 
 不符合的值报为 `attribute-reference` 或 `dimension-reference` 错误。世界没有写 `characterSchema` 时不检查属性，没有声明任何维度时不检查维度，因为它们要到开局时才生成。只声明插件运行时确实找不到或会拒绝的东西，否则合法的世界会被误报。
 

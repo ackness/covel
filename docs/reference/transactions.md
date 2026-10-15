@@ -502,6 +502,8 @@ await store.withTransaction(async (tx) => {
 
 ## World Data import
 
+规划阶段也校验接收插件声明的[维度引用和候选值](./world-data.md)。任何这类错误都会拒绝整份导入计划，不写入其他合法记录；同步遵守相同规则。
+
 带 `worldData` 创建会话时，使用同一份 `DataStore` 事务约定。服务端先构建并校验导入计划，再把会话行和由导入器管理的写入包进一个事务：
 
 - `sessions`
