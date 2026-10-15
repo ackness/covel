@@ -111,12 +111,15 @@ export function buildSnapshotExecutionSteps(
           : prev?.durationMs,
       startedAt:
         event.type === "runtime.started" ? event.timestamp : prev?.startedAt,
+      // A skipped runtime's reason code, as the live stream gives it.
       detail:
         typeof payload.error === "string"
           ? payload.error
           : typeof payload.detail === "string"
             ? payload.detail
-            : undefined,
+            : status === "skipped" && typeof payload.reason === "string"
+              ? payload.reason
+              : undefined,
       ...(status === "deferred"
         ? {
             detached: true,
