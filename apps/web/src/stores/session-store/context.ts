@@ -63,6 +63,7 @@ export interface SessionActions {
   upsertInteractionDraft: (draft: PendingInteractionDraft) => void;
   removeInteractionDraft: (id: string) => void;
   clearInteractionDrafts: () => void;
+  clearRestoredInput: (requestId: string) => void;
   resumeSuspension: (suspensionId: string, data: unknown) => Promise<void>;
   cancelSuspension: (suspensionId: string) => Promise<void>;
   refreshSuspensions: () => Promise<void>;

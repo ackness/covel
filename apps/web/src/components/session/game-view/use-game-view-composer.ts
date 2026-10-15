@@ -2,6 +2,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type KeyboardEvent,
 } from "react";
@@ -72,6 +73,7 @@ export function useGameViewComposer({
   const {
     state: sessionState,
     clearInteractionDrafts,
+    clearRestoredInput,
     removeInteractionDraft,
     submitBlock,
     resumeSuspension,
@@ -80,6 +82,18 @@ export function useGameViewComposer({
     abortActiveTurn,
     loadSessionPlugins,
   } = useSession();
+
+  const restoredRequest = useRef<string | null>(null);
+  const restoredInput = sessionState.restoredInput;
+  useEffect(() => {
+    if (!restoredInput || restoredRequest.current === restoredInput.requestId)
+      return;
+    restoredRequest.current = restoredInput.requestId;
+    setInputValue((current) =>
+      current ? `${restoredInput.content}\n${current}` : restoredInput.content,
+    );
+    clearRestoredInput(restoredInput.requestId);
+  }, [restoredInput, clearRestoredInput]);
 
   const commandQuery = useMemo(
     () => readSlashCommandQuery(inputValue),

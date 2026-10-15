@@ -7,6 +7,14 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  createMemoryHistory,
+  createBrowserHistory,
+  createRootRoute,
+  createRoute,
+  createRouter,
+  RouterContextProvider,
+} from "@tanstack/react-router";
 import i18n from "@/i18n/index.js";
 import type { WorldRecord } from "@/services/api.js";
 import { WorldEditor } from "../world-editor.js";
@@ -37,13 +45,33 @@ const world: WorldRecord = {
   },
 };
 
-function openEditor() {
+const disposeHistories: Array<() => void> = [];
+
+function openEditor(browser = false) {
   const onSave = vi.fn();
   const onCancel = vi.fn();
+  const root = createRootRoute();
+  const routeTree = root.addChildren([
+    createRoute({ getParentRoute: () => root, path: "/editor" }),
+    createRoute({ getParentRoute: () => root, path: "/elsewhere" }),
+  ]);
+  const history = browser
+    ? createBrowserHistory()
+    : createMemoryHistory({ initialEntries: ["/editor"] });
+  if (browser) {
+    history.replace("/elsewhere");
+    history.flush();
+    history.push("/editor");
+    history.flush();
+  }
+  disposeHistories.push(() => history.destroy());
+  const router = createRouter({ routeTree, history });
   const view = render(
-    <WorldEditor world={world} onSave={onSave} onCancel={onCancel} />,
+    <RouterContextProvider router={router}>
+      <WorldEditor world={world} onSave={onSave} onCancel={onCancel} />
+    </RouterContextProvider>,
   );
-  return { ...view, onSave, onCancel };
+  return { ...view, onSave, onCancel, history };
 }
 function selectStartingConditions() {
   fireEvent.mouseDown(
@@ -74,7 +102,10 @@ beforeEach(async () => {
   mocks.requestConfirm.mockResolvedValue(false);
   mocks.updateWorld.mockResolvedValue(world);
 });
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  for (const dispose of disposeHistories.splice(0)) dispose();
+});
 
 describe("WorldEditor unsaved changes", () => {
   it("cancels immediately and permits reload when untouched", () => {
@@ -83,6 +114,56 @@ describe("WorldEditor unsaved changes", () => {
     cancel();
     expect(onCancel).toHaveBeenCalledOnce();
     expect(mocks.requestConfirm).not.toHaveBeenCalled();
+  });
+
+  it.each(["push", "back"] as const)(
+    "guards in-app %s navigation until discard is confirmed",
+    async (navigation) => {
+      const { history } = openEditor(navigation === "back");
+      changeOpening("At the harbor");
+      const leave = () =>
+        navigation === "push" ? history.push("/elsewhere") : history.back();
+      await act(async () => leave());
+      await waitFor(() => expect(mocks.requestConfirm).toHaveBeenCalledOnce());
+      expect(history.location.pathname).toBe("/editor");
+      expect(
+        (
+          screen.getByLabelText(
+            i18n.t("world.openingScenario"),
+          ) as HTMLTextAreaElement
+        ).value,
+      ).toBe("At the harbor");
+      mocks.requestConfirm.mockResolvedValue(true);
+      await act(async () => leave());
+      await waitFor(() => expect(history.location.pathname).toBe("/elsewhere"));
+    },
+  );
+
+  it("does not block clean or reverted navigation and removes the blocker on unmount", async () => {
+    const { history, unmount } = openEditor();
+    changeOpening("At the harbor");
+    changeOpening("At the gate");
+    await act(async () => history.push("/elsewhere"));
+    expect(history.location.pathname).toBe("/elsewhere");
+    expect(mocks.requestConfirm).not.toHaveBeenCalled();
+    changeOpening("Another edit");
+    unmount();
+    await act(async () => history.push("/editor"));
+    expect(history.location.pathname).toBe("/editor");
+    expect(mocks.requestConfirm).not.toHaveBeenCalled();
+  });
+
+  it("keeps invalid JSON safe on navigation", async () => {
+    const { history } = openEditor();
+    fireEvent.change(
+      screen.getByLabelText(i18n.t("world.dimensionDefinitions"), {
+        selector: "textarea",
+      }),
+      { target: { value: "{" } },
+    );
+    await act(async () => history.push("/elsewhere"));
+    expect(history.location.pathname).toBe("/editor");
+    expect(mocks.requestConfirm).toHaveBeenCalledOnce();
   });
 
   it("keeps edits when discard is declined, and exits when confirmed", async () => {

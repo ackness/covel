@@ -22,6 +22,8 @@ vi.mock("@/components/session/plugin-rpc-ui.js", async (importOriginal) => ({
 // Composer availability is the player's core affordance, so it gets a
 // deterministic test rather than relying on the live-LLM e2e run.
 const sessionMock = {
+  restoredInput: null as { requestId: string; content: string } | null,
+  clearRestoredInput: vi.fn(),
   pendingInteractionDrafts: [] as Array<Record<string, unknown>>,
   suspensions: [] as unknown[],
   clearInteractionDrafts: vi.fn(),
@@ -36,7 +38,9 @@ const sessionMock = {
 
 vi.mock("@/stores/session-store.js", () => ({
   useSession: () => ({
+    clearRestoredInput: sessionMock.clearRestoredInput,
     state: {
+      restoredInput: sessionMock.restoredInput,
       pendingInteractionDrafts: sessionMock.pendingInteractionDrafts,
       suspensions: sessionMock.suspensions,
     },
@@ -125,6 +129,27 @@ describe("useGameViewComposer", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     sessionMock.pendingInteractionDrafts = [];
+    sessionMock.restoredInput = null;
+  });
+
+  it("returns a stopped input once, ahead of text typed during the request", () => {
+    const { result, rerender, onSendMessage } = setup([]);
+    act(() => result.current.setInputValue("Look around"));
+    act(() => result.current.handleSubmit());
+    expect(onSendMessage).toHaveBeenCalledWith("Look around");
+    act(() => result.current.setInputValue("Then ask the guard"));
+    sessionMock.restoredInput = {
+      requestId: "stopped",
+      content: "Look around",
+    };
+    rerender();
+    expect(result.current.inputValue).toBe("Look around\nThen ask the guard");
+    expect(sessionMock.clearRestoredInput).toHaveBeenCalledExactlyOnceWith(
+      "stopped",
+    );
+    rerender();
+    expect(result.current.inputValue).toBe("Look around\nThen ask the guard");
+    expect(onSendMessage).toHaveBeenCalledOnce();
   });
 
   it("locks the composer while the begin-adventure hero is still waiting", () => {

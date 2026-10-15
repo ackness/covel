@@ -358,6 +358,7 @@
     "unsavedNarrative": "Unsaved",
     "unsavedNarrativeDetail": "This text was not saved. It stays here until you leave the session.",
     "recoveryHydratingDetail": "Recovering the latest saved result before you continue.",
+    "continueStoppedOpening": "Continue",
     "recoveryRetry": "Retry unfinished turn",
     "recoveryRefresh": "Check status",
     "recoveryStop": "Stop task",

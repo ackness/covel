@@ -28,7 +28,7 @@ Generation uses model calls. If the model produces no output for a long time, yo
 
 Worlds generated in the app can be revised in "Revise this world" on their detail page. Write your request and click "Apply the change". While a revision runs, you can click "Cancel". Your request stays in the box so you can edit it and retry.
 
-When the world dimension editor has unsaved changes, clicking "Cancel" asks whether to discard them. Choose "Keep editing" to retain the drafts; the browser prompts before reloading or closing the page. This also protects incomplete form input and unapplied JSON. For JSON edits, click "Apply definitions" before saving.
+When the world dimension editor has unsaved changes, clicking "Cancel", navigating to another page, or going back asks whether to discard them. Choose "Keep editing" to retain the drafts; the browser prompts before reloading or closing the page. This also protects incomplete form input and unapplied JSON. For JSON edits, click "Apply definitions" before saving.
 
 ## Session-prep screen: choose plugins and gameplay packs
 
@@ -52,6 +52,8 @@ Different tasks can use different models. For example, you might use a better mo
 For details on model roles, see [Model roles](../reference/slots.md).
 
 ## Retry
+
+After stopping the opening, choose "Continue" beside "Stopped; turn not committed" to generate it again. If you stop before a turn starts, the message you just sent returns to the input box, preserving any newer text you typed. You can edit it before sending again.
 
 Models sometimes fail. The app only redoes the part that failed, so the parts that succeeded are kept.
 

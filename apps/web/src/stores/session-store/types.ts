@@ -205,6 +205,8 @@ export interface SessionState {
   executionRecovery?: ExecutionRecovery | null;
   /** Local unsaved prose; never part of history, stage or plugin state. */
   unsavedNarratives?: StreamMessage[];
+  /** Input stopped before execution, waiting for the composer to take it. */
+  restoredInput?: { requestId: string; content: string } | null;
   /** Browser action generation; rejects recovery reads from an older POST. */
   actionGeneration?: number;
 
@@ -293,6 +295,8 @@ export interface ExecutionRecovery {
 }
 
 export type SessionAction =
+  | { type: "RESTORE_STOPPED_INPUT"; requestId: string }
+  | { type: "CLEAR_RESTORED_INPUT"; requestId: string }
   | {
       type: "BOOT_SUCCESS";
       presets: api.PresetSummary[];

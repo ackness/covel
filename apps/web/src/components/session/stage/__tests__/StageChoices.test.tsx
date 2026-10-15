@@ -13,6 +13,33 @@ const baseProps = {
 } as const;
 
 describe("StageChoices", () => {
+  it("shows a returned message in the shared composer draft", () => {
+    const onChange = vi.fn();
+    const onSendMessage = vi.fn();
+    const { rerender } = render(
+      <StageChoices
+        {...baseProps}
+        composerDraft={{ value: "", onChange }}
+        onSendMessage={onSendMessage}
+      />,
+    );
+    rerender(
+      <StageChoices
+        {...baseProps}
+        composerDraft={{ value: "Returned input", onChange }}
+        onSendMessage={onSendMessage}
+      />,
+    );
+    const input = screen.getByTestId(
+      "stage-decision-input",
+    ) as HTMLTextAreaElement;
+    expect(input.value).toBe("Returned input");
+    expect(onSendMessage).not.toHaveBeenCalled();
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(onSendMessage).toHaveBeenCalledWith("Returned input");
+    expect(onChange).toHaveBeenCalledWith("");
+  });
+
   it("renders recap, current decision, suggestions, and composer as one panel", () => {
     const onSendMessage = vi.fn();
     render(

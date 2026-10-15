@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useBlocker } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
 import {
   Braces,
@@ -277,12 +278,9 @@ export function WorldEditor({ world, onSave, onCancel }: WorldEditorProps) {
     }
   }
 
-  async function handleCancel() {
-    if (saving || confirming) return;
-    if (!dirty) {
-      onCancel();
-      return;
-    }
+  async function confirmLeave(): Promise<boolean> {
+    if (saving || confirming) return false;
+    if (!dirty) return true;
     const editor = editorRef.current;
     setConfirming(true);
     try {
@@ -293,10 +291,21 @@ export function WorldEditor({ world, onSave, onCancel }: WorldEditorProps) {
         cancelLabel: t("world.keepEditing"),
         destructive: true,
       });
-      if (editorRef.current === editor && discard) onCancel();
+      return editorRef.current === editor && discard;
     } finally {
       if (editorRef.current === editor) setConfirming(false);
     }
+  }
+
+  useBlocker({
+    shouldBlockFn: async () => !(await confirmLeave()),
+    // The editor owns its native unload guard as well as this router guard.
+    enableBeforeUnload: false,
+  });
+
+  async function handleCancel() {
+    if (saving || confirming) return;
+    if (!dirty || (await confirmLeave())) onCancel();
   }
 
   return (

@@ -855,6 +855,13 @@ export function useBuildSessionActions({
     [dispatch],
   );
 
+  const clearRestoredInput = useCallback(
+    (requestId: string) => {
+      dispatch({ type: "CLEAR_RESTORED_INPUT", requestId });
+    },
+    [dispatch],
+  );
+
   const clearInteractionDrafts = useCallback(() => {
     dispatch({ type: "CLEAR_DRAFTS" });
   }, [dispatch]);
@@ -933,6 +940,7 @@ export function useBuildSessionActions({
       upsertInteractionDraft,
       removeInteractionDraft,
       clearInteractionDrafts,
+      clearRestoredInput,
       resumeSuspension,
       cancelSuspension,
       refreshSuspensions,
@@ -967,6 +975,7 @@ export function useBuildSessionActions({
       upsertInteractionDraft,
       removeInteractionDraft,
       clearInteractionDrafts,
+      clearRestoredInput,
       resumeSuspension,
       cancelSuspension,
       refreshSuspensions,
