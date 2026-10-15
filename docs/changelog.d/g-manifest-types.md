@@ -7,4 +7,4 @@
 ### Fixed
 
 - **`validatePluginManifest` checks a `PLUGIN.md`.** It validated the frontmatter against the compiled runtime schema and rejected every real package manifest; it now uses the package manifest schema.
-- **A runtime that can emit events stays in the foreground.** A `schedule.completion.mode: detached` runtime that lists `emit-event` in its tools, or declares `advertiseEvents: true`, is no longer moved to the background; the check read a package field that was always empty on a runtime.
+- **A runtime that can emit events stays in the foreground.** A `schedule.detached` runtime that lists `emit-event` in its tools, or declares `agent.advertiseEvents: true`, is no longer moved to the background; the check read a package field that was always empty on a runtime.

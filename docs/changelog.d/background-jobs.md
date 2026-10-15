@@ -1,6 +1,6 @@
 ### Breaking
 
-- **A background runtime that lists the `suspend` tool no longer loads.** A runtime with `schedule.manual.execution: background` or `schedule.completion.mode: detached` that lists `suspend` in `agent.tools.builtin` is rejected at load, because no player waits on background work. Remove `suspend` from such a runtime, or run it in the foreground. Rule: `docs/reference/tools.md` (suspend).
+- **A background runtime that lists the `suspend` tool no longer loads.** A runtime with `schedule.background: true` or `schedule.detached: true` that lists `suspend` in `agent.tools.builtin` is rejected at load, because no player waits on background work. Remove `suspend` from such a runtime, or run it in the foreground. Rule: `docs/reference/tools.md` (suspend).
 
 ### Changed
 
