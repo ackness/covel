@@ -307,7 +307,7 @@ describe("ExecutionTimeline plugin names", () => {
     expect(screen.queryByRole("alert")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: /Execution/ }));
     const alert = screen.getByRole("alert");
-    expect(alert.textContent).toContain("recorded execution history");
+    expect(alert.textContent).toContain("Its execution history is shown here");
     expect(alert.textContent).not.toContain("recovery notice");
     expect(within(alert).queryByRole("button")).toBeNull();
     expect(retry).not.toHaveBeenCalled();
