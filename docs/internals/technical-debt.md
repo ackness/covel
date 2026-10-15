@@ -8,10 +8,9 @@
 rg -n "ponytail:" apps packages plugins
 ```
 
-当前源码里有 12 个标记，下面三张表每行对应一个。
-
 > [!IMPORTANT]
 > 增加或删除一条 `ponytail:` 注释时，在同一次改动里更新这一页。
+> `pnpm check:scripts` 和 `pnpm test:docs` 检查每个标记在中英文清单里各有一行，也检查没有标记的条目是否已删除。
 
 ## Kernel / runtime
 
