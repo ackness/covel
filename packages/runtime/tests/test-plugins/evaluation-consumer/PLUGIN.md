@@ -12,20 +12,16 @@ runtime:
   function: { handler: ./handler.js, timeoutMs: 15000 }
   schedule:
     stage: post-turn
-    trigger: { type: scheduled, interval: 1 }
   io:
-    visibility: system
     output: { contract: choice-recommendations@1 }
     inputs:
       choices:
-        from: { contract: scene-prompts@1, cardinality: one }
+        from: { contract: scene-prompts@1 }
         accepts: ./schemas/choices.schema.json
-        required: true
       narrative:
-        from: { contract: narrative-engine@1, cardinality: one }
+        from: { contract: narrative-engine@1 }
         select: /narrativeOutput
         accepts: ./schemas/narrative.schema.json
-        required: true
 ---
 
 Framework test fixture; never bundled as a plugin.

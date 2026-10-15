@@ -64,13 +64,11 @@ runtime:
       narrative:
         from: { contract: narrative-engine@1 }
         select: /narrativeOutput
-        required: true
-    visibility: plugin
-  agent:
-    model: plugin
 ---
 Write one observation grounded in runtime-inputs.narrative.value.
 ```
+
+Fields left out take their defaults: this runtime runs on its own every turn, uses the model of the `plugin` role, and its output is not story text. Leave out fields that match the default; `pnpm validate:plugin` reminds you when you write one. The defaults are in [plugin reference · Defaults](../reference/plugins.md#defaults).
 
 Three rules that are easiest to get wrong:
 
@@ -131,7 +129,6 @@ There are two lists, with different jobs:
 
 ```yaml
 agent:
-  model: plugin
   tools:
     builtin: [plugin-data-set]
     plugin: [save-note]
@@ -161,24 +158,23 @@ runtime:
       narrative:
         from: { contract: narrative-engine@1 }
         select: /narrativeOutput
-        required: true
 ```
 
-| This part               | What it does                                                                                        |
-| ----------------------- | --------------------------------------------------------------------------------------------------- |
-| `requires`              | When this plugin is enabled, Covel makes sure a plugin that provides this capability is enabled too |
-| `io.inputs.<name>.from` | Reads that plugin's result for this turn                                                            |
-| `select`                | Takes only part of the result                                                                       |
-| `required: true`        | When the upstream fails or does not exist, this runtime does not run                                |
+| This part                   | What it does                                                                                        |
+| --------------------------- | --------------------------------------------------------------------------------------------------- |
+| `requires`                  | When this plugin is enabled, Covel makes sure a plugin that provides this capability is enabled too |
+| `io.inputs.<name>.from`     | Reads that plugin's result for this turn                                                            |
+| `select`                    | Takes only part of the result                                                                       |
+| `required` (default `true`) | When the upstream fails or does not exist, this runtime does not run; with `false` it runs anyway   |
 
 In a prompt, the value read is `runtime-inputs.narrative.value`. In a function, it is `ctx.inputs.narrative.value`.
 
-There are two more fields that control order only: `schedule.needs` requires the upstream to succeed, and `schedule.after` only requires the upstream to have finished. An input with `required: true` already includes the condition "upstream succeeded", so you do not need to write `needs` again.
+There are two more fields that control order only: `schedule.needs` requires the upstream to succeed, and `schedule.after` only requires the upstream to have finished. A required input (what an input is when `required` is left out) already includes the condition "upstream succeeded", so you do not need to write `needs` again.
 
 > [!IMPORTANT]
 > A reference across plugins may only use a capability name. Writing another plugin's runtime name (for example `other-plugin/some-runtime`) in `needs`, `after` or `io.inputs` makes the manifest fail to load. Runtimes inside the same plugin can refer to each other by runtime name.
 
-One capability can have several providers. Use `cardinality: one` to mean "only one is needed", and `cardinality: all` to mean "all of them are needed". To make your plugin mutually exclusive with other plugins that provide a capability, write `conflicts` in `PLUGIN.md`.
+One capability can have several providers. `cardinality: one` (the default) means "only one is needed", and `cardinality: all` means "all of them are needed". To make your plugin mutually exclusive with other plugins that provide a capability, write `conflicts` in `PLUGIN.md`.
 
 Runtimes triggered by an event can also be ordered. Among the runtimes triggered by the same event, `needs` and `after` still apply, and runtimes without a dependency still run at the same time. A dependency does not trigger a runtime that no event matched. Runtimes that run in the background cannot be ordered this way. To pass work along, send a follow-up event, or read the output the other side has already saved.
 
@@ -192,7 +188,6 @@ A runtime that handles hidden plot or the answers to mysteries declares `io.conc
 
 ```yaml
 io:
-  visibility: plugin
   concealed: true
 ```
 

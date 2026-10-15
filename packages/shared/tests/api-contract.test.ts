@@ -34,7 +34,7 @@ const plugin = {
       trigger: { type: "auto" },
       execution: "sync",
       turnCompletion: { mode: "await" },
-      outputKind: "plugin",
+      outputKind: "system",
       outputContract: "memory@1",
     },
   ],
@@ -168,9 +168,8 @@ describe("shared API contracts", () => {
     { trigger: { type: "manual", topic: "" } },
     {
       stage: "pre-turn",
+      every: 2,
       trigger: {
-        type: "scheduled",
-        interval: 1,
         startTurn: 1,
         cooldownTurns: 0,
         maxTriggerCount: 1,
@@ -193,7 +192,15 @@ describe("shared API contracts", () => {
               {
                 ...plugin.runtimes[0],
                 stage: manifest?.stage,
-                trigger: manifest?.trigger,
+                // The loader fills in the default type and moves `every`
+                // into the compiled trigger.
+                trigger: {
+                  ...manifest?.trigger,
+                  type: manifest?.trigger?.type ?? "auto",
+                  ...(manifest?.every !== undefined
+                    ? { every: manifest.every }
+                    : {}),
+                },
               },
             ],
           },
@@ -207,7 +214,7 @@ describe("shared API contracts", () => {
   );
 
   it("rejects a zero startTurn in both authoring and discovery", () => {
-    const trigger = { type: "scheduled", startTurn: 0 };
+    const trigger = { type: "auto", startTurn: 0 };
     expect(
       runtimeAuthoringManifestSchema.safeParse({
         type: "agent",

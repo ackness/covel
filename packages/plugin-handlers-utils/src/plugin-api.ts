@@ -191,13 +191,13 @@ export interface PluginToolContext {
   /**
    * Player messages recorded in this session, setup-form submissions included;
    * absent outside a turn. Monotonic, but not the scheduler's logical turn
-   * (`startTurn` / `interval` count committed main-loop player turns).
+   * (`startTurn` / `every` count committed main-loop player turns).
    */
   readonly turnNumber?: number;
   /**
    * The scheduler's logical turn: committed main-loop player turns plus one.
    * Setup and the opening continuation share turn 1 with the first message;
-   * `startTurn` and `interval` gates count in these units.
+   * `startTurn` and `every` gates count in these units.
    */
   readonly logicalTurn?: number;
   /** Topics emitted earlier in this tool loop, used for event deduplication. */

@@ -44,14 +44,14 @@ const guardRuntime = {
   runtimeType: "agent",
   guard: "./guard.js",
   trigger: { type: "auto" },
-  outputKind: "plugin",
+  outputKind: "system",
   outputContract: undefined,
 } as RuntimeManifest;
 
 const siblingRuntime = {
   name: "p/writer",
   pluginId: "p",
-  outputKind: "plugin",
+  outputKind: "system",
   outputContract: undefined,
 } as unknown as RuntimeManifest;
 

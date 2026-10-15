@@ -1,7 +1,7 @@
 ---
 id: tabletop-rules
 kind: plugin
-version: 0.0.35
+version: 0.0.36
 displayName: Tabletop Rules
 description: >-
   Layer opening point allocation onto character creation and resolve attribute
@@ -24,7 +24,6 @@ contributes:
     rules:
       schema: ./schemas/rules.schema.json
       description: Point-buy rules for character creation.
-      version: 1
       accepts:
         - tabletop-rules.rules.initial@1
       authoring:

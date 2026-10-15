@@ -84,7 +84,7 @@ function makeManifest(over?: Partial<RuntimeManifest>): RuntimeManifest {
     pluginId: "mega",
     description: "test runtime with a deferred tool pool",
     stage: "narrative",
-    outputKind: "plugin",
+    outputKind: "system",
     tools: {
       builtin: TOOL_POOL.map((t) => t.name),
       defer: true,

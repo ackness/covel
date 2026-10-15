@@ -22,7 +22,7 @@ describe("plugin trigger discovery contract", () => {
       });
       const authored = {
         name,
-        trigger: schedule?.trigger,
+        trigger: { ...schedule?.trigger, type: schedule?.trigger?.type ?? type },
         stage: schedule?.stage,
       };
       const summary = buildPluginSummary({

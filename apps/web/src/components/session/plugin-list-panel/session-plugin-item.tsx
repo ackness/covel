@@ -184,9 +184,9 @@ export function SessionPluginItem({
                     <p className="break-all font-mono text-xs">{runtime.id}</p>
                     <RuntimeStageBadges runtimes={[runtime]} />
                     <RuntimeFeatureBadges runtime={runtime} />
-                    {runtime.trigger.interval && (
+                    {runtime.trigger.every && (
                       <p className="break-all font-mono text-xs">
-                        interval: {runtime.trigger.interval}
+                        every: {runtime.trigger.every}
                       </p>
                     )}
                     {runtime.trigger.maxTriggerCount !== undefined && (

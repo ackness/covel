@@ -164,7 +164,7 @@ describe("plugin flow routes", () => {
       runtimeType: "agent",
       execution: "background",
       stage: "pre-turn",
-      trigger: { type: "scheduled", interval: 3 },
+      trigger: { type: "auto", every: 3 },
       outputContract: "narrative-engine@1",
       turnCompletion: {
         mode: "detached",
@@ -216,7 +216,7 @@ describe("plugin flow routes", () => {
         provides?: string[];
         tags?: string[];
         runtimes?: Array<{
-          trigger: { type?: string; interval?: number };
+          trigger: { type?: string; every?: number };
           outputContract?: string;
           execution?: string;
           turnCompletion?: { mode: string; maxQueueMs?: number };
@@ -238,8 +238,8 @@ describe("plugin flow routes", () => {
     expect(pkg?.provides).toEqual(["narrative-engine@1"]);
     expect(pkg?.tags).toEqual(["mode:dialogue"]);
     expect(pkg?.runtimes?.[0]?.trigger).toEqual({
-      type: "scheduled",
-      interval: 3,
+      type: "auto",
+      every: 3,
     });
     expect(pkg?.runtimes?.[0]?.outputContract).toBe("narrative-engine@1");
     expect(pkg?.runtimes?.[0]?.execution).toBe("background");

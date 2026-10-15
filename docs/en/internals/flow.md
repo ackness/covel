@@ -154,7 +154,7 @@ Setup runtimes can declare dependencies on each other with `needs(scope: session
 
 - Target already done: the dependency is met right away.
 - Target is `blocked`, or belongs to a plugin that is not enabled in this session: the player must deal with it.
-- For a contract dependency, write `cardinality: one`: as long as one provider is done, blocked, or can finish first, it does not count as a cycle. Write `all`: wait for every provider that is still pending.
+- When a contract dependency is `cardinality: one` (the default): as long as one provider is done, blocked, or can finish first, it does not count as a cycle. When it is `all`: wait for every provider that is still pending.
 - Only members that no order can unblock are marked `blocked` before execution, with the reason `setup-session-cycle`.
 
 #### From setup to playing
@@ -162,7 +162,7 @@ Setup runtimes can declare dependencies on each other with `needs(scope: session
 - **When it switches.** After all setup runtimes report done, the kernel changes `phase` from `'setup'` to `'playing'` in the setup commit transaction. `completedPlayerTurns` is still 0 in this transaction. If the commit fails, the switch of `phase` is rolled back together with `setupRuntimes`.
 - **No separate notice.** Switching `phase` sends no separate SSE event, and there is no proposal type for it. The client reads the current `phase`, `completedPlayerTurns`, and `setupRuntimes` from the session response or the snapshot.
 - **The opening follows at once (setup completion follow-up).** After the last setup input (for example the character form) is submitted, the same `/api/actions` request first commits the setup phase. Then, with a new `turnId` and a separate transaction, it runs the main loop once right away. So the player sees the first real passage of narrative directly. The same SSE stream, trace, and snapshot cover both executions.
-- **The opening does not count as a turn.** The `origin` of this follow-up execution is `continuation`, and it is not counted in `completedPlayerTurns`. The count stays 0 until the first player message in the main loop is committed, and then it becomes 1. So the opening narrative and the first turn share `logicalTurn = 1`. `startTurn` and `interval` are both counted with this number.
+- **The opening does not count as a turn.** The `origin` of this follow-up execution is `continuation`, and it is not counted in `completedPlayerTurns`. The count stays 0 until the first player message in the main loop is committed, and then it becomes 1. So the opening narrative and the first turn share `logicalTurn = 1`. `startTurn` and `every` are both counted with this number.
 
 #### Logical turn number
 
@@ -263,7 +263,7 @@ flowchart TB
     Capture --> Exec[executeTurn]
     Exec --> StartEvt["SSE: execution.started"]
     StartEvt --> Hook1[TurnStart hook]
-    Hook1 --> Filter["selectTriggeredRuntimes<br/>manual: match by name (bypasses shouldTrigger)<br/>setup runtime: take pending from the setupRuntimes mirror<br/>others: shouldTrigger (auto / scheduled / event<br/>+ startTurn / maxTriggerCount / cooldownTurns)"]
+    Hook1 --> Filter["selectTriggeredRuntimes<br/>manual: match by name (bypasses shouldTrigger)<br/>setup runtime: take pending from the setupRuntimes mirror<br/>others: shouldTrigger (auto + every / event<br/>+ startTurn / maxTriggerCount / cooldownTurns)"]
     Filter --> PreSched["PreSchedule hook<br/>(can narrow the runtime set for this turn)"]
     PreSched --> Band{"phase?"}
     Band -->|setup| SetupBand["setup stage<br/>DAG (needs / after / inputs)"]
@@ -611,15 +611,13 @@ Example: a `post-turn` runtime wants to read this turn's story text.
 io:
   inputs:
     narrative:
-      from: { contract: narrative-engine@1, cardinality: one }
-      scope: turn
+      from: { contract: narrative-engine@1 }
       select: /narrativeOutput
-      required: true
 ```
 
 - The stage barrier makes sure `post-turn` runs only after the `narrative` stage ends.
 - Inside the same stage, runtimes that do not depend on each other run in parallel. The inputs and the declared dependencies decide the order.
-- If a `required` input is missing, the consumer does not run.
+- An input is required by default (`required` defaults to `true` and `scope` to `turn`): if it is missing, the consumer does not run.
 - An optional input must say `required: false` explicitly. This way a provider that is temporarily absent does not become a required dependency.
 
 **When the data a runtime reads was taken.**
@@ -657,24 +655,23 @@ How the kernel decides whether a runtime runs in this turn:
               ┌─────────────────────┴────────────────────┐
               │ trigger.type                             │
               ├──────────────────────────────────────────┤
-              │ auto      → true                         │
-              │ scheduled → logical turn % interval == 0 │
+              │ auto      → logical turn % every == 0    │
+              │             (every defaults to 1)        │
               │ event     → topic in pendingEvents       │
               └──────────────────────────────────────────┘
 
-  The trigger enum is exactly the four values auto / manual / scheduled / event;
+  The trigger enum is exactly the three values auto / manual / event, and auto when left out;
   a manifest with any other value is rejected by the loader at load time
   and never reaches the trigger decision.
 ```
 
 In one line for each trigger type:
 
-| `trigger.type` | When it runs                                                   |
-| -------------- | -------------------------------------------------------------- |
-| `auto`         | Every turn                                                     |
-| `scheduled`    | Turns where the logical turn number is divisible by `interval` |
-| `event`        | The event it subscribes to is in the pending events            |
-| `manual`       | Only when named by plugin-rpc. None of the gates above apply   |
+| `trigger.type` | When it runs                                                                      |
+| -------------- | --------------------------------------------------------------------------------- |
+| `auto`         | Every turn; with `schedule.every`, the turns whose logical turn number it divides |
+| `event`        | The event it subscribes to is in the pending events                               |
+| `manual`       | Only when named by plugin-rpc. None of the gates above apply                      |
 
 ## 5. Front-end interaction design
 

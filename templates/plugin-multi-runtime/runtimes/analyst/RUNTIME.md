@@ -5,8 +5,6 @@ description: >-
   actionable observation when useful. Agent-runtime starter.
 schedule:
   stage: post-turn
-  trigger:
-    type: auto
 io:
   inputs:
     narrator-output:
@@ -17,19 +15,10 @@ io:
   selfData:
     - namespace: notes
       as: <existing-notes>
-      format: summary
-      maxEntries: 50
-  visibility: plugin
 agent:
-  model: plugin
   tools:
     builtin:
       - plugin-data-set
-  loop:
-    timeoutMs: 60000
-    callTimeoutMs: 45000
-    firstTokenTimeoutMs: 30000
-    maxRetries: 1
 ---
 
 You are the analyst runtime in the {{pluginName}} plugin. Your job is to turn narrative information relevant to this plugin into one maintainable plugin note.

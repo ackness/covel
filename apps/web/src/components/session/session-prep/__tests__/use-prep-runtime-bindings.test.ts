@@ -36,7 +36,7 @@ const plugins: PluginSummary[] = ["core", "guide"].map((id) => ({
       trigger: { type: "auto" },
       execution: "sync",
       turnCompletion: { mode: "await" },
-      outputKind: "plugin",
+      outputKind: "system",
       outputContract: undefined,
       tags: [],
     },

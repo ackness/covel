@@ -462,12 +462,12 @@ describe("inventory plugin manifest", () => {
   it("records changes in a post-turn function runtime gated on typed WorldIR", () => {
     expect(manifest.pluginType).toBe("plugin");
     expect(manifest.stage).toBe("post-turn");
-    expect(manifest.trigger?.type).toBe("auto");
+    expect(manifest.trigger).toBeUndefined(); // `auto`, the default
     expect(manifest.needs).toBeUndefined();
     expect(manifest.inputs?.worldIR).toEqual({
-      from: { capability: "world-ir-provider@1", cardinality: "one" },
+      // `cardinality: one` and `required: true` are the defaults.
+      from: { capability: "world-ir-provider@1" },
       accepts: "contract:world-ir@1",
-      required: true,
     });
     expect(declaration.requires).toContain("world-ir-provider@1");
     expect(manifest.runtimeType).toBe("function");

@@ -5,7 +5,7 @@ This page explains how to use one command to play a few turns automatically on a
 Use it when:
 
 - You changed a plugin or a runtime, and want to confirm the whole flow still works.
-- You changed trigger, stage, or interval rules, and want to see how they are actually scheduled.
+- You changed trigger, stage, or cadence rules, and want to see how they are actually scheduled.
 - You want to see how long a model's tool calls took and what they output.
 - You are getting ready to release, and want to run a full pass on a real model.
 
@@ -112,13 +112,13 @@ It works out the answer from the server's scheduling rules. It first passes thre
 
 After it passes these three gates, it checks which turn this is. The opening and the player's first message both count as turn 1:
 
-| Configuration                                                                                | Expectation                                                                                                                                                                       |
-| -------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `startTurn` is greater than the current turn, or `interval` does not divide the current turn | This turn does not run (`SKIP`)                                                                                                                                                   |
-| `auto`, with no cooldown and no count limit                                                  | It must run in every turn (strict `PASS` / `FAIL`)                                                                                                                                |
-| `scheduled`, or `auto` with `cooldownTurns` / `maxTriggerCount`                              | It must run at least once in the whole session. A turn that does not get its turn is marked `WAIT`, and step 7 checks them all together                                           |
-| `schedule.completion.mode: detached`                                                         | Marked `DEFER` in the turn. In step 6, it waits for background jobs to clear, and each job must succeed or be cancelled on purpose                                                |
-| `stage: setup`                                                                               | Step 6 checks whether it is marked as completed in this session's records. Opening work may happen after the form is submitted, so it may not show up in the report for each turn |
+| Configuration                                                                             | Expectation                                                                                                                                                                       |
+| ----------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `startTurn` is greater than the current turn, or `every` does not divide the current turn | This turn does not run (`SKIP`)                                                                                                                                                   |
+| `auto`, with no `every`, no cooldown and no count limit                                   | It must run in every turn (strict `PASS` / `FAIL`)                                                                                                                                |
+| `auto` with `every`, `cooldownTurns` or `maxTriggerCount`                                 | It must run at least once in the whole session. A turn that does not get its turn is marked `WAIT`, and step 7 checks them all together                                           |
+| `schedule.completion.mode: detached`                                                      | Marked `DEFER` in the turn. In step 6, it waits for background jobs to clear, and each job must succeed or be cancelled on purpose                                                |
+| `stage: setup`                                                                            | Step 6 checks whether it is marked as completed in this session's records. Opening work may happen after the form is submitted, so it may not show up in the report for each turn |
 
 ### How the script fills in forms
 
@@ -220,13 +220,13 @@ The biggest use of this script is to confirm that each runtime's actual behavior
 | ------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
 | `schedule.stage: setup`                                 | Runs only at the opening. Step 6 checks that it is recorded as completed                    |
 | `stage: pre-turn` / `narrative` / `post-turn` / `audit` | Runs only in normal turns                                                                   |
-| `trigger.type: auto`, with a `stage`                    | Must run in every turn                                                                      |
-| `trigger.type: scheduled`, with a `stage`               | Runs at least once in the turns that are allowed                                            |
+| `auto` (the default), with a `stage`                    | Must run in every turn                                                                      |
+| `auto`, with a `stage` and `every`                      | Runs at least once in the turns that are allowed                                            |
 | `schedule.completion.mode: detached`                    | Marked `DEFER` in the turn. Step 6 checks that the background job succeeded                 |
 | No `stage`                                              | Not scheduled by stage. Marked `FIRE` when it is triggered itself                           |
 | Plugin not enabled in this session                      | `SKIP` throughout                                                                           |
 | `io.visibility: story`                                  | The output column of the Runtime Timeline shows `narrative(<character count>c)`             |
-| `io.visibility: plugin` / `system`                      | The output column shows `keys=[...]`                                                        |
+| `io.visibility: system` (the default)                   | The output column shows `keys=[...]`                                                        |
 | `agent.loop.maxSteps: N`                                | When the steps run out, the failure record contains `exhausted the tool loop after N steps` |
 | `agent.tools`, `contributes.tools`                      | The Tool Calls table shows the actual number of calls and the success rate                  |
 | `type: function`                                        | It has no model-initiated calls in the Tool Calls table                                     |

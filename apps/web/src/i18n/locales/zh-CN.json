@@ -1743,9 +1743,7 @@
       "data": "数据",
       "dataTitle": "提供世界或记忆数据",
       "system": "系统",
-      "systemTitle": "产生系统级输出",
-      "auxiliary": "辅助",
-      "auxiliaryTitle": "产生插件辅助输出"
+      "systemTitle": "产生系统级输出"
     },
     "source": {
       "builtin": {

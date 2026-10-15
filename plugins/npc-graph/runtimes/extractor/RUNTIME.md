@@ -6,31 +6,23 @@ description: >-
 schedule:
   stage: post-turn
   trigger:
-    type: scheduled
-    interval: 1
     cooldownTurns: 1
 io:
   inputs:
     worldIR:
       from:
         contract: world-ir-provider@1
-        cardinality: one
       accepts: "contract:world-ir@1"
-      required: true
   selfData:
     - namespace: nodes
       as: <existing-npcs>
-      format: summary
       maxEntries: 60
     - namespace: edges
       as: <existing-relations>
-      format: summary
       maxEntries: 60
   output:
     contract: npc-graph@1
-  visibility: system
 agent:
-  model: plugin
   history:
     maxTurns: 0
   llm:
@@ -40,9 +32,6 @@ agent:
     plugin:
       - upsert-npc-graph
   loop:
-    timeoutMs: 120000
-    callTimeoutMs: 60000
-    maxRetries: 3
     completion:
       require: explicit
       afterTools:

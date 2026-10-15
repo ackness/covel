@@ -1,7 +1,7 @@
 ---
 id: inventory
 kind: plugin
-version: 0.0.36
+version: 0.0.37
 displayName: Inventory
 description: >-
   Records explicit item gains, losses, and equipment changes from each turn's
@@ -33,7 +33,6 @@ contributes:
       description: >-
         Importable inventory items — world packages can seed the player's
         opening gear.
-      version: 1
       accepts:
         - inventory.items@1
       authoring:

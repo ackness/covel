@@ -1,7 +1,7 @@
 ---
 id: npc-graph
 kind: plugin
-version: 0.0.36
+version: 0.0.37
 displayName: Relationship Graph
 description: >-
   Tracks relationships between characters so the story stays consistent when

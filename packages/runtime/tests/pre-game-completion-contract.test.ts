@@ -48,7 +48,7 @@ function pregameManifest(
     stage: "setup", // Pre-Game band
     runtimeType: "function",
     handler: "./h.js",
-    trigger: { type: "scheduled", interval: 1 },
+    trigger: { type: "auto" },
     ...overrides,
   } as RuntimeManifest;
 }
@@ -420,7 +420,7 @@ describe("Pre-Game completion contract", () => {
     // advance anyway" (newlyDone=[pregame], allSetupDone=true) is gone.
     const pregame = pregameManifest("pregame", {
       stage: "setup",
-      trigger: { type: "scheduled", interval: 1, maxTriggerCount: 1 },
+      trigger: { type: "auto", maxTriggerCount: 1 },
     });
 
     const store = await freshStore("sess-exh");

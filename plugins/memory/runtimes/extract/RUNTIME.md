@@ -3,8 +3,6 @@ type: function
 description: Update memory blocks from the completed source turn.
 schedule:
   stage: post-turn
-  trigger:
-    type: auto
   completion:
     mode: detached
     settle: before-next-execution
@@ -21,7 +19,6 @@ io:
     turn:
       from:
         kernel: turn-digest@1
-  visibility: system
 function:
   model: memory
   timeoutMs: 120000

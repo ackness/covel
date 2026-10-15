@@ -194,7 +194,7 @@ describe("host context against the public SDK", () => {
       runtimeType: "agent",
       guard: "./guard.js",
       trigger: { type: "auto" },
-      outputKind: "plugin",
+      outputKind: "system",
     } as RuntimeManifest;
     let seen: PluginFunctionContext | undefined;
     const deps: TurnExecutorDeps = {

@@ -64,7 +64,7 @@ describe("scene cast manifests", () => {
       outputKind: "system",
     });
     expect(sceneCast.outputContract).toBe("scene-cast@1");
-    expect(sceneCast.trigger).toMatchObject({ type: "scheduled", interval: 1 });
+    expect(sceneCast.trigger).toBeUndefined(); // `auto`, the default
     expect(loadedSceneCast.handler).toBeTypeOf("function");
     expect(sceneStageUi.slots.right.map((spec) => spec.id)).toEqual([
       "scene-stage",

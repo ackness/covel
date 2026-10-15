@@ -5,29 +5,20 @@ description: >-
   deterministic settlement.
 schedule:
   stage: post-turn
-  trigger:
-    type: scheduled
-    interval: 1
 io:
   inputs:
     currentTime:
       from:
         contract: world-time-context@1
-        cardinality: one
-      required: true
     narrative:
       from:
         contract: narrative-engine@1
-        cardinality: one
       select: /narrativeOutput
-      required: true
       accepts: ./narrative.schema.json
   output:
     contract: world-time-evolution@1
     schema: ../../schemas/world-time-evolution.schema.json
-  visibility: system
 agent:
-  model: plugin
   history:
     maxTurns: 0
   llm:
@@ -37,9 +28,6 @@ agent:
     plugin:
       - advance-world-time
   loop:
-    timeoutMs: 120000
-    callTimeoutMs: 60000
-    maxRetries: 3
     completion:
       require: tool-use
       afterTools:

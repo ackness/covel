@@ -42,7 +42,7 @@ function makeManifest(pluginId: string): RuntimeManifest {
     stage: "narrative",
     tools: { builtin: [], plugin: [] },
     permissions: {},
-    outputKind: "plugin",
+    outputKind: "system",
   };
 }
 

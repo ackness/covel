@@ -617,7 +617,7 @@ contributes:
 > [!IMPORTANT]
 > **A message block appears only after it has data.** A `ui.message` block is rendered only after data has been written into the `message` namespace it declares. So a plugin whose writes can be triggered only by a button inside the block never starts: there is no data on the first screen, the block does not appear, and the button cannot be clicked. `branch-reply` was completely invisible in its early days for this reason.
 >
-> The write that makes the block appear for the first time must come from a path that is **not manual**: a `scheduled` / `auto` runtime (which writes the first data after reading the narrative engine's output), an upstream runtime's `plugin.data` proposal, or a world-data import. `branch-reply` uses `trigger: auto` (`stage: post-turn`, after the narrative engine) to write candidate[0]. See [plugins.md § representative implementations](./plugins.md#representative-implementations) for details.
+> The write that makes the block appear for the first time must come from a path that is **not manual**: an `auto` runtime (which writes the first data after reading the narrative engine's output), an upstream runtime's `plugin.data` proposal, or a world-data import. `branch-reply` is an `auto` runtime (the default trigger, `stage: post-turn`, after the narrative engine) to write candidate[0]. See [plugins.md § representative implementations](./plugins.md#representative-implementations) for details.
 
 **Turn binding (`__turnId`).** The turn a message block is attached to is decided by `__turnId` in the `message` namespace. There are two ways to write it:
 

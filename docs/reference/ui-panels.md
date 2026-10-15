@@ -617,7 +617,7 @@ contributes:
 > [!IMPORTANT]
 > **消息块要先有数据才会出现。** `ui.message` 的块只有在它声明的 `message` namespace 里写入了数据之后才渲染。所以，一个只能靠块里的按钮来触发写入的插件永远启动不了：首屏没有数据，块不出现，按钮也就点不到。`branch-reply` 早期就因此完全不显示。
 >
-> 让块第一次出现的那次写入，必须来自一条**不是手动**的路径：`scheduled` / `auto` runtime（读到叙事引擎的输出后写入第一份数据）、上游 runtime 的 `plugin.data` 提案，或者 world-data 导入。`branch-reply` 用 `trigger: auto`（`stage: post-turn`，在叙事引擎之后）写入 candidate[0]，详见 [plugins.md § 代表性实现](./plugins.md#代表性实现)。
+> 让块第一次出现的那次写入，必须来自一条**不是手动**的路径：`auto` runtime（读到叙事引擎的输出后写入第一份数据）、上游 runtime 的 `plugin.data` 提案，或者 world-data 导入。`branch-reply` 是 `auto` runtime（默认的触发方式，`stage: post-turn`，在叙事引擎之后）写入 candidate[0]，详见 [plugins.md § 代表性实现](./plugins.md#代表性实现)。
 
 **回合绑定（`__turnId`）。** 消息块挂在哪一回合，由 `message` namespace 里的 `__turnId` 决定。有两种写法：
 

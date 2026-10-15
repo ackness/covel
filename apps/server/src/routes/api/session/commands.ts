@@ -166,7 +166,7 @@ export function buildCommandEnvironment(args: {
               id: runtime.name,
               pluginId: runtime.pluginId,
               runtimeType: runtime.runtimeType ?? "agent",
-              outputKind: runtime.outputKind ?? "plugin",
+              outputKind: runtime.outputKind ?? "system",
               ...(getRuntimeSpec(runtime).stage
                 ? { stage: getRuntimeSpec(runtime).stage }
                 : {}),

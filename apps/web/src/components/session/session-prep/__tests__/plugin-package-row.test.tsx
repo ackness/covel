@@ -33,7 +33,7 @@ const plugin: PluginSummary = {
     execution: "sync",
     trigger: { type: "auto" },
     turnCompletion: { mode: "await" },
-    outputKind: "plugin",
+    outputKind: "system",
     outputContract: undefined,
     tags: [],
   })),

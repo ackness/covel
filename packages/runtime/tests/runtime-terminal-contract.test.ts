@@ -25,7 +25,7 @@ describe.each(["agent", "function"] as const)(
           name: "probe/main",
           pluginId: "probe",
           stage: "narrative",
-          outputKind: "plugin",
+          outputKind: "system",
           trigger: { type: "auto" },
           runtimeType,
           tools: { builtin: ["suspend"] },
@@ -154,7 +154,7 @@ it.each(["agent", "function", "guard"] as const)(
       name: "probe/main",
       pluginId: "probe",
       stage: "narrative",
-      outputKind: "plugin",
+      outputKind: "system",
       trigger: { type: "auto" },
       runtimeType: kind === "function" ? "function" : "agent",
     };
@@ -230,7 +230,7 @@ describe.each(["turn", "resume"] as const)("%s terminal contract", (entry) => {
             trigger: { type: "auto" },
             maxRetries: 0,
             ...(scenario === "returned failure" && runtimeType === "agent"
-              ? { outputKind: "plugin", requireExplicitCompletion: true }
+              ? { outputKind: "system", requireExplicitCompletion: true }
               : {}),
           };
           const controller = new AbortController();

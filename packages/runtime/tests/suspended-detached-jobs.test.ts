@@ -23,7 +23,7 @@ const asker: RuntimeManifest = {
   pluginId: "probe",
   runtimeType: "function",
   stage: "post-turn",
-  outputKind: "plugin",
+  outputKind: "system",
   trigger: { type: "auto" },
 };
 const memory: RuntimeManifest = {
@@ -32,7 +32,7 @@ const memory: RuntimeManifest = {
   pluginId: "notes",
   runtimeType: "function",
   stage: "post-turn",
-  outputKind: "plugin",
+  outputKind: "system",
   trigger: { type: "auto" },
   turnCompletion: { mode: "detached" },
   effects: { writes: ["plugin-data:self:notes"] },

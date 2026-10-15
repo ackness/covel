@@ -56,7 +56,7 @@ export function makeFakeLoadedRuntime(args: {
   name: string;
   pluginId?: string;
   promptTemplate?: string;
-  outputKind?: "story" | "plugin" | "system";
+  outputKind?: "story" | "system";
   pluginType?: "core-plugin" | "plugin";
 }): LoadedRuntime {
   const manifest: RuntimeManifest = {

@@ -1795,9 +1795,7 @@
       "data": "Data",
       "dataTitle": "Provides world or memory data",
       "system": "System",
-      "systemTitle": "Produces system-level output",
-      "auxiliary": "Auxiliary",
-      "auxiliaryTitle": "Produces auxiliary plugin output"
+      "systemTitle": "Produces system-level output"
     },
     "source": {
       "builtin": {

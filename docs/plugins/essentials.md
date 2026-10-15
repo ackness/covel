@@ -64,13 +64,11 @@ runtime:
       narrative:
         from: { contract: narrative-engine@1 }
         select: /narrativeOutput
-        required: true
-    visibility: plugin
-  agent:
-    model: plugin
 ---
 Write one observation grounded in runtime-inputs.narrative.value.
 ```
+
+没写的字段用默认值：这个 runtime 每回合自动运行，用 `plugin` 用途的模型，它的输出不是故事正文。和默认值一样的字段不用写，写了 `pnpm validate:plugin` 会提醒；默认值见[插件参考 · 默认值](../reference/plugins.md#默认值)。
 
 三条最容易出错的规则：
 
@@ -131,7 +129,6 @@ contributes:
 
 ```yaml
 agent:
-  model: plugin
   tools:
     builtin: [plugin-data-set]
     plugin: [save-note]
@@ -161,24 +158,23 @@ runtime:
       narrative:
         from: { contract: narrative-engine@1 }
         select: /narrativeOutput
-        required: true
 ```
 
-| 这一段                  | 作用                                                         |
-| ----------------------- | ------------------------------------------------------------ |
-| `requires`              | 启用这个插件时，Covel 会确保有一个提供这项能力的插件也被启用 |
-| `io.inputs.<名字>.from` | 读取那个插件这一回合的结果                                   |
-| `select`                | 只取结果里的一部分                                           |
-| `required: true`        | 上游失败或不存在时，这个 runtime 不运行                      |
+| 这一段                    | 作用                                                           |
+| ------------------------- | -------------------------------------------------------------- |
+| `requires`                | 启用这个插件时，Covel 会确保有一个提供这项能力的插件也被启用   |
+| `io.inputs.<名字>.from`   | 读取那个插件这一回合的结果                                     |
+| `select`                  | 只取结果里的一部分                                             |
+| `required`（默认 `true`） | 上游失败或不存在时，这个 runtime 不运行；写 `false` 时照常运行 |
 
 读到的值在提示词里是 `runtime-inputs.narrative.value`，在函数里是 `ctx.inputs.narrative.value`。
 
-还有两个只管先后顺序的字段：`schedule.needs` 要求上游成功，`schedule.after` 只要求上游已经结束。`required: true` 的输入已经带有“上游成功”这个条件，不用再写一遍 `needs`。
+还有两个只管先后顺序的字段：`schedule.needs` 要求上游成功，`schedule.after` 只要求上游已经结束。必需的输入（不写 `required` 时就是）已经带有“上游成功”这个条件，不用再写一遍 `needs`。
 
 > [!IMPORTANT]
 > 跨插件的引用只能写能力名。`needs`、`after`、`io.inputs` 里写别的插件的 runtime 名（例如 `other-plugin/some-runtime`）会让清单加载失败。同一个插件内部的 runtime 之间可以直接用 runtime 名。
 
-同一项能力可以有几个提供者。用 `cardinality: one` 表示“只要一个”，`cardinality: all` 表示“全都要”。想和提供某项能力的其他插件互斥，在 `PLUGIN.md` 写 `conflicts`。
+同一项能力可以有几个提供者。`cardinality: one`（默认）表示“只要一个”，`cardinality: all` 表示“全都要”。想和提供某项能力的其他插件互斥，在 `PLUGIN.md` 写 `conflicts`。
 
 由事件触发的 runtime 也可以排先后：同一个事件触发的几个 runtime 之间，`needs` 和 `after` 照常生效，没有依赖的仍然同时运行。依赖不会替你触发一个没有被事件匹配到的 runtime。后台运行的 runtime 之间不能这样排序，要接力就发一个后续事件，或者读对方已经保存的输出。
 
@@ -192,7 +188,6 @@ runtime:
 
 ```yaml
 io:
-  visibility: plugin
   concealed: true
 ```
 

@@ -13,14 +13,11 @@ io:
       from:
         runtime: dice-check/roller
       select: /dice
-      required: true
     tabletopCheck:
       from:
         contract: tabletop-check@1
-        cardinality: one
       select: /receipt
       required: false
-  visibility: system
 function:
   handler: ./handler.js
 ---

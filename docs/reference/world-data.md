@@ -1434,7 +1434,6 @@ contracts:
 contributes:
   data:
     relationships:
-      version: 1
       accepts: [social.relationships@1]
       schema: ./schemas/relationships.schema.json
 ```

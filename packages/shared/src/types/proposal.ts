@@ -33,7 +33,7 @@ export interface ProposalSource {
 
 export interface NarrativeAppendPayload {
   readonly content: string;
-  readonly kind: string; // 'story' | 'plugin' | custom
+  readonly kind: string; // 'story' | 'system'
 }
 
 export interface InteractionRequestPayload {

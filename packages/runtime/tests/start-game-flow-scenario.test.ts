@@ -57,7 +57,7 @@ function fnManifest(
               ? "post-turn"
               : "audit",
     runtimeType: "function",
-    outputKind: "plugin",
+    outputKind: "system",
     handler: "./handler.js",
     trigger: { type: "auto" },
     ...overrides,

@@ -73,14 +73,14 @@ class NoopLLM implements LLMAdapter {
 }
 
 /**
- * Run one main-loop turn against a `scheduled` runtime and report whether it
+ * Run one main-loop turn against an `auto` runtime with a cadence and report whether it
  * triggered. The session is seeded straight into `playing` at the given
  * `completedPlayerTurns`, so the runtime's cadence is evaluated on the logical
  * turn `N = completedPlayerTurns + 1`.
  */
 async function scheduledRuntimeTriggers(
   completedPlayerTurns: number,
-  interval: number,
+  every: number,
 ): Promise<boolean> {
   const store = createMemoryStore();
   const now = new Date().toISOString();
@@ -103,7 +103,7 @@ async function scheduledRuntimeTriggers(
     stage: "narrative",
     runtimeType: "function",
     handler: "./h.js",
-    trigger: { type: "scheduled", interval },
+    trigger: { type: "auto", every },
   } as RuntimeManifest;
   let ran = false;
   const deps: TurnExecutorDeps = {
@@ -147,7 +147,7 @@ function makeRuntime(name: string): RuntimeManifest {
     pluginId: name,
     description: name,
     stage: "post-turn",
-    outputKind: "plugin",
+    outputKind: "system",
   };
 }
 
@@ -226,7 +226,7 @@ describe("setup frozen snapshot (cross-execution read of committed setup data)",
         runtimeType: "function",
         handler: "./h.js",
         trigger: { type: "auto" },
-        outputKind: "plugin",
+        outputKind: "system",
         outputContract: undefined,
       }) as RuntimeManifest;
     const schemaGen = fnRuntime("p/schema-gen", 40);
@@ -371,7 +371,7 @@ describe("setup gating across trigger paths (setup-incomplete skip)", () => {
         runtimeType: "function",
         handler: "./h.js",
         trigger: { type: "auto" },
-        outputKind: "plugin",
+        outputKind: "system",
         outputContract: undefined,
       }) as RuntimeManifest;
 
@@ -432,7 +432,7 @@ describe("setup gating across trigger paths (setup-incomplete skip)", () => {
       runtimeType: "function",
       handler: "./h.js",
       trigger: { type: "auto" },
-      outputKind: "plugin",
+      outputKind: "system",
       outputContract: undefined,
       inputs: { data: { from: { runtime: "a/gen" }, required: true } },
       input: { schema: "./in.json" },
@@ -540,7 +540,7 @@ describe("setup gating across trigger paths (setup-incomplete skip)", () => {
           runtimeType: "function",
           handler: "./h.js",
           trigger: { type: "auto" },
-          outputKind: "plugin",
+          outputKind: "system",
           outputContract: undefined,
         }) as RuntimeManifest;
       const deps: TurnExecutorDeps = {
@@ -587,7 +587,7 @@ describe("detached activation model (source × detached)", () => {
         runtimeType: "function",
         handler: "./h.js",
         trigger: { type: "auto" },
-        outputKind: "plugin",
+        outputKind: "system",
         outputContract: undefined,
         inputs: { data: { from: { runtime: "n/narr" }, required: true } },
       }) as RuntimeManifest;
@@ -669,7 +669,7 @@ describe("capability cardinality (provider 0 / 1 / N / all)", () => {
       runtimeType: "function",
       handler: "./h.js",
       trigger: { type: "auto" },
-      outputKind: "plugin",
+      outputKind: "system",
       outputContract: "narr",
     }) as RuntimeManifest;
   const consumer = (cardinality?: "one" | "all"): RuntimeManifest =>
@@ -681,7 +681,7 @@ describe("capability cardinality (provider 0 / 1 / N / all)", () => {
       runtimeType: "function",
       handler: "./h.js",
       trigger: { type: "auto" },
-      outputKind: "plugin",
+      outputKind: "system",
       outputContract: undefined,
       inputs: {
         data: {
@@ -1113,7 +1113,7 @@ describe("function handler result contract", () => {
       pluginId: name.split("/")[0],
       description: "canonical function runtime",
       stage: "narrative",
-      outputKind: "plugin",
+      outputKind: "system",
       runtimeType: "function",
       trigger: { type: "auto" },
     }) as RuntimeManifest;
@@ -1191,8 +1191,8 @@ describe("suspension & resume", () => {
 
 describe("logical-turn counting & ledger", () => {
   // needs: ExecutionContext logicalTurn = completedPlayerTurns + 1 (off-by-one fix) (release step 2)
-  it("scenario 13: scheduled interval: 2 在逻辑回合 2、4、6 触发（读 N 而非 completedPlayerTurns）— off-by-one 回归测试", async () => {
-    // logicalTurn = completedPlayerTurns + 1. interval:2 fires on the EVEN
+  it("scenario 13: auto every: 2 在逻辑回合 2、4、6 触发（读 N 而非 completedPlayerTurns）— off-by-one 回归测试", async () => {
+    // logicalTurn = completedPlayerTurns + 1. every:2 fires on the EVEN
     // logical turns 2/4/6, i.e. completedPlayerTurns 1/3/5.
     for (const completed of [1, 3, 5]) {
       expect(await scheduledRuntimeTriggers(completed, 2)).toBe(true);
@@ -1288,7 +1288,7 @@ describe("accepts validation (static decidable subset + runtime check)", () => {
       runtimeType: "function",
       handler: "./h.js",
       trigger: { type: "auto" },
-      outputKind: "plugin",
+      outputKind: "system",
       outputContract: "prov",
     }) as RuntimeManifest;
   const consumer = (
@@ -1303,7 +1303,7 @@ describe("accepts validation (static decidable subset + runtime check)", () => {
       runtimeType: "function",
       handler: "./h.js",
       trigger: { type: "auto" },
-      outputKind: "plugin",
+      outputKind: "system",
       outputContract: undefined,
       inputs: {
         data: {
@@ -1425,7 +1425,7 @@ describe("activation payload (canonical payload shared by function/agent)", () =
       runtimeType: "function",
       handler: "./h.js",
       trigger: { type: "manual" },
-      outputKind: "plugin",
+      outputKind: "system",
       outputContract: undefined,
       input: { schema: "./in.json" },
     } as RuntimeManifest;
@@ -1470,7 +1470,7 @@ describe("activation payload (canonical payload shared by function/agent)", () =
       stage: "narrative",
       runtimeType: "agent",
       trigger: { type: "manual" },
-      outputKind: "plugin",
+      outputKind: "system",
       outputContract: undefined,
     } as RuntimeManifest;
     const assembled = await buildContext({
@@ -1534,7 +1534,7 @@ describe("recordAs export (persistent export revision)", () => {
       runtimeType: "function",
       handler: "./h.js",
       trigger: { type: "auto" },
-      outputKind: "plugin",
+      outputKind: "system",
       outputContract: "cfg-provider",
       version: "1.0.0",
       output: { schema: "./out.json", recordAs },
@@ -1552,7 +1552,7 @@ describe("recordAs export (persistent export revision)", () => {
       runtimeType: "function",
       handler: "./h.js",
       trigger: { type: "auto" },
-      outputKind: "plugin",
+      outputKind: "system",
       outputContract: undefined,
       input: {
         inject: [

@@ -1,7 +1,7 @@
 ---
 id: guide
 kind: plugin
-version: 0.0.36
+version: 0.0.37
 displayName: Action Suggestions
 description: >-
   After each story beat, recaps the relevant context, states the current
@@ -40,42 +40,31 @@ contributes:
         - The framework finishes the runtime automatically after the tool succeeds. Do not call `runtime-done`.
         - Do not emit any text before or after the tool call.
       position: post-history
-      role: system
   tools:
     - generate-guide
 runtime:
   type: agent
   schedule:
     stage: post-turn
-    trigger:
-      type: scheduled
-      interval: 1
   io:
     inputs:
       narrative:
         from:
           contract: narrative-engine@1
-          cardinality: one
         select: /narrativeOutput
         accepts: ./schemas/narrative-output.schema.json
-        required: true
     output:
       schema: ./schemas/scene-prompts-output.schema.json
       contract: scene-prompts@1
-    visibility: system
   agent:
     history:
       maxTurns: 2
       includeSummaries: true
-    model: plugin
     llm:
       reasoningEffort: disabled
       toolChoice:
         name: generate-guide
     loop:
-      timeoutMs: 120000
-      callTimeoutMs: 60000
-      maxRetries: 3
       completion:
         require: tool-use
         afterTools:

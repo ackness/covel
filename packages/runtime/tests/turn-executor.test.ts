@@ -149,7 +149,7 @@ describe("TurnExecutor E2E", () => {
     });
     const scheduled = {
       ...narratorManifest,
-      trigger: { type: "scheduled" as const, interval: 1, cooldownTurns: 1 },
+      trigger: { type: "auto" as const, cooldownTurns: 1 },
     };
     const deps: TurnExecutorDeps = {
       loadRuntime: async () => ({ ...narratorLoaded, manifest: scheduled }),

@@ -28,7 +28,7 @@ const plugins: PluginSummary[] = [
         trigger: { type: "auto" },
         execution: "sync",
         turnCompletion: { mode: "await" },
-        outputKind: "plugin",
+        outputKind: "system",
         outputContract: undefined,
       },
     ],

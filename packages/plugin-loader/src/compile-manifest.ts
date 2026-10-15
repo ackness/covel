@@ -1,4 +1,10 @@
-import { runtimeManifestInputSchema, resolveI18nText } from "@covel/shared";
+import {
+  DEFAULT_RUNTIME_VISIBILITY,
+  defaultAgentLoop,
+  defaultAgentModel,
+  runtimeManifestInputSchema,
+  resolveI18nText,
+} from "@covel/shared";
 import type {
   PluginManifest,
   RuntimeAuthoringManifest,
@@ -48,7 +54,22 @@ export function compileRuntimeManifest(
       ? { ...a?.tools, plugin: [...contributed] }
       : a?.tools;
   const loop = a?.loop;
+  const visibility = runtime.io?.visibility ?? DEFAULT_RUNTIME_VISIBILITY;
+  // An agent that leaves out its slot or loop limits gets the defaults of its
+  // visibility; a function runtime has no loop and names a slot only when
+  // its handler calls a model.
+  const loopDefaults =
+    runtime.type === "agent" ? defaultAgentLoop(visibility) : undefined;
   const schedule = runtime.schedule;
+  // `auto` is the default trigger and `every` its cadence.
+  const trigger =
+    schedule?.trigger || schedule?.every !== undefined
+      ? {
+          ...schedule?.trigger,
+          type: schedule?.trigger?.type ?? ("auto" as const),
+          ...(schedule?.every !== undefined ? { every: schedule.every } : {}),
+        }
+      : undefined;
   const inject: InputInjectDecl[] = (runtime.io?.selfData ?? []).map(
     (entry) => ({ kind: "plugin-data", ...entry }),
   );
@@ -82,13 +103,16 @@ export function compileRuntimeManifest(
     runtimeType: runtime.type,
     handler: runtime.function?.handler,
     guard: runtime.guard,
-    model: a?.model ?? runtime.function?.model,
+    model:
+      runtime.type === "agent"
+        ? (a?.model ?? defaultAgentModel(visibility))
+        : runtime.function?.model,
     llm: a?.llm,
     history: a?.history,
     tools: runtime.function?.tools ?? agentTools,
     advertiseEvents: a?.advertiseEvents,
     stage: schedule?.stage,
-    trigger: schedule?.trigger,
+    trigger,
     needs: schedule?.needs?.map(compileDependency),
     after: schedule?.after?.map(compileDependency),
     turnCompletion: schedule?.completion,
@@ -96,18 +120,19 @@ export function compileRuntimeManifest(
     effects: runtime.effects,
     permissions: runtime.permissions,
     maxSteps: loop?.maxSteps,
-    timeoutMs: runtime.function?.timeoutMs ?? loop?.timeoutMs,
-    callTimeoutMs: loop?.callTimeoutMs,
+    timeoutMs:
+      runtime.function?.timeoutMs ?? loop?.timeoutMs ?? loopDefaults?.timeoutMs,
+    callTimeoutMs: loop?.callTimeoutMs ?? loopDefaults?.callTimeoutMs,
     firstTokenTimeoutMs: loop?.firstTokenTimeoutMs,
     idleTimeoutMs: loop?.idleTimeoutMs,
-    maxRetries: loop?.maxRetries,
+    maxRetries: loop?.maxRetries ?? loopDefaults?.maxRetries,
     loopDetectionThreshold: loop?.loopDetection,
     maxRecursionDepth: loop?.maxRecursionDepth,
     requireToolUse: loop?.completion?.require === "tool-use" || undefined,
     requireExplicitCompletion:
       loop?.completion?.require === "explicit" || undefined,
     completeAfterTools: loop?.completion?.afterTools,
-    outputKind: runtime.io?.visibility,
+    outputKind: visibility,
     ...(runtime.io?.concealed ? { concealed: true } : {}),
     ...(output
       ? { output: { schema: output.schema, recordAs: output.recordAs } }

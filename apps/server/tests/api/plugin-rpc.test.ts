@@ -1086,7 +1086,7 @@ function makeFunctionEntry(args: {
     description: "test function runtime",
     stage: args.stage ?? "post-turn",
     runtimeType: "function",
-    outputKind: "plugin",
+    outputKind: "system",
     pluginType: "plugin",
     handler: "./handler.js",
     trigger: { type: "manual" },
@@ -1163,7 +1163,7 @@ function makeFunctionEntry(args: {
 function makeAgentEntry(args: {
   pluginId: string;
   runtimeId: string;
-  outputKind?: "story" | "plugin" | "system";
+  outputKind?: "story" | "system";
   stage?: RuntimeManifest["stage"];
   source?: PluginSource;
   trigger?: RuntimeManifest["trigger"];

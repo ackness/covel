@@ -35,7 +35,6 @@ requires: [narrative-engine@1]
 contributes:
   data:
     facts:
-      version: 1
       accepts: [facts.index@1]
       schema: ./schemas/facts.schema.json
 ---
@@ -51,14 +50,11 @@ io:
   inputs:
     narrative:
       from: { contract: narrative-engine@1 }
-      required: true
       select: /narrativeOutput
   output:
     contract: facts.index@1
     schema: ../../schemas/facts.schema.json
     recordAs: extracted-facts
-  visibility: plugin
-agent: { model: plugin }
 ---
 Extract only the facts that `runtime-inputs.narrative.value` states.
 ```
@@ -70,10 +66,8 @@ Extract only the facts that `runtime-inputs.narrative.value` states.
 type: function
 schedule:
   trigger: { type: manual }
-  manual: { execution: sync }
 io:
   output: { contract: facts.query@1 }
-  visibility: plugin
 function:
   handler: ./handler.js
   timeoutMs: 90000
@@ -82,13 +76,13 @@ function:
 
 这里新出现的东西：
 
-| 这一段                      | 意思                                                                                  |
-| --------------------------- | ------------------------------------------------------------------------------------- |
-| `provides`                  | 这个插件对外提供的能力。别的插件可以 `requires` 它们                                  |
-| `io.output.contract`        | 这个 runtime 的输出就是这项能力的内容。它必须出现在 `provides` 里                     |
-| `io.output.schema`          | 输出要符合的形状。不符合时这次运行失败                                                |
-| `io.output.recordAs`        | 把输出保存下来，取一个名字。以后的回合可以用 `scope: committed` 读到它                |
-| `schedule.manual.execution` | `sync` 是调用方等它完成；`background` 是放到后台，见[后台工作与失败](#后台工作与失败) |
+| 这一段                      | 意思                                                                                             |
+| --------------------------- | ------------------------------------------------------------------------------------------------ |
+| `provides`                  | 这个插件对外提供的能力。别的插件可以 `requires` 它们                                             |
+| `io.output.contract`        | 这个 runtime 的输出就是这项能力的内容。它必须出现在 `provides` 里                                |
+| `io.output.schema`          | 输出要符合的形状。不符合时这次运行失败                                                           |
+| `io.output.recordAs`        | 把输出保存下来，取一个名字。以后的回合可以用 `scope: committed` 读到它                           |
+| `schedule.manual.execution` | 不写时是 `sync`：调用方等它完成；写 `background` 是放到后台，见[后台工作与失败](#后台工作与失败) |
 
 规则：
 
@@ -123,7 +117,6 @@ pnpm validate:plugin ~/.covel/plugins/fact-index/runtimes/query/RUNTIME.md
 contributes:
   data:
     facts:
-      version: 1
       accepts: [facts.index@1]
       schema: ./schemas/facts.schema.json
 ```
@@ -142,7 +135,6 @@ contributes:
 contributes:
   data:
     facts:
-      version: 1
       schema: ./schemas/facts.schema.json
       accepts: [facts.index@1]
       authoring:
@@ -269,15 +261,15 @@ function:
 
 ### 时限
 
-| 类型  | 字段                             | 意思                                            |
-| ----- | -------------------------------- | ----------------------------------------------- |
-| 函数  | `function.timeoutMs`             | 一次运行的总时限。调用外部接口的时间也算在里面  |
-| agent | `agent.loop.timeoutMs`           | 一次运行的总时限                                |
-| agent | `agent.loop.callTimeoutMs`       | 单次模型调用的时限（不是流式输出的调用）        |
-| agent | `agent.loop.firstTokenTimeoutMs` | 流式调用里，等第一个字的时限                    |
-| agent | `agent.loop.idleTimeoutMs`       | 流式调用里，两次输出之间最长的静默。默认 120 秒 |
-| agent | `agent.loop.maxRetries`          | 模型调用拿不到回复时重试几次。默认 1，最大 5    |
-| agent | `agent.loop.loopDetection`       | 模型连续重复同一个调用多少次算打转。默认 3      |
+| 类型  | 字段                             | 意思                                                                         |
+| ----- | -------------------------------- | ---------------------------------------------------------------------------- |
+| 函数  | `function.timeoutMs`             | 一次运行的总时限。调用外部接口的时间也算在里面                               |
+| agent | `agent.loop.timeoutMs`           | 一次运行的总时限。默认 120 秒，`story` runtime 240 秒                        |
+| agent | `agent.loop.callTimeoutMs`       | 单次模型调用的时限（不是流式输出的调用）。默认 60 秒，`story` runtime 120 秒 |
+| agent | `agent.loop.firstTokenTimeoutMs` | 流式调用里，等第一个字的时限                                                 |
+| agent | `agent.loop.idleTimeoutMs`       | 流式调用里，两次输出之间最长的静默。默认 120 秒                              |
+| agent | `agent.loop.maxRetries`          | 模型调用拿不到回复时重试几次。默认 3，`story` runtime 1；最大 5              |
+| agent | `agent.loop.loopDetection`       | 模型连续重复同一个调用多少次算打转。默认 3                                   |
 
 没有写 `firstTokenTimeoutMs` 时，每次尝试等第一个字的时间会自动缩短，给剩下的重试留出时间。第一个字本来就慢的模型要显式设置它，并把 `timeoutMs` 调大。完整的规则见[插件字段参考](../reference/plugins.md)。
 

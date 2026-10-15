@@ -903,7 +903,7 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 `steer`（插话）：
 
 - 消息并入 story runtime 的下一次 LLM 调用。回合提交时，它和回合在同一个事务里保存到对话历史和聊天记录；回合没有提交，就不保存。
-- 只对 `outputKind: story` 的 runtime 生效。plugin runtime 执行的是结构化任务，不接受插话。
+- 只对 `outputKind: story` 的 runtime 生效。其他 runtime 执行的是结构化任务，不接受插话。
 - 插话在最终响应流式输出期间到达时，story runtime 在收尾前追加一步 LLM 调用来消化它（受 maxSteps 约束）。
 
 `abort`（中止）：
@@ -3635,8 +3635,8 @@ runtime 报告失败时，它的原始错误保留在 `result.runtimeResults` �
   "schemaVersion": 1,
   "framework": {
     "pluginManifest": {
-      "triggerTypes": ["auto", "manual", "scheduled", "event"],
-      "outputKinds": ["story", "plugin", "system"],
+      "triggerTypes": ["auto", "manual", "event"],
+      "outputKinds": ["story", "system"],
       "runtimeTypes": ["agent", "function"],
       "executionModes": ["sync", "background"],
       "turnCompletionModes": ["await", "detached"],
@@ -3678,7 +3678,7 @@ runtime 报告失败时，它的原始错误保留在 `result.runtimeResults` �
 ```
 
 > [!NOTE]
-> **`triggerTypes` 的取值范围**：可用的触发类型只有 `auto` / `manual` / `scheduled` / `event` 四种，`triggerTypes` 把它们全部列出。详见 [reference/plugins.md → Runtime 分组字段](./plugins.md#runtime-分组字段)。
+> **`triggerTypes` 的取值范围**：可用的触发类型只有 `auto` / `manual` / `event` 三种，`triggerTypes` 把它们全部列出。`auto` runtime 的节奏写在 `schedule.every`，runtime 摘要的 `trigger.every` 里给出。详见 [reference/plugins.md → Runtime 分组字段](./plugins.md#runtime-分组字段)。
 
 #### `GET /api/plugins`
 

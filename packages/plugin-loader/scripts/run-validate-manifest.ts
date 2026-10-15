@@ -10,6 +10,7 @@ import { loadPluginDefinition } from "../src/load.js";
 import { discoverPluginAt } from "../src/discover.js";
 import { validatePluginLabels } from "../src/locale-labels.js";
 import { describePluginLanguages } from "../src/plugin-languages.js";
+import { authoringWarnings } from "../src/authoring-warnings.js";
 
 /** Where a validation run writes its results and its messages. */
 export interface ValidateManifestOutput {
@@ -101,6 +102,13 @@ export async function runValidateManifest(
       output.stdout.write(
         `  languages: ${describePluginLanguages(definition.languages)}\n`,
       );
+      // A field written with its default, or a version the package needs,
+      // does not stop the package; the author still sees it.
+      for (const warning of authoringWarnings(
+        definition.packageManifest,
+        definition.manifests,
+      ))
+        output.stdout.write(`  warning: ${warning}\n`);
       // A plugin names the role (slot) it wants; the player's settings pick
       // the model and the endpoint. Nothing reads a plugin's own llm.toml.
       if (

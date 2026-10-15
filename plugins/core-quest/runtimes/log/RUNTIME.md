@@ -4,17 +4,12 @@ description: >-
   Registers, advances, and closes quests from each turn's shared fact extraction.
 schedule:
   stage: post-turn
-  trigger:
-    type: auto
 io:
   inputs:
     worldIR:
       from:
         contract: world-ir-provider@1
-        cardinality: one
       accepts: "contract:world-ir@1"
-      required: true
-  visibility: system
 function:
   handler: ./handler.js
 ---

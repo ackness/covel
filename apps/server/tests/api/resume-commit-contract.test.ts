@@ -237,7 +237,7 @@ describe("resume commit composition", () => {
             stage: "setup",
             trigger: { type: "auto" },
             runtimeType: "function",
-            outputKind: "plugin",
+            outputKind: "system",
           }) as RuntimeManifest,
       );
       const pluginRegistry = createPluginRegistry();

@@ -224,7 +224,6 @@ contributes:
     - id: narrative-style
       content: Keep the narrator's perspective consistent.
       position: pre-history
-      role: system
 ```
 
 ### 动态内容

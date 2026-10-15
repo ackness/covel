@@ -4,9 +4,6 @@ description: Accepts follow-up hidden events planned by other runtimes during
   play, validating them before they join the hidden event table.
 schedule:
   stage: post-turn
-  trigger:
-    type: scheduled
-    interval: 1
 io:
   inputs:
     plans:
@@ -17,14 +14,11 @@ io:
     worldTime:
       from:
         contract: world-time-context@1
-        cardinality: one
       required: false
     dimensions:
       from:
         contract: world.dimensions@1
-        cardinality: one
       required: false
-  visibility: system
   concealed: true
 function:
   handler: ./handler.js

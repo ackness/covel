@@ -166,7 +166,7 @@ ANTHROPIC_API_KEY=sk-ant-xxxxxxxxxxxx
 
 ### 给单个世界或会话调整插件 runtime 模型
 
-“用途分配”决定每个用途（slot）在这台设备上实际使用的服务商和模型，例如把 `plugin` 指向 `ali-coding-plan / qwen3.8-flash`。插件的清单只声明默认用途（如 `model: plugin`），不会把 `deepseek-v4-flash` 这样的具体模型写死到世界里。
+“用途分配”决定每个用途（slot）在这台设备上实际使用的服务商和模型，例如把 `plugin` 指向 `ali-coding-plan / qwen3.8-flash`。插件的清单只声明用途名（如 `model: memory`；agent 不写时用 `plugin`），不会把 `deepseek-v4-flash` 这样的具体模型写死到世界里。
 
 开始会话前的配置页里，插件列表中的每个 agent runtime 都可以再选一个用途：
 

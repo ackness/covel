@@ -77,7 +77,7 @@ export function buildPluginFlowResponse(registry: PluginRegistry) {
     model?: string;
     trigger: {
       type: string;
-      interval?: number;
+      every?: number;
       cooldownTurns?: number;
       maxTriggerCount?: number;
       startTurn?: number;
@@ -144,13 +144,13 @@ export function buildPluginFlowResponse(registry: PluginRegistry) {
         ...(stage !== undefined ? { stage } : {}),
         segmentId,
         runtimeType: manifest.runtimeType ?? "agent",
-        outputKind: manifest.outputKind ?? "plugin",
+        outputKind: manifest.outputKind ?? "system",
         outputContract: manifest.outputContract,
         execution: manifest.execution ?? "sync",
         model: manifest.model,
         trigger: {
           type: manifest.trigger?.type ?? "auto",
-          interval: manifest.trigger?.interval,
+          every: manifest.trigger?.every,
           cooldownTurns: manifest.trigger?.cooldownTurns,
           maxTriggerCount: manifest.trigger?.maxTriggerCount,
           startTurn: manifest.trigger?.startTurn,

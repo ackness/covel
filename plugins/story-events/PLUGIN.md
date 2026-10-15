@@ -1,7 +1,7 @@
 ---
 id: story-events
 kind: plugin
-version: 0.1.2
+version: 0.1.3
 displayName: Hidden Story Events
 description: >-
   Keeps world-authored hidden story events out of prompts and player views until
@@ -45,7 +45,6 @@ contributes:
     events:
       schema: ./schemas/story-events.schema.json
       description: Hidden story events that fire when their condition holds.
-      version: 1
       accepts:
         - story.events@1
       authoring:

@@ -5,21 +5,16 @@ description: >-
   relationships.
 schedule:
   stage: pre-turn
-  trigger:
-    type: scheduled
-    interval: 1
 io:
   inputs:
     currentCast:
       from:
         contract: scene-cast@1
-        cardinality: one
       select: /speakers
       required: false
       accepts: ./schemas/current-cast.json
   output:
     contract: graph-rag@1
-  visibility: plugin
 function:
   handler: ./handler.js
 ---

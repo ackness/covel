@@ -10,7 +10,6 @@ schedule:
 io:
   output:
     contract: stage-direction@1
-  visibility: system
 function:
   handler: ./handler.js
 ---

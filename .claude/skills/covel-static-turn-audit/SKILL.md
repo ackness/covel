@@ -83,7 +83,7 @@ Write down what the reasoning ranges over before reasoning. Take every item from
 - For each outcome of its own runtimes, what state the plugin is left in. Look for an outcome that leaves its data half-written or a setup runtime never done.
 - Assumptions it makes but does not declare — another runtime already ran, last turn's data exists, the player character exists, this is not the first turn. Each one is an obligation to carry into layers B and C.
 - Setup runtimes: every path reaches done, blocked, or a visible wait; the guard skips work already done when a `version` change re-runs setup.
-- Cadence at its boundaries: `startTurn`, interval, cooldown, `maxTriggerCount`.
+- Cadence at its boundaries: `startTurn`, `schedule.every`, cooldown, `maxTriggerCount`.
 
 ### 4. Layer B — Between Plugins
 
@@ -139,7 +139,7 @@ Write the detailed files first and the README last. The README is rewritten from
 
 ```bash
 git rev-parse HEAD && git status --short
-rg -n --sort path "^\s*(stage|needs|after|mode|settle|visibility):|^\s+type: (auto|manual|scheduled|event)$" plugins -g PLUGIN.md -g RUNTIME.md -g '!**/_archive/**'
+rg -n --sort path "^\s*(stage|every|needs|after|mode|settle|visibility):|^\s+type: (auto|manual|event)$" plugins -g PLUGIN.md -g RUNTIME.md -g '!**/_archive/**'
 rg -n "selectTriggeredRuntimes|scheduleTriggeredRuntimes|runEventChain|markPreGameCompletion|finalizeExecution|withSettledExecutionLock" apps packages -g '!*.test.*'
 rg -n "status: \"(success|failed|skipped|suspended)\"|skipReason: \"|outcome: \"" packages/runtime/src/agent-loop packages/runtime/src/function-runtime packages/runtime/src/turn-executor packages/runtime/src/schedule -g '!*.test.*'
 ```

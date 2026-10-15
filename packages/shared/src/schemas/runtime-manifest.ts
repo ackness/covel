@@ -5,7 +5,8 @@ import {
   runtimeRuleIssues,
 } from "./runtime-rules.js";
 import {
-  triggerConfigSchema,
+  authoringEverySchema,
+  authoringTriggerSchema,
   stageSchema,
   turnCompletionConfigSchema,
   toolsConfigSchema,
@@ -14,6 +15,10 @@ import {
   pluginDataInjectDeclSchema,
   runtimeManifestInputSchema,
 } from "./plugin-schemas.js";
+import { AGENT_LOOP_DEFAULTS } from "./runtime-defaults.js";
+
+const loopDefault = (field: "timeoutMs" | "callTimeoutMs" | "maxRetries") =>
+  `Defaults to ${AGENT_LOOP_DEFAULTS.system[field]}; ${AGENT_LOOP_DEFAULTS.story[field]} with \`io.visibility: story\`.`;
 
 export const contractIdSchema = z
   .string()
@@ -33,7 +38,9 @@ const contractRefSchema = contractIdSchema.describe(
 );
 const cardinalitySchema = z
   .enum(["one", "all"])
-  .describe("`one` takes a single provider; `all` takes every provider.");
+  .describe(
+    "`one` takes a single provider; `all` takes every provider. Defaults to `one`.",
+  );
 const dependencyScopeSchema = z
   .enum(["turn", "session"])
   .describe(
@@ -96,11 +103,14 @@ export const runtimeAuthoringManifestSchema = z
       .strictObject({
         stage: stageSchema
           .describe(
-            "Stage the runtime runs in. Required for `auto` and `scheduled` triggers. Order: `setup`, `pre-turn`, `narrative`, `post-turn`, `audit`.",
+            "Stage the runtime runs in. Required for an `auto` trigger, the default. Order: `setup`, `pre-turn`, `narrative`, `post-turn`, `audit`.",
           )
           .optional(),
-        trigger: triggerConfigSchema
-          .describe("When the runtime is activated.")
+        every: authoringEverySchema.optional(),
+        trigger: authoringTriggerSchema
+          .describe(
+            "When the runtime is activated. Leave it out for an `auto` runtime without options.",
+          )
           .optional(),
         needs: z
           .array(needsSchema)
@@ -156,7 +166,7 @@ export const runtimeAuthoringManifestSchema = z
               required: z
                 .boolean()
                 .describe(
-                  "`true` stops this runtime when the upstream value is missing or failed.",
+                  "`true` stops this runtime when the upstream value is missing or failed. Defaults to `true`.",
                 )
                 .optional(),
               accepts: z
@@ -206,9 +216,9 @@ export const runtimeAuthoringManifestSchema = z
           .describe("What the runtime produces.")
           .optional(),
         visibility: z
-          .enum(["story", "plugin", "system"])
+          .enum(["story", "system"])
           .describe(
-            "Output kind the kernel dispatches on: `story` for the main narrative provider, `plugin` for plugin output, `system` for system output.",
+            "Output kind the kernel dispatches on: `story` for the main narrative provider, `system` for every other runtime. Defaults to `system`.",
           )
           .optional(),
         concealed: z
@@ -225,8 +235,9 @@ export const runtimeAuthoringManifestSchema = z
         model: z
           .string()
           .meta({
-            description: "Model slot the agent uses.",
-            examples: ["plugin"],
+            description:
+              "Model slot the agent uses. Defaults to `story` with `io.visibility: story`, otherwise `plugin`.",
+            examples: ["utility"],
           })
           .optional(),
         llm: runtimeManifestInputSchema.shape.llm,
@@ -255,7 +266,7 @@ export const runtimeAuthoringManifestSchema = z
               .int()
               .positive()
               .describe(
-                "Time limit of the runtime in ms. The time a streamed model call spends writing does not count.",
+                `Time limit of the runtime in ms. The time a streamed model call spends writing does not count. ${loopDefault("timeoutMs")}`,
               )
               .optional(),
             callTimeoutMs: z
@@ -263,7 +274,7 @@ export const runtimeAuthoringManifestSchema = z
               .int()
               .positive()
               .describe(
-                "Time limit of one model call that is not streamed, in ms.",
+                `Time limit of one model call that is not streamed, in ms. ${loopDefault("callTimeoutMs")}`,
               )
               .optional(),
             firstTokenTimeoutMs: z
@@ -288,7 +299,7 @@ export const runtimeAuthoringManifestSchema = z
               .min(0)
               .max(5)
               .describe(
-                "Retries on a transient model failure. Defaults to 1; `0` disables retry.",
+                `Retries on a transient model failure; \`0\` disables retry. ${loopDefault("maxRetries")}`,
               )
               .optional(),
             loopDetection: z
@@ -397,7 +408,7 @@ export const runtimeAuthoringManifestSchema = z
         code: "custom",
         path: ["io", "concealed"],
         message:
-          "A runtime with io.visibility: story writes the text the player reads and cannot be io.concealed; conceal a plugin or system runtime instead",
+          "A runtime with io.visibility: story writes the text the player reads and cannot be io.concealed; conceal a system runtime instead",
       });
     const inputs = Object.entries(value.io?.inputs ?? {});
     for (const issue of runtimeRuleIssues(
@@ -406,6 +417,7 @@ export const runtimeAuthoringManifestSchema = z
         handler: value.function?.handler,
         stage: value.schedule?.stage,
         trigger: value.schedule?.trigger,
+        every: value.schedule?.every,
         needs: value.schedule?.needs,
         completion: value.schedule?.completion,
         execution: value.schedule?.manual?.execution,

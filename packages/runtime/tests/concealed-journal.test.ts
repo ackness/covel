@@ -19,7 +19,7 @@ const manifest = (concealed: boolean): RuntimeManifest => ({
   description: "Plans hidden events",
   runtimeType: "agent",
   trigger: { type: "auto" },
-  outputKind: "plugin",
+  outputKind: "system",
   ...(concealed ? { concealed: true } : {}),
 });
 const run = (

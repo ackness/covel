@@ -22,7 +22,6 @@ entry: ./server/index.js
 contributes:
   hooks:
     - event: PreToolUse
-      enforce: normal
 ```
 
 ```js
@@ -186,7 +185,7 @@ Payload: `{ systemPrompt, messages, outputKind?, promptTemplate?, inputSlots?, c
 
 | Field            | Contents                                                                                                                                                                                                                                                                      |
 | ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `outputKind`     | `story`, `plugin`, or `system`.                                                                                                                                                                                                                                               |
+| `outputKind`     | `story` or `system`.                                                                                                                                                                                                                                                          |
 | `promptTemplate` | The prompt body of this runtime, as it is before rendering.                                                                                                                                                                                                                   |
 | `inputSlots`     | The resolved `io.inputs` values.                                                                                                                                                                                                                                              |
 | `characters`     | The characters in the session (`id`, `name`, `type`, `description`).                                                                                                                                                                                                          |

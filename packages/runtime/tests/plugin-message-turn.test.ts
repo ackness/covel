@@ -71,7 +71,7 @@ async function commit(
         description: "test",
         ...source,
         name: source.runtimeId,
-        outputKind: "plugin",
+        outputKind: "system",
       },
       {
         description: "test",

@@ -1,7 +1,7 @@
 ---
 id: soundtrack
 kind: plugin
-version: 0.0.2
+version: 0.0.3
 displayName: Soundtrack
 description: >-
   Plays the background music a world ships, and follows the scene and the mood
@@ -41,7 +41,6 @@ contributes:
     assets:
       schema: ./schemas/assets.schema.json
       description: Music file index records imported from world packages.
-      version: 1
       accepts:
         - stage.music-assets@1
       authoring:
@@ -56,7 +55,6 @@ contributes:
     tracks:
       schema: ./schemas/tracks.schema.json
       description: Track list imported from world packages.
-      version: 1
       accepts:
         - stage.music-tracks@1
       authoring:

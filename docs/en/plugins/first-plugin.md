@@ -60,8 +60,6 @@ Open `runtimes/analyst/RUNTIME.md` and look at the YAML at the top:
 type: agent
 schedule:
   stage: post-turn
-  trigger:
-    type: auto
 io:
   inputs:
     narrator-output:
@@ -72,24 +70,20 @@ io:
   selfData:
     - namespace: notes
       as: <existing-notes>
-      format: summary
-      maxEntries: 50
-  visibility: plugin
 agent:
-  model: plugin
   tools:
     builtin:
       - plugin-data-set
 ```
 
-| This part                                | What it means                                                                                                                  |
-| ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| `type: agent`                            | This is a runtime driven by a model. The body of the file is the prompt for the model                                          |
-| `schedule.stage: post-turn`              | Runs after the narrative                                                                                                       |
-| `io.inputs.narrator-output`              | Reads the story text of this turn. It comes from "any plugin that provides `narrative-engine@1`," not from one specific plugin |
-| `io.selfData`                            | Puts the records it already has into the prompt, so the model can avoid recording the same thing twice                         |
-| `agent.model: plugin`                    | Uses the model role `plugin`                                                                                                   |
-| `agent.tools.builtin: [plugin-data-set]` | The model can call only this one tool: write one record into its own data space                                                |
+| This part                                | What it means                                                                                                                            |
+| ---------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `type: agent`                            | This is a runtime driven by a model. The body of the file is the prompt for the model                                                    |
+| `schedule.stage: post-turn`              | Runs after the narrative                                                                                                                 |
+| `io.inputs.narrator-output`              | Reads the story text of this turn. It comes from "any plugin that provides `narrative-engine@1`," not from one specific plugin           |
+| `io.selfData`                            | Puts the records it already has into the prompt, so the model can avoid recording the same thing twice                                   |
+| Fields left out                          | Take their defaults: it uses the model role `plugin`, and its output is not story text. See [Defaults](../reference/plugins.md#defaults) |
+| `agent.tools.builtin: [plugin-data-set]` | The model can call only this one tool: write one record into its own data space                                                          |
 
 The model can use only the tools listed here. It cannot read or write other plugins' data, and it cannot bypass the kernel to change the save directly.
 

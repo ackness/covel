@@ -59,7 +59,7 @@ function manifest(overrides?: Partial<RuntimeManifest>): RuntimeManifest {
     pluginId: "plug",
     description: "Must call emit-event",
     stage: "narrative",
-    outputKind: "plugin",
+    outputKind: "system",
     tools: { builtin: ["emit-event"] },
     trigger: { type: "auto" },
     ...overrides,

@@ -31,7 +31,7 @@ function manifest(name: string): RuntimeManifest {
     stage: "narrative",
     runtimeType: "function",
     trigger: { type: "auto" },
-    outputKind: "plugin",
+    outputKind: "system",
   };
 }
 

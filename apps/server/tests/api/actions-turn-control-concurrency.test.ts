@@ -46,7 +46,7 @@ function makeRegistryEntry(handler: FunctionHandler): PluginRegistryEntry {
     description: "test function runtime",
     stage: "narrative",
     runtimeType: "function",
-    outputKind: "plugin",
+    outputKind: "system",
     pluginType: "plugin",
     handler: "./handler.js",
     trigger: { type: "auto" },

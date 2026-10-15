@@ -41,7 +41,7 @@ async function suspendedFixture(nested = false) {
     pluginId: "probe",
     runtimeType: "function",
     stage: "narrative",
-    outputKind: "plugin",
+    outputKind: "system",
     trigger: { type: nested ? "manual" : "auto" },
   };
   const parent: RuntimeManifest = {
@@ -256,7 +256,7 @@ describe("resumed setup runtime", () => {
     version: "1.0.0",
     runtimeType: "function",
     stage: "setup",
-    outputKind: "plugin",
+    outputKind: "system",
     trigger: { type: "auto" },
   };
   const other: RuntimeManifest = { ...setup, name: "probe/other" };
@@ -402,7 +402,7 @@ describe("a setup runtime's suspension that ends without an answer (F-188)", () 
     version: "1.0.0",
     runtimeType: "function",
     stage: "setup",
-    outputKind: "plugin",
+    outputKind: "system",
     trigger: { type: "auto", maxTriggerCount: 2 },
   };
 

@@ -30,10 +30,11 @@ export interface RuntimeRuleView {
   readonly trigger?: {
     readonly type?: string;
     readonly topic?: string;
-    readonly interval?: number;
     readonly startTurn?: number;
     readonly cooldownTurns?: number;
   };
+  /** Cadence of an `auto` runtime, in logical turns. */
+  readonly every?: number;
   readonly needs?: readonly (string | { readonly scope?: string })[];
   readonly output?: { readonly schema?: string; readonly recordAs?: string };
   /** `sync` or `background`: how a `manual` / `event` activation runs. */
@@ -53,6 +54,7 @@ type RuleField =
   | "requireExplicitCompletion"
   | "completion"
   | "trigger"
+  | "every"
   | "needs"
   | "output"
   | "execution"
@@ -75,6 +77,7 @@ export const IR_RULE_FIELD_PATHS: RuntimeRuleFieldPaths = {
   requireExplicitCompletion: ["requireExplicitCompletion"],
   completion: ["turnCompletion"],
   trigger: ["trigger"],
+  every: ["trigger", "every"],
   needs: ["needs"],
   output: ["output"],
   execution: ["execution"],
@@ -93,6 +96,7 @@ export const AUTHORING_RULE_FIELD_PATHS: RuntimeRuleFieldPaths = {
   requireExplicitCompletion: ["agent", "loop", "completion", "require"],
   completion: ["schedule", "completion"],
   trigger: ["schedule", "trigger"],
+  every: ["schedule", "every"],
   needs: ["schedule", "needs"],
   output: ["io", "output"],
   execution: ["schedule", "manual", "execution"],
@@ -190,6 +194,13 @@ export function runtimeRuleIssues(
       at("stage"),
       `a runtime with ${name("stage")} cannot use ${name("trigger", "type")} 'event' or 'manual'`,
     );
+  // A cadence counts the turns an `auto` runtime runs in; an activated one
+  // runs when it is called.
+  if (m.every !== undefined && activated)
+    add(
+      at("every"),
+      `${name("every")} is for an 'auto' runtime; a runtime with ${name("trigger", "type")} 'event' or 'manual' runs when it is activated`,
+    );
 
   const completion = m.completion;
   if (
@@ -254,32 +265,30 @@ export function runtimeRuleIssues(
         );
 
   // Setup runs before the turn loop: fixed auto trigger, no cadence fields.
-  if (m.stage === "setup" && m.trigger) {
-    if (m.trigger.type !== "auto")
+  if (m.stage === "setup") {
+    if (m.trigger && (m.trigger.type ?? "auto") !== "auto")
       add(
         at("trigger", "type"),
         `${name("stage")} 'setup' requires ${name("trigger", "type")} 'auto'`,
       );
-    for (const field of ["interval", "startTurn", "cooldownTurns"] as const)
-      if (m.trigger[field] !== undefined)
+    for (const field of ["startTurn", "cooldownTurns"] as const)
+      if (m.trigger?.[field] !== undefined)
         add(
           at("trigger", field),
           `${name("stage")} 'setup' cannot set ${name("trigger", field)}`,
         );
+    if (m.every !== undefined)
+      add(at("every"), `${name("stage")} 'setup' cannot set ${name("every")}`);
   }
 
   if (!authoring) return issues;
 
-  // The scheduler runs `auto` / `scheduled` runtimes stage by stage. Without
-  // a stage this one would never run; no default is guessed.
-  const triggerType = m.trigger?.type ?? "auto";
-  if (
-    (triggerType === "auto" || triggerType === "scheduled") &&
-    m.stage === undefined
-  )
+  // The scheduler runs `auto` runtimes stage by stage. Without a stage this
+  // one would never run; no default is guessed.
+  if ((m.trigger?.type ?? "auto") === "auto" && m.stage === undefined)
     add(
       at("stage"),
-      `${name("stage")} is required for ${name("trigger", "type")} '${triggerType}'; choose setup, pre-turn, narrative, post-turn or audit, or use trigger 'manual' or 'event'`,
+      `${name("stage")} is required for ${name("trigger", "type")} 'auto', the default; choose setup, pre-turn, narrative, post-turn or audit, or use trigger 'manual' or 'event'`,
       "runtime",
     );
 

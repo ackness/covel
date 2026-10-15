@@ -240,7 +240,7 @@ describe("story completion contract", () => {
         pluginId: "planner",
         runtimeType: "function",
         stage: "pre-turn",
-        outputKind: "plugin",
+        outputKind: "system",
         trigger: { type: "auto" },
       },
       { ...manifest, trigger: { type: "auto" } },

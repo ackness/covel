@@ -19,10 +19,25 @@ describe("runtime feature badges", () => {
       deriveRuntimeFeatures({
         kind: "function",
         trigger: { type: "manual" },
-        outputKind: "plugin",
+        outputKind: "system",
         execution: "background",
       }).map((feature) => feature.kind),
-    ).toEqual(["background", "function", "manual", "auxiliary"]);
+    ).toEqual(["background", "function", "manual", "system"]);
+  });
+
+  it("shows an auto runtime with a cadence as scheduled", () => {
+    expect(
+      deriveRuntimeFeatures({
+        runtimeType: "agent",
+        trigger: { type: "auto", every: 3 },
+      }).map((feature) => feature.kind),
+    ).toEqual(["agent", "scheduled"]);
+    expect(
+      deriveRuntimeFeatures({
+        runtimeType: "agent",
+        trigger: { type: "auto", every: 1 },
+      }).map((feature) => feature.kind),
+    ).toEqual(["agent", "automatic"]);
   });
 
   it("derives staged detached AI narrative features", () => {

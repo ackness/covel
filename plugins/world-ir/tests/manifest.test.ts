@@ -32,10 +32,9 @@ describe("world-ir plugin contract", () => {
     expect(parsed?.manifest.maxRetries).toBe(3);
     expect(parsed?.manifest.callTimeoutMs).toBe(60_000);
     expect(parsed?.manifest.inputs?.narrative).toEqual({
-      from: { capability: "narrative-engine@1", cardinality: "one" },
+      from: { capability: "narrative-engine@1" },
       select: "/narrativeOutput",
       accepts: "./schemas/narrative-output.schema.json",
-      required: true,
     });
     expect(parsed?.manifest.output).toEqual({
       schema: "contract:world-ir@1",

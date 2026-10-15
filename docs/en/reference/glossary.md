@@ -249,12 +249,12 @@ See: [model roles](./slots.md), `llm.toml.example`.
 
 ## Trigger mode
 
-How a runtime decides whether it runs in this turn: `auto`, `scheduled`, `manual`, or `event`. There are only these four. Any other value in a manifest is rejected when it loads.
+How a runtime decides whether it runs in this turn: `auto` (the default), `manual`, or `event`. There are only these three. Any other value in a manifest is rejected when it loads.
 
 It works together with two things:
 
-- `stage`: the stage that an `auto` / `scheduled` runtime belongs to. `event` / `manual` runtimes do not set a stage.
-- The sub-fields of `scheduled`: `interval`, `cooldownTurns`, `maxTriggerCount`, and `startTurn`.
+- `stage`: the stage that an `auto` runtime belongs to. `event` / `manual` runtimes do not set a stage.
+- The cadence of `auto`: `schedule.every` (run every how many turns), and `cooldownTurns`, `maxTriggerCount` and `startTurn` under `schedule.trigger`.
 
 See: [plugin field reference](./plugins.md).
 

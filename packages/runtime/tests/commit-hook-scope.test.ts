@@ -27,7 +27,7 @@ it("only retains still-active execution hooks at commit and preserves their capt
     pluginId: "a",
     runtimeType: "function",
     stage: "narrative",
-    outputKind: "plugin",
+    outputKind: "system",
     trigger: { type: "auto" },
   };
   const hookPipeline = createHookPipeline();

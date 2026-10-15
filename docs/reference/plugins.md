@@ -77,7 +77,6 @@ contributes:
   tools: [save-facts]
   data:
     facts:
-      version: 1
       schema: ./schemas/facts.schema.json
 runtime:
   type: agent
@@ -86,13 +85,10 @@ runtime:
   io:
     inputs:
       narrative:
-        from: { contract: narrative-engine@1, cardinality: one }
+        from: { contract: narrative-engine@1 }
         select: /narrativeOutput
-        required: true
     output: { contract: example.facts@1 }
-    visibility: plugin
   agent:
-    model: plugin
     loop:
       completion: { require: tool-use, afterTools: [save-facts] }
 ---
@@ -119,7 +115,7 @@ Extract facts supported by runtime-inputs.narrative.value, then call save-facts.
 
 - `runtime.io.output.contract` 必须出现在本包的 `provides` 里。
 - 同一个包里，两个 runtime 不能产出同一个契约。
-- 不同的包可以提供同一个契约。消费者用 `cardinality: one` 或 `all` 说明要一个还是全部。
+- 不同的包可以提供同一个契约。消费者用 `cardinality: one`（默认）或 `all` 说明要一个还是全部。
 - 只允许一个提供者的扩展点，以及显式写出的 `conflicts`，另外做互斥检查。
 - `conflicts` 只能写插件契约。写内核扩展点或 UI 槽位会得到 `invalid-conflict`，并指出 `conflicts` 字段的位置。内核扩展点怎样组合由它的 mode 决定。
 
@@ -196,7 +192,7 @@ homepage: https://example.com/tidefall
 | 字段          | 主要配置                                                                   |
 | ------------- | -------------------------------------------------------------------------- |
 | `type`        | `agent` 或 `function`                                                      |
-| `schedule`    | `stage`, `trigger`, `needs`, `after`, `completion`, `manual`               |
+| `schedule`    | `stage`, `every`, `trigger`, `needs`, `after`, `completion`, `manual`      |
 | `io`          | `inputs`, `selfData`, `payloadSchema`, `output`, `visibility`, `concealed` |
 | `agent`       | `model`, `llm`, `history`, `tools`, `advertiseEvents`, `loop`              |
 | `function`    | `handler`、可选 `model`、`timeoutMs` 和 `tools`                            |
@@ -213,11 +209,35 @@ permissions:
       methods: [POST]
 ```
 
+### 默认值
+
+和默认值一样的字段不用写。写了的话，`pnpm validate:plugin` 给出一条警告（`is the default value; remove it`），包仍然通过校验。
+
+<!-- prettier-ignore -->
+| 字段 | 不写时 |
+| --- | --- |
+| `schedule.trigger.type` | `auto` |
+| `schedule.every` | `1`：每个回合都运行 |
+| `schedule.manual.execution` | `sync` |
+| `io.visibility` | `system` |
+| `cardinality`（`needs`、`after`、`io.inputs.*.from`） | `one` |
+| `io.inputs.*.required` | `true` |
+| `io.inputs.*.scope` | `turn` |
+| `io.selfData[].format`、`maxEntries` | `summary`、`50` |
+| `agent.model` | `io.visibility: story` 的 runtime 用 `story`，其他用 `plugin` |
+| `agent.loop.timeoutMs`、`callTimeoutMs`、`maxRetries` | `io.visibility: story` 的 runtime：240000、120000、1；其他：120000、60000、3 |
+| `contributes.data.*.version` | `1` |
+| `contributes.hooks[].enforce` | `normal` |
+| `contributes.prompt[].role` | `system` |
+
+`io.visibility` 只有两个值：`story` 给提供故事正文的叙事 runtime，`system` 给其他所有 runtime。
+
 ### 两种 runtime
 
 - **Function runtime** 必须声明 `function.handler`，这个模块必须默认导出一个函数，不能同时配置 `agent`。
 - **Agent runtime** 不能配置 `function`。
 - `function.model` 说明 handler 里的 `ctx.gateway` 调用使用哪个模型 slot（如 `memory`）。后台（detached）任务在领取前用它判断凭证是否就绪。不声明时按系统默认 preset 判断，可能漏掉请求级的 slot 绑定，任务就会一直排队，直到 `maxQueueMs` 超时。
+- `agent.model` 不写时，`io.visibility: story` 的 agent 用 `story`，其他 agent 用 `plugin`。
 - `agent.model` 和 `function.model` 只写用途（slot）的名字。插件不能指定服务商、模型、地址或协议：这些由玩家的模型设置决定（见[实际选择优先级](./slots.md#实际选择优先级)）。插件目录里的 `llm.toml` 不会被读取。
 
 ### Agent 能用哪些工具
@@ -298,13 +318,16 @@ setup runtime 的完成状态按根 `PLUGIN.md` 的 `version` 记录。发布新
 - 还在 setup 阶段的会话，在 setup 阶段里重跑。
 - 已经进入主循环的会话，经 late-setup 通道在 pre-turn 之前补跑，并重新计算重试预算。
 
-所以 setup runtime 的 guard 必须对已完成的工作返回 `{ skip: true }`（例如主角已存在、schema 已写入）。否则升级会让玩家重新看到欢迎信息或表单。不声明 `version` 的插件按 `0.0.0` 处理，永远不会因升级重跑。
+所以 setup runtime 的 guard 必须对已完成的工作返回 `{ skip: true }`（例如主角已存在、schema 已写入）。否则升级会让玩家重新看到欢迎信息或表单。不声明 `version` 的插件按 `0.0.0` 处理，永远不会因升级重跑。有 `entry` 或 setup runtime 的包没写 `version` 时，`pnpm validate:plugin` 给出警告。
 
 ### 触发方式
 
-触发类型有 `auto`、`scheduled`、`manual` 和 `event`。
+触发类型有 `auto`（默认）、`manual` 和 `event`。
 
-- 自动进入主循环的 runtime 应声明 stage。`manual` 和 `event` 按请求或事件单独触发。
+- `auto` runtime 必须声明 stage，每个回合在这个阶段运行。不用写 `schedule.trigger`。
+- `schedule.every: N` 让 `auto` runtime 只在逻辑回合是 N 的倍数时运行。例如 `every: 3` 在第 3、6、9 回合运行。
+- `schedule.trigger` 还可以写 `startTurn`（从第几回合开始）、`cooldownTurns`（两次运行至少隔几个回合）和 `maxTriggerCount`（一局最多几次）。只写这些时，`type` 也不用写。
+- `manual` 和 `event` 按请求或事件单独触发，不声明 stage，也不能写 `every`。setup runtime 不能写 `every`、`startTurn` 和 `cooldownTurns`。
 - `schedule.manual.execution: background` 让手动运行在后台执行。这样的手动或事件 runtime 没有同一次执行的上游，所以不能读 `scope: turn` 的输入；改用 `scope: committed` 或内核输入。
 - `schedule.completion` 控制回合是否等它结束。具体限制由清单校验和运行时准入检查执行。
 
@@ -321,7 +344,7 @@ setup runtime 的完成状态按根 `PLUGIN.md` 的 `version` 记录。发布新
 
 ### 超时、重试和完成条件（`agent.loop`）
 
-Agent 的超时、重试和步数都在 `agent.loop` 里。
+Agent 的超时、重试和步数都在 `agent.loop` 里。不写时按 `io.visibility` 取默认值：`story` runtime 是 `timeoutMs` 240 秒、`callTimeoutMs` 120 秒、`maxRetries` 1；其他 runtime 是 120 秒、60 秒、3。
 
 **流式调用按“多久没有输出”限时。**
 
@@ -356,7 +379,7 @@ Agent 的超时、重试和步数都在 `agent.loop` 里。
 
 **非流式调用**没有进度信号，由 `callTimeoutMs` 限制单次调用的总时长。
 
-**`maxRetries`**（默认 1，最大 5）是一次模型调用拿不到回复时的重试次数。
+**`maxRetries`**（`story` runtime 默认 1，其他默认 3，最大 5）是一次模型调用拿不到回复时的重试次数。
 
 - 会重试：调用超时、网络错误、限流、5xx、服务商报告的生成错误、上面说的输出中途中断，以及一次截断。
 - 不重试：4xx 和输出 schema 不符。
@@ -368,7 +391,6 @@ Agent 的超时、重试和步数都在 `agent.loop` 里。
 - 非流式调用的 `callTimeoutMs` 为 60 秒、`timeoutMs` 为 120 秒时，卡住不返回的调用只够再试一次。流式调用按上面的首次输出等待规则重试。
 - 每次都用满传输层重试的 5xx 也只够两轮。
 - 很快返回、只占一个 HTTP 请求的失败（连接在应答中途断开、生成错误）才用得上更多次数。
-- 内置的记账 agent 和开局 agent 设为 3。
 
 **完成条件。**
 
@@ -394,9 +416,8 @@ Agent 的超时、重试和步数都在 `agent.loop` 里。
 io:
   inputs:
     narrative:
-      from: { contract: narrative-engine@1, cardinality: one }
+      from: { contract: narrative-engine@1 }
       select: /narrativeOutput
-      required: true
       accepts: ./schemas/narrative.schema.json
     previous:
       from: { runtime: example/extract }
@@ -408,8 +429,6 @@ io:
   selfData:
     - namespace: facts
       as: <known-facts>
-      format: summary
-      maxEntries: 50
   output:
     contract: example.facts@1
     schema: ./schemas/output.schema.json
@@ -508,15 +527,15 @@ Agent 的副作用只来自工具：模型能写什么，以 `agent.tools` 白�
 
 #### handler 上下文里的回合信息
 
-| 字段                          | 含义                                                                                                                                                                     |
-| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `ctx.playerMessage`           | 当前输入的文本字符串                                                                                                                                                     |
-| `ctx.logicalTurn`             | 调度器的逻辑回合：已提交的主循环玩家回合数加一。函数 handler 和插件工具的上下文里都有。setup、开场续写和第一条玩家消息同为第 1 回合，`startTurn` / `interval` 也按它计数 |
-| 工具上下文的 `turnNumber`     | 会话里已记录的玩家消息数，包括 setup 的表单提交                                                                                                                          |
-| `ctx.session.lastPlayerInput` | 源执行开始时最近的一条 `PlayerInputSubmission \| null`，包含 `id/sessionId/turnId/formId/values/createdAt`                                                               |
-| `ctx.execution.origin`        | 这次执行因何而起：`player`、`continuation`、`manual`、`background`、`recursive` 或 `resume`                                                                              |
-| `ctx.execution.sourceTurnId`  | 重试一个已提交的回合时，是那个回合的 ID。用它做键，重试时复用上次的掷骰和揭示，不重新抽                                                                                  |
-| `ctx.recursionDepth`          | 顶层执行是 `0`，`ctx.recursiveCall` 每嵌套一层加一                                                                                                                       |
+| 字段                          | 含义                                                                                                                                                                  |
+| ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ctx.playerMessage`           | 当前输入的文本字符串                                                                                                                                                  |
+| `ctx.logicalTurn`             | 调度器的逻辑回合：已提交的主循环玩家回合数加一。函数 handler 和插件工具的上下文里都有。setup、开场续写和第一条玩家消息同为第 1 回合，`startTurn` / `every` 也按它计数 |
+| 工具上下文的 `turnNumber`     | 会话里已记录的玩家消息数，包括 setup 的表单提交                                                                                                                       |
+| `ctx.session.lastPlayerInput` | 源执行开始时最近的一条 `PlayerInputSubmission \| null`，包含 `id/sessionId/turnId/formId/values/createdAt`                                                            |
+| `ctx.execution.origin`        | 这次执行因何而起：`player`、`continuation`、`manual`、`background`、`recursive` 或 `resume`                                                                           |
+| `ctx.execution.sourceTurnId`  | 重试一个已提交的回合时，是那个回合的 ID。用它做键，重试时复用上次的掷骰和揭示，不重新抽                                                                               |
+| `ctx.recursionDepth`          | 顶层执行是 `0`，`ctx.recursiveCall` 每嵌套一层加一                                                                                                                    |
 
 `ctx.session.lastPlayerInput` 可能来自更早的回合。有这条记录不等于本回合提交了表单。
 
@@ -678,7 +697,6 @@ Agent 的副作用只来自工具：模型能写什么，以 `agent.tools` 白�
 contributes:
   data:
     facts:
-      version: 1
       schema: ./schemas/facts.schema.json
       accepts: [example.facts@1]
 ```
@@ -733,7 +751,6 @@ references:
 contributes:
   data:
     facts:
-      version: 1
       schema: ./schemas/facts.schema.json
       search:
         text: text
@@ -826,7 +843,7 @@ namespace 声明 `search` 之后，它的记录进入框架的记忆检索（[`m
 
 有的错误只让一个 runtime 永远不能运行，而不影响包的其余部分：
 
-- 自动或定时的 runtime 没有写 `schedule.stage`。框架不猜默认的 stage。
+- `auto` runtime 没有写 `schedule.stage`。框架不猜默认的 stage。
 - 后台执行的手动或事件 runtime 读同一次执行的输入（见[触发方式](#触发方式)）。
 
 手动放进插件目录的包遇到这类错误时，加载器只去掉这个 runtime，在服务端日志里写明文件、字段和原因，包的其他 runtime、工具和面板照常加载；它的输出契约也不再算这个包提供。`pnpm validate:plugin` 和安装把它报为错误。

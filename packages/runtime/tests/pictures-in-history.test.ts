@@ -243,7 +243,7 @@ describe("pictures in the story history", () => {
       name: "test-tracker",
       pluginId: "test-tracker",
       stage: "post-turn",
-      outputKind: "plugin",
+      outputKind: "system",
     };
 
     const messages = await session.play(new RecordingLLM(true), bookkeeper);

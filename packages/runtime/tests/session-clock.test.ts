@@ -38,7 +38,7 @@ async function seedSession(
 
 function makeRuntime(
   name: string,
-  outputKind: RuntimeManifest["outputKind"] = "plugin",
+  outputKind: RuntimeManifest["outputKind"] = "system",
 ): RuntimeManifest {
   return {
     name,

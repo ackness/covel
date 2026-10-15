@@ -289,7 +289,7 @@ Options:
 
 interface PluginFlowTrigger {
   type: string;
-  interval?: number;
+  every?: number;
   cooldownTurns?: number;
   maxTriggerCount?: number;
   startTurn?: number;
@@ -808,12 +808,12 @@ type TurnBand = "setup" | "playing";
  *               authoritatively from `session.setupRuntimes`, not per turn
  *               (setup work can settle inside the form-submit sub-execution
  *               the turn loop does not read back).
- *   gated     — staged, active, in-band, but `startTurn` or the `scheduled`
- *               interval excludes this logical turn.
+ *   gated     — staged, active, in-band, but `startTurn` or the `every`
+ *               cadence excludes this logical turn.
  *   auto      — staged, active, in-band, plain trigger auto → expected every
  *               turn.
- *   scheduled — staged, active, in-band, trigger scheduled (or auto bounded by
- *               cooldownTurns / maxTriggerCount) → asserted to fire ≥1 time
+ *   scheduled — staged, active, in-band, trigger auto with a cadence or
+ *               bounded by cooldownTurns / maxTriggerCount → asserted to fire ≥1 time
  *               across the turns that allow it (cooldown and trigger counts
  *               are not re-simulated; the run-level check lives in Phase 7).
  *
@@ -840,7 +840,7 @@ interface StepExpectation {
  *
  * The single source of truth is the session's active-plugin set intersected
  * with each runtime's `stage`/`trigger` — NOT the retired numeric priority
- * bands and NOT a re-simulation of interval/cooldown. Three gates in order:
+ * bands and NOT a re-simulation of cooldown. Three gates in order:
  *   1. active set — mutually-exclusive providers (narrator vs
  *      chat-mode-narrator) resolve here: only the active one is expected.
  *   2. stage — a stage-less runtime (memory / history-compaction: `auto`
@@ -877,9 +877,9 @@ function classifyStep(
       reason: `${step.stage} stage — idle in setup band`,
     };
   }
-  const { type, startTurn, interval, cooldownTurns, maxTriggerCount } =
+  const { type, startTurn, every, cooldownTurns, maxTriggerCount } =
     step.trigger;
-  if (type !== "auto" && type !== "scheduled") {
+  if (type !== "auto") {
     // Defensive: a staged runtime with an event/manual trigger is not
     // expected by the stage scheduler.
     return { cls: "unstaged", reason: `trigger ${type}` };
@@ -890,14 +890,14 @@ function classifyStep(
       reason: `startTurn ${startTurn} > logical turn ${logicalTurn}`,
     };
   }
-  if (type === "scheduled" && logicalTurn % (interval ?? 1) !== 0) {
+  if (logicalTurn % (every ?? 1) !== 0) {
     return {
       cls: "gated",
-      reason: `interval ${interval} skips logical turn ${logicalTurn}`,
+      reason: `every ${every} skips logical turn ${logicalTurn}`,
     };
   }
   if (
-    type === "auto" &&
+    (every ?? 1) === 1 &&
     cooldownTurns === undefined &&
     maxTriggerCount === undefined
   ) {

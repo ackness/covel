@@ -352,7 +352,7 @@ describe("job status after the execution commit", () => {
       runtimeType: "function",
       handler: "./worker.js",
       stage: "post-turn",
-      outputKind: "plugin",
+      outputKind: "system",
       trigger: { type: "auto" },
     };
     const handler = async (ctx: FunctionHandlerContext) => {

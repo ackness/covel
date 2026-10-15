@@ -4,30 +4,22 @@ description: Settles authored dimension rules against this narrative, including
   explicit no-change.
 schedule:
   stage: post-turn
-  trigger:
-    type: auto
 io:
   inputs:
     narrative:
       from:
         contract: narrative-engine@1
-        cardinality: one
       select: /narrativeOutput
-      required: true
     worldIR:
       from:
         contract: world-ir-provider@1
-        cardinality: one
       required: false
     worldTime:
       from:
         contract: world-time-evolution@1
-        cardinality: one
       select: /summary
       required: false
-  visibility: system
 agent:
-  model: plugin
   history:
     maxTurns: 1
   llm:
@@ -41,9 +33,6 @@ agent:
       - dimension-rule-get
       - update-dimensions
   loop:
-    timeoutMs: 120000
-    callTimeoutMs: 60000
-    maxRetries: 3
     completion:
       require: tool-use
       afterTools:

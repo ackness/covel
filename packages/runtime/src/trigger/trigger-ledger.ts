@@ -20,7 +20,7 @@ const TRIGGER_LEDGER_NAMESPACE = "runtimes";
 
 /**
  * Turns-since value for a runtime that has never run. Large enough to satisfy
- * any `cooldownTurns` / `turnInterval` gate.
+ * any `cooldownTurns` gate.
  */
 export const NEVER_TRIGGERED_SENTINEL = Number.MAX_SAFE_INTEGER;
 

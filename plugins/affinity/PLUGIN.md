@@ -1,7 +1,7 @@
 ---
 id: affinity
 kind: plugin
-version: 0.0.36
+version: 0.0.37
 displayName: Affinity
 description: >-
   Tracks numeric player-to-NPC affinity, with scores, tiers, and recent changes
@@ -25,7 +25,6 @@ contributes:
       description: >-
         Importable initial affinity records for key NPCs ({id, name, score,
         notes?}).
-      version: 1
       accepts:
         - character.affinity@1
       authoring:
@@ -55,31 +54,22 @@ contributes:
         - The framework finishes automatically after `update-affinity` succeeds; do not call `runtime-done` afterward
         - When you decide not to write, call `runtime-done` once to finish
       position: post-history
-      role: system
   tools:
     - update-affinity
 runtime:
   type: agent
   schedule:
     stage: post-turn
-    trigger:
-      type: auto
   io:
     inputs:
       worldIR:
         from:
           contract: world-ir-provider@1
-          cardinality: one
         accepts: "contract:world-ir@1"
-        required: true
     selfData:
       - namespace: affinity
         as: <existing-affinity>
-        format: summary
-        maxEntries: 50
-    visibility: system
   agent:
-    model: plugin
     history:
       maxTurns: 0
     # The conversation is story text; without a required tool call the model
@@ -87,9 +77,6 @@ runtime:
     llm:
       toolChoice: required
     loop:
-      timeoutMs: 120000
-      callTimeoutMs: 60000
-      maxRetries: 3
       completion:
         require: explicit
         afterTools:

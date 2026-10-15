@@ -1,7 +1,7 @@
 ---
 id: branch-reply
 kind: plugin
-version: 0.0.35
+version: 0.0.36
 displayName: Reply Variants
 description: Offers several reply options so you can choose the one that fits best.
 tags:
@@ -28,19 +28,15 @@ runtime:
   type: function
   schedule:
     stage: post-turn
-    trigger:
-      type: auto
   io:
     inputs:
       narrative:
         from:
           contract: narrative-engine@1
-          cardinality: one
         select: /narrativeOutput
         required: false
     output:
       contract: branch-reply@1
-    visibility: system
   function:
     handler: ./handler.js
   effects:

@@ -22,7 +22,6 @@ entry: ./server/index.js
 contributes:
   hooks:
     - event: PreToolUse
-      enforce: normal
 ```
 
 ```js
@@ -186,7 +185,7 @@ handler 抛出异常、超时或返回了格式不对的结果，都算这个 ha
 
 | 字段             | 内容                                                                                                                                                                                           |
 | ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `outputKind`     | `story`、`plugin` 或 `system`。                                                                                                                                                                |
+| `outputKind`     | `story` 或 `system`。                                                                                                                                                                          |
 | `promptTemplate` | 这个 runtime 的提示词正文，渲染之前的样子。                                                                                                                                                    |
 | `inputSlots`     | 解析后的 `io.inputs` 值。                                                                                                                                                                      |
 | `characters`     | 会话里的角色（`id`、`name`、`type`、`description`）。                                                                                                                                          |

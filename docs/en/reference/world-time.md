@@ -187,7 +187,7 @@ A runtime that needs to keep records based on "the time at the end of this turn"
 io:
   inputs:
     worldTime:
-      from: { contract: world-time-evolution@1, cardinality: one }
+      from: { contract: world-time-evolution@1 }
       select: /summary
       required: false
 ```
@@ -207,7 +207,7 @@ A narrative plugin connects to time like this in its `RUNTIME.md`:
 io:
   inputs:
     worldTime:
-      from: { contract: world-time-context@1, cardinality: one }
+      from: { contract: world-time-context@1 }
       required: false
 ```
 

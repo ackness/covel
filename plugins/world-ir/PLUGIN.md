@@ -1,7 +1,7 @@
 ---
 id: world-ir
 kind: plugin
-version: 0.0.35
+version: 0.0.36
 displayName: World Fact Extraction
 description: >-
   Extracts people, relationships, events, and clues from each story turn for
@@ -32,22 +32,17 @@ contributes:
     - submit-world-facts
   hooks:
     - event: PostContextAssembly
-      enforce: normal
 runtime:
   type: agent
   schedule:
     stage: post-turn
-    trigger:
-      type: auto
   io:
     inputs:
       narrative:
         from:
           contract: narrative-engine@1
-          cardinality: one
         select: /narrativeOutput
         accepts: ./schemas/narrative-output.schema.json
-        required: true
       vocabulary:
         from:
           contract: world-ir.vocabulary@1
@@ -57,17 +52,12 @@ runtime:
       schema: "contract:world-ir@1"
       recordAs: world-ir-v1
       contract: world-ir-provider@1
-    visibility: system
   agent:
-    model: plugin
     llm:
       reasoningEffort: disabled
       toolChoice:
         name: submit-world-facts
     loop:
-      timeoutMs: 120000
-      callTimeoutMs: 60000
-      maxRetries: 3
       completion:
         require: tool-use
         afterTools:

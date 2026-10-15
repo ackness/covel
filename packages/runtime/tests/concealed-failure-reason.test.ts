@@ -32,7 +32,7 @@ async function finalize(concealed: boolean, error?: string) {
   const manifest = {
     name: "planner/plot",
     pluginId: "planner",
-    outputKind: "plugin",
+    outputKind: "system",
     concealed,
   } as unknown as RuntimeManifest;
   const result = await finalizeRuntimeResult(

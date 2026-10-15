@@ -319,18 +319,19 @@ Input/Event → settle barrier → freeze registry generation → Trigger Router
   `type` is `agent` (the file body is the system prompt; the LLM drives tool calls)
   or `function` (a pure JS handler); the other fields are grouped under `schedule`,
   `io`, `agent`, `function`, `guard`, `effects`, `permissions`.
-- **Trigger modes** are the closed enum `auto` / `manual` / `scheduled` / `event`
-  (`TriggerType` in `packages/shared/src/types/plugin.ts`); other values are rejected
-  at load. `shouldTrigger` (`packages/runtime/src/trigger/trigger.ts`) is the single
-  authority for `auto` / `scheduled` / `event`, including the in-turn event fan-out.
+- **Trigger modes** are the closed enum `auto` / `manual` / `event`
+  (`TriggerType` in `packages/shared/src/types/plugin.ts`); `auto` is the default
+  and `schedule.every: N` runs it on every N-th logical turn. Other values are
+  rejected at load. `shouldTrigger` (`packages/runtime/src/trigger/trigger.ts`) is
+  the single authority for `auto` / `event`, including the in-turn event fan-out.
   **`manual` is the exception**: `selectTriggeredRuntimes` selects it by name match
   without calling `shouldTrigger` — an explicit plugin-rpc call is the trigger
   decision, so it bypasses `phase` / `startTurn` / `maxTriggerCount` / `cooldownTurns`
   (the `manual` branch in `shouldTrigger` serves only direct callers).
 - **Scheduling** is declared, never numeric: `schedule.stage` plus typed edges —
   `schedule.needs` (success gate + same-pass DAG edge), `schedule.after` (ordering
-  only), and `io.inputs` bindings (`required: true` implies `needs`). `auto` /
-  `scheduled` runtimes declare a stage; `event` / `manual` runtimes declare none.
+  only), and `io.inputs` bindings (`required`, by default `true`, implies `needs`).
+  `auto` runtimes declare a stage; `event` / `manual` runtimes declare none.
   Runtime-ID references stay inside one package; cross-package edges use a
   versioned contract (`from: { contract }`) listed in the root `requires` /
   `optional`. Intra-stage order comes only from declared edges, independent
@@ -411,8 +412,8 @@ any plugin must not break the framework.
   never by scanning for an ID or another plugin's namespace. World data follows the
   same route: a source targets `contract:<id>` and the kernel delivers it to active
   namespaces that declare `contributes.data.*.accepts`.
-- Dispatch on `RuntimeManifest.outputKind` (`story` / `plugin` / `system`, authored
-  as `io.visibility`). `kind` only decides whether a package is requested by
+- Dispatch on `RuntimeManifest.outputKind` (`story` / `system`, authored as
+  `io.visibility`, default `system`). `kind` only decides whether a package is requested by
   default (`resolveSessionPlugins`); framework code must not treat `core`
   packages differently in any other way. Trust follows the source (`builtin` /
   `community`), never `kind`.
@@ -475,9 +476,12 @@ handling, and supported backend differences — those are not version compatibil
   no timestamp. The kernel leaves them out of what it renders (`io.selfData`
   lines, `<runtime-inputs>`, JSON tool results); text a plugin builds itself goes
   through `modelFacingJson`. Name a turn by its number.
-- Declare `io.visibility` and the contracts a runtime provides or consumes. Agent
+- Declare the contracts a runtime provides or consumes, and `io.visibility: story`
+  on a narrative provider. Leave out fields equal to their default
+  (`docs/reference/plugins.md#默认值`); `validate:plugin` warns about them. Agent
   limits live in `agent.loop`: `timeoutMs`, `callTimeoutMs` (a call that is not
-  streamed), `maxRetries` (default 1), `firstTokenTimeoutMs` and `idleTimeoutMs`
+  streamed), `maxRetries` (defaults 120000 / 60000 / 3, or 240000 / 120000 / 1
+  for a `story` runtime), `firstTokenTimeoutMs` and `idleTimeoutMs`
   (a streamed call; 120s by default, and the default first-token wait of an
   attempt is shortened so the retries left fit into `timeoutMs`),
   `loopDetection` (default 3); a function's limit is `function.timeoutMs`.

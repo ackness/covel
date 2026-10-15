@@ -1,7 +1,7 @@
 ---
 id: core-quest
 kind: plugin
-version: 0.0.36
+version: 0.0.37
 displayName: Quest Log
 description: >-
   Automatically registers and advances quests from the narrative so goals,
@@ -27,7 +27,6 @@ contributes:
       description: >-
         Importable quest records — world packs may preseed main/side quests; the
         quest log advances them by name.
-      version: 1
       accepts:
         - quests@1
       authoring:

@@ -1,7 +1,7 @@
 ---
 id: scene-stage
 kind: plugin
-version: 0.0.35
+version: 0.0.36
 displayName: Scene Stage
 description: >-
   Tracks the current scene, time of day, and who is on stage for the visual
@@ -88,7 +88,6 @@ contributes:
     assets:
       schema: ./schemas/assets.schema.json
       description: Scene backdrop media index records imported from world packages.
-      version: 1
       accepts:
         - stage.scene-assets@1
       authoring:
@@ -103,7 +102,6 @@ contributes:
     scenes:
       schema: ./schemas/scenes.schema.json
       description: Scene background registry imported from world packages.
-      version: 1
       accepts:
         - stage.scenes@1
       authoring:

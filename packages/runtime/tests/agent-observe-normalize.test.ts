@@ -38,7 +38,7 @@ const agentManifest: RuntimeManifest = {
   pluginId: "agent-obs",
   description: "agent observe cross-check",
   stage: "narrative",
-  outputKind: "plugin",
+  outputKind: "system",
   trigger: { type: "auto" },
 } as RuntimeManifest;
 

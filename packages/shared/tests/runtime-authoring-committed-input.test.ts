@@ -79,7 +79,7 @@ describe("runtimeAuthoringManifestSchema concealed runtimes", () => {
         }),
       ]);
   });
-  it.each([undefined, "plugin", "system"])(
+  it.each([undefined, "system"])(
     "accepts a concealed runtime with visibility %j",
     (visibility) => {
       expect(concealed(visibility).success).toBe(true);

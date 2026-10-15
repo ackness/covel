@@ -123,7 +123,7 @@ describe("scenario 10: MediaRef canonicalization shared across boundaries", () =
       runtimeType: "function",
       handler: "./h.js",
       trigger: { type: "manual" },
-      outputKind: "plugin",
+      outputKind: "system",
       outputContract: undefined,
     } as RuntimeManifest;
     const deps: TurnExecutorDeps = {
@@ -188,7 +188,7 @@ describe("scenario 10: MediaRef canonicalization shared across boundaries", () =
       runtimeType: "function",
       handler: "./h.js",
       trigger: { type: "auto" },
-      outputKind: "plugin",
+      outputKind: "system",
       outputContract: undefined,
     } as RuntimeManifest;
     const consumer: RuntimeManifest = {
@@ -199,7 +199,7 @@ describe("scenario 10: MediaRef canonicalization shared across boundaries", () =
       runtimeType: "function",
       handler: "./h.js",
       trigger: { type: "auto" },
-      outputKind: "plugin",
+      outputKind: "system",
       outputContract: undefined,
       inputs: { data: { from: { runtime: "p/gen" }, required: true } },
     } as RuntimeManifest;

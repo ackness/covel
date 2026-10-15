@@ -6,7 +6,6 @@ description: >-
 schedule:
   stage: setup
   trigger:
-    type: auto
     maxTriggerCount: 1
   after:
     - contract: session.opening@1
@@ -14,16 +13,11 @@ io:
   output:
     schema: ./output.schema.json
     contract: world-data-provider@1
-  visibility: system
 agent:
-  model: plugin
   tools:
     plugin:
       - initialize-world
   loop:
-    timeoutMs: 120000
-    callTimeoutMs: 60000
-    maxRetries: 3
     completion:
       require: tool-use
       afterTools:

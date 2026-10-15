@@ -59,7 +59,7 @@ function setupRuntime(
     stage: "setup",
     runtimeType: "function",
     handler: "./handler.js",
-    outputKind: "plugin",
+    outputKind: "system",
     trigger: { type: "auto" },
     ...overrides,
   } as RuntimeManifest;

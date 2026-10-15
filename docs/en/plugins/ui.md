@@ -276,12 +276,8 @@ type: function
 description: Counts the rumors after each turn and shows the total in the story.
 schedule:
   stage: post-turn
-  trigger:
-    type: auto
   after:
     - tavern-rumors/analyst
-io:
-  visibility: plugin
 function:
   handler: ./handler.js
 ---

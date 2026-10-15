@@ -53,7 +53,7 @@ function manifest(overrides: Partial<RuntimeManifest> = {}): RuntimeManifest {
     stage: "setup",
     runtimeType: "agent",
     trigger: { type: "auto" },
-    outputKind: "plugin",
+    outputKind: "system",
     ...overrides,
   } as RuntimeManifest;
 }

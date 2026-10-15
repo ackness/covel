@@ -58,7 +58,7 @@ function makeParsedManifest(
       pluginId: pluginId ?? name,
       description: description ?? `${name} runtime`,
       pluginType: "plugin",
-      outputKind: "plugin",
+      outputKind: "system",
       trigger: { type: "manual" },
       ...rest,
     },

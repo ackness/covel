@@ -3,7 +3,7 @@
  * `trigger.test.ts` does not cover:
  *  - cooldown + maxTriggerCount interplay
  *  - manual + cooldown
- *  - scheduled + startTurn together
+ *  - auto cadence (`every`) + startTurn together
  *  - event without a configured topic
  *  - reserved modes (error-retry / conditional) never fire
  *  - conditional emits exactly one console.warn per (sessionId, runtimeId)
@@ -35,7 +35,7 @@ function ctx(overrides?: Partial<TriggerContext>): TriggerContext {
     isManualTrigger: false,
     ...overrides,
   };
-  // scheduled / startTurn gate on `logicalTurn`; these cases express the turn
+  // every / startTurn gate on `logicalTurn`; these cases express the turn
   // number via `turnNumber`, so mirror it unless a test sets logicalTurn.
   return {
     ...merged,
@@ -67,34 +67,33 @@ describe("shouldTrigger — gate ordering", () => {
   });
 });
 
-describe("shouldTrigger — scheduled", () => {
-  it("scheduled with interval=1 fires every turn", () => {
-    const m = manifest({ trigger: { type: "scheduled", interval: 1 } });
+describe("shouldTrigger — auto cadence", () => {
+  it("auto with every=1 fires every turn", () => {
+    const m = manifest({ trigger: { type: "auto", every: 1 } });
     expect(shouldTrigger(m, ctx({ turnNumber: 1 }))).toBe(true);
     expect(shouldTrigger(m, ctx({ turnNumber: 2 }))).toBe(true);
     expect(shouldTrigger(m, ctx({ turnNumber: 7 }))).toBe(true);
   });
 
-  it("scheduled defaults interval to 1 when omitted", () => {
-    const m = manifest({ trigger: { type: "scheduled" } });
+  it("auto defaults every to 1 when omitted", () => {
+    const m = manifest({ trigger: { type: "auto" } });
     expect(shouldTrigger(m, ctx({ turnNumber: 4 }))).toBe(true);
   });
 
-  it("scheduled fires at turnNumber=0 because 0 % N === 0", () => {
-    // Pre-Game band still uses scheduled triggers — they must fire at turn 0.
-    // (The scheduler's band filter already handles whether priority is
+  it("auto with a cadence fires at turnNumber=0 because 0 % N === 0", () => {
+    // (The scheduler's band filter already handles whether a runtime is
     // in-band; this is just the trigger-router contract.)
-    const m = manifest({ trigger: { type: "scheduled", interval: 3 } });
+    const m = manifest({ trigger: { type: "auto", every: 3 } });
     expect(shouldTrigger(m, ctx({ turnNumber: 0 }))).toBe(true);
   });
 
-  it("scheduled + startTurn: blocked before startTurn even on interval", () => {
+  it("auto every + startTurn: blocked before startTurn even on cadence", () => {
     const m = manifest({
-      trigger: { type: "scheduled", interval: 2, startTurn: 4 },
+      trigger: { type: "auto", every: 2, startTurn: 4 },
     });
     expect(shouldTrigger(m, ctx({ turnNumber: 2 }))).toBe(false);
     expect(shouldTrigger(m, ctx({ turnNumber: 4 }))).toBe(true);
-    expect(shouldTrigger(m, ctx({ turnNumber: 5 }))).toBe(false); // off interval
+    expect(shouldTrigger(m, ctx({ turnNumber: 5 }))).toBe(false); // off cadence
     expect(shouldTrigger(m, ctx({ turnNumber: 6 }))).toBe(true);
   });
 });

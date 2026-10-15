@@ -37,11 +37,6 @@ runtime:
   type: function
   schedule:
     stage: post-turn
-    trigger:
-      type: scheduled
-      interval: 1
-  io:
-    visibility: plugin
   function:
     handler: ./handler.js
 ---
@@ -62,8 +57,6 @@ runtime:
       type: manual
     manual:
       execution: sync
-  io:
-    visibility: plugin
   function:
     handler: ./handler.js
 ---

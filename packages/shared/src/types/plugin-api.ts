@@ -16,8 +16,8 @@ export type PluginStatus =
   "discovered" | "registered" | "active" | "disabled" | "error";
 
 export interface PluginRuntimeTrigger {
-  readonly type: "auto" | "manual" | "scheduled" | "event";
-  readonly interval?: number;
+  readonly type: "auto" | "manual" | "event";
+  readonly every?: number;
   readonly cooldownTurns?: number;
   readonly maxTriggerCount?: number;
   readonly startTurn?: number;
@@ -32,7 +32,7 @@ export interface PluginRuntimeSummary {
   readonly execution: "sync" | "background";
   readonly turnCompletion: EffectiveTurnCompletion;
   readonly model?: string;
-  readonly outputKind: "story" | "plugin" | "system";
+  readonly outputKind: "story" | "system";
   readonly outputContract?: string;
 }
 

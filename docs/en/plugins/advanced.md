@@ -35,7 +35,6 @@ requires: [narrative-engine@1]
 contributes:
   data:
     facts:
-      version: 1
       accepts: [facts.index@1]
       schema: ./schemas/facts.schema.json
 ---
@@ -51,14 +50,11 @@ io:
   inputs:
     narrative:
       from: { contract: narrative-engine@1 }
-      required: true
       select: /narrativeOutput
   output:
     contract: facts.index@1
     schema: ../../schemas/facts.schema.json
     recordAs: extracted-facts
-  visibility: plugin
-agent: { model: plugin }
 ---
 Extract only the facts that `runtime-inputs.narrative.value` states.
 ```
@@ -70,10 +66,8 @@ Extract only the facts that `runtime-inputs.narrative.value` states.
 type: function
 schedule:
   trigger: { type: manual }
-  manual: { execution: sync }
 io:
   output: { contract: facts.query@1 }
-  visibility: plugin
 function:
   handler: ./handler.js
   timeoutMs: 90000
@@ -82,13 +76,13 @@ function:
 
 What is new here:
 
-| This part                   | Meaning                                                                                                                                                     |
-| --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `provides`                  | The capabilities this plugin offers to others. Other plugins can `requires` them.                                                                           |
-| `io.output.contract`        | The output of this runtime is the content of this capability. It must appear in `provides`.                                                                 |
-| `io.output.schema`          | The shape the output must match. If it does not match, this run fails.                                                                                      |
-| `io.output.recordAs`        | Saves the output under a name. Later turns can read it with `scope: committed`.                                                                             |
-| `schedule.manual.execution` | `sync` means the caller waits for it to finish. `background` moves it to the background. See [Background work and failures](#background-work-and-failures). |
+| This part                   | Meaning                                                                                                                                                                |
+| --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `provides`                  | The capabilities this plugin offers to others. Other plugins can `requires` them.                                                                                      |
+| `io.output.contract`        | The output of this runtime is the content of this capability. It must appear in `provides`.                                                                            |
+| `io.output.schema`          | The shape the output must match. If it does not match, this run fails.                                                                                                 |
+| `io.output.recordAs`        | Saves the output under a name. Later turns can read it with `scope: committed`.                                                                                        |
+| `schedule.manual.execution` | Left out, it is `sync`: the caller waits for it to finish. `background` moves it to the background. See [Background work and failures](#background-work-and-failures). |
 
 Rules:
 
@@ -123,7 +117,6 @@ The `PLUGIN.md` above already has this:
 contributes:
   data:
     facts:
-      version: 1
       accepts: [facts.index@1]
       schema: ./schemas/facts.schema.json
 ```
@@ -142,7 +135,6 @@ Add an `authoring` section, so that world authors and authoring tools know where
 contributes:
   data:
     facts:
-      version: 1
       schema: ./schemas/facts.schema.json
       accepts: [facts.index@1]
       authoring:
@@ -269,15 +261,15 @@ A plugin can only name a role. Which model is used, and where the request goes, 
 
 ### Time limits
 
-| Type     | Field                            | Meaning                                                                                                            |
-| -------- | -------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| Function | `function.timeoutMs`             | The total time limit for one run. Time spent calling external APIs counts toward it.                               |
-| Agent    | `agent.loop.timeoutMs`           | The total time limit for one run                                                                                   |
-| Agent    | `agent.loop.callTimeoutMs`       | The time limit for a single model call (a call that is not streamed)                                               |
-| Agent    | `agent.loop.firstTokenTimeoutMs` | In a streamed call, the time to wait for the first token                                                           |
-| Agent    | `agent.loop.idleTimeoutMs`       | In a streamed call, the longest silence between two outputs. The default is 120 seconds.                           |
-| Agent    | `agent.loop.maxRetries`          | How many times to retry when a model call gets no reply. The default is 1, and the maximum is 5.                   |
-| Agent    | `agent.loop.loopDetection`       | How many times the model can repeat the same call in a row before it counts as going in circles. The default is 3. |
+| Type     | Field                            | Meaning                                                                                                                             |
+| -------- | -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| Function | `function.timeoutMs`             | The total time limit for one run. Time spent calling external APIs counts toward it.                                                |
+| Agent    | `agent.loop.timeoutMs`           | The total time limit for one run. The default is 120 seconds, 240 seconds for a `story` runtime.                                    |
+| Agent    | `agent.loop.callTimeoutMs`       | The time limit for a single model call (a call that is not streamed). The default is 60 seconds, 120 seconds for a `story` runtime. |
+| Agent    | `agent.loop.firstTokenTimeoutMs` | In a streamed call, the time to wait for the first token                                                                            |
+| Agent    | `agent.loop.idleTimeoutMs`       | In a streamed call, the longest silence between two outputs. The default is 120 seconds.                                            |
+| Agent    | `agent.loop.maxRetries`          | How many times to retry when a model call gets no reply. The default is 3, 1 for a `story` runtime, and the maximum is 5.           |
+| Agent    | `agent.loop.loopDetection`       | How many times the model can repeat the same call in a row before it counts as going in circles. The default is 3.                  |
 
 When you do not write `firstTokenTimeoutMs`, the time each attempt waits for the first token is shortened automatically. This leaves time for the remaining retries. A model that is slow to produce its first token must set this value explicitly and also increase `timeoutMs`. For the full rules, see the [Plugin fields reference](../reference/plugins.md).
 

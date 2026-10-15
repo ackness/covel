@@ -31,7 +31,7 @@ function manifest(name: string, extra: Partial<RuntimeManifest> = {}) {
     pluginId: PLUGIN_ID,
     description: "test function runtime",
     runtimeType: "function",
-    outputKind: "plugin",
+    outputKind: "system",
     pluginType: "plugin",
     handler: "./handler.js",
     trigger: { type: "manual" },

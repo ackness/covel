@@ -3,13 +3,9 @@ type: function
 description: Tracks who is present in the scene and who is currently speaking.
 schedule:
   stage: pre-turn
-  trigger:
-    type: scheduled
-    interval: 1
 io:
   output:
     contract: scene-cast@1
-  visibility: system
 function:
   handler: ./handler.js
 ---

@@ -6,10 +6,7 @@ description: >-
 schedule:
   stage: setup
   trigger:
-    type: auto
     maxTriggerCount: 1
-io:
-  visibility: system
 function:
   handler: ./handler.js
 ---

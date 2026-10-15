@@ -214,7 +214,7 @@ describe("normalize golden (bundled plugin set)", () => {
     const pregame = requireSpec(specs, "pregame");
     expect(pregame.stage).toBe("setup");
     expect(pregame.declaredTrigger.type).toBe("auto");
-    expect(pregame.declaredTrigger.interval).toBeUndefined();
+    expect(pregame.declaredTrigger.every).toBeUndefined();
     expect(pregame.declaredTrigger.maxTriggerCount).toBe(1);
     expect(pregame.provenance.derivedFrom).toEqual([]);
 
@@ -234,14 +234,21 @@ describe("normalize golden (bundled plugin set)", () => {
       { capability: "world-data-provider@1" },
     ]);
 
-    // pre-turn band: rag-retriever + scene-stage/cast, both scheduled.
+    // pre-turn band: rag-retriever + scene-stage/cast, both `auto` by default.
     const retriever = requireSpec(specs, "npc-graph/rag-retriever");
     expect(retriever.stage).toBe("pre-turn");
-    expect(retriever.declaredTrigger.type).toBe("scheduled");
+    expect(retriever.declaredTrigger).toEqual({ type: "auto" });
 
     const sceneCast = requireSpec(specs, "scene-stage/cast");
     expect(sceneCast.stage).toBe("pre-turn");
-    expect(sceneCast.declaredTrigger.type).toBe("scheduled");
+    expect(sceneCast.declaredTrigger).toEqual({ type: "auto" });
+
+    // story-events/plot keeps its cadence: every third logical turn from 2.
+    expect(requireSpec(specs, "story-events/plot").declaredTrigger).toEqual({
+      type: "auto",
+      every: 3,
+      startTurn: 2,
+    });
 
     const narrator = requireSpec(specs, "narrator");
     expect(narrator.stage).toBe("narrative");
@@ -258,10 +265,12 @@ describe("normalize golden (bundled plugin set)", () => {
     expect(manifestOf(manifests, "world-ir").outputContract).toBe(
       "world-ir-provider@1",
     );
-    expect(worldIr.bindings.narrative).toMatchObject({
-      from: { capability: "narrative-engine@1", cardinality: "one" },
+    // `cardinality: one` and `required: true` are the defaults the manifests
+    // leave out; the scheduler reads an absent value as them.
+    expect(worldIr.bindings.narrative).toEqual({
+      from: { capability: "narrative-engine@1" },
       select: "/narrativeOutput",
-      required: true,
+      accepts: "./schemas/narrative-output.schema.json",
     });
 
     // Structured consumers use only the typed WorldIR slot. The binding is
@@ -276,10 +285,9 @@ describe("normalize golden (bundled plugin set)", () => {
       const spec = requireSpec(specs, id);
       expect(spec.stage).toBe("post-turn");
       expect(spec.deps.needs).toEqual([]);
-      expect(spec.bindings.worldIR).toMatchObject({
-        from: { capability: "world-ir-provider@1", cardinality: "one" },
+      expect(spec.bindings.worldIR).toEqual({
+        from: { capability: "world-ir-provider@1" },
         accepts: "contract:world-ir@1",
-        required: true,
       });
     }
 
@@ -289,10 +297,10 @@ describe("normalize golden (bundled plugin set)", () => {
     const guide = requireSpec(specs, "guide");
     expect(guide.stage).toBe("post-turn");
     expect(guide.deps.needs).toEqual([]);
-    expect(guide.bindings.narrative).toMatchObject({
-      from: { capability: "narrative-engine@1", cardinality: "one" },
+    expect(guide.bindings.narrative).toEqual({
+      from: { capability: "narrative-engine@1" },
       select: "/narrativeOutput",
-      required: true,
+      accepts: "./schemas/narrative-output.schema.json",
     });
 
     // branch-reply: post-turn with a typed `inputs.narrative` binding. No
@@ -303,7 +311,7 @@ describe("normalize golden (bundled plugin set)", () => {
     expect(branchReply.deps.needs).toEqual([]);
     expect(branchReply.bindings).toEqual({
       narrative: {
-        from: { capability: "narrative-engine@1", cardinality: "one" },
+        from: { capability: "narrative-engine@1" },
         select: "/narrativeOutput",
         required: false,
       },

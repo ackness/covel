@@ -201,7 +201,7 @@ describe("POST /api/actions — phase.changed hygiene (Finding 4 regression)", (
     const loaded = makeFakeLoadedRuntime({
       name: PREGAME_ID,
       pluginId: "char-creator",
-      outputKind: "plugin",
+      outputKind: "system",
       pluginType: "core-plugin",
     });
     const pregameLoaded: LoadedRuntime = {

@@ -5,8 +5,6 @@ schedule:
   trigger:
     type: event
     topic: scene.set
-io:
-  visibility: system
 function:
   handler: ./handler.js
 ---

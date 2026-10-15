@@ -1,0 +1,132 @@
+/**
+ * Author warnings `validate:plugin` prints for a package that loads: a field
+ * written with the value it has by default, and a missing version where
+ * setup reruns depend on it. They read the frontmatter as written, before
+ * the schemas fill in their defaults.
+ */
+import {
+  DEFAULT_RUNTIME_VISIBILITY,
+  defaultAgentLoop,
+  defaultAgentModel,
+  type RuntimeVisibility,
+} from "@covel/shared";
+import type { ParsedPluginMd, ParsedRuntimeMd } from "./types.js";
+
+type Raw = Readonly<Record<string, unknown>>;
+
+function record(value: unknown): Raw | undefined {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Raw)
+    : undefined;
+}
+
+function list(value: unknown): readonly unknown[] {
+  return Array.isArray(value) ? value : [];
+}
+
+/** Collects `<file>: <field>: <value> is the default value; remove it`. */
+class Findings {
+  readonly messages: string[] = [];
+  constructor(private readonly file: string) {}
+  check(field: string, value: unknown, defaultValue: unknown): void {
+    if (value !== undefined && value === defaultValue)
+      this.messages.push(
+        `${this.file}: ${field}: ${JSON.stringify(value)} is the default value; remove it`,
+      );
+  }
+}
+
+function runtimeWarnings(runtime: Raw, prefix: string, out: Findings): void {
+  const at = (field: string) => `${prefix}${field}`;
+  const schedule = record(runtime.schedule);
+  out.check(at("schedule.trigger.type"), record(schedule?.trigger)?.type, "auto");
+  out.check(at("schedule.every"), schedule?.every, 1);
+  out.check(
+    at("schedule.manual.execution"),
+    record(schedule?.manual)?.execution,
+    "sync",
+  );
+  const io = record(runtime.io);
+  out.check(at("io.visibility"), io?.visibility, DEFAULT_RUNTIME_VISIBILITY);
+  for (const [name, value] of Object.entries(record(io?.inputs) ?? {})) {
+    const binding = record(value);
+    out.check(
+      at(`io.inputs.${name}.from.cardinality`),
+      record(binding?.from)?.cardinality,
+      "one",
+    );
+    out.check(at(`io.inputs.${name}.required`), binding?.required, true);
+    out.check(at(`io.inputs.${name}.scope`), binding?.scope, "turn");
+  }
+  for (const [index, value] of list(io?.selfData).entries()) {
+    const entry = record(value);
+    out.check(at(`io.selfData[${index}].format`), entry?.format, "summary");
+    out.check(at(`io.selfData[${index}].maxEntries`), entry?.maxEntries, 50);
+  }
+  if (runtime.type !== "agent") return;
+  const visibility: RuntimeVisibility =
+    io?.visibility === "story" ? "story" : DEFAULT_RUNTIME_VISIBILITY;
+  const agent = record(runtime.agent);
+  out.check(at("agent.model"), agent?.model, defaultAgentModel(visibility));
+  const loop = record(agent?.loop);
+  const defaults = defaultAgentLoop(visibility);
+  for (const field of ["timeoutMs", "callTimeoutMs", "maxRetries"] as const)
+    out.check(at(`agent.loop.${field}`), loop?.[field], defaults[field]);
+}
+
+/**
+ * Warnings for one package. Every message names the file and the field; the
+ * package is valid either way.
+ */
+export function authoringWarnings(
+  packageManifest: ParsedPluginMd,
+  manifests: readonly ParsedRuntimeMd[],
+): string[] {
+  const pluginFile = packageManifest.sourcePath ?? "PLUGIN.md";
+  const plugin = new Findings(pluginFile);
+  const raw = packageManifest.rawFrontmatter;
+  const contributes = record(raw.contributes);
+  for (const [index, value] of list(contributes?.hooks).entries())
+    plugin.check(
+      `contributes.hooks[${index}].enforce`,
+      record(value)?.enforce,
+      "normal",
+    );
+  for (const [namespace, value] of Object.entries(
+    record(contributes?.data) ?? {},
+  ))
+    plugin.check(
+      `contributes.data.${namespace}.version`,
+      record(value)?.version,
+      1,
+    );
+  for (const [index, value] of list(contributes?.prompt).entries())
+    plugin.check(
+      `contributes.prompt[${index}].role`,
+      record(value)?.role,
+      "system",
+    );
+  const messages = [...plugin.messages];
+  for (const parsed of manifests) {
+    const inline = parsed.manifest.name === packageManifest.plugin.id;
+    const runtime = record(
+      inline ? parsed.rawFrontmatter.runtime : parsed.rawFrontmatter,
+    );
+    if (!runtime) continue;
+    const findings = new Findings(parsed.sourcePath ?? pluginFile);
+    runtimeWarnings(runtime, inline ? "runtime." : "", findings);
+    messages.push(...findings.messages);
+  }
+  // Setup reruns for existing sessions only when the version changes, and an
+  // entry module changes what the package does; a package with either should
+  // say which version it is.
+  const hasSetup = manifests.some((parsed) => parsed.manifest.stage === "setup");
+  if (
+    !packageManifest.plugin.version &&
+    (packageManifest.plugin.entry || hasSetup)
+  )
+    messages.push(
+      `${pluginFile}: version: missing; a package without one counts as 0.0.0, and setup reruns for existing sessions only when the version changes. Add a version and raise it with each release`,
+    );
+  return messages;
+}

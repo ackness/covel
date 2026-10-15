@@ -28,7 +28,7 @@ const asker: RuntimeManifest = {
   version: "1.2.0",
   runtimeType: "function",
   stage: "post-turn",
-  outputKind: "plugin",
+  outputKind: "system",
   trigger: { type: "auto" },
 };
 const notes: RuntimeManifest = {
@@ -37,7 +37,7 @@ const notes: RuntimeManifest = {
   pluginId: "notes",
   runtimeType: "function",
   stage: "post-turn",
-  outputKind: "plugin",
+  outputKind: "system",
   trigger: { type: "auto" },
   turnCompletion: { mode: "detached" },
   effects: { writes: ["plugin-data:self:notes"] },
@@ -435,7 +435,7 @@ describe("resuming after what it writes changed (F-016)", () => {
       version: "1.2.0",
       runtimeType: "function",
       stage: "post-turn",
-      outputKind: "plugin",
+      outputKind: "system",
       trigger: { type: "manual" },
       effects: { writes: ["plugin-data:self:quest"] },
       ...overrides,
