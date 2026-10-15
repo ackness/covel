@@ -43,7 +43,7 @@ test("first visit starts on the world list, explains preparation and can be reop
   await guide.getByRole("button", { name: "Learn how to play" }).click();
   await expect(guide).toContainText("recommended play pack");
   await expect(guide.getByRole("status")).toContainText(
-    "complete model setup before starting a game",
+    "finish model setup before starting a game",
   );
   // Hold the real persistence lock so dismissal must wait for the saved flag.
   await page.evaluate(
