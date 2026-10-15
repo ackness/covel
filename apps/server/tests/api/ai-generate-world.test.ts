@@ -1168,7 +1168,7 @@ describe("ai world generation route", () => {
     const done = doneEvent(events);
     expect(done.world.metadata).toMatchObject({
       source: "server-store",
-      characterBlueprints: expect.arrayContaining([
+      embeddedCharacters: expect.arrayContaining([
         expect.objectContaining({ id: "keeper" }),
       ]),
       embeddedLorebook: expect.arrayContaining([
@@ -1651,7 +1651,7 @@ describe("ai world generation route", () => {
       );
 
       expect(revised.lore).toBe(REVISED_MD);
-      expect(revised.metadata.characterBlueprints).toHaveLength(3);
+      expect(revised.metadata.embeddedCharacters).toHaveLength(3);
       expect((await store.getWorld("generated-world"))?.lore).toBe(REVISED_MD);
       expect(await readdir(worldsDir)).toEqual([]);
     });
@@ -1672,7 +1672,7 @@ describe("ai world generation route", () => {
       );
 
       expect(revised.lore).toBe(REVISED_MD);
-      expect(revised.metadata.characterBlueprints).toHaveLength(3);
+      expect(revised.metadata.embeddedCharacters).toHaveLength(3);
       expect(await store.getWorld("generated-world")).toBeNull();
       expect(await readdir(worldsDir)).toEqual([]);
     });

@@ -736,7 +736,6 @@ worldData: data/world.data.yaml
 
     // The roleplay notes are part of the character records: one file.
     const haruka = await load("haruka-academy");
-    expect(haruka?.metadata?.characterBlueprints).toBeUndefined();
     expect(haruka?.metadata?.worldData).toMatchObject({
       sources: expect.arrayContaining([
         expect.objectContaining({ id: "characters", target: "characters" }),
@@ -784,9 +783,6 @@ worldData: data/world.data.yaml
   it("rejects dangerous metadata targets", () => {
     expect(
       parseWorldDataTarget("world:metadata.__proto__.polluted"),
-    ).toBeNull();
-    expect(
-      parseWorldDataTarget("world:metadata.characterBlueprints"),
     ).toBeNull();
     expect(
       parseWorldDataTarget("contract:plugin-id.runtime-id@1/ns"),

@@ -290,7 +290,7 @@ describe("BrowserVault session commits", () => {
       name: "Heist",
       description: "",
       metadata: {
-        characterBlueprints: [
+        embeddedCharacters: [
           {
             schemaVersion: 1,
             id: "keeper",
