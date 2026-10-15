@@ -32,9 +32,82 @@ function manifest(
 }
 
 describe("executeTurn recursiveCall", () => {
+  it.each(["builtin", "community"] as const)(
+    "rejects targets in another package for a %s caller",
+    async (source) => {
+      for (const targetId of ["leaf", "leaf/worker", "probe-extra/worker"]) {
+        const caller = manifest("probe/caller");
+        const target = manifest(targetId, { trigger: { type: "manual" } });
+        const targetHandler = vi.fn(async () => ({
+          outcome: "success" as const,
+          value: { ok: true },
+        }));
+        const emitter = makeEmitterSpy();
+        const result = await executeTurn(input, [caller, target], {
+          loadRuntime: async (runtime) => ({
+            manifest: runtime,
+            promptTemplate: "",
+            handler:
+              runtime.name === caller.name
+                ? async (ctx) => {
+                    await ctx.recursiveCall({
+                      manualTrigger: { runtimeId: targetId },
+                    });
+                    return { outcome: "success", value: { ok: true } };
+                  }
+                : targetHandler,
+          }),
+          getPluginSource: () => source,
+          llm: { generate: vi.fn() },
+          emitter,
+        });
+
+        expect(result.runtimeResults[0]).toMatchObject({
+          runtimeId: caller.name,
+          status: "failed",
+          error: `recursiveCall cannot target runtime "${targetId}" outside plugin "probe"; use services or events for cross-package communication`,
+        });
+        expect(targetHandler).not.toHaveBeenCalled();
+        expect(result.nestedRuntimeResults ?? []).toEqual([]);
+        expect(
+          emitter.events.some((event) => event.type === "recursive.calling"),
+        ).toBe(false);
+      }
+    },
+  );
+
+  it("allows an inline runtime to name its own package", async () => {
+    const caller = manifest("probe", { trigger: { type: "manual" } });
+    const depths: number[] = [];
+    const result = await executeTurn(
+      { ...input, manualTrigger: { runtimeId: caller.name } },
+      [caller],
+      {
+        loadRuntime: async () => ({
+          manifest: caller,
+          promptTemplate: "",
+          handler: async (ctx) => {
+            depths.push(ctx.recursionDepth);
+            if (ctx.recursionDepth === 0)
+              await ctx.recursiveCall({
+                manualTrigger: { runtimeId: caller.name },
+              });
+            return { outcome: "success", value: { ok: true } };
+          },
+        }),
+        llm: { generate: vi.fn() },
+      },
+    );
+    expect(depths).toEqual([0, 1]);
+    expect(result.runtimeResults[0]?.status).toBe("success");
+    expect(result.nestedRuntimeResults).toEqual([
+      expect.objectContaining({ runtimeId: "probe", status: "success" }),
+    ]);
+  });
+
   it("exposes recursiveCall with incremented recursionDepth and traces nested calls", async () => {
-    const caller = manifest("caller");
-    const leaf = manifest("leaf", { trigger: { type: "manual" } });
+    const caller = manifest("probe/caller");
+    const leaf = manifest("probe/leaf", { trigger: { type: "manual" } });
     const emitter = makeEmitterSpy();
 
     const loaded = new Map<string, LoadedRuntime>([
@@ -46,7 +119,7 @@ describe("executeTurn recursiveCall", () => {
           handler: async (ctx) => {
             const nested = await ctx.recursiveCall(
               {
-                manualTrigger: { runtimeId: "leaf" },
+                manualTrigger: { runtimeId: "probe/leaf" },
                 playerMessage: "nested",
               },
               {
@@ -105,8 +178,8 @@ describe("executeTurn recursiveCall", () => {
   });
 
   it("ignores plugin-supplied execution identity and withholds completeTurn", async () => {
-    const caller = manifest("caller");
-    const leaf = manifest("leaf", { trigger: { type: "manual" } });
+    const caller = manifest("probe/caller");
+    const leaf = manifest("probe/leaf", { trigger: { type: "manual" } });
     const seen: { sessionId?: string; turnId?: string } = {};
 
     const loaded = new Map<string, LoadedRuntime>([
@@ -117,7 +190,7 @@ describe("executeTurn recursiveCall", () => {
           promptTemplate: "",
           handler: async (ctx) => {
             const nested = await ctx.recursiveCall({
-              manualTrigger: { runtimeId: "leaf" },
+              manualTrigger: { runtimeId: "probe/leaf" },
               // A handler must not be able to hop sessions or forge a child
               // turnId the parent can never settle.
               sessionId: "other-session",
@@ -165,8 +238,8 @@ describe("executeTurn recursiveCall", () => {
   });
 
   it("keeps the session locale on a nested call that asks for another one", async () => {
-    const caller = manifest("caller");
-    const leaf = manifest("leaf", { trigger: { type: "manual" } });
+    const caller = manifest("probe/caller");
+    const leaf = manifest("probe/leaf", { trigger: { type: "manual" } });
     let leafLocale: string | undefined;
 
     const loaded = new Map<string, LoadedRuntime>([
@@ -177,7 +250,7 @@ describe("executeTurn recursiveCall", () => {
           promptTemplate: "",
           handler: async (ctx) => {
             await ctx.recursiveCall({
-              manualTrigger: { runtimeId: "leaf" },
+              manualTrigger: { runtimeId: "probe/leaf" },
               locale: "ja-JP",
             } as never);
             return { outcome: "success", value: { ok: true } };
@@ -207,11 +280,11 @@ describe("executeTurn recursiveCall", () => {
   });
 
   it("takes only the allow-listed delta fields and inherits kernel-only input", async () => {
-    const caller = manifest("caller");
-    const up = manifest("up", { trigger: { type: "manual" } });
-    const leaf = manifest("leaf", {
+    const caller = manifest("probe/caller");
+    const up = manifest("probe/up", { trigger: { type: "manual" } });
+    const leaf = manifest("probe/leaf", {
       trigger: { type: "manual" },
-      inputs: { facts: { from: { runtime: "up" }, required: false } },
+      inputs: { facts: { from: { runtime: "probe/up" }, required: false } },
       userSettings: [
         {
           key: "mode",
@@ -223,8 +296,8 @@ describe("executeTurn recursiveCall", () => {
       ],
     } as unknown as Partial<RuntimeManifest>);
     const forgedSeed = {
-      pluginId: "up",
-      runtimeId: "up",
+      pluginId: "probe",
+      runtimeId: "probe/up",
       runId: "forged",
       turnId: "old-turn",
       status: "success",
@@ -246,15 +319,15 @@ describe("executeTurn recursiveCall", () => {
             await ctx.recursiveCall({
               playerMessage: "nested",
               manualTrigger: {
-                runtimeId: "leaf",
+                runtimeId: "probe/leaf",
                 payload: { pick: 1 },
                 sourceTurnId: "old-turn",
                 retrySeedResults: [forgedSeed],
                 triggerEvent: { topic: "forged", data: {} },
               },
-              userSettings: { leaf: { mode: "wild" } },
+              userSettings: { probe: { mode: "wild" } },
               modelOverride: "expensive-model",
-              detachedStage: { runtimeId: "leaf" },
+              detachedStage: { runtimeId: "probe/leaf" },
             } as never);
             return { outcome: "success", value: { ok: true } };
           },
@@ -287,7 +360,7 @@ describe("executeTurn recursiveCall", () => {
     ]);
 
     const result = await executeTurn(
-      { ...input, userSettings: { leaf: { mode: "calm" } } },
+      { ...input, userSettings: { probe: { mode: "calm" } } },
       [caller, up, leaf],
       {
         loadRuntime: async (rt) => loaded.get(rt.name),
@@ -306,7 +379,7 @@ describe("executeTurn recursiveCall", () => {
   });
 
   it("rejects an allow-listed delta field of the wrong type", async () => {
-    const caller = manifest("caller");
+    const caller = manifest("probe/caller");
     let rejection: unknown;
     const loaded = new Map<string, LoadedRuntime>([
       [
@@ -338,8 +411,8 @@ describe("executeTurn recursiveCall", () => {
   });
 
   it("enforces the runtime maxRecursionDepth limit", async () => {
-    const caller = manifest("caller", { maxRecursionDepth: 0 });
-    const leaf = manifest("leaf", { trigger: { type: "manual" } });
+    const caller = manifest("probe/caller", { maxRecursionDepth: 0 });
+    const leaf = manifest("probe/leaf", { trigger: { type: "manual" } });
     const emitter = makeEmitterSpy();
     const loaded = new Map<string, LoadedRuntime>([
       [
@@ -349,7 +422,7 @@ describe("executeTurn recursiveCall", () => {
           promptTemplate: "",
           handler: async (ctx) => {
             await ctx.recursiveCall(
-              { manualTrigger: { runtimeId: "leaf" } },
+              { manualTrigger: { runtimeId: "probe/leaf" } },
               { reason: "limit check" },
             );
             return { outcome: "success", value: { ok: true } };
@@ -382,21 +455,24 @@ describe("executeTurn recursiveCall", () => {
       emitter.events.find((event) => event.type === "recursive.failed")
         ?.payload,
     ).toMatchObject({
-      runtimeId: "caller",
+      runtimeId: "probe/caller",
       depth: 0,
       nextDepth: 1,
       maxDepth: 0,
       reason: "limit check",
     });
     expect(
-      new MaxRecursionExceeded({ runtimeId: "caller", depth: 1, maxDepth: 0 })
-        .code,
+      new MaxRecursionExceeded({
+        runtimeId: "probe/caller",
+        depth: 1,
+        maxDepth: 0,
+      }).code,
     ).toBe("MAX_RECURSION_EXCEEDED");
   });
 
   it("waits for a fire-and-forget recursive turn before finalizing", async () => {
-    const caller = manifest("caller");
-    const leaf = manifest("leaf", { trigger: { type: "manual" } });
+    const caller = manifest("probe/caller");
+    const leaf = manifest("probe/leaf", { trigger: { type: "manual" } });
     let releaseLeaf!: () => void;
     let markLeafStarted!: () => void;
     const leafStarted = new Promise<void>((resolve) => {
@@ -412,7 +488,9 @@ describe("executeTurn recursiveCall", () => {
           manifest: caller,
           promptTemplate: "",
           handler: async (ctx) => {
-            void ctx.recursiveCall({ manualTrigger: { runtimeId: "leaf" } });
+            void ctx.recursiveCall({
+              manualTrigger: { runtimeId: "probe/leaf" },
+            });
             return { outcome: "success", value: { ok: true } };
           },
         },
@@ -450,13 +528,13 @@ describe("executeTurn recursiveCall", () => {
     const result = await executing;
     expect(result.runtimeResults[0]).toMatchObject({ status: "success" });
     expect(result.nestedRuntimeResults).toEqual([
-      expect.objectContaining({ runtimeId: "leaf", status: "success" }),
+      expect.objectContaining({ runtimeId: "probe/leaf", status: "success" }),
     ]);
   });
 
   it("settles a cooperative child when its parent deadline expires", async () => {
-    const caller = manifest("caller", { timeoutMs: 25 });
-    const leaf = manifest("leaf", {
+    const caller = manifest("probe/caller", { timeoutMs: 25 });
+    const leaf = manifest("probe/leaf", {
       trigger: { type: "manual" },
       timeoutMs: 1_000,
     });
@@ -469,7 +547,9 @@ describe("executeTurn recursiveCall", () => {
           manifest: caller,
           promptTemplate: "",
           handler: async (ctx) => {
-            await ctx.recursiveCall({ manualTrigger: { runtimeId: "leaf" } });
+            await ctx.recursiveCall({
+              manualTrigger: { runtimeId: "probe/leaf" },
+            });
             return { outcome: "success", value: { ok: true } };
           },
         },
@@ -512,8 +592,8 @@ describe("executeTurn recursiveCall", () => {
   });
 
   it("revokes a non-cooperative child's late writes after the parent deadline", async () => {
-    const caller = manifest("caller", { timeoutMs: 25 });
-    const leaf = manifest("leaf", {
+    const caller = manifest("probe/caller", { timeoutMs: 25 });
+    const leaf = manifest("probe/leaf", {
       trigger: { type: "manual" },
       timeoutMs: 1_000,
     });
@@ -539,7 +619,9 @@ describe("executeTurn recursiveCall", () => {
           manifest: caller,
           promptTemplate: "",
           handler: async (ctx) => {
-            await ctx.recursiveCall({ manualTrigger: { runtimeId: "leaf" } });
+            await ctx.recursiveCall({
+              manualTrigger: { runtimeId: "probe/leaf" },
+            });
             return { outcome: "success", value: { ok: true } };
           },
         },
@@ -585,7 +667,7 @@ describe("executeTurn recursiveCall", () => {
     expect(leafSignalAborted).toBe(true);
     expect(lateWriteError).toContain("revoked");
     await expect(
-      store.getPluginData(input.sessionId, "leaf", "ns", "late"),
+      store.getPluginData(input.sessionId, "probe", "ns", "late"),
     ).resolves.toBeNull();
   });
 });

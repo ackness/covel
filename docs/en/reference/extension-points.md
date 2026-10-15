@@ -4,6 +4,8 @@ Some work is not done by the kernel itself. Instead, it is handed to plugins: ad
 
 This page explains how to declare and register a provider, how the kernel combines several providers, and the inputs and outputs of two extension points: session world context and history compression. Plugin authors who write providers need it.
 
+For requests or follow-up work between packages, choose a service or event from the [communication guide](./plugin-extensions.md#choose-a-way-to-communicate); [nested calls with `ctx.recursiveCall`](./plugins.md#nested-calls-ctxrecursivecall) stay within one package.
+
 ## Declaring and registering
 
 There are two steps, just as with tools and hooks:

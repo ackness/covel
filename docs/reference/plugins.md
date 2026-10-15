@@ -520,6 +520,14 @@ Agent 的副作用只来自工具：模型能写什么，以 `agent.tools` 白�
 
 `ctx.session.lastPlayerInput` 可能来自更早的回合。有这条记录不等于本回合提交了表单。
 
+#### 嵌套调用（`ctx.recursiveCall`）
+
+`ctx.recursiveCall({ playerMessage, manualTrigger: { runtimeId, payload } })` 在当前执行里发起嵌套运行，副作用随父执行一起提交。它只读取这些字段；会话、语言、设置和模型沿用父执行，其他字段被忽略。
+
+`manualTrigger.runtimeId` 只能点名调用者自己包里的 runtime：内联 runtime 用包 ID，多 runtime 包用 `<pluginId>/<runtimeId>`。点名别的包会在嵌套执行开始前报错，错误写明目标 runtime 和调用者的包 ID。内置插件和社区插件遵守同一条规则。
+
+跨包请求与响应用[服务](./plugin-extensions.md#公共函数注册与调用)，触发其他包的后续工作用[事件](./plugin-extensions.md#事件怎么触发下游)。
+
 #### 会话视图（`store.getSession()`）
 
 `ctx.store.getSession()`（工具里是 `context.store.getSession()`，action 里是 `context.store.getSession()`）返回当前会话的只读视图 `PluginSessionView`，不是会话记录本身：
