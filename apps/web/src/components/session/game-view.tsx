@@ -49,6 +49,7 @@ import { useGameViewComposer } from "./game-view/use-game-view-composer.js";
 import { useGameViewMode } from "./game-view/use-game-view-mode.js";
 import { worldVisual } from "@/lib/world-visuals.js";
 import { ignoreError } from "@/lib/ignore-error.js";
+import { resolveDisplayText } from "@/lib/i18n-text.js";
 import { emitNavEvent, type SessionPanel } from "@/lib/nav-events.js";
 import { latestExecutionPresentation } from "./execution-presentation.js";
 import { SessionBackdrop } from "./session-backdrop.js";
@@ -521,7 +522,10 @@ export function GameView({
                     disabled={executing}
                     onClick={() => void onTogglePlugin(plugin.id, true)}
                   >
-                    {t("plugin.approval.review", { pluginId: plugin.id })}
+                    {t("plugin.approval.review", {
+                      plugin:
+                        resolveDisplayText(plugin.displayName) || plugin.id,
+                    })}
                   </button>
                 ))}
             </div>

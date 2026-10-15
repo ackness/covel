@@ -1,6 +1,9 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
-import { approvalConfirmMessage } from "../approval-message.js";
+import {
+  approvalConfirmMessage,
+  setApprovalPluginNames,
+} from "../approval-message.js";
 
 const t = (key: string, options?: Record<string, unknown>): string => {
   let text = String(options?.defaultValue ?? key);
@@ -23,5 +26,20 @@ describe("approvalConfirmMessage", () => {
     expect(approvalConfirmMessage(t, "p1", "generate-image")).toContain(
       "generate-image",
     );
+  });
+
+  it("names the plugin by its display name once the catalog is known", () => {
+    setApprovalPluginNames([{ id: "qa-broken", displayName: "QA Broken" }]);
+    try {
+      const text = approvalConfirmMessage(
+        t,
+        "qa-broken",
+        "covel:plugin-server-code",
+      );
+      expect(text).toContain('"QA Broken"');
+      expect(text).not.toContain("qa-broken");
+    } finally {
+      setApprovalPluginNames([]);
+    }
   });
 });

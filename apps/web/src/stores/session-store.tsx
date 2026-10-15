@@ -1,4 +1,5 @@
-import { useMemo, useReducer, type ReactNode } from "react";
+import { useEffect, useMemo, useReducer, type ReactNode } from "react";
+import { setApprovalPluginNames } from "@/lib/approval-message.js";
 import {
   getDataService,
   getSessionWorkspace,
@@ -66,6 +67,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   });
 
   useBootEffect(state, actions.boot);
+  useEffect(() => setApprovalPluginNames(state.plugins), [state.plugins]);
   useExecutionRecovery({
     state,
     stateRef: refs.stateRef,

@@ -1,4 +1,27 @@
+import type { I18nText } from "@covel/shared";
+import { resolveDisplayText } from "./i18n-text.js";
+
 type Translate = (key: string, options?: Record<string, unknown>) => string;
+
+/**
+ * Display names of the installed plugins, kept by the session provider. An
+ * approval can be asked from several places (a turn, a panel, a toggle), and
+ * each names the plugin by ID only.
+ */
+let pluginNames: ReadonlyMap<string, I18nText> = new Map();
+
+export function setApprovalPluginNames(
+  plugins: readonly { readonly id: string; readonly displayName: I18nText }[],
+): void {
+  pluginNames = new Map(
+    plugins.map((plugin) => [plugin.id, plugin.displayName]),
+  );
+}
+
+/** The plugin's display name in the interface language, else its ID. */
+export function approvalPluginName(pluginId: string): string {
+  return resolveDisplayText(pluginNames.get(pluginId)) || pluginId;
+}
 
 /** The grant for letting a community plugin's server code run. */
 const SERVER_CODE_ACTION = "covel:plugin-server-code";
@@ -14,23 +37,24 @@ export function approvalConfirmMessage(
   pluginId: string,
   action: string,
 ): string {
+  const plugin = approvalPluginName(pluginId);
   if (action === SERVER_CODE_ACTION)
     return t("plugin.approval.serverCodeMessage", {
-      pluginId,
+      plugin,
       defaultValue:
-        "Plugin {{pluginId}} is a community plugin. Authorizing it lets its code run inside the Covel backend, without a process sandbox, until the backend restarts.",
+        '"{{plugin}}" is a community plugin. Authorizing it lets its code run inside the Covel backend, without a process sandbox, until the backend restarts.',
     });
   if (action.startsWith(RUNTIME_ACTION_PREFIX))
     return t("plugin.approval.runtimeMessage", {
-      pluginId,
+      plugin,
       runtime: action.slice(RUNTIME_ACTION_PREFIX.length),
       defaultValue:
-        "Plugin {{pluginId}} asks to run its task {{runtime}} in this session. Authorize it?",
+        '"{{plugin}}" asks to run its task {{runtime}} in this session. Authorize it?',
     });
   return t("plugin.approval.confirmMessage", {
-    pluginId,
+    plugin,
     action,
     defaultValue:
-      "Plugin {{pluginId}} requests permission to run {{action}}. Authorize all matching calls for this session?",
+      '"{{plugin}}" asks to run {{action}}. Authorize all such calls for this session?',
   });
 }
