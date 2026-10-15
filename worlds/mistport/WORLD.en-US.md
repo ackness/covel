@@ -80,7 +80,7 @@ The story forces no single ending, but falls naturally into three stages — and
 - Three years ago a Council expedition vanished entirely in the deep Undertow. The lone survivor went mad and can only repeat one line: "It woke up down there." Where is that person held now?
 - Why do Frost's prophecies always come true? Is the fog truly speaking to her — or is someone speaking through her? The first time she saw the player, she said, "You can hear it too, can't you?" What did she mean?
 - Qi never publicly used Tide-Force, so why is he rotting? If not Tide-Force, what else could dissolve a person slowly into the fog?
-- Hidden agendas — do not reveal them before the narrative uncovers them: Qi is one of the few who know the truth of the Riftide and has chosen silence, and fog-rot has already marked his hands; Iron Meg was once a Tide-Reader apprentice, her greatest secret; Lin Yuanzhou found in his exam that he can faintly sense Tide-Force and dares tell no one, since the Guild's official line is that it does not exist; Grey Falcon has begun to question what lies behind his orders.
+- What the cast hides; do not state it before the story reveals it: Qi is one of the few who know the truth of the Riftide and has chosen silence, and fog-rot has already marked his hands; Iron Meg was once a Tide-Reader apprentice, her greatest secret; Lin Yuanzhou found in his exam that he can faintly sense Tide-Force and dares tell no one, since the Guild's official line is that it does not exist; Grey Falcon has begun to question what lies behind his orders.
 
 <!-- /narrator-only -->
 

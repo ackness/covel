@@ -68,7 +68,7 @@ characterSchema:
         Tide-Force
     - id: stealth
       name: Fogcraft
-      description: Skill at keeping silent and dim, navigating the mist, and evading fog beasts
+      description: Skill at muffling sound and light, finding the way, and evading fog beasts
     - id: diplomacy
       name: Diplomacy
       description: Skill at negotiation, reading people, and navigating the four factions
