@@ -83,6 +83,8 @@ export async function deleteSessionWithLifecycle(
   const finishDeletion = async (): Promise<void> => {
     const bus = c.get("eventBus");
     if (bus) invalidateSessionEvents(bus, expectedSession ?? guard.session);
+    // ponytail: failed media release leaves claims held; no route reclaims them after deletion.
+    // See the session/delete-route.ts row in docs/internals/technical-debt.md.
     try {
       await c.get("mediaStore")?.releaseSession(id);
     } catch (error) {

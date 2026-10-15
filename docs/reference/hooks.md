@@ -225,7 +225,7 @@ agent runtime 的每次模型调用之前触发，包括工具结果之后的调
 
 - 保留原结果的 `pluginId`、`runtimeId`、`runId`、`turnId`，以及挂起结果的挂起字段。
 - 写入只来自 runtime 自己：`pendingProposals`、`effects` 和 `completion` 一律取原结果的值，Hook 加的会被丢掉。要拦下一条写入，用 `PreStateCommit`。
-- Hook 改了 `status` 时（比如把失败改成成功），结果不带任何写入。失败的函数 handler 在失败前攒下的写入也不提交。
+- Hook 改了 `status` 时（比如把失败改成成功），这次运行的 `pendingProposals`、`effects` 和 `completion` 全部丢弃。失败的函数 handler 在失败前攒下的写入也不提交。setup runtime 被 Hook 从失败改成成功，也不记为完成，仍是待完成。
 - handler 改了 `output` 却没动 `canonicalValue` 时，内核丢掉旧的 `canonicalValue`。这样其他 runtime 读到的值不会和改写后的输出对不上。
 - 再按 runtime 的 `output.schema` 检查一遍：函数 runtime 检查 `canonicalValue`，agent 在 Hook 改了 `output` 时检查 `output`。从失败或跳过改成成功的结果没有 `canonicalValue`，检查的是 `output`，和正常成功走同样的检查。不符合时 runtime 以 `output-schema-invalid` 失败，什么都不提交。
 

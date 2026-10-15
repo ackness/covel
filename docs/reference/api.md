@@ -84,13 +84,15 @@ Covel 的服务器对外只有一套 HTTP JSON 接口。网页和桌面应用用
 
 选 `pg` 之后，数据是共享的，一部分跨进程的协调也有了。但不是每种能力都会变成共享服务。
 
-| 能力                         | Memory / SQLite               | PostgreSQL 多实例                                |
-| ---------------------------- | ----------------------------- | ------------------------------------------------ |
-| 会话写入互斥                 | 进程内的锁，按单进程部署使用  | 共享数据库的 advisory lock                       |
-| 事件投递给 SSE 订阅者        | 只在当前进程内广播            | 通过 PG `LISTEN/NOTIFY` 转发                     |
-| 活跃回合的 `steer` / `abort` | 操作当前进程持有的执行句柄    | 仍然只在进程内有效                               |
-| 后台任务 `_runtime_jobs`     | 能不能保住取决于存储后端      | 通过 CAS 和可续期的租约认领                      |
-| 媒体二进制数据               | 由单独的 `MEDIA_BACKEND` 决定 | `mirror` 存进 PG；本地媒体后端的文件不会自动共享 |
+<!-- prettier-ignore -->
+| 能力 | Memory / SQLite | PostgreSQL 多实例 |
+| --- | --- | --- |
+| 会话写入互斥 | 进程内的锁，按单进程部署使用 | 共享数据库的 advisory lock |
+| 事件投递给 SSE 订阅者 | 只在当前进程内广播 | 通过 PG `LISTEN/NOTIFY` 转发 |
+| 事件游标 | 同一进程内有效 | 只在发出它的实例上有效；换到别的实例时，客户端需重新读取会话，带旧游标订阅会收到 `system.reset` |
+| 活跃回合的 `steer` / `abort` | 操作当前进程持有的执行句柄 | 仍然只在进程内有效 |
+| 后台任务 `_runtime_jobs` | 能不能保住取决于存储后端 | 通过 CAS 和可续期的租约认领 |
+| 媒体二进制数据 | 由单独的 `MEDIA_BACKEND` 决定 | `mirror` 存进 PG；本地媒体后端的文件不会自动共享 |
 
 PostgreSQL 一列的细节：
 
@@ -918,6 +920,7 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 - 回合的控制注册表在进程内。多 pod（PG）部署下，steer / abort 只能到达同一个 pod 上的回合。跨进程的执行状态探测不改变这一点。
 - 动作请求一进来就登记，所以等待中也能被停止。拿到会话锁之后，它才成为会话当前的回合：覆盖准备、模型执行、提交和收尾，直到 action 完成才释放。所以刷新时不会在提交还没完成时误判为空闲。
 - 有回合正在执行时，停止只作用于它，不会落到排在后面等锁的请求上；排队的请求也不会覆盖当前回合的控制注册。
+- 没有正在执行的回合时，`abort` 会停掉当前进程里这个会话所有还在等待的动作请求。
 - 停止信号不能撤回已经完成的事务。
 
 ### Setup runtime 控制（重试 / 跳过）
@@ -2300,6 +2303,8 @@ Web 设置页根据 `operatorTokenRequired` 决定是否显示“运维访问”
 | `phase`                | `'setup' \| 'playing'`                      | 会话处在开局准备还是正式游玩。激活集里有 setup runtime 时初始为 `setup`，否则为 `playing`；全部 setup runtime 完成后变成 `playing`                                       |
 | `completedPlayerTurns` | number                                      | 已提交的正式玩家回合数。setup 阶段的交互不计入；同一回合不会被重复计数                                                                                                   |
 | `setupRuntimes`        | `Record<runtimeId, SetupRuntimeState>`      | 每个 setup runtime 的状态。见下表                                                                                                                                        |
+
+`worldDataNotices` 只在创建会话的响应里返回，服务器不保存；刷新页面后，这些提示就不见了。
 
 `ownerToken` 什么时候必须携带：
 

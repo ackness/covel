@@ -301,6 +301,8 @@ export async function publishWorldPackage(
 ): Promise<void> {
   const { afterPublish } = options;
   if (options.replace) {
+    // ponytail: directory swaps have no crash journal; a crash can leave a backup to restore manually.
+    // See the world-writer.ts row in docs/internals/technical-debt.md.
     const previous = await mkdtemp(
       path.join(path.dirname(finalDir), ".covel-replaced-"),
     );

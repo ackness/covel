@@ -265,7 +265,9 @@ Web 客户端只发送它的请求用得到的供应商的密钥：
 - 每个会话一个 **owner token**。它在创建会话时生成，只以哈希形式存在 `SessionRecord.metadata` 里，只返回一次。所有会话级路由都要它。
 - 一个 **operator token**（`COVEL_DESKTOP_REST_TOKEN`）。它同时是万能钥匙，能通过任何 owner 检查。全局和管理类路由要它：创建、分叉和列出会话，写世界、AI 和模型路由、启用社区服务端代码。分叉会造出一个新会话，所以和创建会话问的是同一个问题：只有 owner token 不能分叉。
 
-托管档位缺少 operator token 或媒体密钥时，服务端拒绝启动；`commercial` 还要求明确列出 CORS 源（见 [Host profile](#host-profile)）。`self` 档位、桌面客户端和开发环境严格地什么都不做：令牌被忽略，单用户本地游玩不受影响。
+托管档位缺少 operator token 或媒体密钥时，服务端拒绝启动；`commercial` 还要求明确列出 CORS 源（见 [Host profile](#host-profile)）。桌面版和个人自部署的 `self`（personal 形态）不检查会话 owner token；browser-private 形态仍检查。
+
+personal 形态信任本机上的其他进程。回环监听、Host 和 Origin 检查限制局域网和网页的访问，但分不出本机上的其他程序；这些程序能像桌面窗口一样调用不需要令牌的 `/api/*` 接口。设了 `COVEL_DESKTOP_REST_TOKEN` 时，写服务端设置、访问桌面配置和密钥、安装或重载包、读写原始配置文件等接口仍要求启动令牌，放在 `Authorization: Bearer` 里。具体范围由 [Host profile](#host-profile) 的 `server.settings`、`host.config` 和 `host.files` 规则决定。
 
 社区服务端代码（`entry`、handler、hook、wire、运行时 JavaScript）的 import 由两阶段批准把守：先授予 `covel:plugin-server-code`，再授予具体操作。
 

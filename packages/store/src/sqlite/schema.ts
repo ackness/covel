@@ -411,6 +411,8 @@ export const interactionRecords = sqliteTable(
 
 // ── Turn Messages (append-only) ────────────────────────────────
 
+// ponytail: six secondary indexes have unmeasured write cost; PG's ID collation can still require sorting.
+// See the sqlite/schema.ts row in docs/internals/technical-debt.md.
 export const turnMessages = sqliteTable(
   "turn_messages",
   {

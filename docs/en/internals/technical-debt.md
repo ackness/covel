@@ -22,14 +22,28 @@ rg -n "ponytail:" apps packages plugins
 | `packages/runtime/src/turn-executor/turn-runtime-execution.ts` | A consumer with `accepts` reloads the output schema declared by the producer every time | Performance analysis shows enough repeated work to justify a per-turn schema cache |
 | `packages/shared/src/llm-slots.ts` | All LLM providers share one process-wide concurrency limit | Providers that are independent of each other need their own capacity |
 | `packages/runtime/tests/scheduling-acceptance-contract.test.ts` | Before resume data enters the tool loop, its MediaRefs are not checked. The content to be saved is normalized only at commit time | A resumed runtime operates on a media reference before any proposal carries it |
-| `packages/runtime/tests/scheduling-acceptance-contract.test.ts` | Acceptance scenarios 12 and 19-25 (the plan/confirm enablement flow, and persisted approval authorization) are `it.todo` | An enablement resolver or persisted approval authorization is scheduled into the implementation plan |
-| `packages/events/src/event-bus.ts` | The state for receive order is evicted least recently used first. An evicted stream must restart from sequence 1, so its session resets once | Multi-pod deployments keep more live streams than the cap, enough to justify a per-state TTL or a larger cap |
+| `packages/runtime/tests/scheduling-acceptance-contract.test.ts` | Scenario 12's plugin version check is implemented. Resume requests have an approval preflight, and new output has schema validation. The saved continuation is not rechecked against current spec and approval versions, nor are its buffered writes rechecked against current effects declarations. Scenarios 19-25 (the plan/confirm enablement flow and persisted approval authorization) remain `it.todo` | An enablement resolver or persisted approval authorization is scheduled into the implementation plan |
+| `packages/events/src/event-bus.ts` | The state for receive order is evicted least recently used first. An evicted stream must restart from sequence 1, so its session resets once. If the publish queue drops a session's last frames at the cap and no later frame arrives, the receiver cannot detect the loss and does not reset. The read-only `headCursor` also creates session tracking state and shares the session cap with subscriptions | Multi-pod deployments keep more live streams than the cap, enough to justify a per-state TTL or a larger cap |
+| `packages/create/src/world-writer.ts` | World directories are replaced by renaming, with restoration on failure but no crash journal. A crash between renames can leave a `.covel-replaced-*/package` backup that needs manual restoration | Someone reports a missing world after a crash, or a leftover backup directory |
+| `packages/memory/src/archival-search.ts` | Every keyword search loads the session's entire searchable archive before ranking it | Enough archive entries accumulate to make keyword search noticeably slow |
+
+## Storage
+
+<!-- prettier-ignore -->
+| Location | Accepted limit | When to reconsider |
+| --- | --- | --- |
+| `packages/store/src/media-store/pg.ts` | Metadata queries load all assets owned by the session, then compare in JS. Neither PostgreSQL nor SQLite (`packages/store/src/media-store/sqlite.ts`) pushes this filter into SQL, keeping their results identical | A single session holds thousands of media assets |
+| `packages/store/src/common/write-order-ddl.ts` | PostgreSQL locks the session counter row until commit whenever it allocates a write sequence. Session deletion fires record-change triggers for each row. `record_changes` keeps the latest change sequence for every record key for the session's lifetime, including deleted keys | A write path bypasses the session lock, deleting a large session becomes noticeably slow, or the size of `record_changes` becomes a problem |
+| `packages/store/src/sqlite/schema.ts` | `turn_messages` has six secondary indexes in each SQL backend, with unmeasured write cost. PostgreSQL (`packages/store/src/postgres/schema.ts`) indexes use the database collation, but queries sort by `id COLLATE "C"`. Rows tied on the first three index columns may still need an incremental sort; the actual plan needs `EXPLAIN` verification. The single-column `session_id` index is kept even though it is a prefix of the composite indexes | Writes in long sessions slow down, or PostgreSQL `EXPLAIN` shows a sorting cost |
 
 ## Server
 
-| Location                                     | Accepted limit                                                                               | When to reconsider                                    |
-| -------------------------------------------- | -------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
+<!-- prettier-ignore -->
+| Location | Accepted limit | When to reconsider |
+| --- | --- | --- |
 | `apps/server/src/routes/api/turn-control.ts` | Records in an in-process map. Steer and abort work only on the pod that is running that turn | A multi-pod deployment needs turn control across pods |
+| `apps/server/src/lib/pg-event-transport.ts` | NOTIFY has no timeout or query cancellation path. A half-open connection stalls the send in postgres.js, and later frames wait in the event bus's bounded queue; a full queue drops frames and logs a warning. Timing out only the wait would move the backlog into the client's queue | postgres.js can actually cancel the query, or a half-open connection occurs in production |
+| `apps/server/src/routes/api/session/delete-route.ts` | When session deletion succeeds but releasing its media claims fails, the claims keep protecting the files and the failure is only logged. No route retries the release for a deleted session | Release failures become frequent in the logs, or the retained files fill the disk |
 
 ## Web UI
 
