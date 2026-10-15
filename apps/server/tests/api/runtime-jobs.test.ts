@@ -23,6 +23,7 @@ import {
   appendRuntimeJobStatus,
   createRuntimeJobWorker,
   makeRuntimeJobStatusRecord,
+  publishRuntimeJobStatusEvent,
   type RuntimeJobExecutionControl,
 } from "../../src/routes/api/plugin-rpc/runtime-job-worker.js";
 
@@ -38,7 +39,7 @@ function session(id: string): SessionRecord {
     completedPlayerTurns: 1,
     setupRuntimes: {},
     activePlugins: ["mimo-tts"],
-    metadata: {},
+    metadata: { sessionIncarnationNonce: `test-${id}` },
     createdAt: ENQUEUED_AT,
     updatedAt: ENQUEUED_AT,
   };
@@ -87,7 +88,15 @@ function job(
       sourceTurnId: "source-turn",
       sourceExecutionId: "source-execution",
     },
-    payload: { inputs: [{ id: "narrative", value: "hello" }] },
+    payload: {
+      schemaVersion: 1,
+      activation: "manual",
+      turnId: "background-turn",
+      expectedSessionIncarnation: `incarnation:test-${sessionId}`,
+      expectedApprovalScope: "test-scope",
+      locale: "en-US",
+      inputs: [{ id: "narrative", value: "hello" }],
+    },
     enqueuedAt: ENQUEUED_AT,
     ...overrides,
   };
@@ -127,6 +136,35 @@ describe.each([
 
   afterEach(async () => {
     await store.close();
+  });
+
+  it("logs and drops status emissions without an incarnation after persisting", async () => {
+    const created = await createRuntimeJob(
+      store,
+      job("session-a", "invalid", { payload: {} }),
+    );
+    const bus = createEventBus(undefined, { requireSessionIncarnation: true });
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      await expect(
+        appendRuntimeJobStatus(store, bus, created),
+      ).resolves.toBeUndefined();
+      expect(
+        await store.listJobStatus("session-a", { jobId: "invalid" }),
+      ).toHaveLength(1);
+      expect(() =>
+        publishRuntimeJobStatusEvent(
+          bus,
+          makeRuntimeJobStatusRecord(created, 1),
+          "",
+        ),
+      ).not.toThrow();
+      expect(log).toHaveBeenCalledTimes(2);
+      expect(bus.getEventsAfter("session-a", 0).events).toEqual([]);
+    } finally {
+      log.mockRestore();
+      await bus.close();
+    }
   });
 
   it("persists the immutable execution snapshot and enforces idempotent identity", async () => {

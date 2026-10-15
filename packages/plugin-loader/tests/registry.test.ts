@@ -292,6 +292,7 @@ describe("PluginRegistry", () => {
         "session-1",
         ["alpha"],
         async () => {},
+        "test-incarnation",
       );
 
       // After activation, the entry should still be retrievable
@@ -305,8 +306,14 @@ describe("PluginRegistry", () => {
         "session-1",
         ["alpha"],
         async () => {},
+        "test-incarnation",
       );
-      await registry.applyPersistedActivations("session-1", [], async () => {});
+      await registry.applyPersistedActivations(
+        "session-1",
+        [],
+        async () => {},
+        "test-incarnation",
+      );
 
       // Plugin should still be in the registry
       expect(registry.get("alpha")).toBeDefined();
@@ -320,12 +327,18 @@ describe("PluginRegistry", () => {
         "session-1",
         ["alpha"],
         async () => {},
+        "test-incarnation",
       );
 
       await expect(
-        registry.applyPersistedActivations("session-1", ["beta"], async () => {
-          throw new Error("store unavailable");
-        }),
+        registry.applyPersistedActivations(
+          "session-1",
+          ["beta"],
+          async () => {
+            throw new Error("store unavailable");
+          },
+          "test-incarnation",
+        ),
       ).rejects.toThrow("store unavailable");
 
       expect(registry.getActivePlugins("session-1")).toEqual(["alpha"]);
@@ -338,6 +351,7 @@ describe("PluginRegistry", () => {
         "session-1",
         ["alpha", "missing"],
         async () => {},
+        "test-incarnation",
       );
 
       expect(registry.getActivePlugins("session-1")).toEqual(["alpha"]);
@@ -360,10 +374,16 @@ describe("PluginRegistry", () => {
         "session-1",
         ["alpha", "beta"],
         async () => {},
+        "test-incarnation",
       );
       expect(registry.getActiveRuntimes("session-1")).toHaveLength(2);
 
-      await registry.applyPersistedActivations("session-1", [], async () => {});
+      await registry.applyPersistedActivations(
+        "session-1",
+        [],
+        async () => {},
+        "test-incarnation",
+      );
 
       expect(registry.getActiveRuntimes("session-1")).toEqual([]);
       expect(registry.get("alpha")).toBeDefined();
@@ -371,6 +391,7 @@ describe("PluginRegistry", () => {
         "session-1",
         ["alpha"],
         async () => {},
+        "test-incarnation",
       );
       expect(registry.getActiveRuntimes("session-1")).toHaveLength(1);
     });
@@ -500,6 +521,7 @@ describe("PluginRegistry", () => {
         "session-1",
         ["alpha"],
         async () => {},
+        "test-incarnation",
       );
 
       expect(handler).toHaveBeenCalledTimes(1);

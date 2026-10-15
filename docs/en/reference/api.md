@@ -1902,6 +1902,8 @@ Preflight does not load or run the `worldProjections` handlers. So the output of
 
 When the world declares dimensions and none of these plugins provides `world.dimensions@1`, the response carries a warning with `code: "dimension-provider-missing"`: these dimensions will not be imported. The session-prep screen uses it to tell the player.
 
+When more than one of these plugins provides `world.dimensions@1`, the response is `409 { "code": "dimension_provider_conflict", "details": { "candidates": [...] } }`, whether or not the world declares dimensions. A game uses one plugin responsible for dimensions, and the server does not pick one for the player: the session-prep screen lists the `candidates` and asks the player to keep one. `sync-data` and `sync-dimensions` return the same 409 in the same case.
+
 **Request body:**
 
 ```json
@@ -2319,13 +2321,14 @@ When `ownerToken` must be sent:
 
 **Errors:**
 
-| Status | `code`                    | When                                                                                                                                   |
-| ------ | ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| 400    | `plugin_rejected`         | A plugin the player asked for is rejected for a reason other than a missing dependency, such as a conflict; `details` is the rejection |
-| 401    | `operator_token_required` | On a hosted deployment (`demo` / `commercial`), the session was created without the operator token                                     |
-| 404    | `world_not_found`         | A `worldId` was given, but the world does not exist                                                                                    |
-| 409    | `world_deleting`          | The world is being deleted                                                                                                             |
-| 409    | `session_already_exists`  | The `id` chosen by the client already exists                                                                                           |
+| Status | `code`                        | When                                                                                                                                     |
+| ------ | ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| 400    | `plugin_rejected`             | A plugin the player asked for is rejected for a reason other than a missing dependency, such as a conflict; `details` is the rejection   |
+| 401    | `operator_token_required`     | On a hosted deployment (`demo` / `commercial`), the session was created without the operator token                                       |
+| 404    | `world_not_found`             | A `worldId` was given, but the world does not exist                                                                                      |
+| 409    | `world_deleting`              | The world is being deleted                                                                                                               |
+| 409    | `session_already_exists`      | The `id` chosen by the client already exists                                                                                             |
+| 409    | `dimension_provider_conflict` | More than one of the plugins turned on provides `world.dimensions@1`; `details.candidates` lists them. The player keeps one, then starts |
 
 - When `id` already exists, the response body is `{ "error": "Session already exists: <id>", "code": "session_already_exists" }`. Creating does not overwrite the existing session, and it does not treat the old session's child records as data for the new session.
 - The server checks the world once before preparing resources and once more when the session is committed. Preparing does not attach media to the session. If it fails, any leftover bytes that nothing refers to are cleaned up by media GC. It does not force-delete content that another session might be using.
@@ -2387,7 +2390,8 @@ Returns the combined view `SessionSnapshot`, used when restoring or reconnecting
 - The `version` of a receipt summary is the version of the receipt, not the version of a dimension's value.
 - The response does not include dimension rules, starting values, or the full receipt's `definitions` / `readVersions`.
 - `dimensions` can be empty if the session has not initialized its dimensions yet.
-- If the bound provider is missing or the read fails, the endpoint returns a clear error. It does not fall back to reading `WorldRecord.metadata.dimensions`.
+- If the bound provider is not running (it is not installed, failed to load, or misses a dependency), the dimensions pause: the response still carries the saved `dimensions` and `dimensionProviderPluginId`, but no `dimensionRecovery`, and the game screen tells the player the dimensions are paused.
+- If the bound provider runs but the read fails, the endpoint returns a clear error. It does not fall back to reading `WorldRecord.metadata.dimensions`.
 
 Browser-private mode uses the same snapshot shape. It saves the current values, versions, and settlement obligations in one atomic BrowserVault checkpoint. For the fields and the timing of the freeze, see [World Model](./world-model.md#dynamic-dimension-snapshot).
 
@@ -3677,20 +3681,25 @@ Lists all the plugins the server has found. It returns `{ items: PluginSummary[]
 
 Fields of `PluginSummary`:
 
-| Field                                                       | Meaning                                                                                                   |
-| ----------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
-| `id`, `displayName`, `description`                          | The package's identity and its localizable description                                                    |
-| `kind`, `source`                                            | `core \| plugin` and `builtin \| community`                                                               |
-| `hostState`, `error?`                                       | Host state `discovered \| installed \| loaded \| error`, and the load error                               |
-| `provides`, `requires`, `optional`, `conflicts`             | Package-level contract declarations                                                                       |
-| `extensions`                                                | Declared extension points, their IDs, order, and listener information                                     |
-| `eventTopics`                                               | Topics declared in `contributes.events`                                                                   |
-| `runtimeCount`, `runtimes`, `tools`, `userSettings`, `tags` | The runtime summary, tools, and user settings                                                             |
-| `languages`                                                 | `{ text: string[], instructions: string[] }`, see below                                                   |
-| `version?`, `author?`, `license?`, `homepage?`              | The version and [author information](./plugins.md#author-information) from the manifest. For display only |
+<!-- prettier-ignore -->
+| Field | Meaning |
+| --- | --- |
+| `id`, `displayName`, `description` | The package's identity and its localizable description |
+| `kind`, `source` | `core \| plugin` and `builtin \| community` |
+| `hostState`, `error?` | Host state `discovered \| installed \| loaded \| error`, and the load error |
+| `disabledRuntimes?`, `ignoredFields?` | Non-fatal load diagnostics, described below |
+| `provides`, `requires`, `optional`, `conflicts` | Package-level contract declarations |
+| `extensions` | Declared extension points, their IDs, order, and listener information |
+| `eventTopics` | Topics declared in `contributes.events` |
+| `runtimeCount`, `runtimes`, `tools`, `userSettings`, `tags` | The runtime summary, tools, and user settings |
+| `languages` | `{ text: string[], instructions: string[] }`, see below |
+| `version?`, `author?`, `license?`, `homepage?` | The version and [author information](./plugins.md#author-information) from the manifest. For display only |
 
 Field notes:
 
+- `disabledRuntimes`: each item is `{ sourcePath, message, outputContract? }` for a runtime left out at load. It does not count toward `runtimeCount`, `runtimes`, or the package’s output contracts.
+- `ignoredFields`: each item is `{ sourcePath, field, message }` for an unknown field the host ignored. Both arrays are omitted when empty. `sourcePath` is relative to the plugin root (for example `runtimes/note/RUNTIME.md`); file paths in `message` also exclude the server’s installation directory. These warnings do not mark the whole package as `hostState: "error"`. After reload, they describe the currently registered version.
+- Plugin details, session plugin lists, and `plugins[]` in `GET /api/plugin-flows` return the same diagnostic fields. Flow `steps[]` only contains retained runtimes.
 - `eventTopics`: when a session resolves its plugin set, it uses this to make sure a topic has only one declaring plugin.
 - `languages.text`: the languages the plugin has text in. This covers labels, interface text, text in code, and translations in the translation catalog. `languages.instructions`: the languages it has instructions (prompt body) in. Both always include at least `en`.
 - `author.about` and the `label` of links can be maps split by language.
@@ -3810,7 +3819,10 @@ When the session has a world and plugins newly join its active set, the server i
 Rules (enabling and disabling are the same):
 
 - Enabling, disabling, and other writes to the same session share the session lock. After it gets the lock, the server reads `activePlugins` again. It saves to storage first, and only then updates the in-process registry. This way concurrent requests do not overwrite each other, and a failed save never leaves memory and storage out of step.
-- A dimension provider bound to the session must stay enabled. It holds this session's `_dimensions` data, and turns, snapshots, and browser checkpoints all need it. If the active set after re-solving no longer includes it, the request is refused with `409 { "code": "dimension_provider_required" }`, and the session's plugin choice does not change.
+- A dimension provider bound to the session must stay enabled. It holds this session's `_dimensions` data, and snapshots and browser checkpoints read them from it. While it runs, if the active set after re-solving no longer includes it, the request is refused with `409 { "code": "dimension_provider_required" }`, and the session's plugin choice does not change.
+- When the bound provider is already not running (it is not installed, failed to load, or misses a dependency), other plugins are enabled and disabled as usual. It stays in the session's plugin choice and the dimensions pause; once it is back, the dimensions change again.
+- A game uses one plugin responsible for dimensions. When this change would turn on two plugins that provide `world.dimensions@1` together, or one more beside the bound provider, the request is refused with `409 { "code": "dimension_provider_conflict", "details": { "candidates": [...] } }`. A conflict the session already had (say a plugin update declared the contract) does not block other changes: the turn explains it, and turning one of them off resolves it.
+- When the plugin that joins is the session's first plugin responsible for dimensions, the world's dimensions are written at once with the import above.
 
 #### `DELETE /api/sessions/:id/plugins/:pluginId`
 
@@ -3825,10 +3837,10 @@ Turns off a plugin in this session.
 
 **Errors:**
 
-| Status | `code`                           | When                                                                                                                           |
-| ------ | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| 409    | `session_not_active` and similar | The session is not active, it has entered the deletion process, or it was replaced by a session with the same ID while waiting |
-| 409    | `dimension_provider_required`    | The plugin being disabled is the dimension provider bound to the session, or disabling it would also remove it after solving   |
+| Status | `code`                           | When                                                                                                                                       |
+| ------ | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| 409    | `session_not_active` and similar | The session is not active, it has entered the deletion process, or it was replaced by a session with the same ID while waiting             |
+| 409    | `dimension_provider_required`    | The plugin being disabled is the dimension provider bound to the session, or disabling it would also remove it after solving while it runs |
 
 When an error happens, the session is not changed.
 

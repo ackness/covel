@@ -17,6 +17,10 @@ import {
   materializeMediaIndexWrites,
   releaseWorldDataMediaRefs,
 } from "./media-handling.js";
+import {
+  boundDimensionProviderConflict,
+  DimensionProviderConflictError,
+} from "../dimension-provider-conflict.js";
 import { ledgerForWrite, valueHashForWrite } from "./ledger.js";
 import { pluginWriteIdentity } from "./identity.js";
 import type {
@@ -191,13 +195,13 @@ export async function writeImportPlan(options: {
       ),
     );
     if (providerIds.size > 1)
-      throw new Error("Conflicting dimension import providers");
+      throw new DimensionProviderConflictError([...providerIds]);
     const provider = [...providerIds][0];
     if (provider) {
       const session = await options.store.getSession(options.sessionId);
       const bound = session?.metadata?._dimensionProviderPluginId;
       if (bound !== undefined && bound !== provider)
-        throw new Error("Dimension provider changed");
+        throw boundDimensionProviderConflict(String(bound), [provider]);
       const entries = [];
       for (const write of dimensionWrites) {
         if (write.kind !== "plugin-data") continue;

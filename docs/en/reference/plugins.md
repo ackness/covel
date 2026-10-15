@@ -830,6 +830,8 @@ Some errors stop one runtime from ever running and leave the rest of the package
 
 When a package placed in the plugin directory by hand has such an error, the loader leaves out only that runtime and writes the file, the field and the reason to the server log. The package's other runtimes, tools and panels load as usual, and its output contract no longer counts as provided by the package. `pnpm validate:plugin` and installation report it as an error.
 
+Session prep, the session's plugin list, and the installed plugin list in Settings show a warning for each unavailable runtime and ignored field. Warnings are visible without opening advanced settings; choose “Show reason” to read the manifest file, field, and reason. Paths are relative to the plugin directory and do not show the server's installation path. Correcting the manifest and reloading the plugin updates the warnings. See [`GET /api/plugins`](./api.md#get-apiplugins) for the response fields.
+
 When a manifest has a field the host does not know (for example an old field that was removed, or a field written for a newer host), the loader leaves out that field and writes the file and the field to the server log. The package loads as usual, and installation goes ahead. `pnpm validate:plugin` reports it as an error: remove it, or change it to the field name this page gives.
 
 Only a whole field is left out: a field at the top of `PLUGIN.md`, an entry under `contributes` (including unsupported placements under `contributes.ui`), or a field at the top of the inline `runtime` or of a `RUNTIME.md`. Two cases still make the load fail:

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import type { PluginSummary } from "@covel/shared";
 import i18n from "@/i18n";
@@ -45,8 +45,71 @@ function plugin(
 }
 
 describe("session plugin metadata UI", () => {
+  it.each([false, true])(
+    "shows load warnings with advanced settings closed (session=%s)",
+    async (session) => {
+      await i18n.changeLanguage("en-US");
+      const partial: PluginSummary = {
+        ...plugin("partial", "auto"),
+        disabledRuntimes: [
+          {
+            sourcePath: "runtimes/notes/RUNTIME.md",
+            message: "runtimes/notes/RUNTIME.md: schedule.stage: required",
+          },
+        ],
+        ignoredFields: [
+          {
+            sourcePath: "PLUGIN.md",
+            field: "futureFeature",
+            message: "PLUGIN.md: futureFeature: unknown field",
+          },
+        ],
+      };
+      const view = render(
+        <PluginListPanel
+          plugins={[partial]}
+          sessionPlugins={
+            session
+              ? [
+                  {
+                    ...partial,
+                    active: true,
+                    locked: false,
+                    serverCodeApproved: true,
+                    sessionState: "active",
+                  },
+                ]
+              : undefined
+          }
+        />,
+      );
+      const warnings = screen.getByRole("list", {
+        name: "Plugin load warnings",
+      });
+      expect(within(warnings).getAllByRole("listitem")).toHaveLength(2);
+      expect(
+        within(warnings).getByText(/Some features are unavailable/).textContent,
+      ).toContain("runtimes/notes/RUNTIME.md");
+      expect(
+        within(warnings).getByText(/Unrecognized field futureFeature/),
+      ).toBeTruthy();
+      const details = within(warnings).getAllByText("Show reason")[0]!;
+      fireEvent.click(details);
+      expect(details.closest("details")?.open).toBe(true);
+      expect(
+        within(warnings).getByText(partial.disabledRuntimes![0]!.message),
+      ).toBeTruthy();
+      view.rerender(<PluginListPanel plugins={[plugin("healthy", "auto")]} />);
+      expect(
+        screen.queryByRole("list", { name: "Plugin load warnings" }),
+      ).toBeNull();
+    },
+  );
+
   it("seeds builtin core defaults before the session plan loads", () => {
-    expect(isBuiltinDefaultPackage({ kind: "core", source: "builtin" })).toBe(true);
+    expect(isBuiltinDefaultPackage({ kind: "core", source: "builtin" })).toBe(
+      true,
+    );
     expect(isBuiltinDefaultPackage({ kind: "core", source: "community" })).toBe(
       false,
     );

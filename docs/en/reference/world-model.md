@@ -147,11 +147,22 @@ Rules:
 - Each item that is read does not include `initialValue` or `updateRule`. It also does not include which turn it was last updated in.
 - The value is raw JSON. When it is shown or queried, only nodes that the schema explicitly marks with `x-i18n` are translated.
 - When no plugin is responsible for dimensions, or the dimensions have not been initialized yet, the snapshot can be empty. When no plugin responsible for dimensions is turned on as a session is created, the dimensions the world declares are not imported and the session starts as usual; see the [session API](./api.md#post-apisessions). The kernel does not store dimensions itself.
-- When a plugin is responsible for dimensions but it is unavailable or the read fails, this must be an error. It cannot fall back to the world package's initial values, and it cannot pretend the snapshot is empty.
+- When the plugin responsible for dimensions is not running (it is not installed, failed to load, or misses a dependency), the game goes on and the dimensions pause:
+  - The story reads the saved values. No plugin can write the dimensions, and no settlement obligation is recorded.
+  - The session view returns the saved values as usual, and the game screen tells the player the dimensions are paused.
+  - Once that plugin is back, the dimensions change again. Another plugin responsible for dimensions cannot take over: while it is on, turns are refused.
+  - It cannot fall back to the world package's initial values, and it cannot pretend the snapshot is empty.
+- When the plugin responsible for dimensions runs but the read fails, this must be an error.
 
 ### Ownership and writing
 
 **Who is responsible.** The built-in `world-init` provides the world context (extension point `session.world-context@1`, which can have only one provider) and `world.dimensions@1`. The framework finds the one responsible plugin by its contract. It does not decide by plugin ID. The ID of the responsible plugin (`dimensionProviderPluginId`) is filled in by the host. The editor and tracker runtime IDs in `dimensionRecovery` must really belong to that plugin.
+
+**Only one.** One plugin is responsible for the dimensions of a game, and the framework does not pick one for the player.
+
+- When the selection at the start has several plugins that provide `world.dimensions@1`, the preflight and session creation return `409 dimension_provider_conflict`, with these plugins in `details.candidates`. The prep screen asks the player to keep one of them and turns the others off.
+- Turning on another plugin responsible for dimensions during a game also returns 409; see [turning plugins on and off](./api.md#put-apisessionsidpluginspluginid).
+- Turning on the first plugin responsible for dimensions during a game imports the world's dimensions at once; see [receivers that join after the game starts](./world-data.md#receivers-that-join-after-the-game-starts).
 
 **Where it is stored.** Each dimension is a record `{definition, value, version, lastTrackedSource?}` in the protected area `_dimensions` of the responsible plugin.
 

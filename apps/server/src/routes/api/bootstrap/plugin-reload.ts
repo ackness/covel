@@ -66,6 +66,8 @@ export async function preparePluginReload(
     manifests: definition.manifests,
     messages: definition.messages,
     languages: definition.languages,
+    disabledRuntimes: definition.disabledRuntimes,
+    ignoredFields: definition.ignoredFields,
     loadedRuntimes: new Map(),
     status: "registered",
     ...(discovery.source ? { source: discovery.source } : {}),

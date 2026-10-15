@@ -168,6 +168,7 @@ export interface PluginRegistry {
     sessionId: string,
     pluginIds: readonly string[],
     persist: () => Promise<void>,
+    sessionIncarnation: string,
   ): Promise<void>;
 
   /**
@@ -241,6 +242,7 @@ export function createPluginRegistry(
     subType: string,
     sessionId: string,
     payload: Record<string, unknown>,
+    sessionIncarnation: string,
   ): void {
     if (!eventBus) return;
     eventBus.emit({
@@ -248,6 +250,7 @@ export function createPluginRegistry(
       type: "event",
       topic: "plugin",
       sessionId,
+      sessionIncarnation,
       timestamp: new Date().toISOString(),
       payload: { ...payload, _subTopic: "plugin", _subType: subType },
     });
@@ -304,6 +307,7 @@ export function createPluginRegistry(
       sessionId: string,
       pluginIds: readonly string[],
       persist: () => Promise<void>,
+      sessionIncarnation: string,
     ): Promise<void> {
       // Durable state first: a failed persist must never be reflected here.
       await persist();
@@ -319,15 +323,25 @@ export function createPluginRegistry(
       for (const pluginId of desired) {
         if (previous?.has(pluginId)) continue;
         emit({ type: "plugin-activated", pluginId, sessionId });
-        emitToEventBus("plugin.activated", sessionId, { pluginId, sessionId });
+        emitToEventBus(
+          "plugin.activated",
+          sessionId,
+          { pluginId, sessionId },
+          sessionIncarnation,
+        );
       }
       for (const pluginId of previous ?? []) {
         if (desired.has(pluginId)) continue;
         emit({ type: "plugin-deactivated", pluginId, sessionId });
-        emitToEventBus("plugin.deactivated", sessionId, {
-          pluginId,
+        emitToEventBus(
+          "plugin.deactivated",
           sessionId,
-        });
+          {
+            pluginId,
+            sessionId,
+          },
+          sessionIncarnation,
+        );
       }
     },
 

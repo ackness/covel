@@ -152,6 +152,42 @@ it("marks a plugin that has no text in the interface language", async () => {
   expect(screen.queryByText("未翻译")).toBeNull();
 });
 
+it("shows partial-load warnings in Chinese before selecting a plugin", async () => {
+  await i18n.changeLanguage("zh-CN");
+  render(
+    <PluginPackageRow
+      {...rowProps()}
+      selectedPluginIdSet={new Set()}
+      pkg={{
+        ...plugin,
+        disabledRuntimes: [
+          {
+            sourcePath: "PLUGIN.md",
+            message: "PLUGIN.md: runtime.schedule.stage: required",
+          },
+        ],
+        ignoredFields: [
+          {
+            sourcePath: "PLUGIN.md",
+            field: "futureFeature",
+            message: "PLUGIN.md: futureFeature: unknown field",
+          },
+        ],
+      }}
+    />,
+  );
+  expect(screen.getByRole("list", { name: "插件加载提醒" })).toBeTruthy();
+  expect(
+    screen.getByText("部分功能不可用，其他功能仍可使用：PLUGIN.md"),
+  ).toBeTruthy();
+  expect(
+    screen.getByText(
+      "已忽略无法识别的字段 futureFeature（PLUGIN.md），插件仍可使用。",
+    ),
+  ).toBeTruthy();
+  expect(screen.getAllByText("查看原因")).toHaveLength(2);
+});
+
 it.each([
   [
     "en-US",

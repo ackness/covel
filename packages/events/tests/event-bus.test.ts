@@ -208,7 +208,7 @@ describe("EventBus", () => {
 describe("invalidateReplay", () => {
   it("announces a reset with its reason and starts a new epoch", async () => {
     const bus = createEventBus();
-    const resets: Array<{ sessionId: string; reason: string }> = [];
+    const resets: Array<{ sessionId?: string; reason: string }> = [];
     bus.onReset?.((reset) => resets.push(reset));
     bus.emit(makeMessage({ sessionId: "s1" }));
     const before = bus.getEventsAfter("s1", 0);

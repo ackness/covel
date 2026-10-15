@@ -18,6 +18,7 @@ import { MemoryIndexNotice } from "./memory-index-notice.js";
 import { SetupProgressNotice, setupProgress } from "./setup-progress-notice.js";
 import { WorldDataNotices } from "./world-data-notices.js";
 import { SessionPluginNotices } from "./session-plugin-notices.js";
+import { DimensionProviderNotice } from "./dimension-provider-notice.js";
 import {
   ResizableHandle,
   ResizablePanel,
@@ -536,6 +537,11 @@ export function GameView({
           />
 
           <WorldDataNotices notices={worldDataNotices} />
+
+          <DimensionProviderNotice
+            providerPluginId={state.gameState.dimensionProviderPluginId}
+            plugins={sessionPlugins}
+          />
 
           {/* Messages */}
           {stageActive && <SessionDimensionsPanel recoveryOnly />}

@@ -1,7 +1,11 @@
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as api from "@/services/api.js";
-import { useWorldDataPreflight } from "../use-world-data-preflight.js";
+import { ApiError } from "@/services/api/request.js";
+import {
+  dimensionProviderCandidates,
+  useWorldDataPreflight,
+} from "../use-world-data-preflight.js";
 
 vi.mock("@/services/api.js", () => ({ preflightWorldData: vi.fn() }));
 const prepare = async () => {};
@@ -56,6 +60,44 @@ describe("preflight request ownership", () => {
       expect(result.current.worldDataPreflightError).toBeNull();
     },
   );
+
+  it("names the dimension providers the server asks the player to choose from", async () => {
+    vi.mocked(api.preflightWorldData).mockRejectedValueOnce(
+      new ApiError(
+        409,
+        "/api/worlds/world/world-data/preflight",
+        JSON.stringify({
+          error: "Several plugins keep world dimensions (a, b).",
+          code: "dimension_provider_conflict",
+          details: { candidates: ["a", "b"] },
+        }),
+      ),
+    );
+    vi.mocked(api.preflightWorldData).mockResolvedValueOnce(resultFor(1));
+    const { result, rerender } = renderHook(
+      ({ ids }) => useWorldDataPreflight("world", ids, prepare),
+      { initialProps: { ids: ["a", "b"] } },
+    );
+    await act(async () => vi.advanceTimersByTimeAsync(250));
+    expect(result.current.dimensionProviderConflict).toEqual(["a", "b"]);
+    expect(result.current.worldDataPreflightStatus).toBe("error");
+
+    // Keeping one clears the choice with the next check.
+    rerender({ ids: ["a"] });
+    expect(result.current.dimensionProviderConflict).toBeNull();
+    await act(async () => vi.advanceTimersByTimeAsync(250));
+    expect(result.current.dimensionProviderConflict).toBeNull();
+    expect(result.current.worldDataPreflightStatus).toBe("success");
+  });
+
+  it("asks for no choice on any other failure", () => {
+    expect(dimensionProviderCandidates(new Error("offline"))).toBeNull();
+    expect(
+      dimensionProviderCandidates(
+        new ApiError(409, "/x", JSON.stringify({ error: "x", code: "other" })),
+      ),
+    ).toBeNull();
+  });
 
   it("invalidates a request during the debounce for a changed world", async () => {
     const old = deferred();

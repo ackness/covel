@@ -54,6 +54,12 @@ describe("SSE Events", () => {
   describe("POST /api/events/emit", () => {
     it.each([
       null,
+      { topic: "session.invalidated", sessionId: "sess-1" },
+      {
+        topic: "system",
+        sessionId: "sess-1",
+        payload: { _subType: "session.invalidated" },
+      },
       { topic: {}, sessionId: "sess-1" },
       { topic: "test.event", sessionId: 5 },
       { topic: "test.event", sessionId: "sess-1", payload: [] },

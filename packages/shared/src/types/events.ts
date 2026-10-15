@@ -12,6 +12,8 @@ export interface CovelMessage {
   /** Optional routing target: `pluginId/runtimeId` */
   readonly targetRuntime?: string;
   readonly sessionId: string;
+  /** Persisted session equality tag, captured by the producer before async work. */
+  readonly sessionIncarnation?: string;
   readonly turnId?: string;
   readonly timestamp: string;
 }

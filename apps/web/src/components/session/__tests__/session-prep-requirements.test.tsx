@@ -13,6 +13,8 @@ import type { SessionPrepScreenProps } from "../session-prep/types.js";
 const prep = vi.hoisted(() => ({
   unmetRequirements: [] as unknown[],
   preflight: null as unknown,
+  conflict: null as readonly string[] | null,
+  turnOffPlugins: (() => {}) as (ids: readonly string[]) => void,
 }));
 
 vi.mock("@/services/api.js", () => ({
@@ -43,10 +45,14 @@ vi.mock("../session-prep/use-plugin-selection.js", () => ({
     missingPluginIds: [],
     unmetRequirements: prep.unmetRequirements,
     dependentsOff: [],
+    turnOffPlugins: prep.turnOffPlugins,
   }),
 }));
 vi.mock("../session-prep/use-world-data-preflight.js", () => ({
-  useWorldDataPreflight: () => ({ worldDataPreflight: prep.preflight }),
+  useWorldDataPreflight: () => ({
+    worldDataPreflight: prep.preflight,
+    dimensionProviderConflict: prep.conflict,
+  }),
 }));
 vi.mock("../session-prep/use-prep-runtime-bindings.js", () => ({
   usePrepRuntimeBindings: () => ({ bindingState: {} }),
@@ -85,6 +91,8 @@ beforeEach(async () => {
   vi.clearAllMocks();
   prep.unmetRequirements = [];
   prep.preflight = null;
+  prep.conflict = null;
+  prep.turnOffPlugins = vi.fn();
   invalidateAllWorldRecords();
   primeWorldRecord({ ...world, lore: "A barrow under the hill." });
   await i18n.changeLanguage("en-US");
@@ -134,5 +142,28 @@ describe("session prep when the world relies on something missing", () => {
     expect(
       screen.getByTestId("unmet-world-requirements").textContent,
     ).toContain("so the game starts without them");
+  });
+
+  it("asks the player to keep one of several dimension providers before starting", async () => {
+    const startButtons = () =>
+      screen.getAllByRole("button", { name: "Start Game" });
+    const { rerender } = render(<SessionPrepScreen {...props()} />);
+    await waitFor(() =>
+      expect(startButtons()[0]).toHaveProperty("disabled", false),
+    );
+
+    prep.conflict = ["world-init", "rival-dimensions"];
+    rerender(<SessionPrepScreen {...props()} />);
+    const notice = screen.getByTestId("dimension-provider-conflict");
+    expect(notice.textContent).toContain(
+      "Choose the plugin that keeps this world's dimensions",
+    );
+    expect(notice.textContent).toContain("world-init, rival-dimensions");
+    // The server would refuse the start until one is kept.
+    for (const button of startButtons())
+      expect(button).toHaveProperty("disabled", true);
+
+    fireEvent.click(screen.getByRole("button", { name: "Keep world-init" }));
+    expect(prep.turnOffPlugins).toHaveBeenCalledWith(["rival-dimensions"]);
   });
 });

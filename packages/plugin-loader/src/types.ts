@@ -213,6 +213,9 @@ export interface PluginRegistryEntry {
   readonly messages?: readonly PluginMessageCatalog[];
   /** The languages the package has text in; absent means English only. */
   readonly languages?: PluginLanguages;
+  /** Non-fatal diagnostics from the currently registered definition. */
+  readonly disabledRuntimes?: readonly DisabledRuntime[];
+  readonly ignoredFields?: readonly IgnoredField[];
   /** Normalized package data schema declarations. */
   readonly dataSchemas?: Readonly<Record<string, PluginDataSchemaDecl>>;
   /** Normalized package world projections. */

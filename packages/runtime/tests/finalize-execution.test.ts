@@ -507,7 +507,7 @@ describe("finalizeExecution", () => {
     const store = createMemoryStore();
     await savePendingTurn(store);
     const eventBus = createEventBus();
-    const resets: Array<{ sessionId: string; reason: string }> = [];
+    const resets: Array<{ sessionId?: string; reason: string }> = [];
     eventBus.onReset?.((reset) => resets.push(reset));
     const { emitter, emits } = makeRecordingEmitter();
     const emit = emitter.emit.bind(emitter);

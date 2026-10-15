@@ -95,6 +95,12 @@
       "approval-required": "{{plugins}} 提供 {{contract}}，开始游戏后会请求你的授权。",
       "dimensions": "你开启的插件里没有能保存这个世界维度的（{{contract}}），游戏会在没有维度的情况下开始。开启一个提供它的插件就能用上维度。"
     },
+    "dimensionProvider": {
+      "conflictTitle": "选一个插件保存这个世界的维度",
+      "conflictDetail": "{{plugins}} 都会保存世界维度，一局游戏只用其中一个。留下一个，其余的在这局里关闭。",
+      "keep": "留下 {{plugin}}",
+      "paused": "世界维度暂停了：{{plugin}} 没有在运行。维度保持现在的值，剧情照常进行；{{plugin}} 回来后，维度会继续变化。"
+    },
     "history": "历史会话",
     "worldLore": "世界文档",
     "worldTab": "世界",
@@ -1684,6 +1690,12 @@
     "noSlots": "无可用模型用途",
     "config": "配置",
     "loadError": "加载失败",
+    "loadWarnings": {
+      "label": "插件加载提醒",
+      "runtime": "部分功能不可用，其他功能仍可使用：{{path}}",
+      "field": "已忽略无法识别的字段 {{field}}（{{path}}），插件仍可使用。",
+      "details": "查看原因"
+    },
     "unknownError": "未知错误",
     "setupBlocked": "初始化失败",
     "setupRetry": "重试",

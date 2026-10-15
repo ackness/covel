@@ -52,6 +52,8 @@ export interface UsePluginSelectionResult {
    */
   resetToMinimal: () => void;
   togglePlugin: (name: string) => void;
+  /** Turn several plugins off at once, as a toggle of each would. */
+  turnOffPlugins: (ids: readonly string[]) => void;
   retryPluginPlan: () => void;
 }
 
@@ -383,6 +385,20 @@ export function usePluginSelection(
     ],
   );
 
+  const turnOffPlugins = useCallback(
+    (ids: readonly string[]) => {
+      const off = new Set(ids.filter((id) => !lockedPluginIds.has(id)));
+      if (off.size === 0) return;
+      setActivePluginPackId(null);
+      const without = (previous: ReadonlySet<string>) =>
+        new Set([...previous].filter((id) => !off.has(id)));
+      setPackExcludedPlugins(without);
+      setOtherSelectedPlugins(without);
+      setExcludedPlugins((previous) => new Set([...previous, ...off]));
+    },
+    [lockedPluginIds],
+  );
+
   return {
     corePluginIds,
     lockedPluginIds,
@@ -412,6 +428,7 @@ export function usePluginSelection(
     applyPack,
     resetToMinimal,
     togglePlugin,
+    turnOffPlugins,
     retryPluginPlan,
   };
 }

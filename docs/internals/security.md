@@ -390,6 +390,8 @@ default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-sr
 - 如果一个操作的 SSE 响应已经打开，进入被拒时会通过 `error.occurred` 报告，机器可读的错误码与 JSON 守卫相同。
 - 脱离主流程的后台运行时作业保留它们各自的准入锁和提交锁。
 
+**订阅内容。** SSE 连接只接收通过 owner 验证时那一代会话的事件，通过验证后才占用补发状态。生产者在异步工作之前捕获代次；删除控制事件不受 topic 过滤，跨来源乱序也不能把另一代内容交给旧连接。具体握手与重连规则见[协议](../reference/protocol.md)。
+
 **插件数据管理。** 插件的默认启用状态不是数据所有权边界。管理工具和脚本遵守统一的[插件数据写入规则](../reference/api.md#插件数据plugin-data)，`kind: core` 不提供额外保护。
 
 **读取执行状态。** `GET /api/sessions/:id/execution` 把通过 owner 授权的那个会话代次，绑定到已有的响应侧读取屏障上。

@@ -1,3 +1,4 @@
+import { sessionEventBus } from "./session/session-events.js";
 /**
  * API Character routes — list and upsert characters for a session.
  */
@@ -127,10 +128,11 @@ characterRoutes.post("/:id/characters", async (c) => {
     timestamp: now,
   };
 
+  const eventBus = c.get("eventBus");
   const pipeline = createCommitPipeline(
     store,
     c.get("hookPipeline"),
-    c.get("eventBus"),
+    eventBus && sessionEventBus(eventBus, guard.session),
   );
   // Take the per-session lock, like the turn and resume paths. A player editing
   // a character from the UI can otherwise interleave with a turn's
