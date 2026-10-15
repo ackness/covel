@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { publicIncarnationTag } from "../session/session-guard.js";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { turnDigestSchema } from "@covel/shared";
 import type { EventBus } from "@covel/events";
@@ -323,16 +323,18 @@ export function makeRuntimeJobStatusRecord(
 export function publishRuntimeJobStatusEvent(
   eventBus: EventBus,
   record: JobStatusRecord,
-  incarnation: string | undefined,
+  incarnation: string,
 ): void {
-  if (!incarnation)
-    throw new Error("Runtime job is missing its session incarnation");
+  if (!incarnation) {
+    eventBus.rejectEmission("Runtime job is missing its session incarnation");
+    return;
+  }
   eventBus.emit({
     id: crypto.randomUUID(),
     type: "event",
     topic: "job",
     sessionId: record.sessionId,
-    sessionIncarnation: createHash("sha256").update(incarnation).digest("hex"),
+    sessionIncarnation: publicIncarnationTag(incarnation),
     timestamp: record.createdAt,
     payload: {
       ...record,
@@ -406,8 +408,7 @@ export async function appendRuntimeJobStatus(
     return (await tx.appendJobStatus(next)) ? next : undefined;
   });
   const incarnation = runtimeJobIncarnation(job.payload);
-  if (record && incarnation)
-    publishRuntimeJobStatusEvent(eventBus, record, incarnation);
+  if (record) publishRuntimeJobStatusEvent(eventBus, record, incarnation ?? "");
 }
 
 function runtimeKey(job: RuntimeJobRecord): string {

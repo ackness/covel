@@ -212,6 +212,7 @@ describe("package declarations across framework consumers", () => {
         "s1",
         ["inspector"],
         async () => {},
+        "test-incarnation",
       );
       const runtimes = registry.getActiveRuntimes("s1");
       expect(runtimes).toHaveLength(withRuntime ? 1 : 0);
@@ -406,6 +407,7 @@ describe("package declarations across framework consumers", () => {
         "s1",
         ["inspector"],
         async () => {},
+        "test-incarnation",
       );
       expect(
         registry.getActiveRuntimes("s1")[0]!.userSettings?.[0]?.default,

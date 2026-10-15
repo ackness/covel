@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { publicIncarnationTag } from "./session/session-guard.js";
 import { scopeSessionEvents } from "./session/session-events.js";
 import { runtimeJobIncarnation } from "./plugin-rpc/runtime-job-worker.js";
 import {
@@ -663,7 +663,7 @@ async function assembleApi(
       eventBus: scopeSessionEvents(
         eventBus,
         job.sessionId,
-        createHash("sha256").update(incarnation).digest("hex"),
+        publicIncarnationTag(incarnation),
       ),
       sessionLock,
       sessionId: job.sessionId,

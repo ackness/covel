@@ -37,7 +37,10 @@ async function fixture(
     ensure: async () => {},
   });
   const extensionHost = new PluginExtensionHost(services, [uiSlotV1]);
-  const eventBus = createEventBus();
+  const eventBus = createEventBus(undefined, {
+    requireSessionIncarnation: true,
+    strictEmissions: true,
+  });
   const changes: {
     type: string;
     payload: Record<string, unknown>;

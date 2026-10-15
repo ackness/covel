@@ -287,11 +287,14 @@ export function createUiSlotHost(args: {
       terminalEvents.has(event.type);
     if (!relevant) return;
     const { sessionId, payload } = event;
-    const owner = await args.store.getSession(sessionId);
-    if (!owner || publicSessionIncarnation(owner) !== event.sessionIncarnation)
-      return;
     const state = sessionState(sessionId);
     if (state.incarnation !== event.sessionIncarnation) {
+      const owner = await args.store.getSession(sessionId);
+      if (
+        !owner ||
+        publicSessionIncarnation(owner) !== event.sessionIncarnation
+      )
+        return;
       state.cache.clear();
       state.events.clear();
       state.endedTurns.clear();

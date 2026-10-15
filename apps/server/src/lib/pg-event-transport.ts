@@ -40,7 +40,7 @@ export async function createPgEventTransport(
   const reset = () => {
     for (const handler of resetHandlers) handler();
   };
-  const sql = postgres(databaseUrl, { max: 1, onclose: reset });
+  const sql = postgres(databaseUrl, { max: 1 });
   const handlers = new Set<(payload: string) => void>();
 
   try {

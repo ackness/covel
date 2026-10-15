@@ -106,7 +106,9 @@ export function wrapStoreWithPluginDataEvents(
           record: PluginDataRecord,
           expectedUpdatedAt: string | null,
         ): Promise<boolean> => {
-          const scopedBus = await capture(record.sessionId);
+          const scopedBus = isPublicPluginDataRecord(record)
+            ? await capture(record.sessionId)
+            : undefined;
           const swapped = await target.compareAndSetPluginData(
             record,
             expectedUpdatedAt,
@@ -135,7 +137,11 @@ export function wrapStoreWithPluginDataEvents(
           pluginId: string,
           entries: readonly PluginDataBatchCasEntry[],
         ): Promise<boolean> => {
-          const scopedBus = await capture(sessionId);
+          const scopedBus = entries.some((entry) =>
+            isPublicPluginDataRecord({ pluginId, namespace: entry.namespace }),
+          )
+            ? await capture(sessionId)
+            : undefined;
           const swapped = await target.compareAndSetPluginDataBatch(
             sessionId,
             pluginId,
@@ -159,7 +165,9 @@ export function wrapStoreWithPluginDataEvents(
 
       if (prop === "setPluginData") {
         return async (record: PluginDataRecord): Promise<void> => {
-          const scopedBus = await capture(record.sessionId);
+          const scopedBus = isPublicPluginDataRecord(record)
+            ? await capture(record.sessionId)
+            : undefined;
           await target.setPluginData(record);
           emitPluginDataChangedEvent(
             scopedBus,
@@ -181,7 +189,10 @@ export function wrapStoreWithPluginDataEvents(
         return async (records: readonly PluginDataRecord[]): Promise<void> => {
           const audiences = new Map<string, EventBus | undefined>();
           for (const record of records) {
-            if (!audiences.has(record.sessionId))
+            if (
+              isPublicPluginDataRecord(record) &&
+              !audiences.has(record.sessionId)
+            )
               audiences.set(record.sessionId, await capture(record.sessionId));
           }
           await target.setPluginDataBatch(records);
@@ -308,7 +319,9 @@ export function wrapStoreWithPluginDataEvents(
           namespace: string,
           key: string,
         ): Promise<void> => {
-          const scopedBus = await capture(sessionId);
+          const scopedBus = isPublicPluginDataRecord({ pluginId, namespace })
+            ? await capture(sessionId)
+            : undefined;
           await target.deletePluginData(sessionId, pluginId, namespace, key);
           emitPluginDataChangedEvent(scopedBus, pluginId, sessionId, [
             {

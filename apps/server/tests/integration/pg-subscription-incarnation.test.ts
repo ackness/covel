@@ -1,4 +1,4 @@
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it, vi } from "vitest";
 import { createEventBus } from "@covel/events";
 import { createPgStore } from "@covel/store/postgres";
 import { createPgEventTransport } from "../../src/lib/pg-event-transport.js";
@@ -29,10 +29,12 @@ describe.skipIf(!database)("F-201 PostgreSQL subscription incarnation", () => {
     const sender = createEventBus(store, {
       transport: await createPgEventTransport(database!.url),
       requireSessionIncarnation: true,
+      strictEmissions: true,
     });
     const receiver = createEventBus(store, {
       transport: await createPgEventTransport(database!.url),
       requireSessionIncarnation: true,
+      strictEmissions: true,
     });
     const readers: ReadableStreamDefaultReader<Uint8Array>[] = [];
     try {
@@ -77,9 +79,21 @@ describe.skipIf(!database)("F-201 PostgreSQL subscription incarnation", () => {
       });
       const second = await open();
       // A different origin can publish late; the frozen old producer is never relabelled.
+      const current = (await store.getSession(old.id))!;
+      const reads = vi.spyOn(store, "getSession");
       producer.emit({ ...event(), payload: { value: "old-owner-secret" } });
-      expect(await drain(second, { deadlineMs: 3000 })).toEqual([]);
-      expect((await second.read()).done).toBe(true);
+      // Wait for the remote old frame's ownership recheck, then prove this
+      // same stream can still deliver the new owner's content.
+      await vi.waitFor(() => expect(reads).toHaveBeenCalled());
+      reads.mockRestore();
+      sessionEventBus(sender, current).emit({
+        ...event(),
+        payload: { value: "current-owner-content" },
+      });
+      const currentFrames = await drain(second, { want: 1, deadlineMs: 3000 });
+      expect(currentFrames).toHaveLength(1);
+      expect(currentFrames[0]?.data).toContain("current-owner-content");
+      expect(JSON.stringify(currentFrames)).not.toContain("old-owner-secret");
     } finally {
       await Promise.all(readers.map((reader) => reader.cancel()));
       await Promise.all([sender.close(), receiver.close()]);

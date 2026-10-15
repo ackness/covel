@@ -44,10 +44,12 @@ describe("F-201 event incarnation transport", () => {
     const a = createEventBus(store, {
       transport: transport(),
       requireSessionIncarnation: true,
+      strictEmissions: true,
     });
     const b = createEventBus(store, {
       transport: transport(),
       requireSessionIncarnation: true,
+      strictEmissions: true,
     });
     const delivered: SubscriptionEvent[] = [];
     b.onEmit((event) => delivered.push(event));
@@ -83,6 +85,7 @@ describe("F-201 event incarnation transport", () => {
       let receive = (_frame: string) => {};
       const bus = createEventBus(undefined, {
         requireSessionIncarnation: true,
+        strictEmissions: true,
         transport: {
           publish() {},
           subscribe(handler) {
@@ -141,10 +144,7 @@ describe("F-201 event incarnation transport", () => {
     bus.onReset!(reset);
     bus.emit(message("current"));
     loss();
-    expect(reset).toHaveBeenCalledExactlyOnceWith({
-      sessionId: "same-id",
-      reason: "transport-gap",
-    });
+    expect(reset).toHaveBeenCalledExactlyOnceWith({ reason: "transport-gap" });
     expect(bus.getEventsAfter("same-id", 0).epoch).not.toBe(pin.epoch);
     expect(bus.getEventsAfter("same-id", 0).events).toEqual([]);
     pin.release();

@@ -127,7 +127,12 @@ async function fixture(withRuntime = false, activateEntry = true) {
   });
   const discoveryMap = new Map([[id, discovery]]);
   const manifestCache = new Map([[id, definition.manifests]]);
-  await registry.applyPersistedActivations("session", [id], async () => {});
+  await registry.applyPersistedActivations(
+    "session",
+    [id],
+    async () => {},
+    "test-incarnation",
+  );
   const runtimeLoader = withRuntime
     ? createRuntimeLoader({
         pluginRegistry: registry,

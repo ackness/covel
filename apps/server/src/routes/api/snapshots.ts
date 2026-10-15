@@ -1,4 +1,7 @@
-import { publicSessionIncarnation } from "./session/session-guard.js";
+import {
+  publicIncarnationTag,
+  publicSessionIncarnation,
+} from "./session/session-guard.js";
 import { scheduleMemoryIngest } from "./commit-execution.js";
 import { rateLimiter } from "../../middleware/rate-limit.js";
 /**
@@ -740,10 +743,9 @@ snapshotRoutes.post("/:id/fork", rateLimiter({ max: 10 }), async (c) => {
           // Also publish state.snapshot.created (kind='fork') so a
           // forked session's snapshot list reacts immediately.
           eventBus.emit({
-            sessionIncarnation: publicSessionIncarnation({
-              ...parentSession,
-              metadata: { [SESSION_INCARNATION_KEY]: childIncarnationNonce },
-            }),
+            sessionIncarnation: publicIncarnationTag(
+              `incarnation:${childIncarnationNonce}`,
+            ),
             id: randomUUID(),
             type: "event",
             topic: "session",
@@ -760,10 +762,9 @@ snapshotRoutes.post("/:id/fork", rateLimiter({ max: 10 }), async (c) => {
           });
 
           eventBus.emit({
-            sessionIncarnation: publicSessionIncarnation({
-              ...parentSession,
-              metadata: { [SESSION_INCARNATION_KEY]: childIncarnationNonce },
-            }),
+            sessionIncarnation: publicIncarnationTag(
+              `incarnation:${childIncarnationNonce}`,
+            ),
             id: randomUUID(),
             type: "event",
             topic: "session",

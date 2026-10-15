@@ -17,21 +17,19 @@ export function watchSubscription(bus: EventBus, sessionId: string) {
     else reset = { sessionId, reason: "transport-gap" };
   });
   const offReset = bus.onReset?.((event) => {
-    if (event.sessionId !== sessionId) return;
-    if (receiveReset) receiveReset(event);
-    else reset = event;
+    if (event.sessionId !== undefined && event.sessionId !== sessionId) return;
+    const scoped = { ...event, sessionId };
+    if (receiveReset) receiveReset(scoped);
+    else reset = scoped;
   });
-  let pin: ReturnType<EventBus["pin"]>;
-  try {
-    pin = bus.pin(sessionId);
-  } catch (error) {
-    off();
-    offReset?.();
-    throw error;
-  }
+  let pin: ReturnType<EventBus["pin"]> | undefined;
   let closed = false;
   return {
-    epoch: pin.epoch,
+    /** Authorization must succeed before allocating replay state. */
+    pin() {
+      pin ??= bus.pin(sessionId);
+      return pin.epoch;
+    },
     activate(
       onEvent: (event: SubscriptionEvent) => void,
       onReset: (event: Reset) => void,
@@ -46,7 +44,7 @@ export function watchSubscription(bus: EventBus, sessionId: string) {
       closed = true;
       off();
       offReset?.();
-      pin.release();
+      pin?.release();
       pending.length = 0;
     },
   };

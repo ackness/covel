@@ -1,9 +1,14 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createEventBus,
+  MAX_TRACKED_SESSIONS,
   type EventBus,
   type EventBusTransport,
 } from "@covel/events";
+import { PluginExtensionHost, PluginServiceRegistry } from "@covel/runtime";
+import { uiSlotV1 } from "@covel/shared";
+import { createUiSlotHost } from "../../src/ui-slots/host.js";
+import { wrapStoreWithPluginDataEvents } from "../../src/routes/api/bootstrap/plugin-data-store-events.js";
 import { createMemoryStore } from "@covel/store/memory";
 import type { SessionRecord } from "@covel/store";
 import {
@@ -49,6 +54,7 @@ const buses: EventBus[] = [];
 afterEach(async () => {
   await Promise.all(buses.splice(0).map((bus) => bus.close()));
   vi.restoreAllMocks();
+  vi.unstubAllEnvs();
 });
 async function fixture(transport?: EventBusTransport) {
   const store = createMemoryStore();
@@ -57,6 +63,7 @@ async function fixture(transport?: EventBusTransport) {
   const bus = createEventBus(undefined, {
     transport,
     requireSessionIncarnation: true,
+    strictEmissions: true,
   });
   buses.push(bus);
   const app = makeApp(store, bus);
@@ -80,6 +87,125 @@ describe("F-201 subscription incarnation admission", () => {
     expect(live).toHaveLength(50);
     expect(reads).toHaveBeenCalledTimes(1);
     await reader.cancel();
+  });
+
+  it("counts producer and UI host reads without reading hidden writes or each received event", async () => {
+    const { store, owner, bus, app } = await fixture();
+    const wrapped = wrapStoreWithPluginDataEvents(store, bus);
+    const services = new PluginServiceRegistry({
+      list: async () => [],
+      ensure: async () => {},
+    });
+    const host = createUiSlotHost({
+      store: wrapped,
+      eventBus: bus,
+      services,
+      extensionHost: new PluginExtensionHost(services, [uiSlotV1]),
+    });
+    // A projection captures the UI host's incarnation once.
+    await host.get(owner.id);
+    const reads = vi.spyOn(store, "getSession");
+    const response = await app.request(
+      `/api/events/stream?sessionId=${owner.id}`,
+    );
+    const reader = response.body!.getReader();
+    await reader.read();
+    const record = {
+      id: "row",
+      sessionId: owner.id,
+      pluginId: "test-plugin",
+      namespace: "_hidden.test",
+      key: "key",
+      value: {},
+      createdAt: owner.createdAt,
+      updatedAt: owner.updatedAt,
+    };
+    try {
+      await wrapped.setPluginData(record);
+      await wrapped.compareAndSetPluginData(record, record.updatedAt);
+      await wrapped.compareAndSetPluginDataBatch(owner.id, record.pluginId, []);
+      await wrapped.compareAndSetPluginDataBatch(owner.id, record.pluginId, [
+        {
+          namespace: record.namespace,
+          key: record.key,
+          value: {},
+          expectedVersion: null,
+          timestamp: record.updatedAt,
+        },
+      ]);
+      await wrapped.setPluginDataBatch([]);
+      await wrapped.setPluginDataBatch([record]);
+      await wrapped.deletePluginData(
+        owner.id,
+        record.pluginId,
+        record.namespace,
+        record.key,
+      );
+      expect(reads).toHaveBeenCalledTimes(1);
+      for (let n = 0; n < 50; n++) {
+        await wrapped.setPluginData({
+          ...record,
+          namespace: "visible",
+          value: n,
+        });
+      }
+      expect(await drain(reader, { want: 50, deadlineMs: 1000 })).toHaveLength(
+        50,
+      );
+      // One admission read and one producer capture per public write. The UI
+      // listener and subscriber do not repeat those reads for matching events.
+      expect(reads).toHaveBeenCalledTimes(51);
+    } finally {
+      await reader.cancel();
+      await host.close();
+    }
+  });
+
+  it("does not pin or evict replay state for unauthorized handshakes", async () => {
+    const { store, owner, bus, app } = await fixture();
+    emit(bus, owner);
+    const epoch = bus.getEventsAfter(owner.id, 0).epoch;
+    vi.stubEnv("DEPLOYMENT_TIER", "demo");
+    vi.spyOn(store, "getSession").mockImplementation(async (id) => ({
+      ...owner,
+      id,
+    }));
+    const pin = vi.spyOn(bus, "pin");
+    for (let n = 1; n < MAX_TRACKED_SESSIONS; n++) {
+      emit(bus, { ...owner, id: `retained-${n}` });
+    }
+    const response = await app.request(
+      "/api/events/stream?sessionId=unauthorized",
+    );
+    expect(response.status).toBe(401);
+    expect(pin).not.toHaveBeenCalled();
+    expect(bus.getEventsAfter(owner.id, 0).epoch).toBe(epoch);
+    expect(bus.getEventsAfter(owner.id, 0).events).toHaveLength(1);
+  });
+
+  it("logs and drops invalid production emissions without throwing after a commit", async () => {
+    const bus = createEventBus(undefined, { requireSessionIncarnation: true });
+    buses.push(bus);
+    const owner = session();
+    const producer = sessionEventBus(bus, owner);
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    const message = {
+      id: "invalid",
+      type: "event" as const,
+      topic: "state",
+      sessionId: owner.id,
+      timestamp: "now",
+      payload: {},
+    };
+    expect(() => bus.emit(message)).not.toThrow();
+    expect(() =>
+      producer.emit({ ...message, sessionId: "another-session" }),
+    ).not.toThrow();
+    expect(() =>
+      producer.emit({ ...message, sessionIncarnation: "wrong" }),
+    ).not.toThrow();
+    expect(log).toHaveBeenCalledTimes(3);
+    expect(bus.getEventsAfter(owner.id, 0).events).toEqual([]);
   });
 
   it("does not read for heartbeats", async () => {
@@ -259,10 +385,48 @@ describe("F-201 subscription incarnation admission", () => {
         },
       }),
     );
-    expect(await drain(reader, { deadlineMs: 500 })).toEqual([]);
-    expect(reads).toHaveBeenCalledTimes(2);
-    expect((await reader.read()).done).toBe(true);
+    await vi.waitFor(() => expect(reads).toHaveBeenCalledTimes(2));
+    await new Promise((resolve) => setImmediate(resolve));
+    emit(bus, current, "current-owner-content");
+    const frames = await drain(reader, { want: 1, deadlineMs: 500 });
+    expect(frames).toHaveLength(1);
+    expect(frames[0]?.data).toContain("current-owner-content");
+    expect(JSON.stringify(frames)).not.toContain("old-");
+    await reader.cancel();
   });
+
+  it.each([false, true])(
+    "preserves arrivals during a stale-frame recheck (invalidated=%s)",
+    async (invalidated) => {
+      const { store, owner, bus, app } = await fixture();
+      const response = await app.request(
+        `/api/events/stream?sessionId=${owner.id}`,
+      );
+      const reader = response.body!.getReader();
+      await reader.read();
+      const entered = deferred<void>();
+      const release = deferred<SessionRecord>();
+      vi.spyOn(store, "getSession").mockImplementationOnce(async () => {
+        entered.resolve();
+        return release.promise;
+      });
+      emit(bus, session(), "stale-content");
+      await entered.promise;
+      emit(bus, owner, "arrived-during-recheck");
+      if (invalidated) invalidateSessionEvents(bus, owner);
+      release.resolve(owner);
+      try {
+        if (invalidated) expect((await reader.read()).done).toBe(true);
+        else {
+          const frames = await drain(reader, { want: 1, deadlineMs: 500 });
+          expect(frames).toHaveLength(1);
+          expect(frames[0]?.data).toContain("arrived-during-recheck");
+        }
+      } finally {
+        await reader.cancel();
+      }
+    },
+  );
 
   it("keeps a delayed producer bound to the session it captured", async () => {
     const { store, owner, bus } = await fixture();

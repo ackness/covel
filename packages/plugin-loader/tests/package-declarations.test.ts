@@ -64,6 +64,7 @@ describe("package declarations", () => {
       "session",
       ["probe"],
       async () => {},
+      "test-incarnation",
     );
     expect(pluginRuntimeManifests(record)).toEqual([]);
     expect(pluginDeclarations(record)).toEqual([root]);

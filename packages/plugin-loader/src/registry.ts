@@ -168,7 +168,7 @@ export interface PluginRegistry {
     sessionId: string,
     pluginIds: readonly string[],
     persist: () => Promise<void>,
-    sessionIncarnation?: string,
+    sessionIncarnation: string,
   ): Promise<void>;
 
   /**
@@ -242,7 +242,7 @@ export function createPluginRegistry(
     subType: string,
     sessionId: string,
     payload: Record<string, unknown>,
-    sessionIncarnation?: string,
+    sessionIncarnation: string,
   ): void {
     if (!eventBus) return;
     eventBus.emit({
@@ -307,7 +307,7 @@ export function createPluginRegistry(
       sessionId: string,
       pluginIds: readonly string[],
       persist: () => Promise<void>,
-      sessionIncarnation?: string,
+      sessionIncarnation: string,
     ): Promise<void> {
       // Durable state first: a failed persist must never be reflected here.
       await persist();

@@ -73,7 +73,8 @@ export interface SessionPin {
 
 /** Control signal emitted when the local replay cursor can no longer be trusted. */
 export interface EventBusReset {
-  readonly sessionId: string;
+  /** Absent when the transport reset affects every session, including handshakes. */
+  readonly sessionId?: string;
   /**
    * `transport-gap`: a cross-pod frame was lost. `publish-failed`: the commit
    * owner could not publish the events of data it had already committed.
@@ -84,6 +85,8 @@ export interface EventBusReset {
 export interface EventBus {
   /** Publish an event. */
   emit(message: CovelMessage): void;
+  /** Drop an invalid producer emission; strict test buses throw instead. */
+  rejectEmission(reason: string): void;
   /** Get subscription events after a given sequence number for replay. */
   getEventsAfter(sessionId: string, afterSeq: number): EventReplay;
   /**
@@ -148,6 +151,8 @@ export interface EventBusOptions {
   readonly transport?: EventBusTransport;
   /** Session-serving hosts reject producers that have not captured an incarnation. */
   readonly requireSessionIncarnation?: boolean;
+  /** Fail tests at the producer; production logs and drops invalid emissions. */
+  readonly strictEmissions?: boolean;
 }
 
 // Exported so tests exercise the real limits instead of duplicating them.
@@ -407,6 +412,7 @@ export function createEventBus(
   function invalidateReplay(
     sessionId: string,
     reason: EventBusReset["reason"] = "transport-gap",
+    announce = true,
   ): void {
     const state = touchSession(sessionId);
     state.seq = 0;
@@ -414,7 +420,10 @@ export function createEventBus(
     state.epoch = nextEpoch();
     state.buffer = new RingBuffer<SubscriptionEvent>(RING_BUFFER_MAX);
     state.replayFloor = 0;
-    const reset: EventBusReset = { sessionId, reason };
+    if (announce) broadcastReset({ sessionId, reason });
+  }
+
+  function broadcastReset(reset: EventBusReset): void {
     for (const cb of resetCallbacks) {
       try {
         cb(reset);
@@ -742,10 +751,16 @@ export function createEventBus(
   const unsubscribe = transport?.subscribe(handleTransportFrame);
   const unsubscribeReset = transport?.onReset?.(() => {
     if (closed) return;
-    for (const sessionId of [...sessions.keys()]) invalidateReplay(sessionId);
+    for (const sessionId of [...sessions.keys()])
+      invalidateReplay(sessionId, "transport-gap", false);
+    broadcastReset({ reason: "transport-gap" });
   });
 
   const bus: EventBus = {
+    rejectEmission(reason) {
+      if (options?.strictEmissions) throw new Error(reason);
+      console.error("[EventBus] dropping invalid emission:", reason);
+    },
     emit(message: CovelMessage): void {
       if (closed) return;
       if (
@@ -753,7 +768,8 @@ export function createEventBus(
         (typeof message.sessionIncarnation !== "string" ||
           !message.sessionIncarnation)
       ) {
-        throw new Error("Session events require a producer incarnation");
+        bus.rejectEmission("Session events require a producer incarnation");
+        return;
       }
       // ── Subscription event creation ──────────────────────────
       const state = touchSession(message.sessionId);

@@ -15,8 +15,6 @@ export function scopeSessionEvents(
   sessionId: string,
   incarnation: string,
 ): EventBus {
-  if (!incarnation)
-    throw new Error("Session event producer has no incarnation");
   return {
     ...bus,
     onEmit(callback) {
@@ -29,16 +27,22 @@ export function scopeSessionEvents(
       });
     },
     emit(message) {
+      if (!incarnation) {
+        bus.rejectEmission("Session event producer has no incarnation");
+        return;
+      }
       if (message.sessionId !== sessionId) {
-        throw new Error("Session event producer changed its audience");
+        bus.rejectEmission("Session event producer changed its audience");
+        return;
       }
       if (
         message.sessionIncarnation !== undefined &&
         message.sessionIncarnation !== incarnation
       ) {
-        throw new Error(
+        bus.rejectEmission(
           "Session event producer cannot relabel another incarnation",
         );
+        return;
       }
       bus.emit({ ...message, sessionIncarnation: incarnation });
     },

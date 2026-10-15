@@ -213,7 +213,7 @@ export function createRuntimeJobExecutor(deps: {
       publishRuntimeJobStatusEvent(
         eventBus,
         queued.status,
-        runtimeJobIncarnation(queued.job.payload),
+        runtimeJobIncarnation(queued.job.payload) ?? "",
       );
     }
   };

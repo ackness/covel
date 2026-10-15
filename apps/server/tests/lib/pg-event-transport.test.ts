@@ -26,17 +26,17 @@ describe("PgEventTransport", () => {
     postgresMocks.end.mockClear();
   });
 
-  it("signals connection loss and re-LISTEN, and releases reset handlers", async () => {
+  it("signals re-LISTEN but not NOTIFY pool recycling, and releases reset handlers", async () => {
     const transport = await createPgEventTransport("postgres://test");
     const reset = vi.fn();
     const off = transport.onReset!(reset);
     const options = vi.mocked(postgres).mock.calls.at(-1)?.[1];
-    options?.onclose?.(1);
+    expect(options?.onclose).toBeUndefined();
     postgresMocks.listen.mock.calls.at(-1)?.[2]?.();
-    expect(reset).toHaveBeenCalledTimes(2);
+    expect(reset).toHaveBeenCalledTimes(1);
     off();
-    options?.onclose?.(1);
-    expect(reset).toHaveBeenCalledTimes(2);
+    postgresMocks.listen.mock.calls.at(-1)?.[2]?.();
+    expect(reset).toHaveBeenCalledTimes(1);
     await transport.close();
   });
 

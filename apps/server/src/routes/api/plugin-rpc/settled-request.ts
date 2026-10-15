@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { publicIncarnationTag } from "../session/session-guard.js";
 import type { Context } from "hono";
 import type { RuntimeJobServices } from "./runtime-job-credentials.js";
 import {
@@ -161,7 +161,7 @@ export function announceQueuedRuntimeJobs(
     publishRuntimeJobStatusEvent(
       c.get("eventBus"),
       status,
-      runtimeJobIncarnation(job.payload),
+      runtimeJobIncarnation(job.payload) ?? "",
     );
   }
   for (const sessionId of new Set(queued.map(({ job }) => job.sessionId)))
@@ -196,8 +196,12 @@ export async function publishDeferredRuntimeJobs(
   const { eventBus } = deps;
   for (const { job, status } of queued) {
     const incarnation = runtimeJobIncarnation(job.payload);
-    if (!incarnation)
-      throw new Error("Deferred job is missing its session incarnation");
+    if (!incarnation) {
+      eventBus?.rejectEmission(
+        "Deferred job is missing its session incarnation",
+      );
+      continue;
+    }
     if (eventBus) publishRuntimeJobStatusEvent(eventBus, status, incarnation);
     const payload = {
       runtimeId: job.runtimeId,
@@ -211,9 +215,7 @@ export async function publishDeferredRuntimeJobs(
       type: "event",
       topic: "runtime",
       sessionId: job.sessionId,
-      sessionIncarnation: createHash("sha256")
-        .update(incarnation)
-        .digest("hex"),
+      sessionIncarnation: publicIncarnationTag(incarnation),
       timestamp: new Date().toISOString(),
       payload: {
         ...payload,

@@ -132,7 +132,10 @@ describe("POST /api/actions — event forwarding is scoped to the lock tenure", 
 
     const owner = (await store.getSession(SESSION_ID))!;
     const eventBus = sessionEventBus(
-      createEventBus(store, { requireSessionIncarnation: true }),
+      createEventBus(store, {
+        requireSessionIncarnation: true,
+        strictEmissions: true,
+      }),
       owner,
     );
 

@@ -376,7 +376,7 @@ describe("EventBus transport fan-out (audit R-02)", () => {
     try {
       const hub = createHub();
       const bus = createEventBus(undefined, { transport: hub.connect() });
-      const resets: Array<{ sessionId: string; reason: string }> = [];
+      const resets: Array<{ sessionId?: string; reason: string }> = [];
       bus.onReset?.((reset) => resets.push(reset));
 
       const mkFrame = (seq: number): string =>
@@ -422,7 +422,7 @@ describe("EventBus transport fan-out (audit R-02)", () => {
       const hub = createHub();
       const bus = createEventBus(undefined, { transport: hub.connect() });
       const received: SubscriptionEvent[] = [];
-      const resets: Array<{ sessionId: string; reason: string }> = [];
+      const resets: Array<{ sessionId?: string; reason: string }> = [];
       bus.onEmit((event) => received.push(event));
       bus.onReset?.((reset) => resets.push(reset));
 
@@ -465,7 +465,7 @@ describe("EventBus transport fan-out (audit R-02)", () => {
       const hub = createHub();
       const bus = createEventBus(undefined, { transport: hub.connect() });
       const targetEvents: SubscriptionEvent[] = [];
-      const resets: Array<{ sessionId: string; reason: string }> = [];
+      const resets: Array<{ sessionId?: string; reason: string }> = [];
       bus.onEmit((event) => {
         if (event.type.startsWith("target-")) targetEvents.push(event);
       });
@@ -520,7 +520,7 @@ describe("EventBus transport fan-out (audit R-02)", () => {
       const hub = createHub();
       const bus = createEventBus(undefined, { transport: hub.connect() });
       const targetTypes: string[] = [];
-      const resets: Array<{ sessionId: string; reason: string }> = [];
+      const resets: Array<{ sessionId?: string; reason: string }> = [];
       bus.onEmit((event) => {
         if (event.sessionId === "sess-busy") targetTypes.push(event.type);
       });
@@ -565,7 +565,7 @@ describe("EventBus transport fan-out (audit R-02)", () => {
       const hub = createHub();
       const bus = createEventBus(undefined, { transport: hub.connect() });
       const targetTypes: string[] = [];
-      const resets: Array<{ sessionId: string; reason: string }> = [];
+      const resets: Array<{ sessionId?: string; reason: string }> = [];
       bus.onEmit((event) => {
         if (event.sessionId === "sess-parked") targetTypes.push(event.type);
       });
@@ -613,7 +613,7 @@ describe("EventBus transport fan-out (audit R-02)", () => {
       const hub = createHub();
       const bus = createEventBus(undefined, { transport: hub.connect() });
       const types: string[] = [];
-      const resets: Array<{ sessionId: string; reason: string }> = [];
+      const resets: Array<{ sessionId?: string; reason: string }> = [];
       bus.onEmit((event) => types.push(`${event.sessionId}/${event.type}`));
       bus.onReset?.((reset) => resets.push(reset));
 
@@ -686,7 +686,7 @@ describe("EventBus transport fan-out (audit R-02)", () => {
       };
       const sender = createEventBus(undefined, { transport: slow });
       const receiver = createEventBus(undefined, { transport: hub.connect() });
-      const resets: Array<{ sessionId: string; reason: string }> = [];
+      const resets: Array<{ sessionId?: string; reason: string }> = [];
       receiver.onReset?.((reset) => resets.push(reset));
 
       for (let i = 0; i < OUTBOX_PENDING_MAX + 5; i += 1) {
