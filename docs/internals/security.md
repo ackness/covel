@@ -9,7 +9,7 @@
 - 桌面端代理设置：[`../reference/desktop-config.md`](../reference/desktop-config.md)
 - 报告漏洞：[`SECURITY.md`](../../SECURITY.md)
 
-下文多次提到“部署档位”（`DEPLOYMENT_TIER`）。`self` 是默认值，指桌面端和自己部署给自己用的实例；`demo` 和 `commercial` 是给别人用的托管实例，合称托管档位。
+下文多次提到“部署档位”（`DEPLOYMENT_TIER`）。`self` 是默认值，指桌面客户端和自己部署给自己用的实例。`demo` 是给公开网页实例用的档位，为以后的官方网页版准备；官方网页版现在还不支持。`commercial` 是给以后可能有的商业版预留的最严格档位：现在没有账号、租户隔离和配额，这个仓库也不为它更新。`demo` 和 `commercial` 都要求令牌，合称托管档位。
 
 ## Outbound requests (SSRF guard)
 
@@ -217,7 +217,7 @@ Web 客户端只发送它的请求用得到的供应商的密钥：
 - 每个会话一个 **owner token**。它在创建会话时生成，只以哈希形式存在 `SessionRecord.metadata` 里，只返回一次。所有会话级路由都要它。
 - 一个 **operator token**（`COVEL_DESKTOP_REST_TOKEN`）。它同时是万能钥匙，能通过任何 owner 检查。全局和管理类路由要它：创建和列出会话、写世界、AI 和模型路由、启用社区服务端代码。
 
-托管档位缺少 operator token、媒体密钥或 CORS 源时，`validateSecurityPosture`（`apps/server/src/security-posture.ts`）会让启动失败。`self` 档位、桌面端和开发环境严格地什么都不做：令牌被忽略，单用户本地游玩不受影响。
+托管档位缺少 operator token 或媒体密钥时，`validateSecurityPosture`（`apps/server/src/security-posture.ts`）会让启动失败；`commercial` 还要求明确列出 CORS 源。`self` 档位、桌面客户端和开发环境严格地什么都不做：令牌被忽略，单用户本地游玩不受影响。
 
 社区服务端代码（`entry`、handler、hook、wire、运行时 JavaScript）的 import 由两阶段批准把守：先授予 `covel:plugin-server-code`，再授予具体操作。
 

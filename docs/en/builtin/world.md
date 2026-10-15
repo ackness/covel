@@ -17,7 +17,7 @@ The page follows the order you meet them in a game. First come the four that run
 | World Fact Extraction (`world-ir`)         | Sorts out the facts of each turn in the background, for other plugins to use         |
 
 > [!NOTE]
-> None of the plugins on this page has settings for you to adjust, so there is no "What you can change" section below. The basic features are on by default. Optional plugins are chosen by the world or the gameplay pack. For how to install and manage them, see [Install and manage](../start/packages.md).
+> None of the plugins on this page has settings for you to adjust, so there is no "What you can change" section below. Plugins that are on by default (`kind: core`) can be turned off on the session-prep screen. Other plugins are chosen by the world or the gameplay pack. For how to install and manage them, see [Install and manage](../start/packages.md).
 
 ## Pre-Game Setup (`pregame`)
 
@@ -25,7 +25,7 @@ Reads the world material before the game starts, prepares the first part of the 
 
 **What you will see**: a notice that says "Welcome to [world name]".
 
-**When it is on**: a basic feature, on by default.
+**When it is on**: on by default (`kind: core`). You can turn it off on the session-prep screen.
 
 ## Character Creator (`char-creator`)
 
@@ -36,7 +36,7 @@ At the start, it guides you through creating the player character. It gives you 
 - The character form at the start. The first field is the character's name. Up to three more fields follow, taken from the text or choice attributes the world defines for characters. Numeric attributes are not filled in on the form. They use the world's default values.
 - A list of characters in the "Characters" tab on the right. Each character is an expandable card with a portrait. The alias is shown under the name. The cards are read-only.
 
-**When it is on**: a basic feature, on by default. Traditional Story, Dialogue Mode and Low Cost all include it.
+**When it is on**: on by default (`kind: core`). You can turn it off on the session-prep screen. Traditional Story, Dialogue Mode and Low Cost all include it.
 
 **Notes**
 
@@ -80,7 +80,7 @@ At the start, it prepares the character attributes and the "dimensions" of this 
 - "Overview" and "Character Traits" in the "World Details" tab on the right. Character Traits reads the current session character schema, so a save with an existing schema shows it immediately.
 - The current value of each dimension is shown in the panel, and you can change it by hand. If a turn's settlement fails, the panel tells you. You can retry, mark it as handled manually, or skip it explicitly. Before your next action, the system automatically retries once.
 
-**When it is on**: a basic feature, on by default. All three built-in packs include it.
+**When it is on**: on by default (`kind: core`). You can turn it off on the session-prep screen. All three built-in packs include it.
 
 **What world authors can preset**: declare the structure, starting values and update rules of each dimension in `data/dimensions.yaml`. For how to write them, see [World data](../reference/world-data.md). For how dimensions update, see [Dynamic world dimensions](../reference/dynamic-dimensions.md).
 
@@ -101,7 +101,7 @@ Gives the world its own calendar. After each turn of the story ends, it judges f
 - A line in the status summary: "World time: ...".
 - Type `/time` to see the current world time. It only reads the time. It does not call a model and does not advance the turn. If the story has not started yet, it says the time has not been recorded.
 
-**When it is on**: a basic feature, on by default. Each successful narrative turn usually adds one model call.
+**When it is on**: on by default (`kind: core`). You can turn it off on the session-prep screen. Each successful narrative turn usually adds one model call.
 
 **What world authors can preset**: `data/time.yaml`, with an `id: world` and a `definition`. The world can have a simple cycle of a few times of day, or a calendar with months and days. You can also set time to run forward, run backward, run both ways, or run at random, and describe in a paragraph how long various actions take. For the fields, see [World time](../reference/world-time.md).
 

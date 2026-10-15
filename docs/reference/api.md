@@ -64,11 +64,11 @@ Covel 的服务器对外只有一套 HTTP JSON 接口。网页和桌面应用用
 
 服务器把数据存在哪里，由环境变量 `STORE_BACKEND` 决定：
 
-| 后端       | 值               | 用途                                                   |
-| ---------- | ---------------- | ------------------------------------------------------ |
-| SQLite     | `sqlite`（默认） | 本机开发、单机部署。数据在 `./data/covel.db`           |
-| Memory     | `memory`         | 测试，以及浏览器私有模式的临时执行。进程重启后数据丢失 |
-| PostgreSQL | `pg`             | 生产环境。需要 `DATABASE_URL`                          |
+| 后端       | 值               | 用途                                                                                                                                                             |
+| ---------- | ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| SQLite     | `sqlite`（默认） | 桌面客户端和自部署网页版都用它，普通玩家不用换。数据在 `./data/covel.db`（桌面客户端在 `<data_root>/covel.db`）                                                  |
+| Memory     | `memory`         | 测试，以及浏览器私有模式下的回合执行（存档在浏览器里；为以后的官方网页版准备）。进程重启后数据丢失                                                               |
+| PostgreSQL | `pg`             | 给专业开发者和有特殊需求的用户，例如多进程部署、要接已有的数据库。需要 `DATABASE_URL`。和 SQLite 对外行为相同（多进程的限制见[多实例能力边界](#多实例能力边界)） |
 
 补充两点：
 
@@ -5890,23 +5890,30 @@ interface SubscriptionEvent {
 
 ## 存储模式说明
 
-Covel 有三种部署层级（Deployment Tier），每种层级的存储方式不同。
+Covel 有三种部署形态，每种形态的存储方式不同：桌面客户端、自部署网页版和官方网页版。现在支持前两种，官方网页版还不支持。商业版现在没有做，本仓库不为它更新。
 
 浏览器里还可以切换存储模式：
 
 - `local`：数据保存在玩家浏览器的 IndexedDB。
 - `remote`：通过服务器 API，保存到 `STORE_BACKEND` 指定的后端。
 
-### T1: 自部署 (Self-Deploy)
+### 桌面客户端
 
-- **服务器存储**: SQLite（默认，`./data/covel.db`）。可以显式切换到 Memory，只用于一次性测试。
+- **服务器存储**: SQLite，文件在本机的 `<data_root>/covel.db`（默认 `~/.covel/data/covel.db`）。普通玩家不需要关心数据库。PostgreSQL 也支持，面向专业开发者。
+- **网络**: 只绑定本机回环地址（`127.0.0.1`）。
+- **认证**: 没有。令牌被忽略。
+
+### 自部署网页版
+
+- **服务器存储**: 默认是 SQLite（`./data/covel.db`）。专业开发者或有特殊需求的用户可以换成 PostgreSQL。仓库自带的 Docker 配置目前用的是 PostgreSQL。
 - **前端存储**: 默认是 remote，使用服务器的 SQLite；local 模式使用浏览器 IndexedDB。
 - **数据流**:
   - remote 模式：前端通过 API 读写服务器的 store。
   - local 模式：业务记录以带版本的 checkpoint 保存在 Dexie `covel-browser-vault` 里。执行前上传到临时的 MemoryStore，执行后原子地应用 `SessionCommit`。
   - 生成世界等服务器能力，通过 `return-only` 响应把结果交给前端保存。
 - **API 密钥**: 用户自己管理，保存在浏览器 localStorage。
-- **认证**: 无
+- **认证**: 没有。`self` 档位忽略令牌。
+- **范围**: 它是个人实例，不隔离多个玩家。
 
 ```bash
 # 启动方式
@@ -5914,37 +5921,33 @@ pnpm dev:server                       # SQLite 后端（默认）
 STORE_BACKEND=memory pnpm dev:server  # 临时 Memory 后端（重启即丢失）
 ```
 
-### T2: 演示托管 (Demo Host)
+### 官方网页版（还不支持）
 
-- **服务器存储**: Memory 或 SQLite
-- **前端存储**: 允许公开写入的演示可以用 local IndexedDB；私有演示也可以用 remote 服务器存储。
-- **API 密钥**: 用户自己管理，必须用 HTTPS 传输。
+> [!NOTE]
+> 官方网页版现在还不支持。下面写的是它的设计，以及代码里已有的部分。
+
+- **服务器存储**: `DEPLOYMENT_TIER=demo`、`STORE_BACKEND=memory`（见仓库里的 `render.yaml`）。
+- **存档**: 以玩家浏览器 IndexedDB 里的为准。服务器把会话放在内存里执行回合，不写进数据库；会话删除或服务器重启后，内存里的这份就没有了。
+- **API 密钥**: 存在浏览器里，每次请求通过 `X-Provider-Keys` 带来。服务器不把它写进存储；后台作业要用时，它在内存里等作业开始，默认最多等 5 分钟；声明了排队期限（`maxQueueMs`）的作业按那个期限等，作业运行期间也一直持有。
 - **认证**: **必需**。
-  - 会话作用域的端点强制 session owner token。
-  - 全局端点和管理端点强制运维 token（`COVEL_DESKTOP_REST_TOKEN`）。
-  - 没有配置运维 token 时，`validateSecurityPosture` 直接拒绝启动。
+  - 启动时必须设置运维 token（`COVEL_DESKTOP_REST_TOKEN`）和媒体密钥（`COVEL_MEDIA_TOKEN_SECRET`），缺了服务器拒绝启动。
+  - 会话作用域的端点强制 session owner token；全局端点和管理端点强制运维 token。
   - 详见上方[鉴权章节](#鉴权session-owner-token)。
+- **注意**: 存档不写进服务器的数据库，靠的是部署配置：`render.yaml` 把 `STORE_BACKEND` 设为 `memory`。`demo` 档位本身也接受 `sqlite` 和 `pg`。
 
-### T3: 商业部署 (Commercial)
+### 商业版（未实现）
 
-- **服务器存储**: PostgreSQL（需要配置 `DATABASE_URL`）
-- **前端存储**: 游戏数据的增删改查都交给服务器 API。浏览器只留显示缓存：表单提交标记和历史时间线，按会话身份校验。
-- **API 密钥**: 平台和用户两层管理
-- **认证**: 必需
-
-```bash
-# 启动方式
-STORE_BACKEND=pg DATABASE_URL=postgresql://covel:pass@localhost:5432/covel pnpm dev:server
-```
+- 没有账号、租户隔离和配额。这个仓库也不为它更新。
+- 代码里保留的 `commercial` 档位（`DEPLOYMENT_TIER=commercial`）只是最严格的安全设置，不是可用的产品形态。
 
 ### 存储后端对比
 
-| 能力     | Memory                 | SQLite                                     | PostgreSQL                                            |
-| -------- | ---------------------- | ------------------------------------------ | ----------------------------------------------------- |
-| 持久化   | 否 (重启丢失)          | 是 (本地文件)                              | 是 (远程数据库)                                       |
-| 并发     | 单进程                 | 单进程                                     | 多进程（`pg_advisory_lock` 让同一会话跨进程串行执行） |
-| 适用场景 | 测试 / 一次性 demo     | 单机部署（默认）                           | 生产环境                                              |
-| 配置     | `STORE_BACKEND=memory` | 默认（`STORE_BACKEND=sqlite`，可显式指定） | `STORE_BACKEND=pg` + `DATABASE_URL`                   |
+| 能力     | Memory                               | SQLite                                     | PostgreSQL                                            |
+| -------- | ------------------------------------ | ------------------------------------------ | ----------------------------------------------------- |
+| 持久化   | 否 (重启丢失)                        | 是 (本地文件)                              | 是 (远程数据库)                                       |
+| 并发     | 单进程                               | 单进程                                     | 多进程（`pg_advisory_lock` 让同一会话跨进程串行执行） |
+| 适用场景 | 测试；浏览器私有模式的服务端临时存储 | 桌面客户端、自部署网页版（默认）           | 专业开发者或有特殊需求的用户                          |
+| 配置     | `STORE_BACKEND=memory`               | 默认（`STORE_BACKEND=sqlite`，可显式指定） | `STORE_BACKEND=pg` + `DATABASE_URL`                   |
 
 > [!NOTE]
 > **多进程部署的会话锁**

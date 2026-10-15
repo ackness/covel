@@ -581,7 +581,7 @@ await window.covel.invoke("setUiState", { value: { draft: "..." } });
 ## 可安装的组合示例
 
 - [Clickable Map](../../tests/third-party/clickable-map/README.md)（在本仓库里）：自绘面板的最小示例。`webview` 用宿主的方案变量画地图；点击经 `emitEvent` 交给事件 runtime 校验并写入；`draftMessage` 把移动交给叙事；`session.summary@1` 报告当前位置。`pnpm e2e:extensions` 在真实浏览器里跑它。
-- [官方记录工作台 demo 与两个处理服务](https://github.com/covel-ai/covel-plugins/tree/main/examples/notes-workbench)（在插件仓库里，不随核心插件分发）：展示包级 HTML UI、`/notes` 命令、手动函数 runtime、服务发现，以及可以替换的只有 entry 的提供者。工作台只写自己的记录，服务只负责计算；原样保存、格式整理和项目列表都不用模型。新增的提供者通过 `examples.note-format@1` 契约接入，框架和工作台都不按提供者 ID 分支。
+- [官方记录工作台 demo 与两个处理服务](https://github.com/covel-ai/covel-plugins/tree/main/examples/notes-workbench)（在插件仓库里，不随 Covel 一起安装）：展示包级 HTML UI、`/notes` 命令、手动函数 runtime、服务发现，以及可以替换的只有 entry 的提供者。工作台只写自己的记录，服务只负责计算；原样保存、格式整理和项目列表都不用模型。新增的提供者通过 `examples.note-format@1` 契约接入，框架和工作台都不按提供者 ID 分支。
 
 ## 开发时查看注册与调用
 

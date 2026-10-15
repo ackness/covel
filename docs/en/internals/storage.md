@@ -4,11 +4,15 @@ This page explains where Covel keeps its data, who is responsible for it, and wh
 
 Covel does not use one large storage adapter to cover every environment. It has three configurations (profiles), split by how the app is deployed. There is one record format, and each environment uses the database that suits it.
 
-| Profile           | What is the final source of the data                   | Storage used to run turns               | Where it is deployed                               |
-| ----------------- | ------------------------------------------------------ | --------------------------------------- | -------------------------------------------------- |
-| `browser-private` | Dexie `BrowserVault` in the player's browser IndexedDB | A temporary `MemoryStore` on the server | Public demo pages, self-hosted browser-only setups |
-| `desktop`         | Server-side `SqliteStore`                              | The same SQLite                         | Electron desktop app, single-user local installs   |
-| `cloud`           | Server-side `PgStore`                                  | The same PostgreSQL                     | Hosted deployments, multi-process deployments      |
+SQLite is the default. The desktop app and the self-hosted web app both use it, so ordinary players do not need to think about the database. PostgreSQL must keep working, but it is for professional developers and users with special needs, such as multi-process deployments or an existing database. SQLite and PostgreSQL pass the same contract tests and must behave the same from the outside; a difference is a bug. For the limits of several processes, see [API multi-instance limits](../reference/api.md#limits-of-running-several-instances).
+
+| Profile           | What is the final source of the data                   | Storage used to run turns               | Where it is deployed                                                                                                                                                                               |
+| ----------------- | ------------------------------------------------------ | --------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `browser-private` | Dexie `BrowserVault` in the player's browser IndexedDB | A temporary `MemoryStore` on the server | Meant for the official web app, and not complete yet (the official web app is not supported yet). The copy in the player's browser is the save, and nothing is written to a database on the server |
+| `desktop`         | Server-side `SqliteStore`                              | The same SQLite                         | Default. The desktop app, and a self-hosted web app (local SQLite file). Ordinary players all use it                                                                                               |
+| `cloud`           | Server-side `PgStore`                                  | The same PostgreSQL                     | Professional developers and users with special needs choose PostgreSQL (for example, multi-process deployments or an existing database). The desktop app and a self-hosted web app can both use it |
+
+The commercial edition (multi-tenant accounts and quotas) is not built yet, and this repository does not maintain it.
 
 The contracts and implementations for each kind of data:
 
@@ -26,11 +30,11 @@ The browser no longer re-implements the server's create, read, update, delete an
 
 `STORE_BACKEND` decides only the server's `DataStore`:
 
-| Value    | Use                                                      | Notes                                                                                                           |
-| -------- | -------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| `memory` | Tests, and turn execution in browser-private mode        | In-process only. Lost on restart. The health check reports `frontendMode: "local"`.                             |
-| `sqlite` | Desktop app, local development, single-node self-hosting | The file path comes from `SQLITE_PATH`, default `./data/covel.db`. The driver is Node's built-in `node:sqlite`. |
-| `pg`     | Hosted deployments, multi-process deployments            | `DATABASE_URL` must be set. Session locks use PostgreSQL advisory locks.                                        |
+| Value    | Use                                                                             | Notes                                                                                                           |
+| -------- | ------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `memory` | Tests, and turn execution in browser-private mode                               | In-process only. Lost on restart. The health check reports `frontendMode: "local"`.                             |
+| `sqlite` | Desktop app, self-hosted web app, local development                             | The file path comes from `SQLITE_PATH`, default `./data/covel.db`. The driver is Node's built-in `node:sqlite`. |
+| `pg`     | Professional developers and users with special needs; multi-process deployments | `DATABASE_URL` must be set. Session locks use PostgreSQL advisory locks.                                        |
 
 There is no `STORE_BACKEND=idb`, and no `createStore({ backend: "idb" })`. If you write an unknown value (for example, `postgres` instead of `pg`), the service refuses to start, and the error lists the valid values. `MEDIA_BACKEND` and `VECTOR_BACKEND` work the same way.
 

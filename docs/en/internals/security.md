@@ -9,7 +9,7 @@ Related material is on other pages:
 - Desktop proxy settings: [`../reference/desktop-config.md`](../reference/desktop-config.md)
 - Reporting a vulnerability: [`SECURITY.md`](../../../SECURITY.md)
 
-Below, the "deployment tier" (`DEPLOYMENT_TIER`) comes up many times. `self` is the default. It means the desktop app, and instances that a person deploys for their own use. `demo` and `commercial` are hosted instances for other people. Together they are called the hosted tiers.
+Below, the "deployment tier" (`DEPLOYMENT_TIER`) comes up many times. `self` is the default. It means the desktop app, and instances that a person deploys for their own use. `demo` is the tier for public web instances, meant for the official web app, which is not supported yet. `commercial` is the strictest tier, reserved for a possible future commercial edition. There are no accounts, tenant isolation, or quotas, and this repository does not maintain it. `demo` and `commercial` both require tokens. Together they are called the hosted tiers.
 
 ## Outbound requests (SSRF guard)
 
@@ -217,7 +217,7 @@ The `demo` and `commercial` tiers enforce two kinds of token:
 - One **owner token** per session. It is generated when the session is created, is stored only as a hash in `SessionRecord.metadata`, and is returned only once. Every session-level route requires it.
 - One **operator token** (`COVEL_DESKTOP_REST_TOKEN`). It is a master key, and it passes every owner check. Global and admin routes require it: creating and listing sessions, writing worlds, AI and model routes, and enabling community server code.
 
-If the hosted tiers lack an operator token, a media key, or CORS origins, `validateSecurityPosture` (`apps/server/src/security-posture.ts`) makes startup fail. The `self` tier, the desktop app, and development environments do nothing of the kind: tokens are ignored, and single-user local play is not affected.
+If the hosted tiers lack an operator token or a media key, `validateSecurityPosture` (`apps/server/src/security-posture.ts`) makes startup fail. `commercial` also requires an explicit list of CORS origins. The `self` tier, the desktop app, and development environments do nothing of the kind: tokens are ignored, and single-user local play is not affected.
 
 The import of community server code (`entry`, handlers, hooks, wires, runtime JavaScript) is guarded by two-step approval: first `covel:plugin-server-code` is granted, then the specific operations.
 

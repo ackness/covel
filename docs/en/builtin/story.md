@@ -143,7 +143,7 @@ Updating the memory takes one more model call. It runs in the background, so you
 
 A world can replace the four default blocks with its own memory blocks, so memory records clues, relics, countdowns and similar things that suit its genre. The file is `data/memory-blocks.json`. Write one object: `id` is `world`, and the `blocks` list has, for each item, `label`, `displayName` and `extractionHint`. `icon` and `maxChars` are optional. Do not add a block for data that another dimension or plugin already records.
 
-"Mistport Chronicles" (雾港·裂潮纪) includes such a file. For field details, see [World data reference](../reference/world-data.md).
+"Mistport Chronicles" (雾港・裂潮纪) includes such a file. For field details, see [World data reference](../reference/world-data.md).
 
 ## History Compaction (`history-compaction`)
 

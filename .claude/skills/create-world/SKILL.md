@@ -46,7 +46,7 @@ pnpm describe:authoring
 | ----------------------- | ---------------------------- |
 | `worlds/mistport`       | 传统叙事调查剧，含隐藏剧情   |
 | `worlds/haruka-academy` | 视觉小说，立绘加场景背景     |
-| `worlds/emberback`      | RPG：判定、任务、背包、好感  |
+| `worlds/emberback`      | 英文世界，多语言示范  |
 | `worlds/lantern-barrow` | 跑团：开局配点加掷骰检定     |
 
 `worlds/_archive/` 下的世界不会被加载，不要当作样例。

@@ -64,11 +64,11 @@ This page lists every endpoint, request field, response, and error code. Use it 
 
 The environment variable `STORE_BACKEND` decides where the server keeps its data:
 
-| Backend    | Value              | Use                                                                                       |
-| ---------- | ------------------ | ----------------------------------------------------------------------------------------- |
-| SQLite     | `sqlite` (default) | Local development and single-machine deployment. Data is in `./data/covel.db`             |
-| Memory     | `memory`           | Tests, and temporary runs in browser private mode. Data is lost when the process restarts |
-| PostgreSQL | `pg`               | Production. Needs `DATABASE_URL`                                                          |
+| Backend    | Value              | Use                                                                                                                                                                                                                                                                       |
+| ---------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| SQLite     | `sqlite` (default) | The desktop app and the self-hosted web app both use it, so ordinary players do not need to change it. Data is in `./data/covel.db` (the desktop app uses `<data_root>/covel.db`)                                                                                         |
+| Memory     | `memory`           | Tests, and turn runs in browser private mode (saves stay in the browser; meant for the official web app later). Data is lost when the process restarts                                                                                                                    |
+| PostgreSQL | `pg`               | For professional developers and users with special needs, such as multi-process deployments or an existing database. Needs `DATABASE_URL`. Same external behavior as SQLite (limits for several processes: [multi-instance limits](#limits-of-running-several-instances)) |
 
 Two more points:
 
@@ -5892,23 +5892,30 @@ interface SubscriptionEvent {
 
 ## Storage mode notes
 
-Covel has three deployment tiers. Each tier stores data in a different way.
+Covel has three deployment forms, and each one stores data in its own way: the desktop app, the self-hosted web app, and the official web app. The first two are supported now; the official web app is not supported yet. The commercial edition is not built yet, and this repository does not maintain it.
 
 In the browser, you can also switch the storage mode:
 
 - `local`: data is saved in the player's browser, in IndexedDB.
 - `remote`: data is saved through the server API, to the backend set by `STORE_BACKEND`.
 
-### T1: Self-deploy
+### Desktop app
 
-- **Server storage**: SQLite (the default, `./data/covel.db`). You can switch explicitly to Memory, but only for one-off tests.
+- **Server storage**: SQLite, in a file on this computer at `<data_root>/covel.db` (`~/.covel/data/covel.db` by default). Ordinary players do not need to deal with the database. PostgreSQL is also supported, for professional developers.
+- **Network**: binds only to the loopback address (`127.0.0.1`).
+- **Authentication**: none. Tokens are ignored.
+
+### Self-hosted web app
+
+- **Server storage**: SQLite by default (`./data/covel.db`). Developers and users with special needs can switch to PostgreSQL. The Docker setup in this repository uses PostgreSQL.
 - **Front-end storage**: remote is the default, and it uses the server's SQLite. Local mode uses the browser's IndexedDB.
 - **Data flow**:
   - Remote mode: the front end reads and writes the server's store through the API.
   - Local mode: game records are saved as versioned checkpoints in the Dexie `covel-browser-vault`. Before a run, they are uploaded to a temporary MemoryStore. After the run, `SessionCommit` is applied in one atomic step.
   - Server features such as world generation hand their result to the front end through a `return-only` response, and the front end saves it.
 - **API keys**: the user manages them. They are saved in the browser's localStorage.
-- **Authentication**: none
+- **Authentication**: none. The `self` tier ignores tokens.
+- **Scope**: one personal instance. It does not separate several players.
 
 ```bash
 # How to start
@@ -5916,37 +5923,33 @@ pnpm dev:server                       # SQLite backend (default)
 STORE_BACKEND=memory pnpm dev:server  # Temporary Memory backend (data is lost on restart)
 ```
 
-### T2: Demo host
+### Official web app (not supported yet)
 
-- **Server storage**: Memory or SQLite
-- **Front-end storage**: demos that allow public writes can use local IndexedDB. Private demos can also use remote server storage.
-- **API keys**: the user manages them. They must be sent over HTTPS.
+> [!NOTE]
+> The official web app is not supported yet. This section describes its design and the parts that already exist in the code.
+
+- **Server storage**: `DEPLOYMENT_TIER=demo`, `STORE_BACKEND=memory` (see `render.yaml` in the repository).
+- **Saves**: the copy in the player's browser IndexedDB is the save. The server keeps the session in memory to run turns and writes nothing to a database. The in-memory copy is gone when the session is deleted or the server restarts.
+- **API keys**: they are stored in the browser and travel with each request in the `X-Provider-Keys` header. The server never writes them to storage; when a background job needs one, it waits in memory for the job to start: 5 minutes by default, or the job's queue deadline (`maxQueueMs`) when it declares one, and the running job holds it until it ends.
 - **Authentication**: **required**.
-  - Session-scoped endpoints enforce the session owner token.
-  - Global endpoints and admin endpoints enforce the operator token (`COVEL_DESKTOP_REST_TOKEN`).
-  - If no operator token is set, `validateSecurityPosture` refuses to start.
+  - At startup you must set the operator token (`COVEL_DESKTOP_REST_TOKEN`) and the media secret (`COVEL_MEDIA_TOKEN_SECRET`). Without them the server refuses to start.
+  - Session-scoped endpoints enforce the session owner token. Global endpoints and admin endpoints enforce the operator token.
   - See the [authentication section](#authentication-session-owner-token) above for details.
+- **Note**: saves stay out of the server's database because of the deployment settings: `render.yaml` sets `STORE_BACKEND` to `memory`. The `demo` tier itself also accepts `sqlite` and `pg`.
 
-### T3: Commercial
+### Commercial edition (not built)
 
-- **Server storage**: PostgreSQL (you must set `DATABASE_URL`)
-- **Front-end storage**: all create, read, update, and delete of game data goes through the server API. The browser keeps only a display cache: form submission markers and the history timeline, checked against the session identity.
-- **API keys**: managed at two levels, by the platform and by the user
-- **Authentication**: required
-
-```bash
-# How to start
-STORE_BACKEND=pg DATABASE_URL=postgresql://covel:pass@localhost:5432/covel pnpm dev:server
-```
+- It has no accounts, tenant isolation, or quotas. This repository does not maintain it.
+- The `commercial` tier (`DEPLOYMENT_TIER=commercial`) stays in the code only as the strictest safety setting. It is not a working product form.
 
 ### Comparing storage backends
 
-| Capability  | Memory                 | SQLite                                                  | PostgreSQL                                                                              |
-| ----------- | ---------------------- | ------------------------------------------------------- | --------------------------------------------------------------------------------------- |
-| Persistence | No (lost on restart)   | Yes (local file)                                        | Yes (remote database)                                                                   |
-| Concurrency | Single process         | Single process                                          | Multiple processes (`pg_advisory_lock` makes one session run serially across processes) |
-| Use case    | Tests / one-off demos  | Single-machine deployment (default)                     | Production                                                                              |
-| Setup       | `STORE_BACKEND=memory` | Default (`STORE_BACKEND=sqlite`, can be set explicitly) | `STORE_BACKEND=pg` + `DATABASE_URL`                                                     |
+| Capability  | Memory                                                   | SQLite                                                  | PostgreSQL                                                                              |
+| ----------- | -------------------------------------------------------- | ------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| Persistence | No (lost on restart)                                     | Yes (local file)                                        | Yes (remote database)                                                                   |
+| Concurrency | Single process                                           | Single process                                          | Multiple processes (`pg_advisory_lock` makes one session run serially across processes) |
+| Use case    | Tests; temporary server storage for browser private mode | Desktop app and self-hosted web app (default)           | Professional developers and users with special needs                                    |
+| Setup       | `STORE_BACKEND=memory`                                   | Default (`STORE_BACKEND=sqlite`, can be set explicitly) | `STORE_BACKEND=pg` + `DATABASE_URL`                                                     |
 
 > [!NOTE]
 > **Session locks for multi-process deployments**

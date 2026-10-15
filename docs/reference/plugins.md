@@ -102,7 +102,7 @@ Extract facts supported by runtime-inputs.narrative.value, then call save-facts.
 <!-- prettier-ignore -->
 | 根字段 | 含义 |
 | --- | --- |
-| `id`, `kind` | 包身份；`kind` 为 `core` 或 `plugin` |
+| `id`, `kind` | 包身份；`kind` 为 `core`（默认加入每一局）或 `plugin`（选了才启用） |
 | `version`, `displayName`, `description`, `tags` | 元数据；标签用于准备页的分组和筛选，不决定运行时调度 |
 | `covel` | 适配的宿主版本范围，如 `">=0.0.45"`；范围之外的宿主不安装也不加载该包 |
 | `author`, `license`, `homepage` | 作者信息，只用于展示；见[作者信息](#作者信息) |
@@ -886,7 +886,7 @@ pnpm lint
 
 ## 内置插件一览
 
-下面是 [plugins/](../../plugins/) 里随 Covel 内置的全部插件（不含 `_archive/`）。`core` 是基础功能，`plugin` 是可选玩法。“runtime”一列里，“内联”表示只有根文件里的一个 runtime，“无”表示只有 entry、扩展或界面。
+下面是 [plugins/](../../plugins/) 里随 Covel 内置的全部插件（不含 `_archive/`）。`kind: core` 表示这个插件默认加入每一局游戏，玩家可以明确排除；`kind: plugin` 要选了才启用。“runtime”一列里，“内联”表示只有根文件里的一个 runtime，“无”表示只有 entry、扩展或界面。
 
 <!-- prettier-ignore -->
 | ID | 名称 | `kind` | 提供的契约 | runtime | 做什么 |

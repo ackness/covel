@@ -48,7 +48,7 @@ the characters, and the plugin combination. Then add portraits, scenes, and loca
 
 - The package includes usage instructions, the required version, configuration, permissions, and the install and uninstall steps.
 - Explain how to observe a successful result, how to reproduce the verification, and which platforms were actually covered and which limits remain.
-- Plugins and world packages can be versioned independently. When a change affects a shared contract, update the reference and the compatibility notes together.
+- Plugins and world packages can be versioned independently. When a change affects a shared contract, update the reference and note the breaking change in the changelog.
 - Do not put keys, private saves, logs, or the author's machine paths into examples or distribution packages.
 
 Later development skills will reuse this workflow and the task-specific tutorials. This page does not change what permissions the in-game agent has.

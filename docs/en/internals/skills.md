@@ -6,12 +6,12 @@ A skill is a set of operating instructions written for a coding assistant. The a
 
 ## The four current skills
 
-| Skill                     | What it does                                                                                   | When it is used                                                         |
-| ------------------------- | ---------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
-| `create-plugin`           | Creates or changes a plugin: manifest, runtime, tools, UI panels. Validates it when done       | When you say you want a new plugin, a new game mechanic, or a new panel |
-| `create-world`            | Generates a world package from your idea, writes it into `worlds/`, and validates it           | When you say you want a new world or a new setting                      |
-| `covel-static-turn-audit` | Reads the code only, and works out whether scheduling of the runtimes in one turn can go wrong | Only when you explicitly ask for this audit                             |
-| `covel-readonly-audit`    | Works by reading only. Checks the whole repository once, and writes the result as a report     | Only when you explicitly ask for this audit                             |
+| Skill                     | What it does                                                                                                    | When it is used                                                         |
+| ------------------------- | --------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| `create-plugin`           | Creates or changes a plugin: manifest, runtime, tools, UI panels. Validates it when done                        | When you say you want a new plugin, a new game mechanic, or a new panel |
+| `create-world`            | Generates a world package from your idea, writes it into `worlds/`, and validates it                            | When you say you want a new world or a new setting                      |
+| `covel-static-turn-audit` | Reads the code only, and works out whether scheduling of the runtimes in one turn can go wrong                  | Only when you explicitly ask for this audit                             |
+| `covel-readonly-audit`    | Works by reading only. Checks the whole repository once, and writes a summary, a full report and an issue index | Only when you explicitly ask for this audit                             |
 
 The last two are heavy tasks that read a lot of code. Their instructions say that they are "used only when the user explicitly asks". The assistant does not start them on its own.
 
@@ -63,7 +63,12 @@ It runs nothing at all. It does not change project files, does not run programs,
 1. By default, it gives only an audit plan. It reads the source code only after you clearly say "start".
 2. It reads through the areas one by one first: frontend, backend, storage, model gateway, plugins, world packages, kernel, desktop app, media, suspend and resume with background tasks, and installation and trust boundaries.
 3. Then it follows the key paths that cross several layers, and checks whether the layers connect correctly.
-4. It records each area and each path as it reads, and finally puts them into one report at `devs/docs/audits/<date>-readonly-audit/README.md`. This folder is not committed to the repository.
+4. It records each area and each path as it reads, and finally writes three files in `devs/docs/audits/<date>-readonly-audit/`. This folder is not committed to the repository.
+   - `README.md`: the summary; read it first. It gives the conclusion, the issues to fix first, the fix order, and what you need to decide.
+   - `INDEX.md`: every issue sorted by severity, one per line, with its code location. Pick issues from it when you fix them.
+   - `REPORT.md`: the full report, with the complete evidence for every issue.
+
+The areas are split among subagents, with at most 6 running at once by default. Mechanical comparisons, such as checking the language files, go to a cheaper, faster model, and logic that crosses modules goes to the strongest model. The rules are in [`references/dispatch.md`](../../../.claude/skills/covel-readonly-audit/references/dispatch.md).
 
 The difference from the previous skill: this one covers the whole repository and runs nothing. The previous one looks only at runtime scheduling, and it can use small scripts to verify logic.
 
@@ -106,7 +111,7 @@ Then it follows the guidance in that file, and reads the `references/` in the sa
 └── covel-readonly-audit/
     ├── SKILL.md
     ├── agents/openai.yaml
-    └── references/           What to audit, key paths, and how to write the report
+    └── references/           What to audit, key paths, how to write the report, and how to schedule subagents
 ```
 
 The format follows the specification at [agentskills.io](https://agentskills.io).

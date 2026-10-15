@@ -6,7 +6,7 @@ The official catalogue is [covel-ai/covel-plugins](https://github.com/covel-ai/c
 
 ## Categories and trust
 
-- Core plugins ship built into Covel. Official extensions and community plugins are installed when needed.
+- Built-in plugins ship with Covel. Official extensions and community plugins are installed when needed.
 - Maintainer labels and feature categories are for display only. They take no part in permission decisions.
 - The root manifest's `kind: core | plugin` says what role the plugin plays. `source: builtin | community` is decided by the directory where the plugin is found.
 - An official plugin installed from outside is also `community`. It is not enabled automatically, and it does not skip the session's code authorization.
