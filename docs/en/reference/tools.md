@@ -339,6 +339,7 @@ Responses a submit can get:
 
 Character creation uses the dedicated `create-character-form` tool. It collects only the required name, and the string or enum attributes that the world declares.
 
+- When creating the player, declared string name attributes (`name`, `characterName`, `playerName`, `姓名`) use the character name submitted in the form, overriding the schema's default name.
 - A model cannot set a validator for it. There is no `validation` argument, and if one is passed it is dropped. The tool attaches the `player-name` validator that `char-creator` registers itself, and it rejects a character name that is the same as the name or an alias of a character already in the world (see [World Model](./world-model.md)). The other field constraints are checked by the tool and by the submit endpoint.
 - An accepted character form does not leave the session stuck in setup:
   - When a world attribute's default value does not match its own type, that default is not written when the character is created.
@@ -1104,6 +1105,8 @@ At the start of a game, it does two things at once: it sets the character attrib
 | description  | I18nText       |          | Description of the attribute (a string, or a locale → string record)  |
 
 **Output**: `{success, attributeCount, dimensionCount, worldSchema, preGameDone:true}`
+
+Generated `defaultValue`s are starting values for every new player and NPC, not examples of a person from the lore. Name, role, background, and other identity fields belong in `bio`, with neutral or empty values. The tool clears generated `bio` string defaults to empty strings, arrays to empty arrays, and objects and maps to empty objects; it removes enum defaults. Nested biography fields follow the same rules. Numeric and boolean defaults remain. The guard adopts author-provided schemas unchanged, without this normalization.
 
 Whose dimension definitions are used:
 

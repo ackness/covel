@@ -37,7 +37,12 @@ export function createWorldAttributeSchema(z) {
         .number()
         .optional()
         .describe("Highest value of a number attribute; set it with `min`"),
-      defaultValue: z.unknown().optional().describe("Default value"),
+      defaultValue: z
+        .unknown()
+        .optional()
+        .describe(
+          "Starting value for every new, unnamed character, not an example NPC. Use neutral or empty identity values (name, role, background); never copy a specific character from the lore. Put identity fields in bio. Generated bio text/compound defaults are cleared and bio enum defaults are omitted; numeric and boolean defaults remain.",
+        ),
       itemType: z
         .enum(["string", "number"])
         .optional()
@@ -62,7 +67,9 @@ export function createWorldAttributeSchema(z) {
         ),
       category: z
         .enum(["stats", "bio", "abilities", "equipment", "social"])
-        .describe("Attribute category"),
+        .describe(
+          "Attribute category; name, role, background and other identity fields belong in bio",
+        ),
       description: i18nText
         .optional()
         .describe("Attribute description (string or i18n record)"),
@@ -72,10 +79,47 @@ export function createWorldAttributeSchema(z) {
   return attributeSchema;
 }
 
+/**
+ * Generated schemas describe any new character, never the biography of one
+ * person in the lore. Author-provided schemas go through guard.js unchanged.
+ * Clear biography values by type instead of guessing names from prose or IDs.
+ */
+function neutralBiographyDefaults(attributes, inBiography = false) {
+  return attributes.map((attribute) => {
+    const biography = inBiography || attribute.category === "bio";
+    const normalized = { ...attribute };
+    if (attribute.subSchema)
+      normalized.subSchema = neutralBiographyDefaults(
+        attribute.subSchema,
+        biography,
+      );
+    if (biography && Object.hasOwn(attribute, "defaultValue")) {
+      switch (attribute.type) {
+        case "string":
+          normalized.defaultValue = "";
+          break;
+        case "enum":
+          // An empty string need not be one of the options. No choice is
+          // safer than assigning every new character one NPC's affiliation.
+          delete normalized.defaultValue;
+          break;
+        case "array":
+          normalized.defaultValue = [];
+          break;
+        case "object":
+        case "map":
+          normalized.defaultValue = {};
+          break;
+      }
+    }
+    return normalized;
+  });
+}
+
 export function initializeCharacterSchema(params, context) {
   const worldSchema = {
     types: params.types ?? ["npc", "companion"],
-    attributes: params.attributes,
+    attributes: neutralBiographyDefaults(params.attributes),
   };
   return withPendingProposals(
     { success: true, attributeCount: params.attributes.length, worldSchema },
