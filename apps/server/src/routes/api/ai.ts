@@ -308,9 +308,6 @@ function withGeneratedPackageMetadata(
       ...(packageContent.contractData?.length
         ? { contractData: packageContent.contractData }
         : {}),
-      ...(packageContent.characters.length > 0
-        ? { characterBlueprints: packageContent.characters }
-        : {}),
       ...(embeddedLorebook.length > 0 ? { embeddedLorebook } : {}),
       generatedPackageSummary: {
         characters: packageContent.characters.length,

@@ -279,7 +279,7 @@ test.describe("AI World Generation", () => {
     expect(
       (metadata!.generatedPackageSummary as { characters: number }).characters,
     ).toBeGreaterThanOrEqual(3);
-    expect(Array.isArray(metadata?.characterBlueprints)).toBe(true);
+    expect(Array.isArray(metadata?.embeddedCharacters)).toBe(true);
     expect(Array.isArray(metadata?.embeddedLorebook)).toBe(true);
 
     // At minimum, geography and tone should be generated

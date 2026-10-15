@@ -88,9 +88,7 @@ function contentFromRecord(record: WorldRecord): PackageContent {
   const list = (value: unknown) =>
     Array.isArray(value) ? value.filter(isEntry) : [];
   const content: PackageContent = {
-    characters: list(
-      metadata.characterBlueprints ?? metadata.embeddedCharacters,
-    ),
+    characters: list(metadata.embeddedCharacters),
     lorebook: [],
     rules: [],
     contractData: list(metadata.contractData).map(

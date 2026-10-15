@@ -32,9 +32,6 @@ export function parseWorldDataTarget(
     if (segments.some((segment) => FORBIDDEN_METADATA_SEGMENTS.has(segment))) {
       return null;
     }
-    if (segments.length === 1 && segments[0] === "characterBlueprints") {
-      return null;
-    }
     return { kind: "world-metadata", path: segments };
   }
 
