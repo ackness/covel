@@ -147,8 +147,8 @@ describe("GitHub plugin installation", () => {
       source: "community",
     });
     expect(
-      fetchMock.mock.calls.filter(([url]) =>
-        url.startsWith("https://api.github.com"),
+      fetchMock.mock.calls.filter(
+        ([url]) => new URL(url).origin === "https://api.github.com",
       ),
     ).toHaveLength(1);
   });

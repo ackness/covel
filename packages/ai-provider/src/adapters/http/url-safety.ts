@@ -62,13 +62,23 @@ export function validateBaseUrl(url: string): boolean {
   return isDomainAllowed(parsed.hostname);
 }
 
+/** True unless the base URL is HTTPS or plain HTTP to a loopback host name. */
+function mayExposeKeys(baseUrl: string): boolean {
+  let parsed: URL;
+  try {
+    parsed = new URL(baseUrl);
+  } catch {
+    return true;
+  }
+  if (parsed.protocol === "https:") return false;
+  return !(
+    parsed.protocol === "http:" &&
+    LOOPBACK_HOSTNAMES.has(normalizeHost(parsed.hostname))
+  );
+}
+
 export function buildProviderUrl(baseUrl: string, path: string): string {
-  if (
-    baseUrl &&
-    !baseUrl.startsWith("https://") &&
-    !baseUrl.startsWith("http://localhost") &&
-    !baseUrl.startsWith("http://127.0.0.1")
-  ) {
+  if (baseUrl && mayExposeKeys(baseUrl)) {
     console.warn(
       `[ai-provider] Non-HTTPS base URL detected: ${baseUrl}. API keys may be sent in plaintext.`,
     );
