@@ -11,7 +11,7 @@ The rule behind the split is: **the model reads the text, and your code checks a
 - Run the commands below from the root directory of the Covel repository.
 
 > [!IMPORTANT]
-> The plugin on this page lives in the user plugin directory, so the code has no `import` statements for external packages. Covel passes in everything it needs. Installing the plugin does not run `npm install`. Only the built-in plugins under `plugins/` in the repository can directly `import "@covel/plugin-handlers-utils"`.
+> The plugin on this page lives in the user plugin directory. Covel provides `@covel/plugin-handlers-utils` and `zod`, so the code can import them directly. Installing a plugin does not run `npm install`. Bundle other dependencies into the plugin.
 
 ## 1. Create the folders
 
@@ -97,6 +97,8 @@ This plugin has only one runtime, so you do not need to write `agent.tools.plugi
 `tools/save-note.js`:
 
 ```js
+import { makeProposal } from "@covel/plugin-handlers-utils";
+
 export default function makeSaveNote({ tool, z, withPendingProposals }) {
   return tool({
     name: "save-note",
@@ -106,19 +108,16 @@ export default function makeSaveNote({ tool, z, withPendingProposals }) {
       text: z.string().min(1).max(300),
     }),
     async execute(params, context) {
-      const proposal = {
-        id: crypto.randomUUID(),
-        type: "plugin.data",
-        source: { pluginId: context.pluginId, runtimeId: context.runtimeId },
-        sessionId: context.sessionId,
-        turnId: context.turnId,
-        timestamp: new Date().toISOString(),
-        payload: {
+      const proposal = makeProposal(
+        context,
+        new Date().toISOString(),
+        "plugin.data",
+        {
           namespace: "notes",
           key: params.id,
           value: { id: params.id, text: params.text },
         },
-      };
+      );
       return withPendingProposals({ saved: true, id: params.id }, [proposal]);
     },
   });
@@ -143,7 +142,7 @@ Three rules:
 - A tool that only reads data can return its content directly. It does not need `withPendingProposals`.
 
 > [!NOTE]
-> Built-in plugins in the repository can use the SDK's `makeProposal(context, timestamp, "plugin.data", payload)` to create the same request, which saves a few lines.
+> `makeProposal` fills in the request's ID, source and turn information. Use `context.random` for game randomness; the SDK generates request IDs.
 
 `schemas/note.schema.json` describes the shape of one record. When a world package imports content into this data space, it checks the content against this schema. See [Advanced · Data contracts and world import](./advanced.md#data-contracts-and-world-import). The tool's own writes are guarded by the `parameters` above, so the two must have the same shape:
 

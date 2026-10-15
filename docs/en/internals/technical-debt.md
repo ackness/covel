@@ -8,10 +8,9 @@ This is a list of what exists now, not a history of fixed problems. Use this com
 rg -n "ponytail:" apps packages plugins
 ```
 
-The source currently has 12 markers, and each row in the three tables below matches one of them.
-
 > [!IMPORTANT]
 > When you add or remove a `ponytail:` comment, update this page in the same change.
+> `pnpm check:scripts` and `pnpm test:docs` check that each marker has one row in each language, and that entries without a marker have been removed.
 
 ## Kernel / runtime
 

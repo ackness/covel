@@ -11,7 +11,7 @@
 - 下面的命令都在 Covel 仓库的根目录运行。
 
 > [!IMPORTANT]
-> 这一页的插件放在用户插件目录里，所以代码里没有任何 `import` 外部包的语句：需要的东西都由 Covel 传进来。安装插件时不会执行 `npm install`。仓库 `plugins/` 下的内置插件才可以直接 `import "@covel/plugin-handlers-utils"`。
+> 这一页的插件放在用户插件目录里。Covel 提供 `@covel/plugin-handlers-utils` 和 `zod`，代码可以直接导入；安装插件时不会执行 `npm install`。其他依赖需要打包进插件。
 
 ## 1. 建文件夹
 
@@ -97,6 +97,8 @@ Read `runtime-inputs.narrative.value`. Call `save-note` one time with one fact t
 `tools/save-note.js`：
 
 ```js
+import { makeProposal } from "@covel/plugin-handlers-utils";
+
 export default function makeSaveNote({ tool, z, withPendingProposals }) {
   return tool({
     name: "save-note",
@@ -106,19 +108,16 @@ export default function makeSaveNote({ tool, z, withPendingProposals }) {
       text: z.string().min(1).max(300),
     }),
     async execute(params, context) {
-      const proposal = {
-        id: crypto.randomUUID(),
-        type: "plugin.data",
-        source: { pluginId: context.pluginId, runtimeId: context.runtimeId },
-        sessionId: context.sessionId,
-        turnId: context.turnId,
-        timestamp: new Date().toISOString(),
-        payload: {
+      const proposal = makeProposal(
+        context,
+        new Date().toISOString(),
+        "plugin.data",
+        {
           namespace: "notes",
           key: params.id,
           value: { id: params.id, text: params.text },
         },
-      };
+      );
       return withPendingProposals({ saved: true, id: params.id }, [proposal]);
     },
   });
@@ -143,7 +142,7 @@ export default function makeSaveNote({ tool, z, withPendingProposals }) {
 - 只读数据的工具直接返回内容就行，不需要 `withPendingProposals`。
 
 > [!NOTE]
-> 仓库内置插件可以用 SDK 的 `makeProposal(context, timestamp, "plugin.data", payload)` 生成同样的请求，少写几行。
+> `makeProposal` 补齐请求的 ID、来源和回合信息。游戏里的随机数用 `context.random`；请求 ID 由 SDK 生成。
 
 `schemas/note.schema.json` 描述一条记录的形状。世界包往这个数据空间导入内容时按它检查，见[进阶 · 数据契约与世界导入](./advanced.md#数据契约与世界导入)。工具自己的写入靠上面的 `parameters` 把关，所以两边要写成一样的形状：
 

@@ -2,9 +2,10 @@
  * Plugin-local tool: record-note
  *
  * Persists one plugin-owned note through the proposal pipeline. The framework
- * injects tool, z, shortId, and withPendingProposals; no dependency import is
- * required here.
+ * injects tool, z, shortId, and withPendingProposals. The public SDK builds
+ * the proposal envelope.
  */
+import { makeProposal } from "@covel/plugin-handlers-utils";
 
 /** @param {import("@covel/plugin-handlers-utils/plugin-api").PluginToolkit} toolkit */
 export default function ({ tool, z, shortId, withPendingProposals }) {
@@ -43,22 +44,11 @@ export default function ({ tool, z, shortId, withPendingProposals }) {
       };
 
       return withPendingProposals({ recorded: true, key, note }, [
-        {
-          id: crypto.randomUUID(),
-          type: "plugin.data",
-          source: {
-            pluginId: context.pluginId,
-            runtimeId: context.runtimeId,
-          },
-          turnId: context.turnId,
-          sessionId: context.sessionId,
-          payload: {
-            namespace: "notes",
-            key,
-            value: note,
-          },
-          timestamp: now,
-        },
+        makeProposal(context, now, "plugin.data", {
+          namespace: "notes",
+          key,
+          value: note,
+        }),
       ]);
     },
   });
