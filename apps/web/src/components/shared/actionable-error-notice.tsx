@@ -4,6 +4,7 @@ import {
   classifyActionableError,
   type ActionableErrorKind,
 } from "@/lib/actionable-error.js";
+import { describeProviderFailure } from "@/lib/provider-failure-hint.js";
 
 const MESSAGE_KEYS: Record<ActionableErrorKind, string> = {
   auth: "error.actionable.auth",
@@ -40,10 +41,12 @@ const DEFAULT_MESSAGES: Record<ActionableErrorKind, string> = {
 export function ActionableErrorNotice({
   error,
   kind: kindOverride,
+  providerFailureKind,
   layout = "inline",
 }: {
   error?: string;
   kind?: ActionableErrorKind;
+  providerFailureKind?: string;
   layout?: "inline" | "panel";
 }) {
   const { t } = useTranslation();
@@ -51,6 +54,11 @@ export function ActionableErrorNotice({
   const [copied, setCopied] = useState(false);
   const detailId = useId();
   const kind = kindOverride ?? classifyActionableError(error);
+  const providerHint = describeProviderFailure(
+    t,
+    providerFailureKind,
+    undefined,
+  );
 
   useEffect(() => {
     setExpanded(false);
@@ -83,11 +91,13 @@ export function ActionableErrorNotice({
             : "contents"
         }
       >
-        <span className="shrink-0 rounded-sm border border-destructive/40 bg-destructive/5 px-1.5 py-0.5 font-mono text-[10px] uppercase text-destructive">
-          {t(`error.actionable.badge.${kind}`)}
-        </span>
+        {!providerHint && (
+          <span className="shrink-0 rounded-sm border border-destructive/40 bg-destructive/5 px-1.5 py-0.5 font-mono text-[10px] uppercase text-destructive">
+            {t(`error.actionable.badge.${kind}`)}
+          </span>
+        )}
         <span className="min-w-0 text-[11px] text-destructive">
-          {t(MESSAGE_KEYS[kind], DEFAULT_MESSAGES[kind])}
+          {providerHint ?? t(MESSAGE_KEYS[kind], DEFAULT_MESSAGES[kind])}
         </span>
         {error && (
           <button

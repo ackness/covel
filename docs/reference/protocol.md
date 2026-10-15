@@ -159,7 +159,7 @@ return { result: execution.result, committed: outcome.status === "committed" };
 | `runtime.started`       | S→C  | 单个 runtime 开始                                                                   | `{ runtimeId, pluginId, turnId, runId, label }`                                                                         |
 | `runtime.deferred`      | S→C  | staged runtime 已随原始回合提交并转入后台                                           | `{ runtimeId, pluginId, jobId, sourceTurnId }`                                                                          |
 | `runtime.completed`     | S→C  | 单个 runtime 完成                                                                   | `{ runtimeId, pluginId, turnId, runId, status, durationMs }`                                                            |
-| `runtime.failed`        | S→C  | 单个 runtime 失败                                                                   | `{ runtimeId, pluginId, turnId, runId, status, durationMs, error }`                                                     |
+| `runtime.failed`        | S→C  | 单个 runtime 失败                                                                   | `{ runtimeId, pluginId, turnId, runId, status, durationMs, error, errorKind? }`                                         |
 | `execution.completed`   | S→C  | 回合执行终态                                                                        | `{ runtimeCount, resultCount, durationMs, committed, error?, abortReason?, resync? }`，各字段见下                       |
 
 `execution.completed` 的字段：
@@ -173,6 +173,8 @@ return { result: execution.result, committed: outcome.status === "committed" };
 
 > [!NOTE]
 > **开场接力。** 一次玩家动作完成了最后一个 setup runtime 时，`POST /api/actions` 的同一条 SSE 流会自动接着跑一个主循环回合（见 [api.md § POST /api/actions](./api.md)）。这时流里会出现**两轮** `execution.started` 和 runtime 生命周期事件，它们外层的 `turnId` 不同（setup 回合和接力回合）。但只有**一个** `execution.completed` 收尾。前端靠它结束“执行中”的状态，并按 `committed` 处理先行显示的内容。setup 提交失败时不会启动接力，直接以 `committed: false` 结束。玩家在接力开始前停止时，接力不再开始，`execution.completed` 带接力回合的 `turnId` 和 `abortReason: "aborted-by-player"`。
+
+`runtime.failed.errorKind` 是可选的模型失败类别，取值见 [模型失败分类](./slots.md#连接测试与失败原因)。回合失败提示复用连接测试的处理建议，服务商的原话保留在可展开的详情里。无法分类的异常用 `unknown`；没有模型异常的失败可以不带此字段。`io.concealed` 仍用固定文本替换错误详情，但保留类别，因为类别不含隐藏内容。
 
 **`runtime.deferred` 是“移交公告”**
 

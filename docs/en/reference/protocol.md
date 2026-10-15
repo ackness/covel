@@ -159,7 +159,7 @@ This lets stage animations react while the narrative is still being generated, a
 | `runtime.started`       | S→C  | One runtime starts                                                                                                     | `{ runtimeId, pluginId, turnId, runId, label }`                                                                         |
 | `runtime.deferred`      | S→C  | A staged runtime was committed with the original turn and moved to the background                                      | `{ runtimeId, pluginId, jobId, sourceTurnId }`                                                                          |
 | `runtime.completed`     | S→C  | One runtime completes                                                                                                  | `{ runtimeId, pluginId, turnId, runId, status, durationMs }`                                                            |
-| `runtime.failed`        | S→C  | One runtime fails                                                                                                      | `{ runtimeId, pluginId, turnId, runId, status, durationMs, error }`                                                     |
+| `runtime.failed`        | S→C  | One runtime fails                                                                                                      | `{ runtimeId, pluginId, turnId, runId, status, durationMs, error, errorKind? }`                                         |
 | `execution.completed`   | S→C  | The final state of a turn execution                                                                                    | `{ runtimeCount, resultCount, durationMs, committed, error?, abortReason?, resync? }`, each field explained below       |
 
 Fields of `execution.completed`:
@@ -173,6 +173,8 @@ Fields of `execution.completed`:
 
 > [!NOTE]
 > **Opening handoff.** When a player action completes the last setup runtime, the same SSE stream of `POST /api/actions` automatically goes on to run one main-loop turn (see [api.md § POST /api/actions](./api.md)). In this case the stream shows **two** rounds of `execution.started` and runtime lifecycle events, and their outer `turnId` values differ (the setup turn and the handoff turn). But only **one** `execution.completed` closes the stream. The frontend uses it to end the "running" state, and it handles the early content according to `committed`. If the setup commit fails, no handoff starts, and the stream ends directly with `committed: false`. If the player stops before the handoff starts, it does not start, and `execution.completed` carries the handoff turn's `turnId` and `abortReason: "aborted-by-player"`.
+
+`runtime.failed.errorKind` is an optional model failure category; see [failure categories](./slots.md#connection-tests-and-failure-reasons). The turn's failure notice uses the same remedies as the connection test and keeps the provider's message in expandable details. An unclassified exception uses `unknown`; failures without a model exception may omit the field. `io.concealed` still replaces error details with fixed text, but keeps the category because it contains no hidden content.
 
 **`runtime.deferred` is a "handoff notice"**
 

@@ -96,6 +96,10 @@ export function buildSnapshotExecutionSteps(
       runtimeId,
       turnId,
       status,
+      errorKind:
+        status === "failed" && typeof payload.errorKind === "string"
+          ? payload.errorKind
+          : undefined,
       pluginId:
         typeof payload.pluginId === "string"
           ? payload.pluginId

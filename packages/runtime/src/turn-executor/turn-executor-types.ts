@@ -64,6 +64,7 @@ export interface AgentLoopDeps {
     status: string;
     durationMs: number;
     error?: string;
+    errorKind?: import("@covel/shared").ProviderFailureKind;
   }) => Promise<void>;
   /**
    * Trace emitter for per-turn observability. When present, runtime emits

@@ -1,3 +1,5 @@
+import type { ProviderFailureKind } from "../llm-failure-kind.js";
+
 /**
  * Execution types for turns, runtime results, and tool calls.
  */
@@ -73,6 +75,8 @@ export interface RuntimeResult {
   readonly durationMs: number;
   readonly tokenUsage?: TokenUsage;
   readonly error?: string;
+  /** Classified provider failure; absent for non-provider result failures. */
+  readonly errorKind?: ProviderFailureKind;
   readonly timestamp: string;
 }
 
