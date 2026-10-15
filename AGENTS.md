@@ -275,7 +275,9 @@ directly and bundles only its other dependencies.
 workspace package; `shared` sits directly above it, and `@covel/server` composes
 every feature package. `@covel/settings` is split from `shared` so pure-type
 consumers avoid browser/Electron code. Exact edges live in each `package.json`;
-`pnpm check:boundaries` enforces public entry points and package direction.
+`pnpm check:boundaries` enforces public entry points, package direction, and an
+external importer or a reasoned exception for every package export.
+`test-runtime` exposes only its CLI, not a package import entry.
 
 ## Coding Style
 
