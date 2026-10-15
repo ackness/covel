@@ -239,3 +239,10 @@ export {
   replacePluginWires,
   type WireOwner,
 } from "./wire-lifecycle.js";
+
+export {
+  configureProviderHostPolicy,
+  providerHostPolicy,
+  PERSONAL_PROVIDER_HOST_POLICY,
+  type ProviderHostPolicy,
+} from "./host-policy.js";

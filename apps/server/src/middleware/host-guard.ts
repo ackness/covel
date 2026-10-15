@@ -1,6 +1,6 @@
 import type { MiddlewareHandler } from "hono";
 import { errorBody } from "../api-error.js";
-import { isOwnerAuthEnforced } from "../routes/api/session/session-guard.js";
+import type { HostProfile } from "../host-profile.js";
 
 /** Names that always reach the machine the server runs on. */
 const LOOPBACK_HOSTS = ["localhost", "127.0.0.1", "[::1]"] as const;
@@ -35,16 +35,16 @@ function hostnameOf(host: string): string | undefined {
  * Allowed: the loopback names and the names an operator lists in
  * `COVEL_ALLOWED_HOSTS`. The port is not compared: rebinding changes the name,
  * not the port, and the Vite dev proxy forwards its own port. A request with
- * no `Host` header comes from no browser and passes. The `demo` and
- * `commercial` tiers use their own authentication policy; the guard is off there.
+ * no `Host` header comes from no browser and passes. The host profile turns
+ * the check off on the `demo` and `commercial` tiers, which authenticate
+ * requests instead (`network.checkHost`).
  */
-export function createHostGuardMiddleware(env: {
-  deploymentTier: string;
-  allowedHosts: readonly string[];
-}): MiddlewareHandler {
-  if (isOwnerAuthEnforced(env.deploymentTier)) return (_c, next) => next();
+export function createHostGuardMiddleware(
+  network: HostProfile["network"],
+): MiddlewareHandler {
+  if (!network.checkHost) return (_c, next) => next();
   const allowed = new Set<string>(LOOPBACK_HOSTS);
-  for (const entry of env.allowedHosts) {
+  for (const entry of network.allowedHosts) {
     const name = hostnameOf(entry);
     if (name) allowed.add(name);
   }

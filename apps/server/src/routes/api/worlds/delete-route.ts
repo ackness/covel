@@ -19,7 +19,7 @@ import {
   resolveGeneratedWorldPackage,
   WorldPackageResolutionError,
 } from "./file-package.js";
-import { checkWorldWriteAccess } from "./world-write-guard.js";
+import { requireAccess } from "../../../host-profile.js";
 
 export async function deleteWorldWithLifecycle(c: Context): Promise<Response> {
   return deleteWorld(c, c.req.param("id")!, false);
@@ -38,7 +38,7 @@ async function deleteWorld(
   id: string,
   onlyIfUnused: boolean,
 ): Promise<Response> {
-  const denied = checkWorldWriteAccess(c);
+  const denied = requireAccess(c, "world.write");
   if (denied) return denied;
   const settings = decodePluginUserSettingsHeader(
     c.req.header("X-Plugin-User-Settings"),

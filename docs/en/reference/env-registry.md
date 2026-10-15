@@ -406,14 +406,15 @@ This section explains, one by one, the variables whose behavior is more detailed
 - `self` is a local self-hosted deployment. A request from localhost can read the metadata of the provider keys that the server injects.
 - `demo` / `commercial` require a session owner token.
 - Even with `self`, when `NODE_ENV=production` and the storage actually in use is MemoryStore, a session owner token is required. Global world writes also require the operator token. This check looks at the storage that is actually injected, not only at the value of `STORE_BACKEND`.
-- An unknown tier is handled as the strictest one, `commercial`.
-- For details, see the authentication section of [`api.md`](./api.md).
+- Case and surrounding spaces do not count. Any other value stops the server at startup, and the error lists the accepted values.
+- At startup the server combines it with the storage and the tokens into its host profile; routes no longer read it themselves. For the rules of each tier, see [Security boundaries](../internals/security.md#host-profile); for authentication details, see the authentication section of [`api.md`](./api.md).
+- The desktop app always passes `self` when it starts the server.
 
 **`COVEL_DESKTOP_REST_TOKEN`**
 
 - It is the operator token. Using it as a Bearer token passes the owner check of any session. Admin tools and e2e scripts rely on it.
-- In the `demo` / `commercial` tiers, these operations must include it: creating and listing sessions, world writes and dimension imports, AI world generation, model probing and refresh, and activating the server code of community plugins.
-- If `DEPLOYMENT_TIER=demo|commercial` starts without it configured, `validateSecurityPosture` refuses to start.
+- In the `demo` / `commercial` tiers, these operations must include it: creating, forking and listing sessions, world writes and dimension imports, AI world generation, model probing and refresh, and activating the server code of community plugins.
+- If `DEPLOYMENT_TIER=demo|commercial` starts without it configured, the server refuses to start (a startup check of the host profile).
 - The `self` tier does not require it at startup. But under the production MemoryStore, creating, changing, deleting, importing dimensions into, and saving server-generated content for global worlds all check it. If it is not configured, these writes stay off. Public reads and valid session access still work.
 - A normal local or desktop session does not need a token. The desktop config interface has its own token check.
 - This is a trust model with "one operator". It does not provide multi-tenant identity or a code sandbox. See the authentication section of [`api.md`](./api.md).
@@ -428,7 +429,7 @@ This section explains, one by one, the variables whose behavior is more detailed
 - The `self` tier answers only requests opened at `localhost`, `127.0.0.1` or `[::1]` (on any port). Every other host name gets `403 host_not_allowed`. This stops DNS rebinding: a malicious page that points its own domain at your machine still cannot drive the token-less API.
 - To open a self-hosted web app from other machines, list the names it is opened by, for example `COVEL_ALLOWED_HOSTS=covel.example.com,192.168.1.20`. A port in an entry is ignored; only the host name is compared.
 - Behind a reverse proxy, list the `Host` the proxy forwards. When the proxy rewrites `Host` to the upstream name (such as nginx's default `app:3001`), list that name.
-- The `demo` / `commercial` tiers use their own authentication policy and skip this check.
+- The `demo` / `commercial` tiers use their own authentication policy and skip this check. Setting it on those tiers makes the server refuse to start, because the value has no effect there.
 
 **`TRUSTED_PROXY_IPS`**
 
@@ -450,7 +451,7 @@ This section explains, one by one, the variables whose behavior is more detailed
 **`COVEL_MEDIA_CLEANUP_ENABLED`**
 
 - The default is `false`. It decides whether `POST /api/media/cleanup` can be used.
-- Even if it is set to `true`, with `DEPLOYMENT_TIER=commercial` this endpoint always returns 503.
+- With `DEPLOYMENT_TIER=commercial` this endpoint always returns 503, so setting it to `true` on that tier makes the server refuse to start.
 - For details, see the media management section of [`api.md`](./api.md).
 
 ### Desktop proxy

@@ -35,7 +35,6 @@ import { resolveUserResourceDirs } from "../../../lib/user-resource-dirs.js";
 import { buildPluginSummary } from "../../../lib/plugin-descriptor.js";
 import { APP_VERSION } from "../../../lib/app-version.js";
 import { rollbackWorldWithLifecycle } from "../worlds/delete-route.js";
-import { checkWorldWriteAccess } from "../worlds/world-write-guard.js";
 import {
   inspectBundle,
   previewLifetime,
@@ -72,6 +71,7 @@ import {
   type HttpError,
 } from "./shared.js";
 import { activateWorldPackage } from "./worlds.js";
+import { allowsAccess, requireAccess } from "../../../host-profile.js";
 
 type Kind = "plugin" | "world";
 type Tracking = GithubPackagePreview["source"]["tracking"];
@@ -259,7 +259,7 @@ githubCollectionRoutes.post("/github/preview", async (c) => {
       budget,
     );
     const problems: CollectionProblem[] = [];
-    const worldsAllowed = !checkWorldWriteAccess(c);
+    const worldsAllowed = allowsAccess(c, "world.write");
 
     const manifestEntry = selectPackageEntries(
       archive,
@@ -443,7 +443,7 @@ githubCollectionRoutes.post("/github/batch", async (c) => {
         throw httpError(400, "Expected an installation preview");
       const kind: Kind = signed.action === "world-install" ? "world" : "plugin";
       if (kind === "world") {
-        const denied = checkWorldWriteAccess(c);
+        const denied = requireAccess(c, "world.write");
         if (denied) return denied;
       }
       const preview = signed.plugin;
@@ -533,7 +533,7 @@ githubCollectionRoutes.post("/collection", async (c) => {
           );
         const bundle = selectPackageEntries(entries, member.path);
         if (kind === "world") {
-          const denied = checkWorldWriteAccess(c);
+          const denied = requireAccess(c, "world.write");
           if (denied) return denied;
           const { id } = await inspectWorldBundle(bundle);
           worlds.push(worldFacts(bundle));

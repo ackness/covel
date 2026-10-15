@@ -34,7 +34,7 @@ import {
   type AiReloadResult,
   type AiStack,
 } from "../ai-setup.js";
-import { makeInstallApiGuard } from "./privileged-auth.js";
+import { accessGuard } from "../host-profile.js";
 
 const MAX_CONTENT_BYTES = 256 * 1024;
 
@@ -64,7 +64,7 @@ function digestOf(content: string): string {
 
 export function createRawConfigApiRoutes(deps: { ai: AiStack }): Hono {
   const app = new Hono();
-  const guard = makeInstallApiGuard();
+  const guard = accessGuard("host.files");
 
   const files = (): RawConfigFile[] => {
     const home = desktopHome();

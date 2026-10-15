@@ -75,7 +75,6 @@ import {
 import { commitFailureMessage } from "./plugin-rpc/runtime-response.js";
 import { rateLimiter } from "../../middleware/rate-limit.js";
 import {
-  checkHostedOperator,
   checkSessionOwner,
   sessionApprovalScope,
 } from "./session/session-guard.js";
@@ -92,6 +91,7 @@ import {
 import { errorBody, readJsonBody } from "../../api-error.js";
 import { dispatchPluginAction } from "./plugin-rpc/action-dispatch.js";
 import { dispatchPluginEvent } from "./plugin-rpc/event-dispatch.js";
+import { requireAccess } from "../../host-profile.js";
 
 export const pluginRpcRoutes = new Hono();
 
@@ -256,7 +256,7 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
     const entry = pluginRegistry.get(body.pluginId);
     const trustInfo = getPluginTrustInfo(body.pluginId, entry?.source);
     if (trustInfo.source === "community") {
-      const operatorDenied = checkHostedOperator(c);
+      const operatorDenied = requireAccess(c, "plugin.community");
       if (operatorDenied) return operatorDenied;
     }
     const gate = c.get("rpcApprovalGate");

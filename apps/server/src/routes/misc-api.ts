@@ -6,7 +6,7 @@
 
 import { Hono } from "hono";
 import { z } from "zod";
-import { providerApiKeysFromEnv, readRuntimeEnv } from "@covel/shared";
+import { providerApiKeysFromEnv } from "@covel/shared";
 import { reloadAiStack, type AiStack } from "../ai-setup.js";
 import {
   applySlotOverlay,
@@ -20,15 +20,16 @@ import {
 import type { PluginRegistry } from "@covel/plugin-loader";
 import type { DataStore } from "@covel/store";
 import { buildPluginFlowResponse } from "./misc-api/plugin-flow.js";
-import { bearerToken } from "./misc-api/shared.js";
 import { envOverriddenProviders } from "../lib/env-key-overrides.js";
 import { resolveCovelHome } from "./config-api.js";
 import { buildUiSpecsResponse } from "./misc-api/ui-specs.js";
+import { checkSessionOwner } from "./api/session/session-guard.js";
 import {
-  checkHostedOperator,
-  checkSessionOwner,
-  safeEqual,
-} from "./api/session/session-guard.js";
+  accessGuard,
+  allowsAccess,
+  hostProfileOf,
+  requireAccess,
+} from "../host-profile.js";
 import { errorBody } from "../api-error.js";
 import { modelParameters } from "./misc-api/model-parameters.js";
 import { hasServerRuntimeJobCredentials } from "../runtime-job-readiness.js";
@@ -58,7 +59,7 @@ export function createMiscApiRoutes(
   //     the UI show e.g. `default, fast` next to the preset so operators can
   //     tell which aliases share a single underlying model.
   app.get("/api/presets", (c) => {
-    const canReadDiagnostics = !checkHostedOperator(c);
+    const canReadDiagnostics = allowsAccess(c, "server.diagnostics");
     const slotMap = ai.slotRegistry.listSlots();
     const slotBindingsByPreset = new Map<string, string[]>();
     for (const [slotId, slot] of Object.entries(slotMap)) {
@@ -153,7 +154,7 @@ export function createMiscApiRoutes(
 
   // GET /api/llm-config — return slot configuration with capability info
   app.get("/api/llm-config", (c) => {
-    const canReadDiagnostics = !checkHostedOperator(c);
+    const canReadDiagnostics = allowsAccess(c, "server.diagnostics");
     const slots = ai.slotRegistry.listSlots();
     const slotsInfo: Record<string, Record<string, unknown>> = {};
 
@@ -209,25 +210,17 @@ export function createMiscApiRoutes(
   });
 
   // POST /api/llm-config/reload — re-read llm.toml and apply it to the live
-  // gateway in place (no restart). Mirrors the desktop write-endpoint auth:
-  // when a desktop REST token is configured the request must carry it; dev/web
-  // tiers (no token) stay open, matching the rest of misc-api. Always returns
-  // 200 on a completed reload. A parse failure keeps the active configuration.
-  app.post("/api/llm-config/reload", (c) => {
-    const env = readRuntimeEnv();
-    const provided = bearerToken(c);
-    if (
-      env.desktopRestToken &&
-      (!provided || !safeEqual(provided, env.desktopRestToken))
-    ) {
-      return c.json(errorBody("Unauthorized", { code: "unauthorized" }), 401);
-    }
-    return c.json(reloadAiStack(ai));
-  });
+  // gateway in place (no restart). Same rule as the desktop config writes
+  // (`host.config`): the desktop token when one is configured, open on a
+  // personal host without one. Always returns 200 on a completed reload. A
+  // parse failure keeps the active configuration.
+  app.post("/api/llm-config/reload", accessGuard("host.config"), (c) =>
+    c.json(reloadAiStack(ai)),
+  );
 
   // GET /api/provider-keys — live availability only; secrets stay at their owner.
   app.get("/api/provider-keys", (c) => {
-    const denied = checkHostedOperator(c);
+    const denied = requireAccess(c, "server.diagnostics");
     if (denied) return denied;
     const providers: Record<string, { configured: boolean }> = {};
     for (const [provider, value] of Object.entries(apiKeys)) {
@@ -249,7 +242,7 @@ export function createMiscApiRoutes(
   // request-scoped: a server key attaches only to the provider's own trusted
   // origin, as it does for a model call.
   app.post("/api/ai/models", async (c) => {
-    const denied = checkHostedOperator(c);
+    const denied = requireAccess(c, "model.probe");
     if (denied) return denied;
     const parsedBody = z
       .strictObject({
@@ -312,7 +305,7 @@ export function createMiscApiRoutes(
   // the probe cheap — we only care about connectivity + latency, not the
   // full reply.
   app.post("/api/ai/ping", async (c) => {
-    const denied = checkHostedOperator(c);
+    const denied = requireAccess(c, "model.probe");
     if (denied) return denied;
     const parsedBody = z
       .strictObject({
@@ -471,7 +464,7 @@ export function createMiscApiRoutes(
           }
         : { ...slotConfig, slotBindings: undefined },
       capabilityOverridePolicy:
-        readRuntimeEnv().deploymentTier === "self" ? "full" : "restrict-only",
+        hostProfileOf(c).credentials.capabilityOverrides,
     };
     try {
       if (preset.supportedModes.includes("evaluate")) {

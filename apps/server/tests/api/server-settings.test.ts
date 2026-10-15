@@ -2,10 +2,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Hono } from "hono";
 import {
   currentTraceRetention,
+  readRuntimeEnv,
   setTraceRetentionPlayerSource,
 } from "@covel/shared";
 import { createMemoryStore } from "@covel/store/memory";
 import { makeErrorHandler } from "../../src/api-error.js";
+import {
+  deriveHostProfile,
+  hostProfileMiddleware,
+} from "../../src/host-profile.js";
 import { createServerSettings } from "../../src/lib/server-settings.js";
 import { installTraceRetentionSource } from "../../src/lib/trace-retention-source.js";
 import { createServerSettingsRoutes } from "../../src/routes/api/server-settings.js";
@@ -24,9 +29,17 @@ describe("server settings", () => {
   let store: ReturnType<typeof createMemoryStore>;
   let clock: number;
 
+  /** As the server assembles it: with the host profile of the environment. */
   function build() {
-    const settings = createServerSettings(store, () => clock);
+    const profile = deriveHostProfile(readRuntimeEnv(), {
+      storeBackend: "sqlite",
+    });
+    const settings = createServerSettings(store, {
+      playerWritable: profile.retention.playerServerSettings,
+      now: () => clock,
+    });
     const app = new Hono();
+    app.use("*", hostProfileMiddleware(profile));
     app.onError(makeErrorHandler("[server-settings-test]", false));
     app.route(PATH, createServerSettingsRoutes(settings));
     return { settings, app };
@@ -147,7 +160,12 @@ describe("server settings", () => {
       });
       process.env.DEPLOYMENT_TIER = tier;
       process.env.COVEL_DESKTOP_REST_TOKEN = "operator-secret";
-      const { app } = build();
+      const { app, settings } = build();
+      await settings.load();
+      // Retention is the operator's here: the stored choice never reaches
+      // the sweep.
+      installTraceRetentionSource(settings);
+      expect(currentTraceRetention()).toEqual({ days: 30, source: "default" });
       const res = await put(
         app,
         { [KEY]: "7" },

@@ -396,6 +396,9 @@ async function startServer(
     ...(isDev ? {} : { SERVE_STATIC: "true" }),
     COVEL_HOME: paths.covelHome,
     COVEL_DATA_ROOT: paths.dataRoot,
+    // The desktop app is the personal form whatever a .env or the shell
+    // says: the server turns this into its host profile at start.
+    DEPLOYMENT_TIER: "self",
     COVEL_DESKTOP_REST: "1",
     COVEL_DESKTOP_REST_TOKEN: desktopRestToken,
     COVEL_MEDIA_TOKEN_SECRET:

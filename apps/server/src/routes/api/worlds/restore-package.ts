@@ -22,12 +22,12 @@ import {
   isPackageWorld,
   notifyWorldDimensionsChanged,
 } from "./shared.js";
-import { checkWorldWriteAccess } from "./world-write-guard.js";
+import { requireAccess } from "../../../host-profile.js";
 
 export const worldRestorePackageRoutes = new Hono<WorldEnv>();
 
 worldRestorePackageRoutes.post("/:id/restore-package", async (c) => {
-  const denied = checkWorldWriteAccess(c);
+  const denied = requireAccess(c, "world.write");
   if (denied) return denied;
   const store = c.get("store");
   const id = c.req.param("id");

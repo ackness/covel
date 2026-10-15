@@ -62,11 +62,11 @@ function compareFiles(
 }
 
 import { inspectWorldBundle } from "./github-world.js";
-import { checkWorldWriteAccess } from "../worlds/world-write-guard.js";
 import {
   worldOperationLockId,
   isWorldDeleting,
 } from "../../../world-lifecycle.js";
+import { requireAccess } from "../../../host-profile.js";
 
 async function assertWorldPackageUpdate(c: Context, id: string) {
   const world = await c.get("store").getWorld(id);
@@ -87,7 +87,7 @@ export function createGithubUpdateRoutes(kind: "plugin" | "world") {
     resolveUserResourceDirs()[kind === "world" ? "worlds" : "plugins"];
   githubUpdateRoutes.use("*", async (c, next) => {
     if (kind === "world") {
-      const denied = checkWorldWriteAccess(c);
+      const denied = requireAccess(c, "world.write");
       if (denied) return denied;
     }
     await next();

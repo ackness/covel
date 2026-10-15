@@ -24,7 +24,7 @@ export const SERVER_ENV_VARS = [
     type: "string",
     status: "active",
     description:
-      "Comma-separated host names, besides localhost, 127.0.0.1 and [::1], that a request on the self tier may name in its Host header. List the names a self-hosted web app is opened by from other machines; any other Host is refused, which stops DNS rebinding.",
+      "Comma-separated host names, besides localhost, 127.0.0.1 and [::1], that a request on the self tier may name in its Host header. List the names a self-hosted web app is opened by from other machines; any other Host is refused, which stops DNS rebinding. demo and commercial refuse to start with it, since they skip the check.",
   },
   {
     name: "NODE_ENV",
@@ -58,7 +58,8 @@ export const SERVER_ENV_VARS = [
     status: "active",
     values: ["self", "demo", "commercial"],
     defaultValue: "self",
-    description: "Deployment posture used by security-sensitive endpoints.",
+    description:
+      "Deployment form: the server turns it into its host profile once at start. Any other value stops the start.",
   },
   {
     name: "CORS_ORIGIN",
@@ -108,7 +109,7 @@ export const SERVER_ENV_VARS = [
     status: "active",
     defaultValue: "false",
     description:
-      "Enables the destructive POST /api/media/cleanup endpoint. Off by default; never enable in DEPLOYMENT_TIER=commercial without an admin auth layer (the route forces 503 there).",
+      "Enables the destructive POST /api/media/cleanup endpoint. Off by default; DEPLOYMENT_TIER=commercial keeps the endpoint closed and refuses to start with it.",
   },
   {
     name: "COVEL_INSTALL_API_ENABLED",

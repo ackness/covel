@@ -24,7 +24,6 @@ import {
   isDependencyRejection,
   isSetupRuntime,
   pluginHasTextIn,
-  readRuntimeEnv,
 } from "@covel/shared";
 import {
   pluginRuntimeManifests,
@@ -53,9 +52,8 @@ import {
   decorateSessionList,
   withEmbeddingMetadata,
 } from "./session/embedding.js";
+import { allowsAccess, requireAccess } from "../../host-profile.js";
 import {
-  hasOperatorToken,
-  isOwnerAuthEnforced,
   mintSessionOwnerToken,
   mintSessionApprovalScope,
   resolveSessionParam,
@@ -142,25 +140,14 @@ function sanitizeSessionForResponse<T extends SessionRecord>(
 
 // GET /sessions(?worldId=xxx)
 sessionRoutes.get("/", async (c) => {
-  // MemoryStore deployments serve local-mode (browser IndexedDB) frontends,
-  // which list sessions from IDB and never call this endpoint. Sessions that
-  // do exist server-side are transient copies synced up for turn execution —
-  // on a shared public host the only callers of this listing would be other
-  // players, so hide it. Dev / ENABLE_DEBUG_PAGE deployments keep it for the
-  // /debug tooling.
-  const env = readRuntimeEnv();
-  const hideSharedListing =
-    c.get("storeBackend") === "memory" &&
-    env.nodeEnv === "production" &&
-    !env.debugRoutes;
-  if (hideSharedListing) {
-    return c.json({ items: [] });
-  }
-
-  // Hosted tiers (demo/commercial): the listing spans every tenant's sessions
-  // and there is no user identity to filter by, so it is operator-only
-  // (COVEL_DESKTOP_REST_TOKEN). Per-session access uses owner tokens instead.
-  if (isOwnerAuthEnforced(env.deploymentTier) && !hasOperatorToken(c)) {
+  // The host profile's `session.list` rule. A production MemoryStore serves
+  // local-mode (browser IndexedDB) frontends, which list sessions from IDB
+  // and never call this endpoint; the sessions the server holds are transient
+  // copies and the only other callers would be other players, so nobody gets
+  // the listing (ENABLE_DEBUG_PAGE keeps it for the /debug tooling). A hosted
+  // tier has no user identity to filter by, so the listing is the operator's.
+  // A refused caller gets an empty list rather than an error.
+  if (!allowsAccess(c, "session.list")) {
     return c.json({ items: [] });
   }
 
@@ -179,21 +166,15 @@ sessionRoutes.get("/", async (c) => {
 
 // POST /sessions
 sessionRoutes.post("/", async (c) => {
-  // On hosted tiers (demo/commercial) session CREATION is
-  // operator-only — otherwise any anonymous caller could mint themselves a
-  // session + owner token on a shared host. COVEL_DESKTOP_REST_TOKEN is the
-  // only auth primitive the codebase ships, so this is a single-operator
-  // gate ONLY: full principal identity, per-user tenant isolation, and
-  // quota/billing are product-level work and deliberately NOT implemented
-  // here. self/desktop/dev tiers stay open (loopback is the boundary).
-  if (isOwnerAuthEnforced() && !hasOperatorToken(c)) {
-    return c.json(
-      errorBody("Operator token required to create sessions on this tier", {
-        code: "operator_token_required",
-      }),
-      401,
-    );
-  }
+  // The host profile's `session.create` rule. On hosted tiers
+  // (demo/commercial) session CREATION is operator-only — otherwise any
+  // anonymous caller could mint themselves a session + owner token on a
+  // shared host. COVEL_DESKTOP_REST_TOKEN is the only auth primitive the
+  // codebase ships, so this is a single-operator gate ONLY: full principal
+  // identity, per-user tenant isolation, and quota/billing are product-level
+  // work and deliberately NOT implemented here. The self tier stays open.
+  const createDenied = requireAccess(c, "session.create");
+  if (createDenied) return createDenied;
 
   const store = c.get("store");
   const pluginRegistry = c.get("pluginRegistry");

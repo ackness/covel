@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { getImageWire, registerImageWire } from "../src/image/wire-registry.js";
 import { getMusicWire, registerMusicWire } from "../src/music/wire-registry.js";
 import {
@@ -8,9 +8,21 @@ import {
   registerTranscriptionWire,
 } from "../src/speech/wire-registry.js";
 import { withWireRegistrySnapshot } from "../src/wire-lifecycle.js";
+import {
+  configureProviderHostPolicy,
+  PERSONAL_PROVIDER_HOST_POLICY,
+} from "../src/host-policy.js";
+
+/** What the server passes in on `demo` / `commercial`. */
+function useSharedHost(): void {
+  configureProviderHostPolicy({
+    localNetwork: false,
+    sessionlessCommunityWires: false,
+  });
+}
 
 afterEach(() => {
-  vi.unstubAllEnvs();
+  configureProviderHostPolicy(PERSONAL_PROVIDER_HOST_POLICY);
 });
 
 const cases = [
@@ -63,8 +75,8 @@ describe("media wires carry their plugin as owner", () => {
       try {
         expect(withWireRegistrySnapshot(get, ["scope-owner"])).not.toBeNull();
         expect(withWireRegistrySnapshot(get, ["other"])).toBeNull();
-        // No session: a hosted tier refuses a community plugin's wire.
-        vi.stubEnv("DEPLOYMENT_TIER", "demo");
+        // No session: a shared host refuses a community plugin's wire.
+        useSharedHost();
         expect(get()).toBeNull();
       } finally {
         dispose();
@@ -78,7 +90,7 @@ describe("media wires carry their plugin as owner", () => {
       { pluginId: "scope-owner", builtin: true },
     );
     try {
-      vi.stubEnv("DEPLOYMENT_TIER", "demo");
+      useSharedHost();
       expect(getSpeechWire("scope-owner/speech")).not.toBeNull();
       expect(
         withWireRegistrySnapshot(

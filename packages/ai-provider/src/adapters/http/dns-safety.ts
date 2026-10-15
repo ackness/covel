@@ -1,8 +1,8 @@
 import { lookup } from "node:dns/promises";
 import { isIP } from "node:net";
 import { Agent } from "undici";
-import { readRuntimeEnv } from "@covel/shared";
 import { SsrfPolicyError } from "../../errors.js";
+import { providerHostPolicy } from "../../host-policy.js";
 import { isPublicIpAddress, parseIpv6 } from "./ip-safety.js";
 export { isPublicIpAddress } from "./ip-safety.js";
 
@@ -17,9 +17,9 @@ const LOOPBACK_HOSTNAMES = new Set(["localhost", "127.0.0.1", "::1"]);
  * Whether a resolver answer in a private/benchmark range may be accepted.
  *
  * True only for the CORE PROVIDER path (`trustedProviderPath` — the user's own
- * configured LLM baseUrl via postJson/getJson) on the `self` tier
- * (desktop / self-deploy, the default when DEPLOYMENT_TIER is unset — already
- * loopback-bound with owner/operator tokens as no-ops). There, DNS-answer
+ * configured LLM baseUrl via postJson/getJson) on a host whose local network
+ * is the player's (`ProviderHostPolicy.localNetwork`: the desktop app and a
+ * self-hosted server, which the host passes in at start). There, DNS-answer
  * filtering does more harm than good: local TUN proxies (Clash / mihomo /
  * sing-box / Surge) map every hostname into a private/benchmark range and
  * route by SNI, and a LAN Ollama endpoint legitimately resolves to
@@ -31,18 +31,14 @@ const LOOPBACK_HOSTNAMES = new Set(["localhost", "127.0.0.1", "::1"]);
  *    plugin code must not reach internal services even on a local machine;
  *  - IP-LITERAL URLs — a raw `https://10.0.0.1` stays subject to the
  *    public-only rule (url-safety's string check also blocks it upstream);
- *  - hosted tiers (demo / commercial) — they may run inside a cloud network
+ *  - a shared host (`demo` / `commercial`) — it may run inside a cloud network
  *    where private answers reach real internal services.
  */
 function allowResolvedPrivateAddresses(
   isLiteral: boolean,
   trustedProviderPath: boolean,
 ): boolean {
-  return (
-    trustedProviderPath &&
-    !isLiteral &&
-    readRuntimeEnv().deploymentTier === "self"
-  );
+  return trustedProviderPath && !isLiteral && providerHostPolicy().localNetwork;
 }
 
 /**
@@ -138,18 +134,17 @@ async function resolveAllowedAddresses(
     );
   }
 
-  // Core provider path on the self tier: accept any resolver answer (see the
+  // Core provider path on a personal host: accept any resolver answer (see the
   // helper's rationale) — local proxies and LAN endpoints resolve to private
   // ranges, and the socket stays pinned to these exact addresses regardless.
   if (allowResolvedPrivateAddresses(literalFamily !== 0, trustedProviderPath)) {
     return addresses;
   }
 
-  // Loopback is the player's own machine only on the self tier; on a hosted
-  // tier it is the host's internal surface (url-safety applies the same rule).
+  // Loopback is the player's own machine only on a personal host; on a shared
+  // host it is the host's internal surface (url-safety applies the same rule).
   const allowLoopback =
-    LOOPBACK_HOSTNAMES.has(hostname) &&
-    readRuntimeEnv().deploymentTier === "self";
+    LOOPBACK_HOSTNAMES.has(hostname) && providerHostPolicy().localNetwork;
   for (const result of addresses) {
     const allowed = allowLoopback
       ? isLoopbackIpAddress(result.address)

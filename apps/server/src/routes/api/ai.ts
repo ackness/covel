@@ -43,8 +43,6 @@ import type { DataStore, WorldRecord } from "@covel/store";
 import { rateLimiter } from "../../middleware/rate-limit.js";
 import { loadWorldForPublication } from "../../world-data/publication.js";
 import { errorBody, readJsonBody } from "../../api-error.js";
-import { checkHostedOperator } from "./session/session-guard.js";
-import { checkWorldWriteAccess } from "./worlds/world-write-guard.js";
 import { normalizeLocale } from "../../lib/validators.js";
 import { resolveUserResourceDirs } from "../../lib/user-resource-dirs.js";
 import { isWorldDeleting } from "../../world-lifecycle.js";
@@ -54,6 +52,7 @@ import {
 } from "../../world-data/world-sections.js";
 import { parseIdleTimeoutMs } from "../../world-data/authoring-timeout.js";
 import { orderedSend } from "../../lib/ordered-send.js";
+import { requireAccess } from "../../host-profile.js";
 
 type Env = {
   Variables: {
@@ -330,7 +329,7 @@ function withGeneratedPackageMetadata(
 aiRoutes.post(
   "/generate-world",
   async (c, next) => {
-    const denied = checkHostedOperator(c);
+    const denied = requireAccess(c, "world.generate");
     if (denied) return denied;
     await next();
   },
@@ -360,7 +359,7 @@ aiRoutes.post(
       );
     }
     if (saveTarget !== "return-only") {
-      const denied = checkWorldWriteAccess(c);
+      const denied = requireAccess(c, "world.write");
       if (denied) return denied;
     }
     const contractWarnings: string[] = [];
@@ -591,7 +590,7 @@ function browserWorld(value: unknown, worldId: string): WorldRecord | null {
 aiRoutes.post(
   "/revise-world",
   async (c, next) => {
-    const denied = checkHostedOperator(c);
+    const denied = requireAccess(c, "world.generate");
     if (denied) return denied;
     await next();
   },
@@ -662,7 +661,7 @@ aiRoutes.post(
           409,
         );
       }
-      const denied = checkWorldWriteAccess(c);
+      const denied = requireAccess(c, "world.write");
       if (denied) return denied;
       existing = stored;
       saveTarget = target;

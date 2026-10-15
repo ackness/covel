@@ -20,6 +20,7 @@ import type { RpcApprovalGate } from "@covel/approval";
 import type { RuntimeManifest } from "@covel/shared";
 import type { BudgetOptions, CompactorRunner } from "@covel/context";
 import type { SessionLock } from "./lib/session-lock.js";
+import type { HostProfile } from "./host-profile.js";
 import type { EventDirectory } from "./routes/api/bootstrap/event-directory.js";
 import type { RuntimeJobWorker } from "./routes/api/plugin-rpc/runtime-job-worker.js";
 
@@ -77,6 +78,11 @@ declare module "hono" {
      * IndexedDB; server-side sessions are transient sync copies).
      */
     storeBackend?: StoreBackend;
+    /**
+     * The deployment form `app.ts` resolved at start (`host-profile.ts`).
+     * Read it through `hostProfileOf(c)`.
+     */
+    hostProfile?: HostProfile;
     eventBus: EventBus;
     pluginRegistry: PluginRegistry;
     llmAdapter: LLMAdapter;
