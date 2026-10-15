@@ -2,6 +2,7 @@
 import { describe, expect, it } from "vitest";
 import {
   resolveDeclaredSlot,
+  resolveTextRuntimeSlot,
   isDeclaredSlotMissing,
   resolveProviderSlot,
 } from "../model-slot-helpers.js";
@@ -101,4 +102,42 @@ it("marks unavailable bindings as missing without silently changing the default"
   expect(resolveDeclaredSlot(slots, "default")).toBeNull();
   expect(isDeclaredSlotMissing(slots, "story")).toBe(true);
   expect(resolveDeclaredSlot(slots, "plugin")?.slotId).toBe("plugin");
+});
+
+describe("resolveTextRuntimeSlot", () => {
+  const slot = (slotId: string, tag: string, isAvailable?: boolean) => ({
+    slotId,
+    label: slotId,
+    presetId: "",
+    preset: null,
+    tag,
+    ...(isAvailable === undefined ? {} : { isAvailable }),
+  });
+  const slots = [
+    slot("image", "image"),
+    slot("story", "text"),
+    slot("fast", "text", false),
+  ];
+
+  it("uses the declared slot when it is set up", () => {
+    expect(resolveTextRuntimeSlot(slots, "story")).toEqual({
+      slot: slots[1],
+      fallback: false,
+    });
+  });
+
+  it("falls back to the first text slot for a slot that is not set up", () => {
+    expect(resolveTextRuntimeSlot(slots, "plugin")).toEqual({
+      slot: slots[1],
+      fallback: true,
+    });
+  });
+
+  it("does not fall back for a slot that is set up but unusable, or another kind", () => {
+    expect(resolveTextRuntimeSlot(slots, "fast")).toBeNull();
+    expect(resolveTextRuntimeSlot(slots, "image")).toBeNull();
+    expect(
+      resolveTextRuntimeSlot([slot("image", "image")], "plugin"),
+    ).toBeNull();
+  });
 });

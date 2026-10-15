@@ -11,6 +11,28 @@ export function resolveDeclaredSlot(
   return slot?.isAvailable === false ? null : (slot ?? null);
 }
 
+/**
+ * The text slot a runtime's declared slot resolves to. A slot that is not set
+ * up at all falls back to the first text slot, as the server does (same-tag
+ * fallback, `docs/reference/slots.md`); a slot that is set up but cannot be
+ * used does not.
+ */
+export function resolveTextRuntimeSlot(
+  resolvedSlots: readonly ResolvedSlot[],
+  slotId: string,
+): { readonly slot: ResolvedSlot; readonly fallback: boolean } | null {
+  const textSlots = resolvedSlots.filter((slot) => slot.tag === "text");
+  const declared = resolveDeclaredSlot(textSlots, slotId);
+  if (declared) return { slot: declared, fallback: false };
+  if (
+    slotId === "default" ||
+    resolvedSlots.some((slot) => slot.slotId === slotId)
+  )
+    return null;
+  const first = textSlots.find((slot) => slot.isAvailable !== false);
+  return first ? { slot: first, fallback: true } : null;
+}
+
 export function isDeclaredSlotMissing(
   resolvedSlots: readonly ResolvedSlot[],
   slotId: string,

@@ -1853,6 +1853,7 @@
       "conversionFailed": "无法渲染 view"
     },
     "runtimeModelMissing": "模型用途 {{slot}} 不可用，请选择已配置的用途或前往用途分配补齐。",
+    "runtimeModelFallback": "未配置 {{slot}}，改用 {{model}}",
     "untranslated": "未翻译",
     "untranslatedHint": "这个插件没有当前语言的文字，它的面板显示英文。",
     "invalidPanelSpecDetail": "面板定义无效：{{label}}（{{reason}}）",

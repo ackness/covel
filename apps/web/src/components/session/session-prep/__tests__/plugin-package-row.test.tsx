@@ -66,8 +66,6 @@ function rowProps(binding = "story") {
     corePluginIds: new Set<string>(),
     lockedPluginIds: new Set<string>(),
     resolvedSlots: slots,
-    resolveDeclaredSlot: (id: string) =>
-      slots.find((slot) => slot.slotId === id) ?? null,
     isMissingDeclaredSlot: (id: string) =>
       !slots.some((slot) => slot.slotId === id),
     onTogglePlugin: vi.fn(),
@@ -114,9 +112,13 @@ it("shows all stages and provider settings, respecting world defaults and player
       .value,
   ).toBe("voice");
 });
-it("warns about the effective binding, then clears warnings when the missing default is overridden", () => {
+it("shows the slot a role that is not set up falls back to, and the chosen slot after an override", () => {
   const view = render(<PluginPackageRow {...rowProps("")} />);
-  expect(screen.getAllByRole("status")).toHaveLength(2);
+  // The server runs a role that is not set up on the first text slot.
+  expect(screen.queryByRole("status")).toBeNull();
+  expect(
+    screen.getAllByText("removed-role is not set up; uses story · story-model"),
+  ).toHaveLength(2);
   view.rerender(<PluginPackageRow {...rowProps()} />);
   expect(screen.queryByRole("status")).toBeNull();
   const runtime = screen.getByRole("combobox", {

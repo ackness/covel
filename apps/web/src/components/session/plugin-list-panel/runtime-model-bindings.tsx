@@ -5,7 +5,10 @@ import {
   formatSlotLabel,
   type ResolvedSlot,
 } from "@/hooks/use-slot-config.js";
-import { resolveDeclaredSlot } from "../session-prep/model-slot-helpers.js";
+import {
+  resolveDeclaredSlot,
+  resolveTextRuntimeSlot,
+} from "../session-prep/model-slot-helpers.js";
 import { useRuntimeModelSlotOverride } from "./runtime-model-slot-override.js";
 import type { RuntimeModelOverrideChange } from "./types.js";
 
@@ -57,10 +60,14 @@ function RuntimeModelBinding({
     (slot) => slot.tag === "text" && slot.isAvailable !== false,
   );
   const declaredSlot = runtime.model ?? "default";
-  const resolvedSlot = resolveDeclaredSlot(
-    resolvedSlots,
-    boundSlot || declaredSlot,
-  );
+  // A declared slot that is not set up runs on the first text slot; a chosen
+  // slot that is gone is reported.
+  const runtimeDefault = boundSlot
+    ? null
+    : resolveTextRuntimeSlot(resolvedSlots, declaredSlot);
+  const resolvedSlot = boundSlot
+    ? resolveDeclaredSlot(resolvedSlots, boundSlot)
+    : (runtimeDefault?.slot ?? null);
   const effectiveSlot = resolvedSlot?.tag === "text" ? resolvedSlot : null;
   const missingOverride =
     boundSlot && !slots.some((slot) => slot.slotId === boundSlot);
@@ -93,7 +100,12 @@ function RuntimeModelBinding({
         role={effectiveSlot ? undefined : "status"}
       >
         {effectiveSlot
-          ? formatSlotLabel(effectiveSlot)
+          ? runtimeDefault?.fallback
+            ? t("plugin.runtimeModelFallback", {
+                slot: declaredSlot,
+                model: formatSlotLabel(effectiveSlot),
+              })
+            : formatSlotLabel(effectiveSlot)
           : t("plugin.runtimeModelMissing", {
               slot: boundSlot || declaredSlot,
             })}

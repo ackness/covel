@@ -1917,6 +1917,7 @@
       "conversionFailed": "could not render `view`"
     },
     "runtimeModelMissing": "Model role {{slot}} is unavailable. Choose a configured role or update Model Roles.",
+    "runtimeModelFallback": "{{slot}} is not set up; uses {{model}}",
     "untranslated": "Not translated",
     "untranslatedHint": "This plugin has no text in your language. Its panels show English.",
     "invalidPanelSpecDetail": "Invalid panel spec: {{label}} — {{reason}}",
