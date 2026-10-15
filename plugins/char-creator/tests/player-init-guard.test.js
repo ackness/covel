@@ -36,6 +36,54 @@ function context(values, characters = []) {
 }
 
 describe("player initialization World Model", () => {
+  it.each(["name", "characterName", "playerName", "姓名"])(
+    "uses the submitted name for a declared %s text attribute, never another character's default",
+    async (id) => {
+      const ctx = context({ characterName: " Rowan ", name: "Mara Vale" });
+      ctx.world.characterSchema = {
+        ...schema,
+        attributes: [
+          ...schema.attributes,
+          {
+            id,
+            name: "Name",
+            type: "string",
+            category: "bio",
+            defaultValue: "Mara Vale",
+          },
+        ],
+      };
+      const original = structuredClone(ctx.world.characterSchema);
+      const result = await guard(ctx);
+      expect(getPendingProposals(result)).toEqual([
+        expect.objectContaining({
+          payload: expect.objectContaining({
+            name: "Rowan",
+            fields: { systems: 2, [id]: "Rowan" },
+          }),
+        }),
+      ]);
+      expect(ctx.world.characterSchema).toEqual(original);
+    },
+  );
+  it("does not turn an invalid submitted name into a default-named player", async () => {
+    const ctx = context({ characterName: 123 });
+    ctx.world.characterSchema = {
+      ...schema,
+      attributes: [
+        {
+          id: "name",
+          name: "Name",
+          type: "string",
+          category: "bio",
+          defaultValue: "Mara Vale",
+        },
+      ],
+    };
+    const result = await guard(ctx);
+    expect(result).toEqual({ skip: false });
+    expect(getPendingProposals(result)).toEqual([]);
+  });
   it.each([null, { characterName: "Alex" }])(
     "fails without a schema before producing a form or a player for input %j",
     async (values) => {

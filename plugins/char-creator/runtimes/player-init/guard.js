@@ -83,7 +83,7 @@ export default async function guard(ctx) {
       // render time).
       const sheet =
         name && !nameTaken
-          ? characterFields(stripNameKeys(values), schema)
+          ? characterFields(submittedFields(values, name, schema), schema)
           : null;
       if (nameTaken) {
         await logger?.warn?.(
@@ -239,8 +239,7 @@ async function latestSubmission(store) {
  * @param {Record<string, unknown>} values
  */
 function pickName(values) {
-  const candidates = ["characterName", "name", "姓名", "playerName"];
-  for (const key of candidates) {
+  for (const key of NAME_KEYS) {
     const v = values[key];
     if (typeof v === "string" && v.trim()) return v.trim();
   }
@@ -268,11 +267,14 @@ function pickDescription(values) {
 }
 
 /**
- * Remove name-like keys from the fields payload so `name` isn't duplicated
- * both on the CharacterRecord and inside fields.
+ * Only declared text name attributes mirror the authoritative form name.
+ * Otherwise mergeSchemaDefaults would put an NPC's name back into fields
+ * after the form's name keys were removed.
  * @param {Record<string, unknown>} values
+ * @param {string} name
+ * @param {import("@covel/plugin-handlers-utils").CharacterAttributeSchema | null} schema
  */
-function stripNameKeys(values) {
+function submittedFields(values, name, schema) {
   const {
     characterName: _characterName,
     name: _name,
@@ -280,5 +282,11 @@ function stripNameKeys(values) {
     playerName: _playerName,
     ...rest
   } = values;
+  for (const attribute of schema?.attributes ?? []) {
+    if (attribute.type === "string" && NAME_KEYS.includes(attribute.id))
+      rest[attribute.id] = name;
+  }
   return rest;
 }
+
+const NAME_KEYS = ["characterName", "name", "姓名", "playerName"];

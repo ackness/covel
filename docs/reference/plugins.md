@@ -477,6 +477,7 @@ CLI 和安装器的静态校验对 `scope: turn` 和 `scope: committed` 的输�
 
 - 同一个契约 ID 的所有提供者必须发布一致的 schema。
 - 公共 schema 同时覆盖模型输出和 guard 跳过输出。例如 `world-init` 的 `world-data-provider@1` 允许作者提供少于 15 项的属性结构；生成至少 15 项的要求留在 `initialize-world` 的工具参数中。
+- `world-data-provider@1` 要求 `success`、`attributeCount`、`dimensionCount` 和 `worldSchema`。同一份 schema 也校验尚未拆分的工具和 guard 结果，因此允许可选的 `preGameDone: true`。它是完成信号；agent 完成时把它移到 `RuntimeResult.completion`，公共业务输出不要求保留它。
 - 替代插件靠它自己 runtime 的 `io.output.contract` 提供契约（`provides` 自动包含它）。其他已安装插件的产出不能替它满足声明。
 - 被消费的契约缺少 schema，或者提供者只有声明而没有产出，都会产生加载诊断。
 
