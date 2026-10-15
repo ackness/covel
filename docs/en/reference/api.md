@@ -935,6 +935,8 @@ When a setup runtime keeps failing and uses up its retry budget (`maxTriggerCoun
 - A `blocked` runtime is not run again by `start_session`. It must first be unblocked with the endpoints below.
 - The web "Retry" button first calls `retry` for each `blocked` runtime, and then sends `start_session`.
 
+While a setup runtime is suspended and waits for the player's answer, that attempt does not use up a retry. When its suspended item is abandoned, expires or is voided, the attempt is recorded as failed and the runtime goes back to `pending` (or to `blocked` when the retries are used up), so it can be retried or skipped as usual.
+
 These two endpoints use the same owner token authentication as the other session endpoints.
 
 | Method | Path                                       | Description                                                          |
@@ -4175,17 +4177,22 @@ Rules for failed responses:
 
 ##### Out-of-date suspended items
 
-A suspension records two things: how many player turns the history holds at that moment, and the version of the plugin that asked. Before a resume, the server checks whether the suspended item is out of date. An out-of-date item does not run again, because the writes it saved could overwrite newer state.
+A suspension records three things: how many player turns the history holds at that moment, the version of the plugin that asked, and the content at that moment of every record its saved writes would change. Before a resume, the server checks whether the suspended item is out of date. An out-of-date item does not run again, because the writes it saved could overwrite newer state.
 
-| `details.reason`   | When                                                                                      |
-| ------------------ | ----------------------------------------------------------------------------------------- |
-| `session-moved-on` | The number of player turns in the history changed (the player played on, or rewound)      |
-| `plugin-updated`   | The plugin that asked changed version                                                     |
-| `superseded`       | The same runtime suspended again later; only a runtime's newest suspended item can resume |
+| `details.reason`   | When                                                                                                                                   |
+| ------------------ | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `session-moved-on` | The number of player turns in the history changed (the player played on, or rewound)                                                   |
+| `plugin-updated`   | The plugin that asked changed version                                                                                                  |
+| `data-changed`     | A record it would change was changed after the suspension, for example a background job or a manual run wrote the same plugin data key |
 
 The server voids it the way [abandoning](#delete-apisessionsidsuspensionssuspensionid) does, then answers `409` with `code` `suspension_outdated` and an `error` written for the player. The web client removes it from the waiting list and tells the player the request is out of date.
 
-Writes that a background job or a manual run made after the suspension do not count as the session moving on, so they do not make the item out of date.
+Rules for `data-changed`:
+
+- The records compared are: one plugin data key, one state field, one character, the character schema, one lorebook entry. Only the content is compared, so a write to another key does not affect the resume. Dimension changes are not compared here; they check their version themselves when they commit.
+- A record can also change while the resumed runtime runs. The commit transaction compares again before it writes anything; on a change it writes nothing, voids the item the same way and answers the same `409`.
+
+A runtime has only one suspended item waiting to resume at a time. When it suspends again, the older item is voided the way abandoning does, in the transaction that saves the new one, and no separate event is sent. When the web client receives the new `turn.suspended`, it drops the older item of the same runtime.
 
 ##### Suspensions and turn counting
 

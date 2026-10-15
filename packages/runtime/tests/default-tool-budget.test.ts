@@ -90,7 +90,11 @@ async function run(
             resumeSchema: {},
             createdAt: new Date().toISOString(),
             pendingContinuation: {
-              takenUnder: { playerTurns: 0, pluginVersion: "1.0.0" },
+              takenUnder: {
+                playerTurns: 0,
+                pluginVersion: "1.0.0",
+                writes: [],
+              },
               executionContext: {
                 executionId: "prior-run",
                 origin: "manual",

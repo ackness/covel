@@ -636,9 +636,16 @@ export function reducer(
       if (state.suspensions.some((s) => s.id === action.suspension.id)) {
         return state;
       }
+      // A runtime has one pending suspension: the server voided the older
+      // one when it saved this one.
       return {
         ...state,
-        suspensions: [...state.suspensions, action.suspension],
+        suspensions: [
+          ...state.suspensions.filter(
+            (s) => s.runtimeId !== action.suspension.runtimeId,
+          ),
+          action.suspension,
+        ],
       };
     }
     case "REMOVE_SUSPENSION":

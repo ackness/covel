@@ -35,7 +35,20 @@ function manifest(name: string): RuntimeManifest {
   };
 }
 
-async function runScenario(options: { readonly failCommit: boolean }) {
+interface ScenarioOptions {
+  readonly failCommit: boolean;
+  /** Add a detached post-turn runtime whose job a suspended turn holds back. */
+  readonly detached?: boolean;
+}
+
+const notesManifest: RuntimeManifest = {
+  ...manifest("suspension-fixture/notes"),
+  stage: "post-turn",
+  turnCompletion: { mode: "detached" },
+  effects: { writes: ["plugin-data:self:notes"] },
+};
+
+async function buildScenario(options: ScenarioOptions) {
   const store = createMemoryStore();
   await store.createSession({
     metadata: {
@@ -82,10 +95,20 @@ async function runScenario(options: { readonly failCommit: boolean }) {
         }),
       },
     ],
+    [
+      notesManifest.name,
+      {
+        manifest: notesManifest,
+        promptTemplate: "",
+        handler: async () => ({ outcome: "success", value: { ok: true } }),
+      },
+    ],
   ]);
-  const manifests = options.failCommit
-    ? [suspendManifest, writerManifest]
-    : [suspendManifest];
+  const manifests = [
+    suspendManifest,
+    ...(options.failCommit ? [writerManifest] : []),
+    ...(options.detached ? [notesManifest] : []),
+  ];
   const registry = createPluginRegistry();
   registry.register({
     id: PLUGIN_ID,
@@ -138,18 +161,28 @@ async function runScenario(options: { readonly failCommit: boolean }) {
     await next();
   });
   app.route("/api/actions", actionRoutes);
-  const response = await app.request("/api/actions", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      requestId: `request-${options.failCommit ? "rollback" : "suspend"}`,
-      type: "send_message",
-      sessionId: SESSION_ID,
-      payload: { content: "continue" },
-    }),
-  });
-  expect(response.status).toBe(200);
-  const envelopes = parseJsonFrames<ActionEnvelope>(await response.text());
+  const send = async (requestId: string) => {
+    const response = await app.request("/api/actions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        requestId,
+        type: "send_message",
+        sessionId: SESSION_ID,
+        payload: { content: "continue" },
+      }),
+    });
+    expect(response.status).toBe(200);
+    return parseJsonFrames<ActionEnvelope>(await response.text());
+  };
+  return { store, send };
+}
+
+async function runScenario(options: ScenarioOptions) {
+  const { store, send } = await buildScenario(options);
+  const envelopes = await send(
+    `request-${options.failCommit ? "rollback" : "suspend"}`,
+  );
   return { store, envelopes };
 }
 
@@ -195,5 +228,38 @@ describe("POST /api/actions suspension accounting", () => {
     expect(envelopes.map((envelope) => envelope.type)).not.toContain(
       "turn.completed",
     );
+  });
+
+  it("voids the runtime's older suspension when it suspends again and queues the jobs that turn held back (F-016)", async () => {
+    const { store, send } = await buildScenario({
+      failCommit: false,
+      detached: true,
+    });
+    const queuedNotes = async () =>
+      (await store.listJobStatus(SESSION_ID)).filter(
+        (status) =>
+          status.runtimeId === notesManifest.name && status.state === "queued",
+      );
+
+    await send("request-first");
+    const [first] = await store.listSuspensions(SESSION_ID);
+    expect(first).toBeDefined();
+    // The suspended turn holds its detached job back.
+    expect(await queuedNotes()).toHaveLength(0);
+
+    const envelopes = await send("request-second");
+
+    const pending = await store.listSuspensions(SESSION_ID);
+    expect(pending).toHaveLength(1);
+    expect(pending[0]!.id).not.toBe(first!.id);
+    expect(await store.getSuspension(first!.id)).toBeNull();
+    // The voided suspension ended the first turn: it counts and its job runs.
+    expect((await store.getSession(SESSION_ID))?.completedPlayerTurns).toBe(4);
+    expect(await queuedNotes()).toHaveLength(1);
+    expect(
+      envelopes
+        .filter((envelope) => envelope.type === "turn.suspended")
+        .map((envelope) => envelope.payload.suspensionId),
+    ).toEqual([pending[0]!.id]);
   });
 });

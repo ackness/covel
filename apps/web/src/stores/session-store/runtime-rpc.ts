@@ -43,7 +43,7 @@ function suspensionOutdatedDetailKey(details: unknown): string {
       ? details.reason
       : undefined;
   if (reason === "plugin-updated") return "session.suspensionOutdatedPlugin";
-  if (reason === "superseded") return "session.suspensionOutdatedSuperseded";
+  if (reason === "data-changed") return "session.suspensionOutdatedDataChanged";
   return "session.suspensionOutdatedMovedOn";
 }
 

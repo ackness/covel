@@ -30,15 +30,29 @@ import type {
   DataStore,
   StoreTransaction,
   SuspensionRecord,
+  SuspensionWriteBaseline,
   TurnMessageRecord,
 } from "@covel/store";
 import type { EventBus } from "@covel/events";
 import type {
+  DeferredRuntimeJob,
   ExecutionContext,
   Proposal,
   RuntimeManifest,
   SessionEvent,
 } from "@covel/shared";
+import {
+  assertSuspensionWritesUnchanged,
+  SuspensionDataChangedError,
+  takeSuspensionWriteBaseline,
+} from "../resume/suspension-baseline.js";
+import {
+  applySuspensionAbandonTx,
+  isPendingSuspension,
+  planSuspensionAbandon,
+  settleAbandonedSetupAttempt,
+  settleAbandonedSuspensionJobs,
+} from "../resume/suspension-settlement.js";
 import type { HookPipeline } from "../hooks/pipeline.js";
 import { buildHookSettings } from "../hooks/hook-settings.js";
 import { runWithHookScope, type HookScope } from "../hooks/hook-scope.js";
@@ -123,9 +137,27 @@ export interface FinalizeExecutionArgs {
   /**
    * Continuations created while the runtimes executed. Callers stage these
    * instead of publishing them immediately; finalize persists them inside the
-   * same transaction as every sibling proposal.
+   * same transaction as every sibling proposal, each with the records its
+   * buffered proposals write as they are then (`takenUnder.writes`). Saving
+   * one voids every other pending suspension of the same runtime, settled
+   * like an abandon: a runtime has one suspension that can be resumed.
    */
   readonly suspensions?: readonly SuspensionRecord[];
+  /**
+   * A resumed suspension's `takenUnder.writes`. They are read again first in
+   * the transaction; when one changed, nothing commits and the outcome's
+   * `code` is `suspension-data-changed`.
+   */
+  readonly writeBaseline?: readonly SuspensionWriteBaseline[];
+  /**
+   * Queues, in the commit transaction, the detached jobs that the turn of a
+   * voided older suspension held back (see `suspensions`). A commit that has
+   * such jobs and no way to queue them rolls back instead of losing them.
+   */
+  readonly enqueueReleasedJobsInTx?: (
+    tx: StoreTransaction,
+    jobs: readonly DeferredRuntimeJob[],
+  ) => Promise<void>;
   /**
    * `turn_results` rows to settle. Nested rows reuse the top-level `turnId`,
    * so the top-level id alone settles them all. Empty when the caller persists
@@ -210,6 +242,11 @@ export interface FinalizeExecutionOutcome {
   readonly isolatedRuntimes?: readonly IsolatedRuntime[];
   /** A non-proposal error (store error / `extraInTx` throw) that rolled back the execution. */
   readonly error?: string;
+  /**
+   * Set when a record the resumed suspension's buffered proposals write
+   * changed after it was taken (`writeBaseline`): nothing was written.
+   */
+  readonly code?: "suspension-data-changed";
   /**
    * The data committed but some of its events could not be published; the
    * session's subscribers were reset to re-read it.
@@ -447,18 +484,77 @@ export async function finalizeExecution(
   };
 
   const saveSuspensions = async (
-    sink: Pick<StoreTransaction, "saveSuspension">,
-    deferPostCommit?: (fn: () => Promise<void>) => void,
+    tx: StoreTransaction,
+    deferPostCommit: (fn: () => Promise<void>) => void,
   ): Promise<void> => {
+    const saved = new Map<string, SuspensionRecord>();
+    const voided: SuspensionRecord[] = [];
+    const now = sessionClock?.now ?? new Date().toISOString();
     for (const suspension of args.suspensions ?? []) {
       if (suspension.sessionId !== sessionId) {
         throw new Error(
           `suspension ${suspension.id} belongs to session ${suspension.sessionId}, expected ${sessionId}`,
         );
       }
-      await sink.saveSuspension(suspension);
-      deferPostCommit?.(async () => {
-        emitCommittedSuspension(eventBus, suspension);
+      // What the buffered proposals would overwrite, read after this
+      // execution's own writes: a resume compares it before committing.
+      const continuation = suspension.pendingContinuation;
+      const record: SuspensionRecord = {
+        ...suspension,
+        pendingContinuation: {
+          ...continuation,
+          takenUnder: {
+            ...continuation.takenUnder,
+            writes: await takeSuspensionWriteBaseline(
+              tx,
+              sessionId,
+              continuation.pendingProposals,
+            ),
+          },
+        },
+      };
+      await tx.saveSuspension(record);
+      saved.set(record.id, record);
+      // One pending suspension per runtime: the new one replaces the rest,
+      // which end as if abandoned (their turn may count and release jobs).
+      for (const older of await tx.listSuspensions(sessionId)) {
+        if (
+          older.id === record.id ||
+          older.runtimeId !== record.runtimeId ||
+          !isPendingSuspension(older)
+        )
+          continue;
+        const plan = await planSuspensionAbandon(tx, older);
+        await applySuspensionAbandonTx(tx, plan, now);
+        if (plan.releasedRuntimeJobs.length > 0) {
+          if (!args.enqueueReleasedJobsInTx) {
+            throw new Error(
+              `cannot queue the jobs held back by replaced suspension ${older.id}`,
+            );
+          }
+          await args.enqueueReleasedJobsInTx(tx, plan.releasedRuntimeJobs);
+        }
+        saved.delete(older.id);
+        voided.push(older);
+      }
+    }
+    for (const record of saved.values()) {
+      deferPostCommit(async () => {
+        emitCommittedSuspension(eventBus, record);
+      });
+    }
+    for (const older of voided) {
+      deferPostCommit(async () => {
+        await settleAbandonedSuspensionJobs(
+          { store, ...(eventBus ? { eventBus } : {}) },
+          older,
+        );
+        await settleAbandonedSetupAttempt(
+          store,
+          older,
+          runtimes.find((runtime) => runtime.name === older.runtimeId),
+          now,
+        );
       });
     }
   };
@@ -587,6 +683,13 @@ export async function finalizeExecution(
       }
       committedEvents = await store.withTransaction(async (tx) => {
         args.signal?.throwIfAborted();
+        // A resume must not put back what a later write replaced: compare the
+        // records its buffered proposals write before anything is written.
+        await assertSuspensionWritesUnchanged(
+          tx,
+          sessionId,
+          args.writeBaseline ?? [],
+        );
         // A failed story cannot complete a player action. Optional state
         // extractors may fail independently after a valid narrative exists.
         // A story held back because the dimension provider failed is the same
@@ -812,6 +915,9 @@ export async function finalizeExecution(
         events: [],
         failedProposals: [],
         error: errorMessage(err),
+        ...(err instanceof SuspensionDataChangedError
+          ? { code: err.code }
+          : {}),
       });
     }
 

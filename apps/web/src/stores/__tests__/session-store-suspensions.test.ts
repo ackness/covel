@@ -101,6 +101,19 @@ describe("session-store — suspensions", () => {
     ).toEqual([keep]);
   });
 
+  it("keeps one pending suspension per runtime: a new one replaces the older", () => {
+    const other = makeSuspension({ id: "other", runtimeId: "other-runtime" });
+    let state = reducer(initialState, {
+      type: "SET_SUSPENSIONS",
+      suspensions: [makeSuspension({ id: "older" }), other],
+    });
+    const newer = makeSuspension({ id: "newer", turnId: "turn-2" });
+
+    state = reducer(state, { type: "ADD_SUSPENSION", suspension: newer });
+
+    expect(state.suspensions).toEqual([other, newer]);
+  });
+
   it("dedupes the same turn.suspended envelope through the real handler and reducer", () => {
     const harness = createHarness();
     const suspension = makeSuspension({ id: "dup" });

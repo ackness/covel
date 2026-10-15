@@ -44,7 +44,9 @@ export async function settleSetupRuntimes(args: {
   for (const r of ran) {
     // A done-signalled attempt whose proposals rolled back counts as failed —
     // that is precisely how a deterministic commit failure depletes the budget.
-    const rolledBackDone = r.doneSignal && !committed;
+    // So does a suspension that was never saved: nothing can resume it.
+    const rolledBackDone =
+      (r.doneSignal || r.ledgerState === "suspended") && !committed;
     const ledgerState: SetupAttemptState = rolledBackDone
       ? "failed"
       : r.ledgerState;
@@ -90,7 +92,7 @@ export async function settleSetupRuntimes(args: {
     const entries: Record<string, SetupRuntimeState> = {};
     for (const r of ran) {
       const lastError =
-        r.doneSignal && !committed
+        (r.doneSignal || r.ledgerState === "suspended") && !committed
           ? (r.error ?? "proposal commit rolled back")
           : r.error;
       const terminal = terminalAttempts.get(r.runtimeId) ?? 0;
@@ -103,9 +105,11 @@ export async function settleSetupRuntimes(args: {
           terminal,
         );
       } else {
+        // A saved suspension waits for the player: never blocked under it.
+        const waiting = r.ledgerState === "suspended" && committed;
         entries[r.runtimeId] = resolvePendingOrBlocked({
           attempts: terminal,
-          budget: r.budget,
+          budget: waiting ? undefined : r.budget,
           pluginVersion: r.pluginVersion,
           generation: r.generation,
           now,

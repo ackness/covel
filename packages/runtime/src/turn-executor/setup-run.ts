@@ -29,7 +29,7 @@ interface SetupResultClass {
   readonly ran: boolean;
   /** Did it signal completion (completion: done / guard skip)? */
   readonly doneSignal: boolean;
-  readonly ledgerState: "success" | "failed" | "skipped";
+  readonly ledgerState: "success" | "failed" | "skipped" | "suspended";
   readonly error?: string;
 }
 
@@ -52,6 +52,11 @@ export function classifySetupResult(result: RuntimeResult): SetupResultClass {
       ledgerState: "failed",
       ...(result.error ? { error: result.error } : {}),
     };
+  }
+  // A suspension pauses the attempt: it spends no budget until its resume
+  // (or the suspension's end without one) settles the same attempt.
+  if (result.status === "suspended") {
+    return { ran: true, doneSignal: false, ledgerState: "suspended" };
   }
   return {
     ran: true,

@@ -40,6 +40,29 @@ const setupRuntimeState = z.discriminatedUnion("state", [
     blockedAt: timestamp,
   }),
 ]);
+const suspensionWriteBaseline = z.object({
+  target: z.discriminatedUnion("kind", [
+    z.object({
+      kind: z.literal("plugin-data"),
+      pluginId: z.string(),
+      namespace: z.string(),
+      key: z.string(),
+    }),
+    z.object({
+      kind: z.literal("state"),
+      table: z.string(),
+      field: z.string(),
+    }),
+    z.object({ kind: z.literal("character"), id: z.string() }),
+    z.object({ kind: z.literal("character-schema") }),
+    z.object({
+      kind: z.literal("lorebook"),
+      pluginId: z.string(),
+      id: z.string(),
+    }),
+  ]),
+  digest: z.string().nullable(),
+});
 const sessionState = z.looseObject({
   status: z.enum(["active", "paused", "ended"]),
   phase: z.enum(["setup", "playing"]),
@@ -121,6 +144,7 @@ const suspensions = createdRow.extend({
     takenUnder: z.object({
       playerTurns: z.number().int().nonnegative(),
       pluginVersion: z.string(),
+      writes: z.array(suspensionWriteBaseline),
     }),
     locale: z.string().optional(),
     logicalTurn: z.number().int().optional(),

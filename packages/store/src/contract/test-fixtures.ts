@@ -335,7 +335,21 @@ export function makeSuspension(
         logicalTurnId: "logical-turn-1",
         countPolicy: "complete-player-turn",
       },
-      takenUnder: { playerTurns: 1, pluginVersion: "1.0.0" },
+      takenUnder: {
+        playerTurns: 1,
+        pluginVersion: "1.0.0",
+        writes: [
+          {
+            target: {
+              kind: "plugin-data",
+              pluginId: "plugin-a",
+              namespace: "quest",
+              key: "stage",
+            },
+            digest: null,
+          },
+        ],
+      },
       suspendToolCallId: "tc-suspend-1",
     },
     createdAt: ts(),
