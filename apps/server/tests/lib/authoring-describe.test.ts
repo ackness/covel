@@ -187,7 +187,7 @@ defaultLocale: en-US
       "WORLD.md": "Lore.",
       ...Object.fromEntries(
         authored.map((item) => [
-          item.source!.entry.path.replace("*", "example"),
+          item.source!.entry.path.replaceAll("*", "example"),
           item.source!.entry.kind === "json"
             ? JSON.stringify(item.example)
             : stringifyYaml(item.example),
