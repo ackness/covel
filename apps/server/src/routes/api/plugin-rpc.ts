@@ -60,6 +60,7 @@ import {
   decodePluginUserSettingsHeader,
   loadSessionPluginUserSettings,
 } from "./plugin-user-settings.js";
+import { requestSuspensionAbandonDeps } from "./suspension-abandon.js";
 import {
   enqueueActivatedRuntimeJob,
   enqueueEventFollowers,
@@ -397,6 +398,7 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
       ),
       deps: buildTurnExecutorDeps(c),
       ...(hookPipeline ? { hookPipeline } : {}),
+      heldJobs: requestSuspensionAbandonDeps(c, decodedUserSettings.settings),
     });
 
     const mode: "sync" | "background" = target.execution ?? "sync";

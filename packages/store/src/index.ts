@@ -15,6 +15,7 @@ export {
 } from "./media-store/factory.js";
 export { supportsVector } from "./vector-store.js";
 export { rebindSnapshotPayloadSession } from "./records/snapshot-session-scope.js";
+export { readSuspensionWriteDigest } from "./common/suspension-write-digest.js";
 export {
   RootStoreWriteInTransactionError,
   SessionAlreadyExistsError,
@@ -125,6 +126,8 @@ export type {
   PaginationOpts,
   SuspensionRecord,
   SuspensionBasis,
+  SuspensionWriteBaseline,
+  SuspensionWriteTarget,
   SnapshotRecord,
   SnapshotPayload,
   SnapshotSessionState,

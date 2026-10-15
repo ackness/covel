@@ -63,6 +63,8 @@ export type {
   SnapshotMetadata,
   SuspensionRecord,
   SuspensionBasis,
+  SuspensionWriteBaseline,
+  SuspensionWriteTarget,
 } from "./records/snapshot-records.js";
 
 // Session-lifecycle records live in @covel/shared (the cross-layer contract);

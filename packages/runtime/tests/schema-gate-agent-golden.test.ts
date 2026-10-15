@@ -218,7 +218,7 @@ describe("ordinary and resumed private schema parity", () => {
         resumeSchema: {},
         createdAt: "2026-01-01T00:00:00Z",
         pendingContinuation: {
-          takenUnder: { playerTurns: 0, pluginVersion: "1.0.0" },
+          takenUnder: { playerTurns: 0, pluginVersion: "1.0.0", writes: [] },
           messages: [],
           toolCallsSoFar: [],
           pendingProposals: [],
@@ -290,7 +290,7 @@ describe("ordinary and resumed private schema parity", () => {
         resumeSchema: {},
         createdAt: new Date().toISOString(),
         pendingContinuation: {
-          takenUnder: { playerTurns: 0, pluginVersion: "1.0.0" },
+          takenUnder: { playerTurns: 0, pluginVersion: "1.0.0", writes: [] },
           messages: [],
           toolCallsSoFar: [],
           pendingProposals: [proposal],
@@ -356,7 +356,7 @@ describe("ordinary and resumed private schema parity", () => {
         resumeSchema: {},
         createdAt: "2026-01-01T00:00:00Z",
         pendingContinuation: {
-          takenUnder: { playerTurns: 0, pluginVersion: "1.0.0" },
+          takenUnder: { playerTurns: 0, pluginVersion: "1.0.0", writes: [] },
           messages: [],
           toolCallsSoFar: [],
           pendingProposals: [],
@@ -430,7 +430,7 @@ describe("ordinary and resumed private schema parity", () => {
           resumeSchema: {},
           createdAt: "2026-01-01T00:00:00Z",
           pendingContinuation: {
-            takenUnder: { playerTurns: 0, pluginVersion: "1.0.0" },
+            takenUnder: { playerTurns: 0, pluginVersion: "1.0.0", writes: [] },
             messages: [],
             toolCallsSoFar: [],
             pendingProposals: [],

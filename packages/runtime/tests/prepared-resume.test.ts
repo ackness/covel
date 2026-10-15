@@ -3,10 +3,14 @@ import { createMemoryStore } from "@covel/store/memory";
 import type { HandlerResult, RuntimeManifest } from "@covel/shared";
 import type { LoadedRuntime } from "@covel/shared/plugin-runtime";
 import {
+  ABANDONED_SETUP_ATTEMPT_ERROR,
+  applySuspensionAbandonTx,
   commitExecution,
   createHookPipeline,
   executeTurn,
+  planSuspensionAbandon,
   resumeSuspendedRuntime,
+  settleAbandonedSetupAttempt,
 } from "../src/index.js";
 
 const timestamp = "2026-09-29T00:00:00.000Z";
@@ -387,5 +391,156 @@ describe("resumed setup runtime", () => {
     expect(
       await store.getPluginData(input.sessionId, "probe", "setup", "seed"),
     ).toBeFalsy();
+  });
+});
+
+describe("a setup runtime's suspension that ends without an answer (F-188)", () => {
+  const setup: RuntimeManifest = {
+    description: "test",
+    name: "probe/setup",
+    pluginId: "probe",
+    version: "1.0.0",
+    runtimeType: "function",
+    stage: "setup",
+    outputKind: "plugin",
+    trigger: { type: "auto", maxTriggerCount: 2 },
+  };
+
+  async function suspendedSetup(manifest: RuntimeManifest = setup) {
+    const store = createMemoryStore();
+    await store.createSession({
+      id: input.sessionId,
+      locale: "en-US",
+      status: "active",
+      phase: "setup",
+      setupRuntimes: {},
+      activePlugins: ["probe"],
+      completedPlayerTurns: 0,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    });
+    const deps = {
+      store,
+      llm: { generate: vi.fn() },
+      loadRuntime: async (m: RuntimeManifest): Promise<LoadedRuntime> => ({
+        manifest: m,
+        promptTemplate: "",
+        handler: async () => ({
+          outcome: "suspended",
+          reason: "Need player confirmation",
+          resumeSchema: { type: "object" },
+        }),
+      }),
+    };
+    const execution = await executeTurn(
+      { ...input, playerMessage: "" },
+      [manifest],
+      deps,
+    );
+    const outcome = await commitExecution({
+      store,
+      execution,
+      completion: { kind: "turn", turnId: input.turnId, durationMs: 0 },
+    });
+    expect(outcome.status).toBe("committed");
+    const [suspension] = await store.listSuspensions(input.sessionId);
+    return { store, deps, suspension: suspension! };
+  }
+
+  async function abandon(
+    store: Awaited<ReturnType<typeof suspendedSetup>>["store"],
+    suspension: Awaited<ReturnType<typeof suspendedSetup>>["suspension"],
+    manifest: RuntimeManifest,
+  ) {
+    const plan = await planSuspensionAbandon(store, suspension);
+    await store.withTransaction((tx) =>
+      applySuspensionAbandonTx(tx, plan, timestamp),
+    );
+    await settleAbandonedSetupAttempt(store, suspension, manifest, timestamp);
+  }
+
+  const attemptStates = async (
+    store: Awaited<ReturnType<typeof suspendedSetup>>["store"],
+  ) =>
+    (
+      await store.listSetupAttempts(input.sessionId, {
+        runtimeId: setup.name,
+      })
+    ).map((attempt) => attempt.state);
+
+  it("does not spend a retry while it waits for the player", async () => {
+    const once = {
+      ...setup,
+      trigger: { type: "auto" as const, maxTriggerCount: 1 },
+    };
+    const { store } = await suspendedSetup(once);
+    expect(await attemptStates(store)).toEqual(["suspended"]);
+    expect(
+      (await store.getSession(input.sessionId))?.setupRuntimes[setup.name]
+        ?.state,
+    ).toBe("pending");
+  });
+
+  it("ends the attempt failed and leaves the runtime pending for a retry", async () => {
+    const { store, suspension } = await suspendedSetup();
+    await abandon(store, suspension, setup);
+
+    const attempts = await store.listSetupAttempts(input.sessionId, {
+      runtimeId: setup.name,
+    });
+    expect(attempts).toMatchObject([
+      { state: "failed", error: ABANDONED_SETUP_ATTEMPT_ERROR },
+    ]);
+    const mirror = (await store.getSession(input.sessionId))?.setupRuntimes[
+      setup.name
+    ];
+    expect(mirror).toMatchObject({
+      state: "pending",
+      attempts: 1,
+      lastError: ABANDONED_SETUP_ATTEMPT_ERROR,
+    });
+  });
+
+  it("blocks the runtime once the abandoned attempt spent its last retry, so the player can skip it", async () => {
+    const once = {
+      ...setup,
+      trigger: { type: "auto" as const, maxTriggerCount: 1 },
+    };
+    const { store, suspension } = await suspendedSetup(once);
+    await abandon(store, suspension, once);
+
+    expect(await attemptStates(store)).toEqual(["failed"]);
+    expect(
+      (await store.getSession(input.sessionId))?.setupRuntimes[setup.name]
+        ?.state,
+    ).toBe("blocked");
+  });
+
+  it("is not blocked while the suspension that replaced it still waits", async () => {
+    const once = {
+      ...setup,
+      trigger: { type: "auto" as const, maxTriggerCount: 1 },
+    };
+    const { store, deps, suspension } = await suspendedSetup(once);
+    // The setup runs again and suspends again: the first suspension is void.
+    const again = await executeTurn(
+      { ...input, turnId: "player-turn-2", playerMessage: "" },
+      [once],
+      deps,
+    );
+    const outcome = await commitExecution({
+      store,
+      execution: again,
+      completion: { kind: "turn", turnId: "player-turn-2", durationMs: 0 },
+    });
+    expect(outcome.status).toBe("committed");
+
+    expect(await store.getSuspension(suspension.id)).toBeNull();
+    expect(await store.listSuspensions(input.sessionId)).toHaveLength(1);
+    expect(await attemptStates(store)).toEqual(["failed", "suspended"]);
+    expect(
+      (await store.getSession(input.sessionId))?.setupRuntimes[setup.name]
+        ?.state,
+    ).toBe("pending");
   });
 });

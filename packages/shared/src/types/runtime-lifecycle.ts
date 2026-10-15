@@ -105,7 +105,7 @@ export interface RanSetupRuntime {
   /** Ledger terminal state derived from the result status (pre commit-outcome). */
   readonly ledgerState: Extract<
     SetupAttemptState,
-    "success" | "failed" | "skipped"
+    "success" | "failed" | "skipped" | "suspended"
   >;
   /** Retry budget = maxTriggerCount (undefined ⇒ unbounded). */
   readonly budget: number | undefined;

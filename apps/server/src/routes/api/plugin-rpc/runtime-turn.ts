@@ -37,6 +37,10 @@ import {
 } from "../session/session-guard.js";
 import { buildSessionHookScope } from "../session/hook-scope.js";
 import { listSettlingRuntimeJobs } from "./jobs.js";
+import {
+  heldJobsRelease,
+  type SuspensionAbandonDeps,
+} from "../suspension-abandon.js";
 import type { SettleWaitBudget } from "./settled-session-lock.js";
 
 export class SessionApprovalScopeChangedError extends Error {
@@ -78,6 +82,12 @@ export interface PluginRpcRuntimeTurnContext {
   readonly approvalScopes: ReadonlyMap<string, string>;
   readonly deps: Omit<TurnExecutorDeps, "store" | "eventBus" | "emitter">;
   readonly hookPipeline?: TurnExecutorDeps["hookPipeline"];
+  /**
+   * Queues the jobs an older suspension's turn held back when a suspension
+   * this run saves replaces it. Without it such a commit rolls back; runs
+   * that cannot suspend (background work) need none.
+   */
+  readonly heldJobs?: SuspensionAbandonDeps;
 }
 
 /**
@@ -304,7 +314,11 @@ export function createPluginRpcRuntimeTurnRunner(
     } = {},
   ): Promise<TurnCommitOutcome> {
     const turnResult = execution.result;
+    const release = ctx.heldJobs
+      ? heldJobsRelease(ctx.heldJobs, ctx.sessionId)
+      : undefined;
     const outcome = await commitExecution({
+      ...(release ? { enqueueReleasedJobsInTx: release.enqueueInTx } : {}),
       memorySystem: ctx.memorySystem,
       imageFlowRuntimeIds: await ctx.resolveImageFlowRuntimeIds?.(),
       signal: opts.executionSignal,
@@ -343,6 +357,7 @@ export function createPluginRpcRuntimeTurnRunner(
     });
 
     const committed = outcome.status === "committed";
+    if (committed) await release?.publish();
     const conflict = outcome.failedProposals.find(
       (item) =>
         item.proposal.type === "dimension.update" &&

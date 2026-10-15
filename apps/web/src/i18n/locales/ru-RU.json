@@ -270,7 +270,7 @@
     "suspensionOutdated": "Этот запрос устарел и снят",
     "suspensionOutdatedMovedOn": "С тех пор история продвинулась дальше.",
     "suspensionOutdatedPlugin": "Плагин, задавший его, с тех пор обновился.",
-    "suspensionOutdatedSuperseded": "Тот же плагин задал более новый запрос.",
+    "suspensionOutdatedDataChanged": "То, что он должен был изменить, с тех пор уже изменили.",
     "memoryUpdateFailed": "Не удалось обновить память истории",
     "memoryUpdateFailedHint": "Ход сохранён. Проверьте модель для памяти и настройки провайдера. Следующая попытка обновления будет после следующего хода.",
     "memoryUpdateErrorDetails": "Сведения об ошибке",
