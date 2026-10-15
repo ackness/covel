@@ -47,7 +47,7 @@ const DATA_REFERENCE_PATH =
 export function authoringSourceKind(
   path: string,
 ): "yaml" | "json" | "media" | undefined {
-  const name = path.replace(/\/+$/, "").split("/").at(-1) ?? "";
+  const name = path.split("/").filter(Boolean).at(-1) ?? "";
   if (/\.ya?ml$/i.test(name)) return "yaml";
   if (/\.json$/i.test(name)) return "json";
   return name.includes(".") ? undefined : "media";
