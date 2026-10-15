@@ -144,10 +144,6 @@ export interface PluginDetail extends Omit<PluginSummary, "runtimes"> {
       readonly runtimeId?: string;
       readonly path: string;
     }[];
-    readonly left: readonly {
-      readonly runtimeId?: string;
-      readonly path: string;
-    }[];
   };
   readonly runtimes: readonly RuntimePluginContract[];
 }

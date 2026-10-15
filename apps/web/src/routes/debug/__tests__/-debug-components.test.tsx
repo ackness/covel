@@ -179,7 +179,6 @@ describe("debug route components", () => {
           ui: {
             right: [{ runtimeId: "story/runtime", path: "ui.json" }],
             message: [],
-            left: [],
           },
           runtimes: [],
         },

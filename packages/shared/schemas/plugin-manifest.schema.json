@@ -903,14 +903,6 @@
                 "minLength": 1
               },
               "description": "Paths of UI specs rendered inside the message stream."
-            },
-            "left": {
-              "type": "array",
-              "items": {
-                "type": "string",
-                "minLength": 1
-              },
-              "description": "Paths of UI specs for the left panel."
             }
           },
           "additionalProperties": false,

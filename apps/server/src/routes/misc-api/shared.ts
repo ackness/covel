@@ -7,7 +7,7 @@ import { DEFAULT_LOCALE, resolveI18nText, type Stage } from "@covel/shared";
 // staged step maps 1:1; the framework never assumes "priority 500 == narrator".
 export type FlowSegmentId = Stage | "event-manual";
 
-export type UiSlotName = "right" | "message" | "left";
+export type UiSlotName = "right" | "message";
 
 export { bearerToken } from "../privileged-auth.js";
 

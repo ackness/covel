@@ -9,7 +9,7 @@ const PLUGINS = path.join(ROOT, "plugins");
 interface BundledPlugin {
   readonly id: string;
   readonly tools: readonly string[];
-  /** Panel ids from the right/left UI specs the root manifest contributes. */
+  /** Panel ids from the right UI specs the root manifest contributes. */
   readonly panelIds: readonly string[];
 }
 
@@ -22,7 +22,7 @@ function bundledPlugins(): BundledPlugin[] {
     const { plugin } = parsePluginMd(readFileSync(file, "utf8"), file);
     const contributes = plugin.contributes;
     const ui = contributes?.ui;
-    const specs = [...(ui?.right ?? []), ...(ui?.left ?? [])];
+    const specs = ui?.right ?? [];
     found.push({
       id: dir.name,
       tools: contributes?.tools ?? [],
@@ -68,7 +68,7 @@ describe("reference tables list what the bundled plugins contribute", () => {
     expect(missing, "add these rows to the tools overview table").toEqual([]);
   });
 
-  it("lists every right and left panel in docs/reference/ui-panels.md", () => {
+  it("lists every right panel in docs/reference/ui-panels.md", () => {
     const rows = tableRows(
       readFileSync(path.join(ROOT, "docs/reference/ui-panels.md"), "utf8"),
     );

@@ -5,11 +5,7 @@ import { runnablePluginIds } from "../api/session/plugins.js";
 import { type UiSlotName } from "./shared.js";
 import type { UiSpecDiagnostic } from "./ui-spec-schema.js";
 
-const UI_SLOTS = [
-  "right",
-  "message",
-  "left",
-] as const satisfies readonly UiSlotName[];
+const UI_SLOTS = ["right", "message"] as const satisfies readonly UiSlotName[];
 
 type SlotSpecs = Partial<
   Record<UiSlotName, readonly Readonly<Record<string, unknown>>[]>
@@ -121,7 +117,6 @@ export async function buildUiSpecsResponse(params: {
     pluginId: string;
     specs: readonly Record<string, unknown>[];
   }>;
-  left: Array<{ pluginId: string; specs: readonly Record<string, unknown>[] }>;
   diagnostics: UiSpecDiagnostic[];
 }> {
   const { sessionId, session: knownSession, registry, store } = params;
@@ -138,7 +133,6 @@ export async function buildUiSpecsResponse(params: {
   };
   const right: SlotEntry[] = [];
   const message: SlotEntry[] = [];
-  const left: SlotEntry[] = [];
 
   for (const plugin of loaded.pluginSpecs) {
     if (activeFilter && !activeFilter.has(plugin.pluginId)) continue;
@@ -147,8 +141,7 @@ export async function buildUiSpecsResponse(params: {
         (runtime) => runtime.slots[slot] ?? [],
       );
       if (specs.length === 0) continue;
-      const target =
-        slot === "right" ? right : slot === "message" ? message : left;
+      const target = slot === "right" ? right : message;
       target.push({ pluginId: plugin.pluginId, specs });
     }
   }
@@ -156,5 +149,5 @@ export async function buildUiSpecsResponse(params: {
   const diagnostics = loaded.diagnostics.filter(
     (diagnostic) => !activeFilter || activeFilter.has(diagnostic.pluginId),
   );
-  return { right, message, left, diagnostics };
+  return { right, message, diagnostics };
 }

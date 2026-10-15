@@ -20,3 +20,15 @@ messages:
   Overview: 总览
   Character Traits: 角色属性
   Character traits are not ready yet. Waiting for the world to finish preparing…: 角色属性定义尚未生成，等待世界初始化……
+  Text: 文本
+  Number: 数值
+  Boolean: 是非
+  Choice: 选项
+  List: 列表
+  Object: 对象
+  Map: 映射
+  Stats: 数值属性
+  Biography: 背景
+  Abilities: 能力
+  Equipment: 装备
+  Social: 社交

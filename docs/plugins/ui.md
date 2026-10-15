@@ -199,7 +199,9 @@ pnpm validate:plugin ~/.covel/plugins/tavern-rumors
 在游戏里看效果：`pnpm dev` 正在运行时，保存文件后插件会自动重新加载，刷新页面即可。页签的名字变成“传闻”，点“添加记录”多出一条，点“追问这条”会把那条传闻的标题放进输入框上方的待发送区。
 
 > [!IMPORTANT]
-> 校验也检查界面文件的结构：组件名、`view` 和 `webview` 二选一、`repeat.statePath` 的写法、`$item` 的字段名、`specVersion`，以及只能引用本插件的数据。游戏显示面板时用的是同一套规则，所以校验通过的面板不会因为格式被去掉。把 `Card` 误写成 `Kard`，校验会失败，并指出是哪个文件的哪个位置，例如 `./runtimes/note/ui/panel.json: view.children[0].component: unknown component Kard`。校验不检查组件的 `props` 和动作名。面板没出现时，打开浏览器的开发者工具看控制台：开发模式下，框架会把每个被去掉的面板和具体原因打印出来。
+> 校验也检查界面文件的结构：组件名、`view` 和 `webview` 二选一、`repeat.statePath` 的写法、`$item` 的字段名、`specVersion`，以及只能引用本插件的数据。游戏显示面板时用的是同一套规则，所以校验通过的面板不会因为格式被去掉。把 `Card` 误写成 `Kard`，校验会失败，并指出是哪个文件的哪个位置，例如 `./runtimes/note/ui/panel.json: view.children[0].component: unknown component Kard`。校验还检查 `FilterContainer` 的数组绑定、行模板和 `$map` 结构；其他组件的 `props` 和动作名不在这项检查里。面板没出现时，打开浏览器的开发者工具看控制台：开发模式下，框架会把每个被去掉的面板和具体原因打印出来。
+
+需要搜索或类别页签时，用 `FilterContainer` 的 `itemTemplate` 放每条记录的子树；它仍能包含按钮和徽标。数据里的枚举键用 `$map` 显示可翻译的标签。完整例子见[行模板](../reference/ui-components.md#filtercontainer-行模板)和[值标签映射](../reference/ui-components.md#值标签映射)。
 
 ## 3. 让按钮做事
 

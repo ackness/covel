@@ -3633,7 +3633,7 @@ runtime 报告失败时，它的原始错误保留在 `result.runtimeResults` �
         "runtime-export",
         "kernel"
       ],
-      "uiSlots": ["right", "message", "left"]
+      "uiSlots": ["right", "message"]
     },
     "scheduling": {
       "effectsPolicy": "warn"

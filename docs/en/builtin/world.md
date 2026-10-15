@@ -77,7 +77,7 @@ At the start, it prepares the character attributes and the "dimensions" of this 
 
 **What you will see**
 
-- "Overview" and "Character Traits" in the "World Details" tab on the right. Character Traits reads the current session character schema, so a save with an existing schema shows it immediately.
+- "Overview" and "Character Traits" in the "World Details" tab on the right. Character Traits reads the current session character schema, so a save with an existing schema shows it immediately. Type and category badges follow the UI language.
 - The current value of each dimension is shown in the panel, and you can change it by hand. If a turn's settlement fails, the panel tells you. You can retry, mark it as handled manually, or skip it explicitly. Before your next action, the system automatically retries once.
 
 **When it is on**: on by default (`kind: core`). You can turn it off on the session-prep screen. All three built-in packs include it.

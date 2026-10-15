@@ -140,7 +140,7 @@ Extract facts supported by runtime-inputs.narrative.value, then call save-facts.
 | `events` | 插件事件契约 |
 | `settings` | 玩家配置项，运行时通过 `ctx.userSettings` 读取 |
 | `data` | 本插件数据 namespace 的 schema、version、accepts、search |
-| `ui` | 包根相对的 `right/message/left` UI spec 路径 |
+| `ui` | 包根相对的 `right/message` UI spec 路径 |
 | `worldProjections` | 世界数据投影声明 |
 | `prompt` | 静态提示词段 |
 
@@ -824,7 +824,7 @@ namespace 声明 `search` 之后，它的记录进入框架的记忆检索（[`m
 
 清单里写了宿主不认识的字段（例如已经删掉的旧字段，或给新版宿主写的字段）时，加载器去掉这个字段，在服务端日志里写明文件和字段，包照常加载，安装也照常进行。`pnpm validate:plugin` 把它报为错误：删掉它，或改成本页写的字段名。
 
-只有整个字段会被去掉：`PLUGIN.md` 顶层的字段、`contributes` 下的一项、内联 `runtime` 或 `RUNTIME.md` 顶层的字段。下面两种情况仍然让加载失败：
+只有整个字段会被去掉：`PLUGIN.md` 顶层的字段、`contributes` 下的一项（包括 `contributes.ui` 下不支持的位置）、内联 `runtime` 或 `RUNTIME.md` 顶层的字段。下面两种情况仍然让加载失败：
 
 - 已知字段里面的未知键，例如 `permissions.fs`、`io.conceal`、`schedule.priority`。宿主不运行一个只看懂一半的声明。
 - 像是限制或标识包的字段写错了，例如 `permision`、`gaurd`、`covle`。这些字段是根上的 `id`、`kind`、`version`、`covel`、`provides`、`requires`、`optional`、`conflicts`、`permissions`、`entry`、`runtime`，以及 runtime 的 `type`、`guard`、`permissions`、`effects`、`schedule`、`io`、`function`。报错会说它像哪个字段。

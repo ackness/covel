@@ -69,28 +69,72 @@ function isTextProperty(name: string): boolean {
 
 /**
  * Parts of a spec that hold data, not text for the player: action parameters
- * sent to a runtime, data sources, and maps from a component property to a
- * data path. A property there may be named `title` and still be data.
+ * sent to a runtime and data sources. A property there may be named `title`
+ * and still be data.
  */
 function isDataSubtree(name: string): boolean {
-  return name === "on" || name === "dataSource" || name.endsWith("PropMap");
+  return name === "on" || name === "watch" || name === "dataSource";
+}
+
+/**
+ * Visit text positions once for both compilation and missing-translation
+ * checks. Only $map labels/fallback are text; its value expression stays data.
+ */
+function mapUiText(
+  value: unknown,
+  translate: (property: string, text: string) => unknown,
+  textProperty?: string,
+): unknown {
+  if (typeof value === "string")
+    return textProperty ? translate(textProperty, value) : value;
+  if (Array.isArray(value))
+    return value.map((item) => mapUiText(item, translate));
+  if (value === null || typeof value !== "object") return value;
+  const isMap = Object.hasOwn(value, "$map");
+  return Object.fromEntries(
+    Object.entries(value).map(([property, child]) => {
+      if (isDataSubtree(property) || (isMap && property === "$map"))
+        return [property, child];
+      if (
+        isMap &&
+        property === "labels" &&
+        child &&
+        typeof child === "object" &&
+        !Array.isArray(child)
+      )
+        return [
+          property,
+          Object.fromEntries(
+            Object.entries(child).map(([key, label]) => [
+              key,
+              mapUiText(label, translate, "label"),
+            ]),
+          ),
+        ];
+      return [
+        property,
+        mapUiText(
+          child,
+          translate,
+          isMap && property === "fallback"
+            ? "fallback"
+            : isTextProperty(property)
+              ? property
+              : undefined,
+        ),
+      ];
+    }),
+  );
 }
 
 /** Every text of a spec the player reads, with the property that holds it. */
-function* uiTexts(
-  value: unknown,
-): Generator<{ property: string; text: string }> {
-  if (Array.isArray(value)) {
-    for (const item of value) yield* uiTexts(item);
-    return;
-  }
-  if (value === null || typeof value !== "object") return;
-  for (const [property, child] of Object.entries(value)) {
-    if (isDataSubtree(property)) continue;
-    if (typeof child === "string") {
-      if (isTextProperty(property)) yield { property, text: child };
-    } else yield* uiTexts(child);
-  }
+function uiTexts(value: unknown): { property: string; text: string }[] {
+  const texts: { property: string; text: string }[] = [];
+  mapUiText(value, (property, text) => {
+    texts.push({ property, text });
+    return text;
+  });
+  return texts;
 }
 
 /**
@@ -137,34 +181,18 @@ export function compileUiText<T>(
   used?: Set<string>,
 ): T {
   if (catalogs.length === 0) return spec;
-  const walk = (value: unknown): unknown => {
-    if (Array.isArray(value)) return value.map(walk);
-    if (value === null || typeof value !== "object") return value;
-    const result: Record<string, unknown> = {};
-    for (const [property, child] of Object.entries(value)) {
-      if (isDataSubtree(property)) {
-        result[property] = child;
-        continue;
-      }
-      if (typeof child !== "string" || !isTextProperty(property)) {
-        result[property] = walk(child);
-        continue;
-      }
-      const translated: Record<string, string> = {};
-      for (const catalog of catalogs) {
-        const key = matchingKey(catalog, property, child);
-        if (key === undefined) continue;
-        translated[catalog.locale] = catalog.messages[key]!;
-        used?.add(`${catalog.file}\u0000${key}`);
-      }
-      result[property] =
-        Object.keys(translated).length > 0
-          ? { [PLUGIN_BASE_LOCALE]: child, ...translated }
-          : child;
+  return mapUiText(spec, (property, text) => {
+    const translated: Record<string, string> = {};
+    for (const catalog of catalogs) {
+      const key = matchingKey(catalog, property, text);
+      if (key === undefined) continue;
+      translated[catalog.locale] = catalog.messages[key]!;
+      used?.add(`${catalog.file}\u0000${key}`);
     }
-    return result;
-  };
-  return walk(spec) as T;
+    return Object.keys(translated).length > 0
+      ? { [PLUGIN_BASE_LOCALE]: text, ...translated }
+      : text;
+  }) as T;
 }
 
 /** Text properties of a spec that are written as an inline locale map. */
@@ -180,8 +208,17 @@ function findInlineUiText(spec: unknown): string[] {
       found.push(at);
       return;
     }
-    for (const [key, child] of Object.entries(value))
-      walk(child, at ? `${at}.${key}` : key);
+    for (const [key, child] of Object.entries(value)) {
+      if (
+        key === "labels" &&
+        Object.hasOwn(value, "$map") &&
+        child &&
+        typeof child === "object"
+      ) {
+        for (const [labelKey, label] of Object.entries(child))
+          walk(label, `${at}.labels.${labelKey}`);
+      } else walk(child, at ? `${at}.${key}` : key);
+    }
   };
   walk(spec, "");
   return found;

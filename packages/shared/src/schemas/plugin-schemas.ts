@@ -518,10 +518,6 @@ export const pluginUiPathsSchema = z
       .array(z.string().min(1))
       .describe("Paths of UI specs rendered inside the message stream.")
       .optional(),
-    left: z
-      .array(z.string().min(1))
-      .describe("Paths of UI specs for the left panel.")
-      .optional(),
   })
   .strict();
 

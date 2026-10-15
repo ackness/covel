@@ -31,14 +31,34 @@
               {
                 "component": "Badge",
                 "props": {
-                  "label": { "$item": "type" },
+                  "label": {
+                    "$map": { "$item": "type" },
+                    "labels": {
+                      "string": "Text",
+                      "number": "Number",
+                      "boolean": "Boolean",
+                      "enum": "Choice",
+                      "array": "List",
+                      "object": "Object",
+                      "map": "Map"
+                    }
+                  },
                   "color": "blue"
                 }
               },
               {
                 "component": "Badge",
                 "props": {
-                  "label": { "$item": "category" }
+                  "label": {
+                    "$map": { "$item": "category" },
+                    "labels": {
+                      "stats": "Stats",
+                      "bio": "Biography",
+                      "abilities": "Abilities",
+                      "equipment": "Equipment",
+                      "social": "Social"
+                    }
+                  }
                 }
               }
             ]

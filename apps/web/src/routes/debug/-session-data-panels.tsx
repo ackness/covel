@@ -90,9 +90,7 @@ export function PluginContractsPanel({
         );
         const localTools = plugin.tools.filter((tool) => tool.kind === "local");
         const uiCount =
-          (plugin.ui?.right?.length ?? 0) +
-          (plugin.ui?.message?.length ?? 0) +
-          (plugin.ui?.left?.length ?? 0);
+          (plugin.ui?.right?.length ?? 0) + (plugin.ui?.message?.length ?? 0);
         return (
           <div key={plugin.id} className="border border-border p-2 space-y-2">
             <div className="flex flex-wrap items-center gap-2">

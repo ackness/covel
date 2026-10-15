@@ -6,8 +6,8 @@ import { loadPluginUiSpec } from "../src/ui-spec.js";
 function itemProps(value: unknown): Record<string, unknown> | undefined {
   if (!value || typeof value !== "object") return;
   const record = value as Record<string, unknown>;
-  if (record.itemComponent === "EntryCard")
-    return record.itemLiteralProps as Record<string, unknown>;
+  if (record.component === "EntryCard")
+    return record.props as Record<string, unknown>;
   for (const child of Object.values(record)) {
     const found = itemProps(child);
     if (found) return found;

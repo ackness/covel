@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { pluginUiSpecIssues } from "../src/schemas/ui-spec.js";
+import {
+  pluginUiSpecIssues,
+  pluginUiSpecSchema,
+} from "../src/schemas/ui-spec.js";
 
 const paths = (spec: unknown) =>
   pluginUiSpecIssues(spec, "owner").map((issue) => issue.path);
@@ -137,5 +140,113 @@ describe("plugin UI spec rules", () => {
       paths({ id: "gallery", navTarget: "images", icon: "book-open", view }),
     ).toEqual([]);
     expect(paths({ navTarget: "unknown", view })).toEqual(["navTarget"]);
+  });
+});
+
+describe("row template and value-label contracts", () => {
+  const view = (itemTemplate: unknown) => ({
+    component: "FilterContainer",
+    props: {
+      items: { $state: "/entries" },
+      itemTemplate,
+    },
+  });
+
+  it("accepts a template with nested slots, row expressions, actions and label maps", () => {
+    const spec = {
+      view: view({
+        component: "Card",
+        slots: {
+          header: [
+            {
+              component: "Badge",
+              props: {
+                label: {
+                  $map: { $item: "status" },
+                  labels: { active: "Active", pluginId: "Label" },
+                  fallback: { $item: "status" },
+                },
+              },
+            },
+          ],
+        },
+        children: [
+          {
+            component: "Button",
+            on: {
+              click: { action: "invokeRuntime", params: { pluginId: "owner" } },
+            },
+          },
+        ],
+      }),
+    };
+    expect(pluginUiSpecSchema.safeParse(spec).success).toBe(true);
+    expect(paths(spec)).toEqual([]);
+  });
+
+  it.each([
+    [{ component: "UnknownWidget" }, "view.props.itemTemplate.component"],
+    [
+      {
+        component: "Stack",
+        slots: { header: [{ component: "UnknownWidget" }] },
+      },
+      "view.props.itemTemplate.slots.header[0].component",
+    ],
+    [
+      {
+        component: "Text",
+        props: { content: { $map: "active", labels: ["Active"] } },
+      },
+      "view.props.itemTemplate.props.content.labels",
+    ],
+    [
+      {
+        component: "Text",
+        props: { content: { $map: "active", labels: { active: 3 } } },
+      },
+      "view.props.itemTemplate.props.content.labels.active",
+    ],
+    [
+      { component: "Text", props: { content: { $item: "/title" } } },
+      "view.props.itemTemplate.props.content.$item",
+    ],
+  ])(
+    "rejects malformed template %j in both schema and shared validation",
+    (template, at) => {
+      const spec = { view: view(template) };
+      expect(pluginUiSpecSchema.safeParse(spec).success).toBe(false);
+      expect(paths(spec)).toContain(at);
+    },
+  );
+
+  it("rejects foreign bindings inside templates", () => {
+    expect(
+      paths({
+        view: view({
+          component: "Button",
+          on: {
+            click: { action: "invokeRuntime", params: { pluginId: "other" } },
+          },
+        }),
+      }),
+    ).toContain("view.props.itemTemplate.on.click.params.pluginId");
+  });
+
+  it("requires a template and state-backed items, and rejects removed item props", () => {
+    for (const props of [
+      { items: { $state: "/entries" } },
+      { items: [], itemTemplate: { component: "Text" } },
+      {
+        items: { $state: "/entries" },
+        itemTemplate: { component: "Text" },
+        itemComponent: "Text",
+        itemPropMap: {},
+        itemLiteralProps: {},
+      },
+    ])
+      expect(
+        paths({ view: { component: "FilterContainer", props } }).length,
+      ).toBeGreaterThan(0);
   });
 });

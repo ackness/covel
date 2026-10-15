@@ -45,41 +45,51 @@
           "color": "red"
         }
       ],
-      "itemComponent": "EntryCard",
       "itemKeyField": "key",
-      "itemPropMap": {
-        "title": "value/name",
-        "category": "value/status",
-        "content": "value/description",
-        "tags": "value/chips",
-        "isNew": "value/isNew"
-      },
-      "itemLiteralProps": {
-        "collapsible": true,
-        "defaultExpanded": true,
-        "categoryOptions": [
-          {
-            "value": "active",
-            "label": "Active",
-            "icon": "compass",
-            "color": "blue"
-          },
-          {
-            "value": "completed",
-            "label": "Completed",
-            "icon": "check-circle-2",
-            "color": "green"
-          },
-          {
-            "value": "failed",
-            "label": "Failed",
-            "icon": "x-circle",
-            "color": "red"
-          }
-        ]
-      },
       "footer": "{{count}} quests tracked",
-      "emptyMessage": "No matching quests"
+      "emptyMessage": "No matching quests",
+      "itemTemplate": {
+        "component": "EntryCard",
+        "props": {
+          "collapsible": true,
+          "defaultExpanded": true,
+          "categoryOptions": [
+            {
+              "value": "active",
+              "label": "Active",
+              "icon": "compass",
+              "color": "blue"
+            },
+            {
+              "value": "completed",
+              "label": "Completed",
+              "icon": "check-circle-2",
+              "color": "green"
+            },
+            {
+              "value": "failed",
+              "label": "Failed",
+              "icon": "x-circle",
+              "color": "red"
+            }
+          ],
+          "title": {
+            "$item": "value/name"
+          },
+          "category": {
+            "$item": "value/status"
+          },
+          "content": {
+            "$item": "value/description"
+          },
+          "tags": {
+            "$item": "value/chips"
+          },
+          "isNew": {
+            "$item": "value/isNew"
+          }
+        }
+      }
     }
   }
 }

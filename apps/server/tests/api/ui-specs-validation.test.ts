@@ -170,6 +170,81 @@ describe("GET /api/ui-specs — per-spec validation", () => {
     expect(badRows).toHaveLength(0);
   });
 
+  it("validates templates and maps through the same loader rules and omits the removed slot", async () => {
+    const template = (itemTemplate: unknown) => ({
+      view: {
+        component: "FilterContainer",
+        props: {
+          items: { $state: "/entries" },
+          itemTemplate,
+        },
+      },
+    });
+    await writePlugin(
+      dir,
+      "template-panel",
+      JSON.stringify(
+        template({
+          component: "Badge",
+          props: {
+            label: {
+              $map: { $item: "status" },
+              labels: { active: "Active" },
+              fallback: "Unknown",
+            },
+          },
+        }),
+      ),
+    );
+    await writePlugin(
+      dir,
+      "bad-template",
+      JSON.stringify(template({ component: "UnknownWidget" })),
+    );
+    await writePlugin(
+      dir,
+      "bad-map",
+      JSON.stringify(
+        template({
+          component: "Badge",
+          props: { label: { $map: "active", labels: 5 } },
+        }),
+      ),
+    );
+    registry = createPluginRegistry();
+    await registerTestPlugins(registry, [dir]);
+    app = createMiscApiRoutes(stubAi, registry, store);
+    const response = await app.request("/api/ui-specs");
+    const body = await response.json();
+    expect(response.status).toBe(200);
+    expect(body).not.toHaveProperty("left");
+    expect(body.right).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ pluginId: "template-panel" }),
+      ]),
+    );
+    expect(body.diagnostics).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          pluginId: "bad-template",
+          issues: expect.arrayContaining([
+            expect.objectContaining({
+              path: "view.props.itemTemplate.component",
+            }),
+          ]),
+        }),
+        expect.objectContaining({
+          pluginId: "bad-map",
+          issues: expect.arrayContaining([
+            expect.objectContaining({
+              path: "view.props.itemTemplate.props.label.labels",
+            }),
+          ]),
+        }),
+      ]),
+    );
+  });
+
   it("does not report diagnostics for inactive plugins", async () => {
     // Re-scope the session to only the valid plugin; the bad ones are no
     // longer active, so their diagnostics must be filtered out.

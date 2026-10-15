@@ -15,6 +15,20 @@ export const CURRENT_UI_SPEC_VERSION = 1;
 export const MAX_UI_WEBVIEW_BYTES = 512 * 1024;
 
 const i18nTextSchema = z.union([z.string(), z.record(z.string(), z.string())]);
+/** Value-to-label expressions share one shape in validation and rendering. */
+export const uiMapDirectiveSchema = z.strictObject({
+  $map: z.unknown(),
+  labels: z.record(z.string(), i18nTextSchema),
+  fallback: z.unknown().optional(),
+});
+
+const filterItemsSchema = z.union([
+  z.strictObject({ $state: z.string().startsWith("/") }),
+  z.strictObject({ $item: z.string() }),
+  z.strictObject({ $bindState: z.string().startsWith("/") }),
+  z.strictObject({ $bindItem: z.string() }),
+]);
+
 const componentNameSchema = z.enum(PLUGIN_UI_COMPONENT_NAMES, {
   error: (issue) =>
     `unknown component ${typeof issue.input === "string" ? issue.input : JSON.stringify(issue.input)}; use a component name from docs/reference/ui-components.md`,
@@ -65,6 +79,26 @@ const uiViewNodeSchema: z.ZodType = z.lazy(() =>
       visible: z.unknown().optional(),
     })
     .superRefine((node, ctx) => {
+      if ((node.component ?? node.type) === "FilterContainer") {
+        const props = z
+          .looseObject({
+            items: filterItemsSchema,
+            itemTemplate: uiViewNodeSchema,
+            itemComponent: z.never().optional(),
+            itemPropMap: z.never().optional(),
+            itemLiteralProps: z.never().optional(),
+          })
+          .safeParse(node.props);
+        if (!props.success)
+          for (const issue of props.error.issues)
+            ctx.addIssue({ ...issue, path: ["props", ...issue.path] });
+        if (node.children || node.repeat || node.slots)
+          ctx.addIssue({
+            code: "custom",
+            message:
+              "FilterContainer renders props.itemTemplate for each item; use that subtree instead of children, slots or repeat",
+          });
+      }
       if (!node.component && !node.type)
         ctx.addIssue({
           code: "custom",
@@ -138,6 +172,27 @@ export const pluginUiSpecSchema = z
     view: uiViewNodeSchema.optional(),
   })
   .superRefine((spec, ctx) => {
+    walkSpec(spec, [], (at, key, value, parent) => {
+      if (key === "$map") {
+        const mapped = uiMapDirectiveSchema.safeParse(parent);
+        if (!mapped.success)
+          for (const issue of mapped.error.issues)
+            ctx.addIssue({
+              ...issue,
+              path: [...at.slice(0, -1), ...issue.path],
+            });
+      }
+      if (
+        (key === "$item" || key === "$bindItem") &&
+        typeof value === "string" &&
+        value.startsWith("/")
+      )
+        ctx.addIssue({
+          code: "custom",
+          path: at,
+          message: `${JSON.stringify(value)} must not start with a slash; write the item's field name (${JSON.stringify(value.slice(1))})`,
+        });
+    });
     const hasView = spec.view !== undefined && spec.view !== null;
     const hasWebview = spec.webview !== undefined && spec.webview !== null;
     if (hasView && hasWebview)
@@ -178,7 +233,7 @@ export function pluginUiSpecIssues(
         path: formatPath(issue.path) || "(root)",
         message: issue.message,
       }));
-  walkSpec(spec, "", (at, key, value) => {
+  walkSpec(spec, [], (at, key, value) => {
     if (
       (key === "pluginId" ||
         key === "sourcePlugin" ||
@@ -186,17 +241,8 @@ export function pluginUiSpecIssues(
       value !== ownerPluginId
     )
       issues.push({
-        path: at,
+        path: formatPath(at),
         message: `a UI binding must reference its owning plugin ${ownerPluginId}`,
-      });
-    if (
-      (key === "$item" || key === "$bindItem") &&
-      typeof value === "string" &&
-      value.startsWith("/")
-    )
-      issues.push({
-        path: at,
-        message: `${JSON.stringify(value)} must not start with a slash; write the item's field name (${JSON.stringify(value.slice(1))})`,
       });
   });
   return issues;
@@ -214,18 +260,25 @@ function formatPath(path: readonly PropertyKey[]): string {
 
 function walkSpec(
   value: unknown,
-  at: string,
-  visit: (at: string, key: string, value: unknown) => void,
+  at: (string | number)[],
+  visit: (
+    at: (string | number)[],
+    key: string,
+    value: unknown,
+    parent: Record<string, unknown>,
+  ) => void,
 ): void {
   if (Array.isArray(value)) {
     for (const [index, item] of value.entries())
-      walkSpec(item, `${at}[${index}]`, visit);
+      walkSpec(item, [...at, index], visit);
     return;
   }
   if (!value || typeof value !== "object") return;
   for (const [key, item] of Object.entries(value)) {
-    const child = at ? `${at}.${key}` : key;
-    visit(child, key, item);
-    walkSpec(item, child, visit);
+    const child = [...at, key];
+    visit(child, key, item, value as Record<string, unknown>);
+    // Label keys and locale keys are data, never bindings or directives.
+    if (key !== "labels" || !Object.hasOwn(value, "$map"))
+      walkSpec(item, child, visit);
   }
 }

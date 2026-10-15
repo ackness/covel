@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { ComponentRenderer } from "@json-render/react";
-import { useStateStore } from "@json-render/react";
+import { RepeatScopeProvider, useStateStore } from "@json-render/react";
 import { clsx } from "clsx";
 import { Search } from "lucide-react";
 import {
@@ -86,55 +86,19 @@ export const Tabs: ComponentRenderer = ({ element, bindings }) => {
   );
 };
 
-// ── Filter Primitives (stateful container + supporting widgets) ──
-//
-// FilterContainer manages internal search + tab state and renders a
-// preconfigured per-item component for each filtered entry. This avoids
-// json-render's "children pre-resolved by parent renderer" limitation
-// (which would prevent a child template from re-resolving against per-item
-// scope) by having the catalog component itself iterate. Tabs is used
-// internally by FilterContainer and also exposed standalone for spec authors
-// who want a tab strip bound to global state via `$bindState`.
-//
-// Spec example:
-// ```json
-// {
-//   "component": "FilterContainer",
-//   "props": {
-//     "items": { "$state": "/entries" },
-//     "searchPlaceholder": "Search…",
-//     "searchFields": ["value/title", "value/content", "value/tags"],
-//     "filterField": "value/category",
-//     "filterTabs": [
-//       { "value": "all", "label": "All" },
-//       { "value": "monster", "label": "Monsters", "icon": "skull", "color": "red" }
-//     ],
-//     "itemComponent": "EntryCard",
-//     "itemPropMap": {
-//       "title": "value/title",
-//       "content": "value/content",
-//       "category": "value/category",
-//       "tags": "value/tags",
-//       "rarity": "value/rarity"
-//     }
-//   }
-// }
-// ```
-
 /**
- * FilterContainer — stateful catalog primitive that owns search + tab state
- * and renders a per-item child component for each filtered entry.
- *
- * Why not a child template? json-render resolves a parent's children before
- * passing them in, so a generic template can't re-resolve `$item` per filtered
- * row without reaching into renderer internals. Pinning to a registered
- * component name + a flat propName→itemPath map keeps the contract declarative
- * and the implementation framework-agnostic.
+ * Owns search and tab state. plugin-panel-spec lowers props.itemTemplate to
+ * lazy children; each row renders them under json-render's public repeat
+ * scope, with the existing state, directives and action handlers intact.
  */
 export function createFilterContainer(
   getRenderer: (name: string) => ComponentRenderer | undefined,
 ): ComponentRenderer {
-  const FilterContainer: ComponentRenderer = ({ element }) => {
+  const FilterContainer: ComponentRenderer = ({
+    element,
+    children,
+    bindings,
+  }) => {
     const { t } = useTranslation();
     const resolve = useI18nResolver();
     // Same unvalidated-spec rules as every other renderer. These three deserve
@@ -146,19 +110,17 @@ export function createFilterContainer(
     const searchFields = asArray(element.props?.searchFields).filter(
       (field): field is string => typeof field === "string",
     );
-    const filterField = element.props?.filterField as string | undefined;
+    const filterField =
+      typeof element.props?.filterField === "string"
+        ? element.props.filterField
+        : undefined;
     const filterTabs = asOptionArray(
       element.props?.filterTabs,
     ) as unknown as FilterTab[];
-    const itemComponent = element.props?.itemComponent as string | undefined;
-    const itemPropMap =
-      (element.props?.itemPropMap as Record<string, string>) ?? {};
-    // itemLiteralProps — flat literal values forwarded verbatim to every item
-    // instance. Useful for "apply this to all items" switches like `collapsible`.
-    // Path-based `itemPropMap` wins on collisions.
-    const itemLiteralProps =
-      (element.props?.itemLiteralProps as Record<string, unknown>) ?? {};
-    const itemKeyField = element.props?.itemKeyField as string | undefined;
+    const itemKeyField =
+      typeof element.props?.itemKeyField === "string"
+        ? element.props.itemKeyField
+        : undefined;
     const emptyMessage = resolve(element.props?.emptyMessage);
     const showSearch =
       element.props?.showSearch !== false && searchFields.length > 0;
@@ -175,10 +137,10 @@ export function createFilterContainer(
     const filtered = useMemo(
       () =>
         filterItems(
-          itemsArray,
+          itemsArray.map((item, index) => ({ item, index })),
           searchQuery,
-          searchFields,
-          filterField,
+          searchFields.map((field) => `item/${field}`),
+          filterField ? `item/${filterField}` : undefined,
           activeFilter,
         ),
       [itemsArray, searchQuery, searchFields, filterField, activeFilter],
@@ -205,9 +167,6 @@ export function createFilterContainer(
       return counts;
     }, [showCounts, itemsArray, filterField, filterTabs]);
 
-    const ItemComponent = itemComponent
-      ? getRenderer(itemComponent)
-      : undefined;
     const SearchIcon = Search;
 
     const fallbackEmpty =
@@ -253,44 +212,22 @@ export function createFilterContainer(
               {emptyMessage || fallbackEmpty}
             </p>
           )}
-          {filtered.length > 0 &&
-            ItemComponent &&
-            filtered.map((item, index) => {
-              const itemProps: Record<string, unknown> = {
-                ...itemLiteralProps,
-              };
-              for (const [propName, itemPath] of Object.entries(itemPropMap)) {
-                itemProps[propName] = resolvePath(item, itemPath);
-              }
+          {bindings?.items &&
+            filtered.map(({ item, index }) => {
               const keyValue = itemKeyField
                 ? resolvePath(item, itemKeyField)
                 : undefined;
-              const reactKey =
-                keyValue !== undefined && keyValue !== null
-                  ? String(keyValue)
-                  : String(index);
               return (
-                <ItemComponent
-                  key={reactKey}
-                  element={{
-                    type: itemComponent ?? "EntryCard",
-                    props: itemProps,
-                  }}
-                  emit={() => {}}
-                  on={() => ({
-                    emit: () => {},
-                    shouldPreventDefault: false,
-                    bound: false,
-                  })}
-                />
+                <RepeatScopeProvider
+                  key={keyValue == null ? index : String(keyValue)}
+                  item={item}
+                  index={index}
+                  basePath={`${bindings.items}/${index}`}
+                >
+                  {children}
+                </RepeatScopeProvider>
               );
             })}
-          {filtered.length > 0 && !ItemComponent && (
-            <p className="text-xs text-red-500 italic">
-              FilterContainer: itemComponent &quot;{itemComponent}&quot; not
-              found in registry
-            </p>
-          )}
         </div>
         {footerRaw !== undefined && footerRaw !== null && (
           <FilterContainerFooter

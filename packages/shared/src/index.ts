@@ -301,6 +301,7 @@ export {
   MAX_UI_WEBVIEW_BYTES,
   pluginUiSpecIssues,
   pluginUiSpecSchema,
+  uiMapDirectiveSchema,
   type PluginUiSpecIssue,
 } from "./schemas/ui-spec.js";
 
