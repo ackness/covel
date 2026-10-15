@@ -1,0 +1,37 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "userMessage": "covel-request:96448854e3c2abdbac75f6d41929926569542f85c57cf6afcbd6ac9e8a8beb26",
+        "model": "codex/gpt-6-luna",
+        "turnIndex": 0,
+        "hasToolResult": false
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "name": "emit-event",
+            "arguments": "{\"topic\":\"check.resolved\",\"data\":{\"checks\":[{\"action\":\"沿着后门的泥印小心靠近并观察\",\"attribute\":\"insight\",\"modifier\":4,\"difficulty\":\"normal\",\"outcome\":\"success\"}]}}",
+            "id": "call_c07f9224336f424bb9771d2eadac5c83"
+          }
+        ],
+        "usage": {
+          "completion_tokens": 61,
+          "completion_tokens_details": {
+            "reasoning_tokens": 0
+          },
+          "prompt_tokens": 14687,
+          "prompt_tokens_details": {
+            "cache_write_tokens": 0,
+            "cached_tokens": 13824
+          },
+          "total_tokens": 14748
+        }
+      },
+      "metadata": {
+        "systemHash": "90101435",
+        "toolsHash": "1166c035"
+      }
+    }
+  ]
+}

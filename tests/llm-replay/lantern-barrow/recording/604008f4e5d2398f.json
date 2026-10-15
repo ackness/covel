@@ -1,0 +1,37 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "userMessage": "covel-request:604008f4e5d2398f81170ff67f065edcafa1367ba77be3ae7b0b09915331aeb8",
+        "model": "codex/gpt-6-luna",
+        "turnIndex": 0,
+        "hasToolResult": false
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "name": "create-character-form",
+            "arguments": "{\"formId\":\"char-creation\",\"title\":\"灰苇村的远征者\",\"submitLabel\":\"踏入酒馆\",\"submitBehavior\":{\"echoFilledNarrative\":true},\"fields\":[{\"name\":\"characterName\",\"label\":\"角色姓名\",\"type\":\"text\",\"required\":true,\"placeholder\":\"写下你的名字\"},{\"name\":\"persona\",\"label\":\"性格\",\"type\":\"textarea\",\"required\":false,\"defaultValue\":\"沉着寡言，先观察再行动\"},{\"name\":\"calling\",\"label\":\"职业\",\"type\":\"text\",\"required\":false,\"defaultValue\":\"游荡者\"},{\"name\":\"background\",\"label\":\"来历\",\"type\":\"textarea\",\"required\":false,\"defaultValue\":\"为追查一桩旧日失踪案来到灰苇村；你曾在一处废弃灯塔的墙缝里，听见有人用自己的声音呼唤你。\"}],\"narrativeTemplate\":\"你来到灰苇村时，古冢方向的夜色像一块尚未冷却的铁。百年不灭的灯已经熄了，守灯人伊索德失踪，青铜墓门敞开；村民谈起这些事时，总会先看一眼门窗，仿佛黑暗也会听见。你把旅途的泥水留在歪角鹿酒馆门口，推门进去。布兰诺克・黑尔独坐在角落，旧剑搁在手边；雷恩修女正低头辨认一张褪色的灯铭拓片。你叫{{characterName}}，是个{{persona}}的{{calling}}。你为{{background}}而来到这里。吧台后的梅瑞尔把告示推到你面前：赏金、古冢入口，以及一行潦草的字——“带回守灯人，查明灯为何熄灭。”窗外，沼泽深处传来一声悠长的钟响。你尚未决定信任谁，但第一次远征已经在等你。\"}",
+            "id": "call_9235920a07bb47a6aaebd7da3eeb6df7"
+          }
+        ],
+        "usage": {
+          "completion_tokens": 452,
+          "completion_tokens_details": {
+            "reasoning_tokens": 0
+          },
+          "prompt_tokens": 6826,
+          "prompt_tokens_details": {
+            "cache_write_tokens": 0,
+            "cached_tokens": 0
+          },
+          "total_tokens": 7278
+        }
+      },
+      "metadata": {
+        "systemHash": "d9417bd8",
+        "toolsHash": "bd8c4fdf"
+      }
+    }
+  ]
+}

@@ -1,0 +1,37 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "userMessage": "covel-request:d5ce0771e0ff7fbb501dbfc440f5c858cc16373eced3a169eb768bebcd715ec8",
+        "model": "codex/gpt-6-luna",
+        "turnIndex": 0,
+        "hasToolResult": false
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "name": "update-affinity",
+            "arguments": "{\"changes\":[{\"name\":\"布兰诺克・黑尔\",\"delta\":1,\"reason\":\"你靠近线索并保持警觉时，布兰诺克也警戒地按住剑柄，与你共同留意危险。\"},{\"name\":\"雷恩修女\",\"delta\":1,\"reason\":\"你在她身边警觉观察时，雷恩默念祷词应对异状。\"}]}",
+            "id": "call_f41ef44d3c6b4d5b8686f5d12180973e"
+          }
+        ],
+        "usage": {
+          "completion_tokens": 102,
+          "completion_tokens_details": {
+            "reasoning_tokens": 0
+          },
+          "prompt_tokens": 6976,
+          "prompt_tokens_details": {
+            "cache_write_tokens": 0,
+            "cached_tokens": 0
+          },
+          "total_tokens": 7078
+        }
+      },
+      "metadata": {
+        "systemHash": "4978991c",
+        "toolsHash": "681c9917"
+      }
+    }
+  ]
+}

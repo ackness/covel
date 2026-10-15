@@ -1,0 +1,31 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "userMessage": "covel-request:bcf65be9892b94d1ae3929d431c37094e5ba8d1d20f5810eece58d05df583e6f",
+        "model": "codex/gpt-6-luna",
+        "turnIndex": 0,
+        "hasToolResult": false
+      },
+      "response": {
+        "content": "你把账纸和后门边那道带芦苇纤维的泥印指给同伴看，说明那笔送往山脚小屋的记录恰好写在古灯熄灭前三天，旁边还有一道模糊的村长家徽记状印痕。几条线索摆在一起，至少说明有人把灯油和灯芯送去过小屋；脚印来自沼泽一带，却在告示前断了，留下它的人显然留意过这张纸。\n\n布兰诺克用指节敲了敲桌面。“账纸指向村长。脚印指向沼泽。别把两件事硬拴成一件。”他沉默片刻，又补了一句：“先问清墓门。二十年前，我没把所有人都带出来。”\n\n雷恩低头看过拓片，手指沿着纸上的旧刻痕轻轻划过。“我想先确认这枚印记究竟属于村长家，还是只是污迹。然后去看墓门上的封印。若灯铭文能告诉我们门为何从里面打开，也许就能知道伊索德留下了什么。”\n\n吧台后的梅瑞尔擦着杯子，没接话，只朝村长家所在的街口瞥了一眼。雨声渐密，后门外那道泥印已被冲得模糊。布兰诺克等着你表态，雷恩也把拓片重新摊开，留出一角空处。",
+        "usage": {
+          "completion_tokens": 347,
+          "completion_tokens_details": {
+            "reasoning_tokens": 0
+          },
+          "prompt_tokens": 14196,
+          "prompt_tokens_details": {
+            "cache_write_tokens": 0,
+            "cached_tokens": 13824
+          },
+          "total_tokens": 14543
+        }
+      },
+      "metadata": {
+        "systemHash": "4b4d9390",
+        "toolsHash": "1166c035"
+      }
+    }
+  ]
+}

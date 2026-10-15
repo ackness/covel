@@ -6,12 +6,12 @@
 
 [covel.story]
 provider = "default"
-model    = "deepseek-v4.1-flash"
+model    = "codex/gpt-6-luna"
 baseUrl  = "https://llm-replay.invalid"
 protocol = "openai-chat-v1"
 
 [covel.plugin]
 provider = "default"
-model    = "deepseek-v4.1-flash"
+model    = "codex/gpt-6-luna"
 baseUrl  = "https://llm-replay.invalid"
 protocol = "openai-chat-v1"

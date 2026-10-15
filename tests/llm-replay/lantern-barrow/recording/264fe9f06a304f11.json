@@ -1,0 +1,37 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "userMessage": "covel-request:264fe9f06a304f1137dc4006061a425a225c8acc8edb55b6773065a1a54513b0",
+        "model": "codex/gpt-6-luna",
+        "turnIndex": 0,
+        "hasToolResult": false
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "name": "advance-world-time",
+            "arguments": "{\"amount\":0,\"unit\":\"phase\",\"reason\":\"与同伴交流判断和打算，属于当前时辰内的短对话，时间未推进。\"}",
+            "id": "call_18e34cd578864482bb967fe183eb7027"
+          }
+        ],
+        "usage": {
+          "completion_tokens": 49,
+          "completion_tokens_details": {
+            "reasoning_tokens": 0
+          },
+          "prompt_tokens": 5387,
+          "prompt_tokens_details": {
+            "cache_write_tokens": 0,
+            "cached_tokens": 0
+          },
+          "total_tokens": 5436
+        }
+      },
+      "metadata": {
+        "systemHash": "1718f388",
+        "toolsHash": "a10dfc75"
+      }
+    }
+  ]
+}

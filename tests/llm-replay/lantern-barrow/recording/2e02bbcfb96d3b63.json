@@ -1,0 +1,37 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "userMessage": "covel-request:2e02bbcfb96d3b63ea2bf8c4fe718aa1e83631a192b56ab3317832e4bfb80f78",
+        "model": "codex/gpt-6-luna",
+        "turnIndex": 0,
+        "hasToolResult": false
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "name": "submit-world-facts",
+            "arguments": "{\"summary\":\"你从酒馆后门附近的黑泥与草屑中发现线索，听见远处土层下传来哼唱；一名赤脚女孩闭眼哼着曲调中的名字，朝北面的山路走去。布兰诺克警觉地按住剑柄，雷恩默念祷词，歌声来源和女孩的去向仍待查明。\",\"entities\":[{\"id\":\"赤脚女孩\",\"type\":\"character\",\"name\":\"赤脚女孩\",\"description\":\"一名身份未明的女孩闭着眼走进雨里，并哼唱着曲调。\"},{\"id\":\"芦苇纤维\",\"type\":\"concept\",\"name\":\"芦苇纤维\",\"description\":\"芦苇纤维被带进酒馆后门门槛内侧。\"},{\"id\":\"灰白草屑\",\"type\":\"concept\",\"name\":\"灰白草屑\",\"description\":\"几片极细的灰白草屑留在酒馆木板缝里。\"}],\"relations\":[],\"events\":[{\"id\":\"布兰诺克警戒\",\"type\":\"state_change\",\"participantIds\":[\"布兰诺克-黑尔\"],\"description\":\"布兰诺克站起身并按住剑柄，但没有拔剑。\",\"attributes\":{\"status\":\"警戒\"}},{\"id\":\"雷恩祷告\",\"type\":\"interaction\",\"participantIds\":[\"雷恩修女\"],\"description\":\"雷恩脸色发白，无声地默念祷词。\"},{\"id\":\"女孩北行\",\"type\":\"movement\",\"participantIds\":[\"赤脚女孩\"],\"description\":\"赤脚女孩闭着眼走进雨里，朝北面的山路迈去。\",\"attributes\":{\"destination\":\"北面的山路\"}},{\"id\":\"女孩哼唱\",\"type\":\"interaction\",\"participantIds\":[\"赤脚女孩\"],\"description\":\"赤脚女孩跟着远处的曲调哼出一个名字。\",\"attributes\":{\"content\":\"一个名字\"}}],\"statements\":[{\"id\":\"泥痕线索\",\"type\":\"discovery\",\"subjectIds\":[\"e2e测试角色\"],\"content\":\"酒馆后门附近残留的黑泥痕迹显示，来者曾在酒馆停留；芦苇纤维被带进门槛内侧，鞋底还沾着几片细微灰白草屑，草屑留在木板缝中。\"},{\"id\":\"脚印中断\",\"type\":\"discovery\",\"subjectIds\":[\"e2e测试角色\"],\"content\":\"门外脚印朝村北延伸几步，随后被水洼和杂乱车辙切断。\"},{\"id\":\"地下歌声\",\"type\":\"discovery\",\"subjectIds\":[\"e2e测试角色\"],\"content\":\"远处传来像隔着很远土层的细微哼唱，酒馆里的人声随即低了下去。\"}]}",
+            "id": "call_19692ce049c8498a8adae6ec06041c8a"
+          }
+        ],
+        "usage": {
+          "completion_tokens": 640,
+          "completion_tokens_details": {
+            "reasoning_tokens": 0
+          },
+          "prompt_tokens": 6967,
+          "prompt_tokens_details": {
+            "cache_write_tokens": 0,
+            "cached_tokens": 0
+          },
+          "total_tokens": 7607
+        }
+      },
+      "metadata": {
+        "systemHash": "f9f69e3a",
+        "toolsHash": "8768d054"
+      }
+    }
+  ]
+}

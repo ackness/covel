@@ -1,0 +1,37 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "userMessage": "covel-request:20897067f023bb42b76dca5000c0ad31f9d8c89e03328abca90cc9e9568f1789",
+        "model": "codex/gpt-6-luna",
+        "turnIndex": 0,
+        "hasToolResult": false
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "name": "emit-event",
+            "arguments": "{\"topic\":\"check.resolved\",\"data\":{\"checks\":[{\"action\":\"从脚印与账纸线索判断来者和用途\",\"attribute\":\"insight\",\"modifier\":4,\"difficulty\":\"normal\",\"outcome\":\"success\"}]}}",
+            "id": "call_a8784ca3d2f843a39cb0517a1de18310"
+          }
+        ],
+        "usage": {
+          "completion_tokens": 61,
+          "completion_tokens_details": {
+            "reasoning_tokens": 0
+          },
+          "prompt_tokens": 14105,
+          "prompt_tokens_details": {
+            "cache_write_tokens": 0,
+            "cached_tokens": 0
+          },
+          "total_tokens": 14166
+        }
+      },
+      "metadata": {
+        "systemHash": "4b4d9390",
+        "toolsHash": "1166c035"
+      }
+    }
+  ]
+}

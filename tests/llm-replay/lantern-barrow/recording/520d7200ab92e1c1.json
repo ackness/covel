@@ -1,0 +1,37 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "userMessage": "covel-request:520d7200ab92e1c19b2afd15e56c5da89496c9c8c4b27ae845c5e5e6261a3aa9",
+        "model": "codex/gpt-6-luna",
+        "turnIndex": 0,
+        "hasToolResult": false
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "name": "upsert-npc-graph",
+            "arguments": "{\"edges\":[{\"sourceName\":\"梅瑞尔・沃斯\",\"targetName\":\"E2E测试角色\",\"relation\":\"KNOWS_ABOUT\",\"strength\":0,\"fact\":\"梅瑞尔・沃斯向E2E测试角色暗示，旧账纸的来源比纸张本身更有价值。\"}]}",
+            "id": "call_6c4dd576765741b08decba2c52e5bfe8"
+          }
+        ],
+        "usage": {
+          "completion_tokens": 85,
+          "completion_tokens_details": {
+            "reasoning_tokens": 0
+          },
+          "prompt_tokens": 7752,
+          "prompt_tokens_details": {
+            "cache_write_tokens": 0,
+            "cached_tokens": 0
+          },
+          "total_tokens": 7837
+        }
+      },
+      "metadata": {
+        "systemHash": "1cf3a39c",
+        "toolsHash": "fab78c23"
+      }
+    }
+  ]
+}

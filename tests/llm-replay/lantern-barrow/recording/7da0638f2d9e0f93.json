@@ -1,0 +1,37 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "userMessage": "covel-request:7da0638f2d9e0f93a081b78595f161cb2b2f9168a62c024d0bf641fce611b7e3",
+        "model": "codex/gpt-6-luna",
+        "turnIndex": 0,
+        "hasToolResult": false
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "name": "generate-guide",
+            "arguments": "{\"scene\":\"雨夜山路异动\",\"recap\":\"你在酒馆后门附近发现黑泥、芦苇纤维和灰白草屑，远处传来隔着土层般的哼唱。一个闭眼哼着同一曲调的赤脚女孩走进雨里，朝北面山路迈去；布兰诺克按住剑柄，雷恩神色发白。\",\"decision\":\"女孩正朝北面的山路走去，你准备如何应对？\",\"prompts\":[{\"kind\":\"act\",\"text\":\"我快步追上女孩，先拦住她离开酒馆灯火范围\"},{\"kind\":\"social\",\"text\":\"我轻声呼唤女孩的名字，试着让她停下并回应我\"},{\"kind\":\"act\",\"text\":\"我请布兰诺克护住女孩，自己沿山路查看哼唱来源\"},{\"kind\":\"observe\",\"text\":\"我留在原地观察女孩的步伐，并倾听哼唱是否有变化\"}]}",
+            "id": "call_c70f4795dfcd4b80b2128b3059ccf642"
+          }
+        ],
+        "usage": {
+          "completion_tokens": 237,
+          "completion_tokens_details": {
+            "reasoning_tokens": 0
+          },
+          "prompt_tokens": 6438,
+          "prompt_tokens_details": {
+            "cache_write_tokens": 0,
+            "cached_tokens": 0
+          },
+          "total_tokens": 6675
+        }
+      },
+      "metadata": {
+        "systemHash": "222d9770",
+        "toolsHash": "ae89d990"
+      }
+    }
+  ]
+}

@@ -1,0 +1,37 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "userMessage": "covel-request:34cd845a06233e9df930aa6b661468b6a6febf1007855949165af53b16898a3b",
+        "model": "codex/gpt-6-luna",
+        "turnIndex": 0,
+        "hasToolResult": false
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "name": "submit-world-facts",
+            "arguments": "{\"schemaVersion\":1,\"summary\":\"你在酒馆发现一张无署名的旧账纸，记有灯油、灯芯及送往山脚小屋的日期，最近一笔在灯灭前三天，旁有模糊的村长家徽记。泥地上的芦苇纤维脚印从后门延伸到告示前后中断，梅瑞尔暗示账纸来源更有价值，雷恩注意到印痕后神情凝重。\",\"entities\":[{\"id\":\"旧账纸\",\"type\":\"item\",\"name\":\"旧账纸\",\"description\":\"旧账纸记有灯油、灯芯和送往山脚小屋的日期。\"},{\"id\":\"芦苇纤维脚印\",\"type\":\"concept\",\"name\":\"芦苇纤维脚印\",\"description\":\"酒馆泥地上有一道带细密芦苇纤维的黑泥脚印。\"}],\"relations\":[],\"events\":[{\"id\":\"发现旧账纸\",\"type\":\"interaction\",\"participantIds\":[\"e2e测试角色\",\"梅瑞尔-沃斯\"],\"description\":\"你注意到旧账纸，梅瑞尔看向账纸并谈及其来源的价值。\"},{\"id\":\"发现脚印\",\"type\":\"interaction\",\"participantIds\":[\"e2e测试角色\"],\"description\":\"你发现酒馆泥地上从后门方向延伸到告示前便中断的黑泥脚印。\"},{\"id\":\"雷恩注意印痕\",\"type\":\"interaction\",\"participantIds\":[\"雷恩修女\"],\"description\":\"雷恩注意到旧账纸上的模糊印痕后眉间微紧。\"}],\"statements\":[{\"id\":\"账纸记录\",\"type\":\"discovery\",\"content\":\"旧账纸记录灯油、灯芯和送往山脚小屋的日期；最近一笔记在灯灭前三天。纸张无署名，旁有模糊印痕，像是村长家的徽记。\",\"subjectIds\":[\"旧账纸\"]},{\"id\":\"脚印特征\",\"type\":\"discovery\",\"content\":\"酒馆吧台旁的半干黑泥脚印带有细密芦苇纤维，从后门方向来，到告示前中断；门外雨水正在冲淡痕迹。\",\"subjectIds\":[\"芦苇纤维脚印\"]},{\"id\":\"梅瑞尔线索\",\"type\":\"discovery\",\"content\":\"梅瑞尔表示账纸本身不值钱，知道它从哪儿来才有价值。\",\"subjectIds\":[\"梅瑞尔-沃斯\",\"旧账纸\"]}]}",
+            "id": "call_d1cb7477f689480da96730df5322e155"
+          }
+        ],
+        "usage": {
+          "completion_tokens": 585,
+          "completion_tokens_details": {
+            "reasoning_tokens": 0
+          },
+          "prompt_tokens": 7004,
+          "prompt_tokens_details": {
+            "cache_write_tokens": 0,
+            "cached_tokens": 0
+          },
+          "total_tokens": 7589
+        }
+      },
+      "metadata": {
+        "systemHash": "f9f69e3a",
+        "toolsHash": "8768d054"
+      }
+    }
+  ]
+}

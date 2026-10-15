@@ -1,0 +1,37 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "userMessage": "covel-request:04d891099d3e406f3ec1b18894349b9c9be64a9ebc0c164cf5531420bf8d7deb",
+        "model": "codex/gpt-6-luna",
+        "turnIndex": 0,
+        "hasToolResult": false
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "name": "generate-guide",
+            "arguments": "{\"scene\":\"酒馆里的出发抉择\",\"recap\":\"你来到灰苇村，古冢的灯已熄、守灯人伊索德失踪，青铜墓门敞开。梅瑞尔张贴了带回伊索德并查明灯熄原因的悬赏；布兰诺克警惕墓门，雷恩愿意同行并能读铭文、处理伤口，雨中的古灯仍未亮起。\",\"decision\":\"出发前，你先和谁谈，或如何安排这次远征？\",\"prompts\":[{\"kind\":\"social\",\"text\":\"我询问布兰诺克，他认为怎样才能安全进出古冢\"},{\"kind\":\"ask\",\"text\":\"我请雷恩解读拓片，问她对墓门封印的判断\"},{\"kind\":\"ask\",\"text\":\"我向梅瑞尔打听磨坊主女儿听见的歌\"},{\"kind\":\"act\",\"text\":\"我招呼布兰诺克和雷恩，立刻冒雨前往古冢\"}]}",
+            "id": "call_96fa6b987a914cb68f9e3f0f3081bf40"
+          }
+        ],
+        "usage": {
+          "completion_tokens": 243,
+          "completion_tokens_details": {
+            "reasoning_tokens": 0
+          },
+          "prompt_tokens": 6056,
+          "prompt_tokens_details": {
+            "cache_write_tokens": 0,
+            "cached_tokens": 0
+          },
+          "total_tokens": 6299
+        }
+      },
+      "metadata": {
+        "systemHash": "222d9770",
+        "toolsHash": "ae89d990"
+      }
+    }
+  ]
+}

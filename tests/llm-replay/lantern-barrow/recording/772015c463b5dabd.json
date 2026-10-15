@@ -1,0 +1,30 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "userMessage": "covel-request:772015c463b5dabd99dab3bd1a51ec87fc4bbe2d9e4cf66a14ced43e2ff0abfd",
+        "model": "codex/gpt-6-luna",
+        "turnIndex": 0,
+        "hasToolResult": false
+      },
+      "response": {
+        "content": "{\"party\":\"布兰诺克指出账纸指向村长、脚印指向沼泽，两条线索不应直接认定有关联。他透露二十年前自己没能把所有人都带出来，并主张先查明墓门情况。雷恩想确认账纸上的印记是否属于村长家，再查看墓门封印；她认为古灯铭文或能说明墓门为何从里面打开，以及伊索德留下了什么。两人都在等玩家表态。\",\"new_facts\":[\"布兰诺克透露，二十年前他没能把所有人都带出来。\"]}",
+        "usage": {
+          "completion_tokens": 143,
+          "completion_tokens_details": {
+            "reasoning_tokens": 0
+          },
+          "prompt_tokens": 5708,
+          "prompt_tokens_details": {
+            "cache_write_tokens": 0,
+            "cached_tokens": 2816
+          },
+          "total_tokens": 5851
+        }
+      },
+      "metadata": {
+        "systemHash": "a3c65487"
+      }
+    }
+  ]
+}
