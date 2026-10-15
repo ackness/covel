@@ -175,8 +175,12 @@ test("personal model configuration survives reload and reaches the request witho
   await expect(
     dialog.getByRole("textbox", { name: "API endpoint", exact: true }),
   ).toHaveValue("https://updated-fixture.invalid/v1");
-  await expect(dialog.getByLabel("Fixture", { exact: true })).toHaveValue(
-    "synthetic-player-key",
+  // A saved key is not shown again; the request below still carries it.
+  const savedKey = dialog.getByLabel("Fixture", { exact: true });
+  await expect(savedKey).toHaveValue("");
+  await expect(savedKey).toHaveAttribute(
+    "placeholder",
+    "Configured on this device; enter a value to replace",
   );
   await dialog
     .getByRole("group", { name: "detailed-model", exact: true })
@@ -207,8 +211,16 @@ test("personal model configuration survives reload and reaches the request witho
   expect(JSON.stringify(request)).not.toContain("pricing");
   expect(JSON.stringify(request)).not.toContain("providerPriceMultipliers");
 
-  await dialog.getByLabel("Fixture", { exact: true }).fill("");
-  await dialog.getByLabel("Fixture", { exact: true }).press("Tab");
+  // A saved key is removed with Clear; an empty field leaves it as it is.
+  await dialog
+    .getByLabel("Fixture", { exact: true })
+    .locator("..")
+    .getByRole("button", { name: "Clear", exact: true })
+    .click();
+  await expect(dialog.getByLabel("Fixture", { exact: true })).toHaveAttribute(
+    "placeholder",
+    "sk-...",
+  );
   await dialog
     .getByRole("button", { name: "Model Roles", exact: true })
     .click();

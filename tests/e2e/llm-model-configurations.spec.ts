@@ -67,7 +67,7 @@ test("same API model configurations can be copied, named, shared, and imported i
   await dialog
     .getByRole("button", { name: "Providers & Models", exact: true })
     .click();
-  await dialog.getByRole("button", { name: /fixture.*1 models/ }).click();
+  await dialog.getByRole("button", { name: /fixture.*1 model\b/ }).click();
   await dialog
     .getByRole("button", { name: "Duplicate configuration", exact: true })
     .click();

@@ -40,6 +40,7 @@ for (const width of [1512, 390]) {
                   id: "gallery",
                   label: "Review gallery",
                   icon: "image",
+                  navTarget: "images",
                   alwaysRender: true,
                   view: {
                     component: "Text",
@@ -64,7 +65,7 @@ for (const width of [1512, 390]) {
       await expect(page.getByText("§ TRACE", { exact: true })).toBeVisible();
       await navigateTopbar(page, "插件", width);
       await expect(
-        page.getByRole("dialog", { name: /SETTINGS/ }),
+        page.getByRole("dialog", { name: "设置", exact: true }),
       ).toBeVisible();
       await page.keyboard.press("Escape");
       await navigateTopbar(page, "调试", width);

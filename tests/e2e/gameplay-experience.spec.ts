@@ -134,9 +134,7 @@ test("story remains legible in both themes and failed updates stay visible", asy
       );
       expect(reading.paragraphGap).toBeGreaterThanOrEqual(16);
       if (index === 0) {
-        await page
-          .getByRole("button", { name: /切换主题|Toggle theme/i })
-          .click();
+        await page.getByRole("button", { name: /深色模式|Dark mode/i }).click();
         await expect
           .poll(() =>
             page

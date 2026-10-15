@@ -203,7 +203,7 @@ test("older orphaned execution stays before the latest story while an optional t
     await current.getByRole("button").first().click();
     await expect(current.getByRole("alert")).toContainText("未产出有效结果");
     const retry = current.getByRole("button", {
-      name: /重试此任务:/,
+      name: /重试此任务：/,
     });
     await expect(retry).toBeVisible();
     await expect(retry).toHaveText("重试此任务");

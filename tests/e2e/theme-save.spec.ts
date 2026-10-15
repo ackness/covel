@@ -63,6 +63,11 @@ test("a saved aurora keeps motion after reload, export and import", async ({
     .getByRole("textbox", { name: "Save as theme package" })
     .fill("My aurora");
   await dialog.getByRole("button", { name: "Save as", exact: true }).click();
+  // The name is taken by the first save, so the app asks before replacing it.
+  await page
+    .getByRole("dialog", { name: "Replace existing theme?" })
+    .getByRole("button", { name: "Replace theme", exact: true })
+    .click();
   await expect(
     dialog.getByRole("textbox", { name: "Save as theme package" }),
   ).toHaveValue("");
@@ -84,6 +89,10 @@ test("a saved aurora keeps motion after reload, export and import", async ({
   const path = testInfo.outputPath(download.suggestedFilename());
   await download.saveAs(path);
   await savedRow.getByRole("button", { name: "Delete", exact: true }).click();
+  await page
+    .getByRole("dialog", { name: "Delete theme?" })
+    .getByRole("button", { name: "Delete", exact: true })
+    .click();
   await expect(page.locator("html")).not.toHaveAttribute(
     "data-theme",
     "my-aurora",

@@ -214,7 +214,7 @@ for (const width of [1512, 390]) {
       // Studio configuration lives in the toolbar's overflow menu.
       await page.getByRole("button", { name: "更多", exact: true }).click();
       await page
-        .getByRole("menuitemcheckbox", { name: "工作室配置", exact: true })
+        .getByRole("button", { name: "工作室配置", exact: true })
         .click();
       await page
         .getByRole("checkbox", { name: "自定义插件与高级设置" })
@@ -276,7 +276,7 @@ for (const width of [1512, 390]) {
         // A late storage badge reduces the rail height after selection.
         releaseHealth();
         await expect(
-          page.getByRole("dialog").getByText("Memory", { exact: true }),
+          page.getByRole("dialog").getByText("内存", { exact: true }),
         ).toBeVisible();
         await expect(lastTab).toBeInViewport({ ratio: 0.98 });
         await page
@@ -285,7 +285,7 @@ for (const width of [1512, 390]) {
           .click();
         await page.getByRole("button", { name: "更多", exact: true }).click();
         await page
-          .getByRole("menuitemcheckbox", { name: "工作室配置", exact: true })
+          .getByRole("button", { name: "工作室配置", exact: true })
           .click();
       }
       await page
