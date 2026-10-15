@@ -3,13 +3,7 @@
   "title": "world-init/schema-gen output",
   "description": "Atomic character schema and dimension declaration initialization result.",
   "type": "object",
-  "required": [
-    "success",
-    "attributeCount",
-    "dimensionCount",
-    "worldSchema",
-    "preGameDone"
-  ],
+  "required": ["success", "attributeCount", "dimensionCount", "worldSchema"],
   "additionalProperties": false,
   "properties": {
     "success": {
@@ -40,6 +34,7 @@
       }
     },
     "preGameDone": {
+      "description": "Optional tool/guard completion signal. The agent finalizer moves it to RuntimeResult.completion before validating the public business output.",
       "type": "boolean",
       "const": true
     },
