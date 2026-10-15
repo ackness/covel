@@ -469,10 +469,12 @@ Anthropic keeps at most two stable system cache boundaries, and it sets two boun
 
 ### Measuring the prefix
 
+Run from the repository root. These examples use the development server's fallback path. If you configured another database, substitute its absolute path; see [path selection](./env-registry.md#plugin-extension-development-data).
+
 ```bash
-pnpm prompt:prefix data/covel.db                      # 库里每局会话一张表
-pnpm prompt:prefix data/covel.db --session <id> --show world-init/dimension-tracker
-pnpm prompt:prefix data/covel.db --json
+pnpm prompt:prefix apps/server/data/covel.db                      # One table per session
+pnpm prompt:prefix apps/server/data/covel.db --session <id> --show world-init/dimension-tracker
+pnpm prompt:prefix apps/server/data/covel.db --json
 ```
 
 The script reads `llm.calling` in `trace_events`, which records the request body sent to the provider. It needs no model, and the service does not need to be running.

@@ -469,10 +469,12 @@ Anthropic 保留至多两个稳定的 system 缓存边界，并在消息里设�
 
 ### 测量前缀
 
+在仓库根目录运行。下面使用开发服务器的回退路径；若配置了其他数据库，换成实际文件的绝对路径，见[路径选择规则](./env-registry.md#plugin-extension-development-data)。
+
 ```bash
-pnpm prompt:prefix data/covel.db                      # 库里每局会话一张表
-pnpm prompt:prefix data/covel.db --session <id> --show world-init/dimension-tracker
-pnpm prompt:prefix data/covel.db --json
+pnpm prompt:prefix apps/server/data/covel.db                      # One table per session
+pnpm prompt:prefix apps/server/data/covel.db --session <id> --show world-init/dimension-tracker
+pnpm prompt:prefix apps/server/data/covel.db --json
 ```
 
 脚本读 `trace_events` 里的 `llm.calling`（它记录了发给服务商的请求体）。不需要模型，也不需要服务在运行。

@@ -231,14 +231,14 @@ SQLite 和 PostgreSQL 都在应用启动时创建当前的表结构，没有针�
 
 v0.0.42 调整了插件扩展契约，旧的开发数据不会自动升级。桌面、服务端、PostgreSQL 和浏览器各自怎样备份、换新存储、回退，见 [v0.0.42 升级指南](../internals/upgrade-0.0.42.md)（[English](../en/internals/upgrade-0.0.42.md)）。
 
-**为什么旧 SQLite 数据库不能继续用。** 旧的 `lorebook_entries` 表用 `plugin_id` 作为列和主键的一部分，当前版本要求 `owner`。启动时的 `CREATE TABLE IF NOT EXISTS` 不会改变旧表，随后创建 `owner` 索引可能直接报错。只删除或新建会话、快照、浏览器 checkpoint 修不好这个表结构。
+**为什么旧 SQLite 数据库不能继续用。** 旧的 `lorebook_entries` 表用 `plugin_id` 作为列和主键的一部分，当前版本要求 `owner`。启动时的 schema 检查会以 `StoreSchemaVersionError` 拒绝打开这个旧库，并指出文件的绝对路径。只删除或新建会话、快照、浏览器 checkpoint 修不好这个表结构。
 
 **处理旧开发环境的步骤：**
 
 1. 停掉所有使用这个数据库的 server 和桌面进程。
-2. 确认实际的 `SQLITE_PATH`。registry 里的默认值是 `./data/covel.db`；源码开发时启动脚本把它指向 `$COVEL_HOME/data/covel.db`，没设置 `COVEL_HOME` 时就是 `~/.covel/data/covel.db`。
-3. 把这个数据库文件和同名前缀的 `-wal`、`-shm` 文件一起备份到安全的位置。
-4. 把 `SQLITE_PATH` 指向一个**还不存在**的新文件；或者在确认备份可用后重建整套开发数据库。
+2. 看 `StoreSchemaVersionError` 消息里的绝对路径，确认实际数据库。显式设置的 `SQLITE_PATH` 优先（包括仓库 `.env` 里的值）；相对路径以服务端工作目录为准，`pnpm dev` 下是 `apps/server/`。源码开发的 home bootstrap 只在 Covel 主目录已存在且 `SQLITE_PATH` 未设置时，选用 `<COVEL_HOME>/data/covel.db`（主目录默认 `~/.covel/`）。否则 registry 先取 `<COVEL_DATA_ROOT>/covel.db`（若已设置），再回退到 `./data/covel.db`，即 `apps/server/data/covel.db`。
+3. 需要保留数据时，把这个数据库文件及其 `-wal`、`-shm` 文件一起备份到安全的位置。
+4. 把 `SQLITE_PATH` 指向一个**还不存在**的新文件；也可以把备份后的这组文件一起移走。确认开发数据不需要保留时，可以直接删除这组文件。
 5. 启动当前版本，让它创建新的表结构，再新建会话和快照。
 
 > [!CAUTION]
@@ -270,7 +270,7 @@ v0.0.42 调整了插件扩展契约，旧的开发数据不会自动升级。桌
 | --- | --- | --- |
 | `NODE_ENV` | `development` | Node 运行模式（`development` / `production` / `test`） |
 | `STORE_BACKEND` | `sqlite` | 服务端数据存在哪里（`memory` / `sqlite` / `pg`） |
-| `SQLITE_PATH` | `./data/covel.db` | SQLite 数据库文件的路径 |
+| `SQLITE_PATH` | `./data/covel.db` | SQLite 文件路径，相对服务端工作目录（`pnpm dev` 下为 `apps/server/`）；home bootstrap 和 `COVEL_DATA_ROOT` 的选择规则见上文 |
 | `DATABASE_URL` | — | PostgreSQL 连接串，`STORE_BACKEND=pg` 时必填 |
 | `MEDIA_BACKEND` / `MEDIA_ROOT` | `mirror` / — | 媒体存在哪里（`mirror` / `memory` / `sqlite` / `pg` / `none`）和文件根目录。`mirror` 跟随 `STORE_BACKEND`，`none` 关闭媒体接口；`MEDIA_ROOT` 未设置时用 `SQLITE_PATH` 旁边的 media 目录 |
 | `VECTOR_BACKEND` | `embedded` | 向量能力（`embedded` / `none` / `external`） |

@@ -29,10 +29,16 @@ export type ExistingColumns = ReadonlyMap<string, ReadonlySet<string>>;
  */
 export function assertRecordedVersion(
   backend: "sqlite" | "pg",
+  database: string,
   found: number | null,
 ): void {
   if (found !== null && found !== DATA_SCHEMA_VERSION) {
-    throw new StoreSchemaVersionError(backend, found, DATA_SCHEMA_VERSION);
+    throw new StoreSchemaVersionError(
+      backend,
+      database,
+      found,
+      DATA_SCHEMA_VERSION,
+    );
   }
 }
 
@@ -42,6 +48,7 @@ export function assertRecordedVersion(
  */
 export function assertColumnsPresent(
   backend: "sqlite" | "pg",
+  database: string,
   expectedColumns: ReadonlyMap<string, readonly string[]>,
   existingColumns: ExistingColumns,
 ): void {
@@ -56,6 +63,7 @@ export function assertColumnsPresent(
   if (missing.length > 0) {
     throw new StoreSchemaVersionError(
       backend,
+      database,
       null,
       DATA_SCHEMA_VERSION,
       missing,

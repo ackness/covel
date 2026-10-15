@@ -66,9 +66,11 @@ Covel 的服务器对外只有一套 HTTP JSON 接口。网页和桌面应用用
 
 | 后端       | 值               | 用途                                                                                                                                                             |
 | ---------- | ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| SQLite     | `sqlite`（默认） | 桌面客户端和自部署网页版都用它，普通玩家不用换。数据在 `./data/covel.db`（桌面客户端在 `<data_root>/covel.db`）                                                  |
+| SQLite     | `sqlite`（默认） | 桌面客户端和自部署网页版都用它，普通玩家不用换。文件位置由 `SQLITE_PATH` 决定（桌面客户端在 `<data_root>/covel.db`）                                             |
 | Memory     | `memory`         | 测试，以及浏览器私有模式下的回合执行（存档在浏览器里；为以后的官方网页版准备）。进程重启后数据丢失                                                               |
 | PostgreSQL | `pg`             | 给专业开发者和有特殊需求的用户，例如多进程部署、要接已有的数据库。需要 `DATABASE_URL`。和 SQLite 对外行为相同（多进程的限制见[多实例能力边界](#多实例能力边界)） |
+
+相对数据库路径以服务端工作目录为准，`pnpm dev` 下是 `apps/server/`。没有路径配置且 Covel 主目录不存在时，回退到 `apps/server/data/covel.db`；完整的路径选择见[环境变量](./env-registry.md#plugin-extension-development-data)。
 
 补充两点：
 
@@ -5905,7 +5907,7 @@ Covel 有三种部署形态，每种形态的存储方式不同：桌面客户�
 
 ### 自部署网页版
 
-- **服务器存储**: 默认是 SQLite（`./data/covel.db`）。专业开发者或有特殊需求的用户可以换成 PostgreSQL。仓库自带的 Docker 配置目前用的是 PostgreSQL。
+- **服务器存储**: 默认是 SQLite，文件位置见[存储后端](#存储后端)。专业开发者或有特殊需求的用户可以换成 PostgreSQL。仓库自带的 Docker 默认配置用 SQLite，也提供 PostgreSQL 配置。
 - **前端存储**: 默认是 remote，使用服务器的 SQLite；local 模式使用浏览器 IndexedDB。
 - **数据流**:
   - remote 模式：前端通过 API 读写服务器的 store。
@@ -6009,16 +6011,16 @@ STORE_BACKEND=memory pnpm dev:server  # 临时 Memory 后端（重启即丢失�
 
 完整的清单见 [`env-registry.md`](./env-registry.md)。
 
-| 变量                | 说明                  | 默认值            |
-| ------------------- | --------------------- | ----------------- |
-| `STORE_BACKEND`     | 存储后端类型          | `sqlite`          |
-| `SQLITE_PATH`       | SQLite 数据库路径     | `./data/covel.db` |
-| `DATABASE_URL`      | PostgreSQL 连接字符串 | -                 |
-| `SERVER_PORT`       | 服务器端口            | `3001`            |
-| `DEPLOYMENT_TIER`   | 部署层级              | `self`            |
-| `CORS_ORIGIN`       | CORS 允许的源         | -                 |
-| `ENABLE_DEBUG_PAGE` | 启用调试页面          | `false`           |
-| `RATE_LIMIT_RPM`    | 速率限制 (请求/分钟)  | `60`              |
+| 变量                | 说明                                    | 默认值            |
+| ------------------- | --------------------------------------- | ----------------- |
+| `STORE_BACKEND`     | 存储后端类型                            | `sqlite`          |
+| `SQLITE_PATH`       | SQLite 数据库路径（相对服务端工作目录） | `./data/covel.db` |
+| `DATABASE_URL`      | PostgreSQL 连接字符串                   | -                 |
+| `SERVER_PORT`       | 服务器端口                              | `3001`            |
+| `DEPLOYMENT_TIER`   | 部署层级                                | `self`            |
+| `CORS_ORIGIN`       | CORS 允许的源                           | -                 |
+| `ENABLE_DEBUG_PAGE` | 启用调试页面                            | `false`           |
+| `RATE_LIMIT_RPM`    | 速率限制 (请求/分钟)                    | `60`              |
 
 ### Opening the effective configuration
 

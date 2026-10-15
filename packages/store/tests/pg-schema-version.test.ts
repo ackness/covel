@@ -1,5 +1,7 @@
-import { afterAll, describe, it } from "vitest";
+import { afterAll, describe, expect, it } from "vitest";
 
+import { StoreSchemaVersionError } from "../src/errors.js";
+import { DATA_SCHEMA_VERSION } from "../src/migrations.js";
 import { runSchemaVersionTests } from "./schema-version-suite.js";
 
 const DATABASE_URL =
@@ -38,6 +40,32 @@ if (pgAvailable) {
   afterAll(async () => {
     await sql.end();
     await isolated.cleanup();
+  });
+
+  it("names the PostgreSQL database without connection credentials", async () => {
+    await sql.unsafe(`
+      CREATE TABLE ${SCHEMA_META_TABLE} (id integer PRIMARY KEY, schema_version integer NOT NULL);
+      INSERT INTO ${SCHEMA_META_TABLE} VALUES (1, ${DATA_SCHEMA_VERSION});
+    `);
+    await sql`
+      UPDATE ${sql(SCHEMA_META_TABLE)} SET schema_version = ${DATA_SCHEMA_VERSION - 1}
+    `;
+    const url = new URL(isolated.url);
+    const database = `${url.hostname}:${url.port || "5432"}${url.pathname}`;
+    const error = await createPgStore(isolated.url).catch(
+      (caught: unknown) => caught,
+    );
+    expect(error).toBeInstanceOf(StoreSchemaVersionError);
+    expect(error).toMatchObject({
+      database,
+      message: expect.stringContaining(database),
+    });
+    if (!(error instanceof StoreSchemaVersionError)) throw error;
+    expect(error.message).not.toContain(`${url.username}:`);
+    if (url.password) {
+      expect(error.message).not.toContain(url.password);
+      expect(error.database).not.toContain(url.password);
+    }
   });
 
   runSchemaVersionTests("PgStore", () => ({

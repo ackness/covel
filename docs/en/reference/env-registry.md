@@ -231,14 +231,14 @@ To upgrade an existing database, you must write and review SQL for the old table
 
 v0.0.42 changed the plugin extension contract. Old development data is not upgraded automatically. For how to back up, move to new storage, and roll back for the desktop app, the server, PostgreSQL, and the browser, see the [v0.0.42 upgrade guide](../internals/upgrade-0.0.42.md) ([English](../internals/upgrade-0.0.42.md)).
 
-**Why an old SQLite database cannot keep being used.** The old `lorebook_entries` table used `plugin_id` as part of a column and of the primary key. The current version requires `owner`. `CREATE TABLE IF NOT EXISTS` at startup does not change an old table, so creating the `owner` index afterward can fail outright. Deleting or recreating sessions, snapshots, or browser checkpoints alone cannot fix this table structure.
+**Why an old SQLite database cannot keep being used.** The old `lorebook_entries` table used `plugin_id` as part of a column and of the primary key. The current version requires `owner`. The startup schema check refuses this old database with `StoreSchemaVersionError`, which names its absolute file path. Deleting or recreating sessions, snapshots, or browser checkpoints alone cannot fix this table structure.
 
 **Steps for an old development environment:**
 
 1. Stop all server and desktop processes that use this database.
-2. Confirm the actual `SQLITE_PATH`. The default in the registry is `./data/covel.db`. In source development, the startup script points it to `$COVEL_HOME/data/covel.db`. If `COVEL_HOME` is not set, it is `~/.covel/data/covel.db`.
-3. Back up this database file and the `-wal` and `-shm` files with the same name prefix to a safe place.
-4. Point `SQLITE_PATH` to a new file that **does not exist yet**. Or, once the backup is confirmed usable, rebuild the whole development database.
+2. Read the absolute path in the `StoreSchemaVersionError` message to identify the database. An explicit `SQLITE_PATH` wins, including a value in the repository's `.env`. Relative paths use the server's working directory: `apps/server/` under `pnpm dev`. The source-development home bootstrap selects `<COVEL_HOME>/data/covel.db` only when that home already exists and `SQLITE_PATH` is unset; the default home is `~/.covel/`. Otherwise, the registry uses `<COVEL_DATA_ROOT>/covel.db` if configured, then falls back to `./data/covel.db`, which is `apps/server/data/covel.db`.
+3. If the data must be kept, back up this database file and its `-wal` and `-shm` files to a safe place.
+4. Point `SQLITE_PATH` to a new file that **does not exist yet**, or move the backed-up files aside together. If the development data is disposable, you can delete these files instead.
 5. Start the current version so it creates the new table structure. Then create new sessions and snapshots.
 
 > [!CAUTION]
@@ -270,7 +270,7 @@ The variables below are also in `registry.ts`. For variables whose use is alread
 | --- | --- | --- |
 | `NODE_ENV` | `development` | Node run mode (`development` / `production` / `test`) |
 | `STORE_BACKEND` | `sqlite` | Where server data is stored (`memory` / `sqlite` / `pg`) |
-| `SQLITE_PATH` | `./data/covel.db` | Path of the SQLite database file |
+| `SQLITE_PATH` | `./data/covel.db` | SQLite file path, relative to the server's working directory (`apps/server/` under `pnpm dev`); see above for home bootstrap and `COVEL_DATA_ROOT` selection |
 | `DATABASE_URL` | — | PostgreSQL connection string. Required when `STORE_BACKEND=pg` |
 | `MEDIA_BACKEND` / `MEDIA_ROOT` | `mirror` / — | Where media is stored (`mirror` / `memory` / `sqlite` / `pg` / `none`) and the root folder for files. `mirror` follows `STORE_BACKEND`. `none` turns off the media interface. If `MEDIA_ROOT` is not set, the media folder next to `SQLITE_PATH` is used |
 | `VECTOR_BACKEND` | `embedded` | Vector capability (`embedded` / `none` / `external`) |

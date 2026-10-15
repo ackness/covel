@@ -62,17 +62,28 @@ export class StoreSchemaVersionError extends Error {
 
   constructor(
     readonly backend: "sqlite" | "pg",
+    /** Absolute SQLite path, or PostgreSQL host/port/database without credentials. */
+    readonly database: string,
     readonly found: number | null,
     readonly expected: number,
     readonly missingColumns: readonly string[] = [],
   ) {
-    super(describeSchemaMismatch(backend, found, expected, missingColumns));
+    super(
+      describeSchemaMismatch(
+        backend,
+        database,
+        found,
+        expected,
+        missingColumns,
+      ),
+    );
     this.name = "StoreSchemaVersionError";
   }
 }
 
 function describeSchemaMismatch(
   backend: "sqlite" | "pg",
+  database: string,
   found: number | null,
   expected: number,
   missingColumns: readonly string[],
@@ -86,9 +97,9 @@ function describeSchemaMismatch(
         : `was written by an older Covel (data schema ${found}; this version uses ${expected})`;
   const remedy =
     backend === "sqlite"
-      ? "Back up the database file (with its -wal and -shm files), then start this version with a new data directory or SQLITE_PATH."
+      ? "Stop all processes using this file. Back up and move aside the database file (with its -wal and -shm files), or delete them if the data is not needed, then restart. Alternatively, point SQLITE_PATH at a new file."
       : "Back up the database, then point DATABASE_URL at a new, empty database.";
-  return `The ${label} database ${cause}. Covel does not migrate stored data and will not open it. ${remedy}`;
+  return `The ${label} database "${database}" ${cause}. Covel does not migrate stored data and will not open it. ${remedy}`;
 }
 
 /** SQLite extended result codes for a primary-key and a unique violation. */

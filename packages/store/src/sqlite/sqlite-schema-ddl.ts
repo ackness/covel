@@ -59,6 +59,7 @@ const VECTOR_MODELS_TRIGGER_SQL = `
 const EXPECTED_COLUMNS = tableColumnsOf(Object.values(schema), "sqlite");
 
 interface SqliteDdlConnection {
+  location(): string | null;
   exec(sql: string): void;
   prepare(sql: string): { get(): unknown; all(): unknown[] };
 }
@@ -81,13 +82,19 @@ function existingColumns(sqlite: SqliteDdlConnection): ExistingColumns {
  * build with another data schema (see `common/schema-version.ts`).
  */
 export function createTables(sqlite: SqliteDdlConnection): void {
+  const database = sqlite.location() ?? ":memory:";
   const row = sqlite.prepare("PRAGMA user_version").get() as {
     user_version: number;
   };
   const found = row.user_version === 0 ? null : row.user_version;
-  assertRecordedVersion("sqlite", found);
+  assertRecordedVersion("sqlite", database, found);
   if (found === null) {
-    assertColumnsPresent("sqlite", EXPECTED_COLUMNS, existingColumns(sqlite));
+    assertColumnsPresent(
+      "sqlite",
+      database,
+      EXPECTED_COLUMNS,
+      existingColumns(sqlite),
+    );
   }
   sqlite.exec(CREATE_TABLES_SQL);
   sqlite.exec(VECTOR_MODELS_TRIGGER_SQL);

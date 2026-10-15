@@ -67,12 +67,20 @@ async function existingColumns(sql: TransactionSql): Promise<ExistingColumns> {
  * was written by a build with another data schema.
  */
 export async function bootPgSchema(client: Sql): Promise<void> {
+  // Select only endpoint fields: connection URLs and options also hold credentials.
+  const { host, port, database: name } = client.options;
+  const database = `${host.map((value, i) => `${value}:${port[i] ?? port[0]}`).join(",")}/${name}`;
   await client.begin(async (sql) => {
     await sql.unsafe(SCHEMA_DDL_LOCK_SQL);
     const found = await readRecordedVersion(sql);
-    assertRecordedVersion("pg", found);
+    assertRecordedVersion("pg", database, found);
     if (found === null) {
-      assertColumnsPresent("pg", EXPECTED_COLUMNS, await existingColumns(sql));
+      assertColumnsPresent(
+        "pg",
+        database,
+        EXPECTED_COLUMNS,
+        await existingColumns(sql),
+      );
     }
     await sql.unsafe(CREATE_TABLES_SQL);
     await sql.unsafe(`

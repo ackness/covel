@@ -6,6 +6,7 @@ import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "vitest";
 
 import { buildCreateTablesSql } from "../src/common/ddl-codegen.js";
+import { StoreSchemaVersionError } from "../src/errors.js";
 import { DATA_SCHEMA_VERSION } from "../src/migrations.js";
 import * as pgSchema from "../src/postgres/schema.js";
 import * as sqliteSchema from "../src/sqlite/schema.js";
@@ -81,6 +82,28 @@ function shapeDigest(tables: readonly unknown[], dialect: "sqlite" | "pg") {
 }
 
 describe("data schema version", () => {
+  it.each([null, DATA_SCHEMA_VERSION - 1, DATA_SCHEMA_VERSION + 1])(
+    "names the absolute SQLite path when refusing schema %s",
+    (version) => {
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), "covel-schema-path-"));
+      const dbPath = path.join(dir, "covel.db");
+      withFile(dbPath, (db) => {
+        db.exec("CREATE TABLE worlds (id TEXT PRIMARY KEY)");
+        db.exec(`PRAGMA user_version = ${version ?? 0}`);
+      });
+
+      expect(() =>
+        createSqliteStore(path.relative(process.cwd(), dbPath)),
+      ).toThrow(
+        expect.objectContaining({
+          name: StoreSchemaVersionError.name,
+          database: fs.realpathSync(dbPath),
+          message: expect.stringContaining(fs.realpathSync(dbPath)),
+        }),
+      );
+    },
+  );
+
   it("changes together with the table shapes", () => {
     // A failure here means a table shape changed. When an existing database
     // cannot follow the change (a column added, removed, renamed or retyped on
