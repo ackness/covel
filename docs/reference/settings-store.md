@@ -246,11 +246,11 @@ API 密钥不和普通设置存在一起，写入方式也不同。
 - 跨会话返回的旧响应不会覆盖当前的数据。
 - 自动刷新只合并最新的一页 trace，保留已经加载的更早的页和分页游标。
 
-**JSON 文件后端的传输方式。** `createJsonFileBackend({ ipc, fetchImpl, getAuthHeaders })` 的 IPC transport 由宿主明确提供，它不会自己去探测 `globalThis.covelIpc`。
+**JSON 文件后端的传输方式。** `createJsonFileBackend({ ipc })` 必须由宿主明确提供 IPC transport，它不会自己去探测 `globalThis.covelIpc`。
 
 - Web 应用只在存在 `getCovelIpc()` 时选用这个 adapter；浏览器使用 localStorage。
-- 明确集成时可以选择这个 adapter 的 REST transport。
-- 版本冲突、密钥隔离和加载失败的行为都保持不变。
+- 这个 adapter 只通过 IPC 读写设置和密钥，不提供 REST 传输。
+- 设置写入带预期版本号，密钥走独立通道，读取失败会向调用方报告。
 
 ## 当前服务商配置
 
@@ -264,7 +264,6 @@ API 密钥不和普通设置存在一起，写入方式也不同。
 - 每个连接使用 `keys.<profile.id>`。
 - 模型配置和展开后的请求配置里都不包含 API key。
 - 一个连接不借用别的连接或同一服务商家族的密钥。
-- “密钥由服务端管理”的标记不会被当成 API key 发出去。
 - 服务端预设继续使用它所属服务商的密钥。
 - 请求里的 `customPresets` 展开结构仍然是当前服务端路由约定的一部分。
 
