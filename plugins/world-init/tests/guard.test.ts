@@ -39,9 +39,30 @@ describe("world-init schema guard", () => {
     }));
     const initialize = initializeWorld({ tool, z });
     const result = await initialize.execute({ attributes }, context({}));
+    const { preGameDone, ...businessOutput } = getToolContent(result);
+    expect(preGameDone).toBe(true);
+    // The private gate sees the tool envelope; the public contract sees the
+    // business output after the kernel extracts the completion signal.
     expect(validateOutput(getToolContent(result), outputSchema)).toEqual({
       valid: true,
     });
+    expect(validateOutput(businessOutput, outputSchema)).toEqual({
+      valid: true,
+    });
+    for (const field of [
+      "success",
+      "attributeCount",
+      "dimensionCount",
+      "worldSchema",
+    ]) {
+      const incomplete = { ...businessOutput };
+      delete incomplete[field];
+      expect(validateOutput(incomplete, outputSchema).valid).toBe(false);
+    }
+    expect(
+      validateOutput({ ...businessOutput, unexpected: true }, outputSchema)
+        .valid,
+    ).toBe(false);
     await expect(
       initialize.execute({ attributes: attributes.slice(0, 14) }, context({})),
     ).rejects.toThrow();
