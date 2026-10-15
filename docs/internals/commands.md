@@ -120,6 +120,23 @@ pnpm check:scripts    # scripts/tests/*.test.mjs under node --test
 pnpm check:workflows  # actionlint on .github/workflows/
 ```
 
+`check:scripts` 的 `ui-literal-baseline.test.mjs` 按文件统计 `apps/web/src` 的 JSX 文字和 `title`、`placeholder`、`aria-label`、`alt`、`label` 等文字属性。只计含中日韩文字或 English 单词的字面量；跳过 `/debug`、测试、stories 和语言 catalog，不计类名、id、URL 或 `t()` 的参数。检测器顶部列出完整规则。新文件的数量必须为零，已有文件不能超过 `scripts/tests/ui-literal-baseline.json` 的记录；减少或删除后也会失败，要求下调基线。
+
+```bash
+node --test scripts/tests/ui-literal-baseline.test.mjs
+node scripts/tests/ui-literal-baseline.test.mjs --update
+```
+
+第一条命令通过时报告 5 个测试通过。第二条只接受数量减少，写入基线并报告 `Updated UI literal baseline (counts can only decrease).`；它不能用来接受新增文字。
+
+服务端的 `instruction-language.test.ts` 固定 `COVEL_INSTRUCTION_LOCALE=en`，加载 Emberback 的 English 会话数据，为每个内置 runtime 选择正文并组装 context，不调用模型。它检查正文、固定扩展段、框架模板和组装后的指令；世界内容在组装前排除，不会连同数据块的框架说明一起被忽略。
+
+```bash
+pnpm --filter @covel/server exec vitest run tests/bootstrap/instruction-language.test.ts --maxWorkers=2
+```
+
+通过时报告 3 个测试通过。发现中日韩指令时，错误列出来源和行号；修正文或缺失的 English 模板，不增加例外。
+
 `check:scripts` 还检查 `apps/*/src`、`packages/*/src` 和插件代码里的兼容措辞，跳过测试和归档。`legacy`、`compat`、`compatible`、`compatibility`、`backward(s)`、`old format`、`old decoder` 必须在同一行或上一行有 `ponytail:`，并同步[限制清单](./technical-debt.md)。只有少数当前 API 或领域术语可以写进 `scripts/tests/compat-wording.test.mjs` 的文件白名单，每项都要说明原因；过时分支应删除，描述当前行为的注释应改写。
 
 ## Release

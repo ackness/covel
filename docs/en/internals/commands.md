@@ -120,6 +120,23 @@ pnpm check:scripts    # scripts/tests/*.test.mjs under node --test
 pnpm check:workflows  # actionlint on .github/workflows/
 ```
 
+The `check:scripts` test `ui-literal-baseline.test.mjs` counts JSX text and text props such as `title`, `placeholder`, `aria-label`, `alt`, and `label` per file in `apps/web/src`. It counts literals containing CJK characters or English words; skips `/debug`, tests, stories, and locale catalogs; and ignores classes, ids, URLs, and `t()` arguments. The detector's header lists its full rules. New files must have zero hits, and existing files cannot exceed `scripts/tests/ui-literal-baseline.json`. A decrease or deleted file also fails until the baseline is lowered.
+
+```bash
+node --test scripts/tests/ui-literal-baseline.test.mjs
+node scripts/tests/ui-literal-baseline.test.mjs --update
+```
+
+The first command reports 5 passing tests. The second accepts only decreases, writes the baseline, and reports `Updated UI literal baseline (counts can only decrease).` It cannot accept new text.
+
+The server's `instruction-language.test.ts` fixes `COVEL_INSTRUCTION_LOCALE=en`, loads an English Emberback session, selects every bundled runtime's body, and assembles its context without a model call. It checks the bodies, static prompt contributions, framework templates, and assembled instructions. World content is excluded before assembly, so framework notes around data blocks remain checked.
+
+```bash
+pnpm --filter @covel/server exec vitest run tests/bootstrap/instruction-language.test.ts --maxWorkers=2
+```
+
+It reports 3 passing tests. A CJK instruction failure lists the source and line number; fix the body or missing English template instead of adding an exception.
+
 `check:scripts` also checks compatibility wording in `apps/*/src`, `packages/*/src`, and plugin code, excluding tests and archives. `legacy`, `compat`, `compatible`, `compatibility`, `backward(s)`, `old format`, and `old decoder` require `ponytail:` on the same or preceding line and a matching [limits ledger](./technical-debt.md) entry. A few current API or domain terms may use the file allowlist in `scripts/tests/compat-wording.test.mjs`, with a reason for each entry. Delete obsolete branches and reword comments that describe current behavior.
 
 ## Release
