@@ -91,6 +91,7 @@ export interface WorldPackageDiagnostic {
     | "convention-collision"
     | "world-data"
     | "locale-overlay"
+    | "locale-trigger-keys"
     | "locale-script"
     | "edition-incomplete"
     | "data-file-unused"
@@ -660,6 +661,60 @@ function localeScriptDiagnostics(
 }
 
 /**
+ * The resolved overlay keeps inherited arrays by reference. Compare it with
+ * the main value to find translated entries that still use the original
+ * trigger words. Object lists are already aligned by the overlay merger.
+ */
+function untranslatedTriggerKeyPaths(
+  main: unknown,
+  localized: unknown,
+  arrayKeys: readonly string[],
+  at = "",
+): string[] {
+  if (main === localized) return [];
+  if (Array.isArray(main) && Array.isArray(localized)) {
+    const key = arrayKeys.find((name) =>
+      main.every(
+        (item) =>
+          isRecord(item) &&
+          (typeof item[name] === "string" || typeof item[name] === "number"),
+      ),
+    );
+    return main.flatMap((item, index) =>
+      untranslatedTriggerKeyPaths(
+        item,
+        localized[index],
+        arrayKeys,
+        `${at}[${key && isRecord(item) ? `${key}=${String(item[key])}` : index}]`,
+      ),
+    );
+  }
+  if (!isRecord(main) || !isRecord(localized)) return [];
+  const fieldPath = (name: string) => (at ? `${at}.${name}` : name);
+  const missing =
+    (main.kind === "triggered" || main.strategy === "selective") &&
+    Array.isArray(main.keys) &&
+    main.keys.some((key) => typeof key === "string" && key.trim()) &&
+    localized.keys === main.keys &&
+    ["content", "title"].some(
+      (field) =>
+        typeof localized[field] === "string" &&
+        localized[field] !== main[field],
+    );
+  return [
+    ...(missing ? [fieldPath("keys")] : []),
+    ...Object.entries(main).flatMap(([name, value]) =>
+      untranslatedTriggerKeyPaths(
+        value,
+        localized[name],
+        arrayKeys,
+        fieldPath(name),
+      ),
+    ),
+  ];
+}
+
+/**
  * Locale files of structured sources: every overlay must apply cleanly, and
  * the main file must hold one language. Every overlay beside a source is
  * checked, not only those of the declared locales.
@@ -737,23 +792,39 @@ async function checkLocaleFiles(
           source.id,
         ),
       );
+      const arrayKeys = [
+        source.descriptor.key ?? "id",
+        "id",
+        ...(source.descriptor.localeArrayKeys ?? []),
+      ];
+      const localized = applyLocaleOverlay(main.value, parsed, {
+        mode: "resolve",
+        locale: overlay.locale,
+        baseLocale: manifest.defaultLocale ?? DEFAULT_LOCALE,
+        arrayKey: arrayKeys,
+      });
       diagnostics.push(
         ...overlayDiagnostics(
-          applyLocaleOverlay(main.value, parsed, {
-            mode: "resolve",
-            locale: overlay.locale,
-            baseLocale: manifest.defaultLocale ?? DEFAULT_LOCALE,
-            arrayKey: [
-              source.descriptor.key ?? "id",
-              "id",
-              ...(source.descriptor.localeArrayKeys ?? []),
-            ],
-          }).issues.map((issue) => ({
+          localized.issues.map((issue) => ({
             ...issue,
             file: path.relative(worldDir, overlay.path),
           })),
           source.id,
         ),
+        ...untranslatedTriggerKeyPaths(
+          main.value,
+          localized.value,
+          arrayKeys,
+        ).map((pointer): WorldPackageDiagnostic => ({
+          level: "warning",
+          code: "locale-trigger-keys",
+          file: path.relative(worldDir, overlay.path),
+          sourceId: source.id,
+          pointer,
+          locales: [overlay.locale],
+          message: `This entry translates its text into ${overlay.locale} but still matches the original trigger words.`,
+          hint: `Add a translated \`keys\` list for this entry in \`${overlay.file}\`, using words a player would write in ${overlay.locale}.`,
+        })),
       );
     }
   }
