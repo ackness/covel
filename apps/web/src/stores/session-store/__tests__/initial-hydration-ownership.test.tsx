@@ -109,7 +109,6 @@ function setup(batched = false) {
     ds,
     sessionIdRef,
     stateRef,
-    runtimeKindRef: { current: new Map() },
     deltaBufferRef: { current: new Map() },
     deltaRafRef: { current: null },
     lastBackfilledTurnIdRef: { current: null },

@@ -1,5 +1,5 @@
 import { SessionDimensionsPanel } from "./session-dimensions-panel.js";
-import { useCallback, useState, useRef, useEffect } from "react";
+import { useCallback, useMemo, useState, useRef, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "@tanstack/react-router";
 import { usePanelCollapse } from "./game-view/use-panel-collapse.js";
@@ -116,7 +116,16 @@ export function GameView({
     submittedBlockValues,
   } = state;
   const { t } = useTranslation();
-  const executionState = latestExecutionPresentation(state);
+  const executionState = useMemo(
+    () =>
+      latestExecutionPresentation({
+        executing,
+        executionSteps,
+        messages,
+        executionRecovery: state.executionRecovery,
+      }),
+    [executing, executionSteps, messages, state.executionRecovery?.status],
+  );
   const navigate = useNavigate();
   const { resolvedSlots, refresh: refreshSlots } = useSlotConfig(
     presets,

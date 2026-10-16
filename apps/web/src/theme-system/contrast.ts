@@ -28,7 +28,7 @@ export interface ThemeContrastResult {
   minimum: number;
 }
 
-export function checkContrastTokens(
+function checkContrastTokens(
   tokens: Readonly<Record<string, string>>,
   scheme: ThemeScheme,
 ): ThemeContrastResult[] {

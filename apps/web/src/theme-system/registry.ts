@@ -45,7 +45,6 @@ const BUILTIN_THEME_ORDER = [
   "abyss",
   "aurora",
 ];
-export { THEME_SCHEME_KEY };
 
 function toThemeOption(theme: ThemeManifest): SettingOption {
   return {

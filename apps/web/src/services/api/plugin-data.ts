@@ -1,3 +1,4 @@
+import i18n from "@/i18n/index.js";
 import { request } from "./request.js";
 
 // -- Plugin Data API -------------------------------------------
@@ -77,9 +78,21 @@ export interface UISpecsResponse {
   diagnostics?: UiSpecDiagnostic[];
 }
 
-export async function fetchUiSpecs(
+const uiSpecReads = new Map<string, Promise<UISpecsResponse>>();
+
+export function fetchUiSpecs(
   sessionId?: string,
+  activePluginKey = "",
 ): Promise<UISpecsResponse> {
   const qs = sessionId ? `?sessionId=${encodeURIComponent(sessionId)}` : "";
-  return request<UISpecsResponse>(`/api/ui-specs${qs}`, { sessionId });
+  const key = JSON.stringify([sessionId, activePluginKey, i18n.language]);
+  const existing = uiSpecReads.get(key);
+  if (existing) return existing;
+  const read = request<UISpecsResponse>(`/api/ui-specs${qs}`, {
+    sessionId,
+  }).finally(() => {
+    if (uiSpecReads.get(key) === read) uiSpecReads.delete(key);
+  });
+  uiSpecReads.set(key, read);
+  return read;
 }

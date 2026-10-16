@@ -57,10 +57,6 @@ function getActiveData(): PluginData {
   return sessionStores.get(activeSessionId) ?? EMPTY_DATA;
 }
 
-function getSnapshot(): PluginData {
-  return getActiveData();
-}
-
 /**
  * Bind the store to a specific session. Subsequent reads/writes affect
  * that session's slot; callers still read via the usual hooks. Pass
@@ -131,16 +127,6 @@ export function applyChanges(
   notify();
 }
 
-/** Bulk load plugin data (e.g., from API on session restore). */
-export function loadPluginData(
-  pluginId: string,
-  namespace: string,
-  items: readonly { key: string; value: unknown }[],
-): void {
-  if (!activeSessionId) return;
-  loadPluginDataForSession(activeSessionId, pluginId, namespace, items);
-}
-
 /**
  * Bulk-load data into a session. A load for a session that is no longer
  * active (a fetch that finished after the player left) is dropped, so it
@@ -161,7 +147,7 @@ export function loadPluginDataForSession(
     ),
   };
   sessionStores.set(sessionId, { ...prev, [pluginId]: pluginNs });
-  if (activeSessionId === sessionId) notify();
+  notify();
 }
 
 /** Replace one active session's plugin snapshot, including absent namespaces. */
@@ -197,11 +183,6 @@ export function resetPluginData(): void {
   if (!activeSessionId) return;
   sessionStores.set(activeSessionId, {});
   notify();
-}
-
-/** React hook — returns all plugin data for the active session. */
-export function usePluginData(): PluginData {
-  return useSyncExternalStore(subscribe, getSnapshot);
 }
 
 /** Subscribe to all namespaces of one plugin without rendering on other owners' writes. */

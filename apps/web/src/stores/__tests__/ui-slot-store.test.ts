@@ -92,3 +92,32 @@ describe("UI slot subscription state", () => {
     expect(result.current).toEqual([]);
   });
 });
+
+it("keeps the visible snapshot for duplicate revisions and empty clears", async () => {
+  const { result } = renderHook(() => useUiSlots("s"));
+  await act(async () => {
+    await refreshUiSlots("s");
+  });
+  act(() => {
+    applyUiSlotEvent("s", "ui.slot.changed", snapshot("same"));
+  });
+  const committed = result.current;
+  act(() => {
+    applyUiSlotEvent("s", "ui.slot.changed", snapshot("same"));
+    applyUiSlotEvent("s", "ui.slot.cleared", { turnId: "unused" });
+  });
+  expect(result.current).toBe(committed);
+  request.mockResolvedValue({ items: [snapshot("same")] });
+  await act(async () => {
+    await refreshUiSlots("s");
+  });
+  expect(result.current).toBe(committed);
+  act(() => {
+    applyUiSlotEvent("s", "ui.slot.preview", snapshot("preview"), "turn");
+  });
+  const preview = result.current;
+  act(() => {
+    applyUiSlotEvent("s", "ui.slot.preview", snapshot("preview"), "turn");
+  });
+  expect(result.current).toBe(preview);
+});

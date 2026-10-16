@@ -65,6 +65,7 @@ export async function hydratePluginDataForUiSpecs(
   sessionId: string,
   dispatch: SessionDispatch,
   isCurrent: () => boolean = () => true,
+  activePluginKey = "",
 ): Promise<void> {
   let namespaces: PluginNamespace[] | undefined;
   await refreshSessionResource(
@@ -72,7 +73,7 @@ export async function hydratePluginDataForUiSpecs(
     ["ui-specs", sessionId, "namespace-seed"],
     {
       isCurrent,
-      read: () => api.fetchUiSpecs(sessionId),
+      read: () => api.fetchUiSpecs(sessionId, activePluginKey),
       apply: (specs) => {
         namespaces = collectSpecNamespaces(specs);
       },

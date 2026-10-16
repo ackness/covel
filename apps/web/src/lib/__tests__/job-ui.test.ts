@@ -1,10 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
-import {
-  compactJobId,
-  formatJobDuration,
-  jobStatusBadgeVariant,
-} from "../job-ui.js";
+import { compactJobId, formatJobDuration } from "../job-ui.js";
 
 describe("job-ui helpers", () => {
   it("compacts long job ids with a stable prefix", () => {
@@ -25,14 +21,5 @@ describe("job-ui helpers", () => {
     expect(formatJobDuration(61_000, { style: "fixed" })).toBe("61.0s");
     expect(formatJobDuration(61_000, { style: "clock" })).toBe("1m1s");
     expect(formatJobDuration(undefined, { emptyValue: "—" })).toBe("—");
-  });
-
-  it("maps job statuses to badge variants", () => {
-    expect(jobStatusBadgeVariant("failed")).toBe("destructive");
-    expect(jobStatusBadgeVariant("done")).toBe("default");
-    expect(jobStatusBadgeVariant("completed")).toBe("default");
-    expect(jobStatusBadgeVariant("pending")).toBe("secondary");
-    expect(jobStatusBadgeVariant("running")).toBe("secondary");
-    expect(jobStatusBadgeVariant("unknown")).toBe("outline");
   });
 });

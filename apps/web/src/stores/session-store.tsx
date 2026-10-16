@@ -49,7 +49,6 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         ds,
         sessionIdRef: refs.sessionIdRef,
         stateRef: refs.stateRef,
-        runtimeKindRef: refs.runtimeKindRef,
         deltaBufferRef: refs.deltaBufferRef,
         deltaRafRef: refs.deltaRafRef,
         lastBackfilledTurnIdRef: refs.lastBackfilledTurnIdRef,

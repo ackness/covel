@@ -33,7 +33,6 @@ function harness(retrying = true) {
     sessionIdRef: { current: "session" },
     // Intentionally not updated: React may batch every event before rendering.
     stateRef: { current: state },
-    runtimeKindRef: { current: new Map() },
     deltaBufferRef: { current: new Map() },
     deltaRafRef: { current: null },
     lastBackfilledTurnIdRef: { current: "attempt" },

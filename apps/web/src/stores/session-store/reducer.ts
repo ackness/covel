@@ -489,23 +489,34 @@ export function reducer(
           ? (action.unsavedNarratives ?? [])
           : [];
       const draftIds = new Set(drafts.map((row) => row.id));
-      return {
-        ...state,
-        unsavedNarratives: [
-          ...(state.unsavedNarratives ?? []).filter(
-            (row) => !draftIds.has(row.id),
-          ),
-          ...drafts,
-        ],
-        messages: mergeRecoveredMessages(
-          state.messages.filter((row) => !draftIds.has(row.id)),
-          action.messages,
-          state.executing,
-          action.actionGeneration === (state.actionGeneration ?? 0)
-            ? action.terminalTurnId
-            : undefined,
-        ),
-      };
+      const currentMessages =
+        draftIds.size === 0 ||
+        !state.messages.some((row) => draftIds.has(row.id))
+          ? state.messages
+          : state.messages.filter((row) => !draftIds.has(row.id));
+      const unsavedNarratives =
+        drafts.length === 0
+          ? state.unsavedNarratives
+          : [
+              ...(state.unsavedNarratives ?? []).filter(
+                (row) => !draftIds.has(row.id),
+              ),
+              ...drafts,
+            ];
+      const messages = mergeRecoveredMessages(
+        currentMessages,
+        action.messages,
+        state.executing,
+        action.actionGeneration === (state.actionGeneration ?? 0)
+          ? action.terminalTurnId
+          : undefined,
+      );
+      if (
+        messages === state.messages &&
+        unsavedNarratives === state.unsavedNarratives
+      )
+        return state;
+      return { ...state, messages, unsavedNarratives };
     }
     case "PREPEND_MESSAGES": {
       // 把更旧的一批消息合并到前部。已有消息（含流式占位/本地追加）优先保留，

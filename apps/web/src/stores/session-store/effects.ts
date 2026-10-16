@@ -76,7 +76,7 @@ export function useUiSpecHydrationEffect(
       !cancelled && sessionGenerationRef.current === generation;
     void refreshSessionResource(dispatch, ["ui-specs", sessionId, "provider"], {
       isCurrent,
-      read: () => api.fetchUiSpecs(sessionId),
+      read: () => api.fetchUiSpecs(sessionId, activePluginKey),
       apply: (res) => {
         const specs = res.message ?? [];
         dispatch({ type: "LOAD_MESSAGE_UI_SPECS", specs });

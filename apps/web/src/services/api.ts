@@ -6,9 +6,6 @@
  */
 
 export {
-  clearOperatorToken,
-  clearSessionToken,
-  getOperatorToken,
   getSessionToken,
   storeOperatorToken,
   storeSessionToken,
@@ -34,7 +31,6 @@ export {
   setPrepRuntimeBindings,
   setProviderPriceMultipliers,
   setProviderProfiles,
-  setSlotConfig,
   slotBindingId,
   slotBindingKey,
 } from "./api/model-settings.js";

@@ -1,7 +1,8 @@
+import type { SessionState } from "@/stores/session-store/types.js";
 import { ActionableErrorNotice } from "@/components/shared/actionable-error-notice.js";
 import type { InteractionSubmitResult } from "@/stores/session-store/types.js";
 import { resolveI18nSentinel } from "./execution-runtime-status.js";
-import { useCallback, useMemo, useState } from "react";
+import { memo, useCallback, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { AlertCircle, ArrowDown, Loader2, MessageSquare } from "lucide-react";
 import { Button } from "@/components/ui/button.js";
@@ -62,7 +63,24 @@ export interface ChatMessagesProps {
 
 // ── Component ────────────────────────────────────────────────────
 
-export function ChatMessages({
+export const ChatMessages = memo(function ChatMessages(
+  props: ChatMessagesProps,
+) {
+  const { state, loadOlderMessages } = useSession();
+  return (
+    <ChatMessagesContent
+      {...props}
+      olderMessagesCursor={state.olderMessagesCursor}
+      dimensions={state.gameState.dimensions}
+      loadOlderMessages={loadOlderMessages}
+    />
+  );
+});
+
+const ChatMessagesContent = memo(function ChatMessagesContent({
+  olderMessagesCursor,
+  dimensions,
+  loadOlderMessages,
   messages,
   executionSteps,
   showExecutionTimeline,
@@ -81,12 +99,15 @@ export function ChatMessages({
   onRetryRuntime,
   onBeginAdventure,
   messagesEndRef,
-}: ChatMessagesProps) {
+}: ChatMessagesProps & {
+  olderMessagesCursor: SessionState["olderMessagesCursor"];
+  dimensions: SessionState["gameState"]["dimensions"];
+  loadOlderMessages: () => Promise<void>;
+}) {
   const { t } = useTranslation();
   const [expandUpdates] = useSetting<boolean>("ui.expandTurnUpdates");
   const { turnNotes, backdrop } = useThemeLayout();
-  const { state: sessionState, loadOlderMessages } = useSession();
-  const sessionId = sessionState.session?.id;
+  const sessionId = session.id;
   // Sticky-bottom auto-scroll. Follows the stream only while the user is
   // pinned to the bottom; surfaces a "jump to latest" button after they
   // scroll up. Keep the native scroll element in state because auto-scroll,
@@ -113,7 +134,7 @@ export function ChatMessages({
   const { topSentinelRef, loadingOlder, loadFailed, retry } =
     useLoadOlderMessages({
       viewportEl,
-      hasOlder: sessionState.olderMessagesCursor != null,
+      hasOlder: olderMessagesCursor != null,
       firstMessageId: messages[0]?.id,
       onLoadOlder: loadOlderMessages,
     });
@@ -124,6 +145,10 @@ export function ChatMessages({
 
   const { isImageGenActive, generatingImage, handleGenerateImage } =
     useImageGeneration({ sessionPlugins, sessionId, t });
+
+  const onGenerateImage = useCallback(() => {
+    void handleGenerateImage();
+  }, [handleGenerateImage]);
 
   // Precompute the index of the last user message once (O(n)). An interactive
   // block is "locked" iff a later user message exists, i.e. its index is below
@@ -172,7 +197,7 @@ export function ChatMessages({
           sessionId={sessionId}
           executing={executing}
           generatingImage={generatingImage}
-          onGenerateImage={() => void handleGenerateImage()}
+          onGenerateImage={onGenerateImage}
           t={t}
         />
       );
@@ -190,7 +215,7 @@ export function ChatMessages({
       onSubmitInteraction,
       isImageGenActive,
       generatingImage,
-      handleGenerateImage,
+      onGenerateImage,
       t,
     ],
   );
@@ -223,7 +248,7 @@ export function ChatMessages({
             {/* Only above the true first message, not above a loaded page. */}
             {backdrop === "banner" &&
               messages.length > 0 &&
-              sessionState.olderMessagesCursor == null && (
+              olderMessagesCursor == null && (
                 <ChapterBanner world={world} locale={session.locale} />
               )}
 
@@ -231,7 +256,7 @@ export function ChatMessages({
               !executing &&
               (isPreGame ? (
                 <SessionCanvasHero
-                  dimensions={sessionState.gameState.dimensions}
+                  dimensions={dimensions}
                   world={world}
                   locale={session.locale}
                   onBegin={onBeginAdventure}
@@ -319,4 +344,4 @@ export function ChatMessages({
       </div>
     </>
   );
-}
+});

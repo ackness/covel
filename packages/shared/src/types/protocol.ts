@@ -45,7 +45,7 @@ export type CovelEventPayload = Readonly<Record<string, unknown>>;
 export interface NarrativeDeltaPayload {
   readonly runtimeId: string;
   readonly pluginId: string;
-  readonly kind?: string;
+  readonly kind: string;
   readonly delta: string;
   /**
    * Discard the text streamed so far for this runtime before appending
@@ -59,7 +59,7 @@ export interface NarrativeCompletedPayload {
   readonly runtimeId: string;
   readonly content: string;
   readonly messageId?: string;
-  readonly kind?: string;
+  readonly kind: string;
 }
 
 export interface InteractionRequestedPayload {
@@ -71,8 +71,8 @@ export interface InteractionRequestedPayload {
 }
 
 export interface UiRenderedPayload {
-  readonly block?: Readonly<Record<string, unknown>>;
-  readonly render?: Readonly<Record<string, unknown>>;
+  readonly block: Readonly<Record<string, unknown>>;
+  readonly render: Readonly<Record<string, unknown>>;
   readonly proposalId?: string;
   readonly runtimeId?: string;
   readonly pluginId?: string;
@@ -121,7 +121,7 @@ export interface ExecutionCompletedPayload {
 export interface RuntimeStartedPayload {
   readonly runtimeId: string;
   readonly pluginId: string;
-  readonly kind?: string;
+  readonly kind: string;
   readonly label?: string;
 }
 

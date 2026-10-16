@@ -401,7 +401,6 @@ it("does not duplicate action-stream patch history when the subscription observe
   const actionStream = createSseEventHandler({
     ...options,
     ds,
-    runtimeKindRef: { current: new Map() },
     deltaBufferRef: { current: new Map() },
     deltaRafRef: { current: null },
     lastBackfilledTurnIdRef: { current: null },
@@ -1149,7 +1148,6 @@ it("bridge publication preserves a newer healthy POST tail and queued delta", as
   const stream = createSseEventHandler({
     ...options,
     ds: {} as DataService,
-    runtimeKindRef: { current: new Map([["story/main", "story"]]) },
     lastBackfilledTurnIdRef: { current: null },
   });
   stream({
@@ -1161,7 +1159,12 @@ it("bridge publication preserves a newer healthy POST tail and queued delta", as
     flowId: "flow",
     seq: 1,
     timestamp: session.createdAt,
-    payload: { runtimeId: "story/main", pluginId: "story", delta: "healthy" },
+    payload: {
+      runtimeId: "story/main",
+      pluginId: "story",
+      kind: "story",
+      delta: "healthy",
+    },
   });
   for (const cb of [...frames.values()]) cb(0);
   expect(getStreamingText("stream_new_story/main")).toBe("healthy");
@@ -1174,7 +1177,12 @@ it("bridge publication preserves a newer healthy POST tail and queued delta", as
     flowId: "flow",
     seq: 2,
     timestamp: session.createdAt,
-    payload: { runtimeId: "story/main", pluginId: "story", delta: " queued" },
+    payload: {
+      runtimeId: "story/main",
+      pluginId: "story",
+      kind: "story",
+      delta: " queued",
+    },
   });
   await act(async () => {
     pending.resolve({ items: historyWindow(1, 80), nextCursor: null });

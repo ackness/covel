@@ -140,11 +140,7 @@ export interface ModelCapabilityLookupResult {
   usesBuiltinAdapter?: boolean;
 }
 
-import {
-  REASONING_EFFORT_VALUES,
-  type ReasoningEffort,
-} from "./reasoning-effort.js";
-export { REASONING_EFFORT_VALUES };
+import type { ReasoningEffort } from "@covel/shared";
 export type { ReasoningEffort };
 
 export type ReasoningProviderFamily =

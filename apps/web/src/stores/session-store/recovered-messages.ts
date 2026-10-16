@@ -11,14 +11,26 @@ export function mergeRecoveredMessages(
   terminalTurnId?: string,
 ): StreamMessage[] {
   if (recovered.length === 0) return current;
-  const messages = [...current];
+  let messages = current;
+  const byId = new Map(current.map((row, index) => [row.id, index]));
+  const writable = () => {
+    if (messages === current) messages = [...current];
+    return messages;
+  };
+  const replace = (index: number, message: StreamMessage) => {
+    const previous = messages[index];
+    if (previous === message) return;
+    if (previous) byId.delete(previous.id);
+    writable()[index] = message;
+    byId.set(message.id, index);
+  };
   const recoveredIds = new Set(recovered.map((message) => message.id));
   let previous = -1;
   for (const [index, message] of recovered.entries()) {
-    const existing = messages.findIndex((row) => row.id === message.id);
+    const existing = byId.get(message.id) ?? -1;
     if (existing >= 0) {
       // A durable same-ID row replaces the client timestamp and echo marker.
-      if (messages[existing]?.requestId) messages[existing] = message;
+      if (messages[existing]?.requestId) replace(existing, message);
       // A later live completion may have arrived while the snapshot was read.
       previous = existing;
       continue;
@@ -37,7 +49,7 @@ export function mergeRecoveredMessages(
           )
         : -1;
     if (echo >= 0) {
-      messages[echo] = message;
+      replace(echo, message);
       previous = echo;
       continue;
     }
@@ -53,7 +65,7 @@ export function mergeRecoveredMessages(
     if (stream >= 0) {
       // Keep an active attempt intact; a closed attempt can recover its full text.
       if (!executing || message.turnId === terminalTurnId)
-        messages[stream] = message;
+        replace(stream, message);
       previous = stream;
       continue;
     }
@@ -62,7 +74,7 @@ export function mergeRecoveredMessages(
     if (insertion < 0) {
       // The next shared ID is an ordering anchor even if its local clock differs.
       for (const following of recovered.slice(index + 1)) {
-        const next = messages.findIndex((row) => row.id === following.id);
+        const next = byId.get(following.id) ?? -1;
         if (next >= 0) {
           insertion = next;
           break;
@@ -90,7 +102,9 @@ export function mergeRecoveredMessages(
       );
     }
     if (insertion < 0) insertion = messages.length;
-    messages.splice(insertion, 0, message);
+    writable().splice(insertion, 0, message);
+    for (let position = insertion; position < messages.length; position += 1)
+      byId.set(messages[position]!.id, position);
     previous = insertion;
   }
   return orderStoryBeforePluginMessages(messages);

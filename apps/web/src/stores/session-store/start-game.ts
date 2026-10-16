@@ -129,7 +129,12 @@ export async function startGameSession({
     if (!isCurrent()) return;
 
     try {
-      await hydratePluginDataForUiSpecs(session.id, dispatch, isCurrent);
+      await hydratePluginDataForUiSpecs(
+        session.id,
+        dispatch,
+        isCurrent,
+        [...(hydratedSession.activePlugins ?? [])].sort().join("\u001f"),
+      );
     } catch {
       // Right-panel hydration will retry when its own ui-spec loader runs.
     }

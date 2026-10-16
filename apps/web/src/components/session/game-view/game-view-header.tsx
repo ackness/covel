@@ -1,11 +1,6 @@
+import { useDismissibleMenu } from "@/hooks/use-dismissible-menu.js";
 import { Link } from "@tanstack/react-router";
-import {
-  useEffect,
-  useRef,
-  useState,
-  type ComponentType,
-  type ReactNode,
-} from "react";
+import { useState, type ComponentType, type ReactNode } from "react";
 import {
   Bug,
   ChevronLeft,
@@ -296,27 +291,7 @@ function HeaderMenu({
   readonly children: ReactNode;
 }) {
   const [open, setOpen] = useState(false);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const triggerRef = useRef<HTMLButtonElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const onPointerDown = (event: PointerEvent) => {
-      if (!containerRef.current?.contains(event.target as Node)) setOpen(false);
-    };
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setOpen(false);
-        triggerRef.current?.focus();
-      }
-    };
-    document.addEventListener("pointerdown", onPointerDown);
-    document.addEventListener("keydown", onKeyDown);
-    return () => {
-      document.removeEventListener("pointerdown", onPointerDown);
-      document.removeEventListener("keydown", onKeyDown);
-    };
-  }, [open]);
+  const { containerRef, triggerRef } = useDismissibleMenu(open, setOpen, true);
 
   return (
     <div

@@ -1,3 +1,4 @@
+import type { ConfirmRequest } from "./confirm-channel.js";
 import type { I18nText } from "@covel/shared";
 import { resolveDisplayText } from "./i18n-text.js";
 
@@ -56,5 +57,26 @@ export function approvalConfirmMessage(
     action,
     defaultValue:
       '"{{plugin}}" asks to run {{action}}. Allow all such requests in this game?',
+  });
+}
+
+/** Ask for the same grant, with the same warning, from every entry point. */
+export function confirmPluginApproval(
+  pending: { readonly pluginId: string; readonly action: string },
+  {
+    t,
+    confirm,
+  }: {
+    t: Translate;
+    confirm: (request: ConfirmRequest) => Promise<boolean>;
+  },
+): Promise<boolean> {
+  return confirm({
+    title: t("plugin.approval.title", {
+      defaultValue: "Authorize plugin action",
+    }),
+    message: approvalConfirmMessage(t, pending.pluginId, pending.action),
+    confirmLabel: t("plugin.approval.allow", { defaultValue: "Authorize" }),
+    cancelLabel: t("plugin.approval.deny", { defaultValue: "Deny" }),
   });
 }

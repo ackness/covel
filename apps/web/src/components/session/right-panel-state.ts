@@ -167,7 +167,7 @@ export function useRightPanelState(
     let cancelled = false;
     setSpecsStatus("loading");
     setSpecsError(null);
-    fetchUiSpecs(sessionId)
+    fetchUiSpecs(sessionId, activePluginKey)
       .then((specs) => {
         if (cancelled) return;
 

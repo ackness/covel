@@ -22,7 +22,7 @@ export type ActionApproval = z.infer<typeof actionApprovalSchema>;
 
 // -- Actions (SSE) -------------------------------------------------
 
-export type { ActionRequest, ActionType } from "@covel/shared";
+export type { ActionRequest } from "@covel/shared";
 
 /**
  * Send an action and receive SSE events via callback.
