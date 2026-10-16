@@ -8,6 +8,9 @@ import { fileURLToPath } from "node:url";
 const generationRoots = new Map<string, readonly string[]>();
 let hooksInstalled = false;
 
+// Also in host-modules.ts. The tests run both modules in a plain Node
+// process, which cannot resolve a `.js` import of a `.ts` file, so each
+// imports only Node built-ins.
 function isInside(root: string, target: string): boolean {
   const rel = path.relative(root, target);
   return rel !== "" && !rel.startsWith("..") && !path.isAbsolute(rel);

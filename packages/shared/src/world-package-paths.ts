@@ -1,3 +1,5 @@
+import { isKnownLocale } from "./utils/i18n.js";
+
 /**
  * Paths of a world package whose meaning is fixed: the kernel reads its own
  * data there, or the file is the package's manifest, lore, descriptor or a
@@ -40,6 +42,17 @@ export const RESERVED_WORLD_PACKAGE_PATHS: readonly string[] = [
 ];
 
 /**
+ * Whether the segment before a file's extension names the locale of an
+ * edition: a known language of two letters (`fr`, `zh-cn`), or of three
+ * letters with a script or region (`yue-hk`). A bare three-letter segment is
+ * part of the name: `bak`, `min` and `src` are language codes too, and the
+ * suffixes of backup and build files far more often.
+ */
+function isEditionLocale(tag: string): boolean {
+  return (tag.includes("-") || /^[a-z]{2}$/.test(tag)) && isKnownLocale(tag);
+}
+
+/**
  * The form two paths are compared in: case-insensitive (a package may sit on
  * a case-insensitive disk), without `.` segments, and with the locale of an
  * edition file removed (`world.zh-CN.yaml` is an edition of `world.yaml`).
@@ -50,7 +63,11 @@ function comparable(path: string): string {
     .split("/")
     .filter((segment) => segment !== "" && segment !== ".")
     .join("/")
-    .replace(/\.[a-z]{2,3}(?:-[a-z0-9]+)*(\.[^./]+)$/, "$1");
+    .replace(
+      /\.([a-z]{2,3}(?:-[a-z0-9]+)*)(\.[^./]+)$/,
+      (suffix, tag: string, extension: string) =>
+        isEditionLocale(tag) ? extension : suffix,
+    );
 }
 
 const reserved = RESERVED_WORLD_PACKAGE_PATHS.map((path) => ({
