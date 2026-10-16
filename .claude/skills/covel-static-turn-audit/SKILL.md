@@ -139,7 +139,7 @@ Write the detailed files first and the README last. The README is rewritten from
 
 ```bash
 git rev-parse HEAD && git status --short
-rg -n --sort path "^\s*(stage|every|needs|after|detached|background|settle|visibility):|^\s+type: (auto|manual|event)$" plugins -g PLUGIN.md -g RUNTIME.md -g '!**/_archive/**'
+rg -n --sort path "^\s*(stage|every|needs|after|detached|background|settle|visibility):|^\s+type: (auto|manual|event)$" plugins -g PLUGIN.md -g RUNTIME.md
 rg -n "selectTriggeredRuntimes|scheduleTriggeredRuntimes|runEventChain|markPreGameCompletion|finalizeExecution|withSettledExecutionLock" apps packages -g '!*.test.*'
 rg -n "status: \"(success|failed|skipped|suspended)\"|skipReason: \"|outcome: \"" packages/runtime/src/agent-loop packages/runtime/src/function-runtime packages/runtime/src/turn-executor packages/runtime/src/schedule -g '!*.test.*'
 ```

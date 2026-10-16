@@ -80,7 +80,6 @@ test("ignores comments, strings, built files and retired plugins", (t) => {
   for (const directory of [
     "apps/consumer/dist",
     "apps/consumer/node_modules",
-    "plugins/_archive/old",
   ]) {
     probe.write(`${directory}/index.js`, 'import "@covel/probe/unused";');
   }

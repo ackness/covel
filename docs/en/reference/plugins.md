@@ -1004,7 +1004,7 @@ Output of the first command:
 
 ## Built-in plugins at a glance
 
-Below are all the plugins that ship with Covel from [plugins/](../../../plugins/), excluding `_archive/`. `kind: core` means the plugin joins every game by default, and a player can exclude it. `kind: plugin` is enabled only when a player chooses it. In the "runtime" column, "inline" means there is only the one runtime in the root file, and "none" means the plugin has only an entry, extensions, or UI.
+Below are all the plugins that ship with Covel from [plugins/](../../../plugins/). `kind: core` means the plugin joins every game by default, and a player can exclude it. `kind: plugin` is enabled only when a player chooses it. In the "runtime" column, "inline" means there is only the one runtime in the root file, and "none" means the plugin has only an entry, extensions, or UI.
 
 <!-- prettier-ignore -->
 | ID | Name | `kind` | Contracts provided | runtime | What it does |

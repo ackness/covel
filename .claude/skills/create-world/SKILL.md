@@ -51,8 +51,6 @@ pnpm describe:authoring
 | `worlds/emberback`      | 英文世界，多语言示范  |
 | `worlds/lantern-barrow` | 跑团：开局配点加掷骰检定     |
 
-`worlds/_archive/` 下的世界不会被加载，不要当作样例。
-
 ### 4. 写文件
 
 ```

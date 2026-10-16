@@ -23,7 +23,7 @@ defaultLocale: en-US
     );
   }
   // Non-package containers must not prevent otherwise complete inventories.
-  await mkdir(path.join(root, "_archive"));
+  await mkdir(path.join(root, "notes"));
 });
 afterEach(async () => {
   vi.restoreAllMocks();

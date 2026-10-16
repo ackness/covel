@@ -21,7 +21,6 @@
     "packages/runtime/tests/test-plugins/evaluation-consumer/{handler,server}.js",
   ],
   "ignorePatterns": [
-    "plugins/_archive/**",
     "templates/**",
     "apps/desktop/staging/**",
     "apps/web/src/routeTree.gen.ts",

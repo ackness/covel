@@ -2,15 +2,13 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { packageImports } from "./package-imports.mjs";
 
-/** Source includes tests and scaffolds, but never generated or retired code. */
+/** Source includes tests and scaffolds, but never generated code. */
 export function sourceFiles(directory) {
   if (!existsSync(directory)) return [];
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
     if (
       entry.name.startsWith(".") ||
-      ["node_modules", "dist", "build", "coverage", "_archive"].includes(
-        entry.name,
-      )
+      ["node_modules", "dist", "build", "coverage"].includes(entry.name)
     )
       return [];
     const file = path.join(directory, entry.name);

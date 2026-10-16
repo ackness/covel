@@ -1004,7 +1004,7 @@ pnpm lint
 
 ## 内置插件一览
 
-下面是 [plugins/](../../plugins/) 里随 Covel 内置的全部插件（不含 `_archive/`）。`kind: core` 表示这个插件默认加入每一局游戏，玩家可以明确排除；`kind: plugin` 要选了才启用。“runtime”一列里，“内联”表示只有根文件里的一个 runtime，“无”表示只有 entry、扩展或界面。
+下面是 [plugins/](../../plugins/) 里随 Covel 内置的全部插件。`kind: core` 表示这个插件默认加入每一局游戏，玩家可以明确排除；`kind: plugin` 要选了才启用。“runtime”一列里，“内联”表示只有根文件里的一个 runtime，“无”表示只有 entry、扩展或界面。
 
 <!-- prettier-ignore -->
 | ID | 名称 | `kind` | 提供的契约 | runtime | 做什么 |

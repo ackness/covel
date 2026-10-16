@@ -227,8 +227,8 @@ if (undeclaredCount === 0)
 console.log("\n[3/9] plugins/<id>/ structure (verify-release sentinels)");
 const pluginDirs = fs
   .readdirSync(path.join(repoRoot, "plugins"), { withFileTypes: true })
-  // `_`-prefixed dirs are non-plugin conventions (plugins/_archive holds
-  // retired plugins; discovery and the workspace glob skip them too).
+  // `_`-prefixed dirs are not plugins (discovery skips a dir without
+  // PLUGIN.md).
   .filter((e) => e.isDirectory() && !e.name.startsWith("_"))
   // A package manager can leave an ignored node_modules-only directory after
   // a plugin is archived. Keep validating every directory with actual source
@@ -271,8 +271,8 @@ if (pluginIssues === 0)
 console.log("\n[4/9] worlds/<id>/ structure");
 const worldDirs = fs
   .readdirSync(path.join(repoRoot, "worlds"), { withFileTypes: true })
-  // `_`-prefixed dirs are archives (e.g. worlds/_archive) — the world-seed
-  // loader skips any dir without a valid world.yaml, so they aren't worlds.
+  // `_`-prefixed dirs are not worlds; the world-seed loader also skips any
+  // dir without a valid world.yaml.
   .filter((e) => e.isDirectory() && !e.name.startsWith("_"));
 let worldIssues = 0;
 for (const entry of worldDirs) {

@@ -474,8 +474,6 @@ function checkWorldFiles() {
   const files = [];
   for (const full of walkFiles(resolve(REPO_ROOT, "worlds"))) {
     const rel = relative(REPO_ROOT, full);
-    const parts = rel.split(sep);
-    if (parts.includes("_archive")) continue; // archived worlds aren't loaded
     if (basename(rel) !== "world.yaml") continue;
     files.push(rel);
   }

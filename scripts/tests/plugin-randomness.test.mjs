@@ -11,9 +11,7 @@ function isCheckedFile(file) {
   return (
     ["plugins", "templates"].includes(parts[0]) &&
     !parts.some((part) =>
-      ["_archive", "test", "tests", "__tests__", "__snapshots__"].includes(
-        part,
-      ),
+      ["test", "tests", "__tests__", "__snapshots__"].includes(part),
     ) &&
     !/\.(?:test|spec|selfcheck)\.[cm]?[jt]sx?$/.test(file)
   );
@@ -70,7 +68,6 @@ test("the randomness gate permits session randomness and ignores tests and archi
         'ctx.random.int(1, 7); shortId("roll", label, ctx.sessionId, ctx.random); randomInteger(1, 7);',
       ],
       ...[
-        "plugins/_archive/example/handler.js",
         "plugins/example/tests/helper.js",
         "plugins/example/test/helper.js",
         "plugins/example/__tests__/helper.ts",

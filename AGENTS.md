@@ -230,8 +230,7 @@ bundled `worlds/` and `plugins/`.
   - `plugin-test-utils`, `test-runtime` — plugin test helpers and the runtime harness CLI
 - `plugins/` — bundled plugin packages (registry: `docs/reference/plugins.md`).
   `worlds/` — bundled world packs (`world.yaml`, `WORLD.md`, optional `data/`,
-  `characters/`, `media/`). `_archive/` under either holds retired packages and is
-  not loaded.
+  `characters/`, `media/`).
 - `packs/builtin.yaml` — plugin packs (named `requested` / `recommended` sets a
   player picks on the session-prep screen).
 - `prompts/server/` — framework prompt templates; `docker/` — Compose stack and

@@ -287,7 +287,7 @@ async function loadWorldPackages(worldsDir: string): Promise<{
     const worldDir = path.join(worldsDir, entry.name);
 
     try {
-      // Containers such as _archive are not world packages. Other access
+      // A directory without world.yaml is not a world package. Other access
       // errors must propagate so a failed inventory cannot authorize deletion.
       try {
         await access(path.join(worldDir, "world.yaml"));
