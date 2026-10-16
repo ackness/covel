@@ -1,3 +1,4 @@
+import { readLockedSession } from "./session/locked-mutation.js";
 import {
   invalidateSessionEvents,
   sessionEventBus,
@@ -21,7 +22,7 @@ import { characterSchemaSchema, sessionContentLocale } from "@covel/shared";
 
 import { withWritableWorld } from "./worlds/mutation-guard.js";
 import { randomUUID } from "node:crypto";
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import {
   isBlockingWorldRequirement,
   isDependencyRejection,
@@ -40,7 +41,7 @@ import {
   runWithHookScope,
 } from "@covel/runtime";
 import { errorBody, readJsonBody } from "../../api-error.js";
-import { decodePluginUserSettingsHeader } from "./plugin-user-settings.js";
+import { readPluginUserSettings } from "./plugin-user-settings.js";
 import { loadSessionHookScope } from "./session/hook-scope.js";
 import { normalizeLocale } from "../../lib/validators.js";
 import {
@@ -64,7 +65,6 @@ import {
   publicSessionMetadata,
   publicSessionIncarnation,
   SESSION_APPROVAL_SCOPE_KEY,
-  SESSION_DELETION_PENDING_KEY,
   SESSION_INCARNATION_KEY,
   SESSION_LIFECYCLE_PENDING_KEY,
   SESSION_OWNER_TOKEN_HASH_KEY,
@@ -95,6 +95,71 @@ import {
   type SessionLifecyclePending,
   withoutLifecyclePending,
 } from "./session/lifecycle.js";
+
+async function clearLifecycleMarker(
+  c: Context,
+  id: string,
+  expectedIncarnation: string,
+  lifecycle: SessionLifecyclePending,
+): Promise<SessionRecord | Response> {
+  const store = c.get("store");
+  return c.get("sessionLock").withLock(id, async () => {
+    const live = await store.getSession(id);
+    if (!live) {
+      return c.json(
+        errorBody(`Session disappeared during ${lifecycle.event}`, {
+          code: "session_incarnation_changed",
+        }),
+        409,
+      );
+    }
+    if (
+      sessionIncarnationIdentity(live) !== expectedIncarnation ||
+      readSessionLifecyclePending(live)?.opId !== lifecycle.opId
+    ) {
+      return c.json(
+        errorBody(`Session lifecycle changed during ${lifecycle.event}`, {
+          code: "session_lifecycle_changed",
+        }),
+        409,
+      );
+    }
+    const metadata = withoutLifecyclePending(live.metadata);
+    const updatedAt = new Date().toISOString();
+    try {
+      await store.updateSession(id, { metadata, updatedAt });
+    } catch (error) {
+      const persisted = await store.getSession(id);
+      const pending = persisted
+        ? readSessionLifecyclePending(persisted)
+        : undefined;
+      if (
+        !persisted ||
+        sessionIncarnationIdentity(persisted) !== expectedIncarnation ||
+        (pending && pending.opId !== lifecycle.opId)
+      ) {
+        return c.json(
+          errorBody(
+            `Session lifecycle changed during ${lifecycle.event} cleanup`,
+            {
+              code: "session_lifecycle_changed",
+            },
+          ),
+          409,
+        );
+      }
+      // The session change is committed. Preserve its response (including the
+      // one-time owner token on creation); a surviving marker expires and can
+      // be reclaimed later.
+      console.warn(
+        `[sessions] failed to clear ${lifecycle.event} lifecycle marker:`,
+        error instanceof Error ? error.message : String(error),
+      );
+      return persisted;
+    }
+    return { ...live, metadata, updatedAt };
+  });
+}
 
 export const sessionRoutes = new Hono<SessionRouteEnv>();
 registerSessionMediaTokenRoute(sessionRoutes);
@@ -183,15 +248,8 @@ sessionRoutes.post("/", async (c) => {
   const pluginRegistry = c.get("pluginRegistry");
   const worldsDirs = c.get("worldsDirs");
   const covelHome = c.get("covelHome");
-  const decodedUserSettings = decodePluginUserSettingsHeader(
-    c.req.header("X-Plugin-User-Settings"),
-  );
-  if (!decodedUserSettings.ok) {
-    return c.json(
-      errorBody(decodedUserSettings.error, { code: decodedUserSettings.code }),
-      decodedUserSettings.status,
-    );
-  }
+  const decodedUserSettings = readPluginUserSettings(c);
+  if (!decodedUserSettings.ok) return decodedUserSettings.response;
 
   const parsed = await readJsonBody<Record<string, unknown>>(c);
   if (parsed instanceof Response) return parsed;
@@ -535,59 +593,12 @@ sessionRoutes.post("/", async (c) => {
     }
   }
 
-  const responseSession = await sessionLock.withLock(id, async () => {
-    const live = await store.getSession(id);
-    if (!live) {
-      return c.json(
-        errorBody("Session disappeared during SessionStart", {
-          code: "session_incarnation_changed",
-        }),
-        409,
-      );
-    }
-    if (
-      sessionIncarnationIdentity(live) !== expectedIncarnation ||
-      readSessionLifecyclePending(live)?.opId !== startLifecycle.opId
-    ) {
-      return c.json(
-        errorBody("Session lifecycle changed during SessionStart", {
-          code: "session_lifecycle_changed",
-        }),
-        409,
-      );
-    }
-    const metadata = withoutLifecyclePending(live.metadata);
-    const updatedAt = new Date().toISOString();
-    try {
-      await store.updateSession(id, { metadata, updatedAt });
-    } catch (error) {
-      const persisted = await store.getSession(id);
-      const pending = persisted
-        ? readSessionLifecyclePending(persisted)
-        : undefined;
-      if (
-        !persisted ||
-        sessionIncarnationIdentity(persisted) !== expectedIncarnation ||
-        (pending && pending.opId !== startLifecycle.opId)
-      ) {
-        return c.json(
-          errorBody("Session lifecycle changed during SessionStart cleanup", {
-            code: "session_lifecycle_changed",
-          }),
-          409,
-        );
-      }
-      // The session is committed and this is the only response carrying the
-      // raw owner token. A non-critical lease cleanup failure must not orphan
-      // the row; a surviving marker expires and can be reclaimed later.
-      console.warn(
-        "[sessions] failed to clear SessionStart lifecycle marker:",
-        error instanceof Error ? error.message : String(error),
-      );
-      return persisted;
-    }
-    return { ...live, metadata, updatedAt };
-  });
+  const responseSession = await clearLifecycleMarker(
+    c,
+    id,
+    expectedIncarnation,
+    startLifecycle,
+  );
   if (responseSession instanceof Response) return responseSession;
 
   const untranslatedPlugins = selection.active.filter(
@@ -652,15 +663,8 @@ sessionRoutes.patch("/:id", async (c) => {
   if (!guard.ok) return guard.response;
   const expectedIncarnation = sessionIncarnationIdentity(guard.session);
 
-  const decodedUserSettings = decodePluginUserSettingsHeader(
-    c.req.header("X-Plugin-User-Settings"),
-  );
-  if (!decodedUserSettings.ok) {
-    return c.json(
-      errorBody(decodedUserSettings.error, { code: decodedUserSettings.code }),
-      decodedUserSettings.status,
-    );
-  }
+  const decodedUserSettings = readPluginUserSettings(c);
+  if (!decodedUserSettings.ok) return decodedUserSettings.response;
 
   const parsed = await readJsonBody<Record<string, unknown>>(c);
   if (parsed instanceof Response) return parsed;
@@ -672,27 +676,15 @@ sessionRoutes.patch("/:id", async (c) => {
   }
   const updates = parsedPatch.updates;
 
-  const sessionLock = c.get("sessionLock");
   const updated = await withSettledSessionLock(c, id, async () => {
-    const lockedGuard = await resolveSessionParam(c);
-    if (!lockedGuard.ok) return lockedGuard.response;
-    const session = lockedGuard.session;
-    if (sessionIncarnationIdentity(session) !== expectedIncarnation) {
-      return c.json(
-        errorBody("Session was replaced while the request was waiting", {
-          code: "session_incarnation_changed",
-        }),
-        409,
-      );
-    }
-    if (session.metadata?.[SESSION_DELETION_PENDING_KEY]) {
-      return c.json(
-        errorBody("Session deletion is in progress; retry DELETE", {
-          code: "session_deleting",
-        }),
-        409,
-      );
-    }
+    const session = await readLockedSession({
+      c,
+      store,
+      sessionId: id,
+      expectedSession: guard.session,
+      allowedStatuses: "any",
+    });
+    if (session instanceof Response) return session;
     if (
       session.status === "ended" &&
       updates.status !== undefined &&
@@ -774,56 +766,12 @@ sessionRoutes.patch("/:id", async (c) => {
 
   let responseSession: SessionRecord | Response = updated.merged;
   if (updated.endLifecycle) {
-    responseSession = await sessionLock.withLock(id, async () => {
-      const live = await store.getSession(id);
-      if (!live) {
-        return c.json(
-          errorBody("Session disappeared during SessionEnd", {
-            code: "session_incarnation_changed",
-          }),
-          409,
-        );
-      }
-      if (
-        sessionIncarnationIdentity(live) !== expectedIncarnation ||
-        readSessionLifecyclePending(live)?.opId !== updated.endLifecycle?.opId
-      ) {
-        return c.json(
-          errorBody("Session lifecycle changed during SessionEnd", {
-            code: "session_lifecycle_changed",
-          }),
-          409,
-        );
-      }
-      const metadata = withoutLifecyclePending(live.metadata);
-      const updatedAt = new Date().toISOString();
-      try {
-        await store.updateSession(id, { metadata, updatedAt });
-      } catch (error) {
-        const persisted = await store.getSession(id);
-        const pending = persisted
-          ? readSessionLifecyclePending(persisted)
-          : undefined;
-        if (
-          !persisted ||
-          sessionIncarnationIdentity(persisted) !== expectedIncarnation ||
-          (pending && pending.opId !== updated.endLifecycle?.opId)
-        ) {
-          return c.json(
-            errorBody("Session lifecycle changed during SessionEnd cleanup", {
-              code: "session_lifecycle_changed",
-            }),
-            409,
-          );
-        }
-        console.warn(
-          "[sessions] failed to clear SessionEnd lifecycle marker:",
-          error instanceof Error ? error.message : String(error),
-        );
-        return persisted;
-      }
-      return { ...live, metadata, updatedAt };
-    });
+    responseSession = await clearLifecycleMarker(
+      c,
+      id,
+      expectedIncarnation,
+      updated.endLifecycle,
+    );
   }
 
   if (responseSession instanceof Response) return responseSession;

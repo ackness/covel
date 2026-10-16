@@ -30,7 +30,7 @@ import {
   hostProfileOf,
   requireAccess,
 } from "../host-profile.js";
-import { errorBody } from "../api-error.js";
+import { readJsonBody, errorBody } from "../api-error.js";
 import { modelParameters } from "./misc-api/model-parameters.js";
 import { hasServerRuntimeJobCredentials } from "../runtime-job-readiness.js";
 import {
@@ -244,13 +244,15 @@ export function createMiscApiRoutes(
   app.post("/api/ai/models", async (c) => {
     const denied = requireAccess(c, "model.probe");
     if (denied) return denied;
+    const json = await readJsonBody(c);
+    if (json instanceof Response) return json;
     const parsedBody = z
       .strictObject({
         provider: z.string().trim().min(1).max(100),
         baseUrl: z.string().trim().url().max(500).optional(),
         protocol: providerProtocolSchema.optional(),
       })
-      .safeParse(await c.req.json().catch(() => undefined));
+      .safeParse(json.body);
     if (!parsedBody.success) {
       return c.json(errorBody("Invalid model list request body"), 400);
     }
@@ -307,6 +309,8 @@ export function createMiscApiRoutes(
   app.post("/api/ai/ping", async (c) => {
     const denied = requireAccess(c, "model.probe");
     if (denied) return denied;
+    const json = await readJsonBody(c);
+    if (json instanceof Response) return json;
     const parsedBody = z
       .strictObject({
         presetId: z
@@ -323,7 +327,7 @@ export function createMiscApiRoutes(
             (value) => value !== undefined,
           ).length <= 1,
       )
-      .safeParse(await c.req.json().catch(() => undefined));
+      .safeParse(json.body);
     if (!parsedBody.success) {
       return c.json(errorBody("Invalid ping request body"), 400);
     }

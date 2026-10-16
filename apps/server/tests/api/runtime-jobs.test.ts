@@ -270,7 +270,21 @@ describe.each([
     );
     expect(await status("session-b", "b-1")).toBe("queued");
     expect(listSessions).not.toHaveBeenCalled();
-    expect(queryJobs).toHaveBeenCalledTimes(1);
+    // Session-scoped reads now use queryPluginData too. No new global scan
+    // may occur, and the wake must not query the other session.
+    expect(
+      queryJobs.mock.calls.filter(
+        ([options]) => options.sessionId === undefined,
+      ),
+    ).toHaveLength(1);
+    expect(
+      queryJobs.mock.calls.slice(1).map(([options]) => options.sessionId),
+    ).toEqual(expect.arrayContaining(["session-a"]));
+    expect(
+      queryJobs.mock.calls
+        .slice(1)
+        .every(([options]) => options.sessionId === "session-a"),
+    ).toBe(true);
 
     // A wake without a session falls back to a full scan.
     worker.wake();

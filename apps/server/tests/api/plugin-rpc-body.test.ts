@@ -58,7 +58,7 @@ describe("plugin-rpc body validation", () => {
       }),
     ).toEqual({
       ok: false,
-      error: "payload must be a JSON object",
+      error: "payload: must be a JSON object",
       status: 400,
     });
     // An event names a topic, never a runtime: the subscribers decide.
@@ -71,7 +71,7 @@ describe("plugin-rpc body validation", () => {
       }),
     ).toEqual({
       ok: false,
-      error: 'kind "event" does not accept field(s): runtimeId',
+      error: "Unknown field(s): runtimeId",
       status: 400,
     });
   });
@@ -102,7 +102,7 @@ describe("plugin-rpc body validation", () => {
       }),
     ).toEqual({
       ok: false,
-      error: "args must be a JSON object",
+      error: "args: must be a JSON object",
       status: 400,
     });
     expect(validatePluginRpcBody([])).toEqual({
@@ -124,7 +124,7 @@ describe("plugin-rpc body validation", () => {
       }),
     ).toEqual({
       ok: false,
-      error: 'kind "action" does not accept runtimeId or commandId',
+      error: "Unknown field(s): runtimeId",
       status: 400,
     });
     expect(
@@ -136,8 +136,7 @@ describe("plugin-rpc body validation", () => {
       }),
     ).toEqual({
       ok: false,
-      error:
-        "command dispatch does not accept pluginId, payload, expectsBackgroundFollower, or retryFromTurnId",
+      error: "Unknown field(s): pluginId",
       status: 400,
     });
   });
@@ -147,7 +146,7 @@ describe("plugin-rpc body validation", () => {
       validatePluginRpcBody({ kind: "action", pluginId: "p", action: 1 }),
     ).toEqual({
       ok: false,
-      error: "action must be a string",
+      error: "action: must be a string",
       status: 400,
     });
     expect(
@@ -158,7 +157,7 @@ describe("plugin-rpc body validation", () => {
       }),
     ).toEqual({
       ok: false,
-      error: "runtimeId must be a string",
+      error: "runtimeId: must be a string",
       status: 400,
     });
   });
@@ -191,7 +190,7 @@ describe("plugin-rpc body validation", () => {
       }),
     ).toEqual({
       ok: false,
-      error: 'kind "runtime" does not accept action or commandId',
+      error: "runtimeId: must be a string; Unknown field(s): action",
       status: 400,
     });
     expect(
@@ -203,7 +202,71 @@ describe("plugin-rpc body validation", () => {
       }),
     ).toEqual({
       ok: false,
-      error: 'kind "command" does not accept action or runtimeId',
+      error: "Unknown field(s): runtimeId",
+      status: 400,
+    });
+  });
+  it("preserves arbitrary action/runtime payloads and command/event length boundaries", () => {
+    for (const payload of [null, 42, "text", ["item"], { nested: true }]) {
+      expect(
+        validatePluginRpcBody({
+          kind: "action",
+          pluginId: "p",
+          action: "a",
+          payload,
+        }),
+      ).toMatchObject({ ok: true, body: { payload } });
+      expect(
+        validatePluginRpcBody({
+          kind: "runtime",
+          pluginId: "p",
+          runtimeId: "p/r",
+          payload,
+        }),
+      ).toMatchObject({ ok: true, body: { payload } });
+    }
+    const command = { kind: "command", commandId: "p:c" };
+    for (const length of [1, 10_000]) {
+      expect(
+        validatePluginRpcBody({ ...command, input: "x".repeat(length) }),
+      ).toMatchObject({ ok: true });
+    }
+    expect(
+      validatePluginRpcBody({ ...command, args: { text: "x".repeat(9_989) } }),
+    ).toMatchObject({ ok: true });
+    expect(
+      validatePluginRpcBody({
+        kind: "event",
+        pluginId: "p",
+        topic: "x".repeat(128),
+        payload: {},
+      }),
+    ).toMatchObject({ ok: true });
+  });
+
+  it.each([
+    { kind: "command", commandId: "p:c" },
+    { kind: "command", commandId: "p:c", input: "" },
+    { kind: "command", commandId: "p:c", input: "x".repeat(10_001) },
+    { kind: "command", commandId: "p:c", args: { text: "x".repeat(9_990) } },
+    { kind: "command", commandId: "p:c", args: null },
+    { kind: "action", pluginId: "", action: "a" },
+    { kind: "action", pluginId: "p", action: "" },
+    { kind: "action", pluginId: "p", action: "a", input: "text" },
+    {
+      kind: "action",
+      pluginId: "p",
+      action: "a",
+      expectsBackgroundFollower: true,
+    },
+    { kind: "runtime", pluginId: "p", runtimeId: "" },
+    { kind: "runtime", pluginId: "p", runtimeId: "p/r", retryFromTurnId: "" },
+    { kind: "runtime", pluginId: "p", runtimeId: "p/r", args: {} },
+    { kind: "event", pluginId: "p", topic: "x".repeat(129) },
+    { kind: "event", pluginId: "p", topic: "t", payload: null },
+  ])("rejects invalid fields and lengths (case %#)", (body) => {
+    expect(validatePluginRpcBody(body)).toMatchObject({
+      ok: false,
       status: 400,
     });
   });

@@ -829,6 +829,34 @@ describe("[HIGH] Session creation rolls back when world-data import fails", () =
 });
 
 describe("provider ping input", () => {
+  it.each(["/api/ai/models", "/api/ai/ping"])(
+    "returns coded JSON errors before resolving a provider at %s",
+    async (path) => {
+      const store = createMemoryStore();
+      try {
+        const app = createMiscApiRoutes(
+          makeAiStackStub(),
+          createPluginRegistry(),
+          store,
+        );
+        for (const [body, code] of [
+          ["{", "invalid_json_body"],
+          ["null", "invalid_request_body"],
+          ["[]", "invalid_request_body"],
+        ]) {
+          const response = await app.request(path, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body,
+          });
+          expect(response.status).toBe(400);
+          expect(await response.json()).toMatchObject({ code });
+        }
+      } finally {
+        await store.close();
+      }
+    },
+  );
   it.each([null, [], { presetId: 5 }, { slot: {} }])(
     "rejects invalid body %j before resolving a provider",
     async (body) => {

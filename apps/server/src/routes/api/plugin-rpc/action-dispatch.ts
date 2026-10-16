@@ -1,3 +1,7 @@
+import {
+  approvalVerdictResponse,
+  hasServerCodeGrant,
+} from "../approval-verdict.js";
 import { sessionEventBus } from "../session/session-events.js";
 import { withSettledExecutionLock } from "./settled-request.js";
 import type { Context } from "hono";
@@ -145,13 +149,7 @@ export async function dispatchPluginAction(
   // Two-phase approval for every community server module. Ask for the
   // server-code grant first when it is missing, then the precise action grant.
   const needsServerCodeGrant =
-    entryTrust === "community" &&
-    !gate.hasGrant(
-      sessionId,
-      pluginId,
-      COMMUNITY_SERVER_CODE_ACTION,
-      approvalScope,
-    );
+    entryTrust === "community" && !hasServerCodeGrant(gate, session, pluginId);
   // A deferred entry always takes the server-code phase first: we cannot know
   // whether `action` even exists until the (untrusted) entry has run.
   const approvalAction =
@@ -171,27 +169,12 @@ export async function dispatchPluginAction(
         : entryDescription,
   });
 
-  if (verdict.status === "pending") {
-    return c.json(
-      {
-        status: "approval-required",
-        approvalId: verdict.approvalId,
-        pending: verdict.pending,
-      },
-      202,
-    );
-  }
-
-  if (verdict.status === "rejected") {
-    // Pending queue is full. Map to 429 so clients back off.
-    return c.json(
-      errorBody(
-        `approval queue is full (limit ${verdict.limit}); try again after resolving pending approvals`,
-        { code: "queue_full" },
-      ),
-      429,
-    );
-  }
+  const verdictResponse = approvalVerdictResponse(c, verdict, {
+    message: (limit) =>
+      `approval queue is full (limit ${limit}); try again after resolving pending approvals`,
+    code: "queue_full",
+  });
+  if (verdictResponse) return verdictResponse;
 
   // Deferred community entry cleared the gate — activate its server code so
   // the entry-registered handler exists before dispatch re-resolves it.
@@ -221,25 +204,12 @@ export async function dispatchPluginAction(
       trustLevel: entryTrust,
       description: entryDescription,
     });
-    if (actionVerdict.status === "pending") {
-      return c.json(
-        {
-          status: "approval-required",
-          approvalId: actionVerdict.approvalId,
-          pending: actionVerdict.pending,
-        },
-        202,
-      );
-    }
-    if (actionVerdict.status === "rejected") {
-      return c.json(
-        errorBody(
-          `approval queue is full (limit ${actionVerdict.limit}); try again after resolving pending approvals`,
-          { code: "queue_full" },
-        ),
-        429,
-      );
-    }
+    const actionVerdictResponse = approvalVerdictResponse(c, actionVerdict, {
+      message: (limit) =>
+        `approval queue is full (limit ${limit}); try again after resolving pending approvals`,
+      code: "queue_full",
+    });
+    if (actionVerdictResponse) return actionVerdictResponse;
   }
 
   // Action-level dispatch.

@@ -30,6 +30,7 @@ import type { SessionLock } from "../../lib/session-lock.js";
 import { errorBody, listBody, okBody, parseJsonBody } from "../../api-error.js";
 import {
   checkSessionOwner,
+  resolveSessionById,
   checkSessionOwnerById,
   rotateSessionApprovalScope,
   sessionApprovalScope,
@@ -65,18 +66,9 @@ export const sessionApprovalRoutes = new Hono<Env>();
 sessionApprovalRoutes.get("/:id/approvals", async (c) => {
   const gate = c.get("rpcApprovalGate");
   const sessionId = c.req.param("id");
-  const store = c.get("store");
-  const denied = await checkSessionOwnerById(c, store, sessionId);
-  if (denied) return denied;
-  const session = await store.getSession(sessionId);
-  if (!session) {
-    return c.json(
-      errorBody(`Session not found: ${sessionId}`, {
-        code: "session_not_found",
-      }),
-      404,
-    );
-  }
+  const guard = await resolveSessionById(c, sessionId);
+  if (!guard.ok) return guard.response;
+  const session = guard.session;
   const current = gate
     .listAllPendingForSession(sessionId)
     .filter((pending) =>

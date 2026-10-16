@@ -1,3 +1,5 @@
+import type { Context } from "hono";
+import { errorBody } from "../../../api-error.js";
 import {
   DIMENSION_DATA_NAMESPACE,
   concealedRuntimeIds,
@@ -36,7 +38,7 @@ import {
   sessionIncarnationIdentity,
 } from "../session/session-guard.js";
 import { buildSessionHookScope } from "../session/hook-scope.js";
-import { listSettlingRuntimeJobs } from "./jobs.js";
+import { RuntimeJobQueueFullError, listSettlingRuntimeJobs } from "./jobs.js";
 import {
   heldJobsRelease,
   type SuspensionAbandonDeps,
@@ -55,6 +57,37 @@ export class SessionNotActiveError extends Error {
     super(`session is ${status}; runtime execution refused`);
     this.name = "SessionNotActiveError";
   }
+}
+
+/** Check the accepted approval scope against the live row under the lock. */
+export async function requireLiveScope(
+  store: Pick<DataStore, "getSession">,
+  sessionId: string,
+  pluginId: string,
+  approvalScope: string,
+): Promise<SessionRecord> {
+  const live = await store.getSession(sessionId);
+  if (!live) throw new SessionNotActiveError("deleted");
+  if (live.status !== "active") throw new SessionNotActiveError(live.status);
+  if (sessionApprovalScope(live, pluginId) !== approvalScope)
+    throw new SessionApprovalScopeChangedError();
+  return live;
+}
+
+export function runtimeQueueErrorResponse(c: Context, err: unknown): Response {
+  if (err instanceof SessionNotActiveError)
+    return c.json(errorBody(err.message, { code: "session_not_active" }), 409);
+  if (err instanceof SessionApprovalScopeChangedError)
+    return c.json(
+      errorBody(err.message, { code: "approval_scope_changed" }),
+      409,
+    );
+  if (err instanceof RuntimeJobQueueFullError)
+    return c.json(
+      errorBody(err.message, { code: "background_queue_full" }),
+      429,
+    );
+  throw err;
 }
 
 export interface PluginRpcRuntimeTurnContext {
