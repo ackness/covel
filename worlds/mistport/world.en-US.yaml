@@ -1,92 +1,99 @@
 # en-US text for world.yaml. Only translated text; structure and ids come from world.yaml.
 name: Mistport Chronicles
-summary: Three tide-bells, a missing Guildmaster, and a shattered Key draw you
-  into a four-way struggle beneath Mistport's eternal fog.
+summary: The tide bell strikes three. A missing Guildmaster and a shattered Key
+  pull you into a four-way shadow war in a harbor city lost in endless fog.
 pluginPolicy:
   pitch:
     label: Mistport Investigation
     description:
-      A traditional investigation of Qi's disappearance with clue memory,
-      relationship tracking, world rules, preset characters, and portraits.
-    reason: A Case Board, Faction Standing, the Deep Withdrawal, and the Key
-      Fragments settle after every turn alongside tide-time, fog-rot, and
-      seven core characters, so every choice in the long investigation leaves
-      a mark.
+      Follow the case of the missing Guildmaster Qi as a classic story, with
+      clue memory, a relationship map, world rules, a ready-made cast and
+      portraits.
+    reason: The Case Board, Faction Standing, the Deep Withdrawal and the Key
+      Fragments update from the story every turn. Add tide time, fog-rot and a
+      core cast of seven, and every choice in a long investigation leaves a
+      mark.
 characterSchema:
   attributes:
     - id: persona
       name: Personality
-      description: The player character's personality and how they speak (voice
-        follows from personality) — e.g. "taciturn, wary, decisive when it counts."
-        Shapes how the narrative portrays your character and dialogue.
+      description:
+        'Your character''s personality and way of speaking (the voice comes
+        from the personality), e.g. "quiet, wary, decisive when it counts."
+        It shapes how the story portrays your character and their dialogue.'
     - id: origin
       name: Origin
       description:
-        Enter as a newly admitted Tide-Reader apprentice or an Undertow
-        local; you may also add a homeland, former trade, and reason for coming
-        to the Main Pier.
+        You enter the story as a newly admitted Tide-Reader apprentice or as an
+        Undertow local who knows its ways. You can also add a homeland, a
+        former trade, and what brought you to the Main Pier.
     - id: motive
-      name: Driving Motive
+      name: Motive
       description:
-        "Your personal reason to risk investigating Qi's disappearance: repaying
-        a debt, seeking knowledge, redemption, coin, or searching for someone lost."
+        "Your own reason for risking the hunt for Guildmaster Qi: repaying a
+        kindness, seeking knowledge, atonement, money, or finding someone who
+        went missing."
     - id: faction
       name: Faction
-      description: Affiliated faction or guild
+      description: The faction or guild they belong to
     - id: role
       name: Role
-      description: Role or rank within the faction
+      description: Position or rank within the faction
     - id: location
       name: Location
-      description: Current whereabouts
+      description: Where they are now
     - id: tideSense
       name: Tide Sense
-      description: Sensitivity to the tide and fog
+      description: Ability to sense the tide and the fog
     - id: fogRot
       name: Fog Rot
-      description: "Irreversible fog-rot progress: 0-24 latent, 25-49 visibly
-        translucent, 50-74 stronger Tide-Force with lasting impairment, and 75+
-        close to dissolution."
+      description:
+        "How far the fog-rot has spread; it never goes back down. 0-24: hard to
+        notice. 25-49: signs of translucence. 50-74: stronger Tide-Force, but
+        lasting impairment. 75 and up: close to dissolving into the fog."
     - id: fogRotSigns
       name: Fog-Rot Signs
       description:
-        Currently observable locations, mutations, and symptoms of fog-rot;
-        leave blank when there are no signs.
+        Where fog-rot shows right now, and what changes and symptoms can be
+        seen; leave blank if there are none.
     - id: vitality
       name: Vitality
-      description: Capacity to act after injury, fatigue, and exposure
+      description: Strength left to act, worn down by injury, fatigue and cold
     - id: stress
       name: Stress
-      description: Mental strain from fear, secrets, and time pressure
+      description: Mental strain from fear, secrets and the pressure of time
     - id: condition
       name: Condition
-      description: Injuries, illness, exposure, or other ongoing conditions
+      description: Injury, illness, chill, or any other lasting condition
     - id: tideReading
       name: Tide-Reading
-      description:
-        Skill at appraising relics, reading tide-marks, and stabilizing
+      description: Skill at appraising relics, reading tide-marks and steadying
         Tide-Force
     - id: stealth
       name: Fogcraft
-      description: Skill at muffling sound and light, finding the way, and evading fog beasts
+      description:
+        Skill at keeping sound and light down, finding the way, and avoiding
+        fog beasts
     - id: diplomacy
       name: Diplomacy
-      description: Skill at negotiation, reading people, and navigating the four factions
+      description:
+        Skill at negotiating, reading people, and dealing with all four
+        factions
     - id: combat
       name: Combat
-      description: Skill at self-defense and fighting in confined ruins
+      description: Skill at close-quarters self-defense and fighting in cramped ruins
     - id: permit
       name: Undertow Permit
-      description: Whether you hold a Council-recognized Undertow permit
+      description: Whether you hold an Undertow permit the Council recognizes
     - id: equipment
       name: Equipment
-      description: Fog-lamps, silenced tools, waterproof rope, and other usable gear
+      description: Fog-lamps, muffled tools, waterproof rope and other usable gear
     - id: relics
       name: Carried Relics
-      description: Appraised or unappraised relics and fragments currently carried
+      description: Relics and relic fragments on your person, appraised or not
     - id: trust
       name: Trust
-      description: Trust toward the player
+      description: Trust in the player
     - id: dispositionToPlayer
       name: Disposition
       description: Attitude toward the player

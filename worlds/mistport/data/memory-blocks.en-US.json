@@ -3,22 +3,22 @@
     {
       "label": "clues",
       "displayName": "Testimony & Reasoning",
-      "extractionHint": "Exact testimony, contradicting details, lines of reasoning, and untested theories. Each lead's verification status lives in the Case Board dimension; do not repeat it here."
+      "extractionHint": "Testimony in the speaker's own words, details that contradict each other, lines of reasoning, and guesses not yet checked. Each lead's verification status is kept in the Case Board dimension; do not repeat it here."
     },
     {
       "label": "relics",
       "displayName": "Relics",
-      "extractionHint": "Ancient relics obtained or seen, their appraisals, effects, risks, and ownership."
+      "extractionHint": "Ancient relics obtained or seen: how they were appraised, what they do, their risks, and who owns them."
     },
     {
       "label": "tides",
-      "displayName": "Tide Lore",
-      "extractionHint": "Observations and rumors about ebb timing, fog-beast sightings, and safe/danger windows. The deep-withdrawal stage lives in the Deep Withdrawal dimension and the player character's fog-rot in character attributes; do not repeat them."
+      "displayName": "Tide Watch",
+      "extractionHint": "Observations and rumors about when the ebbs come, where fog beasts appear, and windows of safety and danger. The deep withdrawal stage is kept in the Deep Withdrawal dimension and the player character's fog-rot in their character attributes; do not repeat them here."
     },
     {
       "label": "commitments",
-      "displayName": "Allegiances & Debts",
-      "extractionHint": "The story behind promises and deals made to the Council, Guild, Salt Fangs, and Congregation: who, for what, and on what terms. Attitude scores and permit/warrant/favor marks live in the Faction Standing dimension."
+      "displayName": "Allegiances & Favors",
+      "extractionHint": "The full story of specific promises and deals the player has made with the Council, the Guild, the Salt Fangs and the Congregation of the Mist: with whom, for what, and on what terms. Each faction's attitude score and its permit, warrant and favor marks are kept in the Faction Standing dimension."
     }
   ]
 }
