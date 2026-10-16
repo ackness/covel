@@ -48,28 +48,35 @@ function mergeTags(existing, added) {
   );
 }
 
+/** One discovery card: a UI block whose single part is the entry's card. */
 function entryCard(value, content, tags, isNew) {
   return {
-    type: "ui-spec",
-    entryId: value.entryId,
-    spec: {
-      type: "EntryCard",
-      props: {
-        title: value.title,
-        category: value.category,
-        content,
-        tags,
-        rarity: value.rarity,
-        ...(isNew ? { isNew: true } : {}),
+    parts: [
+      {
+        type: "ui-spec",
+        content: {
+          entryId: value.entryId,
+          spec: {
+            type: "EntryCard",
+            props: {
+              title: value.title,
+              category: value.category,
+              content,
+              tags,
+              rarity: value.rarity,
+              ...(isNew ? { isNew: true } : {}),
+            },
+          },
+          meta: {
+            entryId: value.entryId,
+            category: value.category,
+            title: value.title,
+            rarity: value.rarity,
+            imageHint: value.imageHint,
+          },
+        },
       },
-    },
-    meta: {
-      entryId: value.entryId,
-      category: value.category,
-      title: value.title,
-      rarity: value.rarity,
-      imageHint: value.imageHint,
-    },
+    ],
   };
 }
 
