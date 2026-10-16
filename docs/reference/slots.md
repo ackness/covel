@@ -838,6 +838,8 @@ Gemini 上的默认形状只在一个模拟 Gemini 接口的本机中转上验�
 
 连接失败时，`error` 取底层原因（如 `connect ECONNREFUSED 127.0.0.1:11434`），不是笼统的 `fetch failed`。分类在 `@covel/ai-provider` 的 `classifyProviderFailure`，类别的类型 `ProviderFailureKind` 在 `@covel/shared`。
 
+HTTP 失败响应即使正文为空、纯文本或 HTML，也保留状态码并按上表分类。错误消息最多显示 200 个字符的正文预览。因错误不可重试而直接结束的 LLM 调用显示 `LLM call failed`，不再称为重试耗尽。
+
 429 只按错误码判断是不是额度用完，不读文字：OpenAI 普通限流的提示里也带着账单页面的链接。
 
 `quota` 和 `auth` 是账户的失败，`@covel/shared` 的 `isAccountFailure` 判断。同一个请求再发给同一家，只会同样失败，所以 HTTP 层和 runtime 都不再重发，只切换玩家配置的备用模型。

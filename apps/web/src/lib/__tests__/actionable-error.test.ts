@@ -11,6 +11,19 @@ describe("classifyActionableError", () => {
     ).toBe("auth");
   });
 
+  it.each([
+    [401, "Authentication Fails (governor)", "auth"],
+    [401, "{}", "auth"],
+    [403, "Access denied", "forbidden"],
+    [404, "Missing", "not-found"],
+  ])("classifies a failed call with HTTP %i", (status, detail, kind) => {
+    expect(
+      classifyActionableError(
+        `LLM call failed after 1 attempt(s): [provider: fixture, model: fixture-model] [openai-chat] HTTP ${status} — ${detail}`,
+      ),
+    ).toBe(kind);
+  });
+
   it("distinguishes proxy/network, timeout, quota, and model errors", () => {
     expect(classifyActionableError("proxy connection refused")).toBe("network");
     expect(classifyActionableError("UND_ERR_CONNECT_TIMEOUT")).toBe("timeout");

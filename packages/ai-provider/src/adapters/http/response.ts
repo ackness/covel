@@ -160,18 +160,27 @@ export async function readAccountFailure(
   };
 }
 
+/** Failed answers still reach assertSuccess, even without a JSON object. */
 export async function parseJson(
   response: Response,
 ): Promise<Record<string, unknown>> {
   const text = await readResponseText(response);
   if (!text) {
+    if (!response.ok) return {};
     throw new Error(
       `Provider returned empty response (HTTP ${response.status} ${response.statusText})`,
     );
   }
   try {
-    return JSON.parse(text) as Record<string, unknown>;
+    const payload: unknown = JSON.parse(text);
+    if (!response.ok && (payload === null || typeof payload !== "object")) {
+      return { message: text.slice(0, ERROR_PREVIEW_MAX_CHARS) };
+    }
+    return payload as Record<string, unknown>;
   } catch {
+    if (!response.ok) {
+      return { message: text.slice(0, ERROR_PREVIEW_MAX_CHARS) };
+    }
     throw new Error(
       `Provider returned non-JSON response (HTTP ${response.status}): ${text.slice(0, ERROR_PREVIEW_MAX_CHARS)}`,
     );
@@ -318,7 +327,7 @@ function providerErrorMessage(
   details: Record<string, unknown> | undefined,
 ): string {
   const detail = details
-    ? ` — ${typeof details.message === "string" ? details.message : JSON.stringify(details)}`
+    ? ` — ${(typeof details.message === "string" ? details.message : JSON.stringify(details)).slice(0, ERROR_PREVIEW_MAX_CHARS)}`
     : "";
   const status = statusCode === undefined ? "" : ` HTTP ${statusCode}`;
   return `[${provider}]${status}${detail}`;
