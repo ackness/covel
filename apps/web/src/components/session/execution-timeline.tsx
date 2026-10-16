@@ -152,7 +152,6 @@ export function ExecutionTimeline({
   turnNumberStart = 1,
   canRetryTasks = true,
   messages = [],
-  setupPhase = false,
 }: {
   steps: ExecutionStep[];
   executing: boolean;
@@ -165,7 +164,6 @@ export function ExecutionTimeline({
   turnNumberStart?: number;
   canRetryTasks?: boolean;
   messages?: readonly StreamMessage[];
-  setupPhase?: boolean;
 }) {
   const { i18n, t } = useTranslation();
   const [modelSettingsOpen, setModelSettingsOpen] = useState(false);
@@ -205,6 +203,10 @@ export function ExecutionTimeline({
   return (
     <div className="space-y-2 py-1">
       {turnGroups.map((group, groupIdx) => {
+        // Execution-time metadata survives the session moving into play and reloads.
+        const setupExecution = group.steps.some(
+          (step) => step.stage === "setup",
+        );
         const statuses = deriveStatuses(group.steps, RUNTIME_LABELS);
         const isLatest = isLatestTurn && group.turnId === latestTurnId;
         const presentation = executionPresentation({
@@ -230,7 +232,7 @@ export function ExecutionTimeline({
         );
         const allDone = (!executing || !isLatest) && !activeForeground;
         const canRetry =
-          !setupPhase &&
+          !setupExecution &&
           allDone &&
           isLatest &&
           !stopped &&
@@ -278,7 +280,7 @@ export function ExecutionTimeline({
                   {executing && isLatest && (
                     <Loader2 className="mr-1 inline h-3 w-3 animate-spin" />
                   )}
-                  {setupPhase ? (
+                  {setupExecution ? (
                     t("session.setupExecutionSummary", {
                       count: statuses.length,
                     })
@@ -301,7 +303,7 @@ export function ExecutionTimeline({
                 {failures.length > 0 && !stopped && (
                   <span
                     className={
-                      setupPhase
+                      setupExecution
                         ? "text-muted-foreground"
                         : `${executionTone(presentation)} font-medium`
                     }
@@ -349,7 +351,7 @@ export function ExecutionTimeline({
             </div>
 
             {!isCollapsed &&
-              !setupPhase &&
+              !setupExecution &&
               !stopped &&
               isLatest &&
               allDone &&

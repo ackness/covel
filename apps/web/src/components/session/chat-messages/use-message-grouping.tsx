@@ -17,7 +17,6 @@ interface UseMessageGroupingArgs {
   readonly messages: StreamMessage[];
   readonly executionSteps: ExecutionStep[];
   readonly showExecutionTimeline?: boolean;
-  readonly setupPhase?: boolean;
   readonly executing: boolean;
   readonly plugins: PluginSummary[];
   readonly onRetryRuntime?: (
@@ -45,7 +44,6 @@ export function useMessageGrouping({
   messages,
   executionSteps,
   showExecutionTimeline = true,
-  setupPhase = false,
   executing,
   plugins,
   onRetryRuntime,
@@ -175,7 +173,6 @@ export function useMessageGrouping({
       addRow(
         `exec-${group.turnId ?? "__unknown__"}`,
         <ExecutionTimeline
-          setupPhase={setupPhase}
           steps={group.steps}
           messages={group.messages.map((entry) => entry.message)}
           executing={executing && isLatestTurn}

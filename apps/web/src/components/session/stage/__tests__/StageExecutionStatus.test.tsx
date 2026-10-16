@@ -35,9 +35,8 @@ describe("StageExecutionStatus", () => {
   it("keeps setup failures in the stage timeline neutral without task retries", () => {
     render(
       <StageExecutionStatus
-        setupPhase
         messages={[]}
-        executionSteps={source}
+        executionSteps={source.map((step) => ({ ...step, stage: "setup" }))}
         plugins={[]}
         executing={false}
         executionError={null}

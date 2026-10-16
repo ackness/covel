@@ -317,7 +317,7 @@ export function StageView(props: StageViewProps): ReactElement {
         onSendMessage={onSendMessage}
       />
 
-      <StageExecutionStatus {...props} setupPhase={session.phase === "setup"} />
+      <StageExecutionStatus {...props} />
 
       {/* History drawer — the full parsed chat, needs a bounded flex column
           for its internal scroll viewport (flex-1 min-h-0). Retain execution

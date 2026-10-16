@@ -10,6 +10,7 @@ import type { PluginSummary } from "@covel/shared";
 import i18n from "@/i18n";
 import { describeProviderFailure } from "@/lib/provider-failure-hint.js";
 import { ExecutionTimeline } from "../execution-timeline.js";
+import { buildSnapshotExecutionSteps } from "@/stores/session-store/snapshot-execution-steps.js";
 
 function plugin(
   id: string,
@@ -48,7 +49,6 @@ describe("ExecutionTimeline plugin names", () => {
     const retry = vi.fn();
     render(
       <ExecutionTimeline
-        setupPhase
         executing={false}
         onRetryRuntime={retry}
         steps={["first", "second"].flatMap((turnId) => [
@@ -56,12 +56,14 @@ describe("ExecutionTimeline plugin names", () => {
             runtimeId: "opening",
             pluginId: "opening",
             turnId,
+            stage: "setup" as const,
             status: "completed" as const,
           },
           {
             runtimeId: "world/setup",
             pluginId: "world",
             turnId,
+            stage: "setup" as const,
             status: "failed" as const,
             detail: "401 Unauthorized",
           },
@@ -90,6 +92,85 @@ describe("ExecutionTimeline plugin names", () => {
     }
     expect(screen.getAllByText("401 Unauthorized")).toHaveLength(2);
     expect(retry).not.toHaveBeenCalled();
+  });
+
+  it("keeps restored setup history neutral beside a later playing execution", () => {
+    // The same runtime IDs can appear later; use each execution's recorded stage.
+    const steps = buildSnapshotExecutionSteps(
+      (["first", "second", "playing"] as const).flatMap((turnId) => {
+        const base = { turnId, timestamp: "2026-10-16T00:00:00Z" };
+        const setup = turnId !== "playing";
+        return [
+          {
+            ...base,
+            type: "runtime.started",
+            payload: {
+              runtimeId: "opening",
+              pluginId: "opening",
+              stage: setup ? "setup" : "narrative",
+            },
+          },
+          {
+            ...base,
+            type: "runtime.completed",
+            payload: {
+              runtimeId: "opening",
+              pluginId: "opening",
+              status: "success",
+            },
+          },
+          {
+            ...base,
+            type: "runtime.started",
+            payload: {
+              runtimeId: "world",
+              pluginId: "world",
+              stage: setup ? "setup" : "post-turn",
+            },
+          },
+          {
+            ...base,
+            type: "runtime.failed",
+            payload: {
+              runtimeId: "world",
+              pluginId: "world",
+              error: "401 Unauthorized",
+            },
+          },
+          { ...base, type: "turn.completed", payload: { committed: !setup } },
+        ];
+      }),
+    );
+    render(
+      <ExecutionTimeline
+        steps={steps}
+        executing={false}
+        onRetryRuntime={vi.fn()}
+      />,
+    );
+    for (const turnId of ["first", "second"]) {
+      const row = within(
+        screen
+          .getAllByTestId("execution-turn")
+          .find((element) => element.getAttribute("data-turn-id") === turnId)!,
+      );
+      expect(row.getByText("Opening setup · 2 tasks")).toBeTruthy();
+      expect(
+        row.queryByText(i18n.t("session.executionState.partial")),
+      ).toBeNull();
+      expect(
+        row.getByText("Failed: 1").classList.contains("text-muted-foreground"),
+      ).toBe(true);
+      fireEvent.click(row.getByRole("button", { name: /Opening setup/ }));
+      expect(row.getByRole("alert")).toBeTruthy();
+      expect(row.queryByRole("button", { name: /Retry/ })).toBeNull();
+    }
+    expect(
+      screen.getAllByText(i18n.t("session.executionState.partial")),
+    ).toHaveLength(1);
+    expect(
+      screen.getByRole("button", { name: "Retry this task" }),
+    ).toBeTruthy();
   });
 
   it("resolves short manifest locale keys in an English UI", () => {

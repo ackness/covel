@@ -157,11 +157,13 @@ return { result: execution.result, committed: outcome.status === "committed" };
 | ----------------------- | ---- | ----------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
 | `execution.started`     | S→C  | 回合执行开始                                                                        | `{ runtimeCount }`                                                                                                      |
 | `interaction.submitted` | S→C  | `submit_interaction` 的回答已落库、后续回合已开始；先于该回合的 `execution.started` | `{ interactionTurnId, results: [{ submissionId, interactionId, values, filledNarrative }], message?: { id, content } }` |
-| `runtime.started`       | S→C  | 单个 runtime 开始                                                                   | `{ runtimeId, pluginId, kind, turnId, runId, label }`                                                                   |
+| `runtime.started`       | S→C  | 单个 runtime 开始                                                                   | `{ runtimeId, pluginId, kind, turnId, runId, label, stage? }`                                                                   |
 | `runtime.deferred`      | S→C  | staged runtime 已随原始回合提交并转入后台                                           | `{ runtimeId, pluginId, jobId, sourceTurnId }`                                                                          |
 | `runtime.completed`     | S→C  | 单个 runtime 完成                                                                   | `{ runtimeId, pluginId, turnId, runId, status, durationMs }`                                                            |
 | `runtime.failed`        | S→C  | 单个 runtime 失败                                                                   | `{ runtimeId, pluginId, turnId, runId, status, durationMs, error, errorKind? }`                                         |
 | `execution.completed`   | S→C  | 回合执行终态                                                                        | `{ runtimeCount, resultCount, durationMs, committed, error?, abortReason?, resync? }`，各字段见下                       |
+
+`runtime.started.stage` 记录这次 runtime 的阶段，取值为 `setup`、`pre-turn`、`narrative`、`post-turn` 或 `audit`；没有阶段的 event/manual runtime 不带此字段。持久 trace 保留它，客户端从实时事件和历史 trace 恢复到同一条执行步骤，后续终态事件不清除阶段。某个执行组有 `stage: "setup"` 的步骤时，时间线显示中性的“开局准备”摘要，不提供单任务重试；会话进入 `playing` 或页面刷新后也不变。不要按当前会话阶段或插件名称推断历史执行的阶段。
 
 `execution.completed` 的字段：
 

@@ -49,7 +49,6 @@ function rowKeys(rows: ReactNode[]): (string | null)[] {
 const renderMessage = (m: StreamMessage) => <div key={m.id}>{m.content}</div>;
 
 interface TimelineProps {
-  setupPhase: boolean;
   canRetryTasks: boolean;
   steps: ExecutionStep[];
   executing: boolean;
@@ -66,22 +65,40 @@ function timeline(rows: ReactNode[], turnId: string): TimelineProps {
 }
 
 describe("useMessageGrouping", () => {
-  it("passes setup phase to historical and current execution rows", () => {
+  it("preserves execution-time stages across setup and playing groups", () => {
     const { result } = renderHook(() =>
       useMessageGrouping({
-        setupPhase: true,
         messages: [],
         executionSteps: [
-          step({ runtimeId: "setup", turnId: "first", status: "failed" }),
-          step({ runtimeId: "setup", turnId: "second", status: "failed" }),
+          step({
+            runtimeId: "world",
+            turnId: "first",
+            status: "failed",
+            stage: "setup",
+          }),
+          step({
+            runtimeId: "world",
+            turnId: "second",
+            status: "completed",
+            stage: "setup",
+          }),
+          step({
+            runtimeId: "world",
+            turnId: "playing",
+            status: "failed",
+            stage: "post-turn",
+          }),
         ],
         executing: false,
         plugins: [],
         renderMessage,
       }),
     );
-    expect(timeline(result.current, "first").setupPhase).toBe(true);
-    expect(timeline(result.current, "second").setupPhase).toBe(true);
+    expect(timeline(result.current, "first").steps[0]?.stage).toBe("setup");
+    expect(timeline(result.current, "second").steps[0]?.stage).toBe("setup");
+    expect(timeline(result.current, "playing").steps[0]?.stage).toBe(
+      "post-turn",
+    );
   });
   it("leaves uncommitted story recovery to the authoritative recovery notice", () => {
     const retry = vi.fn();

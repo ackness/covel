@@ -6,6 +6,7 @@ import { reasoningAction } from "./reasoning.js";
 import {
   isAssetGenerateView,
   PLAYER_ABORT_REASON,
+  stageSchema,
   type CovelEventType,
 } from "@covel/shared";
 import * as api from "@/services/api";
@@ -450,11 +451,13 @@ export function createSseEventHandler(
         const runtimeId = (payload.runtimeId as string) ?? "unknown";
         const pluginId = (payload.pluginId as string) ?? "";
         const label = payload.label as string | undefined;
+        const stage = stageSchema.safeParse(payload.stage);
         deps.dispatch({
           type: "UPSERT_EXECUTION_STEP",
           step: {
             runtimeId,
             pluginId,
+            ...(stage.success ? { stage: stage.data } : {}),
             status: "running",
             attemptStatus: "pending",
             label,

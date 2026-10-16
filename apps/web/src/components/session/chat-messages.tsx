@@ -221,7 +221,6 @@ const ChatMessagesContent = memo(function ChatMessagesContent({
   );
 
   const renderedRows = useMessageGrouping({
-    setupPhase: session.phase === "setup",
     messages,
     executionSteps,
     showExecutionTimeline,

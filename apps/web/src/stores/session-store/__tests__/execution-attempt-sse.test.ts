@@ -64,6 +64,34 @@ function harness(retrying = true) {
   };
 }
 
+it.each(["setup", "narrative", "post-turn"])(
+  "retains the %s stage from start through terminal events",
+  (stage) => {
+    const h = harness(false);
+    h.send("runtime.started", { stage });
+    h.send("runtime.failed", { error: "401 Unauthorized" });
+    expect(
+      h.getState().executionSteps.find((step) => step.turnId === "attempt"),
+    ).toMatchObject({ stage, status: "failed" });
+    h.send("runtime.completed", { status: "success" });
+    expect(
+      h.getState().executionSteps.find((step) => step.turnId === "attempt"),
+    ).toMatchObject({ stage, status: "completed" });
+  },
+);
+
+it.each([undefined, "invalid-stage", { stage: "setup" }])(
+  "does not infer a stage from missing or invalid metadata: %j",
+  (stage) => {
+    const h = harness(false);
+    h.send("runtime.started", { stage });
+    expect(
+      h.getState().executionSteps.find((step) => step.turnId === "attempt")
+        ?.stage,
+    ).toBeUndefined();
+  },
+);
+
 it.each(["quota", "auth", "unknown"])(
   "preserves %s from runtime.failed",
   (errorKind) => {
