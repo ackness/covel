@@ -1,4 +1,8 @@
-import { playerInputSubmissionSchema, turnDigestSchema } from "@covel/shared";
+import {
+  concealedRuntimeIds,
+  playerInputSubmissionSchema,
+  turnDigestSchema,
+} from "@covel/shared";
 import type {
   PlayerInputSubmission,
   RuntimeManifest,
@@ -22,11 +26,7 @@ export function buildTurnDigest(
   const successful = results.filter(
     (result) => result.status === "success" && result.turnId === input.turnId,
   );
-  const concealed = new Set(
-    runtimes
-      .filter((runtime) => runtime.concealed)
-      .map((runtime) => runtime.name),
-  );
+  const concealed = concealedRuntimeIds(runtimes);
   return freezeSnapshot(
     turnDigestSchema.parse({
       turnId: input.turnId,
