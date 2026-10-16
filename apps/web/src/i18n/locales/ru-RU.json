@@ -554,7 +554,7 @@
       "turnedOffConflict": "Также выключено: {{plugins}} — их нельзя использовать вместе с «{{plugin}}».",
       "turnedOffNeeds": "Также выключено: {{plugins}} — им нужен «{{plugin}}»."
     },
-    "setupModelSettings": "Настройки модели",
+    "recoveryModelSettings": "Настройки модели",
     "setupRunning": "Подготовка начала истории",
     "setupExecutionSummary": "Подготовка начала · {{count}} задач",
     "setupExecutionSummary_one": "Подготовка начала · {{count}} задача",

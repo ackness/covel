@@ -152,6 +152,7 @@ export function ExecutionTimeline({
   turnNumberStart = 1,
   canRetryTasks = true,
   messages = [],
+  recoveryTurnId,
 }: {
   steps: ExecutionStep[];
   executing: boolean;
@@ -164,6 +165,8 @@ export function ExecutionTimeline({
   turnNumberStart?: number;
   canRetryTasks?: boolean;
   messages?: readonly StreamMessage[];
+  /** Source turn whose recovery notice owns failure presentation and retry. */
+  recoveryTurnId?: string;
 }) {
   const { i18n, t } = useTranslation();
   const [modelSettingsOpen, setModelSettingsOpen] = useState(false);
@@ -214,6 +217,12 @@ export function ExecutionTimeline({
           steps: group.steps,
           messages,
         });
+        const recoveryOwned =
+          !!recoveryTurnId && group.turnId === recoveryTurnId;
+        const summaryTone =
+          recoveryOwned && !["generating", "updating"].includes(presentation)
+            ? "text-muted-foreground"
+            : executionTone(presentation);
         const stopped = presentation === "stopped";
         const active = statuses.find(
           (r) =>
@@ -233,6 +242,7 @@ export function ExecutionTimeline({
         const allDone = (!executing || !isLatest) && !activeForeground;
         const canRetry =
           !setupExecution &&
+          !recoveryOwned &&
           allDone &&
           isLatest &&
           !stopped &&
@@ -286,7 +296,7 @@ export function ExecutionTimeline({
                     })
                   ) : (
                     <>
-                      <span className={executionTone(presentation)}>
+                      <span className={summaryTone}>
                         {t(`session.executionState.${presentation}`)}
                       </span>
                       {" · "}
@@ -303,9 +313,9 @@ export function ExecutionTimeline({
                 {failures.length > 0 && !stopped && (
                   <span
                     className={
-                      setupExecution
+                      setupExecution || recoveryOwned
                         ? "text-muted-foreground"
-                        : `${executionTone(presentation)} font-medium`
+                        : `${summaryTone} font-medium`
                     }
                   >
                     {t("session.executionFailures", {
@@ -352,6 +362,7 @@ export function ExecutionTimeline({
 
             {!isCollapsed &&
               !setupExecution &&
+              !recoveryOwned &&
               !stopped &&
               isLatest &&
               allDone &&

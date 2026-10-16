@@ -27,6 +27,7 @@ import { OnboardingWizard } from "@/components/onboarding-wizard.js";
 import { ImageScopeContext } from "@/lib/external-images.js";
 import { isOnboarded } from "@/components/onboarding-wizard/persistence.js";
 import { ExecutionRecoveryNotice } from "@/components/session/execution-recovery-notice.js";
+import { SettingsDialog } from "@/settings/SettingsDialog.js";
 import { ServerStatusOverlay } from "@/components/desktop/server-status-overlay.js";
 
 // Lazy-load the in-game surface (chat + stage + json-render panels + plugin
@@ -252,9 +253,17 @@ function SessionScreen() {
         <div className="w-full max-w-2xl overflow-hidden rounded-(--radius-control) border border-border">
           <ExecutionRecoveryNotice
             recovery={state.executionRecovery}
+            steps={state.executionSteps}
+            onOpenSettings={settings.openWithKey}
             onRetry={retryInterruptedTurn}
             onRefresh={refreshExecutionRecovery}
             onStop={abortActiveTurn}
+          />
+          <SettingsDialog
+            open={settings.open}
+            onOpenChange={settings.onOpenChange}
+            initialKey={settings.initialKey}
+            plugins={state.plugins}
           />
         </div>
       </div>

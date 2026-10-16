@@ -11,6 +11,7 @@ type Props = Pick<
   StageViewProps,
   | "messages"
   | "executionSteps"
+  | "recoveryTurnId"
   | "executing"
   | "executionError"
   | "plugins"
@@ -21,6 +22,7 @@ type Props = Pick<
 export function StageExecutionStatus({
   messages,
   executionSteps,
+  recoveryTurnId,
   executing,
   executionError,
   plugins,
@@ -50,6 +52,7 @@ export function StageExecutionStatus({
       <div className="ui-stage-panel pointer-events-auto max-h-[45vh] w-full max-w-2xl overflow-y-auto rounded-(--radius-card) px-4 py-3 text-sm">
         {showTasks && turn && (
           <ExecutionTimeline
+            recoveryTurnId={recoveryTurnId}
             steps={turn.steps}
             messages={turn.messages.map((entry) => entry.message)}
             executing={executing}

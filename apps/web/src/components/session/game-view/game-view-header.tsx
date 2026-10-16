@@ -43,6 +43,7 @@ interface GameViewHeaderProps {
   world: WorldRecord | null;
   executing: boolean;
   executionState?: ExecutionPresentation;
+  recoveryNoticeVisible?: boolean;
   viewMode: GameViewMode;
   isLeftCollapsed: boolean;
   isRightCollapsed: boolean;
@@ -72,6 +73,7 @@ export function GameViewHeader({
   world,
   executing,
   executionState,
+  recoveryNoticeVisible = false,
   viewMode,
   isLeftCollapsed,
   isRightCollapsed,
@@ -105,6 +107,10 @@ export function GameViewHeader({
     (executionState !== undefined &&
       executionState !== "idle" &&
       executionState !== "completed" &&
+      !(
+        recoveryNoticeVisible &&
+        ["failed", "interrupted"].includes(executionState)
+      ) &&
       (sessionPhase !== "setup" ||
         ["generating", "updating"].includes(executionState)));
   const authorView = viewMode === "detailed" || viewMode === "raw";

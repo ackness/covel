@@ -11,6 +11,7 @@ import i18n from "@/i18n";
 import { describeProviderFailure } from "@/lib/provider-failure-hint.js";
 import { ExecutionTimeline } from "../execution-timeline.js";
 import { buildSnapshotExecutionSteps } from "@/stores/session-store/snapshot-execution-steps.js";
+import type { ExecutionStep } from "@/stores/session-store.js";
 
 function plugin(
   id: string,
@@ -44,6 +45,66 @@ describe("ExecutionTimeline plugin names", () => {
   });
 
   afterEach(() => cleanup());
+
+  it("mutes only the recovery-owned row and restores task retries when its notice leaves", () => {
+    const retry = vi.fn();
+    const steps: ExecutionStep[] = ["older", "latest"].map((turnId) => ({
+      runtimeId: "story",
+      pluginId: "story",
+      turnId,
+      status: "failed",
+      detail: "401 Unauthorized",
+      attemptStatus: "failed",
+    }));
+    const { rerender } = render(
+      <ExecutionTimeline
+        steps={steps}
+        executing={false}
+        recoveryTurnId="latest"
+        onRetryRuntime={retry}
+      />,
+    );
+    const [older, latest] = screen.getAllByTestId("execution-turn");
+    expect(older).toBeTruthy();
+    expect(latest).toBeTruthy();
+    const oldRow = within(older!);
+    const latestRow = within(latest!);
+    expect(
+      oldRow
+        .getByText(i18n.t("session.executionState.failed"))
+        .classList.contains("text-destructive"),
+    ).toBe(true);
+    expect(
+      latestRow
+        .getByText(i18n.t("session.executionState.failed"))
+        .classList.contains("text-muted-foreground"),
+    ).toBe(true);
+    expect(
+      latestRow
+        .getByText("Failed: 1")
+        .classList.contains("text-muted-foreground"),
+    ).toBe(true);
+    expect(screen.queryByRole("button", { name: /Retry/ })).toBeNull();
+    fireEvent.click(latestRow.getByRole("button", { name: /Execution/ }));
+    expect(latestRow.getByRole("alert")).toBeTruthy();
+    fireEvent.click(latestRow.getByRole("button", { name: "Show details" }));
+    expect(latestRow.getByText("401 Unauthorized")).toBeTruthy();
+    expect(latestRow.queryByRole("button", { name: /Retry/ })).toBeNull();
+    rerender(
+      <ExecutionTimeline
+        steps={steps}
+        executing={false}
+        onRetryRuntime={retry}
+      />,
+    );
+    expect(
+      latestRow
+        .getByText(i18n.t("session.executionState.failed"))
+        .classList.contains("text-destructive"),
+    ).toBe(true);
+    fireEvent.click(latestRow.getByRole("button", { name: "Retry this task" }));
+    expect(retry).toHaveBeenCalledExactlyOnceWith("story", "latest");
+  });
 
   it("keeps setup attempts neutral and leaves every retry to the setup notice", () => {
     const retry = vi.fn();

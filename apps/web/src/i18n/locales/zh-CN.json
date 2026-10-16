@@ -464,7 +464,7 @@
       "turnedOffConflict": "同时关闭了 {{plugins}}：它们不能和“{{plugin}}”一起用。",
       "turnedOffNeeds": "同时关闭了 {{plugins}}：它们需要“{{plugin}}”。"
     },
-    "setupModelSettings": "模型设置",
+    "recoveryModelSettings": "模型设置",
     "setupRunning": "正在准备开局",
     "setupExecutionSummary": "开局准备 · {{count}} 个任务"
   },

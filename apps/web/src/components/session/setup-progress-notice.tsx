@@ -2,12 +2,12 @@ import { useEffect, useState } from "react";
 import { AlertCircle, Info } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { ActionableErrorNotice } from "@/components/shared/actionable-error-notice.js";
-import { Button } from "@/components/ui/button.js";
-import { classifyActionableError } from "@/lib/actionable-error.js";
 import type { SessionRecord, SetupRuntimeState } from "@/services/api.js";
 import type { StreamMessage } from "@/stores/session-store.js";
 import type { ExecutionRecovery } from "@/stores/session-store/types.js";
 import { isPendingInteractionMessage } from "./game-view/interaction-blocks.js";
+import { FailureRecoveryActions } from "./failure-recovery-actions.js";
+import { executionRecoveryNoticeVisible } from "./execution-presentation.js";
 
 /**
  * A session that sits in setup with nothing on screen to act on: a setup step
@@ -28,21 +28,6 @@ function setupError(state: SetupRuntimeState): string | undefined {
   return undefined;
 }
 
-/** The recovery notice owns an interrupted or failed execution. */
-function recoveryActive(recovery: ExecutionRecovery | null | undefined) {
-  if (!recovery) return false;
-  const state = recovery.status?.state;
-  return (
-    recovery.hydrating ||
-    !!recovery.error ||
-    !recovery.status ||
-    state === "running" ||
-    state === "unknown" ||
-    state === "interrupted" ||
-    state === "failed"
-  );
-}
-
 export function setupProgress(input: {
   readonly session: SessionRecord;
   readonly messages: StreamMessage[];
@@ -53,7 +38,11 @@ export function setupProgress(input: {
   const { session, messages, submittedBlockIds, executing } = input;
   if (session.status !== "active" || session.phase !== "setup") return null;
   // No messages yet: the "begin adventure" hero is the way forward.
-  if (executing || messages.length === 0 || recoveryActive(input.recovery))
+  if (
+    executing ||
+    messages.length === 0 ||
+    executionRecoveryNoticeVisible(input.recovery)
+  )
     return null;
   // A form or choice on screen is what setup waits for.
   if (
@@ -104,10 +93,6 @@ export function SetupProgressNotice({
   }, [visible]);
   if (!progress || !settled) return null;
   const failed = progress.kind === "failed";
-  const errorKind = classifyActionableError(progress.error);
-  const settingsFix =
-    failed &&
-    ["auth", "forbidden", "not-found", "rate-limited"].includes(errorKind);
   const run = async () => {
     setBusy(true);
     setRearmFailed(false);
@@ -160,29 +145,15 @@ export function SetupProgressNotice({
           )}
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          {settingsFix && (
-            <Button
-              type="button"
-              size="sm"
-              disabled={busy}
-              onClick={() =>
-                onOpenSettings(
-                  errorKind === "auth" ? "llm.providers" : "llm.slots",
-                )
-              }
-            >
-              {t("session.setupModelSettings")}
-            </Button>
-          )}
-          <Button
-            type="button"
-            size="sm"
-            variant={settingsFix ? "outline" : "default"}
+          <FailureRecoveryActions
+            error={failed ? progress.error : undefined}
+            retryLabel={t(
+              failed ? "session.setupRetry" : "session.setupContinue",
+            )}
             disabled={busy}
-            onClick={() => void run()}
-          >
-            {t(failed ? "session.setupRetry" : "session.setupContinue")}
-          </Button>
+            onRetry={() => void run()}
+            onOpenSettings={onOpenSettings}
+          />
         </div>
       </div>
     </div>

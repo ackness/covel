@@ -16,6 +16,7 @@ interface MessageComposerProps {
   session: SessionRecord;
   executing: boolean;
   executionState?: ExecutionPresentation;
+  recoveryNoticeVisible?: boolean;
   inputValue: string;
   composerBlocked: boolean;
   composerDisabled: boolean;
@@ -39,6 +40,7 @@ export function MessageComposer({
   session,
   executing,
   executionState,
+  recoveryNoticeVisible = false,
   inputValue,
   composerBlocked,
   composerDisabled,
@@ -234,6 +236,10 @@ export function MessageComposer({
             </p>
           ) : executionState &&
             !["idle", "completed"].includes(executionState) &&
+            !(
+              recoveryNoticeVisible &&
+              ["failed", "interrupted"].includes(executionState)
+            ) &&
             (session.phase !== "setup" ||
               ["generating", "updating"].includes(executionState)) ? (
             <p

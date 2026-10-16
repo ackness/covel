@@ -4,7 +4,46 @@ import {
   type SessionExecutionStatus,
 } from "@covel/shared";
 import type { ExecutionStep, StreamMessage } from "@/stores/session-store.js";
-import { projectExecutionTurns } from "@/stores/session-store/execution-projection.js";
+import {
+  getSourceTurnId,
+  projectExecutionTurns,
+} from "@/stores/session-store/execution-projection.js";
+import type { ExecutionRecovery } from "@/stores/session-store/types.js";
+
+/** Shared with setup so both notices keep their existing visibility rules. */
+export function executionRecoveryNoticeVisible(
+  recovery: ExecutionRecovery | null | undefined,
+): boolean {
+  if (!recovery) return false;
+  const state = recovery.status?.state;
+  return (
+    recovery.hydrating ||
+    !!recovery.error ||
+    !recovery.status ||
+    state === "running" ||
+    state === "unknown" ||
+    state === "interrupted" ||
+    state === "failed"
+  );
+}
+
+/** Recovery attempts are displayed in their original source turn's timeline. */
+export function recoveryNoticeTurnId(
+  recovery: ExecutionRecovery | null | undefined,
+  steps: readonly ExecutionStep[],
+): string | undefined {
+  if (!executionRecoveryNoticeVisible(recovery)) return undefined;
+  return getSourceTurnId(
+    recovery?.status?.turnId,
+    new Map(
+      steps.flatMap((step) =>
+        step.turnId && step.sourceTurnId
+          ? [[step.turnId, step.sourceTurnId] as const]
+          : [],
+      ),
+    ),
+  );
+}
 
 export type ExecutionPresentation =
   | "idle"

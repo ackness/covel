@@ -49,6 +49,7 @@ function rowKeys(rows: ReactNode[]): (string | null)[] {
 const renderMessage = (m: StreamMessage) => <div key={m.id}>{m.content}</div>;
 
 interface TimelineProps {
+  recoveryTurnId?: string;
   canRetryTasks: boolean;
   steps: ExecutionStep[];
   executing: boolean;
@@ -104,6 +105,7 @@ describe("useMessageGrouping", () => {
     const retry = vi.fn();
     const { result } = renderHook(() =>
       useMessageGrouping({
+        recoveryTurnId: "source",
         messages: [],
         executionSteps: [
           step({
@@ -120,6 +122,7 @@ describe("useMessageGrouping", () => {
       }),
     );
     const props = timeline(result.current, "source");
+    expect(props.recoveryTurnId).toBe("source");
     expect(props.canRetryTasks).toBe(false);
     expect(props.onRetryRuntime).toBeUndefined();
     expect(props).not.toHaveProperty("onRetryAll");

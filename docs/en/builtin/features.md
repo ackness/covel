@@ -61,6 +61,7 @@ Models sometimes fail. The app only redoes the part that failed, so the parts th
 - When several tasks fail, click "Retry failed tasks". The story text and other completed results are kept.
 - Before retrying, you can click "Change model / parameters" to switch to another model, or lower the output limit. The retry uses the current settings.
 - If opening setup fails, the notice at the top explains why. For key, permission, endpoint or rate-limit errors, click "Model settings" to fix the problem, then "Retry setup". It only runs unfinished steps. Expand execution records for details; during setup, retry from the top notice.
+- If a turn fails, the recovery notice at the top shows the cause recorded by the task. Expand it to read the original error. For key, permission, endpoint or rate-limit errors, open "Model settings" before retrying. While the recovery notice is visible, retry from there. Execution records keep a summary and expandable details.
 - If the app stops unexpectedly, unfinished tasks stop, and the progress that was saved is kept. A new attempt starts only when you click "Retry unfinished turn".
 
 ## Debug page
