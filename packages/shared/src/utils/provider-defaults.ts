@@ -20,8 +20,9 @@ export interface BuiltinProviderConnection {
  * `baseUrl` and `protocol`. A server key attaches only to the origin given
  * here. Adding a provider that speaks an existing protocol is one entry.
  *
- * A local service on another port, or one that offers several protocols on
- * one port, is a custom provider with its own `baseUrl` and `protocol`.
+ * A local service on another port is a custom provider with its own
+ * `baseUrl`. A service that offers several protocols on one port lists its
+ * default protocol here; a model can still name another one.
  */
 export const BUILTIN_PROVIDER_CONNECTIONS = {
   openrouter: {
@@ -140,6 +141,12 @@ export const BUILTIN_PROVIDER_CONNECTIONS = {
   litellm: {
     label: "LiteLLM Proxy",
     baseUrl: "http://localhost:4000/v1",
+    protocol: "openai-chat-v1",
+    local: true,
+  },
+  magpie: {
+    label: "Magpie",
+    baseUrl: "http://127.0.0.1:3425/v1",
     protocol: "openai-chat-v1",
     local: true,
   },

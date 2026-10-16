@@ -120,6 +120,7 @@ Schema：`packages/ai-provider/src/config/llm-schema.ts`。
 | `llamacpp` | llama.cpp server（本机） | `http://localhost:8080/v1` | `openai-chat-v1` |
 | `vllm` | vLLM（本机） | `http://localhost:8000/v1` | `openai-chat-v1` |
 | `litellm` | LiteLLM Proxy（本机） | `http://localhost:4000/v1` | `openai-chat-v1` |
+| `magpie` | Magpie（本机） | `http://127.0.0.1:3425/v1` | `openai-chat-v1` |
 
 ```toml
 [covel.story]
@@ -132,6 +133,7 @@ model    = "glm-5"
 **本机服务。** 标“本机”的条目，指运行 Covel 服务端的那台机器上的服务，端口是各自的默认值。
 
 - 用了别的端口，或者一个端口上同时提供多种协议的本机网关，按自定义服务商添加：地址填 `http://127.0.0.1:<端口>/v1`，协议选它那一路用的协议。需要几种协议，就添加几个服务商。
+- Magpie 在同一个地址上还提供 OpenAI Responses 和 Anthropic Messages。在“服务商”里选 Magpie 后默认走 OpenAI Chat；某个模型要用另外两种协议时，在这个模型的“接口协议”里另选。
 - 本机地址（`localhost`、`127.0.0.1`、`::1`）上的模型不需要 API Key。没有密钥也算已就绪，可以开始游戏、运行后台任务和做连接测试。服务自己要求密钥时照常填写。
 
 **读取模型列表。** 添加服务商或模型时，“从服务读取模型列表”向该服务请求它提供的模型 ID（`POST /api/ai/models`）。勾选即加入，可以按名称筛选；手动输入的 ID 保留。

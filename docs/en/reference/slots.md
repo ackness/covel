@@ -120,6 +120,7 @@ Built-in providers come with their official address and default protocol. In `ll
 | `llamacpp` | llama.cpp server (local) | `http://localhost:8080/v1` | `openai-chat-v1` |
 | `vllm` | vLLM (local) | `http://localhost:8000/v1` | `openai-chat-v1` |
 | `litellm` | LiteLLM Proxy (local) | `http://localhost:4000/v1` | `openai-chat-v1` |
+| `magpie` | Magpie (local) | `http://127.0.0.1:3425/v1` | `openai-chat-v1` |
 
 ```toml
 [covel.story]
@@ -132,6 +133,7 @@ For a provider that is not in the table, set `baseUrl` as usual. It only needs t
 **Local services.** An entry marked "local" means a service on the same machine that runs the Covel server. The port is that service's default.
 
 - If you use a different port, or a local gateway that offers several protocols on one port, add it as a custom provider. Set the address to `http://127.0.0.1:<port>/v1`, and choose the protocol that this route uses. If you need several protocols, add several providers.
+- Magpie also offers OpenAI Responses and Anthropic Messages on the same address. After you pick Magpie under "Provider", models use OpenAI Chat; to use one of the other two for a model, choose it under that model's "API protocol".
 - A model on a local address (`localhost`, `127.0.0.1`, `::1`) does not need an API key. Without a key it still counts as ready. You can start a game, run background tasks, and run connection tests. If the service itself asks for a key, fill it in as usual.
 
 **Reading the model list.** When you add a provider or a model, "Read the model list from the service" asks that service for the model IDs it offers (`POST /api/ai/models`). Tick the models you want to add. You can filter them by name. IDs you typed by hand are kept.
