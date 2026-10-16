@@ -195,7 +195,6 @@ const FRAMEWORK_CHINESE_LINES = {
   // A Chinese variant of a context-truncation marker.
   "packages/context/src/budget.ts": 1,
   // Patterns that match Chinese text.
-  "packages/plugin-handlers-utils/src/token-estimation.ts": 1,
   "packages/create/src/validation-helpers.ts": 7,
   "packages/runtime/src/turn-executor/turn-output-helpers.ts": 1,
   "packages/tools/src/builtin/tool-search.ts": 2,
