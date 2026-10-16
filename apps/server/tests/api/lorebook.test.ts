@@ -82,6 +82,30 @@ describe("Lorebook API routes", () => {
     await store.close();
   });
 
+  it.each([
+    ["POST", ""],
+    ["PUT", "/entry"],
+    ["PATCH", "/entry"],
+  ])("returns coded JSON errors before %s writes", async (method, suffix) => {
+    for (const [body, code] of [
+      ["{", "invalid_json_body"],
+      ["null", "invalid_request_body"],
+      ["[]", "invalid_request_body"],
+    ]) {
+      const response = await app.request(
+        `/api/sessions/${SESSION_ID}/lorebook${suffix}`,
+        {
+          method,
+          headers: { "content-type": "application/json" },
+          body,
+        },
+      );
+      expect(response.status).toBe(400);
+      expect(await response.json()).toMatchObject({ code });
+      expect(await store.listSessionLorebookEntries(SESSION_ID)).toEqual([]);
+    }
+  });
+
   describe("GET /api/sessions/:id/lorebook", () => {
     it("returns empty list when no entries exist", async () => {
       const res = await app.request(`/api/sessions/${SESSION_ID}/lorebook`);

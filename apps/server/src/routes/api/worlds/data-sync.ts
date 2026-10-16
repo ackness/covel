@@ -1,3 +1,4 @@
+import { hasServerCodeGrant } from "../approval-verdict.js";
 /**
  * World data-sync routes — import-plan preflight, session worldData sync, and
  * session dimension re-import into plugin_data + lorebook.
@@ -12,7 +13,6 @@
 
 import { Hono } from "hono";
 import { z } from "zod";
-import { COMMUNITY_SERVER_CODE_ACTION } from "@covel/approval";
 import { errorBody, okBody, readJsonBody } from "../../../api-error.js";
 import {
   prepareWorldDataSyncForSession,
@@ -24,6 +24,7 @@ import { DimensionProviderConflictError } from "../../../world-data/dimension-pr
 import {
   checkSessionOwner,
   sessionApprovalScope,
+  resolveSessionById,
 } from "../session/session-guard.js";
 import { withLockedSessionMutation } from "../session/locked-mutation.js";
 import type { WorldEnv } from "./shared.js";
@@ -111,13 +112,9 @@ worldDataSyncRoutes.post("/:id/sync-data", async (c) => {
   if (typeof sessionId !== "string") {
     return c.json(errorBody("sessionId (string) is required"), 400);
   }
-  const session = await store.getSession(sessionId);
-  if (!session) {
-    return c.json(errorBody("Session not found"), 404);
-  }
-  // Owner guard: sync rewrites the session's worldData rows.
-  const denied = checkSessionOwner(c, session);
-  if (denied) return denied;
+  const guard = await resolveSessionById(c, sessionId);
+  if (!guard.ok) return guard.response;
+  const session = guard.session;
   if (session.worldId !== worldId) {
     return c.json(errorBody("Session world mismatch"), 400);
   }
@@ -140,14 +137,7 @@ worldDataSyncRoutes.post("/:id/sync-data", async (c) => {
       activePlugins: liveSession.activePlugins,
       registry: pluginRegistry,
       canExecuteProjection: (pluginId: string) =>
-        c
-          .get("rpcApprovalGate")
-          .hasGrant(
-            liveSession.id,
-            pluginId,
-            COMMUNITY_SERVER_CODE_ACTION,
-            sessionApprovalScope(liveSession, pluginId),
-          ),
+        hasServerCodeGrant(c.get("rpcApprovalGate"), liveSession, pluginId),
     },
   });
 
@@ -298,14 +288,7 @@ worldDataSyncRoutes.post("/:id/sync-dimensions", async (c) => {
       activePlugins: liveSession.activePlugins,
       registry: pluginRegistry,
       canExecuteProjection: (pluginId: string) =>
-        c
-          .get("rpcApprovalGate")
-          .hasGrant(
-            liveSession.id,
-            pluginId,
-            COMMUNITY_SERVER_CODE_ACTION,
-            sessionApprovalScope(liveSession, pluginId),
-          ),
+        hasServerCodeGrant(c.get("rpcApprovalGate"), liveSession, pluginId),
     },
   });
 

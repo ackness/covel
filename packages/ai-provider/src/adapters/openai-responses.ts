@@ -21,7 +21,6 @@ import type { ModelProviderAdapter } from "./adapter.js";
 import {
   assertGenerationPayload,
   assertStreamCompleted,
-  assertSuccessfulFinishReason,
   withFailureUsage,
 } from "./generation-completion.js";
 import type { UsageSummary } from "../types.js";

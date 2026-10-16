@@ -3,10 +3,7 @@ import {
   type PluginRegistry,
   type PluginRegistryEntry,
 } from "@covel/plugin-loader";
-import {
-  COMMUNITY_SERVER_CODE_ACTION,
-  type RpcApprovalGate,
-} from "@covel/approval";
+import type { RpcApprovalGate } from "@covel/approval";
 import type { SessionRecord } from "@covel/store";
 import {
   disabledDependents,
@@ -22,7 +19,7 @@ import {
   buildPluginSummary,
   pluginContractFacts,
 } from "../../../lib/plugin-descriptor.js";
-import { sessionApprovalScope } from "./session-guard.js";
+import { hasServerCodeGrant } from "../approval-verdict.js";
 
 /**
  * A session's stored plugin selection. `requiredContracts` is the world's
@@ -71,15 +68,7 @@ export function authorizedSessionPluginIds(
     .filter(
       (entry) =>
         getPluginTrustInfo(entry.id, entry.source).autoLoad ||
-        Boolean(
-          session &&
-          gate?.hasGrant(
-            session.id,
-            entry.id,
-            COMMUNITY_SERVER_CODE_ACTION,
-            sessionApprovalScope(session, entry.id),
-          ),
-        ),
+        Boolean(session && gate && hasServerCodeGrant(gate, session, entry.id)),
     )
     .map((entry) => entry.id);
 }

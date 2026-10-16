@@ -16,7 +16,7 @@ import { z } from "zod";
 import type { DataStore } from "@covel/store";
 import { resolveSessionParam } from "./session/session-guard.js";
 import { withLockedSessionMutation } from "./session/locked-mutation.js";
-import { errorBody, listBody, okBody } from "../../api-error.js";
+import { errorBody, listBody, okBody, readJsonBody } from "../../api-error.js";
 
 type Env = {
   Variables: {
@@ -61,7 +61,9 @@ lorebookRoutes.post("/:id/lorebook", async (c) => {
   const guard = await resolveSessionParam(c);
   if (!guard.ok) return guard.response;
 
-  const raw = await c.req.json<unknown>().catch(() => null);
+  const json = await readJsonBody<Record<string, unknown>>(c);
+  if (json instanceof Response) return json;
+  const raw = json.body;
   const parsed = entryBodySchema.safeParse(raw);
   if (!parsed.success) {
     return c.json(errorBody("Invalid lorebook entry body"), 400);
@@ -99,9 +101,11 @@ lorebookRoutes.put("/:id/lorebook/:entryId", async (c) => {
   if (!guard.ok) return guard.response;
 
   const entryId = c.req.param("entryId");
-  const raw = await c.req.json<unknown>().catch(() => null);
+  const json = await readJsonBody<Record<string, unknown>>(c);
+  if (json instanceof Response) return json;
+  const raw = json.body;
   const parsed = entryBodySchema.safeParse({
-    ...(raw as Record<string, unknown>),
+    ...raw,
     id: entryId,
   });
   if (!parsed.success) {
@@ -146,7 +150,9 @@ lorebookRoutes.patch("/:id/lorebook/:entryId", async (c) => {
   if (!guard.ok) return guard.response;
 
   const entryId = c.req.param("entryId");
-  const raw = await c.req.json<unknown>().catch(() => null);
+  const json = await readJsonBody<Record<string, unknown>>(c);
+  if (json instanceof Response) return json;
+  const raw = json.body;
   const bodySchema = z.object({ enabled: z.boolean() });
   const parsed = bodySchema.safeParse(raw);
   if (!parsed.success) {

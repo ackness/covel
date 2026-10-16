@@ -386,7 +386,13 @@ async function executeTurnImpl(
   // Committed world-model state is fixed from here until finalize; every
   // runtime in this execution shares one read of it.
   if (deps.store && !deps.worldModelReads)
-    deps = { ...deps, worldModelReads: memoizeWorldModelReads(deps.store) };
+    deps = {
+      ...deps,
+      worldModelReads: memoizeWorldModelReads(deps.store, {
+        sessionId: input.sessionId,
+        session: sessionState.session,
+      }),
+    };
   if (deps.extensions) {
     deps = {
       ...deps,

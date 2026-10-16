@@ -208,9 +208,8 @@ describe("turn-executor → SessionContextSnapshot wiring", () => {
     });
     expect(result.runtimeResults[0]?.status).toBe("success");
     expect(llm.captured.systemPrompts[0]).toContain("ancient telescope");
-    // Admission plus the runtime world view; with no dimension provider the
-    // barrier reads nothing, and the prompt snapshot adds no second read.
-    expect(getSession).toHaveBeenCalledTimes(2);
+    // The runtime world view reuses the session read at admission.
+    expect(getSession).toHaveBeenCalledTimes(1);
     // Admission and the runtime world view each read characters once.
     expect(characters).toHaveBeenCalledTimes(2);
     expect(newest).toHaveBeenCalledTimes(1);

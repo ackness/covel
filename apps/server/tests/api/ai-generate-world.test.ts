@@ -221,6 +221,22 @@ describe("ai world generation route", () => {
     await rm(worldsDir, { recursive: true, force: true });
   });
 
+  it("requires concept instead of the removed prompt alias", async () => {
+    const response = await app.request("/api/ai/generate-world", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        prompt: "Clockwork city",
+        saveTarget: "return-only",
+      }),
+    });
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      error: "concept (string) is required",
+    });
+    expect(await store.listWorlds()).toEqual([]);
+  });
+
   it.each([
     {
       configuredUtility: false,
@@ -333,7 +349,7 @@ protocol = "openai-chat-v1"
             method: "POST",
             headers,
             body: JSON.stringify({
-              prompt: "Clockwork city",
+              concept: "Clockwork city",
               model,
               saveTarget: "server-store",
             }),
@@ -369,7 +385,7 @@ protocol = "openai-chat-v1"
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-              prompt: "Clockwork city",
+              concept: "Clockwork city",
               saveTarget: "return-only",
             }),
           }),
@@ -1361,12 +1377,10 @@ protocol = "openai-chat-v1"
       embeddedLorebook: expect.arrayContaining([
         expect.objectContaining({ id: "time-cost" }),
       ]),
-      generatedPackageSummary: {
-        characters: 3,
-        lorebook: 4,
-        rules: 3,
-      },
     });
+    expect(done.world.metadata?.embeddedCharacters).toHaveLength(3);
+    expect(done.world.metadata?.embeddedLorebook).toHaveLength(7);
+    expect(done.world.metadata).not.toHaveProperty("generatedPackageSummary");
     expect(done.world.metadata?.worldDataPath).toBeUndefined();
     expect(done.world.metadata?.characterBlueprintSources).toBeUndefined();
   });
@@ -1781,11 +1795,16 @@ protocol = "openai-chat-v1"
       );
 
       const dir = path.join(worldsDir, "generated-world");
-      expect(revised.metadata.generatedPackageSummary).toEqual({
-        characters: 4,
-        lorebook: 4,
-        rules: 3,
-      });
+      expect(revised.metadata.embeddedCharacters).toHaveLength(4);
+      const entries = revised.metadata.embeddedLorebook as {
+        extra: { sourceKind: string };
+      }[];
+      expect(
+        entries.filter((entry) => entry.extra.sourceKind === "lorebook"),
+      ).toHaveLength(4);
+      expect(
+        entries.filter((entry) => entry.extra.sourceKind === "rule"),
+      ).toHaveLength(3);
       // The lore entries and rules are still in the package.
       expect(
         await readFile(path.join(dir, "data/lorebook.yaml"), "utf8"),

@@ -19,6 +19,7 @@ import type { Hono } from "hono";
 import { createMiscApiRoutes } from "../../src/routes/misc-api.js";
 import { __resetUiSpecsCache } from "../../src/routes/misc-api/ui-specs.js";
 import { registerTestPlugins } from "../helpers/register-test-plugins.js";
+import { publicSessionIncarnation } from "../../src/routes/api/session/session-guard.js";
 
 const stubAi = {
   presetRegistry: { listPresets: () => [] },
@@ -130,6 +131,34 @@ describe("GET /api/ui-specs — registry snapshot", () => {
 
     __resetUiSpecsCache();
     const refreshed = await app.request(`/api/ui-specs?sessionId=${sessionId}`);
+    expect(JSON.stringify(await refreshed.json())).toContain("v2");
+  });
+
+  it("filters activation changes without reloading assets, then reloads on registration", async () => {
+    const first = await app.request(`/api/ui-specs?sessionId=${sessionId}`);
+    expect(JSON.stringify(await first.json())).toContain("v1");
+    await writeFile(specPath, spec("v2"), "utf-8");
+    const session = (await store.getSession(sessionId))!;
+    const incarnation = publicSessionIncarnation(session);
+    for (const activePlugins of [[], ["panel-plugin"], []]) {
+      await registry.applyPersistedActivations(
+        sessionId,
+        activePlugins,
+        () => store.updateSession(sessionId, { activePlugins }),
+        incarnation,
+      );
+      const response = await app.request(
+        `/api/ui-specs?sessionId=${sessionId}`,
+      );
+      const body = (await response.json()) as { right: unknown[] };
+      expect(body.right).toHaveLength(activePlugins.length);
+      if (activePlugins.length) {
+        expect(JSON.stringify(body)).toContain("v1");
+        expect(JSON.stringify(body)).not.toContain("v2");
+      }
+    }
+    registry.register(registry.get("panel-plugin")!);
+    const refreshed = await app.request("/api/ui-specs");
     expect(JSON.stringify(await refreshed.json())).toContain("v2");
   });
 

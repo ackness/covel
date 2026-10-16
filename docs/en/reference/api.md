@@ -51,6 +51,8 @@ This page lists every endpoint, request field, response, and error code. Use it 
 **Basic checks on the request body**
 
 - For endpoints that expect a JSON object, a `null`, an array, or a single value gets `400` at once. It never reaches the handler.
+- Lorebook writes, model listing, and model connection tests share JSON reading errors: invalid syntax returns `400 invalid_json_body`; a non-object returns `400 invalid_request_body`.
+- Session execution status, steering, stopping, and world data sync return `404 session_not_found` for a missing session. Plugin RPC validation identifies invalid fields; clients should not depend on the error text.
 - An approval decision first checks that `decision` and `scope` are valid values. Only then is the pending approval used up.
 - An event injection first checks that each identifier is a string and that `payload` is an object. Only then is the event published.
 
@@ -5124,7 +5126,7 @@ The response is SSE. First come progress frames, and the generated world comes l
 
 | Field           | Type   | Required | Description                                                                                                                            |
 | --------------- | ------ | -------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| `concept`       | string | Yes      | A description of the world concept (up to 4000 characters). The synonym key `prompt` is also accepted                                  |
+| `concept`       | string | Yes      | A description of the world concept (up to 4000 characters), supplied as `concept`                                                      |
 | `locale`        | string | No       | The locale. The default is `zh-CN`                                                                                                     |
 | `model`         | string | No       | Model role or preset ID; defaults to `story`, following [model selection](./slots.md#actual-selection-priority)                        |
 | `saveTarget`    | string | No       | Where to save. The default is `server-file`. The allowed values are in the table below                                                 |

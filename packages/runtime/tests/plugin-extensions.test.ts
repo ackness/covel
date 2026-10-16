@@ -95,6 +95,70 @@ function fixture<M extends ExtensionMode>(
 const input = { value: 2, turnId: "turn" };
 
 describe("kernel extension execution", () => {
+  it("parses once and gives each provider isolated input and a lazy world copy", async () => {
+    const { point, host } = fixture("collect");
+    const parse = vi.spyOn(point.input, "parse");
+    host.register(
+      "alpha",
+      { point: point.id, id: "one" },
+      {
+        handler: (value: typeof input) => {
+          value.value = 90;
+          return { value: value.value };
+        },
+      },
+    );
+    host.register(
+      "beta",
+      { point: point.id, id: "two" },
+      {
+        handler: (value: typeof input, context) => {
+          expect(value.value).toBe(2);
+          expect(context.world).toBe(context.world);
+          (context.world.characters as unknown[]).push({ name: "Local" });
+          return { value: 2 };
+        },
+      },
+    );
+    host.register(
+      "inner",
+      { point: point.id, id: "three" },
+      {
+        handler: (_value, context) => {
+          expect(context.world.characters).toEqual([]);
+          return { value: 3 };
+        },
+      },
+    );
+    const clone = vi.spyOn(globalThis, "structuredClone");
+    try {
+      const run = host.createExecution({
+        sessionId: "session",
+        locale: "en",
+        signal: new AbortController().signal,
+        world: { characterSchema: null, characters: [], dimensions: {} },
+        readPluginData: async () => [],
+      });
+      expect(await run.run(point, input)).toEqual([
+        { value: 90 },
+        { value: 2 },
+        { value: 3 },
+      ]);
+      expect(input.value).toBe(2);
+      expect(parse).toHaveBeenCalledOnce();
+      // One execution snapshot and the two providers that actually read it.
+      expect(
+        clone.mock.calls.filter(
+          ([value]) =>
+            value && typeof value === "object" && "characterSchema" in value,
+        ),
+      ).toHaveLength(3);
+    } finally {
+      clone.mockRestore();
+      parse.mockRestore();
+    }
+  });
+
   it("records final slot validation once and persists the same sanitized failure before returning skip", async () => {
     const events: PluginServiceCallEvent[] = [];
     const services = new PluginServiceRegistry({

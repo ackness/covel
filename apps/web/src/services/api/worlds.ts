@@ -357,7 +357,7 @@ export function generateWorld(
       const res = await requestResponse("/api/ai/generate-world", {
         method: "POST",
         body: JSON.stringify({
-          prompt,
+          concept: prompt,
           locale,
           saveTarget: options?.saveTarget,
           brief: options?.brief,

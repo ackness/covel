@@ -238,28 +238,36 @@ export class PluginExtensionHost {
     const cache = new Map<string, Promise<unknown>>();
     const client = this.services.createKernelClient({
       ...scope,
-      extensionContext: (pluginId, signal) => ({
-        world: structuredClone(world),
-        sessionId: scope.sessionId,
-        locale: scope.locale,
-        messages: pluginMessagesFor(this.messagesOf?.(pluginId), scope.locale),
-        turnId: scope.turnId,
-        pluginData: {
-          get: async (namespace, key) => {
-            signal.throwIfAborted();
-            const rows = await namespaceRows(pluginId, namespace);
-            signal.throwIfAborted();
-            const row = rows.find((candidate) => candidate.key === key);
-            return row ? structuredClone(row.value) : null;
+      extensionContext: (pluginId, signal) => {
+        let providerWorld: typeof world | undefined;
+        return {
+          get world() {
+            return (providerWorld ??= structuredClone(world));
           },
-          list: async (namespace) => {
-            signal.throwIfAborted();
-            const rows = await namespaceRows(pluginId, namespace);
-            signal.throwIfAborted();
-            return structuredClone(rows.map(pluginDataEntry));
+          sessionId: scope.sessionId,
+          locale: scope.locale,
+          messages: pluginMessagesFor(
+            this.messagesOf?.(pluginId),
+            scope.locale,
+          ),
+          turnId: scope.turnId,
+          pluginData: {
+            get: async (namespace, key) => {
+              signal.throwIfAborted();
+              const rows = await namespaceRows(pluginId, namespace);
+              signal.throwIfAborted();
+              const row = rows.find((candidate) => candidate.key === key);
+              return row ? structuredClone(row.value) : null;
+            },
+            list: async (namespace) => {
+              signal.throwIfAborted();
+              const rows = await namespaceRows(pluginId, namespace);
+              signal.throwIfAborted();
+              return structuredClone(rows.map(pluginDataEntry));
+            },
           },
-        },
-      }),
+        };
+      },
     });
     return {
       run: async <I, O, M extends ExtensionMode>(

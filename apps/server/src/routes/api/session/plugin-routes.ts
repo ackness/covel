@@ -1,3 +1,8 @@
+import { readLockedSession } from "./locked-mutation.js";
+import {
+  approvalVerdictResponse,
+  hasServerCodeGrant,
+} from "../approval-verdict.js";
 import { publicSessionIncarnation } from "./session-guard.js";
 import {
   provideRequestJobCredentials,
@@ -27,7 +32,6 @@ import {
   resolveSessionParam,
   rotateSessionApprovalScope,
   sessionApprovalScope,
-  sessionIncarnationIdentity,
   SESSION_DELETION_PENDING_KEY,
 } from "./session-guard.js";
 import type { SessionRouteEnv } from "./route-env.js";
@@ -170,7 +174,6 @@ export function registerSessionPluginRoutes(
     const pluginId = c.req.param("pluginId");
     const guard = await resolveSessionParam(c);
     if (!guard.ok) return guard.response;
-    const expectedIncarnation = sessionIncarnationIdentity(guard.session);
     const pluginEntry = pluginRegistry.get(pluginId);
     if (!pluginEntry) {
       return c.json(
@@ -196,52 +199,23 @@ export function registerSessionPluginRoutes(
       trustLevel: trust.source,
       description: `Enable server-side code for plugin ${pluginId}`,
     });
-    if (verdict.status === "pending") {
-      return c.json(
-        {
-          status: "approval-required",
-          approvalId: verdict.approvalId,
-          pending: verdict.pending,
-        },
-        202,
-      );
-    }
-    if (verdict.status === "rejected") {
-      return c.json(
-        errorBody(
-          `approval queue is full (limit ${verdict.limit}); resolve pending approvals and retry`,
-          { code: "approval_queue_full" },
-        ),
-        429,
-      );
-    }
+    const verdictResponse = approvalVerdictResponse(c, verdict, {
+      message: (limit) =>
+        `approval queue is full (limit ${limit}); resolve pending approvals and retry`,
+      code: "approval_queue_full",
+    });
+    if (verdictResponse) return verdictResponse;
 
     await c.get("activatePluginServerCode")?.(pluginId, id);
     return withSettledSessionLock(c, id, async () => {
-      const lockedGuard = await resolveSessionParam(c);
-      if (!lockedGuard.ok) return lockedGuard.response;
-      const session = lockedGuard.session;
-      if (sessionIncarnationIdentity(session) !== expectedIncarnation) {
-        return c.json(
-          errorBody("Session was replaced while enable was waiting", {
-            code: "session_incarnation_changed",
-          }),
-          409,
-        );
-      }
-      if (
-        session.status !== "active" ||
-        session.metadata?.[SESSION_DELETION_PENDING_KEY]
-      ) {
-        return c.json(
-          errorBody(`Session is ${session.status}; plugin enable refused`, {
-            code: session.metadata?.[SESSION_DELETION_PENDING_KEY]
-              ? "session_deleting"
-              : "session_not_active",
-          }),
-          409,
-        );
-      }
+      const session = await readLockedSession({
+        c,
+        store,
+        sessionId: id,
+        expectedSession: guard.session,
+        allowedStatuses: ["active"],
+      });
+      if (session instanceof Response) return session;
       if (
         trust.source === "community" &&
         sessionApprovalScope(session, pluginId) !== approvalScope
@@ -357,14 +331,11 @@ export function registerSessionPluginRoutes(
             activePlugins: active,
             registry: pluginRegistry,
             canExecuteProjection: (projectionPluginId: string) =>
-              c
-                .get("rpcApprovalGate")
-                .hasGrant(
-                  id,
-                  projectionPluginId,
-                  COMMUNITY_SERVER_CODE_ACTION,
-                  sessionApprovalScope(session, projectionPluginId),
-                ),
+              hasServerCodeGrant(
+                c.get("rpcApprovalGate"),
+                session,
+                projectionPluginId,
+              ),
           },
         });
       } catch (error) {
@@ -401,32 +372,15 @@ export function registerSessionPluginRoutes(
     const pluginId = c.req.param("pluginId");
     const guard = await resolveSessionParam(c);
     if (!guard.ok) return guard.response;
-    const expectedIncarnation = sessionIncarnationIdentity(guard.session);
     return withSettledSessionLock(c, id, async () => {
-      const lockedGuard = await resolveSessionParam(c);
-      if (!lockedGuard.ok) return lockedGuard.response;
-      const session = lockedGuard.session;
-      if (sessionIncarnationIdentity(session) !== expectedIncarnation) {
-        return c.json(
-          errorBody("Session was replaced while disable was waiting", {
-            code: "session_incarnation_changed",
-          }),
-          409,
-        );
-      }
-      if (
-        session.status !== "active" ||
-        session.metadata?.[SESSION_DELETION_PENDING_KEY]
-      ) {
-        return c.json(
-          errorBody(`Session is ${session.status}; plugin disable refused`, {
-            code: session.metadata?.[SESSION_DELETION_PENDING_KEY]
-              ? "session_deleting"
-              : "session_not_active",
-          }),
-          409,
-        );
-      }
+      const session = await readLockedSession({
+        c,
+        store,
+        sessionId: id,
+        expectedSession: guard.session,
+        allowedStatuses: ["active"],
+      });
+      if (session instanceof Response) return session;
 
       const selection = readSessionPluginSelection(session);
       const requested = selection.requested.filter((id) => id !== pluginId);

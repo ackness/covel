@@ -1,3 +1,4 @@
+import { approvalVerdictResponse } from "../approval-verdict.js";
 import {
   pluginRuntimeManifests,
   getPluginTrustInfo,
@@ -7,7 +8,6 @@ import type { Context } from "hono";
 import { COMMUNITY_SERVER_CODE_ACTION } from "@covel/approval";
 import type { SessionRecord } from "@covel/store";
 import type { RuntimeManifest, ValidatedActionRequest } from "@covel/shared";
-import { errorBody } from "../../../api-error.js";
 import { sessionApprovalScope } from "../session/session-guard.js";
 import { runnablePluginIds } from "../session/plugins.js";
 import { requireAccess } from "../../../host-profile.js";
@@ -90,23 +90,11 @@ function preflightApprovals(
         trustLevel: trust.source,
         description: `Authorize ${action} for this session`,
       });
-      if (verdict.status === "pending")
-        return c.json(
-          {
-            status: "approval-required",
-            approvalId: verdict.approvalId,
-            pending: verdict.pending,
-          },
-          202,
-        );
-      if (verdict.status === "rejected")
-        return c.json(
-          errorBody(
-            "Resolve pending approvals before starting another action",
-            { code: "approval_queue_full" },
-          ),
-          429,
-        );
+      const verdictResponse = approvalVerdictResponse(c, verdict, {
+        message: "Resolve pending approvals before starting another action",
+        code: "approval_queue_full",
+      });
+      if (verdictResponse) return verdictResponse;
     }
   }
 }

@@ -18,7 +18,7 @@
 import { compareText } from "@covel/shared";
 import type { Context, Hono } from "hono";
 import type { DataStore, MediaStore, SessionRecord } from "@covel/store";
-import { errorBody } from "../../api-error.js";
+import { readJsonBody, errorBody } from "../../api-error.js";
 import { signMediaTokenForSession } from "../../middleware/media-token.js";
 import { allowsAccess, requireAccess } from "../../host-profile.js";
 import {
@@ -337,16 +337,11 @@ export function registerMediaLibraryRoutes(routes: Hono): void {
     const mediaStore = c.get("mediaStore");
     if (!mediaStore) return unavailable(c);
 
-    const body: unknown = await c.req.json().catch(() => null);
-    if (!body || typeof body !== "object" || Array.isArray(body)) {
+    const parsed = await readJsonBody<Record<string, unknown>>(c);
+    if (parsed instanceof Response)
       return invalid(c, "request body must be a JSON object");
-    }
-    const {
-      ids,
-      unused,
-      force,
-      scanLimit: rawScanLimit,
-    } = body as Record<string, unknown>;
+    const body = parsed.body;
+    const { ids, unused, force, scanLimit: rawScanLimit } = body;
     const scanLimit = parsePositiveInteger(rawScanLimit);
     if (scanLimit === null || typeof scanLimit === "string") {
       return invalid(c, "scanLimit must be a positive integer");

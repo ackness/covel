@@ -170,10 +170,10 @@ export function materializeWorldModel(
   /** The session's content locale; resolves declared dimensions to it. */
   locale?: string,
 ): WorldModelView {
-  let state: WorldModelView = {
-    ...structuredClone(base),
-    dimensions: structuredClone(base.dimensions ?? {}),
-  };
+  let state: WorldModelView = structuredClone({
+    ...base,
+    dimensions: base.dimensions ?? {},
+  });
   const keyOf = memoizedNameKey();
   for (const proposal of proposals) {
     if (proposal.sessionId !== sessionId) continue;

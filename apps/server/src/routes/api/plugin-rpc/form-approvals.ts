@@ -1,3 +1,7 @@
+import {
+  approvalVerdictResponse,
+  hasServerCodeGrant,
+} from "../approval-verdict.js";
 import type { Context } from "hono";
 import { z } from "zod";
 import { COMMUNITY_SERVER_CODE_ACTION } from "@covel/approval";
@@ -89,10 +93,7 @@ export async function preflightFormApprovals(
     const denied = requireAccess(c, "plugin.community");
     if (denied) return denied;
     const scope = sessionApprovalScope(session, pluginId);
-    if (
-      gate.hasGrant(session.id, pluginId, COMMUNITY_SERVER_CODE_ACTION, scope)
-    )
-      continue;
+    if (hasServerCodeGrant(gate, session, pluginId)) continue;
     const verdict = gate.evaluate({
       sessionId: session.id,
       sessionScope: scope,
@@ -102,21 +103,10 @@ export async function preflightFormApprovals(
       trustLevel: trust.source,
       description: `Load form validation for community plugin ${pluginId}`,
     });
-    if (verdict.status === "pending")
-      return c.json(
-        {
-          status: "approval-required",
-          approvalId: verdict.approvalId,
-          pending: verdict.pending,
-        },
-        202,
-      );
-    if (verdict.status === "rejected")
-      return c.json(
-        errorBody("Resolve pending approvals before submitting this form", {
-          code: "approval_queue_full",
-        }),
-        429,
-      );
+    const verdictResponse = approvalVerdictResponse(c, verdict, {
+      message: "Resolve pending approvals before submitting this form",
+      code: "approval_queue_full",
+    });
+    if (verdictResponse) return verdictResponse;
   }
 }

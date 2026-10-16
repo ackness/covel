@@ -668,7 +668,7 @@ Gemini 原生的思考强度、`providerOptions.google.thinkingConfig`、`cached
 `createEventBus(store?, options?)` 只需要一个可选的 `EventStore`。它有两个异步方法：`saveEvent(record)`，以及按会话隔离的 `getEventById(sessionId, id)`。
 
 - 记录类型 `EventStoreRecord` 随包导出。现有的 DataStore 可以直接传入；独立的宿主不用实现其他数据库方法。
-- 持久化是一条有上限的、尽力而为的审计队列。`flush()` 等队列排空，但不保证 transport 已经送达。
+- 只有超出 transport 帧上限的普通事件才进入有上限的持久化队列，供其他进程按引用读取；本地事件和内联帧不写入 `events` 表。SSE 补发仍读取内存缓冲区。`flush()` 等队列排空，但不保证 transport 已经送达。
 - 特别大的 transport 帧，在保存成功之后只发送一个引用，接收方通过同一个存储读出内容。
 
 进程间的 transport 帧必须带非空 `stream`，标识发送端的这一代状态；缺少它的帧会被拒绝。发布端应一起升级并重启。追踪事件按扁平 payload 读取：嵌套的 `data` 是普通数据，不会合并到顶层。旧的嵌套追踪需重新生成，才能按当前调试界面查看。
@@ -1291,7 +1291,7 @@ runtime 的终态：
 
 **`flush()` 和 `close()`**
 
-- `EventBus.flush()` 等有上限的审计持久化队列排空。它不等跨进程的投递，也不阻止新的事件。
+- `EventBus.flush()` 等超大事件的有上限持久化队列排空。它不等跨进程的投递，也不阻止新的事件。
 - `EventBus.close()` 可以重复调用。它依次：停止本地的发出和远端的接收；在支持的地方取消订阅；清掉“等待缺口”的定时器；等没完成的持久化、有顺序的发布和已收到引用的读取结束；最后关闭它自己拥有的 transport。
 - 关闭之后调用 `emit()` 会被忽略。
 - transport 可以从 `subscribe()` 返回一个取消订阅的函数，并在自己持有资源时实现 `close()`。PostgreSQL 的实现通过这个生命周期释放它的 LISTEN/NOTIFY 客户端。

@@ -41,7 +41,7 @@ describe("EventBus", () => {
       );
     local.emit(makeMessage({ id: "last", topic: "world.changed" }));
     await local.flush();
-    expect(await store.listEvents("sess-1")).toHaveLength(2);
+    expect(await store.listEvents("sess-1")).toEqual([]);
     expect(local.getEventsAfter("sess-1", 0)).toMatchObject({
       gap: false,
       latestSeq: 2002,
@@ -156,7 +156,7 @@ describe("EventBus", () => {
   });
 
   describe("store persistence", () => {
-    it("should call store.saveEvent when store is provided", async () => {
+    it("keeps local events in replay without persisting them", async () => {
       const store = createMemoryStore();
       const storeBus = createEventBus(store);
 
@@ -171,19 +171,21 @@ describe("EventBus", () => {
       await new Promise((resolve) => setTimeout(resolve, 10));
 
       const events = await store.listEvents("sess-1");
-      expect(events).toHaveLength(1);
-      expect(events[0]!.id).toBe("msg-persist");
-      expect(events[0]!.topic).toBe("quest.completed");
+      expect(events).toEqual([]);
+      expect(storeBus.getEventsAfter("sess-1", 0).events).toHaveLength(1);
     });
   });
 
   describe("flush (durability barrier)", () => {
-    it("awaits in-flight audit-event persistence", async () => {
+    it("awaits in-flight oversize-event persistence", async () => {
       const store = createMemoryStore();
-      const storeBus = createEventBus(store);
+      const storeBus = createEventBus(store, {
+        transport: { publish: () => {}, subscribe: () => {} },
+      });
       storeBus.emit(
         makeMessage({
           id: "msg-flush",
+          payload: { text: "x".repeat(9_000) },
           sessionId: "sess-f",
           topic: "quest.completed",
         }),

@@ -153,7 +153,10 @@ describe("execution reads through the bootstrap response barrier", () => {
     });
     const missing = await status(ownerToken, "missing-session");
     expect(missing.status).toBe(404);
-    expect(await missing.json()).toEqual({ error: "Session not found" });
+    expect(await missing.json()).toEqual({
+      error: "Session not found: missing-session",
+      code: "session_not_found",
+    });
   });
 
   it.each([false, true])(
