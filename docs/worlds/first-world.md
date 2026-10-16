@@ -120,7 +120,7 @@ characterSchema:
     - id: resolve
       name: 胆识
       type: number
-      category: stats
+      category: abilities
       min: 1
       max: 5
       defaultValue: 3
@@ -131,6 +131,8 @@ characterSchema:
 | --------------------- | ---------------------------------------------------------------- |
 | `pluginPolicy.preset` | 开局默认的玩法包。`traditional-story` 是内置的传统叙事组合       |
 | `characterSchema`     | 这个世界的角色有哪些类型和属性。这里只定义了一个 1 到 5 的“胆识” |
+
+`category` 决定属性用在哪里：`abilities` 是检定和配点用的能力，`stats` 是状态栏里的量条（生命、压力），`social` 是关系（信任），`bio` 是身份，`equipment` 是随身物品。胆识要拿来掷骰，所以放在 `abilities`。
 
 内置的玩法包有四个：`traditional-story`（传统叙事）、`dialogue-mode`（角色对话）、`low-cost`（省 token）、`narrative-only`（只要叙事）。
 
@@ -178,7 +180,7 @@ characterSchema:
 pnpm validate:world ~/.covel/worlds/tidelamp
 ```
 
-校验器检查清单字段、世界观正文、插件 ID 和每个数据文件里的每条记录。有错误时，它给出文件、位置和原因。例如把 `category: stats` 误写成 `category: stat`：
+校验器检查清单字段、世界观正文、插件 ID 和每个数据文件里的每条记录。有错误时，它给出文件、位置和原因。例如把 `category: abilities` 误写成 `category: ability`：
 
 ```text
 ✗ /Users/you/.covel/worlds/tidelamp/world.yaml

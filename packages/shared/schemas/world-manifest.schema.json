@@ -485,7 +485,7 @@
         "category": {
           "type": "string",
           "enum": ["stats", "bio", "abilities", "equipment", "social"],
-          "description": "Group used by the character panel and by prompt context."
+          "description": "Group used by the character panel and by prompt context. `stats` are meters the status bar shows (health, stress); `abilities` are what checks and point buy use; `social` holds relationships; `bio` identity text; `equipment` what the character carries."
         },
         "description": {
           "anyOf": [

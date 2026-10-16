@@ -120,7 +120,7 @@ characterSchema:
     - id: resolve
       name: 胆识
       type: number
-      category: stats
+      category: abilities
       min: 1
       max: 5
       defaultValue: 3
@@ -131,6 +131,8 @@ characterSchema:
 | --------------------- | ----------------------------------------------------------------------------------------------------------------- |
 | `pluginPolicy.preset` | The gameplay pack used by default when a game starts. `traditional-story` is the built-in traditional story set   |
 | `characterSchema`     | The types and attributes of characters in this world. Here, one attribute is defined: "胆识" (nerve), from 1 to 5 |
+
+`category` decides where an attribute is used: `abilities` are what checks and point buy use, `stats` are bars in the status bar (health, stress), `social` holds relationships (trust), `bio` identity, and `equipment` what the character carries. Nerve is rolled against, so it goes in `abilities`.
 
 There are four built-in gameplay packs: `traditional-story` (Traditional Story), `dialogue-mode` (Dialogue Mode), `low-cost` (Low Cost, which saves tokens), and `narrative-only` (Narrative Only).
 
@@ -178,7 +180,7 @@ To have the narrative play this character with a fixed voice and personality, ad
 pnpm validate:world ~/.covel/worlds/tidelamp
 ```
 
-The validator checks the manifest fields, the main world text, the plugin IDs, and every record in each data file. When there is an error, it gives the file, the location, and the reason. For example, if you write `category: stat` instead of `category: stats`:
+The validator checks the manifest fields, the main world text, the plugin IDs, and every record in each data file. When there is an error, it gives the file, the location, and the reason. For example, if you write `category: ability` instead of `category: abilities`:
 
 ```text
 ✗ /Users/you/.covel/worlds/tidelamp/world.yaml

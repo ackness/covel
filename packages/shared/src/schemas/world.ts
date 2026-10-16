@@ -353,7 +353,7 @@ export const attributeDefinitionSchema: z.ZodType = z.lazy(() =>
         )
         .optional(),
       category: attributeCategorySchema.describe(
-        "Group used by the character panel and by prompt context.",
+        "Group used by the character panel and by prompt context. `stats` are meters the status bar shows (health, stress); `abilities` are what checks and point buy use; `social` holds relationships; `bio` identity text; `equipment` what the character carries.",
       ),
       description: i18nTextSchema
         .describe(

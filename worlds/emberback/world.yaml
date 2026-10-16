@@ -1,7 +1,7 @@
 # yaml-language-server: $schema=../../packages/shared/schemas/world-manifest.schema.json
 id: emberback
 name: Emberback Relay
-version: 1.2.0
+version: 1.2.1
 summary: A lonely relay on a tidally locked world receives a distress call in
   your own voice—sent from seventy-two hours in the future.
 defaultLocale: en-US
@@ -46,7 +46,7 @@ characterSchema:
       min: 0
       max: 5
       defaultValue: 2
-      category: stats
+      category: abilities
       description:
         Strength and endurance for hard travel, lifting, climbing, and
         staying functional under heat or cold stress.
@@ -75,7 +75,7 @@ characterSchema:
       min: 0
       max: 5
       defaultValue: 2
-      category: stats
+      category: abilities
       description: Pattern recognition, careful observation, and the ability to
         separate a meaningful signal from noise.
     - id: rapport
@@ -84,7 +84,7 @@ characterSchema:
       min: 0
       max: 5
       defaultValue: 2
-      category: social
+      category: abilities
       description:
         The ability to earn trust, calm conflict, read a room, and persuade
         people without treating them as obstacles.
