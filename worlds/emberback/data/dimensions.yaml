@@ -146,7 +146,7 @@ signalLog:
       channel: Every receiver at once, then the long-range network died
       timestamp: 06:14 station time (claims to be +72 hours)
       status: unexplained
-      note: Stop the convoy at Mile Seventeen. Keep Mina off the tower. Don't let Tomas shut down the signal.
+      note: Don't let the convoy reach Mile Seventeen. Keep Mina off the tower. Don't let Tomas shut down the signal.
   updateRule: >-
     Add an entry (short kebab-case ID) when the narrative receives, records, or uncovers a new transmission or echo. Fill in source, channel, and timestamp as they become known; set traced when its origin is located, verified when independent instruments or witnesses confirm it, disproven when it is shown to be fake or misread. Once a technical fact is established, do not change it unless the narrative explicitly overturns it. Never delete entries.
 
@@ -259,7 +259,7 @@ geography:
         climate: Blinding glare, abrasive dust, and heat fronts that can overtake a vehicle in minutes.
         landmarks:
           - name: Mile Seventeen
-            description: A field repeater beside a natural stone arch. The future warning names this place, but its maintenance log shows nothing unusual.
+            description: A field repeater beneath a natural stone arch. The future warning names this place, but its maintenance log shows nothing unusual.
           - name: Mirror Farm
             description: Mobile solar collectors that power Emberback. Their daily alignment determines how much charge the community can spend.
       - name: Nightward Shelf
@@ -658,7 +658,7 @@ startingConditions:
         x-i18n: true
     additionalProperties: false
   initialValue:
-    openingScenario: At 06:14 every receiver at Emberback plays the same impossible distress call—your own voice, speaking from seventy-two hours ahead. The message warns you to stop a medical convoy at Mile Seventeen, keep Mina off the tower, and prevent Tomas from shutting down the signal. The network then fails as a Crownfire storm approaches.
+    openingScenario: At 06:14 every receiver at Emberback plays the same impossible distress call—your own voice, speaking from seventy-two hours ahead. The message warns you to keep a medical convoy from reaching Mile Seventeen, keep Mina off the tower, and prevent Tomas from shutting down the signal. The network then fails as a Crownfire storm approaches.
     openingHook: The future used your voice. Who do you warn first?
     openingChips:
       - Play the recording for Tomas
