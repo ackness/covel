@@ -110,7 +110,7 @@ describe("dice-check roller handler", () => {
     });
   });
 
-  it("lists the player character's modifiers converted from their ranges", async () => {
+  it("lists the player character's check attributes converted from their ranges", async () => {
     const world = {
       characterSchema: {
         attributes: [
@@ -120,7 +120,7 @@ describe("dice-check roller handler", () => {
             type: "number",
             min: 0,
             max: 5,
-            category: "stats",
+            category: "abilities",
           },
           {
             id: "vitality",
@@ -130,6 +130,14 @@ describe("dice-check roller handler", () => {
             max: 100,
             category: "stats",
           },
+          {
+            id: "trust",
+            name: "信任",
+            type: "number",
+            min: 0,
+            max: 100,
+            category: "social",
+          },
           { id: "calling", name: "使命", type: "string", category: "bio" },
         ],
       },
@@ -138,19 +146,50 @@ describe("dice-check roller handler", () => {
           id: "p1",
           type: "player",
           name: "亚瑟",
-          fields: { grit: 2, vitality: 80, calling: "scholar" },
+          fields: { grit: 2, vitality: 80, trust: 40, calling: "scholar" },
         },
       ],
     };
     const result = await handler(makeCtx({ locale: "zh-CN", world }));
 
     expect(result.value.checkContext).toContain("坚毅 2/5 → +4");
-    expect(result.value.checkContext).toContain("体力 80/100 → +8");
+    expect(result.value.checkContext).toContain("从下方修正表选出");
+    // Meters and relationships are not check attributes.
+    expect(result.value.checkContext).not.toContain("体力 80/100");
+    expect(result.value.checkContext).not.toContain("信任 40/100");
     expect(result.value.checkContext).not.toContain("使命");
 
     // Without a world view there is no list, and the rules still stand.
     const bare = await handler(makeCtx({ locale: "zh-CN" }));
-    expect(bare.value.checkContext).not.toContain("修正表读取");
+    expect(bare.value.checkContext).not.toContain("修正表");
+  });
+
+  it("gives no modifier list when the world has no ranged abilities", async () => {
+    const world = {
+      characterSchema: {
+        attributes: [
+          {
+            id: "hp",
+            name: "Health",
+            type: "number",
+            min: 0,
+            max: 20,
+            category: "stats",
+          },
+          { id: "luck", name: "Luck", type: "number", category: "abilities" },
+        ],
+      },
+      characters: [
+        { id: "p1", type: "player", name: "Ada", fields: { hp: 12, luck: 3 } },
+      ],
+    };
+    const result = await handler(makeCtx({ locale: "en-US", world }));
+
+    expect(result.value.checkContext).not.toContain("modifier list");
+    expect(result.value.checkContext).not.toContain("Health 12/20");
+    expect(result.value.checkContext).toContain(
+      "derive from its numeric value",
+    );
   });
 
   it("keeps the turn's dice for the guard that checks the receipt", async () => {

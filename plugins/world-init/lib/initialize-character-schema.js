@@ -68,7 +68,7 @@ export function createWorldAttributeSchema(z) {
       category: z
         .enum(["stats", "bio", "abilities", "equipment", "social"])
         .describe(
-          "Attribute category; name, role, background and other identity fields belong in bio",
+          "Attribute category. bio: name, role, background and other identity fields. stats: meters such as health or stress, shown as bars. abilities: what dice checks and point buy use (strength, perception…). social: relationships such as trust. equipment: what the character carries",
         ),
       description: i18nText
         .optional()

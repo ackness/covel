@@ -65,14 +65,17 @@ function nameOf(name, locale) {
 }
 
 /**
- * The player character's number attributes with the modifier each converts
+ * The player character's check attributes with the modifier each converts
  * to: `round((value - min) / (max - min) * MODIFIER_LIMIT)`. The narrative
  * reads the modifier here instead of guessing one from a bare value — a 2/5
- * is +4, not +2. Attributes without a declared range are left for the
- * narrative to convert by itself.
+ * is +4, not +2.
  *
- * The standalone `tabletop-rules` package converts the same way
- * (`checkModifier` in its `lib/rules.js`); change both together.
+ * A check attribute is a number in the `abilities` category with a declared
+ * maximum, the same attributes `tabletop-rules` offers for point buy and its
+ * check panel. Health and other meters (`stats`) and relationships (`social`)
+ * are not listed, so the narrative does not roll against them. That package
+ * converts the same way (`checkModifier` in its `lib/rules.js`); change both
+ * together.
  */
 function playerModifiers(world, locale) {
   const player = world?.characters?.find((c) => c.type === "player");
@@ -80,7 +83,8 @@ function playerModifiers(world, locale) {
   if (!player?.fields || !Array.isArray(attributes)) return [];
   const lines = [];
   for (const attr of attributes) {
-    if (attr.type !== "number" || typeof attr.max !== "number") continue;
+    if (attr.type !== "number" || attr.category !== "abilities") continue;
+    if (typeof attr.max !== "number") continue;
     const value = player.fields[attr.id];
     if (typeof value !== "number") continue;
     const min = typeof attr.min === "number" ? attr.min : 0;
@@ -109,14 +113,14 @@ function modifierBlock(modifiers, locale) {
   return pickLocaleText(
     locale,
     [
-      "玩家角色数值属性的修正（已按量程换算：修正 = (数值 − 下限) ÷ 量程 × 10）：",
+      "玩家角色检定属性的修正（已按量程换算：修正 = (数值 − 下限) ÷ 量程 × 10）：",
       ...items,
-      "选用表中的属性时，修正按此表读取；只有不在表中的属性才由你换算成 -10 到 +10 的整数。",
+      "检定只用表中的属性，修正按此表读取。生命、信任这类不在表中的数值不用来检定。",
     ],
     [
-      "Modifiers of the player character's number attributes (converted from their range: modifier = (value - min) ÷ range × 10):",
+      "Modifiers of the player character's check attributes (converted from their range: modifier = (value - min) ÷ range × 10):",
       ...items,
-      "When the attribute is in this list, read the modifier from it. Convert by yourself, as an integer from -10 to +10, only for an attribute that is not listed.",
+      "A check uses only an attribute in this list, with the modifier given here. Values that are not listed, such as health or trust, are not used for checks.",
     ],
   ).join("\n");
 }
@@ -161,8 +165,8 @@ function table(dice, header, words) {
  *
  * The narrative decides the attribute and the difficulty. It does not choose
  * a die and it does not calculate: each check has one row, the row gives the
- * outcome for every difficulty, and the modifier of a ranged number attribute
- * is pre-computed in the modifier list.
+ * outcome for every difficulty, and the modifier of each check attribute is
+ * pre-computed in the modifier list.
  *
  * @param {ReadonlyArray<number>} dice
  * @param {string | undefined} locale
@@ -174,8 +178,8 @@ function buildCheckContext(dice, locale, world) {
   const step2 = modifiers
     ? pickLocaleText(
         locale,
-        "2. 选出这个行动用到的玩家角色卡属性，从下方修正表读取它的修正。",
-        "2. Choose the attribute on the player character's sheet that the action uses, and read its modifier from the modifier list below.",
+        "2. 从下方修正表选出这个行动用到的属性，读取它的修正。",
+        "2. Choose the attribute in the modifier list below that the action uses, and read its modifier there.",
       )
     : pickLocaleText(
         locale,
