@@ -4,6 +4,7 @@ const KINDS = new Set([
   "unreachable",
   "timeout",
   "auth",
+  "missing_key",
   "quota",
   "rate_limited",
   "not_found",

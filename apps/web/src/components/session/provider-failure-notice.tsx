@@ -10,20 +10,23 @@ import { ActionableErrorNotice } from "@/components/shared/actionable-error-noti
 import { classifyActionableError } from "@/lib/actionable-error.js";
 import { resolveTextRuntimeSlot } from "./session-prep/model-slot-helpers.js";
 
-interface SessionModelUse {
+export interface SessionModelUse {
   slotId: string;
   provider: string;
+  hasCredentials?: boolean;
 }
 
 /** Declared uses stay distinct even when they fall back to the same text slot. */
 export function sessionModelUses(
-  plugins: readonly Pick<SessionPlugin, "active" | "hostState" | "runtimes">[],
+  plugins: readonly (Pick<SessionPlugin, "hostState" | "runtimes"> & {
+    active?: boolean;
+  })[],
   slots: readonly ResolvedSlot[],
   overrides: Readonly<Record<string, string>> = {},
 ): SessionModelUse[] {
   const uses = new Map<string, SessionModelUse>();
   for (const plugin of plugins) {
-    if (!plugin.active || plugin.hostState === "error") continue;
+    if (plugin.active === false || plugin.hostState === "error") continue;
     for (const runtime of plugin.runtimes) {
       if (!runtime.model) continue;
       const slotId =
@@ -32,7 +35,14 @@ export function sessionModelUses(
           : runtime.model;
       const resolved = resolveTextRuntimeSlot(slots, slotId)?.slot;
       const provider = resolved?.preset?.provider ?? resolved?.serverProvider;
-      if (provider) uses.set(slotId, { slotId, provider });
+      if (provider)
+        uses.set(slotId, {
+          slotId,
+          provider,
+          ...(resolved?.hasCredentials !== undefined
+            ? { hasCredentials: resolved.hasCredentials }
+            : {}),
+        });
     }
   }
   return [...uses.values()];
@@ -53,16 +63,19 @@ export function ProviderFailureNotice({
   const uses = useContext(SessionModelUsesContext);
   const kind = classifyActionableError(props.error, errorKind);
   const accountFailure =
-    !errorKind || ["auth", "quota", "rate_limited"].includes(errorKind);
+    !errorKind ||
+    ["missing_key", "auth", "quota", "rate_limited"].includes(errorKind);
   const accountKind = !accountFailure
     ? undefined
-    : kind === "auth" || kind === "forbidden"
-      ? kind
-      : kind === "rate-limited"
-        ? errorKind === "quota"
-          ? "quota"
-          : "rate_limited"
-        : undefined;
+    : errorKind === "missing_key"
+      ? "missing_key"
+      : kind === "auth" || kind === "forbidden"
+        ? kind
+        : kind === "rate-limited"
+          ? errorKind === "quota"
+            ? "quota"
+            : "rate_limited"
+          : undefined;
   const provider = failureTarget?.provider;
   const providerLabel = provider
     ? (getBuiltinProviderConnection(provider)?.label ?? provider)
@@ -91,7 +104,7 @@ export function ProviderFailureNotice({
       {affected.length > 1 && (
         <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
           {t(
-            accountKind === "auth"
+            accountKind === "auth" || accountKind === "missing_key"
               ? "session.providerFailure.sharedKey"
               : "session.providerFailure.sharedAccount",
             {

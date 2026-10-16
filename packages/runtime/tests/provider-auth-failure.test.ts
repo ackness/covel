@@ -13,6 +13,64 @@ afterEach(() => vi.unstubAllGlobals());
 describe.each(["generate", "stream"] as const)(
   "%s HTTP authentication failure",
   (mode) => {
+    it("does not retry a missing built-in key or make any HTTP request", async () => {
+      const fetchMock = vi.fn();
+      vi.stubGlobal("fetch", fetchMock);
+      const llm = createGatewayAdapter(
+        createGateway({
+          providerRegistry: createProviderRegistry(),
+          presetRegistry: createPresetRegistry({
+            profiles: [],
+            presets: [
+              {
+                id: "primary",
+                name: "Primary",
+                provider: "deepseek",
+                model: "deepseek-chat",
+                tier: "medium",
+                supportedModes: ["text", "stream"],
+                enabled: true,
+                isDefault: true,
+              },
+            ],
+          }),
+        }),
+      );
+      if (mode === "generate") delete llm.stream;
+      const manifest: RuntimeManifest = {
+        name: "probe/main",
+        pluginId: "probe",
+        description: "test",
+        runtimeType: "agent",
+        stage: "setup",
+        outputKind: "system",
+        trigger: { type: "auto" },
+      };
+      const turn = await runTurnPipeline(
+        {
+          origin: "player",
+          sessionId: "session",
+          turnId: "turn",
+          playerMessage: "Continue",
+        },
+        [manifest],
+        {
+          loadRuntime: async () => ({ manifest, promptTemplate: "probe" }),
+          llm,
+          toolExecutor: { execute: vi.fn(), getToolInfo: () => undefined },
+        },
+      );
+      expect(turn.runtimeResults[0]).toMatchObject({
+        status: "failed",
+        errorKind: "missing_key",
+        failureTarget: { provider: "deepseek", model: "deepseek-chat" },
+        error: expect.stringMatching(
+          /LLM call failed after 1 attempt\(s\).*No API key for DeepSeek/,
+        ),
+      });
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
     it.each([false, true])(
       "records the failed target without claiming retries were exhausted (fallback: %s)",
       async (fallback) => {

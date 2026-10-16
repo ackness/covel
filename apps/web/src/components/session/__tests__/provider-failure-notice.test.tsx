@@ -168,7 +168,44 @@ describe("provider failure scope", () => {
     ).toBeTruthy();
   });
 
+  it("distinguishes a missing key in Chinese and opens provider settings", async () => {
+    await i18n.changeLanguage("zh-CN");
+    const onOpenSettings = vi.fn();
+    render(
+      <SessionModelUsesContext.Provider
+        value={sessionModelUses([plugin], [slot("story")])}
+      >
+        <ExecutionRecoveryNotice
+          recovery={recovery}
+          steps={history("missing_key", "No API key for DeepSeek")}
+          onOpenSettings={onOpenSettings}
+          onRetry={vi.fn()}
+          onRefresh={vi.fn()}
+          onStop={vi.fn()}
+        />
+      </SessionModelUsesContext.Provider>,
+    );
+    expect(
+      screen.getByText("没有填写 DeepSeek 的 API 密钥，请在模型设置中填写。"),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(
+        i18n.t("session.providerFailure.sharedKey", {
+          provider: "DeepSeek",
+          count: 2,
+          slots: new Intl.ListFormat("zh-CN").format([
+            i18n.t("session.modelUse.story"),
+            i18n.t("session.modelUse.plugin"),
+          ]),
+        }),
+      ),
+    ).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "模型设置" }));
+    expect(onOpenSettings).toHaveBeenCalledWith("llm.providers");
+  });
+
   it.each([
+    ["missing_key", "opaque response", /No API key for DeepSeek/],
     ["auth", "opaque response", /rejected the API key/],
     ["auth", "403 Forbidden", /denied access/],
     ["rate_limited", "opaque response", /rate-limiting requests/],

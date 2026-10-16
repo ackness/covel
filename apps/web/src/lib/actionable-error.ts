@@ -17,6 +17,7 @@ export function classifyActionableError(
   providerFailureKind?: string,
 ): ActionableErrorKind {
   const kind = classifyRawActionableError(raw);
+  if (providerFailureKind === "missing_key") return "auth";
   if (providerFailureKind === "auth")
     return kind === "forbidden" ? kind : "auth";
   if (providerFailureKind === "quota" || providerFailureKind === "rate_limited")

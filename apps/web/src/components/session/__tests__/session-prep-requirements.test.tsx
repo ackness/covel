@@ -8,6 +8,8 @@ import {
 } from "@/services/world-records.js";
 import { SessionPrepScreen } from "../session-prep-screen.js";
 import type { SessionPrepScreenProps } from "../session-prep/types.js";
+import type { ResolvedSlot } from "@/hooks/use-slot-config.js";
+import type { sessionModelUses } from "../provider-failure-notice.js";
 
 // What the plugin plan and the world-data check report for this world.
 const prep = vi.hoisted(() => ({
@@ -15,6 +17,10 @@ const prep = vi.hoisted(() => ({
   preflight: null as unknown,
   conflict: null as readonly string[] | null,
   turnOffPlugins: (() => {}) as (ids: readonly string[]) => void,
+  slots: [] as ResolvedSlot[],
+  plugins: [] as Parameters<typeof sessionModelUses>[0],
+  bindings: {} as Record<string, string>,
+  refresh: vi.fn(),
 }));
 
 vi.mock("@/services/api.js", () => ({
@@ -30,14 +36,14 @@ vi.mock("@/services/data-service.js", () => ({
   }),
 }));
 vi.mock("@/hooks/use-slot-config.js", () => ({
-  useSlotConfig: () => ({ resolvedSlots: [], refresh: vi.fn() }),
+  useSlotConfig: () => ({ resolvedSlots: prep.slots, refresh: prep.refresh }),
 }));
 vi.mock("../session-prep/use-plugin-selection.js", () => ({
   usePluginSelection: () => ({
     enabledPluginIds: ["narrator"],
     requestedPluginIds: ["narrator"],
     excludedPluginIds: [],
-    enabledPluginSummaries: [],
+    enabledPluginSummaries: prep.plugins,
     selectedPluginIdSet: new Set(),
     pluginPlan: {},
     pluginPlanLoading: false,
@@ -55,9 +61,28 @@ vi.mock("../session-prep/use-world-data-preflight.js", () => ({
   }),
 }));
 vi.mock("../session-prep/use-prep-runtime-bindings.js", () => ({
-  usePrepRuntimeBindings: () => ({ bindingState: {} }),
+  usePrepRuntimeBindings: () => ({ bindingState: { bindings: prep.bindings } }),
 }));
-vi.mock("@/settings/SettingsDialog.js", () => ({ SettingsDialog: () => null }));
+vi.mock("@/settings/SettingsDialog.js", () => ({
+  SettingsDialog: ({
+    open,
+    initialKey,
+    onOpenChange,
+  }: {
+    open: boolean;
+    initialKey?: string;
+    onOpenChange: (open: boolean) => void;
+  }) =>
+    open ? (
+      <button
+        data-testid="settings"
+        data-page={initialKey}
+        onClick={() => onOpenChange(false)}
+      >
+        Close settings
+      </button>
+    ) : null,
+}));
 vi.mock("../session-prep/dimension-actions.js", () => ({
   DimensionActions: () => null,
 }));
@@ -93,10 +118,152 @@ beforeEach(async () => {
   prep.preflight = null;
   prep.conflict = null;
   prep.turnOffPlugins = vi.fn();
+  prep.slots = [];
+  prep.plugins = [];
+  prep.bindings = {};
   invalidateAllWorldRecords();
   primeWorldRecord({ ...world, lore: "A barrow under the hill." });
   await i18n.changeLanguage("en-US");
   vi.mocked(api.getWorldOverlay).mockResolvedValue(null);
+});
+
+const textSlot = (
+  slotId: string,
+  hasCredentials?: boolean,
+  provider = "deepseek",
+): ResolvedSlot => ({
+  slotId,
+  label: slotId,
+  tag: "text",
+  presetId: "",
+  preset: null,
+  serverProvider: provider,
+  serverModel: "model",
+  isAvailable: true,
+  hasCredentials,
+});
+
+function useTextModels(...models: string[]) {
+  prep.plugins = [
+    {
+      hostState: "loaded",
+      runtimes: models.map((model) => ({
+        id: `fixture/${model}`,
+        model,
+        runtimeType: "agent",
+        trigger: { type: "auto" },
+        execution: "sync",
+        turnCompletion: { mode: "await" },
+        outputKind: "system",
+      })),
+    },
+  ];
+}
+
+async function clickStart(index = 0) {
+  const button = screen.getAllByRole("button", { name: "Start Game" })[index];
+  expect(button).toBeDefined();
+  await waitFor(() => expect(button).toHaveProperty("disabled", false));
+  fireEvent.click(button!);
+}
+
+describe("starting without model credentials", () => {
+  it.each([0, 1])(
+    "confirms from start button %s and still lets the player start",
+    async (index) => {
+      useTextModels("story", "plugin");
+      prep.slots = [textSlot("story", false)];
+      const onStart = vi.fn();
+      render(<SessionPrepScreen {...props(onStart)} />);
+      await clickStart(index);
+      expect(screen.getByRole("dialog").textContent).toContain(
+        "No API key is configured for DeepSeek. Story and Plugin tasks may fail.",
+      );
+      expect(onStart).not.toHaveBeenCalled();
+      fireEvent.click(screen.getByRole("button", { name: "Start anyway" }));
+      await waitFor(() => expect(onStart).toHaveBeenCalledTimes(1));
+      expect(screen.queryByRole("dialog")).toBeNull();
+    },
+  );
+
+  it.each(["unused", "image", "local", "unknown", "override"])(
+    "does not confirm for %s credentials",
+    async (scenario) => {
+      useTextModels("story");
+      prep.slots = [textSlot("story", true)];
+      if (scenario === "unused") prep.slots.push(textSlot("unused", false));
+      if (scenario === "image")
+        prep.slots.push({ ...textSlot("image", false), tag: "image" });
+      if (scenario === "local")
+        prep.slots = [textSlot("story", true, "ollama")];
+      if (scenario === "unknown") prep.slots = [textSlot("story")];
+      if (scenario === "override") {
+        prep.slots = [
+          textSlot("story", false),
+          textSlot("local", true, "ollama"),
+        ];
+        prep.bindings = { "fixture/story": "local" };
+      }
+      const onStart = vi.fn();
+      render(<SessionPrepScreen {...props(onStart)} />);
+      await clickStart();
+      await waitFor(() => expect(onStart).toHaveBeenCalledTimes(1));
+      expect(screen.queryByRole("dialog")).toBeNull();
+    },
+  );
+
+  it("opens provider settings and checks refreshed credentials on the next start", async () => {
+    useTextModels("story");
+    prep.slots = [textSlot("story", false)];
+    const initial = props();
+    const view = render(<SessionPrepScreen {...initial} />);
+    await clickStart();
+    fireEvent.click(screen.getByRole("button", { name: "Add API key" }));
+    expect(initial.onSettingsOpenChange).toHaveBeenCalledWith(true);
+    expect(initial.onStart).not.toHaveBeenCalled();
+    view.rerender(<SessionPrepScreen {...initial} settingsOpen />);
+    expect(screen.getByTestId("settings").getAttribute("data-page")).toBe(
+      "llm.providers",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Close settings" }));
+    expect(prep.refresh).toHaveBeenCalled();
+    view.rerender(<SessionPrepScreen {...initial} />);
+    // Closing settings without entering a key does not remember a bypass.
+    await clickStart();
+    expect(screen.getByRole("dialog")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Add API key" }));
+    view.rerender(<SessionPrepScreen {...initial} settingsOpen />);
+    prep.slots = [textSlot("story", true)];
+    fireEvent.click(screen.getByRole("button", { name: "Close settings" }));
+    view.rerender(<SessionPrepScreen {...initial} />);
+    await clickStart();
+    await waitFor(() => expect(initial.onStart).toHaveBeenCalledTimes(1));
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("names each missing provider and dismisses without starting", async () => {
+    useTextModels("story", "plugin");
+    prep.slots = [
+      textSlot("story", false),
+      textSlot("plugin", false, "openai"),
+    ];
+    const initial = props();
+    render(<SessionPrepScreen {...initial} />);
+    await clickStart();
+    expect(
+      screen.getByText(
+        "No API key is configured for DeepSeek. Story may fail.",
+      ),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(
+        "No API key is configured for OpenAI. Plugin tasks may fail.",
+      ),
+    ).toBeTruthy();
+    fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(initial.onStart).not.toHaveBeenCalled();
+  });
 });
 
 describe("session prep when the world relies on something missing", () => {

@@ -177,7 +177,7 @@ return { result: execution.result, committed: outcome.status === "committed" };
 > [!NOTE]
 > **开场接力。** 一次玩家动作完成了最后一个 setup runtime 时，`POST /api/actions` 的同一条 SSE 流会自动接着跑一个主循环回合（见 [api.md § POST /api/actions](./api.md)）。这时流里会出现**两轮** `execution.started` 和 runtime 生命周期事件，它们外层的 `turnId` 不同（setup 回合和接力回合）。但只有**一个** `execution.completed` 收尾。前端靠它结束“执行中”的状态，并按 `committed` 处理先行显示的内容。setup 提交失败时不会启动接力，直接以 `committed: false` 结束。玩家在接力开始前停止时，接力不再开始，`execution.completed` 带接力回合的 `turnId` 和 `abortReason: "aborted-by-player"`。
 
-`runtime.failed.errorKind` 是可选的模型失败类别，取值见 [模型失败分类](./slots.md#连接测试与失败原因)。回合失败提示复用连接测试的处理建议，服务商的原话保留在可展开的详情里。无法分类的异常用 `unknown`；没有模型异常的失败可以不带此字段。`io.concealed` 仍用固定文本替换错误详情，但保留类别，因为类别不含隐藏内容。
+`runtime.failed.errorKind` 是可选的模型失败类别，取值见 [模型失败分类](./slots.md#连接测试与失败原因)。`missing_key` 表示内置远程服务商在发请求前就发现缺少密钥。回合失败提示复用连接测试的处理建议，服务商的原话保留在可展开的详情里。无法分类的异常用 `unknown`；没有模型异常的失败可以不带此字段。`io.concealed` 仍用固定文本替换错误详情，但保留类别，因为类别不含隐藏内容。
 
 `runtime.failed.failureTarget` 是可选的 `{ provider, model? }`，只来自实际失败的模型异常，不从错误文字推断。它保存在 runtime result 和 trace 中，并随 SSE、会话快照恢复到执行记录。备用目标失败时记录备用目标；修改模型设置不会改写历史目标。此字段只含服务商和模型标识，不含密钥或连接配置。客户端用当前 active runtime 的模型用途和当前路由，列出同一服务商可能受影响的用途。
 

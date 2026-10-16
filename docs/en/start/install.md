@@ -46,7 +46,7 @@ After you close the guide, you see the list of worlds. It has four bundled world
 When you see this list, the installation is complete.
 
 > [!NOTE]
-> You can browse worlds now, but you cannot start a game yet. Generating the story requires connecting a model first. That is covered on the next page.
+> You can browse worlds now. Generating the story needs a working model; the next page explains how to connect one. Starting without a key prompts you to add it, or choose “Start anyway” and configure it later.
 
 ## Problems
 

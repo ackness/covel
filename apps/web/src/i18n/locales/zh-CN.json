@@ -473,12 +473,20 @@
       "quota": "{{provider}} 的额度或余额已用完。",
       "rate_limited": "{{provider}} 正在限制请求，请检查用量和额度。",
       "sharedKey": "{{slots}}，共 {{count}} 个用途都在用 {{provider}}，修好密钥对它们都生效。",
-      "sharedAccount": "{{slots}}，共 {{count}} 个用途都在用 {{provider}}，也可能受影响。请检查这个服务商的账户和限额。"
+      "sharedAccount": "{{slots}}，共 {{count}} 个用途都在用 {{provider}}，也可能受影响。请检查这个服务商的账户和限额。",
+      "missing_key": "没有填写 {{provider}} 的 API 密钥，请在模型设置中填写。"
     },
     "modelUse": {
       "story": "剧情",
       "plugin": "插件",
       "utility": "辅助"
+    },
+    "missingCredentials": {
+      "title": "部分模型用途还没有密钥",
+      "detail": "可以先填写密钥，也可以仍然开始，稍后再配置。",
+      "provider": "{{provider}} 还没有填写 API 密钥，{{slots}}可能会失败。",
+      "configure": "填写密钥",
+      "startAnyway": "仍然开始"
     }
   },
   "blocks": {
@@ -1125,7 +1133,8 @@
       "overloaded": "服务商当前过载，请稍后再试。",
       "server": "服务商内部出错。",
       "refused": "服务商拒绝回答。",
-      "config": "模型配置有误。"
+      "config": "模型配置有误。",
+      "missing_key": "没有填写 API 密钥，请在服务商设置中填写。"
     },
     "addProvider": "添加服务商",
     "addModel": "添加模型",

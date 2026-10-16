@@ -315,8 +315,8 @@ The output limit is calculated by the shared `resolveLlmTokenLimits`:
 Switching to a fallback model:
 
 - An HTTP 429 (rate limit) allows a switch to a configured fallback model.
-- An account failure (no balance left, or a key that is wrong or not allowed to use this model; see `quota` / `auth` below) also allows a switch. It belongs only to the account at this provider, so the fallback target may still work. With no fallback model configured, the call fails and the player is told why.
-- After a refused key (401) or a balance or billing failure, the same call skips backups with the same provider, effective base URL, and key, even when the model differs. A 403 or a rate limit can apply to one model only, so a same-account backup still runs then. Configured backups with a different provider, endpoint, or key are still tried. If all remaining targets are skipped, the last attempted failure is kept. Skipped targets consume no requests.
+- An account failure (a missing key, no balance left, or a key that is wrong or not allowed to use this model; see `missing_key` / `quota` / `auth` below) also allows a switch. It belongs only to the account at this provider, so the fallback target may still work. With no fallback model configured, the call fails and the player is told why.
+- After a missing key, refused key (401), or a balance or billing failure, the same call skips backups with the same provider, effective base URL, and key, even when the model differs. A 403 or a rate limit can apply to one model only, so a same-account backup still runs then. Configured backups with a different provider, endpoint, or key are still tried. If all remaining targets are skipped, the last attempted failure is kept. Skipped targets consume no requests.
 - Other 4xx errors keep their original failure path.
 - Once streamed content has been output, switching is not allowed. This prevents mixing the results of two models.
 
@@ -826,6 +826,7 @@ A model API can fail in more ways than an ordinary URL. Keys, balance, model nam
 | -------------- | -------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
 | `unreachable`  | Cannot connect: service not running, wrong address or port, DNS, TLS | No HTTP status. A connection error code (`ECONNREFUSED`, `ENOTFOUND`, and so on) or a certificate error                          |
 | `timeout`      | Connected, but no answer in time                                     | A timeout error code, an exhausted request budget, 408, 504                                                                      |
+| `missing_key`  | No API key configured                                                | A built-in remote provider at its official address has no effective key; no HTTP request is sent                                 |
 | `auth`         | The key is invalid, or it has no permission to use the model         | 401, 403                                                                                                                         |
 | `quota`        | Balance or quota is not enough                                       | 402. Or the provider's error code or text says the quota is exhausted (OpenAI uses 429 `insufficient_quota`, Anthropic uses 400) |
 | `rate_limited` | Too many requests                                                    | 429                                                                                                                              |
@@ -838,11 +839,13 @@ A model API can fail in more ways than an ordinary URL. Keys, balance, model nam
 
 When a connection fails, `error` gives the underlying cause (for example `connect ECONNREFUSED 127.0.0.1:11434`), not a general `fetch failed`. The classification is done by `classifyProviderFailure` in `@covel/ai-provider`; the type of the kinds, `ProviderFailureKind`, is in `@covel/shared`.
 
+After merging request keys and server configuration, the gateway checks built-in remote providers at their official address. With no key, it throws `MISSING_API_KEY` with the provider’s name (for example, `No API key for DeepSeek`), category `missing_key`, and no HTTP status. Configured authentication headers also count as credentials. Built-in local providers, custom providers, custom addresses, and registered adapters that handle their own authentication are exempt.
+
 Failed HTTP responses keep their status and use the categories above even when the body is empty, plain text, or HTML. The error message shows at most 200 characters of the body preview. An LLM call that stops because its error cannot be retried says `LLM call failed`, without claiming that retries were exhausted.
 
 A 429 counts as an exhausted quota only by its error code, never by its text: OpenAI's ordinary rate-limit message links the billing page too.
 
-`quota` and `auth` are account failures, as `isAccountFailure` in `@covel/shared` decides. Sending the same request to the same provider again only fails the same way, so neither the HTTP layer nor the runtime sends it again; only a fallback model the player configured is tried.
+`missing_key`, `quota`, and `auth` are account failures, as `isAccountFailure` in `@covel/shared` decides. Sending the same request to the same provider again only fails the same way, so neither the HTTP layer nor the runtime sends it again; only a fallback model the player configured is tried.
 
 A connection test picks its probe by model type:
 
@@ -850,7 +853,7 @@ A connection test picks its probe by model type:
 - Evaluation model: sends one evaluation request.
 - Embedding model: sends one vector request.
 
-A test sends only one HTTP request. It does not retry at the transport level, and it does not switch to a fallback model. So the report is the result and the time of that one request.
+A test with a missing required key ends before sending a request. Other tests send only one HTTP request. It does not retry at the transport level, and it does not switch to a fallback model. So the report is the result and the time of that one request.
 
 ### Stream format and end
 
@@ -1021,7 +1024,7 @@ assertLlmRequestBudget(config.requestBudget, {
 
 - When a runtime retries the same target, it first reads the structured provider error's `code`, `statusCode`, and `retriable`.
 - A failed config or schema check is not retried. A keyword in an error message cannot overturn a clear "not retryable" decision.
-- An account failure (`quota` / `auth`) is not retried, even when the status is 429.
+- An account failure (`missing_key` / `quota` / `auth`) is not retried, even when the status is 429.
 - When the gateway organizes errors, it keeps the "retryable" attribute of a known temporary network failure. Only an unknown third-party exception is judged by its message.
 - A cancellation by the caller, or a stream that already has partial output, is still not allowed to retry. A fallback model switch follows its own separate rules.
 
