@@ -1,7 +1,7 @@
 {
   "cases": [
     {
-      "name": "mock-player-init-completes-after-form",
+      "name": "mock-player-init-reviews-form-before-finishing",
       "mode": "mock",
       "runtimeId": "char-creator/player-init",
       "ignoreUpstreams": true,
@@ -19,7 +19,7 @@
           ]
         },
         {
-          "content": "不应请求第二次模型响应。",
+          "content": "{\"preGameDone\":false}",
           "finishReason": "stop",
           "toolCalls": []
         }

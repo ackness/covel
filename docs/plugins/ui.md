@@ -407,6 +407,8 @@ pnpm test:runtime -- tavern-rumors --pretty
 
 字段类型有 `text`、`textarea`、`select`、`checkbox`、`number`。全部参数见[工具参考](../reference/tools.md#create-form)。
 
+需要模型复核填好的叙事时，组合工具可以用 SDK 的 `fillNarrativeTemplate` 返回预览，并让 runtime 在读完结果后再结束。同一交互的修订规则见[工具参考](../reference/tools.md#create-form)。
+
 表单出现后会发生什么：
 
 - 表单显示在正文里。玩家回答之前，输入框是锁住的。

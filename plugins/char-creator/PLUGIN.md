@@ -1,6 +1,6 @@
 ---
 kind: core
-version: 0.0.41
+version: 0.0.42
 displayName: Character Creator
 description: >-
   Helps create your hero and keeps important character details up to date during

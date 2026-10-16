@@ -260,6 +260,8 @@ Create a form that the player must fill in. The framework renders it. After the 
 
 A form that a manual runtime opens through the plugin's UI works the same way. The template is saved inside the transaction, so the player can keep filling it in after a refresh, and the server also validates it. A manual output with no interaction is not written to the conversation history.
 
+Plugins can use the SDK's `fillNarrativeTemplate(template, values)` for a preview. The submitted `filledNarrative` uses this same function: missing values become empty strings, duplicate full stops at placeholder boundaries are merged, and field text is preserved. Within one agent execution, successful tool results with the same `interactionId` show only the last successful form or choice. A failed call does not replace it.
+
 | Argument          | Type        | Required | Description                                           |
 | ----------------- | ----------- | -------- | ----------------------------------------------------- |
 | formId            | string      | ✓        | Unique ID of the form                                 |
@@ -339,6 +341,8 @@ Responses a submit can get:
 #### Character creation form
 
 Character creation uses the dedicated `create-character-form` tool. It collects only the required name, and the string or enum attributes that the world declares.
+
+The tool returns `filledNarrative` so the model can read each complete sentence before finishing, then revise the defaults or template if needed. Defaults should be short phrases that fit their slots, and `calling` should be a concrete calling from the world. The tool rejects repeated words at adjacent boundaries and explicit English or Chinese undecided placeholders, returning the preview and correction advice without emitting a form. These checks do not change earlier player answers. The undecided-value check also preserves enum choices explicitly declared by the world. The model reviews semantic repetition elsewhere in the sentence using the preview.
 
 - When creating the player, declared string name attributes (`name`, `characterName`, `playerName`, `姓名`) use the character name submitted in the form, overriding the schema's default name.
 - A model cannot set a validator for it. There is no `validation` argument, and if one is passed it is dropped. The tool attaches the `player-name` validator that `char-creator` registers itself, and it rejects a character name that is the same as the name or an alias of a character already in the world (see [World Model](./world-model.md)). The other field constraints are checked by the tool and by the submit endpoint.

@@ -475,6 +475,7 @@ export * from "./character-fields.js";
 export * from "./json-text.js";
 export * from "./tool.js";
 export * from "./ui-tools.js";
+export { fillNarrativeTemplate } from "./fill-narrative-template.js";
 
 export * from "./character-field-values.js";
 export type { MediaReference } from "./types.js";

@@ -188,11 +188,7 @@ export function finalizeAgentOutput(
       success: true,
     }));
   const toolResults = [...priorToolResults, ...executedToolCalls];
-  const toolInteractions = extractInteractions(
-    toolResults,
-    dedupeInteractions,
-    manifest.name,
-  );
+  const toolInteractions = extractInteractions(toolResults, dedupeInteractions);
   const declaredInteractions = Array.isArray(output.interactions)
     ? output.interactions
     : [];
@@ -302,8 +298,8 @@ function isEffectEvent(value: unknown): value is JsonValue {
 
 /**
  * Collect `interaction` payloads from executed tool results. When `dedupe` is
- * set, drop repeats sharing an `interactionId` (keeping the first occurrence)
- * so a UI tool the LLM called twice does not render twice.
+ * set, keep the last successful revision of each `interactionId`, so a model
+ * can correct a form after reading its preview without showing two forms.
  */
 function extractInteractions(
   executedToolCalls: readonly Pick<
@@ -311,10 +307,9 @@ function extractInteractions(
     "name" | "result" | "success"
   >[],
   dedupe: boolean,
-  runtimeName: string,
 ): Array<Record<string, unknown>> {
   const interactions: Array<Record<string, unknown>> = [];
-  const seenInteractionIds = new Set<string>();
+  const interactionPositions = new Map<string, number>();
   for (const tc of executedToolCalls) {
     if (!(tc.success && tc.result && typeof tc.result === "object")) continue;
     const r = tc.result as Record<string, unknown>;
@@ -323,13 +318,12 @@ function extractInteractions(
     if (dedupe) {
       const id =
         typeof inter.interactionId === "string" ? inter.interactionId : "";
-      if (id && seenInteractionIds.has(id)) {
-        console.warn(
-          `[runtime] ${runtimeName} produced duplicate interactionId="${id}" via tool "${tc.name}"; keeping the first occurrence`,
-        );
+      const position = id ? interactionPositions.get(id) : undefined;
+      if (position !== undefined) {
+        interactions[position] = inter;
         continue;
       }
-      if (id) seenInteractionIds.add(id);
+      if (id) interactionPositions.set(id, interactions.length);
     }
     interactions.push(inter);
   }

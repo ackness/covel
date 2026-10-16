@@ -4,6 +4,7 @@ export {
 } from "./schemas/execution-snapshots.js";
 export * from "./extension-points/index.js";
 export {
+  fillNarrativeTemplate,
   modelFacingJson,
   modelHiddenPaths,
   type ModelHiddenPath,
