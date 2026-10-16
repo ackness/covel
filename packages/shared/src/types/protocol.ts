@@ -146,6 +146,7 @@ export interface RuntimeLifecyclePayload {
 export interface RuntimeFailedPayload extends RuntimeLifecyclePayload {
   readonly error?: string;
   readonly errorKind?: ProviderFailureKind;
+  readonly failureTarget?: import("./execution.js").RuntimeResult["failureTarget"];
 }
 
 export interface AssetProgressPayload {

@@ -1,6 +1,20 @@
 import type { ExecutionStep } from "./types.js";
 import { retryStepMetadata } from "./execution-projection.js";
 import { mergeReasoning } from "./reasoning.js";
+import { z } from "zod";
+
+const failureTargetSchema = z.object({
+  provider: z.string().min(1),
+  model: z.string().optional(),
+});
+
+/** Read only the public target identity from live and persisted event payloads. */
+export function readFailureTarget(
+  value: unknown,
+): ExecutionStep["failureTarget"] {
+  const parsed = failureTargetSchema.safeParse(value);
+  return parsed.success ? parsed.data : undefined;
+}
 
 const DURABLE_TERMINAL_STATES = new Set([
   "succeeded",
@@ -140,6 +154,10 @@ export function createExecutionStepUpdate(args: {
     errorKind:
       status === "failed" && typeof payload.errorKind === "string"
         ? payload.errorKind
+        : undefined,
+    failureTarget:
+      status === "failed"
+        ? readFailureTarget(payload.failureTarget)
         : undefined,
     turnId,
     ...retryStepMetadata(payload, turnId),

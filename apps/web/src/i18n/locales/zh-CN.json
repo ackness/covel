@@ -466,7 +466,20 @@
     },
     "recoveryModelSettings": "模型设置",
     "setupRunning": "正在准备开局",
-    "setupExecutionSummary": "开局准备 · {{count}} 个任务"
+    "setupExecutionSummary": "开局准备 · {{count}} 个任务",
+    "providerFailure": {
+      "auth": "{{provider}} 的密钥未通过认证，请检查密钥和账户权限。",
+      "forbidden": "{{provider}} 拒绝了访问，请检查账户权限。",
+      "quota": "{{provider}} 的额度或余额已用完。",
+      "rate_limited": "{{provider}} 正在限制请求，请检查用量和额度。",
+      "sharedKey": "{{slots}}，共 {{count}} 个用途都在用 {{provider}}，修好密钥对它们都生效。",
+      "sharedAccount": "{{slots}}，共 {{count}} 个用途都在用 {{provider}}，也可能受影响。请检查这个服务商的账户和限额。"
+    },
+    "modelUse": {
+      "story": "剧情",
+      "plugin": "插件",
+      "utility": "辅助"
+    }
   },
   "blocks": {
     "actionPlaceholder": "或输入自定义行动...",

@@ -560,7 +560,20 @@
     "setupExecutionSummary_one": "Подготовка начала · {{count}} задача",
     "setupExecutionSummary_few": "Подготовка начала · {{count}} задачи",
     "setupExecutionSummary_many": "Подготовка начала · {{count}} задач",
-    "setupExecutionSummary_other": "Подготовка начала · {{count}} задачи"
+    "setupExecutionSummary_other": "Подготовка начала · {{count}} задачи",
+    "providerFailure": {
+      "auth": "{{provider}} отклонил API-ключ. Проверьте ключ и права аккаунта.",
+      "forbidden": "{{provider}} отказал в доступе. Проверьте права аккаунта.",
+      "quota": "У {{provider}} закончилась квота или средства на балансе.",
+      "rate_limited": "{{provider}} ограничивает частоту запросов. Проверьте использование и квоту.",
+      "sharedKey": "{{slots}} — назначений модели в этой сессии: {{count}}. Все используют {{provider}}. Исправление ключа поможет всем.",
+      "sharedAccount": "{{slots}} — назначений модели в этой сессии: {{count}}. Все используют {{provider}} и тоже могут быть затронуты. Проверьте аккаунт и лимиты провайдера."
+    },
+    "modelUse": {
+      "story": "Сюжет",
+      "plugin": "Задачи плагинов",
+      "utility": "Вспомогательные задачи"
+    }
   },
   "blocks": {
     "actionPlaceholder": "Или введите собственное действие...",

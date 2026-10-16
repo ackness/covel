@@ -9,6 +9,7 @@ import {
   mergeExecutionStep,
   foldBackgroundExecutionSteps,
   toExecutionStepStatus,
+  readFailureTarget,
 } from "./execution-steps.js";
 import {
   buildRetryAttemptSteps,
@@ -102,6 +103,10 @@ export function buildSnapshotExecutionSteps(
       errorKind:
         status === "failed" && typeof payload.errorKind === "string"
           ? payload.errorKind
+          : undefined,
+      failureTarget:
+        status === "failed"
+          ? readFailureTarget(payload.failureTarget)
           : undefined,
       pluginId:
         typeof payload.pluginId === "string"

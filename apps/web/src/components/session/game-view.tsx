@@ -58,6 +58,10 @@ import {
 } from "./execution-presentation.js";
 import { SessionBackdrop } from "./session-backdrop.js";
 import { SessionMusic } from "./session-music.js";
+import {
+  SessionModelUsesContext,
+  sessionModelUses,
+} from "./provider-failure-notice.js";
 import { SceneHud } from "./scene-hud.js";
 import { useThemeLayout } from "@/theme-system/use-theme-layout.js";
 
@@ -355,7 +359,7 @@ export function GameView({
 
   // ── Layout ─────────────────────────────────────────────────────
 
-  return (
+  const content = (
     <div className="flex h-full w-full overflow-hidden border-t border-border">
       <SettingsDialog
         open={settings.open}
@@ -597,6 +601,7 @@ export function GameView({
               submittedBlockIds,
               executing,
               recovery: state.executionRecovery,
+              steps: executionSteps,
             })}
             onRearm={(runtimeId) =>
               resolveSetupRuntime(session.id, runtimeId, "retry")
@@ -723,5 +728,16 @@ export function GameView({
         )}
       </ResizablePanelGroup>
     </div>
+  );
+  return (
+    <SessionModelUsesContext.Provider
+      value={sessionModelUses(
+        sessionPlugins,
+        resolvedSlots,
+        session.runtimeModelOverrides,
+      )}
+    >
+      {content}
+    </SessionModelUsesContext.Provider>
   );
 }

@@ -67,6 +67,9 @@ export async function reportRuntimeResult(
     ...(result.status === "failed" && result.errorKind
       ? { errorKind: result.errorKind }
       : {}),
+    ...(result.status === "failed" && result.failureTarget
+      ? { failureTarget: result.failureTarget }
+      : {}),
     ...(reason ? { reason } : {}),
   };
   try {

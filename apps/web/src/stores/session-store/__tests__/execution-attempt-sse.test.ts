@@ -96,14 +96,28 @@ it.each(["quota", "auth", "unknown"])(
   "preserves %s from runtime.failed",
   (errorKind) => {
     const h = harness(false);
-    h.send("runtime.failed", { errorKind, error: "provider detail" });
+    const failureTarget = { provider: "deepseek", model: "failed-model" };
+    h.send("runtime.failed", {
+      errorKind,
+      error: "provider detail",
+      failureTarget,
+    });
     expect(
       h.getState().executionSteps.find((step) => step.turnId === "attempt"),
-    ).toMatchObject({ status: "failed", errorKind, detail: "provider detail" });
+    ).toMatchObject({
+      status: "failed",
+      errorKind,
+      detail: "provider detail",
+      failureTarget,
+    });
     h.send("runtime.completed", { status: "success" });
     expect(
       h.getState().executionSteps.find((step) => step.turnId === "attempt")
         ?.errorKind,
+    ).toBeUndefined();
+    expect(
+      h.getState().executionSteps.find((step) => step.turnId === "attempt")
+        ?.failureTarget,
     ).toBeUndefined();
   },
 );

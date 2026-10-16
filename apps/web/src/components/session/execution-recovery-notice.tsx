@@ -6,7 +6,7 @@ import type {
   ExecutionStep,
 } from "@/stores/session-store/types.js";
 import { PLAYER_ABORT_REASON } from "@covel/shared";
-import { ActionableErrorNotice } from "@/components/shared/actionable-error-notice.js";
+import { ProviderFailureNotice } from "./provider-failure-notice.js";
 import { FailureRecoveryActions } from "./failure-recovery-actions.js";
 import { executionRecoveryNoticeVisible } from "./execution-presentation.js";
 import { I18N_SENTINEL_PREFIX } from "./execution-runtime-status.js";
@@ -107,7 +107,7 @@ export function ExecutionRecoveryNotice({
                 ? "failed"
                 : "hydrating";
   const { title, detail } = RECOVERY_MESSAGES[phase];
-  const error =
+  const failedStep =
     (phase === "failed" || phase === "interrupted") && status?.turnId
       ? steps.find(
           (step) =>
@@ -116,8 +116,9 @@ export function ExecutionRecoveryNotice({
             !step.detached &&
             step.detail &&
             !step.detail.startsWith(I18N_SENTINEL_PREFIX),
-        )?.detail
+        )
       : undefined;
+  const error = failedStep?.detail;
   const canRetry =
     !!status?.retry &&
     (interrupted || failed) &&
@@ -139,7 +140,12 @@ export function ExecutionRecoveryNotice({
           <p className="text-sm font-medium">{t(title)}</p>
           {error ? (
             <div className="mt-1.5">
-              <ActionableErrorNotice error={error} layout="panel" />
+              <ProviderFailureNotice
+                error={error}
+                errorKind={failedStep?.errorKind}
+                failureTarget={failedStep?.failureTarget}
+                layout="panel"
+              />
             </div>
           ) : (
             <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
@@ -155,6 +161,7 @@ export function ExecutionRecoveryNotice({
         <div className="flex flex-wrap gap-2">
           <FailureRecoveryActions
             error={error}
+            errorKind={failedStep?.errorKind}
             retryLabel={retryLabel}
             disabled={busy || recovery.checking}
             onOpenSettings={onOpenSettings}

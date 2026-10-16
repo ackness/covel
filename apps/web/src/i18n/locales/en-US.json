@@ -512,7 +512,20 @@
     "setupRunning": "Preparing the opening",
     "setupExecutionSummary": "Opening setup · {{count}} tasks",
     "setupExecutionSummary_one": "Opening setup · {{count}} task",
-    "setupExecutionSummary_other": "Opening setup · {{count}} tasks"
+    "setupExecutionSummary_other": "Opening setup · {{count}} tasks",
+    "providerFailure": {
+      "auth": "{{provider}} rejected the API key. Check the key and account permissions.",
+      "forbidden": "{{provider}} denied access. Check account permissions.",
+      "quota": "{{provider}} has no quota or balance left.",
+      "rate_limited": "{{provider}} is rate-limiting requests. Check usage and quota.",
+      "sharedKey": "{{slots}} — {{count}} model uses in this session share {{provider}}. Fixing its key applies to all of them.",
+      "sharedAccount": "{{slots}} — {{count}} model uses in this session share {{provider}} and may also be affected. Check this provider’s account and limits."
+    },
+    "modelUse": {
+      "story": "Story",
+      "plugin": "Plugin tasks",
+      "utility": "Utility"
+    }
   },
   "blocks": {
     "actionPlaceholder": "Or type your own action...",
