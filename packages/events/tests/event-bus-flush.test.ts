@@ -10,7 +10,7 @@ function message(id: string, sessionId = "sess-flush"): CovelMessage {
     id,
     type: "event",
     topic: "test.topic",
-    payload: {},
+    payload: { text: "x".repeat(9_000) },
     sessionId,
     timestamp: "2026-09-05T00:00:00.000Z",
   };
@@ -29,7 +29,12 @@ function controlledPersistence() {
     await store.saveEvent(record);
   });
   return {
-    bus: createEventBus({ saveEvent, getEventById: store.getEventById }),
+    bus: createEventBus(
+      { saveEvent, getEventById: store.getEventById },
+      {
+        transport: { publish: () => {}, subscribe: () => {} },
+      },
+    ),
     store,
     saveEvent,
     pending,

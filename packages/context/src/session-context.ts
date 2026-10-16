@@ -223,11 +223,10 @@ function compileLorebookContributions(
   locale: string,
   recentMessages: readonly { readonly content: string }[],
 ): readonly ContextContribution[] {
+  const isActive = lorebookActivationMatcher(playerMessage, recentMessages);
   return records
     .filter((record) => record.enabled)
-    .filter((record) =>
-      isLorebookEntryActive(record, playerMessage, recentMessages),
-    )
+    .filter(isActive)
     .slice()
     .sort(
       (a, b) => a.insertionOrder - b.insertionOrder || compareText(a.id, b.id),
@@ -259,42 +258,54 @@ function compileLorebookContributions(
 const LATIN_WORD_EDGE =
   "(?:[^\\p{L}\\p{N}_]|[\\p{Script=Han}\\p{Script=Hiragana}\\p{Script=Katakana}\\p{Script=Hangul}])";
 
-function isLorebookEntryActive(
-  record: LorebookEntryRecord,
+function lorebookActivationMatcher(
   playerMessage: string,
   recentMessages: readonly { readonly content: string }[],
-): boolean {
-  if (record.strategy === "constant") return true;
-  if (!record.keys || record.keys.length === 0) return false;
-  const rawDepth = normalizeLorebookExtra(record.extra).scanDepth;
-  const depth =
-    typeof rawDepth === "number" && Number.isInteger(rawDepth)
-      ? Math.max(0, Math.min(20, rawDepth))
-      : 0;
-  const haystack = [
-    ...(depth > 0
-      ? recentMessages.slice(-depth).map((message) => message.content)
-      : []),
-    playerMessage,
-  ]
-    .join("\n")
-    .toLowerCase();
-  return record.keys.some((key) => {
-    if (!key.trim()) return false;
-    const needle = key.toLowerCase();
-    if (!/^[\x20-\x7e]+$/.test(needle) || !/[a-z]/.test(needle))
-      return haystack.includes(needle);
-    // A Latin key matches as a whole word, so `art` is not found in `start`.
-    // The word may carry a plural or possessive ending: an author who writes
-    // `lantern` means `lanterns` and `lantern's` too.
-    const escaped = needle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    // Chinese, Japanese and Korean text puts no space around a Latin name, so
-    // a character of those scripts ends a word too.
-    return new RegExp(
-      `(?:^|${LATIN_WORD_EDGE})${escaped}(?:e?s|['’]s)?(?=$|${LATIN_WORD_EDGE})`,
-      "u",
-    ).test(haystack);
-  });
+): (record: LorebookEntryRecord) => boolean {
+  const haystacks = new Map<number, string>();
+  const patterns = new Map<string, RegExp>();
+  return (record) => {
+    if (record.strategy === "constant") return true;
+    if (!record.keys || record.keys.length === 0) return false;
+    const rawDepth = normalizeLorebookExtra(record.extra).scanDepth;
+    const depth =
+      typeof rawDepth === "number" && Number.isInteger(rawDepth)
+        ? Math.max(0, Math.min(20, rawDepth))
+        : 0;
+    let haystack = haystacks.get(depth);
+    if (haystack === undefined) {
+      haystack = [
+        ...(depth > 0
+          ? recentMessages.slice(-depth).map((message) => message.content)
+          : []),
+        playerMessage,
+      ]
+        .join("\n")
+        .toLowerCase();
+      haystacks.set(depth, haystack);
+    }
+    return record.keys.some((key) => {
+      if (!key.trim()) return false;
+      const needle = key.toLowerCase();
+      if (!/^[\x20-\x7e]+$/.test(needle) || !/[a-z]/.test(needle))
+        return haystack.includes(needle);
+      // A Latin key matches as a whole word, so `art` is not found in `start`.
+      // The word may carry a plural or possessive ending: an author who writes
+      // `lantern` means `lanterns` and `lantern's` too.
+      let pattern = patterns.get(needle);
+      if (!pattern) {
+        const escaped = needle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        // Chinese, Japanese and Korean text puts no space around a Latin name, so
+        // a character of those scripts ends a word too.
+        pattern = new RegExp(
+          `(?:^|${LATIN_WORD_EDGE})${escaped}(?:e?s|['’]s)?(?=$|${LATIN_WORD_EDGE})`,
+          "u",
+        );
+        patterns.set(needle, pattern);
+      }
+      return pattern.test(haystack);
+    });
+  };
 }
 
 interface NormalizedLorebookExtra {

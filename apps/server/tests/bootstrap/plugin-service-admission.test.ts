@@ -87,6 +87,16 @@ async function fixture() {
 }
 
 describe("production plugin service admission", () => {
+  it("resolves the captured active set once per discovery list", async () => {
+    const f = await fixture();
+    const captured = await f.host.capture("session");
+    const active = vi.spyOn(f.registry, "getActivePlugins");
+    expect(await captured.run(() => f.host.admission.list("session"))).toEqual([
+      "provider",
+    ]);
+    expect(active).toHaveBeenCalledOnce();
+  });
+
   it("does not admit a confirmed plugin whose requirement is missing", async () => {
     const f = await fixture();
     f.registry.register({

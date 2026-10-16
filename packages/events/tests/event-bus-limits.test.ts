@@ -225,12 +225,20 @@ describe("bounded persist queue (audit R-03)", () => {
       saveEvent,
       getEventById: async () => null,
     };
-    const bus = createEventBus(store);
+    const bus = createEventBus(store, {
+      transport: { publish: () => {}, subscribe: () => {} },
+    });
 
     const OVERFLOW = 5;
     const total = PERSIST_MAX_IN_FLIGHT + PERSIST_QUEUE_MAX + OVERFLOW;
     for (let i = 0; i < total; i += 1) {
-      bus.emit(makeMessage({ id: `msg-${i}` }));
+      bus.emit(
+        makeMessage({
+          id: `msg-${i}`,
+          sessionId: `session-${i}`,
+          payload: { text: "x".repeat(9_000) },
+        }),
+      );
     }
 
     // Only the concurrency cap's worth of saves started; the rest queued.

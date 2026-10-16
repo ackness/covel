@@ -140,10 +140,6 @@ function budgetProviderRequest(
       locale: params.locale,
     },
   );
-  const fixedInputTokens = params.estimator(fixedInput);
-  const systemTokens = params.estimator(primarySystemText);
-  const toolDefinitionTokens = params.estimator(toolDefinitionsText);
-  const responseFormatTokens = params.estimator(responseFormatText);
   const inputLimit = limits.maxInputTokens - limits.reservedForResponse;
   const overflow = Math.max(0, budgeted.totalTokens - inputLimit);
   const zh = instructionLocaleFor(params.locale) === "zh";
@@ -169,6 +165,10 @@ function budgetProviderRequest(
   );
   const compactedTotal = afterToolResults - compactedSummaries.savedTokens;
   if (compactedTotal > inputLimit) {
+    const fixedInputTokens = params.estimator(fixedInput);
+    const systemTokens = params.estimator(primarySystemText);
+    const toolDefinitionTokens = params.estimator(toolDefinitionsText);
+    const responseFormatTokens = params.estimator(responseFormatText);
     throw new RangeError(
       `Context budget exceeded before LLM call for runtime "${params.runtimeId}": estimated ${compactedTotal} input tokens, limit ${inputLimit} (fixed=${fixedInputTokens}, system=${systemTokens}, tools=${toolDefinitionTokens}, responseFormat=${responseFormatTokens}, messages=${budgeted.totalTokens - fixedInputTokens}, toolResultSaved=${compacted.savedTokens}, summarySaved=${compactedSummaries.savedTokens})`,
     );

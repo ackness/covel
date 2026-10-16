@@ -233,14 +233,14 @@ export function createPluginDataWriter(
         namespace,
         key,
       );
-      return row ? structuredClone(row.value) : null;
+      return row ? row.value : null;
     },
     async list(namespace: string) {
       const rows = await store.listPluginData(sessionId, pluginId, namespace);
       const merged = buffer
         ? mergePluginDataRows(rows, buffer, sessionId, pluginId, namespace)
         : rows;
-      return structuredClone(merged.map(pluginDataEntry));
+      return merged.map(pluginDataEntry);
     },
     async delete(namespace: string, key: string) {
       assertWritableNamespace(namespace);
@@ -470,18 +470,15 @@ export function createFunctionStoreView(
   return {
     getSession: async () =>
       pluginSessionView(await store.getSession(sessionId)),
-    listPlayerInputs: async () =>
-      structuredClone(await store.listPlayerInputs(sessionId)),
+    listPlayerInputs: () => store.listPlayerInputs(sessionId),
     // A bounded read from inside a runtime handler means "recent context":
     // plugins asking for `limit` turn messages want the MOST RECENT ones.
     // `listTurnMessages(sessionId, { limit })` would return the OLDEST N, so
     // route a numeric limit through the tail query. No limit → full history.
-    listTurnMessages: async (limit) =>
-      structuredClone(
-        typeof limit === "number"
-          ? await store.listRecentTurnMessages(sessionId, limit)
-          : await store.listTurnMessages(sessionId),
-      ),
+    listTurnMessages: (limit) =>
+      typeof limit === "number"
+        ? store.listRecentTurnMessages(sessionId, limit)
+        : store.listTurnMessages(sessionId),
     readTurnMessages: (options) =>
       readTurnMessagePage(store, sessionId, options),
     async getPluginData(namespace, key) {
@@ -500,9 +497,7 @@ export function createFunctionStoreView(
           updatedAt: now,
         };
       }
-      return structuredClone(
-        await store.getPluginData(sessionId, pluginId, namespace, key),
-      );
+      return store.getPluginData(sessionId, pluginId, namespace, key);
     },
     async listPluginData(namespace) {
       const stored = await store.listPluginData(sessionId, pluginId, namespace);
@@ -541,9 +536,7 @@ export function createRpcHandlerStoreView(
           ? Math.trunc(limit)
           : RPC_TURN_MESSAGE_LIMIT;
       const count = Math.min(Math.max(wanted, 0), RPC_TURN_MESSAGE_LIMIT);
-      return structuredClone(
-        await store.listRecentTurnMessages(ctx.sessionId, count),
-      );
+      return store.listRecentTurnMessages(ctx.sessionId, count);
     },
     async setPluginData(record) {
       assertWritableNamespace(record.namespace);
@@ -576,14 +569,10 @@ export function createRpcHandlerStoreView(
       });
     },
     async getPluginData(namespace, key) {
-      return structuredClone(
-        await store.getPluginData(ctx.sessionId, ctx.pluginId, namespace, key),
-      );
+      return store.getPluginData(ctx.sessionId, ctx.pluginId, namespace, key);
     },
     async listPluginData(namespace) {
-      return structuredClone(
-        await store.listPluginData(ctx.sessionId, ctx.pluginId, namespace),
-      );
+      return store.listPluginData(ctx.sessionId, ctx.pluginId, namespace);
     },
   };
 }

@@ -71,7 +71,7 @@ describe("EventBus close", () => {
     expect(transport.publish).toHaveBeenCalledTimes(2);
     expect(transport.close).toHaveBeenCalledOnce();
     bus.emit(message());
-    expect(store.saveEvent).toHaveBeenCalledTimes(2);
+    expect(store.saveEvent).toHaveBeenCalledOnce();
   });
 
   it("waits for in-flight received references and ignores late delivery", async () => {
