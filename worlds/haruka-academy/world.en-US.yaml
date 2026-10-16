@@ -1,8 +1,6 @@
 # en-US text for world.yaml. Only translated text; structure and ids come from world.yaml.
 name: Haruka Academy · Spring Mint
-summary: Transfer to a private high school by the sea. In the twenty-one days
-  before the school festival, choose a club, keep your promises, and answer the
-  feelings no one has managed to say out loud.
+summary: Transfer to a private high school by the sea. With twenty-one days until the school festival, choose a club, keep your promises, and answer the feelings left unspoken.
 pluginPolicy:
   pitch:
     label: Campus Romance · Visual Novel

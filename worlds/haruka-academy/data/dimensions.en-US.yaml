@@ -193,7 +193,7 @@ festival:
       seaBreezePost:
         note: The booth idea just got through homeroom; nobody has found the postcards yet.
       springMint:
-        note: Mio is handling the contents and the manuscripts on her own; the club is short of members.
+        note: Mio is handling the table of contents and the manuscripts on her own; the club is short of members.
       rumorWall:
         note: Rin is collecting the first anonymous submissions.
       closingSong:
@@ -301,7 +301,7 @@ geography:
             description: Where classmates stuff club flyers, borrowed manga, and notes with somebody's name spelled wrong.
       - name: Club Building
         description: An old three-story wooden building. After 16:00 it fills with the sounds of every club, and in principle the lights must go off after the 18:00 closing announcement. This is where the Literature Club's survival, Light Music Club rehearsals, and Student Council patrols all meet.
-        climate: Chilly toward evening, with the sound of instruments, the smell of old paper, and a hint of coffee in the stairwells; after sunset only a few windows still glow warm yellow.
+        climate: Chilly toward evening, with the sound of instruments, the smell of old paper, and a hint of coffee in the hallways; after sunset only a few windows still glow warm yellow.
         landmarks:
           - name: Literature Club Room
             description: A small room at the end of the third floor, piled with old books, past festival special issues, and handwritten drafts. The club is rushing to finish its special issue, Spring Mint, while facing a merger review.
@@ -338,7 +338,7 @@ geography:
           - name: Orange House Family Restaurant
             description: Good for meeting up in a group, studying together, and disguising a serious talk as chat over the menu.
           - name: Hoshisuna Instrument Shop
-            description: Where the Light Music Club buys strings and picks; Kaho can spend ages in the corner where you try out instruments. In the three days before the main-stage rehearsal, the shop checks one instrument per student for free.
+            description: Where the Light Music Club buys strings and picks; Kaho can spend ages in the corner where you try out instruments. Three days before the main-stage rehearsal, the shop offers students a free check of one instrument.
       - name: Administrative Building and Courtyard
         description: The hub of festival business, between the classroom building and the Club Building. The Student Council Room keeps the budget sheets, venue maps, and club registrations; the courtyard below is the most public stage for lunchtime announcements and festival previews.
         climate: Bright and noisy by day, quiet soon after school lets out; the Student Council Room's lights are often still on at 18:00.
@@ -481,7 +481,7 @@ history:
       description: The school moved to the slopes of Seireki, and the new campus kept the old Club Building as a symbol of tradition.
     - era: Seven years ago
       name: Old Club Building Preservation Movement
-      description: The first students to enroll at the new campus started a petition and saved the old wooden Club Building. Both the Literature Club and the Light Music Club count it as part of their club's tradition.
+      description: The first cohort to move to the new campus started a petition and saved the old wooden Club Building. Both the Literature Club and the Light Music Club count it as part of their club's tradition.
     - era: Three years ago
       name: The spring school festival is reorganized
       description: The festival changed from class exhibits to joint projects by clubs and classes, and the Student Council's power grew.
@@ -572,8 +572,8 @@ socialStructure:
         description: The people driving the festival projects, who often bury their own feelings in the work.
       - name: Student Council members
         description: Stand for rules and order, and take pressure from both the teachers and the students.
-      - name: Shopping-street regulars
-        description: Off-campus faces — the bookstore owner, the music shop clerk, the family restaurant staff — who are a source of chance meetings and news.
+      - name: Familiar faces on the shopping street
+        description: People off campus — the bookstore owner, the music shop clerk, the family restaurant staff — who are a source of chance meetings and news.
     races:
       - name: Ordinary students
         description: No supernatural identities; the main conflicts come from feelings, grades, family, and choices about the future.
@@ -639,7 +639,7 @@ mechanics:
       - In dialogue mode, the reply options should sound like things the player would naturally say, not like task buttons in a system.
       - A school day moves through before morning reading, the morning breaks, lunch, after school, dusk, and after closing; whenever the story clearly moves to a new time slot, mention the bell, the light, the weather, or the next plan.
       - Before morning reading and during breaks, Class 2-B is the anchor; at lunch the player can go to the classroom, the library, or the courtyard; after school, the Club Building and the shopping street; dusk is for Sakurazaka Seawall and the Club Building Rooftop.
-      - When a scene is first established, the location changes, or day turns to night, emit scene.set with a standard location name; the classroom, Club Building, Library, Sakurazaka Seawall, and Seireki Town Shopping Street should match the world's built-in day and night backdrops first.
+      - When a scene is first established, the location changes, or the scene changes between day and night, emit scene.set with a standard location name; the classroom, Club Building, Library, Sakurazaka Seawall, and Seireki Town Shopping Street should match the world's built-in day and night backdrops first.
       - Use day before sunset, and night after sunset, after the closing announcement, or in a clearly nighttime passage; when the variant switches, the lighting, the color of the sea outside the window, and whether characters should have gone home change with it.
       - Emit stage.direction when characters enter, leave, become the focus of the conversation, change position, or change outfit, expression, or pose; merge every change in a turn into one cues array, and when there is no matching visual variant, leave out the visual fields and use the default portrait.
       - A character's entrance must fit their Usual Schedule or be explained by a one-off task; each turn focuses on one or two speaking characters, and the others come in by passing by, through notes, rumors, or the next appointment — never cram all eight into one scene.

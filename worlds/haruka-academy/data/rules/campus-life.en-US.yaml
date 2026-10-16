@@ -30,7 +30,7 @@
     - Evening Wind Lighting
 - id: haruka-stage-route
   title: Scenes and the Stage
-  content: 'Emit scene.set whenever a scene is first established, the location changes, or day turns to night. Use the standard anchors for locations — "Class 2-B", "Club Building", "Library", "Sakurazaka Seawall", "Seireki Town Shopping Street" — and keep particular rooms or shops in the narrative text. Use day before sunset and night after sunset or after the closing announcement, and let the color of the sea outside, the indoor lighting, and when characters head home change with it. The five anchors each have a full set of day and night backdrops: use them first, and don''t give a place a new name for no reason. Emit stage.direction whenever characters enter, leave, change focus, change position, or change outfit, expression, or pose; put every change for the turn in one cues array, and leave out the visual fields when there is no matching visual variant so the framework shows the default portrait. Rin Asakura''s default variantId is uniform-playful; when she drops the jokes to listen in earnest or decides to sit on a story, use expression: serious or variantId: uniform-serious. Kaho Shiina may use expression: concerned or variantId: uniform-concerned when she listens seriously to a club problem; Souta Morikawa uses outfit: rehearsal or variantId: rehearsal-focused during Light Music Club rehearsals; Chihiro Onodera uses outfit: casual or variantId: casual-gentle in off-campus scenes such as the shopping street or the seawall. When characters leave the screen, prefer slide-left for a character exiting on the left and slide-right for one exiting on the right, and fade or dissolve otherwise; stage.clear should also name a suitable transition.'
+  content: 'Emit scene.set whenever a scene is first established, the location changes, or the scene changes between day and night. Use the standard anchors for locations — "Class 2-B", "Club Building", "Library", "Sakurazaka Seawall", "Seireki Town Shopping Street" — and keep particular rooms or shops in the narrative text. Use day before sunset and night after sunset or after the closing announcement, and let the color of the sea outside, the indoor lighting, and when characters head home change with it. The five anchors each have a full set of day and night backdrops: use them first, and don''t give a place a new name for no reason. Emit stage.direction whenever characters enter, leave, change focus, change position, or change outfit, expression, or pose; put every change for the turn in one cues array, and leave out the visual fields when there is no matching visual variant so the framework shows the default portrait. Rin Asakura''s default variantId is uniform-playful; when she drops the jokes to listen in earnest or decides to sit on a story, use expression: serious or variantId: uniform-serious. Kaho Shiina may use expression: concerned or variantId: uniform-concerned when she listens seriously to a club problem; Souta Morikawa uses outfit: rehearsal or variantId: rehearsal-focused during Light Music Club rehearsals; Chihiro Onodera uses outfit: casual or variantId: casual-gentle in off-campus scenes such as the shopping street or the seawall. When characters leave the screen, prefer slide-left for a character exiting on the left and slide-right for one exiting on the right, and fade or dissolve otherwise; stage.clear should also name a suitable transition.'
   keys:
     - location
     - scene
@@ -57,8 +57,10 @@
   keys:
     - everyone
     - favorite
+    - favoritism
     - misunderstanding
     - others
+    - other characters
     - reaction
     - schedule
 - id: haruka-rumor-heat
@@ -71,6 +73,11 @@
     - News Club
     - gossip
     - deny
+    - denies
+    - denied
+    - denying
+    - debunk
+    - debunking
 - id: haruka-festival-convergence
   title: Spring Mint and Evening Wind Lighting
   content: "The festival's climax isn't a checklist of separate tasks. The Literature Club's Spring Mint can print Sea Breeze Post letters or the News Club's debunkings; News Club coverage can win the Light Music Club an audience for its preview; Kaho's new song can be the last song of the Evening Wind Lighting; and the story of the old issues can offer a public reason to keep the Club Building. The player can put one storyline first, or make several hold each other up through concrete trades — but success must still leave each character their own costs, their byline, and their own choices."
@@ -81,3 +88,4 @@
     - song
     - Evening Wind Lighting
     - old issue
+    - back issue

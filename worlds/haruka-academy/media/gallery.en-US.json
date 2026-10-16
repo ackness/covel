@@ -40,7 +40,7 @@
       "id": "asakura-rin",
       "name": "Rin Asakura",
       "description": "Rin winks and grins, a flower-shaped clip in her short auburn hair, holding a camera and her interview notebook at once.",
-      "background": "Rin Asakura is a 2-B student and a News Club reporter. She's good at using interviews to get close to people; she's putting together the festival's Rumor Truth Wall, and has to face where the line is on what gets made public.",
+      "background": "Rin Asakura is a 2-B student and a News Club reporter. She's good at using interviews to get close to people; she's preparing the festival's Rumor Truth Wall and has to decide what she can make public.",
       "storyContext": "Her default look — breezy and joking — for interview invitations and everyday chat. The smile doesn't mean she already knows the player's secrets.",
       "visualNotes": [
         "The camera, interview notebook, armband, and flower clip keep her recognizable."
@@ -90,7 +90,7 @@
       "id": "morikawa-souta",
       "name": "Souta Morikawa",
       "description": "Souta raises a pair of drumsticks, white shirt sleeves rolled up and tie a little loose, with a big, cocky grin.",
-      "background": "Souta Morikawa is the Light Music Club's drummer and Kaho's bandmate. Outgoing and quick with his mouth, he can liven up any room, and he can also cause misunderstandings by misreading a silence.",
+      "background": "Souta Morikawa is the Light Music Club's drummer and Kaho's bandmate. Outgoing and quick-tongued, he can liven up any room, and he can also cause misunderstandings by misreading a silence.",
       "storyContext": "For Light Music Club group scenes and introducing the stage prep. His relationship with Kaho is the bandmate one from the setting; the smile adds no rivalry and no romance.",
       "visualNotes": [
         "The pair of drumsticks, short hair, and rolled-up sleeves keep him recognizable as the drummer."
@@ -101,7 +101,7 @@
       "name": "Akane Toujou",
       "description": "Akane has long, straight dark hair and holds a blue hardcover, with a purple flower peeking out beside it; her gaze is quiet.",
       "background": "Akane Toujou is a third-year who chairs the Library Committee, and a regular at Umineko Bookstore. She treasures the old issues and the memories clubs leave behind, and shows she cares by saving seats, lending books, and keeping quiet company.",
-      "storyContext": "She only enters the story naturally once the player walks into the library on their own. The portrait can introduce her, but it doesn't assume she has already saved the player a seat or told them about her family's past.",
+      "storyContext": "She enters the story naturally only after the player chooses to visit the library. The portrait can introduce her, but it doesn't assume she has already saved the player a seat or told them about her family's past.",
       "visualNotes": [
         "Keep the book and the flower as visual details, but nothing in the setting says where the flower came from, who gave it, or what it means."
       ]
@@ -110,7 +110,7 @@
       "id": "asakura-rin-uniform-serious",
       "name": "Rin Asakura · Listening in Earnest",
       "description": "Rin has both eyes open and has put away the big grin; the camera and notebook are still at hand.",
-      "background": "Rin Asakura is a 2-B student and a News Club reporter. She's good at using interviews to get close to people; she's putting together the festival's Rumor Truth Wall, and has to face where the line is on what gets made public.",
+      "background": "Rin Asakura is a 2-B student and a News Club reporter. She's good at using interviews to get close to people; she's preparing the festival's Rumor Truth Wall and has to decide what she can make public.",
       "storyContext": "For conversations where Rin is really listening and thinking about where to draw the line on a story. It's only an expression variant: it doesn't mean any story has been held back or published.",
       "visualNotes": [
         "The camera, interview notebook, armband, and flower clip keep her recognizable."
@@ -119,7 +119,7 @@
     {
       "id": "shiina-kaho-uniform-concerned",
       "name": "Kaho Shiina · Something on Her Mind",
-      "description": "Kaho's blue eyes are wide open and her smile has faded; she's still in the cardigan, holding her guitar.",
+      "description": "Kaho's blue eyes are open and her smile subdued; she's still in the cardigan, holding her guitar.",
       "background": "Kaho Shiina is the Light Music Club's guitarist, in Class 2-A, and she's writing a new song that has no name yet. She acts on impulse and seems easygoing, but she's serious about the stage and about anyone willing to listen to her practice.",
       "storyContext": "For conversations about rehearsal pressure or moments of hesitation. The current story has to supply what exactly she's worried about.",
       "visualNotes": [
@@ -140,7 +140,7 @@
       "id": "morikawa-souta-rehearsal-focused",
       "name": "Souta Morikawa · Ready to Rehearse",
       "description": "Souta wears a dark T-shirt under an open light-colored shirt, drumsticks still raised, his expression more restrained than in his uniform version.",
-      "background": "Souta Morikawa is the Light Music Club's drummer and Kaho's bandmate. Outgoing and quick with his mouth, he can liven up any room, and he can also cause misunderstandings by misreading a silence.",
+      "background": "Souta Morikawa is the Light Music Club's drummer and Kaho's bandmate. Outgoing and quick-tongued, he can liven up any room, and he can also cause misunderstandings by misreading a silence.",
       "storyContext": "For the change of clothes and mood during Light Music Club rehearsals. The picture doesn't confirm how any rehearsal went, or that the festival performance has happened.",
       "visualNotes": [
         "The drumsticks and hairstyle keep him recognizable; the dark T-shirt and open shirt set this apart from the uniform version."
@@ -160,9 +160,9 @@
     {
       "id": "classroom-2b-night",
       "name": "Class 2-B · Night",
-      "description": "Windows onto the sea, white curtains, and neat rows of desks fill the picture, with a stack of notebooks in the foreground and the blackboard on the right. Warm lamplight and the blue-violet night light up the room.",
+      "description": "Windows onto the sea, white curtains, and neat rows of desks fill the picture, with a stack of notebooks in the foreground and the blackboard on the right. Warm lamplight meets the blue-violet light of night.",
       "background": "Class 2-B is the transfer student's everyday home base; the player starts in the back row by the window. Cleaning duty, lunch breaks, study sessions, and the class's Sea Breeze Post booth for the festival all bring classmates together.",
-      "storyContext": "The night view keeps the same classroom; only the lights inside and the bay outside have turned to night. The story still has to explain why someone is at school and what time it is — lit windows alone don't mean a date is happening.",
+      "storyContext": "The night view keeps the same classroom, with the lights on inside and the bay dark outside. The story still has to explain why someone is at school and what time it is — lit windows alone don't mean a date is happening.",
       "location": "Class 2-B",
       "visualNotes": [
         "The window-side seats, the blackboard on the right, and the notebooks in the foreground are in the same place in the day and night pictures."
@@ -182,7 +182,7 @@
     {
       "id": "club-building-night",
       "name": "Club Building · Night",
-      "description": "The three-story wooden Club Building stands by the sea: a tiled roof, ivy climbing the right side, gravel out front, and a cherry tree make up the old building. Warm lamplight and the blue-violet night light up the scene.",
+      "description": "The three-story wooden Club Building stands by the sea: a tiled roof, ivy climbing the right side, gravel out front, and a cherry tree make up the old building. Warm lamplight meets the blue-violet light of night.",
       "background": "The Literature Club guards its back issues and manuscripts on the third floor; Light Music Club rehearsals, News Club work, and Student Council business all cross paths here too. Room assignments and the merger review make the old building a key place in the festival preparations.",
       "storyContext": "The night view shows lit windows and the bay at nightfall. The windows are just atmosphere; they don't confirm the campus rumor about windows lit after 18:00 as anything supernatural.",
       "location": "Club Building",
@@ -204,7 +204,7 @@
     {
       "id": "library-night",
       "name": "Library · Night",
-      "description": "A high-ceilinged reading room with an upper gallery; on the right a long table sits against windows facing the sea, and back issues are stacked on the low shelves. Warm lamplight and the blue-violet night light up the room.",
+      "description": "A high-ceilinged reading room with an upper gallery; on the right a long table sits against windows facing the sea, and back issues are stacked on the low shelves. Warm lamplight meets the blue-violet light of night.",
       "background": "The library keeps the old festival special issues, and it's where Library Committee chair Akane Toujou enters the story naturally. Old issues, study sessions, and quiet time together set the pace of conversations here.",
       "storyContext": "In the night view the desk lamps and ceiling lights are on, with the bay at night outside. Going in or staying after dark has to fit the current schedule; the picture doesn't mean anyone has permission to stay in the library.",
       "location": "Library",
@@ -226,7 +226,7 @@
     {
       "id": "sakurazaka-seawall-night",
       "name": "Sakurazaka Seawall · Night",
-      "description": "Cherry trees arch over the slope down to the seawall, with the school fence and gate on the left and a white vending machine on the right, facing the sea breeze. Warm lamplight and the blue-violet night light up the scene.",
+      "description": "Cherry trees arch over the slope down to the seawall, with the school fence and gate on the left and a white vending machine on the right, facing the sea breeze. Warm lamplight meets the blue-violet light of night.",
       "background": "Sakurazaka Seawall links the walk home with a stop by the sea; it's a place for walking together, waiting, and talking about lyrics. With so few places to go after school in Seireki, chance meetings and rumors easily cross paths here.",
       "storyContext": "At night the streetlights and the vending machine are lit, and the slope is still dry. The story about drinks revealing who you like is a campus rumor; the picture doesn't prove it true.",
       "location": "Sakurazaka Seawall",
@@ -248,7 +248,7 @@
     {
       "id": "shopping-street-night",
       "name": "Seireki Town Shopping Street · Night",
-      "description": "Books and flowerpots are displayed on the left side of the street; through the windows on the right you can see dining tables and guitars, and colorful awnings, bicycles, and the sea in the distance make an everyday street scene. Warm lamplight and the blue-violet night light up the street.",
+      "description": "Books and flowerpots are displayed on the left side of the street; through the windows on the right you can see dining tables and guitars, and colorful awnings, bicycles, and the sea in the distance make an everyday street scene. Warm lamplight meets the blue-violet light of night.",
       "background": "There are only two shopping streets in front of Seireki's station, and the bookstore, restaurant, florist, and music shop are where students' after-school lives happen. The shops jointly sponsor the Evening Wind Lighting that closes the festival, and they're where clubs go to buy supplies.",
       "storyContext": "The night view keeps the same shopfronts; only the lighting and the sky change. Lit windows don't mean the Evening Wind Lighting closing ceremony has begun, and they don't show any shop's regular hours.",
       "location": "Seireki Town Shopping Street",

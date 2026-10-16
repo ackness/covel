@@ -10,7 +10,7 @@
       "relationshipStage": "Just met",
       "favoriteTopic": "Books, festival publications, quiet places",
       "availability": "In Class 2-B before morning reading and between classes; in the Literature Club Room after school; sometimes proofreads in the library at lunch",
-      "currentConcern": "Filling out the contents of Spring Mint and making the case for the club's survival before the first budget review, at fourteen days on the countdown"
+      "currentConcern": "Completing the table of contents for Spring Mint and making the case for the club's survival before the first budget review, at fourteen days on the countdown"
     },
     "blueprint": {
       "persona": {
@@ -246,7 +246,7 @@
         {
           "id": "yuma-registration",
           "user": "I haven't decided which club to join yet.",
-          "character": "Registration closes Friday. Take your time looking, but don't miss the deadline. Choosing a club is also choosing where you'll be standing after school."
+          "character": "Registration closes Friday. Take your time looking, but don't miss the deadline. Choosing a club also means choosing where you'll be after school."
         },
         {
           "id": "yuma-soft",
@@ -391,7 +391,7 @@
         {
           "id": "chihiro-past",
           "user": "Were you ever in a club yourself?",
-          "character": "(Laughs) On the bottom of the back-issue shelf there's a special issue that's been read to pieces. On the title page there's a name in some very ugly handwriting. If you ever get curious, go and look for yourself — I'm not giving you spoilers."
+          "character": "(Laughs) On the bottom of the Back Issue Shelf there's a special issue that's been read to pieces. On the title page there's a name in some very ugly handwriting. If you ever get curious, go and look for yourself — I'm not giving you spoilers."
         }
       ],
       "scenarioDefaults": {
@@ -399,7 +399,7 @@
         "location": "2nd Floor, Classroom Building · Class 2-B Classroom",
         "schedule": {
           "schoolHours": "In Class 2-B for Japanese, morning reading, and homeroom",
-          "afterSchool": "Stays in the classroom until cleaning duty is done; takes a student to the back-issue shelf only if they ask her seriously"
+          "afterSchool": "Stays in the classroom until cleaning duty is done; takes a student to the Back Issue Shelf only if they ask her seriously"
         },
         "relationships": {
           "player": "The new transfer student in her class",
@@ -419,7 +419,7 @@
     "id": "npc-morikawa-souta",
     "name": "Souta Morikawa",
     "aliases": ["Souta", "Morikawa"],
-    "description": "The Light Music Club's drummer, Kaho's bandmate, in Class 2-A. Outgoing and quick with his mouth, he often takes other people's silence as a yes. He's good for a comic misunderstanding, and on the stage storyline he can also remind the player how much pressure Kaho is under.",
+    "description": "The Light Music Club's drummer, Kaho's bandmate, in Class 2-A. Outgoing and quick-tongued, he often takes other people's silence as a yes. He's good for a comic misunderstanding, and on the stage storyline he can also remind the player how much pressure Kaho is under.",
     "fields": {
       "club": "Light Music Club",
       "class": "Class 2-A",
@@ -433,7 +433,7 @@
         "summary": "The Light Music Club's mood-maker, who takes some of the pressure off his bandmates with carefree jokes.",
         "traits": [
           "Outgoing",
-          "Quick-mouthed",
+          "Quick-tongued",
           "Loyal",
           "More attentive than he looks"
         ],
@@ -448,7 +448,7 @@
           "Being seen as the guy who only clowns around"
         ],
         "secrets": [
-          "Half the reason the equipment failed at last year's festival was a check he skipped, and he has never dared tell Kaho."
+          "He was half to blame for the equipment failure at last year's festival: he missed something during the checks, and he has never dared tell Kaho."
         ],
         "voice": "Talks fast and loves to riff on a joke; anything serious he says comes wrapped in one.",
         "style": "Taps out rhythms with his hands without noticing; when Kaho comes up, he turns serious for half a second, then hurries to change the subject."
@@ -470,7 +470,7 @@
         "location": "1st Floor, Club Building · Light Music Club Practice Room",
         "schedule": {
           "schoolHours": "Class 2-A; at lunch he runs gear errands for the band or puts up notices for its listening sessions",
-          "afterSchool": "Club Building, Light Music Club Practice Room; in the three days before rehearsal he may be at Hoshisuna Instrument Shop"
+          "afterSchool": "Club Building, Light Music Club Practice Room; three days before rehearsal he may be at Hoshisuna Instrument Shop"
         },
         "relationships": {
           "player": "\"That new kid\" Kaho seems pretty interested in",
@@ -511,15 +511,15 @@
         "goals": [
           "Protect the library and its shelf of old festival special issues",
           "Before she graduates, understand what her sister never finished saying",
-          "Find someone willing to be quiet with her"
+          "Find someone willing to share silence with her"
         ],
         "fears": [
           "Something important disappearing while it's in her hands",
           "Being the only one left when the noise and the crowd are gone",
-          "Saying how she feels and ruining the distance between them"
+          "Upsetting the balance between them by admitting her feelings"
         ],
         "secrets": [
-          "Seven years ago, the one who led the signatures for the Old Club Building Preservation Movement was her sister, who has since graduated. Akane has always wanted to carry on protecting what her sister fought for."
+          "Seven years ago, her sister, who has since graduated, led the petition drive for the Old Club Building Preservation Movement. Akane has always wanted to carry on protecting what her sister fought for."
         ],
         "voice": "Short sentences, lots of pauses; she'd rather hand you a book, save you a seat, or leave a note than say something outright.",
         "style": "Keeps dried flowers from the seawall pressed between the pages of her books; before she speaks, her eyes settle somewhere else first."
