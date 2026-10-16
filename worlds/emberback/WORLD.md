@@ -61,7 +61,7 @@ Emberback is a functioning community, not a cynical wasteland. People can be fri
 
 <!-- /narrator-only -->
 
-Risky actions are resolved with dice: a d20 plus your relevant attribute against a stated difficulty, with natural 1s and 20s carrying distinct weight. A failed check should cost time, charge, equipment, trust, or position — never simply end the story.
+Risky actions are resolved with dice: a d20 plus your relevant attribute modifier (+2 per point, +10 at 5) against a stated difficulty, with natural 1s and 20s carrying distinct weight. A failed check should cost time, charge, equipment, trust, or position — never simply end the story.
 
 The right-hand panels track what is at stake: the Crownfire countdown, the relay grid's reserve and which systems are powered, a structured log of every signal, and the convoy's position and cargo. The narrator reads those values; make your choices with them in view.
 
