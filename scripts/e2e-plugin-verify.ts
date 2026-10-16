@@ -957,8 +957,9 @@ function detectFormInTurn(
     }
 
     // Path 2: create-form tool call input (fallback if output doesn't carry
-    // the form but the tool call does)
-    for (const tc of rt.toolCalls ?? []) {
+    // the form but the tool call does). A model may revise its form after
+    // reading the preview, so the last call is the one the player sees.
+    for (const tc of [...(rt.toolCalls ?? [])].reverse()) {
       if (
         tc.toolName !== "create-form" &&
         tc.toolName !== "create-character-form"
