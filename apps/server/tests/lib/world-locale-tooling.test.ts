@@ -261,10 +261,15 @@ describe("world translation tooling", () => {
       string,
       unknown
     >[];
-    await writeFile(
-      target,
-      (await readFile(target, "utf-8")).replace(/^(\s+)description: .*$/m, ""),
-    );
+    // Edit the parsed file: a long description may be wrapped onto the next line.
+    const entries = parseYaml(await readFile(target, "utf-8")) as Record<
+      string,
+      unknown
+    >[];
+    const first = entries[0];
+    if (!first) throw new Error("data/quests.en-US.yaml has no entries");
+    delete first.description;
+    await writeFile(target, stringifyYaml(entries));
     const missing = (
       await worldTranslationStatus(worldDir, "en-US")
     ).files.find((file) => file.file === "data/quests.yaml")!.missing;
