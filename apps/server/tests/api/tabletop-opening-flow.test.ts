@@ -48,6 +48,14 @@ for (const community of [false, true]) {
             usage: { inputTokens: 1, outputTokens: 1 },
           };
         }
+        // The form tool answered with its filled preview; the model accepts it.
+        if (request.messages.at(-1)?.role === "tool")
+          return {
+            content: '{"preGameDone":false}',
+            toolCalls: [],
+            finishReason: "stop",
+            usage: { inputTokens: 1, outputTokens: 1 },
+          };
         return {
           content: "Your story begins.",
           toolCalls: [
@@ -270,10 +278,11 @@ for (const community of [false, true]) {
         }
         expect((await store.getSession(sessionId))?.phase).toBe("playing");
         expect(
-          generate.mock.calls.filter(([request]) =>
-            request.tools?.some(
-              (tool) => tool.name === "create-character-form",
-            ),
+          generate.mock.calls.filter(
+            ([request]) =>
+              request.tools?.some(
+                (tool) => tool.name === "create-character-form",
+              ) && request.messages.at(-1)?.role !== "tool",
           ),
         ).toHaveLength(1);
       } finally {

@@ -37,6 +37,14 @@ const openingForm =
     );
     // The narrator tells the opening once setup is done.
     if (!formTool) return narration;
+    // The form tool answered with its filled preview; the model accepts it.
+    if (request.messages.at(-1)?.role === "tool")
+      return {
+        content: '{"preGameDone":false}',
+        toolCalls: [],
+        finishReason: "stop",
+        usage: { inputTokens: 1, outputTokens: 1 },
+      };
     return {
       content: "Your story begins.",
       toolCalls: [
