@@ -5,7 +5,7 @@ import { sessionEventBus } from "./session/session-events.js";
 
 import { Hono } from "hono";
 import { z } from "zod";
-import { decodePluginUserSettingsHeader } from "./plugin-user-settings.js";
+import { readPluginUserSettings } from "./plugin-user-settings.js";
 import { loadSessionHookScope } from "./session/hook-scope.js";
 import { createCommitPipeline, runWithHookScope } from "@covel/runtime";
 import type { DataStore, CharacterRecord } from "@covel/store";
@@ -62,15 +62,8 @@ characterRoutes.post("/:id/characters", async (c) => {
   const store = c.get("store");
   const sessionId = guard.session.id;
 
-  const decodedUserSettings = decodePluginUserSettingsHeader(
-    c.req.header("X-Plugin-User-Settings"),
-  );
-  if (!decodedUserSettings.ok) {
-    return c.json(
-      errorBody(decodedUserSettings.error, { code: decodedUserSettings.code }),
-      decodedUserSettings.status,
-    );
-  }
+  const decodedUserSettings = readPluginUserSettings(c);
+  if (!decodedUserSettings.ok) return decodedUserSettings.response;
 
   const parsed = await readJsonBody<unknown>(c);
   if (parsed instanceof Response) return parsed;

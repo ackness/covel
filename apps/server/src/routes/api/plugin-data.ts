@@ -10,9 +10,9 @@
  * should be placed behind authentication middleware.
  */
 
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import { z } from "zod";
-import type { DataStore } from "@covel/store";
+import type { DataStore, PluginDataRecord, SessionRecord } from "@covel/store";
 import type { PluginRegistry } from "@covel/plugin-loader";
 import {
   MAX_PLUGIN_DATA_VALUE_BYTES,
@@ -61,6 +61,56 @@ function validatePluginAccess(
   return null;
 }
 
+function publicItem(record: PluginDataRecord) {
+  return {
+    namespace: record.namespace,
+    key: record.key,
+    value: publicPluginDataValue(record),
+    updatedAt: record.updatedAt,
+  };
+}
+
+async function resolvePluginRead(c: Context) {
+  const guard = await resolveSessionParam(c);
+  if (!guard.ok) return guard.response;
+  const pluginId = c.req.param("pluginId") ?? "";
+  const accessErr = validatePluginAccess(
+    c.get("pluginRegistry"),
+    pluginId,
+    false,
+  );
+  if (accessErr) return c.json(errorBody(accessErr.error), accessErr.status);
+  return { store: c.get("store"), sessionId: guard.session.id, pluginId };
+}
+
+function withPluginWrite(
+  c: Context,
+  session: SessionRecord,
+  pluginId: string,
+  mutate: () => Promise<Response>,
+): Promise<Response> {
+  const registry = c.get("pluginRegistry");
+  return withLockedSessionMutation({
+    c,
+    store: c.get("store"),
+    sessionLock: c.get("sessionLock"),
+    sessionId: session.id,
+    expectedSession: session,
+    allowedStatuses: ["active"],
+    mutate: async (live) => {
+      const accessErr = validatePluginAccess(
+        registry,
+        pluginId,
+        true,
+        runnablePluginIds(live.activePlugins, registry),
+      );
+      if (accessErr)
+        return c.json(errorBody(accessErr.error), accessErr.status);
+      return mutate();
+    },
+  });
+}
+
 // GET /session/:id/plugin-data — every readable row of the session's active plugins
 // in one response (the client's full restore). Same row filter and value
 // projection as the per-plugin and per-namespace reads; plugins that are
@@ -81,25 +131,16 @@ pluginDataRoutes.get("/:id/plugin-data", async (c) => {
       .filter((r) => active.has(r.pluginId) && isPublicPluginDataRecord(r))
       .map((r) => ({
         pluginId: r.pluginId,
-        namespace: r.namespace,
-        key: r.key,
-        value: publicPluginDataValue(r),
-        updatedAt: r.updatedAt,
+        ...publicItem(r),
       })),
   });
 });
 
 // GET /session/:id/plugin-data/:pluginId/_index — list namespaces/keys without values
 pluginDataRoutes.get("/:id/plugin-data/:pluginId/_index", async (c) => {
-  const store = c.get("store");
-  const registry = c.get("pluginRegistry");
-  const sessionId = c.req.param("id");
-  const guard = await resolveSessionParam(c);
-  if (!guard.ok) return guard.response;
-  const pluginId = c.req.param("pluginId");
-
-  const accessErr = validatePluginAccess(registry, pluginId, false);
-  if (accessErr) return c.json(errorBody(accessErr.error), accessErr.status);
+  const read = await resolvePluginRead(c);
+  if (read instanceof Response) return read;
+  const { store, sessionId, pluginId } = read;
 
   const records = await store.listPluginData(sessionId, pluginId);
   return c.json({
@@ -111,26 +152,14 @@ pluginDataRoutes.get("/:id/plugin-data/:pluginId/_index", async (c) => {
 
 // GET /session/:id/plugin-data/:pluginId/:namespace
 pluginDataRoutes.get("/:id/plugin-data/:pluginId/:namespace", async (c) => {
-  const store = c.get("store");
-  const registry = c.get("pluginRegistry");
-  const sessionId = c.req.param("id");
-  const guard = await resolveSessionParam(c);
-  if (!guard.ok) return guard.response;
-  const pluginId = c.req.param("pluginId");
+  const read = await resolvePluginRead(c);
+  if (read instanceof Response) return read;
+  const { store, sessionId, pluginId } = read;
   const namespace = c.req.param("namespace");
-
-  // Read: only require the plugin to be registered (not necessarily active)
-  const accessErr = validatePluginAccess(registry, pluginId, false);
-  if (accessErr) return c.json(errorBody(accessErr.error), accessErr.status);
 
   const records = await store.listPluginData(sessionId, pluginId, namespace);
   return c.json({
-    items: records.filter(isPublicPluginDataRecord).map((r) => ({
-      namespace: r.namespace,
-      key: r.key,
-      value: publicPluginDataValue(r),
-      updatedAt: r.updatedAt,
-    })),
+    items: records.filter(isPublicPluginDataRecord).map(publicItem),
   });
 });
 
@@ -138,17 +167,11 @@ pluginDataRoutes.get("/:id/plugin-data/:pluginId/:namespace", async (c) => {
 pluginDataRoutes.get(
   "/:id/plugin-data/:pluginId/:namespace/:key",
   async (c) => {
-    const store = c.get("store");
-    const registry = c.get("pluginRegistry");
-    const sessionId = c.req.param("id");
-    const guard = await resolveSessionParam(c);
-    if (!guard.ok) return guard.response;
-    const pluginId = c.req.param("pluginId");
+    const read = await resolvePluginRead(c);
+    if (read instanceof Response) return read;
+    const { store, sessionId, pluginId } = read;
     const namespace = c.req.param("namespace");
     const key = c.req.param("key");
-
-    const accessErr = validatePluginAccess(registry, pluginId, false);
-    if (accessErr) return c.json(errorBody(accessErr.error), accessErr.status);
 
     const record = await store.getPluginData(
       sessionId,
@@ -159,12 +182,7 @@ pluginDataRoutes.get(
     if (!record || !isPublicPluginDataRecord(record)) {
       return c.json(errorBody("Not found"), 404);
     }
-    return c.json({
-      namespace: record.namespace,
-      key: record.key,
-      value: publicPluginDataValue(record),
-      updatedAt: record.updatedAt,
-    });
+    return c.json(publicItem(record));
   },
 );
 
@@ -173,7 +191,6 @@ pluginDataRoutes.put(
   "/:id/plugin-data/:pluginId/:namespace/:key",
   async (c) => {
     const store = c.get("store");
-    const registry = c.get("pluginRegistry");
     const sessionId = c.req.param("id");
     const guard = await resolveSessionParam(c);
     if (!guard.ok) return guard.response;
@@ -209,34 +226,18 @@ pluginDataRoutes.put(
     const body = parsed.data;
     const now = new Date().toISOString();
 
-    return withLockedSessionMutation({
-      c,
-      store,
-      sessionLock: c.get("sessionLock"),
-      sessionId,
-      expectedSession: guard.session,
-      allowedStatuses: ["active"],
-      mutate: async (live) => {
-        const accessErr = validatePluginAccess(
-          registry,
-          pluginId,
-          true,
-          runnablePluginIds(live.activePlugins, registry),
-        );
-        if (accessErr)
-          return c.json(errorBody(accessErr.error), accessErr.status);
-        await store.setPluginData({
-          id: crypto.randomUUID(),
-          sessionId,
-          pluginId,
-          namespace,
-          key,
-          value: body.value,
-          createdAt: now,
-          updatedAt: now,
-        });
-        return c.json(okBody({ namespace, key }));
-      },
+    return withPluginWrite(c, guard.session, pluginId, async () => {
+      await store.setPluginData({
+        id: crypto.randomUUID(),
+        sessionId,
+        pluginId,
+        namespace,
+        key,
+        value: body.value,
+        createdAt: now,
+        updatedAt: now,
+      });
+      return c.json(okBody({ namespace, key }));
     });
   },
 );
@@ -246,7 +247,6 @@ pluginDataRoutes.delete(
   "/:id/plugin-data/:pluginId/:namespace/:key",
   async (c) => {
     const store = c.get("store");
-    const registry = c.get("pluginRegistry");
     const sessionId = c.req.param("id");
     const guard = await resolveSessionParam(c);
     if (!guard.ok) return guard.response;
@@ -257,48 +257,21 @@ pluginDataRoutes.delete(
     const reservedErr = reservedPluginDataNamespaceError(namespace);
     if (reservedErr) return c.json(errorBody(reservedErr), 403);
 
-    return withLockedSessionMutation({
-      c,
-      store,
-      sessionLock: c.get("sessionLock"),
-      sessionId,
-      expectedSession: guard.session,
-      allowedStatuses: ["active"],
-      mutate: async (live) => {
-        const accessErr = validatePluginAccess(
-          registry,
-          pluginId,
-          true,
-          runnablePluginIds(live.activePlugins, registry),
-        );
-        if (accessErr)
-          return c.json(errorBody(accessErr.error), accessErr.status);
-        await store.deletePluginData(sessionId, pluginId, namespace, key);
-        return c.json(okBody());
-      },
+    return withPluginWrite(c, guard.session, pluginId, async () => {
+      await store.deletePluginData(sessionId, pluginId, namespace, key);
+      return c.json(okBody());
     });
   },
 );
 
 // GET /session/:id/plugin-data/:pluginId — list all namespaces
 pluginDataRoutes.get("/:id/plugin-data/:pluginId", async (c) => {
-  const store = c.get("store");
-  const registry = c.get("pluginRegistry");
-  const sessionId = c.req.param("id");
-  const guard = await resolveSessionParam(c);
-  if (!guard.ok) return guard.response;
-  const pluginId = c.req.param("pluginId");
-
-  const accessErr = validatePluginAccess(registry, pluginId, false);
-  if (accessErr) return c.json(errorBody(accessErr.error), accessErr.status);
+  const read = await resolvePluginRead(c);
+  if (read instanceof Response) return read;
+  const { store, sessionId, pluginId } = read;
 
   const records = await store.listPluginData(sessionId, pluginId);
   return c.json({
-    items: records.filter(isPublicPluginDataRecord).map((r) => ({
-      namespace: r.namespace,
-      key: r.key,
-      value: publicPluginDataValue(r),
-      updatedAt: r.updatedAt,
-    })),
+    items: records.filter(isPublicPluginDataRecord).map(publicItem),
   });
 });

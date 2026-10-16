@@ -70,7 +70,7 @@ import {
   type QueuedActivatedRuntimeJob,
 } from "./plugin-rpc/runtime-job-enqueue.js";
 import {
-  decodePluginUserSettingsHeader,
+  readPluginUserSettings,
   loadSessionPluginUserSettings,
 } from "./plugin-user-settings.js";
 import {
@@ -83,7 +83,7 @@ import {
   assertRecoverableTurn,
   recoveryAction,
 } from "./actions/execution-recovery.js";
-import { checkSessionOwner } from "./session/session-guard.js";
+import { resolveSessionById } from "./session/session-guard.js";
 import { readLockedSession } from "./session/locked-mutation.js";
 import { retryPendingDimensionSettlements } from "./actions/dimension-settlement-retry.js";
 import { preflightActionApprovals } from "./actions/approval-preflight.js";
@@ -174,30 +174,12 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
 
   // Enforce header transport limits before opening the SSE response or doing
   // any session work. Malformed values remain a no-settings request.
-  const decodedUserSettings = decodePluginUserSettingsHeader(
-    c.req.header("X-Plugin-User-Settings"),
-  );
-  if (!decodedUserSettings.ok) {
-    return c.json(
-      errorBody(decodedUserSettings.error, { code: decodedUserSettings.code }),
-      decodedUserSettings.status,
-    );
-  }
+  const decodedUserSettings = readPluginUserSettings(c);
+  if (!decodedUserSettings.ok) return decodedUserSettings.response;
 
-  const session = await store.getSession(sessionId);
-  if (!session) {
-    return c.json(
-      errorBody(`Session not found: ${sessionId}`, {
-        code: "session_not_found",
-      }),
-      404,
-    );
-  }
-
-  // Owner guard (hosted tiers): actions execute turns and spend tokens
-  // on the session's behalf.
-  const ownerDenied = checkSessionOwner(c, session);
-  if (ownerDenied) return ownerDenied;
+  const guard = await resolveSessionById(c, sessionId);
+  if (!guard.ok) return guard.response;
+  const session = guard.session;
 
   // Fast path: a paused/ended session takes no actions. The
   // authoritative re-check happens under the session lock below (this read is
@@ -1312,9 +1294,9 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
       try {
         if (credentialKeys.length > 0) {
           const queuedIds = new Set(
-            (await listRuntimeJobs(store, { sessionId }))
-              .filter((job) => job.status === "queued")
-              .map((job) => job.jobId),
+            (
+              await listRuntimeJobs(store, { sessionId, statuses: ["queued"] })
+            ).map((job) => job.jobId),
           );
           for (const key of credentialKeys)
             if (!queuedIds.has(key.jobId))

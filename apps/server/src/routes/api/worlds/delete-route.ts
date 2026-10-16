@@ -12,7 +12,7 @@ import {
   worldOperationLockId,
   type WorldDeletion,
 } from "../../../world-lifecycle.js";
-import { decodePluginUserSettingsHeader } from "../plugin-user-settings.js";
+import { readPluginUserSettings } from "../plugin-user-settings.js";
 import { deleteSessionWithLifecycle } from "../session/delete-route.js";
 import {
   deleteWorldPackage,
@@ -40,15 +40,8 @@ async function deleteWorld(
 ): Promise<Response> {
   const denied = requireAccess(c, "world.write");
   if (denied) return denied;
-  const settings = decodePluginUserSettingsHeader(
-    c.req.header("X-Plugin-User-Settings"),
-  );
-  if (!settings.ok) {
-    return c.json(
-      errorBody(settings.error, { code: settings.code }),
-      settings.status,
-    );
-  }
+  const settings = readPluginUserSettings(c);
+  if (!settings.ok) return settings.response;
   const store = c.get("store");
   const lock = c.get("sessionLock");
   const key = worldOperationLockId(id);

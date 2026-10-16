@@ -93,7 +93,7 @@ import {
   requestSuspensionAbandonDeps,
 } from "./suspension-abandon.js";
 import {
-  decodePluginUserSettingsHeader,
+  readPluginUserSettings,
   loadSessionPluginUserSettings,
 } from "./plugin-user-settings.js";
 import { buildResumeTurnExecutorDeps } from "./turn-execution-deps.js";
@@ -156,15 +156,8 @@ resumeRoutes.post("/:id/suspensions/:suspensionId/resume", async (c) => {
   const sessionId = c.req.param("id");
   const suspensionId = c.req.param("suspensionId");
   const store = c.get("store");
-  const decodedUserSettings = decodePluginUserSettingsHeader(
-    c.req.header("X-Plugin-User-Settings"),
-  );
-  if (!decodedUserSettings.ok) {
-    return c.json(
-      errorBody(decodedUserSettings.error, { code: decodedUserSettings.code }),
-      decodedUserSettings.status,
-    );
-  }
+  const decodedUserSettings = readPluginUserSettings(c);
+  if (!decodedUserSettings.ok) return decodedUserSettings.response;
   // Opportunistic, time-gated, best-effort: never blocks the resume.
   void trackRequestWork(c, () =>
     maybeSweepExpiredSuspensions(requestSuspensionSweepDeps(c)),
@@ -483,15 +476,8 @@ resumeRoutes.post("/:id/suspensions/:suspensionId/resume", async (c) => {
 // ── DELETE (abandon) ─────────────────────────────────────────────
 
 resumeRoutes.delete("/:id/suspensions/:suspensionId", async (c) => {
-  const decodedUserSettings = decodePluginUserSettingsHeader(
-    c.req.header("X-Plugin-User-Settings"),
-  );
-  if (!decodedUserSettings.ok) {
-    return c.json(
-      errorBody(decodedUserSettings.error, { code: decodedUserSettings.code }),
-      decodedUserSettings.status,
-    );
-  }
+  const decodedUserSettings = readPluginUserSettings(c);
+  if (!decodedUserSettings.ok) return decodedUserSettings.response;
   const guard = await resolveSessionParam(c);
   if (!guard.ok) return guard.response;
 

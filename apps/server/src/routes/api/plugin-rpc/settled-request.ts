@@ -51,10 +51,12 @@ export async function provideRequestJobCredentials(
   const session = await c.get("store").getSession(sessionId);
   if (!session || checkSessionOwner(c, session)) return 0;
   const incarnation = sessionIncarnationIdentity(session);
-  const queued = await listRuntimeJobs(c.get("store"), { sessionId });
+  const queued = await listRuntimeJobs(c.get("store"), {
+    sessionId,
+    statuses: ["queued"],
+  });
   let provided = 0;
   for (const job of queued) {
-    if (job.status !== "queued") continue;
     if (runtimeJobIncarnation(job.payload) !== incarnation) continue;
     c.get("runtimeJobCredentials")?.register(
       {

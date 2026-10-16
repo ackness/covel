@@ -76,7 +76,7 @@ describe("hosted global operator guard", () => {
     ["DELETE", "/api/worlds/existing", undefined],
     ["POST", "/api/worlds/existing/dimensions/import", { dimensions: {} }],
     ["POST", "/api/worlds/existing/restore-package", {}],
-    ["POST", "/api/ai/generate-world", { prompt: "world" }],
+    ["POST", "/api/ai/generate-world", { concept: "world" }],
     ["POST", "/api/model-db/refresh", undefined],
   ])(
     "rejects anonymous %s %s before route work",

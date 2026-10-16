@@ -273,7 +273,7 @@ test.describe("AI World Generation", () => {
     expect(metadata?.dimensions).toBeTruthy();
     expect(Array.isArray(metadata?.embeddedCharacters)).toBe(true);
     expect(
-      (metadata?.embeddedCharacters as unknown[]).length,
+      (metadata!.embeddedCharacters as unknown[]).length,
     ).toBeGreaterThanOrEqual(3);
     expect(Array.isArray(metadata?.embeddedLorebook)).toBe(true);
 

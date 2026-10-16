@@ -1,3 +1,7 @@
+import {
+  approvalVerdictResponse,
+  hasServerCodeGrant,
+} from "../approval-verdict.js";
 import type { Context } from "hono";
 import { COMMUNITY_SERVER_CODE_ACTION } from "@covel/approval";
 import { snapshotUserSettings } from "@covel/runtime";
@@ -7,12 +11,8 @@ import type { SessionRecord } from "@covel/store";
 import { errorBody } from "../../../api-error.js";
 import { loadSessionPluginUserSettings } from "../plugin-user-settings.js";
 import { sessionApprovalScope } from "../session/session-guard.js";
-import { RuntimeJobQueueFullError } from "./jobs.js";
 import { enqueueEventFollowers } from "./runtime-job-enqueue.js";
-import {
-  SessionApprovalScopeChangedError,
-  SessionNotActiveError,
-} from "./runtime-turn.js";
+import { requireLiveScope, runtimeQueueErrorResponse } from "./runtime-turn.js";
 import {
   announceQueuedRuntimeJobs,
   withSettledSessionLock,
@@ -107,12 +107,7 @@ export async function dispatchPluginEvent(
   const approvalScope = sessionApprovalScope(session, body.pluginId);
   const needsServerCodeGrant =
     trustInfo.source === "community" &&
-    !gate.hasGrant(
-      sessionId,
-      body.pluginId,
-      COMMUNITY_SERVER_CODE_ACTION,
-      approvalScope,
-    );
+    !hasServerCodeGrant(gate, session, body.pluginId);
   const verdict = gate.evaluate({
     sessionId,
     sessionScope: approvalScope,
@@ -126,25 +121,12 @@ export async function dispatchPluginEvent(
       ? `Load server-side code for community plugin ${body.pluginId}`
       : `Emit event ${body.topic}`,
   });
-  if (verdict.status === "pending") {
-    return c.json(
-      {
-        status: "approval-required",
-        approvalId: verdict.approvalId,
-        pending: verdict.pending,
-      },
-      202,
-    );
-  }
-  if (verdict.status === "rejected") {
-    return c.json(
-      errorBody(
-        `approval queue is full (limit ${verdict.limit}); try again after resolving pending approvals`,
-        { code: "queue_full" },
-      ),
-      429,
-    );
-  }
+  const verdictResponse = approvalVerdictResponse(c, verdict, {
+    message: (limit) =>
+      `approval queue is full (limit ${limit}); try again after resolving pending approvals`,
+    code: "queue_full",
+  });
+  if (verdictResponse) return verdictResponse;
 
   const subscribers = activeRuntimes.filter(
     (runtime) =>
@@ -159,11 +141,10 @@ export async function dispatchPluginEvent(
     const operatorDenied = requireAccess(c, "plugin.community");
     if (operatorDenied) return operatorDenied;
     const scope = sessionApprovalScope(session, runtime.pluginId);
-    const needsServerCode = !gate.hasGrant(
-      sessionId,
+    const needsServerCode = !hasServerCodeGrant(
+      gate,
+      session,
       runtime.pluginId,
-      COMMUNITY_SERVER_CODE_ACTION,
-      scope,
     );
     const subscriberVerdict = gate.evaluate({
       sessionId,
@@ -178,25 +159,16 @@ export async function dispatchPluginEvent(
         ? `Load server-side code for community plugin ${runtime.pluginId}`
         : runtime.description,
     });
-    if (subscriberVerdict.status === "pending") {
-      return c.json(
-        {
-          status: "approval-required",
-          approvalId: subscriberVerdict.approvalId,
-          pending: subscriberVerdict.pending,
-        },
-        202,
-      );
-    }
-    if (subscriberVerdict.status === "rejected") {
-      return c.json(
-        errorBody(
-          `approval queue is full (limit ${subscriberVerdict.limit}); try again after resolving pending approvals`,
-          { code: "queue_full" },
-        ),
-        429,
-      );
-    }
+    const subscriberVerdictResponse = approvalVerdictResponse(
+      c,
+      subscriberVerdict,
+      {
+        message: (limit) =>
+          `approval queue is full (limit ${limit}); try again after resolving pending approvals`,
+        code: "queue_full",
+      },
+    );
+    if (subscriberVerdictResponse) return subscriberVerdictResponse;
   }
   // The emission has no turn of its own; this id is what its jobs name as
   // their origin.
@@ -219,12 +191,12 @@ export async function dispatchPluginEvent(
   let queued;
   try {
     queued = await sessionLock.withLock(sessionId, async () => {
-      const live = await store.getSession(sessionId);
-      if (!live) throw new SessionNotActiveError("deleted");
-      if (live.status !== "active")
-        throw new SessionNotActiveError(live.status);
-      if (sessionApprovalScope(live, body.pluginId) !== approvalScope)
-        throw new SessionApprovalScopeChangedError();
+      const live = await requireLiveScope(
+        store,
+        sessionId,
+        body.pluginId,
+        approvalScope,
+      );
       return store.withTransaction((tx) =>
         enqueueEventFollowers(tx, {
           sessionId,
@@ -243,22 +215,7 @@ export async function dispatchPluginEvent(
       );
     });
   } catch (err) {
-    if (err instanceof SessionNotActiveError)
-      return c.json(
-        errorBody(err.message, { code: "session_not_active" }),
-        409,
-      );
-    if (err instanceof SessionApprovalScopeChangedError)
-      return c.json(
-        errorBody(err.message, { code: "approval_scope_changed" }),
-        409,
-      );
-    if (err instanceof RuntimeJobQueueFullError)
-      return c.json(
-        errorBody(err.message, { code: "background_queue_full" }),
-        429,
-      );
-    throw err;
+    return runtimeQueueErrorResponse(c, err);
   }
   announceQueuedRuntimeJobs(c, queued);
   return c.json({
