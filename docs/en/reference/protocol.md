@@ -668,7 +668,7 @@ Each connection on `/api/actions` and `/api/events/stream` has a bounded queue t
 `createEventBus(store?, options?)` needs only an optional `EventStore`. It has two async methods: `saveEvent(record)`, and `getEventById(sessionId, id)`, which is isolated per session.
 
 - The record type `EventStoreRecord` is exported with the package. An existing DataStore can be passed in directly. A standalone host does not have to implement other database methods.
-- Persistence is a bounded, best-effort audit queue. `flush()` waits for the queue to drain, but it does not guarantee that the transport has delivered.
+- Only ordinary events too large for an inline transport frame enter the bounded persistence queue, so other processes can fetch them by reference. Local events and inline frames do not write to `events`. SSE replay still reads the memory buffer. `flush()` waits for the queue to drain, but it does not guarantee that the transport has delivered.
 - For a very large transport frame, after a successful save, only a reference is sent. The receiver reads the content from the same store.
 
 Transport frames between processes require a nonempty `stream` identifying the sender generation. Frames without it are rejected; upgrade and restart all publishers together. Trace event payloads are read as flat objects: a nested `data` field is ordinary data and is never merged into the envelope. Old nested traces must be regenerated for the current debug view.
@@ -1291,7 +1291,7 @@ Privacy boundary:
 
 **`flush()` and `close()`**
 
-- `EventBus.flush()` waits for the bounded audit persistence queue to drain. It does not wait for cross-process delivery, and it does not block new events.
+- `EventBus.flush()` waits for the bounded oversized-event persistence queue to drain. It does not wait for cross-process delivery, and it does not block new events.
 - `EventBus.close()` can be called more than once. It does these things in order: stops local emitting and remote receiving; unsubscribes where supported; clears the timers that wait for gaps; waits for unfinished persistence, ordered publishing, and reads of received references to finish; and finally closes the transport it owns.
 - After close, calls to `emit()` are ignored.
 - A transport can return an unsubscribe function from `subscribe()`, and implement `close()` when it holds resources. The PostgreSQL implementation uses this lifecycle to release its LISTEN/NOTIFY client.

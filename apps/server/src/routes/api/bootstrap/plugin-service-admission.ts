@@ -30,7 +30,11 @@ export function createPluginServiceAdmission(args: {
     return admit(live, pluginId);
   }
 
-  async function admit(live: SessionRecord, pluginId: string): Promise<string> {
+  async function admit(
+    live: SessionRecord,
+    pluginId: string,
+    active: readonly string[] = activeIds(live),
+  ): Promise<string> {
     const sessionId = live.id;
     const captured = executions.getStore();
     if (
@@ -42,7 +46,7 @@ export function createPluginServiceAdmission(args: {
           sessionApprovalScope(live, pluginId))
     )
       throw new Error("Plugin service execution authority was revoked");
-    if (!activeIds(live).includes(pluginId))
+    if (!active.includes(pluginId))
       throw new Error(`Plugin is not active: ${pluginId}`);
     await args.ensurePluginEntry(pluginId, sessionId);
     return sessionIncarnationIdentity(live);
@@ -68,11 +72,12 @@ export function createPluginServiceAdmission(args: {
         const session = await args.store.getSession(sessionId);
         if (!session) return [];
         const admitted: string[] = [];
-        for (const pluginId of activeIds(session)) {
+        const active = activeIds(session);
+        for (const pluginId of active) {
           if (args.isEntryRetryDeferred?.(pluginId)) continue;
           try {
             // One live read authorizes the whole list.
-            await admit(session, pluginId);
+            await admit(session, pluginId, active);
             admitted.push(pluginId);
           } catch {
             // Revoked, unapproved and failed entries are not discoverable.

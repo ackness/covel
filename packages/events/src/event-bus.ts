@@ -1,6 +1,6 @@
 /**
  * Event bus — fan-out to onEmit subscribers with per-session replay buffer.
- * Optionally persists events through an EventStore for audit trail.
+ * Persists oversized transport payloads through an EventStore for remote reads.
  *
  * Ring buffer design (RING_BUFFER_MAX = 1000 per session):
  * Enables SSE reconnection recovery — when a client disconnects and reconnects,
@@ -21,9 +21,9 @@
  * - Per-session state (seq counter + ring buffer) is LRU-tracked with a global
  *   cap (MAX_TRACKED_SESSIONS) and an idle TTL (SESSION_IDLE_TTL_MS); pinned
  *   sessions are exempt (their count is bounded by the SSE connection caps).
- * - Audit-trail persistence runs through a bounded queue with a small
+ * - Oversized-payload persistence runs through a bounded queue with a small
  *   concurrency cap; on overflow the oldest queued save is dropped with a
- *   rate-limited warning (the audit trail is best-effort — authoritative
+ *   rate-limited warning (cross-pod delivery is best-effort — authoritative
  *   state is durably committed via the commit pipeline).
  *
  * Cross-pod fan-out:
@@ -41,6 +41,7 @@
  * cross-pod — receivers skip it after RECEIVE_GAP_FLUSH_MS instead of stalling.
  */
 
+import { Buffer } from "node:buffer";
 import type { CovelMessage, SubscriptionEvent } from "@covel/shared";
 import type { EventStore, EventStoreRecord } from "./event-store.js";
 import { RingBuffer } from "./ring-buffer.js";
@@ -116,11 +117,11 @@ export interface EventBus {
    */
   invalidateReplay?(sessionId: string, reason: EventBusReset["reason"]): void;
   /**
-   * Await idle audit-event persistence, including queued saves and events
+   * Await idle oversized-event persistence, including queued saves and events
    * emitted while the bus is still draining. `emit()` is intentionally
-   * non-blocking (audit trail is best-effort; authoritative state is durably
+   * non-blocking (cross-pod delivery is best-effort; authoritative state is durably
    * committed via the commit pipeline). Call `flush()` at a durability barrier
-   * — graceful shutdown, test teardown, or before asserting audit rows — to
+   * — graceful shutdown, test teardown, or before asserting persisted rows — to
    * ensure saves have settled. Dropped or failed saves remain best-effort;
    * transport delivery is not awaited. No-op when there is no store. Never
    * rejects (per-event failures are already logged).
@@ -255,7 +256,7 @@ function buildSubscriptionEvent(
     sessionId,
     timestamp,
     ...(sessionIncarnation ? { sessionIncarnation } : {}),
-    // Invalidation is an internal control; keep it inline and independent of a deleted audit row.
+    // Invalidation is an internal control; keep it inline and independent of a deleted event row.
     payload: subType === "session.invalidated" ? {} : cleanPayload,
   };
 }
@@ -464,7 +465,7 @@ export function createEventBus(
 
   function enqueuePersist(item: PersistItem): void {
     if (persistQueue.length >= PERSIST_QUEUE_MAX) {
-      // Drop-oldest: the audit trail is best-effort, and the newest events
+      // Drop-oldest: cross-pod delivery is best-effort, and the newest events
       // are the ones a reconnecting observer most likely needs. Settling the
       // dropped item (false) unblocks any transport outbox waiting on it.
       const dropped = persistQueue.shift()!;
@@ -473,7 +474,7 @@ export function createEventBus(
       const now = Date.now();
       if (now - lastDropWarnMs >= DROP_WARN_INTERVAL_MS) {
         console.warn(
-          `[EventBus] persist queue full (${PERSIST_QUEUE_MAX}); dropped ${droppedSinceWarn} audit event(s) since last warning`,
+          `[EventBus] persist queue full (${PERSIST_QUEUE_MAX}); dropped ${droppedSinceWarn} oversized event(s) since last warning`,
         );
         lastDropWarnMs = now;
         droppedSinceWarn = 0;
@@ -798,9 +799,7 @@ export function createEventBus(
           seq: transportSeq,
           event: subEvent,
         } satisfies TransportFrame);
-        if (
-          new TextEncoder().encode(frame).length <= MAX_TRANSPORT_INLINE_BYTES
-        ) {
+        if (Buffer.byteLength(frame, "utf8") <= MAX_TRANSPORT_INLINE_BYTES) {
           enqueueOutbox(message.sessionId, () =>
             Promise.resolve(transport.publish(frame)),
           );
@@ -843,9 +842,9 @@ export function createEventBus(
         }
       }
 
-      // Persist to store for audit trail (non-blocking, bounded queue).
+      // Only oversized transport references need a stored payload.
       if (
-        store &&
+        persistSettle &&
         message.topic !== "trace" &&
         subEvent.type !== "session.invalidated"
       ) {

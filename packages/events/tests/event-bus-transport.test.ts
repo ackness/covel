@@ -104,7 +104,7 @@ describe("EventBus transport fan-out (audit R-02)", () => {
     const receivedB: SubscriptionEvent[] = [];
     busB.onEmit((event) => receivedB.push(event));
 
-    const bigPayload = { blob: "x".repeat(10_000) }; // > 7500-byte inline cap
+    const bigPayload = { blob: "中文😀".repeat(1_000) }; // < 7500 code units, > 7500 UTF-8 bytes
     busA.emit(
       makeMessage({
         id: "msg-big",
@@ -158,7 +158,7 @@ describe("EventBus transport fan-out (audit R-02)", () => {
       type: "llm.request",
       payload,
     });
-    expect(await store.listEvents("sess-1")).toHaveLength(1);
+    expect(await store.listEvents("sess-1")).toEqual([]);
     expect(b.getEventsAfter("sess-1", 0).events).toHaveLength(1);
     expect(b.getEventsAfter("sess-1", 0).gap).toBe(false);
     await a.close();

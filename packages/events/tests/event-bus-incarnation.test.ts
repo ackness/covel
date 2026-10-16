@@ -72,7 +72,7 @@ describe("F-201 event incarnation transport", () => {
       ]);
       expect(delivered[0]?.payload.secret).toBe("x".repeat(10000));
       expect(delivered[1]?.payload).toEqual({});
-      expect(records.size).toBe(2);
+      expect(records.size).toBe(1);
       expect(b.getEventsAfter("same-id", 0).events).toEqual(delivered);
     } finally {
       await Promise.all([a.close(), b.close()]);
