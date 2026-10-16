@@ -121,7 +121,7 @@ describe("useUiSpecHydrationEffect", () => {
       await Promise.resolve();
     });
     await waitFor(() => {
-      expect(api.fetchUiSpecs).toHaveBeenCalledWith("sess-b");
+      expect(api.fetchUiSpecs).toHaveBeenCalledWith("sess-b", "");
     });
 
     expect(pluginStore.loadPluginDataForSession).not.toHaveBeenCalled();

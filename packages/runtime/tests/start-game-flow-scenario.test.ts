@@ -135,7 +135,7 @@ function makeRuntimeHarness(store: DataStore): {
                     type: "form",
                     interactionId: "form-char-creation",
                     narrativeTemplate: "Player {{name}} enters as {{concept}}.",
-                    fields: [{ id: "name", label: "Name", type: "text" }],
+                    fields: [{ name: "name", label: "Name", type: "text" }],
                   },
                 ],
               },

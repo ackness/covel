@@ -229,15 +229,13 @@ for (const [backend, create] of [
     it("records the settlement event once when it is published", async () => {
       const store = await setup(create);
       const eventBus = createEventBus(store);
+      const published: string[] = [];
+      eventBus.onEmit((event) => published.push(event.type));
       const failures = vi.spyOn(console, "error");
       await finalize(store, undefined, { eventBus });
       await eventBus.flush();
       expect(
-        (await store.listEvents("s")).filter(
-          (event) =>
-            (event.payload as { _subType?: string })._subType ===
-            "dimensions.settlement.changed",
-        ),
+        published.filter((type) => type === "dimensions.settlement.changed"),
       ).toHaveLength(1);
       expect(failures).not.toHaveBeenCalled();
       failures.mockRestore();

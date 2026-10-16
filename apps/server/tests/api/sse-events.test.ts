@@ -2,7 +2,7 @@
  * SSE Events — tests for EventBus-wired SSE subscribe and emit endpoints.
  */
 
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import { Hono } from "hono";
 import { createEventBus, type EventBus } from "@covel/events";
 import { type DataStore } from "@covel/store";
@@ -135,6 +135,7 @@ describe("SSE Events", () => {
     });
 
     it("should pass targetRuntime if provided", async () => {
+      const emit = vi.spyOn(eventBus, "emit");
       await app.request("/api/events/emit", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -146,12 +147,14 @@ describe("SSE Events", () => {
         }),
       });
 
-      // targetRuntime is not part of the SubscriptionEvent surface; assert it
-      // via the persisted audit record instead.
-      await eventBus.flush();
-      const records = await busStore.listEvents("sess-1");
-      const routed = records.find((r) => r.topic === "routed.event");
-      expect(routed?.targetRuntime).toBe("narrator/narrator");
+      // targetRuntime is not part of the SubscriptionEvent surface, and an
+      // ordinary event is no longer stored; assert the emitted message.
+      expect(emit).toHaveBeenCalledWith(
+        expect.objectContaining({
+          topic: "routed.event",
+          targetRuntime: "narrator/narrator",
+        }),
+      );
     });
   });
 
