@@ -114,7 +114,7 @@ Regenerating uses the model of the `fast` role. If no model is available, the or
 
 ### When it is on
 
-Optional. The "Dialogue Mode" gameplay pack includes it. Worlds such as "Emberback Relay" and "Lantern Barrow: First Expedition" list it as recommended or required.
+Optional. The "Dialogue Mode" gameplay pack includes it. Worlds such as "Emberback Relay" and "Lantern Barrow: The First Delve" list it as recommended or required.
 
 ### Works with
 

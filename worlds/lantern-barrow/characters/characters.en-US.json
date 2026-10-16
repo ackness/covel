@@ -61,7 +61,7 @@
         "traits": ["shrewd", "welcoming", "cautious"],
         "goals": [
           "Get the village through the winter",
-          "Bring Keeper Ysolde home"
+          "Bring Lampkeeper Ysolde home"
         ],
         "fears": [
           "The reeve making matters worse",
@@ -75,7 +75,7 @@
     "id": "npc-aldous-penn",
     "name": "Reeve Aldous Penn",
     "aliases": ["the Reeve", "Penn"],
-    "description": "Greyreed's reeve, who posted the bounty in the tavern. He wants the matter settled quickly, but is evasive about the days before the keeper disappeared.",
+    "description": "Greyreed's reeve, who posted the bounty in the tavern. He wants the matter settled quickly, but is evasive about the days before the lampkeeper disappeared.",
     "fields": {
       "calling": "Reeve"
     },
@@ -97,11 +97,11 @@
   },
   {
     "id": "npc-keeper-ysolde",
-    "name": "Keeper Ysolde",
-    "aliases": ["Ysolde", "the Keeper"],
+    "name": "Lampkeeper Ysolde",
+    "aliases": ["Ysolde", "the Lampkeeper", "the Keeper"],
     "description": "In her seventies, Ysolde has tended the barrow lantern for forty years. Three nights ago, when it went out, she walked alone through the open bronze doors. She hasn't come out.",
     "fields": {
-      "calling": "Lantern Keeper"
+      "calling": "Lampkeeper"
     },
     "blueprint": {
       "persona": {

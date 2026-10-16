@@ -4,7 +4,7 @@
       "id": "lantern-barrow-hero",
       "name": "After the Lantern Went Dark",
       "description": "Greyreed and the barrow to the north at dusk. The ancient lantern on the summit has gone out.",
-      "background": "Greyreed has thirty-odd households, with daily life centered on its mill, tavern, and small chapel. For a hundred years, the lantern kept watch from the barrow north of the village. Three days ago it suddenly went out. Its keeper disappeared soon afterward.",
+      "background": "Greyreed has thirty-odd households, with daily life centered on its mill, tavern, and small chapel. For a hundred years, the lantern kept watch from the barrow north of the village. Three days ago it suddenly went out. Its lampkeeper disappeared soon afterward.",
       "storyContext": "This is what the player can learn on arrival. The distance between the hill and the village serves the promotional composition; it must not determine travel distances or map rulings.",
       "location": "Greyreed and the northern barrow",
       "visualNotes": [
@@ -17,7 +17,7 @@
       "id": "greyreed-map",
       "name": "Greyreed and the Barrow",
       "description": "A sketch map of the area known at the start. Distances between landmarks are not exact travel distances.",
-      "background": "The road north of Greyreed leads to the Keeper's Cottage and Lantern Barrow. In the village, the tavern, the Reeve's House, the mill, and Dawn Chapel are the main places to begin investigating and gathering a party. Marshland surrounds them, reeds broken by stretches of black water.",
+      "background": "The road north of Greyreed leads to the Lampkeeper's Cottage and Lantern Barrow. In the village, the tavern, the Reeve's House, the mill, and Dawn Chapel are the main places to begin investigating and gathering a party. Marshland surrounds them, reeds broken by stretches of black water.",
       "storyContext": "This overview shows only known landmarks above ground. The buildings, waterways, and distances are arranged for illustration. It shows no routes inside the tomb, hidden rooms, or secret locations.",
       "location": "The known surface region around Greyreed",
       "visualNotes": [
@@ -30,7 +30,7 @@
       "id": "crooked-stag-tavern",
       "name": "The Crooked Antler",
       "description": "A hearth, hot ale, and a bounty notice. Your first expedition starts here.",
-      "background": "The Crooked Antler serves as both tavern and inn, and is where Greyreed exchanges its news. Mirelle has a long memory and a tight lip. The reeve is offering thirty silver coins for someone to enter the tomb and bring the keeper home.",
+      "background": "The Crooked Antler serves as both tavern and inn, and is where Greyreed exchanges its news. Mirelle has a long memory and a tight lip. The reeve is offering thirty silver coins for someone to enter the tomb and bring the lampkeeper home.",
       "storyContext": "The player opens this door on a rainy late-autumn night. The veteran and the sister are both potential companions to approach. The empty scene leaves space at the bar, in the corner, and by the window for different conversations, without deciding anyone's next move.",
       "location": "Greyreed · The Crooked Antler",
       "visualNotes": [
@@ -56,7 +56,7 @@
       "id": "hall-of-lamps",
       "name": "The Hall of Lamps",
       "description": "Wall lamps line the stone passage into darkness. A few have been relit, showing the way ahead.",
-      "background": "The Hall of Lamps is the first passage beyond the barrow entrance, with lamps along both walls. The keeper says relighting them sends the barrow deeper into sleep. Noise, fighting, and delays make the expedition more dangerous.",
+      "background": "The Hall of Lamps is the first passage beyond the barrow entrance, with lamps along both walls. The lampkeeper says relighting them sends the barrow deeper into sleep. Noise, fighting, and delays make the expedition more dangerous.",
       "storyContext": "This scene imagines a moment during exploration after some wall lamps have been relit. It does not mean they are already burning in a new session, or that the lantern on the summit has been restored.",
       "location": "Lantern Barrow · Hall of Lamps",
       "visualNotes": [
@@ -89,13 +89,13 @@
     {
       "id": "aldous-penn",
       "name": "Reeve Aldous Penn",
-      "description": "Greyreed's reeve, who posted the bounty in the tavern. He wants the matter settled quickly, but is evasive about the days before the keeper disappeared.",
+      "description": "Greyreed's reeve, who posted the bounty in the tavern. He wants the matter settled quickly, but is evasive about the days before the lampkeeper disappeared.",
       "background": "Respectable and anxious. Habitually hides his own mistakes behind rules and procedure.",
       "storyContext": "A portrait for character introductions and dialogue. It does not establish that the player has found this person, and it leaves later actions and outcomes open."
     },
     {
       "id": "keeper-ysolde",
-      "name": "Keeper Ysolde",
+      "name": "Lampkeeper Ysolde",
       "description": "In her seventies, Ysolde has tended the barrow lantern for forty years. Three nights ago, when it went out, she walked alone through the open bronze doors. She hasn't come out.",
       "background": "A stubborn, clear-headed old woman who knows the truth about the barrow. She would rather shoulder the burden herself than frighten the villagers.",
       "storyContext": "A portrait for character introductions and dialogue. It does not establish that the player has found this person, and it leaves later actions and outcomes open."

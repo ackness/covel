@@ -21,16 +21,16 @@
   title: The Barrow King
   payload:
     The choir stops dead. Deep in the hill, a voice older than the burial chambers
-    speaks the marsh-king's own name. Cold green light rises from the direction of the
+    speaks the Marsh King's own name. Cold green light rises from the direction of the
     throne room. The Barrow King has woken. He does not rush to attack; first, he
     addresses the party in the villagers' voices and offers a bargain. Convey his
     oppressive presence and his terms, and make the danger clear. Leave the player to
     choose whether to fight, flee, or bargain. Call for checks when needed.
 - id: keeper-in-the-choir
-  title: The Keeper in the Choir
+  title: The Lampkeeper in the Choir
   payload:
-    "A familiar old voice has joined the singing: Keeper Ysolde. She isn't joining
-    the choir. Over and over, she hums the tune keepers use on their rounds of the hill,
+    "A familiar old voice has joined the singing: Lampkeeper Ysolde. She isn't joining
+    the choir. Over and over, she hums the tune lampkeepers use on their rounds of the hill,
     pressing down on the choir's melody as though holding something back. If the party is
     near the barrow or inside it, they can recognize her voice coming from deeper within.
     Convey the urgency of this clue. Do not reveal what she is doing or how much longer

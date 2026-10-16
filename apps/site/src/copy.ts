@@ -267,7 +267,7 @@ const en = {
       },
       {
         id: "lantern-barrow",
-        name: "Lantern Barrow: First Expedition",
+        name: "Lantern Barrow: The First Delve",
         genre: "Fantasy · Tabletop",
         summary:
           "After a century, the lantern has gone out and the bronze doors stand open. Form a party, spend your points, and roll your way down.",

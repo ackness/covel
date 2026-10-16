@@ -1,14 +1,14 @@
 - id: find-the-keeper
-  name: Find the Keeper
+  name: Find the Lampkeeper
   description:
-    Keeper Ysolde entered the barrow the night the lantern went out. Three days
+    Lampkeeper Ysolde entered the barrow the night the lantern went out. Three days
     later, she still hasn't returned. The reeve is offering a bounty to bring her back
     alive.
   giver: Reeve Aldous Penn
   reward: Thirty silver coins and the village's gratitude
   objectives:
     - id: keepers-cottage
-      text: Visit the keeper's cottage and see what she left behind
+      text: Visit the Lampkeeper's Cottage and see what she left behind
     - id: enter-the-barrow
       text: Go through the open bronze tomb doors
     - id: find-ysolde

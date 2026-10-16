@@ -1,10 +1,10 @@
-# Lantern Barrow: First Expedition
+# Lantern Barrow: The First Delve
 
-Greyreed stands on the edge of Greyreed Marsh: thirty-odd households, a mill, a tavern, and a small chapel. North of the village stands a small hill, Lantern Barrow. For a hundred years, the ancient lantern on its summit has burned every night, passed from one keeper to the next. Every child in the village knows two rules: stay off the hill after dark, and if the lantern goes out, tell a grown-up at once.
+Greyreed stands on the edge of Greyreed Marsh: thirty-odd households, a mill, a tavern, and a small chapel. North of the village stands a small hill, Lantern Barrow. For a hundred years, the ancient lantern on its summit has burned every night, passed from one lampkeeper to the next. Every child in the village knows two rules: stay off the hill after dark, and if the lantern goes out, tell a grown-up at once.
 
 Three days ago, the lantern went out.
 
-That night, Keeper Ysolde took an oil lamp through the open bronze tomb doors halfway up the hill. She hasn't come out since. The next day, sheep began to disappear outside the village, and the marsh fog grew colder. The miller's daughter says she hears singing underground at night — singing her dead grandfather's name. Reeve Aldous Penn has posted a bounty at the Crooked Antler: thirty silver coins to go into the tomb and bring the keeper home.
+That night, Lampkeeper Ysolde took an oil lamp through the open bronze tomb doors halfway up the hill. She hasn't come out since. The next day, sheep began to disappear outside the village, and the marsh fog grew colder. The miller's daughter says she hears singing underground at night — singing her dead grandfather's name. Reeve Aldous Penn has posted a bounty at the Crooked Antler: thirty silver coins to go into the tomb and bring the lampkeeper home.
 
 This is a classic tabletop adventure: take a job at the tavern, form a party, spend your starting points, and roll your way down into the tomb. You are an adventurer newly arrived in Greyreed.
 
@@ -12,7 +12,7 @@ This is a classic tabletop adventure: take a job at the tavern, form a party, sp
 
 - **The Crooked Antler**: the village's only tavern and inn. Its owner, Mirelle Voss, has a long memory and a tight lip. Every rumor in the village reaches her bar first. A night's food and lodging costs two silver coins.
 - **The Reeve's House**: two stories of stone, with the lord's crest over the door. The reeve is desperate to get this settled before the lord's letter arrives.
-- **The Keeper's Cottage**: a stone cottage at the foot of the barrow, Ysolde's home for forty years. Inside are lamp oil and dozens of old logbooks. The door is never locked. The latest logbook ends abruptly, three days before the lantern went out.
+- **The Lampkeeper's Cottage**: a stone cottage at the foot of the barrow, Ysolde's home for forty years. Inside are lamp oil and dozens of old logbooks. The door is never locked. The latest logbook ends abruptly, three days before the lantern went out.
 - **The Mill**: the miller's daughter was the first to hear the singing.
 - **The Dawn Chapel**: a small chapel devoted to the light. It stood empty for a long time, until Sister Wren moved in yesterday.
 
@@ -21,8 +21,8 @@ This is a classic tabletop adventure: take a job at the tavern, form a party, sp
 - **Brannoc Hale**: a fifty-year-old retired soldier who has spent three days brooding over his drink in the tavern corner. He says he's just passing through, but keeps staring toward the barrow. Twenty years ago, he entered this tomb with a small band. He was the only one to come out.
 - **Sister Wren**: a nineteen-year-old acolyte of the Order of the Dawn Lantern, sent to inspect the lantern. She arrived three days late. She can heal wounds and read the ancient lantern inscriptions, and hides a question about her faith.
 - **Mirelle Voss**: owner of the Crooked Antler. Shrewd and warm, she hands you the truth only once she's sure you're worth it.
-- **Reeve Aldous Penn**: Greyreed's reeve. Respectable and anxious, he is evasive about the days before the keeper disappeared.
-- **Keeper Ysolde**: in her seventies, she has tended the lantern for forty years. She entered the tomb alone the night it went out.
+- **Reeve Aldous Penn**: Greyreed's reeve. Respectable and anxious, he is evasive about the days before the lampkeeper disappeared.
+- **Lampkeeper Ysolde**: in her seventies, she has tended the lantern for forty years. She entered the tomb alone the night it went out.
 - **Corvin Ashe**: a young scholar who arrived from the capital a month ago and went around asking about the lantern. He checked out the day before it went out. No one saw him leave the village.
 
 Brannoc and Wren can join your party. Both have opinions, secrets, and minds of their own. They act independently when danger strikes, and remember how you treat them.
@@ -32,7 +32,7 @@ Brannoc and Wren can join your party. Both have opinions, secrets, and minds of 
 The tomb is bigger inside than the hill that holds it. All you know is the way in:
 
 - **The Bronze Doors**: they have stood open since the night the lantern went out. Their seal was pushed open from within.
-- **The Hall of Lamps**: the keeper once said that wall lamps line both sides of the first passage. Relight them, and the barrow sleeps more deeply.
+- **The Hall of Lamps**: the lampkeeper once said that wall lamps line both sides of the first passage. Relight them, and the barrow sleeps more deeply.
 
 An ossuary, flooded burial chambers, a gallery where the dead sing, a throne at the heart of the hill: what lies deeper is for your party to discover. The Delve Map on the right records each room.
 
