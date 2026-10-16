@@ -481,8 +481,6 @@ export function createMiscApiRoutes(
           },
           gatewayOptions,
         );
-        clearTimeout(timeout);
-        cleanupTransient();
         return c.json({
           ok: true,
           latencyMs: Date.now() - startedAt,
@@ -499,8 +497,6 @@ export function createMiscApiRoutes(
           { presetId: requestedSlot ?? preset.id, values: ["hi"] },
           gatewayOptions,
         );
-        clearTimeout(timeout);
-        cleanupTransient();
         return c.json({
           ok: true,
           latencyMs: Date.now() - startedAt,
@@ -535,8 +531,6 @@ export function createMiscApiRoutes(
     } catch (err) {
       if (!aborted) {
         const failure = classifyProviderFailure(err, preset.provider);
-        clearTimeout(timeout);
-        cleanupTransient();
         return c.json({
           ok: false,
           latencyMs: Date.now() - startedAt,
@@ -547,10 +541,10 @@ export function createMiscApiRoutes(
         });
       }
       // Deliberate abort — either a post-TTFB early-stop or our 30s timeout.
+    } finally {
+      clearTimeout(timeout);
+      cleanupTransient();
     }
-
-    clearTimeout(timeout);
-    cleanupTransient();
     const latencyMs = Date.now() - startedAt;
     if (ttfbMs === null) {
       return c.json({

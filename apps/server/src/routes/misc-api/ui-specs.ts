@@ -98,7 +98,9 @@ async function loadValidatedSpecs(
   const cached = specCache.get(registry);
   if (cached) return cached;
   if (!subscribedRegistries.has(registry)) {
-    registry.onChange(() => specCache.delete(registry));
+    registry.onChange((event) => {
+      if (event.type === "plugin-registered") specCache.delete(registry);
+    });
     subscribedRegistries.add(registry);
   }
   const value = projectRegistryUiSpecs(registry);

@@ -92,10 +92,32 @@ export function wrapStoreWithPluginDataEvents(
   baseStore: DataStore,
   eventBus: EventBus,
 ): DataStore {
-  const capture = async (sessionId: string): Promise<EventBus | undefined> => {
+  return wrapStore(baseStore, eventBus);
+}
+
+function wrapStore(
+  baseStore: DataStore,
+  eventBus: EventBus,
+  transaction = false,
+): DataStore {
+  const audiences = transaction
+    ? new Map<string, Promise<EventBus | undefined>>()
+    : undefined;
+  const readAudience = async (
+    sessionId: string,
+  ): Promise<EventBus | undefined> => {
     const session = await baseStore.getSession(sessionId);
     if (!session) return undefined;
     return sessionEventBus(eventBus, session);
+  };
+  const capture = (sessionId: string): Promise<EventBus | undefined> => {
+    if (!audiences) return readAudience(sessionId);
+    let pending = audiences.get(sessionId);
+    if (!pending) {
+      pending = readAudience(sessionId);
+      audiences.set(sessionId, pending);
+    }
+    return pending;
   };
   return new Proxy(baseStore, {
     get(target, prop, receiver) {
@@ -267,9 +289,10 @@ export function wrapStoreWithPluginDataEvents(
           };
           const result = await target.withTransaction((tx) =>
             fn(
-              wrapStoreWithPluginDataEvents(
+              wrapStore(
                 tx as unknown as DataStore,
                 bufferingBus,
+                true,
               ) as unknown as StoreTransaction,
             ),
           );
@@ -301,9 +324,10 @@ export function wrapStoreWithPluginDataEvents(
             Promise<T>
           >(target as unknown as StoreTransaction, (sp) =>
             fn(
-              wrapStoreWithPluginDataEvents(
+              wrapStore(
                 sp as unknown as DataStore,
                 bufferingBus,
+                true,
               ) as unknown as StoreTransaction,
             ),
           );

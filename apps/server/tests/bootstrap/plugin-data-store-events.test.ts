@@ -70,6 +70,56 @@ describe("wrapStoreWithPluginDataEvents", () => {
     );
   });
 
+  it.each([false, true])(
+    "captures each audience once per scope without caching direct writes (savepoint=%s)",
+    async (savepoint) => {
+      const emit = vi.fn();
+      const getSession = vi.fn(async (id: string) => ({
+        id,
+        metadata: { sessionIncarnationNonce: id },
+      }));
+      interface Tx {
+        getSession: typeof getSession;
+        setPluginData(record: PluginDataRecord): Promise<void>;
+        savepoint(fn: (view: Tx) => Promise<void>): Promise<void>;
+      }
+      const tx: Tx = {
+        getSession,
+        setPluginData: async (_record: PluginDataRecord) => {},
+        savepoint: async (
+          fn: (view: typeof tx) => Promise<void>,
+        ): Promise<void> => fn(tx),
+      };
+      const base = {
+        ...tx,
+        withTransaction: async (fn: (view: typeof tx) => Promise<void>) =>
+          fn(tx),
+      } as unknown as DataStore;
+      const store = wrapStoreWithPluginDataEvents(base, {
+        emit,
+      } as unknown as EventBus);
+      for (let scope = 0; scope < 2; scope++) {
+        await store.withTransaction(async (view) => {
+          const write = async (target: typeof view) => {
+            await Promise.all(
+              ["a", "a", "b"].map((sessionId) =>
+                target.setPluginData({ ...makeRecord(), sessionId }),
+              ),
+            );
+            expect(emit).toHaveBeenCalledTimes(scope * 3);
+          };
+          if (savepoint) await view.savepoint!(write);
+          else await write(view);
+        });
+        expect(getSession).toHaveBeenCalledTimes((scope + 1) * 2);
+      }
+      await store.setPluginData(makeRecord());
+      await store.setPluginData(makeRecord());
+      expect(getSession).toHaveBeenCalledTimes(6);
+      expect(emit).toHaveBeenCalledTimes(8);
+    },
+  );
+
   it("announces compare-and-set writes that landed", async () => {
     const emit = vi.fn();
     let swap = true;

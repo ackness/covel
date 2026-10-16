@@ -31,6 +31,7 @@ import {
   preflightWorldDataForSession,
   syncWorldDataForSession,
 } from "../../src/world-data/session-import.js";
+import { buildImportPlan } from "../../src/world-data/session-import/planning.js";
 import { BUILTIN_PLUGIN_PACKS } from "../../src/config/plugin-packs.js";
 import { resolveSessionPluginPlan } from "../../src/routes/api/session/plugins.js";
 import { sessionRoutes } from "../../src/routes/api/session.js";
@@ -842,6 +843,37 @@ describe("world data session importer", () => {
     );
     // The same file reached through a link leaving the root is not.
     expect(await contentFor({}, overlay)).toBe("safe");
+  });
+
+  it("reports invalid indexTo even when the direct receiver is missing", async () => {
+    const plan = await buildImportPlan({
+      sessionId: "sess-1",
+      worldId: "demo-world",
+      now: NOW,
+      deps: { registry: registry({}), activePlugins: [] },
+      sources: [
+        {
+          id: "unreceived",
+          descriptor: {
+            kind: "json",
+            path: "data/facts.json",
+            to: "contract:missing.facts@1",
+            indexTo: "not-a-contract",
+          },
+          order: 0,
+          resolvedOrder: 0,
+          origin: "world",
+          overridden: false,
+          pathOrigin: { descriptorRoot: ".", origin: "world" },
+        },
+      ],
+    });
+    expect(plan.writes).toEqual([]);
+    expect(plan.diagnostics).toContainEqual({
+      level: "error",
+      sourceId: "unreceived",
+      message: "invalid indexTo URI: not-a-contract",
+    });
   });
 
   it.each(["preflight", "import", "sync"])(

@@ -15,7 +15,7 @@ import { worldOperationLockId } from "../../world-lifecycle.js";
 import { readdir, stat } from "node:fs/promises";
 import { isDeepStrictEqual } from "node:util";
 import path from "node:path";
-import { Hono } from "hono";
+import { Hono, type Context, type MiddlewareHandler } from "hono";
 import { streamOwnedSSE } from "../../application-work.js";
 import {
   createWorld,
@@ -51,6 +51,11 @@ import {
   worldSectionsOf,
 } from "../../world-data/world-sections.js";
 import { parseIdleTimeoutMs } from "../../world-data/authoring-timeout.js";
+import {
+  requestAbortSignal,
+  prefixedConsoleLogger,
+  sameFileIdentity,
+} from "../../world-data/authoring-helpers.js";
 import { orderedSend } from "../../lib/ordered-send.js";
 import { requireAccess } from "../../host-profile.js";
 
@@ -155,6 +160,43 @@ function partProgress(send: (event: GenerateEvent) => Promise<void>) {
     drained: () => events.settled().catch(() => undefined),
   };
 }
+
+function streamWorldAuthoring(
+  c: Context<Env>,
+  label: string,
+  run: (options: {
+    send: (event: GenerateEvent) => Promise<void>;
+    progress: ReturnType<typeof partProgress>;
+    usage: ReturnType<typeof authoringUsage>;
+    signal: AbortSignal;
+  }) => Promise<void>,
+) {
+  const signal = requestAbortSignal(c);
+  return streamOwnedSSE(c, async (stream) => {
+    const send = async (event: GenerateEvent) => {
+      await stream.writeSSE({ data: JSON.stringify(event) });
+    };
+    const progress = partProgress(send);
+    const usage = authoringUsage();
+    try {
+      signal.throwIfAborted();
+      await send({ type: "progress", phase: "generating" });
+      await run({ send, progress, usage, signal });
+    } catch (err) {
+      if (signal.aborted) throw err;
+      logAuthoringError(label, err);
+      await progress.drained();
+      await send({ type: "error", message: authoringErrorMessage(err) });
+    }
+  });
+}
+
+const requireWorldGeneration: MiddlewareHandler<Env> = async (c, next) => {
+  const denied = requireAccess(c, "world.generate");
+  if (denied) return denied;
+  await next();
+};
+
 type SaveTarget = "server-file" | "server-store" | "return-only";
 
 function resolveSaveTarget(value: unknown): SaveTarget | null {
@@ -309,11 +351,6 @@ function withGeneratedPackageMetadata(
         ? { contractData: packageContent.contractData }
         : {}),
       ...(embeddedLorebook.length > 0 ? { embeddedLorebook } : {}),
-      generatedPackageSummary: {
-        characters: packageContent.characters.length,
-        lorebook: packageContent.lorebook.length,
-        rules: packageContent.rules.length,
-      },
       // The generator made this world, so the app may rewrite it. A package
       // on disk carries the same fact as its marker file.
       generated: true,
@@ -324,11 +361,7 @@ function withGeneratedPackageMetadata(
 // POST /ai/generate-world
 aiRoutes.post(
   "/generate-world",
-  async (c, next) => {
-    const denied = requireAccess(c, "world.generate");
-    if (denied) return denied;
-    await next();
-  },
+  requireWorldGeneration,
   rateLimiter({ max: 10 }),
   worldAuthoringFlight,
   async (c) => {
@@ -338,7 +371,7 @@ aiRoutes.post(
     if (parsed instanceof Response) return parsed;
     const body = parsed.body;
 
-    const concept = body.concept ?? body.prompt;
+    const concept = body.concept;
     if (typeof concept !== "string" || !concept.trim()) {
       return c.json(errorBody("concept (string) is required"), 400);
     }
@@ -379,18 +412,10 @@ aiRoutes.post(
     const env = readRuntimeEnv();
     const worldsDir = resolveUserResourceDirs(env).worlds;
 
-    const shutdownSignal = c.get("requestWork")?.signal;
-    return streamOwnedSSE(c, async (stream) => {
-      const send = async (event: GenerateEvent) => {
-        await stream.writeSSE({ data: JSON.stringify(event) });
-      };
-
-      const progress = partProgress(send);
-      const usage = authoringUsage();
-      try {
-        shutdownSignal?.throwIfAborted();
-        await send({ type: "progress", phase: "generating" });
-
+    return streamWorldAuthoring(
+      c,
+      "generate-world",
+      async ({ send, progress, usage, signal }) => {
         const createOpts = {
           llm,
           existingWorldIds: [
@@ -408,19 +433,11 @@ aiRoutes.post(
           brief: brief.value,
           dataContracts,
           packs: BUILTIN_PLUGIN_PACKS,
-          signal: shutdownSignal
-            ? AbortSignal.any([c.req.raw.signal, shutdownSignal])
-            : c.req.raw.signal,
+          signal,
           idleTimeoutMs: idleTimeout.value,
           onProgress: progress.report,
           onUsage: usage.add,
-          logger: {
-            info: (...args: unknown[]) => console.log("[createWorld]", ...args),
-            warn: (...args: unknown[]) =>
-              console.warn("[createWorld]", ...args),
-            error: (...args: unknown[]) =>
-              console.error("[createWorld]", ...args),
-          },
+          logger: prefixedConsoleLogger("createWorld"),
         };
 
         const startMs = Date.now();
@@ -528,16 +545,8 @@ aiRoutes.post(
             : {}),
           ...usage.field(),
         });
-      } catch (err) {
-        if (c.req.raw.signal.aborted || shutdownSignal?.aborted) throw err;
-        logAuthoringError("generate-world", err);
-        await progress.drained();
-        await send({
-          type: "error",
-          message: authoringErrorMessage(err),
-        });
-      }
-    });
+      },
+    );
   },
 );
 
@@ -585,11 +594,7 @@ function browserWorld(value: unknown, worldId: string): WorldRecord | null {
 // POST /ai/revise-world
 aiRoutes.post(
   "/revise-world",
-  async (c, next) => {
-    const denied = requireAccess(c, "world.generate");
-    if (denied) return denied;
-    await next();
-  },
+  requireWorldGeneration,
   rateLimiter({ max: 10 }),
   worldAuthoringFlight,
   async (c) => {
@@ -698,20 +703,10 @@ aiRoutes.post(
       c.get("pluginRegistry"),
       (message) => contractWarnings.push(message),
     );
-    const shutdownSignal = c.get("requestWork")?.signal;
-
-    return streamOwnedSSE(c, async (stream) => {
-      const send = async (event: GenerateEvent) => {
-        await stream.writeSSE({ data: JSON.stringify(event) });
-      };
-      const progress = partProgress(send);
-      const usage = authoringUsage();
-      try {
-        shutdownSignal?.throwIfAborted();
-        await send({ type: "progress", phase: "generating" });
-        const signal = shutdownSignal
-          ? AbortSignal.any([c.req.raw.signal, shutdownSignal])
-          : c.req.raw.signal;
+    return streamWorldAuthoring(
+      c,
+      "revise-world",
+      async ({ send, progress, usage, signal }) => {
         const ownLocale = normalizeLocale(existing.locale, DEFAULT_LOCALE);
         const generated = await createWorld({
           llm,
@@ -730,13 +725,7 @@ aiRoutes.post(
           idleTimeoutMs: idleTimeout.value,
           onProgress: progress.report,
           onUsage: usage.add,
-          logger: {
-            info: (...args: unknown[]) => console.log("[reviseWorld]", ...args),
-            warn: (...args: unknown[]) =>
-              console.warn("[reviseWorld]", ...args),
-            error: (...args: unknown[]) =>
-              console.error("[reviseWorld]", ...args),
-          },
+          logger: prefixedConsoleLogger("reviseWorld"),
         });
         await progress.settled();
         if (!generated.success) {
@@ -777,12 +766,7 @@ aiRoutes.post(
               const currentPackage = await stat(worldDir).catch(
                 () => undefined,
               );
-              if (
-                !currentPackage ||
-                currentPackage.dev !== packageIdentity.dev ||
-                currentPackage.ino !== packageIdentity.ino ||
-                currentPackage.birthtimeMs !== packageIdentity.birthtimeMs
-              )
+              if (!sameFileIdentity(currentPackage, packageIdentity))
                 throw new WorldAuthoringConflictError(
                   "World package changed during revision; reload it and try again",
                 );
@@ -833,7 +817,7 @@ aiRoutes.post(
         };
 
         await send({ type: "progress", phase: "saving" });
-        shutdownSignal?.throwIfAborted();
+        signal.throwIfAborted();
         const record =
           saveTarget === "return-only"
             ? await save()
@@ -851,12 +835,7 @@ aiRoutes.post(
             : {}),
           ...usage.field(),
         });
-      } catch (err) {
-        if (c.req.raw.signal.aborted || shutdownSignal?.aborted) throw err;
-        logAuthoringError("revise-world", err);
-        await progress.drained();
-        await send({ type: "error", message: authoringErrorMessage(err) });
-      }
-    });
+      },
+    );
   },
 );

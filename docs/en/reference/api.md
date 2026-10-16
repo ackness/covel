@@ -5122,7 +5122,7 @@ The response is SSE. First come progress frames, and the generated world comes l
 
 | Field           | Type   | Required | Description                                                                                                                            |
 | --------------- | ------ | -------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| `concept`       | string | Yes      | A description of the world concept (up to 4000 characters). The synonym key `prompt` is also accepted                                  |
+| `concept`       | string | Yes      | A description of the world concept (up to 4000 characters), supplied as `concept`                                                      |
 | `locale`        | string | No       | The locale. The default is `zh-CN`                                                                                                     |
 | `model`         | string | No       | Model role or preset ID; defaults to `story`, following [model selection](./slots.md#actual-selection-priority)                        |
 | `saveTarget`    | string | No       | Where to save. The default is `server-file`. The allowed values are in the table below                                                 |

@@ -146,7 +146,7 @@ describe("world API mapping", () => {
     expect(
       JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)),
     ).toMatchObject({
-      prompt: "idea",
+      concept: "idea",
       locale: "zh-CN",
       saveTarget: "return-only",
       brief: {
