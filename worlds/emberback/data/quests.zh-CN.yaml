@@ -12,12 +12,12 @@
       text: 追查回声的时间和位置特征
 - id: stop-mile-seventeen
   name: 拦下车队
-  description: 琼恩正护送三十箱医用低温药品，开往未来警告里点名的那个地方。赶在远程通讯彻底断掉之前，联系上她。
+  description: 琼正护送三十箱医用低温药品，开往未来警告里点名的那个地方。赶在远程通讯彻底断掉之前，联系上她。
   giver: 未来的你
-  reward: 车队的平安，以及琼恩的信任
+  reward: 车队的平安，以及琼的信任
   objectives:
     - id: contact-june
-      text: 接通琼恩的爬行器
+      text: 接通琼的爬行器
     - id: change-route
       text: 在车队到十七英里之前说服它改道，或者追上它
 - id: keep-the-relay-alive

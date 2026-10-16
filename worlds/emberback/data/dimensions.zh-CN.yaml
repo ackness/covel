@@ -86,7 +86,7 @@ signalLog:
   updateRule: 叙事中收到、录下或发现一条新的发射或回声时，添加一条记录（ID 用简短的 kebab-case）。来源、信道和时间戳弄清一项填一项；查到出处时把状态设为 traced，有独立的仪器或证人确认时设为 verified，证明是伪造或误读时设为 disproven。技术事实一旦确定，除非叙事明确推翻，否则不要改。永远不要删除记录。
 convoy:
   name: 医疗车队
-  description: 琼恩的爬行器车队和车上的三十箱低温药品——正开往十七英里。
+  description: 琼的爬行器车队和车上的三十箱低温药品——正开往十七英里。
   schema:
     properties:
       position:
@@ -141,7 +141,7 @@ geography:
         landmarks:
           - name: 三桅塔
             description: 余烬背的远程天线阵列。天气晴朗时，中间那根桅杆能联通西部中继链上的每一个定居点。
-          - name: 转辙场
+          - name: 开关场
             description: 公共工坊、充电区、厨房和议事的场地，围着站里最老的那台变压器建起来。
       - name: 向阳路
         description: 一条压得很实的爬行器路线，一路朝着太阳，穿过玻璃滩和玄武岩的阴影。十七英里是全线最没遮挡的一段。
@@ -149,7 +149,7 @@ geography:
         landmarks:
           - name: 十七英里
             description: 一台野外中继器，立在一座天然石拱旁边。未来的警告点了这个地方的名，可它的维护日志里看不出任何异常。
-          - name: 太阳能田
+          - name: 镜田
             description: 给余烬背供电的移动式太阳能集光器。它们每天对光对得怎么样，决定了整个社区能花多少电。
       - name: 向夜阶地
         description: 一片往下倾斜的高原，暗蓝色的岩石、霜草，地下埋着冰管，一路通向永夜。
@@ -194,7 +194,7 @@ factions:
       name: 余烬背中继合作社
       description: 站里的技术员、信号员、医护、种植员和厨师一起维护中继站，也一起决定有限的电怎么花。
       leader: 托马斯·里德，民选值班负责人
-      headquarters: 余烬背山脊，转辙场
+      headquarters: 余烬背山脊，开关场
       relations:
         - description: 中继站让信使躲开风暴；信使让这座孤站有补给可用。
         - description: 合作社离不开天文台的预报，但看不惯那些占用中继时间和电力的实验。
@@ -278,7 +278,7 @@ history:
       description: 山脊上的三根桅杆填上了西部中继链上最长的一段盲区，也让一个维修营地变成了一个社区。
     - era: 当代
       year: 19年前
-      name: 全网大停电
+      name: 大断联
       description: 一场王冠火风暴让六个定居点断联了十一天。合作社“凡有呼叫，必有应答”的承诺，就是从那次恢复时开始的。
     - era: 当下
       year: 4个月前
@@ -400,7 +400,7 @@ startingConditions:
     openingHook: 未来借了你的声音。你先去提醒谁？
     openingChips:
       - 把录音放给托马斯听
-      - 呼叫琼恩，拦下车队
+      - 呼叫琼，拦下车队
       - 爬上去追米娜
       - 趁信号还没散，追查来源
       - 看看站里还剩多少电
