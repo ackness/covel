@@ -92,7 +92,6 @@ describe("core plugin manifest contract", () => {
       model: "plugin",
       guard: "./guard.js",
       requireToolUse: true,
-      completeAfterTools: ["create-character-form"],
       maxRetries: 3,
       // Order one-time setup providers without requiring them on form submission.
       after: [
@@ -100,6 +99,7 @@ describe("core plugin manifest contract", () => {
         { capability: "world-data-provider@1" },
       ],
     });
+    expect(playerInit.completeAfterTools).toBeUndefined();
     expect(playerInit.inputs?.["pregame-opening"]).toMatchObject({
       from: { capability: "session.opening@1" },
       select: "/narrativeOutput",

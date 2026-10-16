@@ -153,7 +153,7 @@ describe("agent output boundary", () => {
     });
   });
 
-  it("prefers tool interactions over a declared duplicate and dedupes resumed tools", () => {
+  it("keeps the last successful interaction revision across resume", () => {
     const finalized = finalizeAgentOutput({
       manifest,
       finalContent: JSON.stringify({
@@ -168,7 +168,11 @@ describe("agent output boundary", () => {
           turnId: "turn",
           input: {},
           output: {
-            interaction: { interactionId: "same", type: "form" },
+            interaction: {
+              interactionId: "same",
+              type: "form",
+              title: "Earlier",
+            },
             ui: [
               {
                 parts: [
@@ -187,7 +191,11 @@ describe("agent output boundary", () => {
           name: "form-tool",
           arguments: "{}",
           result: {
-            interaction: { interactionId: "same", type: "form" },
+            interaction: {
+              interactionId: "same",
+              type: "form",
+              title: "Revised",
+            },
             ui: [
               {
                 parts: [
@@ -207,7 +215,9 @@ describe("agent output boundary", () => {
       kind: "ok",
       output: {},
       effects: {
-        interactions: [{ interactionId: "same", type: "form" }],
+        interactions: [
+          { interactionId: "same", type: "form", title: "Revised" },
+        ],
         ui: [
           {
             parts: [

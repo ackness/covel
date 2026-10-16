@@ -1,4 +1,5 @@
-import { translate } from "@covel/plugin-handlers-utils";
+import { modelFacingJson, translate } from "@covel/plugin-handlers-utils";
+import { checkFormDefaults, defaultNarrative } from "../lib/form-defaults.js";
 import {
   NAME_FIELD,
   PLAYER_NAME_VALIDATOR,
@@ -130,6 +131,7 @@ export default function ({ tool }, createFormTool) {
       if (!params.fields.some(isName)) {
         throw new Error("Include a required characterName text field.");
       }
+      checkFormDefaults(params, attributes, context.locale);
       // The setup guard finds this form's submission by this id, so it is set
       // here: the id must not depend on what the model passed. The validator
       // gets the names the world's characters have now, so a taken name is
@@ -148,28 +150,33 @@ export default function ({ tool }, createFormTool) {
         },
       };
       const earlier = await earlierAnswers(context);
-      if (!earlier) return createFormTool.execute(form, context);
       // Asked again after a refused submission: the player corrects the form
       // instead of filling it in from nothing. A name that a character of the
       // world has is not filled in again.
-      const nameTaken = isNameTaken(taken, earlier[NAME_FIELD]);
-      return createFormTool.execute(
-        {
-          ...form,
-          fields: params.fields.map((field) =>
-            nameTaken && field.name === NAME_FIELD
-              ? field
-              : withEarlierAnswer(field, earlier[field.name]),
-          ),
-          notice: nameTaken
-            ? nameTakenMessage(context, earlier[NAME_FIELD])
-            : translate(
-                context,
-                "This world no longer accepts some of your earlier answers. Check the form and submit it again.",
-              ),
-        },
-        context,
-      );
+      const nameTaken = earlier && isNameTaken(taken, earlier[NAME_FIELD]);
+      const offered = earlier
+        ? {
+            ...form,
+            fields: params.fields.map((field) =>
+              nameTaken && field.name === NAME_FIELD
+                ? field
+                : withEarlierAnswer(field, earlier[field.name]),
+            ),
+            notice: nameTaken
+              ? nameTakenMessage(context, earlier[NAME_FIELD])
+              : translate(
+                  context,
+                  "This world no longer accepts some of your earlier answers. Check the form and submit it again.",
+                ),
+          }
+        : form;
+      const result = await createFormTool.execute(offered, context);
+      const filledNarrative = defaultNarrative(offered);
+      return {
+        ...result,
+        filledNarrative,
+        _text: JSON.stringify(modelFacingJson({ filledNarrative })),
+      };
     },
   });
 }

@@ -73,9 +73,9 @@ describe("char-creator plugin", () => {
       expect(root.entry).toBe("./server/index.js");
     });
 
-    it("requires one create-character-form call and stops immediately after success", () => {
+    it("requires a successful form and allows preview review before finishing", () => {
       expect(manifest.requireToolUse).toBe(true);
-      expect(manifest.completeAfterTools).toEqual(["create-character-form"]);
+      expect(manifest.completeAfterTools).toBeUndefined();
       expect(manifest.maxSteps).toBeUndefined(); // Inherit the framework budget.
       expect(manifest.maxRetries).toBe(3);
     });

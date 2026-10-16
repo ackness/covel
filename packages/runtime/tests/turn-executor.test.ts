@@ -974,37 +974,68 @@ describe("TurnExecutor _interaction protocol", () => {
     )!.manifest;
     const charLoaded = await loadRuntime(charDiscovery, charManifest.name);
 
-    // MockLLM calls the character-specific form wrapper.
+    // A failed default emits nothing; a successful preview can then be revised.
     const mockLLM = new MockLLM();
+    let calls = 0;
     mockLLM.generate = async (params) => {
-      const hasToolResult = params.messages.some((m) => m.role === "tool");
-      if (hasToolResult) {
+      calls++;
+      const lastTool = params.messages.filter((m) => m.role === "tool").at(-1);
+      if (calls === 2)
+        expect(JSON.parse(String(lastTool?.content)).error).toContain(
+          'repeats "to"',
+        );
+      if (calls === 3) {
+        expect(JSON.parse(String(lastTool?.content))).toEqual({
+          filledNarrative: "Alex waits. Waiting.",
+        });
+      }
+      if (calls === 4) {
+        expect(JSON.parse(String(lastTool?.content))).toEqual({
+          filledNarrative: "Welcome Alex. You enter the village.",
+        });
         return {
-          content: "表单已创建",
+          content: '{"preGameDone":false}',
           toolCalls: [],
           finishReason: "stop",
           usage: { inputTokens: 50, outputTokens: 10 },
         };
       }
       return {
-        content: "角色创建...",
+        content: null,
         toolCalls: [
           {
-            id: "tc-1",
+            id: `tc-${calls}`,
             name: "create-character-form",
             arguments: JSON.stringify({
               formId: "char-creation",
-              title: "创建角色",
+              title: "Create character",
               fields: [
                 {
                   type: "text",
                   name: "characterName",
-                  label: "角色名",
+                  label: "Name",
                   required: true,
+                  defaultValue: "Alex",
+                },
+                {
+                  type: "text",
+                  name: "background",
+                  label: "Background",
+                  defaultValue:
+                    calls === 1
+                      ? "to find a friend"
+                      : calls === 2
+                        ? "Waiting."
+                        : "You enter the village.",
                 },
               ],
-              submitLabel: "确认",
-              narrativeTemplate: "你的名字是 {{characterName}}。",
+              submitLabel: "Continue",
+              narrativeTemplate:
+                calls === 1
+                  ? "{{characterName}} came to {{background}}."
+                  : calls === 2
+                    ? "{{characterName}} waits. {{background}}."
+                    : "Welcome {{characterName}}. {{background}}.",
             }),
           },
         ],
@@ -1039,12 +1070,16 @@ describe("TurnExecutor _interaction protocol", () => {
 
     // Should have pendingInputs with the interaction protocol
     expect(result.pendingInputs).toBeDefined();
-    expect(result.pendingInputs!.length).toBeGreaterThanOrEqual(1);
+    expect(calls).toBe(4);
+    expect(result.pendingInputs).toHaveLength(1);
 
     const pi = result.pendingInputs![0];
     expect(pi!.interaction).toBeDefined();
     expect(pi!.interaction.type).toBe("form");
     expect(pi!.interaction.interactionId).toBe("char-creation");
+    expect(pi!.interaction.narrativeTemplate).toBe(
+      "Welcome {{characterName}}. {{background}}.",
+    );
     expect(pi!.form).toBeDefined();
     expect((pi!.form as Record<string, unknown>).interactionId).toBe(
       "char-creation",
