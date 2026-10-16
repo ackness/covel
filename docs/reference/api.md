@@ -2137,7 +2137,7 @@ Web 设置页根据 `operatorTokenRequired` 决定是否显示“运维访问”
       "kind": "scene",
       "name": {
         "zh-CN": "文艺部的春日下午",
-        "en": "Spring in the Literature Club"
+        "en": "A Spring Afternoon in the Literature Club"
       },
       "description": {
         "zh-CN": "旧社团楼三层的活动室里，稿纸、旧刊与海风等待下一次校稿。"

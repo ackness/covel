@@ -2137,7 +2137,7 @@ Rules that apply in both cases:
       "kind": "scene",
       "name": {
         "zh-CN": "文艺部的春日下午",
-        "en": "Spring in the Literature Club"
+        "en": "A Spring Afternoon in the Literature Club"
       },
       "description": {
         "zh-CN": "旧社团楼三层的活动室里，稿纸、旧刊与海风等待下一次校稿。"

@@ -25,11 +25,12 @@ definition:
       - Saturday
       - Sunday
     periods:
-      - name: Night
+      - name: Late night
       - name: Morning
       - name: Afternoon
       - name: Evening
   evolution:
-    prompt: Conversation usually takes minutes; classes and club activities take
-      their narrated duration. Sleep or an explicit next-day transition crosses
-      a day. Flashbacks do not move the present clock.
+    prompt: A conversation usually takes a few minutes; classes and club
+      activities take as long as the story says they do. Sleep or a clear cut to
+      the next day moves the clock to the next day. Flashbacks do not change the
+      current date.

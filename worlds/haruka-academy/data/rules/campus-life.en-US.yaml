@@ -1,83 +1,83 @@
 - id: haruka-dialogue-distance
-  title: Dialogue Distance
-  content: Relationship progression between the player and main characters must be reflected through specific dialogues, joint tasks, keeping promises, and respecting boundaries. Affection, Trust, Pressure, and Public Closeness can change asynchronously; relationship stages only shift after completing joint tasks, entrusting secrets, resolving misunderstandings, or making explicit promises, resulting in observable differences in forms of address, invitations, and public distance.
+  title: Keeping the Right Distance
+  content: The player's relationships with the main characters must move forward through concrete conversations, tasks done together, promises kept, and boundaries respected. Affection, Trust, Pressure, and Public Closeness don't have to move together. A relationship stage changes only after a task finished together, a secret confided, a misunderstanding cleared up, or an explicit promise, and the change must be visible in what they call each other, in who invites whom, and in how close they stand in public.
   keys:
-    - Affection
-    - Trust
-    - Pressure
-    - Public Closeness
+    - affection
+    - trust
+    - pressure
+    - closeness
 - id: haruka-school-day
-  title: School Day Rhythm
-  content: A school day proceeds sequentially through morning study prep (before 8:20), morning breaks, lunch break (12:20), dismissal (15:40), club activities (16:00–17:30), dusk, and school closing (18:00). When crossing time slots, mention bells, lighting, weather, or the next promise; each slot typically allows for only one major action. Missed invitations should enter promise memory rather than being automatically made up.
+  title: The Shape of a School Day
+  content: A school day runs in order through getting ready for morning reading before 8:20, the morning breaks, lunch at 12:20, dismissal at 15:40, club activities from 16:00 to 17:30, dusk, and closing at 18:00. When the story moves to a new time slot, mention the bell, the light, the weather, or the next plan. Each slot usually has room for only one main action; a missed invitation goes into the memory of promises instead of being made up automatically.
   keys:
-    - Morning Study
-    - Breaks
-    - Lunch Break
-    - Dismissal
-    - Dusk
-    - School Closing
+    - morning
+    - break
+    - lunch
+    - after school
+    - dusk
+    - closing
 - id: haruka-school-calendar
-  title: School Festival Countdown
-  content: "Festival prep progresses via countdown: budget review (14 days out), exam & manuscript mid-check (10 days out), main stage rehearsal (7 days out), Spring Mint deadline & full dress rehearsal (3 days out), eve setup (1 day out), and the official School Festival & Evening Wind Lighting (Day 0). Class 2-B's Sea Breeze Post, the Literature Club special issue, News Club Rumor Wall, Light Music Club's new song, and Student Council procedures should influence each other at milestones; every event provides a context for dialogue, choice, and consequence. The progress, milestone outcomes, and Literature Club Review across projects are recorded in the Festival Prep and Literature Club Review panels; narrative must clearly state what has been specifically accomplished."
+  title: Festival Countdown
+  content: "Festival preparations follow the countdown: the first budget review at fourteen days, exams and the manuscript check at ten, the main-stage preview at seven, the Spring Mint deadline and the dress rehearsal at three, setup on festival eve at one, and at zero the festival itself and the Evening Wind Lighting. Class 2-B's Sea Breeze Post, the Literature Club's special issue, the News Club's Rumor Truth Wall, the Light Music Club's new song, and the Student Council's procedures should affect one another at each milestone, and every event should set up a situation the player can talk through, make a choice in, and live with the consequences of. The progress of each project, the milestone results, and the Literature Club's review are tracked on the Festival Prep and Literature Club Review panels; the narrative must say exactly what got done."
   keys:
-    - School Festival
-    - Countdown
-    - Club Review
-    - Exams
-    - Interviews
-    - Main Stage
+    - festival
+    - countdown
+    - review
+    - exam
+    - interview
+    - main stage
     - Sea Breeze Post
     - Evening Wind Lighting
 - id: haruka-stage-route
-  title: Scenes and Character Stages
-  content: 'You must emit scene.set when establishing a new scene, switching locations, or changing between day and night. Use standard anchors for locations such as "Class 2-B", "Club Building", "Library", "Sakurazaka Seawall", and "Seireki Town Shopping Street"; specify particular rooms or shops in the narrative text. Use day before sunset, and night after sunset or following the school closing announcement, allowing the sea color outside, indoor lighting, and characters'' departure plans to change accordingly. The five anchors already have complete day/night backgrounds; prioritize using them and do not arbitrarily rename existing locations. You must emit stage.direction when characters enter, exit, shift focus, change positioning, or alter their outfit/expression/pose. Include all changes for that turn in a single cues array; omit visual fields if no corresponding visual variant exists, letting the framework display the default sprite. Rin Asakura''s default variantId is uniform-playful; use expression: serious or variantId: uniform-serious when she drops her jokes to listen earnestly or decides to suppress news stories. Kaho Shiina may use expression: concerned or variantId: uniform-concerned when seriously listening to club issues. Souta Morikawa should use outfit: rehearsal or variantId: rehearsal-focused during Light Music Club rehearsals. Chihiro Onodera should use outfit: casual or variantId: casual-gentle in off-campus scenes like the Shopping Street or Seawall. When characters leave the screen, prioritize slide-left for those exiting left, slide-right for those exiting right, and fade or dissolve for others; stage.clear should also specify an appropriate transition.'
+  title: Scenes and the Stage
+  content: 'Emit scene.set whenever a scene is first established, the location changes, or day turns to night. Use the standard anchors for locations — "Class 2-B", "Club Building", "Library", "Sakurazaka Seawall", "Seireki Town Shopping Street" — and keep particular rooms or shops in the narrative text. Use day before sunset and night after sunset or after the closing announcement, and let the color of the sea outside, the indoor lighting, and when characters head home change with it. The five anchors each have a full set of day and night backdrops: use them first, and don''t give a place a new name for no reason. Emit stage.direction whenever characters enter, leave, change focus, change position, or change outfit, expression, or pose; put every change for the turn in one cues array, and leave out the visual fields when there is no matching visual variant so the framework shows the default portrait. Rin Asakura''s default variantId is uniform-playful; when she drops the jokes to listen in earnest or decides to sit on a story, use expression: serious or variantId: uniform-serious. Kaho Shiina may use expression: concerned or variantId: uniform-concerned when she listens seriously to a club problem; Souta Morikawa uses outfit: rehearsal or variantId: rehearsal-focused during Light Music Club rehearsals; Chihiro Onodera uses outfit: casual or variantId: casual-gentle in off-campus scenes such as the shopping street or the seawall. When characters leave the screen, prefer slide-left for a character exiting on the left and slide-right for one exiting on the right, and fade or dissolve otherwise; stage.clear should also name a suitable transition.'
   keys:
-    - Location
-    - Scene
-    - Sunset
-    - Night
-    - Classroom
+    - location
+    - scene
+    - sunset
+    - night
+    - classroom
     - Club Building
-    - Library
-    - Seawall
-    - Shopping Street
-    - Sprite
-    - Enter
-    - Focus
+    - library
+    - seawall
+    - shopping street
+    - portrait
+    - enter
+    - focus
 - id: haruka-romance-boundary
-  title: Campus Romance Boundaries
-  content: Keep romance descriptions at a teen rating, focusing on heartbeats, misunderstandings, waiting, completing goals side-by-side, and conversations on the way home from school. Avoid adult-oriented content and avoid skipping relationship stages directly with a single choice.
+  title: Romance Boundaries
+  content: Keep romance teen-rated, focused on crushes, misunderstandings, waiting, reaching goals side by side, and conversations on the walk home. Avoid adult content, and never let a single choice skip a relationship stage.
   keys:
-    - School Romance
+    - romance
     - teen
-    - Relationship
+    - relationship
 - id: haruka-ensemble-reactions
-  title: Group Interaction
-  content: The eight preset characters have class, club, and senior-junior relationships with each other, but each turn focuses on only one or two speaking characters. Mio Kamishiro and Rin Asakura are most common in Class 2-B, Kaho Shiina and Souta Morikawa in the Club Building after school, Yuma Shiraishi and Haruka Mikoeda during Student Council procedures and patrols, Chihiro Onodera after classes and duty shifts, and Akane Toujou in the Library during lunch breaks or before closing. Temporary appearances across different schedules require explanation via tasks, rumors, or promises; favoritism, neglect, or misunderstandings can cause chain reactions, but maintain a youthful daily life atmosphere.
+  title: The Ensemble
+  content: The eight preset characters are tied together as classmates, clubmates, and seniors and juniors, but each turn focuses on only one or two speaking characters. Mio Kamishiro and Rin Asakura are most often in Class 2-B; Kaho Shiina and Souta Morikawa in the Club Building after school; Yuma Shiraishi and Haruka Mikoeda around Student Council business and patrols; Chihiro Onodera in class and after cleaning duty; Akane Toujou in the library at lunch or before it closes. A character who shows up outside their usual schedule needs a task, a rumor, or an appointment to explain it. Favoritism, neglect, or a misunderstanding can set off a chain reaction, but keep it grounded in everyday school life.
   keys:
-    - Ensemble
-    - Favoritism
-    - Misunderstanding
-    - Other Characters
-    - Chain Reaction
-    - Schedule
+    - everyone
+    - favorite
+    - misunderstanding
+    - others
+    - reaction
+    - schedule
 - id: haruka-rumor-heat
   title: Rumor Heat
-  content: Seireki Town and Haruka Academy are both small. Each rumor evolves through the stages of "Seed—Spreading—Heating up—Clarified, Confirmed, or Redirected." The stage and heat are settled by the Campus Rumors panel after each turn; the narrative must specify who said it, where it spread, and who was involved, based on the current values in the panel rather than assuming everyone knows. Public alone time, obvious favoritism, or being recorded by the News Club increases heat and Public Closeness; privately fulfilling promises, remembering details, and respecting silence prioritize increasing Trust and reducing Pressure. Rin can report, hold back drafts, or publicly debunk rumors, and players can also change rumors through actions rather than just explanations.
+  content: Seireki and Haruka Academy are both small. Every rumor moves through seed → spreading → heating up → cleared, confirmed, or redirected; its stage and heat are settled after each turn by the Campus Rumors panel. The narrative must make clear who said it, where it spread, and who it involves, and go by the panel's current values — a rumor never becomes common knowledge across the school out of nowhere. Being seen alone together in public, obvious favoritism, or ending up in the News Club's notes raises heat and Public Closeness; keeping a promise in private, remembering details, and respecting a silence raise Trust and lower Pressure first. Rin can report a rumor, sit on the story, or debunk it publicly, and the player can change a rumor through actions, not just explanations.
   keys:
-    - Rumor
-    - Public
-    - Private
+    - rumor
+    - public
+    - private
     - News Club
-    - Heat
-    - Debunking
+    - gossip
+    - deny
 - id: haruka-festival-convergence
   title: Spring Mint and Evening Wind Lighting
-  content: "The festival climax is not a list of isolated tasks: the Literature Club's Spring Mint can publish letters from Sea Breeze Post or News Club debunkings, News Club reports can secure an audience for the Light Music Club's rehearsal, Kaho's new song can be the final piece of Evening Wind Lighting, and stories from old issues can provide public reasons for the Old Club Building Preservation Movement. Players can prioritize helping one line or support multiple lines through specific exchanges; success must still preserve each character's respective costs, credit rights, and choices."
+  content: "The festival's climax isn't a checklist of separate tasks. The Literature Club's Spring Mint can print Sea Breeze Post letters or the News Club's debunkings; News Club coverage can win the Light Music Club an audience for its preview; Kaho's new song can be the last song of the Evening Wind Lighting; and the story of the old issues can offer a public reason to keep the Club Building. The player can put one storyline first, or make several hold each other up through concrete trades — but success must still leave each character their own costs, their byline, and their own choices."
   keys:
     - Spring Mint
     - Sea Breeze Post
     - Rumor Truth Wall
-    - New Song
+    - song
     - Evening Wind Lighting
-    - Old Issues
+    - old issue

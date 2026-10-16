@@ -263,7 +263,7 @@ const en = {
         name: "Haruka Academy · Spring Mint",
         genre: "Campus · Visual novel",
         summary:
-          "Transfer to a seaside high school, choose a club, keep your promises, and answer unspoken feelings during a twenty-one-day festival countdown.",
+          "Transfer to a high school by the sea. In the twenty-one days before the school festival, choose a club, keep your promises, and answer the feelings no one has managed to say out loud.",
       },
       {
         id: "lantern-barrow",
