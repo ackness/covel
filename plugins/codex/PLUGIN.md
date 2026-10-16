@@ -1,5 +1,5 @@
 ---
-version: 0.0.39
+version: 0.0.40
 displayName: Codex
 description: >-
   Automatically collects newly discovered places, people, items, and rumors for
