@@ -1,6 +1,7 @@
 import { appendReasoningStep, reasoningAction } from "./reasoning.js";
 import {
   executionMayBeRunning,
+  stageSchema,
   type SessionExecutionStatus,
   type SnapshotTraceEvent,
 } from "@covel/shared";
@@ -77,6 +78,7 @@ export function buildSnapshotExecutionSteps(
         : event.turnId;
     const key = `${turnId ?? "__no_turn__"}|${runtimeId}`;
     const prev = byKey.get(key);
+    const stage = stageSchema.safeParse(payload.stage);
     const status =
       event.type === "runtime.completed"
         ? toExecutionStepStatus(
@@ -93,6 +95,7 @@ export function buildSnapshotExecutionSteps(
                 : "deferred";
     byKey.set(key, {
       ...prev,
+      ...(stage.success ? { stage: stage.data } : {}),
       runtimeId,
       turnId,
       status,

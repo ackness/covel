@@ -799,6 +799,8 @@ it("offers Continue for a live stopped opening with no runtime steps, using the 
     return (
       <ExecutionRecoveryNotice
         recovery={state.executionRecovery}
+        steps={state.executionSteps}
+        onOpenSettings={vi.fn()}
         onRetry={retryInterruptedTurn}
         onRefresh={vi.fn()}
         onStop={vi.fn()}

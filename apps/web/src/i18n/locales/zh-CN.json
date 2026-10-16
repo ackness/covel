@@ -367,10 +367,10 @@
     "recoveryStop": "停止任务",
     "recoveryStopFailed": "未能停止任务，请检查状态后再试。",
     "setupFailedTitle": "开局准备没有完成",
-    "setupFailedDetail": "准备故事的某一步失败了。已完成的部分会保留，重试只会运行未完成的步骤。",
+    "setupFailedDetail": "某个准备步骤失败了，重试可继续未完成的步骤。",
     "setupRetry": "重试开局准备",
     "setupUnfinishedTitle": "开局准备尚未完成",
-    "setupUnfinishedDetail": "故事还在准备中。点击继续，会用你已填写的内容运行剩下的步骤。",
+    "setupUnfinishedDetail": "继续准备，沿用你已填写的内容。",
     "setupContinue": "继续开局准备",
     "setupRetryFailed": "无法重新开始准备，请检查网络后再试。",
     "memoryIndex": {
@@ -463,7 +463,10 @@
       "turnedOn": "同时打开了 {{plugins}}：有插件需要它们提供的功能。",
       "turnedOffConflict": "同时关闭了 {{plugins}}：它们不能和“{{plugin}}”一起用。",
       "turnedOffNeeds": "同时关闭了 {{plugins}}：它们需要“{{plugin}}”。"
-    }
+    },
+    "recoveryModelSettings": "模型设置",
+    "setupRunning": "正在准备开局",
+    "setupExecutionSummary": "开局准备 · {{count}} 个任务"
   },
   "blocks": {
     "actionPlaceholder": "或输入自定义行动...",

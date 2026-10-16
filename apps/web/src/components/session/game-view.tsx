@@ -51,7 +51,11 @@ import { worldVisual } from "@/lib/world-visuals.js";
 import { ignoreError } from "@/lib/ignore-error.js";
 import { resolveDisplayText } from "@/lib/i18n-text.js";
 import { emitNavEvent, type SessionPanel } from "@/lib/nav-events.js";
-import { latestExecutionPresentation } from "./execution-presentation.js";
+import {
+  executionRecoveryNoticeVisible,
+  latestExecutionPresentation,
+  recoveryNoticeTurnId,
+} from "./execution-presentation.js";
 import { SessionBackdrop } from "./session-backdrop.js";
 import { SessionMusic } from "./session-music.js";
 import { SceneHud } from "./scene-hud.js";
@@ -116,6 +120,13 @@ export function GameView({
     submittedBlockValues,
   } = state;
   const { t } = useTranslation();
+  const recoveryNoticeVisible = executionRecoveryNoticeVisible(
+    state.executionRecovery,
+  );
+  const recoveryTurnId = recoveryNoticeTurnId(
+    state.executionRecovery,
+    executionSteps,
+  );
   const executionState = useMemo(
     () =>
       latestExecutionPresentation({
@@ -494,6 +505,7 @@ export function GameView({
             // open over them.
             <div className="relative z-20 animate-in fade-in-0 duration-200">
               <GameViewHeader
+                recoveryNoticeVisible={recoveryNoticeVisible}
                 executionState={executionState}
                 t={t}
                 sessionId={session.id}
@@ -568,6 +580,8 @@ export function GameView({
           />
           <ExecutionRecoveryNotice
             recovery={state.executionRecovery}
+            steps={executionSteps}
+            onOpenSettings={settings.openWithKey}
             onRetry={retryInterruptedTurn}
             onRefresh={refreshExecutionRecovery}
             onStop={abortActiveTurn}
@@ -588,9 +602,11 @@ export function GameView({
               resolveSetupRuntime(session.id, runtimeId, "retry")
             }
             onRun={onBeginAdventure}
+            onOpenSettings={settings.openWithKey}
           />
           {stageActive ? (
             <StageView
+              recoveryTurnId={recoveryTurnId}
               composerDraft={{ value: inputValue, onChange: setInputValue }}
               panelState={rightPanelState}
               key={session.id}
@@ -621,6 +637,7 @@ export function GameView({
           ) : (
             <div className="ui-story-surface relative z-1 flex min-h-0 flex-1 flex-col">
               <ChatMessages
+                recoveryTurnId={recoveryTurnId}
                 messages={messages}
                 executionSteps={executionSteps}
                 executionError={executionError}
@@ -652,6 +669,7 @@ export function GameView({
 
               {/* Input — always fixed at bottom */}
               <MessageComposer
+                recoveryNoticeVisible={recoveryNoticeVisible}
                 executionState={executionState}
                 t={t}
                 session={session}

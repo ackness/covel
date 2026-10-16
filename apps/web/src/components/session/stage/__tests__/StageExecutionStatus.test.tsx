@@ -32,6 +32,57 @@ beforeEach(async () => {
 afterEach(cleanup);
 
 describe("StageExecutionStatus", () => {
+  it("leaves a failed retry attempt to the recovery notice for its source row", () => {
+    render(
+      <StageExecutionStatus
+        messages={messages}
+        executionSteps={[
+          ...source,
+          {
+            ...source[1]!,
+            turnId: "attempt",
+            sourceTurnId: "source",
+            status: "failed",
+            attemptStatus: "failed",
+            startedAt: "2026-09-05T01:00:00Z",
+          },
+        ]}
+        recoveryTurnId="source"
+        plugins={[]}
+        executing={false}
+        executionError={null}
+        onRetryRuntime={vi.fn()}
+      />,
+    );
+    expect(
+      screen
+        .getByText(i18n.t("session.executionState.failed"))
+        .classList.contains("text-muted-foreground"),
+    ).toBe(true);
+    expect(screen.queryByRole("button", { name: /Retry/ })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /Execution/ }));
+    expect(screen.getAllByRole("alert")).toHaveLength(2);
+    expect(screen.queryByRole("button", { name: /Retry/ })).toBeNull();
+  });
+  it("keeps setup failures in the stage timeline neutral without task retries", () => {
+    render(
+      <StageExecutionStatus
+        messages={[]}
+        executionSteps={source.map((step) => ({ ...step, stage: "setup" }))}
+        plugins={[]}
+        executing={false}
+        executionError={null}
+        onRetryRuntime={vi.fn()}
+      />,
+    );
+    expect(screen.getByText("Opening setup · 3 tasks")).toBeTruthy();
+    expect(
+      screen.queryByText(i18n.t("session.executionState.partial")),
+    ).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /Opening setup/ }));
+    expect(screen.getAllByRole("alert")).toHaveLength(2);
+    expect(screen.queryByRole("button", { name: /Retry/ })).toBeNull();
+  });
   it("retries a task recovered from the remaining-failures summary without original traces", () => {
     const retry = vi.fn();
     render(

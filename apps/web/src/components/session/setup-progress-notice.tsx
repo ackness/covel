@@ -6,6 +6,8 @@ import type { SessionRecord, SetupRuntimeState } from "@/services/api.js";
 import type { StreamMessage } from "@/stores/session-store.js";
 import type { ExecutionRecovery } from "@/stores/session-store/types.js";
 import { isPendingInteractionMessage } from "./game-view/interaction-blocks.js";
+import { FailureRecoveryActions } from "./failure-recovery-actions.js";
+import { executionRecoveryNoticeVisible } from "./execution-presentation.js";
 
 /**
  * A session that sits in setup with nothing on screen to act on: a setup step
@@ -26,21 +28,6 @@ function setupError(state: SetupRuntimeState): string | undefined {
   return undefined;
 }
 
-/** The recovery notice owns an interrupted or failed execution. */
-function recoveryActive(recovery: ExecutionRecovery | null | undefined) {
-  if (!recovery) return false;
-  const state = recovery.status?.state;
-  return (
-    recovery.hydrating ||
-    !!recovery.error ||
-    !recovery.status ||
-    state === "running" ||
-    state === "unknown" ||
-    state === "interrupted" ||
-    state === "failed"
-  );
-}
-
 export function setupProgress(input: {
   readonly session: SessionRecord;
   readonly messages: StreamMessage[];
@@ -51,7 +38,11 @@ export function setupProgress(input: {
   const { session, messages, submittedBlockIds, executing } = input;
   if (session.status !== "active" || session.phase !== "setup") return null;
   // No messages yet: the "begin adventure" hero is the way forward.
-  if (executing || messages.length === 0 || recoveryActive(input.recovery))
+  if (
+    executing ||
+    messages.length === 0 ||
+    executionRecoveryNoticeVisible(input.recovery)
+  )
     return null;
   // A form or choice on screen is what setup waits for.
   if (
@@ -79,12 +70,14 @@ export function SetupProgressNotice({
   progress,
   onRearm,
   onRun,
+  onOpenSettings,
 }: {
   progress: SetupProgress | null;
   /** Re-arm one blocked setup step. */
   onRearm: (runtimeId: string) => Promise<void>;
   /** Run setup again without a player message. */
   onRun: () => void;
+  onOpenSettings: (key: "llm.providers" | "llm.slots") => void;
 }) {
   const { t } = useTranslation();
   const [settled, setSettled] = useState(false);
@@ -119,30 +112,31 @@ export function SetupProgressNotice({
       data-kind={progress.kind}
     >
       <div className="mx-auto flex max-w-3xl flex-wrap items-start gap-3">
-        {failed ? (
-          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
-        ) : (
-          <Info className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-        )}
         <div className="min-w-0 flex-1 basis-48">
-          <p className="text-sm font-medium">
+          <p className="flex items-center gap-2 text-sm font-medium">
+            {failed ? (
+              <AlertCircle className="h-4 w-4 shrink-0 text-amber-600" />
+            ) : (
+              <Info className="h-4 w-4 shrink-0 text-primary" />
+            )}
             {t(
               failed
                 ? "session.setupFailedTitle"
                 : "session.setupUnfinishedTitle",
             )}
           </p>
-          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-            {t(
-              failed
-                ? "session.setupFailedDetail"
-                : "session.setupUnfinishedDetail",
-            )}
-          </p>
-          {progress.error && (
+          {progress.error ? (
             <div className="mt-1.5">
               <ActionableErrorNotice error={progress.error} layout="panel" />
             </div>
+          ) : (
+            <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
+              {t(
+                failed
+                  ? "session.setupFailedDetail"
+                  : "session.setupUnfinishedDetail",
+              )}
+            </p>
           )}
           {rearmFailed && (
             <p className="mt-1 text-xs text-destructive">
@@ -150,14 +144,17 @@ export function SetupProgressNotice({
             </p>
           )}
         </div>
-        <button
-          type="button"
-          disabled={busy}
-          onClick={() => void run()}
-          className="rounded-(--radius-control) bg-primary px-3 py-1.5 text-xs text-primary-foreground disabled:opacity-50"
-        >
-          {t(failed ? "session.setupRetry" : "session.setupContinue")}
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <FailureRecoveryActions
+            error={failed ? progress.error : undefined}
+            retryLabel={t(
+              failed ? "session.setupRetry" : "session.setupContinue",
+            )}
+            disabled={busy}
+            onRetry={() => void run()}
+            onOpenSettings={onOpenSettings}
+          />
+        </div>
       </div>
     </div>
   );

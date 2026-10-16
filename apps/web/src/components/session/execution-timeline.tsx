@@ -152,6 +152,7 @@ export function ExecutionTimeline({
   turnNumberStart = 1,
   canRetryTasks = true,
   messages = [],
+  recoveryTurnId,
 }: {
   steps: ExecutionStep[];
   executing: boolean;
@@ -164,6 +165,8 @@ export function ExecutionTimeline({
   turnNumberStart?: number;
   canRetryTasks?: boolean;
   messages?: readonly StreamMessage[];
+  /** Source turn whose recovery notice owns failure presentation and retry. */
+  recoveryTurnId?: string;
 }) {
   const { i18n, t } = useTranslation();
   const [modelSettingsOpen, setModelSettingsOpen] = useState(false);
@@ -203,6 +206,10 @@ export function ExecutionTimeline({
   return (
     <div className="space-y-2 py-1">
       {turnGroups.map((group, groupIdx) => {
+        // Execution-time metadata survives the session moving into play and reloads.
+        const setupExecution = group.steps.some(
+          (step) => step.stage === "setup",
+        );
         const statuses = deriveStatuses(group.steps, RUNTIME_LABELS);
         const isLatest = isLatestTurn && group.turnId === latestTurnId;
         const presentation = executionPresentation({
@@ -210,6 +217,12 @@ export function ExecutionTimeline({
           steps: group.steps,
           messages,
         });
+        const recoveryOwned =
+          !!recoveryTurnId && group.turnId === recoveryTurnId;
+        const summaryTone =
+          recoveryOwned && !["generating", "updating"].includes(presentation)
+            ? "text-muted-foreground"
+            : executionTone(presentation);
         const stopped = presentation === "stopped";
         const active = statuses.find(
           (r) =>
@@ -228,7 +241,13 @@ export function ExecutionTimeline({
         );
         const allDone = (!executing || !isLatest) && !activeForeground;
         const canRetry =
-          allDone && isLatest && !stopped && canRetryTasks && !!onRetryRuntime;
+          !setupExecution &&
+          !recoveryOwned &&
+          allDone &&
+          isLatest &&
+          !stopped &&
+          canRetryTasks &&
+          !!onRetryRuntime;
         const failures = statuses.filter(
           (runtime) => runtime.status === "failed",
         );
@@ -267,15 +286,25 @@ export function ExecutionTimeline({
                 ) : (
                   <ChevronUp className="w-3 h-3" />
                 )}
-                <span className="uppercase tracking-wider font-mono">
+                <span>
                   {executing && isLatest && (
                     <Loader2 className="mr-1 inline h-3 w-3 animate-spin" />
                   )}
-                  <span className={executionTone(presentation)}>
-                    {t(`session.executionState.${presentation}`)}
-                  </span>
-                  {" · "}
-                  {t("session.executionSummary", { count: statuses.length })}
+                  {setupExecution ? (
+                    t("session.setupExecutionSummary", {
+                      count: statuses.length,
+                    })
+                  ) : (
+                    <>
+                      <span className={summaryTone}>
+                        {t(`session.executionState.${presentation}`)}
+                      </span>
+                      {" · "}
+                      {t("session.executionSummary", {
+                        count: statuses.length,
+                      })}
+                    </>
+                  )}
                 </span>
                 <span className="text-[9px] text-muted-foreground/50 font-mono">
                   #{turnNumber}
@@ -283,7 +312,11 @@ export function ExecutionTimeline({
                 {!isLatest && <span>{t("session.executionHistory")}</span>}
                 {failures.length > 0 && !stopped && (
                   <span
-                    className={`${executionTone(presentation)} font-medium normal-case tracking-normal`}
+                    className={
+                      setupExecution || recoveryOwned
+                        ? "text-muted-foreground"
+                        : `${summaryTone} font-medium`
+                    }
                   >
                     {t("session.executionFailures", {
                       count: failures.length,
@@ -328,6 +361,8 @@ export function ExecutionTimeline({
             </div>
 
             {!isCollapsed &&
+              !setupExecution &&
+              !recoveryOwned &&
               !stopped &&
               isLatest &&
               allDone &&

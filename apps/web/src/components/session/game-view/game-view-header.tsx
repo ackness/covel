@@ -43,6 +43,7 @@ interface GameViewHeaderProps {
   world: WorldRecord | null;
   executing: boolean;
   executionState?: ExecutionPresentation;
+  recoveryNoticeVisible?: boolean;
   viewMode: GameViewMode;
   isLeftCollapsed: boolean;
   isRightCollapsed: boolean;
@@ -72,6 +73,7 @@ export function GameViewHeader({
   world,
   executing,
   executionState,
+  recoveryNoticeVisible = false,
   viewMode,
   isLeftCollapsed,
   isRightCollapsed,
@@ -104,7 +106,13 @@ export function GameViewHeader({
     executing ||
     (executionState !== undefined &&
       executionState !== "idle" &&
-      executionState !== "completed");
+      executionState !== "completed" &&
+      !(
+        recoveryNoticeVisible &&
+        ["failed", "interrupted"].includes(executionState)
+      ) &&
+      (sessionPhase !== "setup" ||
+        ["generating", "updating"].includes(executionState)));
   const authorView = viewMode === "detailed" || viewMode === "raw";
 
   return (
@@ -162,15 +170,17 @@ export function GameViewHeader({
         )}
         {busy && (
           <span
-            className={`ui-chip hidden lg:inline-flex text-[10px] ${executionTone(executionState ?? "idle")}`}
+            className={`ui-chip hidden lg:inline-flex text-[10px] ${executionTone(sessionPhase === "setup" ? "generating" : (executionState ?? "idle"))}`}
             aria-live="polite"
           >
             <span className="ui-pulse-dot w-1.25 h-1.25 rounded-full bg-current" />
-            {executionState &&
-            executionState !== "idle" &&
-            executionState !== "completed"
-              ? t(`session.executionState.${executionState}`)
-              : t("session.stateStreaming")}
+            {sessionPhase === "setup"
+              ? t("session.setupRunning")
+              : executionState &&
+                  executionState !== "idle" &&
+                  executionState !== "completed"
+                ? t(`session.executionState.${executionState}`)
+                : t("session.stateStreaming")}
           </span>
         )}
         <ConnectionStatus />

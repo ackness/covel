@@ -76,6 +76,7 @@ export interface StageViewProps {
   readonly restoring?: boolean;
   readonly executionError: string | null;
   readonly executionSteps: ExecutionStep[];
+  readonly recoveryTurnId?: string;
   readonly plugins: PluginSummary[];
   readonly sessionPlugins: SessionPlugin[];
   readonly submittedBlockIds: ReadonlySet<string>;

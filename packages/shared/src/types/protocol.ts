@@ -1,4 +1,5 @@
 import type { ProviderFailureKind } from "../llm-failure-kind.js";
+import type { Stage } from "./runtime-scheduling.js";
 
 /**
  * Covel Session Protocol — server→client event vocabulary + session snapshot.
@@ -123,6 +124,8 @@ export interface RuntimeStartedPayload {
   readonly pluginId: string;
   readonly kind: string;
   readonly label?: string;
+  /** Stage at execution time; absent for event/manual runtimes. */
+  readonly stage?: Stage;
 }
 
 /** A staged runtime was queued beyond its source turn's foreground barrier. */

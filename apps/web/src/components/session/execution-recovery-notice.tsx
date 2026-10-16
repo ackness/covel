@@ -1,8 +1,15 @@
 import { useEffect, useState } from "react";
 import { AlertCircle, Loader2, RefreshCw, Square } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import type { ExecutionRecovery } from "@/stores/session-store/types.js";
+import type {
+  ExecutionRecovery,
+  ExecutionStep,
+} from "@/stores/session-store/types.js";
 import { PLAYER_ABORT_REASON } from "@covel/shared";
+import { ActionableErrorNotice } from "@/components/shared/actionable-error-notice.js";
+import { FailureRecoveryActions } from "./failure-recovery-actions.js";
+import { executionRecoveryNoticeVisible } from "./execution-presentation.js";
+import { I18N_SENTINEL_PREFIX } from "./execution-runtime-status.js";
 
 const RECOVERY_MESSAGES = {
   stalled: {
@@ -41,14 +48,18 @@ const RECOVERY_MESSAGES = {
 
 export function ExecutionRecoveryNotice({
   recovery,
+  steps = [],
   onRetry,
   onRefresh,
   onStop,
+  onOpenSettings,
 }: {
   recovery: ExecutionRecovery | null | undefined;
+  steps?: readonly ExecutionStep[];
   onRetry: () => void;
   onRefresh: () => void;
   onStop: () => Promise<void>;
+  onOpenSettings: (key: "llm.providers" | "llm.slots") => void;
 }) {
   const { t } = useTranslation();
   const [busy, setBusy] = useState(false);
@@ -56,7 +67,7 @@ export function ExecutionRecoveryNotice({
   useEffect(() => {
     setBusy(false);
   }, [recovery?.status?.turnId, recovery?.status?.state, recovery?.hydrating]);
-  if (!recovery) return null;
+  if (!recovery || !executionRecoveryNoticeVisible(recovery)) return null;
   const status = recovery.status;
   // The server could not tell whether a turn runs; `stalled` once it gave up.
   const unavailable = status?.state === "unknown";
@@ -66,8 +77,6 @@ export function ExecutionRecoveryNotice({
   const interrupted = status?.state === "interrupted";
   const failed = status?.state === "failed";
   const stopped = failed && status?.abortReason === PLAYER_ABORT_REASON;
-  if (!unknown && !running && !interrupted && !failed && !recovery.hydrating)
-    return null;
   const waiting = !stalled && (recovery.hydrating || running || unknown);
   const retry = status?.retry;
   const retryLabel =
@@ -98,6 +107,22 @@ export function ExecutionRecoveryNotice({
                 ? "failed"
                 : "hydrating";
   const { title, detail } = RECOVERY_MESSAGES[phase];
+  const error =
+    (phase === "failed" || phase === "interrupted") && status?.turnId
+      ? steps.find(
+          (step) =>
+            step.turnId === status.turnId &&
+            step.status === "failed" &&
+            !step.detached &&
+            step.detail &&
+            !step.detail.startsWith(I18N_SENTINEL_PREFIX),
+        )?.detail
+      : undefined;
+  const canRetry =
+    !!status?.retry &&
+    (interrupted || failed) &&
+    !recovery.hydrating &&
+    !unknown;
   return (
     <div
       role={waiting ? "status" : "alert"}
@@ -112,9 +137,15 @@ export function ExecutionRecoveryNotice({
         )}
         <div className="min-w-0 flex-1 basis-48">
           <p className="text-sm font-medium">{t(title)}</p>
-          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-            {t(detail)}
-          </p>
+          {error ? (
+            <div className="mt-1.5">
+              <ActionableErrorNotice error={error} layout="panel" />
+            </div>
+          ) : (
+            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+              {t(detail)}
+            </p>
+          )}
           {stopError && (
             <p className="mt-1 text-xs text-destructive">
               {t("session.recoveryStopFailed")}
@@ -122,22 +153,20 @@ export function ExecutionRecoveryNotice({
           )}
         </div>
         <div className="flex flex-wrap gap-2">
-          {status?.retry &&
-            (interrupted || failed) &&
-            !recovery.hydrating &&
-            !unknown && (
-              <button
-                type="button"
-                disabled={busy || recovery.checking}
-                onClick={() => {
-                  setBusy(true);
-                  onRetry();
-                }}
-                className="rounded-(--radius-control) bg-primary px-3 py-1.5 text-xs text-primary-foreground disabled:opacity-50"
-              >
-                {retryLabel}
-              </button>
-            )}
+          <FailureRecoveryActions
+            error={error}
+            retryLabel={retryLabel}
+            disabled={busy || recovery.checking}
+            onOpenSettings={onOpenSettings}
+            onRetry={
+              canRetry
+                ? () => {
+                    setBusy(true);
+                    onRetry();
+                  }
+                : undefined
+            }
+          />
           <button
             type="button"
             disabled={busy}

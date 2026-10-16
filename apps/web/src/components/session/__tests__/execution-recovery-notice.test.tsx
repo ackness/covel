@@ -8,7 +8,10 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import i18n from "@/i18n";
 import { ExecutionRecoveryNotice } from "../execution-recovery-notice.js";
-import type { ExecutionRecovery } from "@/stores/session-store/types.js";
+import type {
+  ExecutionRecovery,
+  ExecutionStep,
+} from "@/stores/session-store/types.js";
 
 beforeEach(async () => {
   await i18n.changeLanguage("en-US");
@@ -24,22 +27,128 @@ const interrupted: ExecutionRecovery = {
     retry: { type: "retry_turn", payload: {} },
   },
 };
-function setup(recovery: ExecutionRecovery) {
+function setup(recovery: ExecutionRecovery, steps: ExecutionStep[] = []) {
   const onRetry = vi.fn();
   const onRefresh = vi.fn();
   const onStop = vi.fn(async () => {});
+  const onOpenSettings = vi.fn();
   render(
     <ExecutionRecoveryNotice
       recovery={recovery}
+      steps={steps}
+      onOpenSettings={onOpenSettings}
       onRetry={onRetry}
       onRefresh={onRefresh}
       onStop={onStop}
     />,
   );
-  return { onRetry, onRefresh, onStop };
+  return { onRetry, onRefresh, onStop, onOpenSettings };
 }
 
 describe("execution recovery notice", () => {
+  it.each([
+    ["401 Authentication Fails (governor)", "auth", "llm.providers"],
+    ["403 Forbidden", "forbidden", "llm.slots"],
+    ["404 Unknown model", "notFound", "llm.slots"],
+    ["429 Too many requests", "rateLimited", "llm.slots"],
+  ])(
+    "makes settings primary for %s using only this execution's error",
+    (error, kind, key) => {
+      const step: ExecutionStep = {
+        runtimeId: "story",
+        pluginId: "story",
+        turnId: "t",
+        status: "failed",
+        detail: error,
+      };
+      const { onOpenSettings, onRetry, onRefresh } = setup(
+        { ...interrupted, status: { ...interrupted.status!, state: "failed" } },
+        [
+          { ...step, turnId: "older", detail: "Wrong historical error" },
+          step,
+          { ...step, runtimeId: "later", detail: "Another runtime failed" },
+        ],
+      );
+      expect(screen.getByRole("alert")).toBeTruthy();
+      expect(screen.getByText(i18n.t(`error.actionable.${kind}`))).toBeTruthy();
+      expect(
+        screen.queryByText(i18n.t("session.recoveryInterruptedDetail")),
+      ).toBeNull();
+      const settings = screen.getByRole("button", { name: "Model settings" });
+      const retry = screen.getByRole("button", {
+        name: "Retry unfinished turn",
+      });
+      expect(settings.getAttribute("data-variant")).toBe("default");
+      expect(retry.getAttribute("data-variant")).toBe("outline");
+      fireEvent.click(settings);
+      expect(onOpenSettings).toHaveBeenCalledExactlyOnceWith(key);
+      expect(onRetry).not.toHaveBeenCalled();
+      expect(screen.queryByText(error)).toBeNull();
+      fireEvent.click(screen.getByRole("button", { name: "Show details" }));
+      expect(screen.getByText(error)).toBeTruthy();
+      expect(screen.queryByText("Wrong historical error")).toBeNull();
+      expect(screen.queryByText("Another runtime failed")).toBeNull();
+      fireEvent.click(screen.getByRole("button", { name: "Check status" }));
+      expect(onRefresh).toHaveBeenCalledOnce();
+      fireEvent.click(retry);
+      fireEvent.click(retry);
+      expect(onRetry).toHaveBeenCalledOnce();
+    },
+  );
+
+  it("keeps retry primary for a failure without a settings remedy", () => {
+    setup(
+      { ...interrupted, status: { ...interrupted.status!, state: "failed" } },
+      [
+        {
+          runtimeId: "story",
+          pluginId: "story",
+          turnId: "t",
+          status: "failed",
+          detail: "Request timed out",
+        },
+      ],
+    );
+    expect(screen.getByText(i18n.t("error.actionable.timeout"))).toBeTruthy();
+    expect(
+      screen
+        .getByRole("button", { name: "Retry unfinished turn" })
+        .getAttribute("data-variant"),
+    ).toBe("default");
+    expect(screen.queryByRole("button", { name: "Model settings" })).toBeNull();
+  });
+
+  it("keeps the existing interrupted notice when no runtime recorded a cause", () => {
+    setup(interrupted, [
+      {
+        runtimeId: "old",
+        pluginId: "old",
+        turnId: "older",
+        status: "failed",
+        detail: "401 Unauthorized",
+      },
+      {
+        runtimeId: "story",
+        pluginId: "story",
+        turnId: "t",
+        status: "failed",
+        detail: "__i18n:session.reasonInterrupted__",
+      },
+    ]);
+    expect(
+      screen.getByText(i18n.t("session.recoveryInterrupted")),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(i18n.t("session.recoveryInterruptedDetail")),
+    ).toBeTruthy();
+    expect(
+      screen
+        .getByRole("button", { name: "Retry unfinished turn" })
+        .getAttribute("data-variant"),
+    ).toBe("default");
+    expect(screen.queryByRole("button", { name: "Model settings" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Show details" })).toBeNull();
+  });
   it("offers Continue in the stopped opening row without running it automatically", () => {
     const { onRetry } = setup({
       ...interrupted,

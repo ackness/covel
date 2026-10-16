@@ -3,8 +3,10 @@ import { describe, expect, it } from "vitest";
 import {
   executionPresentation,
   latestExecutionPresentation,
+  recoveryNoticeTurnId,
 } from "../execution-presentation.js";
 import type { ExecutionStep, StreamMessage } from "@/stores/session-store.js";
+import type { ExecutionRecovery } from "@/stores/session-store/types.js";
 
 const story: StreamMessage = {
   id: "story",
@@ -22,6 +24,36 @@ const failed: ExecutionStep = {
 };
 
 describe("execution presentation", () => {
+  it("assigns recovery to the original timeline row until the notice disappears", () => {
+    const recovery: ExecutionRecovery = {
+      sessionId: "session",
+      hydrating: false,
+      checking: false,
+      status: { state: "failed", turnId: "retry-2" },
+    };
+    const steps: ExecutionStep[] = [
+      failed,
+      { ...failed, turnId: "retry-1", sourceTurnId: "old" },
+      { ...failed, turnId: "retry-2", sourceTurnId: "retry-1" },
+    ];
+    expect(recoveryNoticeTurnId(recovery, steps)).toBe("old");
+    expect(recoveryNoticeTurnId(null, steps)).toBeUndefined();
+    expect(
+      recoveryNoticeTurnId(
+        { ...recovery, status: { state: "completed", turnId: "retry-2" } },
+        steps,
+      ),
+    ).toBeUndefined();
+    expect(
+      recoveryNoticeTurnId(
+        { ...recovery, status: { state: "failed", turnId: "old" } },
+        steps,
+      ),
+    ).toBe("old");
+    expect(
+      recoveryNoticeTurnId({ ...recovery, status: null }, steps),
+    ).toBeUndefined();
+  });
   it("distinguishes uncommitted stops, failures, and committed partial results", () => {
     expect(
       executionPresentation({

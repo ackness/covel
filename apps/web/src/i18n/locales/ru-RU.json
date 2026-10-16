@@ -401,10 +401,10 @@
     "recoveryStop": "Остановить задачу",
     "recoveryStopFailed": "Не удалось остановить задачу. Проверьте состояние и попробуйте снова.",
     "setupFailedTitle": "Подготовка не завершена",
-    "setupFailedDetail": "Один из шагов подготовки истории завершился с ошибкой. Уже выполненное сохранено; повтор запустит только незавершённые шаги.",
+    "setupFailedDetail": "Один из шагов подготовки не удался; повторите незавершённые шаги.",
     "setupRetry": "Повторить подготовку",
     "setupUnfinishedTitle": "Подготовка ещё не завершена",
-    "setupUnfinishedDetail": "История ещё готовится. Продолжите, чтобы выполнить оставшиеся шаги с уже введёнными данными.",
+    "setupUnfinishedDetail": "Продолжите подготовку с уже выбранными настройками.",
     "setupContinue": "Продолжить подготовку",
     "setupRetryFailed": "Не удалось перезапустить подготовку. Проверьте соединение и повторите попытку.",
     "memoryIndex": {
@@ -553,7 +553,14 @@
       "turnedOn": "Также включено: {{plugins}} — они нужны другому плагину.",
       "turnedOffConflict": "Также выключено: {{plugins}} — их нельзя использовать вместе с «{{plugin}}».",
       "turnedOffNeeds": "Также выключено: {{plugins}} — им нужен «{{plugin}}»."
-    }
+    },
+    "recoveryModelSettings": "Настройки модели",
+    "setupRunning": "Подготовка начала истории",
+    "setupExecutionSummary": "Подготовка начала · {{count}} задач",
+    "setupExecutionSummary_one": "Подготовка начала · {{count}} задача",
+    "setupExecutionSummary_few": "Подготовка начала · {{count}} задачи",
+    "setupExecutionSummary_many": "Подготовка начала · {{count}} задач",
+    "setupExecutionSummary_other": "Подготовка начала · {{count}} задачи"
   },
   "blocks": {
     "actionPlaceholder": "Или введите собственное действие...",

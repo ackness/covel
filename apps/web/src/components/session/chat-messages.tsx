@@ -34,6 +34,7 @@ export interface ChatMessagesProps {
   messages: StreamMessage[];
   executionSteps: ExecutionStep[];
   showExecutionTimeline?: boolean;
+  recoveryTurnId?: string;
   executionError: string | null;
   executing: boolean;
   session: SessionRecord;
@@ -84,6 +85,7 @@ const ChatMessagesContent = memo(function ChatMessagesContent({
   messages,
   executionSteps,
   showExecutionTimeline,
+  recoveryTurnId,
   executionError,
   executing,
   session,
@@ -221,6 +223,7 @@ const ChatMessagesContent = memo(function ChatMessagesContent({
   );
 
   const renderedRows = useMessageGrouping({
+    recoveryTurnId,
     messages,
     executionSteps,
     showExecutionTimeline,

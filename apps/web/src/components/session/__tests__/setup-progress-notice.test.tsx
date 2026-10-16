@@ -151,6 +151,7 @@ describe("SetupProgressNotice", () => {
         progress={{ kind: "failed", blocked: ["a/setup", "b/setup"] }}
         onRearm={onRearm}
         onRun={onRun}
+        onOpenSettings={vi.fn()}
       />,
     );
     // The session record trails the end of a run; nothing shows before it settles.
@@ -170,6 +171,7 @@ describe("SetupProgressNotice", () => {
           throw new Error("offline");
         }}
         onRun={onRun}
+        onOpenSettings={vi.fn()}
       />,
     );
     act(() => vi.advanceTimersByTime(1500));
@@ -181,5 +183,86 @@ describe("SetupProgressNotice", () => {
       (screen.getByRole("button", { name: "Retry setup" }) as HTMLButtonElement)
         .disabled,
     ).toBe(false);
+  });
+
+  it.each([
+    ["401 Unauthorized", "auth", "llm.providers"],
+    ["403 Forbidden", "forbidden", "llm.slots"],
+    ["404 Unknown model", "notFound", "llm.slots"],
+    ["429 Too many requests", "rateLimited", "llm.slots"],
+  ])("opens settings for %s and leaves retry secondary", (error, kind, key) => {
+    const onOpenSettings = vi.fn();
+    const onRun = vi.fn();
+    const onRearm = vi.fn();
+    render(
+      <SetupProgressNotice
+        progress={{ kind: "failed", blocked: ["world/setup"], error }}
+        onRearm={onRearm}
+        onRun={onRun}
+        onOpenSettings={onOpenSettings}
+      />,
+    );
+    act(() => vi.advanceTimersByTime(1500));
+    expect(screen.getByRole("alert").getAttribute("data-kind")).toBe("failed");
+    expect(screen.getByText(i18n.t(`error.actionable.${kind}`))).toBeTruthy();
+    expect(screen.queryByText(i18n.t("session.setupFailedDetail"))).toBeNull();
+    expect(screen.queryByText(error)).toBeNull();
+    const settings = screen.getByRole("button", { name: "Model settings" });
+    expect(settings.getAttribute("data-variant")).toBe("default");
+    expect(
+      screen
+        .getByRole("button", { name: "Retry setup" })
+        .getAttribute("data-variant"),
+    ).toBe("outline");
+    fireEvent.click(settings);
+    expect(onOpenSettings).toHaveBeenCalledExactlyOnceWith(key);
+    expect(onRearm).not.toHaveBeenCalled();
+    expect(onRun).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Show details" }));
+    expect(screen.getByText(error)).toBeTruthy();
+  });
+
+  it.each(["Request timed out", "503 Service unavailable", undefined])(
+    "keeps retry primary for a failure without a settings fix: %s",
+    (error) => {
+      render(
+        <SetupProgressNotice
+          progress={{ kind: "failed", blocked: [], error }}
+          onRearm={vi.fn()}
+          onRun={vi.fn()}
+          onOpenSettings={vi.fn()}
+        />,
+      );
+      act(() => vi.advanceTimersByTime(1500));
+      expect(
+        screen
+          .getByRole("button", { name: "Retry setup" })
+          .getAttribute("data-variant"),
+      ).toBe("default");
+      expect(
+        screen.queryByRole("button", { name: "Model settings" }),
+      ).toBeNull();
+    },
+  );
+
+  it("offers a primary continue action for unfinished setup", () => {
+    const onRun = vi.fn();
+    render(
+      <SetupProgressNotice
+        progress={{ kind: "unfinished", blocked: [] }}
+        onRearm={vi.fn()}
+        onRun={onRun}
+        onOpenSettings={vi.fn()}
+      />,
+    );
+    act(() => vi.advanceTimersByTime(1500));
+    expect(screen.getByRole("status").getAttribute("data-kind")).toBe(
+      "unfinished",
+    );
+    const button = screen.getByRole("button", { name: "Continue setup" });
+    expect(button.getAttribute("data-variant")).toBe("default");
+    fireEvent.click(button);
+    expect(onRun).toHaveBeenCalledOnce();
+    expect(screen.queryByRole("button", { name: "Model settings" })).toBeNull();
   });
 });
