@@ -491,7 +491,7 @@ async function enterFreshHarukaSession(page: Page): Promise<string> {
 
   await selectWorldByText(
     page,
-    /遥风学园・春日薄荷|Haruka Academy · Spring Mint/i,
+    /遥风学园・春日薄荷|Harukaze Academy · Spring Mint/i,
   );
 
   const startButton = page

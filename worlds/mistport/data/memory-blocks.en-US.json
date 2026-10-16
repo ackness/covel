@@ -13,7 +13,7 @@
     {
       "label": "tides",
       "displayName": "Tide Watch",
-      "extractionHint": "Observations and rumors about when the ebbs come, where fog beasts appear, and windows of safety and danger. The deep withdrawal stage is kept in the Deep Withdrawal dimension and the player character's fog-rot in their character attributes; do not repeat them here."
+      "extractionHint": "Observations and rumors about when the ebbs come, where fog beasts appear, and windows of safety and danger. The deep ebb stage is kept in the Deep Ebb dimension and the player character's fog-rot in their character attributes; do not repeat them here."
     },
     {
       "label": "commitments",

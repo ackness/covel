@@ -802,7 +802,7 @@ characterSchema:
       type: number
 
 # world.en-US.yaml —— 只有文本
-name: Mistport Chronicles
+name: "Mistport: The Riftide Chronicle"
 characterSchema:
   attributes:
     - id: fogRot

@@ -17,7 +17,7 @@
     - tide
 - id: mistport-opening-leads
   title: The First Step After Three Bells
-  content: Do not dump the whole conspiracy at the start. Su Yao's half-letter, Appraisal Report 74 missing from the Guild's Sealed Archive, and the Echo Gallery newly uncovered beyond the Seal Tide Gate are three starting points that can be checked against one another; the Salt Fangs' hidden hatch and a Council permit come at different prices. Give every scene at least one concrete lead the player can act on, and have one of Lin Yuanzhou, Iron Meg, Grey Falcon or Frost push the investigation on to the next place for reasons of their own.
+  content: Do not dump the whole conspiracy at the start. Su Yao's half-letter, Appraisal Report 74 missing from the Guild's Sealed Archive, and the Echo Gallery newly uncovered beyond the Tide-Seal Gate are three starting points that can be checked against one another; the Salt Fangs' hidden hatch and a Council permit come at different prices. Give every scene at least one concrete lead the player can act on, and have one of Lin Yuanzhou, Iron Meg, Grey Falcon or Frost push the investigation on to the next place for reasons of their own.
   keys:
     - triple strike
     - three strikes
@@ -29,7 +29,7 @@
     - gallery
 - id: mistport-tide-clock
   title: The Tide Clock
-  content: The rising and falling tide, the clocktower bell and the Seal Tide Decree all change where the player can go. When offering choices, make the current tide time clear and let the pressure of time shape the route; the deep withdrawal warning (three quick strikes) is a rare window of opportunity, and of danger.
+  content: The rising and falling tide, the clocktower bell and the Tide-Seal Decree all change where the player can go. When offering choices, make the current tide time clear and let the pressure of time shape the route; the deep ebb warning (three quick strikes) is a rare window of opportunity, and of danger.
   keys:
     - rising tide
     - flood
@@ -67,8 +67,8 @@
     - cost
     - mutation
     - mutate
-    - Tide-Warden
-    - Tide Warden
+    - Tidewielder
+    - Tide wielder
 - id: mistport-faction-pressure
   title: The Four-Way Struggle
   content: The Council, the Tide-Reader Guild, the Salt Fangs and the Congregation of the Mist each react to the player's relic dealings and moves in the Undertow, and when one side gains, another loses. As the plot moves on, show first what it costs to take a side — pleasing one faction usually offends another, and no one stays neutral without leaving a trace.
@@ -91,7 +91,7 @@
     - truth
 - id: mistport-consequence-ledger
   title: Choices Leave Marks
-  content: A costly action should keep changing the state of things, not reset by the next scene. Update tide time, location, vitality, stress, fog-rot and each character's trust as usual. The Case Board (lead status), Faction Standing (attitudes plus permits, warrants and favors), the Deep Withdrawal stage and the Key Fragments are settled from the narrative after each turn — so the narrative must make those changes clear and visible (who saw it, how evidence was corroborated or contaminated, how far the tide signals have got) and must go by their current values, never contradict them. Write only changes the narrative has clearly caused, and carry the consequences into later scenes.
+  content: A costly action should keep changing the state of things, not reset by the next scene. Update tide time, location, vitality, stress, fog-rot and each character's trust as usual. The Case Board (lead status), Faction Standing (attitudes plus permits, warrants and favors), the Deep Ebb stage and the Key Fragments are settled from the narrative after each turn — so the narrative must make those changes clear and visible (who saw it, how evidence was corroborated or contaminated, how far the tide signals have got) and must go by their current values, never contradict them. Write only changes the narrative has clearly caused, and carry the consequences into later scenes.
   keys:
     - trust
     - stress

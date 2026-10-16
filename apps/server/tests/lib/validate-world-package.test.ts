@@ -705,7 +705,7 @@ describe("validateWorldPackage", () => {
     );
     await writeFile(
       path.join(worldDir, "world.en-US.yaml"),
-      "name: Mistport Chronicles\nsubtitle: A tale\n",
+      'name: "Mistport: The Riftide Chronicle"\nsubtitle: A tale\n',
     );
 
     const overlays = (await validate(worldDir, true)).filter(
@@ -878,7 +878,7 @@ describe("validateWorldPackage", () => {
       manifestPath,
       (await readFile(manifestPath, "utf-8")).replace(
         /^name: .*$/m,
-        "name:\n  zh-CN: 雾港・裂潮纪\n  en-US: Mistport Chronicles",
+        'name:\n  zh-CN: 雾港・裂潮纪\n  en-US: "Mistport: The Riftide Chronicle"',
       ),
     );
 

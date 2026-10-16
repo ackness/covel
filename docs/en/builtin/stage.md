@@ -50,7 +50,7 @@ Lets the stage know where things are, whether it is day or night, and who is pre
 
 ### When it is on
 
-Optional. The built-in "Dialogue Mode" gameplay pack includes it. The "Campus Romance · Visual Novel" pack for Haruka Academy also includes it.
+Optional. The built-in "Dialogue Mode" gameplay pack includes it. The "Campus Romance · Visual Novel" pack for Harukaze Academy also includes it.
 
 ### What you can change
 

@@ -26,7 +26,7 @@ const mistportAbilities = [
   },
 ];
 
-// Haruka Academy shape: bio strings plus numbers in social/stats categories —
+// Harukaze Academy shape: bio strings plus numbers in social/stats categories —
 // nothing the default rule may allocate onto.
 const dialogueSchema = {
   attributes: [
@@ -64,7 +64,6 @@ const rules = {
     { id: "combat", label: "Combat", base: 1, max: 5 },
   ],
 };
-
 
 describe("attribute labels", () => {
   it("resolves a name by language code, as the SDK does", () => {

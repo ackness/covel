@@ -98,7 +98,7 @@ So do not write day-only phrases such as "afternoon sunshine" in `style.prefix`.
 
 The game does not know what your picture shows. It matches the place name reported in the story against the names of the scenes. Use `name` and the first part of `locationRef` for the scene’s own place, and the later parts for sub-locations within it. The world data reference gives the full [matching order](../reference/world-data.md#scene-backgrounds).
 
-For example, the classroom in Haruka Academy has a sub-location called "Window Seat". "Library window seat" still uses the library background because the location explicitly names the library. "Window seat" alone, or "Class 2-B window seat", uses the classroom background.
+For example, the classroom in Harukaze Academy has a sub-location called "Window Seat". "Library window seat" still uses the library background because the location explicitly names the library. "Window seat" alone, or "Class 2-B window seat", uses the classroom background.
 
 So two rules of thumb:
 
@@ -113,7 +113,7 @@ When no scene matches, the stage uses the world’s cover. This is not an error.
 pnpm exec tsx scripts/generate-scenes.mjs tidelamp --dry-run
 ```
 
-Using the built-in 遥风学园 (Haruka Academy) as an example, add `--limit 1` to look only at the first scene:
+Using the built-in 遥风学园 (Harukaze Academy) as an example, add `--limit 1` to look only at the first scene:
 
 ```bash
 pnpm exec tsx scripts/generate-scenes.mjs haruka-academy --limit 1 --dry-run

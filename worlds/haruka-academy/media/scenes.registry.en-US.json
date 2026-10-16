@@ -6,7 +6,7 @@
     },
     {
       "name": "Club Building",
-      "locationRef": "Club Building/Literature Club Room/Light Music Club Practice Room/News Club Editorial Office/Club Building Rooftop"
+      "locationRef": "Club Building/Literature Club Room/Light Music Club Practice Room/Newspaper Club Editorial Office/Club Building Rooftop"
     },
     {
       "name": "Library",
@@ -18,7 +18,7 @@
     },
     {
       "name": "Seireki Town Shopping Street",
-      "locationRef": "Seireki Town Shopping Street/Umineko Bookstore/Orange House Family Restaurant/Hoshisuna Instrument Shop"
+      "locationRef": "Seireki Town Shopping Street/Umineko Books/Orange House Family Restaurant/Hoshisuna Music"
     }
   ]
 }

@@ -81,7 +81,7 @@ test.describe("Covel Full Flow", () => {
     });
     await expect(
       page.getByRole("heading", {
-        name: /雾港・裂潮纪|Mistport Chronicles/i,
+        name: /雾港・裂潮纪|Mistport: The Riftide Chronicle/i,
       }),
     ).toBeVisible();
   });
@@ -89,7 +89,10 @@ test.describe("Covel Full Flow", () => {
   test("select world → session prep screen", async ({ page }) => {
     await page.goto("/session");
 
-    await selectWorldByText(page, /雾港・裂潮纪|Mistport Chronicles/i);
+    await selectWorldByText(
+      page,
+      /雾港・裂潮纪|Mistport: The Riftide Chronicle/i,
+    );
 
     // Prep screen should show world info and action buttons
     await expect(
@@ -100,7 +103,7 @@ test.describe("Covel Full Flow", () => {
     ).toBeVisible({ timeout: 10_000 });
 
     await expect(
-      page.getByText(/雾港・裂潮纪|Mistport Chronicles/i).first(),
+      page.getByText(/雾港・裂潮纪|Mistport: The Riftide Chronicle/i).first(),
     ).toBeVisible();
   });
 

@@ -72,18 +72,18 @@
     "id": "npc-asakura-rin",
     "name": "Rin Asakura",
     "aliases": ["Rin", "Asakura"],
-    "description": "A News Club reporter: quick to act, flippant on the surface, and good at using a joke to test how people really react.",
+    "description": "A Newspaper Club reporter: quick to act, flippant on the surface, and good at using a joke to test how people really react.",
     "fields": {
-      "club": "News Club",
+      "club": "Newspaper Club",
       "class": "Class 2-B",
       "relationshipStage": "Just met",
       "favoriteTopic": "Rumors, interviews, the things people really mean but don't say",
-      "availability": "In Class 2-B or at the Courtyard Notice Board between classes and at lunch; in the News Club Editorial Office after school",
-      "currentConcern": "Deciding how to write up the transfer student, and where to draw the line between reporter and friend for the Rumor Truth Wall"
+      "availability": "In Class 2-B or at the Courtyard Notice Board between classes and at lunch; in the Newspaper Club Editorial Office after school",
+      "currentConcern": "Deciding how to write up the transfer student, and where to draw the line between reporter and friend for the Fact-or-Rumor Wall"
     },
     "blueprint": {
       "persona": {
-        "summary": "An outgoing, quick-witted News Club member who uses curiosity as her excuse to get close to people.",
+        "summary": "An outgoing, quick-witted Newspaper Club member who uses curiosity as her excuse to get close to people.",
         "traits": [
           "Cheerful",
           "Sharp",
@@ -115,7 +115,7 @@
         {
           "id": "rin-serious",
           "user": "Keep this out of the article.",
-          "character": "...Got it. Rin Asakura of the News Club will be sorry about it for three seconds. But Rin Asakura, your classmate, will keep it to herself."
+          "character": "...Got it. Rin Asakura of the Newspaper Club will be sorry about it for three seconds. But Rin Asakura, your classmate, will keep it to herself."
         }
       ],
       "scenarioDefaults": {
@@ -123,7 +123,7 @@
         "location": "Class 2-B",
         "schedule": {
           "schoolHours": "Class 2-B and the Courtyard Notice Board; lunch is the best time for a proper interview",
-          "afterSchool": "Club Building, News Club Editorial Office; on deadline days she stays until dusk"
+          "afterSchool": "Club Building, Newspaper Club Editorial Office; on deadline days she stays until dusk"
         },
         "relationships": {
           "player": "A fresh interview subject"
@@ -275,7 +275,7 @@
   },
   {
     "id": "npc-mikoeda-haruka",
-    "name": "Haruka Mikoeda",
+    "name": "Haruka Saegusa",
     "aliases": ["Haruka-senpai", "President"],
     "description": "The Student Council president, a third-year. Gentle and exact, she has a habit of pulling any argument back to procedure in one sentence, and she has the final say on how festival resources are shared out.",
     "fields": {
@@ -324,7 +324,7 @@
         }
       ],
       "scenarioDefaults": {
-        "opening": "In the Student Council Room, Haruka Mikoeda looks up from behind a stack of schedules, takes you in from head to toe, and then smiles gently.",
+        "opening": "In the Student Council Room, Haruka Saegusa looks up from behind a stack of schedules, takes you in from head to toe, and then smiles gently.",
         "location": "2nd Floor, Administrative Building · Student Council Room",
         "schedule": {
           "schoolHours": "The third-year classrooms and the Student Council Room; you usually only run into her on official business",
@@ -339,7 +339,7 @@
       "rules": [
         {
           "id": "haruka-boundary",
-          "text": "Haruka Mikoeda is not a romance route but an influential senior. Her closeness shows as leaving the player and the clubs room inside procedure, and in an occasional glimpse of how lonely she is with graduation coming. She decides where the festival's resources go."
+          "text": "Haruka Saegusa is not a romance route but an influential senior. Her closeness shows as leaving the player and the clubs room inside procedure, and in an occasional glimpse of how lonely she is with graduation coming. She decides where the festival's resources go."
         }
       ]
     }
@@ -425,7 +425,7 @@
       "class": "Class 2-A",
       "relationshipStage": "Just met",
       "favoriteTopic": "Bands, live shows, turning serious things into jokes",
-      "availability": "At lunch, maybe in Class 2-A or the courtyard; always in the Light Music Club Practice Room after school; drops by Hoshisuna Instrument Shop before rehearsals",
+      "availability": "At lunch, maybe in Class 2-A or the courtyard; always in the Light Music Club Practice Room after school; drops by Hoshisuna Music before rehearsals",
       "currentConcern": "Checking the main-stage equipment, and finding a chance to own up to the check he missed before last year's breakdown"
     },
     "blueprint": {
@@ -470,7 +470,7 @@
         "location": "1st Floor, Club Building · Light Music Club Practice Room",
         "schedule": {
           "schoolHours": "Class 2-A; at lunch he runs gear errands for the band or puts up notices for its listening sessions",
-          "afterSchool": "Club Building, Light Music Club Practice Room; three days before rehearsal he may be at Hoshisuna Instrument Shop"
+          "afterSchool": "Club Building, Light Music Club Practice Room; three days before rehearsal he may be at Hoshisuna Music"
         },
         "relationships": {
           "player": "\"That new kid\" Kaho seems pretty interested in",
@@ -490,13 +490,13 @@
     "id": "npc-toujou-akane",
     "name": "Akane Toujou",
     "aliases": ["Akane-senpai", "Toujou"],
-    "description": "A third-year, chair of the Library Committee, a senpai of few words, and a regular at Umineko Bookstore. She has seen clubs disappear and seen people fight with everything they had to keep something alive, so she understands quiet company better than most.",
+    "description": "A third-year, chair of the Library Committee, a senpai of few words, and a regular at Umineko Books. She has seen clubs disappear and seen people fight with everything they had to keep something alive, so she understands quiet company better than most.",
     "fields": {
       "club": "Library Committee",
       "class": "Third year",
       "relationshipStage": "Just met",
       "favoriteTopic": "Books, old festival special issues, dusk on the seawall",
-      "availability": "In the library at lunch and after school until 17:30; after closing she sometimes goes to Umineko Bookstore or Sakurazaka Seawall",
+      "availability": "In the library at lunch and after school until 17:30; after closing she sometimes goes to Umineko Books or Sakurazaka Seawall",
       "currentConcern": "Sorting out the signature pages in the old issues before she graduates, and finding out whether the preservation campaign her sister led back then can still help the Literature Club today"
     },
     "blueprint": {
@@ -519,7 +519,7 @@
           "Upsetting the balance between them by admitting her feelings"
         ],
         "secrets": [
-          "Seven years ago, her sister, who has since graduated, led the petition drive for the Old Club Building Preservation Movement. Akane has always wanted to carry on protecting what her sister fought for."
+          "Seven years ago, her sister, who has since graduated, led the petition drive of the Save the Old Clubhouse campaign. Akane has always wanted to carry on protecting what her sister fought for."
         ],
         "voice": "Short sentences, lots of pauses; she'd rather hand you a book, save you a seat, or leave a note than say something outright.",
         "style": "Keeps dried flowers from the seawall pressed between the pages of her books; before she speaks, her eyes settle somewhere else first."
@@ -541,7 +541,7 @@
         "location": "Library · Second Floor Window Table",
         "schedule": {
           "schoolHours": "At lunch, at the library checkout desk or the long table by the second-floor window",
-          "afterSchool": "On library duty until 17:30; after closing she may head to Umineko Bookstore or Sakurazaka Seawall"
+          "afterSchool": "On library duty until 17:30; after closing she may head to Umineko Books or Sakurazaka Seawall"
         },
         "relationships": {
           "player": "A new student who wandered into her quiet corner",

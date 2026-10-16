@@ -106,10 +106,13 @@ describe.each([
       ["Class 2-B window seat", "classroom-2b"],
       ["Library Sakurazaka Seawall nearby", "sakurazaka-seawall"],
       ["Window Seat Second Floor Window Table nearby", "library"],
+      ["Umineko Books", "shopping-street"],
+      ["Hoshisuna Music", "shopping-street"],
+      ["Newspaper Club Editorial Office", "club-building"],
       ["Window", null],
     ],
   },
-])("Haruka Academy scene names ($locale)", ({ registry, cases }) => {
+])("Harukaze Academy scene names ($locale)", ({ registry, cases }) => {
   it.each(cases)("matches %s to %s", (location, sceneId) => {
     expect(matchScene(registry, location)?.sceneId ?? null).toBe(sceneId);
     expect(matchScene([...registry].reverse(), location)?.sceneId ?? null).toBe(
