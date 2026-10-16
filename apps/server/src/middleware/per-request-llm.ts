@@ -162,9 +162,6 @@ export function createPerRequestLlmMiddleware(
     c.set("requestRuntimeJobReady", (model) =>
       hasRuntimeJobCredentials(opts.ai.gateway, model, requestOptions),
     );
-    if (slotOverrides?.slotBindings?.memory) {
-      c.set("requestMemorySlot", "memory");
-    }
     await withRequestLlmOptions(requestOptions, next);
   };
 }

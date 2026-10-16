@@ -32,7 +32,6 @@
 | status      | 含义                                   |
 | ----------- | -------------------------------------- |
 | `active`    | 代码已经在读，是当前生效的配置         |
-| `planned`   | 计划中的开关，现在设置了也没有效果     |
 | `packaging` | 打包工具读取，应用运行时一般只是透传它 |
 
 ## 文件职责
@@ -339,7 +338,6 @@ v0.0.42 调整了插件扩展契约，旧的开发数据不会自动升级。桌
 | `COVEL_AUTO_SNAPSHOT_RETENTION`  | `20`                      | 每个会话保留几份自动快照                              |
 | `COVEL_TRACE_RETENTION_DAYS`     | `30`                      | trace 和事件流水保留多少天                            |
 | `COVEL_PLUGIN_LOG_LEVEL`         | 开发 `debug`，生产 `info` | 插件日志写入存储的最低级别                            |
-| `COVEL_TRACE_TRUNCATE`           | `false`（`planned`）      | 计划中的 trace 截断开关，现在不可依赖                 |
 
 这些开关的细节见 [Runtime Contract](#runtime-contract)。
 
@@ -352,8 +350,6 @@ v0.0.42 调整了插件扩展契约，旧的开发数据不会自动升级。桌
 | `COVEL_RANDOM_SEED`                                   | —                               | 只用于测试服务端：插件的 `ctx.random` 每次运行给出相同的数 |
 | `CI`                                                  | `false`                         | CI 模式，影响 lint 和 Playwright 的行为                    |
 | `LIVE_LLM_ENABLED`                                    | `false`                         | 开启调用真实服务商的测试                                   |
-| `BASE_URL`                                            | `http://localhost:5173`         | README 截图脚本访问的前端地址                              |
-| `SESSION_ID`                                          | —                               | README 截图脚本使用的会话 ID                               |
 | `COVEL_PG_PREFLIGHT_HOST` / `COVEL_PG_PREFLIGHT_PORT` | `127.0.0.1` / `5432`            | `dev:pg` 启动前 TCP 检查的目标                             |
 | `COVEL_PG_PREFLIGHT_SKIP`                             | `false`                         | 设为 `1` 跳过 `dev:pg` 的 TCP 检查                         |
 

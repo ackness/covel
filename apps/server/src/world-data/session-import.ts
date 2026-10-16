@@ -43,7 +43,6 @@ import { readWorldManifest, resolveWorldRoot } from "./session-import/utils.js";
 import { writeImportPlan } from "./session-import/writes.js";
 import { writeKey } from "./session-import/identity.js";
 import type {
-  ImportWorldDataForSessionOptions,
   ImportWorldDataForSessionResult,
   ApplyPreparedWorldDataImportForSessionOptions,
   PrepareWorldDataImportForSessionOptions,
@@ -299,43 +298,6 @@ export async function applyPreparedWorldDataImportForSession(
     skipped: result.skipped,
     mediaRefs,
   };
-}
-
-export async function importWorldDataForSession(
-  options: ImportWorldDataForSessionOptions,
-): Promise<ImportWorldDataForSessionResult> {
-  const session =
-    (!options.preflight?.activePlugins || options.locale === undefined) &&
-    options.store.getSession
-      ? await options.store.getSession(options.sessionId)
-      : null;
-  const prepared = await prepareWorldDataImportForSession({
-    world: options.worldId
-      ? await options.store.getWorld(options.worldId)
-      : undefined,
-    sessionId: options.sessionId,
-    worldId: options.worldId,
-    worldsDirs: options.worldsDirs,
-    covelHome: options.covelHome,
-    now: options.now,
-    // Existing sessions select skipExisting writes before materializing media.
-    // Session creation passes mediaStore to preparation to keep the subsequent
-    // database transaction short.
-    preflight: {
-      ...options.preflight,
-      activePlugins: options.preflight?.activePlugins ?? session?.activePlugins,
-    },
-    locale: options.locale ?? session?.locale,
-  });
-  return applyPreparedWorldDataImportForSession({
-    store: options.store,
-    mediaStore: options.mediaStore,
-    sessionId: options.sessionId,
-    worldId: options.worldId,
-    now: options.now,
-    prepared,
-    deferMediaFinalize: options.deferMediaFinalize,
-  });
 }
 
 export async function preflightWorldDataForSession(

@@ -7,12 +7,12 @@ import {
   resolveWorldDimensionsLocale,
   validateWorldManifest,
   type WorldDimensions,
+  parseWorldDataTarget,
 } from "@covel/shared";
 import type { WorldRecord } from "@covel/store";
 import { loadWorldDataDescriptor } from "./descriptor.js";
 import { sourceItems } from "./session-import/utils.js";
 import { readWorldDataSource } from "./source-reader.js";
-import { parseWorldDataTarget } from "./target-uri.js";
 
 /**
  * A world as the three sections the world generator writes, so that a

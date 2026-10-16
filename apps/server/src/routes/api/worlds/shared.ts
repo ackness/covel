@@ -1,3 +1,4 @@
+import { isRecord } from "../../../lib/is-record.js";
 import { publicSessionIncarnation } from "../session/session-guard.js";
 /**
  * Shared types + helpers for the world route modules (crud / dimensions /
@@ -24,10 +25,6 @@ export type WorldEnv = {
     sessionLock: SessionLock;
   };
 };
-
-export function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
 
 /**
  * Whether the record was made from a package of files: a bundled, installed

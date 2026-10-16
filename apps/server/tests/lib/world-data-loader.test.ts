@@ -1,6 +1,7 @@
 import {
   resolveWorldDimensionsLocale,
   worldDimensionsSchema,
+  parseWorldDataTarget,
 } from "@covel/shared";
 import { mkdtemp, mkdir, writeFile, symlink, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -14,7 +15,6 @@ import {
 import { loadPluginCatalogue } from "../../src/world-data/validate-world-package.js";
 import { loadSingleWorld } from "../../src/world-seed-loader.js";
 import { loadWorldDataSummary } from "../../src/world-data/world-load.js";
-import { parseWorldDataTarget } from "../../src/world-data/target-uri.js";
 
 async function makeTempWorld(): Promise<string> {
   return mkdtemp(path.join(tmpdir(), "covel-world-data-"));

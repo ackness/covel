@@ -255,16 +255,6 @@ export async function resolveWorldDataSchema(options: {
   return { kind: "local", uri, path: schemaPath, validate };
 }
 
-/**
- * The schema errors of the last value a validator rejected, one per entry:
- * the place in the value and what is wrong there.
- */
-export function schemaErrorLines(validate: ValidateFunction): string[] {
-  return (validate.errors ?? []).map((error) =>
-    `${error.instancePath || "(root)"} ${error.message ?? "is invalid"}`.trim(),
-  );
-}
-
 export function validateWorldDataSchemaValue(options: {
   readonly schema: WorldDataSchemaRef;
   readonly source: OrderedWorldDataSource;

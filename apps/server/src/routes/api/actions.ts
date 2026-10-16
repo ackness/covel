@@ -41,18 +41,17 @@ import {
   snapshotUserSettings,
   type PreparedInteractionSubmission,
 } from "@covel/runtime";
-import type {
-  CovelEventType,
-  JobStatusRecord,
-  RuntimeManifest,
-  RuntimeRetryScope,
-  SseEnvelope,
-} from "@covel/shared";
 import {
+  type CovelEventType,
+  type JobStatusRecord,
+  type RuntimeManifest,
+  type RuntimeRetryScope,
+  type SseEnvelope,
   FORWARDED_EVENT_TYPES,
   PLAYER_ABORT_REASON,
   concealedRuntimeIds,
   readRuntimeEnv,
+  validateActionRequest,
 } from "@covel/shared";
 import type { CompactorRunner } from "@covel/context";
 import {
@@ -86,7 +85,6 @@ import {
 } from "./actions/execution-recovery.js";
 import { checkSessionOwner } from "./session/session-guard.js";
 import { readLockedSession } from "./session/locked-mutation.js";
-import { validateActionRequest } from "./actions/request.js";
 import { retryPendingDimensionSettlements } from "./actions/dimension-settlement-retry.js";
 import { preflightActionApprovals } from "./actions/approval-preflight.js";
 import { preflightFormApprovals } from "./plugin-rpc/form-approvals.js";
@@ -521,10 +519,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
                 "input_already_committed",
               );
           }
-          // Prep's editable world document is browser-local until the first
-          // start action. Persist its value on the session so setup, opening
-          // continuation, later turns, reconnects, and other server workers
-          // all build context from the same lore.
+          // Refresh runtime activations from the session read under the lock.
           pluginRegistry.syncSessionActivations(
             sessionId,
             liveSession.activePlugins,

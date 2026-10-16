@@ -1,13 +1,13 @@
 /** Canonical projections from one registry entry to public plugin DTOs. */
 
-import { compareText } from "@covel/shared";
 import {
+  pluginRuntimeManifests,
   getPluginTrustInfo,
   pluginDeclarations,
   resolvePluginRuntimeManifest,
   type PluginRegistryEntry,
 } from "@covel/plugin-loader";
-import { deriveEffects } from "@covel/runtime";
+import { compareText } from "@covel/shared";
 import {
   effectiveTurnCompletion,
   getRuntimeSpec,
@@ -17,7 +17,7 @@ import {
   type RuntimeManifest,
   type RuntimePluginContract,
 } from "@covel/shared";
-import { pluginManifestRecords } from "../routes/misc-api/registry-projection.js";
+import { deriveEffects } from "@covel/runtime";
 import { buildPluginLoadDiagnostics } from "./plugin-load-diagnostics.js";
 
 function uniqueSorted(values: Iterable<string>): string[] {
@@ -99,7 +99,7 @@ export function pluginContractFacts(entry: PluginRegistryEntry) {
     provides: plugin?.provides ?? [],
     requires,
     optional: optionalContracts(
-      pluginManifestRecords(entry).map(({ manifest }) => manifest),
+      pluginRuntimeManifests(entry).map(({ manifest }) => manifest),
       requires,
     ),
     conflicts: plugin?.conflicts ?? [],
@@ -121,7 +121,7 @@ export function buildPluginSummary(
   entry: PluginRegistryEntry,
   isEntryPublished?: (pluginId: string) => boolean,
 ): PluginSummary {
-  const manifests = pluginManifestRecords(entry).map(
+  const manifests = pluginRuntimeManifests(entry).map(
     ({ manifest }) => manifest,
   );
   const runtimes = manifests.map(runtimeSummary);
@@ -227,7 +227,7 @@ export function buildPluginDetail(
   isEntryPublished?: (pluginId: string) => boolean,
 ): PluginDetail {
   const summary = buildPluginSummary(entry, isEntryPublished);
-  const runtimes = pluginManifestRecords(entry).map(({ manifest }) =>
+  const runtimes = pluginRuntimeManifests(entry).map(({ manifest }) =>
     runtimeContract(resolvePluginRuntimeManifest(entry, manifest)),
   );
   const declarations = pluginDeclarations(entry);

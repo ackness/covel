@@ -1,3 +1,4 @@
+import { importWorldDataForSession } from "../helpers/world-data-import.js";
 import { createHash } from "node:crypto";
 import {
   cp,
@@ -18,6 +19,7 @@ import {
   discoverPlugins,
   loadPluginDefinition,
 } from "@covel/plugin-loader";
+import type { PluginRegistryEntry } from "@covel/plugin-loader";
 import { MAX_PLUGIN_DATA_VALUE_BYTES } from "@covel/shared";
 import { type DataStore } from "@covel/store";
 import { createMemoryMediaStore, createMemoryStore } from "@covel/store/memory";
@@ -25,7 +27,6 @@ import {
   applyPreparedWorldDataImportForSession,
   finalizeWorldDataMediaRefs,
   WorldDataSyncConflictError,
-  importWorldDataForSession,
   prepareWorldDataImportForSession,
   preflightWorldDataForSession,
   syncWorldDataForSession,
@@ -38,13 +39,11 @@ import { loadSingleWorld } from "../../src/world-seed-loader.js";
 import { conventionsOfPlugins } from "../../src/world-data/conventions.js";
 import { loadWorldDataDescriptor } from "../../src/world-data/descriptor.js";
 import { collectMediaSourceFiles } from "../../src/world-data/media.js";
-
 import {
   makePackageManifest,
   makePlugin,
   registry as registryEntries,
 } from "./world-data-projection-fixtures.js";
-import type { PluginRegistryEntry } from "@covel/plugin-loader";
 
 const NOW = "2026-01-01T00:00:00.000Z";
 

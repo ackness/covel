@@ -4,6 +4,8 @@ import {
   WORLD_EDITIONS_KEY,
   worldDimensionsSchema,
   type WorldDataMetadataSummary,
+  parseWorldDataIndexTarget,
+  parseWorldDataTarget,
 } from "@covel/shared";
 import { digestFile, sha256Hex } from "./digest.js";
 import { worldHasData } from "./conventions.js";
@@ -14,10 +16,6 @@ import {
   resolveWorldDataSchema,
   validateWorldDataSchemaValue,
 } from "./schema-registry.js";
-import {
-  parseWorldDataIndexTarget,
-  parseWorldDataTarget,
-} from "./target-uri.js";
 import { collectMediaSourceFiles } from "./media.js";
 import type { OrderedWorldDataSource, WorldDataDiagnostic } from "./types.js";
 

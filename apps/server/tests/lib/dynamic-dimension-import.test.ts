@@ -1,3 +1,4 @@
+import { importWorldDataForSession } from "../helpers/world-data-import.js";
 import { afterEach, describe, expect, it } from "vitest";
 import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
 import path from "node:path";
@@ -6,7 +7,6 @@ import { createMemoryStore } from "@covel/store/memory";
 import { createPluginRegistry } from "@covel/plugin-loader";
 import { registerDimensionProvider } from "../helpers/dimension-provider.js";
 import {
-  importWorldDataForSession,
   preflightWorldDataForSession,
   syncWorldDataForSession,
 } from "../../src/world-data/session-import.js";

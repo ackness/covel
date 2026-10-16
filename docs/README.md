@@ -31,7 +31,7 @@
 | 问题                                 | 优先搜索                                                                                                                                                                               |
 | ------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `PLUGIN.md` 字段有哪些               | `packages/shared/src/schemas/plugin-schemas.ts`（zod 真身，`plugin.ts` 只是 re-export 聚合点）, `packages/plugin-loader/src/parse-plugin-md.ts`, `docs/reference/plugins.md`           |
-| world data 字段和 URI 怎么写         | `packages/shared/src/schemas/world-data.ts`, `apps/server/src/world-data/target-uri.ts`, `apps/server/src/world-data/schema-registry.ts`, `docs/reference/world-data.md`               |
+| world data 字段和 URI 怎么写         | `packages/shared/src/schemas/world-data.ts`, `packages/shared/src/world-data-target.ts`, `apps/server/src/world-data/schema-registry.ts`, `docs/reference/world-data.md`               |
 | 包的作者信息在哪声明、在哪展示       | `packages/shared/src/schemas/package-info.ts`, `apps/web/src/components/shared/package-credits.tsx`, `docs/reference/plugins.md`                                                       |
 | 某个 HTTP endpoint 的真实行为        | `apps/server/src/routes/api/`, `docs/reference/api.md`                                                                                                                                 |
 | SSE / action 事件怎么消费            | `packages/shared/src/types/protocol.ts`, `apps/web/src/services/api/actions.ts`, `apps/web/src/services/subscription.ts`, `docs/reference/protocol.md`                                 |

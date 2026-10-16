@@ -30,7 +30,7 @@ const UNAVAILABLE: SessionMemoryIndexStatus = {
   stale: false,
 };
 
-export async function memoryIndexStatus(
+async function memoryIndexStatus(
   store: DataStore,
   control: MemoryIndexControl | undefined,
   session: SessionRecord,

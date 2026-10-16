@@ -1,3 +1,4 @@
+import { importWorldDataForSession } from "../helpers/world-data-import.js";
 import { readWorldDeletion } from "../../src/world-lifecycle.js";
 import { createPluginRegistry } from "@covel/plugin-loader";
 import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
@@ -24,7 +25,6 @@ import {
 } from "../../../../packages/store/src/contract/test-fixtures.js";
 import { worldCrudRoutes } from "../../src/routes/api/worlds/crud.js";
 import type { WorldEnv } from "../../src/routes/api/worlds/shared.js";
-import { importWorldDataForSession } from "../../src/world-data/session-import.js";
 import { resolveWorldRoot } from "../../src/world-data/session-import/utils.js";
 import { recoverWorldPackageDeletions } from "../../src/routes/api/worlds/file-package.js";
 

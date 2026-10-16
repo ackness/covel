@@ -128,23 +128,6 @@ export interface WorldDataImportPreflightDeps {
   readonly canExecuteProjection?: (pluginId: string) => boolean;
 }
 
-export interface ImportWorldDataForSessionOptions {
-  // Accepts a transaction-scoped view so the session-create route can run the
-  // whole import inside `store.withTransaction`. A full `DataStore` is still
-  // assignable (it is a superset of `StoreTransaction`).
-  readonly store: StoreTransaction;
-  readonly mediaStore?: MediaStore;
-  readonly sessionId: string;
-  readonly worldId: string | undefined;
-  readonly worldsDirs?: readonly string[];
-  readonly covelHome?: string;
-  readonly now: string;
-  readonly preflight?: WorldDataImportPreflightDeps;
-  readonly deferMediaFinalize?: boolean;
-  /** Session locale — selects `<name>.<lang>.<ext>` source variants when present. */
-  readonly locale?: string;
-}
-
 export interface ImportWorldDataForSessionResult {
   readonly imported: boolean;
   readonly diagnostics: readonly WorldDataDiagnostic[];

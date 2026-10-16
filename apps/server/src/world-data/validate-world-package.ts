@@ -7,16 +7,9 @@
  * Nothing is written and no plugin code is executed.
  */
 
-import { compareText } from "@covel/shared";
-import { readFile, readdir, realpath } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import path from "node:path";
-import { parse as parseYaml } from "yaml";
-import { createEventBus } from "@covel/events";
-import { BUILTIN_PLUGIN_PACKS } from "../config/plugin-packs.js";
-import type { PluginRegistry } from "@covel/plugin-loader";
-import { WORLD_LORE_TOKEN_BUDGET, fitWorldLore } from "@covel/context";
+import { isRecord } from "../lib/is-record.js";
 import {
+  compareText,
   DEFAULT_LOCALE,
   estimateTokens,
   isValidPluginSetting,
@@ -28,7 +21,16 @@ import {
   type NarratorOnlyLoreIssue,
   type WorldDimensions,
   type WorldPluginPolicy,
+  parseWorldDataTarget,
 } from "@covel/shared";
+import { readFile, readdir, realpath } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { parse as parseYaml } from "yaml";
+import { createEventBus } from "@covel/events";
+import { BUILTIN_PLUGIN_PACKS } from "../config/plugin-packs.js";
+import type { PluginRegistry } from "@covel/plugin-loader";
+import { WORLD_LORE_TOKEN_BUDGET, fitWorldLore } from "@covel/context";
 import { discoverAndRegisterPlugins } from "../routes/api/bootstrap/plugin-discovery.js";
 import { resolveLocaleFilePath } from "../world-seed-loader.js";
 import { buildPluginSummary } from "../lib/plugin-descriptor.js";
@@ -60,10 +62,9 @@ import {
 import { worldTranslationStatus } from "./locale-tooling.js";
 import { preflightWorldDataForSession } from "./session-import.js";
 import { readEffectiveDimensions } from "./session-import/dimensions.js";
-import { fileExists, isRecord, sourceItems } from "./session-import/utils.js";
+import { fileExists, sourceItems } from "./session-import/utils.js";
 import { readWorldDataSource } from "./source-reader.js";
 import { resolveWorldCover, resolveWorldThemeMusic } from "./gallery.js";
-import { parseWorldDataTarget } from "./target-uri.js";
 import type { OrderedWorldDataSource } from "./types.js";
 import { loadWorldDataSummary } from "./world-load.js";
 

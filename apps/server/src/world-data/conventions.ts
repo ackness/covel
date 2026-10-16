@@ -7,13 +7,13 @@ import {
   isReservedWorldPackagePath,
   worldDataSourceIdRegex,
 } from "@covel/shared";
-import { readdir, stat } from "node:fs/promises";
-import path from "node:path";
-import type { PluginRegistry } from "@covel/plugin-loader";
 import type {
   WorldDataDescriptor,
   WorldDataSourceDescriptor,
 } from "@covel/shared";
+import { readdir, stat } from "node:fs/promises";
+import path from "node:path";
+import type { PluginRegistry } from "@covel/plugin-loader";
 import { resolveContainedPath } from "./safe-path.js";
 import type { WorldDataDiagnostic } from "./types.js";
 
@@ -333,10 +333,6 @@ export function setWorldDataConventions(
   conventions = sources;
 }
 
-export function worldDataConventions(): readonly ConventionalSource[] {
-  return conventions;
-}
-
 /**
  * Default import order of sources, before `after`: dimensions, then media
  * (records point at media files by name), then the rest in the order given,
@@ -354,7 +350,7 @@ export function sourceRank(
 /** `<dir>/*.<ext>`: a conventional path that names every such file of a directory. */
 const DIRECTORY_PATTERN = /^(.+)\/\*(\.[^./*]+)$/;
 
-export function isDirectoryConvention(conventionalPath: string): boolean {
+function isDirectoryConvention(conventionalPath: string): boolean {
   return DIRECTORY_PATTERN.test(conventionalPath);
 }
 

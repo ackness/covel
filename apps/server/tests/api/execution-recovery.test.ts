@@ -5,7 +5,7 @@ import {
   assertRecoverableTurn,
   recoveryAction,
 } from "../../src/routes/api/actions/execution-recovery.js";
-import { registerActiveTurn } from "../../src/routes/api/turn-control.js";
+import { registerActionRequest } from "../../src/routes/api/turn-control.js";
 import {
   createInProcessSessionLock,
   type SessionLock,
@@ -184,7 +184,8 @@ describe("foreground execution recovery", () => {
 
   it("returns running throughout execution and abort settlement without exposing steering", async () => {
     const { store } = await fixture();
-    const turn = registerActiveTurn("recovery", "active", "request");
+    const turn = registerActionRequest("recovery", "active", "request");
+    turn.beginTurn("active");
     try {
       expect(await getSessionExecutionStatus(store, "recovery")).toEqual({
         state: "running",

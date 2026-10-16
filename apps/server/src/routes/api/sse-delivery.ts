@@ -3,7 +3,7 @@ import type { SSEStreamingApi } from "hono/streaming";
 // Match the subscription's existing burst budget and transport gap grace.
 // Observation must not consume the 30s session-lock/heartbeat budget.
 export const SSE_WRITE_QUEUE_MAX = 256;
-export const SSE_DELIVERY_DEADLINE_MS = 2000;
+const SSE_DELIVERY_DEADLINE_MS = 2000;
 
 export interface BoundedSerialQueueOptions {
   readonly capacity: number;

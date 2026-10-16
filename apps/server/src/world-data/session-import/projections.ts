@@ -1,15 +1,15 @@
+import { isRecord } from "../../lib/is-record.js";
 import { Worker } from "node:worker_threads";
 import { pathToFileURL } from "node:url";
 import { HOST_MODULE_PARENT_URL, HOST_MODULES } from "@covel/plugin-loader";
-import type { WorldProjectionDecl } from "@covel/shared";
 import {
   getPluginTrustInfo,
   type PluginRegistryEntry,
 } from "@covel/plugin-loader";
+import type { WorldProjectionDecl } from "@covel/shared";
 import { canonicalJson, digestFile, sha256Hex } from "../digest.js";
 import { resolveContainedPath } from "../safe-path.js";
 import type { OrderedWorldDataSource, WorldDataDiagnostic } from "../types.js";
-import { isRecord } from "./utils.js";
 import {
   preflightPluginTarget,
   validatePluginDataValue,

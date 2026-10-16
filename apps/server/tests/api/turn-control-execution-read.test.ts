@@ -8,7 +8,7 @@ import {
   bootstrapApi,
   type ApiBootstrapResult,
 } from "../../src/routes/api/bootstrap.js";
-import { registerActiveTurn } from "../../src/routes/api/turn-control.js";
+import { registerActionRequest } from "../../src/routes/api/turn-control.js";
 import { closeTestApi } from "../helpers/close-api.js";
 
 const sessionId = "execution-read";
@@ -169,8 +169,9 @@ describe("execution reads through the bootstrap response barrier", () => {
       });
       await entered.promise;
       const turn = active
-        ? registerActiveTurn(sessionId, "active-turn", "active-request")
+        ? registerActionRequest(sessionId, "active-turn", "active-request")
         : undefined;
+      turn?.beginTurn("active-turn");
       let response: Response | undefined;
       const polling = status().then((value) => {
         response = value;

@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_LOCALE } from "@covel/shared";
+import { DEFAULT_LOCALE, validateActionRequest } from "@covel/shared";
 import { normalizeLocale } from "../../src/lib/validators.js";
-import { validateActionRequest } from "../../src/routes/api/actions/request.js";
 
 describe("locale validation", () => {
   it("accepts safe BCP 47 script and region chains", () => {

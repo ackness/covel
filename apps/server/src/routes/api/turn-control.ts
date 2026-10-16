@@ -48,12 +48,6 @@ const waitingRequests = new Map<string, Set<ActionEntry>>();
 /** Why an interjection was not queued; also the code of the 409 response. */
 export type SteerRefusal = "no_active_turn" | "steering_closed";
 
-export interface RegisteredTurn {
-  readonly turnControl: TurnControl;
-  readonly closeInterjections: () => readonly TurnInterjection[];
-  readonly release: () => void;
-}
-
 export interface ActionRequestControl {
   /** Aborted when the player stops this request, before or during a turn. */
   readonly signal: AbortSignal;
@@ -144,20 +138,6 @@ export function registerActionRequest(
         activeTurns.delete(sessionId);
       }
     },
-  };
-}
-
-/** A request whose turn starts at once; for callers outside the actions route. */
-export function registerActiveTurn(
-  sessionId: string,
-  turnId: string,
-  requestId?: string,
-): RegisteredTurn {
-  const request = registerActionRequest(sessionId, turnId, requestId);
-  return {
-    turnControl: request.beginTurn(turnId),
-    closeInterjections: request.closeInterjections,
-    release: request.release,
   };
 }
 

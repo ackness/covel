@@ -90,7 +90,6 @@ declare module "hono" {
     requestLlmOverridden?: boolean;
     /** Credential readiness of a model under this request's LLM configuration. */
     requestRuntimeJobReady?: (model: string | undefined) => boolean;
-    requestMemorySlot?: string;
     /**
      * Narrow gateway facade exposed to function-runtime handlers via
      * `FunctionHandlerContext.gateway`. Set by `bootstrapApi()` when the

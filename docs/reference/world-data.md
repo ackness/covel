@@ -844,7 +844,7 @@ characterSchema:
 - 主文件里不能把文本写成多语言对照（`name: { zh-CN: …, en-US: … }`）。`pnpm validate:world` 把它报为 `inline-locale-map` 错误。这样写的世界包要拆成主文件加语言文件。
 - 维度值里只有 schema 标了 `x-i18n: true` 的文本节点可以翻译。翻译其他节点会让该维度校验失败。
 
-给插件作者：合并规则是 `@covel/shared` 的 `applyLocaleOverlay`。`importWorldDataForSession` / `syncWorldDataForSession` / `preflightWorldDataForSession` 的 `locale` 选项原样传入，缺省时取 `session.locale`。
+给插件作者：合并规则是 `@covel/shared` 的 `applyLocaleOverlay`。调用 `prepareWorldDataImportForSession` / `preflightWorldDataForSession` 时传入会话的 `locale`；`syncWorldDataForSession` 未指定 `locale` 时取 `session.locale`。
 
 ## Target URI
 

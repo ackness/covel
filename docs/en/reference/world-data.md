@@ -844,7 +844,7 @@ Other rules:
 - A main file cannot write text as a multi-language map (`name: { zh-CN: …, en-US: … }`). `pnpm validate:world` reports this as an `inline-locale-map` error. A world package written this way must be split into a main file and language files.
 - In dimension values, only a text node that the schema marks with `x-i18n: true` can be translated. Translating any other node makes validation of that dimension fail.
 
-For plugin authors: the merge rule is `applyLocaleOverlay` in `@covel/shared`. The `locale` option of `importWorldDataForSession`, `syncWorldDataForSession` and `preflightWorldDataForSession` is passed in as it is. When it is left out, `session.locale` is used.
+For plugin authors: the merge rule is `applyLocaleOverlay` in `@covel/shared`. Pass the session’s `locale` to `prepareWorldDataImportForSession` and `preflightWorldDataForSession`. When `syncWorldDataForSession` receives no `locale`, it uses `session.locale`.
 
 ## Target URI
 

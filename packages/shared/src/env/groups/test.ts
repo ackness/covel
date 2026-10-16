@@ -43,21 +43,6 @@ export const TEST_ENV_VARS = [
     description: "Enables live LLM provider tests.",
   },
   {
-    name: "BASE_URL",
-    group: "test",
-    type: "url",
-    status: "active",
-    defaultValue: "http://localhost:5173",
-    description: "README screenshot script frontend URL.",
-  },
-  {
-    name: "SESSION_ID",
-    group: "test",
-    type: "string",
-    status: "active",
-    description: "README screenshot script session id.",
-  },
-  {
     name: "COVEL_PG_PREFLIGHT_HOST",
     group: "test",
     type: "string",

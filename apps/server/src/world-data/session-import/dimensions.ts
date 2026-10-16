@@ -1,6 +1,6 @@
 import { readWorldDataSource } from "../source-reader.js";
-import { parseWorldDataTarget } from "../target-uri.js";
 import {
+  parseWorldDataTarget,
   DIMENSION_CONTRACT,
   DIMENSION_DATA_NAMESPACE,
   resolveWorldDimensionsLocale,

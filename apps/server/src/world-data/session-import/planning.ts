@@ -1,3 +1,4 @@
+import { isRecord } from "../../lib/is-record.js";
 import {
   resolveWorldDataTargets,
   type ResolvedWorldDataTarget,
@@ -11,6 +12,8 @@ import {
   worldDimensionsSchema,
   type CharacterSchemaRecord,
   type WorldDimensions,
+  parseWorldDataIndexTarget,
+  parseWorldDataTarget,
 } from "@covel/shared";
 import type { CharacterRecord } from "@covel/store";
 import { ZodError } from "zod";
@@ -27,10 +30,6 @@ import {
   resolveWorldDataSchema,
   type WorldDataSchemaRef,
 } from "../schema-registry.js";
-import {
-  parseWorldDataIndexTarget,
-  parseWorldDataTarget,
-} from "../target-uri.js";
 import type { OrderedWorldDataSource, WorldDataDiagnostic } from "../types.js";
 import {
   pluginWriteIdentity,
@@ -48,12 +47,7 @@ import type {
   PluginDataTarget,
   WorldDataImportPreflightDeps,
 } from "./types.js";
-import {
-  isRecord,
-  recordLocation,
-  sourceItems,
-  type RecordLocation,
-} from "./utils.js";
+import { recordLocation, sourceItems, type RecordLocation } from "./utils.js";
 import {
   checkLorebookRecord,
   checkProjectedLorebookRecord,

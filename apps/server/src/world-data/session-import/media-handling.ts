@@ -1,3 +1,4 @@
+import { isRecord } from "../../lib/is-record.js";
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
@@ -5,7 +6,6 @@ import { MEDIA_PIN_REF_PREFIX } from "@covel/shared";
 import type { DataStore, MediaStore } from "@covel/store";
 import { scanSessionMediaIds } from "../../routes/api/media-reference-scan.js";
 import type { PlannedWrite, WorldDataImportedMediaRef } from "./types.js";
-import { isRecord } from "./utils.js";
 
 export function mediaMime(filePath: string): string {
   switch (path.extname(filePath).toLowerCase()) {

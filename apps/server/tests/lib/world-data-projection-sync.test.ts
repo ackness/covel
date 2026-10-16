@@ -1,3 +1,4 @@
+import { importWorldDataForSession } from "../helpers/world-data-import.js";
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -8,10 +9,7 @@ import {
   loadPluginDefinition,
 } from "@covel/plugin-loader";
 import { createMemoryStore } from "@covel/store/memory";
-import {
-  importWorldDataForSession,
-  syncWorldDataForSession,
-} from "../../src/world-data/session-import.js";
+import { syncWorldDataForSession } from "../../src/world-data/session-import.js";
 import { buildImportPlan } from "../../src/world-data/session-import/planning.js";
 import {
   makePlugin,

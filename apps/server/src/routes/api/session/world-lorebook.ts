@@ -1,8 +1,5 @@
+import { isRecord } from "../../../lib/is-record.js";
 import type { LorebookEntryRecord, StoreTransaction } from "@covel/store";
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
-}
 
 /**
  * Import portable lorebook rows embedded in a generated WorldRecord.

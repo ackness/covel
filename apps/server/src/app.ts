@@ -103,16 +103,6 @@ function mergeDirs(base: string, user: string | undefined): string[] {
   return user && user !== base ? [base, user] : [base];
 }
 
-function resolvePreferredMemorySlot(slotRegistry: {
-  resolveSlot(slotId: string): string | undefined;
-  listSlotsByTag(tag: string): Array<{ slotId: string }>;
-}): string {
-  for (const candidate of ["memory", "plugin", "story"] as const) {
-    if (slotRegistry.resolveSlot(candidate)) return candidate;
-  }
-  return slotRegistry.listSlotsByTag("text")[0]?.slotId ?? "plugin";
-}
-
 const app = new Hono();
 // An unknown DEPLOYMENT_TIER (or STORE_BACKEND, MEDIA_BACKEND, ...) throws
 // here, which stops the start with the variable and its accepted values.
@@ -294,9 +284,6 @@ async function initializeServer(): Promise<void> {
       validateBaseUrl: validateBaseUrlForPlugin,
       fetchWithRetry,
     };
-    const preferredMemorySlot = () =>
-      resolvePreferredMemorySlot(ai.slotRegistry);
-
     // ── Bootstrap API ───────────────────────────────────────────────
     // Bundled plugins ship inside the repo / packaged app. The desktop shell
     // can additionally mount a user plugins directory via COVEL_USER_PLUGINS_DIR
@@ -352,7 +339,6 @@ async function initializeServer(): Promise<void> {
       ensureEmbeddingLock,
       memoryIndex,
       memoryEmbed,
-      preferredMemorySlot,
       perRequestMiddleware: [perRequestLlm],
       sessionLock,
       memoryIngestLock,

@@ -35,7 +35,7 @@ function compareVersions(a, b) {
 }
 
 /** The manifests that carry the framework version, as paths relative to `root`. */
-export function frameworkManifests(root) {
+function frameworkManifests(root) {
   const manifests = ["package.json"];
   for (const group of ["apps", "packages"]) {
     const directory = path.join(root, group);

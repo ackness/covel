@@ -1,3 +1,4 @@
+import { importWorldDataForSession } from "../helpers/world-data-import.js";
 import { registerDimensionProvider } from "../helpers/dimension-provider.js";
 import {
   createPluginRegistry,
@@ -7,7 +8,6 @@ import {
   type PluginRegistry,
 } from "@covel/plugin-loader";
 import {
-  importWorldDataForSession,
   preflightWorldDataForSession,
   syncWorldDataForSession,
 } from "../../src/world-data/session-import.js";

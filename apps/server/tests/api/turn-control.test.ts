@@ -10,14 +10,14 @@ import {
   abortActiveTurn,
   hasActiveTurn,
   registerActionRequest,
-  registerActiveTurn,
   steerActiveTurn,
 } from "../../src/routes/api/turn-control.js";
 import { turnControlRoutes } from "../../src/routes/api/turn-control-routes.js";
 
 describe("turn-control registry", () => {
   it("registers, steers, aborts, and releases an active turn", () => {
-    const { turnControl, release } = registerActiveTurn("sess-1", "turn-1");
+    const request = registerActionRequest("sess-1", "turn-1");
+    const turnControl = request.beginTurn("turn-1");
 
     expect(steerActiveTurn("sess-1", "hello")).toEqual({ turnId: "turn-1" });
     expect(turnControl.drainSteering?.()).toEqual(["hello"]);
@@ -32,7 +32,7 @@ describe("turn-control registry", () => {
       refused: "steering_closed",
     });
 
-    release();
+    request.release();
     expect(hasActiveTurn("sess-1")).toBe(false);
     expect(abortActiveTurn("sess-1")).toBeNull();
     expect(steerActiveTurn("sess-1", "after")).toEqual({
@@ -41,16 +41,14 @@ describe("turn-control registry", () => {
   });
 
   it("hands every accepted interjection to the commit, read or not", () => {
-    const { turnControl, closeInterjections, release } = registerActiveTurn(
-      "sess-i",
-      "turn-i",
-    );
+    const request = registerActionRequest("sess-i", "turn-i");
+    const turnControl = request.beginTurn("turn-i");
     try {
       steerActiveTurn("sess-i", "first");
       expect(turnControl.drainSteering?.()).toEqual(["first"]);
       steerActiveTurn("sess-i", "second");
 
-      const saved = closeInterjections();
+      const saved = request.closeInterjections();
       expect(saved).toEqual([
         { content: "first", readAt: expect.any(String) },
         { content: "second" },
@@ -60,12 +58,13 @@ describe("turn-control registry", () => {
         refused: "steering_closed",
       });
     } finally {
-      release();
+      request.release();
     }
   });
 
   it("refuses steering once the executor closed the queue", () => {
-    const { turnControl, release } = registerActiveTurn("sess-c", "turn-c");
+    const request = registerActionRequest("sess-c", "turn-c");
+    const turnControl = request.beginTurn("turn-c");
     try {
       expect(steerActiveTurn("sess-c", "in time")).toEqual({
         turnId: "turn-c",
@@ -80,13 +79,15 @@ describe("turn-control registry", () => {
       });
       expect(turnControl.drainSteering?.()).toEqual(["in time"]);
     } finally {
-      release();
+      request.release();
     }
   });
 
   it("a newer registration replaces a stale one; stale release is a no-op", () => {
-    const first = registerActiveTurn("sess-2", "turn-a");
-    const second = registerActiveTurn("sess-2", "turn-b");
+    const first = registerActionRequest("sess-2", "turn-a");
+    first.beginTurn("turn-a");
+    const second = registerActionRequest("sess-2", "turn-b");
+    second.beginTurn("turn-b");
 
     expect(steerActiveTurn("sess-2", "for-b")).toEqual({ turnId: "turn-b" });
     // Releasing the stale first registration must not remove the live one.
@@ -222,7 +223,8 @@ describe("steer/abort routes", () => {
 
   it("409s with steering_closed and stores nothing once the queue is closed", async () => {
     const { app, store } = await makeApp();
-    const { turnControl, release } = registerActiveTurn("sess-r", "turn-r");
+    const request = registerActionRequest("sess-r", "turn-r");
+    const turnControl = request.beginTurn("turn-r");
     try {
       turnControl.closeSteering?.();
 
@@ -238,16 +240,14 @@ describe("steer/abort routes", () => {
       expect(turnControl.drainSteering?.()).toEqual([]);
       expect(await store.listMessages("sess-r")).toEqual([]);
     } finally {
-      release();
+      request.release();
     }
   });
 
   it("steers and aborts an active turn; the interjection waits for the turn's commit", async () => {
     const { app, store } = await makeApp();
-    const { turnControl, closeInterjections, release } = registerActiveTurn(
-      "sess-r",
-      "turn-r",
-    );
+    const request = registerActionRequest("sess-r", "turn-r");
+    const turnControl = request.beginTurn("turn-r");
     try {
       const steer = await app.request("/api/sessions/sess-r/steer", {
         method: "POST",
@@ -261,7 +261,7 @@ describe("steer/abort routes", () => {
 
       // Nothing is written outside the turn: its commit saves the text.
       expect(await store.listMessages("sess-r")).toEqual([]);
-      expect(closeInterjections()).toEqual([
+      expect(request.closeInterjections()).toEqual([
         { content: "take the left path", readAt: expect.any(String) },
       ]);
 
@@ -271,7 +271,7 @@ describe("steer/abort routes", () => {
       expect(abort.status).toBe(200);
       expect(turnControl.signal?.aborted).toBe(true);
     } finally {
-      release();
+      request.release();
     }
   });
 });

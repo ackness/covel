@@ -3,7 +3,7 @@ import { lstat, mkdtemp, readdir, rename, rm } from "node:fs/promises";
 import path from "node:path";
 
 export const INSTALL_STAGING_PREFIX = ".covel-install-";
-export const UNINSTALL_STAGING_PREFIX = ".covel-uninstall-";
+const UNINSTALL_STAGING_PREFIX = ".covel-uninstall-";
 export const WORLD_DELETE_STAGING_PREFIX = ".covel-world-delete-";
 
 /** Only immediate real directories belong to the staging area; never follow links. */

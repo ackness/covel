@@ -1,3 +1,4 @@
+import { isRecord } from "../../lib/is-record.js";
 import {
   DIMENSION_DATA_NAMESPACE,
   DIMENSION_SETTLEMENT_NAMESPACE,
@@ -14,7 +15,7 @@ import {
 } from "../schema-registry.js";
 import type { ResolvedWorldDataTarget } from "../contract-targets.js";
 import type { OrderedWorldDataSource, WorldDataDiagnostic } from "../types.js";
-import { isRecord, recordLocation, type RecordLocation } from "./utils.js";
+import { recordLocation, type RecordLocation } from "./utils.js";
 import type {
   PluginDataTarget,
   WorldDataImportPreflightDeps,

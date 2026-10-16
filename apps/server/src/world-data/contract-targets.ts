@@ -1,7 +1,6 @@
-import { compareText } from "@covel/shared";
+import { compareText, type ParsedWorldDataTarget } from "@covel/shared";
 import type { PluginRegistry } from "@covel/plugin-loader";
 import type { WorldDataDiagnostic } from "./types.js";
-import type { ParsedWorldDataTarget } from "./target-uri.js";
 
 export interface ResolvedPluginDataTarget {
   readonly kind: "plugin-data";

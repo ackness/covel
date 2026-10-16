@@ -60,7 +60,6 @@ import {
 import { estimateTokens } from "@covel/context";
 import type { CompactorRunner } from "@covel/context";
 import { COMMUNITY_SERVER_CODE_ACTION } from "@covel/approval";
-
 import {
   createInProcessSessionLock,
   type SessionLock,
@@ -220,14 +219,6 @@ export interface ApiBootstrapConfig {
    * `createAiStack().gateway.embed`. Absent → keyword-only memory (unchanged).
    */
   readonly memoryEmbed?: EmbedFn;
-  /**
-   * Preferred slot name for internal memory LLM work.
-   *
-   * The app composition root computes this from the server slot registry so
-   * memory uses the same slot-id contract exposed to runtime bindings and
-   * player-facing settings (`memory` → `plugin` → `story` → first text slot).
-   */
-  readonly preferredMemorySlot?: string | (() => string);
   /**
    * Optional per-request middleware inserted AFTER the default dependency
    * injection middleware but BEFORE route handlers execute. Intended for
