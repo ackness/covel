@@ -8,7 +8,7 @@
   name: 线路员工具包
   description: 一卷风吹日晒得发旧的工具包，里面有信号探针、陶瓷剪钳、修补用的导线、密封胶，还有一台手摇应急充电器。
 - id: crawler-key
-  name: 公用爬行器钥匙
+  name: 作业爬行器钥匙
   description: 能发动余烬背那辆破旧的维护爬行器——前提是没人撤掉它的充电配额。
 - id: water-cells
   name: 便携水囊
