@@ -7,7 +7,6 @@ import type {
 export type {
   PluginDetail,
   PluginLoadError,
-  PluginRuntimeSummary,
   PluginSummary,
   PluginRpcRequest,
   PluginRpcResponse,

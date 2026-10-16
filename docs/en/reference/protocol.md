@@ -125,6 +125,7 @@ In the tables, "S→C" means sent from the server to the client.
 | `narrative.delta`     | S→C  | A streamed piece of narrative text | `{ runtimeId, pluginId, kind, delta }`              |
 | `narrative.completed` | S→C  | The complete narrative message     | `{ content, kind, messageId, runtimeId, pluginId }` |
 
+- `narrative.delta`, `narrative.completed`, and `runtime.started` must all carry `kind`; clients read it directly rather than inferring it from `label`.
 - `narrative.delta` can carry `reset: true`. In that case `delta` is an empty string. It means: the text this runtime already streamed was a preparation step before a tool call, or a draft that the review rejected, and it will not become the final narrative. The client should clear the part already shown, then take in the later pieces.
 - The `content` of `narrative.completed` is always the final text after review has passed. It replaces what was shown while streaming.
 
@@ -156,7 +157,7 @@ This lets stage animations react while the narrative is still being generated, a
 | ----------------------- | ---- | ---------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
 | `execution.started`     | S→C  | A turn execution starts                                                                                                | `{ runtimeCount }`                                                                                                      |
 | `interaction.submitted` | S→C  | The answer to `submit_interaction` is saved and the next turn has started. Sent before that turn's `execution.started` | `{ interactionTurnId, results: [{ submissionId, interactionId, values, filledNarrative }], message?: { id, content } }` |
-| `runtime.started`       | S→C  | One runtime starts                                                                                                     | `{ runtimeId, pluginId, turnId, runId, label }`                                                                         |
+| `runtime.started`       | S→C  | One runtime starts                                                                                                     | `{ runtimeId, pluginId, kind, turnId, runId, label }`                                                                   |
 | `runtime.deferred`      | S→C  | A staged runtime was committed with the original turn and moved to the background                                      | `{ runtimeId, pluginId, jobId, sourceTurnId }`                                                                          |
 | `runtime.completed`     | S→C  | One runtime completes                                                                                                  | `{ runtimeId, pluginId, turnId, runId, status, durationMs }`                                                            |
 | `runtime.failed`        | S→C  | One runtime fails                                                                                                      | `{ runtimeId, pluginId, turnId, runId, status, durationMs, error, errorKind? }`                                         |
@@ -1215,7 +1216,7 @@ These events use the standard SSE envelope, and they are saved to `trace_events`
 | `gateway.responded` | The success result of a function-runtime gateway. Text and object calls carry `{ runtimeId, pluginId, method, finishReason, usage, reasoningContent?, model?, provider?, durationMs }`. `model/provider` is the target actually hit after fallback. Transcription calls also carry `usage/model/provider` when available. Old traces, or custom gateways that do not support this metadata, may lack them |
 | `message.completed` | `{ runtimeId, pluginId, content, len, deltaCount }`. `deltaCount` is the number of `narrative.delta` events this runtime produced. It is the saved, authoritative count. The frontend uses a different synthetic field, `_aggregated`, when it combines live fragments. The two cannot be swapped |
 | `block.emitted` | `{ runtimeId, pluginId, proposalId, source, block }` |
-| `ui.rendered` | `{ runtimeId, pluginId, proposalId, source, render, block? }`. The `/actions` SSE forwards it, so the chat area can show committed `ui.render` blocks live. Older trace-only payloads may not have `block`. In that case the client builds it from `render` |
+| `ui.rendered` | `{ runtimeId, pluginId, proposalId, source, render, block }`. The action stream and `state` topic send the same committed payload; the block ID and metadata come from the commit result |
 | `state.patch.applied` | `{ runtimeId, pluginId, proposalId, patch: { packageName, summary, ops } }` |
 | `hook.fired` | `{ event, hookName, pluginId, runtimeId?, targetId?, targetType, proposalType? }` |
 | `hook.rewrote` | `{ event, hookName, pluginId, runtimeId?, targetId?, diff?, proposalType? }` |

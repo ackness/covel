@@ -36,21 +36,6 @@ export function textValue(
   return resolveDisplayText(value, locale);
 }
 
-export function applyPluginPackSelection(
-  current: ReadonlySet<string>,
-  pack: PluginPack,
-  plugins: readonly PluginSummary[],
-  lockedPluginIds: ReadonlySet<string>,
-): Set<string> {
-  const available = new Set(plugins.map((plugin) => plugin.id));
-  const next = new Set(current);
-  for (const pluginId of pack.requested) {
-    if (available.has(pluginId)) next.add(pluginId);
-  }
-  for (const pluginId of lockedPluginIds) next.add(pluginId);
-  return next;
-}
-
 export function defaultSelectedPluginIds(
   plan: WorldPluginPlan | null,
 ): Set<string> {

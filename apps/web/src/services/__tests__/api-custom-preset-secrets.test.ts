@@ -46,7 +46,6 @@ let getProviderPriceMultiplier: ApiModule["getProviderPriceMultiplier"];
 let setParamOverrides: ApiModule["setParamOverrides"];
 let setProviderProfiles: ApiModule["setProviderProfiles"];
 let setProviderPriceMultipliers: ApiModule["setProviderPriceMultipliers"];
-let setSlotConfig: ApiModule["setSlotConfig"];
 let buildProviderKeysHeader: ModelSettingsModule["buildProviderKeysHeader"];
 let rememberServerSlotProviders: ModelSettingsModule["rememberServerSlotProviders"];
 let rememberServerPresetProviders: ModelSettingsModule["rememberServerPresetProviders"];
@@ -77,7 +76,6 @@ beforeEach(async () => {
     setParamOverrides,
     setProviderProfiles,
     setProviderPriceMultipliers,
-    setSlotConfig,
   } = await import("../api.js"));
   ({
     buildProviderKeysHeader,
@@ -134,7 +132,10 @@ describe("custom preset secret channel", () => {
         ],
       },
     ]);
-    setSlotConfig({ story: { modelRef: "a" }, memory: { modelRef: "b" } });
+    await getSettings().set("llm.slotConfig", {
+      story: { modelRef: "a" },
+      memory: { modelRef: "b" },
+    });
     setParamOverrides({ story: { reasoningEffort: "provider-default" } });
     await new Promise((resolve) => setTimeout(resolve, 0));
     const header = JSON.parse(
@@ -188,7 +189,9 @@ describe("custom preset secret channel", () => {
         ],
       },
     ]);
-    setSlotConfig({ default: { modelRef: "model_deepseek" } });
+    await getSettings().set("llm.slotConfig", {
+      default: { modelRef: "model_deepseek" },
+    });
     setParamOverrides({
       default: { temperature: 0.4, reasoningEffort: "max" },
     });
@@ -384,24 +387,26 @@ describe("provider keys follow the bindings in use", () => {
     expect(sentKeys()).toEqual(["deepseek", "mine", "openai", "unused"]);
   });
 
-  it("sends only the providers that slots resolve to", () => {
+  it("sends only the providers that slots resolve to", async () => {
     rememberServerSlotProviders({
       story: { provider: "deepseek" },
       memory: { provider: "openai" },
     });
     rememberServerPresetProviders([{ id: "ds", provider: "deepseek" }]);
-    setSlotConfig({ memory: { modelRef: "mine-model" } });
+    await getSettings().set("llm.slotConfig", {
+      memory: { modelRef: "mine-model" },
+    });
     // story keeps the server default, memory is rebound to the local model.
     expect(sentKeys()).toEqual(["deepseek", "mine"]);
   });
 
-  it("follows a server preset binding and adds providers a request names", () => {
+  it("follows a server preset binding and adds providers a request names", async () => {
     rememberServerSlotProviders({
       story: { provider: "deepseek" },
       memory: { provider: "deepseek" },
     });
     rememberServerPresetProviders([{ id: "oa", provider: "openai" }]);
-    setSlotConfig({ memory: { presetId: "oa" } });
+    await getSettings().set("llm.slotConfig", { memory: { presetId: "oa" } });
     expect(sentKeys()).toEqual(["deepseek", "openai"]);
     expect(sentKeys({ providers: ["unused"] })).toEqual([
       "deepseek",

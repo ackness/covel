@@ -4,6 +4,41 @@ import { useTranslation } from "react-i18next";
 import type { ExecutionRecovery } from "@/stores/session-store/types.js";
 import { PLAYER_ABORT_REASON } from "@covel/shared";
 
+const RECOVERY_MESSAGES = {
+  stalled: {
+    title: "session.recoveryUnconfirmed",
+    detail: "session.recoveryUnconfirmedDetail",
+  },
+  unavailable: {
+    title: "session.recoveryChecking",
+    detail: "session.recoveryUnavailableDetail",
+  },
+  unknown: {
+    title: "session.recoveryChecking",
+    detail: "session.recoveryUnknownDetail",
+  },
+  running: {
+    title: "session.recoveryRunning",
+    detail: "session.recoveryRunningDetail",
+  },
+  interrupted: {
+    title: "session.recoveryInterrupted",
+    detail: "session.recoveryInterruptedDetail",
+  },
+  stopped: {
+    title: "session.executionState.stopped",
+    detail: "session.stoppedDetail",
+  },
+  failed: {
+    title: "session.recoveryFailed",
+    detail: "session.recoveryInterruptedDetail",
+  },
+  hydrating: {
+    title: "session.recoveryHydrating",
+    detail: "session.recoveryHydratingDetail",
+  },
+} as const;
+
 export function ExecutionRecoveryNotice({
   recovery,
   onRetry,
@@ -47,32 +82,22 @@ export function ExecutionRecoveryNotice({
         : stopped && retry?.type === "retry_turn"
           ? t("session.continueStoppedOpening")
           : t("session.recoveryRetry");
-  const title = stalled
-    ? "session.recoveryUnconfirmed"
-    : unknown
-      ? "session.recoveryChecking"
-      : running
-        ? "session.recoveryRunning"
-        : interrupted
-          ? "session.recoveryInterrupted"
-          : stopped
-            ? "session.executionState.stopped"
-            : failed
-              ? "session.recoveryFailed"
-              : "session.recoveryHydrating";
-  const detail = stalled
-    ? "session.recoveryUnconfirmedDetail"
+  const phase = stalled
+    ? "stalled"
     : unavailable
-      ? "session.recoveryUnavailableDetail"
+      ? "unavailable"
       : unknown
-        ? "session.recoveryUnknownDetail"
+        ? "unknown"
         : running
-          ? "session.recoveryRunningDetail"
-          : stopped
-            ? "session.stoppedDetail"
-            : interrupted || failed
-              ? "session.recoveryInterruptedDetail"
-              : "session.recoveryHydratingDetail";
+          ? "running"
+          : interrupted
+            ? "interrupted"
+            : stopped
+              ? "stopped"
+              : failed
+                ? "failed"
+                : "hydrating";
+  const { title, detail } = RECOVERY_MESSAGES[phase];
   return (
     <div
       role={waiting ? "status" : "alert"}

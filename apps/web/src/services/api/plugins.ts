@@ -49,13 +49,6 @@ export async function getPluginCatalog(options?: {
   };
 }
 
-/** List usable plugins. Load diagnostics are available through getPluginCatalog. */
-export async function listPlugins(options?: {
-  silentErrors?: boolean;
-}): Promise<PluginSummary[]> {
-  return (await getPluginCatalog(options)).items;
-}
-
 export async function uninstallPlugin(pluginId: string): Promise<void> {
   await request(`/api/plugins/${encodeURIComponent(pluginId)}`, {
     method: "DELETE",

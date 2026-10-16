@@ -341,7 +341,6 @@ it("does not assign a rejected echo to a subsequent action without an echo", asy
     ds: {} as SseEventHandlerDeps["ds"],
     sessionIdRef,
     stateRef: { current: state },
-    runtimeKindRef: { current: new Map() },
     deltaBufferRef: { current: new Map() },
     deltaRafRef: { current: null },
     lastBackfilledTurnIdRef: { current: null },

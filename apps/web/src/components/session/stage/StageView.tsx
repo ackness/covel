@@ -10,7 +10,12 @@
  * the components). UI slots supply committed values and turn previews.
  */
 import type { InteractionSubmitResult } from "@/stores/session-store/types.js";
-import { useMemo, useState, type ReactElement } from "react";
+import {
+  useMemo,
+  useState,
+  type ComponentProps,
+  type ReactElement,
+} from "react";
 import { useTranslation } from "react-i18next";
 import { Loader2 } from "lucide-react";
 import type {
@@ -173,10 +178,8 @@ export function StageView(props: StageViewProps): ReactElement {
   // ── Latest story text + stream state ──────────────────────────
   // Streaming tokens no longer live in `messages[].content` — the placeholder
   // carries empty content and the live text is held in a fine-grained external
-  // store. This view subscribes only to the latest story message.
+  // store. Only the dialog child subscribes to the live text.
   const storyMsg = findLatestStory(messages);
-  const liveStoryText = useStreamingText(storyMsg?.id ?? "");
-  const storyText = storyMsg ? (liveStoryText ?? storyMsg.content) : "";
   const storyTurnId = storyMsg?.turnId;
   const storyKey = stageStoryKey(storyMsg);
   const isStreaming =
@@ -251,7 +254,6 @@ export function StageView(props: StageViewProps): ReactElement {
   // Hide the previous decision, including plugin surfaces, as soon as a turn
   // starts. Keep already-read narration hidden while waiting for the new story.
   const choicesVisible = !executing && allRead;
-  const dialogVisible = !allRead && storyText.trim().length > 0;
 
   return (
     <div
@@ -280,17 +282,17 @@ export function StageView(props: StageViewProps): ReactElement {
         onToggleImmersive={onToggleImmersive}
         onExit={() => onViewModeChange("parsed")}
       />
-      {dialogVisible && (
-        <StageDialog
-          turnId={storyTurnId}
-          storyText={storyText}
-          streamEnded={!isStreaming}
-          paragraphSpeakers={paragraphSpeakers}
-          autoPlay={autoPlay}
-          reducedMotion={reducedMotion}
-          onAllRead={() => setReadStoryKey(storyKey)}
-        />
-      )}
+      <LiveStageDialog
+        message={storyMsg}
+        allRead={allRead}
+        executing={executing}
+        turnId={storyTurnId}
+        streamEnded={!isStreaming}
+        paragraphSpeakers={paragraphSpeakers}
+        autoPlay={autoPlay}
+        reducedMotion={reducedMotion}
+        onAllRead={() => setReadStoryKey(storyKey)}
+      />
       <StageChoices
         composerDraft={props.composerDraft}
         extensions={(choices, onDraftMessage) => (
@@ -314,19 +316,6 @@ export function StageView(props: StageViewProps): ReactElement {
         onSubmitInteraction={onSubmitInteraction}
         onSendMessage={onSendMessage}
       />
-
-      {/* Progress replaces the decision panel until unread narration arrives. */}
-      {executing && !dialogVisible && (
-        <div
-          className="pointer-events-none absolute inset-x-0 bottom-32 z-30 flex justify-center px-4 md:bottom-40"
-          data-testid="stage-thinking"
-        >
-          <div className="ui-stage-panel flex items-center gap-2 rounded-full px-3.5 py-1.5 text-xs text-muted-foreground">
-            <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
-            <span>{t("stage.thinkingLabel")}</span>
-          </div>
-        </div>
-      )}
 
       <StageExecutionStatus {...props} />
 
@@ -381,6 +370,36 @@ export function StageView(props: StageViewProps): ReactElement {
           )}
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+/** Live tokens update only the dialog and its waiting indicator. */
+function LiveStageDialog({
+  message,
+  allRead,
+  executing,
+  ...dialogProps
+}: Omit<ComponentProps<typeof StageDialog>, "storyText"> & {
+  message: StreamMessage | undefined;
+  allRead: boolean;
+  executing: boolean;
+}) {
+  const { t } = useTranslation();
+  const liveText = useStreamingText(message?.id ?? "");
+  const storyText = message ? (liveText ?? message.content) : "";
+  if (!allRead && storyText.trim().length > 0)
+    return <StageDialog {...dialogProps} storyText={storyText} />;
+  if (!executing) return null;
+  return (
+    <div
+      className="pointer-events-none absolute inset-x-0 bottom-32 z-30 flex justify-center px-4 md:bottom-40"
+      data-testid="stage-thinking"
+    >
+      <div className="ui-stage-panel flex items-center gap-2 rounded-full px-3.5 py-1.5 text-xs text-muted-foreground">
+        <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+        <span>{t("stage.thinkingLabel")}</span>
+      </div>
     </div>
   );
 }

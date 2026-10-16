@@ -1,3 +1,4 @@
+import { THEME_SCHEME_KEY } from "@/lib/appearance.js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { SettingsStore, type SettingsBackendAdapter } from "@covel/settings";
 import { applyAppearance } from "@/lib/appearance.js";
@@ -8,7 +9,6 @@ import {
   primeThemeRegistry,
   saveCustomTheme,
   syncThemeRegistry,
-  THEME_SCHEME_KEY,
 } from "../registry.js";
 import { CUSTOM_THEMES_KEY } from "../storage.js";
 

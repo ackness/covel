@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { memo, useState, type ReactNode } from "react";
 import type { InteractionSubmitResult } from "@/stores/session-store/types.js";
 import type { TFunction } from "i18next";
 import { resolveDisplayText } from "@/lib/i18n-text.js";
@@ -43,7 +43,7 @@ export interface ChatBlockRendererProps {
  * Renders a single block message. Interactive blocks are "locked" once a later
  * user message exists (index below the last user index — an O(1) check).
  */
-export function ChatBlockRenderer({
+export const ChatBlockRenderer = memo(function ChatBlockRenderer({
   msg,
   index,
   viewMode,
@@ -183,7 +183,7 @@ export function ChatBlockRenderer({
       </div>
     </HistoryBlock>
   );
-}
+});
 
 function HistoryBlock({
   collapsed,

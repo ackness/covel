@@ -1151,8 +1151,18 @@ describe("createCommitPipeline", () => {
 
       expect(result.committed).toBe(true);
       expect(
-        emitter.events.find((e) => e.type === "ui.rendered"),
-      ).toBeDefined();
+        emitter.events.find((e) => e.type === "ui.rendered")?.payload,
+      ).toEqual(result.event?.payload);
+      expect(result.event?.payload.block).toEqual({
+        id: proposal.id,
+        type: "ui.render",
+        data: proposal.payload,
+        meta: {
+          runtimeId: proposal.source.runtimeId,
+          pluginId: proposal.source.pluginId,
+          turnId: proposal.turnId,
+        },
+      });
       expect(
         emitter.events.find((e) => e.type === "ui.part.update")?.payload.part,
       ).toMatchObject({

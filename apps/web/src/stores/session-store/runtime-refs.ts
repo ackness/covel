@@ -42,7 +42,6 @@ export interface SessionRuntimeRefs {
   stateRef: MutableRef<SessionState>;
   sessionIdRef: MutableRef<string | null>;
   sessionGenerationRef: MutableRef<number>;
-  runtimeKindRef: MutableRef<Map<string, string>>;
   deltaBufferRef: DeltaBufferRef;
   deltaRafRef: DeltaRafRef;
   lastBackfilledTurnIdRef: MutableRef<string | null>;
@@ -60,7 +59,6 @@ export function useSessionRuntimeRefs(state: SessionState): SessionRuntimeRefs {
   const sessionIdRef = useRef<string | null>(null);
   const sessionGenerationRef = useRef(0);
   const publishedSessionIdRef = useRef<string | null>(null);
-  const runtimeKindRef = useRef<Map<string, string>>(new Map());
   const deltaBufferRef = useRef<DeltaBufferRef["current"]>(new Map());
   const deltaRafRef = useRef<DeltaRafRef["current"]>(null);
   const lastBackfilledTurnIdRef = useRef<string | null>(null);
@@ -104,7 +102,6 @@ export function useSessionRuntimeRefs(state: SessionState): SessionRuntimeRefs {
       stateRef,
       sessionIdRef,
       sessionGenerationRef,
-      runtimeKindRef,
       deltaBufferRef,
       deltaRafRef,
       lastBackfilledTurnIdRef,

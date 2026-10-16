@@ -48,7 +48,7 @@ describe("reconnect message recovery", () => {
       "server-2",
       "reply",
     ]);
-    expect(merge(next, recovered)).toEqual(next);
+    expect(merge(next, recovered)).toBe(next);
     expect(current[1]!.id).toBe("echo-1");
   });
   it("restores the missing story before an already hydrated guide", () => {
@@ -107,7 +107,7 @@ describe("reconnect message recovery", () => {
     const recovered = [story("completed"), story("server-turn-2", "turn-2")];
     const next = merge([live, stream], recovered, true);
     expect(next).toEqual([live, stream]);
-    expect(merge(next, recovered, true)).toEqual(next);
+    expect(merge(next, recovered, true)).toBe(next);
   });
 
   it("recovers a closed stream from its authoritative committed message", () => {
@@ -115,7 +115,7 @@ describe("reconnect message recovery", () => {
     const full = story("committed");
     const next = merge([stream], [full]);
     expect(next).toEqual([full]);
-    expect(merge(next, [full])).toEqual(next);
+    expect(merge(next, [full])).toBe(next);
   });
 
   it("fills gaps using shared server IDs without reordering live rows by client clocks", () => {
@@ -139,4 +139,14 @@ describe("reconnect message recovery", () => {
       live.id,
     ]);
   });
+});
+
+it("keeps the entire state when a snapshot adds no messages or drafts", () => {
+  const state = { ...initialState, messages: [story("saved")] };
+  expect(
+    reducer(state, {
+      type: "MERGE_RECOVERED_MESSAGES",
+      messages: [story("saved")],
+    }),
+  ).toBe(state);
 });

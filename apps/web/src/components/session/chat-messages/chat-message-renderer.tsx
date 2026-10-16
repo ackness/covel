@@ -1,3 +1,4 @@
+import { memo } from "react";
 import type { TFunction } from "i18next";
 import { ImageIcon } from "lucide-react";
 import { Button } from "@/components/ui/button.js";
@@ -28,7 +29,7 @@ export interface ChatMessageRendererProps {
  *              one-liners. Raw JSON / internal LLM trace stays hidden.
  *   raw      — show every message as JSON for inspection.
  */
-export function ChatMessageRenderer({
+export const ChatMessageRenderer = memo(function ChatMessageRenderer({
   msg: rawMessage,
   viewMode,
   isImageGenActive,
@@ -166,4 +167,4 @@ export function ChatMessageRenderer({
       )}
     </div>
   );
-}
+});

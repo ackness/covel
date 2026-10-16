@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { SettingsStoreApi } from "@covel/settings";
 import { llmModelBindingSchema, providerKeyToId } from "@covel/shared";
-import { REASONING_EFFORT_VALUES } from "@/services/api/reasoning-effort.js";
+import { REASONING_EFFORT_VALUES } from "@covel/shared";
 
 const slotConfigSchema = z.record(z.string(), llmModelBindingSchema);
 const providerPriceMultipliersSchema = z.record(

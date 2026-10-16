@@ -30,13 +30,7 @@ export async function emitCommittedProposal(
     });
   } else if (proposal.type === "ui.render") {
     const payload = proposal.payload;
-    await emitter.emit("ui.rendered", {
-      runtimeId: proposal.source.runtimeId,
-      pluginId: proposal.source.pluginId,
-      proposalId: proposal.id,
-      source: proposal.source,
-      render: payload,
-    });
+    if (result.event) await emitter.emit("ui.rendered", result.event.payload);
     for (const part of payload.parts) {
       await emitter.emit("ui.part.update", {
         runtimeId: proposal.source.runtimeId,

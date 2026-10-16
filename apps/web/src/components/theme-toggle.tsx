@@ -1,3 +1,4 @@
+import { THEME_SCHEME_KEY } from "@/lib/appearance.js";
 import { CUSTOM_THEMES_KEY } from "@/theme-system/storage.js";
 import { DEFAULT_APPEARANCE } from "@/lib/appearance.js";
 import { resolveThemeSelection } from "@/theme-system/selection.js";
@@ -6,10 +7,7 @@ import { Moon, Sun } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
-import {
-  getThemeDefinition,
-  THEME_SCHEME_KEY,
-} from "@/theme-system/registry.js";
+import { getThemeDefinition } from "@/theme-system/registry.js";
 import type { ThemeScheme } from "@/theme-system/types.js";
 import { useSetting } from "@/settings/use-settings.js";
 

@@ -15,6 +15,7 @@ import type { StreamMessage } from "@/stores/session-store.js";
 import { StageView, type StageViewProps } from "../StageView.js";
 
 const stageSlots = vi.hoisted(() => ({
+  renders: vi.fn(),
   items: [] as Array<{ slot: string; value: unknown }>,
 }));
 
@@ -25,9 +26,10 @@ vi.mock("../../chat-messages/message-blocks.js", () => ({
 }));
 vi.mock("../StageBackdrop.js", () => ({ StageBackdrop: () => null }));
 vi.mock("../StageSprites.js", () => ({
-  StageSprites: ({ speakers }: { speakers: unknown }) => (
-    <div data-testid="stage-speakers">{JSON.stringify(speakers)}</div>
-  ),
+  StageSprites: ({ speakers }: { speakers: unknown }) => {
+    stageSlots.renders();
+    return <div data-testid="stage-speakers">{JSON.stringify(speakers)}</div>;
+  },
 }));
 vi.mock("../StagePluginPanels.js", () => ({
   StagePluginPanels: () => <div data-testid="plugin-extension" />,
@@ -152,6 +154,7 @@ describe("stage decision lifecycle", () => {
     expect(screen.queryByTestId("stage-dialog")).toBeNull();
     expect(screen.getByTestId("stage-thinking")).toBeDefined();
 
+    const stageRenders = stageSlots.renders.mock.calls.length;
     const nextStory = "You enter the library.\n\nThe librarian looks up.";
     act(() => {
       appendStreamingText(stream.id, nextStory);
@@ -159,6 +162,7 @@ describe("stage decision lifecycle", () => {
     expect(screen.getByTestId("stage-dialog")).toBeDefined();
     expect(screen.queryByTestId("stage-choices")).toBeNull();
     expect(screen.queryByTestId("stage-thinking")).toBeNull();
+    expect(stageSlots.renders).toHaveBeenCalledTimes(stageRenders);
 
     // Narration commits before the remaining plugins finish.
     props = {

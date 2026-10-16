@@ -1,6 +1,3 @@
-export type JobStatusBadgeVariant =
-  "default" | "secondary" | "destructive" | "outline";
-
 export function compactJobId(
   id: string,
   options?: { maxLength?: number; prefixLength?: number },
@@ -28,15 +25,6 @@ export function formatJobDuration(
       : `${Math.floor(seconds / 60)}m${Math.round(seconds % 60)}s`;
   }
   return `${Math.round(ms / 1000)}s`;
-}
-
-export function jobStatusBadgeVariant(
-  status: string | undefined,
-): JobStatusBadgeVariant {
-  if (status === "failed") return "destructive";
-  if (status === "done" || status === "completed") return "default";
-  if (status === "pending" || status === "running") return "secondary";
-  return "outline";
 }
 
 /** Known host job states are translated; plugin-defined state labels stay authored. */

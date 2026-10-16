@@ -101,7 +101,7 @@ export interface DimensionsState {
   mechanics?: WorldMechanics;
   startingConditions?: StartingConditionsDraft;
 }
-export const dimensionTemplateSchemas = {
+const dimensionTemplateSchemas = {
   geography: worldGeographySchema,
   factions: z.array(worldFactionSchema),
   powerSystem: worldPowerSystemSchema,

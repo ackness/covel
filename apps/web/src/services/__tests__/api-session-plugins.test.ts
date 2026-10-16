@@ -27,7 +27,6 @@ const {
   enableSessionPlugin,
   fetchPluginFlows,
   getPluginCatalog,
-  listPlugins,
   listInstalledPlugins,
   listSessionPlugins,
   getPluginDiagnostics,
@@ -229,7 +228,9 @@ describe("plugin discovery API", () => {
     await expect(listInstalledPlugins()).resolves.toEqual(installed);
 
     mockFetchOnce({ items: installed });
-    await expect(listPlugins()).resolves.toEqual([plugin()]);
+    await expect(getPluginCatalog()).resolves.toMatchObject({
+      items: [plugin()],
+    });
   });
 
   it("normalizes only flow-specific optional turn completion", async () => {

@@ -90,7 +90,6 @@ function createHarness(sessionId = "session-a") {
     ds: {} as SseEventHandlerDeps["ds"],
     sessionIdRef,
     stateRef,
-    runtimeKindRef: { current: new Map() },
     deltaBufferRef: { current: new Map() },
     deltaRafRef: { current: null },
     lastBackfilledTurnIdRef: { current: null },
@@ -192,5 +191,32 @@ describe("sse-handler narrative delta buffer", () => {
     expect(getStreamingText("stream_turn-1_narrator")).toBeUndefined();
     expect(harness.deps.deltaBufferRef.current.size).toBe(0);
     expect(harness.deps.deltaRafRef.current).toBeNull();
+  });
+});
+
+it("uses the committed UI block without rebuilding its identity or metadata", () => {
+  const harness = createHarness();
+  const block = {
+    id: "proposal",
+    type: "ui.render",
+    data: { parts: [{ id: "part", type: "text", content: "Hello" }] },
+    meta: { runtimeId: "runtime", pluginId: "provider", turnId: "turn-1" },
+  };
+  harness.handle({
+    ...narrativeDelta(),
+    type: "ui.rendered",
+    payload: {
+      proposalId: "proposal",
+      runtimeId: "runtime",
+      pluginId: "provider",
+      render: block.data,
+      block,
+    },
+  });
+  expect(harness.state().messages[0]).toMatchObject({
+    id: "proposal",
+    turnId: "turn-1",
+    runtimeId: "runtime",
+    block,
   });
 });
