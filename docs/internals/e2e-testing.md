@@ -185,13 +185,14 @@ pnpm e2e:verify --plugin guide --turns 2
 
 详细参数和输出格式见[用真实模型验证](../ship/real-model.md)。
 
-`tests/llm-replay/` 下录好的脚本会话不调用模型，几秒跑完一局，换机器也不需要密钥：
+`tests/llm-replay/` 下是脚本会话。录一遍要调用模型（三回合约 4 分钟），之后回放不调用模型，几秒跑完一局。录制只留在本机，不进版本库。它用来确认一次重构没有改变发给模型的请求：改之前在 `main` 上录，改完回放：
 
 ```bash
-pnpm e2e:replay
+pnpm e2e:replay --record lantern-barrow   # 改之前，需要 DEFAULT_BASE_URL 和 DEFAULT_API_KEY
+pnpm e2e:replay                           # 改之后
 ```
 
-改了世界、插件、提示词或模型之后用 `--record --upstream <origin>` 重录，见[录制与回放](../ship/real-model.md#录制与回放)。
+参数和录制的细节见[录制与回放](../ship/real-model.md#录制与回放)。
 
 ## 环境变量
 

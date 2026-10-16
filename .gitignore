@@ -69,6 +69,8 @@ llm.toml
 !llm.toml.example
 # The models a recorded session was recorded with (no keys).
 !tests/llm-replay/*/llm.toml
+# Recorded model answers stay local: they go stale with every prompt change.
+tests/llm-replay/*/recording/
 
 # ── Generated files ─────────────────────────────────────────────
 apps/web/src/routeTree.gen.ts

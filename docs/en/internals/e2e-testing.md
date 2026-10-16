@@ -185,13 +185,14 @@ pnpm e2e:verify --plugin guide --turns 2
 
 For the full arguments and the output format, see [Verify with a real model](../ship/real-model.md).
 
-The scripted sessions recorded under `tests/llm-replay/` do not call a model. They play a full game in seconds, and they need no keys on any machine:
+`tests/llm-replay/` holds scripted sessions. Recording one calls a model (about 4 minutes for three turns); replaying it calls none and plays a full game in seconds. Recordings stay on your machine and are not committed. Use them to confirm that a refactor did not change the requests sent to the model: record on `main` before the change, replay after it:
 
 ```bash
-pnpm e2e:replay
+pnpm e2e:replay --record lantern-barrow   # before; needs DEFAULT_BASE_URL and DEFAULT_API_KEY
+pnpm e2e:replay                           # after
 ```
 
-After you change a world, a plugin, a prompt or a model, record them again with `--record --upstream <origin>`. See [Recording and replay](../ship/real-model.md#recording-and-replay).
+For the arguments and the details of recording, see [Recording and replay](../ship/real-model.md#recording-and-replay).
 
 ## Environment Variables
 

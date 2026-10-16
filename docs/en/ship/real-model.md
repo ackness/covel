@@ -246,14 +246,18 @@ The requests sent by the two runs must be **exactly the same**. If even one diff
 3. **The ID does not exist yet at the start of each run**: the same ID cannot be created twice. The simplest approach is a new database file for each run. The script deletes the session after a pass, so you can also run again on the same server. When a run fails, or when `--keep` is used, the session is left behind, and you must delete it first.
 4. **The world, plugins, prompts, language, and model config have not changed**. If you change any of them, the affected requests become new requests. This is also when you need to record again.
 
-### Replay a recorded game in the repository
+### Replay a scripted game
 
-Each folder under `tests/llm-replay/` is one recorded session. The recordings are committed with the repository, so after you move to another machine, you can replay without a model, keys, or a network:
+Each folder under `tests/llm-replay/` is one scripted session. Recordings stay on your machine and are not committed: worlds, plugins and prompts change quickly, and a committed recording soon goes stale.
+
+Use it for a change that should not change any prompt, such as a refactor of the kernel, the store or scheduling: record on `main` before the change (see the next section), then replay after it. A passing replay means the session sent the model exactly the same requests; when one differs, `pnpm llm:replay:diff` finds the first difference.
 
 ```bash
 pnpm e2e:replay                  # replay every session
 pnpm e2e:replay lantern-barrow   # replay one
 ```
+
+A session that has not been recorded yet reports `not recorded yet`.
 
 A folder holds three things:
 
@@ -261,7 +265,7 @@ A folder holds three things:
 | --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `scenario.json` | The session: `world`, `turns`, `locale` (default `zh-CN`), `sessionId`, `seed`, and the other arguments `args` passed to the script                 |
 | `llm.toml`      | The model used when recording. Each `[covel.<role>]` must set `provider` and `baseUrl`. At run time, `baseUrl` is replaced with the proxy's address |
-| `recording/`    | One answer file for each request                                                                                                                    |
+| `recording/`    | One answer file for each request. Made by recording and not committed                                                                               |
 
 For each session, the command starts the proxy, a dedicated server, and the script in turn, and stops them all at the end.
 
@@ -272,7 +276,7 @@ For each session, the command starts the proxy, a dedicated server, and the scri
 
 ### Record or record again
 
-Record again after you change the world, a plugin, a prompt, or `llm.toml`:
+Record before the first replay, and again after you change the world, a plugin, a prompt, or `llm.toml`. The three-turn `lantern-barrow` session takes about 4 minutes:
 
 ```bash
 DEFAULT_BASE_URL=https://api.example.com   # origin of the endpoint, without /v1
@@ -285,11 +289,11 @@ pnpm e2e:replay --record lantern-barrow
 - The model is whichever one `llm.toml` names, and your endpoint must provide it. To change models, edit `llm.toml` and then record again.
 - Requests that are already in the recording get their answer from it. Only new requests go to the model. So if you change only one plugin's prompt, recording again calls only the part that is affected.
 - After the session finishes (the script exits with `0` or `1`), old answers in `recording/` that this run did not use are deleted. Nothing is deleted if the run stopped partway through.
-- After you confirm the result, commit the changes in `recording/` together.
+- `recording/` is in `.gitignore` and is not committed.
 
 The recording file holds the original text of the model's answers. It does not contain keys or prompts. To check its size, use `du -sh tests/llm-replay/<game>/recording`. The prompts are in the `*.requests` files under `debugs/`. They are much larger than the answers, and they are not committed to the repository.
 
-To add a new session: copy a folder, edit `scenario.json`, delete `recording/`, and then record it.
+To add a new session: copy a folder (without `recording/`), edit `scenario.json`, and then record it.
 
 ### Record and replay by hand
 
