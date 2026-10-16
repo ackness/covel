@@ -243,7 +243,7 @@ bundled `worlds/` and `plugins/`.
   `packages/test-runtime/src/scaffold.test.ts` generates and runs every mode.
 - `tests/e2e/` — Playwright specs; `tests/third-party/` — installable probe
   plugins used as community-package fixtures; `tests/llm-replay/` — scripted
-  sessions with their recorded model answers, played by `pnpm e2e:replay`.
+  sessions for `pnpm e2e:replay`; their recordings stay local (`--record`).
 - `scripts/` — dev, check, and release tooling. `scripts/tests/*.test.mjs` run
   under `node --test` through `pnpm check`.
 

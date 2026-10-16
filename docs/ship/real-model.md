@@ -246,14 +246,18 @@ pnpm e2e:verify --turns 20 \
 3. **每遍开始时这个 ID 还不存在**：同一个 ID 不能建两次。最简单的做法是每遍用一个新的数据库文件。脚本通过后会删除游戏，所以也可以在同一个服务端上接着跑；失败或带 `--keep` 时游戏会留下，要先删掉。
 4. **世界、插件、提示词、语言和模型配置都没有变**。改了其中任何一项，受影响的请求就是新请求。这也正是需要重新录制的时候。
 
-### 回放仓库里录好的游戏
+### 回放一局脚本游戏
 
-`tests/llm-replay/` 下每个文件夹是一局录好的游戏。录制随仓库提交，所以换一台机器之后，不需要模型、密钥和网络就能回放：
+`tests/llm-replay/` 下每个文件夹是一局脚本游戏。录制只留在本机，不进版本库：世界、插件和提示词改得很快，提交的录制很快就会过期。
+
+它适合用在不该改变提示词的改动上，例如内核、存储或调度的重构：改之前先在 `main` 上录一遍（见下一节），改完再回放。回放通过，说明这局游戏发给模型的请求一条都没变；有不同时，`pnpm llm:replay:diff` 找出第一处。
 
 ```bash
 pnpm e2e:replay                  # replay every session
 pnpm e2e:replay lantern-barrow   # replay one
 ```
+
+还没录过的游戏，回放会提示 `not recorded yet`。
 
 一个文件夹里有三样东西：
 
@@ -261,7 +265,7 @@ pnpm e2e:replay lantern-barrow   # replay one
 | --------------- | -------------------------------------------------------------------------------------------------------- |
 | `scenario.json` | 这局游戏：`world`、`turns`、`locale`（默认 `zh-CN`）、`sessionId`、`seed`，以及传给脚本的其余参数 `args` |
 | `llm.toml`      | 录制时用的模型。每个 `[covel.<用途>]` 都要写 `provider` 和 `baseUrl`；`baseUrl` 运行时会换成代理的地址   |
-| `recording/`    | 每条请求一个回答文件                                                                                     |
+| `recording/`    | 每条请求一个回答文件。录制时生成，不进版本库                                                             |
 
 对每局游戏，命令依次启动代理、一个专用的服务端和脚本，结束后全部停掉。
 
@@ -272,7 +276,7 @@ pnpm e2e:replay lantern-barrow   # replay one
 
 ### 录制或重新录制
 
-改了世界、插件、提示词或 `llm.toml` 之后要重录：
+第一次回放之前要录一遍；改了世界、插件、提示词或 `llm.toml` 之后要重录。三回合的 `lantern-barrow` 大约要 4 分钟：
 
 ```bash
 DEFAULT_BASE_URL=https://api.example.com   # origin of the endpoint, without /v1
@@ -285,11 +289,11 @@ pnpm e2e:replay --record lantern-barrow
 - 用哪个模型以 `llm.toml` 为准，你的接口要能提供它。换模型就改 `llm.toml` 再重录。
 - 录制里已有的请求直接回答，只有新请求才发给模型。所以只改了一个插件的提示词时，重录只调用受影响的那部分。
 - 游戏跑完（脚本以 `0` 或 `1` 退出）之后，这次没用到的旧回答会从 `recording/` 里删掉。中途出错的不删。
-- 确认结果之后，把 `recording/` 的变动一起提交。
+- `recording/` 在 `.gitignore` 里，不提交。
 
 录制文件里是模型回答的原文。它不含密钥，也不含提示词。体积用 `du -sh tests/llm-replay/<游戏>/recording` 查看。提示词在 `debugs/` 下的 `*.requests` 里，比回答大得多，不进版本库。
 
-新增一局游戏：复制一个文件夹，改 `scenario.json`，删掉 `recording/`，再录一遍。
+新增一局游戏：复制一个文件夹（不带 `recording/`），改 `scenario.json`，再录一遍。
 
 ### 自己手动录制和回放
 
