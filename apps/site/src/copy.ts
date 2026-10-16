@@ -270,7 +270,7 @@ const en = {
         name: "Lantern Barrow: First Expedition",
         genre: "Fantasy · Tabletop",
         summary:
-          "The lantern that guarded the barrow for a century has gone out, and the bronze tomb doors stand open. Gather a party, assign your points, and roll the dice on your first expedition.",
+          "After a century, the lantern has gone out and the bronze doors stand open. Form a party, spend your points, and roll your way down.",
       },
       {
         id: "emberback",

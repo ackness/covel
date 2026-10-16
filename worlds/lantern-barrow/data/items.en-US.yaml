@@ -1,18 +1,26 @@
 - id: silver
   name: Silver coins
-  description: Your entire savings. Food and lodging at the tavern cost two coins a night; a healing draught costs eight.
+  description:
+    Your entire savings. Food and lodging at the tavern cost two coins a night; a
+    healing draught costs eight.
 - id: torch
   name: Torch
-  description: Torches soaked in pine resin, each good for about two hours. The darkness in the barrow swallows light.
+  description:
+    Pine-pitch torches, each good for about one phase of the day. The barrow's
+    dark swallows light.
 - id: rope
   name: Hemp rope (15 m)
-  description: Strong hemp rope for climbing down shafts, crossing broken bridges, or tying up things that should have stayed asleep.
+  description:
+    Strong hemp rope for climbing down shafts, crossing broken bridges, or tying
+    down things that should stay asleep.
 - id: healing-draught
   name: Healing draught
-  description: An unbearably bitter herbal potion. Drinking it restores a few hit points and takes one action in combat.
+  description:
+    A horribly bitter herbal draught. Restores a few hit points; drinking one in
+    a fight takes an action.
 - id: rations
   name: Rations
-  description: Dark bread, hard cheese, and salted meat. Enough to feed one person for three days.
+  description: "Black bread, hard cheese, and salted meat: three days of food for one person."
 - id: adventurers-blade
   name: Shortsword
-  description: An ordinary shortsword that sits well in your hand. Whatever your calling, you need a blade when you venture into a tomb.
+  description: Plain but handy. Whatever your calling, nobody goes down into a barrow without a blade.

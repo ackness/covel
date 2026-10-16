@@ -1,32 +1,33 @@
 # en-US text for world.yaml. Only translated text; structure and ids come from world.yaml.
 name: "Lantern Barrow: First Expedition"
 summary:
-  For a century, the lantern kept watch over the barrow. Now it has gone out,
-  its keeper is missing, and the bronze tomb doors stand open. Gather a party in
-  Greyreed's tavern, assign your points, and roll the dice as you descend into the
-  tomb. A classic tabletop adventure starts with your first expedition.
+  For a century, the lantern kept watch over the barrow. Now it has gone out, its
+  keeper is missing, and the bronze tomb doors stand open. Form a party in Greyreed's
+  tavern, assign your points, and roll your way down — a classic tabletop adventure,
+  starting with your first expedition.
 pluginPolicy:
   pitch:
     label: Classic Tabletop
     description:
-      Point-buy character creation, checks using forms and dice pools,
-      quests, inventory, companion affinity, and panels that track dungeon
-      exploration, the barrow's alarm, and your renown.
+      Point-buy character creation, form-based checks and dice-pool rolls, quests,
+      inventory, companion affinity, and panels for dungeon exploration, the barrow's
+      alarm, and your renown.
     reason:
-      Part of the fun is seeing the rules at work. You assign the attribute points, the
-      dice really roll, and the panels record every room you discover and every
-      noise that disturbs the tomb.
+      "Tabletop play is fun when the rules are visible: you assign the attribute points,
+      the dice really roll, and the panels record every room and every noise that stirs
+      the barrow."
 characterSchema:
   attributes:
     - id: persona
       name: Personality
-      description: What your adventurer is like and how they speak, such as
-        "a gruff veteran with a soft heart and few words." This shapes how the
-        narrator portrays you.
+      description:
+        What your adventurer is like and how they speak, such as "a gruff veteran
+        with a soft heart and few words." This shapes how the narrator portrays you.
     - id: calling
       name: Calling
-      description: How your adventurer makes a living. Fighter, rogue, scholar,
-        priest, hunter, or something of your own devising.
+      description:
+        How your adventurer makes a living. Fighter, rogue, scholar, priest, hunter,
+        or something of your own.
     - id: background
       name: Background
       description: Why you came to Greyreed, and something from your past that only you know.
@@ -38,22 +39,28 @@ characterSchema:
       description: Dodging, sneaking, picking locks, and disarming traps.
     - id: endurance
       name: Endurance
-      description: Withstanding poison, cold, exhaustion, and the physical effects of terror.
+      description: Withstanding poison, cold, exhaustion, and the body giving out under terror.
     - id: wits
       name: Wits
-      description: Recognizing runes, recalling legends, solving puzzles, and figuring out how traps work.
+      description:
+        Recognizing runes, recalling legends, solving puzzles, and figuring out how
+        traps work.
     - id: insight
       name: Insight
       description: Noticing ambushes, detecting lies, finding secret doors, and following tracks.
     - id: presence
       name: Presence
-      description: Persuading, intimidating, reassuring, and negotiating, even with things that should have stayed asleep.
+      description:
+        Persuading, intimidating, reassuring, and negotiating, even with things that
+        should have stayed asleep.
     - id: hp
       name: Hit Points
-      description: Lost when you are hurt; restored by rest and healing. At 0, you collapse rather than die immediately.
+      description:
+        Lost when you are hurt; restored by rest and healing. At 0, you collapse
+        rather than die immediately.
     - id: condition
       name: Condition
-      description: Noticeable conditions such as injury, poisoning, or fear.
+      description: Current, visible conditions such as injury, poisoning, or fear.
     - id: trust
       name: Trust
       description: Trust in the player

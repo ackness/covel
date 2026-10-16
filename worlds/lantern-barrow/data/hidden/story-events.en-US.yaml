@@ -1,12 +1,37 @@
 - id: night-singing
   title: The Singing Reaches the Village
-  payload: Late at night, the singing carries beyond the barrow hill for the first time. The miller's daughter steps outside barefoot, eyes closed, humming her grandfather's name to the tune from underground. She heads toward the hill. None of the village dogs bark. Show this scene and the villagers' panic. Give the party a chance to stop her, follow her, or search for the source of the singing. Do not reveal its origin.
+  payload:
+    In the dead of night, the singing carries beyond the barrow hill for the first
+    time. The miller's daughter steps outside barefoot, eyes closed, humming her
+    grandfather's name to the tune from underground. She heads toward the hill. None of
+    the village dogs bark. Play out the scene and the villagers' panic. Give the party a
+    chance to stop her, follow her, or search for the source of the singing. Do not reveal
+    its origin.
 - id: corvin-cornered
   title: The Scholar Cornered
-  payload: 'Someone is arguing with the choir in the darkness ahead: Corvin Ashe. The dead have stopped singing. They stand in a ring, heads turned toward him, trapping him in the corner of a burial chamber. He clutches a faintly glowing crystal to his chest: the Lantern Heart. Recognizing the party, he begs for help, then starts setting terms. He insists he "hasn''t finished studying it." Play out the encounter, showing both his arrogance and his fear. Let the party choose whether to rescue him, seize the Heart, or negotiate. Call for checks when needed; never choose for the player.'
+  payload:
+    'Someone is arguing with the choir in the darkness ahead: Corvin Ashe. The dead
+    have stopped singing. They stand in a ring, heads turned to stare at him, trapping him
+    in the corner of a burial chamber. He clutches a faintly glowing crystal to his chest:
+    the Lantern Heart. Recognizing the party, he begs for help, then starts setting terms.
+    He insists he "hasn''t finished studying it." Play out the encounter, showing both
+    his arrogance and his fear. Let the party choose whether to rescue him, seize the
+    Heart, or negotiate. Call for checks when needed; never choose for the player.'
 - id: king-wakes
   title: The Barrow King
-  payload: The choir falls silent. Deep in the hill, a voice older than the burial chambers speaks the marsh-king's own name. Cold green light shines from the direction of the throne room. The Barrow King has woken. He does not rush to attack; first, he addresses the party in the villagers' voices and offers a bargain. Convey his oppressive presence and his terms, and make the danger clear. Leave the player to choose whether to fight, flee, or bargain. Call for checks when needed.
+  payload:
+    The choir stops dead. Deep in the hill, a voice older than the burial chambers
+    speaks the marsh-king's own name. Cold green light rises from the direction of the
+    throne room. The Barrow King has woken. He does not rush to attack; first, he
+    addresses the party in the villagers' voices and offers a bargain. Convey his
+    oppressive presence and his terms, and make the danger clear. Leave the player to
+    choose whether to fight, flee, or bargain. Call for checks when needed.
 - id: keeper-in-the-choir
   title: The Keeper in the Choir
-  payload: "A familiar old voice cuts through the singing: Keeper Ysolde. She isn't joining the choir. Over and over, she hums the tune keepers use on their rounds of the hill, trying to drown out its melody as though holding something back. If the party is near the barrow or inside it, they can recognize her voice coming from deeper within. Convey the urgency of this clue. Do not reveal what she is doing or how much longer she can hold on."
+  payload:
+    "A familiar old voice has joined the singing: Keeper Ysolde. She isn't joining
+    the choir. Over and over, she hums the tune keepers use on their rounds of the hill,
+    pressing down on the choir's melody as though holding something back. If the party is
+    near the barrow or inside it, they can recognize her voice coming from deeper within.
+    Convey the urgency of this clue. Do not reveal what she is doing or how much longer
+    she can hold on."

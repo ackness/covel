@@ -1,9 +1,13 @@
 - id: brannoc-hale
   name: Brannoc Hale
-  notes: The veteran in the tavern corner. He's still sizing you up, deciding whether you're worth venturing into the tomb with.
+  notes:
+    The veteran in the tavern corner. He's still sizing you up, deciding whether you're
+    worth going down with.
 - id: sister-wren
   name: Sister Wren
-  notes: The acolyte who arrived three days late. You're the first person to give her your full attention while she explains the lantern inscriptions.
+  notes:
+    The acolyte who arrived three days late. You're the first person to listen closely
+    to her explanation of the lantern inscriptions, right to the end.
 - id: mirelle-voss
   name: Mirelle Voss
   notes: The innkeeper. You've paid for your room. As far as she's concerned, that's a start.

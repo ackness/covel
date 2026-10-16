@@ -1,6 +1,9 @@
 - id: find-the-keeper
   name: Find the Keeper
-  description: Keeper Ysolde entered the barrow the night the lantern went out. Three days later, she still hasn't returned. The reeve is offering a bounty to bring her back alive.
+  description:
+    Keeper Ysolde entered the barrow the night the lantern went out. Three days
+    later, she still hasn't returned. The reeve is offering a bounty to bring her back
+    alive.
   giver: Reeve Aldous Penn
   reward: Thirty silver coins and the village's gratitude
   objectives:
@@ -12,9 +15,11 @@
       text: Find Ysolde in the barrow
 - id: the-lantern-heart
   name: The Missing Lantern Heart
-  description: The barrow lantern didn't go out on its own. Someone took the Lantern Heart that lit it. Find out who and why, then decide where it belongs.
+  description:
+    The barrow lantern didn't go out on its own. Someone took the Lantern Heart
+    that lit it. Find out who and why, then decide where it belongs.
   giver: Sister Wren
-  reward: The Order of the Dawn Lantern's recognition, and the barrow's return to sleep
+  reward: The Order of the Dawn Lantern's recognition, and a barrow that sleeps again
   objectives:
     - id: inspect-the-lantern
       text: Climb to the summit of the barrow and examine the extinguished lantern
@@ -24,11 +29,13 @@
       text: Recover the Lantern Heart and decide where it should go
 - id: the-singing-below
   name: The Singing Below
-  description: The miller's daughter says she hears singing underground at night. It sings her dead grandfather's name. Mirelle hopes you'll look into it while you're there.
+  description:
+    The miller's daughter says she hears singing underground at night — singing
+    her dead grandfather's name. Mirelle hopes you'll look into it on your way.
   giver: Mirelle Voss, innkeeper
   reward: One free night's food and lodging, and a favor from Mirelle
   objectives:
     - id: talk-to-the-millers-daughter
       text: Talk to the miller's daughter
     - id: find-the-choir
-      text: Find out where the singing comes from
+      text: Find the source of the singing

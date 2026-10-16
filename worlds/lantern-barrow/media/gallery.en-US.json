@@ -16,7 +16,7 @@
     {
       "id": "greyreed-map",
       "name": "Greyreed and the Barrow",
-      "description": "A sketch map of the area known at the start. Distances between landmarks do not give exact travel distances.",
+      "description": "A sketch map of the area known at the start. Distances between landmarks are not exact travel distances.",
       "background": "The road north of Greyreed leads to the Keeper's Cottage and Lantern Barrow. In the village, the tavern, the Reeve's House, the mill, and Dawn Chapel are the main places to begin investigating and gathering a party. Marshland surrounds them, reeds broken by stretches of black water.",
       "storyContext": "This overview shows only known landmarks above ground. The buildings, waterways, and distances are arranged for illustration. It shows no routes inside the tomb, hidden rooms, or secret locations.",
       "location": "The known surface region around Greyreed",
@@ -30,7 +30,7 @@
       "id": "crooked-stag-tavern",
       "name": "The Crooked Antler",
       "description": "A hearth, hot ale, and a bounty notice. Your first expedition starts here.",
-      "background": "The Crooked Antler serves as both tavern and inn, and is where Greyreed exchanges its news. Mirelle has a sharp memory and knows how to keep a secret. The reeve is offering thirty silver coins for someone to enter the tomb and bring the keeper home.",
+      "background": "The Crooked Antler serves as both tavern and inn, and is where Greyreed exchanges its news. Mirelle has a long memory and a tight lip. The reeve is offering thirty silver coins for someone to enter the tomb and bring the keeper home.",
       "storyContext": "The player opens this door on a rainy late-autumn night. The veteran and the sister are both potential companions to approach. The empty scene leaves space at the bar, in the corner, and by the window for different conversations, without deciding anyone's next move.",
       "location": "Greyreed · The Crooked Antler",
       "visualNotes": [
@@ -43,7 +43,7 @@
       "id": "bronze-tomb-doors",
       "name": "The Open Bronze Doors",
       "description": "Halfway up the hill, the bronze double doors stand wide open, pushed outward. The broken seal lies on the cold, wet stone steps.",
-      "background": "The bronze tomb doors halfway up the barrow opened the night the lantern went out. The seal shows that they were forced open from inside. Ysolde entered with her lamp; no one in the village has seen her since.",
+      "background": "The bronze tomb doors halfway up the barrow opened the night the lantern went out. The seal shows that it was pushed open from inside. Ysolde entered with her lamp; no one in the village has seen her since.",
       "storyContext": "The tomb doors are one of the first definite locations the expedition encounters. Players can examine the seal, prepare their lights, and decide how to enter. The picture reveals nothing about what lies deeper in the tomb.",
       "location": "Lantern Barrow · Bronze Doors",
       "visualNotes": [
@@ -68,35 +68,35 @@
     {
       "id": "brannoc-hale",
       "name": "Brannoc Hale",
-      "description": "A fifty-year-old retired soldier who has spent three days brooding over his drink in a corner of the Crooked Antler. He says he's just passing through, but keeps looking toward the barrow. His sword is old and carefully maintained.",
-      "background": "A gruff veteran with a soft heart. He puts himself between others and danger, then complains about it.",
+      "description": "A fifty-year-old retired soldier who has spent three days brooding over his drink in a corner of the Crooked Antler. He says he's just passing through, but keeps staring toward the barrow. His sword is old but well kept.",
+      "background": "A gruff veteran with a soft heart who steps in front of others first and complains later.",
       "storyContext": "A portrait for character introductions and dialogue. It does not establish that the player has found this person, and it leaves later actions and outcomes open."
     },
     {
       "id": "sister-wren",
       "name": "Sister Wren",
-      "description": "A nineteen-year-old acolyte of the Order of the Dawn Lantern, sent to Greyreed to inspect the barrow lantern. She arrived three days late. She can heal wounds and read the ancient lantern inscriptions, but keeps a doubt about her faith to herself.",
+      "description": "A nineteen-year-old acolyte of the Order of the Dawn Lantern, sent to Greyreed to inspect the barrow lantern. She arrived three days late. She can heal wounds and read the ancient lantern inscriptions, and hides a question about her faith.",
       "background": "Sincere, conscientious, and braver than she looks. Recites prayers when nervous.",
       "storyContext": "A portrait for character introductions and dialogue. It does not establish that the player has found this person, and it leaves later actions and outcomes open."
     },
     {
       "id": "mirelle-voss",
       "name": "Mirelle Voss",
-      "description": "The owner of the Crooked Antler is in her early forties. She has a sharp memory, knows how to keep a secret, and keeps meticulous accounts. Every rumor in the village reaches her bar first.",
-      "background": "Shrewd and welcoming. She tells you the truth once she decides you've earned it.",
+      "description": "Owner of the Crooked Antler, early forties, with a long memory, a tight lip, and exact accounts. Every rumor in the village reaches her bar first.",
+      "background": "Shrewd and warm; she hands you the truth only once she's sure you're worth it.",
       "storyContext": "A portrait for character introductions and dialogue. It does not establish that the player has found this person, and it leaves later actions and outcomes open."
     },
     {
       "id": "aldous-penn",
       "name": "Reeve Aldous Penn",
-      "description": "Greyreed's reeve, who posted the bounty in the tavern. He wants the matter settled quickly, but grows evasive when asked about the days before the keeper disappeared.",
+      "description": "Greyreed's reeve, who posted the bounty in the tavern. He wants the matter settled quickly, but is evasive about the days before the keeper disappeared.",
       "background": "Respectable and anxious. Habitually hides his own mistakes behind rules and procedure.",
       "storyContext": "A portrait for character introductions and dialogue. It does not establish that the player has found this person, and it leaves later actions and outcomes open."
     },
     {
       "id": "keeper-ysolde",
       "name": "Keeper Ysolde",
-      "description": "In her seventies, Ysolde has tended the barrow lantern for forty years. Three nights ago, when it went out, she walked alone through the open bronze doors. She hasn't returned.",
+      "description": "In her seventies, Ysolde has tended the barrow lantern for forty years. Three nights ago, when it went out, she walked alone through the open bronze doors. She hasn't come out.",
       "background": "A stubborn, clear-headed old woman who knows the truth about the barrow. She would rather shoulder the burden herself than frighten the villagers.",
       "storyContext": "A portrait for character introductions and dialogue. It does not establish that the player has found this person, and it leaves later actions and outcomes open."
     },
@@ -104,7 +104,7 @@
       "id": "corvin-ashe",
       "name": "Corvin Ashe",
       "description": "A young scholar from the capital. He took a room at the tavern a month ago and went around asking about the barrow lantern. He checked out the day before it went out. No one saw him leave the village.",
-      "background": "Clever, charming, and dangerously sure of himself. He believes the pursuit of knowledge is justification enough.",
+      "background": "Clever, charming, and dangerously self-assured. He believes knowledge is its own justification.",
       "storyContext": "A portrait for character introductions and dialogue. It does not establish that the player has found this person, and it leaves later actions and outcomes open."
     }
   ]

@@ -21,8 +21,8 @@ delveMap:
     bronze-doors:
       room: The Bronze Doors
       note:
-        The doors have stood open since the night the lantern went out. Someone forced the
-        seal open from inside.
+        The doors have stood open since the night the lantern went out. The seal was pushed
+        open from the inside.
     hall-of-lamps:
       room: Hall of Lamps
       note:
@@ -53,16 +53,16 @@ barrowAlarm:
           stirring: The throne trembles
           awake: The Barrow King wakes
   updateRule:
-    "Apply updates only after the party enters the barrow. Increase level by 1 for
-    fighting, breaking down doors, loud shouting, lighting a flame in the Choir Gallery, a
-    critical failure, or a prolonged rest inside the tomb during this turn's narrative (at
-    most +2 per turn). Decrease it by 1 for relighting a wall lamp, quietly avoiding
+    "Apply updates only after the party enters the barrow. Raise level by 1 when
+    this turn's narrative contains fighting, breaking down doors, loud shouting, lighting
+    a flame in the Choir Gallery, a critical failure, or a prolonged rest inside the tomb
+    (at most +2 per turn). Lower it by 1 for relighting a wall lamp, slipping quietly past
     danger, or soothing the dead. Set stage from level: 0 sleeping, 1 murmuring, 2
     restless, 3–4 singing, 5 stirring, 6 awake. Reset level to 0 once the Lantern Heart is
     back in the ancient lantern and the lantern has been relit."
 lantern:
   name: The Barrow Lantern
-  description: The location of the Lantern Heart and whether the lantern has been relit.
+  description: Where the Lantern Heart is, and whether the lantern burns again.
   schema:
     properties:
       heart:
@@ -106,7 +106,7 @@ renown:
         title: Known as
         x-enumLabels:
           stranger: Stranger
-          sellsword: Hired hand
+          sellsword: Sellsword
           trusted: Trusted
           hero-of-greyreed: Hero of Greyreed
           legend: Legend
@@ -114,11 +114,11 @@ renown:
         title: Deeds
   updateRule:
     "Adjust when villagers witness or have actually heard about the player's
-    actions: +1 for solving a villager's problem, +2 for rescuing the keeper or relighting
-    the lantern, and -1 for deceiving, extorting, or bringing trouble on villagers. Add a
-    sentence to deeds for each change. Set title from score: 0–1 stranger, 2–3 sellsword,
-    4–6 trusted, 7–8 hero-of-greyreed, 9–10 legend. Actions no one knows about do not
-    affect renown."
+    actions: +1 for solving a specific problem for a villager, +2 for rescuing the keeper
+    or relighting the lantern, and -1 for deceiving, extorting, or bringing trouble on
+    villagers. Add a sentence to deeds for each change. Set title from score: 0–1
+    stranger, 2–3 sellsword, 4–6 trusted, 7–8 hero-of-greyreed, 9–10 legend. Actions no
+    one knows about do not affect renown."
 geography:
   name: Geography
   schema:
@@ -137,15 +137,15 @@ geography:
               title: Climate
   initialValue:
     overview:
-      Greyreed stands on the edge of Greyreed Marsh. Lantern Barrow rises just north
-      of the village. For a hundred years, the ancient lantern on its summit has burned
-      every night.
+      Greyreed stands on the edge of Greyreed Marsh. The small hill north of the
+      village is Lantern Barrow. For a hundred years, the ancient lantern on its summit
+      has burned every night.
     regions:
       - name: Greyreed Village
         description:
           Thirty-odd households, a mill, the Crooked Antler tavern, and a small chapel.
           The villagers are practical, superstitious, and know one another inside out.
-        climate: Damp and foggy. By late autumn, the cold has set in.
+        climate: Damp and foggy, already cold in late autumn.
       - name: The Keeper's Cottage
         description:
           A stone cottage at the foot of the barrow, where Ysolde has lived for forty
@@ -155,7 +155,7 @@ geography:
           A round hill covered in dead grass. An extinguished lantern stands at the
           summit; halfway up, the bronze tomb doors hang open. The tomb is bigger inside
           than the hill that holds it.
-        climate: Chilly and damp inside the tomb, with a smell of lamp oil and wet earth.
+        climate: Cold and clammy inside the tomb, with a smell of lamp oil and wet earth.
       - name: Greyreed Marsh
         description:
           Reeds and black water as far as the eye can see. They say the marsh-king's
@@ -184,7 +184,7 @@ factions:
       name: The Hollow Choir
       description:
         "The dead inside the barrow. They do not attack people who sing. They simply
-        keep singing themselves: the name of the marsh-king, and the names of the living."
+        keep singing: the marsh-king's name, and the names of the living."
 tone:
   name: Tone
   schema:
@@ -237,9 +237,9 @@ mechanics:
       a critical success; a natural 1 is a critical failure.
     customRules:
       - At 0 hit points, you collapse rather than die immediately. Companions can drag you
-        to safety.
-      - A torch burns for about two hours. Without light in the barrow, you cannot see
-        where you are going or spot traps.
+        back.
+      - A torch burns for about one phase of the day. Without light in the barrow, you
+        cannot see where you are going or spot traps.
       - Noise, firelight, and resting inside the tomb all raise the Barrow Alarm.
 startingConditions:
   name: Opening
@@ -258,14 +258,14 @@ startingConditions:
       'Rain falls on a late-autumn night as you push open the door of the
       Crooked Antler. The reeve''s bounty notice hangs above the bar: the keeper is
       missing, the barrow lantern has gone out, and the bronze tomb doors stand open.
-      Thirty silver coins for someone to go down there. An old soldier cleans his sword in
-      the corner; a young sister by the window leafs through a book of ancient lantern
+      Thirty silver coins to whoever goes down. An old soldier cleans his sword in the
+      corner; a young sister by the window leafs through a book of ancient lantern
       inscriptions. The innkeeper slides you a mug of hot ale. "You here about the notice
       too?"'
-    openingHook: The lantern went out three days ago. Who will venture into the tomb with you tonight?
+    openingHook: The lantern has been dark for three days. Who goes down with you tonight?
     openingChips:
       - Ask the innkeeper about the keeper
       - Sit across from the old soldier
       - Ask the sister to read the lantern inscriptions
-      - Find the reeve and negotiate the price
+      - Find the reeve and talk money
     startingLocation: Greyreed, the Crooked Antler
