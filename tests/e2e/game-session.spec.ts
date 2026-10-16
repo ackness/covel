@@ -8,6 +8,7 @@ import {
   sendPlayerMessage,
   useServerWorlds,
   waitForTurnIdle,
+  startGame,
   waitForTurnStarted,
 } from "./helpers/player.js";
 
@@ -79,7 +80,7 @@ test.describe("Game Session — 3 Round Flow", () => {
     await expect(startButton).toBeEnabled({ timeout: 30_000 });
     await keepFocusedGuidePluginSet(page);
     await expect(startButton).toBeEnabled({ timeout: 30_000 });
-    await startButton.click();
+    await startGame(page, startButton);
 
     // Wait for game view
     await expect(composerInput(page)).toBeVisible({

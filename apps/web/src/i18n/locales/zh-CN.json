@@ -479,7 +479,9 @@
     "modelUse": {
       "story": "剧情",
       "plugin": "插件",
-      "utility": "辅助"
+      "utility": "辅助",
+      "fast": "压缩历史",
+      "memory": "记忆提取"
     },
     "missingCredentials": {
       "title": "部分模型用途还没有密钥",

@@ -3,6 +3,7 @@ import {
   ONBOARDING_VERSION,
   seedBrowserSettings,
   useServerWorlds,
+  startGame,
 } from "./helpers/player.js";
 
 for (const mode of ["local", "remote"] as const) {
@@ -67,9 +68,10 @@ for (const mode of ["local", "remote"] as const) {
       const selectedLore = `Selected ${mode} session lore`;
       await input.fill(selectedLore);
       await expect(page.getByRole("alert")).toContainText("Draft not saved");
-      await page
-        .getByRole("button", { name: "Start Game", exact: true })
-        .click();
+      await startGame(
+        page,
+        page.getByRole("button", { name: "Start Game", exact: true }),
+      );
       await expect(page).toHaveURL(/sid=/);
       const sessionId = new URL(page.url()).searchParams.get("sid")!;
       const persistedLore = () =>

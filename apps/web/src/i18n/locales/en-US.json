@@ -525,7 +525,9 @@
     "modelUse": {
       "story": "Story",
       "plugin": "Plugin tasks",
-      "utility": "Utility"
+      "utility": "Utility",
+      "fast": "History compression",
+      "memory": "Memory extraction"
     },
     "missingCredentials": {
       "title": "Some model uses have no API key",

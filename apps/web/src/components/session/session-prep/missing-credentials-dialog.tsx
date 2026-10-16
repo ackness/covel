@@ -8,7 +8,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog.js";
-import type { SessionModelUse } from "../provider-failure-notice.js";
+import {
+  formatModelUses,
+  type SessionModelUse,
+} from "../provider-failure-notice.js";
 
 /** A choice at start, never a requirement to configure a model before playing. */
 export function MissingCredentialsDialog({
@@ -27,11 +30,9 @@ export function MissingCredentialsDialog({
   const { t, i18n } = useTranslation();
   const providers = new Map<string, string[]>();
   for (const use of uses) {
-    const names = providers.get(use.provider) ?? [];
-    names.push(
-      t(`session.modelUse.${use.slotId}`, { defaultValue: use.slotId }),
-    );
-    providers.set(use.provider, names);
+    const slotIds = providers.get(use.provider) ?? [];
+    slotIds.push(use.slotId);
+    providers.set(use.provider, slotIds);
   }
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -48,7 +49,7 @@ export function MissingCredentialsDialog({
               {t("session.missingCredentials.provider", {
                 provider:
                   getBuiltinProviderConnection(provider)?.label ?? provider,
-                slots: new Intl.ListFormat(i18n.language).format(slots),
+                slots: formatModelUses(t, i18n.language, slots),
               })}
             </li>
           ))}

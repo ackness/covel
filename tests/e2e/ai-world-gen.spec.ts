@@ -7,6 +7,7 @@ import {
   useServerWorlds,
   waitForTurnIdle,
   waitForTurnStarted,
+  startGame,
 } from "./helpers/player.js";
 
 const liveLlmEnabled = /^(1|true|yes|on)$/i.test(
@@ -340,7 +341,7 @@ test.describe("AI World Generation", () => {
     });
 
     // ── Start the game ──
-    await startButton.click();
+    await startGame(page, startButton);
 
     // Wait for game view (input field + sid in URL)
     await expect(composerInput(page)).toBeVisible({
