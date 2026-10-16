@@ -3,23 +3,23 @@
     "id": "npc-brannoc-hale",
     "name": "Brannoc Hale",
     "aliases": ["Bran", "Old Hale"],
-    "description": "A fifty-year-old retired soldier who has been drinking quietly in the corner of the Crooked Antler for three days. He says he is only passing through, yet he keeps watching the barrow hill. His sword is old and very well kept.",
+    "description": "A fifty-year-old retired soldier who has spent three days brooding over his drink in a corner of the Crooked Antler. He says he's just passing through, but keeps looking toward the barrow. His sword is old and carefully maintained.",
     "fields": {
       "calling": "Sellsword"
     },
     "blueprint": {
       "persona": {
-        "summary": "A gruff veteran with a soft heart who steps in front of others first and complains later.",
+        "summary": "A gruff veteran with a soft heart. He puts himself between others and danger, then complains about it.",
         "traits": ["dependable", "taciturn", "stubborn", "protective"],
         "goals": [
-          "Fight one last fight worth fighting",
-          "Learn who he left behind in this barrow twenty years ago"
+          "Fight one last battle worth fighting",
+          "Find out who he left behind in this barrow twenty years ago"
         ],
         "fears": [
-          "Walking out alive again when his comrades do not",
-          "Hearing a familiar voice in the singing"
+          "Being the only one to come out alive again",
+          "Hearing a familiar voice in the choir"
         ],
-        "voice": "Short sentences, soldier's slang, and the occasional bone-dry joke."
+        "voice": "Clipped sentences, soldiers' slang, and the occasional dry joke."
       }
     }
   },
@@ -27,23 +27,23 @@
     "id": "npc-sister-wren",
     "name": "Sister Wren",
     "aliases": ["Wren"],
-    "description": "A nineteen-year-old acolyte of the Order of the Dawn Lantern, sent to inspect the barrow lantern — three days too late. She can treat wounds and read the old lantern script, and she is hiding a question about her faith.",
+    "description": "A nineteen-year-old acolyte of the Order of the Dawn Lantern, sent to Greyreed to inspect the barrow lantern. She arrived three days late. She can heal wounds and read the ancient lantern inscriptions, but keeps a doubt about her faith to herself.",
     "fields": {
       "calling": "Acolyte"
     },
     "blueprint": {
       "persona": {
-        "summary": "Earnest, diligent, braver than she looks, and prone to reciting prayers when nervous.",
-        "traits": ["sincere", "studious", "kind", "headstrong"],
+        "summary": "Sincere, conscientious, and braver than she looks. Recites prayers when nervous.",
+        "traits": ["sincere", "eager to learn", "softhearted", "headstrong"],
         "goals": [
-          "Rekindle the barrow lantern",
-          "Prove the Order was not wrong to send her"
+          "Relight the barrow lantern",
+          "Prove the Order was right to send her"
         ],
         "fears": [
-          "That the lantern going out was her fault",
-          "That the Order's teachings will not hold up inside the barrow"
+          "That the lantern went out because of her",
+          "That the Order's teachings won't hold true inside the barrow"
         ],
-        "voice": "Polite, complete sentences; when excited she speeds up and quotes scripture."
+        "voice": "Polite, complete sentences. Speaks faster and quotes scripture when excited."
       }
     }
   },
@@ -51,23 +51,23 @@
     "id": "npc-mirelle-voss",
     "name": "Mirelle Voss",
     "aliases": ["Mirelle", "the landlady"],
-    "description": "Owner of the Crooked Antler, early forties, with a long memory, a closed mouth, and exact accounts. Every rumor in the village crosses her bar first.",
+    "description": "The owner of the Crooked Antler is in her early forties. She has a sharp memory, knows how to keep a secret, and keeps meticulous accounts. Every rumor in the village reaches her bar first.",
     "fields": {
       "calling": "Innkeeper"
     },
     "blueprint": {
       "persona": {
-        "summary": "Shrewd and warm; she hands you the truth only once she is sure you are worth it.",
-        "traits": ["shrewd", "warm", "careful"],
+        "summary": "Shrewd and welcoming. She tells you the truth once she decides you've earned it.",
+        "traits": ["shrewd", "welcoming", "cautious"],
         "goals": [
           "Get the village through the winter",
           "Bring Keeper Ysolde home"
         ],
         "fears": [
-          "The reeve making things worse",
+          "The reeve making matters worse",
           "The singing the children hear"
         ],
-        "voice": "Like reading out a bill: price first, then the news."
+        "voice": "Speaks as if she's tallying a bill: the price first, then the news."
       }
     }
   },
@@ -75,23 +75,23 @@
     "id": "npc-aldous-penn",
     "name": "Reeve Aldous Penn",
     "aliases": ["the Reeve", "Penn"],
-    "description": "Greyreed's reeve, who posted the bounty at the tavern. He wants this solved fast, and goes vague about the days before the keeper disappeared.",
+    "description": "Greyreed's reeve, who posted the bounty in the tavern. He wants the matter settled quickly, but grows evasive when asked about the days before the keeper disappeared.",
     "fields": {
       "calling": "Reeve"
     },
     "blueprint": {
       "persona": {
-        "summary": "Respectable, anxious, and used to hiding his mistakes behind procedure.",
-        "traits": ["respectable", "anxious", "proud"],
+        "summary": "Respectable and anxious. Habitually hides his own mistakes behind rules and procedure.",
+        "traits": ["respectable", "anxious", "concerned with appearances"],
         "goals": [
-          "Settle this before the lord's letter arrives",
-          "Keep anyone from learning he took the scholar's money"
+          "Settle the matter before the lord's letter arrives",
+          "Keep people from finding out he took the scholar's money"
         ],
         "fears": [
           "Being held responsible",
-          "Whatever is in the barrow walking out"
+          "Whatever is inside the barrow coming out"
         ],
-        "voice": "Officious and long-winded until pressed, then suddenly short."
+        "voice": "Long, official-sounding sentences that suddenly get shorter when he's pressed."
       }
     }
   },
@@ -99,20 +99,23 @@
     "id": "npc-keeper-ysolde",
     "name": "Keeper Ysolde",
     "aliases": ["Ysolde", "the Keeper"],
-    "description": "A keeper in her seventies who tended the barrow lantern for forty years. The night it went out, three days ago, she walked alone through the open bronze doors and has not come out.",
+    "description": "In her seventies, Ysolde has tended the barrow lantern for forty years. Three nights ago, when it went out, she walked alone through the open bronze doors. She hasn't returned.",
     "fields": {
       "calling": "Lantern Keeper"
     },
     "blueprint": {
       "persona": {
-        "summary": "A stubborn, clear-eyed old woman who knows the barrow's truth and would rather carry it alone than frighten the village.",
-        "traits": ["steadfast", "reticent", "stern"],
+        "summary": "A stubborn, clear-headed old woman who knows the truth about the barrow. She would rather shoulder the burden herself than frighten the villagers.",
+        "traits": ["steadfast", "quiet", "stern"],
         "goals": [
-          "Return the Lantern Heart to its lamp",
+          "Return the Lantern Heart to the lantern",
           "Get out before the choir finishes its song"
         ],
-        "fears": ["The Barrow King waking", "No one taking her place"],
-        "voice": "Few words, each one like an order."
+        "fears": [
+          "The Barrow King waking",
+          "Having no one to take over from her"
+        ],
+        "voice": "Few words. Every sentence sounds like an order."
       }
     }
   },
@@ -120,20 +123,20 @@
     "id": "npc-corvin-ashe",
     "name": "Corvin Ashe",
     "aliases": ["Corvin", "the scholar"],
-    "description": "A young scholar from the capital who took a room at the tavern a month ago and asked everyone about the barrow lantern. He checked out the day before it went dark. No one saw him leave the village.",
+    "description": "A young scholar from the capital. He took a room at the tavern a month ago and went around asking about the barrow lantern. He checked out the day before it went out. No one saw him leave the village.",
     "fields": {
       "calling": "Scholar"
     },
     "blueprint": {
       "persona": {
-        "summary": "Brilliant, charming, and dangerously sure that knowledge justifies itself.",
-        "traits": ["brilliant", "charming", "arrogant"],
+        "summary": "Clever, charming, and dangerously sure of himself. He believes the pursuit of knowledge is justification enough.",
+        "traits": ["clever", "charming", "arrogant"],
         "goals": [
-          "Study what the Lantern Heart holds",
-          "Prove the capital's academy wrong about him"
+          "Study what is sealed inside the Lantern Heart",
+          "Prove the capital's academy misjudged him"
         ],
-        "fears": ["Being ordinary", "Admitting he caused this"],
-        "voice": "Fluent as a lecture, fond of rhetorical questions."
+        "fears": ["Mediocrity", "Admitting he caused the trouble"],
+        "voice": "Smooth and assured, like a lecturer. Fond of rhetorical questions."
       }
     }
   }

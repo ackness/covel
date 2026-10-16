@@ -1,34 +1,34 @@
 - id: find-the-keeper
   name: Find the Keeper
-  description: Keeper Ysolde walked into the barrow the night the lantern went out and has not come back in three days. The reeve has posted a bounty to bring her home alive.
+  description: Keeper Ysolde entered the barrow the night the lantern went out. Three days later, she still hasn't returned. The reeve is offering a bounty to bring her back alive.
   giver: Reeve Aldous Penn
-  reward: Thirty silver and the village's gratitude
+  reward: Thirty silver coins and the village's gratitude
   objectives:
     - id: keepers-cottage
-      text: Search the keeper's cottage for what she left behind
+      text: Visit the keeper's cottage and see what she left behind
     - id: enter-the-barrow
-      text: Pass through the open bronze doors
+      text: Go through the open bronze tomb doors
     - id: find-ysolde
-      text: Find Ysolde inside the barrow
+      text: Find Ysolde in the barrow
 - id: the-lantern-heart
   name: The Missing Lantern Heart
-  description: The barrow lantern did not simply go out — the heart-stone that lit it was taken. Learn who took it and why, then decide where it belongs.
+  description: The barrow lantern didn't go out on its own. Someone took the Lantern Heart that lit it. Find out who and why, then decide where it belongs.
   giver: Sister Wren
-  reward: The Order of the Dawn Lantern's recognition, and a barrow that sleeps again
+  reward: The Order of the Dawn Lantern's recognition, and the barrow's return to sleep
   objectives:
     - id: inspect-the-lantern
-      text: Climb the barrow hill and examine the dark lantern
+      text: Climb to the summit of the barrow and examine the extinguished lantern
     - id: who-took-it
       text: Find out who took the Lantern Heart
     - id: decide-its-fate
-      text: Recover the Lantern Heart and decide its fate
+      text: Recover the Lantern Heart and decide where it should go
 - id: the-singing-below
   name: The Singing Below
-  description: The miller's daughter says she hears singing under the ground at night — singing her dead grandfather's name. Mirelle would like you to look into it on your way.
+  description: The miller's daughter says she hears singing underground at night. It sings her dead grandfather's name. Mirelle hopes you'll look into it while you're there.
   giver: Mirelle Voss, innkeeper
-  reward: A free night's room and board, and a favor from Mirelle
+  reward: One free night's food and lodging, and a favor from Mirelle
   objectives:
     - id: talk-to-the-millers-daughter
       text: Talk to the miller's daughter
     - id: find-the-choir
-      text: Find the source of the singing
+      text: Find out where the singing comes from

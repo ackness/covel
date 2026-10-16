@@ -1,65 +1,59 @@
 # en-US text for world.yaml. Only translated text; structure and ids come from world.yaml.
 name: "Lantern Barrow: First Expedition"
-summary: The lantern that guarded the barrow for a century has gone out, its
-  keeper is missing, and the bronze doors stand open. Form a party at the
-  Greyreed tavern, spend your points, and roll your way down — a classic
-  tabletop adventure, starting with your first expedition.
+summary:
+  For a century, the lantern kept watch over the barrow. Now it has gone out,
+  its keeper is missing, and the bronze tomb doors stand open. Gather a party in
+  Greyreed's tavern, assign your points, and roll the dice as you descend into the
+  tomb. A classic tabletop adventure starts with your first expedition.
 pluginPolicy:
   pitch:
     label: Classic Tabletop
-    description: Point-buy character creation, form checks and dice-pool rolls,
-      quests and inventory, companion affinity, and live panels for the delve
-      map, the barrow's alarm, and your renown.
+    description:
+      Point-buy character creation, checks using forms and dice pools,
+      quests, inventory, companion affinity, and panels that track dungeon
+      exploration, the barrow's alarm, and your renown.
     reason:
-      Tabletop play is fun when the rules are visible — you spent the points,
-      the dice are really rolled, and every room and every noise that stirs
-      the barrow stays on the panels.
+      Part of the fun is seeing the rules at work. You assign the attribute points, the
+      dice really roll, and the panels record every room you discover and every
+      noise that disturbs the tomb.
 characterSchema:
   attributes:
     - id: persona
       name: Personality
-      description:
-        Who your adventurer is and how they talk — e.g. "a gruff veteran
-        with a soft heart who speaks in short sentences." Shapes how the
+      description: What your adventurer is like and how they speak, such as
+        "a gruff veteran with a soft heart and few words." This shapes how the
         narrator portrays you.
     - id: calling
       name: Calling
-      description:
-        What your adventurer does for a living — fighter, rogue, scholar,
-        priest, hunter, or your own idea.
+      description: How your adventurer makes a living. Fighter, rogue, scholar,
+        priest, hunter, or something of your own devising.
     - id: background
       name: Background
-      description: Why you came to Greyreed, and one thing from your past only you know.
+      description: Why you came to Greyreed, and something from your past that only you know.
     - id: might
       name: Might
-      description: Fighting, forcing doors, climbing, and carrying.
+      description: Fighting, breaking down doors, climbing, and carrying heavy loads.
     - id: agility
       name: Agility
-      description: Dodging, sneaking, lockpicking, and disarming traps.
+      description: Dodging, sneaking, picking locks, and disarming traps.
     - id: endurance
       name: Endurance
-      description: Resisting poison, cold, exhaustion, and the body's response to terror.
+      description: Withstanding poison, cold, exhaustion, and the physical effects of terror.
     - id: wits
       name: Wits
-      description:
-        Reading runes, recalling lore, solving puzzles, and understanding
-        how traps work.
+      description: Recognizing runes, recalling legends, solving puzzles, and figuring out how traps work.
     - id: insight
       name: Insight
-      description: Spotting ambushes, hearing lies, finding hidden doors, and tracking.
+      description: Noticing ambushes, detecting lies, finding secret doors, and following tracks.
     - id: presence
       name: Presence
-      description:
-        Persuading, intimidating, calming, and bargaining — including with
-        things that should not be awake.
+      description: Persuading, intimidating, reassuring, and negotiating, even with things that should have stayed asleep.
     - id: hp
       name: Hit Points
-      description:
-        Drops when hurt and recovers with rest or healing. At 0 you fall
-        unconscious rather than dying outright.
+      description: Lost when you are hurt; restored by rest and healing. At 0, you collapse rather than die immediately.
     - id: condition
       name: Condition
-      description: Current visible conditions such as wounded, poisoned, or shaken.
+      description: Noticeable conditions such as injury, poisoning, or fear.
     - id: trust
       name: Trust
-      description: Trust toward the player
+      description: Trust in the player
