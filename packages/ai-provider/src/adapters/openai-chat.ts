@@ -16,7 +16,8 @@ import {
   parseJson,
   iterateSsePayloads,
   assertSuccess,
-  createStructuredOutputError,
+  assertCompletedGeneration,
+  parseStructuredObject,
   readOpenAiChatText,
   readOpenAiChatFinishReason,
   readOpenAiChatUsage,
@@ -291,6 +292,46 @@ function serializeMessages(
   });
 }
 
+function openAiChatTextBody(
+  config: ProviderConfig,
+  params: import("../types.js").TextGenerationParams,
+  context: ModelRequestContext | undefined,
+): Record<string, unknown> {
+  const messages = applyCapabilityFallback(
+    withResponseFormatInstruction(
+      params.messages,
+      params.responseFormat,
+      params.instructionLocale,
+    ),
+    context,
+  );
+  const body: Record<string, unknown> = {
+    model: params.model,
+    messages: serializeMessages(
+      lateSystemOption(messages, params.providerRequestMetadata),
+      params.model,
+      config,
+    ),
+    ...openAiPromptCacheKeyField(config, params),
+    ...sanitizeOpenAiMetadata(params.providerRequestMetadata),
+    ...extractOpenAiParameterOverrides(
+      params.providerRequestMetadata,
+      context,
+      params.model,
+    ),
+  };
+  attachOpenAiTools(body, params.tools, params.model, context, params.defaults);
+  if (params.responseFormat) {
+    // json_object is the widest interoperable structured-output mode for
+    // OpenAI API endpoints (including Qwen/DeepSeek proxies). The
+    // adapter also places the exact schema in the system prompt;
+    // runtime validation remains the final contract gate.
+    body.response_format = { type: "json_object" };
+  }
+
+  return body;
+}
+
 /**
  * OpenAI Chat Completions v1 adapter.
  * Works with any API using the OpenAI wire format (DeepSeek, DashScope, etc.).
@@ -299,43 +340,7 @@ export function createOpenAiChatAdapter(): ModelProviderAdapter {
   return {
     async generateText(config, params, context) {
       params = withTextRequestDefaults(params);
-      const messages = applyCapabilityFallback(
-        withResponseFormatInstruction(
-          params.messages,
-          params.responseFormat,
-          params.instructionLocale,
-        ),
-        context,
-      );
-      const body: Record<string, unknown> = {
-        model: params.model,
-        messages: serializeMessages(
-          lateSystemOption(messages, params.providerRequestMetadata),
-          params.model,
-          config,
-        ),
-        ...openAiPromptCacheKeyField(config, params),
-        ...sanitizeOpenAiMetadata(params.providerRequestMetadata),
-        ...extractOpenAiParameterOverrides(
-          params.providerRequestMetadata,
-          context,
-          params.model,
-        ),
-      };
-      attachOpenAiTools(
-        body,
-        params.tools,
-        params.model,
-        context,
-        params.defaults,
-      );
-      if (params.responseFormat) {
-        // json_object is the widest interoperable structured-output mode for
-        // OpenAI API endpoints (including Qwen/DeepSeek proxies). The
-        // adapter also places the exact schema in the system prompt;
-        // runtime validation remains the final contract gate.
-        body.response_format = { type: "json_object" };
-      }
+      const body = openAiChatTextBody(config, params, context);
 
       const response = await postJson(config, "/chat/completions", body);
       const payload = await parseJson(response);
@@ -347,11 +352,11 @@ export function createOpenAiChatAdapter(): ModelProviderAdapter {
         "openai-chat",
         reportedUsage,
       );
-      assertSuccess(response, payload, "openai-chat");
-      assertGenerationPayload(payload, "openai-chat", reportedUsage);
-      assertSuccessfulFinishReason(
-        readOpenAiChatFinishReason(payload),
+      assertCompletedGeneration(
+        response,
+        payload,
         "openai-chat",
+        readOpenAiChatFinishReason(payload),
         reportedUsage,
       );
 
@@ -411,35 +416,25 @@ export function createOpenAiChatAdapter(): ModelProviderAdapter {
         "openai-chat",
         reportedUsage,
       );
-      assertSuccess(response, payload, "openai-chat");
-      assertGenerationPayload(payload, "openai-chat", reportedUsage);
-      assertSuccessfulFinishReason(
-        readOpenAiChatFinishReason(payload),
+      assertCompletedGeneration(
+        response,
+        payload,
         "openai-chat",
+        readOpenAiChatFinishReason(payload),
         reportedUsage,
       );
 
       const reply = splitThinkTags(readOpenAiChatText(payload));
-      let rawObject: unknown;
-      try {
-        rawObject = JSON.parse(reply.text);
-      } catch {
-        throw createStructuredOutputError(
-          "openai-chat",
-          readOpenAiChatUsage(payload),
-        );
-      }
-      const validation = params.schema.safeParse(rawObject);
-      if (!validation.success) {
-        throw createStructuredOutputError(
-          "openai-chat",
-          readOpenAiChatUsage(payload),
-        );
-      }
+      const object = parseStructuredObject(
+        reply.text,
+        params.schema,
+        "openai-chat",
+        reportedUsage,
+      );
 
       return {
         ...(diagnostics ? { diagnostics } : {}),
-        object: validation.data,
+        object,
         reasoningContent: joinReasoning(
           readOpenAiChatReasoningContent(payload)?.text,
           reply.reasoning,
@@ -451,44 +446,13 @@ export function createOpenAiChatAdapter(): ModelProviderAdapter {
 
     async *streamText(config, params, context) {
       params = withTextRequestDefaults(params);
-      const messages = applyCapabilityFallback(
-        withResponseFormatInstruction(
-          params.messages,
-          params.responseFormat,
-          params.instructionLocale,
-        ),
-        context,
-      );
-      const body: Record<string, unknown> = {
-        model: params.model,
-        messages: serializeMessages(
-          lateSystemOption(messages, params.providerRequestMetadata),
-          params.model,
-          config,
-        ),
+      const body = {
+        ...openAiChatTextBody(config, params, context),
         stream: true,
-        // OpenAI Chat only includes a final usage chunk when this option is
-        // explicit. Third-party providers that support usage follow the same
-        // shape; malformed/absent counters remain safely normalized to zero.
+        // Request the final usage chunk when the provider supports it.
         stream_options: { include_usage: true },
-        ...(params.responseFormat
-          ? { response_format: { type: "json_object" } }
-          : {}),
-        ...openAiPromptCacheKeyField(config, params),
-        ...sanitizeOpenAiMetadata(params.providerRequestMetadata),
-        ...extractOpenAiParameterOverrides(
-          params.providerRequestMetadata,
-          context,
-          params.model,
-        ),
       };
-      attachOpenAiTools(
-        body,
-        params.tools,
-        params.model,
-        context,
-        params.defaults,
-      );
+
       const response = await postJson(config, "/chat/completions", body);
 
       // Check HTTP status before parsing SSE — a non-2xx response won't be SSE

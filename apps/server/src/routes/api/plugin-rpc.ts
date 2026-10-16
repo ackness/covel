@@ -248,10 +248,8 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
       );
     }
 
-    // Approval gate — trust comes from plugin discovery source, NOT from
-    // the manifest's `pluginType` field. `pluginType` is author-supplied and
-    // could be forged by a third-party plugin claiming `core-plugin` to
-    // auto-bypass approval. `entry.source` is set by bootstrap from the
+    // Approval trust comes from discovery source, independent of authored
+    // package kind. `entry.source` is set by bootstrap from the
     // discovery pipeline, which clamps non-first-dir plugins to 'community'
     // so they can't escalate. A missing source remains community-trusted.
     const entry = pluginRegistry.get(body.pluginId);

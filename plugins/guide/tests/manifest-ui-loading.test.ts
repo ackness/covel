@@ -29,14 +29,13 @@ describe("guide manifest and UI loading", () => {
     expect(parsed.manifest).toMatchObject({
       name: "guide",
       pluginId: "guide",
-      pluginType: "plugin",
+      kind: "plugin",
       ui: { message: ["./ui/guide-block.json"] },
     });
     expect(parsed.manifest).not.toHaveProperty("stage");
     expect(compileInlineRuntime(parsed)?.manifest).toMatchObject({
       name: "guide",
       pluginId: "guide",
-      pluginType: "plugin",
       stage: "post-turn",
       model: "plugin",
       outputKind: "system",
@@ -59,7 +58,6 @@ describe("guide manifest and UI loading", () => {
     expect(manifests).toHaveLength(1);
     expect(manifests[0].manifest).toMatchObject({
       name: "guide",
-      pluginType: "plugin",
       stage: "post-turn",
       model: "plugin",
       outputKind: "system",

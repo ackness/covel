@@ -84,7 +84,7 @@ it.each(
           id: pluginId,
           name: pluginId,
           description: "Fixture",
-          pluginType: "plugin",
+          kind: "plugin",
           runtimeCount: 0,
         },
       });

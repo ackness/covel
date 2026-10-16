@@ -996,6 +996,8 @@ Both endpoints return `{ ok, runtimeId, state }`.
 | DELETE | `/api/plugins/:id`            | Uninstall a third-party plugin (deletes `~/.covel/plugins/<id>`)                                                                                     |
 | GET    | `/api/plugin-flows`           | Preview data for the pre-game flow (plugin list plus staged steps), shown on the session-prep screen                                                 |
 
+`GET /api/plugin-flows` entries in `plugins` and `steps` use `kind` (`core` or `plugin`) for the package category. They do not return `pluginType`.
+
 `DELETE /api/plugins/:id`:
 
 - Authentication: the desktop app requires a bearer token. A production deployment with no token requires `COVEL_INSTALL_API_ENABLED=1`.

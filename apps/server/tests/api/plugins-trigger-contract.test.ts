@@ -35,7 +35,7 @@ describe("plugin trigger discovery contract", () => {
           id: authored.name,
           name: "Trigger fixture",
           description,
-          pluginType: "plugin",
+          kind: "plugin",
           runtimeCount: 1,
         },
         manifests: [

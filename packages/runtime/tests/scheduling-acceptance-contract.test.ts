@@ -1861,7 +1861,6 @@ describe("effects hazard (same-layer W/W, W/R, R/W detection)", () => {
     ({
       name,
       pluginId: name.split("/")[0],
-      pluginType: "community",
       stage: "narrative",
       trigger: { type: "auto" },
       model: "m",

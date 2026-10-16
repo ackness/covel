@@ -22,7 +22,7 @@ function makeEntry(manifests: readonly RuntimeManifest[]): PluginRegistryEntry {
       id: "media-tools",
       name: "Media Tools",
       description: "Test media runtimes",
-      pluginType: "plugin",
+      kind: "plugin",
       runtimeCount: parsed.length,
     },
     manifests: parsed,

@@ -1,3 +1,5 @@
+import { INPUT_MODALITIES, OUTPUT_MODALITIES } from "@covel/shared";
+
 /**
  * ModelDatabase — loads from the bundled LiteLLM-derived JSON and supports
  * runtime updates (from GitHub fetch or manual edits).
@@ -337,7 +339,7 @@ export async function fetchLiteLlmModels(
   };
 }
 
-function transformLiteLlmEntry(
+export function transformLiteLlmEntry(
   raw: Record<string, unknown>,
 ): ModelDbEntry | null {
   const mode = (raw.mode as string) ?? "chat";
@@ -395,7 +397,7 @@ function deriveInput(
   const explicit = raw.supported_modalities as string[] | undefined;
   if (explicit?.length)
     return explicit.filter((s): s is InputModality =>
-      ["text", "image", "audio", "video", "file"].includes(s),
+      (INPUT_MODALITIES as readonly string[]).includes(s),
     );
 
   const m: InputModality[] = [];
@@ -441,9 +443,7 @@ function deriveOutput(
   const explicit = raw.supported_output_modalities as string[] | undefined;
   if (explicit?.length)
     return explicit.filter((s): s is OutputModality =>
-      ["text", "image", "audio", "video", "embedding", "evaluation"].includes(
-        s,
-      ),
+      (OUTPUT_MODALITIES as readonly string[]).includes(s),
     );
 
   switch (mode) {

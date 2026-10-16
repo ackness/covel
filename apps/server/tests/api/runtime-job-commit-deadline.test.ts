@@ -45,7 +45,6 @@ function manifest(
     version: "1.0.0",
     runtimeType: "function",
     outputKind: "system",
-    pluginType: "plugin",
     handler: "./handler.js",
     effects: { writes: ["plugin-data:self:tracks"] },
     ...extra,
@@ -80,7 +79,7 @@ async function setup(handler: FunctionHandler) {
       id: PLUGIN_ID,
       name: PLUGIN_ID,
       description: "",
-      pluginType: "plugin",
+      kind: "plugin",
       runtimeCount: runtimes.size,
     },
     manifests: [...runtimes.values()].map((loaded) => ({

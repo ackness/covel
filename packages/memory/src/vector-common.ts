@@ -1,3 +1,5 @@
+import { supportsVector, type VectorSearchResult } from "@covel/store/vector";
+
 /**
  * Shared primitives for the semantic (vector) memory tier.
  *
@@ -75,3 +77,45 @@ export function distanceToScore(distance: number): number {
 
 /** Cap on items embedded per ingestion sweep — bounds a cold-start backfill burst. */
 export const MAX_INGEST_BATCH = 128;
+
+/** Null means the caller should use keyword search for this session. */
+export async function searchSessionVectors(
+  store: object,
+  embed: EmbedFn,
+  sessionId: string,
+  query: string,
+  limit: number,
+  namespace: string,
+): Promise<readonly VectorSearchResult[] | null> {
+  if (!supportsVector(store)) return null;
+  const target = await store.resolveSessionVectorTarget(sessionId);
+  if (!target) return null;
+  const [queryVector] = await embed([query], {
+    sessionId,
+    modelId: target.modelId,
+  });
+  if (!queryVector?.length) return null;
+  const results = await store.searchVectors({
+    sessionId,
+    query: queryVector,
+    topK: limit,
+    pluginId: MEMORY_VECTOR_PLUGIN_ID,
+    namespace,
+  });
+  return results.length ? results : null;
+}
+
+export function payloadContent(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  try {
+    const value: unknown = JSON.parse(raw);
+    return value !== null &&
+      typeof value === "object" &&
+      "content" in value &&
+      typeof value.content === "string"
+      ? value.content
+      : null;
+  } catch {
+    return null;
+  }
+}

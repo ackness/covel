@@ -461,7 +461,7 @@ contributes:
       id: "character-blueprint",
       name: "Presence",
       description: "",
-      pluginType: "plugin",
+      kind: "plugin",
       runtimeCount: 0,
     },
     dataSchemas: {
@@ -567,7 +567,7 @@ describe("[HIGH] Plugin activation happens after session persist", () => {
         id: "test-plugin",
         name: "Test",
         description: "",
-        pluginType: "plugin",
+        kind: "plugin",
         runtimeCount: 0,
       },
       loadedRuntimes: new Map(),

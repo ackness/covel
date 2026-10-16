@@ -1,3 +1,5 @@
+import { assertInsideRoot } from "./path-containment.js";
+import { fileExists } from "./file-system.js";
 import { provideHostModules } from "./host-modules.js";
 import {
   pluginImportReferences,
@@ -123,7 +125,11 @@ async function captureRuntimePrompts(
       warnUnreadVariant(sourcePath);
       continue;
     }
-    await assertInsideRoot(discovery.rootPath, sourcePath, "Localized prompt");
+    await assertInsideRoot(
+      discovery.rootPath,
+      sourcePath,
+      "Localized prompt path traversal rejected",
+    );
     const content = await fs.readFile(sourcePath, "utf-8");
     const localized = discovery.isMultiRuntime
       ? parseRuntimeMd(content, sourcePath, plugin, canonical.rawFrontmatter)
@@ -207,35 +213,6 @@ async function parsePluginMdForLocale(
     : rest;
 }
 
-/**
- * Validate that `target` is inside `root` after resolving symlinks.
- * Uses fs.realpath() to defeat symlink-based path traversal.
- * Falls back to lexical check when the target does not exist on disk.
- */
-async function assertInsideRoot(
-  root: string,
-  target: string,
-  label: string,
-): Promise<void> {
-  let realRoot: string;
-  let realTarget: string;
-  try {
-    realRoot = await fs.realpath(root);
-  } catch {
-    realRoot = path.resolve(root);
-  }
-  try {
-    realTarget = await fs.realpath(target);
-  } catch {
-    // Target doesn't exist — fall back to lexical check (safe: non-existent path can't be read)
-    realTarget = path.resolve(target);
-  }
-  const rel = path.relative(realRoot, realTarget);
-  if (rel.startsWith("..") || path.isAbsolute(rel)) {
-    throw new Error(`${label} path traversal rejected`);
-  }
-}
-
 /** Whether a file exists under the package root, read synchronously. */
 function packageFileExists(rootPath: string): PackageFileExists {
   return (relativePath) => {
@@ -245,18 +222,6 @@ function packageFileExists(rootPath: string): PackageFileExists {
       return false;
     }
   };
-}
-
-/**
- * Check whether a path exists and is a file.
- */
-async function fileExists(p: string): Promise<boolean> {
-  try {
-    const stat = await fs.stat(p);
-    return stat.isFile();
-  } catch {
-    return false;
-  }
 }
 
 /**
@@ -287,7 +252,7 @@ export async function loadPluginSummary(
           !Array.isArray(description))
           ? (description as PluginSummary["description"])
           : (manifest?.description ?? ""),
-      pluginType: manifest?.pluginType ?? "plugin",
+      kind: manifest?.kind ?? "plugin",
       runtimeCount: loaded.manifests.length,
       ...(manifest?.tags ? { tags: manifest.tags } : {}),
     };
@@ -379,7 +344,11 @@ export async function loadPluginDefinition(
     parsedPackage.plugin.contracts ?? {},
   )) {
     const schemaPath = path.resolve(discovery.rootPath, declaration.schema);
-    await assertInsideRoot(discovery.rootPath, schemaPath, "Contract schema");
+    await assertInsideRoot(
+      discovery.rootPath,
+      schemaPath,
+      "Contract schema path traversal rejected",
+    );
     contractSchemas[contract] = await readSchemaFile(
       schemaPath,
       `contracts.${contract}.schema`,
@@ -499,7 +468,7 @@ export async function loadPluginEntryDefinition(
     await assertInsideRoot(
       discovery.rootPath,
       file,
-      "Localized plugin manifest",
+      "Localized plugin manifest path traversal rejected",
     );
     const localized = await parsePluginMdForLocale(discovery.rootPath, locale);
     staticPromptVariants[locale] = localized.plugin.contributes?.prompt ?? [];
@@ -544,7 +513,7 @@ async function resolveRuntimeDir(
   await assertInsideRoot(
     discovery.rootPath,
     record.sourcePath,
-    "Runtime manifest",
+    "Runtime manifest path traversal rejected",
   );
   return path.dirname(record.sourcePath);
 }
@@ -567,7 +536,11 @@ async function loadOutputSchema(
     if (declaredPath.startsWith("contract:"))
       return requireContractSchema(declaredPath, contracts);
     const fullPath = path.resolve(runtimeDir, declaredPath);
-    await assertInsideRoot(pluginRoot, fullPath, "Output schema");
+    await assertInsideRoot(
+      pluginRoot,
+      fullPath,
+      "Output schema path traversal rejected",
+    );
     if (!(await fileExists(fullPath))) {
       throw new Error(
         `${fullPath}: io.output.schema: file not found; include the declared JSON Schema`,
@@ -597,7 +570,11 @@ async function loadDeclaredSchema(
   if (declaredPath.startsWith("contract:"))
     return requireContractSchema(declaredPath, contracts);
   const fullPath = path.resolve(runtimeDir, declaredPath);
-  await assertInsideRoot(pluginRoot, fullPath, label);
+  await assertInsideRoot(
+    pluginRoot,
+    fullPath,
+    `${label} path traversal rejected`,
+  );
   if (!(await fileExists(fullPath))) {
     throw new Error(
       `${fullPath}: ${label}: file not found; include the declared JSON Schema`,
@@ -780,7 +757,11 @@ export async function loadRuntime(
   let handler: FunctionHandler | undefined;
   if (parsed.manifest.runtimeType === "function" && parsed.manifest.handler) {
     const handlerPath = path.resolve(runtimeDir, parsed.manifest.handler);
-    await assertInsideRoot(discovery.rootPath, handlerPath, "Handler");
+    await assertInsideRoot(
+      discovery.rootPath,
+      handlerPath,
+      "Handler path traversal rejected",
+    );
     provideHostModules(discovery.rootPath);
     const url = pathToFileURL(handlerPath);
     if (generation) url.searchParams.set("generation", generation);
@@ -797,7 +778,11 @@ export async function loadRuntime(
   let guard: AgentGuard | undefined;
   if (parsed.manifest.guard) {
     const guardPath = path.resolve(runtimeDir, parsed.manifest.guard);
-    await assertInsideRoot(discovery.rootPath, guardPath, "Guard");
+    await assertInsideRoot(
+      discovery.rootPath,
+      guardPath,
+      "Guard path traversal rejected",
+    );
     provideHostModules(discovery.rootPath);
     const url = pathToFileURL(guardPath);
     if (generation) url.searchParams.set("generation", generation);

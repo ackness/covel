@@ -460,7 +460,7 @@ describe("inventory plugin manifest", () => {
   });
 
   it("records changes in a post-turn function runtime gated on typed WorldIR", () => {
-    expect(manifest.pluginType).toBe("plugin");
+    expect(manifest).not.toHaveProperty("pluginType");
     expect(manifest.stage).toBe("post-turn");
     expect(manifest.trigger).toBeUndefined(); // `auto`, the default
     expect(manifest.needs).toBeUndefined();

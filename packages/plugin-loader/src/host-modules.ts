@@ -1,3 +1,4 @@
+import { isPathInside } from "./path-containment.js";
 /**
  * The packages a plugin may import without shipping them: the public plugin
  * SDK and `zod`, its peer. The host resolves them to its own copies for every
@@ -23,14 +24,6 @@ export const HOST_MODULE_PARENT_URL = import.meta.url;
 const pluginRoots = new Set<string>();
 let hooksInstalled = false;
 
-// Also in reload-generation.ts. The tests run both modules in a plain Node
-// process, which cannot resolve a `.js` import of a `.ts` file, so each
-// imports only Node built-ins.
-function isInside(root: string, target: string): boolean {
-  const rel = path.relative(root, target);
-  return rel !== "" && !rel.startsWith("..") && !path.isAbsolute(rel);
-}
-
 /** Whether `specifier` names a host module or one of its subpaths. */
 export function isHostModule(specifier: string): boolean {
   return HOST_MODULES.some(
@@ -42,7 +35,7 @@ export function isHostModule(specifier: string): boolean {
 function pluginRootOf(url: string | undefined): string | undefined {
   if (!url?.startsWith("file:")) return undefined;
   const file = fileURLToPath(url);
-  for (const root of pluginRoots) if (isInside(root, file)) return root;
+  for (const root of pluginRoots) if (isPathInside(root, file)) return root;
   return undefined;
 }
 

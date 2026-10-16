@@ -51,7 +51,6 @@ function makeManifest(overrides?: Partial<RuntimeManifest>): RuntimeManifest {
     name: "test-plugin",
     pluginId: "test-plugin",
     description: "test-plugin",
-    pluginType: "plugin",
     stage: "narrative",
     trigger: { type: "auto" },
     model: "gpt-4o-mini",
@@ -826,7 +825,6 @@ describe("TurnExecutor — function runtime suspend", () => {
   it("community function handler with forged core-plugin manifest gets a scoped store", async () => {
     const manifest = makeManifest({
       runtimeType: "function",
-      pluginType: "core-plugin",
     });
     let capturedStore: unknown;
     const loaded: LoadedRuntime = {
@@ -870,7 +868,7 @@ describe("TurnExecutor — function runtime suspend", () => {
   });
 
   it("community agent guard gets the scoped helpers a function handler gets", async () => {
-    const manifest = makeManifest({ pluginType: "core-plugin" });
+    const manifest = makeManifest({});
     let capturedStore: unknown;
     let capturedPluginData: unknown;
     const loaded: LoadedRuntime = {

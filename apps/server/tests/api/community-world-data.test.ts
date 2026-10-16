@@ -46,7 +46,7 @@ async function entry(
       id,
       name: id,
       description: "",
-      pluginType: "plugin",
+      kind: "plugin",
       runtimeCount: 0,
     },
     packageManifest: makePackageManifest(id, namespaces, rootPath, CONTRACT),

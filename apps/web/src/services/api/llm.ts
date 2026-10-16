@@ -1,3 +1,8 @@
+import type {
+  InputModality,
+  OutputModality,
+  ModelFeature,
+} from "@covel/shared";
 import { getSettings } from "@/settings/store";
 import { getDesktopRestAuthHeaders } from "@/lib/desktop-bridge.js";
 import {
@@ -13,18 +18,11 @@ import {
 
 // -- LLM Config -------------------------------------------------
 
-export type InputModality = "text" | "image" | "audio" | "video" | "file";
-export type OutputModality =
-  "text" | "image" | "audio" | "embedding" | "evaluation";
-export type ModelFeature =
-  | "function_calling"
-  | "structured_output"
-  | "streaming"
-  | "reasoning"
-  | "vision"
-  | "prompt_caching"
-  | "web_search"
-  | "computer_use";
+export type {
+  InputModality,
+  OutputModality,
+  ModelFeature,
+} from "@covel/shared";
 
 export interface ModelPricing {
   inputPerMToken?: number;

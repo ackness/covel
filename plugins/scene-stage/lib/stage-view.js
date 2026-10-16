@@ -153,7 +153,7 @@ function resolvePreviewActor(value, speakers, presenceMap) {
   return partial.length === 1 ? partial[0] : undefined;
 }
 
-function cueVisual(current, cue) {
+export function cueVisual(current, cue) {
   const next = { ...current };
   const hasVariantId =
     typeof cue.variantId === "string" && cue.variantId.length > 0;

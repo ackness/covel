@@ -96,7 +96,6 @@ export type {
 } from "./world-generation.js";
 
 export type {
-  PluginType,
   RuntimeType,
   RuntimeHistoryPolicy,
   TriggerType,

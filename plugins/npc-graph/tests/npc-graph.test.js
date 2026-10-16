@@ -78,7 +78,7 @@ describe("npc-graph manifests", () => {
   it("extractor declares the expected metadata", () => {
     const extractor = manifests.find((m) => m.name === "npc-graph/extractor");
     expect(extractor).toBeDefined();
-    expect(extractor.pluginType).toBe("plugin");
+    expect(extractor).not.toHaveProperty("pluginType");
     // Narrator-downstream layer — post-turn stage, run in parallel with guide,
     // codex, and character-tracker.
     expect(extractor.stage).toBe("post-turn");

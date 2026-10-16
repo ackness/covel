@@ -36,7 +36,7 @@ function makeSummary(overrides: Partial<PluginSummary> = {}): PluginSummary {
     id: "test-runtime",
     name: "Test Runtime",
     description: "",
-    pluginType: "plugin",
+    kind: "plugin",
     runtimeCount: 1,
     ...overrides,
   };
@@ -59,9 +59,9 @@ function makeEntry(args: {
     packageManifest: {
       plugin: { id: args.id, kind: "plugin", description: "Hook fixture" },
       manifest: {
+        kind: "plugin",
         name: args.id,
         pluginId: args.id,
-        pluginType: "plugin",
         description: "Hook fixture",
         userSettings: args.loaded.manifest.userSettings,
       },

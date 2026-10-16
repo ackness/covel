@@ -1,3 +1,5 @@
+import { dimensionsJsonEqual } from "@covel/plugin-handlers-utils/dimensions";
+
 // Deterministic condition evaluation for hidden story events. No model calls:
 // every leaf reads a frozen dimension value or the current world-time value.
 
@@ -14,21 +16,6 @@ export const OPERATORS = [
 
 /** Bounds of a turn condition: the first and the last session turn it holds on. */
 export const TURN_BOUNDS = ["turnGte", "turnLte"];
-
-function jsonEqual(left, right) {
-  if (Object.is(left, right)) return true;
-  if (!left || !right || typeof left !== "object" || typeof right !== "object")
-    return false;
-  if (Array.isArray(left) !== Array.isArray(right)) return false;
-  const a = Object.keys(left);
-  const b = Object.keys(right);
-  return (
-    a.length === b.length &&
-    a.every(
-      (key) => Object.hasOwn(right, key) && jsonEqual(left[key], right[key]),
-    )
-  );
-}
 
 function readPath(value, path) {
   const segments = Array.isArray(path)
@@ -51,13 +38,13 @@ function compare(operator, actual, expected) {
     case "exists":
       return (actual !== undefined && actual !== null) === (expected !== false);
     case "equals":
-      return jsonEqual(actual, expected);
+      return dimensionsJsonEqual(actual, expected);
     case "notEquals":
-      return !jsonEqual(actual, expected);
+      return !dimensionsJsonEqual(actual, expected);
     case "in":
       return (
         Array.isArray(expected) &&
-        expected.some((item) => jsonEqual(actual, item))
+        expected.some((item) => dimensionsJsonEqual(actual, item))
       );
     case "gte":
       return typeof actual === "number" && actual >= expected;

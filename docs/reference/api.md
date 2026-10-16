@@ -996,6 +996,8 @@ setup runtime 挂起等玩家回答时，这次尝试不占重试次数。挂起
 | DELETE | `/api/plugins/:id`            | 卸载第三方插件（删除 `~/.covel/plugins/<id>`）                             |
 | GET    | `/api/plugin-flows`           | 开局前流程的预览数据（插件列表 + 分段步骤），供准备页展示                  |
 
+`GET /api/plugin-flows` 的 `plugins` 和 `steps` 条目用 `kind`（`core` 或 `plugin`）表示插件类别，不返回 `pluginType`。
+
 `DELETE /api/plugins/:id`：
 
 - 鉴权：桌面端要求 bearer token；没有 token 的生产部署要求 `COVEL_INSTALL_API_ENABLED=1`。

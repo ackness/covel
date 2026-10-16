@@ -105,7 +105,7 @@ async function fixture(
       id: "fake-narrator",
       name: "fake",
       description: "",
-      pluginType: "plugin",
+      kind: "plugin",
       runtimeCount: 1,
     },
 

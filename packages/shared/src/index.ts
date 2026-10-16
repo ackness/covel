@@ -55,10 +55,18 @@ export type {
 export { llmModelBindingSchema } from "./model-binding.js";
 export type { LlmModelBinding } from "./model-binding.js";
 export {
+  INPUT_MODALITIES,
+  OUTPUT_MODALITIES,
+  MODEL_FEATURES,
   defaultModelRoleTag,
   modelOutputTag,
   protocolOutputModalities,
   supportsModelRole,
+} from "./model-capabilities.js";
+export type {
+  InputModality,
+  OutputModality,
+  ModelFeature,
 } from "./model-capabilities.js";
 export { projectModelCapabilityForBuiltinAdapter } from "./model-capability-support.js";
 export {

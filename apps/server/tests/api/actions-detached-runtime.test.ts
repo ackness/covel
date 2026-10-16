@@ -123,7 +123,7 @@ describe("POST /api/actions — scheduler-detached runtime", () => {
         id: PLUGIN_ID,
         name: PLUGIN_ID,
         description: "",
-        pluginType: "plugin",
+        kind: "plugin",
         runtimeCount: manifests.length,
       },
       manifests: parsed,

@@ -67,7 +67,7 @@ describe("plugin flow routes", () => {
           id: args.pluginId,
           name: args.pluginId,
           description: args.pluginId,
-          pluginType: "plugin",
+          kind: "plugin",
           runtimeCount: 1,
         },
         manifests: [parsed],
@@ -104,6 +104,7 @@ describe("plugin flow routes", () => {
 
     const body = (await res.json()) as {
       segments: Array<{ id: string }>;
+      plugins: Array<{ kind: string }>;
       steps: Array<{
         runtimeId: string;
         segmentId: string;
@@ -113,6 +114,10 @@ describe("plugin flow routes", () => {
       }>;
     };
 
+    for (const item of [...body.plugins, ...body.steps]) {
+      expect(item).toHaveProperty("kind", "plugin");
+      expect(item).not.toHaveProperty("pluginType");
+    }
     expect(body.segments.map((segment) => segment.id)).toEqual([
       "setup",
       "pre-turn",
@@ -187,7 +192,7 @@ describe("plugin flow routes", () => {
           "zh-CN": "注册表里的包",
           "en-US": "Package from the registry",
         },
-        pluginType: "core-plugin",
+        kind: "core",
         runtimeCount: 1,
         // The loader's order: a written tag, then the derived ones.
         tags: ["mode:dialogue", "cost:llm", "ui:right-panel"],

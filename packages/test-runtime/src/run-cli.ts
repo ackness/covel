@@ -1,29 +1,13 @@
 import { runRuntimeDebug, runRuntimeCases } from "./runner.js";
 import { hasUnexpectedRunFailure } from "./reporting.js";
 
-interface CliOptions {
-  target?: string;
-  runtimeId?: string;
-  pluginId?: string;
-  withPlugins?: string[];
-  pluginsDir?: string;
-  sessionId?: string;
-  locale?: string;
-  message?: string;
-  payload?: Record<string, unknown>;
-  userSettings?: Record<string, unknown>;
-  llmResponse?: Record<string, unknown>;
-  llmResponses?: readonly Record<string, unknown>[];
-  llmContent?: string;
-  llmObject?: Record<string, unknown>;
-  mockPresetId?: string;
-  showPrompts?: boolean;
-  ignoreUpstreams?: boolean;
-  expectsBackgroundFollower?: boolean;
-  mode?: "mock" | "live";
-  caseName?: string;
-  pretty?: boolean;
-}
+import type { RunRuntimeDebugOptions } from "./types.js";
+
+type CliOptions = {
+  -readonly [
+    Key in keyof Omit<RunRuntimeDebugOptions, "mediaStore">
+  ]: RunRuntimeDebugOptions[Key];
+} & { pretty?: boolean };
 
 /** Where a CLI run writes its report and its messages. */
 export interface CliOutput {
@@ -101,7 +85,7 @@ function parseArgs(argv: readonly string[]): CliOptions | "help" {
         options.pluginId = next();
         break;
       case "--with-plugin":
-        (options.withPlugins ??= []).push(next());
+        options.withPlugins = [...(options.withPlugins ?? []), next()];
         break;
       case "--plugins-dir":
         options.pluginsDir = next();

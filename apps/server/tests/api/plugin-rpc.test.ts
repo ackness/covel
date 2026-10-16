@@ -357,10 +357,10 @@ describe("POST /api/sessions/:id/plugin-rpc", () => {
       packageManifest: {
         ...parsed,
         manifest: {
+          kind: "plugin",
           name: "inspector",
           pluginId: "inspector",
           description: "Inspector",
-          pluginType: "plugin",
           commands,
         },
         plugin: {
@@ -374,7 +374,7 @@ describe("POST /api/sessions/:id/plugin-rpc", () => {
         id: "inspector",
         name: "Inspector",
         description: "Inspector",
-        pluginType: "plugin",
+        kind: "plugin",
         runtimeCount: 1,
       },
 
@@ -1040,7 +1040,7 @@ function makeSummary(id: string): PluginSummary {
     id,
     name: id,
     description: "",
-    pluginType: "plugin",
+    kind: "plugin",
     runtimeCount: 1,
   };
 }
@@ -1077,8 +1077,7 @@ function makeFunctionEntry(args: {
     }>;
   }>;
 }): { entry: PluginRegistryEntry; loaded: LoadedRuntime } {
-  // Note: `pluginType` is author-supplied and no longer affects the runtime
-  // RPC trust gate. Trust now comes from `entry.source`, which the
+  // RPC trust comes from `entry.source`, which the
   // server bootstrap derives from discovery (first-dir=bundled, others=community).
   const manifest: RuntimeManifest = {
     name: args.runtimeId,
@@ -1087,7 +1086,6 @@ function makeFunctionEntry(args: {
     stage: args.stage ?? "post-turn",
     runtimeType: "function",
     outputKind: "system",
-    pluginType: "plugin",
     handler: "./handler.js",
     trigger: { type: "manual" },
     ...(args.execution ? { execution: args.execution } : {}),
@@ -1175,7 +1173,6 @@ function makeAgentEntry(args: {
     stage: args.stage ?? "narrative",
     runtimeType: "agent",
     outputKind: args.outputKind ?? "story",
-    pluginType: "plugin",
     trigger: args.trigger ?? { type: "manual" },
   } as RuntimeManifest;
 
@@ -2282,13 +2279,7 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
     );
   });
 
-  // ── Regression: trust comes from discovery source, not pluginType.
-  //
-  // A third-party plugin that forges `pluginType: 'core-plugin'` in its
-  // frontmatter must NOT auto-bypass the approval gate. The server-side
-  // contract is: `entry.source` is set by the bootstrap discovery pipeline
-  // (first-dir = bundled, all others = community) and drives the trust-gate
-  // verdict. `pluginType` is now display-only.
+  // Trust comes from discovery source, independent of authored package kind.
   it("community-source runtimes produce approval-required on first call, retry succeeds after approval", async () => {
     let handlerCalls = 0;
     const { app, store, gate } = setupRuntimeTestEnv({
@@ -2388,11 +2379,7 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
     expect(handlerCalls).toBe(1);
   });
 
-  it("ignores forged pluginType:core-plugin in manifest when entry.source is community", async () => {
-    // Explicit regression: even if a community plugin claims `pluginType: core-plugin`
-    // in its frontmatter, the runtime RPC trust gate keeps it at community level.
-    // The makeFunctionEntry helper currently writes `pluginType: 'plugin'`, so to
-    // exercise the exact forgery scenario we override the manifest post-register.
+  it("requires approval for a core package from a community source", async () => {
     const store = createMemoryStore();
     const pluginRegistry = createPluginRegistry();
     const { entry, loaded } = makeFunctionEntry({
@@ -2401,9 +2388,10 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
       handler: async () => ({ ok: true }),
       source: "community",
     });
-    // Simulate a third-party plugin setting `pluginType: 'core-plugin'` in its manifest.
-    (loaded.manifest as { pluginType: string }).pluginType = "core-plugin";
-    pluginRegistry.register(entry);
+    pluginRegistry.register({
+      ...entry,
+      summary: { ...entry.summary, kind: "core" },
+    });
 
     const rpcRegistry = createPluginRpcRegistry();
     const rpcExecutor = createRpcExecutor({ registry: rpcRegistry });

@@ -43,7 +43,7 @@ function makeEntry(args: {
     id: args.id,
     name: args.id,
     description: "",
-    pluginType: "plugin",
+    kind: "plugin",
     runtimeCount: 1,
   };
   return {

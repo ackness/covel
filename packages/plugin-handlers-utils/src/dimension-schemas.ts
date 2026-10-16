@@ -201,8 +201,9 @@ function derivationIssues(
       const fits =
         matchesType(range.value, type) &&
         (!node.enum ||
-          node.enum.some((item) => equalJson(item, range.value))) &&
-        (!Object.hasOwn(node, "const") || equalJson(node.const!, range.value));
+          node.enum.some((item) => dimensionsJsonEqual(item, range.value))) &&
+        (!Object.hasOwn(node, "const") ||
+          dimensionsJsonEqual(node.const!, range.value));
       if (!fits)
         add(
           ["ranges", index, "value"],
@@ -410,16 +411,16 @@ export const dimensionValueSchema = z.preprocess(
   dimensionValueSchemaRefined,
 );
 
-function equalJson(left: JsonValue, right: JsonValue): boolean {
+export function dimensionsJsonEqual(left: unknown, right: unknown): boolean {
   if (Object.is(left, right)) return true;
   if (
-    left === null ||
-    right === null ||
+    !left ||
+    !right ||
     typeof left !== "object" ||
-    typeof right !== "object"
+    typeof right !== "object" ||
+    Array.isArray(left) !== Array.isArray(right)
   )
     return false;
-  if (Array.isArray(left) !== Array.isArray(right)) return false;
   const a = Object.keys(left);
   const b = Object.keys(right);
   return (
@@ -427,9 +428,9 @@ function equalJson(left: JsonValue, right: JsonValue): boolean {
     a.every(
       (key) =>
         Object.hasOwn(right, key) &&
-        equalJson(
-          (left as Record<string, JsonValue>)[key]!,
-          (right as Record<string, JsonValue>)[key]!,
+        dimensionsJsonEqual(
+          (left as Record<string, unknown>)[key],
+          (right as Record<string, unknown>)[key],
         ),
     )
   );
@@ -511,9 +512,15 @@ export function validateDimensionValue(
       add(`Expected ${types.join(" | ")}`);
       return;
     }
-    if (node.enum && !node.enum.some((item) => equalJson(item, input)))
+    if (
+      node.enum &&
+      !node.enum.some((item) => dimensionsJsonEqual(item, input))
+    )
       add("Value is not in enum");
-    if (Object.hasOwn(node, "const") && !equalJson(node.const!, input))
+    if (
+      Object.hasOwn(node, "const") &&
+      !dimensionsJsonEqual(node.const!, input)
+    )
       add("Value does not match const");
     if (typeof input === "number") {
       if (node.minimum !== undefined && input < node.minimum)

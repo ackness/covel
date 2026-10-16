@@ -62,7 +62,7 @@ describe("a minimal world", () => {
         id: discovery.id,
         name: discovery.id,
         description: "",
-        pluginType: "plugin",
+        kind: "plugin",
         runtimeCount: definition.manifests.length,
       },
       ...definition,

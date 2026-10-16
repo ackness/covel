@@ -1,3 +1,8 @@
+import type {
+  InputModality,
+  OutputModality,
+  ModelFeature,
+} from "@covel/shared";
 import type { BuiltinProviderProtocol } from "@covel/shared";
 import type {
   LLMDiagnostics,
@@ -34,23 +39,11 @@ export type OperationMode =
 
 // ── Model Capability ──────────────────────────────────────────────
 
-/** What a model can accept as input. */
-export type InputModality = "text" | "image" | "audio" | "video" | "file";
-
-/** What a model can produce as output. */
-export type OutputModality =
-  "text" | "image" | "audio" | "video" | "embedding" | "evaluation";
-
-/** Feature flags for model capabilities beyond basic I/O. */
-export type ModelFeature =
-  | "function_calling"
-  | "structured_output"
-  | "streaming"
-  | "reasoning"
-  | "vision"
-  | "prompt_caching"
-  | "web_search"
-  | "computer_use";
+export type {
+  InputModality,
+  OutputModality,
+  ModelFeature,
+} from "@covel/shared";
 
 /**
  * Pricing information per million tokens (USD).

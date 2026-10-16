@@ -34,7 +34,7 @@ function makeSummary(overrides: Partial<PluginSummary> = {}): PluginSummary {
     id: "test-runtime",
     name: "Test Runtime",
     description: "",
-    pluginType: "plugin",
+    kind: "plugin",
     runtimeCount: 1,
     ...overrides,
   };
@@ -202,7 +202,6 @@ describe("POST /api/actions — phase.changed hygiene (Finding 4 regression)", (
       name: PREGAME_ID,
       pluginId: "char-creator",
       outputKind: "system",
-      pluginType: "core-plugin",
     });
     const pregameLoaded: LoadedRuntime = {
       ...loaded,

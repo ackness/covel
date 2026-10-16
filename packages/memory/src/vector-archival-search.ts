@@ -19,14 +19,14 @@ import {
 } from "./archival-items.js";
 import { archivalResult } from "./archival-search.js";
 import type { ArchivalLookupStore } from "./store-contracts.js";
-import { supportsVector } from "@covel/store/vector";
 import type { ArchivalSearchResult, ArchivalSearcher } from "./types.js";
 import {
   ARCHIVAL_NAMESPACE,
   distanceToScore,
   type EmbedFn,
   isEmbeddingModelChanged,
-  MEMORY_VECTOR_PLUGIN_ID,
+  searchSessionVectors,
+  payloadContent,
 } from "./vector-common.js";
 
 export function createVectorArchivalSearcher(deps: {
@@ -43,30 +43,18 @@ export function createVectorArchivalSearcher(deps: {
       query,
       limit = 10,
     ): Promise<readonly ArchivalSearchResult[]> {
-      if (!supportsVector(store)) {
-        return fallback.search(sessionId, query, limit);
-      }
       let results;
       let items;
       try {
-        const target = await store.resolveSessionVectorTarget(sessionId);
-        if (!target) {
-          return fallback.search(sessionId, query, limit);
-        }
-        const [queryVec] = await embed([query], {
+        results = await searchSessionVectors(
+          store,
+          embed,
           sessionId,
-          modelId: target.modelId,
-        });
-        if (!queryVec || queryVec.length === 0) {
-          return fallback.search(sessionId, query, limit);
-        }
-        results = await store.searchVectors({
-          sessionId,
-          query: queryVec,
-          topK: limit,
-          pluginId: MEMORY_VECTOR_PLUGIN_ID,
-          namespace: ARCHIVAL_NAMESPACE,
-        });
+          query,
+          limit,
+          ARCHIVAL_NAMESPACE,
+        );
+        if (!results) return fallback.search(sessionId, query, limit);
         // Read only the records the hits name, not the whole corpus.
         const sources = new Map<string, SearchablePluginData>(
           (pluginData ? await pluginData(sessionId) : []).map((source) => [
@@ -95,10 +83,6 @@ export function createVectorArchivalSearcher(deps: {
         return fallback.search(sessionId, query, limit);
       }
 
-      if (results.length === 0) {
-        return fallback.search(sessionId, query, limit);
-      }
-
       // The index is asynchronous. Never publish a deleted or changed source
       // just because its old embedding still ranks highly.
       if (
@@ -117,19 +101,4 @@ export function createVectorArchivalSearcher(deps: {
       );
     },
   };
-}
-
-function payloadContent(raw: string | null): string | null {
-  if (!raw) return null;
-  try {
-    const value: unknown = JSON.parse(raw);
-    return value !== null &&
-      typeof value === "object" &&
-      "content" in value &&
-      typeof value.content === "string"
-      ? value.content
-      : null;
-  } catch {
-    return null;
-  }
 }

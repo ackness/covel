@@ -1,3 +1,8 @@
+import type { ZodType } from "zod";
+import {
+  assertGenerationPayload,
+  assertSuccessfulFinishReason,
+} from "../generation-completion.js";
 import type { FormData as UndiciFormData } from "undici";
 import {
   ERROR_PREVIEW_MAX_CHARS,
@@ -367,4 +372,34 @@ export function appendProviderMetadata(
       formData.set(key, String(value));
     }
   }
+}
+
+/** Apply the same success boundary to every non-streamed generation. */
+export function assertCompletedGeneration(
+  response: Response,
+  payload: Record<string, unknown>,
+  provider: string,
+  finishReason: string,
+  usage?: UsageSummary,
+): void {
+  assertSuccess(response, payload, provider);
+  assertGenerationPayload(payload, provider, usage);
+  assertSuccessfulFinishReason(finishReason, provider, usage);
+}
+
+export function parseStructuredObject<T>(
+  text: string,
+  schema: ZodType<T>,
+  provider: string,
+  usage?: UsageSummary,
+): T {
+  let raw: unknown;
+  try {
+    raw = JSON.parse(text);
+  } catch {
+    throw createStructuredOutputError(provider, usage);
+  }
+  const validation = schema.safeParse(raw);
+  if (!validation.success) throw createStructuredOutputError(provider, usage);
+  return validation.data;
 }

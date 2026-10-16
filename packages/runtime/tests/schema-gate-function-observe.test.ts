@@ -30,7 +30,6 @@ function manifest(overrides: Partial<RuntimeManifest> = {}): RuntimeManifest {
   return {
     name: "fn-plugin/observer",
     pluginId: "fn-plugin",
-    pluginType: "community",
     stage: "narrative",
     trigger: { type: "auto" },
     model: "gpt-4o-mini",

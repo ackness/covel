@@ -37,7 +37,7 @@ function makeSummary(overrides: Partial<PluginSummary> = {}): PluginSummary {
     id: RUNTIME_ID,
     name: RUNTIME_ID,
     description: "",
-    pluginType: "plugin",
+    kind: "plugin",
     runtimeCount: 1,
     ...overrides,
   };
@@ -298,7 +298,7 @@ describe("POST /api/actions — turn commit barrier", () => {
         id: pluginId,
         name: pluginId,
         description: "Hook-only package",
-        pluginType: "plugin",
+        kind: "plugin",
         runtimeCount: 0,
       },
       packageManifest: {
@@ -308,10 +308,10 @@ describe("POST /api/actions — turn commit barrier", () => {
           description: "Hook-only package",
         },
         manifest: {
+          kind: "plugin",
           name: pluginId,
           pluginId,
           description: "Hook-only package",
-          pluginType: "plugin",
           userSettings: [
             { key: "budget", type: "number", label: "Budget", default: 10 },
           ],

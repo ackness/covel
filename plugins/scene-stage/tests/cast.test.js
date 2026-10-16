@@ -57,7 +57,6 @@ describe("scene cast manifests", () => {
     expect(sceneCast).toMatchObject({
       name: "scene-stage/cast",
       pluginId: "scene-stage",
-      pluginType: "plugin",
       runtimeType: "function",
       handler: "./handler.js",
       stage: "pre-turn",
@@ -75,7 +74,6 @@ describe("scene cast manifests", () => {
   it("loads chat-mode-narrator with active cast contract injection", () => {
     expect(chatNarrator).toMatchObject({
       name: "chat-mode-narrator",
-      pluginType: "plugin",
       stage: "narrative",
       outputKind: "story",
       model: "story",

@@ -54,7 +54,7 @@ export function buildPluginFlowResponse(registry: PluginRegistry) {
       id: string;
       name: I18nText;
       description: I18nText;
-      pluginType: string;
+      kind: import("@covel/shared").PluginManifest["kind"];
       runtimeIds: string[];
     }
   > = [];
@@ -66,7 +66,7 @@ export function buildPluginFlowResponse(registry: PluginRegistry) {
     runtimeId: string;
     runtimeName: string;
     description: string;
-    pluginType: string;
+    kind: import("@covel/shared").PluginManifest["kind"];
     stage?: Stage;
     segmentId: FlowSegmentId;
     runtimeType: string;
@@ -111,7 +111,7 @@ export function buildPluginFlowResponse(registry: PluginRegistry) {
       id: entry.id,
       name: pluginName,
       description: pluginDescription,
-      pluginType: summary.pluginType,
+      kind: summary.kind,
       runtimeIds: manifests.map((item) => item.manifest.name),
       ...buildPluginLoadDiagnostics(entry),
     });
@@ -139,7 +139,7 @@ export function buildPluginFlowResponse(registry: PluginRegistry) {
         runtimeId,
         runtimeName,
         description: textValue(manifest.description),
-        pluginType: summary.pluginType,
+        kind: summary.kind,
         ...(stage !== undefined ? { stage } : {}),
         segmentId,
         runtimeType: manifest.runtimeType ?? "agent",

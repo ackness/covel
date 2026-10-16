@@ -875,6 +875,30 @@ describe("graceful degradation", () => {
     expect(results.some((r) => r.content.includes("dragon"))).toBe(true);
   });
 
+  it("falls back when reading a matched archival source fails", async () => {
+    const store = createMemoryStore();
+    const sessionId = "sess-archival-read-fail";
+    await lockModel(store, sessionId);
+    await addLorebook(store, sessionId, "forge", "forge", "the ancient forge");
+    const system = createMemorySystem({ store, embed });
+    await system.ingest(sessionId);
+    const read = vi
+      .spyOn(store, "getLorebookEntry")
+      .mockRejectedValueOnce(new Error("source unavailable"));
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const results = await system.archival.search(sessionId, "forge", 5);
+      expect(read).toHaveBeenCalled();
+      expect(results.some((result) => result.key === "forge")).toBe(true);
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining("vector archival failed"),
+      );
+    } finally {
+      read.mockRestore();
+      warn.mockRestore();
+    }
+  });
+
   it("falls back to keyword when vector-target resolution throws", async () => {
     const store = createMemoryStore();
     const sessionId = "sess-target-fail";

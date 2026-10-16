@@ -44,7 +44,7 @@ describe("world data projections", () => {
         id: discovery!.id,
         name: discovery!.id,
         description: "",
-        pluginType: "plugin",
+        kind: "plugin",
         runtimeCount: manifests.length,
       },
 

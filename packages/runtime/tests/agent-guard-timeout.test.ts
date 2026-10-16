@@ -25,7 +25,6 @@ function makeAgentManifest(
     name: "guarded-agent",
     description: "guarded-agent",
     pluginId: "guarded-agent",
-    pluginType: "plugin",
     stage: "narrative",
     trigger: { type: "auto" },
     model: "gpt-4o-mini",

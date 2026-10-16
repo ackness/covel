@@ -57,7 +57,8 @@ import {
   parseJson,
   iterateSsePayloads,
   assertSuccess,
-  createStructuredOutputError,
+  assertCompletedGeneration,
+  parseStructuredObject,
   createUnsupportedModeError,
   readAnthropicText,
   readAnthropicToolCalls,
@@ -362,6 +363,42 @@ function hasSystem(value: string | AnthropicSystemBlock[]): boolean {
   return value.length > 0;
 }
 
+function anthropicTextBody(
+  config: ProviderConfig,
+  params: import("../types.js").TextGenerationParams,
+  context: ModelRequestContext | undefined,
+): Record<string, unknown> {
+  const { system, messages } = toAnthropicMessages(
+    applyCapabilityFallback(params.messages, context),
+    { model: params.model, config },
+    params.instructionLocale,
+  );
+  const anthropicTools = toAnthropicTools(params.tools);
+  const systemField = buildAnthropicSystemField(
+    system,
+    config,
+    responseFormatInstruction(
+      params.messages,
+      params.responseFormat,
+      params.instructionLocale,
+    ),
+  );
+  return {
+    model: params.model,
+    max_tokens: resolveMaxTokens(context),
+    ...(hasSystem(systemField) ? { system: systemField } : {}),
+    messages,
+    ...(anthropicTools ? { tools: anthropicTools } : {}),
+    ...requestedToolChoice(params, context),
+    ...sanitizeAnthropicMetadata(params.providerRequestMetadata),
+    ...extractAnthropicParameterOverrides(
+      params.providerRequestMetadata,
+      context,
+      params.model,
+    ),
+  };
+}
+
 /**
  * Anthropic Messages v1 adapter.
  * Handles the Anthropic-specific streaming format and message structure.
@@ -370,40 +407,12 @@ export function createAnthropicMessagesAdapter(): ModelProviderAdapter {
   return {
     async generateText(config, params, context) {
       params = withTextRequestDefaults(params);
-      const { system, messages } = toAnthropicMessages(
-        applyCapabilityFallback(params.messages, context),
-        { model: params.model, config },
-        params.instructionLocale,
-      );
-      const anthropicTools = toAnthropicTools(params.tools);
-      const systemField = buildAnthropicSystemField(
-        system,
-        config,
-        responseFormatInstruction(
-          params.messages,
-          params.responseFormat,
-          params.instructionLocale,
-        ),
-      );
       const headers = anthropicHeaders(config.apiKey);
       const configNoKey = { ...config, apiKey: undefined };
       const response = await postJson(
         configNoKey,
         "/messages",
-        {
-          model: params.model,
-          max_tokens: resolveMaxTokens(context),
-          ...(hasSystem(systemField) ? { system: systemField } : {}),
-          messages,
-          ...(anthropicTools ? { tools: anthropicTools } : {}),
-          ...requestedToolChoice(params, context),
-          ...sanitizeAnthropicMetadata(params.providerRequestMetadata),
-          ...extractAnthropicParameterOverrides(
-            params.providerRequestMetadata,
-            context,
-            params.model,
-          ),
-        },
+        anthropicTextBody(config, params, context),
         undefined,
         headers,
       );
@@ -416,11 +425,11 @@ export function createAnthropicMessagesAdapter(): ModelProviderAdapter {
         "anthropic",
         reportedUsage,
       );
-      assertSuccess(response, payload, "anthropic");
-      assertGenerationPayload(payload, "anthropic", reportedUsage);
-      assertSuccessfulFinishReason(
-        String(payload.stop_reason ?? "stop"),
+      assertCompletedGeneration(
+        response,
+        payload,
         "anthropic",
+        String(payload.stop_reason ?? "stop"),
         reportedUsage,
       );
 
@@ -485,34 +494,24 @@ export function createAnthropicMessagesAdapter(): ModelProviderAdapter {
         "anthropic",
         reportedUsage,
       );
-      assertSuccess(response, payload, "anthropic");
-      assertGenerationPayload(payload, "anthropic", reportedUsage);
-      assertSuccessfulFinishReason(
+      assertCompletedGeneration(
+        response,
+        payload,
+        "anthropic",
         String(payload.stop_reason ?? "stop"),
+        reportedUsage,
+      );
+
+      const object = parseStructuredObject(
+        readAnthropicText(payload),
+        params.schema,
         "anthropic",
         reportedUsage,
       );
 
-      let rawObject: unknown;
-      try {
-        rawObject = JSON.parse(readAnthropicText(payload));
-      } catch {
-        throw createStructuredOutputError(
-          "anthropic",
-          readAnthropicUsage(payload),
-        );
-      }
-      const validation = params.schema.safeParse(rawObject);
-      if (!validation.success) {
-        throw createStructuredOutputError(
-          "anthropic",
-          readAnthropicUsage(payload),
-        );
-      }
-
       return {
         ...(diagnostics ? { diagnostics } : {}),
-        object: validation.data,
+        object,
         finishReason: String(payload.stop_reason ?? "stop"),
         usage: readAnthropicUsage(payload),
         reasoningContent: readAnthropicReasoning(payload),
@@ -527,41 +526,12 @@ export function createAnthropicMessagesAdapter(): ModelProviderAdapter {
 
     async *streamText(config, params, context) {
       params = withTextRequestDefaults(params);
-      const { system, messages } = toAnthropicMessages(
-        applyCapabilityFallback(params.messages, context),
-        { model: params.model, config },
-        params.instructionLocale,
-      );
-      const anthropicTools = toAnthropicTools(params.tools);
-      const systemField = buildAnthropicSystemField(
-        system,
-        config,
-        responseFormatInstruction(
-          params.messages,
-          params.responseFormat,
-          params.instructionLocale,
-        ),
-      );
       const headers = anthropicHeaders(config.apiKey);
       const configNoKey = { ...config, apiKey: undefined };
       const response = await postJson(
         configNoKey,
         "/messages",
-        {
-          model: params.model,
-          max_tokens: resolveMaxTokens(context),
-          stream: true,
-          ...(hasSystem(systemField) ? { system: systemField } : {}),
-          messages,
-          ...(anthropicTools ? { tools: anthropicTools } : {}),
-          ...requestedToolChoice(params, context),
-          ...sanitizeAnthropicMetadata(params.providerRequestMetadata),
-          ...extractAnthropicParameterOverrides(
-            params.providerRequestMetadata,
-            context,
-            params.model,
-          ),
-        },
+        { ...anthropicTextBody(config, params, context), stream: true },
         undefined,
         headers,
       );

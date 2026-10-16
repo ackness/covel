@@ -26,7 +26,7 @@ function makeSummary(overrides?: Partial<PluginSummary>): PluginSummary {
     id: "test-plugin",
     name: "Test Plugin",
     description: "A test plugin",
-    pluginType: "plugin",
+    kind: "plugin",
     runtimeCount: 1,
     ...overrides,
   };
@@ -57,7 +57,6 @@ function makeParsedManifest(
       name,
       pluginId: pluginId ?? name,
       description: description ?? `${name} runtime`,
-      pluginType: "plugin",
       outputKind: "system",
       trigger: { type: "manual" },
       ...rest,
@@ -227,9 +226,9 @@ describe("Plugin Routes", () => {
             ),
             manifest: {
               ...parsed.manifest,
+              kind: "plugin",
               name: "my-plugin",
               pluginId: "my-plugin",
-              pluginType: "plugin",
               worldProjections: {
                 "images-from-world-ir": {
                   from: "contract:world-ir@1",

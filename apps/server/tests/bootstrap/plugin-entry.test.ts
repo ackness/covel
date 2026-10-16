@@ -119,7 +119,7 @@ function makeParams(entries: ReturnType<typeof writePlugin>[]) {
         id: entry.discovery.id,
         name: entry.discovery.id,
         description: "Fixture",
-        pluginType: "plugin",
+        kind: "plugin",
         runtimeCount: 0,
       },
       packageManifest: entry.parsed,

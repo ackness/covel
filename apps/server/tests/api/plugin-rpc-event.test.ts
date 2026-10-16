@@ -46,7 +46,6 @@ function runtime(
     stage: "post-turn",
     runtimeType: "function",
     outputKind: "system",
-    pluginType: "plugin",
     handler: "./handler.js",
     trigger,
     execution: "background",
@@ -65,6 +64,7 @@ function register(
   const manifests = args.runtimes.map((manifest, index) => ({
     plugin: { id: pluginId, kind: "plugin", description: pluginId },
     manifest: {
+      kind: "plugin",
       ...manifest,
       // The package declaration carries the event contracts.
       ...(index === 0 && args.events
@@ -87,7 +87,7 @@ function register(
       id: pluginId,
       name: pluginId,
       description: pluginId,
-      pluginType: "plugin",
+      kind: "plugin",
       runtimeCount: manifests.length,
     },
     manifests,

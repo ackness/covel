@@ -66,7 +66,6 @@ function fnManifest(
   return {
     name,
     pluginId: name.split("/")[0]!,
-    pluginType: "core-plugin",
     description: name,
     stage:
       priority <= 99
@@ -91,7 +90,7 @@ function makeSummary(id: string): PluginSummary {
     id,
     name: id,
     description: id,
-    pluginType: "core-plugin",
+    kind: "core",
     runtimeCount: 1,
   };
 }

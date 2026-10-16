@@ -38,7 +38,7 @@ function makeSummary(id: string): PluginSummary {
     id,
     name: id,
     description: "",
-    pluginType: "plugin",
+    kind: "plugin",
     runtimeCount: 2,
   };
 }
@@ -56,7 +56,6 @@ function makeManifest(args: {
     ...(args.stage ? { stage: args.stage } : {}),
     runtimeType: "function",
     outputKind: "system",
-    pluginType: "plugin",
     handler: "./handler.js",
     trigger: args.trigger,
     ...(args.execution ? { execution: args.execution } : {}),

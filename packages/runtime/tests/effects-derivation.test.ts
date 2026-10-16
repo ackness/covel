@@ -23,7 +23,6 @@ function manifest(overrides: Partial<RuntimeManifest> = {}): RuntimeManifest {
   return {
     name: "p/rt",
     pluginId: "p",
-    pluginType: "community",
     stage: "narrative",
     trigger: { type: "auto" },
     model: "gpt-4o-mini",

@@ -34,7 +34,6 @@ function makeFunctionManifest(
     name: "fn-plugin",
     description: "fn-plugin",
     pluginId: "fn-plugin",
-    pluginType: "plugin",
     stage: "narrative",
     trigger: { type: "auto" },
     model: "gpt-4o-mini",

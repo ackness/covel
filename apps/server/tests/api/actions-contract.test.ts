@@ -45,7 +45,7 @@ function makeSummary(overrides: Partial<PluginSummary> = {}): PluginSummary {
     id: "test-runtime",
     name: "Test Runtime",
     description: "",
-    pluginType: "plugin",
+    kind: "plugin",
     runtimeCount: 1,
     ...overrides,
   };

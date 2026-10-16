@@ -132,7 +132,7 @@ export interface TurnExecutorDeps extends AgentLoopDeps {
   /**
    * Resolve trust from plugin discovery source. Registry/bootstrap wires this
    * from the directory a plugin was loaded from, which is stronger than the
-   * author-supplied `pluginType` manifest field.
+   * author-supplied package kind.
    */
   readonly getPluginSource?: (pluginId: string) => PluginSource | undefined;
 

@@ -13,7 +13,6 @@ const manifest: RuntimeManifest = {
   name: "fn-plugin/extract",
   pluginId: "fn-plugin",
   description: "test",
-  pluginType: "plugin",
   stage: "narrative",
   trigger: { type: "auto" },
   model: "gpt-4o-mini",

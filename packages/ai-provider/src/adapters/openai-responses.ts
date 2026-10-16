@@ -30,7 +30,8 @@ import {
   parseJson,
   iterateSsePayloads,
   assertSuccess,
-  createStructuredOutputError,
+  assertCompletedGeneration,
+  parseStructuredObject,
   readOpenAiResponsesUsage,
   readResponseText,
   readResponsesOutputText,
@@ -459,11 +460,11 @@ export function createOpenAiResponsesAdapter(): ModelProviderAdapter {
         "openai-responses",
         reportedUsage,
       );
-      assertSuccess(response, payload, "openai-responses");
-      assertGenerationPayload(payload, "openai-responses", reportedUsage);
-      assertSuccessfulFinishReason(
-        mapResponseStatus(payload.status),
+      assertCompletedGeneration(
+        response,
+        payload,
         "openai-responses",
+        mapResponseStatus(payload.status),
         reportedUsage,
       );
 
@@ -506,35 +507,25 @@ export function createOpenAiResponsesAdapter(): ModelProviderAdapter {
         "openai-responses",
         reportedUsage,
       );
-      assertSuccess(response, payload, "openai-responses");
-      assertGenerationPayload(payload, "openai-responses", reportedUsage);
-      assertSuccessfulFinishReason(
-        mapResponseStatus(payload.status),
+      assertCompletedGeneration(
+        response,
+        payload,
         "openai-responses",
+        mapResponseStatus(payload.status),
         reportedUsage,
       );
 
       const reply = splitThinkTags(readResponsesOutputText(payload));
-      let rawObject: unknown;
-      try {
-        rawObject = JSON.parse(reply.text);
-      } catch {
-        throw createStructuredOutputError(
-          "openai-responses",
-          readOpenAiResponsesUsage(payload),
-        );
-      }
-      const validation = params.schema.safeParse(rawObject);
-      if (!validation.success) {
-        throw createStructuredOutputError(
-          "openai-responses",
-          readOpenAiResponsesUsage(payload),
-        );
-      }
+      const object = parseStructuredObject(
+        reply.text,
+        params.schema,
+        "openai-responses",
+        reportedUsage,
+      );
 
       return {
         ...(diagnostics ? { diagnostics } : {}),
-        object: validation.data,
+        object,
         finishReason: mapResponseStatus(payload.status),
         usage: readOpenAiResponsesUsage(payload),
         reasoningContent: joinReasoning(

@@ -1,3 +1,4 @@
+import { cueVisual } from "../../lib/stage-view.js";
 import {
   makeProposal,
   resolveCharacter,
@@ -118,7 +119,7 @@ export default async function handler(ctx) {
     }
 
     const current = index >= 0 ? actors[index] : null;
-    const visual = patchVisual(current?.visual, cue);
+    const visual = cueVisual(current?.visual, cue);
     const position = POSITIONS.has(cue.position)
       ? cue.position
       : current?.position;
@@ -189,22 +190,6 @@ export default async function handler(ctx) {
     },
     [proposal, ...proposals],
   );
-}
-
-function patchVisual(current, cue) {
-  const next = { ...current };
-  const hasVariantId =
-    typeof cue.variantId === "string" && cue.variantId.length > 0;
-  const hasSemanticPatch = [cue.outfit, cue.expression, cue.pose].some(
-    (value) => typeof value === "string" && value.length > 0,
-  );
-  if (!hasVariantId && hasSemanticPatch) delete next.variantId;
-  for (const key of ["variantId", "outfit", "expression", "pose"]) {
-    if (typeof cue[key] === "string" && cue[key].length > 0) {
-      next[key] = cue[key];
-    }
-  }
-  return Object.keys(next).length > 0 ? next : undefined;
 }
 
 function withoutPosition(actor) {

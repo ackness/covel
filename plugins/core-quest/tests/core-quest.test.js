@@ -732,7 +732,7 @@ describe("core-quest plugin manifest", () => {
   });
 
   it("keeps the log in a post-turn function runtime gated on typed WorldIR", () => {
-    expect(manifest.pluginType).toBe("plugin");
+    expect(manifest).not.toHaveProperty("pluginType");
     expect(manifest.stage).toBe("post-turn");
     expect(manifest.runtimeType).toBe("function");
     expect(manifest.handler).toBe("./handler.js");

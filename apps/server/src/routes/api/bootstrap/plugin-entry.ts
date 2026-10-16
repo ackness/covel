@@ -31,6 +31,7 @@ import type { RuntimeLoader } from "./runtime-loader.js";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import {
+  assertInsideRoot,
   getPluginTrustInfo,
   loadPluginEntryDefinition,
   pluginDeclarations,
@@ -53,33 +54,6 @@ import type { DataStore } from "@covel/store";
 import type { ToolRegistry } from "@covel/tools";
 import { buildEntryApi } from "./plugin-entry-api.js";
 import { PluginRegistrationError } from "./plugin-registration-error.js";
-
-/**
- * Validate that `target` is inside `root` after resolving symlinks.
- * Mirrors `assertInsideRoot` in @covel/plugin-loader (load.ts): fs.realpath
- * defeats symlink-based path traversal; falls back to a lexical check when
- * the target does not exist on disk.
- */
-async function assertInsideRoot(root: string, target: string): Promise<void> {
-  let realRoot: string;
-  let realTarget: string;
-  try {
-    realRoot = await fsSync.promises.realpath(root);
-  } catch {
-    realRoot = path.resolve(root);
-  }
-  try {
-    realTarget = await fsSync.promises.realpath(target);
-  } catch {
-    // Target doesn't exist — fall back to lexical check (a non-existent path
-    // cannot be imported anyway).
-    realTarget = path.resolve(target);
-  }
-  const rel = path.relative(realRoot, realTarget);
-  if (rel.startsWith("..") || path.isAbsolute(rel)) {
-    throw new Error("entry path escapes the plugin root");
-  }
-}
 
 // `PluginAPI` / `PluginToolkit` (and the related option types) are the
 // Public Plugin API — they live in @covel/runtime so plugin authors can
@@ -318,7 +292,11 @@ export async function createBootstrapPluginEntries(
           batch.signal.throwIfAborted();
           currentEntry = entryPath;
           const fullPath = path.resolve(definition.pluginRoot, entryPath);
-          await assertInsideRoot(definition.pluginRoot, fullPath);
+          await assertInsideRoot(
+            definition.pluginRoot,
+            fullPath,
+            "entry path escapes the plugin root",
+          );
           batch.signal.throwIfAborted();
           if (!fsSync.existsSync(fullPath)) {
             throw new Error(`entry file not found: ${entryPath}`);

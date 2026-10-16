@@ -9,6 +9,8 @@ export { getJson, postFormData, postJson } from "./http/request.js";
 export {
   appendProviderMetadata,
   assertSuccess,
+  assertCompletedGeneration,
+  parseStructuredObject,
   createStructuredOutputError,
   createUnsupportedModeError,
   iterateSsePayloads,

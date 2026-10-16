@@ -47,7 +47,6 @@ function makeRegistryEntry(handler: FunctionHandler): PluginRegistryEntry {
     stage: "narrative",
     runtimeType: "function",
     outputKind: "system",
-    pluginType: "plugin",
     handler: "./handler.js",
     trigger: { type: "auto" },
   } as RuntimeManifest;
@@ -62,7 +61,7 @@ function makeRegistryEntry(handler: FunctionHandler): PluginRegistryEntry {
     id: PLUGIN_ID,
     name: PLUGIN_ID,
     description: "",
-    pluginType: "plugin",
+    kind: "plugin",
     runtimeCount: 1,
   };
   return {

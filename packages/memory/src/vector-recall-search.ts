@@ -15,13 +15,12 @@ import { searchExcerpt } from "@covel/plugin-handlers-utils";
  * as before.
  */
 
-import { supportsVector } from "@covel/store/vector";
 import type { RecallSearchResult, RecallSearcher } from "./types.js";
 import {
   distanceToScore,
   type EmbedFn,
   isEmbeddingModelChanged,
-  MEMORY_VECTOR_PLUGIN_ID,
+  searchSessionVectors,
   RECALL_NAMESPACE,
 } from "./vector-common.js";
 
@@ -46,29 +45,17 @@ export function createVectorRecallSearcher(deps: {
       query,
       limit = 10,
     ): Promise<readonly RecallSearchResult[]> {
-      if (!supportsVector(store)) {
-        return fallback.search(sessionId, query, limit);
-      }
       let results;
       try {
-        const target = await store.resolveSessionVectorTarget(sessionId);
-        if (!target) {
-          return fallback.search(sessionId, query, limit);
-        }
-        const [queryVec] = await embed([query], {
+        results = await searchSessionVectors(
+          store,
+          embed,
           sessionId,
-          modelId: target.modelId,
-        });
-        if (!queryVec || queryVec.length === 0) {
-          return fallback.search(sessionId, query, limit);
-        }
-        results = await store.searchVectors({
-          sessionId,
-          query: queryVec,
-          topK: limit,
-          pluginId: MEMORY_VECTOR_PLUGIN_ID,
-          namespace: RECALL_NAMESPACE,
-        });
+          query,
+          limit,
+          RECALL_NAMESPACE,
+        );
+        if (!results) return fallback.search(sessionId, query, limit);
       } catch (err) {
         // Embedding outage / KNN failure must never break a turn — fall back.
         // A changed embedding model is reported once by ingestion and shown
@@ -81,12 +68,6 @@ export function createVectorRecallSearcher(deps: {
             }`,
           );
         }
-        return fallback.search(sessionId, query, limit);
-      }
-
-      // Empty vector table (e.g. brand-new session that hasn't ingested yet) —
-      // keyword still has the raw messages, so prefer it over zero results.
-      if (results.length === 0) {
         return fallback.search(sessionId, query, limit);
       }
 

@@ -133,3 +133,5 @@ export {
   validatePluginFiles,
   validateRuntimeDeclarations,
 } from "./static-validation.js";
+
+export { isPathInside, assertInsideRoot } from "./path-containment.js";

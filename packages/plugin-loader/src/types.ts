@@ -34,7 +34,6 @@ import type {
   PluginDataSchemaDecl,
   WorldProjectionDecl,
   PluginTag,
-  PluginType,
   RuntimeManifest,
   PluginUserSettingSpec,
   PluginEventDecl,
@@ -50,7 +49,7 @@ export interface PackageManifest {
   readonly name: string;
   readonly pluginId: string;
   readonly description: string;
-  readonly pluginType: PluginType;
+  readonly kind: import("@covel/shared").PluginManifest["kind"];
   readonly displayName?: import("@covel/shared").PluginManifest["displayName"];
   readonly version?: string;
   readonly tags?: readonly PluginTag[];
@@ -188,7 +187,7 @@ export interface PluginSummary {
    */
   readonly displayName?: I18nText;
   readonly description: I18nText;
-  readonly pluginType: PluginType;
+  readonly kind: import("@covel/shared").PluginManifest["kind"];
   readonly runtimeCount: number;
   readonly tags?: readonly PluginTag[];
 }
@@ -236,7 +235,7 @@ export interface PluginRegistryEntry {
    * Discovery-source trust. Set by bootstrap from
    * `PluginDiscoveryResult.source` so downstream trust decisions (runtime RPC
    * approval gate, tool trust clamp, auto-load) use the path the plugin was
-   * discovered from, not a `pluginType` field the plugin itself can forge.
+   * discovered from, not a `kind` field the plugin itself can forge.
    *
    * When absent, `getPluginTrustInfo` defaults to community regardless of ID.
    */

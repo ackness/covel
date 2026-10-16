@@ -14,7 +14,6 @@ it.each(["fast", undefined])(
       name: "fixture/extract",
       pluginId: "fixture",
       description: "model binding fixture",
-      pluginType: "plugin",
       runtimeType: "function",
       stage: "narrative",
       trigger: { type: "auto" },

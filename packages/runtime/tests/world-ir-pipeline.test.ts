@@ -117,7 +117,6 @@ async function runPipeline(worldIrContent: string) {
     name: "test-world-ir-consumer",
     pluginId: "test-world-ir-consumer",
     description: "Captures the shared typed WorldIR slot.",
-    pluginType: "plugin",
     stage: "post-turn",
     runtimeType: "function",
     handler: "./unused.js",

@@ -133,7 +133,6 @@ export function compileRuntimeManifest(
     name: runtimeId,
     version: plugin.version,
     description: runtime.description ?? plugin.description,
-    pluginType: plugin.kind === "core" ? "core-plugin" : "plugin",
     runtimeType,
     // The loader leaves the runtime out when the default file is missing.
     handler: runtime.function

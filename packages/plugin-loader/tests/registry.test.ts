@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import type { RuntimeManifest, PluginType } from "@covel/shared";
+import type { RuntimeManifest } from "@covel/shared";
 import type {
   LoadedRuntime,
   PluginRegistryEntry,
@@ -21,7 +21,7 @@ function makeSummary(
     id,
     name: `Plugin ${id}`,
     description: `Description for ${id}`,
-    pluginType: "plugin" as PluginType,
+    kind: "plugin",
     runtimeCount: 1,
     ...overrides,
   };
@@ -73,7 +73,7 @@ function makePackageManifest(
       name,
       pluginId: name,
       description: name,
-      pluginType: "plugin",
+      kind: "plugin",
       dataSchemas: overrides?.dataSchemas,
       worldProjections: overrides?.worldProjections,
     },

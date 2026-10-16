@@ -326,7 +326,7 @@ interface PluginFlowResponse {
   }>;
   plugins: Array<{
     id: string;
-    pluginType: string;
+    kind: "core" | "plugin";
     runtimeIds: string[];
   }>;
   steps: PluginFlowStep[];

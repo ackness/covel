@@ -1,3 +1,4 @@
+import { payloadContent } from "./vector-common.js";
 /**
  * Embed-on-write ingestion — the missing half of semantic memory.
  *
@@ -640,21 +641,6 @@ function commitArchival(
     guard,
     { upserts: batch.upserts ?? [], deletes: batch.deletes },
   );
-}
-
-function payloadContent(raw: string | null | undefined): string | null {
-  if (!raw) return null;
-  try {
-    const value: unknown = JSON.parse(raw);
-    return value !== null &&
-      typeof value === "object" &&
-      "content" in value &&
-      typeof value.content === "string"
-      ? value.content
-      : null;
-  } catch {
-    return null;
-  }
 }
 
 // Index progress is deliberately absent from business-data snapshots/checkpoints.

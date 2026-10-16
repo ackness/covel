@@ -127,7 +127,7 @@ for (const width of [1512, 390]) {
       description: "Current session metadata",
       status: "registered",
       source: "builtin",
-      pluginType: "plugin",
+      kind: "plugin",
       active: true,
       locked: false,
       runtimeCount: 3,

@@ -105,7 +105,7 @@ describe("TurnExecutor E2E", () => {
   it("should discover narrator from plugins/", () => {
     expect(narratorManifest.name).toBe("narrator");
     expect(narratorManifest.stage).toBe("narrative");
-    expect(narratorManifest.pluginType).toBe("core-plugin");
+    expect(narratorManifest.outputKind).toBe("story");
   });
 
   it("should execute a turn with narrator and get narrative output", async () => {

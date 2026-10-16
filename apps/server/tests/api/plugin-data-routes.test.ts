@@ -49,9 +49,9 @@ function makeManifest(pluginId: string): RuntimeManifest {
 function registerPlugin(
   registry: PluginRegistry,
   pluginId = "test-plugin",
-  pluginType: "plugin" | "core-plugin" = "plugin",
+  kind: "plugin" | "core" = "plugin",
 ): void {
-  const manifest = { ...makeManifest(pluginId), pluginType };
+  const manifest = makeManifest(pluginId);
   const parsed: ParsedRuntimeMd = {
     runtime: {},
     manifest,
@@ -64,7 +64,7 @@ function registerPlugin(
       id: pluginId,
       name: "Test Plugin",
       description: "",
-      pluginType,
+      kind,
       runtimeCount: 1,
     },
     loadedRuntimes: new Map(),
@@ -356,9 +356,9 @@ describe("Plugin Data REST API routes", () => {
   });
 });
 
-describe.each(["plugin", "core-plugin"] as const)(
+describe.each(["plugin", "core"] as const)(
   "Plugin Data write guards (%s)",
-  (pluginType) => {
+  (kind) => {
     let store: DataStore;
     let registry: PluginRegistry;
     let app: Hono;
@@ -368,7 +368,7 @@ describe.each(["plugin", "core-plugin"] as const)(
     beforeEach(async () => {
       store = createMemoryStore();
       registry = createPluginRegistry();
-      registerPlugin(registry, pluginId, pluginType);
+      registerPlugin(registry, pluginId, kind);
       registry.syncSessionActivations(sessionId, [pluginId]);
       app = buildApp(store, registry);
 

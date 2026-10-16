@@ -33,7 +33,7 @@ describe("session creation without installed world-data receivers", () => {
           id: discovery.id,
           name: discovery.id,
           description: "",
-          pluginType: "plugin",
+          kind: "plugin",
           runtimeCount: definition.manifests.length,
         },
         ...definition,

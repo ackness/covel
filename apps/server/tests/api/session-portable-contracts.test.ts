@@ -21,7 +21,7 @@ it("creates a schema-less portable session with contract data, characters and lo
       id: pluginId,
       name: "Clock",
       description: "",
-      pluginType: "plugin",
+      kind: "plugin",
       runtimeCount: 0,
     },
     rootPath: path.resolve(

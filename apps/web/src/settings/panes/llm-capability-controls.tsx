@@ -2,7 +2,12 @@ import i18n from "@/i18n";
 import { Check } from "lucide-react";
 import { useInputDraft } from "../use-input-draft.js";
 import { useTranslation } from "react-i18next";
-import { projectModelCapabilityForBuiltinAdapter } from "@covel/shared";
+import {
+  projectModelCapabilityForBuiltinAdapter,
+  INPUT_MODALITIES,
+  OUTPUT_MODALITIES,
+  MODEL_FEATURES,
+} from "@covel/shared";
 import { ModelTokenLimits } from "./llm-token-limits.js";
 import { Label } from "@/components/ui/label.js";
 import {
@@ -13,30 +18,9 @@ import {
   type OutputModality,
 } from "@/services/api.js";
 
-const ALL_INPUT_MODALITY_IDS: InputModality[] = [
-  "text",
-  "image",
-  "audio",
-  "video",
-  "file",
-];
-const ALL_OUTPUT_MODALITY_IDS: OutputModality[] = [
-  "text",
-  "image",
-  "audio",
-  "embedding",
-  "evaluation",
-];
-const ALL_FEATURE_IDS: ModelFeature[] = [
-  "function_calling",
-  "structured_output",
-  "streaming",
-  "reasoning",
-  "vision",
-  "prompt_caching",
-  "web_search",
-  "computer_use",
-];
+const ALL_INPUT_MODALITY_IDS = [...INPUT_MODALITIES];
+const ALL_OUTPUT_MODALITY_IDS = [...OUTPUT_MODALITIES];
+const ALL_FEATURE_IDS = [...MODEL_FEATURES];
 
 const MODALITY_COLORS: Record<string, string> = {
   "in:image": "bg-violet-500/15 text-violet-600",

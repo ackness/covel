@@ -65,7 +65,7 @@ describe("char-creator plugin", () => {
 
     it("is a setup-stage core-plugin", () => {
       expect(manifest.stage).toBe("setup");
-      expect(manifest.pluginType).toBe("core-plugin");
+      expect(manifest).not.toHaveProperty("pluginType");
     });
 
     it("declares only create-character-form — character creation is performed by guard.js, not by the LLM", () => {

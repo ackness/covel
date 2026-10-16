@@ -150,10 +150,6 @@
       "minimum": 0,
       "maximum": 50
     },
-    "pluginType": {
-      "type": "string",
-      "enum": ["core-plugin", "plugin"]
-    },
     "outputKind": {
       "type": "string",
       "enum": ["story", "system"]

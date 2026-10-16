@@ -44,7 +44,6 @@ function fnManifest(
   return {
     name,
     pluginId: name.split("/")[0]!,
-    pluginType: "core-plugin",
     description: name,
     stage:
       priority <= 99
