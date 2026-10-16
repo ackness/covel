@@ -48,7 +48,6 @@ export interface EventRow {
   type: string;
   topic: string;
   payload: unknown;
-  targetRuntime: string | null;
   turnId: string | null;
   createdAt: string;
 }
@@ -129,7 +128,6 @@ export function toEventRecord(row: EventRow, json: JsonReader): EventRecord {
     type: row.type,
     topic: row.topic,
     payload: json.read(row.payload),
-    targetRuntime: row.targetRuntime ?? undefined,
     turnId: row.turnId ?? undefined,
     createdAt: row.createdAt,
   };

@@ -42,7 +42,6 @@ eventRoutes.post("/emit", async (c) => {
       topic: z.string().min(1),
       sessionId: z.string().min(1),
       payload: z.record(z.string(), z.unknown()).nullish(),
-      targetRuntime: z.string().optional(),
     }),
   );
   if (parsed instanceof Response) return parsed;
@@ -71,7 +70,6 @@ eventRoutes.post("/emit", async (c) => {
     topic: body.topic,
     payload: body.payload ?? {},
     sessionId: body.sessionId,
-    targetRuntime: body.targetRuntime,
     timestamp: new Date().toISOString(),
   };
 

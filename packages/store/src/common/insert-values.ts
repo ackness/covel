@@ -413,7 +413,6 @@ function buildInsertValues(json: JsonWriter): InsertValueBuilders {
         type: record.type,
         topic: record.topic,
         payload: json.writeNullableJson(record.payload),
-        targetRuntime: record.targetRuntime ?? null,
         turnId: record.turnId ?? null,
         createdAt: record.createdAt,
       };

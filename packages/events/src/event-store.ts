@@ -5,7 +5,6 @@ export interface EventStoreRecord {
   readonly type: string;
   readonly topic: string;
   readonly payload: unknown;
-  readonly targetRuntime?: string;
   readonly turnId?: string;
   readonly createdAt: string;
 }

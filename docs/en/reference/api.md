@@ -4729,7 +4729,7 @@ This endpoint also limits how often a client address can make requests (`RATE_LI
 
 #### `POST /api/events/emit`
 
-Injects an event into the event bus from outside. You can use it to trigger a runtime or to simulate a game event.
+Pushes an event into a session's event stream from outside. Clients subscribed to that session (the browser, the debug page) receive it, so you can use it to simulate a game event. It does not trigger a runtime.
 
 > [!IMPORTANT]
 > This endpoint is for debugging. When `NODE_ENV=production`, it is only available if `ENABLE_DEBUG_PAGE` is set. Otherwise it returns `403`.
@@ -4740,17 +4740,15 @@ Injects an event into the event bus from outside. You can use it to trigger a ru
 {
   "topic": "combat.start",
   "payload": { "enemyId": "goblin-01", "terrain": "forest" },
-  "sessionId": "mistport-a1b2c3d4",
-  "targetRuntime": "combat"
+  "sessionId": "mistport-a1b2c3d4"
 }
 ```
 
-| Field           | Type   | Required | Description                               |
-| --------------- | ------ | -------- | ----------------------------------------- |
-| `topic`         | string | Yes      | Event topic                               |
-| `payload`       | object | No       | Event payload. It must be an object       |
-| `sessionId`     | string | Yes      | Target session ID                         |
-| `targetRuntime` | string | No       | The runtime that should receive the event |
+| Field       | Type   | Required | Description                         |
+| ----------- | ------ | -------- | ----------------------------------- |
+| `topic`     | string | Yes      | Event topic                         |
+| `payload`   | object | No       | Event payload. It must be an object |
+| `sessionId` | string | Yes      | Target session ID                   |
 
 **Response**
 

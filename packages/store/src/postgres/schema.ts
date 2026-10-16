@@ -228,7 +228,6 @@ export const events = pgTable(
     type: text("type").notNull(),
     topic: text("topic").notNull(),
     payload: jsonb("payload"), // JSON
-    targetRuntime: text("target_runtime"),
     turnId: text("turn_id"),
     createdAt: text("created_at").notNull(),
   },

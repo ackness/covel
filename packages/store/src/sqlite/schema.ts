@@ -197,7 +197,6 @@ export const events = sqliteTable(
     type: text("type").notNull(),
     topic: text("topic").notNull(),
     payload: text("payload"), // JSON
-    targetRuntime: text("target_runtime"),
     turnId: text("turn_id"),
     createdAt: text("created_at").notNull(),
   },

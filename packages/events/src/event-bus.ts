@@ -855,7 +855,6 @@ export function createEventBus(
             type: message.type,
             topic: message.topic,
             payload: message.payload,
-            targetRuntime: message.targetRuntime,
             turnId: message.turnId,
             createdAt: message.timestamp,
           },

@@ -164,7 +164,6 @@ export const checkpointRecordArrays = {
       type: z.string(),
       topic: z.string(),
       payload: jsonValue,
-      targetRuntime: z.string().optional(),
       turnId: z.string().optional(),
     }),
   ),

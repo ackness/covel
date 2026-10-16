@@ -4727,7 +4727,7 @@ id: example-epoch:2
 
 #### `POST /api/events/emit`
 
-从外部往事件总线里注入一个事件。可以用来触发某个 runtime，或者模拟游戏事件。
+从外部往一个会话的事件流里推送一个事件。订阅这个会话的客户端（浏览器、调试页）会收到它，可以用来模拟游戏事件。它不会触发 runtime。
 
 > [!IMPORTANT]
 > 这是调试用的端点。`NODE_ENV=production` 时，只有设置了 `ENABLE_DEBUG_PAGE` 才可用，否则返回 `403`。
@@ -4738,17 +4738,15 @@ id: example-epoch:2
 {
   "topic": "combat.start",
   "payload": { "enemyId": "goblin-01", "terrain": "forest" },
-  "sessionId": "mistport-a1b2c3d4",
-  "targetRuntime": "combat"
+  "sessionId": "mistport-a1b2c3d4"
 }
 ```
 
-| 字段            | 类型   | 必填 | 说明                   |
-| --------------- | ------ | ---- | ---------------------- |
-| `topic`         | string | 是   | 事件主题               |
-| `payload`       | object | 否   | 事件负载，必须是对象   |
-| `sessionId`     | string | 是   | 目标会话 ID            |
-| `targetRuntime` | string | 否   | 指定接收事件的 runtime |
+| 字段        | 类型   | 必填 | 说明                 |
+| ----------- | ------ | ---- | -------------------- |
+| `topic`     | string | 是   | 事件主题             |
+| `payload`   | object | 否   | 事件负载，必须是对象 |
+| `sessionId` | string | 是   | 目标会话 ID          |
 
 **响应**
 
