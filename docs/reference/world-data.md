@@ -631,7 +631,7 @@ Put the file at `data/quests.yaml`: it is imported without a descriptor. The sam
 - 每个约定 source 有一个 ID，descriptor 的 `after` 和 override 用它指代这个 source：内核的是 `dimensions`、`lorebook`、`characters`；插件的是它的 namespace，两个插件的 namespace 相同时是 `<插件 ID>-<namespace>`；目录里的文件是 `<约定 ID>-<文件名>`，例如 `data/rules/tide-mystery.yaml` 是 `rules-tide-mystery`。
 - 同一个会话启用的两个契约声明了同一个路径时，这个路径不算约定，这个文件不导入，世界包要用 descriptor 说明给谁。会话照常开始。服务端日志记一条 `[sessions]` 警告，世界数据预检返回一条 `convention-collision` 警告，`pnpm validate:world` 也会报出来（见[静态校验](#静态校验pnpm-validateworld)）。
 
-给插件作者：`path` 是相对世界包根目录的路径，只能由 ASCII 字母、数字和 `_`、`.`、`/`、`-` 组成，不能以 `/` 开头，也不能含 `..`。最后一段可以写成 `*.<扩展名>`，表示目录里这一类的每个文件（媒体 source 不行，它本来就是目录）。它也不能是内核或世界包自己的路径：`world.yaml`、`WORLD.md`、`data/world.data.yaml`、`data/dimensions.yaml`、`data/lorebook.yaml`、`characters/characters.json`、`media/gallery.json`、`media/portraits.json`、`media/scenes.json`、`media/gallery/` 目录，以及它们的语言版本（如 `world.zh-CN.yaml`），比较时不分大小写。不符合的插件清单在加载时校验失败。
+给插件作者：`path` 是相对世界包根目录的路径，只能由 ASCII 字母、数字和 `_`、`.`、`/`、`-` 组成，不能以 `/` 开头，也不能含 `..`。最后一段可以写成 `*.<扩展名>`，表示目录里这一类的每个文件（媒体 source 不行，它本来就是目录）。它也不能是内核或世界包自己的路径：`world.yaml`、`WORLD.md`、`data/world.data.yaml`、`data/dimensions.yaml`、`data/lorebook.yaml`、`characters/characters.json`、`media/gallery.json`、`media/portraits.json`、`media/scenes.json`、`media/gallery/` 目录，以及它们的语言版本（如 `world.zh-CN.yaml`），比较时不分大小写。语言版本只认两个字母的语言代码（`.fr`、`.zh-CN`），或带地区的三个字母代码（`.yue-HK`）；`.bak`、`.min` 这样的后缀属于文件名，`characters/characters.bak.json` 可以用。不符合的插件清单在加载时校验失败。
 
 **什么时候仍然写 descriptor：**
 

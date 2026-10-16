@@ -343,20 +343,38 @@ async function translateWorld(dir: string, target: string): Promise<void> {
   if (result.failed.length > 0) process.exitCode = 1;
 }
 
+/**
+ * Run `task` for every directory. A package that cannot be read (a runtime
+ * directory with a misnamed manifest, say) is reported, and the others still
+ * get their turn.
+ */
+async function forEachDir(task: (dir: string) => Promise<void>): Promise<void> {
+  for (const dir of dirs) {
+    try {
+      await task(dir);
+    } catch (error) {
+      console.error(
+        `${dir}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      process.exitCode = 1;
+    }
+  }
+}
+
 switch (command) {
   case "status":
-    for (const dir of dirs) await status(dir);
+    await forEachDir(status);
     break;
   case "extract":
     await extract(dirs[0]!);
     break;
   case "lock":
-    for (const dir of dirs) {
+    await forEachDir(async (dir) => {
       if (kindOf(dir) !== "plugin") fail("lock works on plugin directories");
       console.log(
         `${dir}: ${await lockPluginLabels(dir)} label translation(s) locked`,
       );
-    }
+    });
     break;
   case "translate":
     await translate(dirs[0]!);

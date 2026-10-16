@@ -264,7 +264,14 @@ describe("plugin manifest dataSchemas", () => {
         },
       },
     });
-    for (const inside of ["data/records.json", "media/scenes.registry.json"])
+    // `.old`, `.bak` and `.min` belong to the file name; none is an edition.
+    for (const inside of [
+      "data/records.json",
+      "media/scenes.registry.json",
+      "characters/characters.old.json",
+      "data/lorebook.bak.yaml",
+      "media/scenes.min.json",
+    ])
       expect(pluginManifestSchema.safeParse(withSource(inside)).success).toBe(
         true,
       );
@@ -288,7 +295,11 @@ describe("plugin manifest dataSchemas", () => {
       "./data/lorebook.yaml",
       "world.yaml",
       "world.zh-CN.yaml",
+      "world.yue-HK.yaml",
       "WORLD.md",
+      "WORLD.en.md",
+      "data/lorebook.fr.yaml",
+      "characters/characters.en-US.json",
       "data/world.data.yaml",
       "media/gallery",
       "media/gallery/extra.json",

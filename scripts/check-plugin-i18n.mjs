@@ -542,7 +542,14 @@ async function checkBundledTranslations() {
     const root = join(pluginsDir, name);
     if (name.startsWith("_") || !existsSync(join(root, "PLUGIN.md"))) continue;
     const zh = `plugins/${name}/locales/zh.yaml`;
-    const { labels, messages } = await pluginTranslationStatus(root, "zh");
+    let state;
+    try {
+      state = await pluginTranslationStatus(root, "zh");
+    } catch (error) {
+      report(`plugins/${name}: ${error.message}`);
+      continue;
+    }
+    const { labels, messages } = state;
     for (const unit of labels.missing)
       report(
         `plugins/${name}/${unit.file}: ${unit.pointer} "${unit.text.slice(0, 60)}" has no Chinese translation - add it to ${zh} under "${unit.file}".`,

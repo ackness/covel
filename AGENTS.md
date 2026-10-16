@@ -136,8 +136,8 @@ pnpm test:pg          # required PostgreSQL integration tests (DATABASE_URL from
 pnpm e2e:smoke        # deterministic Chromium smoke suite run by CI; pnpm e2e for all Playwright
 pnpm create-plugin    # scaffold from templates/: pnpm create-plugin <name>; --with-tools scaffolds into plugins/
 pnpm validate:plugin  # validate PLUGIN.md / RUNTIME.md and locale files; a plugin DIR also gets
-                      # cross-runtime checks, a check that PLUGIN.md and package.json state one
-                      # version, and a line with the languages it has text in
+                      # cross-runtime checks, a check that a package.json, if there is one,
+                      # says "type": "module", and a line with the languages it has text in
 pnpm validate:world   # validate world packages (manifest, lore, plugin IDs, every seed record):
                       # pnpm validate:world [--strict] [--plugins <dir>] worlds/<id>
 pnpm schemas:generate # regenerate packages/shared/schemas/*.json and docs/reference/schema/*.md
