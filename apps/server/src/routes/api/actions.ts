@@ -759,6 +759,9 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
             playerMessage: turnPlayerMessage,
             locale: effectiveLocale,
             modelOverride: model,
+            // `turnOrigin` is the flow (player turn or opening) that
+            // `turn.started` records for recovery; the execution of a runtime
+            // retry is `manual`, so it is not counted as a player turn.
             origin: isRuntimeRetry ? ("manual" as const) : turnOrigin,
             ...(turnOrigin === "player" && !isRuntimeRetry
               ? { logicalTurnId: crypto.randomUUID() }
