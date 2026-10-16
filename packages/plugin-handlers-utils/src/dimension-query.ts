@@ -5,6 +5,7 @@ import {
 } from "./dimension-schemas.js";
 import { resolveI18nText } from "./i18n.js";
 import { instructionLocaleFor } from "./instruction-locale.js";
+import { modelFacingJson } from "./model-facing.js";
 import type { DimensionSnapshot } from "./dimension-types.js";
 
 export const dimensionQuerySchema = z.strictObject({
@@ -68,7 +69,74 @@ function readPath(
   return { found: true, value: current };
 }
 
-/** Explicit queries keep their full public result; model text has a fixed budget. */
+type DimensionQuery = z.infer<typeof dimensionQuerySchema>["queries"][number];
+
+interface DimensionSelection {
+  found: boolean;
+  value?: unknown;
+  error?: string;
+  page?: { value: unknown; total: number; nextOffset?: number };
+}
+
+/** What one query selects inside a value: its path, then its offset/limit page. */
+function selectQuery(
+  value: unknown,
+  query: DimensionQuery,
+): DimensionSelection {
+  const picked = query.path
+    ? readPath(value, query.path)
+    : { found: true, value };
+  if (
+    !picked.found ||
+    (query.offset === undefined && query.limit === undefined)
+  )
+    return picked;
+  const offset = query.offset ?? 0,
+    limit = query.limit ?? 100;
+  const collection =
+    typeof picked.value === "string"
+      ? Array.from(picked.value)
+      : Array.isArray(picked.value)
+        ? picked.value
+        : picked.value && typeof picked.value === "object"
+          ? Object.entries(picked.value)
+          : undefined;
+  if (!collection) return picked;
+  const slice = collection.slice(offset, offset + limit);
+  return {
+    ...picked,
+    page: {
+      value:
+        typeof picked.value === "string"
+          ? slice.join("")
+          : Array.isArray(picked.value)
+            ? slice
+            : Object.fromEntries(slice as [string, unknown][]),
+      total: collection.length,
+      ...(offset + limit < collection.length
+        ? { nextOffset: offset + limit }
+        : {}),
+    },
+  };
+}
+
+function selectionLine(
+  label: string,
+  version: number,
+  shown: DimensionSelection,
+  queryCount: number,
+): string {
+  if (!shown.found) return `${label}: not found`;
+  const json = JSON.stringify(shown.page ?? shown.value);
+  const budget = shown.page ? Math.floor(7600 / queryCount) : 320;
+  return `${label} (v${version}) = ${json.length > budget ? `${json.slice(0, budget)}… [truncated; query a narrower path or smaller offset/limit page]` : json}`;
+}
+
+/**
+ * Explicit queries keep their full public result; model text has a fixed
+ * budget. The text selects inside the `modelFacingJson` projection, so a
+ * direct query of `sessionId` cannot turn bookkeeping into a nameless scalar.
+ */
 export function queryDimensionSnapshot(
   snapshot: DimensionSnapshot,
   input: unknown,
@@ -76,75 +144,37 @@ export function queryDimensionSnapshot(
 ) {
   const parsed = dimensionQuerySchema.parse(input);
   const dimensions = dimensionSnapshotSchema.parse(snapshot);
-  const results = parsed.queries.map((query) => {
+  const answers = parsed.queries.map((query) => {
+    const label = `${query.dimension}${query.path ? `.${query.path}` : ""}`;
     const entry = dimensions[query.dimension];
     if (!entry)
       return {
-        ...query,
-        found: false as const,
-        value: null,
-        error: "Unknown dimension",
+        result: {
+          ...query,
+          found: false as const,
+          value: null,
+          error: "Unknown dimension",
+        },
+        line: `${label}: not found`,
       };
-    const value = entry.value;
-    const picked = query.path
-      ? readPath(value, query.path)
-      : { found: true, value };
-    let page:
-      { value: unknown; total: number; nextOffset?: number } | undefined;
-    if (
-      picked.found &&
-      (query.offset !== undefined || query.limit !== undefined)
-    ) {
-      const offset = query.offset ?? 0,
-        limit = query.limit ?? 100;
-      const collection =
-        typeof picked.value === "string"
-          ? Array.from(picked.value)
-          : Array.isArray(picked.value)
-            ? picked.value
-            : picked.value && typeof picked.value === "object"
-              ? Object.entries(picked.value)
-              : undefined;
-      if (collection) {
-        const slice = collection.slice(offset, offset + limit);
-        page = {
-          value:
-            typeof picked.value === "string"
-              ? slice.join("")
-              : Array.isArray(picked.value)
-                ? slice
-                : Object.fromEntries(slice as [string, unknown][]),
-          total: collection.length,
-          ...(offset + limit < collection.length
-            ? { nextOffset: offset + limit }
-            : {}),
-        };
-      }
-    }
+    const shown = selectQuery(modelFacingJson(entry.value), query);
     return {
-      ...query,
-      ...picked,
-      ...(page ? { page } : {}),
-      name: resolveI18nText(entry.name, locale),
-      schema: entry.schema,
-      version: entry.version,
+      result: {
+        ...query,
+        ...selectQuery(entry.value, query),
+        name: resolveI18nText(entry.name, locale),
+        schema: entry.schema,
+        version: entry.version,
+      },
+      line: selectionLine(label, entry.version, shown, parsed.queries.length),
     };
   });
-  const text = results
-    .map((result) => {
-      const label = `${result.dimension}${result.path ? `.${result.path}` : ""}`;
-      if (!result.found) return `${label}: not found`;
-      const json = JSON.stringify(
-        "page" in result && result.page ? result.page : result.value,
-      );
-      const budget =
-        "page" in result && result.page
-          ? Math.floor(7600 / parsed.queries.length)
-          : 320;
-      return `${label} (v${result.version}) = ${json.length > budget ? `${json.slice(0, budget)}… [truncated; query a narrower path or smaller offset/limit page]` : json}`;
-    })
-    .join("\n");
-  return { success: true, results, _text: text.slice(0, 8192) };
+  const text = answers.map((answer) => answer.line).join("\n");
+  return {
+    success: true,
+    results: answers.map((answer) => answer.result),
+    _text: text.slice(0, 8192),
+  };
 }
 
 const CUT_VALUE_LENGTH = 240;

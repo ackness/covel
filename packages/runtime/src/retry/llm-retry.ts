@@ -603,6 +603,16 @@ export async function streamLLMWithRetry(
             firstTokenWaitMs(policy, attemptsLeft, remainingMs()),
           );
         let ttfbHandle = armFirstTokenGuard();
+        // A rate-limited or failed transport attempt is followed by a backoff
+        // the provider asked for (`retry-after`); the model has not been asked
+        // yet, so the guard pauses and restarts when a later attempt is
+        // answered. The call timeout still bounds the whole wait.
+        let firstTokenGuardPaused = false;
+        const restartFirstTokenGuard = (): void => {
+          clearTimeout(ttfbHandle);
+          firstTokenGuardPaused = false;
+          ttfbHandle = armFirstTokenGuard();
+        };
         const onQueueStart = () => {
           clearTimeout(callTimeoutHandle);
           clearTimeout(ttfbHandle);
@@ -611,16 +621,9 @@ export async function streamLLMWithRetry(
             effectiveDeadline += waitedMs;
             if (waitedMs > 0) params.onQueueWait?.(waitedMs);
             callTimeoutHandle = armCallGuard();
-            firstTokenGuardPaused = false;
-            ttfbHandle = armFirstTokenGuard();
+            restartFirstTokenGuard();
           };
         };
-
-        // A rate-limited or failed transport attempt is followed by a backoff
-        // the provider asked for (`retry-after`); the model has not been asked
-        // yet, so the guard pauses and restarts when a later attempt is
-        // answered. The call timeout still bounds the whole wait.
-        let firstTokenGuardPaused = false;
         const onProviderRequest = (request: LLMProviderRequest): void => {
           trace.onProviderRequest(request);
           if (firstTokenSeen) return;
@@ -628,8 +631,7 @@ export async function streamLLMWithRetry(
             clearTimeout(ttfbHandle);
             firstTokenGuardPaused = true;
           } else if (firstTokenGuardPaused) {
-            firstTokenGuardPaused = false;
-            ttfbHandle = armFirstTokenGuard();
+            restartFirstTokenGuard();
           }
         };
 

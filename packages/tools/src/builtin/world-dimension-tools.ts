@@ -1,7 +1,6 @@
 import { z } from "zod";
 import {
   dimensionQuerySchema,
-  modelFacingJson,
   queryDimensionSnapshot,
   type I18nText,
   type DimensionValueSchema,
@@ -21,22 +20,7 @@ export const worldDimensionGetTool = tool({
     const locale = z
       .object({ locale: z.string().optional() })
       .parse(session ?? {}).locale;
-    const result = queryDimensionSnapshot(ctx.world.dimensions, params, locale);
-    // Project before selecting a path: a direct query of `sessionId` must not
-    // turn bookkeeping into a nameless scalar that bypasses the projection.
-    const modelSnapshot = Object.fromEntries(
-      Object.entries(ctx.world.dimensions).map(([id, entry]) => [
-        id,
-        {
-          ...entry,
-          value: modelFacingJson(entry.value),
-        },
-      ]),
-    );
-    return {
-      ...result,
-      _text: queryDimensionSnapshot(modelSnapshot, params, locale)._text,
-    };
+    return queryDimensionSnapshot(ctx.world.dimensions, params, locale);
   },
 });
 
