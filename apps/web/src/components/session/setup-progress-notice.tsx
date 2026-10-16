@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { AlertCircle, Info } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { ActionableErrorNotice } from "@/components/shared/actionable-error-notice.js";
+import { Button } from "@/components/ui/button.js";
+import { classifyActionableError } from "@/lib/actionable-error.js";
 import type { SessionRecord, SetupRuntimeState } from "@/services/api.js";
 import type { StreamMessage } from "@/stores/session-store.js";
 import type { ExecutionRecovery } from "@/stores/session-store/types.js";
@@ -79,12 +81,14 @@ export function SetupProgressNotice({
   progress,
   onRearm,
   onRun,
+  onOpenSettings,
 }: {
   progress: SetupProgress | null;
   /** Re-arm one blocked setup step. */
   onRearm: (runtimeId: string) => Promise<void>;
   /** Run setup again without a player message. */
   onRun: () => void;
+  onOpenSettings: (key: "llm.providers" | "llm.slots") => void;
 }) {
   const { t } = useTranslation();
   const [settled, setSettled] = useState(false);
@@ -100,6 +104,10 @@ export function SetupProgressNotice({
   }, [visible]);
   if (!progress || !settled) return null;
   const failed = progress.kind === "failed";
+  const errorKind = classifyActionableError(progress.error);
+  const settingsFix =
+    failed &&
+    ["auth", "forbidden", "not-found", "rate-limited"].includes(errorKind);
   const run = async () => {
     setBusy(true);
     setRearmFailed(false);
@@ -119,30 +127,31 @@ export function SetupProgressNotice({
       data-kind={progress.kind}
     >
       <div className="mx-auto flex max-w-3xl flex-wrap items-start gap-3">
-        {failed ? (
-          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
-        ) : (
-          <Info className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-        )}
         <div className="min-w-0 flex-1 basis-48">
-          <p className="text-sm font-medium">
+          <p className="flex items-center gap-2 text-sm font-medium">
+            {failed ? (
+              <AlertCircle className="h-4 w-4 shrink-0 text-amber-600" />
+            ) : (
+              <Info className="h-4 w-4 shrink-0 text-primary" />
+            )}
             {t(
               failed
                 ? "session.setupFailedTitle"
                 : "session.setupUnfinishedTitle",
             )}
           </p>
-          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-            {t(
-              failed
-                ? "session.setupFailedDetail"
-                : "session.setupUnfinishedDetail",
-            )}
-          </p>
-          {progress.error && (
+          {progress.error ? (
             <div className="mt-1.5">
               <ActionableErrorNotice error={progress.error} layout="panel" />
             </div>
+          ) : (
+            <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
+              {t(
+                failed
+                  ? "session.setupFailedDetail"
+                  : "session.setupUnfinishedDetail",
+              )}
+            </p>
           )}
           {rearmFailed && (
             <p className="mt-1 text-xs text-destructive">
@@ -150,14 +159,31 @@ export function SetupProgressNotice({
             </p>
           )}
         </div>
-        <button
-          type="button"
-          disabled={busy}
-          onClick={() => void run()}
-          className="rounded-(--radius-control) bg-primary px-3 py-1.5 text-xs text-primary-foreground disabled:opacity-50"
-        >
-          {t(failed ? "session.setupRetry" : "session.setupContinue")}
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          {settingsFix && (
+            <Button
+              type="button"
+              size="sm"
+              disabled={busy}
+              onClick={() =>
+                onOpenSettings(
+                  errorKind === "auth" ? "llm.providers" : "llm.slots",
+                )
+              }
+            >
+              {t("session.setupModelSettings")}
+            </Button>
+          )}
+          <Button
+            type="button"
+            size="sm"
+            variant={settingsFix ? "outline" : "default"}
+            disabled={busy}
+            onClick={() => void run()}
+          >
+            {t(failed ? "session.setupRetry" : "session.setupContinue")}
+          </Button>
+        </div>
       </div>
     </div>
   );

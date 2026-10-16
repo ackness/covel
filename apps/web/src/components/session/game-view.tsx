@@ -588,6 +588,7 @@ export function GameView({
               resolveSetupRuntime(session.id, runtimeId, "retry")
             }
             onRun={onBeginAdventure}
+            onOpenSettings={settings.openWithKey}
           />
           {stageActive ? (
             <StageView

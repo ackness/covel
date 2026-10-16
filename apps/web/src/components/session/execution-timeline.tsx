@@ -152,6 +152,7 @@ export function ExecutionTimeline({
   turnNumberStart = 1,
   canRetryTasks = true,
   messages = [],
+  setupPhase = false,
 }: {
   steps: ExecutionStep[];
   executing: boolean;
@@ -164,6 +165,7 @@ export function ExecutionTimeline({
   turnNumberStart?: number;
   canRetryTasks?: boolean;
   messages?: readonly StreamMessage[];
+  setupPhase?: boolean;
 }) {
   const { i18n, t } = useTranslation();
   const [modelSettingsOpen, setModelSettingsOpen] = useState(false);
@@ -228,7 +230,12 @@ export function ExecutionTimeline({
         );
         const allDone = (!executing || !isLatest) && !activeForeground;
         const canRetry =
-          allDone && isLatest && !stopped && canRetryTasks && !!onRetryRuntime;
+          !setupPhase &&
+          allDone &&
+          isLatest &&
+          !stopped &&
+          canRetryTasks &&
+          !!onRetryRuntime;
         const failures = statuses.filter(
           (runtime) => runtime.status === "failed",
         );
@@ -267,15 +274,25 @@ export function ExecutionTimeline({
                 ) : (
                   <ChevronUp className="w-3 h-3" />
                 )}
-                <span className="uppercase tracking-wider font-mono">
+                <span>
                   {executing && isLatest && (
                     <Loader2 className="mr-1 inline h-3 w-3 animate-spin" />
                   )}
-                  <span className={executionTone(presentation)}>
-                    {t(`session.executionState.${presentation}`)}
-                  </span>
-                  {" · "}
-                  {t("session.executionSummary", { count: statuses.length })}
+                  {setupPhase ? (
+                    t("session.setupExecutionSummary", {
+                      count: statuses.length,
+                    })
+                  ) : (
+                    <>
+                      <span className={executionTone(presentation)}>
+                        {t(`session.executionState.${presentation}`)}
+                      </span>
+                      {" · "}
+                      {t("session.executionSummary", {
+                        count: statuses.length,
+                      })}
+                    </>
+                  )}
                 </span>
                 <span className="text-[9px] text-muted-foreground/50 font-mono">
                   #{turnNumber}
@@ -283,7 +300,11 @@ export function ExecutionTimeline({
                 {!isLatest && <span>{t("session.executionHistory")}</span>}
                 {failures.length > 0 && !stopped && (
                   <span
-                    className={`${executionTone(presentation)} font-medium normal-case tracking-normal`}
+                    className={
+                      setupPhase
+                        ? "text-muted-foreground"
+                        : `${executionTone(presentation)} font-medium`
+                    }
                   >
                     {t("session.executionFailures", {
                       count: failures.length,
@@ -328,6 +349,7 @@ export function ExecutionTimeline({
             </div>
 
             {!isCollapsed &&
+              !setupPhase &&
               !stopped &&
               isLatest &&
               allDone &&

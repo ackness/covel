@@ -32,6 +32,26 @@ beforeEach(async () => {
 afterEach(cleanup);
 
 describe("StageExecutionStatus", () => {
+  it("keeps setup failures in the stage timeline neutral without task retries", () => {
+    render(
+      <StageExecutionStatus
+        setupPhase
+        messages={[]}
+        executionSteps={source}
+        plugins={[]}
+        executing={false}
+        executionError={null}
+        onRetryRuntime={vi.fn()}
+      />,
+    );
+    expect(screen.getByText("Opening setup · 3 tasks")).toBeTruthy();
+    expect(
+      screen.queryByText(i18n.t("session.executionState.partial")),
+    ).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /Opening setup/ }));
+    expect(screen.getAllByRole("alert")).toHaveLength(2);
+    expect(screen.queryByRole("button", { name: /Retry/ })).toBeNull();
+  });
   it("retries a task recovered from the remaining-failures summary without original traces", () => {
     const retry = vi.fn();
     render(

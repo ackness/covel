@@ -383,10 +383,10 @@
     "recoveryStop": "Stop task",
     "recoveryStopFailed": "Could not stop the task. Check its status and try again.",
     "setupFailedTitle": "Setup did not finish",
-    "setupFailedDetail": "A step that prepares the story failed. What is already done is kept; retrying runs only the unfinished steps.",
+    "setupFailedDetail": "A setup step failed; retry to finish the remaining steps.",
     "setupRetry": "Retry setup",
     "setupUnfinishedTitle": "Setup is not finished yet",
-    "setupUnfinishedDetail": "The story is still being prepared. Continue to run the remaining steps with what you have already entered.",
+    "setupUnfinishedDetail": "Continue setup with the choices you already made.",
     "setupContinue": "Continue setup",
     "setupRetryFailed": "Could not restart setup. Check the connection and try again.",
     "memoryIndex": {
@@ -507,7 +507,12 @@
       "turnedOn": "Also turned on {{plugins}}: another plugin needs what they provide.",
       "turnedOffConflict": "Also turned off {{plugins}}: they cannot be used together with \"{{plugin}}\".",
       "turnedOffNeeds": "Also turned off {{plugins}}: they need \"{{plugin}}\"."
-    }
+    },
+    "setupModelSettings": "Model settings",
+    "setupRunning": "Preparing the opening",
+    "setupExecutionSummary": "Opening setup · {{count}} tasks",
+    "setupExecutionSummary_one": "Opening setup · {{count}} task",
+    "setupExecutionSummary_other": "Opening setup · {{count}} tasks"
   },
   "blocks": {
     "actionPlaceholder": "Or type your own action...",

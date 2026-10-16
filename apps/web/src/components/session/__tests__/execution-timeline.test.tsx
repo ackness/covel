@@ -44,6 +44,54 @@ describe("ExecutionTimeline plugin names", () => {
 
   afterEach(() => cleanup());
 
+  it("keeps setup attempts neutral and leaves every retry to the setup notice", () => {
+    const retry = vi.fn();
+    render(
+      <ExecutionTimeline
+        setupPhase
+        executing={false}
+        onRetryRuntime={retry}
+        steps={["first", "second"].flatMap((turnId) => [
+          {
+            runtimeId: "opening",
+            pluginId: "opening",
+            turnId,
+            status: "completed" as const,
+          },
+          {
+            runtimeId: "world/setup",
+            pluginId: "world",
+            turnId,
+            status: "failed" as const,
+            detail: "401 Unauthorized",
+          },
+        ])}
+      />,
+    );
+    expect(screen.getAllByText("Opening setup · 2 tasks")).toHaveLength(2);
+    expect(screen.getAllByText("Failed: 1")).toHaveLength(2);
+    expect(
+      screen.queryByText(i18n.t("session.executionState.partial")),
+    ).toBeNull();
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.queryByRole("button", { name: /Retry/ })).toBeNull();
+    for (const summary of screen.getAllByRole("button", {
+      name: /Opening setup/,
+    })) {
+      fireEvent.click(summary);
+    }
+    expect(screen.getAllByRole("alert")).toHaveLength(2);
+    expect(screen.queryByRole("button", { name: /Retry/ })).toBeNull();
+    expect(screen.queryByText(i18n.t("session.partialCompletion"))).toBeNull();
+    for (const detail of screen.getAllByRole("button", {
+      name: "Show details",
+    })) {
+      fireEvent.click(detail);
+    }
+    expect(screen.getAllByText("401 Unauthorized")).toHaveLength(2);
+    expect(retry).not.toHaveBeenCalled();
+  });
+
   it("resolves short manifest locale keys in an English UI", () => {
     render(
       <ExecutionTimeline

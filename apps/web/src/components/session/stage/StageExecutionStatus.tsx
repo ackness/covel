@@ -15,7 +15,7 @@ type Props = Pick<
   | "executionError"
   | "plugins"
   | "onRetryRuntime"
->;
+> & { setupPhase?: boolean };
 
 /** Stage and chat share the same source-turn task projection and retry target. */
 export function StageExecutionStatus({
@@ -25,6 +25,7 @@ export function StageExecutionStatus({
   executionError,
   plugins,
   onRetryRuntime,
+  setupPhase = false,
 }: Props) {
   const { t } = useTranslation();
   const { latestTurn } = useMemo(
@@ -50,6 +51,7 @@ export function StageExecutionStatus({
       <div className="ui-stage-panel pointer-events-auto max-h-[45vh] w-full max-w-2xl overflow-y-auto rounded-(--radius-card) px-4 py-3 text-sm">
         {showTasks && turn && (
           <ExecutionTimeline
+            setupPhase={setupPhase}
             steps={turn.steps}
             messages={turn.messages.map((entry) => entry.message)}
             executing={executing}

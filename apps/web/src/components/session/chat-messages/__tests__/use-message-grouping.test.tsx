@@ -49,6 +49,7 @@ function rowKeys(rows: ReactNode[]): (string | null)[] {
 const renderMessage = (m: StreamMessage) => <div key={m.id}>{m.content}</div>;
 
 interface TimelineProps {
+  setupPhase: boolean;
   canRetryTasks: boolean;
   steps: ExecutionStep[];
   executing: boolean;
@@ -65,6 +66,23 @@ function timeline(rows: ReactNode[], turnId: string): TimelineProps {
 }
 
 describe("useMessageGrouping", () => {
+  it("passes setup phase to historical and current execution rows", () => {
+    const { result } = renderHook(() =>
+      useMessageGrouping({
+        setupPhase: true,
+        messages: [],
+        executionSteps: [
+          step({ runtimeId: "setup", turnId: "first", status: "failed" }),
+          step({ runtimeId: "setup", turnId: "second", status: "failed" }),
+        ],
+        executing: false,
+        plugins: [],
+        renderMessage,
+      }),
+    );
+    expect(timeline(result.current, "first").setupPhase).toBe(true);
+    expect(timeline(result.current, "second").setupPhase).toBe(true);
+  });
   it("leaves uncommitted story recovery to the authoritative recovery notice", () => {
     const retry = vi.fn();
     const { result } = renderHook(() =>
