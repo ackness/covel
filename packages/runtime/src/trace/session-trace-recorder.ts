@@ -54,6 +54,7 @@ export interface TraceRecorder {
     turnId?: string;
     error: string;
     errorKind?: import("@covel/shared").ProviderFailureKind;
+    failureTarget?: import("@covel/shared").RuntimeResult["failureTarget"];
     status?: string;
     durationMs?: number;
   }): Promise<void>;

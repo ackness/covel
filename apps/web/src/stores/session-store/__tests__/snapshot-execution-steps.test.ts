@@ -73,15 +73,21 @@ describe("authoritative execution recovery", () => {
   it.each(["quota", "auth", "unknown"])(
     "restores the %s remedy after refresh",
     (errorKind) => {
+      const failureTarget = { provider: "deepseek", model: "failed-model" };
       expect(
         buildSnapshotExecutionSteps([
-          event("runtime.failed", { errorKind, error: "provider detail" }),
+          event("runtime.failed", {
+            errorKind,
+            error: "provider detail",
+            failureTarget,
+          }),
         ]),
       ).toEqual([
         expect.objectContaining({
           status: "failed",
           errorKind,
           detail: "provider detail",
+          failureTarget,
         }),
       ]);
     },

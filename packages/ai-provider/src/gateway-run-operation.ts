@@ -32,6 +32,7 @@
  */
 
 import { AiProviderError } from "./errors.js";
+import { assertProviderCredentials } from "./provider-credentials.js";
 import {
   acquireLLMSlot,
   type LLMSlot,
@@ -200,6 +201,8 @@ export function createRunOperation(
 
         let slot: LLMSlot | undefined;
         try {
+          notifyTargetAttempt(options?.onTargetAttempt, target);
+          assertProviderCredentials(provider, resolved);
           if (["text", "object", "evaluate"].includes(spec.mode))
             slot = await acquireLLMSlot(
               scope?.signal ?? options?.signal,
@@ -210,7 +213,6 @@ export function createRunOperation(
               signal: scope.signal,
               requireAttempt: true,
             });
-          notifyTargetAttempt(options?.onTargetAttempt, target);
           await notifyStart(
             resolved.hooks,
             provider,

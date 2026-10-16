@@ -1,10 +1,13 @@
 import { useEffect, useState } from "react";
 import { AlertCircle, Info } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { ActionableErrorNotice } from "@/components/shared/actionable-error-notice.js";
+import { ProviderFailureNotice } from "./provider-failure-notice.js";
 import type { SessionRecord, SetupRuntimeState } from "@/services/api.js";
 import type { StreamMessage } from "@/stores/session-store.js";
-import type { ExecutionRecovery } from "@/stores/session-store/types.js";
+import type {
+  ExecutionRecovery,
+  ExecutionStep,
+} from "@/stores/session-store/types.js";
 import { isPendingInteractionMessage } from "./game-view/interaction-blocks.js";
 import { FailureRecoveryActions } from "./failure-recovery-actions.js";
 import { executionRecoveryNoticeVisible } from "./execution-presentation.js";
@@ -20,6 +23,8 @@ export interface SetupProgress {
   readonly blocked: readonly string[];
   /** The error of the first failing step, when it recorded one. */
   readonly error?: string;
+  readonly errorKind?: string;
+  readonly failureTarget?: ExecutionStep["failureTarget"];
 }
 
 function setupError(state: SetupRuntimeState): string | undefined {
@@ -34,6 +39,7 @@ export function setupProgress(input: {
   readonly submittedBlockIds: ReadonlySet<string>;
   readonly executing: boolean;
   readonly recovery?: ExecutionRecovery | null;
+  readonly steps?: readonly ExecutionStep[];
 }): SetupProgress | null {
   const { session, messages, submittedBlockIds, executing } = input;
   if (session.status !== "active" || session.phase !== "setup") return null;
@@ -55,11 +61,29 @@ export function setupProgress(input: {
   const blocked = states
     .filter(([, state]) => state.state === "blocked")
     .map(([runtimeId]) => runtimeId);
-  const error = states
-    .map(([, state]) => setupError(state))
-    .find((text) => text !== undefined);
+  const failed = states.find(([, state]) => setupError(state) !== undefined);
+  const error = failed ? setupError(failed[1]) : undefined;
+  // The session clock identifies the outstanding setup failure; its matching
+  // lifecycle row supplies the structured target, live or after hydration.
+  const step = failed
+    ? [...(input.steps ?? [])]
+        .reverse()
+        .find(
+          (step) =>
+            step.runtimeId === failed[0] &&
+            step.status === "failed" &&
+            step.detail === error,
+        )
+    : undefined;
   return blocked.length > 0 || error !== undefined
-    ? { kind: "failed", blocked, ...(error ? { error } : {}) }
+    ? {
+        kind: "failed",
+        blocked,
+        ...(error ? { error } : {}),
+        ...(step
+          ? { errorKind: step.errorKind, failureTarget: step.failureTarget }
+          : {}),
+      }
     : { kind: "unfinished", blocked };
 }
 
@@ -127,7 +151,12 @@ export function SetupProgressNotice({
           </p>
           {progress.error ? (
             <div className="mt-1.5">
-              <ActionableErrorNotice error={progress.error} layout="panel" />
+              <ProviderFailureNotice
+                error={progress.error}
+                errorKind={progress.errorKind}
+                failureTarget={progress.failureTarget}
+                layout="panel"
+              />
             </div>
           ) : (
             <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
@@ -147,6 +176,7 @@ export function SetupProgressNotice({
         <div className="flex flex-wrap items-center gap-2">
           <FailureRecoveryActions
             error={failed ? progress.error : undefined}
+            errorKind={failed ? progress.errorKind : undefined}
             retryLabel={t(
               failed ? "session.setupRetry" : "session.setupContinue",
             )}

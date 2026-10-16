@@ -1,4 +1,5 @@
 export type AiProviderErrorCode =
+  | "MISSING_API_KEY"
   | "REFUSAL"
   | "REQUEST_BUDGET_EXCEEDED"
   | "RATE_LIMITED"

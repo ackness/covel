@@ -2011,11 +2011,16 @@ describe("createTraceRecorder", () => {
       runtimeId: "r1",
       pluginId: "p1",
       error: "LLM timeout",
+      failureTarget: { provider: "fixture", model: "failed-model" },
     });
 
     const arg = store.addTraceEvent.mock.calls[0]![0];
     expect(arg.type).toBe("runtime.failed");
     expect(arg.payload.error).toBe("LLM timeout");
+    expect(arg.payload.failureTarget).toEqual({
+      provider: "fixture",
+      model: "failed-model",
+    });
   });
 
   it("should record turn.started and turn.completed", async () => {

@@ -5,19 +5,21 @@ import { classifyActionableError } from "@/lib/actionable-error.js";
 /** Fix settings first when retrying the same request cannot address its cause. */
 export function FailureRecoveryActions({
   error,
+  errorKind,
   retryLabel,
   disabled,
   onRetry,
   onOpenSettings,
 }: {
   error?: string;
+  errorKind?: string;
   retryLabel: string;
   disabled?: boolean;
   onRetry?: () => void;
   onOpenSettings: (key: "llm.providers" | "llm.slots") => void;
 }) {
   const { t } = useTranslation();
-  const kind = classifyActionableError(error);
+  const kind = classifyActionableError(error, errorKind);
   const settingsFix = [
     "auth",
     "forbidden",

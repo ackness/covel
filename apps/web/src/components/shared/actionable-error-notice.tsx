@@ -42,11 +42,13 @@ export function ActionableErrorNotice({
   error,
   kind: kindOverride,
   providerFailureKind,
+  summary,
   layout = "inline",
 }: {
   error?: string;
   kind?: ActionableErrorKind;
   providerFailureKind?: string;
+  summary?: string;
   layout?: "inline" | "panel";
 }) {
   const { t } = useTranslation();
@@ -103,7 +105,9 @@ export function ActionableErrorNotice({
               : "min-w-0 text-[11px] text-destructive"
           }
         >
-          {providerHint ?? t(MESSAGE_KEYS[kind], DEFAULT_MESSAGES[kind])}
+          {summary ??
+            providerHint ??
+            t(MESSAGE_KEYS[kind], DEFAULT_MESSAGES[kind])}
         </span>
         {error && (
           <button

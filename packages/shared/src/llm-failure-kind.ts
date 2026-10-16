@@ -8,7 +8,8 @@
  * - `unreachable`: no connection (service not running, wrong host or port,
  *   DNS, TLS)
  * - `timeout`: connected, no answer in time
- * - `auth`: the key is missing, wrong, or not allowed to use this model
+ * - `missing_key`: a known remote provider has no configured key
+ * - `auth`: the key is wrong or not allowed to use this model
  * - `quota`: the account has no balance or quota left
  * - `rate_limited`: too many requests for now
  * - `not_found`: the endpoint path or the model ID does not exist
@@ -21,6 +22,7 @@
 export type ProviderFailureKind =
   | "unreachable"
   | "timeout"
+  | "missing_key"
   | "auth"
   | "quota"
   | "rate_limited"
@@ -33,12 +35,12 @@ export type ProviderFailureKind =
   | "unknown";
 
 /**
- * A failure of the account at this provider: no balance, or a key it does
+ * A failure of the account at this provider: no key, no balance, or a key it does
  * not accept. Sending the same request to the same provider again fails the
  * same way until the player fixes the account, so it is never retried there.
  * A backup the player configured is another target and may still work; the
- * gateway skips a same-account backup only after a 401 or a balance failure.
+ * gateway skips a same-account backup after a missing key, 401, or balance failure.
  */
 export function isAccountFailure(kind: ProviderFailureKind): boolean {
-  return kind === "quota" || kind === "auth";
+  return kind === "quota" || kind === "auth" || kind === "missing_key";
 }

@@ -77,6 +77,11 @@ export interface RuntimeResult {
   readonly error?: string;
   /** Classified provider failure; absent for non-provider result failures. */
   readonly errorKind?: ProviderFailureKind;
+  /** Actual failed provider target, never credentials or endpoint configuration. */
+  readonly failureTarget?: {
+    readonly provider: string;
+    readonly model?: string;
+  };
   readonly timestamp: string;
 }
 

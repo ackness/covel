@@ -527,10 +527,15 @@ describe.each(["generate", "stream", "function"] as const)(
         expect(turn.runtimeResults[0]).toMatchObject({
           status: "failed",
           errorKind,
+          failureTarget: { provider: "fixture" },
           error: expect.stringContaining("provider detail"),
         });
         expect(onRuntimeComplete).toHaveBeenCalledWith(
-          expect.objectContaining({ status: "failed", errorKind }),
+          expect.objectContaining({
+            status: "failed",
+            errorKind,
+            failureTarget: { provider: "fixture" },
+          }),
         );
       },
     );

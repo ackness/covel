@@ -1,4 +1,5 @@
 import { acquireLLMSlot, type LLMSlot } from "@covel/shared";
+import { assertProviderCredentials } from "./provider-credentials.js";
 import { withTextRequestDefaults } from "./adapters/request-defaults.js";
 import { objectResponseFormat } from "./adapters/structured-output.js";
 import {
@@ -481,6 +482,8 @@ export function createGateway(deps: GatewayDependencies) {
       let slot: LLMSlot | undefined;
 
       try {
+        notifyTargetAttempt(options?.onTargetAttempt, target);
+        assertProviderCredentials(provider, resolved);
         slot = await acquireLLMSlot(options.signal, options.onQueueStart);
         if (options?.requestBudget)
           assertLlmRequestBudget(options.requestBudget, {
@@ -499,7 +502,6 @@ export function createGateway(deps: GatewayDependencies) {
           metadataTarget,
           (initialTarget ??= target),
         );
-        notifyTargetAttempt(options?.onTargetAttempt, target);
         await notifyStart(
           resolved.hooks,
           provider,

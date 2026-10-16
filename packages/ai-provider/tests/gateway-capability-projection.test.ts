@@ -56,18 +56,25 @@ describe("effective gateway capabilities", () => {
         presets: [{ ...preset, provider: "google", protocol: undefined }],
       }),
     });
-    const result = await gateway.generateText({
-      messages: [{ role: "user", content: "hello" }],
-      providerRequestMetadata: { parameterOverrides: { topK: 12 } },
-    });
+    const options = { apiKeys: { google: "fixture-key" } };
+    const result = await gateway.generateText(
+      {
+        messages: [{ role: "user", content: "hello" }],
+        providerRequestMetadata: { parameterOverrides: { topK: 12 } },
+      },
+      options,
+    );
     expect(result.diagnostics?.warnings ?? []).not.toContainEqual(
       expect.objectContaining({ feature: "parameterOverrides.topK" }),
     );
     await expect(
-      gateway.generateText({
-        messages: [{ role: "user", content: "hello" }],
-        providerRequestMetadata: { parameterOverrides: { topK: -1 } },
-      }),
+      gateway.generateText(
+        {
+          messages: [{ role: "user", content: "hello" }],
+          providerRequestMetadata: { parameterOverrides: { topK: -1 } },
+        },
+        options,
+      ),
     ).rejects.toMatchObject({ code: "CONFIG_ERROR", retriable: false });
     expect(generateText).toHaveBeenCalledTimes(1);
   });

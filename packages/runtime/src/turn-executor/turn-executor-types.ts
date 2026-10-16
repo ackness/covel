@@ -65,6 +65,7 @@ export interface AgentLoopDeps {
     durationMs: number;
     error?: string;
     errorKind?: import("@covel/shared").ProviderFailureKind;
+    failureTarget?: import("@covel/shared").RuntimeResult["failureTarget"];
     /** Why a framework gate skipped the runtime, as a code. */
     reason?: string;
   }) => Promise<void>;

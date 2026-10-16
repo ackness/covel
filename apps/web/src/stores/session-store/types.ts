@@ -66,6 +66,7 @@ export interface ExecutionStep {
   label?: string;
   detail?: string;
   errorKind?: string;
+  failureTarget?: import("@covel/shared").RuntimeResult["failureTarget"];
   /** Qualified tool name when status is "tool". */
   toolName?: string;
   durationMs?: number;

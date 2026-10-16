@@ -27,13 +27,14 @@ import type {
 } from "./types.js";
 
 /**
- * A refused key (401) or an empty balance fails every model of the account, so
+ * A missing/refused key (401) or empty balance fails every model of the account, so
  * a backup with the same provider, base URL and key is skipped. A 403 or a rate
  * limit can apply to one model only, so such a backup still runs.
  */
 function failsWholeAccount(error: unknown): boolean {
   const failure = classifyProviderFailure(error);
   return (
+    failure.kind === "missing_key" ||
     failure.kind === "quota" ||
     (failure.kind === "auth" && failure.statusCode === 401)
   );

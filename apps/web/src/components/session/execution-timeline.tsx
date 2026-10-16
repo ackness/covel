@@ -11,7 +11,7 @@ import { useTranslation } from "react-i18next";
 import { resolveI18nText } from "@covel/shared";
 import type { ExecutionStep } from "@/stores/session-store.js";
 import type { PluginSummary } from "@/services/api.js";
-import { ActionableErrorNotice } from "@/components/shared/actionable-error-notice.js";
+import { ProviderFailureNotice } from "./provider-failure-notice.js";
 import {
   executionPresentation,
   executionTone,
@@ -80,9 +80,11 @@ function RuntimeFailureNotice({
                 {resolvedDetail}
               </p>
             ) : (
-              <ActionableErrorNotice
+              <ProviderFailureNotice
                 error={resolvedDetail}
                 providerFailureKind={rt.errorKind}
+                errorKind={rt.errorKind}
+                failureTarget={rt.failureTarget}
                 kind={isIncomplete ? "incomplete" : undefined}
                 layout="panel"
               />
