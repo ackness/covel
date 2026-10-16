@@ -77,7 +77,7 @@ To also draft an entry for each landmark in each region, add `--landmarks`. You 
 | `defaults.quality`             | The picture quality. The default is `medium`                                                                                                                                                    |
 | `scenes[].id`                  | The name of the scene, and the start of the file name. The pictures are called `<id>-day.webp` and `<id>-night.webp`. Use a short, meaningful English name, for example `library` or `quay-inn` |
 | `scenes[].name`                | The name shown for the scene                                                                                                                                                                    |
-| `scenes[].locationRef`         | Which places in the story this background matches. When one picture covers several places, separate them with `/`. Each part counts as a name for this scene                                    |
+| `scenes[].locationRef`         | The places this background matches, separated by `/`. Write the scene’s own place first, followed by sub-locations within it                                                                    |
 | `scenes[].subject`             | The description of the daytime picture                                                                                                                                                          |
 | `scenes[].subjectNight`        | A description used only for the night picture. If it is empty, the night picture uses `subject`                                                                                                 |
 
@@ -96,18 +96,16 @@ So do not write day-only phrases such as "afternoon sunshine" in `style.prefix`.
 
 ### The name decides whether the background changes
 
-The game does not know what your picture shows. It matches the place name reported in the story against the names of the scenes. The names of a scene are its `name` and each part of its `locationRef`. The match ignores spaces and capital letters. It tries the rules below in order, and moves to the next rule only when the previous one finds nothing:
+The game does not know what your picture shows. It matches the place name reported in the story against the names of the scenes. Use `name` and the first part of `locationRef` for the scene’s own place, and the later parts for sub-locations within it. The world data reference gives the full [matching order](../reference/world-data.md#scene-backgrounds).
 
-1. The place name is exactly the same as one of the scene's names.
-2. The place name contains one of the scene's names. The place "library second floor" matches the name "library". If several names match, the longest one is used.
-3. One of the scene's names contains the place name. The place "seawall" matches the name "Sakurazaka seawall". But this counts only when exactly one scene matches.
+For example, the classroom in Haruka Academy has a sub-location called "Window Seat". "Library window seat" still uses the library background because the location explicitly names the library. "Window seat" alone, or "Class 2-B window seat", uses the classroom background.
 
 So two rules of thumb:
 
 - Write the names the way the story will use them, in line with `WORLD.md` and the geography setting.
-- Do not let two scenes share the same short word. If both scenes have "corridor" in their names, the place "corridor" matches neither one, and the background does not change.
+- Do not let two scenes share the same short word. If one scene has "east corridor" and another has "west corridor", "corridor" alone matches neither one.
 
-When no scene matches, the stage keeps its current background. This is not an error.
+When no scene matches, the stage uses the world’s cover. This is not an error.
 
 ## 3. Preview, without making pictures
 

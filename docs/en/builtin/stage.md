@@ -72,7 +72,7 @@ For how to do it, see [Add scene pictures to a world](../worlds/scenes.md). For 
 ### Notes
 
 - At the start, if the story has not said where it is, the stage uses the first scene in the scene registry. So the screen is never blank at the beginning.
-- Places are matched by name. A scene name that is too short (for example, just one character) will match every place that contains that character. Write the full name.
+- Places are matched by name. See [The name decides whether the background changes](../worlds/scenes.md#the-name-decides-whether-the-background-changes) for naming advice and examples. A scene name that is too short (for example, just one character) will match every place that contains that character. Write the full name.
 
 ## Soundtrack (`soundtrack`)
 

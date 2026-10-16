@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { matchScene } from "../lib/scene-match.js";
 
@@ -34,6 +35,13 @@ describe("matchScene", () => {
     expect(idOf("图书馆二楼窗边长桌旁")).toBe("library");
   });
 
+  it.each(["教室二楼窗边长桌旁", "二年B组二楼窗边长桌旁"])(
+    "prefers either own place name over another scene's sub-location: %s",
+    (location) => {
+      expect(idOf(location)).toBe("classroom");
+    },
+  );
+
   it("shows a scene for a fragment of one of its names only when no other scene shares it", () => {
     expect(idOf("樱坂")).toBe("seawall");
     // Both the classroom and the library have a name with "二楼" in it.
@@ -46,5 +54,66 @@ describe("matchScene", () => {
     expect(matchScene([null, "x", { name: "车站" }], "车站")).toEqual({
       name: "车站",
     });
+  });
+});
+
+const harukaScenes = JSON.parse(
+  readFileSync(
+    new URL(
+      "../../../worlds/haruka-academy/media/scenes.registry.json",
+      import.meta.url,
+    ),
+    "utf8",
+  ),
+).scenes;
+const harukaEnglishScenes = JSON.parse(
+  readFileSync(
+    new URL(
+      "../../../worlds/haruka-academy/media/scenes.registry.en-US.json",
+      import.meta.url,
+    ),
+    "utf8",
+  ),
+).scenes;
+
+describe.each([
+  {
+    locale: "zh-CN",
+    registry: harukaScenes,
+    cases: [
+      ["图书馆靠窗座位", "library"],
+      ["靠窗座位在图书馆", "library"],
+      ["图书馆窗边座位", "library"],
+      ["靠窗座位", "classroom-2b"],
+      ["二年B组靠窗座位", "classroom-2b"],
+      ["图书馆樱坂海堤旁", "sakurazaka-seawall"],
+      ["靠窗座位二楼窗边长桌旁", "library"],
+      ["窗", null],
+    ],
+  },
+  {
+    locale: "en-US",
+    // Locale overlays translate names by array position and keep the base IDs.
+    registry: harukaScenes.map((scene, index) => ({
+      ...scene,
+      ...harukaEnglishScenes[index],
+    })),
+    cases: [
+      ["library window seat", "library"],
+      ["window seat in the library", "library"],
+      ["  LIBRARY \t window SEAT  ", "library"],
+      ["window seat", "classroom-2b"],
+      ["Class 2-B window seat", "classroom-2b"],
+      ["Library Sakurazaka Seawall nearby", "sakurazaka-seawall"],
+      ["Window Seat Second Floor Window Table nearby", "library"],
+      ["Window", null],
+    ],
+  },
+])("Haruka Academy scene names ($locale)", ({ registry, cases }) => {
+  it.each(cases)("matches %s to %s", (location, sceneId) => {
+    expect(matchScene(registry, location)?.sceneId ?? null).toBe(sceneId);
+    expect(matchScene([...registry].reverse(), location)?.sceneId ?? null).toBe(
+      sceneId,
+    );
   });
 });
