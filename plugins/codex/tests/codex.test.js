@@ -73,14 +73,24 @@ describe("sync-codex-entries", () => {
     const result = await sync([mountain]);
 
     expect(result.created).toEqual(["codex-azure-peak"]);
-    expect(result.ui[0]).toMatchObject({
-      type: "ui-spec",
-      entryId: "codex-azure-peak",
-      spec: {
-        type: "EntryCard",
-        props: { title: "Azure Peak", category: "location", isNew: true },
-      },
-    });
+    // A UI effect is a block of parts; the kernel drops a write without them.
+    expect(result.ui).toHaveLength(1);
+    expect(result.ui[0].parts).toEqual([
+      expect.objectContaining({
+        type: "ui-spec",
+        content: expect.objectContaining({
+          entryId: "codex-azure-peak",
+          spec: expect.objectContaining({
+            type: "EntryCard",
+            props: expect.objectContaining({
+              title: "Azure Peak",
+              category: "location",
+              isNew: true,
+            }),
+          }),
+        }),
+      }),
+    ]);
     expect(await stored("codex-azure-peak")).toMatchObject({
       title: "Azure Peak",
       category: "location",
@@ -106,7 +116,7 @@ describe("sync-codex-entries", () => {
       created: [],
       updated: ["codex-azure-peak"],
     });
-    expect(result.ui[0].spec.props).toMatchObject({
+    expect(result.ui[0].parts[0].content.spec.props).toMatchObject({
       content: "山顶近来出现了新的古阵波动。",
       tags: ["古阵"],
     });
