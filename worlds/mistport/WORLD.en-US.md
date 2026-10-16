@@ -4,7 +4,7 @@
 
 Mistport is a harbor city jammed between a cliff face and the sea, like an iron wedge hammered into the rock. A pale grey fog lies over everything and never lifts. The air always tastes of salt and rust, and you can never see more than fifty paces. No one in Mistport has ever seen the sky; the old people say the fog last cleared three generations ago. Locals don't say "good morning." They say "quiet fog" — a quiet fog means the fog beasts are still far off.
 
-The city climbs the cliff in three tiers. At the top sits the **Upper City**, where the Council and the merchant houses hold the clifftop behind high stone walls that keep the fog at their feet. Set into the dome of the Council Hall is an ancient tide-stone lamp, the only light in the city that needs no flame. The middle tier is **Mid-Harbor**, a crush of docks, workshops, inns and gambling dens. Its mechanical clocktower runs on the tides and strikes once every six hours; it is the only way anyone in Mistport tells the time. At the bottom lies the **Undertow**. At high tide it is drowned under grey seawater, and only when the tide goes out does it lay bare the ruins of an ancient civilization.
+The city climbs the cliff in three tiers. At the top sits the **Upper City**, where the Council and the merchant houses hold the clifftop behind high stone walls that keep the fog at their feet. Set into the dome of the Council Hall is an ancient tide-stone lamp, the only light in the city that needs no flame. The middle tier is **Mid-Harbor**, a crush of docks, workshops, inns and gambling dens. Its mechanical clocktower runs on the tides and strikes once every six hours; it is the only way anyone in Mistport tells the time. At the bottom lies the **Undertow**. When the tide comes in it is drowned under grey seawater, and only when the tide goes out does it lay bare the ruins of an ancient civilization.
 
 No one knows who built those ruins. The one certainty is that every ebb uncovers a completely different landscape, as if the seabed kept rebuilding itself. The Tide-Reader Guild calls this the **Riftide**, and still cannot say what causes it. Ancient relics lie scattered through the ruins. Some can light a hundred paces of fog. Some turn your arm to stone at a single touch. Some whisper at night. The relic trade keeps Mistport alive, and it is the root of every quarrel in the city.
 
@@ -34,7 +34,7 @@ Worse, the fog is getting thicker. The most sensitive Tide-Readers can tell: ove
 - **Su Yao** — a full Tide-Reader, Guildmaster Qi's assistant, and the examiner at the player's entrance exam. She does everything by the book and is loyal to the Guild, but since Qi disappeared she has begun to doubt what she always believed. She is the player's bridge to the Guild's leadership, and many leads pass through her hands — but she always knows more than she says.
 - **Iron Meg** — second-in-command of the Salt Fangs, in her thirties. A relic accident left her left arm fog-rotted from the elbow down; it is translucent now and gives off a faint grey glow. Cold and hard, she keeps her word, and she is the one who really keeps order in the lower city. She has been buying up one particular kind of relic fragment and pays far more than any trader would. What she wants them for, she won't say.
 - **Chen Yuanshan (Councilor Chen)** — chair of the Council, past sixty, and a practiced political schemer. He pushes the Seal Tide Decree in the name of public safety while he quietly sends his trusted expedition back down into the Undertow, again and again. What is he looking for? Those who know have either kept quiet or disappeared.
-- **Guildmaster Qi** — head of the Tide-Reader Guild, a gentle white-haired scholar who knows more about the Riftide than anyone alive. Lately he is never without his gloves. As the story opens, he has left a letter and walked down into the Undertow at high tide — when no one can get into the Undertow at all.
+- **Guildmaster Qi** — head of the Tide-Reader Guild, a gentle white-haired scholar who knows more about the Riftide than anyone alive. Lately he is never without his gloves. As the story opens, he has left a letter and walked down into the Undertow at flood tide — when no one can get into the Undertow at all.
 - **Frost** — the Congregation's youngest Mist-Speaker, fifteen or sixteen at most. She says she can hear the fog whispering, and more than once she has named the time of an ebb and the place a ruin would surface, and been right. Prophet, madwoman or fraud? She looks at the player as if she has known them for a long time.
 - **Grey Falcon** — captain of Councilor Chen's private expedition, and the sharpest blade the Seal Tide Decree has. Silent, efficient, not a wasted feeling. On orders, he seals off particular areas, searches for particular types of relic, and arrests a few people "nobody has ever heard of." Lately the trail he is following leads toward the place where Qi disappeared.
 
@@ -86,7 +86,7 @@ The story forces no single ending, but it falls naturally into three acts, and t
 
 ## Opening Scene
 
-Dusk. You step onto the slick planks of Mid-Harbor's main pier. The ferry's mooring line disappears into the fog, as if you had walked here out of nothing. The air is heavy with salt. From somewhere in the fog comes the dull sound of the clocktower — not the usual stroke that marks the hour, but three quick strikes. On the dock, the old sailors stop work and look at one another.
+Dusk. You step onto the slick planks of Mid-Harbor's main pier. The ferry's mooring line disappears into the fog, as if you had walked here out of nothing. The air is heavy with salt. From the fog comes the clocktower's dull toll — not its regular time signal, but three quick strikes. On the dock, the old sailors stop work and look at one another.
 
 Three strikes mean a **deep withdrawal warning**, and that almost never happens. The last deep withdrawal was six years ago. It uncovered a huge structure now called the **Bone Arch**, and it cost seventeen lives.
 
@@ -96,7 +96,7 @@ A young woman in a Tide-Reader Guild uniform pushes through the crowd, heading s
 
 Her eyes fall on the new apprentice's tide-mark on your wrist. If instead you wear the waterproof knot of an Undertow local, she draws a note from her sleeve that says who you are.
 
-"Guildmaster Qi is missing." She keeps her voice low and doesn't wait for you to speak. "He left a letter this morning and was gone. It says he went down into the Undertow — but the tide was in. No one can get into the Undertow while the tide is in."
+"Guildmaster Qi is missing." She keeps her voice low and doesn't wait for you to speak. "He left a letter this morning and was gone. It says he went down into the Undertow — but the tide was coming in. No one can get into the Undertow on a flood tide."
 
 She glances toward the clocktower. "But if the deep withdrawal really is coming…"
 

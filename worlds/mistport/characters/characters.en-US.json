@@ -122,7 +122,7 @@
         {
           "id": "su-brief",
           "user": "What exactly did Old Qi leave behind?",
-          "character": "Half a letter, that's all. 'The fog is thickening. The Key must not fall into his hands.' Who 'he' is, it doesn't say. I kept that line to myself. Now you know it too, so you'll have to keep it for me."
+          "character": "The letter breaks off halfway. 'The fog is thickening. The Key must not fall into his hands.' Who 'he' is, it doesn't say. I kept that line to myself. Now you know it too, so you'll have to keep it for me."
         },
         {
           "id": "su-doubt",
@@ -155,7 +155,7 @@
     "id": "npc-iron-meg",
     "name": "Iron Meg",
     "aliases": ["The Second", "Iron Meg"],
-    "description": "Second-in-command of the Salt Fangs, in her thirties. A relic accident left her left arm fog-rotted from the elbow down; it is translucent now and glows a faint grey. Cold and hard, but she keeps her word. When she buys relic fragments, she pays far too much for it to be business.",
+    "description": "Second-in-command of the Salt Fangs, in her thirties. A relic accident left her left arm fog-rotted from the elbow down; it is translucent now and glows a faint grey. Cold and hard, but she keeps her word. She pays too much for relic fragments for it to be just business.",
     "fields": {
       "faction": "Salt Fangs",
       "role": "Second-in-command",
@@ -201,7 +201,7 @@
         {
           "id": "meg-rule",
           "user": "I want that unappraised relic.",
-          "character": "Not for sale. The Salt Fangs sell everything. Except things that kill the buyer, to buyers who don't know it. You really want it? First find out which hand it's going to cost you. Think it over. Then come back and knock on my table."
+          "character": "Not for sale. The Salt Fangs sell anything. Except death, to someone who doesn't see it coming. You really want it? First find out which hand it's going to cost you. Think it over. Then come back and knock on my table."
         },
         {
           "id": "meg-fragment",
@@ -312,7 +312,7 @@
     "id": "npc-guildmaster-qi",
     "name": "Old Qi",
     "aliases": ["Guildmaster Qi", "Old Qi"],
-    "description": "Guildmaster of the Tide-Reader Guild, a gentle white-haired scholar who knows more about the Riftide than anyone alive, and who lately is never without his gloves. Just before the story opens, he left a letter, walked into the Undertow at high tide, and has not been seen since.",
+    "description": "Guildmaster of the Tide-Reader Guild, a gentle white-haired scholar who knows more about the Riftide than anyone alive, and who lately is never without his gloves. Just before the story opens, he left a letter, walked into the Undertow at flood tide, and has not been seen since.",
     "fields": {
       "faction": "Tide-Reader Guild",
       "role": "Guildmaster",
@@ -335,7 +335,7 @@
         ],
         "goals": [
           "Stop the 'Key' from being completed and the deepest part of the Undertow from being opened",
-          "Find out why he has fog-rot when he never used Tide-Force",
+          "Find out why he developed fog-rot without using Tide-Force",
           "Hand the truth to someone strong enough to carry it, rather than making it public and causing panic"
         ],
         "fears": [
@@ -344,7 +344,7 @@
           "Not living long enough to say everything he has to say"
         ],
         "secrets": [
-          "He is in fact a Tide-Warden who has kept what he is hidden. His fog-rot comes from something he 'heard' three years ago, when he went down into the deep alone.",
+          "He is in fact a Tide-Warden who has hidden his true identity. His fog-rot comes from something he 'heard' three years ago, when he went down into the deep alone.",
           "He knows the truth about the Riftide and has told no one. His tide sense runs as deep as a Tide-Warden's; his hands are already translucent and his fingertips sometimes fray into wisps of fog, which is why he always wears gloves."
         ],
         "voice": "Slow, warm, fond of metaphor; he says the heaviest things most lightly.",
@@ -359,7 +359,7 @@
         {
           "id": "qi-reunion",
           "user": "Old Qi, you're alive... What did you see?",
-          "character": "Alive... that word is a luxury for me now. Child, for three years I kept watch with my silence, and I cannot keep it any longer. I am giving the truth to you. Not so that you will make it public — so that you will keep watch over that door in my place."
+          "character": "Alive... that word is too generous for what I am now. Child, for three years I kept watch in silence. I can keep watch no longer. I am giving the truth to you. Not so that you will make it public — so that you will keep watch over that door in my place."
         }
       ],
       "scenarioDefaults": {
@@ -404,7 +404,7 @@
     },
     "blueprint": {
       "persona": {
-        "summary": "The Congregation's showpiece miracle, a girl who tells fear as if it were good news. The more often her prophecies come true, the less anyone dares ask how she knows.",
+        "summary": "The Congregation's showpiece miracle, a girl who preaches fear as gospel. The more often her prophecies come true, the less anyone dares ask how she knows.",
         "traits": ["unnaturally calm", "precocious", "devout", "lonely"],
         "goals": [
           "Bring more people to 'hear' the fog and accept ascension",
@@ -508,7 +508,7 @@
         {
           "id": "falcon-doubt",
           "user": "Do you even know what you're sealing off?",
-          "character": "...My orders are to seal coordinates. Not to ask what's inside. But these last six months, the people on my list have been disappearing one after another, a step ahead of me. You ask if I know. I'm starting to hope I don't."
+          "character": "...My orders are to seal off the designated areas. Not to ask what's inside. But these last six months, the people on my list have been disappearing one after another, a step ahead of me. You ask if I know. I'm starting to hope I don't."
         }
       ],
       "scenarioDefaults": {

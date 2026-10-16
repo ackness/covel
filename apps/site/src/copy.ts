@@ -256,7 +256,7 @@ const en = {
         name: "Mistport Chronicles",
         genre: "Dark fantasy · Investigation",
         summary:
-          "The tide bell strikes three. A missing Guildmaster and a shattered Key pull you into a four-way shadow war in a harbor city lost in endless fog.",
+          "The tide bell strikes three times. A missing Guildmaster and a shattered Key pull you into a four-way shadow war in a harbor city lost in endless fog.",
       },
       {
         id: "haruka-academy",

@@ -257,7 +257,7 @@ geography:
               hours; three quick strikes mean a deep withdrawal warning.
           - name: The Salt Market
             description:
-              A half-open market in Mid-Harbor's back alleys where the Salt
+              A semi-public market in Mid-Harbor's back alleys where the Salt
               Fangs sell goods and recruit. Only those carrying Salt Chips are
               told the real prices.
           - name: The Soundless Inn
@@ -289,7 +289,7 @@ geography:
               closest to the Mist Lord.
           - name: The Hidden Grotto
             description:
-              A network of caves that even high tide never floods — the Salt
+              A network of caves that even the flood tide never reaches — the Salt
               Fangs' base, where Iron Meg keeps the relic fragments she has
               gathered.
           - name: Drawdown Steps
@@ -336,9 +336,10 @@ factions:
     - id: council
       name: Mistport Council
       description:
-        The political power that rules the Upper City. It is using the Seal Tide
-        Decree to keep civilians out of the Undertow and to monopolize the legal
-        relic trade; inside, it is split between doves and hawks.
+        The political power that rules the Upper City. It is trying to restrict
+        civilian access to the Undertow through the Seal Tide Decree and to
+        monopolize the legal relic trade; inside, it is split between doves and
+        hawks.
       leader: Council Chair Chen Yuanshan
       headquarters: Upper City — Council Hall
       relations:
@@ -422,8 +423,8 @@ powerSystem:
         tide, most stable at ebb
       - Using an unappraised relic can backfire — at best it disables you, at
         worst it kills
-      - Fog beasts are drawn to surges of Tide-Force; using relics on a large
-        scale brings whole packs of them
+      - Fog beasts are drawn to fluctuations in Tide-Force; using relics on a
+        large scale brings whole packs of them
       - Tide-Readers guide the energy with the tide-mark technique, which takes
         long training — yet the official position denies Tide-Force exists
       - Overusing Tide-Force brings on fog-rot — the body slowly turns
@@ -567,10 +568,9 @@ socialStructure:
         description:
           People on the edge of the Undertow who get by on scavenging and
           smuggling; also the Congregation's main following
-    notes:
-      Members of the Tide-Reader Guild stand outside the class system; their
-      skill lets them move between tiers. People with fog-rot are shunned by
-      every class and drift, one by one, to the Congregation.
+    notes: Members of the Tide-Reader Guild can move between tiers regardless of
+      class, thanks to their skills. People with fog-rot are shunned by every
+      class and drift, one by one, to the Congregation.
 tone:
   name: Tone
   schema:
@@ -586,7 +586,7 @@ tone:
   initialValue:
     narrativeStyle:
       Gothic mystery wrapped in fog — an unhurried pace with dangerous currents
-      underneath; the truth comes away layer by layer, and the cost builds up bit
+      underneath; the truth is uncovered layer by layer, and the cost mounts bit
       by bit.
     themes:
       - class conflict
@@ -612,8 +612,7 @@ mechanics:
       "Built on vocational skill trees: Tide-Reading (appraising and guiding
       relics), Stealth (moving through fog), Diplomacy (social), Combat."
     customRules:
-      - Moving through fog calls for sound and light checks; a failure draws fog
-        beasts
+      - Actions in fog require noise/light checks; a failure draws fog beasts
       - Relics must be appraised before use; otherwise roll on the random-effect
         table
       - The tide cycle limits how much of the Undertow can be explored; when the
@@ -648,13 +647,13 @@ startingConditions:
   initialValue:
     openingScenario:
       "Dusk. You have just arrived on the main pier in Mid-Harbor. The tide
-      clock strikes a rare triple — the deep withdrawal warning. On the docks
+      clock sounds three quick strikes — the rare deep withdrawal warning. On the docks
       the Salt Fangs are recruiting explorers and the Council is posting the
       Seal Tide Decree. Tide-Reader Su Yao pushes through the crowd. If you are
       a new apprentice, she knows the tide-mark from your exam; if you are an
       Undertow local, she carries a note in which Qi asked for someone who knows
       the way. She tells you Guildmaster Qi walked into the Undertow this
-      morning — at high tide."
+      morning — at flood tide."
     openingHook: Three bells, a missing Guildmaster — go down, or seal the harbor?
     openingChips:
       - Deep withdrawal

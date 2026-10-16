@@ -1,7 +1,8 @@
 # en-US text for world.yaml. Only translated text; structure and ids come from world.yaml.
 name: Mistport Chronicles
-summary: The tide bell strikes three. A missing Guildmaster and a shattered Key
-  pull you into a four-way shadow war in a harbor city lost in endless fog.
+summary:
+  The tide bell strikes three times. A missing Guildmaster and a shattered
+  Key pull you into a four-way shadow war in a harbor city lost in endless fog.
 pluginPolicy:
   pitch:
     label: Mistport Investigation
@@ -58,13 +59,13 @@ characterSchema:
         seen; leave blank if there are none.
     - id: vitality
       name: Vitality
-      description: Strength left to act, worn down by injury, fatigue and cold
+      description: Strength left to act, worn down by injury, fatigue and loss of body heat
     - id: stress
       name: Stress
       description: Mental strain from fear, secrets and the pressure of time
     - id: condition
       name: Condition
-      description: Injury, illness, chill, or any other lasting condition
+      description: Injury, illness, hypothermia, or another lasting condition
     - id: tideReading
       name: Tide-Reading
       description: Skill at appraising relics, reading tide-marks and steadying

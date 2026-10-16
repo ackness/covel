@@ -8,7 +8,7 @@
     {
       "label": "relics",
       "displayName": "Relics",
-      "extractionHint": "Ancient relics obtained or seen: how they were appraised, what they do, their risks, and who owns them."
+      "extractionHint": "Ancient relics obtained or seen: their appraisal results, effects, risks, and ownership."
     },
     {
       "label": "tides",

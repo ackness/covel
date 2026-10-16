@@ -4,8 +4,8 @@
       "id": "ebb-tide-landing",
       "name": "The Ebb-Tide Landing",
       "description": "A slick pier meets the steps at the water's edge; the salt-worn outlines of ruins fade into pale grey fog.",
-      "background": "Mistport's Undertow lies under water at high tide, and explorers may go in only for a short while after the ebb. The ruins it uncovers may be laid out differently every time, so knowing the tide and when to get out is safer than trusting an old map.",
-      "storyContext": "A mood piece showing one way down at the ebb; it does not fix the layout of the next low tide. It helps the player grasp how little can be seen in the fog, how the tide line shifts, and why a way back matters.",
+      "background": "Mistport's Undertow goes under at flood tide, and explorers may go in only for a short while after the ebb. The ruins it uncovers may be laid out differently every time, so knowing the tide and when to get out is safer than trusting an old map.",
+      "storyContext": "A mood piece showing one way down at the ebb; it does not fix the layout of the next ebb. It helps the player grasp how little can be seen in the fog, how the tide line shifts, and why a way back matters.",
       "location": "A waterside passage between Mid-Harbor and the Undertow",
       "visualNotes": [
         "Ropes, shells and wet planks are sharp up close; the distance is lost entirely in fog.",
@@ -59,8 +59,8 @@
     {
       "id": "chen-yuanshan",
       "name": "Chen Yuanshan",
-      "description": "A grey-haired elder in a dark, embroidered robe holds up a dark, angular fragment; a smile and a searching look sit on his face together.",
-      "background": "Chen Yuanshan, past sixty, chairs the Mistport Council and is pushing the Seal Tide Decree to keep civilians out of the Undertow. The Council controls the Upper City and the legal relic trade, so his orders decide directly who may go on an expedition.",
+      "description": "A grey-haired elder in a dark, embroidered robe holds up a dark, angular fragment. He smiles, but his gaze is appraising.",
+      "background": "Chen Yuanshan, past sixty, chairs the Mistport Council and is pushing the Seal Tide Decree to restrict civilian access to the Undertow. The Council controls the Upper City and the legal relic trade, so his orders decide directly who may go on an expedition.",
       "storyContext": "Good for introducing the Council's power, permits, and the pressure of the lockdown. The image does not establish where the fragment in his hand came from, what it does, or what he is searching for.",
       "visualNotes": [
         "The fragment is described only as an angular object; its shape does not give it a quest number or make it part of a key."
@@ -70,7 +70,7 @@
       "id": "guildmaster-qi",
       "name": "Old Qi",
       "description": "White-haired and white-bearded, Old Qi holds a thick book. His face is gentle, and faint grey, translucent traces hang around his hands.",
-      "background": "Old Qi is Guildmaster of the Tide-Reader Guild and cares more about research than politics. As the game opens, he has left a letter, gone into the Undertow and disappeared — at a time when high tide should have made it impossible to get in.",
+      "background": "Old Qi is Guildmaster of the Tide-Reader Guild and cares more about research than politics. As the game opens, he has left a letter, gone into the Undertow and disappeared — during the flood tide, when it should have been impossible to get in.",
       "storyContext": "Good for his character file, the clues to his disappearance and background on the Guild. The portrait is a character reference: it does not mean the player has found him, and it does not explain how he got into ruins under the flood.",
       "visualNotes": [
         "The book and the patches of fog-rot follow his established look; the image reveals neither what is in the book nor what caused the symptoms."
@@ -103,7 +103,7 @@
       "background": "Mistport climbs the cliff in three tiers: the Upper City, Mid-Harbor and the Undertow. The relic trade keeps the city alive; the ebb bares the ruins and the flood drowns the lowest tier, and after every Riftide the layout of the ruins changes.",
       "storyContext": "A promotional overview of the harbor city that uses stacked buildings to show a vertical city. Actual exploration still keeps to fog visibility of no more than fifty paces; the cover is not a ruin map to be reused.",
       "visualNotes": [
-        "The city's warm lamps are not the cold tide-stone lamps used to explore the Undertow; the broken arch in the picture is not the Bone Arch of any particular deep withdrawal."
+        "The city's warm lamps are not the cold tide-stone lamps used to explore the Undertow; the broken arch in the picture is not identified as the Bone Arch from any particular deep withdrawal."
       ]
     }
   ]
