@@ -4,7 +4,7 @@
 
 **English** · [简体中文](./README.zh-CN.md)
 
-[![Version](https://img.shields.io/badge/version-v0.0.52-8b5cf6)](./docs/CHANGELOG.md#0052---2026-10-15)
+[![Version](https://img.shields.io/badge/version-v0.0.52-8b5cf6)](./docs/CHANGELOG.md#0052---2026-10-16)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 [![Stage](https://img.shields.io/badge/stage-early--access-orange)](./docs/CHANGELOG.md)
 [![Ask DeepWiki](https://img.shields.io/badge/Ask-DeepWiki-0b7285?logo=readthedocs&logoColor=white)](https://deepwiki.com/ackness/covel)
