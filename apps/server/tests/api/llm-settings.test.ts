@@ -656,8 +656,9 @@ describe("connection test by model kind and failure", () => {
     expect(requests).toEqual([]);
   });
 
-  it("sends one request and names the kind of a provider's refusal", async () => {
-    const { app, presetRegistry } = setup();
+  const addGroqPreset = (
+    presetRegistry: ReturnType<typeof setup>["presetRegistry"],
+  ) =>
     presetRegistry.addPreset({
       ...presetRegistry.resolvePreset("slot-story")!,
       id: "slot-groq",
@@ -670,6 +671,10 @@ describe("connection test by model kind and failure", () => {
         maxOutputTokens: 4096,
       },
     });
+
+  it("sends one request and names the kind of a provider's refusal", async () => {
+    const { app, presetRegistry } = setup({ apiKeys: { groq: "test-key" } });
+    addGroqPreset(presetRegistry);
     const fetchMock = vi.fn(async () =>
       Response.json(
         { error: { message: "Service overloaded" } },
@@ -686,6 +691,22 @@ describe("connection test by model kind and failure", () => {
       error: expect.stringContaining("Service overloaded"),
     });
     expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  it("names a missing key of a known remote provider without a request", async () => {
+    const { app, presetRegistry } = setup();
+    addGroqPreset(presetRegistry);
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    const response = await ping(app, { presetId: "slot-groq" });
+
+    expect(await response.json()).toMatchObject({
+      ok: false,
+      errorKind: "missing_key",
+      error: expect.stringContaining("No API key for Groq"),
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });
 
