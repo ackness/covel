@@ -22,7 +22,7 @@ function context(locale) {
 describe("check instructions", () => {
   it("follow the instruction language, not the session language", async () => {
     expect((await handler(context("zh-CN"))).value.checkContext).toBe(
-      "没有提交跑团检定。不要编造掷骰。",
+      "No tabletop check submitted（本回合没有提交跑团检定，不要编造掷骰）",
     );
     expect((await handler(context("ru-RU"))).value.checkContext).toBe(
       "No tabletop check submitted. Do not invent a roll.",
@@ -30,6 +30,10 @@ describe("check instructions", () => {
     vi.stubEnv("COVEL_INSTRUCTION_LOCALE", "en");
     expect((await handler(context("zh-CN"))).value.checkContext).toBe(
       "No tabletop check submitted. Do not invent a roll.",
+    );
+    vi.stubEnv("COVEL_INSTRUCTION_LOCALE", "zh");
+    expect((await handler(context("en-US"))).value.checkContext).toBe(
+      "No tabletop check submitted（本回合没有提交跑团检定，不要编造掷骰）",
     );
   });
 });
