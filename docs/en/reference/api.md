@@ -835,15 +835,15 @@ When restoring an existing session, if the recent window does not overlap the me
 
 `GET /api/sessions/:id/execution` returns `SessionExecutionStatus`, which says whether a turn is running in this session right now. It uses the same ownership check as the other session endpoints. The optional `execution` field of `GET /api/sessions/:id/view` gives the same status.
 
-| Field         | Description                                                            |
-| ------------- | ---------------------------------------------------------------------- |
-| `state`       | `idle`, `running`, `completed`, `failed`, `interrupted`, or `unknown`  |
-| `turnId`      | Optional                                                               |
-| `requestId`   | Optional                                                               |
-| `startedAt`   | Optional                                                               |
-| `origin`      | Optional                                                               |
-| `abortReason` | Optional                                                               |
-| `retry`       | Optional, `{ type, payload }`. Used when the player explicitly retries |
+| Field         | Description                                                                                                                                                                                                                                                                                                                                                      |
+| ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `state`       | `idle`, `running`, `completed`, `failed`, `interrupted`, or `unknown`                                                                                                                                                                                                                                                                                            |
+| `turnId`      | Optional                                                                                                                                                                                                                                                                                                                                                         |
+| `requestId`   | Optional                                                                                                                                                                                                                                                                                                                                                         |
+| `startedAt`   | Optional                                                                                                                                                                                                                                                                                                                                                         |
+| `origin`      | Optional, `player` or `continuation`: whether this foreground action belongs to a player turn or the opening continuation; a retry uses it to decide how to run again. It is not the execution origin: when runtimes run again (`retry_runtime`, `retry_failed_runtimes`), the turn result's `origin` is `manual`, while this field keeps the flow it belongs to |
+| `abortReason` | Optional                                                                                                                                                                                                                                                                                                                                                         |
+| `retry`       | Optional, `{ type, payload }`. Used when the player explicitly retries                                                                                                                                                                                                                                                                                           |
 
 This endpoint does not wait for the lock of a long turn. On PostgreSQL it checks with a non-blocking advisory lock:
 

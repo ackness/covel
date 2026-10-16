@@ -630,6 +630,12 @@ export interface SessionExecutionStatus {
   readonly turnId?: string;
   readonly requestId?: string;
   readonly startedAt?: string;
+  /**
+   * The flow the foreground action belongs to: a player turn or the opening
+   * continuation. A retry reads it to decide how to run again. It is not the
+   * `ExecutionOrigin` of the turn result: a runtime retry is stored as
+   * `manual` there and keeps the flow of its source turn here.
+   */
   readonly origin?: "player" | "continuation";
   /**
    * An explicit retry uses a new requestId and includes recoverFromTurnId.

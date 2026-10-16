@@ -835,15 +835,15 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 
 `GET /api/sessions/:id/execution` 返回 `SessionExecutionStatus`，说明这个会话现在有没有回合在跑。它使用和其他会话端点相同的归属校验。`GET /api/sessions/:id/view` 的可选字段 `execution` 给出同一份状态。
 
-| 字段          | 说明                                                                 |
-| ------------- | -------------------------------------------------------------------- |
-| `state`       | `idle`、`running`、`completed`、`failed`、`interrupted` 或 `unknown` |
-| `turnId`      | 可选                                                                 |
-| `requestId`   | 可选                                                                 |
-| `startedAt`   | 可选                                                                 |
-| `origin`      | 可选                                                                 |
-| `abortReason` | 可选                                                                 |
-| `retry`       | 可选，`{ type, payload }`，玩家显式重试时使用                        |
+| 字段          | 说明                                                                                                                                                                                                                            |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `state`       | `idle`、`running`、`completed`、`failed`、`interrupted` 或 `unknown`                                                                                                                                                            |
+| `turnId`      | 可选                                                                                                                                                                                                                            |
+| `requestId`   | 可选                                                                                                                                                                                                                            |
+| `startedAt`   | 可选                                                                                                                                                                                                                            |
+| `origin`      | 可选，`player` 或 `continuation`：这个前台动作属于玩家回合还是开场延续，重试按它决定怎样重跑。它不是执行来源：重跑 runtime（`retry_runtime`、`retry_failed_runtimes`）时，回合结果的 `origin` 是 `manual`，这里仍是它所在的流程 |
+| `abortReason` | 可选                                                                                                                                                                                                                            |
+| `retry`       | 可选，`{ type, payload }`，玩家显式重试时使用                                                                                                                                                                                   |
 
 这个接口不会去等长回合的锁。PostgreSQL 下用非阻塞的 advisory lock 探测：
 
