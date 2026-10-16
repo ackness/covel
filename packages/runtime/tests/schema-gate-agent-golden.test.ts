@@ -4,7 +4,7 @@
  * These tests are the regression anchor for the agent-specific structured
  * output path.
  *
- * Pinned behaviours (all via `executeTurn` → `executeAgentRuntime`):
+ * Pinned behaviours (all via `runTurnPipeline` → `executeAgentRuntime`):
  *   1. schema declared + conforming JSON → success, output = parsed envelope.
  *   2. schema declared + non-conforming JSON → failed, schema-validation error.
  *   3. schema declared + plain prose → failed, prose diagnostic.
@@ -17,13 +17,13 @@ import { describe, expect, it, vi } from "vitest";
 import type { Proposal, RuntimeManifest, TurnInput } from "@covel/shared";
 import { createMemoryStore } from "@covel/store/memory";
 import { finalizeExecution } from "../src/commit/finalize-execution.js";
-import { executeTurn } from "../src/turn-executor/turn-executor.js";
+import { runTurnPipeline } from "../src/turn-executor/turn-executor.js";
 import type { TurnExecutorDeps } from "../src/turn-executor/turn-executor.js";
-import { resumeSuspendedRuntime } from "../src/resume/turn-resume.js";
+import { resumeRuntimePipeline } from "../src/resume/turn-resume.js";
 import { createToolExecutor } from "../src/agent-loop/tool-executor.js";
 import { tool } from "@covel/tools";
 import { z } from "zod";
-import type { LLMAdapter, LLMResponse } from "../src/llm/llm-adapter.js";
+import type { LLMAdapter, LLMResponse } from "@covel/shared";
 
 // Minimal LLM that returns a fixed string as the final content — enough to
 // drive the schema gate, which only inspects the parsed final content.
@@ -87,7 +87,7 @@ function input(sessionId: string): TurnInput {
 describe("agent schema gate (golden)", () => {
   it("succeeds and returns the parsed envelope when JSON conforms to the schema", async () => {
     const llm = new FixedContentLLM('{"prompt":"a portrait"}');
-    const result = await executeTurn(
+    const result = await runTurnPipeline(
       input("sess-ok"),
       [manifest({ output: { schema: "./output.schema.json" } })],
       makeDeps(llm, { ...OBJECT_SCHEMA }),
@@ -105,7 +105,7 @@ describe("agent schema gate (golden)", () => {
       ...makeDeps(llm, { ...OBJECT_SCHEMA }),
       onRuntimeComplete,
     };
-    const result = await executeTurn(
+    const result = await runTurnPipeline(
       input("sess-wrong"),
       [manifest({ output: { schema: "./output.schema.json" } })],
       deps,
@@ -130,7 +130,7 @@ describe("agent schema gate (golden)", () => {
 
   it("fails with a prose diagnostic when the model returns plain prose", async () => {
     const llm = new FixedContentLLM("just some narrative, not JSON at all");
-    const result = await executeTurn(
+    const result = await runTurnPipeline(
       input("sess-prose"),
       [manifest({ output: { schema: "./output.schema.json" } })],
       makeDeps(llm, { ...OBJECT_SCHEMA }),
@@ -150,7 +150,7 @@ describe("agent schema gate (golden)", () => {
     // Same non-conforming JSON as the failure case, but the runtime declares no
     // schema → `loaded.outputSchema` is undefined → the gate never runs.
     const llm = new FixedContentLLM('{"wrong":"shape"}');
-    const result = await executeTurn(
+    const result = await runTurnPipeline(
       input("sess-no-schema"),
       [manifest()],
       makeDeps(llm), // no outputSchema
@@ -167,7 +167,7 @@ describe("agent schema gate (golden)", () => {
     const llm = new FixedContentLLM(
       '{"narrativeOutput":"A lamp lights the stairs."}',
     );
-    const result = await executeTurn(
+    const result = await runTurnPipeline(
       input("sess-story"),
       [
         manifest({
@@ -206,8 +206,8 @@ describe("ordinary and resumed private schema parity", () => {
         },
       },
     );
-    const ordinary = await executeTurn(input("effect-parity"), [m], deps);
-    const resumed = await resumeSuspendedRuntime(
+    const ordinary = await runTurnPipeline(input("effect-parity"), [m], deps);
+    const resumed = await resumeRuntimePipeline(
       {
         id: "effect-suspension",
         sessionId: "effect-parity",
@@ -265,7 +265,7 @@ describe("ordinary and resumed private schema parity", () => {
         store,
       };
       const turnInput = input(`empty-${content === null ? "null" : "string"}`);
-      const ordinary = await executeTurn(turnInput, [m], deps);
+      const ordinary = await runTurnPipeline(turnInput, [m], deps);
       expect(ordinary.runtimeResults[0]?.status).toBe("failed");
       expect(ordinary.runtimeResults[0]?.error).toContain(
         "output did not match output.schema",
@@ -302,7 +302,7 @@ describe("ordinary and resumed private schema parity", () => {
         },
       };
       await store.saveSuspension(suspension);
-      const resumed = await resumeSuspendedRuntime(suspension, {}, m, deps);
+      const resumed = await resumeRuntimePipeline(suspension, {}, m, deps);
       expect(resumed.status).toBe("failed");
       expect(resumed.error).toContain("output did not match output.schema");
       expect(resumed.pendingProposals ?? []).toEqual([]);
@@ -331,7 +331,7 @@ describe("ordinary and resumed private schema parity", () => {
       ).toBeUndefined();
 
       nextContent = validContent;
-      const retry = await resumeSuspendedRuntime(suspension, {}, m, deps);
+      const retry = await resumeRuntimePipeline(suspension, {}, m, deps);
       expect(retry.status).toBe("success");
       expect(retry.pendingProposals).toEqual([proposal]);
     },
@@ -344,8 +344,8 @@ describe("ordinary and resumed private schema parity", () => {
   ] as const)("uses the same verdict for %s", async (content, status) => {
     const m = manifest({ output: { schema: "output.json" } });
     const deps = makeDeps(new FixedContentLLM(content), { ...OBJECT_SCHEMA });
-    const ordinary = await executeTurn(input("schema-parity"), [m], deps);
-    const resumed = await resumeSuspendedRuntime(
+    const ordinary = await runTurnPipeline(input("schema-parity"), [m], deps);
+    const resumed = await resumeRuntimePipeline(
       {
         id: "suspended",
         sessionId: "schema-parity",
@@ -418,8 +418,8 @@ describe("ordinary and resumed private schema parity", () => {
           store: baseDeps.store!,
         }),
       };
-      const ordinary = await executeTurn(input("tool-parity"), [m], deps);
-      const resumed = await resumeSuspendedRuntime(
+      const ordinary = await runTurnPipeline(input("tool-parity"), [m], deps);
+      const resumed = await resumeRuntimePipeline(
         {
           id: "suspended",
           sessionId: "tool-parity",

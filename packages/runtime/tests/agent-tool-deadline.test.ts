@@ -7,9 +7,9 @@ import {
 } from "../src/agent-loop/turn-agent-tool-loop.js";
 import { createToolExecutor } from "../src/agent-loop/tool-executor.js";
 import { acquireLLMSlot, setLLMSlotCapForTests } from "@covel/shared";
-import { executeTurn } from "../src/turn-executor/turn-executor.js";
+import { runTurnPipeline } from "../src/turn-executor/turn-executor.js";
 import { createHookPipeline } from "../src/hooks/pipeline.js";
-import { resumeSuspendedRuntime } from "../src/resume/turn-resume.js";
+import { resumeRuntimePipeline } from "../src/resume/turn-resume.js";
 
 afterEach(() => {
   vi.useRealTimers();
@@ -99,7 +99,7 @@ describe("agent tool deadline", () => {
           };
         },
       });
-      const running = executeTurn(opts.input, [manifest], {
+      const running = runTurnPipeline(opts.input, [manifest], {
         ...opts.deps,
         hookPipeline,
         loadRuntime: async () => ({
@@ -182,7 +182,7 @@ describe("agent tool deadline", () => {
             };
           },
         });
-      const running = executeTurn(opts.input, [manifest], {
+      const running = runTurnPipeline(opts.input, [manifest], {
         ...opts.deps,
         hookPipeline,
         loadRuntime: async () => ({ manifest, promptTemplate: "probe" }),
@@ -276,7 +276,7 @@ describe("agent tool deadline", () => {
       const running =
         path === "loop"
           ? runAgentToolLoop(opts)
-          : resumeSuspendedRuntime(
+          : resumeRuntimePipeline(
               {
                 id: "suspension",
                 sessionId: opts.input.sessionId,

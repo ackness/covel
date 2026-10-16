@@ -21,7 +21,7 @@ import type {
   EvaluationParams,
   EvaluationQuestions,
   EvaluationResult,
-} from "./evaluation/types.js";
+} from "@covel/shared";
 
 import { AiProviderError } from "./errors.js";
 import { describeUnavailableWire } from "./wire-lifecycle.js";

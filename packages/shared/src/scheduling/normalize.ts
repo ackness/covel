@@ -32,22 +32,15 @@ export function stageRank(stage: Stage | undefined): number {
 }
 
 /**
- * Coarse `TurnMessageRecord.order` value. The field is written but never read
- * for sorting — every store sorts turn messages by `createdAt` — so this is a
- * stage ordinal only. The column is retained (dropping it needs a four-backend
- * migration for zero benefit). Stage-less runtimes write 99.
+ * Stage ordinal used to order messages sharing a timestamp. Stage-less
+ * runtimes write 99; stores sort by `(createdAt, order, id)`.
  */
 export function stageMessageOrder(stage: Stage | undefined): number {
   return stage === undefined ? 99 : STAGE_ORDER.indexOf(stage);
 }
 
-function declaredTrigger(
-  manifest: RuntimeManifest,
-  derivedFrom: string[],
-): TriggerSpec {
-  const declared = manifest.trigger ?? { type: "auto" as const };
-  if (manifest.trigger === undefined) derivedFrom.push("trigger:default-auto");
-  return declared;
+function declaredTrigger(manifest: RuntimeManifest): TriggerSpec {
+  return manifest.trigger ?? { type: "auto" };
 }
 
 function collectExportBindings(
@@ -92,15 +85,11 @@ function normalizeTurnCompletionPolicy(
 export function normalizeRuntimeManifest(
   manifest: RuntimeManifest,
 ): NormalizedRuntimeSpec {
-  const derivedFrom: string[] = [];
-
   const stage: Stage | undefined = manifest.stage;
 
-  const trigger = declaredTrigger(manifest, derivedFrom);
+  const trigger = declaredTrigger(manifest);
 
   const turnCompletionPolicy = normalizeTurnCompletionPolicy(manifest);
-
-  if (manifest.execution === "background") derivedFrom.push("execution");
 
   const needs: readonly DependencyRef[] = manifest.needs ?? [];
 
@@ -120,22 +109,9 @@ export function normalizeRuntimeManifest(
     },
     bindings,
     exportBindings: collectExportBindings(manifest),
-    schemas: {
-      ...(manifest.input?.schema !== undefined
-        ? { activation: manifest.input.schema }
-        : {}),
-      ...(manifest.output?.schema !== undefined
-        ? { output: manifest.output.schema }
-        : {}),
-    },
-    ...(manifest.output?.recordAs !== undefined
-      ? { outputRecordAs: manifest.output.recordAs }
-      : {}),
     ...(manifest.effects !== undefined
       ? { effectsDecl: manifest.effects }
       : {}),
-    httpPermissions: manifest.permissions?.http ?? [],
-    provenance: { derivedFrom },
   };
 }
 

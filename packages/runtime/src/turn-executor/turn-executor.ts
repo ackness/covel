@@ -111,7 +111,7 @@ export {
   type TurnExecutorOptions,
 } from "./turn-executor-types.js";
 export {
-  resumeSuspendedRuntime,
+  resumeRuntimePipeline,
   type ResumeSuspendedRuntimeOptions,
 } from "../resume/turn-resume.js";
 
@@ -136,9 +136,9 @@ export {
  *
  * @example
  * ```typescript
- * import { executeTurn } from '@covel/runtime';
+ * import { runTurnPipeline } from './turn-executor.js';
  *
- * const result = await executeTurn(
+ * const result = await runTurnPipeline(
  *   { sessionId: 'sess-1', turnId: 'turn-1', playerMessage: 'Go north' },
  *   activeManifests,
  *   { loadRuntime, llm, store, toolExecutor },
@@ -149,7 +149,7 @@ export {
  * }
  * ```
  */
-export async function executeTurn(
+export async function runTurnPipeline(
   input: TurnInput,
   activeRuntimes: readonly RuntimeManifest[],
   deps: TurnExecutorDeps,
@@ -724,7 +724,7 @@ async function executeTurnImpl(
       sessionContext,
       triggerEvent,
       turnOptions: options,
-      executeTurnFn: executeTurn,
+      executeTurnFn: runTurnPipeline,
       recursionDepth,
       executionId: executionContext.executionId,
       executionContext,
@@ -760,7 +760,7 @@ async function executeTurnImpl(
   // their own proposal in the same transaction
   // (function-runtime/plugin-handler-helpers.ts), so an abort discards them
   // too. Unbuffered direct writes exist only in the standalone test-runtime
-  // API, never inside executeTurn.
+  // API, never inside runTurnPipeline.
   const playerAborted = (): boolean =>
     deps.turnControl?.signal?.aborted === true;
   const executionAborted = (): boolean =>

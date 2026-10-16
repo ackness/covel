@@ -2,7 +2,7 @@ import type { PluginLanguages } from "../types/plugin-api.js";
 import {
   canonicalizeLocale,
   localesShareLanguageAndScript,
-} from "./locale-registry.js";
+} from "@covel/plugin-handlers-utils";
 
 /** Key of a world record's metadata that lists the locales it has content for. */
 export const WORLD_EDITIONS_KEY = "supportedLocales";

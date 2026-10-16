@@ -11,7 +11,7 @@ const extensionPointPattern = "[a-z][a-z0-9.-]*@[1-9][0-9]*";
 /** The ID of an extension within its package. */
 const extensionIdPattern = "[a-zA-Z0-9][\\w.-]*";
 
-export const extensionDeclarationSchema = z.strictObject({
+const extensionDeclarationSchema = z.strictObject({
   point: z
     .string()
     .regex(new RegExp(`^${extensionPointPattern}$`))
@@ -737,7 +737,7 @@ export const detachedOptionsSchema = z.strictObject({
  * Scheduler-driven turn-barrier policy of the compiled IR. Kept separate from
  * `execution`, whose meaning is the manual/event activation mode.
  */
-export const turnCompletionConfigSchema = detachedOptionsSchema.extend({
+const turnCompletionConfigSchema = detachedOptionsSchema.extend({
   mode: z
     .enum(["await", "detached"])
     .describe(

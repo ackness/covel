@@ -2,10 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { RuntimeManifest, TurnInput } from "@covel/shared";
 import { applyBudget } from "../src/budget.js";
 import { buildMessageHistoryWithSummaries } from "../src/message-insertion.js";
-import {
-  buildSegmentedContext,
-  buildSegmentedContextAsync,
-} from "../src/prompt-assembler.js";
+import { buildContext } from "../src/context-builder.js";
 import {
   buildCurrentTurnUserMessage,
   buildFrameworkPreamble,
@@ -181,23 +178,25 @@ describe("fixed text of the prompt assembly", () => {
     ...overrides,
   });
 
-  it("writes the event instruction in the instruction language", () => {
-    const block = (locale: string) => {
-      const prompt = buildSegmentedContext(
-        params(locale, {
-          manifest: { ...manifest, advertiseEvents: true },
-          eventCatalogText: "- scene.set",
-        }),
+  it("writes the event instruction in the instruction language", async () => {
+    const block = async (locale: string) => {
+      const prompt = (
+        await buildContext(
+          params(locale, {
+            manifest: { ...manifest, advertiseEvents: true },
+            eventCatalogText: "- scene.set",
+          }),
+        )
       ).systemPrompt;
       return prompt.slice(
         prompt.indexOf("<available-events>"),
         prompt.indexOf("</available-events>"),
       );
     };
-    expect(block("zh-CN")).toContain("调用 emit-event 工具");
-    noEnglishSentence(block("zh-CN").replace("- scene.set", ""));
-    expect(block("en-US")).toContain("call the emit-event tool");
-    expect(block("zh-Hant-TW")).not.toMatch(HAN);
+    expect(await block("zh-CN")).toContain("调用 emit-event 工具");
+    noEnglishSentence((await block("zh-CN")).replace("- scene.set", ""));
+    expect(await block("en-US")).toContain("call the emit-event tool");
+    expect(await block("zh-Hant-TW")).not.toMatch(HAN);
   });
 
   it("writes the note under a history summary in the instruction language", () => {
@@ -280,7 +279,7 @@ describe("fixed text of the prompt assembly", () => {
       const store = createMemoryStore();
       await store.setPluginDataBatch(records(count));
       return (
-        await buildSegmentedContextAsync(
+        await buildContext(
           params(locale, {
             manifest: {
               ...manifest,

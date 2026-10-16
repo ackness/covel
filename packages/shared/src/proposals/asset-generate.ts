@@ -1,3 +1,4 @@
+import { isRecord } from "../utils/is-record.js";
 import type {
   AssetGeneratePayload,
   MediaRef,
@@ -33,7 +34,7 @@ export function isAssetGeneratePayload(
   if (typeof payload.modality !== "string" || payload.modality.length === 0)
     return false;
   if (!mediaRefSchema.safeParse(payload.ref).success) return false;
-  if (payload.meta !== undefined && !isPlainRecord(payload.meta)) return false;
+  if (payload.meta !== undefined && !isRecord(payload.meta)) return false;
   return true;
 }
 
@@ -57,7 +58,7 @@ export function isAssetGenerateView(
   if (typeof view.modality !== "string" || view.modality.length === 0)
     return false;
   if (!mediaRefSchema.safeParse(view.ref).success) return false;
-  if (view.meta !== undefined && !isPlainRecord(view.meta)) return false;
+  if (view.meta !== undefined && !isRecord(view.meta)) return false;
   if (typeof view.createdAt !== "string" || view.createdAt.length === 0)
     return false;
   return true;
@@ -129,8 +130,4 @@ export function picturesShown(blocks: unknown): readonly ShownPicture[] {
     const picture = isAssetGenerateView(data) ? pictureOf(data) : null;
     return picture ? [picture] : [];
   });
-}
-
-function isPlainRecord(value: unknown): value is Record<string, unknown> {
-  return !!value && typeof value === "object" && !Array.isArray(value);
 }

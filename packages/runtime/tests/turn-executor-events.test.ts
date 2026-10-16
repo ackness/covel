@@ -15,9 +15,9 @@ import type { LoadedRuntime } from "@covel/plugin-loader";
 import { createMemoryStore } from "@covel/store/memory";
 import type { DataStore } from "@covel/store";
 import { commitExecution } from "../src/commit/commit-execution.js";
-import { executeTurn } from "../src/turn-executor/turn-executor.js";
+import { runTurnPipeline } from "../src/turn-executor/turn-executor.js";
 import type { TurnExecutorDeps } from "../src/turn-executor/turn-executor.js";
-import type { LLMAdapter, LLMResponse } from "../src/llm/llm-adapter.js";
+import type { LLMAdapter, LLMResponse } from "@covel/shared";
 import { createEventBus, type EventBus } from "@covel/events";
 
 // Prime a store with one prior player message so turnNumber >= 1 and
@@ -101,7 +101,11 @@ describe("TurnExecutor EventBus Bridge", () => {
       store: await createMainLoopStore("sess-1"),
     };
 
-    const result = await executeTurn(makeTurnInput(), [narratorManifest], deps);
+    const result = await runTurnPipeline(
+      makeTurnInput(),
+      [narratorManifest],
+      deps,
+    );
 
     const turnStarted = events.find((e) => e.type === "turn.started");
     expect(turnStarted).toBeDefined();
@@ -155,7 +159,7 @@ describe("TurnExecutor EventBus Bridge", () => {
       store: await createMainLoopStore("sess-1"),
     };
 
-    await executeTurn(makeTurnInput(), [narratorManifest], deps);
+    await runTurnPipeline(makeTurnInput(), [narratorManifest], deps);
 
     const runtimeStarted = events.find((e) => e.type === "runtime.started");
     const runtimeCompleted = events.find((e) => e.type === "runtime.completed");
@@ -192,7 +196,7 @@ describe("TurnExecutor EventBus Bridge", () => {
       store: await createMainLoopStore("sess-1"),
     };
 
-    await executeTurn(makeTurnInput(), [narratorManifest], deps);
+    await runTurnPipeline(makeTurnInput(), [narratorManifest], deps);
 
     const runtimeFailed = events.find((e) => e.type === "runtime.failed");
     expect(runtimeFailed).toBeDefined();
@@ -210,7 +214,11 @@ describe("TurnExecutor EventBus Bridge", () => {
       store: await createMainLoopStore("sess-1"),
     };
 
-    const result = await executeTurn(makeTurnInput(), [narratorManifest], deps);
+    const result = await runTurnPipeline(
+      makeTurnInput(),
+      [narratorManifest],
+      deps,
+    );
     expect(result.runtimeResults).toHaveLength(1);
     expect(result.runtimeResults[0]!.status).toBe("success");
   });

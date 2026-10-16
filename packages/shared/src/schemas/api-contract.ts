@@ -11,7 +11,7 @@ import type {
   PluginSummary,
   WorldPluginPlan,
 } from "../types/plugin-api.js";
-import { canonicalizeLocale } from "../utils/locale-registry.js";
+import { canonicalizeLocale } from "@covel/plugin-handlers-utils";
 import {
   pluginUserSettingSpecSchema,
   stageSchema,
@@ -71,8 +71,6 @@ const actionBase = {
   sessionId: requiredActionString("sessionId", 256, ACTION_ID_PATTERN),
   model: actionModelSchema.optional(),
 };
-
-export const actionTypeSchema = z.enum(ACTION_TYPES);
 
 const actionRecoveryPayload = {
   recoverFromTurnId: requiredActionString(

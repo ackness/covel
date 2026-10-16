@@ -1,11 +1,11 @@
 import type { PluginMessages } from "@covel/plugin-handlers-utils";
-import { resolveI18nText } from "./i18n.js";
+import { resolveI18nText } from "@covel/plugin-handlers-utils";
 
 export type { PluginMessages };
 import {
   canonicalizeLocale,
   localesShareLanguageAndScript,
-} from "./locale-registry.js";
+} from "@covel/plugin-handlers-utils";
 
 /** The `messages` section of one `locales/<locale>.yaml` of a plugin. */
 export interface PluginMessageCatalog {

@@ -20,7 +20,7 @@ import type {
 } from "@covel/shared";
 import type { SuspensionRecord } from "@covel/store";
 import type { EmittedEvent, SuspendSentinel } from "@covel/tools";
-import type { LLMMessage } from "../llm/llm-adapter.js";
+import type { LLMMessage } from "@covel/shared";
 import type { HookPipeline } from "../hooks/pipeline.js";
 import { finalizeRuntimeResult } from "../turn-executor/runtime-finalization.js";
 import type { AgentLoopDeps } from "../turn-executor/turn-executor-types.js";

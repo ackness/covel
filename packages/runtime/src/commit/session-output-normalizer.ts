@@ -5,6 +5,7 @@
  * through session-kernel.ts unless a caller intentionally needs this boundary.
  */
 
+import { isRecord } from "../utils/is-record.js";
 import { normalizeUIRenderInstruction } from "@covel/shared";
 import type {
   Proposal,
@@ -16,10 +17,6 @@ import {
   collectAssetGenerations,
   makeProposal,
 } from "../session/session-kernel-helpers.js";
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
-}
 
 /** A domain effect {@link normalizeOutput} cannot turn into a proposal. */
 export interface MalformedDomainEffect {

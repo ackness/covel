@@ -10,7 +10,7 @@ import {
 } from "@covel/tools";
 import { z } from "zod";
 import type { Proposal, RuntimeManifest, TurnInput } from "@covel/shared";
-import { executeTurn } from "../src/turn-executor/turn-executor.js";
+import { runTurnPipeline } from "../src/turn-executor/turn-executor.js";
 import { createToolExecutor } from "../src/agent-loop/tool-executor.js";
 import { finalizeExecution } from "../src/commit/finalize-execution.js";
 import { createRuntimeTools } from "../src/function-runtime/runtime-tools.js";
@@ -74,7 +74,7 @@ async function fixture(
       getToolSource: () => "builtin",
     }),
   };
-  const result = await executeTurn(
+  const result = await runTurnPipeline(
     { ...input, origin: options.origin ?? input.origin },
     [runtime],
     deps,

@@ -1,3 +1,4 @@
+import { isRecord } from "./validation-helpers.js";
 import {
   characterSchemaSetPayloadSchema,
   validateWorldModel,
@@ -16,10 +17,6 @@ import type {
 } from "./types.js";
 
 const CONTENT_ID = /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
-}
 
 function strings(value: unknown): string[] | undefined {
   if (!Array.isArray(value)) return undefined;

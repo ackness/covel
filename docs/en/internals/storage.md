@@ -55,7 +55,7 @@ There is no `STORE_BACKEND=idb`, and no `createStore({ backend: "idb" })`. If yo
 
 - `*-store.ts` (`sqlite-store.ts`, `pg-store.ts`) is a very thin factory that assembles the modules into a `DataStore`.
 - `schema.ts` defines the tables, and `*-schema-ddl.ts` creates them.
-- `*-store-mappers.ts` converts between database rows and records.
+- The shared `common/sql-*-records.ts` query layer converts between database rows and records.
 - Queries are grouped into one file per feature area: sessions, runtime records, snapshots, state, worlds, plugin data, export, lifecycle, and server settings.
 
 When you add a table or a query, put it in the module for its feature area, add it to both backends, and do not put it in the factory.
@@ -469,7 +469,7 @@ Both backends declare the same indexes (PostgreSQL's names carry a `pg_` prefix)
 - PostgreSQL uses a separate sequence for each table to assign positions for messages, traces and turn artifacts, and this still works when several connections write at the same time.
 - SQLite assigns them inside the write boundary it serializes.
 - A gap in sequence numbers after a rollback is normal. When importing in order, new positions are assigned in the order of the import list. Cursor pagination and full lists use the same positions.
-- The data schema version is 4 for both SQL backends. It is checked at startup; see [The data schema version is checked at startup](#capabilities-and-migrations).
+- The data schema version is 5 for both SQL backends. It is checked at startup; see [The data schema version is checked at startup](#capabilities-and-migrations).
 
 **Vector retrieval.** The results are first filtered by session, plugin and namespace, and then the top-K is picked exactly. Memory, SQLite and PostgreSQL all return Euclidean L2 distance. PostgreSQL materializes the filtered candidates instead of using a global approximate index, because the latter can miss matches after filtering.
 
@@ -520,7 +520,7 @@ The bookkeeping data of execution grows with every turn. The categories in the t
 | Record                                      | Limit                                                                                                                                                                                                                                                                                                                                                                 |
 | ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `kind=auto` snapshots                       | One per `completedPlayerTurns` value (a later commit under the same count refreshes it). The newest `COVEL_AUTO_SNAPSHOT_RETENTION` (default 20) are kept, except snapshots recorded as the `parentId` of a branch. Manual snapshots and branch snapshots are never cleaned up.                                                                                       |
-| Snapshot payloads and branches              | Do not contain the control-plane namespaces `_runtime_jobs`, `_runtime_job_control` and `_logs`. For snapshots taken before the exclusion rule took effect, they are also stripped when branching. Rows in the retired `_jobs` namespace are deleted at startup.                                                                                                      |
+| Snapshot payloads and branches              | Do not contain the control-plane namespaces `_runtime_jobs`, `_runtime_job_control` and `_logs`. For snapshots taken before the exclusion rule took effect, they are also stripped when branching.                                                                                                                                                                    |
 | `_runtime_jobs` and their `job_status` rows | Unfinished jobs are kept. For finished jobs, the newest 20 per runtime per session are kept.                                                                                                                                                                                                                                                                          |
 | `_logs`                                     | A ring of 200 rows per plugin. It is trimmed the first time the logger writes, and then once every 20 writes, so one execution may briefly go over the limit.                                                                                                                                                                                                         |
 | `trace_events`                              | 30 days by default (`COVEL_TRACE_RETENTION_DAYS`, where `0` keeps everything. When the variable is not set, the player's choice in Settings is used, stored in `server_settings`). Cleaned per session after each commit; cleaned for all sessions at startup and once a day after that. The rows of the latest turn are kept, because execution recovery reads them. |
@@ -548,7 +548,6 @@ These rows are not copied in full into browser checkpoints (see [Browser-Private
 
 - A retry rebuilds its seed from the full runtime results it saved (including effects and canonical values). The media reference scan also reads it directly.
 - `runtime_outputs` is a narrower projection, used by the runtime output API.
-- The old per-runtime `runtime_results` table duplicated these rows, and it is deleted at startup.
 - A row is written before commit and settled by `setTurnResultCommitStatus`. When the turn commits successfully, it also rewrites results of discarded runtime writes to `failed` with an error attached, so a retry never seeds a discarded result as if it had succeeded.
 
 ## Plugin-Data Ownership and Reserved Names

@@ -15,8 +15,8 @@ import type {
   LLMMessage,
   LLMResponseFormat,
   LLMToolDefinition,
-} from "../llm/llm-adapter.js";
-import type { RetryPolicy } from "../retry/llm-retry.js";
+} from "@covel/shared";
+import type { RetryPolicy } from "../retry/retry-common.js";
 import { retryHint } from "../retry/retry-common.js";
 
 import type { TurnEmitter } from "../trace/turn-emitter.js";

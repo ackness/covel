@@ -14,9 +14,9 @@ import { describe, it, expect } from "vitest";
 import type { RuntimeManifest, TurnInput } from "@covel/shared";
 import { createMemoryStore } from "@covel/store/memory";
 import type { DataStore } from "@covel/store";
-import { executeTurn } from "../src/turn-executor/turn-executor.js";
+import { runTurnPipeline } from "../src/turn-executor/turn-executor.js";
 import type { TurnExecutorDeps } from "../src/turn-executor/turn-executor.js";
-import type { LLMAdapter, LLMResponse } from "../src/llm/llm-adapter.js";
+import type { LLMAdapter, LLMResponse } from "@covel/shared";
 
 class NoopLLM implements LLMAdapter {
   async generate(): Promise<LLMResponse> {
@@ -65,7 +65,7 @@ async function runTurn(
   manifests: readonly RuntimeManifest[],
   handlers: Record<string, (ctx: unknown) => Promise<Record<string, unknown>>>,
   onRuntimeComplete?: TurnExecutorDeps["onRuntimeComplete"],
-): Promise<Awaited<ReturnType<typeof executeTurn>>> {
+): Promise<Awaited<ReturnType<typeof runTurnPipeline>>> {
   const input: TurnInput = {
     origin: "player",
     sessionId: "sess-1",
@@ -85,10 +85,10 @@ async function runTurn(
     store: await mainLoopStore("sess-1"),
     ...(onRuntimeComplete ? { onRuntimeComplete } : {}),
   };
-  return executeTurn(input, manifests, deps);
+  return runTurnPipeline(input, manifests, deps);
 }
 
-describe("executeTurn: manifest.needs", () => {
+describe("runTurnPipeline: manifest.needs", () => {
   it("skips a downstream runtime when its declared upstream failed", async () => {
     const upstream = manifest("narrator", { stage: "narrative" });
     const downstream = manifest("guide", {
@@ -194,7 +194,7 @@ describe("executeTurn: manifest.needs", () => {
       store: await mainLoopStore("sess-1"),
     };
 
-    const result = await executeTurn(input, [upstream, downstream], deps);
+    const result = await runTurnPipeline(input, [upstream, downstream], deps);
 
     expect(downstreamRan).toBe(true);
     const byId = new Map(result.runtimeResults.map((r) => [r.runtimeId, r]));
@@ -244,7 +244,7 @@ describe("executeTurn: manifest.needs", () => {
   });
 });
 
-describe("executeTurn: capability-based needs", () => {
+describe("runTurnPipeline: capability-based needs", () => {
   it("runs cardinality one when one provider succeeds and an alternative is cyclic", async () => {
     const available = manifest("engine-a", {
       outputContract: "narrative-engine@1",

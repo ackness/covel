@@ -1,12 +1,14 @@
+import {
+  assertCharacterFields,
+  mergeSchemaDefaults,
+} from "@covel/plugin-handlers-utils";
 import { describe, expect, it, vi } from "vitest";
 import type { CharacterAttributeSchema } from "@covel/shared";
 import {
   buildFieldsZod,
-  assertCharacterFields,
   formatFields,
   formatFieldValue,
   loadCharacterSchema,
-  mergeSchemaDefaults,
   sortByFrequencyThenRecency,
   toSnapshot,
   truncate,

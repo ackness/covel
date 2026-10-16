@@ -29,7 +29,7 @@
  * Schema ownership
  * ────────────────
  * The `vector_models` table and `sessions.embedding_model_id` column are
- * created by `pg-store-mappers.ts`. This module enables the optional vector
+ * created by `pg-schema-ddl.ts`. This module enables the optional vector
  * extension and creates physical tables atomically with registry publication.
  */
 

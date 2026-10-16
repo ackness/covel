@@ -7,7 +7,7 @@ import type {
 } from "@covel/shared";
 import type { SuspensionRecord } from "@covel/store";
 import { createHookPipeline } from "../src/hooks/pipeline.js";
-import { resumeSuspendedRuntime } from "../src/resume/turn-resume.js";
+import { resumeRuntimePipeline } from "../src/resume/turn-resume.js";
 import type { TurnExecutorDeps } from "../src/turn-executor/turn-executor-types.js";
 
 afterEach(() => vi.useRealTimers());
@@ -20,7 +20,7 @@ it("enforces the public output contract when an agent resumes", async () => {
     undefined,
     f.suspension.sessionId,
   );
-  const result = await resumeSuspendedRuntime(f.suspension, {}, manifest, {
+  const result = await resumeRuntimePipeline(f.suspension, {}, manifest, {
     ...f.deps,
     loadRuntime: async () => ({
       ...loaded!,
@@ -142,7 +142,7 @@ describe("resumed runtime terminal failures", () => {
       f.handler.mockRejectedValue(new Error("synthetic execution failure"));
       f.generate.mockRejectedValue(new Error("synthetic execution failure"));
       try {
-        const result = await resumeSuspendedRuntime(
+        const result = await resumeRuntimePipeline(
           f.suspension,
           {},
           f.manifest,
@@ -184,7 +184,7 @@ describe("resumed runtime terminal failures", () => {
     async (kind) => {
       const f = fixture();
       try {
-        const result = await resumeSuspendedRuntime(
+        const result = await resumeRuntimePipeline(
           f.suspension,
           {},
           {
@@ -213,7 +213,7 @@ describe("resumed runtime terminal failures", () => {
     async (kind) => {
       const f = fixture(kind);
       try {
-        const result = await resumeSuspendedRuntime(
+        const result = await resumeRuntimePipeline(
           f.suspension,
           {},
           f.manifest,
@@ -233,7 +233,7 @@ describe("resumed runtime terminal failures", () => {
     f.generate.mockRejectedValue(new Error("original failure"));
     f.onRuntimeComplete.mockRejectedValue(new Error("observer failure"));
     try {
-      const result = await resumeSuspendedRuntime(
+      const result = await resumeRuntimePipeline(
         f.suspension,
         {},
         f.manifest,
@@ -267,7 +267,7 @@ describe("resumed runtime terminal failures", () => {
       },
     });
     const loadRuntime = vi.fn(f.deps.loadRuntime!);
-    const running = resumeSuspendedRuntime(f.suspension, {}, f.manifest, {
+    const running = resumeRuntimePipeline(f.suspension, {}, f.manifest, {
       ...f.deps,
       loadRuntime,
       turnControl: { executionSignal: controller.signal },
@@ -302,7 +302,7 @@ describe("resumed runtime terminal failures", () => {
       await release.promise;
       return { outcome: "success", value: { text: "late" } };
     });
-    const running = resumeSuspendedRuntime(
+    const running = resumeRuntimePipeline(
       f.suspension,
       {},
       { ...f.manifest, timeoutMs },

@@ -69,7 +69,6 @@ export type {
 export {
   PLAYER_ABORT_REASON,
   TurnAbortedError,
-  isTurnAbortedError,
 } from "./turn-executor/turn-control.js";
 export type { TurnControl } from "./turn-executor/turn-control.js";
 export { pendingDimensionSettlements } from "./turn-executor/dimension-barrier.js";
@@ -125,7 +124,7 @@ export type {
   LLMStreamEvent,
   LLMToolCall,
   LLMToolDefinition,
-} from "./llm/llm-adapter.js";
+} from "@covel/shared";
 
 // ── Tool Executor ────────────────────────────────────────────────
 export { createToolExecutor } from "./agent-loop/tool-executor.js";
@@ -265,13 +264,12 @@ export { HOOK_SEMANTICS } from "./hooks/index.js";
 export type {
   HookEvent,
   HookSemantic,
-  HookEnforce,
   HookContext,
   HookResult,
   HookHandler,
   HookRegistration,
-  HookDeclaration,
 } from "./hooks/index.js";
+export type { HookEnforce, HookDeclaration } from "@covel/shared";
 
 // ── Turn Emitter (per-turn trace fan-out) ───────────────────────
 export {

@@ -339,7 +339,7 @@ Input/Event → settle barrier → freeze registry generation → Trigger Router
   **`manual` is the exception**: `selectTriggeredRuntimes` selects it by name match
   without calling `shouldTrigger` — an explicit plugin-rpc call is the trigger
   decision, so it bypasses `phase` / `startTurn` / `maxTriggerCount` / `cooldownTurns`
-  (the `manual` branch in `shouldTrigger` serves only direct callers).
+  (`shouldTrigger` always returns false for `manual`).
 - **Scheduling** is declared, never numeric: `schedule.stage` plus typed edges —
   `schedule.needs` (success gate + same-pass DAG edge), `schedule.after` (ordering
   only), and `io.inputs` bindings (`required`, by default `true`, implies `needs`).

@@ -10,7 +10,7 @@ import type { PluginFunctionContext } from "@covel/plugin-handlers-utils";
 import type { RuntimeManifest, TurnInput } from "@covel/shared";
 import type { PluginRuntimeGateway } from "@covel/shared/plugin-runtime";
 import { createMemoryMediaStore, createMemoryStore } from "@covel/store/memory";
-import { executeTurn } from "../src/turn-executor/turn-executor.js";
+import { runTurnPipeline } from "../src/turn-executor/turn-executor.js";
 import type { TurnExecutorDeps } from "../src/turn-executor/turn-executor.js";
 
 // `satisfies` fails to compile when the SDK gains or loses a field.
@@ -165,7 +165,7 @@ describe("host context against the public SDK", () => {
       mediaStore: createMemoryMediaStore(),
     };
 
-    await executeTurn(
+    await runTurnPipeline(
       { ...input, manualTrigger: { runtimeId: "p/fn" } },
       [manifest],
       deps,
@@ -220,7 +220,7 @@ describe("host context against the public SDK", () => {
       getPluginSource: () => "builtin",
     };
 
-    await executeTurn(input, [manifest], deps);
+    await runTurnPipeline(input, [manifest], deps);
 
     expect(seen).toBeDefined();
     expectSdkKeys(seen!);

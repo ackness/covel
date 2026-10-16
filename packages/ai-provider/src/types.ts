@@ -1,7 +1,4 @@
-import {
-  BUILTIN_PROVIDER_PROTOCOLS,
-  type BuiltinProviderProtocol,
-} from "@covel/shared";
+import type { BuiltinProviderProtocol } from "@covel/shared";
 import type {
   LLMDiagnostics,
   LLMRequestBudget,
@@ -15,18 +12,6 @@ import type { ZodType } from "zod";
 import type { ReasoningEffort } from "./reasoning-effort.js";
 
 // ── Provider Protocol ──────────────────────────────────────────────
-
-/**
- * All wire protocols the framework knows how to speak, from the descriptor
- * table in `@covel/shared` (`PROVIDER_PROTOCOL_DESCRIPTORS`).
- *
- * OpenAI API providers (DeepSeek, Qwen/DashScope, Groq, …) are not
- * separate protocols — they speak `openai-chat-v1` and register with zero
- * code via `llm.toml` `[covel.<slot>]`. Only a genuinely new *wire* shape
- * (e.g. Bedrock SigV4, Cohere) warrants a new protocol: a descriptor there
- * and a `ProtocolDefinition` in `BUILTIN_PROTOCOLS`.
- */
-export const PROVIDER_PROTOCOLS = BUILTIN_PROVIDER_PROTOCOLS;
 
 /**
  * A built-in protocol, or the ID of a text protocol a plugin registered

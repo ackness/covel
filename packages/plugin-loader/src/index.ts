@@ -73,7 +73,7 @@ export {
 } from "./package-defaults.js";
 
 // ── Registry ─────────────────────────────────────────────────────
-export { normalizeRuntimeManifest, getRuntimeSpec } from "./normalize.js";
+export { normalizeRuntimeManifest, getRuntimeSpec } from "@covel/shared";
 
 export { createPluginRegistry } from "./registry.js";
 export type { PluginRegistry, PluginRegistryOptions } from "./registry.js";

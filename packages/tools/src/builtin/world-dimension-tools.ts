@@ -5,7 +5,7 @@ import {
   type I18nText,
   type DimensionValueSchema,
 } from "@covel/shared";
-import { tool } from "../tool.js";
+import { tool } from "@covel/plugin-handlers-utils";
 
 /** Public reads use the same frozen turn snapshot for every calling plugin. */
 export const worldDimensionGetTool = tool({

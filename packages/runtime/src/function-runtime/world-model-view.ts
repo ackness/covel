@@ -97,7 +97,7 @@ export function memoizeWorldModelReads(
  * get the session's language from `ctx.world` and from their store facade
  * without resolving anything themselves.
  */
-export function worldForSession<
+function worldForSession<
   T extends {
     readonly name?: string;
     readonly description?: string;

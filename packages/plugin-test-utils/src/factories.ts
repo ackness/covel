@@ -37,7 +37,7 @@ export function makeTurnInput(overrides?: Partial<TurnInput>): TurnInput {
  *
  * @example
  * ```typescript
- * const ctx = makeTriggerContext({ turnNumber: 5, isManualTrigger: true });
+ * const ctx = makeTriggerContext({ turnNumber: 5, logicalTurn: 5 });
  * ```
  */
 export function makeTriggerContext(
@@ -50,7 +50,6 @@ export function makeTriggerContext(
     triggerCount: 0,
     turnsSinceLastTrigger: 999,
     pendingEventTopics: [],
-    isManualTrigger: false,
     ...overrides,
   };
 }

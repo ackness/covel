@@ -14,7 +14,7 @@ import { DEFAULT_LOCALE, promptSegmentV1 } from "@covel/shared";
 import type { LoadedRuntime } from "@covel/shared/plugin-runtime";
 import { buildContext, selectPromptSegments } from "@covel/context";
 import type { SessionContextSnapshot } from "@covel/context";
-import type { LLMMessage } from "../llm/llm-adapter.js";
+import type { LLMMessage } from "@covel/shared";
 import type { HookPipeline } from "../hooks/pipeline.js";
 import { resolveUserSettings } from "../turn-executor/turn-executor-helpers.js";
 import {

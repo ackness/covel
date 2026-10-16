@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { createMemoryStore } from "@covel/store/memory";
 import type { FunctionHandlerContext } from "@covel/plugin-loader";
 import type { InputSlot, RuntimeManifest, RuntimeResult } from "@covel/shared";
-import { executeTurn } from "../src/turn-executor/turn-executor.js";
+import { runTurnPipeline } from "../src/turn-executor/turn-executor.js";
 
 const sessionId = "batch-session";
 /** The value of a single-cardinality input binding. */
@@ -65,7 +65,7 @@ async function run(
     createdAt: "2026-01-01T00:00:00Z",
   });
   const calls: string[] = [];
-  const result = await executeTurn(
+  const result = await runTurnPipeline(
     {
       sessionId,
       turnId: "batch",

@@ -1,25 +1,16 @@
 /**
  * Public context assembly tests for `kind: 'plugin-data'` inject resolution.
  *
- * The internal sync path is tested separately in `context-builder.test.ts`;
- * these cases assert that:
- *   - sync path ignores plugin-data injects but still returns valid output
- *   - async path resolves runtime injects the same way the sync path does
- *   - async path materialises plugin-data injects via `store.getPluginDataPromptWindow`
+ * These cases assert that:
+ *   - plugin-data injects materialise via `store.getPluginDataPromptWindow`
  *   - empty namespaces render as `<tag>(none)</tag>`
  *   - two-pass truncation is stable and deterministic (anchors + recent)
  *   - summary / full / ids-only formats each serialise as specified
  *   - store errors propagate out of `buildContext`
- *   - `needsAsyncBuild` correctly detects plugin-data declarations
  */
 import { describe, it, expect } from "vitest";
 import { buildContext, type ContextBuildParams } from "@covel/context";
-import { buildContextSync, needsAsyncBuild } from "../src/context-builder.js";
-import {
-  PROMPT_CACHE_BREAKPOINT_MARKER,
-  type RuntimeManifest,
-  type TurnInput,
-} from "@covel/shared";
+import { type RuntimeManifest, type TurnInput } from "@covel/shared";
 import type { DataStore, PluginDataRecord } from "@covel/store";
 import { createMemoryStore } from "@covel/store/memory";
 
@@ -82,98 +73,6 @@ function makeStoreStub(entries: PluginDataRecord[]): DataStore {
     },
   });
 }
-
-// ── needsAsyncBuild ──────────────────────────────────────────────
-
-describe("needsAsyncBuild", () => {
-  it("returns false when manifest has no injects", () => {
-    const manifest = makeManifest();
-    expect(needsAsyncBuild({ manifest })).toBe(false);
-  });
-
-  it("returns false when no inject is plugin-data kind", () => {
-    const manifest = makeManifest({
-      input: {
-        inject: [{ kind: "kernel", from: "turn-digest@1", name: "digest" }],
-      },
-    });
-    expect(needsAsyncBuild({ manifest })).toBe(false);
-  });
-
-  it("returns true when any inject is plugin-data kind", () => {
-    const manifest = makeManifest({
-      input: {
-        inject: [
-          { kind: "kernel", from: "turn-digest@1", name: "digest" },
-          {
-            kind: "plugin-data",
-            namespace: "entries",
-            as: "<existing-entries>",
-            format: "summary",
-            maxEntries: 50,
-          },
-        ],
-      },
-    });
-    expect(needsAsyncBuild({ manifest })).toBe(true);
-  });
-});
-
-// ── buildContext — sync and async paths agree ───────────────────
-
-describe("buildContext — sync and async paths", () => {
-  it("render same-execution inputs identically", async () => {
-    const params: ContextBuildParams = {
-      promptTemplate: "You are the codex keeper.",
-      manifest: makeManifest(),
-      turnInput: makeTurnInput(),
-      completedResults: new Map(),
-      inputSlots: {
-        narrative: {
-          cardinality: "one",
-          value: "你走到了山脚下。",
-          source: {
-            pluginId: "narrator",
-            runtimeId: "narrator",
-            resultId: "r1",
-          },
-        },
-      },
-    };
-
-    const sync = buildContextSync(params);
-    const asyncResult = await buildContext(params);
-
-    expect(asyncResult.systemPrompt).toBe(sync.systemPrompt);
-    expect(asyncResult.messages).toEqual(sync.messages);
-    expect(asyncResult.turnContext).toContain("你走到了山脚下。");
-  });
-
-  it("sync path silently skips plugin-data injects (does not throw)", () => {
-    const manifest = makeManifest({
-      input: {
-        inject: [
-          {
-            kind: "plugin-data",
-            namespace: "entries",
-            as: "<existing-entries>",
-            format: "summary",
-            maxEntries: 50,
-          },
-        ],
-      },
-    });
-    const params: ContextBuildParams = {
-      promptTemplate: "body",
-      manifest,
-      turnInput: makeTurnInput(),
-      completedResults: new Map(),
-    };
-    const result = buildContextSync(params);
-    expect(result.systemPrompt).toBe(`body${PROMPT_CACHE_BREAKPOINT_MARKER}`);
-    expect(result.turnContext).toBe("");
-  });
-});
 
 // ── buildContext — plugin-data inject ────────────────────────────
 
@@ -407,7 +306,7 @@ describe("buildContext — format variants", () => {
         ],
       },
     });
-    return buildContext({
+    return await buildContext({
       promptTemplate: "body",
       manifest,
       turnInput: makeTurnInput(),

@@ -20,8 +20,6 @@
 import { buildCreateTablesSql, tableNameOf } from "../common/ddl-codegen.js";
 import { pgWriteOrderTriggersSql } from "../common/write-order-ddl.js";
 import {
-  DELETE_RETIRED_PLUGIN_DATA_SQL,
-  RETIRED_TABLE_NAMES,
   SESSIONS_TABLE,
   SESSION_SCOPED_TABLE_NAMES,
 } from "../table-registry.js";
@@ -95,12 +93,6 @@ export const CREATE_TABLES_SQL = [
   VECTOR_MODELS_TRIGGER_SQL,
   pgWriteOrderTriggersSql(),
   CREATE_MEDIA_TABLES_SQL,
-  // Checked first so routine boots do not log a "does not exist" notice.
-  ...RETIRED_TABLE_NAMES.map(
-    (table) =>
-      `DO $$ BEGIN IF to_regclass('${table}') IS NOT NULL THEN DROP TABLE ${table}; END IF; END $$;`,
-  ),
-  DELETE_RETIRED_PLUGIN_DATA_SQL,
 ].join("\n\n");
 
 // ── Table names for cleanup ─────────────────────────────────────

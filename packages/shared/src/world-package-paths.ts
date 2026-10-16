@@ -1,4 +1,4 @@
-import { isKnownLocale } from "./utils/i18n.js";
+import { isKnownLocale } from "@covel/plugin-handlers-utils";
 
 /**
  * Paths of a world package whose meaning is fixed: the kernel reads its own

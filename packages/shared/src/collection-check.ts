@@ -1,3 +1,4 @@
+import { isRecord } from "./utils/is-record.js";
 import { providedContracts } from "./plugin-selection.js";
 import type { CollectionProblem } from "./schemas/collection.js";
 import { satisfiesHostVersionRange } from "./utils/host-version-range.js";
@@ -20,8 +21,6 @@ export interface CollectionWorldFacts {
   readonly requested: readonly string[];
 }
 
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
 const strings = (value: unknown): string[] =>
   Array.isArray(value)
     ? value.filter((item): item is string => typeof item === "string")

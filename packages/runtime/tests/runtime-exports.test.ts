@@ -17,6 +17,7 @@ import type {
   RuntimeExportBinding,
   RuntimeExportRecord,
   RuntimeManifest,
+  RuntimeResult,
 } from "@covel/shared";
 import { publishExecutionExports } from "../src/commit/runtime-export-publish.js";
 import { resolveExportBindings } from "../src/schedule/input-bindings.js";
@@ -27,7 +28,10 @@ const SCHEMA = {
   properties: { threshold: { type: "number" } },
 } as const;
 
-function successResult(runtimeId: string, value: unknown) {
+function successResult(
+  runtimeId: string,
+  value: RuntimeResult["output"],
+): Pick<RuntimeResult, "status" | "runtimeId" | "runId" | "output"> {
   return {
     status: "success",
     runtimeId,
@@ -83,7 +87,7 @@ describe("publishExecutionExports", () => {
 
   it("increments revision monotonically per (runtime, recordAs)", async () => {
     const store = createMemoryStore();
-    const args = (value: unknown) => ({
+    const args = (value: RuntimeResult["output"]) => ({
       sink: store,
       sessionId: "s",
       results: [successResult("p/gen", value)],

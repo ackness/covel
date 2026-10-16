@@ -104,7 +104,7 @@ function displayKey(id: string): string | undefined {
 }
 
 /** The item of a lorebook entry, or null when it is disabled or empty. */
-export function lorebookItem(entry: LorebookEntryRecord): ArchivalItem | null {
+function lorebookItem(entry: LorebookEntryRecord): ArchivalItem | null {
   if (!entry.enabled) return null;
   const content = String(entry.content ?? "").trim();
   if (!content) return null;
@@ -123,7 +123,7 @@ export function lorebookItem(entry: LorebookEntryRecord): ArchivalItem | null {
   };
 }
 
-export function characterItem(char: CharacterRecord): ArchivalItem | null {
+function characterItem(char: CharacterRecord): ArchivalItem | null {
   const text =
     `[${char.type}] ${characterLabel(char)}: ${char.description ?? ""} ${JSON.stringify(modelFacingJson(char.fields ?? {}))}`.trim();
   if (!text) return null;
@@ -136,7 +136,7 @@ export function characterItem(char: CharacterRecord): ArchivalItem | null {
 }
 
 /** The item of a searchable plugin data record, or null when its text field is empty. */
-export function pluginDataItem(
+function pluginDataItem(
   row: PluginDataRecord,
   source: SearchablePluginData,
 ): ArchivalItem | null {

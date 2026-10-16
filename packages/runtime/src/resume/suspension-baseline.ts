@@ -15,6 +15,7 @@
  * commit rejects them when it moved on.
  */
 
+import { isRecord } from "../utils/is-record.js";
 import type { Proposal } from "@covel/shared";
 import type {
   SuspensionWriteBaseline,
@@ -26,10 +27,6 @@ import { readSuspensionWriteDigest } from "@covel/store/session";
 export type SuspensionWriteReader = Parameters<
   typeof readSuspensionWriteDigest
 >[0];
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
-}
 
 function nonEmpty(value: unknown): value is string {
   return typeof value === "string" && value.length > 0;

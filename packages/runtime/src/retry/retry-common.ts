@@ -16,7 +16,7 @@ import {
   isAccountFailure,
   LLMRequestBudgetError,
 } from "@covel/shared";
-import type { LLMMessage } from "../llm/llm-adapter.js";
+import type { LLMMessage } from "@covel/shared";
 
 // ── Config ──────────────────────────────────────────────────────────
 
@@ -119,7 +119,7 @@ export function buildRetryPolicy(input: {
  * more than half of what is left: a stalled attempt always leaves room for
  * the next one. With 120s and four attempts the waits are 60s, 30s, 15s, 15s.
  */
-export function stallWaitMs(remainingMs: number, attemptsLeft: number): number {
+function stallWaitMs(remainingMs: number, attemptsLeft: number): number {
   if (attemptsLeft <= 1) return remainingMs;
   return Math.max(
     remainingMs / attemptsLeft,

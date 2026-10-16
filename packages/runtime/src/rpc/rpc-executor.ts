@@ -49,7 +49,7 @@ export interface RpcDispatchDeps {
 }
 
 /** An action runs under the session lock; this bounds how long it holds it. */
-export const DEFAULT_RPC_HANDLER_TIMEOUT_MS = 30_000;
+const DEFAULT_RPC_HANDLER_TIMEOUT_MS = 30_000;
 
 export class RpcDispatchError extends Error {
   constructor(

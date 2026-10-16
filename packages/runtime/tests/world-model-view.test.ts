@@ -15,7 +15,7 @@ import {
   overlayWorldModelView,
 } from "../src/function-runtime/world-model-view.js";
 import { createCommitPipeline } from "../src/session/session-kernel.js";
-import { executeTurn } from "../src/turn-executor/turn-executor.js";
+import { runTurnPipeline } from "../src/turn-executor/turn-executor.js";
 
 const sessionId = "world-session";
 const timestamp = "2026-01-01T00:00:00.000Z";
@@ -427,7 +427,7 @@ describe("execution World Model", () => {
         : {}),
     }));
     const seen: unknown[] = [];
-    const result = await executeTurn(
+    const result = await runTurnPipeline(
       { origin: "player", sessionId, turnId: "turn", playerMessage: "go" },
       manifests,
       {

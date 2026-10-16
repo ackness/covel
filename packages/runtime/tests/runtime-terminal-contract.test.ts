@@ -9,8 +9,8 @@ import type {
 import type { TurnEmitter } from "../src/trace/turn-emitter.js";
 import { createHookPipeline } from "../src/hooks/pipeline.js";
 import type { HookResult } from "../src/hooks/types.js";
-import { executeTurn } from "../src/turn-executor/turn-executor.js";
-import { resumeSuspendedRuntime } from "../src/resume/turn-resume.js";
+import { runTurnPipeline } from "../src/turn-executor/turn-executor.js";
+import { resumeRuntimePipeline } from "../src/resume/turn-resume.js";
 import type { TurnExecutorDeps } from "../src/turn-executor/turn-executor-types.js";
 import { collectExecutionSuspensions } from "../src/suspension-artifact.js";
 
@@ -51,7 +51,7 @@ describe.each(["agent", "function"] as const)(
         const events: SubscriptionEvent[] = [];
         eventBus.onEmit((event) => events.push(event));
         try {
-          const turn = await executeTurn(
+          const turn = await runTurnPipeline(
             {
               origin: "player",
               sessionId: "session",
@@ -181,7 +181,7 @@ it.each(["agent", "function", "guard"] as const)(
     const guard = vi.fn(async () => ({ skip: true }));
     const generate = vi.fn();
     const onRuntimeComplete = vi.fn(async () => {});
-    const result = await executeTurn(
+    const result = await runTurnPipeline(
       {
         origin: "player",
         sessionId: "session",
@@ -354,7 +354,7 @@ describe.each(["turn", "resume"] as const)("%s terminal contract", (entry) => {
             const result =
               entry === "turn"
                 ? (
-                    await executeTurn(
+                    await runTurnPipeline(
                       {
                         origin: "player",
                         sessionId: "session",
@@ -365,7 +365,7 @@ describe.each(["turn", "resume"] as const)("%s terminal contract", (entry) => {
                       deps,
                     )
                   ).runtimeResults[0]!
-                : await resumeSuspendedRuntime(
+                : await resumeRuntimePipeline(
                     {
                       id: "suspension",
                       sessionId: "session",
@@ -492,7 +492,7 @@ describe.each(["generate", "stream", "function"] as const)(
           trigger: { type: "auto" },
         };
         const onRuntimeComplete = vi.fn(async () => {});
-        const turn = await executeTurn(
+        const turn = await runTurnPipeline(
           {
             origin: "player",
             sessionId: "session",

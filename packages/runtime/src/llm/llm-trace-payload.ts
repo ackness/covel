@@ -15,11 +15,7 @@ import type {
  * `docs/reference/protocol.md`.
  */
 
-import type {
-  LLMMessage,
-  LLMResponse,
-  LLMToolDefinition,
-} from "./llm-adapter.js";
+import type { LLMMessage, LLMResponse, LLMToolDefinition } from "@covel/shared";
 
 export interface LlmCallingPayloadInput {
   readonly providerRequests?: readonly LLMProviderRequest[];

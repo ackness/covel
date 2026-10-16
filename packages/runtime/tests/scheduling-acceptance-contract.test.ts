@@ -42,7 +42,7 @@ import {
   type SetupRuntimeState,
 } from "@covel/shared";
 import { buildContext } from "@covel/context";
-import { executeTurn } from "../src/turn-executor/turn-executor.js";
+import { runTurnPipeline } from "../src/turn-executor/turn-executor.js";
 import type { TurnExecutorDeps } from "../src/turn-executor/turn-executor.js";
 import type { LoadedRuntime } from "@covel/plugin-loader";
 import { finalizeExecution } from "../src/commit/finalize-execution.js";
@@ -59,7 +59,7 @@ import {
   deriveEffects,
 } from "../src/schedule/effects.js";
 import type { ScheduledGroup } from "../src/types.js";
-import type { LLMAdapter, LLMResponse } from "../src/llm/llm-adapter.js";
+import type { LLMAdapter, LLMResponse } from "@covel/shared";
 
 class NoopLLM implements LLMAdapter {
   async generate(): Promise<LLMResponse> {
@@ -118,7 +118,7 @@ async function scheduledRuntimeTriggers(
     llm: new NoopLLM(),
     store,
   };
-  await executeTurn(
+  await runTurnPipeline(
     {
       sessionId: "s",
       turnId: "t",
@@ -263,7 +263,7 @@ describe("setup frozen snapshot (cross-execution read of committed setup data)",
 
     // ── Execution 1 (setup band): only schema-gen runs; player-init (main loop)
     //    is not yet scheduled. Its write BUFFERS — nothing hits the store yet.
-    const setupTurn = await executeTurn(
+    const setupTurn = await runTurnPipeline(
       {
         sessionId,
         turnId: "t1",
@@ -314,7 +314,7 @@ describe("setup frozen snapshot (cross-execution read of committed setup data)",
 
     // ── Execution 2 (playing band): player-init passes the frozen-snapshot gate
     //    (schema-gen's mirror is done) and reads the COMMITTED schema.
-    const mainTurn = await executeTurn(
+    const mainTurn = await runTurnPipeline(
       { origin: "player", sessionId, turnId: "t2", playerMessage: "again" },
       [schemaGen, playerInit],
       deps,
@@ -395,7 +395,7 @@ describe("setup gating across trigger paths (setup-incomplete skip)", () => {
       store,
     };
 
-    const result = await executeTurn(
+    const result = await runTurnPipeline(
       { origin: "player", sessionId: "s2", turnId: "t", playerMessage: "go" },
       [aSetup, aMain, bMain],
       deps,
@@ -456,7 +456,7 @@ describe("setup gating across trigger paths (setup-incomplete skip)", () => {
         llm: new NoopLLM(),
         store,
       };
-      const result = await executeTurn(
+      const result = await runTurnPipeline(
         {
           origin: "player",
           sessionId: "s",
@@ -490,7 +490,7 @@ describe("setup gating across trigger paths (setup-incomplete skip)", () => {
         llm: new NoopLLM(),
         store,
       };
-      const result = await executeTurn(
+      const result = await runTurnPipeline(
         {
           origin: "player",
           sessionId: "s",
@@ -552,7 +552,7 @@ describe("setup gating across trigger paths (setup-incomplete skip)", () => {
         llm: new NoopLLM(),
         store,
       };
-      const result = await executeTurn(
+      const result = await runTurnPipeline(
         {
           origin: "player",
           sessionId: "s",
@@ -716,7 +716,7 @@ describe("capability cardinality (provider 0 / 1 / N / all)", () => {
       llm: new NoopLLM(),
       store,
     };
-    const result = await executeTurn(
+    const result = await runTurnPipeline(
       { origin: "player", sessionId: "s", turnId: "t", playerMessage: "go" },
       activeRuntimes,
       deps,
@@ -1133,7 +1133,7 @@ describe("function handler result contract", () => {
       loadRuntime: async () => loaded,
       store,
     } as unknown as TurnExecutorDeps;
-    const result = await executeTurn(
+    const result = await runTurnPipeline(
       {
         origin: "player",
         sessionId,
@@ -1442,7 +1442,7 @@ describe("activation payload (canonical payload shared by function/agent)", () =
       llm: new NoopLLM(),
       store,
     };
-    const result = await executeTurn(
+    const result = await runTurnPipeline(
       {
         origin: "player",
         sessionId: "s",
@@ -1673,7 +1673,7 @@ describe("recordAs export (persistent export revision)", () => {
 
     // ── Frozen read: a consumer sees the revision committed at or before its
     //    execution start, never a later one (store-level cutoff, the primitive
-    //    executeTurn pins `atOrBefore = executionStartedAt` against). ──
+    //    runTurnPipeline pins `atOrBefore = executionStartedAt` against). ──
     {
       const store = createMemoryStore();
       await seedPlaying(store, 1);
@@ -1712,7 +1712,7 @@ describe("recordAs export (persistent export revision)", () => {
       };
       // The producer stays in the active set so the provider gate passes, but it
       // is NOT triggered to run — the value comes purely from the frozen export.
-      const result = await executeTurn(
+      const result = await runTurnPipeline(
         { origin: "player", sessionId: "s", turnId: "t", playerMessage: "go" },
         [producer("cfg"), consumer()],
         deps,
@@ -1747,7 +1747,7 @@ describe("recordAs export (persistent export revision)", () => {
       };
       // p/gen is NOT in the active set — the export exists in the store but its
       // producer is deactivated, so a required consumer skips.
-      const result = await executeTurn(
+      const result = await runTurnPipeline(
         { origin: "player", sessionId: "s", turnId: "t", playerMessage: "go" },
         [consumer()],
         deps,
@@ -1784,7 +1784,7 @@ describe("recordAs export (persistent export revision)", () => {
         llm: new NoopLLM(),
         store,
       };
-      const result = await executeTurn(
+      const result = await runTurnPipeline(
         { origin: "player", sessionId: "s", turnId: "t", playerMessage: "go" },
         [producer("cfg"), consumer({ accepts: true })],
         deps,

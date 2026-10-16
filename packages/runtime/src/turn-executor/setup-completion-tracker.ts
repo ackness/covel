@@ -26,6 +26,7 @@
  *   only when this execution actually observed setup activity.
  */
 
+import type { SetupCompletionDelta } from "@covel/shared";
 import type {
   RanSetupRuntime,
   RuntimeManifest,
@@ -49,12 +50,6 @@ export interface SetupCompletionTrackerArgs {
   readonly preGameRuntimes: readonly RuntimeManifest[];
   readonly isPreGamePending: boolean;
   readonly isManualTrigger: boolean;
-}
-
-/** The `TurnResult.setupCompletion` payload shape. */
-export interface SetupCompletionDelta {
-  readonly newlyDone: Readonly<Record<string, SetupRuntimeState>>;
-  readonly allSetupDone: boolean;
 }
 
 export class SetupCompletionTracker {

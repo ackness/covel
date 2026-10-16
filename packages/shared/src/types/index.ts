@@ -143,6 +143,7 @@ export type {
   DetachedStageInput,
   TurnInput,
   TurnResult,
+  SetupCompletionDelta,
   NestedTurnResult,
   RecursiveCallDelta,
   InteractionType,
@@ -280,7 +281,7 @@ export type {
   AttributeDefinition,
   CharacterAttributeSchema,
   Character,
-} from "./character-schema.js";
+} from "@covel/plugin-handlers-utils";
 
 export type {
   RuntimeOutput,

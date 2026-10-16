@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { ToolRegistry, FRAMEWORK_TOOL_NAMES } from "../src/registry.js";
-import { tool } from "../src/tool.js";
+import { tool } from "@covel/plugin-handlers-utils";
 import type { ToolModule } from "../src/types.js";
 import {
   builtinUITools,

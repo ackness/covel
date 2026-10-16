@@ -18,7 +18,7 @@
  */
 
 import { z } from "zod";
-import { tool } from "../tool.js";
+import { tool } from "@covel/plugin-handlers-utils";
 import type { ToolModule } from "../types.js";
 
 /** Sentinel shape the turn-executor checks after each tool call. */

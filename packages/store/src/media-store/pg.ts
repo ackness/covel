@@ -1,5 +1,5 @@
 import postgres, { type JSONValue, type Sql } from "postgres";
-import { CREATE_MEDIA_TABLES_SQL } from "../postgres/pg-store-mappers.js";
+import { CREATE_MEDIA_TABLES_SQL } from "../postgres/pg-schema-ddl.js";
 import { SCHEMA_DDL_LOCK_SQL } from "../postgres/pg-schema-boot.js";
 import type {
   MediaAssetRecord,

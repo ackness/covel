@@ -1,5 +1,5 @@
 import { instructionLocaleFor } from "@covel/shared";
-import type { LLMMessage, LLMResponse } from "../llm/llm-adapter.js";
+import type { LLMMessage, LLMResponse } from "@covel/shared";
 import { runPostLLMResponseHook } from "../hooks/wire-helpers.js";
 
 /** Rejected drafts never dispatch tools or become the committed narrative. */

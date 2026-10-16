@@ -388,7 +388,7 @@ export function createPluginLogger(
  * What plugin code reads of the session: the public `PluginSessionView`, a
  * projection of the record, never the record itself.
  */
-export function pluginSessionView(
+function pluginSessionView(
   session: Pick<
     Session,
     "phase" | "completedPlayerTurns" | "locale" | "setupRuntimes"

@@ -18,9 +18,9 @@ import {
   buildHookSettings,
   snapshotUserSettings,
 } from "./hooks/hook-settings.js";
-import { executeTurn as runTurn } from "./turn-executor/turn-executor.js";
+import { runTurnPipeline } from "./turn-executor/turn-executor.js";
 import {
-  resumeSuspendedRuntime as resumeRuntime,
+  resumeRuntimePipeline,
   type ResumeSuspendedRuntimeOptions,
 } from "./resume/turn-resume.js";
 import type {
@@ -169,7 +169,7 @@ export async function executeTurn(
       : buildHookSettings(runtimes, userSettings),
     locale: deps.hookScope?.locale ?? input.locale,
   };
-  const turn = await runTurn(
+  const turn = await runTurnPipeline(
     { ...input, userSettings },
     runtimes,
     { ...captured.deps, hookScope },
@@ -306,7 +306,7 @@ export async function resumeSuspendedRuntime(
     locale: deps.hookScope?.locale ?? suspension.pendingContinuation.locale,
   };
   const result = await runWithHookScope(hookScope, () =>
-    resumeRuntime(
+    resumeRuntimePipeline(
       suspension,
       resumeData,
       manifest,

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { applyPerCallBudget } from "../src/agent-loop/request-context-budget.js";
-import type { LLMAdapter } from "../src/llm/llm-adapter.js";
+import type { LLMAdapter } from "@covel/shared";
 import { buildRetryPolicy } from "../src/retry/retry-common.js";
 
 describe("pre-request budget errors", () => {

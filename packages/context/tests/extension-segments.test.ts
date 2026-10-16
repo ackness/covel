@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { buildContextSync as buildContext } from "../src/context-builder.js";
+import { buildContext } from "../src/context-builder.js";
 import {
   PROMPT_CACHE_BREAKPOINT_MARKER,
   type PromptSegment,
@@ -16,8 +16,8 @@ const segment = (
   providerPluginId: "source",
   ...extra,
 });
-function assemble(segments: readonly PromptSegment[]) {
-  return buildContext({
+async function assemble(segments: readonly PromptSegment[]) {
+  return await buildContext({
     promptTemplate: "Instructions",
     manifest: {
       name: "target",
@@ -37,8 +37,8 @@ function assemble(segments: readonly PromptSegment[]) {
     promptSegments: segments,
   });
 }
-it("keeps stable and session system segments in the system prompt and moves turn-volatile ones out", () => {
-  const { systemPrompt, turnContext, messages } = assemble([
+it("keeps stable and session system segments in the system prompt and moves turn-volatile ones out", async () => {
+  const { systemPrompt, turnContext, messages } = await assemble([
     segment("fresh memory"),
     segment("static", { volatility: "stable" }),
     segment("session", { volatility: "session" }),
@@ -53,8 +53,8 @@ it("keeps stable and session system segments in the system prompt and moves turn
     { role: "user", content: "hello" },
   ]);
 });
-it("scopes segments to their provider, story runtimes and declared contracts", () => {
-  const { turnContext } = assemble([
+it("scopes segments to their provider, story runtimes and declared contracts", async () => {
+  const { turnContext } = await assemble([
     segment("private", { audience: "self" }),
     segment("own", { audience: "self", providerPluginId: "target" }),
     segment("story", { audience: "story" }),
@@ -67,8 +67,8 @@ it("scopes segments to their provider, story runtimes and declared contracts", (
   expect(turnContext).toContain("story");
   expect(turnContext).toContain("matching");
 });
-it("keeps message roles and post-history placement", () => {
-  const { messages } = assemble([
+it("keeps message roles and post-history placement", async () => {
+  const { messages } = await assemble([
     segment("before", { position: "pre-history", role: "user" }),
     segment("after", { position: "post-history", role: "assistant" }),
   ]);
@@ -76,8 +76,8 @@ it("keeps message roles and post-history placement", () => {
   expect(messages.at(-1)).toEqual({ role: "assistant", content: "after" });
 });
 
-it("places depth segments before the requested history position and post-history last", () => {
-  const result = buildContext({
+it("places depth segments before the requested history position and post-history last", async () => {
+  const result = await buildContext({
     promptTemplate: "Instructions",
     manifest: {
       name: "target",
@@ -112,18 +112,20 @@ it("places depth segments before the requested history position and post-history
   ]);
   expect(result.messages[3]?.role).toBe("user");
 });
-it("keeps provider content literal instead of interpolating caller template syntax", () => {
+it("keeps provider content literal instead of interpolating caller template syntax", async () => {
   expect(
-    assemble([
-      segment("literal", {
-        content: "{{ player.message }}",
-        position: "post-history",
-      }),
-    ]).messages.at(-1)?.content,
+    (
+      await assemble([
+        segment("literal", {
+          content: "{{ player.message }}",
+          position: "post-history",
+        }),
+      ])
+    ).messages.at(-1)?.content,
   ).toBe("{{ player.message }}");
 });
-it("clamps depth beyond the available history and supports depth zero", () => {
-  const result = assemble([
+it("clamps depth beyond the available history and supports depth zero", async () => {
+  const result = await assemble([
     segment("first", { position: { depth: 99 } }),
     segment("last", { position: { depth: 0 } }),
   ]);
@@ -134,11 +136,11 @@ it("clamps depth beyond the available history and supports depth zero", () => {
   ]);
 });
 
-it("breaks same-order provider ties by code units, not locale", () => {
+it("breaks same-order provider ties by code units, not locale", async () => {
   // localeCompare ranks "alpha" before "Zeta"; code-unit order puts "Zeta"
   // first. Both must agree with the extension host's provider ordering so
   // assembled bytes stay identical across ICU builds.
-  const { turnContext } = assemble([
+  const { turnContext } = await assemble([
     segment("from-alpha", { providerPluginId: "alpha" }),
     segment("from-zeta", { providerPluginId: "Zeta" }),
   ]);
@@ -148,8 +150,8 @@ it("breaks same-order provider ties by code units, not locale", () => {
   );
 });
 
-it("keeps mixed message positions while moving volatile system-role content past system cache markers", () => {
-  const { systemPrompt, messages } = assemble([
+it("keeps mixed message positions while moving volatile system-role content past system cache markers", async () => {
+  const { systemPrompt, messages } = await assemble([
     segment("fresh-system", { position: "pre-history", role: "system" }),
     segment("stable-system", {
       position: "pre-history",

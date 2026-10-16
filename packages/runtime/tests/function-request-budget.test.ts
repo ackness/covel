@@ -1,6 +1,6 @@
 import { AiProviderError } from "@covel/ai-provider";
 import type { RuntimeManifest } from "@covel/shared";
-import { executeTurn } from "../src/turn-executor/turn-executor.js";
+import { runTurnPipeline } from "../src/turn-executor/turn-executor.js";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { z } from "zod";
 import type { LLMRequestBudget } from "@covel/shared";
@@ -140,7 +140,7 @@ it("carries the host budget through the actual function executor", async () => {
     trigger: { type: "auto" },
     timeoutMs: 300_000,
   };
-  const pending = executeTurn(
+  const pending = runTurnPipeline(
     {
       origin: "player",
       sessionId: "session",

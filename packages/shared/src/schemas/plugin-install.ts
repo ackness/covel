@@ -68,12 +68,6 @@ export const githubPluginPreviewSchema = z
   })
   .strict();
 
-export const githubPluginPreviewsSchema = z
-  .object({
-    items: z.array(githubPluginPreviewSchema),
-  })
-  .strict();
-
 export type GithubPluginPreview = z.infer<typeof githubPluginPreviewSchema>;
 
 export const pluginInstallationSchema = z

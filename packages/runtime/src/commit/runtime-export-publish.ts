@@ -38,15 +38,11 @@ interface ExportSink {
   appendRuntimeExport(record: RuntimeExportRecord): Promise<boolean>;
 }
 
-/** Loose success-result shape the publisher reads (a superset of the finalize result). */
-interface PublishableResult {
-  readonly status?: string;
-  readonly runtimeId: string;
-  readonly runId?: string;
-  readonly resultId?: string;
-  readonly output?: unknown;
-  readonly canonicalValue?: RuntimeResult["canonicalValue"];
-}
+/** The result fields read when publishing a committed runtime export. */
+type PublishableResult = Pick<
+  RuntimeResult,
+  "status" | "runtimeId" | "runId" | "output" | "canonicalValue"
+>;
 
 /** Per-runtime `recordAs` declaration plus producer provenance. */
 export interface ExportDecl {
@@ -171,7 +167,7 @@ export async function publishExecutionExports(
       }
 
       const schemaDigest = digestOf(schema);
-      const resultId = result.resultId ?? result.runId ?? "";
+      const resultId = result.runId;
       const build = (revision: number): RuntimeExportRecord => ({
         sessionId,
         producerPluginId: decl.pluginId,

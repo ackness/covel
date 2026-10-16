@@ -21,6 +21,10 @@
  *     see NPCs created by a character tracker plugin.
  */
 
+import {
+  assertCharacterFields,
+  mergeSchemaDefaults,
+} from "@covel/plugin-handlers-utils";
 import type {
   CharacterSchema,
   CharacterRecord,
@@ -28,7 +32,7 @@ import type {
   Proposal,
 } from "@covel/shared";
 import { z } from "zod";
-import { tool } from "../tool.js";
+import { tool } from "@covel/plugin-handlers-utils";
 import {
   characterLabel,
   characterNameKey,
@@ -46,23 +50,20 @@ import {
 } from "../result.js";
 import { overlayCharacters } from "../proposal-overlay.js";
 import { validateFieldsAgainstSchema } from "../schema-validator.js";
-import { wordId } from "../short-id.js";
+import { wordId } from "@covel/plugin-handlers-utils";
 import {
   buildFieldsZod,
-  assertCharacterFields,
   characterTypeSchema,
   characterFieldsHint,
   formatFields,
   formatFieldValue,
   loadCharacterSchema,
-  mergeSchemaDefaults,
   sortByFrequencyThenRecency,
   toSnapshot,
   truncate,
   type CharacterStore,
 } from "./character-tool-helpers.js";
 
-export { mergeSchemaDefaults } from "./character-tool-helpers.js";
 export type {
   CharacterSnapshot,
   CharacterStore,

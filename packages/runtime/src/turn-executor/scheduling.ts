@@ -217,7 +217,6 @@ export function selectTriggeredRuntimes(args: {
       turnsSinceLastTrigger:
         runtimeTurnsSinceLastTrigger.get(rt.name) ?? NEVER_TRIGGERED_SENTINEL,
       pendingEventTopics: [],
-      isManualTrigger: false,
     };
     return shouldTrigger(rt, triggerContext);
   });

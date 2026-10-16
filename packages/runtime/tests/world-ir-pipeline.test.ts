@@ -18,7 +18,7 @@ import { createMemoryStore } from "@covel/store/memory";
 import { tool } from "@covel/tools";
 import makeSubmitWorldFacts from "../../../plugins/world-ir/tools/submit-world-facts.js";
 import { createToolExecutor } from "../src/agent-loop/tool-executor.js";
-import { executeTurn } from "../src/turn-executor/turn-executor.js";
+import { runTurnPipeline } from "../src/turn-executor/turn-executor.js";
 
 const PLUGINS_DIR = path.resolve(import.meta.dirname, "../../../plugins");
 
@@ -168,7 +168,7 @@ async function runPipeline(worldIrContent: string) {
     playerMessage: "Search the desk.",
   };
 
-  const result = await executeTurn(
+  const result = await runTurnPipeline(
     input,
     [narrator.manifest, worldIr.manifest, consumer],
     {

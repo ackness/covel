@@ -5,9 +5,7 @@ import {
   BrowserSyncValidationError,
   RevisionConflictError,
   applySessionCommit,
-  isBrowserCheckpoint,
   isPersistenceProfile,
-  isSessionCommit,
   validateBrowserCheckpoint,
   validateSessionCommit,
 } from "../src/browser-sync/browser-sync.js";
@@ -75,10 +73,10 @@ describe("browser-authoritative persistence contract", () => {
   it("validates profiles, checkpoints, and commit metadata", () => {
     expect(isPersistenceProfile("cloud")).toBe(true);
     expect(isPersistenceProfile("browser-shared")).toBe(false);
-    expect(isBrowserCheckpoint(firstCheckpoint)).toBe(true);
+    expect(() => validateBrowserCheckpoint(firstCheckpoint)).not.toThrow();
 
     const commit = commitFrom(firstCheckpoint);
-    expect(isSessionCommit(commit)).toBe(true);
+    expect(() => validateSessionCommit(commit)).not.toThrow();
     expect(() =>
       validateSessionCommit({
         ...commit,

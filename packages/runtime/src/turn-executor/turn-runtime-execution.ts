@@ -745,7 +745,7 @@ export async function executeOneRuntime(
  * keys are ignored; invalid fields and targets outside the caller's package
  * are author errors.
  */
-export function readRecursiveCallDelta(
+function readRecursiveCallDelta(
   raw: unknown,
   pluginId: string,
 ): RecursiveCallDelta {

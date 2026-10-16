@@ -41,7 +41,7 @@ import type {
   LLMTargetIdentity,
   LLMToolCall,
   LLMToolDefinition,
-} from "../llm/llm-adapter.js";
+} from "@covel/shared";
 import {
   emitLlmCalling,
   emitLlmRespondedError,
@@ -74,19 +74,6 @@ import {
   type RetryPolicy,
   type RetryReason,
 } from "./retry-common.js";
-
-// Re-export the shared retry primitives so existing import sites that pull
-// these from `llm-retry.js` keep working unchanged.
-export {
-  LLMRetryError,
-  buildRetryPolicy,
-  isTransientError,
-  perturbMessages,
-  DEFAULT_MAX_RETRIES,
-  DEFAULT_FIRST_TOKEN_TIMEOUT_MS,
-  DEFAULT_LOOP_THRESHOLD,
-} from "./retry-common.js";
-export type { RetryPolicy, RetryReason } from "./retry-common.js";
 
 // ── Tool-loop detection ─────────────────────────────────────────────
 

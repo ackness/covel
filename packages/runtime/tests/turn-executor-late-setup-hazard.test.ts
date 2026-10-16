@@ -14,9 +14,9 @@ import type { RuntimeManifest, SubscriptionEvent } from "@covel/shared";
 import type { FunctionHandler } from "@covel/plugin-loader";
 import { createMemoryStore } from "@covel/store/memory";
 import { createEventBus, type EventBus } from "@covel/events";
-import { executeTurn } from "../src/turn-executor/turn-executor.js";
+import { runTurnPipeline } from "../src/turn-executor/turn-executor.js";
 import type { TurnExecutorDeps } from "../src/turn-executor/turn-executor.js";
-import type { LLMAdapter, LLMResponse } from "../src/llm/llm-adapter.js";
+import type { LLMAdapter, LLMResponse } from "@covel/shared";
 
 class NoopLLM implements LLMAdapter {
   async generate(): Promise<LLMResponse> {
@@ -113,7 +113,7 @@ describe("late-setup hazard policy and detachment diagnostics", () => {
         },
       ]),
     );
-    const result = await executeTurn(
+    const result = await runTurnPipeline(
       { origin: "player", sessionId: "s", turnId: "t", playerMessage: "go" },
       [a, b],
       makeDeps(handlers, eventBus, store),
@@ -156,7 +156,7 @@ describe("late-setup hazard policy and detachment diagnostics", () => {
     }));
     const handlers = new Map([[detachedSetup.name, handler]]);
 
-    const result = await executeTurn(
+    const result = await runTurnPipeline(
       { origin: "player", sessionId: "s", turnId: "t", playerMessage: "go" },
       [detachedSetup],
       makeDeps(handlers, eventBus, store),

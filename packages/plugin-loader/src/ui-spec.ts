@@ -19,7 +19,7 @@ async function containedFile(root: string, file: string): Promise<string> {
 }
 
 /** A UI spec the host does not show, with what is wrong with it. */
-export class PluginUiSpecError extends Error {
+class PluginUiSpecError extends Error {
   constructor(
     readonly issues: readonly PluginUiSpecIssue[],
     /** The spec's `id`, when it has one. */

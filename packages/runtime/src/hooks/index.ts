@@ -14,10 +14,9 @@ export { runWithHookScope, type HookScope } from "./hook-scope.js";
 export type {
   HookEvent,
   HookSemantic,
-  HookEnforce,
   HookContext,
   HookResult,
   HookHandler,
   HookRegistration,
-  HookDeclaration,
 } from "./types.js";
+export type { HookEnforce, HookDeclaration } from "@covel/shared";

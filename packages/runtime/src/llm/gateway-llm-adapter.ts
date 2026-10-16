@@ -29,7 +29,7 @@ import type {
   LLMTargetIdentity,
   LLMToolDefinition,
   LLMUsageSummary,
-} from "./llm-adapter.js";
+} from "@covel/shared";
 
 /**
  * Minimal structural form of `@covel/ai-provider`'s `SlotOverridesInput`.
@@ -517,7 +517,7 @@ function withResponseFormatInstruction(
 }
 
 function toGatewayMessages(
-  messages: readonly import("./llm-adapter.js").LLMMessage[],
+  messages: readonly import("@covel/shared").LLMMessage[],
 ) {
   return messages.map((msg) => ({
     role: msg.role,

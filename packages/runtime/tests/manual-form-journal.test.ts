@@ -3,7 +3,7 @@ import { createMemoryStore } from "@covel/store/memory";
 import { createFormTool } from "@covel/tools";
 import type { RuntimeManifest } from "@covel/shared";
 import type { PluginFormInteraction } from "@covel/plugin-handlers-utils";
-import { executeTurn } from "../src/turn-executor/turn-executor.js";
+import { runTurnPipeline } from "../src/turn-executor/turn-executor.js";
 import { createToolExecutor } from "../src/agent-loop/tool-executor.js";
 import { collectExecutionJournal } from "../src/execution-journal.js";
 import { finalizeExecution } from "../src/commit/finalize-execution.js";
@@ -48,7 +48,7 @@ describe.each(["function", "agent"] as const)(
           tools: { builtin: ["create-form"] },
         };
         let calls = 0;
-        const result = await executeTurn(
+        const result = await runTurnPipeline(
           {
             sessionId: "s",
             turnId: "t",

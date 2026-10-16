@@ -655,10 +655,10 @@ export function executionMayBeRunning(
 }
 
 export interface SessionSnapshot {
-  readonly dimensions: import("./dimensions.js").DimensionSnapshot;
+  readonly dimensions: import("@covel/plugin-handlers-utils/dimensions").DimensionSnapshot;
   readonly dimensionProviderPluginId?: string;
-  readonly dimensionSettlements?: readonly import("./dimensions.js").DimensionSettlementSummary[];
-  readonly dimensionRecovery?: import("./dimensions.js").DimensionRecovery;
+  readonly dimensionSettlements?: readonly import("@covel/plugin-handlers-utils/dimensions").DimensionSettlementSummary[];
+  readonly dimensionRecovery?: import("@covel/plugin-handlers-utils/dimensions").DimensionRecovery;
   readonly session: {
     readonly id: string;
     readonly worldId?: string;

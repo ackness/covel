@@ -23,9 +23,9 @@ import {
 import { settleSetupRuntimes } from "../src/commit/setup-settle.js";
 import { detectSetupSessionCycles } from "../src/turn-executor/setup-run.js";
 import { selectTriggeredRuntimes } from "../src/turn-executor/scheduling.js";
-import { executeTurn } from "../src/turn-executor/turn-executor.js";
+import { runTurnPipeline } from "../src/turn-executor/turn-executor.js";
 import type { TurnExecutorDeps } from "../src/turn-executor/turn-executor.js";
-import type { LLMAdapter, LLMResponse } from "../src/llm/llm-adapter.js";
+import type { LLMAdapter, LLMResponse } from "@covel/shared";
 
 class NoopLLM implements LLMAdapter {
   async generate(): Promise<LLMResponse> {
@@ -302,7 +302,7 @@ describe("setup session-gate SCC", () => {
     });
     const { consumer, loop, other } = capabilityRuntimes();
     const invoked: string[] = [];
-    await executeTurn(
+    await runTurnPipeline(
       { origin: "player", sessionId: "s", turnId: "t", playerMessage: "" },
       [consumer, loop, other],
       {
@@ -362,7 +362,7 @@ describe("setup session-gate SCC", () => {
       llm: new NoopLLM(),
       store,
     };
-    await executeTurn(
+    await runTurnPipeline(
       { origin: "player", sessionId: "s", turnId: "t", playerMessage: "" },
       [x, y],
       deps,
@@ -442,7 +442,7 @@ describe("main-loop dependency-cycle SCC", () => {
       llm: new NoopLLM(),
       store,
     };
-    const result = await executeTurn(
+    const result = await runTurnPipeline(
       { origin: "player", sessionId: "s", turnId: "t", playerMessage: "go" },
       [a, b, c],
       deps,
@@ -511,7 +511,7 @@ describe("plugin version mismatch", () => {
       llm: new NoopLLM(),
       store,
     };
-    const result = await executeTurn(
+    const result = await runTurnPipeline(
       { origin: "player", sessionId: "s", turnId: "t", playerMessage: "go" },
       [setup],
       deps,

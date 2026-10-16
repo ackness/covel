@@ -19,7 +19,7 @@ import { instructionLocaleFor, type LLMContentPart } from "@covel/shared";
  * tokens for a 1024x1024 picture on OpenAI at high detail, about 1,400 on
  * Anthropic, and up to 1,600 for the largest size either accepts unscaled.
  */
-export const IMAGE_PART_TOKEN_ESTIMATE = 1_500;
+const IMAGE_PART_TOKEN_ESTIMATE = 1_500;
 
 /**
  * Convert a message `content` value (string or content-part array) into the

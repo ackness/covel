@@ -2,11 +2,11 @@ import { throughGateway } from "./helpers/through-gateway.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { acquireLLMSlot, setLLMSlotCapForTests } from "@covel/shared";
 import {
-  buildRetryPolicy,
   callLLMWithRetry,
   streamLLMWithRetry,
 } from "../src/retry/llm-retry.js";
-import type { LLMAdapter } from "../src/llm/llm-adapter.js";
+import { buildRetryPolicy } from "../src/retry/retry-common.js";
+import type { LLMAdapter } from "@covel/shared";
 
 afterEach(() => setLLMSlotCapForTests(undefined));
 

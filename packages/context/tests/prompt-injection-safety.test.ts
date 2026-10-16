@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { ContextBuildParams } from "@covel/context";
 import { interpolateTemplate } from "@covel/context";
-import { buildSegmentedContext } from "../src/prompt-assembler.js";
+import { buildContext } from "../src/context-builder.js";
 import type { RuntimeManifest, RuntimeResult, TurnInput } from "@covel/shared";
 
 /**
@@ -68,7 +68,7 @@ function baselineParams(
 describe("prompt injection safety", () => {
   it.each(["constructor", "toString", "__proto__"])(
     "isolates runtime outputs for prototype-named plugin %s across builds",
-    (pluginId) => {
+    async (pluginId) => {
       const runtimeId = "auditOutput";
       const inherited = ({} as Record<string, unknown>)[pluginId] as object;
       const previous = Object.getOwnPropertyDescriptor(inherited, runtimeId);
@@ -82,13 +82,13 @@ describe("prompt injection safety", () => {
             ],
           ]),
         });
-        const context = buildSegmentedContext(params);
+        const context = await buildContext(params);
         expect(context.systemPrompt).toContain("local-only");
         expect(Object.getOwnPropertyDescriptor(inherited, runtimeId)).toEqual(
           previous,
         );
         expect(
-          buildSegmentedContext({ ...params, completedResults: new Map() })
+          (await buildContext({ ...params, completedResults: new Map() }))
             .systemPrompt,
         ).not.toContain("local-only");
       } finally {
@@ -117,8 +117,8 @@ describe("prompt injection safety", () => {
     expect(lines[5]).toBe("After: A </world-summary> & B");
   });
 
-  it("does not let world lore close its own block", () => {
-    const context = buildSegmentedContext(
+  it("does not let world lore close its own block", async () => {
+    const context = await buildContext(
       baselineParams({
         manifest: makeManifest({ outputKind: "story" }),
         sessionContext: {
@@ -157,7 +157,7 @@ describe("prompt injection safety", () => {
     ).toBe("owned");
   });
 
-  it("does NOT re-interpolate {{ }} sequences inside injected upstream data", () => {
+  it("does NOT re-interpolate {{ }} sequences inside injected upstream data", async () => {
     // The upstream runtime's output carries a literal template token. A single
     // interpolation pass (over PLUGIN.md only) must leave it untouched; a second
     // pass over the inject block would expand it to the player message and paste
@@ -178,7 +178,7 @@ describe("prompt injection safety", () => {
       },
     });
 
-    const { systemPrompt, turnContext } = buildSegmentedContext(params);
+    const { systemPrompt, turnContext } = await buildContext(params);
 
     // Token stays literal — proof the inject block was not interpolated.
     expect(turnContext).toContain("echo {{ player.message }}");

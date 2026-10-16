@@ -3,7 +3,7 @@ import type { LoadedRuntime } from "@covel/plugin-loader";
 import type { RuntimeManifest, TurnInput } from "@covel/shared";
 import { createMemoryStore } from "@covel/store/memory";
 import {
-  executeTurn,
+  runTurnPipeline,
   MaxRecursionExceeded,
   type TurnExecutorDeps,
 } from "../src/turn-executor/turn-executor.js";
@@ -31,7 +31,7 @@ function manifest(
   };
 }
 
-describe("executeTurn recursiveCall", () => {
+describe("runTurnPipeline recursiveCall", () => {
   it.each(["builtin", "community"] as const)(
     "rejects targets in another package for a %s caller",
     async (source) => {
@@ -43,7 +43,7 @@ describe("executeTurn recursiveCall", () => {
           value: { ok: true },
         }));
         const emitter = makeEmitterSpy();
-        const result = await executeTurn(input, [caller, target], {
+        const result = await runTurnPipeline(input, [caller, target], {
           loadRuntime: async (runtime) => ({
             manifest: runtime,
             promptTemplate: "",
@@ -79,7 +79,7 @@ describe("executeTurn recursiveCall", () => {
   it("allows an inline runtime to name its own package", async () => {
     const caller = manifest("probe", { trigger: { type: "manual" } });
     const depths: number[] = [];
-    const result = await executeTurn(
+    const result = await runTurnPipeline(
       { ...input, manualTrigger: { runtimeId: caller.name } },
       [caller],
       {
@@ -155,7 +155,7 @@ describe("executeTurn recursiveCall", () => {
       emitter,
     };
 
-    const result = await executeTurn(input, [caller, leaf], deps);
+    const result = await runTurnPipeline(input, [caller, leaf], deps);
 
     expect(result.runtimeResults).toHaveLength(1);
     expect(result.runtimeResults[0]?.output).toMatchObject({
@@ -228,7 +228,7 @@ describe("executeTurn recursiveCall", () => {
       emitter: makeEmitterSpy(),
     };
 
-    const result = await executeTurn(input, [caller, leaf], deps);
+    const result = await runTurnPipeline(input, [caller, leaf], deps);
 
     expect(seen.sessionId).toBe(input.sessionId);
     expect(seen.turnId).toBe(input.turnId);
@@ -270,7 +270,7 @@ describe("executeTurn recursiveCall", () => {
       ],
     ]);
 
-    await executeTurn({ ...input, locale: "en-US" }, [caller, leaf], {
+    await runTurnPipeline({ ...input, locale: "en-US" }, [caller, leaf], {
       loadRuntime: async (rt) => loaded.get(rt.name),
       llm: { generate: vi.fn() },
       emitter: makeEmitterSpy(),
@@ -359,7 +359,7 @@ describe("executeTurn recursiveCall", () => {
       ],
     ]);
 
-    const result = await executeTurn(
+    const result = await runTurnPipeline(
       { ...input, userSettings: { probe: { mode: "calm" } } },
       [caller, up, leaf],
       {
@@ -401,7 +401,7 @@ describe("executeTurn recursiveCall", () => {
       ],
     ]);
 
-    await executeTurn(input, [caller], {
+    await runTurnPipeline(input, [caller], {
       loadRuntime: async (rt) => loaded.get(rt.name),
       llm: { generate: vi.fn() },
       emitter: makeEmitterSpy(),
@@ -445,7 +445,7 @@ describe("executeTurn recursiveCall", () => {
       emitter,
     };
 
-    const result = await executeTurn(input, [caller, leaf], deps);
+    const result = await runTurnPipeline(input, [caller, leaf], deps);
 
     expect(result.runtimeResults[0]?.status).toBe("failed");
     expect(result.runtimeResults[0]?.error).toContain(
@@ -514,7 +514,7 @@ describe("executeTurn recursiveCall", () => {
     };
 
     let settled = false;
-    const executing = executeTurn(input, [caller, leaf], deps).then(
+    const executing = runTurnPipeline(input, [caller, leaf], deps).then(
       (result) => {
         settled = true;
         return result;
@@ -581,7 +581,7 @@ describe("executeTurn recursiveCall", () => {
       llm: { generate: vi.fn() },
     };
 
-    const result = await executeTurn(input, [caller, leaf], deps);
+    const result = await runTurnPipeline(input, [caller, leaf], deps);
 
     expect(result.runtimeResults[0]).toMatchObject({ status: "failed" });
     expect(result.runtimeResults[0]?.error).toContain("timed out after 25ms");
@@ -654,7 +654,7 @@ describe("executeTurn recursiveCall", () => {
       getPluginSource: () => "builtin",
     };
 
-    const result = await executeTurn(input, [caller, leaf], deps);
+    const result = await runTurnPipeline(input, [caller, leaf], deps);
 
     // The parent returned at its own deadline; it did not wait for the child.
     expect(leafDone).toBe(false);

@@ -4,7 +4,7 @@ import type {
   EvaluationAnswer,
   EvaluationQuestions,
   EvaluationResult,
-} from "../evaluation/types.js";
+} from "@covel/shared";
 import type { EvaluationProtocol } from "./evaluation.js";
 
 const probability = z.number().min(0).max(1);

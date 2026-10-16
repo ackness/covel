@@ -30,7 +30,7 @@
  * Schema ownership
  * ────────────────
  * The `vector_models` table and the `sessions.embedding_model_id` /
- * `embedding_locked_at` columns are created by `sqlite-store-mappers.ts`
+ * `embedding_locked_at` columns are created by `sqlite-schema-ddl.ts`
  * during store initialization. This module ONLY creates per-model
  * physical vec0 tables on demand — it does not duplicate the registry
  * or session-column DDL.
@@ -138,7 +138,7 @@ export function createSqliteVectorCapability(
   }
 
   // NOTE: vector_models table and sessions.embedding_model_id /
-  // embedding_locked_at columns are owned by sqlite-store-mappers.ts.
+  // embedding_locked_at columns are owned by sqlite-schema-ddl.ts.
   // We trust they exist by the time this factory runs.
 
   // Session deletion remains available without this optional extension. Now

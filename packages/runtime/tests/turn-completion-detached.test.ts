@@ -2,9 +2,9 @@ import { describe, expect, it, vi } from "vitest";
 import type { InputSlot, RuntimeManifest, TurnInput } from "@covel/shared";
 import { createMemoryStore } from "@covel/store/memory";
 import type { FunctionHandler, LoadedRuntime } from "@covel/plugin-loader";
-import { executeTurn } from "../src/turn-executor/turn-executor.js";
+import { runTurnPipeline } from "../src/turn-executor/turn-executor.js";
 import type { TurnExecutorDeps } from "../src/turn-executor/turn-executor.js";
-import type { LLMAdapter, LLMResponse } from "../src/llm/llm-adapter.js";
+import type { LLMAdapter, LLMResponse } from "@covel/shared";
 
 class NoopLLM implements LLMAdapter {
   async generate(): Promise<LLMResponse> {
@@ -99,7 +99,7 @@ describe("scheduler-driven detached turn completion", () => {
       ]),
     );
 
-    const result = await executeTurn(
+    const result = await runTurnPipeline(
       {
         sessionId: "session",
         turnId: "source-turn",
@@ -206,7 +206,7 @@ describe("scheduler-driven detached turn completion", () => {
     // The source execution has committed, so the session clock moved on.
     await deps.store!.updateSession("session", { completedPlayerTurns: 1 });
 
-    const result = await executeTurn(input, [narrative, detached], deps);
+    const result = await runTurnPipeline(input, [narrative, detached], deps);
 
     expect(result.runtimeResults).toHaveLength(1);
     expect(result.runtimeResults[0]).toMatchObject({
@@ -248,7 +248,7 @@ describe("scheduler-driven detached turn completion", () => {
       ]),
     );
 
-    const result = await executeTurn(
+    const result = await runTurnPipeline(
       {
         sessionId: "session",
         turnId: "turn",
@@ -278,7 +278,7 @@ describe("scheduler-driven detached turn completion", () => {
       new Map<string, FunctionHandler>([[unsafe.name, handler]]),
     );
 
-    const result = await executeTurn(
+    const result = await runTurnPipeline(
       {
         sessionId: "session",
         turnId: "turn",
@@ -310,7 +310,7 @@ describe("scheduler-driven detached turn completion", () => {
       new Map<string, FunctionHandler>([[unsafe.name, handler]]),
     );
 
-    const result = await executeTurn(
+    const result = await runTurnPipeline(
       {
         sessionId: "session",
         turnId: "turn",

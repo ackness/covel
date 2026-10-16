@@ -256,34 +256,11 @@ function buildExportsBindingBlock(params: ContextBuildParams): string {
   return `<runtime-exports>\n${escapeXmlContent(JSON.stringify(modelFacingSlots(slots)))}\n</runtime-exports>`;
 }
 
-/**
- * Build the 10 prompt segments for a single runtime context. The only inject
- * kind that renders a block (`plugin-data`) needs the store, so this
- * synchronous path renders none; use {@link buildPromptSegmentsAsync}.
- */
-function buildPromptSegments(params: ContextBuildParams): PromptSegments {
-  return buildPromptSegmentsCommon(params, "");
-}
-
-/**
- * Async variant — same as {@link buildPromptSegments} but resolves
- * `kind: 'plugin-data'` inject declarations via the injected store.
- */
-async function buildPromptSegmentsAsync(
+/** Build prompt segments, resolving plugin-data injects through the store. */
+async function buildPromptSegments(
   params: ContextBuildParams,
 ): Promise<PromptSegments> {
   const rawInjects = await buildInjectBlocksAsync(params);
-  return buildPromptSegmentsCommon(params, rawInjects);
-}
-
-/**
- * Shared segment assembly given a pre-resolved inject-block string. Split
- * out so the sync and async paths share every other segment unchanged.
- */
-function buildPromptSegmentsCommon(
-  params: ContextBuildParams,
-  rawInjects: string,
-): PromptSegments {
   const variables = assemblePromptVariables(params);
 
   const pluginInstructions = interpolateTemplate(
@@ -416,48 +393,14 @@ function buildPromptSegmentsCommon(
 }
 
 /**
- * Build the assembled runtime context. Same return shape as
- * {@link buildContext}.
- *
- * Assembles the system prompt as 10 named segments (see {@link PromptSegments}),
- * then joins segments 1–6 with `\n\n` as the final `systemPrompt`. The
- * `messages` array contains history + current user message, with any
- * depth-positioned notes and post-history instructions applied afterward.
- *
- * When the caller supplies both `estimator` and `contextBudget`, the pruning
- * pass runs before returning.
- *
- * @param params - Same shape as `buildContext` with an optional
- *   `frameworkPreamble` override for segment 1.
+ * Assemble the system prompt, current turn inputs, and message history.
+ * Plugin-data injects read from `params.store`. Budget pruning runs when both
+ * an estimator and context budget are supplied.
  */
-export function buildSegmentedContext(
-  params: ContextBuildParams,
-): AssembledContext {
-  const segments = buildPromptSegments(params);
-  return finalizeSegmentedContext(params, segments);
-}
-
-/**
- * Async assembly path — identical to {@link buildSegmentedContext} but uses
- * {@link buildPromptSegmentsAsync} so `kind: 'plugin-data'` injects can
- * await the store.
- */
-export async function buildSegmentedContextAsync(
+export async function buildContext(
   params: ContextBuildParams,
 ): Promise<AssembledContext> {
-  const segments = await buildPromptSegmentsAsync(params);
-  return finalizeSegmentedContext(params, segments);
-}
-
-/**
- * Shared finalisation — message history, author's notes, post-history
- * instructions, and budget pruning. Split out so the sync and async
- * paths share every post-segment step.
- */
-function finalizeSegmentedContext(
-  params: ContextBuildParams,
-  segments: PromptSegments,
-): AssembledContext {
+  const segments = await buildPromptSegments(params);
   const systemPrompt = serializeSystemPrompt(segments, true);
   // Serialization emits segment 1 first, followed by its cache marker.
   const frameworkHead = segments.frameworkPreamble

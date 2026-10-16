@@ -7,7 +7,7 @@ import initializeWorld from "../../../plugins/world-init/tools/initialize-world.
 import schemaGuard from "../../../plugins/world-init/guard.js";
 import { createToolExecutor } from "../src/agent-loop/tool-executor.js";
 import { finalizeExecution } from "../src/commit/finalize-execution.js";
-import { executeTurn } from "../src/turn-executor/turn-executor.js";
+import { runTurnPipeline } from "../src/turn-executor/turn-executor.js";
 
 const outputSchema = JSON.parse(
   readFileSync(
@@ -85,7 +85,7 @@ describe("schema-gen completion and public output contract", () => {
         finishReason: "tool_calls",
         usage: { inputTokens: 1, outputTokens: 1 },
       }));
-      const turn = await executeTurn(
+      const turn = await runTurnPipeline(
         {
           sessionId: "session",
           turnId: "setup",

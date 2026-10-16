@@ -5,7 +5,7 @@
  * is validated against the runtime's `output.schema`. A mismatch fails the
  * runtime and commits no domain effects.
  *
- * Pinned behaviours (via `executeTurn` → `executeFunctionRuntime`):
+ * Pinned behaviours (via `runTurnPipeline` → `executeFunctionRuntime`):
  *   1. value conforms → success.
  *   2. value violates schema → failed with output-schema-invalid.
  *   3. no output.schema declared → validation is skipped.
@@ -15,7 +15,7 @@ import { describe, expect, it, beforeEach, afterEach, vi } from "vitest";
 import type { JsonValue, RuntimeManifest, TurnInput } from "@covel/shared";
 import type { LoadedRuntime } from "@covel/plugin-loader";
 import { createMemoryStore } from "@covel/store/memory";
-import { executeTurn } from "../src/turn-executor/turn-executor.js";
+import { runTurnPipeline } from "../src/turn-executor/turn-executor.js";
 import type { TurnExecutorDeps } from "../src/turn-executor/turn-executor.js";
 import { createHookPipeline } from "../src/hooks/pipeline.js";
 import { finalizeExecution } from "../src/commit/finalize-execution.js";
@@ -79,7 +79,7 @@ describe("function output schema gate", () => {
       handler: async () => returned,
     };
 
-    const result = await executeTurn(
+    const result = await runTurnPipeline(
       input("sess-fn-ok"),
       [loaded.manifest],
       makeDeps(loaded),
@@ -100,7 +100,7 @@ describe("function output schema gate", () => {
       handler: async () => returned,
     };
 
-    const result = await executeTurn(
+    const result = await runTurnPipeline(
       input("sess-fn-bad"),
       [loaded.manifest],
       makeDeps(loaded),
@@ -120,7 +120,7 @@ describe("function output schema gate", () => {
       handler: async () => returned,
     };
 
-    const result = await executeTurn(
+    const result = await runTurnPipeline(
       input("sess-fn-noschema"),
       [loaded.manifest],
       makeDeps(loaded),
@@ -144,7 +144,7 @@ describe("function output schema gate", () => {
         }),
       };
       const onRuntimeComplete = vi.fn();
-      const result = await executeTurn(
+      const result = await runTurnPipeline(
         input("sess-contract"),
         [loaded.manifest],
         {
@@ -178,7 +178,7 @@ describe("function output schema gate", () => {
           ...(shape === "valid" ? { prompt: "ok" } : { wrong: "shape" }),
         }),
       };
-      const result = await executeTurn(
+      const result = await runTurnPipeline(
         input("sess-guard-contract"),
         [loaded.manifest],
         makeDeps(loaded),
@@ -202,7 +202,7 @@ describe("function output schema gate", () => {
       outputContractSchema: { ...VALUE_SCHEMA, additionalProperties: false },
       guard: async () => ({ skip: true, prompt: "ok" }),
     };
-    const result = await executeTurn(
+    const result = await runTurnPipeline(
       input("sess-guard-strict"),
       [loaded.manifest],
       makeDeps(loaded),
@@ -240,7 +240,7 @@ describe("function output schema gate", () => {
           },
         }),
       });
-      const result = await executeTurn(
+      const result = await runTurnPipeline(
         input("sess-hook-contract"),
         [loaded.manifest],
         {
@@ -300,10 +300,14 @@ describe("function output schema gate", () => {
           };
         },
       };
-      const result = await executeTurn(input(sessionId), [loaded.manifest], {
-        ...makeDeps(loaded),
-        store,
-      });
+      const result = await runTurnPipeline(
+        input(sessionId),
+        [loaded.manifest],
+        {
+          ...makeDeps(loaded),
+          store,
+        },
+      );
       expect(result.runtimeResults[0]?.status).toBe(
         valid ? "success" : "failed",
       );
@@ -381,11 +385,15 @@ describe("function output schema gate", () => {
           },
         }),
       });
-      const result = await executeTurn(input(sessionId), [loaded.manifest], {
-        ...makeDeps(loaded),
-        store,
-        hookPipeline,
-      });
+      const result = await runTurnPipeline(
+        input(sessionId),
+        [loaded.manifest],
+        {
+          ...makeDeps(loaded),
+          store,
+          hookPipeline,
+        },
+      );
       const runtime = result.runtimeResults[0];
       expect(runtime?.status).toBe(valid ? "success" : "failed");
       if (!valid) expect(runtime?.error).toContain("output-schema-invalid");
@@ -453,7 +461,7 @@ describe("function output schema gate", () => {
               },
         );
       }
-      const result = await executeTurn(
+      const result = await runTurnPipeline(
         input("sess-contract-throw"),
         [loaded.manifest],
         {

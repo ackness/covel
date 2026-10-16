@@ -1,3 +1,4 @@
+import { isRecord } from "../utils/is-record.js";
 import { overlayWorldModelView } from "../function-runtime/world-model-view.js";
 import { createAgentLoopBudget } from "./agent-loop-budget.js";
 import type {
@@ -22,7 +23,7 @@ import {
   parseJsonText,
   type EmittedEvent,
 } from "@covel/tools";
-import type { LLMMessage } from "../llm/llm-adapter.js";
+import type { LLMMessage } from "@covel/shared";
 import { promptCacheKeyFor } from "../llm/prompt-cache-key.js";
 import type { HookPipeline } from "../hooks/pipeline.js";
 import type { RetryInfo } from "../retry/llm-retry.js";
@@ -48,7 +49,6 @@ import {
 import { createResponseReviewer } from "./response-review.js";
 import {
   extractToolFailureMessage,
-  isRecord,
   parseFinalOutputEnvelope,
   type ExecutedToolCallState,
   type FailedToolCallState,

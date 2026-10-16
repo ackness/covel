@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseJsonText } from "../src/json-text.js";
+import { parseJsonText } from "@covel/plugin-handlers-utils";
 
 const originalError = (text: string): string => {
   try {

@@ -13,11 +13,7 @@ import {
   buildLlmRespondedErrorPayload,
   buildLlmRespondedSuccessPayload,
 } from "../src/llm/llm-trace-payload.js";
-import type {
-  LLMMessage,
-  LLMResponse,
-  LLMToolDefinition,
-} from "../src/llm/llm-adapter.js";
+import type { LLMMessage, LLMResponse, LLMToolDefinition } from "@covel/shared";
 
 const baseIdentity = {
   runtimeId: "narrator/main",

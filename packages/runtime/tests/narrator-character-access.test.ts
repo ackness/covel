@@ -3,9 +3,9 @@ import { describe, expect, it, vi } from "vitest";
 import { discoverPlugins, loadRuntime } from "@covel/plugin-loader";
 import { createMemoryStore } from "@covel/store/memory";
 import { createCharacterTools } from "@covel/tools";
-import { executeTurn } from "../src/turn-executor/turn-executor.js";
+import { runTurnPipeline } from "../src/turn-executor/turn-executor.js";
 import { createToolExecutor } from "../src/agent-loop/tool-executor.js";
-import type { LLMAdapter } from "../src/llm/llm-adapter.js";
+import type { LLMAdapter } from "@covel/shared";
 
 const plugins = path.resolve(import.meta.dirname, "../../../plugins");
 
@@ -79,7 +79,7 @@ describe.each(["narrator", "chat-mode-narrator"])(
           usage: { inputTokens: 1, outputTokens: 1 },
         };
       });
-      const result = await executeTurn(
+      const result = await runTurnPipeline(
         {
           sessionId: "story",
           turnId: "turn",

@@ -30,12 +30,8 @@ export {
   BrowserSyncValidationError,
   RevisionConflictError,
   applySessionCommit,
-  assertBrowserCheckpoint,
   assertPersistenceProfile,
-  assertSessionCommit,
-  isBrowserCheckpoint,
   isPersistenceProfile,
-  isSessionCommit,
   validateBrowserCheckpoint,
   validateSessionCommit,
 } from "./browser-sync/browser-sync.js";

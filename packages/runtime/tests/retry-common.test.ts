@@ -10,10 +10,10 @@ import {
   type GatewayLike,
 } from "../src/llm/gateway-llm-adapter.js";
 import {
-  buildRetryPolicy,
   callLLMWithRetry,
   streamLLMWithRetry,
 } from "../src/retry/llm-retry.js";
+import { buildRetryPolicy } from "../src/retry/retry-common.js";
 import { TurnAbortedError } from "../src/turn-executor/turn-control.js";
 
 const messages = [{ role: "user" as const, content: "Hello" }];

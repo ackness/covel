@@ -69,7 +69,7 @@ export function hasPendingSibling(
 }
 
 /** The version recorded for a plugin that declares none. */
-export function suspensionPluginVersion(manifest: RuntimeManifest): string {
+function suspensionPluginVersion(manifest: RuntimeManifest): string {
   return manifest.version ?? "0.0.0";
 }
 

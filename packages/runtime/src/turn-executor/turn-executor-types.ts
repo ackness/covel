@@ -12,7 +12,7 @@ import type {
   TokenEstimator,
 } from "@covel/context";
 import type { EventBus } from "@covel/events";
-import type { LLMAdapter } from "../llm/llm-adapter.js";
+import type { LLMAdapter } from "@covel/shared";
 import type { TurnControl } from "./turn-control.js";
 import type { ToolExecutor } from "../agent-loop/tool-executor.js";
 import type { HookPipeline } from "../hooks/pipeline.js";

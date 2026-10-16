@@ -32,11 +32,7 @@ import type { HookPipeline } from "./pipeline.js";
 import { cloneHookData } from "./hook-data.js";
 import type { HookContext, HookEvent, HookResult } from "./types.js";
 import type { TurnEmitter } from "../trace/turn-emitter.js";
-import type {
-  LLMMessage,
-  LLMResponse,
-  LLMToolDefinition,
-} from "../llm/llm-adapter.js";
+import type { LLMMessage, LLMResponse, LLMToolDefinition } from "@covel/shared";
 
 // ── Shared options ───────────────────────────────────────────────
 

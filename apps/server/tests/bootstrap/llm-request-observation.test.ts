@@ -15,8 +15,8 @@ import {
 import {
   callLLMWithRetry,
   streamLLMWithRetry,
-  buildRetryPolicy,
 } from "../../../../packages/runtime/src/retry/llm-retry.js";
+import { buildRetryPolicy } from "../../../../packages/runtime/src/retry/retry-common.js";
 import { outboundFetch } from "../../../../packages/ai-provider/src/outbound-network.js";
 
 vi.mock("../../../../packages/ai-provider/src/outbound-network.js", () => ({

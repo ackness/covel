@@ -13,10 +13,10 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createGatewayAdapter } from "../src/llm/gateway-llm-adapter.js";
 import {
-  buildRetryPolicy,
   callLLMWithRetry,
   streamLLMWithRetry,
 } from "../src/retry/llm-retry.js";
+import { buildRetryPolicy } from "../src/retry/retry-common.js";
 import {
   requestLLMResponse,
   type RequestLLMResponseOptions,

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildContextSync as buildContext } from "../src/context-builder.js";
+import { buildContext } from "../src/context-builder.js";
 import type {
   ContextBuildParams,
   MessageHistoryRecord,
@@ -49,7 +49,7 @@ const baseParams = (): ContextBuildParams => ({
 });
 
 describe("buildContext — budget pruning", () => {
-  it("prunes when estimator+budget are provided", () => {
+  it("prunes when estimator+budget are provided", async () => {
     const params: ContextBuildParams = {
       ...baseParams(),
       estimator: mockEstimator,
@@ -59,7 +59,7 @@ describe("buildContext — budget pruning", () => {
       },
     };
 
-    const ctx = buildContext(params);
+    const ctx = await buildContext(params);
 
     // Input history = 20 msgs + 1 current user = 21. Pruning must drop some.
     expect(ctx.messages.length).toBeLessThan(21);
@@ -69,7 +69,7 @@ describe("buildContext — budget pruning", () => {
     expect(first.content).toMatch(/older messages pruned/);
   });
 
-  it("reports the budget outcome so callers can trace a pruned turn", () => {
+  it("reports the budget outcome so callers can trace a pruned turn", async () => {
     const params: ContextBuildParams = {
       ...baseParams(),
       estimator: mockEstimator,
@@ -79,12 +79,12 @@ describe("buildContext — budget pruning", () => {
       },
     };
 
-    const ctx = buildContext(params);
+    const ctx = await buildContext(params);
 
     expect(ctx.prunedMessageCount).toBeGreaterThan(0);
   });
 
-  it("does not prune when estimator is missing", () => {
+  it("does not prune when estimator is missing", async () => {
     const params: ContextBuildParams = {
       ...baseParams(),
       contextBudget: {
@@ -94,20 +94,20 @@ describe("buildContext — budget pruning", () => {
       // estimator omitted
     };
 
-    const ctx = buildContext(params);
+    const ctx = await buildContext(params);
 
     expect(ctx.messages.length).toBe(21);
     expect(ctx.messages[0]!.role).toBe("user");
   });
 
-  it("does not prune when contextBudget is missing", () => {
+  it("does not prune when contextBudget is missing", async () => {
     const params: ContextBuildParams = {
       ...baseParams(),
       estimator: mockEstimator,
       // contextBudget omitted
     };
 
-    const ctx = buildContext(params);
+    const ctx = await buildContext(params);
 
     expect(ctx.messages.length).toBe(21);
     expect(ctx.messages[0]!.role).toBe("user");

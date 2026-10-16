@@ -3,7 +3,7 @@ import type { CharacterRecord } from "../types/character-record.js";
 import type { CharacterSchemaRecord } from "../types/world-model.js";
 import type { Proposal } from "../types/proposal.js";
 import { characterSchemaSchema } from "../schemas/world.js";
-import { buildFieldsZodFromSchema } from "../schemas/character-fields.js";
+import { buildFieldsZodFromSchema } from "@covel/plugin-handlers-utils";
 import { materializeCharacterUpsert } from "./character-upsert.js";
 import {
   characterLabel,
@@ -13,11 +13,11 @@ import {
 import {
   dimensionInitializePayloadSchema,
   materializeDimensionRecords,
-} from "./dimensions.js";
+} from "@covel/plugin-handlers-utils/dimensions";
 import {
   dimensionSnapshotFromRecords,
   resolveWorldDimensionsLocale,
-} from "../schemas/dimensions.js";
+} from "@covel/plugin-handlers-utils/dimensions";
 
 export interface WorldModelView {
   readonly worldRecord?: {
@@ -34,7 +34,7 @@ export interface WorldModelView {
   } | null;
   readonly characterSchema: CharacterSchemaRecord | null;
   readonly characters: readonly CharacterRecord[];
-  readonly dimensions: import("../types/dimensions.js").DimensionSnapshot;
+  readonly dimensions: import("@covel/plugin-handlers-utils/dimensions").DimensionSnapshot;
   readonly dimensionProviderPluginId?: string;
 }
 

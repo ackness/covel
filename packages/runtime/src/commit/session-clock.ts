@@ -22,13 +22,9 @@
  *     `setup → playing`.
  */
 
+import type { SetupCompletionDelta } from "@covel/shared";
 import type { DataStore, StoreTransaction } from "@covel/store";
 import type { ExecutionContext, SetupRuntimeState } from "@covel/shared";
-
-export interface SetupCompletionDelta {
-  readonly newlyDone: Readonly<Record<string, SetupRuntimeState>>;
-  readonly allSetupDone: boolean;
-}
 
 export interface SessionClockUpdate {
   readonly now: string;

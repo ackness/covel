@@ -9,9 +9,9 @@ import { describe, it, expect } from "vitest";
 import type { RuntimeManifest, TurnInput } from "@covel/shared";
 import { createMemoryStore } from "@covel/store/memory";
 import type { DataStore } from "@covel/store";
-import { executeTurn } from "../src/turn-executor/turn-executor.js";
+import { runTurnPipeline } from "../src/turn-executor/turn-executor.js";
 import type { TurnExecutorDeps } from "../src/turn-executor/turn-executor.js";
-import type { LLMAdapter, LLMResponse } from "../src/llm/llm-adapter.js";
+import type { LLMAdapter, LLMResponse } from "@covel/shared";
 
 class NoopLLM implements LLMAdapter {
   async generate(): Promise<LLMResponse> {
@@ -65,7 +65,7 @@ function manifest(
   } as RuntimeManifest;
 }
 
-describe("executeTurn main-loop DAG scheduler", () => {
+describe("runTurnPipeline main-loop DAG scheduler", () => {
   it("runs independent narrator downstreams concurrently", async () => {
     // narrator, then guide + extractor + codex + char-tracker in parallel (all
     // depend only on narrator). Without the DAG scheduler they would execute
@@ -133,7 +133,7 @@ describe("executeTurn main-loop DAG scheduler", () => {
       store: await mainLoopStore("sess-dag"),
     };
 
-    const result = await executeTurn(
+    const result = await runTurnPipeline(
       input,
       [narrator, guide, extractor, codex, charTracker],
       deps,

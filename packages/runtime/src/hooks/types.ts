@@ -78,11 +78,6 @@ export const GUARD_HOOK_EVENTS: ReadonlySet<HookEvent> = new Set<HookEvent>([
   "PreStateCommit",
 ]);
 
-// `HookEnforce` and `HookDeclaration` are owned by @covel/shared (single
-// source of truth) and re-exported here so the runtime hooks barrel keeps a
-// stable surface for existing importers.
-export type { HookEnforce, HookDeclaration } from "@covel/shared";
-
 // ── Hook context (read-only metadata about the current hook site) ──
 
 export interface HookContext {
@@ -175,6 +170,3 @@ export interface HookRegistration<P = unknown> {
   /** Ordering group. Default normal. */
   readonly enforce?: HookEnforce;
 }
-
-// `HookDeclaration` (the PLUGIN.md frontmatter shape) is re-exported from
-// @covel/shared at the top of this file — see the `export type` there.

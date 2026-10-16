@@ -25,9 +25,9 @@ import type { RuntimeManifest, TurnInput } from "@covel/shared";
 import { createMemoryStore } from "@covel/store/memory";
 import type { DataStore } from "@covel/store";
 import { collectExecutionJournal } from "../src/execution-journal.js";
-import { executeTurn } from "../src/turn-executor/turn-executor.js";
+import { runTurnPipeline } from "../src/turn-executor/turn-executor.js";
 import type { TurnExecutorDeps } from "../src/turn-executor/turn-executor.js";
-import type { LLMAdapter, LLMResponse } from "../src/llm/llm-adapter.js";
+import type { LLMAdapter, LLMResponse } from "@covel/shared";
 import type {
   FunctionHandlerContext,
   PluginRuntimeGateway,
@@ -90,7 +90,7 @@ async function runTurn(
   extraDeps: Partial<TurnExecutorDeps> = {},
   runtimeEffects: Record<string, import("@covel/shared").RuntimeEffects> = {},
 ): Promise<{
-  result: Awaited<ReturnType<typeof executeTurn>>;
+  result: Awaited<ReturnType<typeof runTurnPipeline>>;
   store: DataStore;
   handlerCalls: Record<string, Array<Record<string, unknown>>>;
 }> {
@@ -114,11 +114,11 @@ async function runTurn(
     store,
     ...extraDeps,
   };
-  const result = await executeTurn(turnInput, manifests, deps);
+  const result = await runTurnPipeline(turnInput, manifests, deps);
   return { result, store, handlerCalls };
 }
 
-describe("executeTurn: manual trigger", () => {
+describe("runTurnPipeline: manual trigger", () => {
   it("runs only the targeted runtime and skips unrelated auto runtimes", async () => {
     const target = fnManifest("plug/target", { trigger: { type: "manual" } });
     const unrelated = fnManifest("plug/auto", { trigger: { type: "auto" } });

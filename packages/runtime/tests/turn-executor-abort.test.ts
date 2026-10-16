@@ -8,10 +8,10 @@
 import { describe, it, expect } from "vitest";
 import type { RuntimeManifest, TurnInput } from "@covel/shared";
 import { createMemoryStore } from "@covel/store/memory";
-import { executeTurn } from "../src/turn-executor/turn-executor.js";
+import { runTurnPipeline } from "../src/turn-executor/turn-executor.js";
 import type { TurnExecutorDeps } from "../src/turn-executor/turn-executor.js";
 import { PLAYER_ABORT_REASON } from "../src/turn-executor/turn-control.js";
-import type { LLMAdapter, LLMResponse } from "../src/llm/llm-adapter.js";
+import type { LLMAdapter, LLMResponse } from "@covel/shared";
 
 function manifest(
   name: string,
@@ -54,7 +54,7 @@ function prose(content: string): LLMResponse {
   };
 }
 
-describe("executeTurn player abort", () => {
+describe("runTurnPipeline player abort", () => {
   it("stops scheduling later groups and surfaces abortReason; earlier results survive", async () => {
     const controller = new AbortController();
     const calledRuntimes: string[] = [];
@@ -77,7 +77,7 @@ describe("executeTurn player abort", () => {
       turnControl: { signal: controller.signal },
     };
 
-    const result = await executeTurn(
+    const result = await runTurnPipeline(
       input,
       [
         manifest("plug-a", 500),
@@ -123,7 +123,7 @@ describe("executeTurn player abort", () => {
       turnControl: { signal: controller.signal },
     };
 
-    await executeTurn(
+    await runTurnPipeline(
       input,
       [manifest("fn-plug", 500, { runtimeType: "function" })],
       deps,
@@ -153,7 +153,7 @@ describe("executeTurn player abort", () => {
       store,
     };
 
-    const result = await executeTurn(
+    const result = await runTurnPipeline(
       input,
       [manifest("plug-a", 500), manifest("plug-b", 600)],
       deps,

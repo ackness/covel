@@ -17,11 +17,11 @@ import {
   getPendingProposals,
   type EventDirectoryLike,
 } from "@covel/tools";
-import { executeTurn } from "../src/turn-executor/turn-executor.js";
+import { runTurnPipeline } from "../src/turn-executor/turn-executor.js";
 import type { TurnExecutorDeps } from "../src/turn-executor/turn-executor.js";
 import { createToolExecutor } from "../src/agent-loop/tool-executor.js";
 import { normalizeOutput } from "../src/commit/session-output-normalizer.js";
-import type { LLMAdapter, LLMResponse } from "../src/llm/llm-adapter.js";
+import type { LLMAdapter, LLMResponse } from "@covel/shared";
 import type { FunctionHandlerContext } from "@covel/plugin-loader";
 
 // Static directory stub — only "test.ping" is declared. Mirrors the shape
@@ -141,7 +141,7 @@ describe("emit-event: tool-loop accumulation + finalize merge into effects.event
       }),
     };
 
-    const result = await executeTurn(
+    const result = await runTurnPipeline(
       makeTurnInput(),
       [emitterManifest, followerManifest],
       deps,
@@ -239,7 +239,7 @@ describe("emit-event: segment 5 directory injection (plan task 5)", () => {
       },
     };
 
-    await executeTurn(makeTurnInput(), [emitterManifest], deps, {
+    await runTurnPipeline(makeTurnInput(), [emitterManifest], deps, {
       maxSteps: 3,
     });
 
@@ -315,9 +315,14 @@ describe("emit-event: same-turn duplicate topic no-op (plan task 1)", () => {
       }),
     };
 
-    const result = await executeTurn(makeTurnInput(), [emitterManifest], deps, {
-      maxSteps: 4,
-    });
+    const result = await runTurnPipeline(
+      makeTurnInput(),
+      [emitterManifest],
+      deps,
+      {
+        maxSteps: 4,
+      },
+    );
 
     const emitterResult = result.runtimeResults.find(
       (r) => r.runtimeId === "plug/emitter",
@@ -396,7 +401,7 @@ describe("emit-event: a refused emit and the runtime's result", () => {
       ...(args.requireToolUse ? { requireToolUse: true } : {}),
     } as RuntimeManifest;
     const store = await mainLoopStore("sess-1");
-    const result = await executeTurn(
+    const result = await runTurnPipeline(
       makeTurnInput(),
       [manifest],
       {

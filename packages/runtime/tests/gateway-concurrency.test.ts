@@ -1,5 +1,6 @@
 import { AiProviderError } from "@covel/ai-provider";
-import { buildRetryPolicy, callLLMWithRetry } from "../src/retry/llm-retry.js";
+import { callLLMWithRetry } from "../src/retry/llm-retry.js";
+import { buildRetryPolicy } from "../src/retry/retry-common.js";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { z } from "zod";
 import {

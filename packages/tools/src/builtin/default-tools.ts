@@ -10,7 +10,7 @@ import {
   worldDimensionGetTool,
   worldDimensionListTool,
 } from "./world-dimension-tools.js";
-import { builtinUITools } from "./ui-tools.js";
+import { builtinUITools } from "@covel/plugin-handlers-utils";
 
 type DefaultToolStore = Parameters<typeof createPluginDataTools>[0] &
   Parameters<typeof createCharacterTools>[0];

@@ -1,3 +1,4 @@
+import { isRecord } from "./utils/is-record.js";
 import type { LLMProviderRequest } from "./types/llm-provider-request.js";
 
 /** A duplicate request refers to an earlier full body in the same trace array. */
@@ -31,10 +32,6 @@ export function compactProviderRequests(
     const { body: _body, schemaVersion: _version, ...attempt } = request;
     return { ...attempt, schemaVersion: 2, bodyRef };
   });
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
 /** Read full request bodies and references to earlier bodies without recursion. */

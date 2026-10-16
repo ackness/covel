@@ -12,7 +12,7 @@ import type {
 } from "@covel/shared";
 import type { SuspensionRecord } from "@covel/store";
 import type { EmittedEvent } from "@covel/tools";
-import type { LLMMessage } from "../llm/llm-adapter.js";
+import type { LLMMessage } from "@covel/shared";
 import { formatToolLoopFailure } from "../turn-executor/turn-output-helpers.js";
 import { runAgentToolLoop } from "../agent-loop/turn-agent-tool-loop.js";
 import { createAgentSchemaGate } from "../agent-loop/runtime-output-validator.js";
@@ -55,7 +55,7 @@ export interface ResumeSuspendedRuntimeOptions {
  *
  * The caller is responsible for auth, runtime lookup, and concurrency checks.
  */
-export async function resumeSuspendedRuntime(
+export async function resumeRuntimePipeline(
   suspension: SuspensionRecord,
   resumeData: unknown,
   manifest: RuntimeManifest,
