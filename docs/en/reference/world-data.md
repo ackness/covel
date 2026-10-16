@@ -827,7 +827,7 @@ characterSchema:
 - A language file can translate only text that already exists in the main file. A key or ID that is not in the main file, text in a place that is not text, or a changed number or boolean is ignored and reported, and the main file's value is kept.
 - Text that is not translated falls back to the main file, so you can translate a little at a time.
 - A language file holds only the fields used for matching and the translations. Do not copy things that change, such as media hashes and paths.
-- A plain text list (for example aliases) is translated as a whole. The list in the language file replaces the list in the main file. An item written as `null` means "use the main file's value".
+- A plain text list (for example aliases or trigger words in `keys`) is translated as a whole. The list in the language file replaces the list in the main file. An item written as `null` means "use the main file's value". Triggered rules and `selective` lorebook entries need `keys` in the session's language; otherwise, a player using the translated words cannot trigger them.
 
 **How the three kinds of file are read:**
 
@@ -1661,6 +1661,7 @@ Output when it passes:
 | `world-data` | same as preflight | The descriptor, source order, file reading, targets, hidden-data rules, and each record checked against its contract schema |
 | `locale-file-name` | error | A language file's name gives only the language (`.en.`) and not the locale of the world's edition (`.en-US.`). This file is not read. |
 | `locale-overlay` | warning | A translation in a language file has no place to go (the main file has no such key or ID, or it changed a value that is not text). That entry is ignored. |
+| `locale-trigger-keys` | warning | A triggered entry translates its content or title but inherits the main file's trigger words; add translated `keys` to that entry in the language file. It remains a warning under `--strict`. |
 | `locale-script` | warning | A language file for a language other than Chinese, Japanese or Korean still contains CJK characters: untranslated text, or a trigger word copied from the main file. |
 | `edition-incomplete` | warning | The world has an edition in a language, but that edition is missing some translations. A session in that language reads the world's original default-language text. |
 | `inline-locale-map` | error | The main file writes text as a multi-language map. The main file should have one language, and the translations go in language files. |

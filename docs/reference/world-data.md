@@ -827,7 +827,7 @@ characterSchema:
 - 语言文件只能翻译主文件里已有的文本。出现主文件没有的 key 或 id、在不是文本的位置写文本、改动数字或布尔值，这一条会被忽略并报告，主文件的值保留。
 - 没翻译的文本回退到主文件，所以可以逐步翻译。
 - 语言文件里只放对齐用的字段和译文。不要复制媒体哈希、路径这些会变化的内容。
-- 纯文本列表（例如别名）整列翻译：语言文件里的列表替换主文件的列表，某一项写 `null` 表示沿用主文件。
+- 纯文本列表（例如别名、触发词 `keys`）整列翻译：语言文件里的列表替换主文件的列表，某一项写 `null` 表示沿用主文件。触发式规则和 `selective` lorebook 条目的 `keys` 要用会话语言里的词，否则玩家输入译文里的词也不能触发它。
 
 **三类文件的读取方式：**
 
@@ -1661,6 +1661,7 @@ pnpm validate:world --strict --plugins ~/.covel/plugins ~/.covel/worlds/my-world
 | `world-data` | 与预检一致 | descriptor、source 顺序、文件读取、target、隐藏数据规则，以及按契约 schema 逐条校验的记录 |
 | `locale-file-name` | error | 语言文件的文件名只写了语言（`.en.`），没有写成世界版本的 locale（`.en-US.`）；这个文件不会被读取 |
 | `locale-overlay` | warning | 语言文件里有一条译文无处安放（主文件没有这个 key 或 id，或它改了非文本的值），这条被忽略 |
+| `locale-trigger-keys` | warning | 触发式条目的正文或标题已翻译，触发词仍沿用主文件；在该语言文件的条目里补上译后的 `keys`，`--strict` 下也只是提醒 |
 | `locale-script` | warning | 非中日韩语言的语言文件里留有中日韩文字：没翻译的文本，或从主文件照抄的触发词 |
 | `edition-incomplete` | warning | 世界有某种语言的版本，但它缺少若干条译文；用这种语言开的会话会读到世界默认语言的原文 |
 | `inline-locale-map` | error | 主文件里把文本写成了多语言对照；主文件只写一种语言，译文放进语言文件 |
