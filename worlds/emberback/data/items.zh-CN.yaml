@@ -1,15 +1,15 @@
 - id: trade-chits
-  name: 交易筹码
+  name: 工分券
   description: 合作社的记账凭证，吃饭、零件、路费和个人用品都能用它付。紧急服务不卖。
 - id: field-radio
-  name: 野战电台
-  description: 一部结实的短程电台，调在余烬背的维护信道上。侧面的缓存里，还存着那通不可能的呼叫。
+  name: 外勤电台
+  description: 一部结实的短程电台，调在余烬岭的维护信道上。侧面的缓存里，还存着那通不可能的呼叫。
 - id: linekeeper-kit
-  name: 线路员工具包
+  name: 线务员工具包
   description: 一卷风吹日晒得发旧的工具包，里面有信号探针、陶瓷剪钳、修补用的导线、密封胶，还有一台手摇应急充电器。
 - id: crawler-key
-  name: 作业爬行器钥匙
-  description: 能发动余烬背那辆破旧的维护爬行器——前提是没人撤掉它的充电配额。
+  name: 作业履带车钥匙
+  description: 能发动余烬岭那辆破旧的维护履带车——前提是没人撤掉它的充电配额。
 - id: water-cells
   name: 便携水囊
   description: 两个半升装的软水囊，水来自背阳一面的冷凝器。一个人跑一趟短途外勤，够用。
