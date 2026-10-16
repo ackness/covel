@@ -3,12 +3,12 @@
     {
       "label": "clues",
       "displayName": "Clues & Theories",
-      "extractionHint": "Clues, testimony, and reasoning about the Lantern Heart, the keeper, Corvin, and the truth of the barrow."
+      "extractionHint": "Clues, testimony, and reasoning about the Lantern Heart, the keeper, Corvin, and the truth about the barrow."
     },
     {
       "label": "party",
       "displayName": "Party Bonds",
-      "extractionHint": "What Brannoc and Wren confided, argued about, or promised, and what the player did for whom when it was dangerous. Affinity scores live in the affinity panel."
+      "extractionHint": "What Brannoc and Wren have confided, disagreed about, or promised, and what the player did for whom when it was dangerous. Affinity scores are tracked in the affinity panel."
     }
   ]
 }
