@@ -11,5 +11,5 @@ definition:
     prompt:
       Keep time in tide phases; do not convert to clock hours. A run of short
       exchanges can stay in the current phase; waiting for the tide or exploring
-      across districts should move it forward. A deep withdrawal is a story
+      across districts should move it forward. A deep ebb is a story
       event, not a regular phase.

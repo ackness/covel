@@ -116,7 +116,7 @@ festival:
               note:
                 title: Latest
           rumorWall:
-            title: News Club Rumor Truth Wall
+            title: Newspaper Club Fact-or-Rumor Wall
             properties:
               progress:
                 title: Progress
@@ -182,7 +182,7 @@ festival:
               rough: Scraped by
               missed: Missed
           festivalDay:
-            title: Festival day & Evening Wind Lighting
+            title: Festival day & Evening Breeze Lanterns
             x-enumLabels:
               upcoming: Upcoming
               passed: Passed
@@ -261,7 +261,7 @@ rumors:
       rumor: A Club Building window still lit after 18:00 keeps someone's wish secret.
     window-seat:
       rumor: Toujou-senpai only saves the window seat for someone special.
-  updateRule: Rumors move seed → spreading → heating → cleared / confirmed / redirected, and advance only when the narrative clearly shows a rumor spreading, being cleared up, or being proven. Add a new rumor (for example, one about the transfer student) the first time someone says it in the narrative, with a short English kebab-case ID, stage seed, and heat 1. heat +1 for being seen alone together in public, obvious favoritism, or ending up in the News Club's notes; heat -1 when Rin sits on the story, the people involved clear it up through their actions, or a newer event pushes it out of the conversation. Never make a rumor known across the whole school out of nowhere.
+  updateRule: Rumors move seed → spreading → heating → cleared / confirmed / redirected, and advance only when the narrative clearly shows a rumor spreading, being cleared up, or being proven. Add a new rumor (for example, one about the transfer student) the first time someone says it in the narrative, with a short English kebab-case ID, stage seed, and heat 1. heat +1 for being seen alone together in public, obvious favoritism, or ending up in the Newspaper Club's notes; heat -1 when Rin sits on the story, the people involved clear it up through their actions, or a newer event pushes it out of the conversation. Never make a rumor known across the whole school out of nowhere.
 geography:
   name: Geography
   schema:
@@ -310,7 +310,7 @@ geography:
           - name: Club Building Rooftop
             description: Where Yuma Shiraishi often lingers after his 17:40 patrol. From here you can see the sports-field lights, the sea, and the club windows that are still lit.
           - name: Second Floor Hallway Bulletin Board
-            description: Where the News Club puts up calls for interviewees, its plans for festival coverage, and short news items that get people talking.
+            description: Where the Newspaper Club puts up calls for interviewees, its plans for festival coverage, and short news items that get people talking.
       - name: Library
         description: A small two-story library behind the classroom building, open from 12:20 to 13:00 and after school, closing at 17:30. In the afternoon the window seats catch the light off the sea; it's a good place for quiet conversations, study sessions, looking things up, and Literature Club research.
         climate: Quiet and dry; in spring it smells of paper, wooden shelves, and mint candy.
@@ -330,23 +330,23 @@ geography:
           - name: Seawall Bench
             description: Kaho Shiina sometimes writes lyrics here, and Yuma Shiraishi takes the long way round to pass by. After rain, one end of the bench always dries first, which started the rumor about "the seat saved for couples."
       - name: Seireki Town Shopping Street
-        description: Two short shopping streets in front of the station that fill with students heading home after 17:00. The bookstore, florist, family restaurant, music shop, and convenience store are everyday hangouts off campus, and together they sponsor the Evening Wind Lighting that closes the festival.
+        description: Two short shopping streets in front of the station that fill with students heading home after 17:00. The bookstore, florist, family restaurant, music shop, and convenience store are everyday hangouts off campus, and together they sponsor the Evening Breeze Lanterns that close the festival.
         climate: Bright shop signs in the evening; on rainy days, umbrellas and school uniforms crowd under the narrow eaves.
         landmarks:
-          - name: Umineko Bookstore
+          - name: Umineko Books
             description: An independent bookstore the Literature Club often visits. The owner keeps ten years of festival publications and is supplying the last batch of recycled paper for the Spring Mint special issue.
           - name: Orange House Family Restaurant
             description: Good for meeting up in a group, studying together, and disguising a serious talk as chat over the menu.
-          - name: Hoshisuna Instrument Shop
+          - name: Hoshisuna Music
             description: Where the Light Music Club buys strings and picks; Kaho can spend ages in the corner where you try out instruments. Three days before the main-stage rehearsal, the shop offers students a free check of one instrument.
       - name: Administrative Building and Courtyard
         description: The hub of festival business, between the classroom building and the Club Building. The Student Council Room keeps the budget sheets, venue maps, and club registrations; the courtyard below is the most public stage for lunchtime announcements and festival previews.
         climate: Bright and noisy by day, quiet soon after school lets out; the Student Council Room's lights are often still on at 18:00.
         landmarks:
           - name: Student Council Room
-            description: Where Haruka Mikoeda chairs the budget reviews and Yuma Shiraishi checks club registrations. The master progress chart on the wall changes color at fourteen, seven, and three days on the countdown.
+            description: Where Haruka Saegusa chairs the budget reviews and Yuma Shiraishi checks club registrations. The master progress chart on the wall changes color at fourteen, seven, and three days on the countdown.
           - name: Courtyard Notice Board
-            description: Where the News Club puts out festival extras and corrections to rumors, the Light Music Club holds open listening sessions, and Class 2-B recruits volunteers for the Sea Breeze Post.
+            description: Where the Newspaper Club puts out festival extras and corrections to rumors, the Light Music Club holds open listening sessions, and Class 2-B recruits volunteers for the Sea Breeze Post.
 factions:
   name: Factions
   schema:
@@ -376,9 +376,9 @@ factions:
           title: Relations
   initialValue:
     - id: student-council
-      name: Haruka Academy Student Council
+      name: Harukaze Academy Student Council
       description: Runs the school festival, club budgets, clubroom assignments, and discipline on campus. It stands for rules and procedure, and takes pressure from teachers, clubs, and students all at once.
-      leader: Student Council President · Haruka Mikoeda
+      leader: Student Council President · Haruka Saegusa
       headquarters: 2nd Floor, Administrative Building · Student Council Room
       relations:
         - description: Because the Literature Club is short of members, the Student Council is deciding whether it keeps a room of its own.
@@ -386,16 +386,16 @@ factions:
         - description: Class 2-B's Sea Breeze Post has to get its courtyard booth and the content of its anonymous messages approved.
     - id: literature-club
       name: Literature Club
-      description: An old, small club with few members that still insists on making a festival special issue, this year titled Spring Mint. The old clubroom, the back issues, and the recycled paper from Umineko Bookstore are the heart of the club.
+      description: An old, small club with few members that still insists on making a festival special issue, this year titled Spring Mint. The old clubroom, the back issues, and the recycled paper from Umineko Books are the heart of the club.
       leader: Mio Kamishiro
       headquarters: 3rd Floor, Club Building · Literature Club Room
       relations:
-        - description: Often competes with the News Club for the same interviewees because their topics overlap; this year the two clubs could swap a page, so that short stories, interviews, and rumor-busting together help the Literature Club pass the review.
+        - description: Often competes with the Newspaper Club for the same interviewees because their topics overlap; this year the two clubs could swap a page, so that short stories, interviews, and rumor-busting together help the Literature Club pass the review.
     - id: news-club
-      name: News Club
-      description: Has its finger on every campus rumor and holds the right to report on the festival; it's planning the Rumor Truth Wall. Very driven, with a sense of boundaries that comes and goes — one interview can open a door or blow a misunderstanding up.
+      name: Newspaper Club
+      description: Has its finger on every campus rumor and holds the right to report on the festival; it's planning the Fact-or-Rumor Wall. Very driven, with a sense of boundaries that comes and goes — one interview can open a door or blow a misunderstanding up.
       leader: Rin Asakura
-      headquarters: 2nd Floor, Club Building · News Club Editorial Office
+      headquarters: 2nd Floor, Club Building · Newspaper Club Editorial Office
       relations:
         - description: Needs the Student Council's permission to interview people, and regularly gives the council headaches.
     - id: light-music-club
@@ -404,7 +404,7 @@ factions:
       leader: Kaho Shiina
       headquarters: 1st Floor, Club Building · Practice Room
       relations:
-        - description: News Club coverage can win the Light Music Club votes, and it can also turn a botched rehearsal into the talk of the school.
+        - description: Newspaper Club coverage can win the Light Music Club votes, and it can also turn a botched rehearsal into the talk of the school.
     - id: class-2b
       name: Class 2-B
       description: The class the player transfers into, and the main stage for everyday relationships, cleaning duty, lunch breaks, rumors, and the class festival project. Its booth, the Sea Breeze Post, seals away postcards visitors write to their future selves until next year.
@@ -416,7 +416,7 @@ factions:
     - id: shopping-street
       name: Seireki Town Shopping Street
       description: The little shopping district in front of the station, where students buy supplies, study together, run into each other, and take the long way home after school.
-      leader: Head of the Shopping Street Association · owner of Umineko Bookstore
+      leader: Head of the Shopping Street Association · owner of Umineko Books
       headquarters: In front of Seireki Station
 powerSystem:
   name: Relationship Progression
@@ -477,16 +477,16 @@ history:
           title: Significance
   initialValue:
     - era: Ten years ago
-      name: Haruka Academy moves to its seaside campus
+      name: Harukaze Academy moves to its seaside campus
       description: The school moved to the slopes of Seireki, and the new campus kept the old Club Building as a symbol of tradition.
     - era: Seven years ago
-      name: Old Club Building Preservation Movement
+      name: Save the Old Clubhouse campaign
       description: The first cohort to move to the new campus started a petition and saved the old wooden Club Building. Both the Literature Club and the Light Music Club count it as part of their club's tradition.
     - era: Three years ago
       name: The spring school festival is reorganized
       description: The festival changed from class exhibits to joint projects by clubs and classes, and the Student Council's power grew.
     - era: Two years ago
-      name: The Evening Wind Lighting becomes the closing tradition
+      name: The Evening Breeze Lanterns become the closing tradition
       description: The shopping street lent the school its leftover string lights, and at the close of the festival they were lit one by one from the courtyard down to Sakurazaka. Students started using "who you watch the last light with" as a code for a date they won't admit to.
     - era: Last year
       name: The Light Music Club's main-stage mishap
@@ -496,7 +496,7 @@ history:
       description: The Literature Club was put on the merger list for lack of members, and its festival publication became its last chance to keep the club.
     - era: Recently
       name: A transfer student arrives
-      description: The player transfers into Class 2-B and becomes a new unknown that the class, the Literature Club, the News Club, the Light Music Club, and the Student Council have all noticed.
+      description: The player transfers into Class 2-B and becomes a new unknown that the class, the Literature Club, the Newspaper Club, the Light Music Club, and the Student Council have all noticed.
 economy:
   name: Economy
   schema:
@@ -532,9 +532,9 @@ economy:
       - Swapped cleaning duty
       - Time walking home together
       - Sea Breeze Post booth shift
-      - Evening Wind Lighting volunteer spot
+      - Evening Breeze Lanterns volunteer spot
       - Recycled paper for the Literature Club's special issue
-      - Space on the News Club's Rumor Truth Wall
+      - Space on the Newspaper Club's Fact-or-Rumor Wall
     tradeNotes: Most trades run on favors. Helping carry equipment, covering someone's cleaning duty, keeping a secret, or keeping someone company at practice often matters more than money. Money is for drinks, bento, flowers, guitar strings, and materials for the publication; relationships move forward by keeping promises.
 socialStructure:
   name: Society
@@ -643,7 +643,7 @@ mechanics:
       - Use day before sunset, and night after sunset, after the closing announcement, or in a clearly nighttime passage; when the variant switches, the lighting, the color of the sea outside the window, and whether characters should have gone home change with it.
       - Emit stage.direction when characters enter, leave, become the focus of the conversation, change position, or change outfit, expression, or pose; merge every change in a turn into one cues array, and when there is no matching visual variant, leave out the visual fields and use the default portrait.
       - A character's entrance must fit their Usual Schedule or be explained by a one-off task; each turn focuses on one or two speaking characters, and the others come in by passing by, through notes, rumors, or the next appointment — never cram all eight into one scene.
-      - "The key festival milestones on the countdown are: the first budget review at fourteen days, exams and the manuscript check at ten, the main-stage preview at seven, the special-issue deadline and the dress rehearsal at three, festival-eve setup at one, and at zero the festival itself and the Evening Wind Lighting."
+      - "The key festival milestones on the countdown are: the first budget review at fourteen days, exams and the manuscript check at ten, the main-stage preview at seven, the special-issue deadline and the dress rehearsal at three, festival-eve setup at one, and at zero the festival itself and the Evening Breeze Lanterns."
       - Rumors go seed → spreading → heating up → cleared / confirmed / redirected; every rumor needs a source, a place where it spread, and the characters it affects, and it never becomes known across the whole school out of nowhere.
 startingConditions:
   name: Opening
@@ -665,7 +665,7 @@ startingConditions:
       openingChips:
         title: Opening moves
   initialValue:
-    openingScenario: The second Monday of April, 8:20, ten minutes before the morning reading bell. You have just transferred into Class 2-B at Haruka Academy, and the classroom still smells of chalk dust and sea breeze. The back-row seat by the window is empty. Class President Mio Kamishiro sets a class schedule on the corner of the desk, Rin Asakura of the News Club holds up her interview notebook from the back of the room, and the Light Music Club's guitar drifts in from outside the window as someone tunes up. Passing the door, Student Council Vice President Yuma Shiraishi hands a club registration form to the teacher, and the bulletin board beside the blackboard says the spring school festival is twenty-one days away. The first things you can answer are Mio's offer to show you around the school and Rin's lunchtime interview; the guitar and the club registration point to where you might go after school.
+    openingScenario: The second Monday of April, 8:20, ten minutes before the morning reading bell. You have just transferred into Class 2-B at Harukaze Academy, and the classroom still smells of chalk dust and sea breeze. The back-row seat by the window is empty. Class President Mio Kamishiro sets a class schedule on the corner of the desk, Rin Asakura of the Newspaper Club holds up her interview notebook from the back of the room, and the Light Music Club's guitar drifts in from outside the window as someone tunes up. Passing the door, Student Council Vice President Yuma Shiraishi hands a club registration form to the teacher, and the bulletin board beside the blackboard says the spring school festival is twenty-one days away. The first things you can answer are Mio's offer to show you around the school and Rin's lunchtime interview; the guitar and the club registration point to where you might go after school.
     startingLocation: Class 2-B · Window Seat
     playerConstraints:
       - The player is a second-year transfer student.
@@ -673,7 +673,7 @@ startingConditions:
       - All romance must stay teen-rated.
       - At the start, the player is at the acquaintance stage with all four opening-focus characters — Mio Kamishiro, Rin Asakura, Kaho Shiina, and Yuma Shiraishi; Akane Toujou hasn't appeared yet, and the player gets to know her naturally after walking into the library.
       - The player can choose why they transferred, but the reason should serve everyday school life and the relationships.
-    openingHook: Before the morning reading bell, do you answer the class president's offer to show you around, or the News Club's lunchtime interview first?
+    openingHook: Before the morning reading bell, do you answer the class president's offer to show you around, or the Newspaper Club's lunchtime interview first?
     openingChips:
       - Ask Mio to show me around the school
       - Say yes to Rin's lunchtime interview

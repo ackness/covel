@@ -10,7 +10,7 @@ describe("world data schemas", () => {
   it("allows world.yaml to point at a world data descriptor", () => {
     const result = worldManifestSchema.safeParse({
       id: "haruka-academy",
-      name: "Haruka Academy",
+      name: "Harukaze Academy",
       summary: "A school world",
       defaultLocale: "zh-CN",
       worldData: "data/world.data.yaml",

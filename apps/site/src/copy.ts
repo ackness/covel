@@ -165,7 +165,7 @@ const en = {
   rack: {
     label: "Plugins on",
     packs: {
-      stage: "Haruka Academy · visual novel",
+      stage: "Harukaze Academy · visual novel",
       tabletop: "Lantern Barrow · classic tabletop",
       story: "Traditional story",
       languages: "Every bundled plugin",
@@ -253,14 +253,14 @@ const en = {
     list: [
       {
         id: "mistport",
-        name: "Mistport Chronicles",
+        name: "Mistport: The Riftide Chronicle",
         genre: "Dark fantasy · Investigation",
         summary:
           "The tide bell strikes three times. A missing Guildmaster and a shattered Key pull you into a four-way shadow war in a harbor city lost in endless fog.",
       },
       {
         id: "haruka-academy",
-        name: "Haruka Academy · Spring Mint",
+        name: "Harukaze Academy · Spring Mint",
         genre: "Campus · Visual novel",
         summary:
           "Transfer to a private high school by the sea. With twenty-one days until the school festival, choose a club, keep your promises, and answer the feelings left unspoken.",

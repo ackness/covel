@@ -183,8 +183,8 @@ Open <http://localhost:5173> — debug tooling lives at `/debug`. For personal u
 
 ![World select](./.assets/images/readme/select-world.png)
 
-- **Mistport Chronicles** (雾港・裂潮纪) — the traditional-story demo: a dark-fantasy investigation. Its custom plugin pack, bilingual lore, investigation memory, cast blueprints, rules, and portraits show how a world can specialize the framework without forking it.
-- **Haruka Academy** (遥风学园) — the stage-mode demo: a school ensemble romance. Dialogue policy, character relationships, memory blocks, transparent sprites, and day/night scene registries turn the same kernel into a visual novel.
+- **Mistport: The Riftide Chronicle** (雾港・裂潮纪) — the traditional-story demo: a dark-fantasy investigation. Its custom plugin pack, bilingual lore, investigation memory, cast blueprints, rules, and portraits show how a world can specialize the framework without forking it.
+- **Harukaze Academy** (遥风学园) — the stage-mode demo: a school ensemble romance. Dialogue policy, character relationships, memory blocks, transparent sprites, and day/night scene registries turn the same kernel into a visual novel.
 - **Emberback Relay** — written in English (`en-US` is the default) to show how one world can carry several languages, with a Chinese edition. It is a science-fiction frontier mystery in traditional-story mode. A lonely relay on a tidally locked world receives a distress call in your own voice from seventy-two hours ahead. It also has seeded quests, inventory, affinity, rules, character blueprints, portraits, and five check attributes.
 - **Lantern Barrow: First Expedition** (提灯古冢・初次远征) — the tabletop-mode demo: a bilingual classic dungeon crawl. Point-buy character creation, d20 attribute checks, quests, inventory, companion affinity, and live delve-map, alarm, lantern, and renown panels; it requires the `action-check@1` contract instead of naming a dice plugin.
 

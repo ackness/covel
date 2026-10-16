@@ -6,7 +6,7 @@
       "description": "In the clubroom on the third floor of the old Club Building, manuscript paper, back issues, and the sea breeze wait for the next round of proofreading.",
       "background": "The Literature Club's room is on the third floor of the old Club Building, where it keeps years of back issues and handwritten drafts. Short on members, the club is facing a merger review; its festival special issue, Spring Mint, carries the members' hope of being able to stay.",
       "storyContext": "A place for proofreading, interviews, and making things together, with room for a short silence too. The picture doesn't decide whether the special issue succeeds or whether the club keeps its room.",
-      "location": "Haruka Academy · Literature Club, third floor of the old Club Building",
+      "location": "Harukaze Academy · Literature Club, third floor of the old Club Building",
       "visualNotes": [
         "An old wooden table, blank manuscript paper, and a blue volume make it clear what the room is for.",
         "Rooftops, cherry blossoms, and the sea outside the window keep the feel of a seaside town in spring.",
@@ -19,7 +19,7 @@
       "description": "A mood piece: Mio Kamishiro sorts the manuscripts for the festival special issue, leaving room for the player's response and for the relationship to grow.",
       "background": "Mio Kamishiro is both class president of 2-B and president of the Literature Club, and she always thinks of other people's feelings first. Getting the festival special issue ready, she needs someone willing to take on some of the small jobs — and she'll remember every manuscript they worked on together.",
       "storyContext": "A moment of proofreading together that could happen. The empty chair leaves the player a place to join in, without fixing the player's looks, a romance, or any promise already made.",
-      "location": "Haruka Academy · by the Literature Club's worktable",
+      "location": "Harukaze Academy · by the Literature Club's worktable",
       "visualNotes": [
         "Mio's hairstyle, violet eyes, and navy sailor uniform follow her original portrait.",
         "The pages she holds out, the pencil, and the empty chair are an invitation to work together.",
@@ -40,7 +40,7 @@
       "id": "asakura-rin",
       "name": "Rin Asakura",
       "description": "Rin winks and grins, a flower-shaped clip in her short auburn hair, holding a camera and her interview notebook at once.",
-      "background": "Rin Asakura is a 2-B student and a News Club reporter. She's good at using interviews to get close to people; she's preparing the festival's Rumor Truth Wall and has to decide what she can make public.",
+      "background": "Rin Asakura is a 2-B student and a Newspaper Club reporter. She's good at using interviews to get close to people; she's preparing the festival's Fact-or-Rumor Wall and has to decide what she can make public.",
       "storyContext": "Her default look — breezy and joking — for interview invitations and everyday chat. The smile doesn't mean she already knows the player's secrets.",
       "visualNotes": [
         "The camera, interview notebook, armband, and flower clip keep her recognizable."
@@ -68,9 +68,9 @@
     },
     {
       "id": "mikoeda-haruka",
-      "name": "Haruka Mikoeda",
+      "name": "Haruka Saegusa",
       "description": "Haruka holds a blue folder, her long hair half tied back and the Student Council badge pinned to her uniform; she looks calm.",
-      "background": "Haruka Mikoeda is the third-year Student Council president, coordinating the festival's resources and schedule. Gentle and exact, she tends to steer an argument back to something that can actually be done.",
+      "background": "Haruka Saegusa is the third-year Student Council president, coordinating the festival's resources and schedule. Gentle and exact, she tends to steer an argument back to something that can actually be done.",
       "storyContext": "For scenes about budgets, clubrooms, and coordinating the festival. In the setting she is a supporting character; the portrait adds no romance route and no private promise.",
       "visualNotes": [
         "The half-tied long hair, council badge, and blue folder follow her original portrait."
@@ -100,7 +100,7 @@
       "id": "toujou-akane",
       "name": "Akane Toujou",
       "description": "Akane has long, straight dark hair and holds a blue hardcover, with a purple flower peeking out beside it; her gaze is quiet.",
-      "background": "Akane Toujou is a third-year who chairs the Library Committee, and a regular at Umineko Bookstore. She treasures the old issues and the memories clubs leave behind, and shows she cares by saving seats, lending books, and keeping quiet company.",
+      "background": "Akane Toujou is a third-year who chairs the Library Committee, and a regular at Umineko Books. She treasures the old issues and the memories clubs leave behind, and shows she cares by saving seats, lending books, and keeping quiet company.",
       "storyContext": "She enters the story naturally only after the player chooses to visit the library. The portrait can introduce her, but it doesn't assume she has already saved the player a seat or told them about her family's past.",
       "visualNotes": [
         "Keep the book and the flower as visual details, but nothing in the setting says where the flower came from, who gave it, or what it means."
@@ -110,7 +110,7 @@
       "id": "asakura-rin-uniform-serious",
       "name": "Rin Asakura · Listening in Earnest",
       "description": "Rin has both eyes open and has put away the big grin; the camera and notebook are still at hand.",
-      "background": "Rin Asakura is a 2-B student and a News Club reporter. She's good at using interviews to get close to people; she's preparing the festival's Rumor Truth Wall and has to decide what she can make public.",
+      "background": "Rin Asakura is a 2-B student and a Newspaper Club reporter. She's good at using interviews to get close to people; she's preparing the festival's Fact-or-Rumor Wall and has to decide what she can make public.",
       "storyContext": "For conversations where Rin is really listening and thinking about where to draw the line on a story. It's only an expression variant: it doesn't mean any story has been held back or published.",
       "visualNotes": [
         "The camera, interview notebook, armband, and flower clip keep her recognizable."
@@ -172,7 +172,7 @@
       "id": "club-building-day",
       "name": "Club Building · Day",
       "description": "The three-story wooden Club Building stands by the sea: a tiled roof, ivy climbing the right side, gravel out front, and a cherry tree make up the old building. Soft daylight fills the scene.",
-      "background": "The Literature Club guards its back issues and manuscripts on the third floor; Light Music Club rehearsals, News Club work, and Student Council business all cross paths here too. Room assignments and the merger review make the old building a key place in the festival preparations.",
+      "background": "The Literature Club guards its back issues and manuscripts on the third floor; Light Music Club rehearsals, Newspaper Club work, and Student Council business all cross paths here too. Room assignments and the merger review make the old building a key place in the festival preparations.",
       "storyContext": "The day view suits visits before or after club activities. The exterior doesn't say whose room is behind each window.",
       "location": "Club Building",
       "visualNotes": [
@@ -183,7 +183,7 @@
       "id": "club-building-night",
       "name": "Club Building · Night",
       "description": "The three-story wooden Club Building stands by the sea: a tiled roof, ivy climbing the right side, gravel out front, and a cherry tree make up the old building. Warm lamplight meets the blue-violet light of night.",
-      "background": "The Literature Club guards its back issues and manuscripts on the third floor; Light Music Club rehearsals, News Club work, and Student Council business all cross paths here too. Room assignments and the merger review make the old building a key place in the festival preparations.",
+      "background": "The Literature Club guards its back issues and manuscripts on the third floor; Light Music Club rehearsals, Newspaper Club work, and Student Council business all cross paths here too. Room assignments and the merger review make the old building a key place in the festival preparations.",
       "storyContext": "The night view shows lit windows and the bay at nightfall. The windows are just atmosphere; they don't confirm the campus rumor about windows lit after 18:00 as anything supernatural.",
       "location": "Club Building",
       "visualNotes": [
@@ -238,7 +238,7 @@
       "id": "shopping-street-day",
       "name": "Seireki Town Shopping Street · Day",
       "description": "Books and flowerpots are displayed on the left side of the street; through the windows on the right you can see dining tables and guitars, and colorful awnings, bicycles, and the sea in the distance make an everyday street scene. Soft daylight fills the street.",
-      "background": "There are only two shopping streets in front of Seireki's station, and the bookstore, restaurant, florist, and music shop are where students' after-school lives happen. The shops jointly sponsor the Evening Wind Lighting that closes the festival, and they're where clubs go to buy supplies.",
+      "background": "There are only two shopping streets in front of Seireki's station, and the bookstore, restaurant, florist, and music shop are where students' after-school lives happen. The shops jointly sponsor the Evening Breeze Lanterns that close the festival, and they're where clubs go to buy supplies.",
       "storyContext": "The day view suits shopping for supplies, browsing in the bookstore, and meeting up in a group. The shopfronts show what kind of street it is; don't invent new shop names from the blurry signs.",
       "location": "Seireki Town Shopping Street",
       "visualNotes": [
@@ -249,8 +249,8 @@
       "id": "shopping-street-night",
       "name": "Seireki Town Shopping Street · Night",
       "description": "Books and flowerpots are displayed on the left side of the street; through the windows on the right you can see dining tables and guitars, and colorful awnings, bicycles, and the sea in the distance make an everyday street scene. Warm lamplight meets the blue-violet light of night.",
-      "background": "There are only two shopping streets in front of Seireki's station, and the bookstore, restaurant, florist, and music shop are where students' after-school lives happen. The shops jointly sponsor the Evening Wind Lighting that closes the festival, and they're where clubs go to buy supplies.",
-      "storyContext": "The night view keeps the same shopfronts; only the lighting and the sky change. Lit windows don't mean the Evening Wind Lighting closing ceremony has begun, and they don't show any shop's regular hours.",
+      "background": "There are only two shopping streets in front of Seireki's station, and the bookstore, restaurant, florist, and music shop are where students' after-school lives happen. The shops jointly sponsor the Evening Breeze Lanterns that close the festival, and they're where clubs go to buy supplies.",
+      "storyContext": "The night view keeps the same shopfronts; only the lighting and the sky change. Lit windows don't mean the Evening Breeze Lanterns closing ceremony has begun, and they don't show any shop's regular hours.",
       "location": "Seireki Town Shopping Street",
       "visualNotes": [
         "The bookstore and florist are on the left, the restaurant and music shop windows on the right, and the crossing and the sea in the distance line up in both versions."
@@ -260,7 +260,7 @@
       "id": "world-cover",
       "name": "Sea Breeze Across the Campus",
       "description": "Sunlight falls on a slope running down beside the classroom building; beyond the railing are cherry blossoms, green trees, the school's roofs, and the bay.",
-      "background": "Haruka Academy sits on a gentle slope in Seireki, a small seaside town, its classroom building facing the harbor. The spring school festival is twenty-one days away, and a transfer student is about to start a new everyday life in Class 2-B.",
+      "background": "Harukaze Academy sits on a gentle slope in Seireki, a small seaside town, its classroom building facing the harbor. The spring school festival is twenty-one days away, and a transfer student is about to start a new everyday life in Class 2-B.",
       "storyContext": "For the home page and the world introduction, setting the mood of a seaside campus, spring clubs, and everyday relationships. The empty scene doesn't assign the player a club or a romance.",
       "visualNotes": [
         "This overview of the campus is shown separately from the five scene anchors; don't name the distant buildings as new story locations."

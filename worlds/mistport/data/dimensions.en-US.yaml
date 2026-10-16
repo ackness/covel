@@ -35,7 +35,7 @@ caseBoard:
     echo-gallery:
       lead: Three traces in the Echo Gallery
       note:
-        Qi's tide-mark, new rope from Grey Falcon's private unit, a copper plate
+        Qi's tide-sigil, new rope from Grey Falcon's private unit, a copper plate
         engraved with a nursery rhyme — and their timings contradict one
         another.
     stilltide-survivor:
@@ -48,15 +48,15 @@ caseBoard:
     Record only changes the narrative makes explicit this turn. When a new
     named piece of evidence, testimony or contradiction turns up, add an entry
     (short English kebab-case ID) with status unverified. Set corroborated when
-    independent testimony or a tide-mark record backs it up; contaminated when
+    independent testimony or a tide-sigil record backs it up; contaminated when
     the flood washes it over, it is forged, or it leaks publicly; resolved when
     the truth is confirmed and no longer disputed. The tide carrying evidence
     away does not prove anyone's explanation. Never delete an entry; keep note
     to one sentence, the current read.
 deepWithdrawal:
-  name: Deep Withdrawal
+  name: Deep Ebb
   description:
-    A rare deep withdrawal lays the Undertow completely bare — and leaves very
+    A rare deep ebb lays the Undertow completely bare — and leaves very
     little time to get out.
   schema:
     properties:
@@ -66,21 +66,20 @@ deepWithdrawal:
           triple-warning: Triple warning
           step-ninety: Past step ninety
           full-exposure: Ruins fully exposed
-          return-bell: Return bell
+          return-bell: Flood bell
           flood: Sudden flood
           receded: Tide back in
       note:
         title: Tide report
   initialValue:
-    note:
-      The tide bell has struck three times. The deep withdrawal has come early,
+    note: The tide bell has struck three times. The deep ebb has come early,
       and no one can say why.
   updateRule:
     Advance only on tide signals the narrative states outright, in this order —
     triple-warning → step-ninety (the sea has fallen past the ninetieth
     Drawdown Step) → full-exposure (the ruins lie fully exposed) → return-bell
-    (the return bell; usually about half an hour remains) → flood (the sudden
-    flood) → receded (this deep withdrawal is over). Never skip a stage or go
+    (the flood bell; usually about half an hour remains) → flood (the sudden
+    flood) → receded (this deep ebb is over). Never skip a stage or go
     back. After receded, return to triple-warning only if the narrative clearly
     sounds a new triple warning. Ordinary tides belong to world time and are
     not recorded here.
@@ -234,7 +233,7 @@ geography:
               A restricted records room beneath the Guild Tower. On the day Qi
               disappeared, a page went missing from Appraisal Report 74 and
               another from the visitor ledger, yet the lock was never forced.
-          - name: Stilltide Infirmary
+          - name: Stilltide Asylum
             description:
               Officially it cares for patients with severe fog-rot; in fact the
               Council keeps it under close guard. The only survivor of the
@@ -254,7 +253,7 @@ geography:
           - name: Clocktower
             description:
               A mechanical clock driven by the tides that strikes once every six
-              hours; three quick strikes mean a deep withdrawal warning.
+              hours; three quick strikes mean a deep ebb warning.
           - name: The Salt Market
             description:
               A semi-public market in Mid-Harbor's back alleys where the Salt
@@ -266,7 +265,7 @@ geography:
               sound-deadening fog fungus. The keeper never asks where you came
               from, but when a guest doesn't come back, their fog-lamp goes up
               on the beam over the door.
-          - name: Seal Tide Gate
+          - name: Tide-Seal Gate
             description:
               The checkpoint on the way from Mid-Harbor down to the Drawdown
               Steps. Grey Falcon checks permits here and confiscates open flames
@@ -281,7 +280,7 @@ geography:
           - name: Bone Arch
             description:
               A huge, half-drowned arch of unknown origin. It was uncovered in the
-              deep withdrawal six years ago, which cost seventeen lives.
+              deep ebb six years ago, which cost seventeen lives.
           - name: The Sunken Bell Hall
             description:
               A half-sunken building that surfaces only at ebb. The Congregation
@@ -294,15 +293,14 @@ geography:
               gathered.
           - name: Drawdown Steps
             description:
-              A long stair below the Seal Tide Gate leading down to the ruins,
+              A long stair below the Tide-Seal Gate leading down to the ruins,
               each step cut with evacuation marks. It only counts as a deep
-              withdrawal once the sea has fallen past the ninetieth step; after
-              the return bell, the safe window is down to about half an hour.
+              ebb once the sea has fallen past the ninetieth step; after
+              the flood bell, the safe window is down to about half an hour.
           - name: Echo Gallery
-            description:
-              A ring-shaped corridor, the first thing this deep withdrawal
+            description: A ring-shaped corridor, the first thing this deep ebb
               uncovered. Its stone walls repeat footsteps and whispers after a
-              delay. Qi's tide-mark, fresh rope marks from Grey Falcon's private
+              delay. Qi's tide-sigil, fresh rope marks from Grey Falcon's private
               unit and a strange copper plate engraved with a nursery rhyme have
               all turned up here together.
 factions:
@@ -337,7 +335,7 @@ factions:
       name: Mistport Council
       description:
         The political power that rules the Upper City. It is trying to restrict
-        civilian access to the Undertow through the Seal Tide Decree and to
+        civilian access to the Undertow through the Tide-Seal Decree and to
         monopolize the legal relic trade; inside, it is split between doves and
         hawks.
       leader: Council Chair Chen Yuanshan
@@ -417,7 +415,7 @@ powerSystem:
     description:
       An unpredictable energy held in ancient relics. It resonates with the
       tidal cycle and is strongest at ebb. Tide-Readers guide and steady it with
-      tide-marks; overuse brings on fog-rot.
+      tide-sigils; overuse brings on fog-rot.
     rules:
       - Relic effects change with the phase of the tide — strongest at high
         tide, most stable at ebb
@@ -425,7 +423,7 @@ powerSystem:
         worst it kills
       - Fog beasts are drawn to fluctuations in Tide-Force; using relics on a
         large scale brings whole packs of them
-      - Tide-Readers guide the energy with the tide-mark technique, which takes
+      - Tide-Readers guide the energy with the tide-sigil technique, which takes
         long training — yet the official position denies Tide-Force exists
       - Overusing Tide-Force brings on fog-rot — the body slowly turns
         translucent and finally dissolves into the fog, and it cannot be
@@ -440,7 +438,7 @@ powerSystem:
         description: Can tell whether a relic is active
       - name: Tide-Reader
         description: Can appraise and steady ordinary relics
-      - name: Tide-Warden
+      - name: Tidewielder
         description:
           Can actively guide Tide-Force — extremely rare, and most already show
           fog-rot
@@ -474,9 +472,9 @@ history:
         relics the ebb uncovered could be sold.
     - era: Modern
       year: Six years ago
-      name: The Bone Arch Withdrawal
+      name: The Bone Arch Ebb
       description:
-        The last deep withdrawal uncovered the Bone Arch. Expeditions poured in,
+        The last deep ebb uncovered the Bone Arch. Expeditions poured in,
         and seventeen people died in the returning flood. People still avoid
         speaking of it.
     - era: Modern
@@ -493,9 +491,9 @@ history:
         Mist-Speaker Frost kept coming true.
     - era: Modern
       year: Last year
-      name: The Seal Tide Decree Is Drafted
+      name: The Tide-Seal Decree Is Drafted
       description:
-        Council Chair Chen proposed the Seal Tide Decree to bar anyone without a
+        Council Chair Chen proposed the Tide-Seal Decree to bar anyone without a
         permit from the Undertow, and the lower city rose in fierce opposition.
     - era: Now
       name: The Thickening Fog
@@ -647,22 +645,22 @@ startingConditions:
   initialValue:
     openingScenario:
       "Dusk. You have just arrived on the main pier in Mid-Harbor. The tide
-      clock sounds three quick strikes — the rare deep withdrawal warning. On the docks
+      clock sounds three quick strikes — the rare deep ebb warning. On the docks
       the Salt Fangs are recruiting explorers and the Council is posting the
-      Seal Tide Decree. Tide-Reader Su Yao pushes through the crowd. If you are
-      a new apprentice, she knows the tide-mark from your exam; if you are an
+      Tide-Seal Decree. Tide-Reader Su Yao pushes through the crowd. If you are
+      a new apprentice, she knows the tide-sigil from your exam; if you are an
       Undertow local, she carries a note in which Qi asked for someone who knows
       the way. She tells you Guildmaster Qi walked into the Undertow this
       morning — at flood tide."
     openingHook: Three bells, a missing Guildmaster — go down, or seal the harbor?
     openingChips:
-      - Deep withdrawal
-      - Seal Tide Decree
+      - Deep ebb
+      - Tide-Seal Decree
       - Qi's disappearance
       - A torn letter
     playerConstraints:
       - You start as a Tide-Reader apprentice or an ordinary Undertow local
       - You may not carry an open flame into the fog
-      - Entering the Undertow without a permit breaks the Seal Tide Decree, and
+      - Entering the Undertow without a permit breaks the Tide-Seal Decree, and
         the Council will hold you to account
     startingLocation: Mid-Harbor — Main Pier

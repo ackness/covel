@@ -10,7 +10,7 @@
       "location": "Upper City · Tide-Reader Guild Tower",
       "tideSense": "Unknown",
       "fogRotSigns": "None",
-      "condition": "In good shape, but on edge since the deep withdrawal warning",
+      "condition": "In good shape, but on edge since the deep ebb warning",
       "equipment": ["apprentice's fog-lamp", "chalk", "waterproof rope"],
       "dispositionToPlayer": "A fellow apprentice; friendly, but careful"
     },
@@ -38,7 +38,7 @@
           "During his exam he discovered he can faintly sense Tide-Force. He dares not tell anyone, because the Guild's official position is that Tide-Force does not exist."
         ],
         "voice": "Talks a little too fast and hides his nerves behind questions thrown back at you; when he's serious, his voice suddenly drops.",
-        "style": "Has a habit of rubbing the tide-mark cut into his wrist; when he's nervous he keeps checking how bright his fog-lamp is."
+        "style": "Has a habit of rubbing the tide-sigil cut into his wrist; when he's nervous he keeps checking how bright his fog-lamp is."
       },
       "dialogueExamples": [
         {
@@ -82,7 +82,7 @@
       "faction": "Tide-Reader Guild",
       "role": "Tide-Reader (rank 2)",
       "location": "Upper City · Tide-Reader Guild Tower",
-      "tideSense": "Can guide it (tide-marks)",
+      "tideSense": "Can guide it (tide-sigils)",
       "fogRotSigns": "None",
       "condition": "Up all night, but keeping herself in check",
       "equipment": [
@@ -236,8 +236,8 @@
   {
     "id": "npc-chen-yuanshan",
     "name": "Chen Yuanshan",
-    "aliases": ["Councilor Chen", "the Chair"],
-    "description": "Chair of the Mistport Council, past sixty, and a skilled schemer. In public he pushes the Seal Tide Decree for the sake of public safety; in private he sends his trusted expedition down into the Undertow again and again.",
+    "aliases": ["Speaker Chen", "the Chair"],
+    "description": "Chair of the Mistport Council, past sixty, and a skilled schemer. In public he pushes the Tide-Seal Decree for the sake of public safety; in private he sends his trusted expedition down into the Undertow again and again.",
     "fields": {
       "faction": "Mistport Council",
       "role": "Council Chair",
@@ -260,7 +260,7 @@
         ],
         "goals": [
           "Find the 'Key' before anyone else and open the deepest part of the Undertow",
-          "Use the Seal Tide Decree to corner the relic supply and crush the Salt Fangs",
+          "Use the Tide-Seal Decree to corner the relic supply and crush the Salt Fangs",
           "Keep everyone who knows anything quiet"
         ],
         "fears": [
@@ -278,7 +278,7 @@
       "dialogueExamples": [
         {
           "id": "chen-decree",
-          "user": "Isn't the Seal Tide Decree just a way to corner the relic trade?",
+          "user": "Isn't the Tide-Seal Decree just a way to corner the relic trade?",
           "character": "My young friend, seventeen lives paid for that lesson. 'Monopoly' is rather a glib word for it. I simply don't want anyone else to die in the flood. ...Of course, if you were willing to do a little something for the Council, a 'permit' for the Undertow is not entirely out of the question."
         },
         {
@@ -320,7 +320,7 @@
       "tideSense": "Unknown",
       "fogRotSigns": "Always wears gloves",
       "condition": "Missing; whereabouts unknown",
-      "equipment": ["worn tide journal", "old-style Tide-Warden's needle"],
+      "equipment": ["worn tide journal", "old-style Tidewielder's needle"],
       "relics": ["lock-resonance plate (purpose never disclosed)"],
       "dispositionToPlayer": "If they meet again, he will see the player as someone he can trust with the truth"
     },
@@ -344,8 +344,8 @@
           "Not living long enough to say everything he has to say"
         ],
         "secrets": [
-          "He is in fact a Tide-Warden who has hidden his true identity. His fog-rot comes from something he 'heard' three years ago, when he went down into the deep alone.",
-          "He knows the truth about the Riftide and has told no one. His tide sense runs as deep as a Tide-Warden's; his hands are already translucent and his fingertips sometimes fray into wisps of fog, which is why he always wears gloves."
+          "He is in fact a Tidewielder who has hidden his true identity. His fog-rot comes from something he 'heard' three years ago, when he went down into the deep alone.",
+          "He knows the truth about the Riftide and has told no one. His tide sense runs as deep as a Tidewielder's; his hands are already translucent and his fingertips sometimes fray into wisps of fog, which is why he always wears gloves."
         ],
         "voice": "Slow, warm, fond of metaphor; he says the heaviest things most lightly.",
         "style": "Rubs a tide journal with worn corners as he talks; his fog-rotted fingertips give off a faint light."
@@ -458,8 +458,8 @@
   {
     "id": "npc-grey-falcon",
     "name": "Grey Falcon",
-    "aliases": ["Captain Falcon", "Grey Falcon"],
-    "description": "Captain of Chen Yuanshan's private expedition, and the sharpest hand the Seal Tide Decree has. Silent, efficient, no wasted feeling. Lately the trail he is following leads toward where Old Qi disappeared.",
+    "aliases": ["Captain Grey", "Grey Falcon"],
+    "description": "Captain of Chen Yuanshan's private expedition, and the sharpest hand the Tide-Seal Decree has. Silent, efficient, no wasted feeling. Lately the trail he is following leads toward where Old Qi disappeared.",
     "fields": {
       "faction": "Mistport Council (Chen Yuanshan's private unit)",
       "role": "Expedition Captain / Enforcer",
@@ -469,7 +469,7 @@
       "condition": "In good shape; twelve hours on duty without a break",
       "equipment": [
         "shielded storm lantern",
-        "Seal Tide Decree badge",
+        "Tide-Seal Decree badge",
         "silent crossbow"
       ],
       "dispositionToPlayer": "Hostile by default; a shared question might make him give a little"
@@ -484,7 +484,7 @@
           "starting to waver"
         ],
         "goals": [
-          "Enforce the Seal Tide Decree and seal off the areas he is assigned",
+          "Enforce the Tide-Seal Decree and seal off the areas he is assigned",
           "Bring back Old Qi and those 'Key' fragments",
           "Work out who all his sealing-off is really protecting"
         ],
@@ -503,7 +503,7 @@
         {
           "id": "falcon-block",
           "user": "You have no authority to stop me going into the Undertow.",
-          "character": "I do. Article Three of the Seal Tide Decree. Turn around. Back to Mid-Harbor. Now. ...I don't want to be writing up a body before the tide comes in. Not one this young."
+          "character": "I do. Article Three of the Tide-Seal Decree. Turn around. Back to Mid-Harbor. Now. ...I don't want to be writing up a body before the tide comes in. Not one this young."
         },
         {
           "id": "falcon-doubt",

@@ -1,5 +1,5 @@
 # en-US text for world.yaml. Only translated text; structure and ids come from world.yaml.
-name: Mistport Chronicles
+name: "Mistport: The Riftide Chronicle"
 summary:
   The tide bell strikes three times. A missing Guildmaster and a shattered
   Key pull you into a four-way shadow war in a harbor city lost in endless fog.
@@ -10,7 +10,7 @@ pluginPolicy:
       Follow the case of the missing Guildmaster Qi as a classic story, with
       clue memory, a relationship map, world rules, a ready-made cast and
       portraits.
-    reason: The Case Board, Faction Standing, the Deep Withdrawal and the Key
+    reason: The Case Board, Faction Standing, the Deep Ebb and the Key
       Fragments update from the story every turn. Add tide time, fog-rot and a
       core cast of seven, and every choice in a long investigation leaves a
       mark.
@@ -68,7 +68,7 @@ characterSchema:
       description: Injury, illness, hypothermia, or another lasting condition
     - id: tideReading
       name: Tide-Reading
-      description: Skill at appraising relics, reading tide-marks and steadying
+      description: Skill at appraising relics, reading tide-sigils and steadying
         Tide-Force
     - id: stealth
       name: Fogcraft

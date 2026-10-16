@@ -38,8 +38,8 @@ After you close the guide, you see the list of worlds. It has four bundled world
 
 | World                                                 | Style                                                                        |
 | ----------------------------------------------------- | ---------------------------------------------------------------------------- |
-| 雾港・裂潮纪 (Mistport Chronicles)                    | A dark-fantasy investigation in the traditional narrative style              |
-| 遥风学园 (Haruka Academy · Spring Mint)               | A campus ensemble story in stage mode                                        |
+| 雾港・裂潮纪 (Mistport: The Riftide Chronicle)        | A dark-fantasy investigation in the traditional narrative style              |
+| 遥风学园 (Harukaze Academy · Spring Mint)             | A campus ensemble story in stage mode                                        |
 | Emberback Relay                                       | Frontier science-fiction mystery, written in English, with a Chinese edition |
 | 提灯古冢・初次远征 (Lantern Barrow: First Expedition) | A classic tabletop dungeon crawl, with starting stats and dice checks        |
 

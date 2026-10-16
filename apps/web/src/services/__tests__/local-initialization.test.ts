@@ -18,7 +18,7 @@ vi.mock("../api.js", () => api);
 const catalog: WorldRecord[] = [
   {
     id: "haruka-academy",
-    name: { "en-US": "Haruka Academy", "zh-CN": "Fixture Academy" },
+    name: { "en-US": "Harukaze Academy", "zh-CN": "Fixture Academy" },
     description: "A complete catalog world",
     lore: "A twenty-one-day festival countdown",
     tags: ["school", "ensemble"],

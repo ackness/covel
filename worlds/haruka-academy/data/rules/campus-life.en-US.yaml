@@ -18,7 +18,7 @@
     - closing
 - id: haruka-school-calendar
   title: Festival Countdown
-  content: "Festival preparations follow the countdown: the first budget review at fourteen days, exams and the manuscript check at ten, the main-stage preview at seven, the Spring Mint deadline and the dress rehearsal at three, setup on festival eve at one, and at zero the festival itself and the Evening Wind Lighting. Class 2-B's Sea Breeze Post, the Literature Club's special issue, the News Club's Rumor Truth Wall, the Light Music Club's new song, and the Student Council's procedures should affect one another at each milestone, and every event should set up a situation the player can talk through, make a choice in, and live with the consequences of. The progress of each project, the milestone results, and the Literature Club's review are tracked on the Festival Prep and Literature Club Review panels; the narrative must say exactly what got done."
+  content: "Festival preparations follow the countdown: the first budget review at fourteen days, exams and the manuscript check at ten, the main-stage preview at seven, the Spring Mint deadline and the dress rehearsal at three, setup on festival eve at one, and at zero the festival itself and the Evening Breeze Lanterns. Class 2-B's Sea Breeze Post, the Literature Club's special issue, the Newspaper Club's Fact-or-Rumor Wall, the Light Music Club's new song, and the Student Council's procedures should affect one another at each milestone, and every event should set up a situation the player can talk through, make a choice in, and live with the consequences of. The progress of each project, the milestone results, and the Literature Club's review are tracked on the Festival Prep and Literature Club Review panels; the narrative must say exactly what got done."
   keys:
     - festival
     - countdown
@@ -27,7 +27,7 @@
     - interview
     - main stage
     - Sea Breeze Post
-    - Evening Wind Lighting
+    - Evening Breeze Lanterns
 - id: haruka-stage-route
   title: Scenes and the Stage
   content: 'Emit scene.set whenever a scene is first established, the location changes, or the scene changes between day and night. Use the standard anchors for locations — "Class 2-B", "Club Building", "Library", "Sakurazaka Seawall", "Seireki Town Shopping Street" — and keep particular rooms or shops in the narrative text. Use day before sunset and night after sunset or after the closing announcement, and let the color of the sea outside, the indoor lighting, and when characters head home change with it. The five anchors each have a full set of day and night backdrops: use them first, and don''t give a place a new name for no reason. Emit stage.direction whenever characters enter, leave, change focus, change position, or change outfit, expression, or pose; put every change for the turn in one cues array, and leave out the visual fields when there is no matching visual variant so the framework shows the default portrait. Rin Asakura''s default variantId is uniform-playful; when she drops the jokes to listen in earnest or decides to sit on a story, use expression: serious or variantId: uniform-serious. Kaho Shiina may use expression: concerned or variantId: uniform-concerned when she listens seriously to a club problem; Souta Morikawa uses outfit: rehearsal or variantId: rehearsal-focused during Light Music Club rehearsals; Chihiro Onodera uses outfit: casual or variantId: casual-gentle in off-campus scenes such as the shopping street or the seawall. When characters leave the screen, prefer slide-left for a character exiting on the left and slide-right for one exiting on the right, and fade or dissolve otherwise; stage.clear should also name a suitable transition.'
@@ -53,7 +53,7 @@
     - relationship
 - id: haruka-ensemble-reactions
   title: The Ensemble
-  content: The eight preset characters are tied together as classmates, clubmates, and seniors and juniors, but each turn focuses on only one or two speaking characters. Mio Kamishiro and Rin Asakura are most often in Class 2-B; Kaho Shiina and Souta Morikawa in the Club Building after school; Yuma Shiraishi and Haruka Mikoeda around Student Council business and patrols; Chihiro Onodera in class and after cleaning duty; Akane Toujou in the library at lunch or before it closes. A character who shows up outside their usual schedule needs a task, a rumor, or an appointment to explain it. Favoritism, neglect, or a misunderstanding can set off a chain reaction, but keep it grounded in everyday school life.
+  content: The eight preset characters are tied together as classmates, clubmates, and seniors and juniors, but each turn focuses on only one or two speaking characters. Mio Kamishiro and Rin Asakura are most often in Class 2-B; Kaho Shiina and Souta Morikawa in the Club Building after school; Yuma Shiraishi and Haruka Saegusa around Student Council business and patrols; Chihiro Onodera in class and after cleaning duty; Akane Toujou in the library at lunch or before it closes. A character who shows up outside their usual schedule needs a task, a rumor, or an appointment to explain it. Favoritism, neglect, or a misunderstanding can set off a chain reaction, but keep it grounded in everyday school life.
   keys:
     - everyone
     - favorite
@@ -65,12 +65,12 @@
     - schedule
 - id: haruka-rumor-heat
   title: Rumor Heat
-  content: Seireki and Haruka Academy are both small. Every rumor moves through seed → spreading → heating up → cleared, confirmed, or redirected; its stage and heat are settled after each turn by the Campus Rumors panel. The narrative must make clear who said it, where it spread, and who it involves, and go by the panel's current values — a rumor never becomes common knowledge across the school out of nowhere. Being seen alone together in public, obvious favoritism, or ending up in the News Club's notes raises heat and Public Closeness; keeping a promise in private, remembering details, and respecting a silence raise Trust and lower Pressure first. Rin can report a rumor, sit on the story, or debunk it publicly, and the player can change a rumor through actions, not just explanations.
+  content: Seireki and Harukaze Academy are both small. Every rumor moves through seed → spreading → heating up → cleared, confirmed, or redirected; its stage and heat are settled after each turn by the Campus Rumors panel. The narrative must make clear who said it, where it spread, and who it involves, and go by the panel's current values — a rumor never becomes common knowledge across the school out of nowhere. Being seen alone together in public, obvious favoritism, or ending up in the Newspaper Club's notes raises heat and Public Closeness; keeping a promise in private, remembering details, and respecting a silence raise Trust and lower Pressure first. Rin can report a rumor, sit on the story, or debunk it publicly, and the player can change a rumor through actions, not just explanations.
   keys:
     - rumor
     - public
     - private
-    - News Club
+    - Newspaper Club
     - gossip
     - deny
     - denies
@@ -79,13 +79,14 @@
     - debunk
     - debunking
 - id: haruka-festival-convergence
-  title: Spring Mint and Evening Wind Lighting
-  content: "The festival's climax isn't a checklist of separate tasks. The Literature Club's Spring Mint can print Sea Breeze Post letters or the News Club's debunkings; News Club coverage can win the Light Music Club an audience for its preview; Kaho's new song can be the last song of the Evening Wind Lighting; and the story of the old issues can offer a public reason to keep the Club Building. The player can put one storyline first, or make several hold each other up through concrete trades — but success must still leave each character their own costs, their byline, and their own choices."
+  title: Spring Mint and Evening Breeze Lanterns
+  content: "The festival's climax isn't a checklist of separate tasks. The Literature Club's Spring Mint can print Sea Breeze Post letters or the Newspaper Club's debunkings; Newspaper Club coverage can win the Light Music Club an audience for its preview; Kaho's new song can be the last song of the Evening Breeze Lanterns; and the story of the old issues can offer a public reason to keep the Club Building. The player can put one storyline first, or make several hold each other up through concrete trades — but success must still leave each character their own costs, their byline, and their own choices."
   keys:
     - Spring Mint
     - Sea Breeze Post
-    - Rumor Truth Wall
+    - Fact-or-Rumor Wall
+    - Fact or Rumor Wall
     - song
-    - Evening Wind Lighting
+    - Evening Breeze Lanterns
     - old issue
     - back issue

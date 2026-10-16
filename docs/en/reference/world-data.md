@@ -362,7 +362,7 @@ A world package does not have to use every capability. Let the genre decide the 
 | `worlds/lantern-barrow` | Classic tabletop dungeon exploration (Chinese and English)                                                              | The `traditional-story` pack plus tabletop rules, checks, quests, items, affinity, character blueprints and `story-events`. Starting point buy from `tabletop-rules` (`contract:tabletop-rules.rules.initial@1`), form checks and the `dice-check` dice pool. `.en-US` variants of quests, items and affinity. Evolving dimensions 古冢地图 (tomb map), 古冢警戒 (tomb alert), 古冢之灯 (tomb lantern) and 名望 (renown). Hidden encounters and event chains (including `.en-US` variants). | `world.yaml`, `WORLD.md` / `WORLD.en-US.md`, `data/tabletop-rules.json`, `data/*.en-US.yaml`, `characters/*.en-US.json`            |
 
 - None of the four worlds has a descriptor; every file is at a convention path. Rule files sit under `data/rules/`, one set per file.
-- All four worlds enable `story-events`. Mistport, Emberback and Lantern Barrow also turn on story planning with `pluginSettings.story-events.planner: true`. Besides the hidden events the author sets up, it adds follow-up events that fire only once, based on clues left during play. Haruka Academy's romance routes are arranged one by one by the author, and it does not turn on story planning.
+- All four worlds enable `story-events`. Mistport, Emberback and Lantern Barrow also turn on story planning with `pluginSettings.story-events.planner: true`. Besides the hidden events the author sets up, it adds follow-up events that fire only once, based on clues left during play. Harukaze Academy's romance routes are arranged one by one by the author, and it does not turn on story planning.
 - When you make a new world, first copy the structure of the world whose gameplay is closest to yours. Then add or remove characters, rules or media by following the sections below.
 
 ### Display fields
@@ -802,7 +802,7 @@ characterSchema:
       type: number
 
 # world.en-US.yaml —— text only
-name: Mistport Chronicles
+name: "Mistport: The Riftide Chronicle"
 characterSchema:
   attributes:
     - id: fogRot

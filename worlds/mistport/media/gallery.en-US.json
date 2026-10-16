@@ -60,7 +60,7 @@
       "id": "chen-yuanshan",
       "name": "Chen Yuanshan",
       "description": "A grey-haired elder in a dark, embroidered robe holds up a dark, angular fragment. He smiles, but his gaze is appraising.",
-      "background": "Chen Yuanshan, past sixty, chairs the Mistport Council and is pushing the Seal Tide Decree to restrict civilian access to the Undertow. The Council controls the Upper City and the legal relic trade, so his orders decide directly who may go on an expedition.",
+      "background": "Chen Yuanshan, past sixty, chairs the Mistport Council and is pushing the Tide-Seal Decree to restrict civilian access to the Undertow. The Council controls the Upper City and the legal relic trade, so his orders decide directly who may go on an expedition.",
       "storyContext": "Good for introducing the Council's power, permits, and the pressure of the lockdown. The image does not establish where the fragment in his hand came from, what it does, or what he is searching for.",
       "visualNotes": [
         "The fragment is described only as an angular object; its shape does not give it a quest number or make it part of a key."
@@ -90,7 +90,7 @@
       "id": "grey-falcon",
       "name": "Grey Falcon",
       "description": "A short-haired man in a dark coat with an insignia holds a tightly shuttered metal fog-lamp that lets out only a thin slit of cold light.",
-      "background": "Grey Falcon is captain of Chen Yuanshan's private expedition and enforces the Seal Tide Decree. A man of few words and great efficiency, he handles cordons, searches and pursuit.",
+      "background": "Grey Falcon is captain of Chen Yuanshan's private expedition and enforces the Tide-Seal Decree. A man of few words and great efficiency, he handles cordons, searches and pursuit.",
       "storyContext": "Use it to show how Council orders press on the harbor and the entrances to the ruins. At the start, his hunt crosses the trail of Qi's disappearance; the portrait does not decide whether he keeps obeying later.",
       "visualNotes": [
         "The metal lamp is recognizable by its shutters and faint cold light; never describe it as a flaming torch."
@@ -103,7 +103,7 @@
       "background": "Mistport climbs the cliff in three tiers: the Upper City, Mid-Harbor and the Undertow. The relic trade keeps the city alive; the ebb bares the ruins and the flood drowns the lowest tier, and after every Riftide the layout of the ruins changes.",
       "storyContext": "A promotional overview of the harbor city that uses stacked buildings to show a vertical city. Actual exploration still keeps to fog visibility of no more than fifty paces; the cover is not a ruin map to be reused.",
       "visualNotes": [
-        "The city's warm lamps are not the cold tide-stone lamps used to explore the Undertow; the broken arch in the picture is not identified as the Bone Arch from any particular deep withdrawal."
+        "The city's warm lamps are not the cold tide-stone lamps used to explore the Undertow; the broken arch in the picture is not identified as the Bone Arch from any particular deep ebb."
       ]
     }
   ]

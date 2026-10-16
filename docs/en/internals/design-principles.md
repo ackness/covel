@@ -25,7 +25,7 @@ These are the grounds for every trade-off. Where the code disagrees with them, t
 - Bundled plugins are examples shipped with the app to show what the framework can do. They use the same interfaces as community plugins, and nothing a community plugin cannot use. The only difference is trust: bundled plugins ship with the app and run without the player's approval.
 - Framework code makes no special case for any particular plugin; see "The core: the kernel provides primitives, plugins carry gameplay" below. With every plugin removed, the framework must still run.
 - One narrative plugin must be enough to play a world from start to finish. Every other plugin is there to enrich play.
-- The four bundled worlds are demos too. Mistport, Haruka Academy and Lantern Barrow each show one play style: traditional narrative, stage mode and tabletop rules. Emberback is written in English for English-speaking players, and shows how a world carries several languages.
+- The four bundled worlds are demos too. Mistport, Harukaze Academy and Lantern Barrow each show one play style: traditional narrative, stage mode and tabletop rules. Emberback is written in English for English-speaking players, and shows how a world carries several languages.
 
 ### Missing pieces must not stop the game
 
