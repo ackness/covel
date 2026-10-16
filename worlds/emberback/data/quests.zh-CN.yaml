@@ -1,32 +1,32 @@
 - id: call-from-tomorrow
   name: 来自明天的呼叫
-  description: 你自己的声音从七十二小时后的未来发来了警告。留存呼叫记录，查清它究竟如何传至余烬背，并在王冠火到来前决定向他人透露多少内容。
-  giver: 来自未来的神秘呼叫者
-  reward: 余烬背首个远程回声背后的真相
+  description: 你自己的声音从七十二小时后发来了警告。保住这段录音，查清它是怎么传到余烬背的，并在王冠火到来之前，决定要把多少内容告诉别人。
+  giver: 来自未来的不明呼叫者
+  reward: 余烬背第一次远程回声背后的真相
   objectives:
     - id: preserve-recording
-      text: 单独备份隔离这段未来的呼叫讯息
+      text: 把这段来自未来的发射单独隔离备份一份
     - id: verify-voice
-      text: 将信号与你在站内留存的声纹进行比对
+      text: 拿信号和站里存档的你的声纹比对
     - id: trace-origin
-      text: 追溯回声的时标与发报源头特征
+      text: 追查回声的时间和位置特征
 - id: stop-mile-seventeen
   name: 拦下车队
-  description: 琼恩正护送三十箱低温药品赶往警告中点名提及的地点。在远程通讯彻底中断前联络上她。
-  giver: 未来的你自己
-  reward: 车队平安无事与琼恩的信任
+  description: 琼正护送三十箱医用低温药品，开往未来警告里点名的那个地方。赶在远程通讯彻底断掉之前，联系上她。
+  giver: 未来的你
+  reward: 车队的平安，以及琼的信任
   objectives:
     - id: contact-june
-      text: 与琼恩的爬行器建立通讯联络
+      text: 接通琼的爬行器
     - id: change-route
-      text: 在车队抵达十七英里前追上他们或说服其改道
+      text: 在车队到十七英里之前说服它改道，或者追上它
 - id: keep-the-relay-alive
-  name: 三小时供电
-  description: 王冠火将在三小时后席卷余烬背。中继站无法同时为远程天线主阵列、风暴护盾、爬行器充电桩、诊所备用电以及米娜的全谱扫描供电。
+  name: 三个小时的电
+  description: 王冠火三小时后到达余烬背。中继站没法同时给远程主阵列、风暴护盾、爬行器充电桩、诊所备用电和米娜的全谱扫描供电。
   giver: 余烬背中继合作社
-  reward: 一座仍能应答呼叫的中继站
+  reward: 一座还能应答呼叫的中继站
   objectives:
     - id: audit-charge
-      text: 盘点中继站的电力储备与消耗预算
+      text: 核算全站的用电预算
     - id: choose-priorities
-      text: 把宝贵的电量分配给最关键的系统
+      text: 把电分给最要紧的系统
