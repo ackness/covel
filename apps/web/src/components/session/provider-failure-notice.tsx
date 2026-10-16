@@ -1,5 +1,6 @@
 import { createContext, useContext, type ComponentProps } from "react";
 import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 import {
   getBuiltinProviderConnection,
   type SessionPlugin,
@@ -14,6 +15,27 @@ export interface SessionModelUse {
   slotId: string;
   provider: string;
   hasCredentials?: boolean;
+}
+
+const USE_ORDER = ["story", "plugin", "utility", "fast", "memory"];
+
+/** Name the uses for the player, the story first, in the UI language. */
+export function formatModelUses(
+  t: TFunction,
+  language: string,
+  slotIds: readonly string[],
+): string {
+  const rank = (slotId: string) => {
+    const index = USE_ORDER.indexOf(slotId);
+    return index === -1 ? USE_ORDER.length : index;
+  };
+  return new Intl.ListFormat(language).format(
+    [...new Set(slotIds)]
+      .sort((a, b) => rank(a) - rank(b) || a.localeCompare(b))
+      .map((slotId) =>
+        t(`session.modelUse.${slotId}`, { defaultValue: slotId }),
+      ),
+  );
 }
 
 /** Declared uses stay distinct even when they fall back to the same text slot. */
@@ -84,10 +106,10 @@ export function ProviderFailureNotice({
     provider && accountKind
       ? uses.filter((use) => use.provider === provider)
       : [];
-  const slots = new Intl.ListFormat(i18n.language).format(
-    affected.map(({ slotId }) =>
-      t(`session.modelUse.${slotId}`, { defaultValue: slotId }),
-    ),
+  const slots = formatModelUses(
+    t,
+    i18n.language,
+    affected.map(({ slotId }) => slotId),
   );
   return (
     <>

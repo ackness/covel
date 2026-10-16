@@ -17,6 +17,7 @@ import {
 } from "../setup-progress-notice.js";
 import {
   SessionModelUsesContext,
+  formatModelUses,
   sessionModelUses,
 } from "../provider-failure-notice.js";
 
@@ -85,6 +86,18 @@ function history(errorKind = "auth", error = "opaque provider response") {
 }
 
 describe("provider failure scope", () => {
+  it("names uses in the player's language, the story first", async () => {
+    const ids = ["memory", "plugin", "fast", "story", "plugin", "custom"];
+    await i18n.changeLanguage("zh-CN");
+    expect(formatModelUses(i18n.t, "zh-CN", ids)).toBe(
+      "剧情、插件、压缩历史、记忆提取和custom",
+    );
+    await i18n.changeLanguage("en-US");
+    expect(formatModelUses(i18n.t, "en-US", ids)).toBe(
+      "Story, Plugin tasks, History compression, Memory extraction, and custom",
+    );
+  });
+
   it("restores the target from history and names every active use sharing it", () => {
     const onOpenSettings = vi.fn();
     const steps = history();

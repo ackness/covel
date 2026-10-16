@@ -4,6 +4,7 @@ import {
   seedBrowserSettings,
   selectWorldByText,
   useServerWorlds,
+  startGame,
 } from "./helpers/player.js";
 
 for (const [locale, itemName] of [
@@ -22,10 +23,10 @@ for (const [locale, itemName] of [
     // Emberback seeds quests and opening gear, so the summary has content
     // before the first turn.
     await selectWorldByText(page, /Emberback|余烬背/i);
-    await page
-      .getByRole("button", { name: /^(start game|开始游戏)$/i })
-      .first()
-      .click();
+    await startGame(
+      page,
+      page.getByRole("button", { name: /^(start game|开始游戏)$/i }).first(),
+    );
     await expect(page).toHaveURL(/sid=/, { timeout: 20_000 });
     const sessionId = new URL(page.url()).searchParams.get("sid")!;
 

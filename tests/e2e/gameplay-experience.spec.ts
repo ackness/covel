@@ -2,6 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 import {
   seedAppSettings,
   selectWorldByText,
+  startGame,
   useServerWorlds,
 } from "./helpers/player.js";
 
@@ -12,10 +13,10 @@ async function restoreReadingFixture(page: Page): Promise<string> {
   await useServerWorlds(page);
   await page.goto("/session");
   await selectWorldByText(page, /雾港|Mistport/i);
-  await page
-    .getByRole("button", { name: /^(开始游戏|Start game)$/i })
-    .first()
-    .click();
+  await startGame(
+    page,
+    page.getByRole("button", { name: /^(开始游戏|Start game)$/i }).first(),
+  );
   await expect(page).toHaveURL(/sid=/);
   const id = new URL(page.url()).searchParams.get("sid")!;
   const sessionPath = `**/api/sessions/${id}`;
