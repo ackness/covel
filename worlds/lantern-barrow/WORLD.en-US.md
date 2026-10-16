@@ -41,7 +41,7 @@ The barrow sleeps lightly. Fighting, breaking down doors, making a racket, light
 ## Rules at a Glance
 
 - **Point-buy**: Might, Agility, Endurance, Wits, Insight, and Presence each start at 1. Distribute 6 more points among them, to a maximum of 4 in any one attribute.
-- **Checks**: roll d20 + the relevant attribute against a difficulty of 8 (easy), 12 (normal), 16 (hard), or 20 (very hard). A natural 20 is a critical success; a natural 1 is a critical failure. You can start a check from the Attribute checks panel on the right, or use `/roll` at any time.
+- **Checks**: roll d20 + the relevant attribute modifier (+2 per point, +10 at 5) against a difficulty of 8 (easy), 12 (normal), 16 (hard), or 20 (very hard). A natural 20 is a critical success; a natural 1 is a critical failure. You can start a check from the Attribute checks panel on the right, or use `/roll` at any time.
 - **Hit points**: at 0, you collapse. You don't die immediately, and companions can drag you back.
 - **Supplies**: a torch burns for about one phase of the day. Your inventory tracks rations, healing draughts, and silver coins. Without light, you can't see where you're going or spot traps.
 - **Panels**: quests, inventory, companion affinity, Delve Map, Barrow Alarm, The Barrow Lantern, and Renown all update as the story unfolds.

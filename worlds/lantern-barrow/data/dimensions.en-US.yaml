@@ -233,7 +233,7 @@ mechanics:
     skillSystem:
       Might, Agility, Endurance, Wits, Insight, and Presence each start at 1.
       Distribute 6 additional points as you choose, to a maximum of 4 in any one
-      attribute. Checks use d20 + attribute against difficulty 8/12/16/20. A natural 20 is
+      attribute. Checks roll d20 + the attribute modifier (+2 per point, +10 at 5) against difficulty 8/12/16/20. A natural 20 is
       a critical success; a natural 1 is a critical failure.
     customRules:
       - At 0 hit points, you collapse rather than die immediately. Companions can drag you
