@@ -129,15 +129,7 @@ const formFieldSchema = z
           : field.type === "checkbox"
             ? "boolean"
             : "string";
-      // Older plugin packages could only declare string defaults.
-      const legacyDefault =
-        typeof field.defaultValue === "string" &&
-        ((field.type === "number" &&
-          field.defaultValue.trim() !== "" &&
-          Number.isFinite(Number(field.defaultValue))) ||
-          (field.type === "checkbox" &&
-            ["true", "false"].includes(field.defaultValue)));
-      if (typeof field.defaultValue !== expected && !legacyDefault)
+      if (typeof field.defaultValue !== expected)
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ["defaultValue"],

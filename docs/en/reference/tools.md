@@ -285,7 +285,7 @@ Rules for field values:
 - A field that is not submitted uses its default value, including 0 and false. A text or select field that is submitted as an empty string also uses its default value.
 - `placeholder` is for display only.
 - The default value of a `select` field must be one of its options.
-- A default written as a finite number string or as `"true"` / `"false"` also works, and it is normalized on submit. New plugins should write numbers and booleans directly.
+- Defaults for `number` and `checkbox` fields do not accept strings; write numbers and booleans directly.
 
 #### Custom validation with `validation`
 
