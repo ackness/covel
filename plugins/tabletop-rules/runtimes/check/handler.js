@@ -85,8 +85,8 @@ export default async function (ctx) {
 }
 
 /**
- * What the narrative reads. `Settled tabletop check` is a marker that the
- * narrative prompts name in both languages; the rest is an instruction.
+ * What the narrative reads. Both check markers stay English because the
+ * narrative prompts name them in both languages; the rest is an instruction.
  */
 function settled(receipt, locale) {
   // The model reads the check, not the rows it is stored under.
@@ -107,7 +107,7 @@ function settled(receipt, locale) {
           )
         : pickLocaleText(
             locale,
-            "没有提交跑团检定。不要编造掷骰。",
+            "No tabletop check submitted（本回合没有提交跑团检定，不要编造掷骰）",
             "No tabletop check submitted. Do not invent a roll.",
           ),
     },

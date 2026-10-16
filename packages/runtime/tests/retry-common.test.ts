@@ -82,6 +82,7 @@ describe.each(["generate", "stream"] as const)(
     });
 
     it.each([
+      { code: "PROVIDER_ERROR", statusCode: 401, retriable: false },
       { code: "PROVIDER_ERROR", statusCode: 400, retriable: false },
       { code: "CONFIG_ERROR", retriable: false },
       { code: "SCHEMA_VALIDATION_FAILED", retriable: false },
@@ -104,7 +105,10 @@ describe.each(["generate", "stream"] as const)(
         ) {
           await expect(run()).rejects.toBe(error);
         } else {
-          await expect(run()).rejects.toMatchObject({ cause: error });
+          await expect(run()).rejects.toMatchObject({
+            cause: error,
+            message: `LLM call failed after 1 attempt(s): ${error.message}`,
+          });
         }
         expect(attempt).toHaveBeenCalledTimes(1);
       },

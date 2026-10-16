@@ -838,6 +838,8 @@ A model API can fail in more ways than an ordinary URL. Keys, balance, model nam
 
 When a connection fails, `error` gives the underlying cause (for example `connect ECONNREFUSED 127.0.0.1:11434`), not a general `fetch failed`. The classification is done by `classifyProviderFailure` in `@covel/ai-provider`; the type of the kinds, `ProviderFailureKind`, is in `@covel/shared`.
 
+Failed HTTP responses keep their status and use the categories above even when the body is empty, plain text, or HTML. The error message shows at most 200 characters of the body preview. An LLM call that stops because its error cannot be retried says `LLM call failed`, without claiming that retries were exhausted.
+
 A 429 counts as an exhausted quota only by its error code, never by its text: OpenAI's ordinary rate-limit message links the billing page too.
 
 `quota` and `auth` are account failures, as `isAccountFailure` in `@covel/shared` decides. Sending the same request to the same provider again only fails the same way, so neither the HTTP layer nor the runtime sends it again; only a fallback model the player configured is tried.
