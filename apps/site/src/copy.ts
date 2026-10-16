@@ -267,7 +267,7 @@ const en = {
       },
       {
         id: "lantern-barrow",
-        name: "Lantern Barrow: First Expedition",
+        name: "Lantern Barrow: The First Delve",
         genre: "Fantasy · Tabletop",
         summary:
           "After a century, the lantern has gone out and the bronze doors stand open. Form a party, spend your points, and roll your way down.",
@@ -510,7 +510,7 @@ const zh: Copy = {
       },
       {
         id: "emberback",
-        name: "余烬背中继站",
+        name: "余烬岭中继站",
         genre: "科幻 · 生存",
         summary:
           "潮汐锁定世界上的孤立中继站，收到一封来自七十二小时后的求救信号，声音是你自己的。",

@@ -1,6 +1,6 @@
 crownfire:
-  name: 王冠火倒计时
-  description: 王冠火风暴还有几分钟到达山脊，以及它看起来有多近。
+  name: 冠火倒计时
+  description: 冠火风暴还有几分钟到达山脊，以及它看起来有多近。
   schema:
     properties:
       minutesRemaining:
@@ -44,13 +44,13 @@ relayGrid:
               low: 低功率
               full: 全功率
           crawlerChargers:
-            title: 爬行器充电桩
+            title: 履带车充电桩
             x-enumLabels:
               off: 关闭
               low: 低功率
               full: 全功率
           nightglassLink:
-            title: 夜玻璃链路
+            title: 夜镜链路
             x-enumLabels:
               off: 关闭
               low: 低功率
@@ -86,7 +86,7 @@ signalLog:
   updateRule: 叙事中收到、录下或发现一条新的发射或回声时，添加一条记录（ID 用简短的 kebab-case）。来源、信道和时间戳弄清一项填一项；查到出处时把状态设为 traced，有独立的仪器或证人确认时设为 verified，证明是伪造或误读时设为 disproven。技术事实一旦确定，除非叙事明确推翻，否则不要改。永远不要删除记录。
 convoy:
   name: 医疗车队
-  description: 琼的爬行器车队和车上的三十箱低温药品——正开往十七英里。
+  description: 琼的履带车队和车上的三十个冷藏药箱——正开往十七英里。
   schema:
     properties:
       position:
@@ -106,8 +106,8 @@ convoy:
           intermittent: 时断时续
           open: 信道畅通
       cryoPacks:
-        title: 完好的低温药品箱
-  updateRule: 只有当叙事写到车队停下、转向、到达某处或被困住时，才改 position。contact 按电台本回合实际联通的情况设置。只有当叙事明确写到药品箱损坏、变质或丢失时，才减少 cryoPacks。
+        title: 完好的冷藏药箱
+  updateRule: 只有当叙事写到车队停下、转向、到达某处或被困住时，才改 position。contact 按电台本回合实际联通的情况设置。只有当叙事明确写到药箱损坏、变质或丢失时，才减少 cryoPacks。
 geography:
   name: 地理
   schema:
@@ -133,32 +133,32 @@ geography:
               title: 地标
         title: 区域
   initialValue:
-    overview: 维斯珀是一颗潮汐锁定的行星。白热的昼面和冰封的夜面在暮界线相接——那是一条能住人的窄带，有红色的山脊、冷风，还有靠无线电连在一起的定居点。
+    overview: 维斯珀是一颗潮汐锁定的行星。白热的昼面和冰封的夜面在晨昏线相接——那是一条能住人的窄带，有红色的山脊、冷风，还有靠无线电连在一起的定居点。
     regions:
-      - name: 余烬背山脊
+      - name: 余烬岭山脊
         description: 一道长长的锈红色陡崖，上面是中继站、住家、工坊和能挪动的太阳能田。山脊很偏，但从来不安静。
         climate: 干燥多风；向阳的一侧热，背阳的一侧冷，界线分明。
         landmarks:
           - name: 三桅塔
-            description: 余烬背的远程天线阵列。天气晴朗时，中间那根桅杆能联通西部中继链上的每一个定居点。
+            description: 余烬岭的远程天线阵列。天气晴朗时，中间那根桅杆能联通西部中继链上的每一个定居点。
           - name: 开关场
             description: 公共工坊、充电区、厨房和议事的场地，围着站里最老的那台变压器建起来。
       - name: 向阳路
-        description: 一条压得很实的爬行器路线，一路朝着太阳，穿过玻璃滩和玄武岩的阴影。十七英里是全线最没遮挡的一段。
+        description: 一条压得很实的履带车路线，一路朝着太阳，穿过玻璃滩和玄武岩的阴影。十七英里是全线最没遮挡的一段。
         climate: 强光晃眼，沙尘磨人，热浪锋面几分钟就能追上一辆车。
         landmarks:
           - name: 十七英里
             description: 一台野外中继器，装在一座天然石拱下面。未来的警告点了这个地方的名，可它的维护日志里看不出任何异常。
           - name: 镜田
-            description: 给余烬背供电的移动式太阳能集光器。它们每天对光对得怎么样，决定了整个社区能花多少电。
-      - name: 向夜阶地
+            description: 给余烬岭供电的移动式太阳能集光器。它们每天对光对得怎么样，决定了整个社区能花多少电。
+      - name: 背阳台地
         description: 一片往下倾斜的高原，暗蓝色的岩石、霜草，地下埋着冰管，一路通向永夜。
         climate: 晴朗，冷得刺骨，常有来去很快的冰风暴。
         landmarks:
-          - name: 夜玻璃天文台
+          - name: 夜镜天文台
             description: 一座小巧紧凑的科研站，研究磁暴、大气回声，还有维斯珀冰缘的推移。
-      - name: 王冠火前锋
-        description: 一场大陆尺度的磁暴，正沿着暮界线移动。带电的尘埃会让无线电信号弯折，还在天上画出一道道金色光带。
+      - name: 冠火锋面
+        description: 一场大陆尺度的磁暴，正沿着晨昏线移动。带电的尘埃会让无线电信号弯折，还在天上画出一道道金色光带。
         climate: 电活动强烈，难以预测，对暴露在外的人、车和天线阵列都很危险。
 factions:
   name: 势力
@@ -191,30 +191,30 @@ factions:
           title: 关系
   initialValue:
     - id: relay-cooperative
-      name: 余烬背中继合作社
+      name: 余烬岭中继合作社
       description: 站里的技术员、信号员、医护、种植员和厨师一起维护中继站，也一起决定有限的电怎么花。
       leader: 托马斯·里德，民选值班负责人
-      headquarters: 余烬背山脊，开关场
+      headquarters: 余烬岭山脊，开关场
       relations:
         - description: 中继站让信使躲开风暴；信使让这座孤站有补给可用。
         - description: 合作社离不开天文台的预报，但看不惯那些占用中继时间和电力的实验。
     - id: sunrunners
       name: 逐日者
-      description: 独立的爬行器车组，在暮界线各定居点之间运送药品、邮件、备件和乘客。
+      description: 独立的履带车组，在晨昏线各定居点之间运送药品、邮件、备件和乘客。
       leader: 每次线路会议上推选的轮值领队
       headquarters: 就在路上
       relations:
-        - description: 他们把命交给余烬背的信号员，尽管每次封路都要抱怨一通。
+        - description: 他们把命交给余烬岭的信号员，尽管每次封路都要抱怨一通。
         - description: 对多数司机来说，预报模型远不如路标、直觉和电台里一个清楚的声音管用。
     - id: nightglass-observatory
-      name: 夜玻璃天文台
+      name: 夜镜天文台
       description: 一支小型的民间科研队，追踪维斯珀的大气，以及那些有时先于源头发射就到达的无线电回声。
-      leader: 米娜·帕克博士
-      headquarters: 向夜阶地
+      leader: 米娜·朴博士
+      headquarters: 背阳台地
       relations:
-        - description: 夜玻璃需要余烬背的阵列来验证它的理论；余烬背需要夜玻璃来预测王冠火。
+        - description: 夜镜需要余烬岭的阵列来验证它的理论；余烬岭需要夜镜来预测冠火。
 powerSystem:
-  name: 回声解译
+  name: 回声判读
   schema:
     properties:
       name:
@@ -236,22 +236,22 @@ powerSystem:
               title: 描述
         title: 层级
   initialValue:
-    name: 回声解译
+    name: 回声判读
     description: 从维斯珀的地磁天气造成的带时差无线电回声里，提取有用信息的手艺。这是技术，不是预言。
     rules:
       - 回声必须先录下、打上时间戳，再和一个独立的信号比对过，才能算作证据。
       - 未来的信息越清楚，人们照着它行动时引起的干扰就越强；确定性从来不是白来的。
       - 回声显示的是一次可能的发射，不是固定的未来。选择可以阻止、改变或促成所听到的事。
-      - 王冠火会让回声传得更远，同时让普通通讯更靠不住，外露的电子设备更危险。
+      - 冠火会让回声传得更远，同时让普通通讯更靠不住，外露的电子设备更危险。
     tiers:
       - name: 监听者
         description: 能在浓重的静电杂音里认出规律、虚假的重复，以及有意说出的话。
       - name: 追踪者
         description: 能比对各台接收器之间的相位漂移，估算回声来自何时何地。
-      - name: 重构者
+      - name: 拼接者
         description: 能从几段互相矛盾的回声里拼出缺失的片段，同时不假装不确定性已经消失。
-      - name: 发信者
-        description: 理论上能把回复发进更早的时间窗口。目前没有任何经过证实的发信者。
+      - name: 回呼者
+        description: 理论上能把回复发进更早的时间窗口。目前没有任何经过证实的回呼者。
 history:
   name: 历史
   schema:
@@ -270,20 +270,20 @@ history:
   initialValue:
     - era: 开拓定居时代
       year: 214年前
-      name: 降落暮界线
+      name: 晨昏线登陆
       description: 第一批永久居住舱落了地。选的位置，正好让维斯珀的光和冷能靠普通的工程手段调和。
     - era: 中继时代
       year: 86年前
-      name: 余烬背通电启用
+      name: 余烬岭开通
       description: 山脊上的三根桅杆填上了西部中继链上最长的一段盲区，也让一个维修营地变成了一个社区。
     - era: 当代
       year: 19年前
       name: 大断联
-      description: 一场王冠火风暴让六个定居点断联了十一天。合作社“凡有呼叫，必有应答”的承诺，就是从那次恢复时开始的。
+      description: 一场冠火风暴让六个定居点断联了十一天。合作社“凡有呼叫，必有应答”的承诺，就是从那次恢复时开始的。
     - era: 当下
       year: 4个月前
-      name: 首个证实回声
-      description: 米娜·帕克录下了一份天气公报，九分钟后，夜玻璃天文台才把它播发出去。之后又出了几次，一次比一次长，一次比一次具体。
+      name: 第一次证实的回声
+      description: 米娜·朴录下了一份天气公报，九分钟后，夜镜天文台才把它播发出去。之后又出了几次，一次比一次长，一次比一次具体。
 economy:
   name: 经济
   schema:
@@ -304,15 +304,15 @@ economy:
         title: 贸易
   initialValue:
     currencies:
-      - name: 交易筹码
+      - name: 工分券
         description: 合作社的记账凭证，能买吃的、付修理费、付路费、买个人用品。就算拿不出筹码，必要的紧急服务也不会拒绝你。
     resources:
       - 电池电量
       - 冷凝水
       - 陶瓷电子元件
-      - 爬行器零件
-      - 医用低温药品箱
-    tradeNotes: 电才是余烬背真正的预算。每一次大修、发射、给车充电或科研扫描，都是在从别的公共需要那里抢电。
+      - 履带车零件
+      - 医用冷藏药箱
+    tradeNotes: 电才是余烬岭真正的预算。每一次大修、发射、给车充电或科研扫描，都是在从别的公共需要那里抢电。
 socialStructure:
   name: 社会
   schema:
@@ -332,7 +332,7 @@ socialStructure:
   initialValue:
     classes:
       - name: 站内社员
-        description: 住在余烬背的合作社成员，一起轮维护班、一起投票，也一起担起紧急情况下的义务。
+        description: 住在余烬岭的合作社成员，一起轮维护班、一起投票，也一起担起紧急情况下的义务。
       - name: 外勤车队
         description: 在各定居点之间来回跑的信使、货运司机和机修工，靠站里的临时铺位落脚。
       - name: 往来访客
@@ -376,7 +376,7 @@ mechanics:
   initialValue:
     skillSystem: 有风险的行动用体能、技术、野外经验、洞察或人缘判定。失败会改变时间、电量、信任、安全，或者手头信息的质量，而不是让故事就此停下。
     customRules:
-      - 追踪王冠火倒计时；某个行动花掉了不少时间时，说清代价。
+      - 追踪冠火倒计时；某个行动花掉了不少时间时，说清代价。
       - 车辆、电台和站内系统都要用电；分给一处的电，别处就不能再用。
       - 未来的回声只给线索，从不规定结果。玩家的选择可能阻止、改变或促成那段被听到的发射。
       - 做出的承诺和发现的线索，都记进任务日志和信号日志。
@@ -396,7 +396,7 @@ startingConditions:
       startingLocation:
         title: 起始地点
   initialValue:
-    openingScenario: 06:14，余烬背所有的接收器同时放出同一通不可能的求救呼叫——是你自己的声音，从七十二小时之后传来。它警告你：别让医疗车队开到十七英里，别让米娜上塔，也别让托马斯关掉信号。随后，王冠火风暴逼近，网络断了。
+    openingScenario: 06:14，余烬岭所有的接收器同时放出同一通不可能的求救呼叫——是你自己的声音，从七十二小时之后传来。它警告你：别让医疗车队开到十七英里，别让米娜上塔，也别让托马斯关掉信号。随后，冠火风暴逼近，网络断了。
     openingHook: 未来借了你的声音。你先去提醒谁？
     openingChips:
       - 把录音放给托马斯听
@@ -405,7 +405,7 @@ startingConditions:
       - 趁信号还没散，追查来源
       - 看看站里还剩多少电
     playerConstraints:
-      - 你是余烬背最新的线路员，受过训练，但大家还不放心让你独自应付一场危机。
-      - 王冠火三小时后到达山脊。
+      - 你是余烬岭最新的线务员，受过训练，但大家还不放心让你独自应付一场危机。
+      - 冠火三小时后到达山脊。
       - 医疗车队已经上路，远程通讯正在失效。
-    startingLocation: 余烬背中继站，信号室
+    startingLocation: 余烬岭中继站，信号室

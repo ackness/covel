@@ -1,8 +1,8 @@
 - id: call-from-tomorrow
   name: 来自明天的呼叫
-  description: 你自己的声音从七十二小时后发来了警告。保住这段录音，查清它是怎么传到余烬背的，并在王冠火到来之前，决定要把多少内容告诉别人。
+  description: 你自己的声音从七十二小时后发来了警告。保住这段录音，查清它是怎么传到余烬岭的，并在冠火到来之前，决定要把多少内容告诉别人。
   giver: 来自未来的不明呼叫者
-  reward: 余烬背第一次远程回声背后的真相
+  reward: 余烬岭第一次远程回声背后的真相
   objectives:
     - id: preserve-recording
       text: 把这段来自未来的发射单独隔离备份一份
@@ -12,18 +12,18 @@
       text: 追查回声的时间和位置特征
 - id: stop-mile-seventeen
   name: 拦下车队
-  description: 琼正护送三十箱医用低温药品，开往未来警告里点名的那个地方。赶在远程通讯彻底断掉之前，联系上她。
+  description: 琼正护送三十个医用冷藏药箱，开往未来警告里点名的那个地方。赶在远程通讯彻底断掉之前，联系上她。
   giver: 未来的你
   reward: 车队的平安，以及琼的信任
   objectives:
     - id: contact-june
-      text: 接通琼的爬行器
+      text: 接通琼的履带车
     - id: change-route
       text: 在车队到十七英里之前说服它改道，或者追上它
 - id: keep-the-relay-alive
   name: 三个小时的电
-  description: 王冠火三小时后到达余烬背。中继站没法同时给远程主阵列、风暴护盾、爬行器充电桩、诊所备用电和米娜的全谱扫描供电。
-  giver: 余烬背中继合作社
+  description: 冠火三小时后到达余烬岭。中继站没法同时给远程主阵列、风暴护盾、履带车充电桩、诊所备用电和米娜的全谱扫描供电。
+  giver: 余烬岭中继合作社
   reward: 一座还能应答呼叫的中继站
   objectives:
     - id: audit-charge

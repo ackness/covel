@@ -26,7 +26,7 @@ delveMap:
     hall-of-lamps:
       room: Hall of Lamps
       note:
-        The keeper once said wall lamps line both sides of the first passage inside the
+        The lampkeeper once said wall lamps line both sides of the first passage inside the
         tomb.
   updateRule:
     "Add an entry when a named room is first entered, seen, or reported by a
@@ -81,7 +81,7 @@ lantern:
           flickering: Flickering
           burning: Burning
       keeper:
-        title: Keeper
+        title: Lampkeeper
         x-enumLabels:
           missing: Missing
           found: Found
@@ -114,7 +114,7 @@ renown:
         title: Deeds
   updateRule:
     "Adjust when villagers witness or have actually heard about the player's
-    actions: +1 for solving a specific problem for a villager, +2 for rescuing the keeper
+    actions: +1 for solving a specific problem for a villager, +2 for rescuing the lampkeeper
     or relighting the lantern, and -1 for deceiving, extorting, or bringing trouble on
     villagers. Add a sentence to deeds for each change. Set title from score: 0–1
     stranger, 2–3 sellsword, 4–6 trusted, 7–8 hero-of-greyreed, 9–10 legend. Actions no
@@ -146,7 +146,7 @@ geography:
           Thirty-odd households, a mill, the Crooked Antler tavern, and a small chapel.
           The villagers are practical, superstitious, and know one another inside out.
         climate: Damp and foggy, already cold in late autumn.
-      - name: The Keeper's Cottage
+      - name: The Lampkeeper's Cottage
         description:
           A stone cottage at the foot of the barrow, where Ysolde has lived for forty
           years. Inside are lamp oil and old logbooks. The door is never locked.
@@ -158,7 +158,7 @@ geography:
         climate: Cold and clammy inside the tomb, with a smell of lamp oil and wet earth.
       - name: Greyreed Marsh
         description:
-          Reeds and black water as far as the eye can see. They say the marsh-king's
+          Reeds and black water as far as the eye can see. They say the Marsh King's
           old village lies drowned somewhere beneath them.
 factions:
   name: Factions
@@ -184,7 +184,7 @@ factions:
       name: The Hollow Choir
       description:
         "The dead inside the barrow. They do not attack people who sing. They simply
-        keep singing: the marsh-king's name, and the names of the living."
+        keep singing: the Marsh King's name, and the names of the living."
 tone:
   name: Tone
   schema:
@@ -233,7 +233,7 @@ mechanics:
     skillSystem:
       Might, Agility, Endurance, Wits, Insight, and Presence each start at 1.
       Distribute 6 additional points as you choose, to a maximum of 4 in any one
-      attribute. Checks use d20 + attribute against difficulty 8/12/16/20. A natural 20 is
+      attribute. Checks roll d20 + the attribute modifier (+2 per point, +10 at 5) against difficulty 8/12/16/20. A natural 20 is
       a critical success; a natural 1 is a critical failure.
     customRules:
       - At 0 hit points, you collapse rather than die immediately. Companions can drag you
@@ -256,7 +256,7 @@ startingConditions:
   initialValue:
     openingScenario:
       'Rain falls on a late-autumn night as you push open the door of the
-      Crooked Antler. The reeve''s bounty notice hangs above the bar: the keeper is
+      Crooked Antler. The reeve''s bounty notice hangs above the bar: the lampkeeper is
       missing, the barrow lantern has gone out, and the bronze tomb doors stand open.
       Thirty silver coins to whoever goes down. An old soldier cleans his sword in the
       corner; a young sister by the window leafs through a book of ancient lantern
@@ -264,7 +264,7 @@ startingConditions:
       too?"'
     openingHook: The lantern has been dark for three days. Who goes down with you tonight?
     openingChips:
-      - Ask the innkeeper about the keeper
+      - Ask the innkeeper about the lampkeeper
       - Sit across from the old soldier
       - Ask the sister to read the lantern inscriptions
       - Find the reeve and talk money

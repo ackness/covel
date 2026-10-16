@@ -34,8 +34,8 @@
 - id: lantern-truth
   title: The Truth About the Barrow
   content:
-    "Lantern Barrow is a prison, not a tomb. A hundred years ago, the marsh-king
-    traded the peace of all his village's dead for immortality. The first keeper sealed
+    "Lantern Barrow is a prison, not a tomb. A hundred years ago, the Marsh King
+    traded the peace of all his village's dead for immortality. The first lampkeeper sealed
     him beneath the hill with the flame of the Lantern Heart. While the lantern burns, he
     sleeps and the dead are silent. Corvin took the Heart to study the power sealed inside
     it; Ysolde followed him into the tomb. The reeve took Corvin's money for information
@@ -45,6 +45,7 @@
   keys:
     - Lantern Heart
     - Barrow King
+    - lampkeeper
     - keeper
     - Ysolde
     - Corvin
