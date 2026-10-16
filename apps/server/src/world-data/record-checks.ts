@@ -5,6 +5,7 @@
  * source.
  */
 
+import { isRecord } from "../lib/is-record.js";
 import path from "node:path";
 import type { PluginRegistry } from "@covel/plugin-loader";
 import {
@@ -14,15 +15,11 @@ import {
   type DimensionValueSchema,
   type ModelHiddenReason,
   type WorldDimensions,
+  parseWorldDataTarget,
 } from "@covel/shared";
-import {
-  isRecord,
-  recordLocation,
-  sourceItems,
-} from "./session-import/utils.js";
+import { recordLocation, sourceItems } from "./session-import/utils.js";
 import { characterBlockRoutes } from "./conventions.js";
 import { readWorldDataSource } from "./source-reader.js";
-import { parseWorldDataTarget } from "./target-uri.js";
 import type { OrderedWorldDataSource } from "./types.js";
 import type { WorldPackageDiagnostic } from "./validate-world-package.js";
 

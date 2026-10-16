@@ -30,7 +30,7 @@ import {
 } from "node:fs/promises";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { Readable } from "node:stream";
-import { createTables } from "../sqlite/sqlite-store-mappers.js";
+import { createTables } from "../sqlite/sqlite-schema-ddl.js";
 import type { SqliteMediaStoreOptions } from "./types.js";
 import {
   finalizeMediaCleanupResult,

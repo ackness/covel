@@ -98,11 +98,8 @@ describe("builtin ui tools", () => {
 });
 
 describe("create-form select options", () => {
-  it.each([
-    [0, false],
-    ["0", "false"],
-  ])(
-    "accepts typed and legacy numeric/checkbox defaults (%s, %s)",
+  it.each([[0, false]])(
+    "accepts typed numeric/checkbox defaults (%s, %s)",
     async (points, ready) => {
       await expect(
         createFormTool.execute(

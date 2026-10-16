@@ -77,6 +77,11 @@ export interface RuntimeResult {
   readonly error?: string;
   /** Classified provider failure; absent for non-provider result failures. */
   readonly errorKind?: ProviderFailureKind;
+  /** Actual failed provider target, never credentials or endpoint configuration. */
+  readonly failureTarget?: {
+    readonly provider: string;
+    readonly model?: string;
+  };
   readonly timestamp: string;
 }
 
@@ -256,6 +261,12 @@ export interface RecursiveCallDelta {
 /** Pure execution data returned to a nested caller; commit stays with the host. */
 export type NestedTurnResult = TurnResult;
 
+/** Setup completion observed during one execution and committed with its proposals. */
+export interface SetupCompletionDelta {
+  readonly newlyDone: Readonly<Record<string, SetupRuntimeState>>;
+  readonly allSetupDone: boolean;
+}
+
 export interface TurnResult {
   readonly turnId: string;
   readonly sessionId: string;
@@ -285,10 +296,7 @@ export interface TurnResult {
    * atomically with the turn's proposals. Absent on manual / non-player
    * executions, which skip setup-completion tracking.
    */
-  readonly setupCompletion?: {
-    readonly newlyDone: Readonly<Record<string, SetupRuntimeState>>;
-    readonly allSetupDone: boolean;
-  };
+  readonly setupCompletion?: SetupCompletionDelta;
   /**
    * Setup runtimes that ran (entered guard/handler) in this execution. The
    * commit-owning caller passes them to `finalizeExecution`, which — AFTER the

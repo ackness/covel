@@ -1,7 +1,7 @@
 import { kernelExtensionPoints } from "./contracts.js";
 import { z } from "zod";
 import { defineExtensionPoint } from "./definition.js";
-import { dimensionSnapshotSchema } from "../schemas/dimensions.js";
+import { dimensionSnapshotSchema } from "@covel/plugin-handlers-utils/dimensions";
 
 export const sessionWorldContextV1 = defineExtensionPoint({
   ...kernelExtensionPoints.sessionWorldContext,

@@ -11,7 +11,7 @@
  */
 
 import type { LLMContentPart, LLMImagePart, MediaRef } from "@covel/shared";
-import type { LLMMessage } from "../llm/llm-adapter.js";
+import type { LLMMessage } from "@covel/shared";
 import type { MediaStoreLike } from "../function-runtime/runtime-media-context.js";
 
 /**

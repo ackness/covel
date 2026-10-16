@@ -58,11 +58,6 @@ function claimPort(port: number): Promise<number> {
   });
 }
 
-/** Find a random free port. */
-export function findFreePort(): Promise<number> {
-  return claimPort(0);
-}
-
 /** The port a `server.port` file names, or undefined when it names none. */
 export function parseStoredPort(
   text: string | null | undefined,

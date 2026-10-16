@@ -22,10 +22,6 @@ import {
 } from "../common/schema-version.js";
 import { sqliteWriteOrderTriggersSql } from "../common/write-order-ddl.js";
 import { DATA_SCHEMA_VERSION } from "../migrations.js";
-import {
-  DELETE_RETIRED_PLUGIN_DATA_SQL,
-  DROP_RETIRED_TABLES_SQL,
-} from "../table-registry.js";
 import * as schema from "./schema.js";
 
 /**
@@ -99,8 +95,6 @@ export function createTables(sqlite: SqliteDdlConnection): void {
   sqlite.exec(CREATE_TABLES_SQL);
   sqlite.exec(VECTOR_MODELS_TRIGGER_SQL);
   sqlite.exec(sqliteWriteOrderTriggersSql());
-  sqlite.exec(DROP_RETIRED_TABLES_SQL);
-  sqlite.exec(DELETE_RETIRED_PLUGIN_DATA_SQL);
   if (found === null) {
     sqlite.exec(`PRAGMA user_version = ${DATA_SCHEMA_VERSION}`);
   }

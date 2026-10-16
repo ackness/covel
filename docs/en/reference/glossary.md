@@ -170,7 +170,7 @@ See: `packs/builtin.yaml`, `apps/server/src/config/plugin-packs.ts`, [plugin fie
 
 There are two separate ways to describe a plugin.
 
-- **kind**: a field in the root `PLUGIN.md`, with two values. A `core` plugin is added to every game unless the player excludes it explicitly. A `plugin` is enabled only when it is selected. The loader compiles this into the internal `pluginType` (`core-plugin` or `plugin`).
+- **kind**: a field in the root `PLUGIN.md`, with two values. A `core` plugin is added to every game unless the player excludes it explicitly. A `plugin` is enabled only when it is selected. Loaded package manifests and plugin summaries keep `kind`; compiled runtimes do not repeat it.
 - **Source** (`builtin` or `community`): decided by the directory the plugin is in. It does not depend on the manifest or the name. It decides whether the plugin loads automatically, how its tools are approved, and whether its server code needs player authorization.
 
 A plugin maintained by the project but installed from outside the repository still has the source `community`.

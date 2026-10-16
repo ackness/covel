@@ -180,7 +180,7 @@ describe("fork with a bound dimension provider", () => {
         id: PROVIDER,
         name: "Dimension Provider",
         description: "",
-        pluginType: "core-plugin",
+        kind: "core",
         runtimeCount: 0,
       },
       packageManifest: parsePluginMd(

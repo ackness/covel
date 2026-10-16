@@ -9,7 +9,7 @@ import {
 import { emitToast } from "@/lib/toast-channel.js";
 import { ignoreError } from "@/lib/ignore-error.js";
 import { requestConfirm } from "@/lib/confirm-channel.js";
-import { approvalConfirmMessage } from "@/lib/approval-message.js";
+import { confirmPluginApproval } from "@/lib/approval-message.js";
 import type { MutableRef, SessionActionOwner } from "./runtime-refs.js";
 import type { SseEventHandler } from "./sse-handler.js";
 import type { SessionDispatch } from "./types.js";
@@ -18,7 +18,7 @@ import { toExecutionStepStatus } from "./execution-steps.js";
 const CONNECTION_CLOSED_REASON = "__i18n:session.reasonConnectionClosed__";
 
 /** Refresh grant-backed UI state even if the subsequent form/action is rejected. */
-export function refreshApprovedSessionPlugins(
+function refreshApprovedSessionPlugins(
   sessionId: string,
   dispatch: SessionDispatch,
   isCurrent: () => boolean,
@@ -108,15 +108,9 @@ export async function resumeSessionSuspension(
       // Never hold the workspace FIFO while waiting for the player.
       const allowed =
         isCurrent() &&
-        (await requestConfirm({
-          title: i18n.t("plugin.approval.title"),
-          message: approvalConfirmMessage(
-            (key, options) => i18n.t(key, options) as string,
-            approval.pending.pluginId,
-            approval.pending.action,
-          ),
-          confirmLabel: i18n.t("plugin.approval.allow"),
-          cancelLabel: i18n.t("plugin.approval.deny"),
+        (await confirmPluginApproval(approval.pending, {
+          t: (key, options) => i18n.t(key, options) as string,
+          confirm: requestConfirm,
         }));
       const approved = await workspace.run(
         sid,
@@ -328,15 +322,9 @@ export function runActionStream(
       async (approval) => {
         const allowed =
           isCurrent() &&
-          (await requestConfirm({
-            title: i18n.t("plugin.approval.title"),
-            message: approvalConfirmMessage(
-              (key, options) => i18n.t(key, options) as string,
-              approval.pending.pluginId,
-              approval.pending.action,
-            ),
-            confirmLabel: i18n.t("plugin.approval.allow"),
-            cancelLabel: i18n.t("plugin.approval.deny"),
+          (await confirmPluginApproval(approval.pending, {
+            t: (key, options) => i18n.t(key, options) as string,
+            confirm: requestConfirm,
           }));
         const proceed = allowed && isCurrent();
         await api.resolveApproval(

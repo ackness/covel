@@ -38,7 +38,7 @@ interface ChangeSource {
   readonly key: string;
 }
 
-export const RECORD_CHANGE_SOURCES: readonly ChangeSource[] = [
+const RECORD_CHANGE_SOURCES: readonly ChangeSource[] = [
   {
     table: "lorebook_entries",
     kind: "lorebook",

@@ -26,7 +26,7 @@ import {
   SEARCH_TOOLS_TOOL_NAME,
   type ToolSearchDoc,
 } from "@covel/tools";
-import type { LLMToolDefinition } from "../llm/llm-adapter.js";
+import type { LLMToolDefinition } from "@covel/shared";
 import type { ToolCallContext, ToolExecutor } from "./tool-executor.js";
 
 export { SEARCH_TOOLS_TOOL_NAME };

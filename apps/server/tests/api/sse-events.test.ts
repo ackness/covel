@@ -63,7 +63,6 @@ describe("SSE Events", () => {
       { topic: {}, sessionId: "sess-1" },
       { topic: "test.event", sessionId: 5 },
       { topic: "test.event", sessionId: "sess-1", payload: [] },
-      { topic: "test.event", sessionId: "sess-1", targetRuntime: {} },
     ])("rejects invalid event %j without publishing", async (body) => {
       const response = await app.request("/api/events/emit", {
         method: "POST",
@@ -132,26 +131,6 @@ describe("SSE Events", () => {
       expect(await res.json()).toMatchObject({ code: "session_not_active" });
       await eventBus.flush();
       expect(await busStore.listEvents("sess-1")).toEqual([]);
-    });
-
-    it("should pass targetRuntime if provided", async () => {
-      await app.request("/api/events/emit", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          topic: "routed.event",
-          payload: { x: 1 },
-          sessionId: "sess-1",
-          targetRuntime: "narrator/narrator",
-        }),
-      });
-
-      // targetRuntime is not part of the SubscriptionEvent surface; assert it
-      // via the persisted audit record instead.
-      await eventBus.flush();
-      const records = await busStore.listEvents("sess-1");
-      const routed = records.find((r) => r.topic === "routed.event");
-      expect(routed?.targetRuntime).toBe("narrator/narrator");
     });
   });
 

@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { z } from "zod";
-import { tool } from "../src/tool.js";
+import { tool } from "@covel/plugin-handlers-utils";
 import type { ToolExecutionContext } from "../src/types.js";
 
 /** A model sends raw JSON arguments, not the parsed type `execute` declares. */

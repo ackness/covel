@@ -60,7 +60,7 @@ describe("runtime job public projections", () => {
         id: PLUGIN_ID,
         name: PLUGIN_ID,
         description: "",
-        pluginType: "plugin",
+        kind: "plugin",
         runtimeCount: 0,
       },
       loadedRuntimes: new Map(),

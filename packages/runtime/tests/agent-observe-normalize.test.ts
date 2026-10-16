@@ -17,9 +17,9 @@ import {
 import type { RuntimeManifest, TurnInput } from "@covel/shared";
 import type { LoadedRuntime } from "@covel/plugin-loader";
 import { createMemoryStore } from "@covel/store/memory";
-import { executeTurn } from "../src/turn-executor/turn-executor.js";
+import { runTurnPipeline } from "../src/turn-executor/turn-executor.js";
 import type { TurnExecutorDeps } from "../src/turn-executor/turn-executor.js";
-import type { LLMAdapter, LLMResponse } from "../src/llm/llm-adapter.js";
+import type { LLMAdapter, LLMResponse } from "@covel/shared";
 
 class JsonLLM implements LLMAdapter {
   constructor(private readonly content: string) {}
@@ -69,7 +69,7 @@ describe("agent structured output", () => {
       store: createMemoryStore(),
     } as unknown as TurnExecutorDeps;
 
-    const result = await executeTurn(
+    const result = await runTurnPipeline(
       input("sess-agent-obs"),
       [agentManifest],
       deps,
@@ -91,7 +91,7 @@ describe("agent structured output", () => {
       store: createMemoryStore(),
     } as unknown as TurnExecutorDeps;
 
-    const result = await executeTurn(
+    const result = await runTurnPipeline(
       input("sess-agent-ok"),
       [agentManifest],
       deps,

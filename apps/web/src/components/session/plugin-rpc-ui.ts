@@ -9,7 +9,7 @@ import {
 } from "@/services/api.js";
 import { getSessionWorkspace } from "@/services/data-service.js";
 import { emitToast } from "@/lib/toast-channel.js";
-import { approvalConfirmMessage } from "@/lib/approval-message.js";
+import { confirmPluginApproval } from "@/lib/approval-message.js";
 
 type Translate = (key: string, options?: Record<string, unknown>) => string;
 
@@ -202,22 +202,10 @@ export async function resolvePluginRpcApprovalResponse(params: {
       break;
     requested.add(key);
 
-    const proceed = await params.confirm({
-      title: params.t("plugin.approval.title", {
-        defaultValue: "Authorize plugin action",
-      }),
-      message: approvalConfirmMessage(
-        params.t,
-        approvedPluginId,
-        approvedAction,
-      ),
-      confirmLabel: params.t("plugin.approval.allow", {
-        defaultValue: "Authorize",
-      }),
-      cancelLabel: params.t("plugin.approval.deny", {
-        defaultValue: "Deny",
-      }),
-    });
+    const proceed = await confirmPluginApproval(
+      { pluginId: approvedPluginId, action: approvedAction },
+      { t: params.t, confirm: params.confirm },
+    );
 
     try {
       await (params.submitApproval ?? resolveApproval)(

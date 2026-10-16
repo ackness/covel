@@ -21,7 +21,7 @@ import {
   overlayPluginDataRows,
   overlayPluginDataValue,
 } from "../proposal-overlay.js";
-import { tool } from "../tool.js";
+import { tool } from "@covel/plugin-handlers-utils";
 import type { ToolModule } from "../types.js";
 
 /** Minimal read-only store interface for plugin data operations. */

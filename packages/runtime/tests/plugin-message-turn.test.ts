@@ -55,7 +55,8 @@ async function commit(
   const card = {
     ...source,
     turnId,
-    status: "success",
+    status: "success" as const,
+    runId: "card-run",
     toolCalls: [],
     output: {},
     ...(!options.functionOutput ? { pendingProposals: [proposal(items)] } : {}),
@@ -88,7 +89,8 @@ async function commit(
               pluginId: "external-story",
               runtimeId: "external-story",
               turnId,
-              status: "success",
+              status: "success" as const,
+              runId: "story-run",
               output: { narrativeOutput: "A newly generated scene." },
             },
           ]

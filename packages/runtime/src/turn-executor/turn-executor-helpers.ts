@@ -10,7 +10,7 @@ import type {
   ToolCallContext,
   ToolExecutor,
 } from "../agent-loop/tool-executor.js";
-import type { LLMToolDefinition } from "../llm/llm-adapter.js";
+import type { LLMToolDefinition } from "@covel/shared";
 import {
   buildSearchToolsDefinition,
   declaredToolNames,

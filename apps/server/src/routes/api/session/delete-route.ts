@@ -3,7 +3,7 @@ import { invalidateSessionEvents, sessionEventBus } from "./session-events.js";
 import { withMemoryIngestLock } from "../../../lib/memory-ingest-lock.js";
 import { withSettledSessionLock } from "../plugin-rpc/settled-request.js";
 import { randomUUID } from "node:crypto";
-import { decodePluginUserSettingsHeader } from "../plugin-user-settings.js";
+import { readPluginUserSettings } from "../plugin-user-settings.js";
 import { loadSessionHookScope } from "./hook-scope.js";
 import type { Context, Hono } from "hono";
 import type { SessionRecord } from "@covel/store";
@@ -37,17 +37,8 @@ export async function deleteSessionWithLifecycle(
   const store = c.get("store");
   const guard = await resolveSessionById(c, id);
   if (!guard.ok) return guard.response;
-  const decodedUserSettings = decodePluginUserSettingsHeader(
-    c.req.header("X-Plugin-User-Settings"),
-  );
-  if (!decodedUserSettings.ok) {
-    return c.json(
-      errorBody(decodedUserSettings.error, {
-        code: decodedUserSettings.code,
-      }),
-      decodedUserSettings.status,
-    );
-  }
+  const decodedUserSettings = readPluginUserSettings(c);
+  if (!decodedUserSettings.ok) return decodedUserSettings.response;
   const expectedIncarnation = sessionIncarnationIdentity(
     expectedSession ?? guard.session,
   );

@@ -1,10 +1,10 @@
 /**
- * Invariant: `executeTurn` always calls `store.saveTurnResult` before it
+ * Invariant: `runTurnPipeline` always calls `store.saveTurnResult` before it
  * returns — even when zero runtimes ran, when the session is paused, or when
  * all runtimes failed. Skipping this write would lose the execution artifact
  * required by commit settlement and observability.
  *
- * Exception: when `session.status !== 'active'` (paused/ended) executeTurn
+ * Exception: when `session.status !== 'active'` (paused/ended) runTurnPipeline
  * returns early *before* saving — that's intentional because no runtimes
  * ran and creating a turn_result row would be misleading. That path is
  * covered explicitly below.
@@ -14,9 +14,9 @@ import { describe, it, expect } from "vitest";
 import type { RuntimeManifest } from "@covel/shared";
 import { createMemoryStore } from "@covel/store/memory";
 import type { DataStore } from "@covel/store";
-import { executeTurn } from "../src/turn-executor/turn-executor.js";
+import { runTurnPipeline } from "../src/turn-executor/turn-executor.js";
 import type { TurnExecutorDeps } from "../src/turn-executor/turn-executor.js";
-import type { LLMAdapter, LLMResponse } from "../src/llm/llm-adapter.js";
+import type { LLMAdapter, LLMResponse } from "@covel/shared";
 
 class NoopLLM implements LLMAdapter {
   async generate(): Promise<LLMResponse> {
@@ -67,7 +67,7 @@ function fnManifest(name: string, priority: number): RuntimeManifest {
   } as RuntimeManifest;
 }
 
-describe("executeTurn: saveTurnResult invariant", () => {
+describe("runTurnPipeline: saveTurnResult invariant", () => {
   it("persists a turn_result for the happy path (handler succeeds)", async () => {
     const store = await freshActiveStore("sess-happy");
     const deps: TurnExecutorDeps = {
@@ -83,7 +83,7 @@ describe("executeTurn: saveTurnResult invariant", () => {
       llm: new NoopLLM(),
       store,
     };
-    await executeTurn(
+    await runTurnPipeline(
       {
         origin: "player",
         sessionId: "sess-happy",
@@ -109,7 +109,7 @@ describe("executeTurn: saveTurnResult invariant", () => {
       llm: new NoopLLM(),
       store,
     };
-    await executeTurn(
+    await runTurnPipeline(
       {
         origin: "player",
         sessionId: "sess-fail",
@@ -129,7 +129,7 @@ describe("executeTurn: saveTurnResult invariant", () => {
 
   it("persists a turn_result when zero runtimes are scheduled", async () => {
     // No runtimes in the active list → the stage schedule is empty; but
-    // executeTurn still must record the turn so the player-turn count increments.
+    // runTurnPipeline still must record the turn so the player-turn count increments.
     const store = await freshActiveStore("sess-empty");
     const deps: TurnExecutorDeps = {
       loadRuntime: async () => ({
@@ -139,7 +139,7 @@ describe("executeTurn: saveTurnResult invariant", () => {
       llm: new NoopLLM(),
       store,
     };
-    await executeTurn(
+    await runTurnPipeline(
       {
         origin: "player",
         sessionId: "sess-empty",
@@ -153,7 +153,7 @@ describe("executeTurn: saveTurnResult invariant", () => {
   });
 
   it("does NOT persist a turn_result when the session is paused", async () => {
-    // A paused session intentionally short-circuits executeTurn with no
+    // A paused session intentionally short-circuits runTurnPipeline with no
     // runtime activity — don't create a phantom turn_result.
     const store = await freshActiveStore("sess-paused");
     await store.updateSession("sess-paused", { status: "paused" });
@@ -165,7 +165,7 @@ describe("executeTurn: saveTurnResult invariant", () => {
       llm: new NoopLLM(),
       store,
     };
-    await executeTurn(
+    await runTurnPipeline(
       {
         origin: "player",
         sessionId: "sess-paused",

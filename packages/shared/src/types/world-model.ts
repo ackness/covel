@@ -1,4 +1,4 @@
-import type { AttributeDefinition } from "./character-schema.js";
+import type { AttributeDefinition } from "@covel/plugin-handlers-utils";
 
 /** Authoritative session character schema. Version advances on replacement. */
 export interface CharacterSchema {

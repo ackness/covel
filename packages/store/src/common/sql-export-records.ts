@@ -13,7 +13,7 @@
  */
 
 import { and, asc, desc, eq, lte, sql } from "drizzle-orm";
-import type { Column, SQL, Table } from "drizzle-orm";
+import type { Column, Table } from "drizzle-orm";
 
 import type { InsertValueBuilders } from "./insert-values.js";
 import type { JsonReader } from "./mappers.js";
@@ -46,12 +46,6 @@ export type SqlExportRecords = Pick<
   "appendRuntimeExport" | "getLatestRuntimeExport" | "listRuntimeExports"
 >;
 
-/** `and(...conds)` over the defined predicates, or `undefined` when none. */
-function allOf(conds: readonly (SQL | undefined)[]): SQL | undefined {
-  const defined = conds.filter((c): c is SQL => c !== undefined);
-  return defined.length > 0 ? and(...defined) : undefined;
-}
-
 export function createSqlExportRecords(
   deps: SqlExportRecordsDeps,
 ): SqlExportRecords {
@@ -81,14 +75,14 @@ export function createSqlExportRecords(
       opts?: { readonly atOrBefore?: string },
     ): Promise<RuntimeExportRecord | null> {
       const row = await runner.selectFirst<RuntimeExportRow>(runtimeExports, {
-        where: allOf([
+        where: and(
           eq(runtimeExports.sessionId, sessionId),
           eq(runtimeExports.producerRuntimeId, producerRuntimeId),
           eq(runtimeExports.recordAs, recordAs),
           opts?.atOrBefore !== undefined
             ? lte(runtimeExports.committedAt, opts.atOrBefore)
             : undefined,
-        ]),
+        ),
         // Highest revision first — `revision` is the authoritative monotone
         // sequence, so the frozen-read cutoff filters on committedAt then this
         // picks the latest surviving revision.
@@ -107,7 +101,7 @@ export function createSqlExportRecords(
       },
     ): Promise<readonly RuntimeExportRecord[]> {
       const rows = await runner.select<RuntimeExportRow>(runtimeExports, {
-        where: allOf([
+        where: and(
           eq(runtimeExports.sessionId, sessionId),
           filter?.producerRuntimeId !== undefined
             ? eq(runtimeExports.producerRuntimeId, filter.producerRuntimeId)
@@ -124,7 +118,7 @@ export function createSqlExportRecords(
                   and newer.record_as = ${runtimeExports.recordAs}
               )`
             : undefined,
-        ]),
+        ),
         orderBy: [
           asc(byteOrder(runtimeExports.producerRuntimeId)),
           asc(byteOrder(runtimeExports.recordAs)),

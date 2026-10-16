@@ -68,7 +68,7 @@ function installedPlugins(): PluginRegistry {
       id: "untrusted",
       name: "untrusted",
       description: "Untrusted",
-      pluginType: "plugin",
+      kind: "plugin",
       runtimeCount: 0,
     },
     loadedRuntimes: new Map(),

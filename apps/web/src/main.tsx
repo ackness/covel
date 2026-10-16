@@ -10,7 +10,11 @@ import {
 } from "@/services/data-service";
 import { fetchServerHealth } from "@/services/api";
 import { probeDesktopMode } from "@/lib/desktop-bridge";
-import { type Appearance, type ColorScheme } from "@/lib/appearance";
+import {
+  THEME_SCHEME_KEY,
+  type Appearance,
+  type ColorScheme,
+} from "@/lib/appearance";
 import { getSettings, initSettings } from "@/settings/store";
 import { configureMessagesWindowCap } from "@/stores/session-store/reducer";
 import { CUSTOM_THEMES_KEY } from "@/theme-system/storage.js";
@@ -18,10 +22,7 @@ import {
   APPEARANCE_TOKENS_KEY,
   applyTokenOverrides,
 } from "@/theme-system/overrides.js";
-import {
-  syncThemeRegistry,
-  THEME_SCHEME_KEY,
-} from "@/theme-system/registry.js";
+import { syncThemeRegistry } from "@/theme-system/registry.js";
 import i18n, { i18nReady } from "@/i18n";
 import type { SupportedLocale } from "@/i18n/locale-detector";
 import "@/i18n";

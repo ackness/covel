@@ -84,9 +84,29 @@ function taggedRanges(template: string): Array<[number, number]> {
 
 /**
  * Replace `{{ path }}` template variables in a prompt string.
- * Unresolved variables are replaced with an empty string. A value that lands
- * inside a tagged block is XML-escaped, so a closing tag in world text or a
- * character description cannot leave the block.
+ *
+ * Supported variable paths:
+ * - `{{ inputs.pluginId.runtimeId.fieldName }}` -- other runtime's output field
+ * - `{{ session.turnNumber }}` -- the session's turn count
+ * - `{{ player.message }}` -- player's current message
+ *
+ * Unresolved variables are replaced with an empty string.
+ *
+ * @param template - The prompt template containing `{{ variable }}` placeholders.
+ * @param variables - A nested object of variable values to resolve against.
+ * @returns The interpolated string with all placeholders replaced.
+ *
+ * @example
+ * ```typescript
+ * import { interpolateTemplate } from '@covel/context';
+ *
+ * const result = interpolateTemplate(
+ *   'Hello {{ player.name }}, welcome to {{ world.name }}!',
+ *   { player: { name: 'Aria' }, world: { name: 'Cloudmere' } },
+ * );
+ * // => 'Hello Aria, welcome to Cloudmere!'
+ * ```
+ * A value inside a tagged block is XML-escaped so data cannot close the block.
  */
 export function interpolateTemplate(
   template: string,
@@ -182,7 +202,7 @@ export function escapeXmlContent(value: string): string {
 function isPluginDataInject(
   decl: InputInjectDecl,
 ): decl is PluginDataInjectDecl {
-  return (decl as { kind?: string }).kind === "plugin-data";
+  return decl.kind === "plugin-data";
 }
 
 /**
@@ -489,13 +509,12 @@ export function buildExecutionStoryCue(locale: string | undefined): string {
 }
 
 /**
- * How a runtime finishes, from the manifest fields the agent loop builds its
- * policy from (`requireToolUse`, `completeAfterTools`, the output schema).
+ * How a runtime finishes: with `runtime-done`, with a completing tool, with
+ * its structured output, or with its story text.
  *
- * The `[COMPLETION]` instruction and the tools the runtime is offered both
- * come from this one answer. Derived apart, they disagreed: a runtime that
- * must call a tool was offered `runtime-done` and told to end a quiet turn
- * with it, a call the loop answers with a correction and one more model call.
+ * The prompt's `[COMPLETION]` instruction is written from this answer. A
+ * caller that decides which tools a runtime is offered reads the same answer,
+ * so the prompt never names a terminator the runtime does not have.
  */
 export function resolveFrameworkCompletion(
   manifest: Pick<

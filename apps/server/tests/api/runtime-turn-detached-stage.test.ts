@@ -326,7 +326,7 @@ describe("plugin RPC detached-stage runner", () => {
           id: PLUGIN_ID,
           name: PLUGIN_ID,
           description: "fixture",
-          pluginType: "plugin",
+          kind: "plugin",
           runtimeCount: 2,
         },
         manifests: [producerManifest(), current].map((manifest) => ({

@@ -4,11 +4,12 @@ import {
   seedBrowserSettings,
   selectWorldByText,
   useServerWorlds,
+  startGame,
 } from "./helpers/player.js";
 
 for (const [locale, itemName] of [
   ["en-US", "Field radio"],
-  ["zh-CN", "野战电台"],
+  ["zh-CN", "外勤电台"],
 ] as const) {
   test(`bundled plugins put the objective and the pack into the status strip in ${locale}`, async ({
     page,
@@ -21,11 +22,11 @@ for (const [locale, itemName] of [
     await page.goto("/session");
     // Emberback seeds quests and opening gear, so the summary has content
     // before the first turn.
-    await selectWorldByText(page, /Emberback|余烬背/i);
-    await page
-      .getByRole("button", { name: /^(start game|开始游戏)$/i })
-      .first()
-      .click();
+    await selectWorldByText(page, /Emberback|余烬岭/i);
+    await startGame(
+      page,
+      page.getByRole("button", { name: /^(start game|开始游戏)$/i }).first(),
+    );
     await expect(page).toHaveURL(/sid=/, { timeout: 20_000 });
     const sessionId = new URL(page.url()).searchParams.get("sid")!;
 

@@ -71,7 +71,7 @@ runtime:
         id: "producer",
         name: "producer",
         description: "",
-        pluginType: "plugin",
+        kind: "plugin",
         runtimeCount: definition.manifests.length,
       },
       rootPath: root,

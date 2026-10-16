@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createMemoryStore } from "@covel/store/memory";
 import type { RuntimeManifest } from "@covel/shared";
-import { executeTurn } from "../src/turn-executor/turn-executor.js";
+import { runTurnPipeline } from "../src/turn-executor/turn-executor.js";
 
 describe("logical turn in handler context", () => {
   it("gives function handlers the scheduler's logical turn", async () => {
@@ -28,7 +28,7 @@ describe("logical turn in handler context", () => {
       trigger: { type: "auto" },
     } as RuntimeManifest;
     let seen: unknown;
-    await executeTurn(
+    await runTurnPipeline(
       { origin: "player", sessionId: "s", turnId: "t", playerMessage: "go" },
       [manifest],
       {

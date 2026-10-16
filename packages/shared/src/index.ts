@@ -4,6 +4,7 @@ export {
 } from "./schemas/execution-snapshots.js";
 export * from "./extension-points/index.js";
 export {
+  fillNarrativeTemplate,
   modelFacingJson,
   modelHiddenPaths,
   type ModelHiddenPath,
@@ -55,10 +56,18 @@ export type {
 export { llmModelBindingSchema } from "./model-binding.js";
 export type { LlmModelBinding } from "./model-binding.js";
 export {
+  INPUT_MODALITIES,
+  OUTPUT_MODALITIES,
+  MODEL_FEATURES,
   defaultModelRoleTag,
   modelOutputTag,
   protocolOutputModalities,
   supportsModelRole,
+} from "./model-capabilities.js";
+export type {
+  InputModality,
+  OutputModality,
+  ModelFeature,
 } from "./model-capabilities.js";
 export { projectModelCapabilityForBuiltinAdapter } from "./model-capability-support.js";
 export {
@@ -89,7 +98,7 @@ export {
   characterUpsertPayloadSchema,
 } from "./proposals/world-model.js";
 export type { WorldModelView } from "./proposals/world-model.js";
-export { buildFieldsZodFromSchema } from "./schemas/character-fields.js";
+export { buildFieldsZodFromSchema } from "@covel/plugin-handlers-utils";
 
 // ── Utilities ─────────────────────────────────────────────────────
 export { deepMerge } from "./utils/deep-merge.js";
@@ -115,7 +124,7 @@ export {
   localeRegistry,
   localesShareLanguageAndScript,
   normalizeLocale,
-} from "./utils/locale-registry.js";
+} from "@covel/plugin-handlers-utils";
 export {
   INSTRUCTION_LOCALES,
   instructionLocaleFor,
@@ -123,11 +132,11 @@ export {
   instructionVariantCandidates,
   isInstructionVariantLocale,
   localeTier,
-} from "./utils/instruction-locale.js";
+} from "@covel/plugin-handlers-utils";
 export type {
   InstructionLocale,
   LocaleTier,
-} from "./utils/instruction-locale.js";
+} from "@covel/plugin-handlers-utils";
 export { pluginMessagesFor } from "./utils/plugin-messages.js";
 export {
   WORLD_EDITIONS_KEY,
@@ -156,7 +165,7 @@ export type {
 export type {
   LocaleDefinition,
   SupportedLocale,
-} from "./utils/locale-registry.js";
+} from "@covel/plugin-handlers-utils";
 export {
   resolveI18nText,
   resolveI18nDeep,
@@ -164,7 +173,7 @@ export {
   isLocaleMap,
   localizedWorldText,
   WORLD_LOCALIZED_TEXT_KEY,
-} from "./utils/i18n.js";
+} from "@covel/plugin-handlers-utils";
 export {
   applyLocaleOverlay,
   findInlineLocaleMaps,
@@ -287,7 +296,6 @@ export {
   hookDeclarationSchema,
   runtimeManifestInputSchema,
   stageSchema,
-  turnCompletionConfigSchema,
   MAX_SETTLE_WAIT_MS,
   effectsDeclSchema,
   permissionsDeclSchema,
@@ -304,8 +312,6 @@ export {
   uiMapDirectiveSchema,
   type PluginUiSpecIssue,
 } from "./schemas/ui-spec.js";
-
-export type { RuntimeManifestInput } from "./schemas/plugin.js";
 
 // ── World Schemas ───────────────────────────────────────────────
 export {
@@ -349,7 +355,7 @@ export type {
   DimensionUpdate,
   DimensionInitializePayload,
   DimensionUpdatePayload,
-} from "./types/dimensions.js";
+} from "@covel/plugin-handlers-utils/dimensions";
 export {
   dimensionInitializePayloadSchema,
   dimensionUpdatePayloadSchema,
@@ -357,12 +363,12 @@ export {
   DimensionValidationError,
   dimensionsJsonEqual,
   materializeDimensionRecords,
-} from "./proposals/dimensions.js";
+} from "@covel/plugin-handlers-utils/dimensions";
 export {
   dimensionQuerySchema,
   queryDimensionSnapshot,
   projectDimensionSnapshot,
-} from "./proposals/dimension-query.js";
+} from "@covel/plugin-handlers-utils/dimensions";
 export {
   DIMENSION_DATA_NAMESPACE,
   DIMENSION_SETTLEMENT_NAMESPACE,
@@ -385,14 +391,13 @@ export {
   dimensionSnapshotFromRecords,
   resolveDimensionDefinitionLocale,
   resolveWorldDimensionsLocale,
-} from "./schemas/dimensions.js";
+} from "@covel/plugin-handlers-utils/dimensions";
 
 // ── API Transport Contracts ────────────────────────────────────
 export {
   createSessionRequestSchema,
   type CreateSessionRequest,
   actionRequestSchema,
-  actionTypeSchema,
   MAX_PLAYER_MESSAGE_CHARS,
   apiListResponseSchema,
   apiErrorResponseSchema,
@@ -420,9 +425,6 @@ export {
   worldDataDescriptorEntrySchema,
   worldDataSourceDescriptorOverrideSchema,
   worldDataDescriptorOverrideSchema,
-  worldDataDiagnosticCountsSchema,
-  worldDataSourceSummarySchema,
-  worldDataMetadataSummarySchema,
 } from "./schemas/world-data.js";
 
 export type {
@@ -443,27 +445,6 @@ export type {
   ManifestValidationResult,
   ManifestValidationError,
 } from "./schemas/validate.js";
-
-// ── Translation-layer Schemas ─────────────────────────────
-export {
-  runtimeOutputResultSchema,
-  runtimeOutputToolCallSchema,
-  runtimeOutputPromptMessageSchema,
-  runtimeOutputMetaDataSchema,
-  runtimeOutputSchema,
-} from "./schemas/runtime-output.js";
-
-export type { RuntimeOutputSchema } from "./schemas/runtime-output.js";
-
-export {
-  interactionSourceSchema,
-  interactionChannelSchema,
-  interactionRecordTypeSchema,
-  interactionRecordMetaDataSchema,
-  interactionRecordSchema,
-} from "./schemas/interaction-record.js";
-
-export type { InteractionRecordSchema } from "./schemas/interaction-record.js";
 
 // ── Proposal Helpers ─────────────────────────────────────────────
 export {
@@ -520,7 +501,6 @@ export {
   githubPluginUpdateCheckSchema,
   type GithubPluginUpdatePreview,
   githubPluginPreviewSchema,
-  githubPluginPreviewsSchema,
   pluginInstallationSchema,
   pluginInstallationsSchema,
   type PluginInstallation,

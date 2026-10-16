@@ -305,8 +305,8 @@ for (const entry of sideCarResources) {
     filter: (source) => {
       const base = path.basename(source);
       if (EXCLUDE_DIRS.has(base)) return false;
-      // Top-level `_` dirs are non-content conventions (plugins/_archive,
-      // worlds/_archive): never loaded at runtime, dead weight in the app.
+      // Top-level `_` dirs are not packages: never loaded at runtime, dead
+      // weight in the app.
       if (base.startsWith("_") && path.dirname(source) === src) return false;
       if (entry === "worlds" && isGalleryOriginal(source)) return false;
       return true;

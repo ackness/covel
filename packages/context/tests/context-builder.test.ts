@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { interpolateTemplate } from "@covel/context";
-import { buildContextSync as buildContext } from "../src/context-builder.js";
+import { buildContext } from "../src/context-builder.js";
 import type { ContextBuildParams, MessageHistoryRecord } from "@covel/context";
 import {
   PROMPT_CACHE_BREAKPOINT_MARKER,
@@ -111,7 +111,7 @@ describe("interpolateTemplate", () => {
 // ── buildContext ─────────────────────────────────────────────────
 
 describe("buildContext", () => {
-  it("should assemble full context with inputs and interpolation", () => {
+  it("should assemble full context with inputs and interpolation", async () => {
     const params: ContextBuildParams = {
       promptTemplate: "You are a narrator.\n{{ player.message }}\n",
       manifest: makeManifest(),
@@ -130,7 +130,7 @@ describe("buildContext", () => {
       },
     };
 
-    const ctx = buildContext(params);
+    const ctx = await buildContext(params);
 
     expect(ctx.systemPrompt).toContain("I open the door");
     // The input is data of this turn: it leaves the system prompt and
@@ -145,7 +145,7 @@ describe("buildContext", () => {
     ]);
   });
 
-  it("should return raw template as systemPrompt when no inject and no vars", () => {
+  it("should return raw template as systemPrompt when no inject and no vars", async () => {
     const params: ContextBuildParams = {
       promptTemplate: "Plain instructions.",
       manifest: makeManifest(),
@@ -153,7 +153,7 @@ describe("buildContext", () => {
       completedResults: new Map(),
     };
 
-    const ctx = buildContext(params);
+    const ctx = await buildContext(params);
 
     expect(ctx.systemPrompt).toBe(
       `Plain instructions.${PROMPT_CACHE_BREAKPOINT_MARKER}`,
@@ -161,7 +161,7 @@ describe("buildContext", () => {
     expect(ctx.messages).toEqual([{ role: "user", content: "hello" }]);
   });
 
-  it("uses a runtime execution cue when the current player message is empty", () => {
+  it("uses a runtime execution cue when the current player message is empty", async () => {
     const params: ContextBuildParams = {
       promptTemplate: "Plain instructions.",
       manifest: makeManifest(),
@@ -169,7 +169,7 @@ describe("buildContext", () => {
       completedResults: new Map(),
     };
 
-    const ctx = buildContext(params);
+    const ctx = await buildContext(params);
 
     expect(ctx.messages).toEqual([
       {
@@ -179,7 +179,7 @@ describe("buildContext", () => {
     ]);
   });
 
-  it("uses a manual runtime cue when a manual trigger has no player message", () => {
+  it("uses a manual runtime cue when a manual trigger has no player message", async () => {
     const params: ContextBuildParams = {
       promptTemplate: "Plain instructions.",
       manifest: makeManifest(),
@@ -191,7 +191,7 @@ describe("buildContext", () => {
       completedResults: new Map(),
     };
 
-    const ctx = buildContext(params);
+    const ctx = await buildContext(params);
 
     expect(ctx.messages).toEqual([
       {
@@ -202,7 +202,7 @@ describe("buildContext", () => {
     ]);
   });
 
-  it("should include message history before current user message", () => {
+  it("should include message history before current user message", async () => {
     const history: MessageHistoryRecord[] = [
       { role: "user", content: "I enter the cave" },
       {
@@ -220,7 +220,7 @@ describe("buildContext", () => {
       messageHistory: history,
     };
 
-    const ctx = buildContext(params);
+    const ctx = await buildContext(params);
 
     expect(ctx.messages).toHaveLength(3);
     expect(ctx.messages[0]).toEqual({
@@ -235,7 +235,7 @@ describe("buildContext", () => {
     expect(ctx.messages[2]).toEqual({ role: "user", content: "I look around" });
   });
 
-  it("should preserve name field on history messages", () => {
+  it("should preserve name field on history messages", async () => {
     const history: MessageHistoryRecord[] = [
       { role: "assistant", content: "A story begins.", name: "narrator" },
     ];
@@ -248,7 +248,7 @@ describe("buildContext", () => {
       messageHistory: history,
     };
 
-    const ctx = buildContext(params);
+    const ctx = await buildContext(params);
     expect(ctx.messages[0]).toEqual({
       role: "assistant",
       content: "A story begins.",
@@ -256,7 +256,7 @@ describe("buildContext", () => {
     });
   });
 
-  it("should behave as before when no message history provided", () => {
+  it("should behave as before when no message history provided", async () => {
     const params: ContextBuildParams = {
       promptTemplate: "Instructions.",
       manifest: makeManifest(),
@@ -264,7 +264,7 @@ describe("buildContext", () => {
       completedResults: new Map(),
     };
 
-    const ctx = buildContext(params);
+    const ctx = await buildContext(params);
     expect(ctx.messages).toEqual([{ role: "user", content: "hello" }]);
   });
 });
@@ -272,7 +272,7 @@ describe("buildContext", () => {
 // ── Summary substitution ────────────────────────────────
 
 describe("buildContext — summary substitution", () => {
-  it("substitutes compacted spans with summary", () => {
+  it("substitutes compacted spans with summary", async () => {
     const history: MessageHistoryRecord[] = [
       { role: "user", content: "older message 1", compactedAtTurnId: "sum-1" },
       {
@@ -283,7 +283,7 @@ describe("buildContext — summary substitution", () => {
       { role: "user", content: "recent message" },
     ];
 
-    const ctx = buildContext({
+    const ctx = await buildContext({
       promptTemplate: "Template.",
       manifest: makeManifest(),
       turnInput: makeTurnInput({ playerMessage: "current" }),
@@ -311,14 +311,14 @@ describe("buildContext — summary substitution", () => {
     expect(ctx.messages[2]).toMatchObject({ role: "user", content: "current" });
   });
 
-  it("emits summary only once per compactedAtTurnId, even for multiple messages", () => {
+  it("emits summary only once per compactedAtTurnId, even for multiple messages", async () => {
     const history: MessageHistoryRecord[] = [
       { role: "user", content: "msg1", compactedAtTurnId: "sum-1" },
       { role: "assistant", content: "msg2", compactedAtTurnId: "sum-1" },
       { role: "user", content: "msg3", compactedAtTurnId: "sum-1" },
     ];
 
-    const ctx = buildContext({
+    const ctx = await buildContext({
       promptTemplate: "T.",
       manifest: makeManifest(),
       turnInput: makeTurnInput({ playerMessage: "now" }),

@@ -43,7 +43,7 @@ function makeEntry(loaded: LoadedRuntime): PluginRegistryEntry {
     id: loaded.manifest.pluginId,
     name: loaded.manifest.pluginId,
     description: "",
-    pluginType: "plugin",
+    kind: "plugin",
     runtimeCount: 1,
   };
   const parsed = {

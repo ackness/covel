@@ -3,7 +3,11 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import type { RuntimeManifest } from "@covel/shared";
 import { getRuntimeSpec } from "@covel/shared";
-import { discoverPlugins, loadPluginManifest } from "@covel/plugin-loader";
+import {
+  discoverPlugins,
+  loadPluginManifest,
+  loadPluginDefinition,
+} from "@covel/plugin-loader";
 
 const PLUGINS_DIR = path.resolve(import.meta.dirname, "../../../plugins");
 
@@ -60,14 +64,12 @@ describe("core plugin manifest contract", () => {
     const playerInit = requireRuntime(manifests, "char-creator/player-init");
 
     expect(pregame).toMatchObject({
-      pluginType: "core-plugin",
       stage: "setup",
       runtimeType: "function",
       handler: "./handler.js",
       trigger: { type: "auto", maxTriggerCount: 1 },
     });
     expect(schemaGen).toMatchObject({
-      pluginType: "core-plugin",
       stage: "setup",
       after: [{ capability: "session.opening@1" }],
       model: "plugin",
@@ -86,12 +88,10 @@ describe("core plugin manifest contract", () => {
 
     expect(playerInit.trigger).toBeUndefined(); // `auto`, the default
     expect(playerInit).toMatchObject({
-      pluginType: "core-plugin",
       stage: "setup",
       model: "plugin",
       guard: "./guard.js",
       requireToolUse: true,
-      completeAfterTools: ["create-character-form"],
       maxRetries: 3,
       // Order one-time setup providers without requiring them on form submission.
       after: [
@@ -99,6 +99,7 @@ describe("core plugin manifest contract", () => {
         { capability: "world-data-provider@1" },
       ],
     });
+    expect(playerInit.completeAfterTools).toBeUndefined();
     expect(playerInit.inputs?.["pregame-opening"]).toMatchObject({
       from: { capability: "session.opening@1" },
       select: "/narrativeOutput",
@@ -134,7 +135,6 @@ describe("core plugin manifest contract", () => {
     const worldIr = requireRuntime(manifests, "world-ir");
 
     expect(retriever).toMatchObject({
-      pluginType: "plugin",
       stage: "pre-turn",
       runtimeType: "function",
       handler: "./handler.js",
@@ -143,7 +143,6 @@ describe("core plugin manifest contract", () => {
     expect(retriever.trigger).toBeUndefined();
 
     expect(narrator).toMatchObject({
-      pluginType: "core-plugin",
       stage: "narrative",
       model: "story",
       outputKind: "story",
@@ -346,20 +345,16 @@ describe("core plugin manifest contract", () => {
     }
   });
 
-  it("keeps framework-controlled core plugins enabled as core-plugin manifests", async () => {
-    const manifests = await loadRuntimeManifests();
-    const coreRuntimeIds = [
-      "pregame",
-      "world-init/schema-gen",
-      "char-creator/player-init",
-      "narrator",
-      "char-creator/character-tracker",
-    ];
-
-    for (const runtimeId of coreRuntimeIds) {
-      expect(requireRuntime(manifests, runtimeId).pluginType).toBe(
-        "core-plugin",
-      );
+  it("keeps bundled core packages enabled by their kind", async () => {
+    const discoveries = await discoverPlugins(PLUGINS_DIR);
+    for (const id of ["pregame", "world-init", "char-creator", "narrator"]) {
+      const discovery = discoveries.find((entry) => entry.id === id);
+      expect(discovery, id).toBeDefined();
+      const definition = await loadPluginDefinition(discovery!);
+      expect(definition.packageManifest.plugin.kind, id).toBe("core");
+      for (const { manifest } of definition.manifests) {
+        expect(manifest).not.toHaveProperty("pluginType");
+      }
     }
   });
 });

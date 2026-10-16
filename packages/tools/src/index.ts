@@ -1,6 +1,6 @@
 // ── Tool definition ──────────────────────────────────────────────
-export { tool, ToolValidationError } from "./tool.js";
-export { parseJsonText } from "./json-text.js";
+export { tool, ToolValidationError } from "@covel/plugin-handlers-utils";
+export { parseJsonText } from "@covel/plugin-handlers-utils";
 export { ToolRegistry, FRAMEWORK_TOOL_NAMES } from "./registry.js";
 export {
   getPendingProposals,
@@ -42,22 +42,17 @@ export {
   createChoicesTool,
   createNotificationTool,
   builtinUITools,
-} from "./builtin/ui-tools.js";
+} from "@covel/plugin-handlers-utils";
 export { createPluginDataTools } from "./builtin/plugin-data-tools.js";
 export {
   createCharacterTools,
   buildSessionCharacterWriteTools,
-  mergeSchemaDefaults,
 } from "./builtin/character-tools.js";
-export {
-  assertCharacterFields,
-  CharacterFieldValidationError,
-} from "./builtin/character-tool-helpers.js";
 export type {
   CharacterStore,
   CharacterSnapshot,
 } from "./builtin/character-tools.js";
-export { buildFieldsZodFromSchema } from "./schema-to-zod.js";
+export { buildFieldsZodFromSchema } from "@covel/shared";
 export { suspendTool, isSuspendSentinel } from "./builtin/suspend.js";
 export type { SuspendSentinel } from "./builtin/suspend.js";
 export {
@@ -89,7 +84,12 @@ export {
 } from "./builtin/world-dimension-tools.js";
 
 // ── Short ID (LLM-friendly entity references) ──────────────────
-export { shortId, shortIdBatch, wordId, wordSlug } from "./short-id.js";
+export {
+  shortId,
+  shortIdBatch,
+  wordId,
+  wordSlug,
+} from "@covel/plugin-handlers-utils";
 
 // ── Types ────────────────────────────────────────────────────────
 export type {

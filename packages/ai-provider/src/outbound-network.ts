@@ -12,7 +12,7 @@ export interface OutboundProxyConfig {
 export interface ConfigureOutboundProxyInput extends OutboundProxyConfig {
   /** Resolve Chromium's ordered proxy result for each concrete target URL. */
   readonly resolveSystemProxy?: SystemProxyResolver;
-  /** @deprecated Static system proxy for shells without a per-request resolver. */
+  /** Static system proxy for shells without a per-request resolver. */
   readonly systemProxyUrl?: string;
 }
 

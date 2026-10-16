@@ -407,6 +407,8 @@ When the player must fill in several fields before the game can continue (creati
 
 The field types are `text`, `textarea`, `select`, `checkbox`, and `number`. For all the parameters, see the [Tools reference](../reference/tools.md#create-form).
 
+For model review of a filled narrative, a composed tool can return a preview using the SDK's `fillNarrativeTemplate`, and let the runtime finish after reading the result. See the [Tools reference](../reference/tools.md#create-form) for interaction revision rules.
+
 What happens once the form appears:
 
 - The form shows in the story text. The input box is locked until the player answers.

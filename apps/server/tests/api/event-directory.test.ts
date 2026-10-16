@@ -39,7 +39,6 @@ function parsedManifest(
   return {
     plugin: { id: patch.pluginId, kind: "plugin", description: "test plugin" },
     manifest: {
-      pluginType: "plugin",
       description: "test runtime",
       ...patch,
     } as PackageManifest,
@@ -60,7 +59,7 @@ function registerPlugin(
       id: pluginId,
       name: pluginId,
       description: "",
-      pluginType: "plugin",
+      kind: "plugin",
       runtimeCount: 1,
     },
     rootPath,

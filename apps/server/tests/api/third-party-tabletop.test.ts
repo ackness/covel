@@ -1,3 +1,4 @@
+import { importWorldDataForSession } from "../helpers/world-data-import.js";
 import { closeTestApi } from "../helpers/close-api.js";
 import { mkdtemp, mkdir, readFile, writeFile, cp, rm } from "node:fs/promises";
 import { parse as parseYaml } from "yaml";
@@ -6,7 +7,6 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { type DataStore } from "@covel/store";
 import { createSqliteStore } from "@covel/store/sqlite";
-import { importWorldDataForSession } from "../../src/world-data/session-import.js";
 import type { LLMAdapter } from "@covel/runtime";
 import {
   bootstrapApi,

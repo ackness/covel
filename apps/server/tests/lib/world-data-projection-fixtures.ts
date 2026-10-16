@@ -102,7 +102,7 @@ export async function makePlugin(options: {
       id: options.id,
       name: options.id,
       description: "",
-      pluginType: "plugin",
+      kind: "plugin",
       runtimeCount: 0,
     },
     dataSchemas: Object.fromEntries(
@@ -175,7 +175,7 @@ export function worldIrEntry(): PluginRegistryEntry {
       id: "world-ir",
       name: "World IR",
       description: "",
-      pluginType: "plugin",
+      kind: "plugin",
       runtimeCount: 0,
     },
     packageManifest: parsePluginMd(

@@ -17,6 +17,7 @@ import {
   type PluginAPI,
 } from "@covel/runtime";
 import {
+  isPathInside,
   createPluginRegistry,
   discoverPlugins,
   loadPluginDefinition,
@@ -504,16 +505,14 @@ export async function loadEntryTools(
     const realRoot = await fs.promises.realpath(discovery.rootPath);
     for (const entryPath of entryPaths) {
       const fullPath = path.resolve(discovery.rootPath, entryPath);
-      const rel = path.relative(discovery.rootPath, fullPath);
-      if (rel.startsWith("..") || path.isAbsolute(rel)) {
+      if (!isPathInside(discovery.rootPath, fullPath, { allowRoot: true })) {
         throw new Error(`entry path escapes plugin root: ${entryPath}`);
       }
       if (!fs.existsSync(fullPath)) {
         throw new Error(`entry file not found: ${fullPath}`);
       }
       const realPath = await fs.promises.realpath(fullPath);
-      const realRel = path.relative(realRoot, realPath);
-      if (realRel.startsWith("..") || path.isAbsolute(realRel)) {
+      if (!isPathInside(realRoot, realPath, { allowRoot: true })) {
         throw new Error(`entry path escapes plugin root: ${entryPath}`);
       }
 

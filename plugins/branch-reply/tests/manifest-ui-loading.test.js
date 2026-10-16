@@ -25,7 +25,7 @@ describe("branch-reply manifest and UI loading", () => {
     expect(parsed.manifest).toMatchObject({
       name: "branch-reply",
       pluginId: "branch-reply",
-      pluginType: "plugin",
+      kind: "plugin",
       extensions: [
         { point: "prompt.history-transform@1", id: "accepted-branch" },
       ],
@@ -36,7 +36,6 @@ describe("branch-reply manifest and UI loading", () => {
     expect(compileInlineRuntime(parsed).manifest).toMatchObject({
       name: "branch-reply",
       pluginId: "branch-reply",
-      pluginType: "plugin",
       runtimeType: "function",
       outputKind: "system",
       stage: "post-turn",

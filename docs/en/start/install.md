@@ -36,17 +36,17 @@ The first time you open Covel, a getting-started guide appears. You can follow i
 
 After you close the guide, you see the list of worlds. It has four bundled worlds:
 
-| World                                                 | Style                                                                        |
-| ----------------------------------------------------- | ---------------------------------------------------------------------------- |
-| 雾港・裂潮纪 (Mistport Chronicles)                    | A dark-fantasy investigation in the traditional narrative style              |
-| 遥风学园 (Haruka Academy · Spring Mint)               | A campus ensemble story in stage mode                                        |
-| Emberback Relay                                       | Frontier science-fiction mystery, written in English, with a Chinese edition |
-| 提灯古冢・初次远征 (Lantern Barrow: First Expedition) | A classic tabletop dungeon crawl, with starting stats and dice checks        |
+| World                                                | Style                                                                        |
+| ---------------------------------------------------- | ---------------------------------------------------------------------------- |
+| 雾港・裂潮纪 (Mistport: The Riftide Chronicle)       | A dark-fantasy investigation in the traditional narrative style              |
+| 遥风学园 (Harukaze Academy · Spring Mint)            | A campus ensemble story in stage mode                                        |
+| Emberback Relay                                      | Frontier science-fiction mystery, written in English, with a Chinese edition |
+| 提灯古冢・初次远征 (Lantern Barrow: The First Delve) | A classic tabletop dungeon crawl, with starting stats and dice checks        |
 
 When you see this list, the installation is complete.
 
 > [!NOTE]
-> You can browse worlds now, but you cannot start a game yet. Generating the story requires connecting a model first. That is covered on the next page.
+> You can browse worlds now. Generating the story needs a working model; the next page explains how to connect one. Starting without a key prompts you to add it, or choose “Start anyway” and configure it later.
 
 ## Problems
 

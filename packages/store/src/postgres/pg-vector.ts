@@ -29,7 +29,7 @@
  * Schema ownership
  * ────────────────
  * The `vector_models` table and `sessions.embedding_model_id` column are
- * created by `pg-store-mappers.ts`. This module enables the optional vector
+ * created by `pg-schema-ddl.ts`. This module enables the optional vector
  * extension and creates physical tables atomically with registry publication.
  */
 
@@ -52,33 +52,15 @@ import type {
 import { normalizeVectorTopK } from "../vector-store.js";
 import { assertStoreIdentifiers, withoutNul } from "../common/without-nul.js";
 
-// ── Safety helpers ───────────────────────────────────────────────
+import {
+  physicalTableName as modelTableName,
+  requireCurrentTableName as currentTableName,
+  serializeVector,
+} from "../common/vector-table.js";
 
-function assertValidId(id: number): void {
-  if (!Number.isInteger(id) || id <= 0) {
-    throw new Error(`pg-vector: invalid model registry id ${id}`);
-  }
-}
-
-function physicalTableName(id: number): string {
-  assertValidId(id);
-  return `vec_mem_m${id}`;
-}
-
-function requireCurrentTableName(id: number, tableName: string): string {
-  const expected = physicalTableName(id);
-  if (tableName !== expected) {
-    throw new Error(
-      `pg-vector: vector_models.id ${id} violates the current table_name invariant`,
-    );
-  }
-  return expected;
-}
-
-/** Serialize a Float32Array for pgvector: "[v1,v2,...,vn]" */
-function toVectorString(v: Float32Array): string {
-  return `[${Array.from(v).join(",")}]`;
-}
+const physicalTableName = (id: number) => modelTableName(id, "pg-vector");
+const requireCurrentTableName = (id: number, tableName: string) =>
+  currentTableName(id, tableName, "pg-vector");
 
 // ── Factory ──────────────────────────────────────────────────────
 
@@ -373,7 +355,7 @@ export function createPgVectorCapability(
     // The extension and physical tables are created by ensureVectorModel. Do
     // not resolve a session binding here: the binding, model row, incarnation
     // guard, and INSERT must all be observed under one parent-row lock.
-    const vecStr = toVectorString(input.embedding);
+    const vecStr = serializeVector(input.embedding);
 
     // Pair with deletePgSessionCascade's parent FOR UPDATE lock. Resolving
     // the target only after this lock removes the resolve/delete/recreate
@@ -478,7 +460,7 @@ export function createPgVectorCapability(
     }
 
     const tname = physicalTableName(target.modelRegistryId);
-    const vecStr = toVectorString(input.query);
+    const vecStr = serializeVector(input.query);
 
     // Build conditional WHERE clauses.
     const extraClauses: string[] = [`session_id = $2`];

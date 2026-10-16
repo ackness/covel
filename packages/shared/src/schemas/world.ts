@@ -6,11 +6,11 @@
  */
 
 import { z } from "zod";
-import { canonicalizeLocale } from "../utils/locale-registry.js";
-import type { AttributeDefinition } from "../types/character-schema.js";
-import { worldDimensionsSchema } from "./dimensions.js";
+import { canonicalizeLocale } from "@covel/plugin-handlers-utils";
+import type { AttributeDefinition } from "@covel/plugin-handlers-utils";
+import { worldDimensionsSchema } from "@covel/plugin-handlers-utils/dimensions";
 import { packageCreditFields } from "./package-info.js";
-export { worldDimensionsSchema } from "./dimensions.js";
+export { worldDimensionsSchema } from "@covel/plugin-handlers-utils/dimensions";
 
 // ── Common ──────────────────────────────────────────────────────
 

@@ -564,7 +564,7 @@ describe("affinity plugin manifest", () => {
   });
 
   it("is a non-core post-turn agent runtime gated on typed WorldIR", () => {
-    expect(manifest.pluginType).toBe("plugin");
+    expect(manifest).not.toHaveProperty("pluginType");
     expect(manifest.name).toBe("affinity");
     expect(manifest.stage).toBe("post-turn");
     expect(manifest.trigger).toBeUndefined(); // `auto`, the default

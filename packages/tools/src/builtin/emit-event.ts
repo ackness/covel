@@ -12,7 +12,7 @@
  */
 
 import { z } from "zod";
-import { tool } from "../tool.js";
+import { tool } from "@covel/plugin-handlers-utils";
 import { ToolRefusal, withEmittedEvents } from "../result.js";
 import type { ToolModule } from "../types.js";
 

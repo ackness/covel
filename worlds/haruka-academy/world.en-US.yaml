@@ -1,56 +1,54 @@
 # en-US text for world.yaml. Only translated text; structure and ids come from world.yaml.
-name: Haruka Academy · Spring Mint
-summary: Transfer to a seaside private high school, choose a club, keep your
-  promises, and answer unspoken feelings during a twenty-one-day festival
-  countdown.
+name: Harukaze Academy · Spring Mint
+summary: Transfer to a private high school by the sea. With twenty-one days until the school festival, choose a club, keep your promises, and answer the feelings left unspoken.
 pluginPolicy:
   pitch:
     label: Campus Romance · Visual Novel
-    description:
-      Full-screen stage with portraits and day/night scenes, selectable
-      replies, and live affection, heart routes, promises, rumors, and
-      festival prep that change with every conversation.
-    reason: Across the twenty-one-day festival countdown, every promise kept or
-      broken and every rumor stays on the panels, and the five heart routes
-      advance only through moments that actually happen.
+    description: A full-screen stage with character portraits and day and night
+      backdrops, several replies to choose from, and affection, heart routes,
+      promises, rumors and festival prep that shift as you talk.
+    reason:
+      Over the twenty-one-day festival countdown, every promise you keep or
+      break and every rumor stays on the panels, and the five heart routes move
+      forward only on things that actually happen.
 characterSchema:
   attributes:
     - id: persona
       name: Personality
-      description: The player character's personality and how they speak (voice
-        follows from personality) — e.g. "cautious and reserved, terse when nervous,
-        polite but opinionated." Shapes how the narrative portrays your character and
-        dialogue.
+      description: Your character's personality and way of speaking (the voice
+        follows from the personality) — e.g. "cautious and introverted, goes quiet
+        when nervous, polite but has opinions of their own." Shapes how the story
+        portrays your character and their lines.
     - id: club
       name: Club
-      description: Club membership
+      description: The club they belong to
     - id: class
       name: Class
-      description: Homeroom class
+      description: Their homeroom class
     - id: relationshipStage
       name: Relationship
-      description: Current relationship stage with the player
+      description: Where their relationship with the player stands right now
     - id: affection
       name: Affection
-      description: Affection toward the player
+      description: How much they like the player
     - id: trust
       name: Trust
-      description: Trust toward the player
+      description: How much they trust the player
     - id: pressure
       name: Pressure
-      description: Current psychological pressure
+      description: The emotional pressure they are under right now
     - id: publicCloseness
       name: Public Closeness
-      description: How close the character appears to the player in front of others
+      description: How close they act with the player in front of other people
     - id: favoriteTopic
-      name: Favorite Topic
-      description: Topics they enjoy talking about
+      name: Favorite Topics
+      description: Things they're interested in or open up about easily
     - id: availability
       name: Usual Schedule
       description:
-        When and where the character usually appears; story events should
-        explain temporary changes.
+        When and where the character usually turns up; a story event should
+        explain any temporary change.
     - id: currentConcern
-      name: Current Concern
-      description: The school event, relationship, or unfinished goal currently
-        weighing most on the character.
+      name: On Their Mind
+      description: The school event, relationship, or unfinished goal they care
+        about most right now.

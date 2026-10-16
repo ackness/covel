@@ -34,6 +34,16 @@ async function scenario(script: string): Promise<unknown> {
     await fs.mkdir(path.dirname(target), { recursive: true });
     await fs.writeFile(target, source);
   };
+  // Keep Node's own JS format handling; only resolve this TS helper explicitly.
+  await write(
+    "reload-hook.ts",
+    (await fs.readFile(new URL(hookModule), "utf8")).replace(
+      '"./path-containment.js"',
+      JSON.stringify(
+        new URL("../src/path-containment.ts", import.meta.url).href,
+      ),
+    ),
+  );
   await write("package.json", '{"type":"module"}');
   // Every module counts its evaluations; `helper` also carries a value.
   const counted = (name: string, body = "") =>
@@ -61,7 +71,7 @@ async function scenario(script: string): Promise<unknown> {
     `import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { trackReloadGeneration } from ${JSON.stringify(hookModule)};
+import { trackReloadGeneration } from ${JSON.stringify(pathToFileURL(path.join(parent, "reload-hook.ts")).href)};
 const root = import.meta.dirname;
 const load = async (file, generation) => {
   const url = pathToFileURL(path.join(root, file));

@@ -1,3 +1,4 @@
+import { isRecord } from "../../lib/is-record.js";
 import {
   resolveWorldDataTargets,
   type ResolvedWorldDataTarget,
@@ -11,6 +12,8 @@ import {
   worldDimensionsSchema,
   type CharacterSchemaRecord,
   type WorldDimensions,
+  parseWorldDataIndexTarget,
+  parseWorldDataTarget,
 } from "@covel/shared";
 import type { CharacterRecord } from "@covel/store";
 import { ZodError } from "zod";
@@ -27,10 +30,6 @@ import {
   resolveWorldDataSchema,
   type WorldDataSchemaRef,
 } from "../schema-registry.js";
-import {
-  parseWorldDataIndexTarget,
-  parseWorldDataTarget,
-} from "../target-uri.js";
 import type { OrderedWorldDataSource, WorldDataDiagnostic } from "../types.js";
 import {
   pluginWriteIdentity,
@@ -48,12 +47,7 @@ import type {
   PluginDataTarget,
   WorldDataImportPreflightDeps,
 } from "./types.js";
-import {
-  isRecord,
-  recordLocation,
-  sourceItems,
-  type RecordLocation,
-} from "./utils.js";
+import { recordLocation, sourceItems, type RecordLocation } from "./utils.js";
 import {
   checkLorebookRecord,
   checkProjectedLorebookRecord,
@@ -506,6 +500,12 @@ function resolveCharacterBlocks(
   };
 }
 
+function isProjectionWrite(write: PlannedWrite): boolean {
+  return (
+    write.derivedFrom?.some((item) => item.startsWith("projection:")) ?? false
+  );
+}
+
 export async function buildImportPlan(options: {
   sessionId: string;
   worldId: string;
@@ -591,6 +591,13 @@ export async function buildImportPlan(options: {
     const parsedIndex = source.descriptor.indexTo
       ? parseWorldDataIndexTarget(source.descriptor.indexTo)
       : null;
+    if (source.descriptor.indexTo && !parsedIndex) {
+      diagnostics.push({
+        level: "error",
+        sourceId: source.id,
+        message: `invalid indexTo URI: ${source.descriptor.indexTo}`,
+      });
+    }
     const indexTargets = parsedIndex
       ? resolveWorldDataTargets(
           parsedIndex,
@@ -628,15 +635,6 @@ export async function buildImportPlan(options: {
       diagnostics.push(
         ...preflightPluginTarget(pluginTarget, source, options.deps),
       );
-    }
-    if (source.descriptor.indexTo) {
-      if (!parseWorldDataIndexTarget(source.descriptor.indexTo)) {
-        diagnostics.push({
-          level: "error",
-          sourceId: source.id,
-          message: `invalid indexTo URI: ${source.descriptor.indexTo}`,
-        });
-      }
     }
     const resolvedSchema = await resolveWorldDataSchema({
       source,
@@ -842,12 +840,8 @@ export async function buildImportPlan(options: {
     }
     const existing = sameSource.get(identity);
     if (existing) {
-      const existingProjection = existing.write.derivedFrom?.find((item) =>
-        item.startsWith("projection:"),
-      );
-      const currentProjection = write.derivedFrom?.find((item) =>
-        item.startsWith("projection:"),
-      );
+      const existingProjection = isProjectionWrite(existing.write);
+      const currentProjection = isProjectionWrite(write);
       if (existingProjection || currentProjection) {
         // Projections are optional derived views. A duplicate key from a
         // projection must not turn an otherwise valid canonical import into a
@@ -897,12 +891,8 @@ export async function buildImportPlan(options: {
       continue;
     }
     if (existing.source.id !== write.source.id) {
-      const existingProjection = existing.derivedFrom?.find((item) =>
-        item.startsWith("projection:"),
-      );
-      const currentProjection = write.derivedFrom?.find((item) =>
-        item.startsWith("projection:"),
-      );
+      const existingProjection = isProjectionWrite(existing);
+      const currentProjection = isProjectionWrite(write);
       if (!existingProjection && currentProjection) {
         // A projection cannot shadow canonical authored data merely because
         // its source appears later. This mirrors the same-source collision

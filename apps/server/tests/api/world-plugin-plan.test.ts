@@ -38,7 +38,7 @@ function entry(
       id,
       name: id,
       description: id,
-      pluginType: fields.kind === "core" ? "core-plugin" : "plugin",
+      kind: fields.kind === "core" ? "core" : "plugin",
       runtimeCount: 0,
       tags: fields.tags ?? [],
     },

@@ -16,28 +16,26 @@ export function collectUpstreamWorldProposals(
   results: ReadonlyMap<string, RuntimeResult>,
   sessionId: string,
 ): readonly Proposal[] {
-  return structuredClone(
-    [...results.values()].flatMap((result) =>
-      result.status === "success" || result.status === "skipped"
-        ? (result.pendingProposals ?? [])
-            .filter(
-              (proposal) =>
-                proposal.type === "character.upsert" ||
-                proposal.type === "character.schema.set" ||
-                proposal.type === "dimension.initialize" ||
-                proposal.type === "dimension.update",
-            )
-            .map((proposal) => ({
-              ...proposal,
-              sessionId,
-              turnId: result.turnId,
-              source: {
-                pluginId: result.pluginId,
-                runtimeId: result.runtimeId,
-              },
-            }))
-        : [],
-    ),
+  return [...results.values()].flatMap((result) =>
+    result.status === "success" || result.status === "skipped"
+      ? (result.pendingProposals ?? [])
+          .filter(
+            (proposal) =>
+              proposal.type === "character.upsert" ||
+              proposal.type === "character.schema.set" ||
+              proposal.type === "dimension.initialize" ||
+              proposal.type === "dimension.update",
+          )
+          .map((proposal) => ({
+            ...proposal,
+            sessionId,
+            turnId: result.turnId,
+            source: {
+              pluginId: result.pluginId,
+              runtimeId: result.runtimeId,
+            },
+          }))
+      : [],
   );
 }
 
@@ -53,12 +51,19 @@ export type WorldModelReadStore = Pick<
 /**
  * Committed world-model state cannot change inside one execution (writes stay
  * buffered until finalize), so every runtime of that execution can share one
- * read of it. Each caller still receives its own copy.
+ * read of it. These internal reads are shared; createWorldModelView detaches
+ * the state before exposing it to handlers.
  */
 export function memoizeWorldModelReads(
   store: WorldModelReadStore,
+  seed?: {
+    readonly sessionId: string;
+    readonly session: Awaited<ReturnType<WorldModelReadStore["getSession"]>>;
+  },
 ): WorldModelReadStore {
   const cache = new Map<string, Promise<unknown>>();
+  if (seed)
+    cache.set(`session\u0000${seed.sessionId}`, Promise.resolve(seed.session));
   const memo = <T>(key: string, load: () => Promise<T>): Promise<T> => {
     let hit = cache.get(key) as Promise<T> | undefined;
     if (!hit) {
@@ -66,7 +71,7 @@ export function memoizeWorldModelReads(
       cache.set(key, hit);
       hit.catch(() => cache.delete(key));
     }
-    return hit.then((value) => structuredClone(value));
+    return hit;
   };
   return {
     listCharacters: (sessionId) =>
@@ -97,7 +102,7 @@ export function memoizeWorldModelReads(
  * get the session's language from `ctx.world` and from their store facade
  * without resolving anything themselves.
  */
-export function worldForSession<
+function worldForSession<
   T extends {
     readonly name?: string;
     readonly description?: string;
@@ -172,7 +177,7 @@ export async function createWorldModelView(
     sessionId,
     session?.locale,
   );
-  return overlayWorldModelView(
+  return overlayOwnedWorldModelView(
     base,
     sessionId,
     pending,
@@ -189,7 +194,23 @@ export function overlayWorldModelView(
   /** The session's content locale. */
   locale?: string,
 ): WorldModelView {
-  const snapshot = structuredClone(base);
+  return overlayOwnedWorldModelView(
+    structuredClone(base),
+    sessionId,
+    pending,
+    assertLive,
+    locale,
+  );
+}
+
+/** Takes ownership of a detached base; shared callers use overlayWorldModelView. */
+function overlayOwnedWorldModelView(
+  snapshot: WorldModelView,
+  sessionId: string,
+  pending: readonly Proposal[],
+  assertLive: () => void,
+  locale?: string,
+): WorldModelView {
   // No proposal writes the world record, and it holds the whole setting text:
   // it is frozen once and every read returns that object.
   const { worldRecord: _worldRecord, ...model } = snapshot;

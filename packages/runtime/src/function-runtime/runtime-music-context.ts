@@ -8,8 +8,6 @@
  * request from the same plugin in the same session is never paid for twice.
  */
 
-import { createHash } from "node:crypto";
-import { AiProviderError } from "@covel/ai-provider";
 import type { MediaStore } from "@covel/store";
 import type {
   MediaContext,
@@ -18,7 +16,12 @@ import type {
   MusicGenerateOutput,
   PluginRuntimeGateway,
 } from "@covel/shared/plugin-runtime";
-import { resolveTargetIdentity } from "./media-cache-key.js";
+import {
+  mediaPromptHash,
+  isSlotAvailable,
+  cachedSingleRef,
+  resolveTargetIdentity,
+} from "./media-cache-key.js";
 
 /**
  * Deterministic key over the model and the generation params — identical
@@ -28,7 +31,7 @@ function promptHashOf(
   input: MusicGenerateInput,
   target: readonly unknown[] | null,
 ): string {
-  const canonical = JSON.stringify([
+  return mediaPromptHash([
     target,
     input.presetId ?? "",
     input.prompt,
@@ -37,7 +40,6 @@ function promptHashOf(
     input.durationSeconds ?? null,
     input.format ?? "",
   ]);
-  return createHash("sha256").update(canonical).digest("hex");
 }
 
 interface CreateRuntimeMusicContextOptions {
@@ -55,13 +57,7 @@ export function createRuntimeMusicContext(
   const { sessionId, pluginId } = options;
   return {
     isAvailable(presetId = "music"): boolean {
-      try {
-        return gateway.resolveSlot({ presetId, fallbackTag: "music" }) !== null;
-      } catch (error) {
-        if (error instanceof AiProviderError && error.code === "CONFIG_ERROR")
-          return false;
-        throw error;
-      }
+      return isSlotAvailable(gateway, presetId, "music");
     },
 
     async generate(input: MusicGenerateInput): Promise<MusicGenerateOutput> {
@@ -76,18 +72,8 @@ export function createRuntimeMusicContext(
       // ctx.speech: cache hits stamp THIS call's metadata onto the refs.
       const meta = { ...input.metadata, pluginId, promptHash };
 
-      const existing = await mediaStore.listByMetadata(sessionId, {
-        promptHash,
-        pluginId,
-      });
-      if (existing.length >= 1) {
-        const asset = existing[0]!;
-        return {
-          refs: [{ id: asset.id, mime: asset.mime, size: asset.size, meta }],
-          warnings: [],
-          cached: true,
-        };
-      }
+      const cached = await cachedSingleRef(mediaStore, sessionId, meta);
+      if (cached) return { refs: [cached], warnings: [], cached: true };
 
       const result = await gateway.composeMusic({
         presetId: input.presetId,

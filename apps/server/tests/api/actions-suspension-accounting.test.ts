@@ -118,7 +118,7 @@ async function buildScenario(options: ScenarioOptions) {
       name: PLUGIN_ID,
       description: "",
       version: "0.0.0",
-      pluginType: "plugin",
+      kind: "plugin",
       source: "builtin",
       runtimeCount: manifests.length,
     },

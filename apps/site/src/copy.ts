@@ -165,7 +165,7 @@ const en = {
   rack: {
     label: "Plugins on",
     packs: {
-      stage: "Haruka Academy · visual novel",
+      stage: "Harukaze Academy · visual novel",
       tabletop: "Lantern Barrow · classic tabletop",
       story: "Traditional story",
       languages: "Every bundled plugin",
@@ -253,24 +253,24 @@ const en = {
     list: [
       {
         id: "mistport",
-        name: "Mistport Chronicles",
+        name: "Mistport: The Riftide Chronicle",
         genre: "Dark fantasy · Investigation",
         summary:
-          "Three tide-bells, a missing Guildmaster and a shattered Key draw you into a four-way struggle beneath Mistport's eternal fog.",
+          "The tide bell strikes three times. A missing Guildmaster and a shattered Key pull you into a four-way shadow war in a harbor city lost in endless fog.",
       },
       {
         id: "haruka-academy",
-        name: "Haruka Academy · Spring Mint",
+        name: "Harukaze Academy · Spring Mint",
         genre: "Campus · Visual novel",
         summary:
-          "Transfer to a seaside high school, choose a club, keep your promises, and answer unspoken feelings during a twenty-one-day festival countdown.",
+          "Transfer to a private high school by the sea. With twenty-one days until the school festival, choose a club, keep your promises, and answer the feelings left unspoken.",
       },
       {
         id: "lantern-barrow",
-        name: "Lantern Barrow: First Expedition",
+        name: "Lantern Barrow: The First Delve",
         genre: "Fantasy · Tabletop",
         summary:
-          "The barrow's lantern has gone out and its bronze doors stand open. Form a party, spend your points and roll your way down.",
+          "After a century, the lantern has gone out and the bronze doors stand open. Form a party, spend your points, and roll your way down.",
       },
       {
         id: "emberback",
@@ -510,7 +510,7 @@ const zh: Copy = {
       },
       {
         id: "emberback",
-        name: "余烬背中继站",
+        name: "余烬岭中继站",
         genre: "科幻 · 生存",
         summary:
           "潮汐锁定世界上的孤立中继站，收到一封来自七十二小时后的求救信号，声音是你自己的。",

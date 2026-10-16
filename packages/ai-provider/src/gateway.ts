@@ -1,4 +1,5 @@
 import { acquireLLMSlot, type LLMSlot } from "@covel/shared";
+import { assertProviderCredentials } from "./provider-credentials.js";
 import { withTextRequestDefaults } from "./adapters/request-defaults.js";
 import { objectResponseFormat } from "./adapters/structured-output.js";
 import {
@@ -21,7 +22,7 @@ import type {
   EvaluationParams,
   EvaluationQuestions,
   EvaluationResult,
-} from "./evaluation/types.js";
+} from "@covel/shared";
 
 import { AiProviderError } from "./errors.js";
 import { describeUnavailableWire } from "./wire-lifecycle.js";
@@ -69,7 +70,10 @@ import {
   targetMetadata,
   resolveGatewayEmbeddingTarget,
 } from "./gateway-slot-resolution.js";
-import type { GatewayOptions } from "./gateway-slot-resolution.js";
+import type {
+  GatewayOptions,
+  GatewaySlotResolutionDependencies,
+} from "./gateway-slot-resolution.js";
 import { createRunOperation } from "./gateway-run-operation.js";
 import { DEFAULT_IMAGE_WIRE, getImageWire } from "./image/wire-registry.js";
 import type { ImageGenerationResult } from "./image/types.js";
@@ -82,9 +86,7 @@ import {
 } from "./speech/wire-registry.js";
 import type {
   EmbeddingResult,
-  OperationMode,
   PresetConfig,
-  ProviderDefaults,
   ProviderConfig,
   ProviderProtocol,
   ResolvedTarget,
@@ -134,28 +136,7 @@ function missingMediaWireMessage(
 }
 
 interface GatewayDependencies {
-  providerRegistry: {
-    resolve(
-      target: {
-        provider: string;
-        baseUrl?: string;
-        protocol?: ProviderProtocol;
-      },
-      options?: { mode: OperationMode },
-    ): ProviderResolution;
-    withApiKeys(
-      resolution: ProviderResolution,
-      apiKeys: Record<string, string>,
-      providerName: string,
-      envApiKeys?: Record<string, string>,
-    ): ProviderResolution;
-    // Overlay-capable methods — populated by the real createProviderRegistry.
-    // Optional so structural test mocks don't need to implement them; when
-    // absent, slotOverrides simply silently degrade to no-op.
-    hasProvider?(name: string): boolean;
-    addProvider?(name: string, defaults: ProviderDefaults): void;
-    removeProvider?(name: string): void;
-  };
+  providerRegistry: GatewaySlotResolutionDependencies["providerRegistry"];
   presetRegistry: {
     resolveTextTarget(input: { presetId?: string }): ResolvedTarget;
     resolveEmbeddingTarget(input?: { presetId?: string }): ResolvedTarget;
@@ -501,6 +482,8 @@ export function createGateway(deps: GatewayDependencies) {
       let slot: LLMSlot | undefined;
 
       try {
+        notifyTargetAttempt(options?.onTargetAttempt, target);
+        assertProviderCredentials(provider, resolved);
         slot = await acquireLLMSlot(options.signal, options.onQueueStart);
         if (options?.requestBudget)
           assertLlmRequestBudget(options.requestBudget, {
@@ -519,7 +502,6 @@ export function createGateway(deps: GatewayDependencies) {
           metadataTarget,
           (initialTarget ??= target),
         );
-        notifyTargetAttempt(options?.onTargetAttempt, target);
         await notifyStart(
           resolved.hooks,
           provider,

@@ -802,7 +802,7 @@ characterSchema:
       type: number
 
 # world.en-US.yaml —— 只有文本
-name: Mistport Chronicles
+name: "Mistport: The Riftide Chronicle"
 characterSchema:
   attributes:
     - id: fogRot
@@ -827,7 +827,7 @@ characterSchema:
 - 语言文件只能翻译主文件里已有的文本。出现主文件没有的 key 或 id、在不是文本的位置写文本、改动数字或布尔值，这一条会被忽略并报告，主文件的值保留。
 - 没翻译的文本回退到主文件，所以可以逐步翻译。
 - 语言文件里只放对齐用的字段和译文。不要复制媒体哈希、路径这些会变化的内容。
-- 纯文本列表（例如别名）整列翻译：语言文件里的列表替换主文件的列表，某一项写 `null` 表示沿用主文件。
+- 纯文本列表（例如别名、触发词 `keys`）整列翻译：语言文件里的列表替换主文件的列表，某一项写 `null` 表示沿用主文件。触发式规则和 `selective` lorebook 条目的 `keys` 要用会话语言里的词，否则玩家输入译文里的词也不能触发它。
 
 **三类文件的读取方式：**
 
@@ -844,7 +844,7 @@ characterSchema:
 - 主文件里不能把文本写成多语言对照（`name: { zh-CN: …, en-US: … }`）。`pnpm validate:world` 把它报为 `inline-locale-map` 错误。这样写的世界包要拆成主文件加语言文件。
 - 维度值里只有 schema 标了 `x-i18n: true` 的文本节点可以翻译。翻译其他节点会让该维度校验失败。
 
-给插件作者：合并规则是 `@covel/shared` 的 `applyLocaleOverlay`。`importWorldDataForSession` / `syncWorldDataForSession` / `preflightWorldDataForSession` 的 `locale` 选项原样传入，缺省时取 `session.locale`。
+给插件作者：合并规则是 `@covel/shared` 的 `applyLocaleOverlay`。调用 `prepareWorldDataImportForSession` / `preflightWorldDataForSession` 时传入会话的 `locale`；`syncWorldDataForSession` 未指定 `locale` 时取 `session.locale`。
 
 ## Target URI
 
@@ -1249,19 +1249,19 @@ sources:
 
 `media/scenes.json` 字段：
 
-| 字段           | 说明                                                                                                                                                                                                                                               |
-| -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `id`           | 场景的 ID，也是文件名前缀（`<id>-day.webp` / `<id>-night.webp`）。                                                                                                                                                                                 |
-| `name`         | 场景显示名。                                                                                                                                                                                                                                       |
-| `locationRef`  | 对应作者定义的地点名；一张背景对应多个地点时用 `/` 分隔（`图书馆/二楼窗边长桌/旧刊架`），每一段都是这个场景的一个名字。内置 geography 模板的声明路径为 `geography.initialValue.regions[].name` 或其 `landmarks[].name`；这不是框架要求的维度结构。 |
-| `subject`      | 英文画面描述（日图）。最终的生图提示词是 `style.prefix + subject + style.suffix`。                                                                                                                                                                 |
-| `subjectNight` | 可选，夜图专用的画面描述；留空则夜图用 `subject`（配合 `style.nightSuffix`）。                                                                                                                                                                     |
+| 字段           | 说明                                                                                                                                                                                                                                                                 |
+| -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`           | 场景的 ID，也是文件名前缀（`<id>-day.webp` / `<id>-night.webp`）。                                                                                                                                                                                                   |
+| `name`         | 场景显示名。                                                                                                                                                                                                                                                         |
+| `locationRef`  | 对应作者定义的地点名；用 `/` 分隔场景本身的地点和其中的子地点（`图书馆/二楼窗边长桌/旧刊架`），第一段是场景本身的地点，每一段都参与匹配。内置 geography 模板的声明路径为 `geography.initialValue.regions[].name` 或其 `landmarks[].name`；这不是框架要求的维度结构。 |
+| `subject`      | 英文画面描述（日图）。最终的生图提示词是 `style.prefix + subject + style.suffix`。                                                                                                                                                                                   |
+| `subjectNight` | 可选，夜图专用的画面描述；留空则夜图用 `subject`（配合 `style.nightSuffix`）。                                                                                                                                                                                       |
 
 **叙事报告的地点怎样对到场景。** 比较前去掉空白、不分大小写。按下面的顺序，前一条没有结果才看后一条：
 
 1. 地点等于场景的 `name` 或 `locationRef` 的某一段。
-2. 地点里含有某个名字（地点“图书馆二楼”对到名字“图书馆”）；有多个时取最长的名字。
-3. 某个名字里含有这个地点（地点“海堤”对到名字“樱坂海堤”），并且只有一个场景如此。两个场景的名字都含有这个地点时不匹配，舞台不换背景图。
+2. 地点里含有某个名字（地点“图书馆二楼”对到名字“图书馆”）。场景本身的地点名（`name` 和 `locationRef` 第一段）优先于子地点名（后面的段）；同一级别取最长的名字。例如“图书馆靠窗座位”选图书馆，不会因为教室的子地点“靠窗座位”更长而选教室。
+3. 某个名字里含有这个地点（地点“海堤”对到名字“樱坂海堤”），并且只有一个场景如此。两个场景的名字都含有这个地点时不匹配，舞台改用世界封面。
 
 所以名字要写成叙事会用的说法，并避免让两个场景共用同一个短片段。
 
@@ -1661,6 +1661,7 @@ pnpm validate:world --strict --plugins ~/.covel/plugins ~/.covel/worlds/my-world
 | `world-data` | 与预检一致 | descriptor、source 顺序、文件读取、target、隐藏数据规则，以及按契约 schema 逐条校验的记录 |
 | `locale-file-name` | error | 语言文件的文件名只写了语言（`.en.`），没有写成世界版本的 locale（`.en-US.`）；这个文件不会被读取 |
 | `locale-overlay` | warning | 语言文件里有一条译文无处安放（主文件没有这个 key 或 id，或它改了非文本的值），这条被忽略 |
+| `locale-trigger-keys` | warning | 触发式条目的正文或标题已翻译，触发词仍沿用主文件；在该语言文件的条目里补上译后的 `keys`，`--strict` 下也只是提醒 |
 | `locale-script` | warning | 非中日韩语言的语言文件里留有中日韩文字：没翻译的文本，或从主文件照抄的触发词 |
 | `edition-incomplete` | warning | 世界有某种语言的版本，但它缺少若干条译文；用这种语言开的会话会读到世界默认语言的原文 |
 | `inline-locale-map` | error | 主文件里把文本写成了多语言对照；主文件只写一种语言，译文放进语言文件 |

@@ -33,7 +33,7 @@ import { createSqliteLifecycleRecords } from "./sqlite-lifecycle-records.js";
 import { createSqliteExportRecords } from "./sqlite-export-records.js";
 import { createSqliteSessions } from "./sqlite-sessions.js";
 import { createSqliteSnapshotRecords } from "./sqlite-snapshot-records.js";
-import { createTables } from "./sqlite-store-mappers.js";
+import { createTables } from "./sqlite-schema-ddl.js";
 import { createSqliteState } from "./sqlite-state.js";
 import {
   createSqliteSavepoint,

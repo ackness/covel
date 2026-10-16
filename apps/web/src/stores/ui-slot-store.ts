@@ -68,19 +68,25 @@ export function refreshUiSlots(sessionId: string): Promise<void> {
     .then((response) => {
       if (states.get(sessionId) !== state || state.epoch !== epoch) return;
       const received = new Set<string>();
+      let changed = false;
       for (const candidate of response.items) {
         const parsed = uiSlotSnapshotSchema.safeParse(candidate);
         if (!parsed.success) continue;
         const key = identity(parsed.data.slot, parsed.data.key);
         received.add(key);
         if ((state.revisions.get(key) ?? 0) > started) continue;
+        if (state.committed.get(key)?.revision === parsed.data.revision)
+          continue;
         state.committed.set(key, parsed.data);
+        changed = true;
       }
       for (const key of state.committed.keys()) {
-        if (!received.has(key) && (state.revisions.get(key) ?? 0) <= started)
+        if (!received.has(key) && (state.revisions.get(key) ?? 0) <= started) {
           state.committed.delete(key);
+          changed = true;
+        }
       }
-      publish(state);
+      if (changed) publish(state);
     })
     .finally(() => {
       if (state.loading === loading) state.loading = undefined;
@@ -130,9 +136,13 @@ export function applyUiSlotEvent(
   ) {
     if (turn) {
       endTurn(state, turn);
+      let changed = false;
       for (const [key, preview] of state.previews)
-        if (preview.previewTurnId === turn) state.previews.delete(key);
-      publish(state);
+        if (preview.previewTurnId === turn) {
+          state.previews.delete(key);
+          changed = true;
+        }
+      if (changed) publish(state);
     }
     return type === "ui.slot.cleared";
   }
@@ -147,9 +157,17 @@ export function applyUiSlotEvent(
   const key = identity(parsed.data.slot, parsed.data.key);
   if (type === "ui.slot.preview") {
     if (!turn || state.endedTurns.has(turn)) return true;
+    const previous = state.previews.get(key);
+    if (
+      previous?.revision === parsed.data.revision &&
+      previous.previewTurnId === turn
+    )
+      return true;
     state.previews.set(key, { ...parsed.data, previewTurnId: turn });
   } else {
     state.revisions.set(key, ++state.sequence);
+    if (state.committed.get(key)?.revision === parsed.data.revision)
+      return true;
     state.committed.set(key, parsed.data);
   }
   publish(state);

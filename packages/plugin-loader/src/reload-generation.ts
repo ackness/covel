@@ -1,3 +1,4 @@
+import { isPathInside } from "./path-containment.js";
 /** Development reload: give one plugin a fresh module graph per generation. */
 import fs from "node:fs";
 import { registerHooks } from "node:module";
@@ -7,14 +8,6 @@ import { fileURLToPath } from "node:url";
 /** Reload generation → the plugin directories (as given and resolved) it may re-import from. */
 const generationRoots = new Map<string, readonly string[]>();
 let hooksInstalled = false;
-
-// Also in host-modules.ts. The tests run both modules in a plain Node
-// process, which cannot resolve a `.js` import of a `.ts` file, so each
-// imports only Node built-ins.
-function isInside(root: string, target: string): boolean {
-  const rel = path.relative(root, target);
-  return rel !== "" && !rel.startsWith("..") && !path.isAbsolute(rel);
-}
 
 /**
  * The versioned URL of a relative import made by a module of a tracked
@@ -43,7 +36,7 @@ export function reloadGenerationUrl(
     [".cjs", ".node"].includes(path.extname(target))
   )
     return undefined;
-  if (!roots.some((root) => isInside(root, target))) return undefined;
+  if (!roots.some((root) => isPathInside(root, target))) return undefined;
   url.searchParams.set("generation", generation);
   return url.href;
 }

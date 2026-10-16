@@ -66,8 +66,6 @@ type RuntimeJobStore = Pick<
   DataStore | StoreTransaction,
   | "compareAndSetPluginData"
   | "getPluginData"
-  | "listPluginData"
-  | "listPluginDataByNamespace"
   | "queryPluginData"
 > &
   Partial<Pick<DataStore, "withTransaction">>;
@@ -418,10 +416,7 @@ export async function listAllRuntimeJobs(
 }
 
 export async function listRuntimeJobs(
-  store: Pick<
-    DataStore | StoreTransaction,
-    "listPluginData" | "listPluginDataByNamespace"
-  >,
+  store: Pick<DataStore | StoreTransaction, "queryPluginData">,
   args: {
     readonly sessionId: string;
     readonly pluginId?: string;
@@ -429,21 +424,17 @@ export async function listRuntimeJobs(
     readonly limit?: number;
   },
 ): Promise<readonly RuntimeJobRecord[]> {
-  const rows = args.pluginId
-    ? await store.listPluginData(
-        args.sessionId,
-        args.pluginId,
-        RUNTIME_JOB_NAMESPACE,
-      )
-    : await store.listPluginDataByNamespace(
-        args.sessionId,
-        RUNTIME_JOB_NAMESPACE,
-      );
-  const statuses = args.statuses ? new Set(args.statuses) : undefined;
+  const rows = await store.queryPluginData({
+    namespace: RUNTIME_JOB_NAMESPACE,
+    sessionId: args.sessionId,
+    ...(args.pluginId ? { pluginId: args.pluginId } : {}),
+    ...(args.statuses
+      ? { valueFilter: { field: "status", values: args.statuses } }
+      : {}),
+  });
   const jobs = rows
     .map(fromRuntimeJobRow)
     .filter((job): job is RuntimeJobRecord => Boolean(job))
-    .filter((job) => !statuses || statuses.has(job.status))
     .sort(
       (a, b) =>
         a.sequence - b.sequence ||
@@ -460,11 +451,15 @@ export async function listSettlingRuntimeJobs(
 ): Promise<readonly RuntimeJobRecord[]> {
   const session = await store.getSession(sessionId);
   if (!session) return [];
-  return (await listRuntimeJobs(store, { sessionId })).filter(
+  return (
+    await listRuntimeJobs(store, {
+      sessionId,
+      statuses: ["queued", "claimed", "running", "committing"],
+    })
+  ).filter(
     (job) =>
       session.activePlugins.includes(job.pluginId) &&
-      job.settle === "before-next-execution" &&
-      !TERMINAL_RUNTIME_JOB_STATUSES.has(job.status),
+      job.settle === "before-next-execution",
   );
 }
 

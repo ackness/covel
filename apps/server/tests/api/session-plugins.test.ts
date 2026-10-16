@@ -7,7 +7,7 @@
  * inline that drifted from the real implementation.)
  *
  * Covers:
- * - explicit plugin selection and core defaults (enforced by manifest.pluginType,
+ * - explicit plugin selection and core defaults (enforced by manifest.kind,
  *       not hardcoded plugin IDs — see AGENTS.md framework-plugin isolation)
  * - H3: pluginId body validation
  */
@@ -48,7 +48,7 @@ function makeSummary(overrides?: Partial<TestSummary>): TestSummary {
     id: "test-plugin",
     name: "Test Plugin",
     description: "A test plugin",
-    pluginType: "plugin",
+    kind: "plugin",
     runtimeCount: 1,
     ...overrides,
   };
@@ -60,7 +60,7 @@ function makeEntry(
   const id = overrides?.id ?? "test-plugin";
   const summary = (overrides?.summary ?? makeSummary()) as TestSummary;
   const root = parsePluginMd(
-    `---\n${JSON.stringify({ id, kind: summary.pluginType === "core-plugin" ? "core" : "plugin", description: summary.description, provides: [...(summary.provides ?? []).map((value) => (typeof value === "string" && summary.pluginType === "core-plugin" ? { contract: value, default: true } : value)), `${id}@1`], requires: summary.requires, conflicts: summary.conflicts })}\n---\n`,
+    `---\n${JSON.stringify({ id, kind: summary.kind, description: summary.description, provides: [...(summary.provides ?? []).map((value) => (typeof value === "string" && summary.kind === "core" ? { contract: value, default: true } : value)), `${id}@1`], requires: summary.requires, conflicts: summary.conflicts })}\n---\n`,
     `${id}/PLUGIN.md`,
   );
   return {
@@ -211,7 +211,7 @@ describe("Session plugin routes (real sessionRoutes)", () => {
         summary: makeSummary({
           id: "narrator",
           name: "Core Narrator",
-          pluginType: "core-plugin",
+          kind: "core",
           provides: ["narrative-engine@1"],
           conflicts: ["chat-mode-narrator@1"],
         }),
@@ -224,7 +224,7 @@ describe("Session plugin routes (real sessionRoutes)", () => {
         summary: makeSummary({
           id: "pregame",
           name: "Core Pre-Game",
-          pluginType: "core-plugin",
+          kind: "core",
         }),
         source: "builtin",
       }),
@@ -235,7 +235,7 @@ describe("Session plugin routes (real sessionRoutes)", () => {
         summary: makeSummary({
           id: "optional-plugin",
           name: "Optional Plugin",
-          pluginType: "plugin",
+          kind: "plugin",
         }),
         source: "community",
       }),
@@ -246,7 +246,7 @@ describe("Session plugin routes (real sessionRoutes)", () => {
         summary: makeSummary({
           id: "chat-mode-narrator",
           name: "Chat Mode Narrator",
-          pluginType: "plugin",
+          kind: "plugin",
           provides: ["narrative-engine@1"],
           requires: [
             "scene-cast@1",
@@ -268,7 +268,7 @@ describe("Session plugin routes (real sessionRoutes)", () => {
         summary: makeSummary({
           id: "scene-cast",
           name: "Scene Cast",
-          pluginType: "plugin",
+          kind: "plugin",
         }),
         source: "builtin",
       }),
@@ -279,7 +279,7 @@ describe("Session plugin routes (real sessionRoutes)", () => {
         summary: makeSummary({
           id: "scene-prompts",
           name: "Scene Prompts",
-          pluginType: "plugin",
+          kind: "plugin",
         }),
         source: "builtin",
       }),
@@ -290,7 +290,7 @@ describe("Session plugin routes (real sessionRoutes)", () => {
         summary: makeSummary({
           id: "character-blueprint",
           name: "Character Blueprint",
-          pluginType: "plugin",
+          kind: "plugin",
         }),
         // Declares it accepts world blueprints + mirrored characters — drives
         // capability discovery (blueprintStorageTargets / characterMirrorTargets)
@@ -318,7 +318,7 @@ describe("Session plugin routes (real sessionRoutes)", () => {
         summary: makeSummary({
           id: "character-presence",
           name: "Character Presence",
-          pluginType: "plugin",
+          kind: "plugin",
         }),
         source: "builtin",
       }),
@@ -329,7 +329,7 @@ describe("Session plugin routes (real sessionRoutes)", () => {
         summary: makeSummary({
           id: "player-identity",
           name: "Player Identity",
-          pluginType: "plugin",
+          kind: "plugin",
         }),
         source: "builtin",
       }),
@@ -340,7 +340,7 @@ describe("Session plugin routes (real sessionRoutes)", () => {
         summary: makeSummary({
           id: "living-world-rules",
           name: "Living World Rules",
-          pluginType: "plugin",
+          kind: "plugin",
         }),
         source: "builtin",
       }),
@@ -351,7 +351,7 @@ describe("Session plugin routes (real sessionRoutes)", () => {
         summary: makeSummary({
           id: "branch-reply",
           name: "Branch Reply",
-          pluginType: "plugin",
+          kind: "plugin",
         }),
         source: "builtin",
       }),
@@ -464,7 +464,7 @@ describe("Session plugin routes (real sessionRoutes)", () => {
           summary: makeSummary({
             id: "late-core",
             name: "Late Core",
-            pluginType: "core-plugin",
+            kind: "core",
           }),
           source: "builtin",
         }),
@@ -813,7 +813,7 @@ describe("Session plugin routes (real sessionRoutes)", () => {
           summary: makeSummary({
             id: "opening-reader",
             name: "Opening Reader",
-            pluginType: "core-plugin",
+            kind: "core",
             requires: ["pregame@1"],
           }),
           source: "builtin",
@@ -1155,7 +1155,7 @@ describe("Session plugin routes (real sessionRoutes)", () => {
         registry.register(
           makeEntry({
             id: pluginId,
-            summary: makeSummary({ id: pluginId, pluginType: "plugin" }),
+            summary: makeSummary({ id: pluginId, kind: "plugin" }),
             source: "builtin",
           }),
         );
@@ -1208,7 +1208,7 @@ describe("Session plugin routes (real sessionRoutes)", () => {
           id: "persist-failure-plugin",
           summary: makeSummary({
             id: "persist-failure-plugin",
-            pluginType: "plugin",
+            kind: "plugin",
           }),
           source: "builtin",
         }),
@@ -1383,7 +1383,7 @@ describe("Session plugin routes (real sessionRoutes)", () => {
           summary: makeSummary({
             id: "forged-core",
             name: "Forged Core",
-            pluginType: "core-plugin",
+            kind: "core",
           }),
           source: "community",
         }),

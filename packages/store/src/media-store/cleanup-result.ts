@@ -32,7 +32,7 @@ export function finalizeMediaCleanupResult(
  * References that `policy.expireRefs` releases: held under the given session
  * ID prefix and created no later than `now - maxAgeMs`.
  */
-export function expiredMediaRefs(
+function expiredMediaRefs(
   refs: readonly MediaRefRecord[],
   policy: MediaLifecyclePolicy = {},
 ): readonly MediaRefRecord[] {

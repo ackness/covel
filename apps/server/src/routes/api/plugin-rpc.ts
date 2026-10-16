@@ -1,3 +1,7 @@
+import {
+  approvalVerdictResponse,
+  hasServerCodeGrant,
+} from "./approval-verdict.js";
 import { sessionEventBus } from "./session/session-events.js";
 import { resolveMediaImageFlow } from "./media-image-flow.js";
 import {
@@ -58,7 +62,7 @@ import {
 import { getPluginTrustInfo } from "@covel/plugin-loader";
 import { validatePluginRpcBody } from "./plugin-rpc/body.js";
 import {
-  decodePluginUserSettingsHeader,
+  readPluginUserSettings,
   loadSessionPluginUserSettings,
 } from "./plugin-user-settings.js";
 import { requestSuspensionAbandonDeps } from "./suspension-abandon.js";
@@ -67,16 +71,15 @@ import {
   enqueueEventFollowers,
   type QueuedActivatedRuntimeJob,
 } from "./plugin-rpc/runtime-job-enqueue.js";
-import { RuntimeJobQueueFullError } from "./plugin-rpc/jobs.js";
 import {
   createPluginRpcRuntimeTurnRunner,
-  SessionApprovalScopeChangedError,
-  SessionNotActiveError,
+  requireLiveScope,
+  runtimeQueueErrorResponse,
 } from "./plugin-rpc/runtime-turn.js";
 import { commitFailureMessage } from "./plugin-rpc/runtime-response.js";
 import { rateLimiter } from "../../middleware/rate-limit.js";
 import {
-  checkSessionOwner,
+  resolveSessionById,
   sessionApprovalScope,
 } from "./session/session-guard.js";
 import {
@@ -105,31 +108,12 @@ function toApiErrorCode(code: string): string {
 pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
   const store = c.get("store");
   const sessionId = c.req.param("id");
-  const decodedUserSettings = decodePluginUserSettingsHeader(
-    c.req.header("X-Plugin-User-Settings"),
-  );
-  if (!decodedUserSettings.ok) {
-    return c.json(
-      errorBody(decodedUserSettings.error, {
-        code: toApiErrorCode(decodedUserSettings.code),
-      }),
-      decodedUserSettings.status,
-    );
-  }
+  const decodedUserSettings = readPluginUserSettings(c);
+  if (!decodedUserSettings.ok) return decodedUserSettings.response;
 
-  const session = await store.getSession(sessionId);
-  if (!session) {
-    return c.json(
-      errorBody(`Session "${sessionId}" not found`, {
-        code: "session_not_found",
-      }),
-      404,
-    );
-  }
-  // Owner guard (hosted tiers): plugin-rpc can trigger manual runtimes
-  // (full turn pipeline) and mutate plugin data.
-  const ownerDenied = checkSessionOwner(c, session);
-  if (ownerDenied) return ownerDenied;
+  const guard = await resolveSessionById(c, sessionId);
+  if (!guard.ok) return guard.response;
+  const session = guard.session;
   if (session.status !== "active") {
     return c.json(
       errorBody(`session is ${session.status}; plugin RPC execution refused`, {
@@ -248,10 +232,8 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
       );
     }
 
-    // Approval gate — trust comes from plugin discovery source, NOT from
-    // the manifest's `pluginType` field. `pluginType` is author-supplied and
-    // could be forged by a third-party plugin claiming `core-plugin` to
-    // auto-bypass approval. `entry.source` is set by bootstrap from the
+    // Approval trust comes from discovery source, independent of authored
+    // package kind. `entry.source` is set by bootstrap from the
     // discovery pipeline, which clamps non-first-dir plugins to 'community'
     // so they can't escalate. A missing source remains community-trusted.
     const entry = pluginRegistry.get(body.pluginId);
@@ -269,12 +251,7 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
     // the `runtime:<name>` grant; the renderer's retry walks the phases.
     const needsServerCodeGrant =
       trustInfo.source === "community" &&
-      !gate.hasGrant(
-        sessionId,
-        body.pluginId,
-        COMMUNITY_SERVER_CODE_ACTION,
-        approvalScope,
-      );
+      !hasServerCodeGrant(gate, session, body.pluginId);
     const verdict = gate.evaluate({
       sessionId,
       sessionScope: approvalScope,
@@ -288,25 +265,12 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
         ? `Load server-side code for community plugin ${body.pluginId}`
         : target.description,
     });
-    if (verdict.status === "pending") {
-      return c.json(
-        {
-          status: "approval-required",
-          approvalId: verdict.approvalId,
-          pending: verdict.pending,
-        },
-        202,
-      );
-    }
-    if (verdict.status === "rejected") {
-      return c.json(
-        errorBody(
-          `approval queue is full (limit ${verdict.limit}); try again after resolving pending approvals`,
-          { code: "queue_full" },
-        ),
-        429,
-      );
-    }
+    const verdictResponse = approvalVerdictResponse(c, verdict, {
+      message: (limit) =>
+        `approval queue is full (limit ${limit}); try again after resolving pending approvals`,
+      code: "queue_full",
+    });
+    if (verdictResponse) return verdictResponse;
     // Player-authored plugin settings travel with the request
     // as a base64-encoded JSON header (`X-Plugin-User-Settings`) sourced
     // from the unified SettingsStore. The body map keys on pluginId so
@@ -403,25 +367,6 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
     });
 
     const mode: "sync" | "background" = target.execution ?? "sync";
-    const queueError = (err: unknown) => {
-      if (err instanceof SessionNotActiveError)
-        return c.json(
-          errorBody(err.message, { code: "session_not_active" }),
-          409,
-        );
-      if (err instanceof SessionApprovalScopeChangedError)
-        return c.json(
-          errorBody(err.message, { code: "approval_scope_changed" }),
-          409,
-        );
-      if (err instanceof RuntimeJobQueueFullError)
-        return c.json(
-          errorBody(err.message, { code: "background_queue_full" }),
-          429,
-        );
-      throw err;
-    };
-
     // ── Background mode / expected follower ────────────────────────
     //
     // `execution: background` runtimes, and sync prompt-builders whose client
@@ -436,12 +381,12 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
       let queued;
       try {
         queued = await sessionLock.withLock(sessionId, async () => {
-          const live = await store.getSession(sessionId);
-          if (!live) throw new SessionNotActiveError("deleted");
-          if (live.status !== "active")
-            throw new SessionNotActiveError(live.status);
-          if (sessionApprovalScope(live, body.pluginId) !== approvalScope)
-            throw new SessionApprovalScopeChangedError();
+          const live = await requireLiveScope(
+            store,
+            sessionId,
+            body.pluginId,
+            approvalScope,
+          );
           return store.withTransaction((tx) =>
             enqueueActivatedRuntimeJob(tx, {
               sessionId,
@@ -464,7 +409,7 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
           );
         });
       } catch (err) {
-        return queueError(err);
+        return runtimeQueueErrorResponse(c, err);
       }
       announceQueuedRuntimeJobs(c, [queued]);
       return c.json(
@@ -558,25 +503,7 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
         ...(deferredJobs.length > 0 ? { deferredJobs } : {}),
       });
     } catch (err) {
-      if (err instanceof SessionNotActiveError) {
-        return c.json(
-          errorBody(err.message, { code: "session_not_active" }),
-          409,
-        );
-      }
-      if (err instanceof SessionApprovalScopeChangedError) {
-        return c.json(
-          errorBody(err.message, { code: "approval_scope_changed" }),
-          409,
-        );
-      }
-      if (err instanceof RuntimeJobQueueFullError) {
-        return c.json(
-          errorBody(err.message, { code: "background_queue_full" }),
-          429,
-        );
-      }
-      throw err;
+      return runtimeQueueErrorResponse(c, err);
     }
   }
 

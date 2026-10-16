@@ -40,13 +40,7 @@ export interface UIRenderPartsInstruction {
   readonly status?: UIPartStatus;
 }
 
-export interface UIRenderLegacyInstruction {
-  readonly type: UIComponentType | string;
-  readonly [key: string]: unknown;
-}
-
-export type UIRenderInstruction =
-  UIRenderPartsInstruction | UIRenderLegacyInstruction;
+export type UIRenderInstruction = UIRenderPartsInstruction;
 
 export function isUIRenderPartsInstruction(
   value: unknown,
@@ -80,55 +74,30 @@ export function normalizeUIRenderInstruction(
   instruction: UIRenderInstruction,
   fallbackId = "ui-1",
 ): UIRenderPartsInstruction {
-  if (isUIRenderPartsInstruction(instruction)) {
-    const parts = instruction.parts.map((rawPart, index) => {
-      const part = rawPart as unknown as Record<string, unknown>;
-      return {
-        id:
-          typeof part.id === "string" && part.id.length > 0
-            ? part.id
-            : `${fallbackId}-part-${index + 1}`,
-        type:
-          typeof part.type === "string" && part.type.length > 0
-            ? part.type
-            : "card",
-        status: normalizePartStatus(part.status),
-        content: "content" in part ? part.content : {},
-        ...(part.retry && typeof part.retry === "object"
-          ? { retry: part.retry as UIRenderPartRetry }
-          : {}),
-      };
-    });
+  const parts = instruction.parts.map((rawPart, index) => {
+    const part = rawPart as unknown as Record<string, unknown>;
     return {
-      parts,
-      ...(instruction.layout ? { layout: instruction.layout } : {}),
-      status: normalizePartStatus(
-        instruction.status ?? inferInstructionStatus(parts),
-      ),
+      id:
+        typeof part.id === "string" && part.id.length > 0
+          ? part.id
+          : `${fallbackId}-part-${index + 1}`,
+      type:
+        typeof part.type === "string" && part.type.length > 0
+          ? part.type
+          : "card",
+      status: normalizePartStatus(part.status),
+      content: "content" in part ? part.content : {},
+      ...(part.retry && typeof part.retry === "object"
+        ? { retry: part.retry as UIRenderPartRetry }
+        : {}),
     };
-  }
-
-  const single = instruction as UIRenderLegacyInstruction;
-  const id =
-    typeof single.id === "string" && single.id.length > 0
-      ? single.id
-      : fallbackId;
-  const content: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(single)) {
-    if (key !== "id" && key !== "type") content[key] = value;
-  }
-  const part: UIRenderPart = {
-    id,
-    type:
-      typeof single.type === "string" && single.type.length > 0
-        ? single.type
-        : "card",
-    status: "success",
-    content,
-  };
+  });
   return {
-    parts: [part],
-    status: "success",
+    parts,
+    ...(instruction.layout ? { layout: instruction.layout } : {}),
+    status: normalizePartStatus(
+      instruction.status ?? inferInstructionStatus(parts),
+    ),
   };
 }
 

@@ -75,12 +75,4 @@ export const FEATURE_ENV_VARS = [
     description:
       "Auto snapshots kept per session; older kind=auto snapshots are deleted after each checkpoint unless a fork names them as parent. 0 keeps all.",
   },
-  {
-    name: "COVEL_TRACE_TRUNCATE",
-    group: "feature",
-    type: "boolean",
-    status: "planned",
-    defaultValue: "false",
-    description: "Planned trace payload truncation switch.",
-  },
 ] as const satisfies readonly EnvVarDefinition[];

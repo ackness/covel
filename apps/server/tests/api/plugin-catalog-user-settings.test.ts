@@ -15,7 +15,7 @@ function entry(root: ReturnType<typeof parsePluginMd>): PluginRegistryEntry {
       id: "probe",
       name: "Probe",
       description: "Probe",
-      pluginType: "plugin",
+      kind: "plugin",
       runtimeCount: 0,
     },
     packageManifest: root,

@@ -16,9 +16,9 @@ import { PluginServiceRegistry } from "../src/plugin-services.js";
 import { PluginExtensionHost } from "../src/plugin-extensions.js";
 import { createMemoryStore } from "@covel/store/memory";
 import type { DataStore } from "@covel/store";
-import { executeTurn } from "../src/turn-executor/turn-executor.js";
+import { runTurnPipeline } from "../src/turn-executor/turn-executor.js";
 import type { TurnExecutorDeps } from "../src/turn-executor/turn-executor.js";
-import type { LLMAdapter, LLMResponse } from "../src/llm/llm-adapter.js";
+import type { LLMAdapter, LLMResponse } from "@covel/shared";
 import { createHookPipeline } from "../src/hooks/pipeline.js";
 import type { HookPipeline } from "../src/hooks/pipeline.js";
 import { makeEmitterSpy } from "./_helpers/emitter-spy.js";
@@ -110,7 +110,11 @@ describe("Turn executor hook wire-in", () => {
     it("runs normally without hookPipeline — no side effects", async () => {
       const llm = new SimpleMockLLM();
       const deps = await makeDeps(llm);
-      const result = await executeTurn(makeTurnInput(), [makeManifest()], deps);
+      const result = await runTurnPipeline(
+        makeTurnInput(),
+        [makeManifest()],
+        deps,
+      );
       expect(result.runtimeResults).toHaveLength(1);
       expect(result.runtimeResults[0]!.status).toBe("success");
       expect(result.abortReason).toBeUndefined();
@@ -139,7 +143,7 @@ describe("Turn executor hook wire-in", () => {
         handler: inactive,
       });
       const deps = await makeDeps(llm, pipeline);
-      const result = await executeTurn(makeTurnInput(), [], {
+      const result = await runTurnPipeline(makeTurnInput(), [], {
         ...deps,
         hookScope: {
           activePluginIds: new Set(["entry-only"]),
@@ -162,7 +166,11 @@ describe("Turn executor hook wire-in", () => {
       });
 
       const deps = await makeDeps(llm, pipeline);
-      const result = await executeTurn(makeTurnInput(), [makeManifest()], deps);
+      const result = await runTurnPipeline(
+        makeTurnInput(),
+        [makeManifest()],
+        deps,
+      );
       expect(result.runtimeResults).toHaveLength(1);
       expect(result.abortReason).toBeUndefined();
     });
@@ -179,7 +187,11 @@ describe("Turn executor hook wire-in", () => {
       });
 
       const deps = await makeDeps(llm, pipeline);
-      const result = await executeTurn(makeTurnInput(), [makeManifest()], deps);
+      const result = await runTurnPipeline(
+        makeTurnInput(),
+        [makeManifest()],
+        deps,
+      );
 
       // Turn aborted before any runtime ran.
       expect(result.runtimeResults).toHaveLength(0);
@@ -201,7 +213,11 @@ describe("Turn executor hook wire-in", () => {
       });
 
       const deps = await makeDeps(llm, pipeline);
-      const result = await executeTurn(makeTurnInput(), [makeManifest()], deps);
+      const result = await runTurnPipeline(
+        makeTurnInput(),
+        [makeManifest()],
+        deps,
+      );
 
       // Turn completed normally
       expect(result.runtimeResults).toHaveLength(1);
@@ -225,7 +241,11 @@ describe("Turn executor hook wire-in", () => {
       const onRuntimeComplete = vi.fn();
       const deps = { ...(await makeDeps(llm, pipeline)), onRuntimeComplete };
 
-      const result = await executeTurn(makeTurnInput(), [makeManifest()], deps);
+      const result = await runTurnPipeline(
+        makeTurnInput(),
+        [makeManifest()],
+        deps,
+      );
 
       expect(result.runtimeResults[0]?.status).toBe("skipped");
       expect(onRuntimeComplete).toHaveBeenCalledOnce();
@@ -300,7 +320,7 @@ describe("Turn executor hook wire-in", () => {
         store: await createMainLoopStore("sess-hook-wire"),
       };
 
-      const result = await executeTurn(makeTurnInput(), [manifest], deps);
+      const result = await runTurnPipeline(makeTurnInput(), [manifest], deps);
 
       // Tool executor was NOT called (hook aborted)
       expect(toolExecutor.execute).not.toHaveBeenCalled();
@@ -359,7 +379,7 @@ describe("Turn executor hook wire-in", () => {
         }),
         emitter,
       };
-      const result = await executeTurn(makeTurnInput(), [manifest], deps);
+      const result = await runTurnPipeline(makeTurnInput(), [manifest], deps);
 
       expect(result.runtimeResults[0]!.output).toMatchObject({
         narrativeOutput: "rewritten by hook",
@@ -404,7 +424,7 @@ describe("Turn executor hook wire-in", () => {
             outputSchema: schema,
           }),
         };
-        const result = await executeTurn(makeTurnInput(), [manifest], deps);
+        const result = await runTurnPipeline(makeTurnInput(), [manifest], deps);
         return result.runtimeResults[0]!;
       };
 
@@ -446,7 +466,7 @@ describe("Turn executor hook wire-in", () => {
 
       const deps = await makeDeps(llm, pipeline);
       const input = makeTurnInput();
-      const result = await executeTurn(input, [manifest], deps);
+      const result = await runTurnPipeline(input, [manifest], deps);
 
       // Downstream commit rebinds proposals on these fields — they must stay
       // the framework-selected identity, not whatever the hook returned.
@@ -538,7 +558,7 @@ describe("Turn executor hook wire-in", () => {
         store: await createMainLoopStore("sess-hook-wire"),
       };
 
-      const result = await executeTurn(makeTurnInput(), [manifest], deps);
+      const result = await runTurnPipeline(makeTurnInput(), [manifest], deps);
 
       expect(result.runtimeResults[0]!.status).toBe("success");
       // Tool was called exactly once (hook returned continue, not abort)
@@ -567,7 +587,7 @@ describe("Turn executor hook wire-in", () => {
         compactor,
       };
 
-      await executeTurn(makeTurnInput(), [makeManifest()], deps);
+      await runTurnPipeline(makeTurnInput(), [makeManifest()], deps);
 
       expect(compactor.run).not.toHaveBeenCalled();
     });
@@ -581,7 +601,7 @@ describe("Turn executor hook wire-in", () => {
         compactor,
       };
 
-      await executeTurn(makeTurnInput(), [makeManifest()], deps);
+      await runTurnPipeline(makeTurnInput(), [makeManifest()], deps);
 
       expect(compactor.run).toHaveBeenCalledOnce();
       expect(compactor.run.mock.calls[0]?.[1]).toContain("Say something.");
@@ -644,7 +664,7 @@ describe("Turn executor hook wire-in", () => {
         extensions,
       };
 
-      await executeTurn(makeTurnInput(), [makeManifest()], deps);
+      await runTurnPipeline(makeTurnInput(), [makeManifest()], deps);
 
       const compactedMessages = compactor.run.mock.calls[0]?.[2] as
         Array<{ content: string }> | undefined;
@@ -684,7 +704,11 @@ describe("Turn executor hook wire-in", () => {
         compactor,
       };
 
-      const result = await executeTurn(makeTurnInput(), [makeManifest()], deps);
+      const result = await runTurnPipeline(
+        makeTurnInput(),
+        [makeManifest()],
+        deps,
+      );
 
       expect(result.runtimeResults[0]?.status).toBe("success");
       const providerMessages = llm.calls[0]?.messages;
@@ -727,7 +751,7 @@ describe("Turn executor hook wire-in", () => {
           compactor,
         };
 
-        await executeTurn(
+        await runTurnPipeline(
           makeTurnInput(),
           [makeManifest({ history: { maxTurns: 1, includeSummaries } })],
           deps,
@@ -776,7 +800,7 @@ describe("Turn executor hook wire-in", () => {
         store: await createMainLoopStore("sess-hook-wire"),
       };
 
-      const result = await executeTurn(makeTurnInput(), [keep, drop], deps);
+      const result = await runTurnPipeline(makeTurnInput(), [keep, drop], deps);
       const ran = result.runtimeResults.map((r) => r.runtimeId);
       expect(ran).toContain("keep");
       expect(ran).not.toContain("drop");
@@ -797,7 +821,7 @@ describe("Turn executor hook wire-in", () => {
       });
 
       const deps = await makeDeps(llm, pipeline);
-      await executeTurn(makeTurnInput(), [makeManifest()], deps);
+      await runTurnPipeline(makeTurnInput(), [makeManifest()], deps);
 
       const sent = (
         llm.calls[0] as { messages: Array<{ role: string; content: string }> }
@@ -821,7 +845,7 @@ describe("Turn executor hook wire-in", () => {
       });
 
       const deps = await makeDeps(llm, pipeline);
-      await executeTurn(
+      await runTurnPipeline(
         makeTurnInput({ locale: "en-US" }),
         [makeManifest()],
         deps,
@@ -855,7 +879,7 @@ describe("Turn executor hook wire-in", () => {
       });
 
       const deps = await makeDeps(llm, pipeline);
-      await executeTurn(
+      await runTurnPipeline(
         makeTurnInput(),
         [makeManifest({ outputKind: "story" })],
         deps,
@@ -902,7 +926,11 @@ describe("Turn executor hook wire-in", () => {
           protectLastUserTurns: 1,
         },
       } satisfies TurnExecutorDeps;
-      const result = await executeTurn(makeTurnInput(), [makeManifest()], deps);
+      const result = await runTurnPipeline(
+        makeTurnInput(),
+        [makeManifest()],
+        deps,
+      );
 
       expect(result.runtimeResults[0]?.status).toBe("failed");
       expect(result.runtimeResults[0]?.error).toMatch(
@@ -940,7 +968,7 @@ describe("Turn executor hook wire-in", () => {
       });
 
       const deps = await makeDeps(llm, pipeline);
-      await executeTurn(makeTurnInput(), [makeManifest()], deps);
+      await runTurnPipeline(makeTurnInput(), [makeManifest()], deps);
 
       // The LLM saw the injected message...
       const sent = (
@@ -978,7 +1006,7 @@ describe("Turn executor hook wire-in", () => {
         providerPluginId,
       });
       const deps = await makeDeps(llm, pipeline);
-      await executeTurn(makeTurnInput(), [makeManifest()], {
+      await runTurnPipeline(makeTurnInput(), [makeManifest()], {
         ...deps,
         extensionExecution: {
           run: async (point: { id: string }, input: unknown) =>
@@ -1016,7 +1044,7 @@ describe("Turn executor hook wire-in", () => {
       });
 
       const deps = await makeDeps(llm, pipeline);
-      await executeTurn(makeTurnInput(), [makeManifest()], deps);
+      await runTurnPipeline(makeTurnInput(), [makeManifest()], deps);
 
       expect((llm.calls[0] as { model?: string }).model).toBe(
         "hook-chosen-model",
@@ -1051,7 +1079,11 @@ describe("Turn executor hook wire-in", () => {
       });
 
       const deps = await makeDeps(llm, pipeline);
-      const result = await executeTurn(makeTurnInput(), [makeManifest()], deps);
+      const result = await runTurnPipeline(
+        makeTurnInput(),
+        [makeManifest()],
+        deps,
+      );
 
       expect(result.runtimeResults[0]!.output).toMatchObject({
         narrativeOutput: "patched by hook",
@@ -1112,7 +1144,7 @@ describe("Turn executor hook wire-in", () => {
         store: await createMainLoopStore("sess-hook-wire"),
       };
 
-      const result = await executeTurn(makeTurnInput(), [manifest], deps);
+      const result = await runTurnPipeline(makeTurnInput(), [manifest], deps);
 
       // Tool executed exactly once and the loop stopped — only the first LLM
       // call happened, the second queued response was never consumed.
@@ -1185,7 +1217,7 @@ describe("Turn executor hook wire-in", () => {
         store: await createMainLoopStore("sess-hook-wire"),
       };
 
-      const result = await executeTurn(makeTurnInput(), [manifest], deps);
+      const result = await runTurnPipeline(makeTurnInput(), [manifest], deps);
       const toolNames = result.runtimeResults[0]!.toolCalls.map(
         (t) => t.toolName,
       );

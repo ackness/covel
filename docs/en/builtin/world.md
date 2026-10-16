@@ -40,6 +40,7 @@ At the start, it guides you through creating the player character. It gives you 
 
 **Notes**
 
+- The model reviews the opening with its defaults filled in and uses a concrete calling from the world. Repeated wording or an undecided placeholder prompts a correction before the form is shown.
 - A character's name cannot be the same as a name or alias of a character already in the world. If it is, the form shows a note under the name. Change the name and submit again.
 - If the world later stops accepting some of what you entered before, the form appears again. The answers that still work are already filled in, and the form explains why.
 - People who already appear in the story are not recorded a second time. If the narrative uses a different form of their name, it only adds an alias to the original character.

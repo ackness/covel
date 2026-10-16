@@ -1,6 +1,6 @@
 /** Display fallback only; authoritative game state is never capped. */
-export const STATE_PATCH_CACHE_LIMIT = 256;
-export const STATE_PATCH_RECENT_IDS_LIMIT = 256;
+const STATE_PATCH_CACHE_LIMIT = 256;
+const STATE_PATCH_RECENT_IDS_LIMIT = 256;
 
 interface Patch {
   id: string;

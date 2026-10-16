@@ -5,9 +5,9 @@ import type { LoadedRuntime } from "@covel/plugin-loader";
 import { createMemoryStore } from "@covel/store/memory";
 import { tool } from "@covel/tools";
 import { z } from "zod";
-import { executeTurn } from "../src/turn-executor/turn-executor.js";
+import { runTurnPipeline } from "../src/turn-executor/turn-executor.js";
 import type { TurnExecutorDeps } from "../src/turn-executor/turn-executor.js";
-import type { LLMAdapter } from "../src/llm/llm-adapter.js";
+import type { LLMAdapter } from "@covel/shared";
 import { createToolExecutor } from "../src/agent-loop/tool-executor.js";
 import { makeEmitterSpy } from "./_helpers/emitter-spy.js";
 
@@ -76,7 +76,7 @@ describe("turn-executor message.completed trace emission", () => {
       emitter,
     };
 
-    await executeTurn(makeTurnInput(), [manifest], deps, { maxSteps: 2 });
+    await runTurnPipeline(makeTurnInput(), [manifest], deps, { maxSteps: 2 });
 
     const llmCalling = emitter.events.find((e) => e.type === "llm.calling");
     expect(llmCalling?.payload).toMatchObject({
@@ -131,7 +131,7 @@ describe("turn-executor message.completed trace emission", () => {
       emitter,
     };
 
-    await executeTurn(makeTurnInput(), [manifest], deps, { maxSteps: 2 });
+    await runTurnPipeline(makeTurnInput(), [manifest], deps, { maxSteps: 2 });
 
     expect(
       emitter.events.find((e) => e.type === "message.completed"),
@@ -197,7 +197,7 @@ describe("turn-executor request error trace pairing", () => {
       }),
     };
 
-    await executeTurn(makeTurnInput(), [manifest], deps, { maxSteps: 2 });
+    await runTurnPipeline(makeTurnInput(), [manifest], deps, { maxSteps: 2 });
     expect(callCount).toBe(1);
 
     // Every llm.calling must have a paired llm.responded — even on the

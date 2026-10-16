@@ -15,7 +15,7 @@ import {
   overlayWorldModelView,
 } from "../src/function-runtime/world-model-view.js";
 import { createCommitPipeline } from "../src/session/session-kernel.js";
-import { executeTurn } from "../src/turn-executor/turn-executor.js";
+import { runTurnPipeline } from "../src/turn-executor/turn-executor.js";
 
 const sessionId = "world-session";
 const timestamp = "2026-01-01T00:00:00.000Z";
@@ -348,7 +348,7 @@ describe("execution World Model", () => {
     });
   });
 
-  it("shares one committed read per execution while handing each caller its own copy", async () => {
+  it("shares committed reads while isolating each handler world view", async () => {
     const store = createMemoryStore();
     await createCommitPipeline(store).commitAll([schema(), character()]);
     let characterReads = 0;
@@ -362,7 +362,12 @@ describe("execution World Model", () => {
     const reads = memoizeWorldModelReads(counted);
     const first = await createWorldModelView(reads, sessionId);
     const firstCharacters = await reads.listCharacters(sessionId);
-    (firstCharacters[0]!.fields as { hp: number }).hp = 0;
+    expect(await reads.listCharacters(sessionId)).toBe(firstCharacters);
+    expect(() => {
+      (first.characters[0]!.fields as { hp: number }).hp = 0;
+    }).toThrow();
+    expect(first.characters).not.toBe(firstCharacters);
+    expect(Object.isFrozen(firstCharacters[0]!.fields)).toBe(false);
     const second = await createWorldModelView(reads, sessionId);
     expect(characterReads).toBe(1);
     expect(second.characters).toEqual(first.characters);
@@ -427,7 +432,7 @@ describe("execution World Model", () => {
         : {}),
     }));
     const seen: unknown[] = [];
-    const result = await executeTurn(
+    const result = await runTurnPipeline(
       { origin: "player", sessionId, turnId: "turn", playerMessage: "go" },
       manifests,
       {

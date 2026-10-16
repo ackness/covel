@@ -113,6 +113,27 @@ export async function selectWorldByText(page: Page, text: RegExp) {
 }
 
 /**
+ * Click the start button of the session-prep screen. Without an API key for a
+ * model the session uses, the screen asks first; a spec without keys starts
+ * anyway.
+ */
+export async function startGame(page: Page, startButton: Locator) {
+  await startButton.click();
+  const startAnyway = page.getByRole("button", {
+    name: /^(仍然开始|Start anyway)$/i,
+  });
+  const started = page.waitForURL(/sid=/).then(
+    () => false,
+    () => false,
+  );
+  const prompted = startAnyway.waitFor().then(
+    () => true,
+    () => false,
+  );
+  if (await Promise.race([started, prompted])) await startAnyway.click();
+}
+
+/**
  * Wait until no turn is running. Multi-runtime turns with live LLM calls run
  * well past a minute, so the budget is generous — but unlike the old helper
  * this actually waits for the turn rather than for an enabled input.

@@ -1,3 +1,4 @@
+import { RerunActionButton } from "./rerun-action-button.js";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Download, ExternalLink, File } from "lucide-react";
@@ -7,13 +8,9 @@ import { Media } from "@/components/Media.js";
 import { MediaPreviewDialog } from "@/components/MediaPreviewDialog.js";
 import type { MediaRef } from "@covel/shared";
 import { isMediaRef } from "@/lib/media-ref-utils.js";
-import {
-  catalogItems,
-  invokeCatalogAction,
-} from "@/lib/catalog/catalog-actions.js";
+import { catalogItems } from "@/lib/catalog/catalog-actions.js";
 import { resolvePath, useI18nResolver } from "@/lib/catalog/helpers.js";
 import { useActiveSessionId } from "@/lib/catalog/session-context.js";
-import { emitToast } from "@/lib/toast-channel.js";
 import { formatJobDuration, jobStatusLabel } from "@/lib/job-ui.js";
 import { downloadMedia } from "./actions.js";
 
@@ -146,35 +143,14 @@ export function MediaGalleryPanel({
                       </Button>
                     </>
                   ) : null}
-                  {props.rerunAction ? (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={busy || !sessionId}
-                      onClick={() => {
-                        if (!sessionId || !props.rerunAction) return;
-                        setBusy(true);
-                        void invokeCatalogAction({
-                          sessionId,
-                          action: props.rerunAction,
-                          scope: { item, props: input },
-                          t,
-                        })
-                          .catch((err) =>
-                            emitToast(
-                              "error",
-                              err instanceof Error
-                                ? err.message
-                                : t("common.error"),
-                            ),
-                          )
-                          .finally(() => setBusy(false));
-                      }}
-                    >
-                      {resolve(props.rerunAction.label) ||
-                        t("catalog.jobList.rerun")}
-                    </Button>
-                  ) : null}
+                  <RerunActionButton
+                    action={props.rerunAction}
+                    sessionId={sessionId}
+                    item={item}
+                    input={input}
+                    busy={busy}
+                    setBusy={setBusy}
+                  />
                 </div>
               </div>
             </div>

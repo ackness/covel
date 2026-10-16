@@ -4,7 +4,7 @@ import type { RuntimeManifest } from "@covel/shared";
 import type { LoadedRuntime, PluginRuntimeGateway } from "@covel/plugin-loader";
 import { createMemoryStore } from "@covel/store/memory";
 import { createEventBus } from "@covel/events";
-import { executeTurn } from "../src/turn-executor/turn-executor.js";
+import { runTurnPipeline } from "../src/turn-executor/turn-executor.js";
 import { createPluginRuntimeGateway } from "../src/function-runtime/plugin-runtime-gateway.js";
 
 it.each(["fast", undefined])(
@@ -14,7 +14,6 @@ it.each(["fast", undefined])(
       name: "fixture/extract",
       pluginId: "fixture",
       description: "model binding fixture",
-      pluginType: "plugin",
       runtimeType: "function",
       stage: "narrative",
       trigger: { type: "auto" },
@@ -68,7 +67,7 @@ it.each(["fast", undefined])(
       },
     };
     const resolveModel = vi.fn(() => "session-override");
-    const result = await executeTurn(
+    const result = await runTurnPipeline(
       {
         origin: "player",
         sessionId: "session-model",

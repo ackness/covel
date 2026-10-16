@@ -25,6 +25,35 @@ function event(
 }
 
 describe("authoritative execution recovery", () => {
+  it("recovers setup stage from persisted starts and preserves it through terminal-only refreshes", () => {
+    const steps = buildSnapshotExecutionSteps([
+      event("runtime.failed", { error: "401 Unauthorized" }),
+      event("runtime.started", { stage: "setup" }),
+    ]);
+    expect(steps).toEqual([
+      expect.objectContaining({ stage: "setup", status: "failed" }),
+    ]);
+    // The browser cache retains metadata even if a later trace window only has the terminal.
+    expect(
+      reconcileExecutionSteps(steps, [
+        event("runtime.completed", { status: "success" }),
+      ]),
+    ).toEqual([
+      expect.objectContaining({ stage: "setup", status: "completed" }),
+    ]);
+  });
+
+  it.each([undefined, "invalid-stage", { stage: "setup" }])(
+    "does not assign setup to a trace with missing or invalid stage: %j",
+    (stage) => {
+      expect(
+        buildSnapshotExecutionSteps([
+          event("runtime.started", { stage }),
+          event("runtime.failed", { error: "401 Unauthorized" }),
+        ])[0]?.stage,
+      ).toBeUndefined();
+    },
+  );
   it("restores why a runtime was skipped after refresh", () => {
     expect(
       buildSnapshotExecutionSteps([
@@ -44,15 +73,21 @@ describe("authoritative execution recovery", () => {
   it.each(["quota", "auth", "unknown"])(
     "restores the %s remedy after refresh",
     (errorKind) => {
+      const failureTarget = { provider: "deepseek", model: "failed-model" };
       expect(
         buildSnapshotExecutionSteps([
-          event("runtime.failed", { errorKind, error: "provider detail" }),
+          event("runtime.failed", {
+            errorKind,
+            error: "provider detail",
+            failureTarget,
+          }),
         ]),
       ).toEqual([
         expect.objectContaining({
           status: "failed",
           errorKind,
           detail: "provider detail",
+          failureTarget,
         }),
       ]);
     },

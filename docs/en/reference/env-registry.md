@@ -32,7 +32,6 @@ Every variable belongs to a group (`group`):
 | status      | Meaning                                                                    |
 | ----------- | -------------------------------------------------------------------------- |
 | `active`    | The code already reads it. It is the current setting                       |
-| `planned`   | A planned switch. Setting it now has no effect                             |
 | `packaging` | The packaging tools read it. The app itself usually just passes it through |
 
 ## What each file is for
@@ -339,7 +338,6 @@ The variables below are also in `registry.ts`. For variables whose use is alread
 | `COVEL_AUTO_SNAPSHOT_RETENTION`  | `20`                                         | How many automatic snapshots are kept for each session                                       |
 | `COVEL_TRACE_RETENTION_DAYS`     | `30`                                         | How many days traces and event logs are kept                                                 |
 | `COVEL_PLUGIN_LOG_LEVEL`         | `debug` in development, `info` in production | Lowest level of plugin logs that are written to storage                                      |
-| `COVEL_TRACE_TRUNCATE`           | `false` (`planned`)                          | Planned trace truncation switch. Do not rely on it now                                       |
 
 For details of these switches, see [Runtime Contract](#runtime-contract).
 
@@ -352,8 +350,6 @@ For details of these switches, see [Runtime Contract](#runtime-contract).
 | `COVEL_RANDOM_SEED`                                   | —                               | For server tests only: `ctx.random` in plugins gives the same numbers on every run                                |
 | `CI`                                                  | `false`                         | CI mode. Affects how lint and Playwright behave                                                                   |
 | `LIVE_LLM_ENABLED`                                    | `false`                         | Turns on tests that call real providers                                                                           |
-| `BASE_URL`                                            | `http://localhost:5173`         | Front-end address that the README screenshot script visits                                                        |
-| `SESSION_ID`                                          | —                               | Session ID used by the README screenshot script                                                                   |
 | `COVEL_PG_PREFLIGHT_HOST` / `COVEL_PG_PREFLIGHT_PORT` | `127.0.0.1` / `5432`            | Target of the TCP check before `dev:pg` starts                                                                    |
 | `COVEL_PG_PREFLIGHT_SKIP`                             | `false`                         | Set to `1` to skip the TCP check of `dev:pg`                                                                      |
 

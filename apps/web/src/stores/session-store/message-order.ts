@@ -9,21 +9,38 @@ import type { StreamMessage } from "./types.js";
 export function orderStoryBeforePluginMessages(
   messages: StreamMessage[],
 ): StreamMessage[] {
-  let ordered = messages;
-  for (let index = 0; index < ordered.length; index += 1) {
-    const story = ordered[index]!;
-    if (story.kind !== "story" || !story.turnId) continue;
-    const early = ordered
-      .slice(0, index)
-      .filter(
-        (message) =>
-          message.turnId === story.turnId && message.kind === "plugin-message",
-      );
-    if (early.length === 0) continue;
-    const moved = new Set(early);
-    const before = ordered.slice(0, index).filter((m) => !moved.has(m));
-    ordered = [...before, story, ...early, ...ordered.slice(index + 1)];
-    index = before.length;
+  const pluginTurns = new Set<string>();
+  const lastStoryIndex = new Map<string, number>();
+  let needsMove = false;
+  for (const [index, message] of messages.entries()) {
+    if (!message.turnId) continue;
+    if (message.kind === "plugin-message") pluginTurns.add(message.turnId);
+    if (message.kind === "story") {
+      lastStoryIndex.set(message.turnId, index);
+      if (pluginTurns.has(message.turnId)) needsMove = true;
+    }
+  }
+  if (!needsMove) return messages;
+
+  const ordered: StreamMessage[] = [];
+  const pending = new Map<string, StreamMessage[]>();
+  for (const [index, message] of messages.entries()) {
+    const turnId = message.turnId;
+    if (
+      turnId &&
+      message.kind === "plugin-message" &&
+      index < (lastStoryIndex.get(turnId) ?? -1)
+    ) {
+      const rows = pending.get(turnId) ?? [];
+      rows.push(message);
+      pending.set(turnId, rows);
+      continue;
+    }
+    ordered.push(message);
+    if (turnId && index === lastStoryIndex.get(turnId)) {
+      for (const row of pending.get(turnId) ?? []) ordered.push(row);
+      pending.delete(turnId);
+    }
   }
   return ordered;
 }

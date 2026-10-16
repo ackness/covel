@@ -153,7 +153,7 @@ export interface HostFacts {
   readonly storeBackend: StoreBackend;
 }
 
-export const OPERATOR_TOKEN_REQUIRED_CODE = "operator_token_required";
+const OPERATOR_TOKEN_REQUIRED_CODE = "operator_token_required";
 
 /**
  * Constant-time string comparison. Both inputs are hashed to fixed-length
@@ -342,7 +342,7 @@ export function deriveHostProfile(
  * Settings this environment cannot run with: a hosted tier without the
  * secrets it needs, and values the chosen form would silently ignore.
  */
-export function hostProfileProblems(env: RuntimeEnv): string[] {
+function hostProfileProblems(env: RuntimeEnv): string[] {
   const tier = env.deploymentTier;
   const hosted = tier !== "self";
   const problems: string[] = [];
@@ -421,7 +421,7 @@ export function hostProfileOf(c: Context): HostProfile {
 }
 
 /** The token from an `Authorization: Bearer <token>` header. */
-export function bearerToken(c: Context): string | undefined {
+function bearerToken(c: Context): string | undefined {
   const header = (c.req.header("authorization") ?? "").trim();
   return /^Bearer\s+(.+)$/i.exec(header)?.[1]?.trim() || undefined;
 }

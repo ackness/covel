@@ -3,8 +3,8 @@ import { createMemoryStore } from "@covel/store/memory";
 import { runtimeDoneTool, tool } from "@covel/tools";
 import { z } from "zod";
 import type { RuntimeManifest, RuntimeResult } from "@covel/shared";
-import type { LLMAdapter, LLMResponse } from "../src/llm/llm-adapter.js";
-import { executeTurn } from "../src/turn-executor/turn-executor.js";
+import type { LLMAdapter, LLMResponse } from "@covel/shared";
+import { runTurnPipeline } from "../src/turn-executor/turn-executor.js";
 import {
   executeTurn as executePreparedTurn,
   type ExecutionDeps,
@@ -72,7 +72,7 @@ async function run(
         },
       }),
     });
-  const result = await executeTurn(
+  const result = await runTurnPipeline(
     {
       sessionId: "session-story",
       turnId: "turn-story",
@@ -127,7 +127,7 @@ async function run(
               runtimeId: "extractor",
               runId: "extractor-run",
               turnId: "turn-story",
-              status: "failed",
+              status: "failed" as const,
               output: null,
               toolCalls: [],
             },

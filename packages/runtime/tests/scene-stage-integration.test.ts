@@ -27,11 +27,11 @@ import {
 } from "@covel/plugin-loader";
 import type { LoadedRuntime } from "@covel/plugin-loader";
 import { createEmitEventTool, type EventDirectoryLike } from "@covel/tools";
-import { executeTurn } from "../src/turn-executor/turn-executor.js";
+import { runTurnPipeline } from "../src/turn-executor/turn-executor.js";
 import type { TurnExecutorDeps } from "../src/turn-executor/turn-executor.js";
 import { createToolExecutor } from "../src/agent-loop/tool-executor.js";
 import { processRuntimeResult } from "../src/session/session-kernel.js";
-import type { LLMAdapter, LLMResponse } from "../src/llm/llm-adapter.js";
+import type { LLMAdapter, LLMResponse } from "@covel/shared";
 
 const PLUGINS_DIR = path.resolve(import.meta.dirname, "../../../plugins");
 const SESSION_ID = "sess-scene-stage-it";
@@ -164,7 +164,7 @@ describe("scene-stage: scene.set → resolver → stage/current (E → B integra
         turnId,
         playerMessage: "look around",
       };
-      const result = await executeTurn(
+      const result = await runTurnPipeline(
         turnInput,
         [emitterManifest, resolverManifest],
         deps,

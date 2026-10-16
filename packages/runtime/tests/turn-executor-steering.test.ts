@@ -7,10 +7,10 @@
 import { describe, it, expect } from "vitest";
 import type { RuntimeManifest, TurnInput } from "@covel/shared";
 import { createMemoryStore } from "@covel/store/memory";
-import { executeTurn } from "../src/turn-executor/turn-executor.js";
+import { runTurnPipeline } from "../src/turn-executor/turn-executor.js";
 import type { TurnExecutorDeps } from "../src/turn-executor/turn-executor.js";
 import { trackSteeringReaders } from "../src/turn-executor/turn-control.js";
-import type { LLMAdapter, LLMResponse } from "../src/llm/llm-adapter.js";
+import type { LLMAdapter, LLMResponse } from "@covel/shared";
 
 const narrator = {
   name: "narrator",
@@ -76,11 +76,11 @@ async function timelineOf(turnInput: TurnInput): Promise<string[]> {
       },
     },
   };
-  await executeTurn(turnInput, [narrator, ledger], deps, { maxSteps: 3 });
+  await runTurnPipeline(turnInput, [narrator, ledger], deps, { maxSteps: 3 });
   return timeline;
 }
 
-describe("executeTurn steering queue", () => {
+describe("runTurnPipeline steering queue", () => {
   it("closes the queue when the story runtime ends, before bookkeeping runs", async () => {
     expect(await timelineOf(input)).toEqual([
       "story-call",

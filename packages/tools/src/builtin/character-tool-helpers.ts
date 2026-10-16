@@ -1,10 +1,5 @@
 import { compareText } from "@covel/shared";
 import { modelFacingJson } from "@covel/plugin-handlers-utils";
-export {
-  mergeSchemaDefaults,
-  assertCharacterFields,
-  CharacterFieldValidationError,
-} from "@covel/plugin-handlers-utils";
 import type {
   AttributeDefinition,
   CharacterAttributeSchema,
@@ -14,7 +9,7 @@ import type {
 } from "@covel/shared";
 import { materializeWorldModel } from "@covel/shared";
 import { z, type ZodType } from "zod";
-import { buildFieldsZodFromSchema } from "../schema-to-zod.js";
+import { buildFieldsZodFromSchema } from "@covel/shared";
 
 /**
  * Minimal store interface needed by the character tools. Kept local to avoid

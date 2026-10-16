@@ -65,7 +65,7 @@ describe("char-creator plugin", () => {
 
     it("is a setup-stage core-plugin", () => {
       expect(manifest.stage).toBe("setup");
-      expect(manifest.pluginType).toBe("core-plugin");
+      expect(manifest).not.toHaveProperty("pluginType");
     });
 
     it("declares only create-character-form — character creation is performed by guard.js, not by the LLM", () => {
@@ -73,9 +73,9 @@ describe("char-creator plugin", () => {
       expect(root.entry).toBe("./server/index.js");
     });
 
-    it("requires one create-character-form call and stops immediately after success", () => {
+    it("requires a successful form and allows preview review before finishing", () => {
       expect(manifest.requireToolUse).toBe(true);
-      expect(manifest.completeAfterTools).toEqual(["create-character-form"]);
+      expect(manifest.completeAfterTools).toBeUndefined();
       expect(manifest.maxSteps).toBeUndefined(); // Inherit the framework budget.
       expect(manifest.maxRetries).toBe(3);
     });

@@ -51,6 +51,8 @@ This page lists every endpoint, request field, response, and error code. Use it 
 **Basic checks on the request body**
 
 - For endpoints that expect a JSON object, a `null`, an array, or a single value gets `400` at once. It never reaches the handler.
+- Lorebook writes, model listing, and model connection tests share JSON reading errors: invalid syntax returns `400 invalid_json_body`; a non-object returns `400 invalid_request_body`.
+- Session execution status, steering, stopping, and world data sync return `404 session_not_found` for a missing session. Plugin RPC validation identifies invalid fields; clients should not depend on the error text.
 - An approval decision first checks that `decision` and `scope` are valid values. Only then is the pending approval used up.
 - An event injection first checks that each identifier is a string and that `payload` is an object. Only then is the event published.
 
@@ -995,6 +997,8 @@ Both endpoints return `{ ok, runtimeId, state }`.
 | GET    | `/api/plugins/:id`            | Get plugin details and the full manifest development contract                                                                                        |
 | DELETE | `/api/plugins/:id`            | Uninstall a third-party plugin (deletes `~/.covel/plugins/<id>`)                                                                                     |
 | GET    | `/api/plugin-flows`           | Preview data for the pre-game flow (plugin list plus staged steps), shown on the session-prep screen                                                 |
+
+`GET /api/plugin-flows` entries in `plugins` and `steps` use `kind` (`core` or `plugin`) for the package category. They do not return `pluginType`.
 
 `DELETE /api/plugins/:id`:
 
@@ -2133,7 +2137,7 @@ Rules that apply in both cases:
       "kind": "scene",
       "name": {
         "zh-CN": "文艺部的春日下午",
-        "en": "Spring in the Literature Club"
+        "en": "A Spring Afternoon in the Literature Club"
       },
       "description": {
         "zh-CN": "旧社团楼三层的活动室里，稿纸、旧刊与海风等待下一次校稿。"
@@ -4725,7 +4729,7 @@ This endpoint also limits how often a client address can make requests (`RATE_LI
 
 #### `POST /api/events/emit`
 
-Injects an event into the event bus from outside. You can use it to trigger a runtime or to simulate a game event.
+Pushes an event into a session's event stream from outside. Clients subscribed to that session (the browser, the debug page) receive it, so you can use it to simulate a game event. It does not trigger a runtime.
 
 > [!IMPORTANT]
 > This endpoint is for debugging. When `NODE_ENV=production`, it is only available if `ENABLE_DEBUG_PAGE` is set. Otherwise it returns `403`.
@@ -4736,17 +4740,15 @@ Injects an event into the event bus from outside. You can use it to trigger a ru
 {
   "topic": "combat.start",
   "payload": { "enemyId": "goblin-01", "terrain": "forest" },
-  "sessionId": "mistport-a1b2c3d4",
-  "targetRuntime": "combat"
+  "sessionId": "mistport-a1b2c3d4"
 }
 ```
 
-| Field           | Type   | Required | Description                               |
-| --------------- | ------ | -------- | ----------------------------------------- |
-| `topic`         | string | Yes      | Event topic                               |
-| `payload`       | object | No       | Event payload. It must be an object       |
-| `sessionId`     | string | Yes      | Target session ID                         |
-| `targetRuntime` | string | No       | The runtime that should receive the event |
+| Field       | Type   | Required | Description                         |
+| ----------- | ------ | -------- | ----------------------------------- |
+| `topic`     | string | Yes      | Event topic                         |
+| `payload`   | object | No       | Event payload. It must be an object |
+| `sessionId` | string | Yes      | Target session ID                   |
 
 **Response**
 
@@ -5122,7 +5124,7 @@ The response is SSE. First come progress frames, and the generated world comes l
 
 | Field           | Type   | Required | Description                                                                                                                            |
 | --------------- | ------ | -------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| `concept`       | string | Yes      | A description of the world concept (up to 4000 characters). The synonym key `prompt` is also accepted                                  |
+| `concept`       | string | Yes      | A description of the world concept (up to 4000 characters), supplied as `concept`                                                      |
 | `locale`        | string | No       | The locale. The default is `zh-CN`                                                                                                     |
 | `model`         | string | No       | Model role or preset ID; defaults to `story`, following [model selection](./slots.md#actual-selection-priority)                        |
 | `saveTarget`    | string | No       | Where to save. The default is `server-file`. The allowed values are in the table below                                                 |

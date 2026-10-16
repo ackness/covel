@@ -5,21 +5,16 @@
  * through session-kernel.ts unless a caller intentionally needs this boundary.
  */
 
-import { normalizeUIRenderInstruction } from "@covel/shared";
-import type {
-  Proposal,
-  ProposalSource,
-  RuntimeEffects,
-  UIRenderInstruction,
+import { isRecord } from "../utils/is-record.js";
+import {
+  isUIRenderPartsInstruction,
+  normalizeUIRenderInstruction,
 } from "@covel/shared";
+import type { Proposal, ProposalSource, RuntimeEffects } from "@covel/shared";
 import {
   collectAssetGenerations,
   makeProposal,
 } from "../session/session-kernel-helpers.js";
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
-}
 
 /** A domain effect {@link normalizeOutput} cannot turn into a proposal. */
 export interface MalformedDomainEffect {
@@ -54,7 +49,12 @@ export function malformedDomainEffect(
   const blocks: unknown = effects.ui;
   if (!Array.isArray(blocks)) return undefined;
   for (const [index, block] of blocks.entries()) {
-    if (!isRecord(block) || !Array.isArray(block.parts)) continue;
+    if (!isRecord(block)) continue;
+    if (!Array.isArray(block.parts))
+      return {
+        type: "ui.render",
+        error: `effects.ui[${index}].parts is not an array`,
+      };
     const part = block.parts.findIndex((entry) => !isRecord(entry));
     if (part >= 0)
       return {
@@ -123,19 +123,12 @@ export function normalizeOutput(
   }
 
   const uiBlocks = (Array.isArray(effects.ui) ? effects.ui : []).filter(
-    isRecord,
+    isUIRenderPartsInstruction,
   );
   for (const [index, block] of uiBlocks.entries()) {
-    const fallbackId =
-      (typeof block.interactionId === "string" && block.interactionId) ||
-      (typeof block.id === "string" && block.id) ||
-      `ui-${index + 1}`;
     proposals.push(
       makeProposal("ui.render", source, turnId, sessionId, {
-        ...normalizeUIRenderInstruction(
-          block as unknown as UIRenderInstruction,
-          fallbackId,
-        ),
+        ...normalizeUIRenderInstruction(block, `ui-${index + 1}`),
       }),
     );
   }

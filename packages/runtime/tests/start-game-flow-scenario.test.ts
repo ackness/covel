@@ -3,10 +3,10 @@ import type { RuntimeManifest, TurnInput } from "@covel/shared";
 import { createMemoryStore } from "@covel/store/memory";
 import type { DataStore } from "@covel/store";
 import type { LoadedRuntime } from "@covel/plugin-loader";
-import { executeTurn } from "../src/turn-executor/turn-executor.js";
+import { runTurnPipeline } from "../src/turn-executor/turn-executor.js";
 import type { TurnExecutorDeps } from "../src/turn-executor/turn-executor.js";
 import { finalizeExecution } from "../src/commit/finalize-execution.js";
-import type { LLMAdapter, LLMResponse } from "../src/llm/llm-adapter.js";
+import type { LLMAdapter, LLMResponse } from "@covel/shared";
 
 /** Runtime results recorded on the turn's execution artifact(s). */
 async function turnRuntimeResults(
@@ -44,7 +44,6 @@ function fnManifest(
   return {
     name,
     pluginId: name.split("/")[0]!,
-    pluginType: "core-plugin",
     description: name,
     stage:
       priority <= 99
@@ -136,7 +135,7 @@ function makeRuntimeHarness(store: DataStore): {
                     type: "form",
                     interactionId: "form-char-creation",
                     narrativeTemplate: "Player {{name}} enters as {{concept}}.",
-                    fields: [{ id: "name", label: "Name", type: "text" }],
+                    fields: [{ name: "name", label: "Name", type: "text" }],
                   },
                 ],
               },
@@ -199,7 +198,7 @@ async function runTurn(
   input: Partial<TurnInput>,
 ) {
   const turnId = input.turnId ?? crypto.randomUUID();
-  const result = await executeTurn(
+  const result = await runTurnPipeline(
     {
       sessionId: "sess-start-flow",
       turnId,

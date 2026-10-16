@@ -11,7 +11,7 @@
  */
 
 import { and, asc, eq, inArray } from "drizzle-orm";
-import type { Column, SQL, Table } from "drizzle-orm";
+import type { Column, Table } from "drizzle-orm";
 
 import type { InsertValueBuilders } from "./insert-values.js";
 import type { JsonReader } from "./mappers.js";
@@ -85,12 +85,6 @@ export type SqlLifecycleRecords = Pick<
   | "listJobStatus"
   | "deleteJobStatus"
 >;
-
-/** `and(...conds)` over the defined predicates, or `undefined` when none. */
-function allOf(conds: readonly (SQL | undefined)[]): SQL | undefined {
-  const defined = conds.filter((c): c is SQL => c !== undefined);
-  return defined.length > 0 ? and(...defined) : undefined;
-}
 
 export function createSqlLifecycleRecords(
   deps: SqlLifecycleRecordsDeps,
@@ -190,7 +184,7 @@ export function createSqlLifecycleRecords(
       filter?: { readonly runtimeId?: string; readonly generation?: number },
     ): Promise<readonly SetupAttemptRecord[]> {
       const rows = await runner.select<SetupAttemptRow>(setupAttempts, {
-        where: allOf([
+        where: and(
           eq(setupAttempts.sessionId, sessionId),
           filter?.runtimeId !== undefined
             ? eq(setupAttempts.runtimeId, filter.runtimeId)
@@ -198,7 +192,7 @@ export function createSqlLifecycleRecords(
           filter?.generation !== undefined
             ? eq(setupAttempts.generation, filter.generation)
             : undefined,
-        ]),
+        ),
         orderBy: [
           asc(setupAttempts.startedAt),
           asc(byteOrder(setupAttempts.executionId)),
@@ -230,7 +224,7 @@ export function createSqlLifecycleRecords(
       filter?: { readonly progressScopeId?: string; readonly jobId?: string },
     ): Promise<readonly JobStatusRecord[]> {
       const rows = await runner.select<JobStatusRow>(jobStatus, {
-        where: allOf([
+        where: and(
           eq(jobStatus.sessionId, sessionId),
           filter?.progressScopeId !== undefined
             ? eq(jobStatus.progressScopeId, filter.progressScopeId)
@@ -238,7 +232,7 @@ export function createSqlLifecycleRecords(
           filter?.jobId !== undefined
             ? eq(jobStatus.jobId, filter.jobId)
             : undefined,
-        ]),
+        ),
         orderBy: [asc(byteOrder(jobStatus.jobId)), asc(jobStatus.sequence)],
       });
       return rows.map((row) => toJobStatusRecord(row, json));

@@ -32,11 +32,7 @@ import type { HookPipeline } from "./pipeline.js";
 import { cloneHookData } from "./hook-data.js";
 import type { HookContext, HookEvent, HookResult } from "./types.js";
 import type { TurnEmitter } from "../trace/turn-emitter.js";
-import type {
-  LLMMessage,
-  LLMResponse,
-  LLMToolDefinition,
-} from "../llm/llm-adapter.js";
+import type { LLMMessage, LLMResponse, LLMToolDefinition } from "@covel/shared";
 
 // ── Shared options ───────────────────────────────────────────────
 
@@ -216,7 +212,7 @@ export interface PreSchedulePayload {
  * drop or reorder runtimes but can never inject a manifest that was not
  * selected, nor swap a selected runtime's manifest for a mutated copy —
  * downstream trust decisions and the runtime loader key off manifest fields
- * (`pluginId`, `pluginType`), which a fabricated manifest could forge to run
+ * (`pluginId`), which a fabricated manifest could forge to run
  * community handlers with builtin identity.
  *
  * `abort` has no defined meaning for PreSchedule and is treated as "no

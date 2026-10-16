@@ -19,7 +19,7 @@ import type { LoadedRuntime, PluginRuntimeGateway } from "@covel/plugin-loader";
 import { type DataStore } from "@covel/store";
 import { createMemoryStore } from "@covel/store/memory";
 import { createEventBus, type EventBus } from "@covel/events";
-import { executeTurn } from "../src/turn-executor/turn-executor.js";
+import { runTurnPipeline } from "../src/turn-executor/turn-executor.js";
 import { collectExecutionJournal } from "../src/execution-journal.js";
 import type { TurnExecutorDeps } from "../src/turn-executor/turn-executor.js";
 import {
@@ -34,7 +34,6 @@ function makeFunctionManifest(
     name: "fn-plugin",
     description: "fn-plugin",
     pluginId: "fn-plugin",
-    pluginType: "plugin",
     stage: "narrative",
     trigger: { type: "auto" },
     model: "gpt-4o-mini",
@@ -134,7 +133,7 @@ describe("function-runtime trace", () => {
       },
     };
 
-    await executeTurn(
+    await runTurnPipeline(
       makeTurnInput(),
       [loaded.manifest],
       makeDeps(loaded, { emitter }),
@@ -164,7 +163,7 @@ describe("function-runtime trace", () => {
       }),
     };
 
-    const result = await executeTurn(
+    const result = await runTurnPipeline(
       makeTurnInput(),
       [loaded.manifest],
       makeDeps(loaded),
@@ -190,7 +189,7 @@ describe("function-runtime trace", () => {
       }),
     };
 
-    await executeTurn(
+    await runTurnPipeline(
       makeTurnInput(),
       [loaded.manifest],
       makeDeps(loaded, { emitter }),
@@ -210,7 +209,7 @@ describe("function-runtime trace", () => {
       },
     };
 
-    const result = await executeTurn(
+    const result = await runTurnPipeline(
       makeTurnInput(),
       [loaded.manifest],
       makeDeps(loaded, { emitter }),
@@ -233,7 +232,7 @@ describe("function-runtime trace", () => {
       },
     };
 
-    const result = await executeTurn(
+    const result = await runTurnPipeline(
       makeTurnInput(),
       [loaded.manifest],
       makeDeps(loaded, { emitter }),
@@ -253,7 +252,7 @@ describe("function-runtime trace", () => {
       promptTemplate: "",
     } as LoadedRuntime;
 
-    const result = await executeTurn(
+    const result = await runTurnPipeline(
       makeTurnInput(),
       [loaded.manifest],
       makeDeps(loaded),
@@ -278,7 +277,7 @@ describe("function-runtime trace", () => {
       },
     };
 
-    await executeTurn(
+    await runTurnPipeline(
       makeTurnInput(),
       [loaded.manifest],
       makeDeps(loaded, { emitter, gateway: rawGateway }),
@@ -309,7 +308,7 @@ describe("function-runtime trace", () => {
       },
     };
 
-    await executeTurn(
+    await runTurnPipeline(
       makeTurnInput(),
       [loaded.manifest],
       makeDeps(loaded, { gateway: rawGateway }),
@@ -348,7 +347,7 @@ describe("function-runtime trace", () => {
     };
 
     const { emitter } = captureEmitter();
-    await executeTurn(
+    await runTurnPipeline(
       makeTurnInput(),
       [loaded.manifest],
       makeDeps(loaded, { emitter }),
@@ -382,7 +381,7 @@ describe("function-runtime trace", () => {
       },
     };
 
-    await executeTurn(
+    await runTurnPipeline(
       makeTurnInput(),
       [loaded.manifest],
       makeDeps(loaded, { emitter, gateway: rawGateway }),

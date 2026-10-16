@@ -3,12 +3,12 @@
     {
       "label": "relationships",
       "displayName": "Relationships",
-      "extractionHint": "What actually happened between each character and the player: which line or moment changed the distance, and what they said or held back. Affection lives in the affinity panel and stage/trust/pressure in the Heart Routes dimension; record memorable details here, not numbers."
+      "extractionHint": "What has actually happened between each character and the player: which line or which moment changed the distance between them, and what they said or kept to themselves. Affection is tracked in the affinity panel, and stage, trust and pressure in the Heart Routes dimension; write only the details worth remembering here, never the numbers."
     },
     {
       "label": "campus_schedule",
       "displayName": "Campus Schedule",
-      "extractionHint": "Current location, weather, next bell or campus closing appointment, likely characters and scheduled destinations. The world-time plugin owns the current date and phase; do not maintain a second clock in memory."
+      "extractionHint": "The current location and weather, the next bell or plan for closing time, which characters could naturally turn up, and where anyone has arranged to go. The world-time plugin owns the current date and time of day; do not keep a second clock in memory."
     }
   ]
 }

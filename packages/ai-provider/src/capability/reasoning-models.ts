@@ -17,7 +17,7 @@ import { z } from "zod";
 import type { ModelFeature, ProviderProtocol } from "../types.js";
 import bundledData from "./reasoning-models.data.json" with { type: "json" };
 
-export const REASONING_PROVIDER_FAMILIES = [
+const REASONING_PROVIDER_FAMILIES = [
   "openai",
   "anthropic",
   "deepseek",
@@ -110,7 +110,7 @@ const familySchema = z.strictObject({
   rules: z.array(ruleSchema).optional(),
 });
 
-export const reasoningModelsFileSchema = z.strictObject({
+const reasoningModelsFileSchema = z.strictObject({
   families: z.array(familySchema),
 });
 

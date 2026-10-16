@@ -6,9 +6,9 @@ import type {
 } from "@covel/shared";
 import { type DataStore } from "@covel/store";
 import { createMemoryStore } from "@covel/store/memory";
-import { executeTurn } from "../src/turn-executor/turn-executor.js";
+import { runTurnPipeline } from "../src/turn-executor/turn-executor.js";
 import type { TurnExecutorDeps } from "../src/turn-executor/turn-executor.js";
-import type { LLMAdapter, LLMResponse } from "../src/llm/llm-adapter.js";
+import type { LLMAdapter, LLMResponse } from "@covel/shared";
 
 class NoopLLM implements LLMAdapter {
   async generate(): Promise<LLMResponse> {
@@ -57,7 +57,7 @@ async function runWithOrigin(
   phase: "setup" | "playing" = "playing",
 ): Promise<{
   store: DataStore;
-  result: Awaited<ReturnType<typeof executeTurn>>;
+  result: Awaited<ReturnType<typeof runTurnPipeline>>;
 }> {
   const store = await freshActiveStore("s", phase);
   const input: TurnInput = {
@@ -67,7 +67,7 @@ async function runWithOrigin(
     origin,
     ...(origin === "player" ? { logicalTurnId: "logical-1" } : {}),
   };
-  const result = await executeTurn(input, [], depsFor(store));
+  const result = await runTurnPipeline(input, [], depsFor(store));
   return { store, result };
 }
 
@@ -122,8 +122,8 @@ describe("executionId", () => {
       playerMessage: "",
       origin: "manual",
     } as const;
-    const r1 = await executeTurn({ ...base, turnId: "t1" }, [], deps);
-    const r2 = await executeTurn({ ...base, turnId: "t2" }, [], deps);
+    const r1 = await runTurnPipeline({ ...base, turnId: "t1" }, [], deps);
+    const r2 = await runTurnPipeline({ ...base, turnId: "t2" }, [], deps);
     expect(r1.executionContext.executionId).toBeTruthy();
     expect(r1.executionContext.executionId).not.toBe(
       r2.executionContext.executionId,

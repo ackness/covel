@@ -1,5 +1,6 @@
+import type { RuntimeStatus } from "@covel/shared";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { executeTurn } from "../src/turn-executor/turn-executor.js";
+import { runTurnPipeline } from "../src/turn-executor/turn-executor.js";
 import { createEventBus, type EventBus } from "@covel/events";
 import { createMemoryStore } from "@covel/store/memory";
 import { createSqliteStore } from "@covel/store/sqlite";
@@ -96,8 +97,8 @@ async function finalize(
   store: DataStore,
   update?: Proposal | readonly Proposal[],
   options: {
-    trackerStatus?: string;
-    irStatus?: string;
+    trackerStatus?: RuntimeStatus;
+    irStatus?: RuntimeStatus;
     records?: Record<string, DimensionRecord>;
     eventBus?: EventBus;
   } = {},
@@ -116,7 +117,7 @@ async function finalize(
     runtimeId: string,
     pluginId: string,
     output: Record<string, unknown>,
-    status = "success",
+    status: RuntimeStatus = "success",
   ) => ({
     runtimeId,
     pluginId,
@@ -228,15 +229,13 @@ for (const [backend, create] of [
     it("records the settlement event once when it is published", async () => {
       const store = await setup(create);
       const eventBus = createEventBus(store);
+      const published: string[] = [];
+      eventBus.onEmit((event) => published.push(event.type));
       const failures = vi.spyOn(console, "error");
       await finalize(store, undefined, { eventBus });
       await eventBus.flush();
       expect(
-        (await store.listEvents("s")).filter(
-          (event) =>
-            (event.payload as { _subType?: string })._subType ===
-            "dimensions.settlement.changed",
-        ),
+        published.filter((type) => type === "dimensions.settlement.changed"),
       ).toHaveLength(1);
       expect(failures).not.toHaveBeenCalled();
       failures.mockRestore();
@@ -278,7 +277,7 @@ for (const [backend, create] of [
       expect(await receipt(store)).toMatchObject({ status: "no-change" });
       expect(await record(store)).toMatchObject({ value: 0, version: 1 });
     });
-    it.each(["failed", "skipped", "success"])(
+    it.each(["failed", "skipped", "success"] as const)(
       "registers debt even when tracker is %s or never submits a proposal",
       async (trackerStatus) => {
         const store = await setup(create);
@@ -295,6 +294,7 @@ for (const [backend, create] of [
         ).toBe(true);
         expect(
           await dimensionExecutionBarrier({
+            session: await store.getSession("s"),
             store,
             sessionId: "s",
             runtimes,
@@ -303,6 +303,7 @@ for (const [backend, create] of [
         ).toContain("pending");
         expect(
           await dimensionExecutionBarrier({
+            session: await store.getSession("s"),
             store,
             sessionId: "s",
             runtimes,
@@ -357,6 +358,7 @@ for (const [backend, create] of [
         expect(await receipt(store)).toMatchObject({ status: settlement });
         expect(
           await dimensionExecutionBarrier({
+            session: await store.getSession("s"),
             store,
             sessionId: "s",
             runtimes,
@@ -376,6 +378,7 @@ for (const [backend, create] of [
       expect(await record(store)).toMatchObject({ value: 3 });
       expect(
         await dimensionExecutionBarrier({
+          session: await store.getSession("s"),
           store,
           sessionId: "s",
           runtimes,
@@ -479,7 +482,7 @@ for (const [backend, create] of [
           pluginId,
           runId: runtimeId === "story" ? "narrative-result" : runtimeId,
           turnId: "t",
-          status: "success",
+          status: "success" as const,
           output,
         });
         return finalizeExecution({
@@ -676,7 +679,7 @@ describe("story gate on the dimension provider", () => {
   ) => {
     const store = await setup();
     const seen: unknown[] = [];
-    const result = await executeTurn(
+    const result = await runTurnPipeline(
       {
         origin: "player",
         sessionId: "s",
@@ -740,7 +743,7 @@ describe("story gate on the dimension provider", () => {
     // plugin runs, and no world-context provider answers.
     const store = await setup();
     const seen: unknown[] = [];
-    const result = await executeTurn(
+    const result = await runTurnPipeline(
       { origin: "player", sessionId: "s", turnId: "t", playerMessage: "go" },
       manifests(false).filter((manifest) => manifest.pluginId === "story"),
       {
@@ -781,13 +784,16 @@ describe("dimension execution barrier", () => {
       outputContract: DIMENSION_CONTRACT,
     }) as RuntimeManifest;
   const story = runtimes.filter((runtime) => runtime.pluginId === "story");
-  const barrier = async (active: readonly RuntimeManifest[]) =>
-    dimensionExecutionBarrier({
-      store: await setup(),
+  const barrier = async (active: readonly RuntimeManifest[]) => {
+    const store = await setup();
+    return dimensionExecutionBarrier({
+      session: await store.getSession("s"),
+      store,
       sessionId: "s",
       runtimes: active,
       willNarrate: true,
     });
+  };
 
   it("lets the story run when the bound provider is not running", async () => {
     expect(await barrier(story)).toBeUndefined();
@@ -845,7 +851,7 @@ describe("settlement receipt retention", () => {
             runtimeId: "story",
             turnId: "t",
             runId: "new",
-            status: "success",
+            status: "success" as const,
             output: null,
           },
         ],

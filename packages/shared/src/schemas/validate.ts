@@ -5,6 +5,7 @@
  * and world.yaml files with structured error reporting.
  */
 
+import { isRecord } from "../utils/is-record.js";
 import type { ZodError, ZodType } from "zod";
 import { pluginManifestSchema } from "./plugin-manifest.js";
 import {
@@ -15,7 +16,7 @@ import {
 import {
   dimensionIdSchema,
   worldDimensionDefinitionSchema,
-} from "./dimensions.js";
+} from "@covel/plugin-handlers-utils/dimensions";
 
 // ── Validation result ───────────────────────────────────────────
 
@@ -77,9 +78,6 @@ export function validatePluginManifest(
   return validate(pluginManifestSchema, data);
 }
 
-const isObject = (value: unknown): value is Record<string, unknown> =>
-  value !== null && typeof value === "object" && !Array.isArray(value);
-
 /**
  * Validate a world.yaml manifest object.
  *
@@ -93,7 +91,7 @@ export function validateWorldManifest(
   data: unknown,
   options?: { ignoreUnknownRootFields?: boolean },
 ): ManifestValidationResult {
-  if (!options?.ignoreUnknownRootFields || !isObject(data))
+  if (!options?.ignoreUnknownRootFields || !isRecord(data))
     return validate(worldManifestSchema, data);
   const ignoredFields = Object.keys(data).filter(
     (key) => !Object.hasOwn(worldManifestSchema.shape, key),
@@ -102,7 +100,7 @@ export function validateWorldManifest(
   let manifest = data;
   if (data.pluginPolicy !== undefined) {
     const { pluginPolicy: written, ...rest } = data;
-    const known = isObject(written)
+    const known = isRecord(written)
       ? Object.fromEntries(
           Object.entries(written).filter(([key]) => {
             if (Object.hasOwn(worldPluginPolicySchema.shape, key)) return true;

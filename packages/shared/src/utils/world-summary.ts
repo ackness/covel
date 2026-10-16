@@ -1,5 +1,5 @@
 import type { World } from "../types/world.js";
-import { WORLD_LOCALIZED_TEXT_KEY } from "./i18n.js";
+import { WORLD_LOCALIZED_TEXT_KEY } from "@covel/plugin-handlers-utils";
 
 /**
  * The `metadata` keys a world summary keeps: what the world list, a world

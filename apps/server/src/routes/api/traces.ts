@@ -2,6 +2,7 @@
  * API Trace routes — read-only endpoints for debug trace inspection.
  */
 
+import { isRecord } from "../../lib/is-record.js";
 import { compareText } from "@covel/shared";
 import { Hono, type Context } from "hono";
 import type { DataStore, TraceEventRecord } from "@covel/store";
@@ -499,10 +500,6 @@ function readNumber(
   return typeof value === "number" && Number.isFinite(value)
     ? value
     : undefined;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function hasOwn(

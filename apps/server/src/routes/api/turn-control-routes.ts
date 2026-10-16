@@ -23,10 +23,7 @@ import {
   steerActiveTurn,
   type SteerRefusal,
 } from "./turn-control.js";
-import {
-  checkSessionOwner,
-  sessionIncarnationIdentity,
-} from "./session/session-guard.js";
+import { resolveSessionById } from "./session/session-guard.js";
 import { getSessionExecutionStatus } from "./actions/execution-recovery.js";
 
 type Env = {
@@ -45,14 +42,8 @@ export const turnControlRoutes = new Hono<Env>();
 turnControlRoutes.get("/:id/execution", async (c) => {
   const sessionId = c.req.param("id");
   const store = c.get("store");
-  const session = await store.getSession(sessionId);
-  if (!session) return c.json(errorBody("Session not found"), 404);
-  const denied = checkSessionOwner(c, session);
-  if (denied) return denied;
-  c.set("sessionReadIncarnation", {
-    sessionId,
-    identity: sessionIncarnationIdentity(session),
-  });
+  const guard = await resolveSessionById(c, sessionId);
+  if (!guard.ok) return guard.response;
   return c.json(
     await getSessionExecutionStatus(store, sessionId, c.get("sessionLock")),
   );
@@ -60,7 +51,6 @@ turnControlRoutes.get("/:id/execution", async (c) => {
 
 turnControlRoutes.post("/:id/steer", rateLimiter({ max: 30 }), async (c) => {
   const sessionId = c.req.param("id");
-  const store = c.get("store");
   const body = await c.req
     .json<{ message?: unknown }>()
     .catch(() => null as { message?: unknown } | null);
@@ -68,13 +58,8 @@ turnControlRoutes.post("/:id/steer", rateLimiter({ max: 30 }), async (c) => {
   if (!message) {
     return c.json(errorBody("message (non-empty string) is required"), 400);
   }
-  const session = await store.getSession(sessionId);
-  if (!session) {
-    return c.json(errorBody("Session not found"), 404);
-  }
-  // Owner guard (hosted tiers).
-  const denied = checkSessionOwner(c, session);
-  if (denied) return denied;
+  const guard = await resolveSessionById(c, sessionId);
+  if (!guard.ok) return guard.response;
 
   const steered = steerActiveTurn(sessionId, message);
   if ("refused" in steered) {
@@ -93,14 +78,8 @@ turnControlRoutes.post("/:id/steer", rateLimiter({ max: 30 }), async (c) => {
 
 turnControlRoutes.post("/:id/abort", rateLimiter({ max: 30 }), async (c) => {
   const sessionId = c.req.param("id");
-  const store = c.get("store");
-  const session = await store.getSession(sessionId);
-  if (!session) {
-    return c.json(errorBody("Session not found"), 404);
-  }
-  // Owner guard (hosted tiers).
-  const denied = checkSessionOwner(c, session);
-  if (denied) return denied;
+  const guard = await resolveSessionById(c, sessionId);
+  if (!guard.ok) return guard.response;
 
   const aborted = abortActiveTurn(sessionId);
   if (!aborted) {

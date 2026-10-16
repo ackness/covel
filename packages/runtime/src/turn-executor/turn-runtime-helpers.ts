@@ -42,11 +42,7 @@ export function emitSubEvent(
 /**
  * Trust is derived EXCLUSIVELY from the immutable discovery registry
  * (`getPluginSource` — set from the plugin's load path at boot, never from
- * plugin-supplied data). The old fallback trusted the manifest's own
- * `pluginType === "core-plugin"` claim, which is author-supplied and was
- * reachable with a forged manifest — handing untrusted code the full
- * un-scoped DataStore. No registry answer ⇒
- * NOT trusted; callers without a `getPluginSource` dep get the scoped
+ * plugin-supplied data). Without a registry answer callers get the scoped
  * capability view, which is the safe default.
  */
 export function isTrustedPluginSource(

@@ -1,6 +1,6 @@
 routes:
   name: Heart Routes
-  description: Relationship stage, trust, and pressure with each romanceable character. Affection itself lives in the affinity panel.
+  description: Relationship stage, trust, and pressure with each of the five romanceable characters. How much they like the player (affection) is tracked in the affinity panel.
   schema:
     properties:
       mio:
@@ -9,10 +9,10 @@ routes:
           stage:
             title: Stage
             x-enumLabels:
-              acquaintance: Acquaintance
-              familiar: Familiar
-              heartbeat: Heartbeat
-              confession-eve: Confession eve
+              acquaintance: Just met
+              familiar: Friends
+              heartbeat: Crush
+              confession-eve: On the verge
               together: Together
           trust:
             title: Trust
@@ -24,10 +24,10 @@ routes:
           stage:
             title: Stage
             x-enumLabels:
-              acquaintance: Acquaintance
-              familiar: Familiar
-              heartbeat: Heartbeat
-              confession-eve: Confession eve
+              acquaintance: Just met
+              familiar: Friends
+              heartbeat: Crush
+              confession-eve: On the verge
               together: Together
           trust:
             title: Trust
@@ -39,10 +39,10 @@ routes:
           stage:
             title: Stage
             x-enumLabels:
-              acquaintance: Acquaintance
-              familiar: Familiar
-              heartbeat: Heartbeat
-              confession-eve: Confession eve
+              acquaintance: Just met
+              familiar: Friends
+              heartbeat: Crush
+              confession-eve: On the verge
               together: Together
           trust:
             title: Trust
@@ -54,10 +54,10 @@ routes:
           stage:
             title: Stage
             x-enumLabels:
-              acquaintance: Acquaintance
-              familiar: Familiar
-              heartbeat: Heartbeat
-              confession-eve: Confession eve
+              acquaintance: Just met
+              familiar: Friends
+              heartbeat: Crush
+              confession-eve: On the verge
               together: Together
           trust:
             title: Trust
@@ -69,19 +69,19 @@ routes:
           stage:
             title: Stage
             x-enumLabels:
-              acquaintance: Acquaintance
-              familiar: Familiar
-              heartbeat: Heartbeat
-              confession-eve: Confession eve
+              acquaintance: Just met
+              familiar: Friends
+              heartbeat: Crush
+              confession-eve: On the verge
               together: Together
           trust:
             title: Trust
           pressure:
             title: Pressure
-  updateRule: Settle only interactions this turn's narrative explicitly shows between the player and that character. Trust +1 for keeping a promise, remembering a detail, respecting a silence, or being trusted with a secret. Pressure +1 for public favoritism, a joke that crosses a line, pushing for feelings, or leaving them to carry something alone; pressure -1 for sharing the load or clearing up a misunderstanding. Stage advances one step only after a memorable event — finishing something together, a shared secret, a resolved misunderstanding, or an explicit promise — and only with trust of at least 1 (to familiar), 2 (to heartbeat), or 4 (to confession eve). Together is reached only on or after festival day, when both explicitly confirm their feelings. Never skip stages or advance on numbers alone; real hurt can drop one stage. Affection is not tracked here.
+  updateRule: Settle only interactions between the player and that character that this turn's narrative actually shows. trust +1 for keeping a promise, remembering a detail, respecting a silence, or sharing a secret. pressure +1 for favoritism in public, a joke that goes too far, pushing for their feelings, or leaving them to carry something alone; pressure -1 for sharing the load or clearing up a misunderstanding. stage moves up one step only after a memorable event — something finished together, a secret shared, a misunderstanding cleared up, or an explicit promise — and only when trust is at least 1 for acquaintance → familiar, 2 for familiar → heartbeat, and 4 for heartbeat → confession-eve. together is reached only on or after festival day, when both of them explicitly confirm their feelings. Never skip a stage or move up on numbers alone; real hurt can drop the stage by one. Affection is not tracked here.
 festival:
   name: Festival Prep
-  description: Progress on the four festival projects and the countdown milestones. The days remaining come from world time.
+  description: Progress on the four festival projects and the countdown milestones. The number of days left comes from world time.
   schema:
     properties:
       projects:
@@ -97,7 +97,7 @@ festival:
                 x-enumLabels:
                   on-track: On track
                   struggling: Struggling
-                  blocked: Blocked
+                  blocked: Stuck
                   done: Done
               note:
                 title: Latest
@@ -111,12 +111,12 @@ festival:
                 x-enumLabels:
                   on-track: On track
                   struggling: Struggling
-                  blocked: Blocked
+                  blocked: Stuck
                   done: Done
               note:
                 title: Latest
           rumorWall:
-            title: News Club Rumor Wall
+            title: Newspaper Club Fact-or-Rumor Wall
             properties:
               progress:
                 title: Progress
@@ -125,7 +125,7 @@ festival:
                 x-enumLabels:
                   on-track: On track
                   struggling: Struggling
-                  blocked: Blocked
+                  blocked: Stuck
                   done: Done
               note:
                 title: Latest
@@ -139,7 +139,7 @@ festival:
                 x-enumLabels:
                   on-track: On track
                   struggling: Struggling
-                  blocked: Blocked
+                  blocked: Stuck
                   done: Done
               note:
                 title: Latest
@@ -147,21 +147,21 @@ festival:
         title: Milestones
         properties:
           budgetReview:
-            title: D-14 Budget review
+            title: D-14 First budget review
             x-enumLabels:
               upcoming: Upcoming
               passed: Passed
               rough: Scraped by
               missed: Missed
           midCheck:
-            title: D-10 Exams & draft check
+            title: D-10 Exams & manuscript check
             x-enumLabels:
               upcoming: Upcoming
               passed: Passed
               rough: Scraped by
               missed: Missed
           stagePreview:
-            title: D-7 Stage preview
+            title: D-7 Main-stage preview
             x-enumLabels:
               upcoming: Upcoming
               passed: Passed
@@ -182,7 +182,7 @@ festival:
               rough: Scraped by
               missed: Missed
           festivalDay:
-            title: Festival day & Lantern Lighting
+            title: Festival day & Evening Breeze Lanterns
             x-enumLabels:
               upcoming: Upcoming
               passed: Passed
@@ -191,17 +191,17 @@ festival:
   initialValue:
     projects:
       seaBreezePost:
-        note: The class approved the booth idea; nobody has sourced postcards yet.
+        note: The booth idea just got through homeroom; nobody has found the postcards yet.
       springMint:
-        note: Mio is carrying the contents and drafts alone; the club is short of members.
+        note: Mio is handling the table of contents and the manuscripts on her own; the club is short of members.
       rumorWall:
         note: Rin is collecting the first anonymous submissions.
       closingSong:
         note: Kaho's new song is still missing its last verse.
-  updateRule: Raise progress only when this turn's narrative shows the player or a character actually doing prep work — +5 to +10 for a concrete task, +15 for a whole collaborative session, +20 at most per turn; accidents, fights, or a rejected draft can lower it. Use blocked when stuck, struggling when clearly behind, and done with progress 100 when finished. Mark a milestone only after it happens on the page — passed, rough when it barely holds, missed when it slips. Days are tracked by world time, not here. Keep note to one sentence.
+  updateRule: Raise progress only when this turn's narrative shows the player or a character actually doing prep work — +5 to +10 for one concrete job, +15 for a whole stretch of working together, +20 at most in one turn; an accident, an argument, or a rejected manuscript can lower it. Set blocked when the work is stuck, struggling when it is clearly hard going, and done with progress 100 when it is finished. Mark a milestone only once it has actually happened in the narrative — passed when it goes well, rough when it barely scrapes through, missed when it is missed. Days are tracked by world time, not here. Keep note to one sentence about the latest news.
 clubReview:
   name: Literature Club Review
-  description: The Literature Club is on the merger list for lack of members. Spring Mint and the response to it are its last chance.
+  description: The Literature Club is on the merger list for lack of members. Spring Mint and how people respond to it are its last chance.
   schema:
     properties:
       status:
@@ -209,14 +209,14 @@ clubReview:
         x-enumLabels:
           under-review: Under review
           building-case: Building a case
-          hearing-passed: Passed the hearing
+          hearing-passed: Passed first review
           saved: Saved
           merged: Merged
       support:
         title: Support
       evidence:
-        title: Case points
-  updateRule: When the narrative shows concrete, public support — a new member, an old-issue story found, a good reaction to a Spring Mint preview, someone on the student council softening, signatures or letters — add 1–2 support and one sentence to evidence; a scandal, a missed deadline, or a fight going public can cost 1. Switch to building-case the first time someone actively prepares a defense. After the budget review happens on the page, set hearing-passed if support is 4 or more, otherwise stay under-review; after the festival set saved or merged by the final outcome. If Mio's secret about the renovation becomes public, record it in evidence.
+        title: Points in favor
+  updateRule: When the narrative shows the player or a character winning concrete support that can be made public — a new member joining, an old-issue story turning up, a good reaction to a Spring Mint preview, someone on the Student Council softening, signatures or letters — add 1–2 support and one sentence to evidence; a scandal, a missed deadline, or a conflict going public can cost 1. Switch to building-case the first time someone actively prepares to argue for the club's survival. After the first budget review happens in the narrative, set hearing-passed if support is 4 or more, otherwise leave it at under-review; after the festival, set saved or merged by the final outcome. If the truth about the renovation that Mio has been hiding comes out, record it in evidence.
 promises:
   name: Promises
   description: What you promised, to whom, and whether you kept it.
@@ -233,11 +233,11 @@ promises:
             pending: Pending
             kept: Kept
             broken: Broken
-            released: Released
-  updateRule: Add an entry (short English kebab-case ID, status pending) when the player explicitly agrees to something specific for a character this turn — walking home together, helping out, keeping a secret, showing up somewhere. Pleasantries and vague "maybe next time" do not count. Set kept when fulfilled on the page, broken when missed or betrayed, released when the other person clearly lets it go. Never delete entries.
+            released: Called off
+  updateRule: Add an entry when the player explicitly agrees to do something specific for a character in this turn's narrative — walking home together, helping out, keeping a secret, showing up somewhere — with a short English kebab-case ID and status pending. Polite noises and a vague "maybe next time" don't count. Set kept when it is fulfilled in the narrative, broken when it is missed or betrayed, and released when the other person clearly says it isn't needed anymore. Never delete entries.
 rumors:
   name: Campus Rumors
-  description: It is a small seaside town and rumors travel fast — who started it, who believes it, who moves closer or away because of it.
+  description: Seireki is small, and rumors travel fast — who said it first, who believes it, who moves closer or backs away because of it.
   schema:
     additionalProperties:
       properties:
@@ -256,12 +256,12 @@ rumors:
           title: Heat
   initialValue:
     vending-machine:
-      rumor: Whatever drink the vending machine drops at sunset reveals who you are thinking about.
+      rumor: Whatever drink the vending machine drops at sunset shows who you're thinking about.
     lit-window:
-      rumor: A clubhouse window still lit after six keeps someone's wish secret.
+      rumor: A Club Building window still lit after 18:00 keeps someone's wish secret.
     window-seat:
-      rumor: Akane only saves the window seat for someone special.
-  updateRule: Rumors move seed → spreading → heating → cleared, confirmed, or redirected, advancing only when the narrative shows them spread, cleared, or proven. Add a new rumor (short English kebab-case ID, stage seed, heat 1) the first time someone says it on the page — for example, one about the transfer student. Heat +1 for being seen alone together, obvious favoritism, or the News Club writing it down; heat -1 when Rin holds the story, someone disproves it through action, or a newer event buries it. Never make a rumor school-wide out of nowhere.
+      rumor: Toujou-senpai only saves the window seat for someone special.
+  updateRule: Rumors move seed → spreading → heating → cleared / confirmed / redirected, and advance only when the narrative clearly shows a rumor spreading, being cleared up, or being proven. Add a new rumor (for example, one about the transfer student) the first time someone says it in the narrative, with a short English kebab-case ID, stage seed, and heat 1. heat +1 for being seen alone together in public, obvious favoritism, or ending up in the Newspaper Club's notes; heat -1 when Rin sits on the story, the people involved clear it up through their actions, or a newer event pushes it out of the conversation. Never make a rumor known across the whole school out of nowhere.
 geography:
   name: Geography
   schema:
@@ -287,66 +287,66 @@ geography:
               title: Landmarks
         title: Regions
   initialValue:
-    overview: A private high school on a coastal slope in Seireki. The classroom building, Club Building, Library, station shopping streets, and the Sakurazaka path to the seawall form the main setting. Distances are short; choices between the lunch bell and the 6 PM closing broadcast determine whom you encounter, giving rise to chance meetings and rumors.
+    overview: A private high school on the seaside slopes of Seireki. Most of the story happens in the classroom building, the Club Building, the library, the shopping streets by the station, and Sakurazaka, the slope down to the seawall. Everything is close together, so the route the player picks between the lunch bell and the 18:00 closing announcement decides who they run into, and chance meetings and rumors happen naturally.
     regions:
       - name: Class 2-B
-        description: The class the player transfers into. The last seat by the window offers a view of the playground and the distant sea. Moments before morning reading, during ten-minute breaks, at the 12:20 PM lunch break, after 3:40 PM duty shifts, and before quizzes serve as starting points for conversation.
-        climate: Spring brings bright sunlight and ventilation, with sea breezes often rustling the curtains in the afternoon. On rainy days, glass fogs up, and classroom sounds become softer.
+        description: The class the player transfers into; from the back row by the window you can see the sports field and the sea in the distance. Before morning reading, the ten-minute breaks, lunch at 12:20, cleaning duty after 15:40, and the blank minutes before a quiz are all openings for a conversation.
+        climate: Airy and bright in spring, with a sea breeze often stirring the curtains in the afternoon; on rainy days the windows mist over and the classroom goes quiet.
         landmarks:
           - name: Window Seat
-            description: The player's initial seat. Mio Kamishiro places materials on the corner of the desk, while Rin Asakura often leans forward from the back row to strike up a conversation.
+            description: The player's first seat. Mio Kamishiro leaves papers on the corner of the desk, and Rin Asakura often leans over from the back row to start talking.
           - name: Bulletin Board by the Blackboard
-            description: Pinned here are the School Festival countdown, duty roster, club recruitment notices, makeup exam lists, and Sea Breeze Post booth assignments for Class 2-B. Altered schedules are the easiest source of misunderstandings.
+            description: Holds the festival countdown, the duty roster, club recruiting posters, the makeup-exam list, and Class 2-B's job sheet for the Sea Breeze Post booth. A changed duty roster is the easiest way to start a misunderstanding.
           - name: Back Row Lockers
-            description: Students stuff club flyers, borrowed manga, and notes with misspelled names in here.
+            description: Where classmates stuff club flyers, borrowed manga, and notes with somebody's name spelled wrong.
       - name: Club Building
-        description: An old three-story wooden building. After 4 PM, it fills with the sounds of various clubs. Lights must be turned off after the 6 PM closing broadcast. This is where the Literature Club's survival, Light Music Club rehearsals, and Student Council patrols intersect.
-        climate: It gets chilly in the evening. Hallways often carry instrument sounds, the scent of old paper, and coffee. After sunset, only a few windows remain lit with warm yellow light.
+        description: An old three-story wooden building. After 16:00 it fills with the sounds of every club, and in principle the lights must go off after the 18:00 closing announcement. This is where the Literature Club's survival, Light Music Club rehearsals, and Student Council patrols all meet.
+        climate: Chilly toward evening, with the sound of instruments, the smell of old paper, and a hint of coffee in the hallways; after sunset only a few windows still glow warm yellow.
         landmarks:
-          - name: Literature Club Activity Room
-            description: A small room at the end of the third floor, piled with old books, School Festival special issues, and handwritten manuscripts. They are rushing to produce a special issue titled *Spring Mint* while facing Merger Review.
+          - name: Literature Club Room
+            description: A small room at the end of the third floor, piled with old books, past festival special issues, and handwritten drafts. The club is rushing to finish its special issue, Spring Mint, while facing a merger review.
           - name: Light Music Club Practice Room
-            description: A practice room on the first floor near the playground. Soundproofing is mediocre, so guitar sounds leak into the hallway.
+            description: A practice room on the first floor, on the sports-field side. The soundproofing is so-so, and the guitar leaks out into the hallway.
           - name: Club Building Rooftop
-            description: A place where Yuma Shiraishi often lingers after his 5:40 PM patrol. From here, one can see the playground lights, the sea, and club windows that haven't gone dark yet.
-          - name: Second Floor Corridor Bulletin Board
-            description: The News Club posts interview recruitments, School Festival reporting plans, and briefs prone to sparking debate here.
+            description: Where Yuma Shiraishi often lingers after his 17:40 patrol. From here you can see the sports-field lights, the sea, and the club windows that are still lit.
+          - name: Second Floor Hallway Bulletin Board
+            description: Where the Newspaper Club puts up calls for interviewees, its plans for festival coverage, and short news items that get people talking.
       - name: Library
-        description: A two-story library behind the classroom building. Open from 12:20 PM to 1 PM and after school, closing at 5:30 PM. Window seats are illuminated by sea light in the afternoon, suitable for quiet conversations, tutoring, research, and Literature Club material gathering.
-        climate: Quiet and dry. In spring, there is often the scent of paper, wooden bookshelves, and mint candy.
+        description: A small two-story library behind the classroom building, open from 12:20 to 13:00 and after school, closing at 17:30. In the afternoon the window seats catch the light off the sea; it's a good place for quiet conversations, study sessions, looking things up, and Literature Club research.
+        climate: Quiet and dry; in spring it smells of paper, wooden shelves, and mint candy.
         landmarks:
-          - name: Second Floor Window Long Table
-            description: Mio likes proofreading manuscripts here, hiding her truly anxious expressions behind the pages.
-          - name: Old Journal Shelf
-            description: Archives past years' School Festival special issues. The oldest volume contains a signed page from Akane Toujou's sister's time, and Chihiro Onodera's student-era pen name is also hidden within.
-          - name: Lending Desk Note Box
-            description: Akane Toujou uses short sticky notes to remind people of return dates, reserve seats, or recommend the next book. Once familiar, the way she addresses you on the notes subtly changes.
+          - name: Second Floor Window Table
+            description: A long table where Mio likes to proofread manuscripts, and where she hides her real worry behind the pages.
+          - name: Back Issue Shelf
+            description: Keeps the festival special issues from every year. The oldest one holds the signature page Akane Toujou's sister left back then, and Chihiro Onodera's pen name from her student days is hidden in there too.
+          - name: Checkout Desk Note Box
+            description: Akane Toujou uses short notes to remind people of due dates, save seats, or recommend the next book. As she gets to know someone, the way she addresses them on the notes quietly changes.
       - name: Sakurazaka Seawall
-        description: A slope leading from the school gate to the seaside. Walking to the station takes about twelve minutes. Cherry blossoms line the path in spring. It is suitable for walking side-by-side after school, brief pauses, and saying things difficult to utter in the classroom.
-        climate: Windy. Pavement reflects light after rain. In the evening, one can hear waves and distant train sounds.
+        description: The slope from the school gate down to the sea, about a twelve-minute walk from the station, lined with cherry blossoms in spring. A place for walking side by side after school, stopping for a moment, and saying the things that are hard to say in the classroom.
+        climate: Windy; the pavement shines after rain, and in the evening you can hear the waves and a train in the distance.
         landmarks:
           - name: Vending Machine
-            description: Usually only lemon soda, mint soda, and canned hot coffee remain. A student rumor says that if you insert coins at sunset, the first drink dispensed reveals who you are thinking about.
+            description: Never seems to have anything left but lemon soda, mint soda, and canned hot coffee. Students say that if you put your coins in right at sunset, the first drink to drop shows who you're thinking about.
           - name: Seawall Bench
-            description: Kaho Shiina occasionally writes lyrics here, and Yuma Shiraishi sometimes takes a detour past this spot. One end of the bench always dries first after rain, sparking the rumor about 'seats saved for couples'.
+            description: Kaho Shiina sometimes writes lyrics here, and Yuma Shiraishi takes the long way round to pass by. After rain, one end of the bench always dries first, which started the rumor about "the seat saved for couples."
       - name: Seireki Town Shopping Street
-        description: Two short shopping streets in front of the station. After 5 PM, they fill with students leaving school. Bookstores, florists, family restaurants, music shops, and convenience stores form a daily haven outside campus, and jointly sponsor the Evening Wind Lighting ceremony closing the School Festival.
-        climate: Neon signs are bright in the evening. On rainy days, umbrellas and uniforms crowd under narrow eaves.
+        description: Two short shopping streets in front of the station that fill with students heading home after 17:00. The bookstore, florist, family restaurant, music shop, and convenience store are everyday hangouts off campus, and together they sponsor the Evening Breeze Lanterns that close the festival.
+        climate: Bright shop signs in the evening; on rainy days, umbrellas and school uniforms crowd under the narrow eaves.
         landmarks:
-          - name: Umineko Bookstore
-            description: An independent bookstore frequently visited by the Literature Club. The owner keeps School Festival publications from the past decade and provides the final batch of recycled paper for the *Spring Mint* special issue.
+          - name: Umineko Books
+            description: An independent bookstore the Literature Club often visits. The owner keeps ten years of festival publications and is supplying the last batch of recycled paper for the Spring Mint special issue.
           - name: Orange House Family Restaurant
-            description: Suitable for group meetups, tutoring, and disguising serious topics as casual dining chatter.
-          - name: Hoshisuna Instrument Shop
-            description: Where the Light Music Club buys strings and picks. Kaho lingers long in the sound-check corner. Three days before main stage rehearsals, the shop offers free instrument checks for students.
+            description: Good for meeting up in a group, studying together, and disguising a serious talk as chat over the menu.
+          - name: Hoshisuna Music
+            description: Where the Light Music Club buys strings and picks; Kaho can spend ages in the corner where you try out instruments. Three days before the main-stage rehearsal, the shop offers students a free check of one instrument.
       - name: Administrative Building and Courtyard
-        description: The logistical hub between the classroom building and Club Building. The Student Council Room holds budget sheets, venue maps, and Club registrations. The Courtyard downstairs is the most public stage for lunch announcements and School Festival previews.
-        climate: Bright and noisy during the day, quickly becoming quiet after school. The Student Council Room often remains lit until 6 PM.
+        description: The hub of festival business, between the classroom building and the Club Building. The Student Council Room keeps the budget sheets, venue maps, and club registrations; the courtyard below is the most public stage for lunchtime announcements and festival previews.
+        climate: Bright and noisy by day, quiet soon after school lets out; the Student Council Room's lights are often still on at 18:00.
         landmarks:
           - name: Student Council Room
-            description: Haruka Mikoeda presides over budget reviews here, and Yuma Shiraishi verifies Club registrations. The master Progress chart on the wall changes color at fourteen, seven, and three days remaining on the countdown.
+            description: Where Haruka Saegusa chairs the budget reviews and Yuma Shiraishi checks club registrations. The master progress chart on the wall changes color at fourteen, seven, and three days on the countdown.
           - name: Courtyard Notice Board
-            description: A common location where the News Club releases School Festival extras and rebuttals, the Light Music Club conducts open auditions, and Class 2-B recruits volunteers for 'Sea Breeze Post'.
+            description: Where the Newspaper Club puts out festival extras and corrections to rumors, the Light Music Club holds open listening sessions, and Class 2-B recruits volunteers for the Sea Breeze Post.
 factions:
   name: Factions
   schema:
@@ -363,7 +363,7 @@ factions:
         leader:
           title: Leader
         headquarters:
-          title: Headquarters
+          title: Base
         relations:
           items:
             properties:
@@ -376,48 +376,48 @@ factions:
           title: Relations
   initialValue:
     - id: student-council
-      name: Harukaze Student Council
-      description: Responsible for the School Festival, club budgets, activity room assignments, and school discipline. It represents rules and procedures, bearing multiple pressures from teachers, clubs, and students.
-      leader: Student Council President · Haruka Mikoeda
+      name: Harukaze Academy Student Council
+      description: Runs the school festival, club budgets, clubroom assignments, and discipline on campus. It stands for rules and procedure, and takes pressure from teachers, clubs, and students all at once.
+      leader: Student Council President · Haruka Saegusa
       headquarters: 2nd Floor, Administrative Building · Student Council Room
       relations:
-        - description: Due to insufficient membership, the Student Council is evaluating whether the Literature Club should retain an independent activity room.
-        - description: The Light Music Club needs Student Council approval for main stage rehearsal times and volume requests.
-        - description: Class 2-B's "Sea Breeze Post" requires content review for its courtyard booth and anonymous messages.
+        - description: Because the Literature Club is short of members, the Student Council is deciding whether it keeps a room of its own.
+        - description: The Light Music Club needs Student Council approval for its main-stage rehearsal times and its volume requests.
+        - description: Class 2-B's Sea Breeze Post has to get its courtyard booth and the content of its anonymous messages approved.
     - id: literature-club
       name: Literature Club
-      description: A long-standing small club with few members but a commitment to producing the School Festival special issue titled "Spring Mint." The old activity room, past issues, and recycled paper provided by Umineko Bookstore are its spiritual core.
+      description: An old, small club with few members that still insists on making a festival special issue, this year titled Spring Mint. The old clubroom, the back issues, and the recycled paper from Umineko Books are the heart of the club.
       leader: Mio Kamishiro
-      headquarters: 3rd Floor, Club Building · Literature Club Activity Room
+      headquarters: 3rd Floor, Club Building · Literature Club Room
       relations:
-        - description: Often competes with the News Club over interview subjects due to publication topic choices; this year, they can swap one page so that short stories, interviews, and rumor debunking help the club pass review.
+        - description: Often competes with the Newspaper Club for the same interviewees because their topics overlap; this year the two clubs could swap a page, so that short stories, interviews, and rumor-busting together help the Literature Club pass the review.
     - id: news-club
-      name: News Club
-      description: Controls in-school rumors and reporting rights for the School Festival, currently planning the "Rumor Truth Wall." Highly proactive but inconsistent with boundaries; one interview may bring opportunities or amplify misunderstandings.
+      name: Newspaper Club
+      description: Has its finger on every campus rumor and holds the right to report on the festival; it's planning the Fact-or-Rumor Wall. Very driven, with a sense of boundaries that comes and goes — one interview can open a door or blow a misunderstanding up.
       leader: Rin Asakura
-      headquarters: 2nd Floor, Club Building · News Club Editorial Office
+      headquarters: 2nd Floor, Club Building · Newspaper Club Editorial Office
       relations:
-        - description: Needs Student Council approval for interview permissions and often gives the Student Council headaches.
+        - description: Needs the Student Council's permission to interview people, and regularly gives the council headaches.
     - id: light-music-club
       name: Light Music Club
-      description: A band club aiming for the School Festival main stage and the final song before closing. The atmosphere is free, but rehearsal pressure is high. Members often downplay their seriousness as casual fun, and Kaho Shiina's new song still has no official title.
+      description: A band club with its sights on the festival's main stage and the last song before the festival closes. The mood is loose, but the pressure in rehearsal is intense. Members tend to pass off working hard as "just messing around," and Kaho Shiina's new song still has no real name.
       leader: Kaho Shiina
       headquarters: 1st Floor, Club Building · Practice Room
       relations:
-        - description: News Club coverage can help the Light Music Club gain votes but may also turn rehearsal mistakes into hot topics.
+        - description: Newspaper Club coverage can win the Light Music Club votes, and it can also turn a botched rehearsal into the talk of the school.
     - id: class-2b
       name: Class 2-B
-      description: The class the player transfers into, serving as the core stage for daily relationships, duty rosters, lunch breaks, rumors, and class festival projects. The class booth, "Sea Breeze Post," seals postcards written to future selves for guests until next year.
+      description: The class the player transfers into, and the main stage for everyday relationships, cleaning duty, lunch breaks, rumors, and the class festival project. Its booth, the Sea Breeze Post, seals away postcards visitors write to their future selves until next year.
       leader: Homeroom Teacher · Chihiro Onodera
-      headquarters: 2nd Floor, Academic Building · Class 2-B Classroom
+      headquarters: 2nd Floor, Classroom Building · Class 2-B Classroom
       relations:
-        - description: Mio Kamishiro is both Class President and Literature Club President, so class affairs often overlap with club pressures.
-        - description: Rin Asakura collects rumors within the class but protects those she truly values.
+        - description: Mio Kamishiro is both class president and Literature Club president, so class business and club pressure often pile up together.
+        - description: Rin Asakura collects rumors in class, but she also protects the people she truly cares about.
     - id: shopping-street
       name: Seireki Town Shopping Street
-      description: A small commercial area near the station, where students buy materials, attend cram schools, have chance encounters, or take detours home after school.
-      leader: Shopping Street Association President · Owner of Umineko Bookstore
-      headquarters: In Front of Seireki Station
+      description: The little shopping district in front of the station, where students buy supplies, study together, run into each other, and take the long way home after school.
+      leader: Head of the Shopping Street Association · owner of Umineko Books
+      headquarters: In front of Seireki Station
 powerSystem:
   name: Relationship Progression
   schema:
@@ -439,36 +439,36 @@ powerSystem:
               title: Rank
             description:
               title: Description
-        title: Tiers
+        title: Stages
   initialValue:
     name: Affection and Distance
-    description: Core changes in this world stem from characters' trust, curiosity, dependence, jealousy, pressure, and sense of boundaries toward the player. It is a relationship progression system based on dialogue patterns.
+    description: Change in this world comes from how the characters feel toward the player — trust, curiosity, reliance, jealousy, pressure, and a sense of boundaries. This is the relationship system for dialogue mode.
     rules:
-      - Relationship Progression relies on specific events and dialogue choices; directly crossing boundaries lowers Trust.
-      - Affection, Pressure, and Public Closeness for the same character can change asynchronously.
-      - Festival Prep, exams, club crises, and rumors drive staged changes in character relationships.
-      - Affection represents Heartbeat, Trust represents willingness to share secrets, Pressure represents real-world burdens, and Public Closeness represents how surrounding classmates interpret the relationship.
-      - When the player fulfills promises, remembers details, and respects silence, Trust rises first; when publicly favoring someone, jokingly crossing lines, or pressing for feelings, Pressure and Rumor Heat rise first.
-      - Single daily choices usually cause only minor stat changes; Relationship stages must be driven by memorable events like completing tasks together, sharing secrets, resolving misunderstandings, or making explicit Promises, rather than automatic jumps based solely on stats.
-      - After a Relationship stage change, observable differences in how characters address the player, initiate invitations, willing locations to appear, and public distance should reflect this shift.
+      - Relationships move forward through concrete events and dialogue choices; crossing a line outright lowers Trust.
+      - A character's Affection, Pressure, and Public Closeness don't have to change together.
+      - Festival preparations, exams, club crises, and rumors push relationships from one stage to the next.
+      - Affection is attraction, Trust is willingness to confide a secret, Pressure is the real-world weight they carry, and Public Closeness is how the classmates around them read the relationship.
+      - When the player keeps promises, remembers details, and respects silences, Trust goes up first; favoritism in public, jokes that go too far, or pushing for someone's feelings raise Pressure and Rumor Heat first.
+      - A single everyday choice usually moves the numbers only a little. A relationship stage has to be moved by a memorable event — a task finished together, a secret confided, a misunderstanding cleared up, or an explicit promise — never by numbers alone.
+      - After a relationship stage changes, there must be visible differences in what the character calls the player, whether they offer invitations, where they're willing to show up, and how close they stand in public.
     tiers:
-      - name: Acquaintance
-        description: Normal conversation is possible, and characters maintain polite distance.
-      - name: Familiar
-        description: Characters are willing to share daily worries or invite the player to activities, starting to remember preferences and adjust forms of address.
-      - name: Heartbeat
-        description: Characters show clear interest, testing behaviors, or private invitations, but public conduct remains influenced by rumors and duties.
-      - name: Confession eve
-        description: The relationship approaches confirmation, requiring resolution of misunderstandings, promises, or future choices.
+      - name: Just met
+        description: Ordinary conversation is possible; the character keeps a polite distance.
+      - name: Friends
+        description: The character shares everyday worries or invites the player to things, starts remembering the player's likes, and changes what they call them.
+      - name: Crush
+        description: The character clearly cares, tests the waters, or asks to spend time alone, but in public is still held back by rumors and duties.
+      - name: On the verge
+        description: The relationship is close to being confirmed; misunderstandings, promises, or choices about the future still have to be dealt with.
       - name: Together
-        description: Characters and the player confirm each other's positions and face post-festival choices together; this is the result of long-term events and should not be reached prematurely during early festival prep.
+        description: The character and the player confirm where they stand with each other and face the choices after the festival together. This comes from a long run of events and should not be reached early in festival prep.
 history:
   name: History
   schema:
     items:
       properties:
         era:
-          title: Era
+          title: When
         name:
           title: Name
         description:
@@ -477,26 +477,26 @@ history:
           title: Significance
   initialValue:
     - era: Ten years ago
-      name: Haruka Academy relocated to the seaside campus
-      description: The school moved to the slopes of Seireki Town, preserving the old Club Building as a symbol of tradition.
+      name: Harukaze Academy moves to its seaside campus
+      description: The school moved to the slopes of Seireki, and the new campus kept the old Club Building as a symbol of tradition.
     - era: Seven years ago
-      name: Old Club Building Preservation Movement
-      description: The first cohort of transfer students launched a petition that Saved the wooden old Club Building. Both the Literature Club and Light Music Club view this event as part of their club traditions.
+      name: Save the Old Clubhouse campaign
+      description: The first cohort to move to the new campus started a petition and saved the old wooden Club Building. Both the Literature Club and the Light Music Club count it as part of their club's tradition.
     - era: Three years ago
-      name: Spring Festival Reform
-      description: The School Festival shifted from individual class displays to joint club and class projects, expanding the Student Council's authority.
+      name: The spring school festival is reorganized
+      description: The festival changed from class exhibits to joint projects by clubs and classes, and the Student Council's power grew.
     - era: Two years ago
-      name: Evening Wind Lighting became the closing tradition
-      description: The Shopping Street lent its remaining lights to the school, illuminating them one by one from the Courtyard to Cherry Blossom Slope at closing time. Students began treating "who you watch the last light with" as an unspoken code for a date.
+      name: The Evening Breeze Lanterns become the closing tradition
+      description: The shopping street lent the school its leftover string lights, and at the close of the festival they were lit one by one from the courtyard down to Sakurazaka. Students started using "who you watch the last light with" as a code for a date they won't admit to.
     - era: Last year
-      name: Light Music Club main stage mishap
-      description: Equipment failure during the School Festival rehearsal nearly cost the Light Music Club their spot on this year's main stage. Kaho has been holding a grudge about it ever since.
-    - era: This semester
-      name: Literature Club Merger Review
-      description: Due to low membership, the Literature Club was placed on the merger list. The School Festival publication became their last chance to keep the Club alive.
+      name: The Light Music Club's main-stage mishap
+      description: The Light Music Club's equipment failed during the festival preview, and the club nearly lost its place on this year's main stage. Kaho has never been able to let it go.
+    - era: This term
+      name: Literature Club merger review
+      description: The Literature Club was put on the merger list for lack of members, and its festival publication became its last chance to keep the club.
     - era: Recently
-      name: Transfer Student arrived
-      description: The player transfers into Class 2-B, becoming a new variable noticed by the Class, Literature Club, News Club, Light Music Club, and Student Council alike.
+      name: A transfer student arrives
+      description: The player transfers into Class 2-B and becomes a new unknown that the class, the Literature Club, the Newspaper Club, the Light Music Club, and the Student Council have all noticed.
 economy:
   name: Economy
   schema:
@@ -519,23 +519,23 @@ economy:
     currencies:
       - name: Allowance
         symbol: ¥
-        description: Used to buy drinks, bento boxes, club materials, and small gifts for after-school dates.
+        description: For drinks, bento, club supplies, and little things for after-school dates.
       - name: Favors
-        description: Soft resources accumulated by helping with class duties, moving equipment, keeping secrets, and accompanying practice sessions.
+        description: A soft currency you build up by covering cleaning duty, carrying equipment, keeping secrets, and keeping someone company at practice.
     resources:
-      - Club Budget
-      - School Festival Booth Slot
-      - Interview Permit
-      - Practice Room Booking Time
-      - Special Issue Manuscript Pages
-      - Main Stage Rehearsal Slot
-      - Class Duty Swap
-      - After-School Companion Time
-      - Sea Breeze Post Booth Slot
-      - Evening Wind Lighting Volunteer Slot
-      - Literature Club Recycled Paper for Special Issue
-      - News Club Rumor Truth Wall Space
-    tradeNotes: Resource exchanges are often mediated through favors. Helping move equipment, taking over someone's duty, keeping a secret, or joining a practice session is often more valuable than money. Money suits buying drinks, bento, flowers, guitar strings, and publication materials; relationship progression relies on fulfilling promises.
+      - Club budget
+      - Festival booth slot
+      - Interview permission
+      - Practice room booking
+      - Pages in the special issue
+      - Main-stage rehearsal slot
+      - Swapped cleaning duty
+      - Time walking home together
+      - Sea Breeze Post booth shift
+      - Evening Breeze Lanterns volunteer spot
+      - Recycled paper for the Literature Club's special issue
+      - Space on the Newspaper Club's Fact-or-Rumor Wall
+    tradeNotes: Most trades run on favors. Helping carry equipment, covering someone's cleaning duty, keeping a secret, or keeping someone company at practice often matters more than money. Money is for drinks, bento, flowers, guitar strings, and materials for the publication; relationships move forward by keeping promises.
 socialStructure:
   name: Society
   schema:
@@ -549,7 +549,7 @@ socialStructure:
               title: Rank
             description:
               title: Description
-        title: Classes
+        title: Groups
       races:
         items:
           properties:
@@ -559,29 +559,29 @@ socialStructure:
               title: Description
             traits:
               title: Traits
-        title: Peoples
+        title: People
       notes:
         title: Notes
   initialValue:
     classes:
-      - name: Transfer Student
-        description: "The player's initial status: easily noticed and surrounded by rumors. This blank slate allows entry into various social circles."
-      - name: Class Officers
-        description: Handles class affairs, managing event schedules and student relationships.
-      - name: Club Core Members
-        description: Drives School Festival planning, often hiding personal emotions within work.
-      - name: Student Council Members
-        description: Represents rules and order, bearing dual pressure from teachers and students.
-      - name: Shop District Acquaintances
-        description: Off-campus acquaintances like bookstore owners, instrument shop staff, and family restaurant employees serve as sources of chance encounters and information.
+      - name: Transfer student
+        description: The player's starting role. Easy to notice and easy to surround with rumors; being a blank page lets the player get into different circles.
+      - name: Class officers
+        description: Handle class business, and know the event schedule and who gets along with whom.
+      - name: Core club members
+        description: The people driving the festival projects, who often bury their own feelings in the work.
+      - name: Student Council members
+        description: Stand for rules and order, and take pressure from both the teachers and the students.
+      - name: Familiar faces on the shopping street
+        description: People off campus — the bookstore owner, the music shop clerk, the family restaurant staff — who are a source of chance meetings and news.
     races:
-      - name: Ordinary Students
-        description: No supernatural identities; conflicts arise primarily from emotions, grades, family, and future choices.
+      - name: Ordinary students
+        description: No supernatural identities; the main conflicts come from feelings, grades, family, and choices about the future.
         traits:
-          - Sensitive to others' evaluations
-          - Hides true thoughts in collective life
-          - Packs anxiety into clubs, grades, and jokes
-    notes: Character relationships intertwine through classes, clubs, the Student Council, and after-school routes. Who saves seats at lunch, who swaps duties, and who leaves together before the final broadcast become soft public signals; private promises, shared tasks, and changes in address drive Trust and intimacy.
+          - Sensitive to what others think of them
+          - Hide what they really think in group life
+          - Wrap their anxieties in clubs, grades, and jokes
+    notes: Relationships run through classes, clubs, the Student Council, and the routes people take after school. Who saves a seat at lunch, who swaps cleaning duty, who leaves together before the closing announcement — these all become quiet public signals. Private promises, shared tasks, and a change in what someone calls you build trust and closeness.
 tone:
   name: Tone
   schema:
@@ -596,24 +596,24 @@ tone:
         title: Themes
   initialValue:
     genres:
-      - School Romance
-      - Youthful Slice of Life
-      - Light Ensemble Cast
-    narrativeStyle: Delicate, restrained, and dialogue-driven. Express emotions through actions and pauses, avoiding exaggerated drama and adult-oriented descriptions.
+      - School romance
+      - Coming-of-age slice of life
+      - Light ensemble
+    narrativeStyle: Delicate, restrained, dialogue first. Show feelings through actions and pauses; avoid overblown drama and adult content.
     themes:
-      - Belonging after a transfer
-      - Shared goals before the School Festival
-      - Ambiguity and misunderstandings
-      - Club survival
-      - Adolescent self-affirmation
-      - Small-town rumors and public scrutiny
-      - Balancing rules and personal desires
-      - Intimacy born from co-creation
-      - Senpai's farewell and legacy
-      - The obsession with preserving old things
-      - Schedule choices and missed opportunities
-      - Public rumors and private sincerity
-      - Farewells before the festival ends
+      - Finding where you belong after transferring
+      - Shared goals before the festival
+      - Unspoken feelings and misunderstandings
+      - Keeping a club alive
+      - Figuring out who you are as a teenager
+      - Small-town rumors and being watched
+      - Balancing the rules against what you want
+      - The closeness of making something together
+      - Seniors saying goodbye and passing things on
+      - Holding on to old things
+      - Choosing where to be, and what you miss
+      - Public rumors and private feelings
+      - Goodbyes before the festival ends
 mechanics:
   name: Play Style
   schema:
@@ -627,24 +627,24 @@ mechanics:
       customRules:
         title: House rules
   initialValue:
-    skillSystem: Advance relationships through dialogue choices, shared activities, keeping promises, and School Festival tasks. Monitor Affection, Trust, Pressure, Rumor Heat, Public Closeness, and the School Festival Countdown.
+    skillSystem: Relationships move forward through dialogue choices, activities together, promises kept, and festival tasks. Keep an eye on Affection, Trust, Pressure, Rumor Heat, Public Closeness, and the festival countdown.
     customRules:
-      - In each round, try to make one or two main characters the focus of the conversation.
-      - Keep expressions of affection subtle; prioritize hints, jokes, silence, and actions.
-      - The School Festival Countdown naturally creates task pressure.
-      - Players can choose to join the club, help with preparations, investigate rumors, or spend time alone with a specific character.
-      - Short scene prompts should offer three to four natural phrasings, covering tones such as gentle, direct, observant, and lightly teasing.
-      - Advance only one clear emotional Milestone per round; avoid resolving core conflicts for multiple characters at once.
-      - Public settings primarily affect Rumor Heat and Public Closeness, while private settings primarily affect Trust and Pressure.
-      - In dialogue mode, branching responses should sound like what a player would naturally say, avoiding the tone of systemized task buttons.
-      - A school day progresses through pre-morning reading, morning breaks, lunch break, after school, dusk, and post-closure; whenever there is a significant time shift, describe the bell rings, lighting, weather, or the next appointment.
-      - Use Class 2-B as an anchor for pre-morning reading and breaks; during lunch, go to the classroom, Library, or Courtyard; after school, enter the Club Building and Shopping Street; dusk is suitable for the Sakurazaka Seawall and the Club Building Rooftop.
-      - When establishing a scene for the first time, switching locations, or when day/night changes, use standard location names to trigger scene.set; the classroom, Club Building, Library, Sakurazaka Seawall, and Seireki Town Shopping Street prioritize hitting the world's built-in day/night backgrounds.
-      - Use 'day' before sunset, and 'night' after sunset, after the closing announcement, or in explicitly nighttime segments; when switching variants, ensure that lighting, the color of the sea outside the window, and whether characters should leave school change accordingly.
-      - Emit stage.direction when characters enter, exit, become the focus of speech, change position, or alter clothing/expression/posture. Merge all changes in a single turn into one cues array; omit visual fields and use the default sprite if no corresponding visual variant exists.
-      - New character appearances must align with Usual Schedule or be explained by ad-hoc tasks; each turn focuses on one to two speaking characters, while others enter via passing by, notes, Rumor, or the next Promise—do not cram all eight characters into one scene simultaneously.
-      - "Key School Festival Milestones are: budget preliminary review at 14 days countdown, exam and manuscript mid-check at 10 days, main stage rehearsal at 7 days, special issue deadline and full dress rehearsal at 3 days, eve-of-festival setup at 1 day, and the official festival with Evening Wind Lighting at 0 days."
-      - Rumors evolve through 'Seed—Spreading—Heating up—Clarify/Confirm/Redirected'; each rumor must have a source, spread location, and affected characters—it cannot simply become known school-wide out of nowhere.
+      - Each turn, try to keep one or two main characters at the center of the conversation.
+      - Characters keep their feelings understated when they like someone; hints, jokes, silences, and actions come first.
+      - The festival countdown naturally puts pressure on everyone's tasks.
+      - The player can choose to join a club, help with festival prep, look into a rumor, or spend time alone with one character.
+      - The short reply options should offer three or four natural ways to say something, covering different tones such as gentle, direct, observant, and lightly teasing.
+      - Move only one clear emotional beat forward per turn; don't resolve the core conflicts of several characters at once.
+      - Public scenes mainly affect Rumor Heat and Public Closeness; private scenes mainly affect Trust and Pressure.
+      - In dialogue mode, the reply options should sound like things the player would naturally say, not like task buttons in a system.
+      - A school day moves through before morning reading, the morning breaks, lunch, after school, dusk, and after closing; whenever the story clearly moves to a new time slot, mention the bell, the light, the weather, or the next plan.
+      - Before morning reading and during breaks, Class 2-B is the anchor; at lunch the player can go to the classroom, the library, or the courtyard; after school, the Club Building and the shopping street; dusk is for Sakurazaka Seawall and the Club Building Rooftop.
+      - When a scene is first established, the location changes, or the scene changes between day and night, emit scene.set with a standard location name; the classroom, Club Building, Library, Sakurazaka Seawall, and Seireki Town Shopping Street should match the world's built-in day and night backdrops first.
+      - Use day before sunset, and night after sunset, after the closing announcement, or in a clearly nighttime passage; when the variant switches, the lighting, the color of the sea outside the window, and whether characters should have gone home change with it.
+      - Emit stage.direction when characters enter, leave, become the focus of the conversation, change position, or change outfit, expression, or pose; merge every change in a turn into one cues array, and when there is no matching visual variant, leave out the visual fields and use the default portrait.
+      - A character's entrance must fit their Usual Schedule or be explained by a one-off task; each turn focuses on one or two speaking characters, and the others come in by passing by, through notes, rumors, or the next appointment — never cram all eight into one scene.
+      - "The key festival milestones on the countdown are: the first budget review at fourteen days, exams and the manuscript check at ten, the main-stage preview at seven, the special-issue deadline and the dress rehearsal at three, festival-eve setup at one, and at zero the festival itself and the Evening Breeze Lanterns."
+      - Rumors go seed → spreading → heating up → cleared / confirmed / redirected; every rumor needs a source, a place where it spread, and the characters it affects, and it never becomes known across the whole school out of nowhere.
 startingConditions:
   name: Opening
   schema:
@@ -665,17 +665,17 @@ startingConditions:
       openingChips:
         title: Opening moves
   initialValue:
-    openingScenario: The second Monday of April, 8:20 AM, ten minutes before the morning reading bell. You arrive as a transfer student in Class 2-B at Haruka Academy, where the classroom still smells of chalk dust and sea breeze. The last seat by the window is empty; Class President Mio Kamishiro places the schedule at the corner of the desk; Rin Asakura from the News Club holds up her notebook from the back row; and guitar sounds from the Light Music Club drift in from outside. Passing by the door, Student Council Vice President Yuma Shiraishi hands a club registration form to the teacher, while the bulletin board beside the blackboard announces twenty-one days until the Spring School Festival. Your immediate choices are answering Mio's offer to show you around campus or Rin's lunchtime interview; the guitar music and club registration point toward where you might head after school.
-    startingLocation: Class 2-B, window seat
+    openingScenario: The second Monday of April, 8:20, ten minutes before the morning reading bell. You have just transferred into Class 2-B at Harukaze Academy, and the classroom still smells of chalk dust and sea breeze. The back-row seat by the window is empty. Class President Mio Kamishiro sets a class schedule on the corner of the desk, Rin Asakura of the Newspaper Club holds up her interview notebook from the back of the room, and the Light Music Club's guitar drifts in from outside the window as someone tunes up. Passing the door, Student Council Vice President Yuma Shiraishi hands a club registration form to the teacher, and the bulletin board beside the blackboard says the spring school festival is twenty-one days away. The first things you can answer are Mio's offer to show you around the school and Rin's lunchtime interview; the guitar and the club registration point to where you might go after school.
+    startingLocation: Class 2-B · Window Seat
     playerConstraints:
       - The player is a second-year transfer student.
-      - No fixed club initially.
-      - All romantic progression must maintain teen content standards.
-      - Initially, relationships with Mio Kamishiro, Rin Asakura, Kaho Shiina, and Yuma Shiraishi — the four opening focus characters — are at the acquaintance stage; Akane Toujou has not yet appeared and will be met naturally when visiting the Library.
-      - The player may choose their reason for transferring, but it should serve campus daily life and relationship progression.
-    openingHook: Before the morning reading bell rings, do you respond to the Class President's invitation for a tour, or the News Club's lunch break interview?
+      - The player has no club at the start.
+      - All romance must stay teen-rated.
+      - At the start, the player is at the acquaintance stage with all four opening-focus characters — Mio Kamishiro, Rin Asakura, Kaho Shiina, and Yuma Shiraishi; Akane Toujou hasn't appeared yet, and the player gets to know her naturally after walking into the library.
+      - The player can choose why they transferred, but the reason should serve everyday school life and the relationships.
+    openingHook: Before the morning reading bell, do you answer the class president's offer to show you around, or the Newspaper Club's lunchtime interview first?
     openingChips:
-      - Ask Mio to show me around campus
-      - Agree to Rin's lunch break interview
-      - Clarify the club registration deadline
-      - Remember that guitar melody from outside the window
+      - Ask Mio to show me around the school
+      - Say yes to Rin's lunchtime interview
+      - Ask when club registration closes
+      - Remember the guitar tune from outside the window

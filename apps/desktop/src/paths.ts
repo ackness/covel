@@ -74,7 +74,7 @@ export function dataRootCopyRecordPath(): string {
   return path.join(covelHome(), "data-root-copy.json");
 }
 
-export function userPluginsDir(): string {
+function userPluginsDir(): string {
   return path.join(covelHome(), "plugins");
 }
 
@@ -111,7 +111,7 @@ function userDbPath(): string {
   return path.join(configuredDataRoot(), "covel.db");
 }
 
-export function userWorldsDir(): string {
+function userWorldsDir(): string {
   return path.join(configuredDataRoot(), "worlds");
 }
 

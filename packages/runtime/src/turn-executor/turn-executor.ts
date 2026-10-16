@@ -111,7 +111,7 @@ export {
   type TurnExecutorOptions,
 } from "./turn-executor-types.js";
 export {
-  resumeSuspendedRuntime,
+  resumeRuntimePipeline,
   type ResumeSuspendedRuntimeOptions,
 } from "../resume/turn-resume.js";
 
@@ -136,9 +136,9 @@ export {
  *
  * @example
  * ```typescript
- * import { executeTurn } from '@covel/runtime';
+ * import { runTurnPipeline } from './turn-executor.js';
  *
- * const result = await executeTurn(
+ * const result = await runTurnPipeline(
  *   { sessionId: 'sess-1', turnId: 'turn-1', playerMessage: 'Go north' },
  *   activeManifests,
  *   { loadRuntime, llm, store, toolExecutor },
@@ -149,7 +149,7 @@ export {
  * }
  * ```
  */
-export async function executeTurn(
+export async function runTurnPipeline(
   input: TurnInput,
   activeRuntimes: readonly RuntimeManifest[],
   deps: TurnExecutorDeps,
@@ -266,12 +266,12 @@ async function executeTurnImpl(
   }
 
   let sessionState: LoadedTurnSessionState;
+  let sessionSummaries: readonly import("@covel/store").SessionSummaryRecord[];
   try {
-    sessionState = await loadTurnSessionState({
-      input,
-      deps,
-      shouldAppendPlayerMessage,
-    });
+    [sessionState, sessionSummaries] = await Promise.all([
+      loadTurnSessionState({ input, deps, shouldAppendPlayerMessage }),
+      loadSessionSummaries({ input, deps }),
+    ]);
   } catch (error) {
     if (!deps.turnControl?.signal?.aborted) throw error;
     return {
@@ -304,6 +304,7 @@ async function executeTurnImpl(
     input.detachedStage?.sourceLogicalTurn ??
     sessionState.completedPlayerTurns + 1;
   const dimensionBarrier = await dimensionExecutionBarrier({
+    session: sessionState.session,
     store: deps.store,
     sessionId: input.sessionId,
     runtimes: activeRuntimes,
@@ -385,7 +386,13 @@ async function executeTurnImpl(
   // Committed world-model state is fixed from here until finalize; every
   // runtime in this execution shares one read of it.
   if (deps.store && !deps.worldModelReads)
-    deps = { ...deps, worldModelReads: memoizeWorldModelReads(deps.store) };
+    deps = {
+      ...deps,
+      worldModelReads: memoizeWorldModelReads(deps.store, {
+        sessionId: input.sessionId,
+        session: sessionState.session,
+      }),
+    };
   if (deps.extensions) {
     deps = {
       ...deps,
@@ -536,7 +543,6 @@ async function executeTurnImpl(
       },
     );
   }
-  const sessionSummaries = await loadSessionSummaries({ input, deps });
   const loadSessionContext = () =>
     refreshSessionContextSnapshot({
       input,
@@ -724,7 +730,7 @@ async function executeTurnImpl(
       sessionContext,
       triggerEvent,
       turnOptions: options,
-      executeTurnFn: executeTurn,
+      executeTurnFn: runTurnPipeline,
       recursionDepth,
       executionId: executionContext.executionId,
       executionContext,
@@ -760,7 +766,7 @@ async function executeTurnImpl(
   // their own proposal in the same transaction
   // (function-runtime/plugin-handler-helpers.ts), so an abort discards them
   // too. Unbuffered direct writes exist only in the standalone test-runtime
-  // API, never inside executeTurn.
+  // API, never inside runTurnPipeline.
   const playerAborted = (): boolean =>
     deps.turnControl?.signal?.aborted === true;
   const executionAborted = (): boolean =>

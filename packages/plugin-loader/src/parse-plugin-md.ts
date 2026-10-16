@@ -306,7 +306,7 @@ export function normalizePackageManifest(
     name: plugin.id,
     pluginId: plugin.id,
     description: resolveI18nText(plugin.description, "en") ?? "",
-    pluginType: plugin.kind === "core" ? "core-plugin" : "plugin",
+    kind: plugin.kind ?? "plugin",
     displayName: plugin.displayName,
     version: plugin.version,
     tags: plugin.tags,

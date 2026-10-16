@@ -10,8 +10,9 @@
  */
 
 import type { ToolCallRecord } from "@covel/shared";
-import type { LLMMessage } from "../llm/llm-adapter.js";
-import { detectToolLoop, perturbMessages } from "../retry/llm-retry.js";
+import type { LLMMessage } from "@covel/shared";
+import { detectToolLoop } from "../retry/llm-retry.js";
+import { perturbMessages } from "../retry/retry-common.js";
 
 export interface LoopGuardState {
   /** Number of perturbations already injected for this runtime. */

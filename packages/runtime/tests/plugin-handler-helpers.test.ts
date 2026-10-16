@@ -7,9 +7,11 @@
 
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { createMemoryStore } from "@covel/store/memory";
+import type { Proposal } from "@covel/shared";
 import type { DataStore } from "@covel/store";
 import {
   createFunctionStoreView,
+  createRpcHandlerStoreView,
   createPluginDataWriter,
   createPluginLogger,
 } from "../src/function-runtime/plugin-handler-helpers.js";
@@ -32,6 +34,40 @@ describe("createPluginDataWriter", () => {
     runtimeId: RUNTIME_ID,
     turnId: TURN_ID,
   };
+
+  it.each([false, true])(
+    "isolates direct and buffered reads (buffered=%s)",
+    async (buffered) => {
+      const buffer: Proposal[] | undefined = buffered ? [] : undefined;
+      const writer = createPluginDataWriter(store, ctx, buffer);
+      await writer.set("notes", "one", { nested: { value: 1 } });
+      const change = (value: unknown) => {
+        (value as { nested: { value: number } }).nested.value = 9;
+      };
+      change(await writer.get("notes", "one"));
+      const listed = await writer.list("notes");
+      expect(listed).toHaveLength(1);
+      change(listed[0]!.value);
+      const view = createFunctionStoreView(store, ctx, buffer);
+      change((await view.getPluginData("notes", "one"))?.value);
+      change((await view.listPluginData("notes"))[0]?.value);
+      expect(await writer.get("notes", "one")).toEqual({
+        nested: { value: 1 },
+      });
+      if (!buffered) {
+        const rpc = createRpcHandlerStoreView(store, ctx);
+        const getValue = async () => {
+          const row = await rpc.getPluginData?.("notes", "one");
+          return (row as { value: unknown } | null)?.value;
+        };
+        change(await getValue());
+        change((await rpc.listPluginData?.("notes"))?.[0]?.value);
+        expect(await getValue()).toEqual({
+          nested: { value: 1 },
+        });
+      }
+    },
+  );
 
   it("writes plugin_data scoped to the runtime pluginId", async () => {
     const writer = createPluginDataWriter(store, ctx);

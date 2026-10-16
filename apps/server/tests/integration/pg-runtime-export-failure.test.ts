@@ -54,7 +54,6 @@ describe.skipIf(!database)("PostgreSQL export failure isolation", () => {
             name: `probe/${id}`,
             pluginId: "probe",
             description: "Fault probe",
-            pluginType: "plugin",
             outputKind: id === "story" ? "story" : "plugin",
             ...(id === "story"
               ? {}
@@ -182,13 +181,13 @@ describe.skipIf(!database)("PostgreSQL export failure isolation", () => {
             {
               status: "success",
               runtimeId: "probe/broken",
-              resultId: "broken",
+              runId: "broken",
               output: { value: 1 },
             },
             {
               status: "success",
               runtimeId: "probe/healthy",
-              resultId: "healthy",
+              runId: "healthy",
               output: { value: 2 },
             },
           ],

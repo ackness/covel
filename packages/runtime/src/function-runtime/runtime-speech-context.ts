@@ -9,7 +9,6 @@
  * returned directly to the handler, nothing is persisted.
  */
 
-import { createHash } from "node:crypto";
 import type { MediaRef } from "@covel/shared";
 import type { MediaStore } from "@covel/store";
 import type {
@@ -20,7 +19,11 @@ import type {
   SpeechGenerateOutput,
   SpeechTranscribeInput,
 } from "@covel/shared/plugin-runtime";
-import { resolveTargetIdentity } from "./media-cache-key.js";
+import {
+  mediaPromptHash,
+  cachedSingleRef,
+  resolveTargetIdentity,
+} from "./media-cache-key.js";
 
 /**
  * Deterministic key over the model and the synthesis params — identical
@@ -30,14 +33,13 @@ function promptHashOf(
   input: SpeechGenerateInput,
   target: readonly unknown[] | null,
 ): string {
-  const canonical = JSON.stringify([
+  return mediaPromptHash([
     target,
     input.presetId ?? "",
     input.text,
     input.voice ?? "",
     input.format ?? "",
   ]);
-  return createHash("sha256").update(canonical).digest("hex");
 }
 
 function isMediaRef(audio: SpeechTranscribeInput["audio"]): audio is MediaRef {
@@ -73,18 +75,8 @@ export function createRuntimeSpeechContext(
       // ctx.images: cache hits stamp THIS call's metadata onto the refs.
       const meta = { ...input.metadata, pluginId, promptHash };
 
-      const existing = await mediaStore.listByMetadata(sessionId, {
-        promptHash,
-        pluginId,
-      });
-      if (existing.length >= 1) {
-        const asset = existing[0]!;
-        return {
-          refs: [{ id: asset.id, mime: asset.mime, size: asset.size, meta }],
-          warnings: [],
-          cached: true,
-        };
-      }
+      const cached = await cachedSingleRef(mediaStore, sessionId, meta);
+      if (cached) return { refs: [cached], warnings: [], cached: true };
 
       const result = await gateway.synthesizeSpeech({
         presetId: input.presetId,

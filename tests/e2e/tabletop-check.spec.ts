@@ -10,7 +10,7 @@ import {
   sourceTurnId,
 } from "./execution-recovery-fixtures.js";
 import check from "../../plugins/tabletop-rules/runtimes/check/handler.js";
-import { createFormTool } from "../../packages/tools/src/builtin/ui-tools.js";
+import { createFormTool } from "../../packages/plugin-handlers-utils/src/index.js";
 import { createMemoryStore } from "../../packages/store/src/memory-entry.js";
 import { createInteractionSubmitter } from "../../packages/runtime/src/interaction/interaction-submission.js";
 import { actionStreamBody } from "./helpers/action-stream.js";

@@ -1,3 +1,4 @@
+import type { Components } from "react-markdown";
 import { importImage } from "@/lib/import-image.js";
 import { lazy, memo, Suspense, useContext, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -133,22 +134,24 @@ const LazyReactMarkdown = lazy(async () => {
   const urlTransform = (url: string) =>
     /^(data:image\/|blob:)/i.test(url) ? url : defaultUrlTransform(url);
 
+  const components: Components = {
+    a: ({ href, children: linkChildren }) => (
+      <a href={safeHref(href)} target="_blank" rel="noopener noreferrer">
+        {linkChildren}
+      </a>
+    ),
+    img: ({ src, alt }) => <MarkdownImage src={src} alt={alt} />,
+    pre: ({ children: preChildren }) => (
+      <pre className="overflow-x-auto">{preChildren}</pre>
+    ),
+  };
+
   function Inner({ children }: { children: string }) {
     return (
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         urlTransform={urlTransform}
-        components={{
-          a: ({ href, children: linkChildren }) => (
-            <a href={safeHref(href)} target="_blank" rel="noopener noreferrer">
-              {linkChildren}
-            </a>
-          ),
-          img: ({ src, alt }) => <MarkdownImage src={src} alt={alt} />,
-          pre: ({ children: preChildren }) => (
-            <pre className="overflow-x-auto">{preChildren}</pre>
-          ),
-        }}
+        components={components}
       >
         {children}
       </ReactMarkdown>

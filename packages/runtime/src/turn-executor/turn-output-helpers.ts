@@ -5,6 +5,7 @@
  * orchestration, hooks, scheduling, and persistence.
  */
 
+import { isRecord } from "../utils/is-record.js";
 import type { RuntimeResult } from "@covel/shared";
 
 export interface ExecutedToolCallState {
@@ -59,10 +60,6 @@ export function looksLikeStructuredRuntimeOutput(
   if (/^<tool[- >]/i.test(s)) return true;
 
   return false;
-}
-
-export function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
 /**

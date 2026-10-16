@@ -14,13 +14,9 @@ import { discoverPlugins, loadPluginManifest } from "@covel/plugin-loader";
 import type { LoadedRuntime } from "@covel/plugin-loader";
 import { createMemoryStore } from "@covel/store/memory";
 import type { DataStore } from "@covel/store";
-import { executeTurn } from "../src/turn-executor/turn-executor.js";
+import { runTurnPipeline } from "../src/turn-executor/turn-executor.js";
 import type { TurnExecutorDeps } from "../src/turn-executor/turn-executor.js";
-import type {
-  LLMAdapter,
-  LLMResponse,
-  LLMStreamEvent,
-} from "../src/llm/llm-adapter.js";
+import type { LLMAdapter, LLMResponse, LLMStreamEvent } from "@covel/shared";
 
 // Prime a store with one prior player message so turnNumber >= 1 and
 // main-loop priority runtimes survive the Pre-Game band filter.
@@ -118,7 +114,7 @@ describe("TurnExecutor Resilience", () => {
         store: await createMainLoopStore("sess-1"),
       };
 
-      const result = await executeTurn(
+      const result = await runTurnPipeline(
         makeTurnInput(),
         [narratorManifest],
         deps,
@@ -137,7 +133,7 @@ describe("TurnExecutor Resilience", () => {
         store: await createMainLoopStore("sess-1"),
       };
 
-      const result = await executeTurn(
+      const result = await runTurnPipeline(
         makeTurnInput(),
         [narratorManifest],
         deps,
@@ -169,7 +165,11 @@ describe("TurnExecutor Resilience", () => {
         tools: undefined,
       };
 
-      const result = await executeTurn(makeTurnInput(), [noToolManifest], deps);
+      const result = await runTurnPipeline(
+        makeTurnInput(),
+        [noToolManifest],
+        deps,
+      );
 
       expect(result.runtimeResults).toHaveLength(1);
       expect(result.runtimeResults[0]!.status).toBe("success");

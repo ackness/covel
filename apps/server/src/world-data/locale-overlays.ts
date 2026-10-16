@@ -1,6 +1,4 @@
 import { compareText } from "@covel/shared";
-import { readFile, readdir } from "node:fs/promises";
-import path from "node:path";
 import {
   DEFAULT_LOCALE,
   applyLocaleOverlay,
@@ -9,6 +7,8 @@ import {
   localeLanguage,
   type LocaleOverlayIssue,
 } from "@covel/shared";
+import { readFile, readdir } from "node:fs/promises";
+import path from "node:path";
 import { parse as parseYaml } from "yaml";
 import { resolveContainedPath } from "./safe-path.js";
 
@@ -37,7 +37,7 @@ function parseStructured(file: string, text: string): unknown {
  * of that language, and a world would have two spellings for one edition. A
  * language that is an edition as such (`fr`) is exact.
  */
-export function exactLocaleFor(
+function exactLocaleFor(
   tag: string,
   declared: readonly string[],
 ): string | undefined {
@@ -246,7 +246,7 @@ const EDITION_FILE = /^(?:world\.(.+)\.yaml|WORLD\.(.+)\.md)$/;
  * language of another edition (`WORLD.en.md` beside `world.en-US.yaml`) is a
  * misnamed translation, not an edition. Default first, the rest sorted.
  */
-export async function worldEditionLocales(
+async function worldEditionLocales(
   worldDir: string,
   defaultLocale: string | undefined,
 ): Promise<string[]> {
@@ -322,7 +322,7 @@ export async function readWorldManifestSource(worldDir: string): Promise<{
 }
 
 /** A manifest object without `id` takes the name of the world's directory. */
-export function withDirectoryId(manifest: unknown, worldDir: string): unknown {
+function withDirectoryId(manifest: unknown, worldDir: string): unknown {
   if (
     manifest === null ||
     typeof manifest !== "object" ||

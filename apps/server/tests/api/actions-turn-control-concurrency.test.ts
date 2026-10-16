@@ -3,7 +3,7 @@
  *
  * Two overlapping actions on the same session: the second queues on the
  * session lock and must NOT clobber the first turn's steer/abort
- * registration. Before the fix, registerActiveTurn ran before
+ * registration. Before the fix, the active turn was registered before
  * sessionLock.withLock, so an abort issued while turn 1 was mid-execution
  * targeted the still-waiting turn 2.
  */
@@ -47,7 +47,6 @@ function makeRegistryEntry(handler: FunctionHandler): PluginRegistryEntry {
     stage: "narrative",
     runtimeType: "function",
     outputKind: "system",
-    pluginType: "plugin",
     handler: "./handler.js",
     trigger: { type: "auto" },
   } as RuntimeManifest;
@@ -62,7 +61,7 @@ function makeRegistryEntry(handler: FunctionHandler): PluginRegistryEntry {
     id: PLUGIN_ID,
     name: PLUGIN_ID,
     description: "",
-    pluginType: "plugin",
+    kind: "plugin",
     runtimeCount: 1,
   };
   return {

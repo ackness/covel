@@ -44,7 +44,12 @@ import {
 import type { PluginRuntimeGateway } from "@covel/plugin-loader";
 import { decodeBase64Json } from "../lib/base64-json.js";
 import { hasRuntimeJobCredentials } from "../runtime-job-readiness.js";
-import { llmModelBindingSchema } from "@covel/shared";
+import {
+  llmModelBindingSchema,
+  INPUT_MODALITIES,
+  OUTPUT_MODALITIES,
+  MODEL_FEATURES,
+} from "@covel/shared";
 import { hostProfileOf } from "../host-profile.js";
 
 export interface PerRequestLlmOptions {
@@ -73,25 +78,9 @@ export interface PerRequestLlmOptions {
 const MAX_HEADER_BYTES = 64 * 1024; // sanity cap — browsers rarely send bigger
 const MAX_CONTEXT_WINDOW = 10_000_000;
 const MAX_OUTPUT_TOKENS = 1_000_000;
-const INPUT_MODALITIES = new Set(["text", "image", "audio", "video", "file"]);
-const OUTPUT_MODALITIES = new Set([
-  "text",
-  "image",
-  "audio",
-  "video",
-  "embedding",
-  "evaluation",
-]);
-const MODEL_FEATURES = new Set([
-  "function_calling",
-  "structured_output",
-  "streaming",
-  "reasoning",
-  "vision",
-  "prompt_caching",
-  "web_search",
-  "computer_use",
-]);
+const inputModalities = new Set<string>(INPUT_MODALITIES);
+const outputModalities = new Set<string>(OUTPUT_MODALITIES);
+const modelFeatures = new Set<string>(MODEL_FEATURES);
 
 export function createPerRequestLlmMiddleware(
   opts: PerRequestLlmOptions,
@@ -146,12 +135,7 @@ export function createPerRequestLlmMiddleware(
     // agent-runtime side sees via `llmAdapter`.
     const perRequestPluginGateway = createPluginRuntimeGateway(
       opts.ai.gateway,
-      {
-        apiKeys: requestKeys ?? {},
-        envApiKeys: opts.envApiKeys,
-        ...(slotOverrides ? { slotOverrides } : {}),
-        capabilityOverridePolicy,
-      },
+      requestOptions,
     );
 
     c.set("llmAdapter", perRequestAdapter);
@@ -162,9 +146,6 @@ export function createPerRequestLlmMiddleware(
     c.set("requestRuntimeJobReady", (model) =>
       hasRuntimeJobCredentials(opts.ai.gateway, model, requestOptions),
     );
-    if (slotOverrides?.slotBindings?.memory) {
-      c.set("requestMemorySlot", "memory");
-    }
     await withRequestLlmOptions(requestOptions, next);
   };
 }
@@ -303,17 +284,9 @@ export function parseSlotOverrides(
         const next: NonNullable<
           SlotOverridesInput["capabilityOverrides"]
         >[string] = {};
-        const input = cleanStringArray(source.input, INPUT_MODALITIES, false);
-        const output = cleanStringArray(
-          source.output,
-          OUTPUT_MODALITIES,
-          false,
-        );
-        const features = cleanStringArray(
-          source.features,
-          MODEL_FEATURES,
-          true,
-        );
+        const input = cleanStringArray(source.input, inputModalities, false);
+        const output = cleanStringArray(source.output, outputModalities, false);
+        const features = cleanStringArray(source.features, modelFeatures, true);
         if (input) next.input = input as typeof next.input;
         if (output) next.output = output as typeof next.output;
         if (features) next.features = features as typeof next.features;

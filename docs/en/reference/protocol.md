@@ -125,6 +125,7 @@ In the tables, "S→C" means sent from the server to the client.
 | `narrative.delta`     | S→C  | A streamed piece of narrative text | `{ runtimeId, pluginId, kind, delta }`              |
 | `narrative.completed` | S→C  | The complete narrative message     | `{ content, kind, messageId, runtimeId, pluginId }` |
 
+- `narrative.delta`, `narrative.completed`, and `runtime.started` must all carry `kind`; clients read it directly rather than inferring it from `label`.
 - `narrative.delta` can carry `reset: true`. In that case `delta` is an empty string. It means: the text this runtime already streamed was a preparation step before a tool call, or a draft that the review rejected, and it will not become the final narrative. The client should clear the part already shown, then take in the later pieces.
 - The `content` of `narrative.completed` is always the final text after review has passed. It replaces what was shown while streaming.
 
@@ -156,11 +157,13 @@ This lets stage animations react while the narrative is still being generated, a
 | ----------------------- | ---- | ---------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
 | `execution.started`     | S→C  | A turn execution starts                                                                                                | `{ runtimeCount }`                                                                                                      |
 | `interaction.submitted` | S→C  | The answer to `submit_interaction` is saved and the next turn has started. Sent before that turn's `execution.started` | `{ interactionTurnId, results: [{ submissionId, interactionId, values, filledNarrative }], message?: { id, content } }` |
-| `runtime.started`       | S→C  | One runtime starts                                                                                                     | `{ runtimeId, pluginId, turnId, runId, label }`                                                                         |
+| `runtime.started`       | S→C  | One runtime starts                                                                                                     | `{ runtimeId, pluginId, kind, turnId, runId, label, stage? }`                                                           |
 | `runtime.deferred`      | S→C  | A staged runtime was committed with the original turn and moved to the background                                      | `{ runtimeId, pluginId, jobId, sourceTurnId }`                                                                          |
 | `runtime.completed`     | S→C  | One runtime completes                                                                                                  | `{ runtimeId, pluginId, turnId, runId, status, durationMs }`                                                            |
-| `runtime.failed`        | S→C  | One runtime fails                                                                                                      | `{ runtimeId, pluginId, turnId, runId, status, durationMs, error, errorKind? }`                                         |
+| `runtime.failed`        | S→C  | One runtime fails                                                                                                      | `{ runtimeId, pluginId, turnId, runId, status, durationMs, error, errorKind?, failureTarget? }`                         |
 | `execution.completed`   | S→C  | The final state of a turn execution                                                                                    | `{ runtimeCount, resultCount, durationMs, committed, error?, abortReason?, resync? }`, each field explained below       |
+
+`runtime.started.stage` records the runtime's stage for that execution: `setup`, `pre-turn`, `narrative`, `post-turn` or `audit`. Event/manual runtimes without a stage omit it. Persisted traces retain it, and clients restore it from live events and historical traces onto the same execution step; later terminal events do not clear the stage. A group with a `stage: "setup"` step keeps a neutral "Opening setup" summary without per-task retries, even after the session enters `playing` or the page reloads. Do not infer a historical execution's stage from the current session phase or a plugin name.
 
 Fields of `execution.completed`:
 
@@ -174,7 +177,9 @@ Fields of `execution.completed`:
 > [!NOTE]
 > **Opening handoff.** When a player action completes the last setup runtime, the same SSE stream of `POST /api/actions` automatically goes on to run one main-loop turn (see [api.md § POST /api/actions](./api.md)). In this case the stream shows **two** rounds of `execution.started` and runtime lifecycle events, and their outer `turnId` values differ (the setup turn and the handoff turn). But only **one** `execution.completed` closes the stream. The frontend uses it to end the "running" state, and it handles the early content according to `committed`. If the setup commit fails, no handoff starts, and the stream ends directly with `committed: false`. If the player stops before the handoff starts, it does not start, and `execution.completed` carries the handoff turn's `turnId` and `abortReason: "aborted-by-player"`.
 
-`runtime.failed.errorKind` is an optional model failure category; see [failure categories](./slots.md#connection-tests-and-failure-reasons). The turn's failure notice uses the same remedies as the connection test and keeps the provider's message in expandable details. An unclassified exception uses `unknown`; failures without a model exception may omit the field. `io.concealed` still replaces error details with fixed text, but keeps the category because it contains no hidden content.
+`runtime.failed.errorKind` is an optional model failure category; see [failure categories](./slots.md#connection-tests-and-failure-reasons). `missing_key` means a built-in remote provider was missing its key before a request was sent. The turn's failure notice uses the same remedies as the connection test and keeps the provider's message in expandable details. An unclassified exception uses `unknown`; failures without a model exception may omit the field. `io.concealed` still replaces error details with fixed text, but keeps the category because it contains no hidden content.
+
+`runtime.failed.failureTarget` is an optional `{ provider, model? }` taken from the actual failed model exception, never inferred from error text. Runtime results and traces retain it; SSE and session snapshots restore it into execution records. A failed fallback records that fallback target, and later settings changes do not rewrite the historical target. It contains only provider and model identities, never keys or connection configuration. The client uses current active runtimes and current routing to list model uses that may share the affected provider.
 
 **`runtime.deferred` is a "handoff notice"**
 
@@ -667,7 +672,7 @@ Each connection on `/api/actions` and `/api/events/stream` has a bounded queue t
 `createEventBus(store?, options?)` needs only an optional `EventStore`. It has two async methods: `saveEvent(record)`, and `getEventById(sessionId, id)`, which is isolated per session.
 
 - The record type `EventStoreRecord` is exported with the package. An existing DataStore can be passed in directly. A standalone host does not have to implement other database methods.
-- Persistence is a bounded, best-effort audit queue. `flush()` waits for the queue to drain, but it does not guarantee that the transport has delivered.
+- Only ordinary events too large for an inline transport frame enter the bounded persistence queue, so other processes can fetch them by reference. Local events and inline frames do not write to `events`. SSE replay still reads the memory buffer. `flush()` waits for the queue to drain, but it does not guarantee that the transport has delivered.
 - For a very large transport frame, after a successful save, only a reference is sent. The receiver reads the content from the same store.
 
 Transport frames between processes require a nonempty `stream` identifying the sender generation. Frames without it are rejected; upgrade and restart all publishers together. Trace event payloads are read as flat objects: a nested `data` field is ordinary data and is never merged into the envelope. Old nested traces must be regenerated for the current debug view.
@@ -1215,7 +1220,7 @@ These events use the standard SSE envelope, and they are saved to `trace_events`
 | `gateway.responded` | The success result of a function-runtime gateway. Text and object calls carry `{ runtimeId, pluginId, method, finishReason, usage, reasoningContent?, model?, provider?, durationMs }`. `model/provider` is the target actually hit after fallback. Transcription calls also carry `usage/model/provider` when available. Old traces, or custom gateways that do not support this metadata, may lack them |
 | `message.completed` | `{ runtimeId, pluginId, content, len, deltaCount }`. `deltaCount` is the number of `narrative.delta` events this runtime produced. It is the saved, authoritative count. The frontend uses a different synthetic field, `_aggregated`, when it combines live fragments. The two cannot be swapped |
 | `block.emitted` | `{ runtimeId, pluginId, proposalId, source, block }` |
-| `ui.rendered` | `{ runtimeId, pluginId, proposalId, source, render, block? }`. The `/actions` SSE forwards it, so the chat area can show committed `ui.render` blocks live. Older trace-only payloads may not have `block`. In that case the client builds it from `render` |
+| `ui.rendered` | `{ runtimeId, pluginId, proposalId, source, render, block }`. The action stream and `state` topic send the same committed payload; the block ID and metadata come from the commit result |
 | `state.patch.applied` | `{ runtimeId, pluginId, proposalId, patch: { packageName, summary, ops } }` |
 | `hook.fired` | `{ event, hookName, pluginId, runtimeId?, targetId?, targetType, proposalType? }` |
 | `hook.rewrote` | `{ event, hookName, pluginId, runtimeId?, targetId?, diff?, proposalType? }` |
@@ -1290,7 +1295,7 @@ Privacy boundary:
 
 **`flush()` and `close()`**
 
-- `EventBus.flush()` waits for the bounded audit persistence queue to drain. It does not wait for cross-process delivery, and it does not block new events.
+- `EventBus.flush()` waits for the bounded oversized-event persistence queue to drain. It does not wait for cross-process delivery, and it does not block new events.
 - `EventBus.close()` can be called more than once. It does these things in order: stops local emitting and remote receiving; unsubscribes where supported; clears the timers that wait for gaps; waits for unfinished persistence, ordered publishing, and reads of received references to finish; and finally closes the transport it owns.
 - After close, calls to `emit()` are ignored.
 - A transport can return an unsubscribe function from `subscribe()`, and implement `close()` when it holds resources. The PostgreSQL implementation uses this lifecycle to release its LISTEN/NOTIFY client.

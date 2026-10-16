@@ -32,7 +32,6 @@ function ctx(overrides?: Partial<TriggerContext>): TriggerContext {
     triggerCount: 0,
     turnsSinceLastTrigger: 999,
     pendingEventTopics: [],
-    isManualTrigger: false,
     ...overrides,
   };
   // every / startTurn gate on `logicalTurn`; these cases express the turn
@@ -50,11 +49,9 @@ describe("shouldTrigger — gate ordering", () => {
     expect(shouldTrigger(m, c)).toBe(false);
   });
 
-  it("cooldown takes precedence over manual flag too", () => {
-    // Even an explicit manual trigger must respect cooldown — players who
-    // mash the button shouldn't bypass throttling.
+  it("manual runtimes never enter the automatic router", () => {
     const m = manifest({ trigger: { type: "manual", cooldownTurns: 3 } });
-    const c = ctx({ isManualTrigger: true, turnsSinceLastTrigger: 1 });
+    const c = ctx({ turnsSinceLastTrigger: 1 });
     expect(shouldTrigger(m, c)).toBe(false);
   });
 

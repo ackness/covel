@@ -1,9 +1,9 @@
+import type { SlotOverridesInput } from "@covel/ai-provider";
 import { describe, expect, it } from "vitest";
 import type { LLMDiagnostics, LLMRequestBudget } from "@covel/shared";
 import {
   createGatewayAdapter,
   type GatewayLike,
-  type SlotOverridesInput,
 } from "../src/llm/gateway-llm-adapter.js";
 
 describe("createGatewayAdapter target resolution", () => {

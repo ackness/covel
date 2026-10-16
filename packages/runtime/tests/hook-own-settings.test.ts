@@ -11,7 +11,7 @@
  * - pipeline injection (plugin hook reads its own bucket; cross-plugin → {};
  *   framework hook → {}; outside scope → getter absent, ctx forwarded as-is)
  * - read-only guarantee (returned bucket is frozen)
- * - end-to-end through executeTurn (snapshot built from manifest.userSettings
+ * - end-to-end through runTurnPipeline (snapshot built from manifest.userSettings
  *   merged with TurnInput.userSettings, visible to an in-turn TurnStart hook)
  */
 
@@ -26,11 +26,11 @@ import {
 } from "../src/hooks/hook-scope.js";
 import { createHookPipeline } from "../src/hooks/pipeline.js";
 import type { HookContext } from "../src/hooks/types.js";
-import { executeTurn } from "../src/turn-executor/turn-executor.js";
+import { runTurnPipeline } from "../src/turn-executor/turn-executor.js";
 import { buildHookSettings } from "../src/hooks/hook-settings.js";
 import { finalizeExecution } from "../src/commit/finalize-execution.js";
 import type { TurnExecutorDeps } from "../src/turn-executor/turn-executor.js";
-import type { LLMAdapter, LLMResponse } from "../src/llm/llm-adapter.js";
+import type { LLMAdapter, LLMResponse } from "@covel/shared";
 
 // ── hook-scope primitives ──────────────────────────────────────────
 
@@ -361,7 +361,7 @@ describe("HookPipeline getOwnSettings injection", () => {
   });
 });
 
-// ── end-to-end through executeTurn ──────────────────────────────────
+// ── end-to-end through runTurnPipeline ──────────────────────────────────
 
 class SimpleMockLLM implements LLMAdapter {
   async generate(): Promise<LLMResponse> {
@@ -403,7 +403,7 @@ function makeCfgManifest(): RuntimeManifest {
   };
 }
 
-describe("executeTurn → hook getOwnSettings end-to-end", () => {
+describe("runTurnPipeline → hook getOwnSettings end-to-end", () => {
   it("preserves each runtime's own default when a plugin declares several runtimes", async () => {
     const makeRuntime = (name: string, tone: string): RuntimeManifest => ({
       ...makeCfgManifest(),
@@ -418,7 +418,7 @@ describe("executeTurn → hook getOwnSettings end-to-end", () => {
       makeRuntime("configured/b", "loud"),
     ];
     const seen: unknown[] = [];
-    const result = await executeTurn(
+    const result = await runTurnPipeline(
       {
         origin: "player",
         sessionId: "defaults",
@@ -507,7 +507,7 @@ describe("executeTurn → hook getOwnSettings end-to-end", () => {
       userSettings: { "cfg-plugin": playerValues },
     };
 
-    const result = await executeTurn(input, [manifest], deps);
+    const result = await runTurnPipeline(input, [manifest], deps);
 
     expect(result.runtimeResults).toHaveLength(1);
     // Player value wins for tone; manifest default fills missing verbosity.

@@ -5,6 +5,7 @@ import {
   seedAppSettings,
   selectWorldByText,
   useServerWorlds,
+  startGame,
 } from "./helpers/player.js";
 
 /**
@@ -490,14 +491,14 @@ async function enterFreshHarukaSession(page: Page): Promise<string> {
 
   await selectWorldByText(
     page,
-    /遥风学园・春日薄荷|Haruka Academy · Spring Mint/i,
+    /遥风学园・春日薄荷|Harukaze Academy · Spring Mint/i,
   );
 
   const startButton = page
     .getByRole("button", { name: /^(start game|开始游戏)$/i })
     .first();
   await expect(startButton).toBeVisible({ timeout: 10_000 });
-  await startButton.click();
+  await startGame(page, startButton);
 
   await expect(page).toHaveURL(/sid=/, { timeout: 15_000 });
   const sessionId = new URL(page.url()).searchParams.get("sid");

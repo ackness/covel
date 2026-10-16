@@ -37,7 +37,7 @@ function entry(overrides: Partial<PluginRegistryEntry>): PluginRegistryEntry {
       id: "probe",
       name: "Probe",
       description: "Probe",
-      pluginType: "plugin",
+      kind: "plugin",
       runtimeCount: 0,
     },
     status: "registered",

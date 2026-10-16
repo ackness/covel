@@ -41,18 +41,17 @@ import {
   snapshotUserSettings,
   type PreparedInteractionSubmission,
 } from "@covel/runtime";
-import type {
-  CovelEventType,
-  JobStatusRecord,
-  RuntimeManifest,
-  RuntimeRetryScope,
-  SseEnvelope,
-} from "@covel/shared";
 import {
+  type CovelEventType,
+  type JobStatusRecord,
+  type RuntimeManifest,
+  type RuntimeRetryScope,
+  type SseEnvelope,
   FORWARDED_EVENT_TYPES,
   PLAYER_ABORT_REASON,
   concealedRuntimeIds,
   readRuntimeEnv,
+  validateActionRequest,
 } from "@covel/shared";
 import type { CompactorRunner } from "@covel/context";
 import {
@@ -71,7 +70,7 @@ import {
   type QueuedActivatedRuntimeJob,
 } from "./plugin-rpc/runtime-job-enqueue.js";
 import {
-  decodePluginUserSettingsHeader,
+  readPluginUserSettings,
   loadSessionPluginUserSettings,
 } from "./plugin-user-settings.js";
 import {
@@ -84,9 +83,8 @@ import {
   assertRecoverableTurn,
   recoveryAction,
 } from "./actions/execution-recovery.js";
-import { checkSessionOwner } from "./session/session-guard.js";
+import { resolveSessionById } from "./session/session-guard.js";
 import { readLockedSession } from "./session/locked-mutation.js";
-import { validateActionRequest } from "./actions/request.js";
 import { retryPendingDimensionSettlements } from "./actions/dimension-settlement-retry.js";
 import { preflightActionApprovals } from "./actions/approval-preflight.js";
 import { preflightFormApprovals } from "./plugin-rpc/form-approvals.js";
@@ -176,30 +174,12 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
 
   // Enforce header transport limits before opening the SSE response or doing
   // any session work. Malformed values remain a no-settings request.
-  const decodedUserSettings = decodePluginUserSettingsHeader(
-    c.req.header("X-Plugin-User-Settings"),
-  );
-  if (!decodedUserSettings.ok) {
-    return c.json(
-      errorBody(decodedUserSettings.error, { code: decodedUserSettings.code }),
-      decodedUserSettings.status,
-    );
-  }
+  const decodedUserSettings = readPluginUserSettings(c);
+  if (!decodedUserSettings.ok) return decodedUserSettings.response;
 
-  const session = await store.getSession(sessionId);
-  if (!session) {
-    return c.json(
-      errorBody(`Session not found: ${sessionId}`, {
-        code: "session_not_found",
-      }),
-      404,
-    );
-  }
-
-  // Owner guard (hosted tiers): actions execute turns and spend tokens
-  // on the session's behalf.
-  const ownerDenied = checkSessionOwner(c, session);
-  if (ownerDenied) return ownerDenied;
+  const guard = await resolveSessionById(c, sessionId);
+  if (!guard.ok) return guard.response;
+  const session = guard.session;
 
   // Fast path: a paused/ended session takes no actions. The
   // authoritative re-check happens under the session lock below (this read is
@@ -521,10 +501,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
                 "input_already_committed",
               );
           }
-          // Prep's editable world document is browser-local until the first
-          // start action. Persist its value on the session so setup, opening
-          // continuation, later turns, reconnects, and other server workers
-          // all build context from the same lore.
+          // Refresh runtime activations from the session read under the lock.
           pluginRegistry.syncSessionActivations(
             sessionId,
             liveSession.activePlugins,
@@ -1317,9 +1294,9 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
       try {
         if (credentialKeys.length > 0) {
           const queuedIds = new Set(
-            (await listRuntimeJobs(store, { sessionId }))
-              .filter((job) => job.status === "queued")
-              .map((job) => job.jobId),
+            (
+              await listRuntimeJobs(store, { sessionId, statuses: ["queued"] })
+            ).map((job) => job.jobId),
           );
           for (const key of credentialKeys)
             if (!queuedIds.has(key.jobId))

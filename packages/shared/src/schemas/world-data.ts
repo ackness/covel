@@ -179,35 +179,6 @@ export const worldDataDescriptorOverrideSchema = z
   })
   .strict();
 
-export const worldDataDiagnosticCountsSchema = z
-  .object({
-    info: z.number().int().min(0),
-    warning: z.number().int().min(0),
-    error: z.number().int().min(0),
-  })
-  .strict();
-
-export const worldDataSourceSummarySchema = z
-  .object({
-    id: worldDataSourceIdSchema,
-    digest: z.string().min(1),
-    target: z.string().min(1),
-    schema: z.string().min(1).optional(),
-    importedAt: z.string().min(1).optional(),
-    order: z.number().int().min(0),
-    origin: z.enum(["world", "override"]),
-    overridden: z.boolean().optional(),
-    diagnostics: worldDataDiagnosticCountsSchema,
-  })
-  .strict();
-
-export const worldDataMetadataSummarySchema = z
-  .object({
-    schemaVersion: z.literal(1),
-    sources: z.array(worldDataSourceSummarySchema),
-  })
-  .strict();
-
 export type WorldDataDescriptorInput = z.input<
   typeof worldDataDescriptorSchema
 >;

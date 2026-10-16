@@ -4,6 +4,7 @@ import {
   ONBOARDING_VERSION,
   selectWorldByText,
   useServerWorlds,
+  startGame,
 } from "./helpers/player.js";
 
 test.beforeEach(async ({ page }) => {
@@ -135,10 +136,10 @@ test("the game surface lets the aurora show through and fades the world art", as
   page,
 }) => {
   await selectWorldByText(page, /雾港.*裂潮纪|Mistport/i);
-  await page
-    .getByRole("button", { name: /^(start game|开始游戏)$/i })
-    .first()
-    .click();
+  await startGame(
+    page,
+    page.getByRole("button", { name: /^(start game|开始游戏)$/i }).first(),
+  );
   // Creating a session takes several seconds on a busy machine; the other
   // specs that start a game give it the same room.
   await expect(page).toHaveURL(/sid=/, { timeout: 15_000 });

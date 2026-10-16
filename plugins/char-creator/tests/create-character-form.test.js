@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createFormTool, tool } from "@covel/tools";
 import makeCharacterForm from "../tools/create-character-form.js";
 import { validatePlayerName } from "../lib/player-name.js";
@@ -301,5 +301,197 @@ describe("create-character-form schema boundary", () => {
       store: { listPlayerInputs: async () => [] },
     });
     expect(result.interaction).not.toHaveProperty("notice");
+  });
+});
+
+describe("create-character-form narrative defaults", () => {
+  const openingContext = (locale) => ({
+    ...context,
+    locale,
+    world: {
+      characterSchema: {
+        attributes: ["calling", "background"].map((id) => ({
+          id,
+          name: id,
+          type: "string",
+          category: "bio",
+        })),
+      },
+    },
+  });
+  const opening = (calling, background, narrativeTemplate) => ({
+    ...params,
+    narrativeTemplate,
+    fields: [
+      { ...params.fields[0], defaultValue: "张三" },
+      {
+        name: "calling",
+        type: "text",
+        label: "Calling",
+        defaultValue: calling,
+      },
+      {
+        name: "background",
+        type: "textarea",
+        label: "Background",
+        defaultValue: background,
+      },
+    ],
+  });
+
+  it("rejects the reported opening with a correction and no form or writes", async () => {
+    const emitForm = vi.fn(createFormTool.execute);
+    const checked = makeCharacterForm(
+      { tool },
+      { ...createFormTool, execute: emitForm },
+    );
+    const pendingProposals = [];
+    await expect(
+      checked.execute(
+        opening(
+          "尚未定下的冒险者",
+          "为追寻一桩旧事来到灰苇村，心底藏着不愿轻易示人的秘密",
+          "你叫{{characterName}}，是{{calling}}；你因{{background}}来到这里。",
+        ),
+        { ...openingContext("zh-CN"), pendingProposals },
+      ),
+    ).rejects.toThrow(
+      /calling.defaultValue is an undecided placeholder[\s\S]*Choose a concrete value[\s\S]*Filled narrative: 你叫张三[\s\S]*秘密来到这里/,
+    );
+    expect(emitForm).not.toHaveBeenCalled();
+    expect(pendingProposals).toEqual([]);
+  });
+
+  it.each([
+    ["zh-CN", "寻找旧友来到", "你因{{background}}来到这里。", "来到"],
+    ["zh-CN", "来到灰苇村", "你来到{{background}}。", "来到"],
+    ["en-US", "to find a friend", "You came to {{background}}.", "to"],
+    ["en-US", "find a friend here", "You came to {{background}} here.", "here"],
+  ])(
+    "rejects adjacent repetition in %s",
+    async (locale, background, template, word) => {
+      await expect(
+        createCharacterForm.execute(
+          opening("scout", background, template),
+          openingContext(locale),
+        ),
+      ).rejects.toThrow(`background.defaultValue repeats "${word}"`);
+    },
+  );
+
+  it.each([
+    ["zh-CN", "待定"],
+    ["zh-CN", "尚未定下的冒险者"],
+    ["en-US", "TBD"],
+    ["en-US", "an undecided adventurer"],
+  ])("rejects an undecided calling in %s (%s)", async (locale, calling) => {
+    await expect(
+      createCharacterForm.execute(
+        opening(
+          calling,
+          "debt",
+          "{{characterName}}: {{calling}}; {{background}}.",
+        ),
+        openingContext(locale),
+      ),
+    ).rejects.toThrow(/calling.defaultValue is an undecided placeholder/);
+  });
+
+  it.each([
+    [
+      "zh-CN",
+      "巡林人",
+      "追寻一桩旧事",
+      "你叫{{characterName}}，是{{calling}}，因{{background}}来到灰苇村。",
+      "你叫张三，是巡林人，因追寻一桩旧事来到灰苇村。",
+    ],
+    [
+      "en-US",
+      "a scout",
+      "a promise to an undecided voter.",
+      "{{characterName}} is {{calling}}, bound by {{background}}.",
+      "张三 is a scout, bound by a promise to an undecided voter.",
+    ],
+  ])(
+    "returns the filled opening in %s without bookkeeping",
+    async (locale, calling, background, template, expected) => {
+      const result = await createCharacterForm.execute(
+        opening(calling, background, template),
+        openingContext(locale),
+      );
+      expect(result.filledNarrative).toBe(expected);
+      expect(JSON.parse(result._text)).toEqual({ filledNarrative: expected });
+      expect(result.created).toBe(true);
+    },
+  );
+
+  it("keeps an author's enum choice and a player's earlier answer", async () => {
+    const result = await createCharacterForm.execute(
+      {
+        ...params,
+        narrativeTemplate: "{{characterName}}: {{occupation}}; {{motive}}.",
+        fields: [
+          ...params.fields,
+          {
+            name: "occupation",
+            type: "select",
+            label: "Occupation",
+            options: ["undecided"],
+            defaultValue: "undecided",
+          },
+          {
+            name: "motive",
+            type: "text",
+            label: "Motive",
+            defaultValue: "exploration",
+          },
+        ],
+      },
+      {
+        ...context,
+        locale: "en-US",
+        world: {
+          characterSchema: {
+            attributes: [
+              context.world.characterSchema.attributes[0],
+              {
+                ...context.world.characterSchema.attributes[2],
+                options: ["undecided"],
+              },
+            ],
+          },
+        },
+        store: {
+          listPlayerInputs: async () => [
+            {
+              formId: "char-creation",
+              values: { characterName: "Wren", motive: "undecided" },
+            },
+          ],
+        },
+      },
+    );
+    expect(result.filledNarrative).toBe("Wren: undecided; undecided.");
+  });
+
+  it("does not confuse similar words or punctuation with adjacent repetition", async () => {
+    await expect(
+      createCharacterForm.execute(
+        opening(
+          "a scout",
+          "tomorrow",
+          "You came to {{background}}; tomorrow will be different.",
+        ),
+        openingContext("en-US"),
+      ),
+    ).resolves.toHaveProperty("created", true);
+  });
+
+  it("renders blank optional defaults as missing, as submission does", async () => {
+    const result = await createCharacterForm.execute(
+      opening("scout", "   ", "{{calling}} / {{background}}"),
+      openingContext("en-US"),
+    );
+    expect(result.filledNarrative).toBe("scout / ");
   });
 });

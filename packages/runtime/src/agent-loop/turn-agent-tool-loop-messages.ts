@@ -1,9 +1,5 @@
 import { parseJsonText } from "@covel/tools";
-import type {
-  LLMMessage,
-  LLMResponse,
-  LLMToolCall,
-} from "../llm/llm-adapter.js";
+import type { LLMMessage, LLMResponse, LLMToolCall } from "@covel/shared";
 
 type ToolCallResponse = Pick<
   LLMResponse,

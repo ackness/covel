@@ -3,6 +3,7 @@ import type {
   PageCursor,
   SnapshotCharacter,
   SessionExecutionStatus,
+  Stage,
 } from "@covel/shared";
 import type * as api from "@/services/api";
 
@@ -50,6 +51,8 @@ export interface ExecutionStep {
   reasoning?: readonly ReasoningEntry[];
   runtimeId: string;
   pluginId: string;
+  /** Stage recorded by runtime.started, retained for historical setup rows. */
+  stage?: Stage;
   status:
     | "running"
     | "llm"
@@ -63,6 +66,7 @@ export interface ExecutionStep {
   label?: string;
   detail?: string;
   errorKind?: string;
+  failureTarget?: import("@covel/shared").RuntimeResult["failureTarget"];
   /** Qualified tool name when status is "tool". */
   toolName?: string;
   durationMs?: number;

@@ -44,11 +44,8 @@ export function shouldTrigger(
       return logicalTurn % (trigger?.every ?? 1) === 0;
 
     case "manual":
-      // Dead in the production selection path: selectTriggeredRuntimes picks
-      // manual runtimes by name match and never calls shouldTrigger for them
-      // (an explicit plugin-rpc call IS the trigger decision). Kept for direct
-      // callers (tests, event fan-out reuse) — see AGENTS.md "Trigger modes".
-      return context.isManualTrigger;
+      // Explicit manual selection bypasses this router.
+      return false;
 
     case "event":
       return (

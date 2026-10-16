@@ -1,3 +1,4 @@
+import { isPathInside } from "./path-containment.js";
 import {
   MAX_UI_WEBVIEW_BYTES,
   pluginUiSpecIssues,
@@ -12,14 +13,13 @@ async function containedFile(root: string, file: string): Promise<string> {
     fs.realpath(root),
     fs.realpath(file),
   ]);
-  const relative = path.relative(realRoot, realFile);
-  if (relative.startsWith("..") || path.isAbsolute(relative))
+  if (!isPathInside(realRoot, realFile, { allowRoot: true }))
     throw new Error("UI asset escapes plugin root");
   return realFile;
 }
 
 /** A UI spec the host does not show, with what is wrong with it. */
-export class PluginUiSpecError extends Error {
+class PluginUiSpecError extends Error {
   constructor(
     readonly issues: readonly PluginUiSpecIssue[],
     /** The spec's `id`, when it has one. */

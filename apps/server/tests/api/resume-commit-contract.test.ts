@@ -40,7 +40,6 @@ describe("resume commit composition", () => {
       const manifest = {
         name: "producer",
         pluginId: "producer",
-        pluginType: "plugin",
         version: "1.0.0",
         description: "Resumed export producer",
         stage: "narrative",
@@ -59,7 +58,7 @@ describe("resume commit composition", () => {
           id: "producer",
           name: "Producer",
           description: "",
-          pluginType: "plugin",
+          kind: "plugin",
           runtimeCount: 1,
         },
         manifests: [
@@ -232,7 +231,6 @@ describe("resume commit composition", () => {
           ({
             name,
             pluginId: "setup",
-            pluginType: "plugin",
             version: "1.0.0",
             description: name,
             stage: "setup",
@@ -251,7 +249,7 @@ describe("resume commit composition", () => {
           id: "setup",
           name: "Setup",
           description: "",
-          pluginType: "plugin",
+          kind: "plugin",
           runtimeCount: manifests.length,
         },
         manifests: manifests.map((manifest) => ({

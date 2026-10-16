@@ -383,10 +383,10 @@
     "recoveryStop": "Stop task",
     "recoveryStopFailed": "Could not stop the task. Check its status and try again.",
     "setupFailedTitle": "Setup did not finish",
-    "setupFailedDetail": "A step that prepares the story failed. What is already done is kept; retrying runs only the unfinished steps.",
+    "setupFailedDetail": "A setup step failed; retry to finish the remaining steps.",
     "setupRetry": "Retry setup",
     "setupUnfinishedTitle": "Setup is not finished yet",
-    "setupUnfinishedDetail": "The story is still being prepared. Continue to run the remaining steps with what you have already entered.",
+    "setupUnfinishedDetail": "Continue setup with the choices you already made.",
     "setupContinue": "Continue setup",
     "setupRetryFailed": "Could not restart setup. Check the connection and try again.",
     "memoryIndex": {
@@ -507,6 +507,34 @@
       "turnedOn": "Also turned on {{plugins}}: another plugin needs what they provide.",
       "turnedOffConflict": "Also turned off {{plugins}}: they cannot be used together with \"{{plugin}}\".",
       "turnedOffNeeds": "Also turned off {{plugins}}: they need \"{{plugin}}\"."
+    },
+    "recoveryModelSettings": "Model settings",
+    "setupRunning": "Preparing the opening",
+    "setupExecutionSummary": "Opening setup · {{count}} tasks",
+    "setupExecutionSummary_one": "Opening setup · {{count}} task",
+    "setupExecutionSummary_other": "Opening setup · {{count}} tasks",
+    "providerFailure": {
+      "auth": "{{provider}} rejected the API key. Check the key and account permissions.",
+      "forbidden": "{{provider}} denied access. Check account permissions.",
+      "quota": "{{provider}} has no quota or balance left.",
+      "rate_limited": "{{provider}} is rate-limiting requests. Check usage and quota.",
+      "sharedKey": "{{slots}} — {{count}} model uses in this session share {{provider}}. Fixing its key applies to all of them.",
+      "sharedAccount": "{{slots}} — {{count}} model uses in this session share {{provider}} and may also be affected. Check this provider’s account and limits.",
+      "missing_key": "No API key for {{provider}}. Add a key in model settings."
+    },
+    "modelUse": {
+      "story": "Story",
+      "plugin": "Plugin tasks",
+      "utility": "Utility",
+      "fast": "History compression",
+      "memory": "Memory extraction"
+    },
+    "missingCredentials": {
+      "title": "Some model uses have no API key",
+      "detail": "Add a key now, or start anyway and configure it later.",
+      "provider": "No API key is configured for {{provider}}. {{slots}} may fail.",
+      "configure": "Add API key",
+      "startAnyway": "Start anyway"
     }
   },
   "blocks": {
@@ -1155,7 +1183,8 @@
       "overloaded": "The provider is overloaded; try again later.",
       "server": "The provider had an internal error.",
       "refused": "The provider declined to answer.",
-      "config": "The model configuration is not valid."
+      "config": "The model configuration is not valid.",
+      "missing_key": "No API key is configured. Add one in provider settings."
     },
     "addProvider": "Add provider",
     "addModel": "Add model",

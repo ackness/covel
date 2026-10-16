@@ -29,7 +29,8 @@ const execution = {
       pluginId: "fixture",
       runtimeId: "fixture",
       turnId: "turn-cancel-commit",
-      status: "success",
+      status: "success" as const,
+      runId: "fixture-run",
       output: {},
       effects: {
         statePatches: [1, 2, 3].map((value) => ({

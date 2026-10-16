@@ -5,7 +5,7 @@ import {
 import { describe, expect, it, vi } from "vitest";
 import { createMemoryStore } from "@covel/store/memory";
 import { turnDigestSchema, type RuntimeManifest } from "@covel/shared";
-import { executeTurn } from "../src/turn-executor/turn-executor.js";
+import { runTurnPipeline } from "../src/turn-executor/turn-executor.js";
 import {
   buildTurnDigest,
   snapshotPlayerInput,
@@ -80,7 +80,7 @@ describe("source player input snapshot", () => {
       const generate = vi.fn(async () => {
         throw new Error("Guard must skip model execution");
       });
-      const result = await executeTurn(
+      const result = await runTurnPipeline(
         {
           sessionId: "session",
           turnId: "now",

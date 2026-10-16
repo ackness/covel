@@ -1,4 +1,5 @@
 import type { PluginRpcRequest } from "@covel/shared";
+import { z } from "zod";
 
 export type PluginRpcBodyValidation =
   | { readonly ok: true; readonly body: PluginRpcRequest }
@@ -8,248 +9,77 @@ export type PluginRpcBodyValidation =
       readonly status: 400;
     };
 
-function rejectUnknownFields(
-  body: Readonly<Record<string, unknown>>,
-  kind: PluginRpcRequest["kind"],
-  allowed: readonly string[],
-): PluginRpcBodyValidation | undefined {
-  const allowedSet = new Set(allowed);
-  const fields = Object.keys(body).filter((field) => !allowedSet.has(field));
-  if (fields.length === 0) return undefined;
-  return {
-    ok: false,
-    error: `kind "${kind}" does not accept field(s): ${fields.join(", ")}`,
-    status: 400,
-  };
-}
+const selector = z
+  .string({ error: "must be a string" })
+  .min(1, "must be a non-empty string");
+const jsonObject = z.record(z.string(), z.unknown(), {
+  error: "must be a JSON object",
+});
+
+const pluginRpcBodySchema = z.discriminatedUnion("kind", [
+  z.strictObject({
+    kind: z.literal("action"),
+    pluginId: selector,
+    action: selector,
+    payload: z.unknown().optional(),
+  }),
+  z.strictObject({
+    kind: z.literal("runtime"),
+    pluginId: selector,
+    runtimeId: selector,
+    payload: z.unknown().optional(),
+    expectsBackgroundFollower: z.boolean().optional(),
+    retryFromTurnId: selector.optional(),
+  }),
+  z
+    .strictObject({
+      kind: z.literal("command"),
+      commandId: selector,
+      input: selector.max(10_000).optional(),
+      args: jsonObject
+        .refine(
+          (args) => JSON.stringify(args).length <= 10_000,
+          "must be at most 10000 JSON characters",
+        )
+        .optional(),
+    })
+    .refine(
+      (body) => (body.input !== undefined) !== (body.args !== undefined),
+      "command dispatch requires exactly one of input or args",
+    ),
+  z.strictObject({
+    kind: z.literal("event"),
+    pluginId: selector,
+    topic: selector.max(128),
+    payload: jsonObject.optional(),
+  }),
+]);
 
 export function validatePluginRpcBody(raw: unknown): PluginRpcBodyValidation {
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
-    return { ok: false, error: "body must be a JSON object", status: 400 };
+  const parsed = pluginRpcBodySchema.safeParse(raw);
+  if (!parsed.success) {
+    const error = parsed.error.issues
+      .map((issue) => {
+        if (issue.code === "unrecognized_keys")
+          return `Unknown field(s): ${issue.keys.join(", ")}`;
+        if (issue.code === "invalid_union")
+          return "kind must be one of action, runtime, command, or event";
+        if (issue.code === "invalid_type" && issue.path.length === 0)
+          return "body must be a JSON object";
+        return issue.path.length > 0
+          ? `${issue.path.join(".")}: ${issue.message}`
+          : issue.message;
+      })
+      .join("; ");
+    return { ok: false, error, status: 400 };
   }
-
-  const body = raw as Record<string, unknown>;
-  if (
-    body.kind !== "action" &&
-    body.kind !== "runtime" &&
-    body.kind !== "command" &&
-    body.kind !== "event"
-  ) {
-    return {
-      ok: false,
-      error: "kind must be one of action, runtime, command, or event",
-      status: 400,
-    };
-  }
-
-  if (body.kind === "event") {
-    if (!body.pluginId || typeof body.pluginId !== "string") {
-      return { ok: false, error: "pluginId (string) is required", status: 400 };
-    }
-    if (
-      typeof body.topic !== "string" ||
-      body.topic.length === 0 ||
-      body.topic.length > 128
-    ) {
-      return {
-        ok: false,
-        error: "topic must be a non-empty string of at most 128 characters",
-        status: 400,
-      };
-    }
-    if (
-      body.payload !== undefined &&
-      (!body.payload ||
-        typeof body.payload !== "object" ||
-        Array.isArray(body.payload))
-    ) {
-      return { ok: false, error: "payload must be a JSON object", status: 400 };
-    }
-    const unknown = rejectUnknownFields(body, body.kind, [
-      "kind",
-      "pluginId",
-      "topic",
-      "payload",
-    ]);
-    if (unknown) return unknown;
-    return { ok: true, body: body as unknown as PluginRpcRequest };
-  }
-
+  const body = parsed.data;
   if (body.kind === "command") {
-    if (body.action !== undefined || body.runtimeId !== undefined) {
-      return {
-        ok: false,
-        error: 'kind "command" does not accept action or runtimeId',
-        status: 400,
-      };
-    }
-    if (typeof body.commandId !== "string" || body.commandId.length === 0) {
-      return { ok: false, error: "commandId must be a string", status: 400 };
-    }
-    const hasInput = body.input !== undefined;
-    const hasArgs = body.args !== undefined;
-    if (hasInput === hasArgs) {
-      return {
-        ok: false,
-        error: "command dispatch requires exactly one of input or args",
-        status: 400,
-      };
-    }
-    if (
-      hasInput &&
-      (typeof body.input !== "string" ||
-        body.input.length === 0 ||
-        body.input.length > 10_000)
-    ) {
-      return {
-        ok: false,
-        error: "input must be a non-empty string of at most 10000 characters",
-        status: 400,
-      };
-    }
-    if (hasArgs) {
-      if (
-        !body.args ||
-        typeof body.args !== "object" ||
-        Array.isArray(body.args)
-      ) {
-        return { ok: false, error: "args must be a JSON object", status: 400 };
-      }
-      if (JSON.stringify(body.args).length > 10_000) {
-        return {
-          ok: false,
-          error: "args must be at most 10000 JSON characters",
-          status: 400,
-        };
-      }
-    }
-    if (
-      body.pluginId !== undefined ||
-      body.payload !== undefined ||
-      body.expectsBackgroundFollower !== undefined ||
-      body.retryFromTurnId !== undefined
-    ) {
-      return {
-        ok: false,
-        error:
-          "command dispatch does not accept pluginId, payload, expectsBackgroundFollower, or retryFromTurnId",
-        status: 400,
-      };
-    }
-    const unknown = rejectUnknownFields(body, body.kind, [
-      "kind",
-      "commandId",
-      "input",
-      "args",
-    ]);
-    if (unknown) return unknown;
-    return { ok: true, body: body as unknown as PluginRpcRequest };
+    const { kind, commandId, input, args } = body;
+    if (input !== undefined)
+      return { ok: true, body: { kind, commandId, input } };
+    // The schema's XOR refinement requires args when input is absent.
+    return { ok: true, body: { kind, commandId, args: args! } };
   }
-
-  if (body.kind === "action") {
-    if (body.runtimeId !== undefined || body.commandId !== undefined) {
-      return {
-        ok: false,
-        error: 'kind "action" does not accept runtimeId or commandId',
-        status: 400,
-      };
-    }
-    if (body.input !== undefined || body.args !== undefined) {
-      return {
-        ok: false,
-        error: "input and args require kind command",
-        status: 400,
-      };
-    }
-    if (
-      body.expectsBackgroundFollower !== undefined ||
-      body.retryFromTurnId !== undefined
-    ) {
-      return {
-        ok: false,
-        error:
-          "action dispatch does not accept expectsBackgroundFollower or retryFromTurnId",
-        status: 400,
-      };
-    }
-    if (!body.pluginId || typeof body.pluginId !== "string") {
-      return { ok: false, error: "pluginId (string) is required", status: 400 };
-    }
-    if (typeof body.action !== "string") {
-      return { ok: false, error: "action must be a string", status: 400 };
-    }
-    if (body.action.length === 0) {
-      return {
-        ok: false,
-        error: "action must be a non-empty string",
-        status: 400,
-      };
-    }
-    const unknown = rejectUnknownFields(body, body.kind, [
-      "kind",
-      "pluginId",
-      "action",
-      "payload",
-    ]);
-    if (unknown) return unknown;
-    return { ok: true, body: body as unknown as PluginRpcRequest };
-  }
-
-  if (body.action !== undefined || body.commandId !== undefined) {
-    return {
-      ok: false,
-      error: 'kind "runtime" does not accept action or commandId',
-      status: 400,
-    };
-  }
-  if (body.input !== undefined || body.args !== undefined) {
-    return {
-      ok: false,
-      error: "input and args require kind command",
-      status: 400,
-    };
-  }
-  if (!body.pluginId || typeof body.pluginId !== "string") {
-    return { ok: false, error: "pluginId (string) is required", status: 400 };
-  }
-  if (typeof body.runtimeId !== "string") {
-    return { ok: false, error: "runtimeId must be a string", status: 400 };
-  }
-  if (body.runtimeId.length === 0) {
-    return {
-      ok: false,
-      error: "runtimeId must be a non-empty string",
-      status: 400,
-    };
-  }
-  if (
-    body.expectsBackgroundFollower !== undefined &&
-    typeof body.expectsBackgroundFollower !== "boolean"
-  ) {
-    return {
-      ok: false,
-      error: "expectsBackgroundFollower must be a boolean",
-      status: 400,
-    };
-  }
-  if (
-    body.retryFromTurnId !== undefined &&
-    (typeof body.retryFromTurnId !== "string" || body.retryFromTurnId === "")
-  ) {
-    return {
-      ok: false,
-      error: "retryFromTurnId must be a non-empty string",
-      status: 400,
-    };
-  }
-  const unknown = rejectUnknownFields(body, body.kind, [
-    "kind",
-    "pluginId",
-    "runtimeId",
-    "payload",
-    "expectsBackgroundFollower",
-    "retryFromTurnId",
-  ]);
-  if (unknown) return unknown;
-  return { ok: true, body: body as unknown as PluginRpcRequest };
+  return { ok: true, body };
 }

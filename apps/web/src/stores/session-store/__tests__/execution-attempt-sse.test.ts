@@ -33,7 +33,6 @@ function harness(retrying = true) {
     sessionIdRef: { current: "session" },
     // Intentionally not updated: React may batch every event before rendering.
     stateRef: { current: state },
-    runtimeKindRef: { current: new Map() },
     deltaBufferRef: { current: new Map() },
     deltaRafRef: { current: null },
     lastBackfilledTurnIdRef: { current: "attempt" },
@@ -65,18 +64,60 @@ function harness(retrying = true) {
   };
 }
 
+it.each(["setup", "narrative", "post-turn"])(
+  "retains the %s stage from start through terminal events",
+  (stage) => {
+    const h = harness(false);
+    h.send("runtime.started", { stage });
+    h.send("runtime.failed", { error: "401 Unauthorized" });
+    expect(
+      h.getState().executionSteps.find((step) => step.turnId === "attempt"),
+    ).toMatchObject({ stage, status: "failed" });
+    h.send("runtime.completed", { status: "success" });
+    expect(
+      h.getState().executionSteps.find((step) => step.turnId === "attempt"),
+    ).toMatchObject({ stage, status: "completed" });
+  },
+);
+
+it.each([undefined, "invalid-stage", { stage: "setup" }])(
+  "does not infer a stage from missing or invalid metadata: %j",
+  (stage) => {
+    const h = harness(false);
+    h.send("runtime.started", { stage });
+    expect(
+      h.getState().executionSteps.find((step) => step.turnId === "attempt")
+        ?.stage,
+    ).toBeUndefined();
+  },
+);
+
 it.each(["quota", "auth", "unknown"])(
   "preserves %s from runtime.failed",
   (errorKind) => {
     const h = harness(false);
-    h.send("runtime.failed", { errorKind, error: "provider detail" });
+    const failureTarget = { provider: "deepseek", model: "failed-model" };
+    h.send("runtime.failed", {
+      errorKind,
+      error: "provider detail",
+      failureTarget,
+    });
     expect(
       h.getState().executionSteps.find((step) => step.turnId === "attempt"),
-    ).toMatchObject({ status: "failed", errorKind, detail: "provider detail" });
+    ).toMatchObject({
+      status: "failed",
+      errorKind,
+      detail: "provider detail",
+      failureTarget,
+    });
     h.send("runtime.completed", { status: "success" });
     expect(
       h.getState().executionSteps.find((step) => step.turnId === "attempt")
         ?.errorKind,
+    ).toBeUndefined();
+    expect(
+      h.getState().executionSteps.find((step) => step.turnId === "attempt")
+        ?.failureTarget,
     ).toBeUndefined();
   },
 );

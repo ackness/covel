@@ -10,6 +10,7 @@
 import { compareText } from "@covel/shared";
 import {
   DEFAULT_LOCALE,
+  fillNarrativeTemplate,
   MAX_PLAYER_MESSAGE_CHARS,
   resolveI18nText,
   type I18nText,
@@ -273,12 +274,7 @@ function validateFormValues(
   const fields = interaction.fields as Array<Record<string, unknown>>;
   const declared = new Map<string, Record<string, unknown>>();
   for (const field of fields) {
-    const name =
-      typeof field.name === "string"
-        ? field.name
-        : typeof field.id === "string"
-          ? field.id
-          : "";
+    const name = typeof field.name === "string" ? field.name : "";
     if (!name) {
       throw new InteractionSubmissionError(
         `Committed form ${interaction.interactionId} contains a field without a name`,
@@ -535,19 +531,7 @@ function fillTemplate(
   }
   if (!template) return fallbackNarrative(sub, labels, located.interaction);
 
-  const replacements = buildReplacements(sub, labels);
-  return template.replace(
-    /\{\{\s*([^}]+?)\s*\}\}([。.]?)/g,
-    (_match, key: string, fullStop: string) => {
-      const value = replacements[key.trim()];
-      const rendered =
-        value !== undefined && value !== null ? String(value) : "";
-      // Preserve the submitted text; omit only a duplicate template full stop.
-      return fullStop && rendered.endsWith(fullStop)
-        ? rendered
-        : rendered + fullStop;
-    },
-  );
+  return fillNarrativeTemplate(template, buildReplacements(sub, labels));
 }
 
 const ALREADY_SUBMITTED = {

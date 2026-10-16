@@ -195,7 +195,6 @@ const FRAMEWORK_CHINESE_LINES = {
   // A Chinese variant of a context-truncation marker.
   "packages/context/src/budget.ts": 1,
   // Patterns that match Chinese text.
-  "packages/plugin-handlers-utils/src/token-estimation.ts": 1,
   "packages/create/src/validation-helpers.ts": 7,
   "packages/runtime/src/turn-executor/turn-output-helpers.ts": 1,
   "packages/tools/src/builtin/tool-search.ts": 2,
@@ -475,8 +474,6 @@ function checkWorldFiles() {
   const files = [];
   for (const full of walkFiles(resolve(REPO_ROOT, "worlds"))) {
     const rel = relative(REPO_ROOT, full);
-    const parts = rel.split(sep);
-    if (parts.includes("_archive")) continue; // archived worlds aren't loaded
     if (basename(rel) !== "world.yaml") continue;
     files.push(rel);
   }

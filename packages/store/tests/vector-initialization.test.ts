@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { Sql } from "postgres";
 import type { SQL } from "drizzle-orm";
 import { PgDialect } from "drizzle-orm/pg-core";
-import { createTables } from "../src/sqlite/sqlite-store-mappers.js";
+import { createTables } from "../src/sqlite/sqlite-schema-ddl.js";
 import { createSqliteVectorCapability } from "../src/sqlite/sqlite-vector.js";
 import { createPgVectorCapability } from "../src/postgres/pg-vector.js";
 import { deletePgSessionCascade } from "../src/postgres/pg-session-cascade.js";

@@ -3,7 +3,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { PluginPanel } from "../plugin-panel.js";
 import {
   __clearAllPluginDataForTest,
-  loadPluginData,
+  loadPluginDataForSession,
   setActiveSession,
 } from "@/stores/plugin-data-store.js";
 
@@ -63,10 +63,10 @@ it("renders two named owner namespaces and clears them across sessions", async (
     },
   );
   setActiveSession("session-a");
-  loadPluginData("other-plugin", "vertices", [
+  loadPluginDataForSession("session-a", "other-plugin", "vertices", [
     { key: "foreign", value: { identifier: "foreign", caption: "Foreign" } },
   ]);
-  loadPluginData("map-plugin", "vertices", [
+  loadPluginDataForSession("session-a", "map-plugin", "vertices", [
     {
       key: "port",
       value: { identifier: "port", caption: "Harbor", category: "location" },
@@ -76,7 +76,7 @@ it("renders two named owner namespaces and clears them across sessions", async (
       value: { identifier: "gate", caption: "Gate", category: "location" },
     },
   ]);
-  loadPluginData("map-plugin", "connections", [
+  loadPluginDataForSession("session-a", "map-plugin", "connections", [
     {
       key: "route",
       value: {
@@ -96,7 +96,7 @@ it("renders two named owner namespaces and clears them across sessions", async (
   expect(screen.getByText("Open passage")).toBeTruthy();
   expect(screen.queryByRole("button", { name: "Foreign" })).toBeNull();
   await act(async () => {
-    loadPluginData("other-plugin", "vertices", [
+    loadPluginDataForSession("session-a", "other-plugin", "vertices", [
       {
         key: "foreign-next",
         value: { identifier: "foreign-next", caption: "Foreign Next" },
@@ -109,7 +109,7 @@ it("renders two named owner namespaces and clears them across sessions", async (
   await act(async () => setActiveSession("session-b"));
   expect(screen.queryAllByRole("button", { name: "Harbor" })).toEqual([]);
   await act(async () => {
-    loadPluginData("map-plugin", "vertices", [
+    loadPluginDataForSession("session-b", "map-plugin", "vertices", [
       {
         key: "tower",
         value: { identifier: "tower", caption: "Tower", category: "location" },

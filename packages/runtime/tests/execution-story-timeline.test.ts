@@ -11,8 +11,8 @@ import type { RuntimeManifest, RuntimeResult, TurnInput } from "@covel/shared";
 import type { DataStore } from "@covel/store";
 import { createMemoryStore } from "@covel/store/memory";
 import { attachRuntimeJournal } from "../src/execution-journal.js";
-import { executeTurn } from "../src/turn-executor/turn-executor.js";
-import type { LLMAdapter, LLMMessage } from "../src/llm/llm-adapter.js";
+import { runTurnPipeline } from "../src/turn-executor/turn-executor.js";
+import type { LLMAdapter, LLMMessage } from "@covel/shared";
 
 const now = "2026-10-05T00:00:00.000Z";
 const PRIOR_NARRATIVE = "The king offers a second bargain. Will you take it?";
@@ -94,7 +94,7 @@ async function conversations(
   const store = await seedSession();
   const seen = new Map<string, readonly LLMMessage[]>();
   const narrative = options.narrative ?? NARRATIVE;
-  const { runtimeResults } = await executeTurn(
+  const { runtimeResults } = await runTurnPipeline(
     {
       origin: "player",
       sessionId: "s",

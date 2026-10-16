@@ -8,7 +8,7 @@ import type {
   RuntimeResult,
   TurnInput,
 } from "@covel/shared";
-import { executeTurn } from "../src/turn-executor/turn-executor.js";
+import { runTurnPipeline } from "../src/turn-executor/turn-executor.js";
 import { finalizeExecution } from "../src/commit/finalize-execution.js";
 import { createToolExecutor } from "../src/agent-loop/tool-executor.js";
 import { tool } from "@covel/tools";
@@ -71,7 +71,7 @@ describe("terminal domain boundaries", () => {
         finishReason: "stop",
         usage: { inputTokens: 1, outputTokens: 1 },
       }));
-      const turn = await executeTurn(input, [story], {
+      const turn = await runTurnPipeline(input, [story], {
         store,
         toolExecutor: createToolExecutor({ findTool: () => lookup, store }),
         onDelta: async (delta) => {
@@ -139,7 +139,7 @@ describe("terminal domain boundaries", () => {
       finishReason: "stop",
       usage: { inputTokens: 1, outputTokens: 1 },
     }));
-    const turn = await executeTurn(input, [story], {
+    const turn = await runTurnPipeline(input, [story], {
       store,
       toolExecutor: createToolExecutor({ findTool: () => lookup, store }),
       onDelta: async () => {},
@@ -186,7 +186,7 @@ describe("terminal domain boundaries", () => {
         },
       });
       const called = vi.fn();
-      const turn = await executeTurn(input, [producer, follower], {
+      const turn = await runTurnPipeline(input, [producer, follower], {
         store,
         llm,
         hookPipeline: hooks,
@@ -257,7 +257,7 @@ describe("terminal domain boundaries", () => {
             }
           : {}),
       };
-      const turn = await executeTurn(input, [story], {
+      const turn = await runTurnPipeline(input, [story], {
         store,
         llm: adapter,
         onDelta: async () => {},
@@ -329,7 +329,7 @@ describe("canonical function values", () => {
         output: { schema: "value.json", recordAs: "data" },
         outputContract: "data@1",
       };
-      const turn = await executeTurn(input, [producer], {
+      const turn = await runTurnPipeline(input, [producer], {
         store,
         llm,
         loadRuntime: async () => ({
@@ -449,7 +449,7 @@ describe("canonical function values", () => {
         },
       });
       const schema = { type: "number" };
-      const turn = await executeTurn(input, [producer], {
+      const turn = await runTurnPipeline(input, [producer], {
         store,
         llm,
         hookPipeline,
@@ -502,7 +502,7 @@ it("fails public contract output-only rewrites before buffered writes can commit
       };
     },
   });
-  const turn = await executeTurn(input, [producer], {
+  const turn = await runTurnPipeline(input, [producer], {
     store,
     llm,
     hookPipeline,

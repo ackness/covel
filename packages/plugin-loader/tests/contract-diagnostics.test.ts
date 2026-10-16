@@ -39,11 +39,16 @@ function entry(
       id,
       name: id,
       description: id,
-      pluginType: "plugin",
+      kind: "plugin",
       runtimeCount: manifests.length,
     },
     packageManifest: {
-      manifest: { name: id, pluginId: id, description: id },
+      manifest: {
+        kind: "plugin",
+        name: id,
+        pluginId: id,
+        description: id,
+      },
       plugin: { id, kind: "plugin", provides: options.provides },
       contractSchemas: Object.fromEntries(
         (options.schemas ?? []).map((contract) => [contract, {}]),
@@ -68,7 +73,7 @@ describe("contractReferenceDiagnostics", () => {
           id: discovery.id,
           name: discovery.id,
           description: "",
-          pluginType: "plugin",
+          kind: "plugin",
           runtimeCount: definition.manifests.length,
         },
         packageManifest: definition.packageManifest,

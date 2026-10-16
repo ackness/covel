@@ -30,7 +30,7 @@ function makeSummary(overrides: Partial<PluginSummary> = {}): PluginSummary {
     id: "plugin",
     name: "Plugin",
     description: "",
-    pluginType: "plugin",
+    kind: "plugin",
     runtimeCount: 1,
     ...overrides,
   };
@@ -60,7 +60,7 @@ function makeManifest(name: string, pluginId: string): ParsedPluginMd {
   return {
     plugin: { id: pluginId, kind: "plugin", description: "Test" },
     manifest: {
-      pluginType: "plugin",
+      kind: "plugin",
       name,
       pluginId,
       description: "",
@@ -90,7 +90,7 @@ describe("GET /api/ui-specs session-aware filter", () => {
         summary: makeSummary({
           id: "codex",
           name: "Codex",
-          pluginType: "core-plugin",
+          kind: "core",
         }),
         rootPath: pluginRoot({
           id: "codex",
@@ -107,7 +107,7 @@ describe("GET /api/ui-specs session-aware filter", () => {
         summary: makeSummary({
           id: "optional-plugin",
           name: "Optional",
-          pluginType: "plugin",
+          kind: "plugin",
         }),
         rootPath: pluginRoot({
           id: "opt",

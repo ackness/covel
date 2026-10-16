@@ -62,7 +62,7 @@ const MIN_OUTPUT_CEILING = 1024;
  * the budget with a floor. It stops a model that ignores the requested length;
  * the exact bound is still applied to the text afterwards.
  */
-export function summaryOutputCeiling(maxTokens: number): number {
+function summaryOutputCeiling(maxTokens: number): number {
   return Math.max(MIN_OUTPUT_CEILING, maxTokens * 2);
 }
 
@@ -249,7 +249,7 @@ function computeProtectStart(
  * is the reason an author reads there. Returning `null` stays for "nothing to
  * compact".
  */
-export class HistoryCompactionError extends Error {
+class HistoryCompactionError extends Error {
   constructor(message: string, options?: ErrorOptions) {
     super(message, options);
     this.name = "HistoryCompactionError";

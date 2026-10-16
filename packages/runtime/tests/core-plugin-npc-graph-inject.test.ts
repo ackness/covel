@@ -5,9 +5,9 @@ import { createMemoryStore } from "@covel/store/memory";
 import type { DataStore } from "@covel/store";
 import { getPendingProposals, shortIdBatch, tool, z } from "@covel/tools";
 import { createCommitPipeline } from "../src/session/session-kernel.js";
-import { executeTurn } from "../src/turn-executor/turn-executor.js";
+import { runTurnPipeline } from "../src/turn-executor/turn-executor.js";
 import type { TurnExecutorDeps } from "../src/turn-executor/turn-executor.js";
-import type { LLMAdapter, LLMResponse } from "../src/llm/llm-adapter.js";
+import type { LLMAdapter, LLMResponse } from "@covel/shared";
 import createUpsertNpcGraph from "../../../plugins/npc-graph/tools/upsert-npc-graph.js";
 import ragRetrieverHandler from "../../../plugins/npc-graph/runtimes/rag-retriever/handler.js";
 
@@ -327,7 +327,7 @@ describe("npc-graph core plugin write-read-inject path", () => {
       store,
     };
 
-    const result = await executeTurn(input, [narrator, retriever], deps);
+    const result = await runTurnPipeline(input, [narrator, retriever], deps);
 
     expect(result.runtimeResults.map((runtime) => runtime.runtimeId)).toEqual([
       "npc-graph/rag-retriever",

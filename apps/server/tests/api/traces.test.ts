@@ -63,7 +63,7 @@ function makeSummary(overrides?: Partial<PluginSummary>): PluginSummary {
     id: "image-plugin",
     name: "Image Plugin",
     description: "Image plugin",
-    pluginType: "plugin",
+    kind: "plugin",
     runtimeCount: 1,
     ...overrides,
   };
@@ -78,7 +78,6 @@ function makeEntry(
       name: "image-plugin",
       pluginId: "image-plugin",
       description: "Image plugin runtime",
-      pluginType: "plugin",
       outputKind: "system",
       runtimeType: "function",
       trigger: { type: "manual" },

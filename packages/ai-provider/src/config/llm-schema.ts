@@ -1,6 +1,9 @@
 import { z } from "zod";
 import {
   DEFAULT_PROVIDER_PROTOCOL,
+  INPUT_MODALITIES,
+  OUTPUT_MODALITIES,
+  MODEL_FEATURES,
   getBuiltinProviderConnection,
   isProviderProtocolId,
 } from "@covel/shared";
@@ -16,25 +19,9 @@ export const providerProtocolSchema = z.string().refine(isProviderProtocolId, {
     "Unknown protocol: use a built-in protocol ID, or <pluginId>/<wireId> for a plugin's text protocol",
 });
 
-const inputModalitySchema = z.enum(["text", "image", "audio", "video", "file"]);
-const outputModalitySchema = z.enum([
-  "text",
-  "image",
-  "audio",
-  "video",
-  "embedding",
-  "evaluation",
-]);
-const modelFeatureSchema = z.enum([
-  "function_calling",
-  "structured_output",
-  "streaming",
-  "reasoning",
-  "vision",
-  "prompt_caching",
-  "web_search",
-  "computer_use",
-]);
+const inputModalitySchema = z.enum(INPUT_MODALITIES);
+const outputModalitySchema = z.enum(OUTPUT_MODALITIES);
+const modelFeatureSchema = z.enum(MODEL_FEATURES);
 
 const pricingSchema = z
   .object({

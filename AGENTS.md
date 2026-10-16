@@ -230,8 +230,7 @@ bundled `worlds/` and `plugins/`.
   - `plugin-test-utils`, `test-runtime` — plugin test helpers and the runtime harness CLI
 - `plugins/` — bundled plugin packages (registry: `docs/reference/plugins.md`).
   `worlds/` — bundled world packs (`world.yaml`, `WORLD.md`, optional `data/`,
-  `characters/`, `media/`). `_archive/` under either holds retired packages and is
-  not loaded.
+  `characters/`, `media/`).
 - `packs/builtin.yaml` — plugin packs (named `requested` / `recommended` sets a
   player picks on the session-prep screen).
 - `prompts/server/` — framework prompt templates; `docker/` — Compose stack and
@@ -339,7 +338,7 @@ Input/Event → settle barrier → freeze registry generation → Trigger Router
   **`manual` is the exception**: `selectTriggeredRuntimes` selects it by name match
   without calling `shouldTrigger` — an explicit plugin-rpc call is the trigger
   decision, so it bypasses `phase` / `startTurn` / `maxTriggerCount` / `cooldownTurns`
-  (the `manual` branch in `shouldTrigger` serves only direct callers).
+  (`shouldTrigger` always returns false for `manual`).
 - **Scheduling** is declared, never numeric: `schedule.stage` plus typed edges —
   `schedule.needs` (success gate + same-pass DAG edge), `schedule.after` (ordering
   only), and `io.inputs` bindings (`required`, by default `true`, implies `needs`).

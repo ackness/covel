@@ -19,14 +19,10 @@ import fs from "node:fs";
 import path from "node:path";
 
 /** The SQLite database with the two files it has while a WAL is pending. */
-export const DATABASE_FILES = [
-  "covel.db",
-  "covel.db-wal",
-  "covel.db-shm",
-] as const;
+const DATABASE_FILES = ["covel.db", "covel.db-wal", "covel.db-shm"] as const;
 
 /** Directories that travel with the database. */
-export const DATA_DIRECTORIES = ["worlds", "media"] as const;
+const DATA_DIRECTORIES = ["worlds", "media"] as const;
 
 /**
  * The copy is written here first and renamed into place at the end, so a
@@ -70,7 +66,7 @@ export function sameDataRoot(a: string, b: string): boolean {
 }
 
 /** True when the directory holds a database file, world, or media. */
-export function hasCovelData(root: string): boolean {
+function hasCovelData(root: string): boolean {
   if (DATABASE_FILES.some((name) => exists(path.join(root, name)))) return true;
   return DATA_DIRECTORIES.some((name) => {
     try {

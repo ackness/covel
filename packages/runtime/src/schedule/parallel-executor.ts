@@ -25,7 +25,7 @@ export async function executeParallel(
   turnId: string,
 ): Promise<ReadonlyMap<string, RuntimeResult>> {
   const identities = runtimes.map((runtime): ParallelRuntimeIdentity => ({
-    pluginId: runtime.pluginId ?? runtime.name.split("/")[0]!,
+    pluginId: runtime.pluginId,
     runtimeId: runtime.name,
     runId: crypto.randomUUID(),
     turnId,

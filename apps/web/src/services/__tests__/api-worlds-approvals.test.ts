@@ -34,7 +34,6 @@ const {
   updateWorld,
   importDimensions,
   preflightWorldData,
-  listApprovals,
   resolveApproval,
   storeOperatorToken,
   storeSessionToken,
@@ -147,7 +146,7 @@ describe("world API mapping", () => {
     expect(
       JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)),
     ).toMatchObject({
-      prompt: "idea",
+      concept: "idea",
       locale: "zh-CN",
       saveTarget: "return-only",
       brief: {
@@ -300,38 +299,6 @@ describe("world API mapping", () => {
 });
 
 describe("approvals API helpers", () => {
-  it("listApprovals reads the standard items envelope from the server", async () => {
-    mockFetchOnce({
-      items: [
-        {
-          approvalId: "approval-1",
-          sessionId: "sess-1",
-          pluginId: "plugin-1",
-          action: "run",
-          payload: { x: 1 },
-          trustLevel: "community",
-          requestedAt: "2026-04-22T00:00:00.000Z",
-          description: "Run plugin action",
-        },
-      ],
-    });
-
-    const approvals = await listApprovals("sess-1");
-
-    expect(approvals).toEqual([
-      {
-        approvalId: "approval-1",
-        sessionId: "sess-1",
-        pluginId: "plugin-1",
-        action: "run",
-        payload: { x: 1 },
-        trustLevel: "community",
-        requestedAt: "2026-04-22T00:00:00.000Z",
-        description: "Run plugin action",
-      },
-    ]);
-  });
-
   it("sends the session owner token for an approval decision", async () => {
     await storeSessionToken("sess-1", "owner-secret");
     mockFetchOnce({ ok: true });

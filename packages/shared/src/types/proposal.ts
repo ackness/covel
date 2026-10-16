@@ -161,8 +161,8 @@ export interface ProposalPayloadMap {
   "plugin.data.delete": PluginDataDeletePayload;
   "character.upsert": CharacterUpsertPayload;
   "character.schema.set": CharacterSchemaSetPayload;
-  "dimension.initialize": import("./dimensions.js").DimensionInitializePayload;
-  "dimension.update": import("./dimensions.js").DimensionUpdatePayload;
+  "dimension.initialize": import("@covel/plugin-handlers-utils/dimensions").DimensionInitializePayload;
+  "dimension.update": import("@covel/plugin-handlers-utils/dimensions").DimensionUpdatePayload;
   "lorebook.upsert": LorebookUpsertPayload;
 }
 

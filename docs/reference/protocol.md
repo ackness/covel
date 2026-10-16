@@ -125,6 +125,7 @@ return { result: execution.result, committed: outcome.status === "committed" };
 | `narrative.delta`     | S→C  | 流式叙事文本片段 | `{ runtimeId, pluginId, kind, delta }`              |
 | `narrative.completed` | S→C  | 完整叙事消息     | `{ content, kind, messageId, runtimeId, pluginId }` |
 
+- `narrative.delta`、`narrative.completed` 和 `runtime.started` 都必须带 `kind`；客户端直接读取它，不从 `label` 推断。
 - `narrative.delta` 可以带 `reset: true`，这时 `delta` 是空字符串。意思是：同一个 runtime 已经流出来的文字属于工具调用之前的准备步骤，或者是被审查驳回的草稿，不会成为最终的叙事。客户端应该清掉已经显示的部分，再接收后面的片段。
 - `narrative.completed` 的 `content` 始终是审查通过之后的最终文本。它替换流式显示的内容。
 
@@ -156,11 +157,13 @@ return { result: execution.result, committed: outcome.status === "committed" };
 | ----------------------- | ---- | ----------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
 | `execution.started`     | S→C  | 回合执行开始                                                                        | `{ runtimeCount }`                                                                                                      |
 | `interaction.submitted` | S→C  | `submit_interaction` 的回答已落库、后续回合已开始；先于该回合的 `execution.started` | `{ interactionTurnId, results: [{ submissionId, interactionId, values, filledNarrative }], message?: { id, content } }` |
-| `runtime.started`       | S→C  | 单个 runtime 开始                                                                   | `{ runtimeId, pluginId, turnId, runId, label }`                                                                         |
+| `runtime.started`       | S→C  | 单个 runtime 开始                                                                   | `{ runtimeId, pluginId, kind, turnId, runId, label, stage? }`                                                           |
 | `runtime.deferred`      | S→C  | staged runtime 已随原始回合提交并转入后台                                           | `{ runtimeId, pluginId, jobId, sourceTurnId }`                                                                          |
 | `runtime.completed`     | S→C  | 单个 runtime 完成                                                                   | `{ runtimeId, pluginId, turnId, runId, status, durationMs }`                                                            |
-| `runtime.failed`        | S→C  | 单个 runtime 失败                                                                   | `{ runtimeId, pluginId, turnId, runId, status, durationMs, error, errorKind? }`                                         |
+| `runtime.failed`        | S→C  | 单个 runtime 失败                                                                   | `{ runtimeId, pluginId, turnId, runId, status, durationMs, error, errorKind?, failureTarget? }`                         |
 | `execution.completed`   | S→C  | 回合执行终态                                                                        | `{ runtimeCount, resultCount, durationMs, committed, error?, abortReason?, resync? }`，各字段见下                       |
+
+`runtime.started.stage` 记录这次 runtime 的阶段，取值为 `setup`、`pre-turn`、`narrative`、`post-turn` 或 `audit`；没有阶段的 event/manual runtime 不带此字段。持久 trace 保留它，客户端从实时事件和历史 trace 恢复到同一条执行步骤，后续终态事件不清除阶段。某个执行组有 `stage: "setup"` 的步骤时，时间线显示中性的“开局准备”摘要，不提供单任务重试；会话进入 `playing` 或页面刷新后也不变。不要按当前会话阶段或插件名称推断历史执行的阶段。
 
 `execution.completed` 的字段：
 
@@ -174,7 +177,9 @@ return { result: execution.result, committed: outcome.status === "committed" };
 > [!NOTE]
 > **开场接力。** 一次玩家动作完成了最后一个 setup runtime 时，`POST /api/actions` 的同一条 SSE 流会自动接着跑一个主循环回合（见 [api.md § POST /api/actions](./api.md)）。这时流里会出现**两轮** `execution.started` 和 runtime 生命周期事件，它们外层的 `turnId` 不同（setup 回合和接力回合）。但只有**一个** `execution.completed` 收尾。前端靠它结束“执行中”的状态，并按 `committed` 处理先行显示的内容。setup 提交失败时不会启动接力，直接以 `committed: false` 结束。玩家在接力开始前停止时，接力不再开始，`execution.completed` 带接力回合的 `turnId` 和 `abortReason: "aborted-by-player"`。
 
-`runtime.failed.errorKind` 是可选的模型失败类别，取值见 [模型失败分类](./slots.md#连接测试与失败原因)。回合失败提示复用连接测试的处理建议，服务商的原话保留在可展开的详情里。无法分类的异常用 `unknown`；没有模型异常的失败可以不带此字段。`io.concealed` 仍用固定文本替换错误详情，但保留类别，因为类别不含隐藏内容。
+`runtime.failed.errorKind` 是可选的模型失败类别，取值见 [模型失败分类](./slots.md#连接测试与失败原因)。`missing_key` 表示内置远程服务商在发请求前就发现缺少密钥。回合失败提示复用连接测试的处理建议，服务商的原话保留在可展开的详情里。无法分类的异常用 `unknown`；没有模型异常的失败可以不带此字段。`io.concealed` 仍用固定文本替换错误详情，但保留类别，因为类别不含隐藏内容。
+
+`runtime.failed.failureTarget` 是可选的 `{ provider, model? }`，只来自实际失败的模型异常，不从错误文字推断。它保存在 runtime result 和 trace 中，并随 SSE、会话快照恢复到执行记录。备用目标失败时记录备用目标；修改模型设置不会改写历史目标。此字段只含服务商和模型标识，不含密钥或连接配置。客户端用当前 active runtime 的模型用途和当前路由，列出同一服务商可能受影响的用途。
 
 **`runtime.deferred` 是“移交公告”**
 
@@ -667,7 +672,7 @@ Gemini 原生的思考强度、`providerOptions.google.thinkingConfig`、`cached
 `createEventBus(store?, options?)` 只需要一个可选的 `EventStore`。它有两个异步方法：`saveEvent(record)`，以及按会话隔离的 `getEventById(sessionId, id)`。
 
 - 记录类型 `EventStoreRecord` 随包导出。现有的 DataStore 可以直接传入；独立的宿主不用实现其他数据库方法。
-- 持久化是一条有上限的、尽力而为的审计队列。`flush()` 等队列排空，但不保证 transport 已经送达。
+- 只有超出 transport 帧上限的普通事件才进入有上限的持久化队列，供其他进程按引用读取；本地事件和内联帧不写入 `events` 表。SSE 补发仍读取内存缓冲区。`flush()` 等队列排空，但不保证 transport 已经送达。
 - 特别大的 transport 帧，在保存成功之后只发送一个引用，接收方通过同一个存储读出内容。
 
 进程间的 transport 帧必须带非空 `stream`，标识发送端的这一代状态；缺少它的帧会被拒绝。发布端应一起升级并重启。追踪事件按扁平 payload 读取：嵌套的 `data` 是普通数据，不会合并到顶层。旧的嵌套追踪需重新生成，才能按当前调试界面查看。
@@ -1215,7 +1220,7 @@ error.occurred        → executionError
 | `gateway.responded` | function-runtime gateway 的成功结果。文本和对象调用带 `{ runtimeId, pluginId, method, finishReason, usage, reasoningContent?, model?, provider?, durationMs }`，`model/provider` 是回退之后实际命中的目标。转写调用同样带可用的 `usage/model/provider`。旧的 trace，或者不支持这些元数据的自定义 gateway，可以没有它们 |
 | `message.completed` | `{ runtimeId, pluginId, content, len, deltaCount }`。`deltaCount` 是这个 runtime 产生的 `narrative.delta` 事件数，是保存下来的权威计数。前端汇总实时片段时用的是另一个合成字段 `_aggregated`，两者不能互换 |
 | `block.emitted` | `{ runtimeId, pluginId, proposalId, source, block }` |
-| `ui.rendered` | `{ runtimeId, pluginId, proposalId, source, render, block? }`。`/actions` SSE 会转发它，这样聊天区能实时显示已提交的 `ui.render` 块。较旧的、只进 trace 的负载可能没有 `block`，这时客户端从 `render` 合成它 |
+| `ui.rendered` | `{ runtimeId, pluginId, proposalId, source, render, block }`。action 流和 `state` topic 发送相同的已提交负载；`block` 的 ID 和元数据来自提交结果 |
 | `state.patch.applied` | `{ runtimeId, pluginId, proposalId, patch: { packageName, summary, ops } }` |
 | `hook.fired` | `{ event, hookName, pluginId, runtimeId?, targetId?, targetType, proposalType? }` |
 | `hook.rewrote` | `{ event, hookName, pluginId, runtimeId?, targetId?, diff?, proposalType? }` |
@@ -1290,7 +1295,7 @@ runtime 的终态：
 
 **`flush()` 和 `close()`**
 
-- `EventBus.flush()` 等有上限的审计持久化队列排空。它不等跨进程的投递，也不阻止新的事件。
+- `EventBus.flush()` 等超大事件的有上限持久化队列排空。它不等跨进程的投递，也不阻止新的事件。
 - `EventBus.close()` 可以重复调用。它依次：停止本地的发出和远端的接收；在支持的地方取消订阅；清掉“等待缺口”的定时器；等没完成的持久化、有顺序的发布和已收到引用的读取结束；最后关闭它自己拥有的 transport。
 - 关闭之后调用 `emit()` 会被忽略。
 - transport 可以从 `subscribe()` 返回一个取消订阅的函数，并在自己持有资源时实现 `close()`。PostgreSQL 的实现通过这个生命周期释放它的 LISTEN/NOTIFY 客户端。

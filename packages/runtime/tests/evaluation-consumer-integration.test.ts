@@ -21,7 +21,7 @@ import type {
   LoadedRuntime,
 } from "@covel/shared/plugin-runtime";
 import { PluginServiceRegistry } from "../src/plugin-services.js";
-import { executeTurn } from "../src/turn-executor/turn-executor.js";
+import { runTurnPipeline } from "../src/turn-executor/turn-executor.js";
 import { createToolExecutor } from "../src/agent-loop/tool-executor.js";
 import { processRuntimeResult } from "../src/session/session-kernel.js";
 
@@ -114,7 +114,7 @@ describe("plugin-owned evaluation integration", () => {
       resolveSlot: () => ({ tag: "evaluation" }),
     } as unknown as PluginRuntimeGateway;
     const store = createMemoryStore();
-    const result = await executeTurn(
+    const result = await runTurnPipeline(
       {
         sessionId: "demo-test",
         turnId: "turn-1",

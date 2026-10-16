@@ -13,9 +13,9 @@ On the world selection screen, pick one of the built-in worlds. To read the back
 
 For a first game, these are good choices:
 
-- To read a story: **Mistport Chronicles** (雾港・裂潮纪).
-- To see portraits and scenes: **Haruka Academy · Spring Mint** (遥风学园).
-- To use dice, quests, and an inventory: **Emberback Relay** or **Lantern Barrow: First Expedition**.
+- To read a story: **Mistport: The Riftide Chronicle** (雾港・裂潮纪).
+- To see portraits and scenes: **Harukaze Academy · Spring Mint** (遥风学园).
+- To use dice, quests, and an inventory: **Emberback Relay** or **Lantern Barrow: The First Delve**.
 
 > [!NOTE]
 > The interface language and the language of the world content are two different things. The interface language only decides the buttons and labels. The content language of a game is set when the game is created, and it must be a language version that the world already has.

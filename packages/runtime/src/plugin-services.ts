@@ -373,7 +373,12 @@ export class PluginServiceRegistry {
       description: definition.description,
       extension,
       invoke: async (input, context) => {
-        const parsed = definition.input.parse(structuredClone(input));
+        // The extension host validates kernel inputs before composition/caching.
+        // Each provider still owns its input, including unknown schema fields.
+        const detached = structuredClone(input);
+        const parsed = extension
+          ? (detached as I)
+          : definition.input.parse(detached);
         context.signal.throwIfAborted();
         const result = await definition.handler(parsed, context);
         context.signal.throwIfAborted();
@@ -552,10 +557,7 @@ export class PluginServiceRegistry {
                 ? withDefaultUtilsSignal(caller.utils, signal)
                 : undefined;
               errorCode = "invocation-error";
-              return entry.invoke(input, {
-                ...(entry.extension && kernel
-                  ? kernel.extensionContext(pluginId, signal)
-                  : {}),
+              const context: PluginServiceContext = {
                 callerPluginId: caller.pluginId,
                 signal,
                 gateway,
@@ -565,7 +567,15 @@ export class PluginServiceRegistry {
                   [...path, key],
                   state,
                 ),
-              });
+              };
+              if (entry.extension && kernel)
+                Object.defineProperties(
+                  context,
+                  Object.getOwnPropertyDescriptors(
+                    kernel.extensionContext(pluginId, signal),
+                  ),
+                );
+              return entry.invoke(input, context);
             },
             state,
             parentState,

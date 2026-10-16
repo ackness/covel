@@ -4,7 +4,7 @@
  */
 
 import { describe, it, expect, beforeEach } from "vitest";
-import type { PluginType, SubscriptionEvent } from "@covel/shared";
+import type { SubscriptionEvent } from "@covel/shared";
 import type { PluginRegistryEntry, PluginSummary } from "../src/types.js";
 import { createPluginRegistry, type PluginRegistry } from "../src/registry.js";
 import { createEventBus, type EventBus } from "@covel/events";
@@ -14,7 +14,7 @@ function makeSummary(id: string): PluginSummary {
     id,
     name: `Plugin ${id}`,
     description: `Description for ${id}`,
-    pluginType: "plugin" as PluginType,
+    kind: "plugin",
     runtimeCount: 1,
   };
 }

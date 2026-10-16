@@ -197,7 +197,6 @@ export const events = sqliteTable(
     type: text("type").notNull(),
     topic: text("topic").notNull(),
     payload: text("payload"), // JSON
-    targetRuntime: text("target_runtime"),
     turnId: text("turn_id"),
     createdAt: text("created_at").notNull(),
   },
@@ -528,7 +527,7 @@ export const mediaRefs = sqliteTable(
     index("media_refs_session_id_idx").on(table.sessionId),
     index("media_refs_media_id_idx").on(table.mediaId),
     // UNIQUE on (sessionId, mediaId) only — see DDL comment in
-    // sqlite-store-mappers.ts. plugin_id is "first-source metadata", not part
+    // sqlite-schema-ddl.ts. plugin_id is "first-source metadata", not part
     // of the key, so addRef is idempotent regardless of pluginId.
     uniqueIndex("media_refs_unique_idx").on(table.sessionId, table.mediaId),
   ],

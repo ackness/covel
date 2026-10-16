@@ -4,7 +4,7 @@ import {
   instructionLocaleOverride,
   instructionVariantCandidates,
   isInstructionVariantLocale,
-} from "../src/utils/instruction-locale.js";
+} from "@covel/plugin-handlers-utils";
 
 describe("instruction locale", () => {
   it("reads Chinese instructions only for Simplified Chinese sessions", () => {

@@ -260,6 +260,8 @@ plugin 工具封装插件自己的业务。它的 schema、文案和数据结构
 
 手动 runtime 通过插件界面打开的表单也一样：模板在事务内保存，刷新后可以继续填，服务端也会校验。没有交互的手动输出不写入对话历史。
 
+插件可用 SDK 的 `fillNarrativeTemplate(template, values)` 生成预览。玩家提交后的 `filledNarrative` 也使用此函数：缺值填空字符串，只合并占位符边界重复的句号，保留字段原文。同一次 agent 执行中，多个成功工具结果使用相同 `interactionId` 时，只显示最后一次成功的表单或选项；失败的调用不会替换它。
+
 | 参数              | 类型        | 必需 | 描述                                |
 | ----------------- | ----------- | ---- | ----------------------------------- |
 | formId            | string      | ✓    | 表单唯一标识                        |
@@ -274,6 +276,7 @@ plugin 工具封装插件自己的业务。它的 schema、文案和数据结构
 **FormField**: `{ type, name, label, placeholder?, options?, required?, defaultValue?, min?, max?, step? }`
 
 - type: `text` | `textarea` | `select` | `checkbox` | `number`
+- `name` 是必填的字段标识，不能用 `id` 代替。
 
 字段的取值规则：
 
@@ -284,7 +287,7 @@ plugin 工具封装插件自己的业务。它的 schema、文案和数据结构
 - 没有提交的字段使用默认值，包括 0 和 false。文本和选择字段提交空字符串时也使用默认值。
 - `placeholder` 只用于展示。
 - `select` 的默认值必须是选项之一。
-- 默认值写成有限数字字符串或 `"true"` / `"false"` 也能用，提交时统一规范化。新插件应直接写数字和布尔值。
+- `number` 和 `checkbox` 的默认值不接受字符串；请直接写数字和布尔值。
 
 #### 自定义校验 `validation`
 
@@ -338,6 +341,8 @@ plugin 工具封装插件自己的业务。它的 schema、文案和数据结构
 #### 角色创建表单
 
 角色创建用专用的 `create-character-form` 工具。它只收集必填的姓名，以及世界声明的字符串或枚举属性。
+
+工具返回 `filledNarrative`，让模型在结束前读完整句，必要时修改默认值或模板后再调用。默认值应是适合占位位置的短语，`calling` 应是世界中真实的职业或身份。工具拒绝相邻边界重复的词，以及明确的中英文“未定”占位值，并给出预览和修改提示；失败时不发出表单。此检查不改动玩家之前的答案。“未定”检查也不拒绝世界明确声明的枚举选项。句子中间的语义重复由模型结合预览复核。
 
 - 建角时，schema 声明的字符串姓名属性（`name`、`characterName`、`playerName`、`姓名`）使用表单提交的角色名，覆盖 schema 的默认姓名。
 - 模型不能为它指定校验器：参数里没有 `validation`，传了也会被丢弃。工具自己挂上 `char-creator` 注册的 `player-name` 校验器，拒绝和世界里已有角色的名字或别名相同的角色名（见 [World Model](./world-model.md)）。其余字段约束由工具和提交接口校验。
@@ -400,7 +405,7 @@ interface UIRenderPart {
 }
 ```
 
-工具返回 `{ ui: [{ parts, layout? }] }`，框架据此生成 `ui.render` proposal。返回 `{ ui: [{ type, ...content }] }` 这种没有 `parts` 的形状时，框架自动把它包成一个 `success` 状态的 part。
+工具返回 `{ ui: [{ parts, layout? }] }`，框架据此生成 `ui.render` proposal。每个 UI 块必须带 `parts`；没有 `parts` 的块会被拒绝。
 
 ### plugin-data-set
 

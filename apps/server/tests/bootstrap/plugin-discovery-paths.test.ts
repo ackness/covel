@@ -6,10 +6,6 @@ import { createEventBus } from "@covel/events";
 import { createMemoryStore } from "@covel/store/memory";
 import { discoverAndRegisterPlugins } from "../../src/routes/api/bootstrap/plugin-discovery.js";
 import { buildPluginFlowResponse } from "../../src/routes/misc-api/plugin-flow.js";
-import {
-  pluginRuntimeDirectory,
-  pluginRuntimeDocumentPath,
-} from "../../src/routes/misc-api/registry-projection.js";
 import { stringify } from "yaml";
 import { buildUiSpecsResponse } from "../../src/routes/misc-api/ui-specs.js";
 
@@ -94,14 +90,11 @@ describe("registry runtime discovery paths", () => {
       const documentName = runtime.directory ? "RUNTIME.md" : "PLUGIN.md";
       const manifestPath = path.join(runtimeDir, documentName);
       expect(entry.runtimeManifestPaths?.[runtime.name]).toBe(manifestPath);
-      expect(pluginRuntimeDirectory(entry, runtime.name)).toBe(runtimeDir);
-      expect(pluginRuntimeDocumentPath(entry, runtime.name)).toBe(manifestPath);
       expect(
         flow.steps.find((step) => step.runtimeId === runtime.name)?.docPath,
       ).toBe(path.posix.join("plugins", id, runtime.directory, documentName));
     }
-    expect(pluginRuntimeDirectory(entry, `${id}/unknown`)).toBeUndefined();
-    expect(pluginRuntimeDocumentPath(entry, `${id}/unknown`)).toBeUndefined();
+    expect(entry.runtimeManifestPaths?.[`${id}/unknown`]).toBeUndefined();
 
     const response = await buildUiSpecsResponse({ registry, store });
     expect(response.right).toEqual([

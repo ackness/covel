@@ -1,5 +1,4 @@
 // Types
-export { PROVIDER_PROTOCOLS } from "./types.js";
 export {
   REASONING_EFFORT_VALUES,
   resolveReasoningEffortProfile,
@@ -52,6 +51,7 @@ export type {
   ModelSlotMap,
   CacheStrategy,
   SlotOverridesInput,
+  CapabilityOverridePolicy,
   CustomPresetInput,
 } from "./types.js";
 export type {
@@ -115,7 +115,7 @@ export type {
   EvaluationAnswer,
   EvaluationParams,
   EvaluationResult,
-} from "./evaluation/types.js";
+} from "@covel/shared";
 export { createEvaluationAdapter } from "./adapters/evaluation.js";
 
 // Adapters

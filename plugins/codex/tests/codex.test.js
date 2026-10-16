@@ -335,7 +335,7 @@ describe("codex plugin manifest", () => {
   });
 
   it("should be a non-core agent-runtime plugin", () => {
-    expect(manifest.pluginType).toBe("plugin");
+    expect(manifest).not.toHaveProperty("pluginType");
     expect(manifest.name).toBe("codex");
     // Narrator-downstream layer — post-turn stage, run in parallel with guide /
     // extractor / character-tracker.

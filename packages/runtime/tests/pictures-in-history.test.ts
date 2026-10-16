@@ -13,8 +13,8 @@ import type { Proposal, RuntimeManifest, TurnInput } from "@covel/shared";
 import type { LoadedRuntime } from "@covel/plugin-loader";
 import { createMemoryMediaStore, createMemoryStore } from "@covel/store/memory";
 import { createCommitPipeline } from "../src/session/session-kernel.js";
-import { executeTurn } from "../src/turn-executor/turn-executor.js";
-import type { LLMAdapter, LLMResponse } from "../src/llm/llm-adapter.js";
+import { runTurnPipeline } from "../src/turn-executor/turn-executor.js";
+import type { LLMAdapter, LLMResponse } from "@covel/shared";
 import { MAX_PICTURE_BYTES } from "../src/agent-loop/picture-attachments.js";
 import { buildLlmCallingPayload } from "../src/llm/llm-trace-payload.js";
 
@@ -110,7 +110,7 @@ async function makeSession() {
   };
 
   const play = async (llm: RecordingLLM, manifest = narrator) => {
-    const result = await executeTurn(
+    const result = await runTurnPipeline(
       turnInput(`turn-${clock}`, "What do I see?"),
       [manifest],
       { loadRuntime: async () => loaded(manifest), llm, store, mediaStore },

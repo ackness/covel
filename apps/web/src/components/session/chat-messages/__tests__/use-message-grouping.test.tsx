@@ -49,6 +49,7 @@ function rowKeys(rows: ReactNode[]): (string | null)[] {
 const renderMessage = (m: StreamMessage) => <div key={m.id}>{m.content}</div>;
 
 interface TimelineProps {
+  recoveryTurnId?: string;
   canRetryTasks: boolean;
   steps: ExecutionStep[];
   executing: boolean;
@@ -65,10 +66,46 @@ function timeline(rows: ReactNode[], turnId: string): TimelineProps {
 }
 
 describe("useMessageGrouping", () => {
+  it("preserves execution-time stages across setup and playing groups", () => {
+    const { result } = renderHook(() =>
+      useMessageGrouping({
+        messages: [],
+        executionSteps: [
+          step({
+            runtimeId: "world",
+            turnId: "first",
+            status: "failed",
+            stage: "setup",
+          }),
+          step({
+            runtimeId: "world",
+            turnId: "second",
+            status: "completed",
+            stage: "setup",
+          }),
+          step({
+            runtimeId: "world",
+            turnId: "playing",
+            status: "failed",
+            stage: "post-turn",
+          }),
+        ],
+        executing: false,
+        plugins: [],
+        renderMessage,
+      }),
+    );
+    expect(timeline(result.current, "first").steps[0]?.stage).toBe("setup");
+    expect(timeline(result.current, "second").steps[0]?.stage).toBe("setup");
+    expect(timeline(result.current, "playing").steps[0]?.stage).toBe(
+      "post-turn",
+    );
+  });
   it("leaves uncommitted story recovery to the authoritative recovery notice", () => {
     const retry = vi.fn();
     const { result } = renderHook(() =>
       useMessageGrouping({
+        recoveryTurnId: "source",
         messages: [],
         executionSteps: [
           step({
@@ -85,6 +122,7 @@ describe("useMessageGrouping", () => {
       }),
     );
     const props = timeline(result.current, "source");
+    expect(props.recoveryTurnId).toBe("source");
     expect(props.canRetryTasks).toBe(false);
     expect(props.onRetryRuntime).toBeUndefined();
     expect(props).not.toHaveProperty("onRetryAll");

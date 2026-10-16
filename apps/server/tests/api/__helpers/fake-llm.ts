@@ -57,7 +57,6 @@ export function makeFakeLoadedRuntime(args: {
   pluginId?: string;
   promptTemplate?: string;
   outputKind?: "story" | "system";
-  pluginType?: "core-plugin" | "plugin";
 }): LoadedRuntime {
   const manifest: RuntimeManifest = {
     name: args.name,
@@ -66,7 +65,6 @@ export function makeFakeLoadedRuntime(args: {
     stage: "narrative",
     runtimeType: "agent",
     outputKind: args.outputKind ?? "story",
-    pluginType: args.pluginType ?? "plugin",
     trigger: { type: "auto" },
   };
 

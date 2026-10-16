@@ -5,9 +5,9 @@
  * (`allSetupDone`) when *all* Pre-Game runtimes in the active set are accounted
  * for.
  *
- * Scheduling redesign: the completion write moved out of `executeTurn` and into
+ * Scheduling redesign: the completion write moved out of `runTurnPipeline` and into
  * the finalize transaction (session-clock write), so the observable contract at
- * the executeTurn boundary is `TurnResult.setupCompletion`, the delta the
+ * the runTurnPipeline boundary is `TurnResult.setupCompletion`, the delta the
  * executor hands the finalizer.
  *
  * This is subtle enough that drift here silently breaks opening flows
@@ -20,9 +20,9 @@ import { mirrorSetupDone } from "@covel/shared";
 import type { HandlerResult, RuntimeManifest, TurnInput } from "@covel/shared";
 import { createMemoryStore } from "@covel/store/memory";
 import type { DataStore } from "@covel/store";
-import { executeTurn } from "../src/turn-executor/turn-executor.js";
+import { runTurnPipeline } from "../src/turn-executor/turn-executor.js";
 import type { TurnExecutorDeps } from "../src/turn-executor/turn-executor.js";
-import type { LLMAdapter, LLMResponse } from "../src/llm/llm-adapter.js";
+import type { LLMAdapter, LLMResponse } from "@covel/shared";
 import type { HookPipeline } from "../src/hooks/pipeline.js";
 import { createHookPipeline } from "../src/hooks/pipeline.js";
 
@@ -86,7 +86,7 @@ async function runPregameTurn(
   },
 ): Promise<{
   store: DataStore;
-  result: Awaited<ReturnType<typeof executeTurn>>;
+  result: Awaited<ReturnType<typeof runTurnPipeline>>;
 }> {
   const store = await freshStore(sessionId);
   const input: TurnInput = {
@@ -115,12 +115,14 @@ async function runPregameTurn(
     store,
     ...(options?.hookPipeline ? { hookPipeline: options.hookPipeline } : {}),
   };
-  const result = await executeTurn(input, manifests, deps);
+  const result = await runTurnPipeline(input, manifests, deps);
   return { store, result };
 }
 
 /** RuntimeIds newly marked done in this execution's setup-completion delta. */
-function newlyDone(result: Awaited<ReturnType<typeof executeTurn>>): string[] {
+function newlyDone(
+  result: Awaited<ReturnType<typeof runTurnPipeline>>,
+): string[] {
   return Object.keys(result.setupCompletion?.newlyDone ?? {}).sort();
 }
 
@@ -207,7 +209,13 @@ describe("Pre-Game completion contract", () => {
       {
         pregame: async () => ({ preGameDone: true }),
         "char-creator/player-init": async () => ({
-          ui: [{ type: "form", interactionId: "char" }],
+          ui: [
+            {
+              parts: [
+                { id: "char", type: "form", status: "success", content: {} },
+              ],
+            },
+          ],
           // preGameDone intentionally absent — form not yet submitted.
         }),
       },
@@ -247,7 +255,7 @@ describe("Pre-Game completion contract", () => {
       store,
     };
 
-    const result = await executeTurn(input, [pregame, playerInit], deps);
+    const result = await runTurnPipeline(input, [pregame, playerInit], deps);
 
     const playerMessages = (
       await store.listTurnMessages("sess-bootstrap")
@@ -300,7 +308,7 @@ describe("Pre-Game completion contract", () => {
       store,
     };
 
-    const result = await executeTurn(
+    const result = await runTurnPipeline(
       {
         sessionId: "sess-resume",
         turnId: "turn-1",
@@ -416,7 +424,7 @@ describe("Pre-Game completion contract", () => {
     // message therefore no longer suppresses the run — the runtime IS invoked
     // again, and until it reports done it stays pending (heading toward blocked
     // once the ledger budget is exhausted via the finalize settle, which this
-    // executeTurn-only harness does not exercise). The old "band-exhausted ⇒
+    // runTurnPipeline-only harness does not exercise). The old "band-exhausted ⇒
     // advance anyway" (newlyDone=[pregame], allSetupDone=true) is gone.
     const pregame = pregameManifest("pregame", {
       stage: "setup",
@@ -453,7 +461,7 @@ describe("Pre-Game completion contract", () => {
       llm: new NoopLLM(),
       store,
     };
-    const result = await executeTurn(
+    const result = await runTurnPipeline(
       {
         sessionId: "sess-exh",
         turnId: "turn-0",

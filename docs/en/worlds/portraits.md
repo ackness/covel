@@ -125,7 +125,7 @@ Add `variants` to a character. Each item is another image:
 pnpm exec tsx scripts/generate-portraits.mjs tidelamp --dry-run
 ```
 
-It prints the file name and the full prompt of each image, and then it stops. Using the built-in Haruka Academy world as an example, add `--limit 1` to look at only the first image:
+It prints the file name and the full prompt of each image, and then it stops. Using the built-in Harukaze Academy world as an example, add `--limit 1` to look at only the first image:
 
 ```bash
 pnpm exec tsx scripts/generate-portraits.mjs haruka-academy --limit 1 --dry-run
@@ -307,12 +307,12 @@ When you check the images themselves, look at these things: the detail at the or
 
 The four built-in worlds each have their own art style. You can open their manifests and use them as examples:
 
-| World                           | Manifest                                                                | Art style                                                                | Framing                                                     | People |
-| ------------------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------------ | ----------------------------------------------------------- | ------ |
-| Haruka Academy `haruka-academy` | [`portraits.json`](../../../worlds/haruka-academy/media/portraits.json) | Anime visual-novel portraits, soft cel shading, spring pastels           | Portrait orientation, head to thigh, transparent background | 8      |
-| Mistport `mistport`             | [`portraits.json`](../../../worlds/mistport/media/portraits.json)       | Realistic painted noir in fog, cold grey, teal, and rust                 | Half body, three-quarter turn, grey fog background          | 7      |
-| Emberback `emberback`           | [`portraits.json`](../../../worlds/emberback/media/portraits.json)      | Bright retro sci-fi adventure poster, cream, terracotta, and cobalt blue | Full body, with an environment for each person's job        | 5      |
-| Lantern Barrow `lantern-barrow` | [`portraits.json`](../../../worlds/lantern-barrow/media/portraits.json) | Realistic skin and worn cloth, warm key light with cool rim light        | Portrait orientation, full body, transparent background     | 6      |
+| World                             | Manifest                                                                | Art style                                                                | Framing                                                     | People |
+| --------------------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------------ | ----------------------------------------------------------- | ------ |
+| Harukaze Academy `haruka-academy` | [`portraits.json`](../../../worlds/haruka-academy/media/portraits.json) | Anime visual-novel portraits, soft cel shading, spring pastels           | Portrait orientation, head to thigh, transparent background | 8      |
+| Mistport `mistport`               | [`portraits.json`](../../../worlds/mistport/media/portraits.json)       | Realistic painted noir in fog, cold grey, teal, and rust                 | Half body, three-quarter turn, grey fog background          | 7      |
+| Emberback `emberback`             | [`portraits.json`](../../../worlds/emberback/media/portraits.json)      | Bright retro sci-fi adventure poster, cream, terracotta, and cobalt blue | Full body, with an environment for each person's job        | 5      |
+| Lantern Barrow `lantern-barrow`   | [`portraits.json`](../../../worlds/lantern-barrow/media/portraits.json) | Realistic skin and worn cloth, warm key light with cool rim light        | Portrait orientation, full body, transparent background     | 6      |
 
 Two things worth learning from:
 

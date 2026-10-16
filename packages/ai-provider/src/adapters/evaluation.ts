@@ -6,7 +6,7 @@ import type {
   EvaluationParams,
   EvaluationQuestions,
   EvaluationResult,
-} from "../evaluation/types.js";
+} from "@covel/shared";
 import { AiProviderError } from "../errors.js";
 import { postJson } from "./http/request.js";
 import {

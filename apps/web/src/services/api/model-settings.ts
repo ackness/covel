@@ -93,11 +93,6 @@ export function rememberServerPresetProviders(
   );
 }
 
-/** Test helper: forget what the server said. */
-export function resetServerProviderDirectory(): void {
-  serverProviderDirectory = {};
-}
-
 /**
  * Provider IDs whose keys a request can need, or `null` when that is not known
  * yet (then every key is sent). Roles resolve through the saved binding first
@@ -358,10 +353,6 @@ export function getSlotConfig(): Record<string, SlotConfigEntry> {
   return (
     getSettings().get<Record<string, SlotConfigEntry>>("llm.slotConfig") ?? {}
   );
-}
-
-export function setSlotConfig(config: Record<string, SlotConfigEntry>): void {
-  void getSettings().set("llm.slotConfig", config);
 }
 
 export function getProviderProfiles(): ProviderModelProfile[] {

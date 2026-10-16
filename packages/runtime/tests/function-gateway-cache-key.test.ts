@@ -4,7 +4,7 @@ import type { RuntimeManifest, TurnInput } from "@covel/shared";
 import type { LoadedRuntime, PluginRuntimeGateway } from "@covel/plugin-loader";
 import { createMemoryStore } from "@covel/store/memory";
 import { createEventBus } from "@covel/events";
-import { executeTurn } from "../src/turn-executor/turn-executor.js";
+import { runTurnPipeline } from "../src/turn-executor/turn-executor.js";
 import type { TurnExecutorDeps } from "../src/turn-executor/turn-executor.js";
 import { promptCacheKeyFor } from "../src/llm/prompt-cache-key.js";
 import { createPluginRuntimeGateway } from "../src/function-runtime/plugin-runtime-gateway.js";
@@ -13,7 +13,6 @@ const manifest: RuntimeManifest = {
   name: "fn-plugin/extract",
   pluginId: "fn-plugin",
   description: "test",
-  pluginType: "plugin",
   stage: "narrative",
   trigger: { type: "auto" },
   model: "gpt-4o-mini",
@@ -32,7 +31,7 @@ async function runWith(
   gateway: PluginRuntimeGateway,
   locale?: string,
 ): Promise<void> {
-  await executeTurn({ ...input, locale }, [loaded.manifest], {
+  await runTurnPipeline({ ...input, locale }, [loaded.manifest], {
     loadRuntime: async () => loaded,
     llm: { generate: vi.fn() },
     store: createMemoryStore(),

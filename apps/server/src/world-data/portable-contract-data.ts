@@ -1,11 +1,10 @@
 import { readFile } from "node:fs/promises";
-import { KERNEL_WORLD_DATA_PATHS } from "@covel/shared";
+import { KERNEL_WORLD_DATA_PATHS, parseWorldDataTarget } from "@covel/shared";
 import type { WorldGenerationDataContract } from "@covel/create";
 import type { PluginRegistry } from "@covel/plugin-loader";
 import { describeAuthoringSurface } from "../authoring/describe.js";
 import { conventionsOfPlugins } from "./conventions.js";
 import { resolveWorldDataSchema } from "./schema-registry.js";
-import { parseWorldDataTarget } from "./target-uri.js";
 import type { OrderedWorldDataSource } from "./types.js";
 
 function source(

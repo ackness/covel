@@ -19,7 +19,7 @@ export type EnvGroup =
   | "test"
   | "web";
 
-export type EnvStatus = "active" | "packaging" | "planned";
+export type EnvStatus = "active" | "packaging";
 
 export interface EnvVarDefinition {
   readonly name: string;

@@ -28,6 +28,7 @@ export interface RuntimeStatus {
     | "unknown";
   detail?: string;
   errorKind?: string;
+  failureTarget?: ExecutionStep["failureTarget"];
   /** Qualified tool name when status is "tool" (e.g. "init-wizard:emit-character-form"). */
   toolName?: string;
   /** Duration in milliseconds (only set when completed or failed). */
@@ -71,6 +72,7 @@ export function deriveStatuses(
     status: step.status,
     detail: step.detail,
     errorKind: step.errorKind,
+    failureTarget: step.failureTarget,
     toolName: step.toolName,
     durationMs: step.durationMs,
     detached: step.detached,

@@ -9,9 +9,14 @@ import {
 import { afterEach, expect, it, vi } from "vitest";
 import i18n from "@/i18n";
 import { GameViewHeader } from "../game-view/game-view-header.js";
+import { MessageComposer } from "../game-view/message-composer.js";
+import type { ExecutionPresentation } from "../execution-presentation.js";
+import { executionRecoveryNoticeVisible } from "../execution-presentation.js";
+import { ExecutionRecoveryNotice } from "../execution-recovery-notice.js";
+import type { ExecutionRecovery } from "@/stores/session-store/types.js";
 import { ChapterBanner } from "../chapter-banner.js";
 import { SessionCanvasHero } from "../chat-messages/session-canvas-hero.js";
-import type { WorldRecord } from "@/services/api.js";
+import type { SessionRecord, WorldRecord } from "@/services/api.js";
 
 vi.mock("@tanstack/react-router", () => ({
   Link: ({ children }: { children: ReactNode }) => (
@@ -27,6 +32,135 @@ vi.mock("../game-view/connection-status.js", () => ({
 }));
 vi.mock("../session-music.js", () => ({ MusicToggle: () => null }));
 afterEach(cleanup);
+
+function sessionStatus(
+  phase: SessionRecord["phase"],
+  executionState: ExecutionPresentation,
+  executing = false,
+  recovery?: ExecutionRecovery,
+) {
+  return (
+    <>
+      <GameViewHeader
+        recoveryNoticeVisible={executionRecoveryNoticeVisible(recovery)}
+        t={i18n.t}
+        sessionId="s"
+        sessionPhase={phase}
+        locale="en-US"
+        turnCount={0}
+        world={null}
+        executing={executing}
+        executionState={executionState}
+        viewMode="parsed"
+        isLeftCollapsed
+        isRightCollapsed
+        onViewModeChange={vi.fn()}
+        onToggleLeftPanel={vi.fn()}
+        onToggleRightPanel={vi.fn()}
+        onOpenSettings={vi.fn()}
+        onOpenSuspensions={vi.fn()}
+        suspensionsCount={0}
+        onBackToWorldSelect={vi.fn()}
+        onResetSession={vi.fn()}
+      />
+      <MessageComposer
+        recoveryNoticeVisible={executionRecoveryNoticeVisible(recovery)}
+        t={i18n.t}
+        session={{ phase, status: "active" } as SessionRecord}
+        executing={executing}
+        executionState={executionState}
+        inputValue=""
+        composerBlocked={false}
+        composerDisabled={false}
+        awaitingBegin={false}
+        onInputValueChange={vi.fn()}
+        onSubmit={vi.fn()}
+        onKeyDown={vi.fn()}
+      />
+      <ExecutionRecoveryNotice
+        recovery={recovery}
+        onRetry={vi.fn()}
+        onRefresh={vi.fn()}
+        onStop={vi.fn()}
+        onOpenSettings={vi.fn()}
+      />
+    </>
+  );
+}
+
+it.each(["failed", "interrupted"] as const)(
+  "lets the recovery notice own the playing %s state without header/composer duplicates",
+  (state) => {
+    const recovery: ExecutionRecovery = {
+      sessionId: "s",
+      hydrating: false,
+      checking: false,
+      status: {
+        state,
+        turnId: "t",
+        retry: { type: "retry_turn", payload: {} },
+      },
+    };
+    const view = render(sessionStatus("playing", state, false, recovery));
+    expect(screen.getByTestId("execution-recovery-notice")).toBeTruthy();
+    expect(
+      screen.queryByText(i18n.t(`session.executionState.${state}`)),
+    ).toBeNull();
+    view.rerender(sessionStatus("playing", state));
+    expect(screen.queryByTestId("execution-recovery-notice")).toBeNull();
+    expect(
+      screen.getAllByText(i18n.t(`session.executionState.${state}`)),
+    ).toHaveLength(2);
+  },
+);
+
+it.each(["generating", "updating"] as const)(
+  "keeps %s progress while the recovery notice observes a running turn",
+  (state) => {
+    render(
+      sessionStatus("playing", state, true, {
+        sessionId: "s",
+        hydrating: false,
+        checking: false,
+        status: { state: "running", turnId: "t" },
+      }),
+    );
+    expect(screen.getByTestId("execution-recovery-notice")).toBeTruthy();
+    expect(
+      screen.getAllByText(i18n.t(`session.executionState.${state}`)),
+    ).toHaveLength(2);
+  },
+);
+
+it.each(["partial", "failed", "completed", "stopped", "interrupted"] as const)(
+  "leaves the setup %s notice out of the header and composer",
+  (executionState) => {
+    const view = render(sessionStatus("setup", executionState));
+    const label = i18n.t(`session.executionState.${executionState}`);
+    expect(screen.queryByText(label)).toBeNull();
+    expect(screen.queryByText(i18n.t("session.stateStreaming"))).toBeNull();
+    expect(screen.queryByText(i18n.t("session.setupRunning"))).toBeNull();
+    if (executionState !== "completed") {
+      view.rerender(sessionStatus("playing", executionState));
+      expect(screen.getAllByText(label)).toHaveLength(2);
+    }
+  },
+);
+
+it.each(["generating", "updating"] as const)(
+  "describes %s as opening preparation during setup",
+  (executionState) => {
+    const view = render(sessionStatus("setup", executionState, true));
+    expect(screen.getAllByText(i18n.t("session.setupRunning"))).toHaveLength(2);
+    expect(
+      screen.queryByText(i18n.t(`session.executionState.${executionState}`)),
+    ).toBeNull();
+    view.rerender(sessionStatus("playing", executionState, true));
+    expect(
+      screen.getAllByText(i18n.t(`session.executionState.${executionState}`)),
+    ).toHaveLength(2);
+  },
+);
 
 it("uses native buttons in the overflow disclosure and restores focus on Escape and selection", () => {
   const changeView = vi.fn();

@@ -9,7 +9,8 @@ import type {
 import { errorBody } from "../../../api-error.js";
 import { BUILTIN_PLUGIN_PACKS } from "../../../config/plugin-packs.js";
 import { buildPluginSummary } from "../../../lib/plugin-descriptor.js";
-import { isRecord, type WorldEnv } from "./shared.js";
+import type { WorldEnv } from "./shared.js";
+import { isRecord } from "../../../lib/is-record.js";
 
 export const worldPluginPlanRoutes = new Hono<WorldEnv>();
 

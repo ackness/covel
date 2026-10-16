@@ -29,75 +29,54 @@ import type {
   LLMTargetIdentity,
   LLMToolDefinition,
   LLMUsageSummary,
-} from "./llm-adapter.js";
+} from "@covel/shared";
 
-/**
- * Minimal structural form of `@covel/ai-provider`'s `SlotOverridesInput`.
- * Duplicated here to keep `@covel/runtime` decoupled from the ai-provider
- * package (which already depends on `@covel/runtime`'s sibling).
- */
-export interface SlotOverridesInput {
-  slotBindings?: Record<string, import("@covel/shared").LlmModelBinding>;
-  parameterOverrides?: Record<
-    string,
-    {
-      temperature?: number;
-      topP?: number;
-      topK?: number;
-      maxOutputTokens?: number;
-      frequencyPenalty?: number;
-      presencePenalty?: number;
-      reasoningEffort?: import("@covel/shared").ReasoningEffort;
-    }
-  >;
-  customPresets?: Array<{
-    reasoningEffort?: import("@covel/shared").ReasoningEffort;
-    id: string;
-    name: string;
-    provider: string;
-    baseUrl?: string;
-    model: string;
-    /** A built-in protocol or a plugin's `<pluginId>/<wireId>`. */
-    protocol?: string;
+import type {
+  SlotOverridesInput,
+  CapabilityOverridePolicy,
+} from "@covel/ai-provider";
+
+interface GatewayTextInput {
+  presetId?: string;
+  instructionLocale?: "en" | "zh";
+  messages: Array<{
+    role: string;
+    content: string | readonly (LLMTextPart | LLMImagePart)[] | null;
+    toolCalls?: Array<{ id: string; name: string; arguments: string }>;
+    toolCallId?: string;
+    reasoningContent?: string;
+    providerContinuation?: LLMProviderContinuation;
   }>;
-  capabilityOverrides?: Record<
-    string,
-    {
-      input?: Array<"text" | "image" | "audio" | "video" | "file">;
-      output?: Array<
-        "text" | "image" | "audio" | "video" | "embedding" | "evaluation"
-      >;
-      features?: Array<
-        | "function_calling"
-        | "structured_output"
-        | "streaming"
-        | "reasoning"
-        | "vision"
-        | "prompt_caching"
-        | "web_search"
-        | "computer_use"
-      >;
-      contextWindow?: number;
-      maxOutputTokens?: number;
-    }
-  >;
+  tools?: Array<{
+    type: "function";
+    function: {
+      name: string;
+      description?: string;
+      parameters?: Record<string, unknown>;
+    };
+  }>;
+  responseFormat?: LLMResponseFormat;
+  providerRequestMetadata?: Record<string, unknown>;
+  defaults?: LLMRequestDefaults;
+  promptCacheKey?: string;
 }
 
-export type CapabilityOverridePolicy = "full" | "restrict-only";
+interface GatewayTextOptions {
+  apiKeys?: Record<string, string>;
+  envApiKeys?: Record<string, string>;
+  traceId?: string;
+  signal?: AbortSignal;
+  requestBudget?: LLMRequestBudget;
+  onQueueStart?: LLMQueueStart;
+  slotOverrides?: SlotOverridesInput;
+  capabilityOverridePolicy?: CapabilityOverridePolicy;
+  /** Request-hard generation limit; gateway applies it after metadata. */
+  parameterOverrides?: { maxOutputTokens?: number };
+  onTargetAttempt?: (target: LLMTargetIdentity) => void;
+  onProviderRequest?: (request: LLMProviderRequest) => void;
+}
 
-/**
- * Minimal gateway interface — only the parts we need.
- * Matches the shape returned by @covel/ai-provider's createGateway().
- *
- * Intentionally NOT folded into the shared LLM-adapter contracts
- * (`LLMAdapter` / `SimpleCompletionAdapter` in `@covel/shared`): this is a
- * structural duck-type of the *ai-provider gateway* (provider-protocol shape:
- * `generateText` / `streamText`, `presetId`, OpenAI-style `function` tools),
- * declared here so `@covel/runtime` does not take a build/type dependency on
- * `@covel/ai-provider` (which already depends on runtime's sibling). It is the
- * thing `createGatewayAdapter` adapts *into* an `LLMAdapter`, not another copy
- * of the LLM-call contract — merging the two would re-couple the packages.
- */
+/** The text-generation surface the runtime adapts from the gateway. */
 export interface GatewayLike {
   resolveSlot(
     presetId: string | undefined,
@@ -120,44 +99,8 @@ export interface GatewayLike {
   } | null;
 
   generateText(
-    input: {
-      presetId?: string;
-      instructionLocale?: "en" | "zh";
-      messages: Array<{
-        role: string;
-        content: string | readonly (LLMTextPart | LLMImagePart)[] | null;
-        toolCalls?: Array<{ id: string; name: string; arguments: string }>;
-        toolCallId?: string;
-        reasoningContent?: string;
-        providerContinuation?: LLMProviderContinuation;
-      }>;
-      tools?: Array<{
-        type: "function";
-        function: {
-          name: string;
-          description?: string;
-          parameters?: Record<string, unknown>;
-        };
-      }>;
-      responseFormat?: LLMResponseFormat;
-      providerRequestMetadata?: Record<string, unknown>;
-      defaults?: LLMRequestDefaults;
-      promptCacheKey?: string;
-    },
-    options?: {
-      apiKeys?: Record<string, string>;
-      envApiKeys?: Record<string, string>;
-      traceId?: string;
-      signal?: AbortSignal;
-      requestBudget?: LLMRequestBudget;
-      onQueueStart?: LLMQueueStart;
-      slotOverrides?: SlotOverridesInput;
-      capabilityOverridePolicy?: CapabilityOverridePolicy;
-      /** Request-hard generation limit; gateway applies it after metadata. */
-      parameterOverrides?: { maxOutputTokens?: number };
-      onTargetAttempt?: (target: LLMTargetIdentity) => void;
-      onProviderRequest?: (request: LLMProviderRequest) => void;
-    },
+    input: GatewayTextInput,
+    options?: GatewayTextOptions,
   ): Promise<{
     text: string;
     finishReason: string;
@@ -170,44 +113,8 @@ export interface GatewayLike {
   }>;
 
   streamText?(
-    input: {
-      presetId?: string;
-      instructionLocale?: "en" | "zh";
-      messages: Array<{
-        role: string;
-        content: string | readonly (LLMTextPart | LLMImagePart)[] | null;
-        toolCalls?: Array<{ id: string; name: string; arguments: string }>;
-        toolCallId?: string;
-        reasoningContent?: string;
-        providerContinuation?: LLMProviderContinuation;
-      }>;
-      tools?: Array<{
-        type: "function";
-        function: {
-          name: string;
-          description?: string;
-          parameters?: Record<string, unknown>;
-        };
-      }>;
-      providerRequestMetadata?: Record<string, unknown>;
-      defaults?: LLMRequestDefaults;
-      responseFormat?: LLMResponseFormat;
-      promptCacheKey?: string;
-    },
-    options?: {
-      apiKeys?: Record<string, string>;
-      envApiKeys?: Record<string, string>;
-      traceId?: string;
-      signal?: AbortSignal;
-      requestBudget?: LLMRequestBudget;
-      onQueueStart?: LLMQueueStart;
-      slotOverrides?: SlotOverridesInput;
-      capabilityOverridePolicy?: CapabilityOverridePolicy;
-      /** @see generateText options.parameterOverrides */
-      parameterOverrides?: { maxOutputTokens?: number };
-      onTargetAttempt?: (target: LLMTargetIdentity) => void;
-      onProviderRequest?: (request: LLMProviderRequest) => void;
-    },
+    input: GatewayTextInput,
+    options?: GatewayTextOptions,
   ): AsyncIterable<{
     type: string;
     textDelta?: string;
@@ -517,7 +424,7 @@ function withResponseFormatInstruction(
 }
 
 function toGatewayMessages(
-  messages: readonly import("./llm-adapter.js").LLMMessage[],
+  messages: readonly import("@covel/shared").LLMMessage[],
 ) {
   return messages.map((msg) => ({
     role: msg.role,

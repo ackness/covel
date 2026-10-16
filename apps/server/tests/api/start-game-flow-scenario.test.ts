@@ -66,7 +66,6 @@ function fnManifest(
   return {
     name,
     pluginId: name.split("/")[0]!,
-    pluginType: "core-plugin",
     description: name,
     stage:
       priority <= 99
@@ -91,7 +90,7 @@ function makeSummary(id: string): PluginSummary {
     id,
     name: id,
     description: id,
-    pluginType: "core-plugin",
+    kind: "core",
     runtimeCount: 1,
   };
 }
@@ -187,8 +186,8 @@ function makeLoadedRuntimes(store: DataStore): Map<string, LoadedRuntime> {
                     interactionId: "form-char-creation",
                     narrativeTemplate: "Player {{name}} enters as {{concept}}.",
                     fields: [
-                      { id: "name", label: "Name", type: "text" },
-                      { id: "concept", label: "Concept", type: "text" },
+                      { name: "name", label: "Name", type: "text" },
+                      { name: "concept", label: "Concept", type: "text" },
                     ],
                   },
                 ],

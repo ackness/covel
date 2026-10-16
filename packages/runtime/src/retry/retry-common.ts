@@ -16,7 +16,7 @@ import {
   isAccountFailure,
   LLMRequestBudgetError,
 } from "@covel/shared";
-import type { LLMMessage } from "../llm/llm-adapter.js";
+import type { LLMMessage } from "@covel/shared";
 
 // ── Config ──────────────────────────────────────────────────────────
 
@@ -119,7 +119,7 @@ export function buildRetryPolicy(input: {
  * more than half of what is left: a stalled attempt always leaves room for
  * the next one. With 120s and four attempts the waits are 60s, 30s, 15s, 15s.
  */
-export function stallWaitMs(remainingMs: number, attemptsLeft: number): number {
+function stallWaitMs(remainingMs: number, attemptsLeft: number): number {
   if (attemptsLeft <= 1) return remainingMs;
   return Math.max(
     remainingMs / attemptsLeft,
@@ -158,7 +158,7 @@ export type RetryReason =
   | "output-truncated"
   | "unknown";
 
-/** Internal marker so turn-executor can tell "retry exhausted" apart. */
+/** Terminal LLM failure; keeps its cause for provider classification. */
 export class LLMRetryError extends Error {
   override readonly cause: unknown;
   readonly reason: RetryReason;
@@ -177,7 +177,10 @@ export class LLMRetryError extends Error {
     // keywords like "rate limited" or "fetch failed" without having to
     // unwrap `.cause`.
     const causeMsg = extractMessage(args.cause);
-    const base = `LLM retry exhausted after ${args.attempts} attempt(s) (${args.reason})`;
+    const base =
+      args.reason === "unknown"
+        ? `LLM call failed after ${args.attempts} attempt(s)`
+        : `LLM retry exhausted after ${args.attempts} attempt(s) (${args.reason})`;
     super(args.message ?? (causeMsg ? `${base}: ${causeMsg}` : base));
     this.name = "LLMRetryError";
     this.reason = args.reason;

@@ -12,7 +12,7 @@
  *  4. PreSchedule replacement is filter-only: manifests not in the
  *     original triggered set are dropped, and originals are re-used (a
  *     mutated copy cannot be smuggled in).
- *  5. isTrustedPluginSource never trusts the manifest's own pluginType
+ *  5. isTrustedPluginSource requires a discovery source
  *     claim — only the discovery registry's source.
  */
 
@@ -272,7 +272,6 @@ describe("PreSchedule is filter-only", () => {
     const forged = makeManifest({
       name: "evil/injected",
       pluginId: "narrator", // claims builtin identity
-      pluginType: "core-plugin",
     });
     const result = await runPreScheduleHook(
       opts(pipelineReturning([...original, forged])),
@@ -285,7 +284,6 @@ describe("PreSchedule is filter-only", () => {
     const mutated = {
       ...original[0],
       pluginId: "narrator",
-      pluginType: "core-plugin",
     } as RuntimeManifest;
     const result = await runPreScheduleHook(
       opts(pipelineReturning([mutated])),
@@ -312,8 +310,8 @@ describe("PreSchedule is filter-only", () => {
 });
 
 describe("isTrustedPluginSource ignores manifest claims", () => {
-  it("never trusts pluginType: core-plugin without a registry answer", () => {
-    const forged = makeManifest({ pluginType: "core-plugin" });
+  it("never trusts a manifest without a registry answer", () => {
+    const forged = makeManifest({ pluginId: "narrator" });
     expect(isTrustedPluginSource({}, forged)).toBe(false);
     expect(
       isTrustedPluginSource({ getPluginSource: () => undefined }, forged),

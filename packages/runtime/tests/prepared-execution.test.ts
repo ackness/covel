@@ -8,6 +8,7 @@ import type { RuntimeManifest } from "@covel/shared";
 import type { LoadedRuntime } from "@covel/shared/plugin-runtime";
 import {
   executeTurn,
+  resumeSuspendedRuntime,
   commitExecution,
   finalizeExecution,
 } from "../src/index.js";
@@ -90,6 +91,7 @@ describe("prepared execution host API", () => {
       loadRuntime,
       llm: { generate: vi.fn() },
     });
+    expect(execution.commit.outputSchemas[parent.name]).toBe(schema);
     expect(execution.commit.results).toHaveLength(2);
     expect(
       execution.commit.results.map((result) => result.pendingProposals?.length),
@@ -122,6 +124,79 @@ describe("prepared execution host API", () => {
     expect(
       (await store.getLatestRuntimeExport("s", parent.name, "answer"))?.value,
     ).toEqual({ text: parent.name });
+  });
+
+  it("reuses the loaded schema across turns while isolating public results", async () => {
+    const store = await fixture();
+    const runtime = manifest("probe/export", {
+      output: { recordAs: "answer", schema: "./output.json" },
+    });
+    const loaded: LoadedRuntime = {
+      manifest: runtime,
+      promptTemplate: "",
+      outputSchema: schema,
+      handler: async () => ({ outcome: "success", value: { text: "ready" } }),
+    };
+    const deps = {
+      store,
+      llm: { generate: vi.fn() },
+      loadRuntime: async () => loaded,
+    };
+    const first = await executeTurn(input, [runtime], deps);
+    const second = await executeTurn(
+      { ...input, turnId: "t2" },
+      [runtime],
+      deps,
+    );
+    expect(first.commit.outputSchemas[runtime.name]).toBe(schema);
+    expect(second.commit.outputSchemas[runtime.name]).toBe(schema);
+    const output = first.result.runtimeResults[0]?.output;
+    if (!output) throw new Error("Expected public output");
+    Object.assign(output, { text: "changed outside commit" });
+    expect(first.commit.results[0]?.output).toEqual({ text: "ready" });
+  });
+
+  it("retains the loaded schema in a resumed execution's commit plan", async () => {
+    const store = await fixture();
+    const runtime = manifest("probe/resume", { trigger: { type: "manual" } });
+    await store.saveSuspension({
+      id: "suspended",
+      sessionId: "s",
+      turnId: "t",
+      runtimeId: runtime.name,
+      pluginId: runtime.pluginId,
+      reason: "Need input",
+      resumeSchema: {},
+      pendingContinuation: {
+        takenUnder: { playerTurns: 0, pluginVersion: "1.0.0", writes: [] },
+        messages: [],
+        toolCallsSoFar: [],
+        pendingProposals: [],
+        executionContext: {
+          executionId: "original",
+          origin: "manual",
+          countPolicy: "none",
+        },
+      },
+      createdAt: timestamp,
+    });
+    const suspension = await store.getSuspension("suspended");
+    if (!suspension) throw new Error("Expected suspension");
+    const execution = await resumeSuspendedRuntime(suspension, {}, runtime, {
+      store,
+      llm: { generate: vi.fn() },
+      loadRuntime: async () => ({
+        manifest: runtime,
+        promptTemplate: "",
+        outputSchema: schema,
+        handler: async () => ({
+          outcome: "success",
+          value: { text: "resumed" },
+        }),
+      }),
+    });
+    expect(execution.result.status).toBe("success");
+    expect(execution.commit.outputSchemas[runtime.name]).toBe(schema);
   });
 
   it("does not expose failed handler commands as output", async () => {

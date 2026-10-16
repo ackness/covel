@@ -382,7 +382,10 @@ baseUrl = "https://other.example/v1"
 protocol = "typesafe-systemone-v1"`);
     const fetchMock = mockResponse();
     fetchMock.mockResolvedValueOnce(new Response(null, { status: 529 }));
-    expect(await gateway.evaluate(params)).toMatchObject({ provider: "other" });
+    const apiKeys = { typesafe: "fixture-key" };
+    expect(await gateway.evaluate(params, { apiKeys })).toMatchObject({
+      provider: "other",
+    });
     expect(fetchMock).toHaveBeenCalledTimes(2);
     fetchMock.mockClear();
     const controller = new AbortController();
@@ -393,7 +396,7 @@ protocol = "typesafe-systemone-v1"`);
       throw controller.signal.reason;
     });
     await expect(
-      gateway.evaluate(params, { signal: controller.signal }),
+      gateway.evaluate(params, { apiKeys, signal: controller.signal }),
     ).rejects.toThrow();
     expect(receivedSignal?.aborted).toBe(true);
     expect(receivedSignal?.reason).toBe(controller.signal.reason);

@@ -16,14 +16,10 @@ import {
 import type { LoadedRuntime } from "@covel/plugin-loader";
 import { createMemoryStore } from "@covel/store/memory";
 import { tool } from "@covel/tools";
-import { executeTurn } from "../src/turn-executor/turn-executor.js";
+import { runTurnPipeline } from "../src/turn-executor/turn-executor.js";
 import { collectExecutionJournal } from "../src/execution-journal.js";
 import type { TurnExecutorDeps } from "../src/turn-executor/turn-executor.js";
-import type {
-  LLMAdapter,
-  LLMMessage,
-  LLMResponse,
-} from "../src/llm/llm-adapter.js";
+import type { LLMAdapter, LLMMessage, LLMResponse } from "@covel/shared";
 import { z } from "zod";
 
 // ── Mock LLM ─────────────────────────────────────────────────────
@@ -109,7 +105,7 @@ describe("TurnExecutor E2E", () => {
   it("should discover narrator from plugins/", () => {
     expect(narratorManifest.name).toBe("narrator");
     expect(narratorManifest.stage).toBe("narrative");
-    expect(narratorManifest.pluginType).toBe("core-plugin");
+    expect(narratorManifest.outputKind).toBe("story");
   });
 
   it("should execute a turn with narrator and get narrative output", async () => {
@@ -119,7 +115,11 @@ describe("TurnExecutor E2E", () => {
       store: await createMainLoopStore("sess-1"),
     };
 
-    const result = await executeTurn(makeTurnInput(), [narratorManifest], deps);
+    const result = await runTurnPipeline(
+      makeTurnInput(),
+      [narratorManifest],
+      deps,
+    );
 
     expect(result.turnId).toBe("turn-1");
     expect(result.sessionId).toBe("sess-1");
@@ -157,7 +157,7 @@ describe("TurnExecutor E2E", () => {
       store,
     };
 
-    const result = await executeTurn(makeTurnInput(), [scheduled], deps);
+    const result = await runTurnPipeline(makeTurnInput(), [scheduled], deps);
 
     expect(result.runtimeResults).toHaveLength(1);
     expect(collectExecutionJournal(result)).toEqual(
@@ -183,7 +183,11 @@ describe("TurnExecutor E2E", () => {
       store: await createMainLoopStore("sess-1"),
     };
 
-    const result = await executeTurn(makeTurnInput(), [narratorManifest], deps);
+    const result = await runTurnPipeline(
+      makeTurnInput(),
+      [narratorManifest],
+      deps,
+    );
     const narratorResult = result.runtimeResults[0]!;
     expect(
       (narratorResult.output as Record<string, unknown>).narrativeOutput,
@@ -197,7 +201,7 @@ describe("TurnExecutor E2E", () => {
       store: await createMainLoopStore("sess-1"),
     };
 
-    await executeTurn(
+    await runTurnPipeline(
       makeTurnInput({ playerMessage: "我攻击巨龙" }),
       [narratorManifest],
       deps,
@@ -245,7 +249,7 @@ describe("TurnExecutor E2E", () => {
       store: await createMainLoopStore("sess-1"),
     };
 
-    const result = await executeTurn(
+    const result = await runTurnPipeline(
       makeTurnInput(),
       [narratorManifest, preNarrator], // Deliberately out of priority order
       deps,
@@ -300,9 +304,14 @@ describe("TurnExecutor E2E", () => {
       store: await createMainLoopStore("sess-1"),
     };
 
-    await executeTurn(makeTurnInput(), [storyManifest, helperManifest], deps, {
-      maxSteps: 1,
-    });
+    await runTurnPipeline(
+      makeTurnInput(),
+      [storyManifest, helperManifest],
+      deps,
+      {
+        maxSteps: 1,
+      },
+    );
 
     // Stage barrier: story-runtime (priority 500 → narrative stage) runs before
     // helper-runtime (priority 550 → post-turn stage). Order is incidental to
@@ -315,7 +324,7 @@ describe("TurnExecutor E2E", () => {
     mockLLM.calls.length = 0;
     resolveCalls.length = 0;
 
-    await executeTurn(
+    await runTurnPipeline(
       { ...makeTurnInput(), playerMessage: "继续前进", modelOverride: "e2e3" },
       [storyManifest, helperManifest],
       deps,
@@ -341,9 +350,19 @@ describe("TurnExecutor E2E", () => {
         categories: [{ style: "safe", suggestions: ["先观察周围环境"] }],
         ui: [
           {
-            type: "action-guide",
-            topic,
-            categories: [{ style: "safe", suggestions: ["先观察周围环境"] }],
+            parts: [
+              {
+                id: "ui-1",
+                type: "action-guide",
+                status: "success",
+                content: {
+                  topic,
+                  categories: [
+                    { style: "safe", suggestions: ["先观察周围环境"] },
+                  ],
+                },
+              },
+            ],
           },
         ],
       }),
@@ -403,7 +422,7 @@ describe("TurnExecutor E2E", () => {
       }),
     };
 
-    const result = await executeTurn(makeTurnInput(), [manifest], deps, {
+    const result = await runTurnPipeline(makeTurnInput(), [manifest], deps, {
       maxSteps: 2,
     });
     expect(callCount).toBe(2);
@@ -423,7 +442,11 @@ describe("TurnExecutor E2E", () => {
       store: await createMainLoopStore("sess-1"),
     };
 
-    const result = await executeTurn(makeTurnInput(), [narratorManifest], deps);
+    const result = await runTurnPipeline(
+      makeTurnInput(),
+      [narratorManifest],
+      deps,
+    );
 
     // Turn should still complete, but narrator result should be failed
     expect(result.runtimeResults).toHaveLength(1);
@@ -446,13 +469,13 @@ describe("TurnExecutor E2E", () => {
       store: await createMainLoopStore("sess-1"),
     };
 
-    const result = await executeTurn(
+    const result = await runTurnPipeline(
       makeTurnInput(),
       [narratorManifest, manualRuntime],
       deps,
     );
 
-    // Only narrator should run (manual-only skipped because isManualTrigger is false)
+    // Only narrator should run; manual-only runtimes need explicit selection.
     expect(result.runtimeResults).toHaveLength(1);
     expect(result.runtimeResults[0]!.pluginId).toBe("narrator");
   });
@@ -466,7 +489,7 @@ describe("TurnExecutor E2E", () => {
       store,
     };
 
-    const result = await executeTurn(
+    const result = await runTurnPipeline(
       makeTurnInput({ sessionId: "sess-msg", playerMessage: "我走进森林" }),
       [narratorManifest],
       deps,
@@ -475,7 +498,7 @@ describe("TurnExecutor E2E", () => {
     const persisted = await store.listTurnMessages("sess-msg");
     const messages = collectExecutionJournal(result);
 
-    // executeTurn only stages this turn's rows; finalizeExecution owns writes.
+    // runTurnPipeline only stages this turn's rows; finalizeExecution owns writes.
     expect(persisted.map((message) => message.id)).toEqual(["prior-player-0"]);
     expect(messages.map((message) => message.sourceType)).toEqual([
       "player",
@@ -511,11 +534,19 @@ describe("TurnExecutor E2E", () => {
         ],
         ui: [
           {
-            type: "action-guide",
-            topic,
-            categories: [
-              { style: "safe", suggestions: ["先观察周围灵气流向"] },
-              { style: "creative", suggestions: ["借水雾掩护靠近入口"] },
+            parts: [
+              {
+                id: "ui-1",
+                type: "action-guide",
+                status: "success",
+                content: {
+                  topic,
+                  categories: [
+                    { style: "safe", suggestions: ["先观察周围灵气流向"] },
+                    { style: "creative", suggestions: ["借水雾掩护靠近入口"] },
+                  ],
+                },
+              },
             ],
           },
         ],
@@ -574,7 +605,11 @@ describe("TurnExecutor E2E", () => {
       }),
     };
 
-    const result = await executeTurn(makeTurnInput(), [guideManifest], deps);
+    const result = await runTurnPipeline(
+      makeTurnInput(),
+      [guideManifest],
+      deps,
+    );
     const guideResult = result.runtimeResults[0]!;
 
     expect(guideResult.status).toBe("success");
@@ -585,11 +620,19 @@ describe("TurnExecutor E2E", () => {
     expect(guideResult.output).not.toHaveProperty("ui");
     expect(guideResult.effects?.ui).toEqual([
       {
-        type: "action-guide",
-        topic: "探查百灵沼泽入口",
-        categories: [
-          { style: "safe", suggestions: ["先观察周围灵气流向"] },
-          { style: "creative", suggestions: ["借水雾掩护靠近入口"] },
+        parts: [
+          {
+            id: "ui-1",
+            type: "action-guide",
+            status: "success",
+            content: {
+              topic: "探查百灵沼泽入口",
+              categories: [
+                { style: "safe", suggestions: ["先观察周围灵气流向"] },
+                { style: "creative", suggestions: ["借水雾掩护靠近入口"] },
+              ],
+            },
+          },
         ],
       },
     ]);
@@ -663,7 +706,7 @@ describe("TurnExecutor E2E", () => {
       }),
     };
 
-    const result = await executeTurn(makeTurnInput(), [manifest], deps);
+    const result = await runTurnPipeline(makeTurnInput(), [manifest], deps);
     const runtimeResult = result.runtimeResults[0]!;
 
     expect(runtimeResult.status).toBe("success");
@@ -731,9 +774,14 @@ describe("TurnExecutor E2E", () => {
       }),
     };
 
-    const result = await executeTurn(makeTurnInput(), [lookupManifest], deps, {
-      maxSteps: 3,
-    });
+    const result = await runTurnPipeline(
+      makeTurnInput(),
+      [lookupManifest],
+      deps,
+      {
+        maxSteps: 3,
+      },
+    );
     const runtimeResult = result.runtimeResults[0]!;
 
     expect(runtimeResult.status).toBe("failed");
@@ -812,7 +860,7 @@ describe("TurnExecutor E2E", () => {
       }),
     };
 
-    const result = await executeTurn(makeTurnInput(), [manifest], deps);
+    const result = await runTurnPipeline(makeTurnInput(), [manifest], deps);
     const runtimeResult = result.runtimeResults[0]!;
 
     expect(llmCallCount).toBe(2);
@@ -856,7 +904,7 @@ describe("TurnExecutor E2E", () => {
       store,
     };
 
-    await executeTurn(
+    await runTurnPipeline(
       makeTurnInput({
         sessionId: "sess-hist",
         turnId: "turn-1",
@@ -926,37 +974,68 @@ describe("TurnExecutor _interaction protocol", () => {
     )!.manifest;
     const charLoaded = await loadRuntime(charDiscovery, charManifest.name);
 
-    // MockLLM calls the character-specific form wrapper.
+    // A failed default emits nothing; a successful preview can then be revised.
     const mockLLM = new MockLLM();
+    let calls = 0;
     mockLLM.generate = async (params) => {
-      const hasToolResult = params.messages.some((m) => m.role === "tool");
-      if (hasToolResult) {
+      calls++;
+      const lastTool = params.messages.filter((m) => m.role === "tool").at(-1);
+      if (calls === 2)
+        expect(JSON.parse(String(lastTool?.content)).error).toContain(
+          'repeats "to"',
+        );
+      if (calls === 3) {
+        expect(JSON.parse(String(lastTool?.content))).toEqual({
+          filledNarrative: "Alex waits. Waiting.",
+        });
+      }
+      if (calls === 4) {
+        expect(JSON.parse(String(lastTool?.content))).toEqual({
+          filledNarrative: "Welcome Alex. You enter the village.",
+        });
         return {
-          content: "表单已创建",
+          content: '{"preGameDone":false}',
           toolCalls: [],
           finishReason: "stop",
           usage: { inputTokens: 50, outputTokens: 10 },
         };
       }
       return {
-        content: "角色创建...",
+        content: null,
         toolCalls: [
           {
-            id: "tc-1",
+            id: `tc-${calls}`,
             name: "create-character-form",
             arguments: JSON.stringify({
               formId: "char-creation",
-              title: "创建角色",
+              title: "Create character",
               fields: [
                 {
                   type: "text",
                   name: "characterName",
-                  label: "角色名",
+                  label: "Name",
                   required: true,
+                  defaultValue: "Alex",
+                },
+                {
+                  type: "text",
+                  name: "background",
+                  label: "Background",
+                  defaultValue:
+                    calls === 1
+                      ? "to find a friend"
+                      : calls === 2
+                        ? "Waiting."
+                        : "You enter the village.",
                 },
               ],
-              submitLabel: "确认",
-              narrativeTemplate: "你的名字是 {{characterName}}。",
+              submitLabel: "Continue",
+              narrativeTemplate:
+                calls === 1
+                  ? "{{characterName}} came to {{background}}."
+                  : calls === 2
+                    ? "{{characterName}} waits. {{background}}."
+                    : "Welcome {{characterName}}. {{background}}.",
             }),
           },
         ],
@@ -987,16 +1066,20 @@ describe("TurnExecutor _interaction protocol", () => {
 
     // Isolate the interaction protocol after world initialization. The real
     // guard reads the schema above; absent providers add no `after` DAG edges.
-    const result = await executeTurn(makeTurnInput(), [charManifest], deps);
+    const result = await runTurnPipeline(makeTurnInput(), [charManifest], deps);
 
     // Should have pendingInputs with the interaction protocol
     expect(result.pendingInputs).toBeDefined();
-    expect(result.pendingInputs!.length).toBeGreaterThanOrEqual(1);
+    expect(calls).toBe(4);
+    expect(result.pendingInputs).toHaveLength(1);
 
     const pi = result.pendingInputs![0];
     expect(pi!.interaction).toBeDefined();
     expect(pi!.interaction.type).toBe("form");
     expect(pi!.interaction.interactionId).toBe("char-creation");
+    expect(pi!.interaction.narrativeTemplate).toBe(
+      "Welcome {{characterName}}. {{background}}.",
+    );
     expect(pi!.form).toBeDefined();
     expect((pi!.form as Record<string, unknown>).interactionId).toBe(
       "char-creation",

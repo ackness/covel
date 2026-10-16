@@ -262,7 +262,6 @@ it("terminal recovery replaces a real delta placeholder and clears queued text",
       executing: true,
     });
     const refs = useSessionRuntimeRefs(state);
-    refs.runtimeKindRef.current.set("story/main", "story");
     const stream = createSseEventHandler({
       ...refs,
       dispatch,
@@ -280,7 +279,12 @@ it("terminal recovery replaces a real delta placeholder and clears queued text",
     flowId: "flow",
     seq: 1,
     timestamp: "2026-01-01T00:00:00Z",
-    payload: { runtimeId: "story/main", pluginId: "story", delta: "partial" },
+    payload: {
+      runtimeId: "story/main",
+      pluginId: "story",
+      kind: "story",
+      delta: "partial",
+    },
   } as const;
   act(() => {
     hook.result.current.stream(delta);
@@ -348,7 +352,6 @@ function ownedRecovery() {
       executing: true,
     });
     const refs = useSessionRuntimeRefs(state);
-    refs.runtimeKindRef.current.set("story/main", "story");
     const stream = createSseEventHandler({
       ...refs,
       dispatch,
@@ -367,7 +370,12 @@ function ownedRecovery() {
       flowId: "flow",
       seq: 1,
       timestamp: session.createdAt,
-      payload: { runtimeId: "story/main", pluginId: "story", delta: text },
+      payload: {
+        runtimeId: "story/main",
+        pluginId: "story",
+        kind: "story",
+        delta: text,
+      },
     });
   const flush = () => {
     for (const cb of [...frames.values()]) cb(0);
@@ -791,6 +799,8 @@ it("offers Continue for a live stopped opening with no runtime steps, using the 
     return (
       <ExecutionRecoveryNotice
         recovery={state.executionRecovery}
+        steps={state.executionSteps}
+        onOpenSettings={vi.fn()}
         onRetry={retryInterruptedTurn}
         onRefresh={vi.fn()}
         onStop={vi.fn()}

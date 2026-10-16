@@ -1,4 +1,5 @@
 import type { ProviderFailureKind } from "../llm-failure-kind.js";
+import type { Stage } from "./runtime-scheduling.js";
 
 /**
  * Covel Session Protocol — server→client event vocabulary + session snapshot.
@@ -45,7 +46,7 @@ export type CovelEventPayload = Readonly<Record<string, unknown>>;
 export interface NarrativeDeltaPayload {
   readonly runtimeId: string;
   readonly pluginId: string;
-  readonly kind?: string;
+  readonly kind: string;
   readonly delta: string;
   /**
    * Discard the text streamed so far for this runtime before appending
@@ -59,7 +60,7 @@ export interface NarrativeCompletedPayload {
   readonly runtimeId: string;
   readonly content: string;
   readonly messageId?: string;
-  readonly kind?: string;
+  readonly kind: string;
 }
 
 export interface InteractionRequestedPayload {
@@ -71,8 +72,8 @@ export interface InteractionRequestedPayload {
 }
 
 export interface UiRenderedPayload {
-  readonly block?: Readonly<Record<string, unknown>>;
-  readonly render?: Readonly<Record<string, unknown>>;
+  readonly block: Readonly<Record<string, unknown>>;
+  readonly render: Readonly<Record<string, unknown>>;
   readonly proposalId?: string;
   readonly runtimeId?: string;
   readonly pluginId?: string;
@@ -121,8 +122,10 @@ export interface ExecutionCompletedPayload {
 export interface RuntimeStartedPayload {
   readonly runtimeId: string;
   readonly pluginId: string;
-  readonly kind?: string;
+  readonly kind: string;
   readonly label?: string;
+  /** Stage at execution time; absent for event/manual runtimes. */
+  readonly stage?: Stage;
 }
 
 /** A staged runtime was queued beyond its source turn's foreground barrier. */
@@ -143,6 +146,7 @@ export interface RuntimeLifecyclePayload {
 export interface RuntimeFailedPayload extends RuntimeLifecyclePayload {
   readonly error?: string;
   readonly errorKind?: ProviderFailureKind;
+  readonly failureTarget?: import("./execution.js").RuntimeResult["failureTarget"];
 }
 
 export interface AssetProgressPayload {
@@ -655,10 +659,10 @@ export function executionMayBeRunning(
 }
 
 export interface SessionSnapshot {
-  readonly dimensions: import("./dimensions.js").DimensionSnapshot;
+  readonly dimensions: import("@covel/plugin-handlers-utils/dimensions").DimensionSnapshot;
   readonly dimensionProviderPluginId?: string;
-  readonly dimensionSettlements?: readonly import("./dimensions.js").DimensionSettlementSummary[];
-  readonly dimensionRecovery?: import("./dimensions.js").DimensionRecovery;
+  readonly dimensionSettlements?: readonly import("@covel/plugin-handlers-utils/dimensions").DimensionSettlementSummary[];
+  readonly dimensionRecovery?: import("@covel/plugin-handlers-utils/dimensions").DimensionRecovery;
   readonly session: {
     readonly id: string;
     readonly worldId?: string;

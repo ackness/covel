@@ -13,7 +13,7 @@ import type { CovelMessage } from "@covel/shared";
 import { isEnvTruthy, readRuntimeEnv } from "@covel/shared";
 import { errorBody, okBody, parseJsonBody } from "../../api-error.js";
 import type { SessionLock } from "../../lib/session-lock.js";
-import { checkSessionOwner } from "./session/session-guard.js";
+import { resolveSessionById } from "./session/session-guard.js";
 import { withLockedSessionMutation } from "./session/locked-mutation.js";
 
 type Env = {
@@ -42,7 +42,6 @@ eventRoutes.post("/emit", async (c) => {
       topic: z.string().min(1),
       sessionId: z.string().min(1),
       payload: z.record(z.string(), z.unknown()).nullish(),
-      targetRuntime: z.string().optional(),
     }),
   );
   if (parsed instanceof Response) return parsed;
@@ -61,17 +60,9 @@ eventRoutes.post("/emit", async (c) => {
   // session's owner token so a non-production demo boot can't accept arbitrary
   // cross-session events. Strict no-op on self/desktop (unenforced tiers).
   const store = c.get("store");
-  const session = await store.getSession(body.sessionId);
-  if (!session) {
-    return c.json(
-      errorBody(`Session not found: ${body.sessionId}`, {
-        code: "session_not_found",
-      }),
-      404,
-    );
-  }
-  const denied = checkSessionOwner(c, session);
-  if (denied) return denied;
+  const guard = await resolveSessionById(c, body.sessionId);
+  if (!guard.ok) return guard.response;
+  const session = guard.session;
 
   const message: CovelMessage = {
     id: crypto.randomUUID(),
@@ -79,7 +70,6 @@ eventRoutes.post("/emit", async (c) => {
     topic: body.topic,
     payload: body.payload ?? {},
     sessionId: body.sessionId,
-    targetRuntime: body.targetRuntime,
     timestamp: new Date().toISOString(),
   };
 

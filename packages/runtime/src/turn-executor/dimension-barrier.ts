@@ -5,7 +5,7 @@ import {
   type DimensionSettlementReceipt,
   type RuntimeManifest,
 } from "@covel/shared";
-import type { DataStore } from "@covel/store";
+import type { DataStore, SessionRecord } from "@covel/store";
 
 /** How the executor marks a story held back because the provider did not publish. */
 export const DIMENSION_SNAPSHOT_SKIP = {
@@ -76,6 +76,7 @@ export function dimensionProviderConflictReason(
  * provider's place, stop the execution with a reason the player can act on.
  */
 export async function dimensionExecutionBarrier(args: {
+  readonly session: SessionRecord | null;
   readonly store?: DataStore;
   readonly sessionId: string;
   readonly runtimes: readonly RuntimeManifest[];
@@ -93,8 +94,7 @@ export async function dimensionExecutionBarrier(args: {
   const provider = providers[0];
   // No provider runs: nothing writes the dimensions, and no settlement can run.
   if (!provider) return undefined;
-  const session = await args.store.getSession(args.sessionId);
-  const bound = session?.metadata?._dimensionProviderPluginId;
+  const bound = args.session?.metadata?._dimensionProviderPluginId;
   if (bound !== undefined && bound !== provider)
     return `This session's dimensions belong to "${String(bound)}", which is not running. "${provider}" also keeps world dimensions and cannot take them over: turn it off to play on without dimension updates.`;
   if (!args.willNarrate) return undefined;

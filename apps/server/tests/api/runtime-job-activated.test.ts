@@ -32,7 +32,6 @@ function manifest(name: string, extra: Partial<RuntimeManifest> = {}) {
     description: "test function runtime",
     runtimeType: "function",
     outputKind: "system",
-    pluginType: "plugin",
     handler: "./handler.js",
     trigger: { type: "manual" },
     ...extra,
@@ -76,7 +75,7 @@ async function setup(handlers: {
         id: PLUGIN_ID,
         name: PLUGIN_ID,
         description: "",
-        pluginType: "plugin",
+        kind: "plugin",
         runtimeCount: runtimes.size,
       },
       manifests: [...runtimes.values()].map((loaded) => ({

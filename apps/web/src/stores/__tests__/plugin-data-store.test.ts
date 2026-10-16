@@ -19,12 +19,10 @@ import {
   dropPluginDataSession,
   getPluginNamespacesSnapshot,
   getPluginNamespaceSnapshot,
-  loadPluginData,
   resetPluginData,
   loadPluginDataForSession,
   replacePluginDataForSession,
   setActiveSession,
-  usePluginData,
   usePluginNamespaces,
   usePluginNamespace,
   __clearAllPluginDataForTest,
@@ -61,9 +59,9 @@ describe("plugin-data-store — sessionId-scoped isolation", () => {
     expect(getPluginNamespaceSnapshot("codex", "message")).toEqual({});
   });
 
-  it("loadPluginData respects the active session binding", () => {
+  it("loadPluginDataForSession respects the active session binding", () => {
     setActiveSession("session-a");
-    loadPluginData("codex", "message", [
+    loadPluginDataForSession("session-a", "codex", "message", [
       { key: "item-1", value: { name: "alpha" } },
       { key: "item-2", value: { name: "beta" } },
     ]);
@@ -119,7 +117,9 @@ describe("plugin-data-store — sessionId-scoped isolation", () => {
     applyChanges("codex", [
       { namespace: "message", key: "ignored", value: "noop", operation: "set" },
     ]);
-    loadPluginData("codex", "message", [{ key: "also-ignored", value: 1 }]);
+    loadPluginDataForSession("session-a", "codex", "message", [
+      { key: "also-ignored", value: 1 },
+    ]);
     expect(getPluginNamespaceSnapshot("codex", "message")).toEqual({});
   });
 
@@ -185,21 +185,6 @@ describe("plugin-data-store — React hook integration", () => {
     expect(result.current).toBe(empty);
   });
 
-  it("usePluginData re-renders when the active session changes", () => {
-    setActiveSession("session-a");
-    applyChanges("codex", [
-      { namespace: "message", key: "k", value: "A", operation: "set" },
-    ]);
-
-    const { result } = renderHook(() => usePluginData());
-    expect(result.current["codex"]?.message).toEqual({ k: "A" });
-
-    act(() => {
-      setActiveSession("session-b");
-    });
-    expect(result.current["codex"]?.message).toBeUndefined();
-  });
-
   it("usePluginNamespace returns empty object on missing namespace", () => {
     setActiveSession("session-a");
 
@@ -237,8 +222,12 @@ describe("plugin-data-store — React hook integration", () => {
 
 it("replaces all namespaces only for the requested active-session plugin", () => {
   setActiveSession("session-a");
-  loadPluginData("provider", "removed", [{ key: "stale", value: true }]);
-  loadPluginData("other", "message", [{ key: "kept", value: true }]);
+  loadPluginDataForSession("session-a", "provider", "removed", [
+    { key: "stale", value: true },
+  ]);
+  loadPluginDataForSession("session-a", "other", "message", [
+    { key: "kept", value: true },
+  ]);
   expect(
     replacePluginDataForSession("session-a", "provider", {
       current: { value: "fresh" },
@@ -257,9 +246,13 @@ it("replaces all namespaces only for the requested active-session plugin", () =>
 
 it("rejects a late plugin replacement or deletion for another active session", () => {
   setActiveSession("session-a");
-  loadPluginData("provider", "message", [{ key: "value", value: "a" }]);
+  loadPluginDataForSession("session-a", "provider", "message", [
+    { key: "value", value: "a" },
+  ]);
   setActiveSession("session-b");
-  loadPluginData("provider", "message", [{ key: "value", value: "b" }]);
+  loadPluginDataForSession("session-b", "provider", "message", [
+    { key: "value", value: "b" },
+  ]);
   expect(replacePluginDataForSession("session-a", "provider", {})).toBe(false);
   expect(getPluginNamespaceSnapshot("provider", "message")).toEqual({
     value: "b",
@@ -283,7 +276,7 @@ it("treats inherited plugin and namespace names as missing until explicitly load
   const empty = getPluginNamespacesSnapshot("missing");
   expect(getPluginNamespacesSnapshot("constructor")).toBe(empty);
   expect(getPluginNamespaceSnapshot("constructor", "constructor")).toEqual({});
-  loadPluginData("constructor", "constructor", [
+  loadPluginDataForSession("session-a", "constructor", "constructor", [
     { key: "value", value: "owned" },
   ]);
   expect(getPluginNamespacesSnapshot("constructor")).toEqual({

@@ -1,16 +1,13 @@
+import { RerunActionButton } from "./rerun-action-button.js";
 import { MediaGalleryPanel } from "./image-gallery-panel.js";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Copy, Loader2 } from "lucide-react";
 import { jobListPropsSchema } from "@covel/shared";
 import { Button } from "@/components/ui/button.js";
-import {
-  catalogItems,
-  invokeCatalogAction,
-} from "@/lib/catalog/catalog-actions.js";
+import { catalogItems } from "@/lib/catalog/catalog-actions.js";
 import { resolvePath, useI18nResolver } from "@/lib/catalog/helpers.js";
 import { useActiveSessionId } from "@/lib/catalog/session-context.js";
-import { emitToast } from "@/lib/toast-channel.js";
 import {
   compactJobId,
   formatJobDuration,
@@ -133,35 +130,14 @@ export function JobListPanel({
                         : t("common.error")}
                   </p>
                 ) : null}
-                {props.rerunAction ? (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={busy || !sessionId}
-                    onClick={() => {
-                      if (!sessionId || !props.rerunAction) return;
-                      setBusy(true);
-                      void invokeCatalogAction({
-                        sessionId,
-                        action: props.rerunAction,
-                        scope: { item, props: input },
-                        t,
-                      })
-                        .catch((err) =>
-                          emitToast(
-                            "error",
-                            err instanceof Error
-                              ? err.message
-                              : t("common.error"),
-                          ),
-                        )
-                        .finally(() => setBusy(false));
-                    }}
-                  >
-                    {resolve(props.rerunAction.label) ||
-                      t("catalog.jobList.rerun")}
-                  </Button>
-                ) : null}
+                <RerunActionButton
+                  action={props.rerunAction}
+                  sessionId={sessionId}
+                  item={item}
+                  input={input}
+                  busy={busy}
+                  setBusy={setBusy}
+                />
               </div>
             ) : null}
           </div>

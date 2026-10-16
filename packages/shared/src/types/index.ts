@@ -96,7 +96,6 @@ export type {
 } from "./world-generation.js";
 
 export type {
-  PluginType,
   RuntimeType,
   RuntimeHistoryPolicy,
   TriggerType,
@@ -143,6 +142,7 @@ export type {
   DetachedStageInput,
   TurnInput,
   TurnResult,
+  SetupCompletionDelta,
   NestedTurnResult,
   RecursiveCallDelta,
   InteractionType,
@@ -188,7 +188,6 @@ export type {
   UIRenderPartRetry,
   UIRenderPart,
   UIRenderPartsInstruction,
-  UIRenderLegacyInstruction,
   UIRenderInstruction,
 } from "./ui.js";
 
@@ -280,7 +279,7 @@ export type {
   AttributeDefinition,
   CharacterAttributeSchema,
   Character,
-} from "./character-schema.js";
+} from "@covel/plugin-handlers-utils";
 
 export type {
   RuntimeOutput,

@@ -51,6 +51,8 @@ Covel 的服务器对外只有一套 HTTP JSON 接口。网页和桌面应用用
 **请求体的基本检查**
 
 - 要求 JSON 对象的端点，收到 `null`、数组或单个值时直接返回 `400`，不会进入处理逻辑。
+- Lorebook 写入、模型列表和模型连通性测试使用统一的 JSON 读取错误：语法错误返回 `400 invalid_json_body`，非对象返回 `400 invalid_request_body`。
+- 会话执行状态、引导、停止和世界数据同步找不到会话时返回 `404 session_not_found`。插件 RPC 的字段校验会指出字段名；客户端不要依赖错误文本。
 - 审批决定先检查 `decision` 和 `scope` 是不是合法取值，通过了才会消耗那条待决审批。
 - 事件注入先检查各个标识符是字符串、`payload` 是对象，然后才发布。
 
@@ -995,6 +997,8 @@ setup runtime 挂起等玩家回答时，这次尝试不占重试次数。挂起
 | GET    | `/api/plugins/:id`            | 获取插件详情及完整的 manifest 开发契约                                     |
 | DELETE | `/api/plugins/:id`            | 卸载第三方插件（删除 `~/.covel/plugins/<id>`）                             |
 | GET    | `/api/plugin-flows`           | 开局前流程的预览数据（插件列表 + 分段步骤），供准备页展示                  |
+
+`GET /api/plugin-flows` 的 `plugins` 和 `steps` 条目用 `kind`（`core` 或 `plugin`）表示插件类别，不返回 `pluginType`。
 
 `DELETE /api/plugins/:id`：
 
@@ -2133,7 +2137,7 @@ Web 设置页根据 `operatorTokenRequired` 决定是否显示“运维访问”
       "kind": "scene",
       "name": {
         "zh-CN": "文艺部的春日下午",
-        "en": "Spring in the Literature Club"
+        "en": "A Spring Afternoon in the Literature Club"
       },
       "description": {
         "zh-CN": "旧社团楼三层的活动室里，稿纸、旧刊与海风等待下一次校稿。"
@@ -4723,7 +4727,7 @@ id: example-epoch:2
 
 #### `POST /api/events/emit`
 
-从外部往事件总线里注入一个事件。可以用来触发某个 runtime，或者模拟游戏事件。
+从外部往一个会话的事件流里推送一个事件。订阅这个会话的客户端（浏览器、调试页）会收到它，可以用来模拟游戏事件。它不会触发 runtime。
 
 > [!IMPORTANT]
 > 这是调试用的端点。`NODE_ENV=production` 时，只有设置了 `ENABLE_DEBUG_PAGE` 才可用，否则返回 `403`。
@@ -4734,17 +4738,15 @@ id: example-epoch:2
 {
   "topic": "combat.start",
   "payload": { "enemyId": "goblin-01", "terrain": "forest" },
-  "sessionId": "mistport-a1b2c3d4",
-  "targetRuntime": "combat"
+  "sessionId": "mistport-a1b2c3d4"
 }
 ```
 
-| 字段            | 类型   | 必填 | 说明                   |
-| --------------- | ------ | ---- | ---------------------- |
-| `topic`         | string | 是   | 事件主题               |
-| `payload`       | object | 否   | 事件负载，必须是对象   |
-| `sessionId`     | string | 是   | 目标会话 ID            |
-| `targetRuntime` | string | 否   | 指定接收事件的 runtime |
+| 字段        | 类型   | 必填 | 说明                 |
+| ----------- | ------ | ---- | -------------------- |
+| `topic`     | string | 是   | 事件主题             |
+| `payload`   | object | 否   | 事件负载，必须是对象 |
+| `sessionId` | string | 是   | 目标会话 ID          |
 
 **响应**
 
@@ -5120,7 +5122,7 @@ interface SseEnvelope {
 
 | 字段            | 类型   | 必填 | 说明                                                                             |
 | --------------- | ------ | ---- | -------------------------------------------------------------------------------- |
-| `concept`       | string | 是   | 世界概念描述（最多 4000 字符）。也接受同义键 `prompt`                            |
+| `concept`       | string | 是   | 世界概念描述（最多 4000 字符），使用 `concept` 键                                |
 | `locale`        | string | 否   | 语言区域，默认 `zh-CN`                                                           |
 | `model`         | string | 否   | 模型用途或预设 ID；默认 `story`，按[模型选择规则](./slots.md#实际选择优先级)解析 |
 | `saveTarget`    | string | 否   | 保存目标，默认 `server-file`。可选值见下表                                       |

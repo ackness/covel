@@ -399,6 +399,7 @@ agent:
 When there are several completing tools, or the model should call `runtime-done` when nothing changed, write the full `completion`. Write only one of `finishWith` and `completion`.
 
 - `completion.afterTools`: the run finishes once one of the listed tools succeeds.
+- When the model must read the tool result and revise it, use `completion.require: tool-use` without `afterTools`. Character creation, for example, returns the filled narrative for review before the model finishes.
 - `completion.require: explicit`: the run must end with a successful call to a completing tool, or with `runtime-done`. A runtime with `io.visibility: story` cannot use it.
 - `completion.require: tool-use`: with a nonempty `afterTools` list, at least one listed completing tool must succeed. Without that list, any successful business tool counts. Failed calls and `runtime-done` do not count.
 - If the model returns only plain text, or calls `runtime-done` while no such call has been made yet, the framework first injects a correction prompt. Only if the run is still not complete is it marked as failed. So even when "nothing changed", submit an empty result through a business tool.
@@ -1004,7 +1005,7 @@ Output of the first command:
 
 ## Built-in plugins at a glance
 
-Below are all the plugins that ship with Covel from [plugins/](../../../plugins/), excluding `_archive/`. `kind: core` means the plugin joins every game by default, and a player can exclude it. `kind: plugin` is enabled only when a player chooses it. In the "runtime" column, "inline" means there is only the one runtime in the root file, and "none" means the plugin has only an entry, extensions, or UI.
+Below are all the plugins that ship with Covel from [plugins/](../../../plugins/). `kind: core` means the plugin joins every game by default, and a player can exclude it. `kind: plugin` is enabled only when a player chooses it. In the "runtime" column, "inline" means there is only the one runtime in the root file, and "none" means the plugin has only an entry, extensions, or UI.
 
 <!-- prettier-ignore -->
 | ID | Name | `kind` | Contracts provided | runtime | What it does |

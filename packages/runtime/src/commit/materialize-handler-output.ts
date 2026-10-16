@@ -1,8 +1,8 @@
+import { isRecord } from "../utils/is-record.js";
 /** Materialize a successful plugin HandlerResult into the kernel output. */
 
 import type { HandlerResult, RuntimeResult } from "@covel/shared";
 import { getPendingProposals } from "@covel/tools";
-import { isPlainObject } from "./normalize-handler-result.js";
 
 type SuccessOutcome = Extract<HandlerResult, { outcome: "success" }>;
 
@@ -18,7 +18,7 @@ export function materializeHandlerSuccess(
   "output" | "effects" | "completion" | "pendingProposals"
 > {
   const value = structuredClone(outcome.value);
-  const projected: Record<string, unknown> = isPlainObject(value)
+  const projected: Record<string, unknown> = isRecord(value)
     ? { ...value }
     : value === undefined
       ? {}

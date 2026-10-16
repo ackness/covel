@@ -167,7 +167,7 @@ async function registryWithDataPlugin(
       id,
       name: id,
       description: "",
-      pluginType: "plugin",
+      kind: "plugin",
       runtimeCount: 0,
     },
     packageManifest: parsePluginMd(

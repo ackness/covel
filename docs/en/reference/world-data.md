@@ -362,7 +362,7 @@ A world package does not have to use every capability. Let the genre decide the 
 | `worlds/lantern-barrow` | Classic tabletop dungeon exploration (Chinese and English)                                                              | The `traditional-story` pack plus tabletop rules, checks, quests, items, affinity, character blueprints and `story-events`. Starting point buy from `tabletop-rules` (`contract:tabletop-rules.rules.initial@1`), form checks and the `dice-check` dice pool. `.en-US` variants of quests, items and affinity. Evolving dimensions 古冢地图 (tomb map), 古冢警戒 (tomb alert), 古冢之灯 (tomb lantern) and 名望 (renown). Hidden encounters and event chains (including `.en-US` variants). | `world.yaml`, `WORLD.md` / `WORLD.en-US.md`, `data/tabletop-rules.json`, `data/*.en-US.yaml`, `characters/*.en-US.json`            |
 
 - None of the four worlds has a descriptor; every file is at a convention path. Rule files sit under `data/rules/`, one set per file.
-- All four worlds enable `story-events`. Mistport, Emberback and Lantern Barrow also turn on story planning with `pluginSettings.story-events.planner: true`. Besides the hidden events the author sets up, it adds follow-up events that fire only once, based on clues left during play. Haruka Academy's romance routes are arranged one by one by the author, and it does not turn on story planning.
+- All four worlds enable `story-events`. Mistport, Emberback and Lantern Barrow also turn on story planning with `pluginSettings.story-events.planner: true`. Besides the hidden events the author sets up, it adds follow-up events that fire only once, based on clues left during play. Harukaze Academy's romance routes are arranged one by one by the author, and it does not turn on story planning.
 - When you make a new world, first copy the structure of the world whose gameplay is closest to yours. Then add or remove characters, rules or media by following the sections below.
 
 ### Display fields
@@ -802,7 +802,7 @@ characterSchema:
       type: number
 
 # world.en-US.yaml —— text only
-name: Mistport Chronicles
+name: "Mistport: The Riftide Chronicle"
 characterSchema:
   attributes:
     - id: fogRot
@@ -827,7 +827,7 @@ characterSchema:
 - A language file can translate only text that already exists in the main file. A key or ID that is not in the main file, text in a place that is not text, or a changed number or boolean is ignored and reported, and the main file's value is kept.
 - Text that is not translated falls back to the main file, so you can translate a little at a time.
 - A language file holds only the fields used for matching and the translations. Do not copy things that change, such as media hashes and paths.
-- A plain text list (for example aliases) is translated as a whole. The list in the language file replaces the list in the main file. An item written as `null` means "use the main file's value".
+- A plain text list (for example aliases or trigger words in `keys`) is translated as a whole. The list in the language file replaces the list in the main file. An item written as `null` means "use the main file's value". Triggered rules and `selective` lorebook entries need `keys` in the session's language; otherwise, a player using the translated words cannot trigger them.
 
 **How the three kinds of file are read:**
 
@@ -844,7 +844,7 @@ Other rules:
 - A main file cannot write text as a multi-language map (`name: { zh-CN: …, en-US: … }`). `pnpm validate:world` reports this as an `inline-locale-map` error. A world package written this way must be split into a main file and language files.
 - In dimension values, only a text node that the schema marks with `x-i18n: true` can be translated. Translating any other node makes validation of that dimension fail.
 
-For plugin authors: the merge rule is `applyLocaleOverlay` in `@covel/shared`. The `locale` option of `importWorldDataForSession`, `syncWorldDataForSession` and `preflightWorldDataForSession` is passed in as it is. When it is left out, `session.locale` is used.
+For plugin authors: the merge rule is `applyLocaleOverlay` in `@covel/shared`. Pass the session’s `locale` to `prepareWorldDataImportForSession` and `preflightWorldDataForSession`. When `syncWorldDataForSession` receives no `locale`, it uses `session.locale`.
 
 ## Target URI
 
@@ -1249,19 +1249,19 @@ It uses the same image process as portraits, but with a different manifest. The 
 
 Fields of `media/scenes.json`:
 
-| Field          | Description                                                                                                                                                                                                                                                                                                                                                     |
-| -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `id`           | The scene's ID, and also the file name prefix (`<id>-day.webp` / `<id>-night.webp`).                                                                                                                                                                                                                                                                            |
-| `name`         | The display name of the scene.                                                                                                                                                                                                                                                                                                                                  |
-| `locationRef`  | The place name the author defined. When one background covers several places, separate them with `/` (`图书馆/二楼窗边长桌/旧刊架`). Each part is one name for this scene. The built-in geography template's declaration path is `geography.initialValue.regions[].name` or `landmarks[].name` in it. This is not a dimension structure the framework requires. |
-| `subject`      | The English description of the picture (daytime). The final image prompt is `style.prefix + subject + style.suffix`.                                                                                                                                                                                                                                            |
-| `subjectNight` | Optional. A description used only for the night picture. If left empty, the night picture uses `subject` (together with `style.nightSuffix`).                                                                                                                                                                                                                   |
+| Field          | Description                                                                                                                                                                                                                                                                                                                                                                                              |
+| -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`           | The scene's ID, and also the file name prefix (`<id>-day.webp` / `<id>-night.webp`).                                                                                                                                                                                                                                                                                                                     |
+| `name`         | The display name of the scene.                                                                                                                                                                                                                                                                                                                                                                           |
+| `locationRef`  | The place name the author defined. Separate the scene’s own place from its sub-locations with `/` (`图书馆/二楼窗边长桌/旧刊架`). The first part is the scene’s own place, and every part participates in matching. The built-in geography template's declaration path is `geography.initialValue.regions[].name` or `landmarks[].name` in it. This is not a dimension structure the framework requires. |
+| `subject`      | The English description of the picture (daytime). The final image prompt is `style.prefix + subject + style.suffix`.                                                                                                                                                                                                                                                                                     |
+| `subjectNight` | Optional. A description used only for the night picture. If left empty, the night picture uses `subject` (together with `style.nightSuffix`).                                                                                                                                                                                                                                                            |
 
 **How a location in the narrative report matches a scene.** Before comparing, spaces are removed and case is ignored. Use the rules below in order. Look at the next rule only when the previous one gives no result:
 
 1. The location equals the scene's `name`, or one part of its `locationRef`.
-2. The location contains one of the names (the location "图书馆二楼" matches the name "图书馆"). When several names match, the longest one is used.
-3. One of the names contains the location (the location "海堤" matches the name "樱坂海堤"), and only one scene does this. When two scenes' names both contain the location, nothing matches, and the stage does not change its background picture.
+2. The location contains one of the names (the location "图书馆二楼" matches the name "图书馆"). The scene’s own place names (`name` and the first `locationRef` part) take priority over sub-location names (the later parts). Within the same rank, the longest name wins. For example, "Library window seat" selects the library, even though the classroom’s sub-location "Window Seat" is longer.
+3. One of the names contains the location (the location "海堤" matches the name "樱坂海堤"), and only one scene does this. When two scenes' names both contain the location, nothing matches, and the stage uses the world’s cover.
 
 So write names in the words the narrative will use, and avoid letting two scenes share the same short fragment.
 
@@ -1661,6 +1661,7 @@ Output when it passes:
 | `world-data` | same as preflight | The descriptor, source order, file reading, targets, hidden-data rules, and each record checked against its contract schema |
 | `locale-file-name` | error | A language file's name gives only the language (`.en.`) and not the locale of the world's edition (`.en-US.`). This file is not read. |
 | `locale-overlay` | warning | A translation in a language file has no place to go (the main file has no such key or ID, or it changed a value that is not text). That entry is ignored. |
+| `locale-trigger-keys` | warning | A triggered entry translates its content or title but inherits the main file's trigger words; add translated `keys` to that entry in the language file. It remains a warning under `--strict`. |
 | `locale-script` | warning | A language file for a language other than Chinese, Japanese or Korean still contains CJK characters: untranslated text, or a trigger word copied from the main file. |
 | `edition-incomplete` | warning | The world has an edition in a language, but that edition is missing some translations. A session in that language reads the world's original default-language text. |
 | `inline-locale-map` | error | The main file writes text as a multi-language map. The main file should have one language, and the translations go in language files. |

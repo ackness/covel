@@ -167,7 +167,7 @@ function mergeInto(target, sections) {
 }
 
 /** Entries of every fragment, in file-name order. `fragments` is `[{ name, text }]`. */
-export function collectFragments(fragments) {
+function collectFragments(fragments) {
   const sections = new Map();
   const errors = [];
   const sorted = [...fragments].sort((a, b) =>

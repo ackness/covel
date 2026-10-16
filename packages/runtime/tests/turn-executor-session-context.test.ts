@@ -15,10 +15,10 @@ import type { RuntimeManifest, TurnInput } from "@covel/shared";
 import type { LoadedRuntime } from "@covel/plugin-loader";
 import { createMemoryStore } from "@covel/store/memory";
 import type { DataStore } from "@covel/store";
-import { executeTurn } from "../src/turn-executor/turn-executor.js";
+import { runTurnPipeline } from "../src/turn-executor/turn-executor.js";
 import type { TurnExecutorDeps } from "../src/turn-executor/turn-executor.js";
 import { finalizeExecution } from "../src/commit/finalize-execution.js";
-import type { LLMAdapter, LLMResponse } from "../src/llm/llm-adapter.js";
+import type { LLMAdapter, LLMResponse } from "@covel/shared";
 
 // ── Fixtures ─────────────────────────────────────────────────────
 
@@ -201,16 +201,15 @@ describe("turn-executor → SessionContextSnapshot wiring", () => {
       .mockRejectedValue(new Error("Full input log read"));
     const llm = makeCapturingLLM();
     const manifest = makeManifest();
-    const result = await executeTurn(makeTurnInput(sessionId), [manifest], {
+    const result = await runTurnPipeline(makeTurnInput(sessionId), [manifest], {
       store,
       llm,
       loadRuntime: async () => makeLoaded(manifest),
     });
     expect(result.runtimeResults[0]?.status).toBe("success");
     expect(llm.captured.systemPrompts[0]).toContain("ancient telescope");
-    // Admission plus the runtime world view; with no dimension provider the
-    // barrier reads nothing, and the prompt snapshot adds no second read.
-    expect(getSession).toHaveBeenCalledTimes(2);
+    // The runtime world view reuses the session read at admission.
+    expect(getSession).toHaveBeenCalledTimes(1);
     // Admission and the runtime world view each read characters once.
     expect(characters).toHaveBeenCalledTimes(2);
     expect(newest).toHaveBeenCalledTimes(1);
@@ -236,7 +235,7 @@ describe("turn-executor → SessionContextSnapshot wiring", () => {
       // metadata alone, so the snapshot does not need plugin data for this.
     };
 
-    const result = await executeTurn(
+    const result = await runTurnPipeline(
       makeTurnInput(sessionId),
       [manifest],
       deps,
@@ -296,10 +295,10 @@ describe("turn-executor → SessionContextSnapshot wiring", () => {
       // No worldDataPluginId → listPluginData in snapshot loader is not
       // invoked. The snapshot build itself therefore succeeds using the
       // other reads; this test focuses on the recovery path just being
-      // reachable without exceptions bubbling out of executeTurn.
+      // reachable without exceptions bubbling out of runTurnPipeline.
     };
 
-    const result = await executeTurn(
+    const result = await runTurnPipeline(
       makeTurnInput(sessionId),
       [manifest],
       deps,
@@ -421,7 +420,7 @@ describe("turn-executor → SessionContextSnapshot wiring", () => {
     };
 
     // ── Turn 1 (setup): player-init creates the player; narrator does NOT run.
-    const setupResult = await executeTurn(
+    const setupResult = await runTurnPipeline(
       makeTurnInput(sessionId, {
         turnId: "turn-form",
         playerMessage: "Player Aria enters as cartographer.",
@@ -464,7 +463,7 @@ describe("turn-executor → SessionContextSnapshot wiring", () => {
     });
 
     // ── Turn 2 (main loop): the narrator runs and its context carries the player.
-    await executeTurn(
+    await runTurnPipeline(
       makeTurnInput(sessionId, {
         turnId: "turn-main",
         playerMessage: "Aria surveys the district.",

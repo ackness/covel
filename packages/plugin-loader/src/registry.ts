@@ -215,20 +215,37 @@ export function createPluginRegistry(
       readonly entries: ReadonlyMap<string, PluginRegistryEntry>;
       readonly generation: number;
       readonly ids: readonly string[];
+      runtimes?: readonly RuntimeManifest[];
     }
   >();
-  const activeIds = (sessionId: string): readonly string[] => {
+  const activeSet = (sessionId: string) => {
     const confirmed = readableActivations().get(sessionId);
-    if (!confirmed || confirmed.size === 0) return [];
+    if (!confirmed || confirmed.size === 0) return undefined;
     const resolve = options?.resolveSessionSet;
-    if (!resolve) return [...confirmed];
     const current = readableEntries();
     const cached = resolvedSets.get(confirmed);
     if (cached?.entries === current && cached.generation === generation)
-      return cached.ids;
-    const ids = resolve([...confirmed], current);
-    resolvedSets.set(confirmed, { entries: current, generation, ids });
-    return ids;
+      return cached;
+    const ids = resolve ? resolve([...confirmed], current) : [...confirmed];
+    const resolved: NonNullable<ReturnType<typeof resolvedSets.get>> = {
+      entries: current,
+      generation,
+      ids,
+    };
+    resolvedSets.set(confirmed, resolved);
+    return resolved;
+  };
+  const activeIds = (sessionId: string): readonly string[] =>
+    activeSet(sessionId)?.ids ?? [];
+
+  const reconcileActivations = (sessionId: string, desired: Set<string>) => {
+    const previous = sessionActivations.get(sessionId);
+    if (desired.size === 0) sessionActivations.delete(sessionId);
+    else if (
+      previous?.size !== desired.size ||
+      [...desired].some((id) => !previous.has(id))
+    )
+      sessionActivations.set(sessionId, desired);
   };
 
   function emit(event: RegistryChangeEvent): void {
@@ -315,11 +332,7 @@ export function createPluginRegistry(
       const desired = new Set(
         pluginIds.filter((pluginId) => entries.has(pluginId)),
       );
-      if (desired.size === 0) {
-        sessionActivations.delete(sessionId);
-      } else {
-        sessionActivations.set(sessionId, desired);
-      }
+      reconcileActivations(sessionId, desired);
       for (const pluginId of desired) {
         if (previous?.has(pluginId)) continue;
         emit({ type: "plugin-activated", pluginId, sessionId });
@@ -352,11 +365,7 @@ export function createPluginRegistry(
       const desired = new Set(
         pluginIds.filter((pluginId) => entries.has(pluginId)),
       );
-      if (desired.size === 0) {
-        sessionActivations.delete(sessionId);
-      } else {
-        sessionActivations.set(sessionId, desired);
-      }
+      reconcileActivations(sessionId, desired);
     },
 
     onChange(handler: (event: RegistryChangeEvent) => void): () => void {
@@ -378,12 +387,13 @@ export function createPluginRegistry(
     },
 
     getActiveRuntimes(sessionId: string): readonly RuntimeManifest[] {
-      const sessionSet = activeIds(sessionId);
-      if (sessionSet.length === 0) return [];
+      const resolved = activeSet(sessionId);
+      if (!resolved) return [];
+      if (resolved.runtimes) return [...resolved.runtimes];
 
       const manifests: RuntimeManifest[] = [];
 
-      for (const pluginId of sessionSet) {
+      for (const pluginId of resolved.ids) {
         const entry = readableEntries().get(pluginId);
         if (!entry) continue;
         manifests.push(...declaredRuntimeManifests(entry));
@@ -392,11 +402,12 @@ export function createPluginRegistry(
       // Sort by (stage, name). Stage-less runtimes (event / manual / UI-only)
       // rank last — they are never band-scheduled but can appear in listings.
       // event-directory's first-wins topic resolution consumes this order.
-      return resolveRuntimeProviders(manifests).sort((a, b) => {
+      resolved.runtimes = resolveRuntimeProviders(manifests).sort((a, b) => {
         const ra = stageRank(getRuntimeSpec(a).stage);
         const rb = stageRank(getRuntimeSpec(b).stage);
         return ra - rb || compareText(a.name, b.name);
       });
+      return [...resolved.runtimes];
     },
   };
 }

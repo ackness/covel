@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { createProviderRegistry } from "../src/provider-registry.js";
 import { isBuiltinTextProtocol } from "@covel/shared";
-import { PROVIDER_PROTOCOLS } from "../src/types.js";
+import { BUILTIN_PROVIDER_PROTOCOLS } from "@covel/shared";
 import { getProtocolDefinition } from "../src/protocol-registry.js";
 
 describe("provider-registry", () => {
@@ -393,7 +393,7 @@ describe("provider-registry", () => {
 
   describe("ProtocolRegistry coverage", () => {
     it("registers an adapter + cacheStrategy + capabilityDefaults for every protocol", () => {
-      for (const protocol of PROVIDER_PROTOCOLS) {
+      for (const protocol of BUILTIN_PROVIDER_PROTOCOLS) {
         const def = getProtocolDefinition(protocol);
         expect(def, `protocol "${protocol}" must be registered`).toBeDefined();
         // Each protocol bundles all three protocol-scoped concerns.
@@ -405,7 +405,7 @@ describe("provider-registry", () => {
     });
 
     it("translates a reasoning level on every text protocol and on no other", () => {
-      for (const protocol of PROVIDER_PROTOCOLS) {
+      for (const protocol of BUILTIN_PROVIDER_PROTOCOLS) {
         const def = getProtocolDefinition(protocol);
         expect(Boolean(def?.reasoningFields), protocol).toBe(
           isBuiltinTextProtocol(protocol),
@@ -414,7 +414,7 @@ describe("provider-registry", () => {
     });
 
     it("resolves each protocol to a working adapter through the registry", () => {
-      for (const protocol of PROVIDER_PROTOCOLS) {
+      for (const protocol of BUILTIN_PROVIDER_PROTOCOLS) {
         const registry = createProviderRegistry({
           providerDefaults: { p: { baseUrl: "https://x" } },
         });

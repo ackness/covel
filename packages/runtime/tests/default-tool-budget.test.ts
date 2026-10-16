@@ -3,11 +3,11 @@ import type { RuntimeManifest, TurnInput } from "@covel/shared";
 import { createMemoryStore } from "@covel/store/memory";
 import { createEmitEventTool, runtimeDoneTool } from "@covel/tools";
 import {
-  executeTurn,
-  resumeSuspendedRuntime,
+  runTurnPipeline,
+  resumeRuntimePipeline,
 } from "../src/turn-executor/turn-executor.js";
 import { createToolExecutor } from "../src/agent-loop/tool-executor.js";
-import type { LLMResponse } from "../src/llm/llm-adapter.js";
+import type { LLMResponse } from "@covel/shared";
 
 async function run(
   path: "turn" | "resume",
@@ -78,8 +78,9 @@ async function run(
   const options = callerLimit ? { maxSteps: callerLimit } : undefined;
   const result =
     path === "turn"
-      ? (await executeTurn(input, [manifest], deps, options)).runtimeResults[0]!
-      : await resumeSuspendedRuntime(
+      ? (await runTurnPipeline(input, [manifest], deps, options))
+          .runtimeResults[0]!
+      : await resumeRuntimePipeline(
           {
             id: "suspension",
             sessionId: input.sessionId,

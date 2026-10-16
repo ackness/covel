@@ -71,10 +71,10 @@ const backends: [string, () => Promise<DataStore>][] = [
   ["sqlite", async () => createSqliteStore(":memory:")],
   ...(pgUrl
     ? [
-        [
-          "postgres",
-          () => createPgStore(pgUrl, { freshSchema: true }),
-        ] as [string, () => Promise<DataStore>],
+        ["postgres", () => createPgStore(pgUrl, { freshSchema: true })] as [
+          string,
+          () => Promise<DataStore>,
+        ],
       ]
     : []),
 ];
@@ -94,7 +94,7 @@ function plugin(
       id,
       name: id,
       description: "",
-      pluginType: "plugin",
+      kind: "plugin",
       runtimeCount: 0,
     },
     packageManifest: parsePluginMd(
@@ -292,9 +292,7 @@ describe.each(backends)("dimension providers of a session (%s)", (_, open) => {
         code: "dimension_provider_conflict",
         details: { candidates: ["world-init", RIVAL] },
       });
-      expect((await store.getSession("s"))!.activePlugins).not.toContain(
-        RIVAL,
-      );
+      expect((await store.getSession("s"))!.activePlugins).not.toContain(RIVAL);
     });
   });
 });

@@ -38,7 +38,6 @@ describe("reasoning live and recovery", () => {
       ds: {} as SseEventHandlerDeps["ds"],
       sessionIdRef: { current: "session" },
       stateRef: { current: state },
-      runtimeKindRef: { current: new Map() },
       deltaBufferRef: { current: new Map() },
       deltaRafRef: { current: null },
       lastBackfilledTurnIdRef: { current: "turn" },

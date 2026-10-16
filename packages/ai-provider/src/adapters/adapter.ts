@@ -2,7 +2,7 @@ import type {
   EvaluationParams,
   EvaluationQuestions,
   EvaluationResult,
-} from "../evaluation/types.js";
+} from "@covel/shared";
 
 import type {
   EmbeddingParams,

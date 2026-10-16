@@ -39,6 +39,7 @@ import type {
   ExecutionContext,
   Proposal,
   RuntimeManifest,
+  RuntimeResult,
   SessionEvent,
 } from "@covel/shared";
 import {
@@ -103,8 +104,9 @@ import { flushPostCommit } from "./post-commit-fanout.js";
  */
 type FinalizeManifest = RuntimeManifest;
 
-/** The loose runtime-result shape the commit pipeline accepts (top-level or nested). */
-type FinalizableResult = CommittableRuntimeResult;
+/** Commit results retain the execution identity and status of a runtime result. */
+type FinalizableResult = CommittableRuntimeResult &
+  Pick<RuntimeResult, "runId" | "status">;
 
 interface FailedProposal {
   readonly proposal: Proposal;

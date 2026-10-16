@@ -1,7 +1,7 @@
 /** World packages declare open dimension definitions; sessions own their values. */
 
-import type { WorldDimensions } from "./dimensions.js";
-export type { WorldDimensions } from "./dimensions.js";
+import type { WorldDimensions } from "@covel/plugin-handlers-utils/dimensions";
+export type { WorldDimensions } from "@covel/plugin-handlers-utils/dimensions";
 
 // ── Common ───────────────────────────────────────────────────────
 

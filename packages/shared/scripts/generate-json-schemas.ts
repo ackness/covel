@@ -35,7 +35,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { z } from "zod";
 import { runtimeManifestInputSchema } from "../src/schemas/plugin.js";
 
-import { worldDimensionsSchema } from "../src/schemas/dimensions.js";
+import { worldDimensionsSchema } from "@covel/plugin-handlers-utils/dimensions";
 import { pluginManifestSchema } from "../src/schemas/plugin-manifest.js";
 import { runtimeAuthoringManifestSchema } from "../src/schemas/runtime-manifest.js";
 import { worldDataDescriptorSchema } from "../src/schemas/world-data.js";

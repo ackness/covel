@@ -18,9 +18,9 @@ import {
   buildHookSettings,
   snapshotUserSettings,
 } from "./hooks/hook-settings.js";
-import { executeTurn as runTurn } from "./turn-executor/turn-executor.js";
+import { runTurnPipeline } from "./turn-executor/turn-executor.js";
 import {
-  resumeSuspendedRuntime as resumeRuntime,
+  resumeRuntimePipeline,
   type ResumeSuspendedRuntimeOptions,
 } from "./resume/turn-resume.js";
 import type {
@@ -96,7 +96,9 @@ function captureSchemas(deps: ExecutionDeps) {
       ) => {
         const loaded = await deps.loadRuntime(...args);
         if (loaded?.outputSchema) {
-          outputSchemas[args[0].name] = structuredClone(loaded.outputSchema);
+          // Loader schemas are shared per registry generation. Preserve identity
+          // so export validation reuses the compiled validator across executions.
+          outputSchemas[args[0].name] = loaded.outputSchema;
         }
         return loaded;
       },
@@ -169,7 +171,7 @@ export async function executeTurn(
       : buildHookSettings(runtimes, userSettings),
     locale: deps.hookScope?.locale ?? input.locale,
   };
-  const turn = await runTurn(
+  const turn = await runTurnPipeline(
     { ...input, userSettings },
     runtimes,
     { ...captured.deps, hookScope },
@@ -207,25 +209,31 @@ export async function executeTurn(
         upstreamResults: job.upstreamResults.map(publicRuntimeResult),
       }))
     : undefined;
+  const {
+    runtimeResults,
+    auditResult,
+    deferredRuntimeJobs,
+    nestedRuntimeResults,
+    ...rest
+  } = turn;
   return {
     result: {
-      ...structuredClone(turn),
-      runtimeResults: turn.runtimeResults.map(publicRuntimeResult),
-      ...(turn.auditResult
-        ? { auditResult: publicRuntimeResult(turn.auditResult) }
-        : {}),
-      ...(turn.deferredRuntimeJobs
+      ...structuredClone(rest),
+      runtimeResults: runtimeResults.map(publicRuntimeResult),
+      ...(auditResult ? { auditResult: publicRuntimeResult(auditResult) } : {}),
+      ...(deferredRuntimeJobs
         ? {
-            deferredRuntimeJobs: turn.deferredRuntimeJobs.map((job) => ({
-              ...structuredClone(job),
-              upstreamResults: job.upstreamResults.map(publicRuntimeResult),
-            })),
+            deferredRuntimeJobs: deferredRuntimeJobs.map(
+              ({ upstreamResults, ...job }) => ({
+                ...structuredClone(job),
+                upstreamResults: upstreamResults.map(publicRuntimeResult),
+              }),
+            ),
           }
         : {}),
-      ...(turn.nestedRuntimeResults
+      ...(nestedRuntimeResults
         ? {
-            nestedRuntimeResults:
-              turn.nestedRuntimeResults.map(publicRuntimeResult),
+            nestedRuntimeResults: nestedRuntimeResults.map(publicRuntimeResult),
           }
         : {}),
     },
@@ -278,8 +286,8 @@ export async function executeTurn(
             }
           : {}),
         ...(turn.setupRan ? { setupRan: turn.setupRan } : {}),
-        outputSchemas: captured.outputSchemas,
       }),
+      outputSchemas: captured.outputSchemas,
       hookSettings: hookScope.settings,
       hookLocale: hookScope.locale,
     },
@@ -306,7 +314,7 @@ export async function resumeSuspendedRuntime(
     locale: deps.hookScope?.locale ?? suspension.pendingContinuation.locale,
   };
   const result = await runWithHookScope(hookScope, () =>
-    resumeRuntime(
+    resumeRuntimePipeline(
       suspension,
       resumeData,
       manifest,
@@ -376,7 +384,6 @@ export async function resumeSuspendedRuntime(
             : {}),
         },
         ...(setup.setupRan ? { setupRan: setup.setupRan } : {}),
-        outputSchemas: captured.outputSchemas,
         resolvedSuspensionId: suspension.id,
         writeBaseline: suspension.pendingContinuation.takenUnder.writes,
         resumedExecution: {
@@ -386,6 +393,7 @@ export async function resumeSuspendedRuntime(
         },
         ...(releasedRuntimeJobs?.length ? { releasedRuntimeJobs } : {}),
       }),
+      outputSchemas: captured.outputSchemas,
       hookSettings: hookScope.settings,
       hookLocale: hookScope.locale,
     },

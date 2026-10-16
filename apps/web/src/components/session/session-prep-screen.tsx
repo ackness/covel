@@ -43,6 +43,8 @@ import {
 import { useWorldRecord } from "@/services/world-records.js";
 import { DimensionActions } from "./session-prep/dimension-actions.js";
 import { ModelsCard } from "./session-prep/models-card.js";
+import { MissingCredentialsDialog } from "./session-prep/missing-credentials-dialog.js";
+import { sessionModelUses } from "./provider-failure-notice.js";
 import { PluginSelectionCard } from "./session-prep/plugin-selection-card.js";
 import { SessionPluginNotices } from "./session-plugin-notices.js";
 import { pluginName } from "@/lib/plugin-notices.js";
@@ -195,6 +197,17 @@ export function SessionPrepScreen({
     resolvedSlots,
     !pluginPlanUnavailable,
   );
+  const missingModelUses = useMemo(
+    () =>
+      sessionModelUses(
+        enabledPluginSummaries,
+        resolvedSlots,
+        bindingState.bindings,
+      ).filter((use) => use.hasCredentials === false),
+    [enabledPluginSummaries, resolvedSlots, bindingState.bindings],
+  );
+  const [credentialConfirmOpen, setCredentialConfirmOpen] = useState(false);
+  const [settingsFocusKey, setSettingsFocusKey] = useState<string>();
 
   const [flowData, setFlowData] = useState<api.PluginFlowResponse | null>(null);
   useEffect(() => {
@@ -294,7 +307,10 @@ export function SessionPrepScreen({
   const handleSettingsOpenChange = useCallback(
     (open: boolean) => {
       onSettingsOpenChange(open);
-      if (!open) refreshSlots();
+      if (!open) {
+        setSettingsFocusKey(undefined);
+        refreshSlots();
+      }
     },
     [onSettingsOpenChange, refreshSlots],
   );
@@ -347,38 +363,47 @@ export function SessionPrepScreen({
   const [isStarting, setIsStarting] = useState(false);
   const [resumingId, setResumingId] = useState<string | null>(null);
 
-  const handleStart = useCallback(async () => {
-    if (
-      isStarting ||
-      pluginPlanUnavailable ||
-      loreUnavailable ||
-      providerConflict
-    )
-      return;
-    setIsStarting(true);
-    try {
-      await onStart(
-        startPluginsPayload(requestedPluginIds),
-        lore.value === originalLore ? undefined : lore.value,
-        excludedPluginIds,
-      );
-    } catch {
-      // startGameSession stores the actionable message in session state; keep
-      // this handler settled while the prep screen renders that message.
-    } finally {
-      setIsStarting(false);
-    }
-  }, [
-    isStarting,
-    pluginPlanUnavailable,
-    loreUnavailable,
-    providerConflict,
-    lore.value,
-    originalLore,
-    requestedPluginIds,
-    excludedPluginIds,
-    onStart,
-  ]);
+  const handleStart = useCallback(
+    async (allowMissingCredentials = false) => {
+      if (
+        isStarting ||
+        pluginPlanUnavailable ||
+        loreUnavailable ||
+        providerConflict
+      )
+        return;
+      if (!allowMissingCredentials && missingModelUses.length > 0) {
+        setCredentialConfirmOpen(true);
+        return;
+      }
+      setCredentialConfirmOpen(false);
+      setIsStarting(true);
+      try {
+        await onStart(
+          startPluginsPayload(requestedPluginIds),
+          lore.value === originalLore ? undefined : lore.value,
+          excludedPluginIds,
+        );
+      } catch {
+        // startGameSession stores the actionable message in session state; keep
+        // this handler settled while the prep screen renders that message.
+      } finally {
+        setIsStarting(false);
+      }
+    },
+    [
+      isStarting,
+      pluginPlanUnavailable,
+      loreUnavailable,
+      providerConflict,
+      lore.value,
+      originalLore,
+      requestedPluginIds,
+      excludedPluginIds,
+      onStart,
+      missingModelUses,
+    ],
+  );
 
   const handleResume = useCallback(
     async (session: api.SessionRecord) => {
@@ -401,8 +426,19 @@ export function SessionPrepScreen({
       <SettingsDialog
         open={settingsOpen}
         onOpenChange={handleSettingsOpenChange}
-        initialKey={settingsInitialKey}
+        initialKey={settingsFocusKey ?? settingsInitialKey}
         plugins={plugins}
+      />
+      <MissingCredentialsDialog
+        open={credentialConfirmOpen}
+        onOpenChange={setCredentialConfirmOpen}
+        uses={missingModelUses}
+        onConfigure={() => {
+          setCredentialConfirmOpen(false);
+          setSettingsFocusKey("llm.providers");
+          onSettingsOpenChange(true);
+        }}
+        onStart={() => void handleStart(true)}
       />
       <div className="h-full w-full overflow-y-auto overscroll-contain">
         <div className="mx-auto max-w-6xl px-4 pb-24 pt-5 md:px-8 md:py-8">

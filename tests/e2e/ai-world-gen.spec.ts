@@ -7,6 +7,7 @@ import {
   useServerWorlds,
   waitForTurnIdle,
   waitForTurnStarted,
+  startGame,
 } from "./helpers/player.js";
 
 const liveLlmEnabled = /^(1|true|yes|on)$/i.test(
@@ -271,15 +272,10 @@ test.describe("AI World Generation", () => {
     // point at is deleted right after generation, so retaining them would leave
     // dangling references.
     expect(metadata?.dimensions).toBeTruthy();
-    expect(metadata?.generatedPackageSummary).toMatchObject({
-      characters: expect.any(Number),
-      lorebook: expect.any(Number),
-      rules: expect.any(Number),
-    });
-    expect(
-      (metadata!.generatedPackageSummary as { characters: number }).characters,
-    ).toBeGreaterThanOrEqual(3);
     expect(Array.isArray(metadata?.embeddedCharacters)).toBe(true);
+    expect(
+      (metadata!.embeddedCharacters as unknown[]).length,
+    ).toBeGreaterThanOrEqual(3);
     expect(Array.isArray(metadata?.embeddedLorebook)).toBe(true);
 
     // At minimum, geography and tone should be generated
@@ -345,7 +341,7 @@ test.describe("AI World Generation", () => {
     });
 
     // ── Start the game ──
-    await startButton.click();
+    await startGame(page, startButton);
 
     // Wait for game view (input field + sid in URL)
     await expect(composerInput(page)).toBeVisible({

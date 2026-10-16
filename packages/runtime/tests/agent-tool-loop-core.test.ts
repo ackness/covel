@@ -24,11 +24,7 @@ import { createHookPipeline } from "../src/hooks/pipeline.js";
 import type { RunAgentToolLoopOptions } from "../src/agent-loop/turn-agent-tool-loop.js";
 import { promptCacheKeyFor } from "../src/llm/prompt-cache-key.js";
 import { TurnAbortedError } from "../src/turn-executor/turn-control.js";
-import type {
-  LLMAdapter,
-  LLMResponse,
-  LLMStreamEvent,
-} from "../src/llm/llm-adapter.js";
+import type { LLMAdapter, LLMResponse, LLMStreamEvent } from "@covel/shared";
 import type { TurnEmitter } from "../src/trace/turn-emitter.js";
 
 // ── Fixtures ──────────────────────────────────────────────────────

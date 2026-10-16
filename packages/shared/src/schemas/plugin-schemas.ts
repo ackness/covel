@@ -11,7 +11,7 @@ const extensionPointPattern = "[a-z][a-z0-9.-]*@[1-9][0-9]*";
 /** The ID of an extension within its package. */
 const extensionIdPattern = "[a-zA-Z0-9][\\w.-]*";
 
-export const extensionDeclarationSchema = z.strictObject({
+const extensionDeclarationSchema = z.strictObject({
   point: z
     .string()
     .regex(new RegExp(`^${extensionPointPattern}$`))
@@ -737,7 +737,7 @@ export const detachedOptionsSchema = z.strictObject({
  * Scheduler-driven turn-barrier policy of the compiled IR. Kept separate from
  * `execution`, whose meaning is the manual/event activation mode.
  */
-export const turnCompletionConfigSchema = detachedOptionsSchema.extend({
+const turnCompletionConfigSchema = detachedOptionsSchema.extend({
   mode: z
     .enum(["await", "detached"])
     .describe(
@@ -1076,7 +1076,6 @@ export const runtimeManifestInputSchema = z
     completeAfterTools: z.array(z.string().min(1)).min(1).optional(),
     /** Maximum nested ctx.recursiveCall() depth. Default 10. */
     maxRecursionDepth: z.number().int().min(0).max(50).optional(),
-    pluginType: z.enum(["core-plugin", "plugin"]).optional(),
     outputKind: outputKindSchema.optional(),
     concealed: z.boolean().optional(),
     outputContract: z.string().min(1).optional(),

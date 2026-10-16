@@ -20,20 +20,16 @@ import {
  */
 
 import type { LLMRequestDefaults, RuntimeManifest } from "@covel/shared";
-import type { LLMMessage, LLMResponse } from "../llm/llm-adapter.js";
+import type { LLMMessage, LLMResponse } from "@covel/shared";
 import {
   callLLMWithRetry,
-  LLMRetryError,
   streamLLMWithRetry,
   type RetryInfo,
-  type RetryPolicy,
 } from "../retry/llm-retry.js";
+import { LLMRetryError, type RetryPolicy } from "../retry/retry-common.js";
 import { isStreamRecoveryAllowed } from "../retry/retry-common.js";
 import type { AgentLoopDeps } from "../turn-executor/turn-executor-types.js";
-import type {
-  LLMToolDefinition,
-  LLMResponseFormat,
-} from "../llm/llm-adapter.js";
+import type { LLMToolDefinition, LLMResponseFormat } from "@covel/shared";
 import { getTurnExecutionSignal } from "../turn-executor/turn-control.js";
 
 export interface RequestLLMResponseOptions {

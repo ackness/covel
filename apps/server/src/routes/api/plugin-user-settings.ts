@@ -13,6 +13,8 @@
  * actually reach the scheduled loop (agent `{{ userSettings.* }}`, guards, and
  * hooks all read `input.userSettings`).
  */
+import type { Context } from "hono";
+import { errorBody } from "../../api-error.js";
 import type { TurnInput, WorldPluginSettings } from "@covel/shared";
 import type { DataStore, SessionRecord } from "@covel/store";
 import {
@@ -49,6 +51,25 @@ export type PluginUserSettingsHeaderDecodeResult =
       readonly code: typeof PLUGIN_USER_SETTINGS_HEADER_TOO_LARGE_CODE;
       readonly error: string;
     };
+
+/** Read request settings and translate transport limits to the API response. */
+export function readPluginUserSettings(
+  c: Context,
+):
+  | { readonly ok: true; readonly settings: TurnInput["userSettings"] }
+  | { readonly ok: false; readonly response: Response } {
+  const decoded = decodePluginUserSettingsHeader(
+    c.req.header("X-Plugin-User-Settings"),
+  );
+  if (decoded.ok) return decoded;
+  return {
+    ok: false,
+    response: c.json(
+      errorBody(decoded.error, { code: decoded.code }),
+      decoded.status,
+    ),
+  };
+}
 
 function headerLimitError(error: string): PluginUserSettingsHeaderDecodeResult {
   return {

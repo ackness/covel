@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { tool } from "../tool.js";
+import { tool } from "@covel/plugin-handlers-utils";
 import type { ToolModule } from "../types.js";
 
 /** Narrow query boundary; memory owns tier selection and ranking. */

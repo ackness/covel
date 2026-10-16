@@ -1,13 +1,13 @@
-import type { Context } from "hono";
-import { COMMUNITY_SERVER_CODE_ACTION } from "@covel/approval";
+import { approvalVerdictResponse } from "../approval-verdict.js";
 import {
+  pluginRuntimeManifests,
   getPluginTrustInfo,
   resolveRuntimeProviders,
 } from "@covel/plugin-loader";
+import type { Context } from "hono";
+import { COMMUNITY_SERVER_CODE_ACTION } from "@covel/approval";
 import type { SessionRecord } from "@covel/store";
 import type { RuntimeManifest, ValidatedActionRequest } from "@covel/shared";
-import { errorBody } from "../../../api-error.js";
-import { pluginManifestRecords } from "../../misc-api/registry-projection.js";
 import { sessionApprovalScope } from "../session/session-guard.js";
 import { runnablePluginIds } from "../session/plugins.js";
 import { requireAccess } from "../../../host-profile.js";
@@ -62,7 +62,7 @@ function preflightApprovals(
     runnablePluginIds(session.activePlugins, registry).flatMap((id) => {
       const entry = registry.get(id);
       return entry
-        ? pluginManifestRecords(entry).map((record) => record.manifest)
+        ? pluginRuntimeManifests(entry).map((record) => record.manifest)
         : [];
     }),
   );
@@ -90,23 +90,11 @@ function preflightApprovals(
         trustLevel: trust.source,
         description: `Authorize ${action} for this session`,
       });
-      if (verdict.status === "pending")
-        return c.json(
-          {
-            status: "approval-required",
-            approvalId: verdict.approvalId,
-            pending: verdict.pending,
-          },
-          202,
-        );
-      if (verdict.status === "rejected")
-        return c.json(
-          errorBody(
-            "Resolve pending approvals before starting another action",
-            { code: "approval_queue_full" },
-          ),
-          429,
-        );
+      const verdictResponse = approvalVerdictResponse(c, verdict, {
+        message: "Resolve pending approvals before starting another action",
+        code: "approval_queue_full",
+      });
+      if (verdictResponse) return verdictResponse;
     }
   }
 }

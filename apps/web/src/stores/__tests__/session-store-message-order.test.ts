@@ -68,3 +68,31 @@ describe("story and derived message order", () => {
     expect(orderStoryBeforePluginMessages(state.messages)).toBe(state.messages);
   });
 });
+
+it("defers each turn's surfaces until its last story while retaining unrelated rows", () => {
+  const rows = [
+    message("a-surface", "plugin-message", "a"),
+    message("b-surface", "plugin-message", "b"),
+    message("a-story-1", "story", "a"),
+    message("b-story-1", "story", "b"),
+    message("a-surface-2", "plugin-message", "a"),
+    message("unrelated", "system", "other"),
+    message("a-story-2", "story", "a"),
+    message("b-story-2", "story", "b"),
+    message("tail", "plugin-message", "a"),
+  ];
+  const ordered = orderStoryBeforePluginMessages(rows);
+  expect(ordered.map((row) => row.id)).toEqual([
+    "a-story-1",
+    "b-story-1",
+    "unrelated",
+    "a-story-2",
+    "a-surface",
+    "a-surface-2",
+    "b-story-2",
+    "b-surface",
+    "tail",
+  ]);
+  expect(rows[0]?.id).toBe("a-surface");
+  expect(orderStoryBeforePluginMessages(ordered)).toBe(ordered);
+});

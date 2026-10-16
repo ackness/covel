@@ -152,9 +152,19 @@ describe("normalizeOutput", () => {
         {
           ui: [
             {
-              type: "action-guide",
-              topic: "Next move",
-              categories: [{ style: "safe", suggestions: ["先观察周围环境"] }],
+              parts: [
+                {
+                  id: "ui-1",
+                  type: "action-guide",
+                  status: "success",
+                  content: {
+                    topic: "Next move",
+                    categories: [
+                      { style: "safe", suggestions: ["先观察周围环境"] },
+                    ],
+                  },
+                },
+              ],
             },
           ],
         },
@@ -1151,8 +1161,18 @@ describe("createCommitPipeline", () => {
 
       expect(result.committed).toBe(true);
       expect(
-        emitter.events.find((e) => e.type === "ui.rendered"),
-      ).toBeDefined();
+        emitter.events.find((e) => e.type === "ui.rendered")?.payload,
+      ).toEqual(result.event?.payload);
+      expect(result.event?.payload.block).toEqual({
+        id: proposal.id,
+        type: "ui.render",
+        data: proposal.payload,
+        meta: {
+          runtimeId: proposal.source.runtimeId,
+          pluginId: proposal.source.pluginId,
+          turnId: proposal.turnId,
+        },
+      });
       expect(
         emitter.events.find((e) => e.type === "ui.part.update")?.payload.part,
       ).toMatchObject({
@@ -1391,9 +1411,19 @@ describe("processRuntimeResult", () => {
         effects: {
           ui: [
             {
-              type: "action-guide",
-              topic: "Where next?",
-              categories: [{ style: "safe", suggestions: ["先观察周围环境"] }],
+              parts: [
+                {
+                  id: "ui-1",
+                  type: "action-guide",
+                  status: "success",
+                  content: {
+                    topic: "Where next?",
+                    categories: [
+                      { style: "safe", suggestions: ["先观察周围环境"] },
+                    ],
+                  },
+                },
+              ],
             },
           ],
         },
@@ -1981,11 +2011,16 @@ describe("createTraceRecorder", () => {
       runtimeId: "r1",
       pluginId: "p1",
       error: "LLM timeout",
+      failureTarget: { provider: "fixture", model: "failed-model" },
     });
 
     const arg = store.addTraceEvent.mock.calls[0]![0];
     expect(arg.type).toBe("runtime.failed");
     expect(arg.payload.error).toBe("LLM timeout");
+    expect(arg.payload.failureTarget).toEqual({
+      provider: "fixture",
+      model: "failed-model",
+    });
   });
 
   it("should record turn.started and turn.completed", async () => {

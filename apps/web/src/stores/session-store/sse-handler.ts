@@ -6,6 +6,7 @@ import { reasoningAction } from "./reasoning.js";
 import {
   isAssetGenerateView,
   PLAYER_ABORT_REASON,
+  stageSchema,
   type CovelEventType,
 } from "@covel/shared";
 import * as api from "@/services/api";
@@ -69,7 +70,6 @@ export interface SseEventHandlerDeps {
   ds: DataService;
   sessionIdRef: MutableRef<string | null>;
   stateRef: MutableRef<SessionState>;
-  runtimeKindRef: MutableRef<Map<string, string>>;
   deltaBufferRef: DeltaBufferRef;
   deltaRafRef: DeltaRafRef;
   lastBackfilledTurnIdRef: MutableRef<string | null>;
@@ -331,9 +331,7 @@ export function createSseEventHandler(
         const delta = (payload.delta as string) ?? "";
         const runtimeId = (payload.runtimeId as string) ?? "unknown";
         const pluginId = (payload.pluginId as string) ?? "";
-        const deltaKind =
-          (payload.kind as string) ??
-          deps.runtimeKindRef.current.get(runtimeId);
+        const deltaKind = payload.kind as string;
         if (deltaKind === "story" && payload.reset === true) {
           // The text streamed so far was a preparation step or a rejected
           // draft; drop it (buffered and rendered) before the next step.
@@ -351,9 +349,7 @@ export function createSseEventHandler(
         const content = (payload.content as string) ?? "";
         const runtimeId = (payload.runtimeId as string) ?? "unknown";
         const msgId = (payload.messageId as string) ?? crypto.randomUUID();
-        const completedKind =
-          (payload.kind as string) ??
-          deps.runtimeKindRef.current.get(runtimeId);
+        const completedKind = payload.kind as string;
         if (completedKind === "story") {
           // A story runtime's stream is finished. Always flush the same-frame
           // delta and drop the external live buffer — even on empty content —
@@ -399,33 +395,13 @@ export function createSseEventHandler(
         break;
       }
       case "ui.rendered": {
-        const block = payload.block as Record<string, unknown> | undefined;
-        const render = payload.render as Record<string, unknown> | undefined;
-        const uiBlock =
-          block ??
-          (render
-            ? {
-                id:
-                  (payload.proposalId as string | undefined) ??
-                  crypto.randomUUID(),
-                type: "ui.render",
-                data: render,
-                meta: {
-                  runtimeId: payload.runtimeId,
-                  pluginId: payload.pluginId,
-                  turnId: (payload.turnId as string | undefined) ?? turnId,
-                },
-              }
-            : null);
-        if (uiBlock) {
-          addBlockMessageFromSse(
-            deps,
-            uiBlock,
-            payload,
-            envelope.timestamp,
-            turnId,
-          );
-        }
+        addBlockMessageFromSse(
+          deps,
+          payload.block as Record<string, unknown>,
+          payload,
+          envelope.timestamp,
+          turnId,
+        );
         break;
       }
       case "state.changed": {
@@ -475,17 +451,13 @@ export function createSseEventHandler(
         const runtimeId = (payload.runtimeId as string) ?? "unknown";
         const pluginId = (payload.pluginId as string) ?? "";
         const label = payload.label as string | undefined;
-        let kind = payload.kind as string | undefined;
-        if (!kind && label) {
-          const slashIdx = label.indexOf("/");
-          if (slashIdx >= 0) kind = label.slice(slashIdx + 1);
-        }
-        if (kind) deps.runtimeKindRef.current.set(runtimeId, kind);
+        const stage = stageSchema.safeParse(payload.stage);
         deps.dispatch({
           type: "UPSERT_EXECUTION_STEP",
           step: {
             runtimeId,
             pluginId,
+            ...(stage.success ? { stage: stage.data } : {}),
             status: "running",
             attemptStatus: "pending",
             label,

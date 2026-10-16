@@ -1,5 +1,5 @@
-import { isLocaleMap, resolveI18nText } from "./i18n.js";
-import { localesShareLanguageAndScript } from "./locale-registry.js";
+import { isLocaleMap, resolveI18nText } from "@covel/plugin-handlers-utils";
+import { localesShareLanguageAndScript } from "@covel/plugin-handlers-utils";
 
 /**
  * Sparse locale overlays.

@@ -15,7 +15,7 @@ import type { RuntimeManifest, TurnInput } from "@covel/shared";
 import type { LoadedRuntime } from "@covel/plugin-loader";
 import { type DataStore } from "@covel/store";
 import { createMemoryStore } from "@covel/store/memory";
-import { executeTurn } from "../src/turn-executor/turn-executor.js";
+import { runTurnPipeline } from "../src/turn-executor/turn-executor.js";
 import type { TurnExecutorDeps } from "../src/turn-executor/turn-executor.js";
 
 function makeAgentManifest(
@@ -25,7 +25,6 @@ function makeAgentManifest(
     name: "guarded-agent",
     description: "guarded-agent",
     pluginId: "guarded-agent",
-    pluginType: "plugin",
     stage: "narrative",
     trigger: { type: "auto" },
     model: "gpt-4o-mini",
@@ -74,7 +73,7 @@ describe("agent guard deadline (R-12)", () => {
       },
     };
 
-    const result = await executeTurn(
+    const result = await runTurnPipeline(
       makeTurnInput(),
       [loaded.manifest],
       makeDeps(loaded),
@@ -104,7 +103,7 @@ describe("agent guard deadline (R-12)", () => {
       },
     };
 
-    await executeTurn(
+    await runTurnPipeline(
       makeTurnInput(),
       [loaded.manifest],
       makeDeps(loaded, { turnControl: { signal: controller.signal } }),
@@ -153,7 +152,7 @@ describe("agent guard deadline (R-12)", () => {
       },
     };
 
-    const result = await executeTurn(
+    const result = await runTurnPipeline(
       makeTurnInput(),
       [loaded.manifest],
       makeDeps(loaded, { store, getPluginSource: () => "builtin" }),
@@ -196,7 +195,7 @@ describe("agent guard deadline (R-12)", () => {
       },
     };
 
-    const turn = executeTurn(
+    const turn = runTurnPipeline(
       makeTurnInput(),
       [loaded.manifest],
       makeDeps(loaded, {

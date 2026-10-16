@@ -82,6 +82,7 @@ export function classifyProviderFailure(
     ...(statusCode !== undefined ? { statusCode } : {}),
   });
 
+  if (normalized.code === "MISSING_API_KEY") return failure("missing_key");
   if (normalized.code === "REFUSAL") return failure("refused");
   if (normalized.code === "CONFIG_ERROR") return failure("config");
   if (normalized.code === "REQUEST_BUDGET_EXCEEDED") return failure("timeout");

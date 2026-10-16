@@ -29,7 +29,7 @@ import { createPgLifecycleRecords } from "./pg-lifecycle-records.js";
 import { createPgExportRecords } from "./pg-export-records.js";
 import { createPgSessionRecords } from "./pg-session-records.js";
 import { createPgSnapshotRecords } from "./pg-snapshot-records.js";
-import { DROP_ALL_SQL } from "./pg-store-mappers.js";
+import { DROP_ALL_SQL } from "./pg-schema-ddl.js";
 import { bootPgSchema, SCHEMA_META_TABLE } from "./pg-schema-boot.js";
 import { createPgStateRecords } from "./pg-state-records.js";
 import { createPgVectorCapability } from "./pg-vector.js";

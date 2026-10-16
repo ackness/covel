@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { createMemoryStore } from "@covel/store/memory";
 import type { LLMAdapter, LLMResponse, RuntimeManifest } from "@covel/shared";
-import { executeTurn } from "../src/turn-executor/turn-executor.js";
+import { runTurnPipeline } from "../src/turn-executor/turn-executor.js";
 import { finalizeExecution } from "../src/commit/finalize-execution.js";
 import { collectExecutionJournal } from "../src/execution-journal.js";
 import { createHookPipeline } from "../src/hooks/pipeline.js";
@@ -90,7 +90,7 @@ async function run(
       jsonSchema: { type: "object" },
     }),
   };
-  const result = await executeTurn(
+  const result = await runTurnPipeline(
     {
       sessionId: "review",
       turnId: "turn",

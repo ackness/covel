@@ -19,9 +19,9 @@ import type { RuntimeManifest, TurnInput } from "@covel/shared";
 import type { LoadedRuntime } from "@covel/plugin-loader";
 import type { TokenEstimator } from "@covel/context";
 import { createMemoryStore } from "@covel/store/memory";
-import { executeTurn } from "../src/turn-executor/turn-executor.js";
+import { runTurnPipeline } from "../src/turn-executor/turn-executor.js";
 import type { TurnExecutorDeps } from "../src/turn-executor/turn-executor.js";
-import type { LLMAdapter, LLMResponse } from "../src/llm/llm-adapter.js";
+import type { LLMAdapter, LLMResponse } from "@covel/shared";
 
 const SESSION_ID = "sess-budget-wire";
 const BUDGET = {
@@ -171,7 +171,7 @@ describe("turn-executor → context budget wiring", () => {
       maxOutputTokens: 32_768,
     });
     const manifest = makeManifest({ model: "story" });
-    const result = await executeTurn(makeTurnInput(), [manifest], {
+    const result = await runTurnPipeline(makeTurnInput(), [manifest], {
       ...(await makeBaseDeps(llm, manifest)),
       estimator: (text) => text.length,
       contextBudget: { maxInputTokens: 32_768, reservedForResponse: 16_384 },
@@ -193,7 +193,7 @@ describe("turn-executor → context budget wiring", () => {
       requestedMaxOutputTokens: 4096,
     });
     const manifest = makeManifest({ model: "plugin" });
-    const result = await executeTurn(makeTurnInput(), [manifest], {
+    const result = await runTurnPipeline(makeTurnInput(), [manifest], {
       ...(await makeBaseDeps(llm, manifest)),
       estimator: (text) => text.length,
       contextBudget: { maxInputTokens: 16_384, reservedForResponse: 16_384 },
@@ -212,7 +212,7 @@ describe("turn-executor → context budget wiring", () => {
       maxOutputTokens: 16_384,
     });
     const manifest = makeManifest();
-    const result = await executeTurn(makeTurnInput(), [manifest], {
+    const result = await runTurnPipeline(makeTurnInput(), [manifest], {
       ...(await makeBaseDeps(llm, manifest)),
       estimator: (text) => text.length,
       contextBudget: {
@@ -244,7 +244,7 @@ describe("turn-executor → context budget wiring", () => {
         estimator,
         contextBudget: { ...BUDGET, reservedForResponse: 3_000 },
       };
-      const result = await executeTurn(makeTurnInput(), [manifest], deps);
+      const result = await runTurnPipeline(makeTurnInput(), [manifest], deps);
       expect(result.runtimeResults[0]?.status).toBe("success");
       expect(llm.calls).toHaveLength(1);
       expect(llm.calls[0]?.maxOutputTokens).toBe(requestedMaxOutputTokens);
@@ -269,7 +269,7 @@ describe("turn-executor → context budget wiring", () => {
         contextBudget: BUDGET,
       };
 
-      const result = await executeTurn(makeTurnInput(), [manifest], deps);
+      const result = await runTurnPipeline(makeTurnInput(), [manifest], deps);
 
       expect(result.runtimeResults).toHaveLength(1);
       expect(result.runtimeResults[0]!.status).toBe("success");

@@ -30,7 +30,7 @@
  * Schema ownership
  * ────────────────
  * The `vector_models` table and the `sessions.embedding_model_id` /
- * `embedding_locked_at` columns are created by `sqlite-store-mappers.ts`
+ * `embedding_locked_at` columns are created by `sqlite-schema-ddl.ts`
  * during store initialization. This module ONLY creates per-model
  * physical vec0 tables on demand — it does not duplicate the registry
  * or session-column DDL.
@@ -64,33 +64,15 @@ import {
   type SqliteConnection,
 } from "./node-sqlite.js";
 
-// ── Safety helpers ───────────────────────────────────────────────
+import {
+  physicalTableName as modelTableName,
+  requireCurrentTableName as currentTableName,
+  serializeVector,
+} from "../common/vector-table.js";
 
-function assertValidId(id: number): void {
-  if (!Number.isInteger(id) || id <= 0) {
-    throw new Error(`sqlite-vec: invalid model registry id ${id}`);
-  }
-}
-
-function physicalTableName(id: number): string {
-  assertValidId(id);
-  return `vec_mem_m${id}`;
-}
-
-function requireCurrentTableName(id: number, tableName: string): string {
-  const expected = physicalTableName(id);
-  if (tableName !== expected) {
-    throw new Error(
-      `sqlite-vec: vector_models.id ${id} violates the current table_name invariant`,
-    );
-  }
-  return expected;
-}
-
-/** Convert a Float32Array to the JSON string form sqlite-vec expects. */
-function toJsonVector(v: Float32Array): string {
-  return `[${Array.from(v).join(",")}]`;
-}
+const physicalTableName = (id: number) => modelTableName(id, "sqlite-vec");
+const requireCurrentTableName = (id: number, tableName: string) =>
+  currentTableName(id, tableName, "sqlite-vec");
 
 // ── Row types for raw SQL queries ───────────────────────────────
 
@@ -138,7 +120,7 @@ export function createSqliteVectorCapability(
   }
 
   // NOTE: vector_models table and sessions.embedding_model_id /
-  // embedding_locked_at columns are owned by sqlite-store-mappers.ts.
+  // embedding_locked_at columns are owned by sqlite-schema-ddl.ts.
   // We trust they exist by the time this factory runs.
 
   // Session deletion remains available without this optional extension. Now
@@ -460,7 +442,7 @@ export function createSqliteVectorCapability(
       input.namespace,
       input.key,
       input.payload ?? null,
-      toJsonVector(input.embedding),
+      serializeVector(input.embedding),
     );
   }
 
@@ -486,7 +468,7 @@ export function createSqliteVectorCapability(
     // Build WHERE dynamically. `k` must appear in WHERE for sqlite-vec.
     const conditions = ["embedding MATCH ?", "k = ?", "session_id = ?"];
     const params: Array<string | number> = [
-      toJsonVector(input.query),
+      serializeVector(input.query),
       topK,
       input.sessionId,
     ];

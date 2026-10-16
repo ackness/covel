@@ -112,7 +112,7 @@ function distance(a: string, b: string): number {
 }
 
 /** The guarded field an unknown key most likely misspells. */
-export function misspelledGuardedField(
+function misspelledGuardedField(
   key: string,
   guarded: readonly string[],
 ): string | undefined {
@@ -132,7 +132,7 @@ function location(form: ManifestForm, path: readonly PropertyKey[]) {
 }
 
 /** The unknown whole fields of one issue that loading may leave out. */
-export function ignorableUnknownFields(
+function ignorableUnknownFields(
   form: ManifestForm,
   issue: UnknownKeyIssue,
 ): UnknownField[] {

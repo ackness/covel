@@ -5,7 +5,7 @@
  * no package.json, and its `.js` files still load as ES modules.
  */
 import { execFile } from "node:child_process";
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, rm, writeFile, readFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -182,12 +182,26 @@ const after = await load("/tally/runtimes/count/handler.js");
 console.log(JSON.stringify({ before, after }));
 `,
     });
+    // Keep Node's own JS format handling; only resolve this TS helper explicitly.
+    await files(root, {
+      "host-modules.ts": (
+        await readFile(
+          path.resolve(import.meta.dirname, "../src/host-modules.ts"),
+          "utf8",
+        )
+      ).replace(
+        '"./path-containment.js"',
+        JSON.stringify(
+          new URL("../src/path-containment.ts", import.meta.url).href,
+        ),
+      ),
+    });
     const output = await new Promise<string>((resolve, reject) =>
       execFile(
         process.execPath,
         [
           path.join(root, "probe.mjs"),
-          path.resolve(import.meta.dirname, "../src/host-modules.ts"),
+          path.join(root, "host-modules.ts"),
           path.join(root, "plugins"),
         ],
         (error, stdout, stderr) =>

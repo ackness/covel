@@ -18,10 +18,10 @@ import {
 import type { RuntimeManifest, TurnInput } from "@covel/shared";
 import { type DataStore } from "@covel/store";
 import { createMemoryStore } from "@covel/store/memory";
-import { executeTurn } from "../src/turn-executor/turn-executor.js";
+import { runTurnPipeline } from "../src/turn-executor/turn-executor.js";
 import type { TurnExecutorDeps } from "../src/turn-executor/turn-executor.js";
 import { finalizeExecution } from "../src/commit/finalize-execution.js";
-import type { LLMAdapter, LLMResponse } from "../src/llm/llm-adapter.js";
+import type { LLMAdapter, LLMResponse } from "@covel/shared";
 
 class NoopLLM implements LLMAdapter {
   async generate(): Promise<LLMResponse> {
@@ -81,7 +81,7 @@ async function seedSetupSession(): Promise<DataStore> {
 async function runGuardTurn(): Promise<{
   store: DataStore;
   guardResult: Awaited<
-    ReturnType<typeof executeTurn>
+    ReturnType<typeof runTurnPipeline>
   >["runtimeResults"][number];
 }> {
   const store = await seedSetupSession();
@@ -117,7 +117,7 @@ async function runGuardTurn(): Promise<{
     playerMessage: "go",
     origin: "player",
   };
-  const result = await executeTurn(input, [guardRuntime], deps);
+  const result = await runTurnPipeline(input, [guardRuntime], deps);
   const guardResult = result.runtimeResults[0]!;
   // The write buffered: nothing is in the store until finalize commits.
   expect(await store.listCharacters(SESSION_ID)).toHaveLength(0);

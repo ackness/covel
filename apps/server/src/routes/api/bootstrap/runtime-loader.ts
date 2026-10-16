@@ -105,84 +105,83 @@ export function createRuntimeLoader(
     locale,
     sessionId,
   ) => {
-    for (const [pluginId, discovery] of discoveryMap) {
-      const manifests = manifestCache.get(pluginId);
-      if (
-        !manifests?.some((m) => m.manifest.name === manifest.name) &&
-        !snapshots.getStore()?.loaded.has(manifest.name)
-      )
-        continue;
-      if (manifest.pluginId !== pluginId) continue;
-      // Grants remain live: an old artifact snapshot never authorizes revoked code.
-      if (!(await authorized(pluginId, manifest.name, sessionId)))
+    const pluginId = manifest.pluginId;
+    const discovery = discoveryMap.get(pluginId);
+    if (!discovery) return undefined;
+    const manifests = manifestCache.get(pluginId);
+    if (
+      !manifests?.some((m) => m.manifest.name === manifest.name) &&
+      !snapshots.getStore()?.loaded.has(manifest.name)
+    )
+      return undefined;
+    // Grants remain live: an old artifact snapshot never authorizes revoked code.
+    if (!(await authorized(pluginId, manifest.name, sessionId)))
+      throw new Error(
+        `[runtime-loader] ${pluginId}/${manifest.name}: community runtime requires explicit session approval (server-code AND runtime grants)`,
+      );
+    const captured = snapshots.getStore();
+    if (captured) {
+      if (captured.sessionId !== sessionId)
+        throw new Error("Runtime snapshot belongs to another session");
+      const loaded = captured.loaded.get(manifest.name);
+      if (!loaded) {
+        const reason = captured.failed.get(manifest.name);
         throw new Error(
-          `[runtime-loader] ${pluginId}/${manifest.name}: community runtime requires explicit session approval (server-code AND runtime grants)`,
+          reason
+            ? `[runtime-loader] runtime ${manifest.name} of plugin ${pluginId} failed to load: ${reason}`
+            : `Runtime ${manifest.name} was not admitted in this execution snapshot`,
         );
-      const captured = snapshots.getStore();
-      if (captured) {
-        if (captured.sessionId !== sessionId)
-          throw new Error("Runtime snapshot belongs to another session");
-        const loaded = captured.loaded.get(manifest.name);
-        if (!loaded) {
-          const reason = captured.failed.get(manifest.name);
-          throw new Error(
-            reason
-              ? `[runtime-loader] runtime ${manifest.name} of plugin ${pluginId} failed to load: ${reason}`
-              : `Runtime ${manifest.name} was not admitted in this execution snapshot`,
-          );
-        }
-        return {
-          ...loaded,
-          promptTemplate: resolveRuntimePrompt(
-            captured.prompts.get(manifest.name)!,
-            locale ?? captured.locale,
-          ),
-        };
       }
-      // No runtime module may be imported before entry authorization succeeds.
-      await boundEnsurePluginEntry(pluginId, sessionId);
-      const entry = params.pluginRegistry?.get(pluginId);
-      if (!entry?.packageManifest?.plugin)
-        throw new Error(`Missing plugin definition: ${pluginId}`);
-      const generation = generations.get(pluginId) ?? "initial";
-      const key = JSON.stringify([
-        pluginId,
-        generation,
-        locale ?? "",
-        manifest.name,
-      ]);
-      let pending = artifacts.get(key);
-      if (!pending) {
-        pending = loadRuntimeFromDisk(
-          discovery,
-          manifest.name,
-          locale,
-          {
-            packageManifest: entry.packageManifest,
-            manifests: manifests ?? [],
-            messages: entry.messages ?? [],
-            languages: entry.languages ?? {
-              text: ["en"],
-              instructions: ["en"],
-            },
-            disabledRuntimes: entry.disabledRuntimes ?? [],
-            ignoredFields: entry.ignoredFields ?? [],
-          },
-          Object.fromEntries(
-            [...params.pluginRegistry!.getAll().values()].flatMap((e) =>
-              Object.entries(e.packageManifest?.contractSchemas ?? {}),
-            ),
-          ),
-          generation,
-        );
-        artifacts.set(key, pending);
-        void pending.catch(() => {
-          if (artifacts.get(key) === pending) artifacts.delete(key);
-        });
-      }
-      return pending;
+      return {
+        ...loaded,
+        promptTemplate: resolveRuntimePrompt(
+          captured.prompts.get(manifest.name)!,
+          locale ?? captured.locale,
+        ),
+      };
     }
-    return undefined;
+    // No runtime module may be imported before entry authorization succeeds.
+    await boundEnsurePluginEntry(pluginId, sessionId);
+    const entry = params.pluginRegistry?.get(pluginId);
+    if (!entry?.packageManifest?.plugin)
+      throw new Error(`Missing plugin definition: ${pluginId}`);
+    const generation = generations.get(pluginId) ?? "initial";
+    const key = JSON.stringify([
+      pluginId,
+      generation,
+      locale ?? "",
+      manifest.name,
+    ]);
+    let pending = artifacts.get(key);
+    if (!pending) {
+      pending = loadRuntimeFromDisk(
+        discovery,
+        manifest.name,
+        locale,
+        {
+          packageManifest: entry.packageManifest,
+          manifests: manifests ?? [],
+          messages: entry.messages ?? [],
+          languages: entry.languages ?? {
+            text: ["en"],
+            instructions: ["en"],
+          },
+          disabledRuntimes: entry.disabledRuntimes ?? [],
+          ignoredFields: entry.ignoredFields ?? [],
+        },
+        Object.fromEntries(
+          [...params.pluginRegistry!.getAll().values()].flatMap((e) =>
+            Object.entries(e.packageManifest?.contractSchemas ?? {}),
+          ),
+        ),
+        generation,
+      );
+      artifacts.set(key, pending);
+      void pending.catch(() => {
+        if (artifacts.get(key) === pending) artifacts.delete(key);
+      });
+    }
+    return pending;
   };
 
   return {

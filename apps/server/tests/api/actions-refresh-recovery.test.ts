@@ -35,7 +35,7 @@ async function fixture() {
       id: "test-story",
       name: "Story",
       description: "",
-      pluginType: "plugin",
+      kind: "plugin",
       runtimeCount: 1,
     },
 

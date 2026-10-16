@@ -115,7 +115,7 @@ const SVG_MIME = "image/svg+xml";
  * of the formats the player-facing gallery handles. The header alone is client
  * controlled, so the bytes decide what is stored and served back.
  */
-export function sniffImageMime(bytes: Uint8Array): string | undefined {
+function sniffImageMime(bytes: Uint8Array): string | undefined {
   const startsWith = (sig: readonly number[], at = 0) =>
     sig.every((b, i) => bytes[at + i] === b);
   if (startsWith([0x89, 0x50, 0x4e, 0x47])) return "image/png";

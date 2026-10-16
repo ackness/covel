@@ -75,7 +75,6 @@ function createHarness(seed: SessionState = initialState): {
     ds: {} as SseEventHandlerDeps["ds"],
     sessionIdRef: { current: SESSION_ID },
     stateRef,
-    runtimeKindRef: { current: new Map() },
     deltaBufferRef: { current: new Map() },
     deltaRafRef: { current: null },
     lastBackfilledTurnIdRef: { current: null },

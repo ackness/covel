@@ -49,3 +49,37 @@ export function supportsModelRole(
     ? true
     : output.includes(modality);
 }
+
+/** What a model can accept as input. */
+export const INPUT_MODALITIES = [
+  "text",
+  "image",
+  "audio",
+  "video",
+  "file",
+] as const;
+export type InputModality = (typeof INPUT_MODALITIES)[number];
+
+/** What a model can produce as output. */
+export const OUTPUT_MODALITIES = [
+  "text",
+  "image",
+  "audio",
+  "video",
+  "embedding",
+  "evaluation",
+] as const;
+export type OutputModality = (typeof OUTPUT_MODALITIES)[number];
+
+/** Feature flags beyond basic model I/O. */
+export const MODEL_FEATURES = [
+  "function_calling",
+  "structured_output",
+  "streaming",
+  "reasoning",
+  "vision",
+  "prompt_caching",
+  "web_search",
+  "computer_use",
+] as const;
+export type ModelFeature = (typeof MODEL_FEATURES)[number];

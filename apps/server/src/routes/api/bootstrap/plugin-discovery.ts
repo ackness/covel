@@ -124,7 +124,7 @@ export async function discoverAndRegisterPlugins(
       // `source` comes from `discoverPluginsMulti`: bundled first-dir plugins
       // get builtin trust, everything else (including an absent source) is
       // community — so a third-party plugin can't self-assign a higher
-      // trust level by forging `pluginType: core-plugin` in its frontmatter.
+      // trust level by forging `kind: core` in its frontmatter.
       registry.register({
         id: discovery.id,
         summary,
@@ -170,7 +170,7 @@ export async function discoverAndRegisterPlugins(
           id: discovery.id,
           name: discovery.id,
           description: "",
-          pluginType: "plugin",
+          kind: "plugin",
           runtimeCount: 0,
         },
         loadedRuntimes: new Map(),

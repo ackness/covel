@@ -7,7 +7,7 @@ import type {
 } from "@covel/shared";
 import { createEmitEventTool } from "@covel/tools";
 import { createToolExecutor } from "../src/agent-loop/tool-executor.js";
-import { executeTurn } from "../src/turn-executor/turn-executor.js";
+import { runTurnPipeline } from "../src/turn-executor/turn-executor.js";
 import { finalizeExecution } from "../src/commit/finalize-execution.js";
 import { classifySetupResult } from "../src/turn-executor/setup-run.js";
 
@@ -48,7 +48,7 @@ describe("function business value and effect boundary", () => {
         events: [{ topic: "probe.changed", data: { source: "effect" } }],
         pluginData: [{ namespace: "state", key: "explicit", value: true }],
       };
-      const turn = await executeTurn(
+      const turn = await runTurnPipeline(
         {
           sessionId: "effect-session",
           turnId: "effect-turn",
@@ -139,12 +139,23 @@ describe("function business value and effect boundary", () => {
 
   it.each([
     { ui: "invalid", expectedUi: 0 },
-    { ui: [null, 42, { id: "valid-card", type: "form" }], expectedUi: 1 },
+    {
+      ui: [
+        null,
+        42,
+        {
+          parts: [
+            { id: "valid-card", type: "form", status: "success", content: {} },
+          ],
+        },
+      ],
+      expectedUi: 1,
+    },
   ])(
     "ignores malformed UI effects during execution and commit",
     async ({ ui, expectedUi }) => {
       const store = createMemoryStore();
-      const turn = await executeTurn(
+      const turn = await runTurnPipeline(
         {
           sessionId: "ui-session",
           turnId: "ui-turn",
@@ -195,7 +206,7 @@ describe("function business value and effect boundary", () => {
         jobStatus: [{ jobId: "job", state: "failed", sequence: 1 }],
         diagnostics: [{ code: "probe", message: "observed" }],
       };
-      const turn = await executeTurn(
+      const turn = await runTurnPipeline(
         {
           sessionId: "observed-session",
           turnId: "observed-turn",
@@ -247,7 +258,7 @@ describe("function business value and effect boundary", () => {
 
   it("does not retain domain effects when the success value fails its schema", async () => {
     const store = createMemoryStore();
-    const turn = await executeTurn(
+    const turn = await runTurnPipeline(
       {
         sessionId: "schema-session",
         turnId: "schema-turn",
@@ -310,7 +321,7 @@ describe("function business value and effect boundary", () => {
       ...producer,
       tools: { builtin: ["emit-event"] },
     } as RuntimeManifest;
-    const turn = await executeTurn(
+    const turn = await runTurnPipeline(
       {
         sessionId: "tool-event-session",
         turnId: "tool-event-turn",

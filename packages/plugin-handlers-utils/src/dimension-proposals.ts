@@ -1,6 +1,7 @@
 import { z } from "zod";
 import {
   DIMENSION_MAX_UPDATES,
+  dimensionsJsonEqual,
   dimensionIdSchema,
   dimensionJsonSchema,
   dimensionRecordSchema,
@@ -86,30 +87,7 @@ export class DimensionValidationError extends Error {
   }
 }
 
-export function dimensionsJsonEqual(left: unknown, right: unknown): boolean {
-  if (Object.is(left, right)) return true;
-  if (
-    !left ||
-    !right ||
-    typeof left !== "object" ||
-    typeof right !== "object" ||
-    Array.isArray(left) !== Array.isArray(right)
-  )
-    return false;
-  const a = Object.keys(left);
-  const b = Object.keys(right);
-  return (
-    a.length === b.length &&
-    a.every(
-      (key) =>
-        Object.hasOwn(right, key) &&
-        dimensionsJsonEqual(
-          (left as Record<string, unknown>)[key],
-          (right as Record<string, unknown>)[key],
-        ),
-    )
-  );
-}
+export { dimensionsJsonEqual } from "./dimension-schemas.js";
 
 /**
  * Shared domain materialization for tool previews and the commit boundary.

@@ -21,7 +21,6 @@ function makeContext(overrides?: Partial<TriggerContext>): TriggerContext {
     triggerCount: 0,
     turnsSinceLastTrigger: 999,
     pendingEventTopics: [],
-    isManualTrigger: false,
     ...overrides,
   };
   // every / startTurn gate on `logicalTurn`; these cases express the turn
@@ -48,17 +47,10 @@ describe("shouldTrigger", () => {
   });
 
   // 3. manual, not triggered
-  it("should return false for manual trigger when isManualTrigger is false", () => {
+  it("leaves explicit manual selection to the scheduler", () => {
     const manifest = makeManifest({ trigger: { type: "manual" } });
-    const ctx = makeContext({ isManualTrigger: false });
+    const ctx = makeContext();
     expect(shouldTrigger(manifest, ctx)).toBe(false);
-  });
-
-  // 4. manual, triggered
-  it("should return true for manual trigger when isManualTrigger is true", () => {
-    const manifest = makeManifest({ trigger: { type: "manual" } });
-    const ctx = makeContext({ isManualTrigger: true });
-    expect(shouldTrigger(manifest, ctx)).toBe(true);
   });
 
   // 5. auto with a cadence, on the cadence

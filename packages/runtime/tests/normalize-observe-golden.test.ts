@@ -216,13 +216,11 @@ describe("normalize golden (bundled plugin set)", () => {
     expect(pregame.declaredTrigger.type).toBe("auto");
     expect(pregame.declaredTrigger.every).toBeUndefined();
     expect(pregame.declaredTrigger.maxTriggerCount).toBe(1);
-    expect(pregame.provenance.derivedFrom).toEqual([]);
 
     const schemaGen = requireSpec(specs, "world-init/schema-gen");
     expect(schemaGen.stage).toBe("setup");
     expect(schemaGen.declaredTrigger.type).toBe("auto");
     expect(schemaGen.deps.after).toEqual([{ capability: "session.opening@1" }]);
-    expect(schemaGen.provenance.derivedFrom).toEqual([]);
 
     // player-init stays ordered after setup providers, but submitting its form
     // in a later execution must not require those completed providers again.
@@ -354,7 +352,6 @@ describe("normalize golden (bundled plugin set)", () => {
       const spec = normalizeRuntimeManifest(manifest);
       expect(spec.bindings).toEqual(manifest.inputs ?? {});
       expect(spec.exportBindings).toEqual({});
-      expect(spec.httpPermissions).toEqual([]);
       expect(spec.backgroundWhenDetached).toBe(
         manifest.execution === "background",
       );

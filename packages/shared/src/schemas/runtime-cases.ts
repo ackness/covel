@@ -3,7 +3,7 @@ import { z } from "zod";
 const text = z.string().min(1);
 const data = z.record(z.string(), z.unknown());
 
-export const caseExpectationsSchema = z.strictObject({
+const caseExpectationsSchema = z.strictObject({
   runtimeResults: z
     .array(
       z.strictObject({
@@ -61,7 +61,7 @@ export const caseExpectationsSchema = z.strictObject({
     .optional(),
 });
 
-export const caseArtifactConfigSchema = z.strictObject({
+const caseArtifactConfigSchema = z.strictObject({
   saveImages: z
     .strictObject({
       namespace: text
@@ -76,7 +76,7 @@ export const caseArtifactConfigSchema = z.strictObject({
     .optional(),
 });
 
-export const runtimeCaseSchema = z.strictObject({
+const runtimeCaseSchema = z.strictObject({
   name: text.describe("Required case name, selected by --case."),
   runtimeId: text.describe("Required runtime ID to execute."),
   pluginId: text

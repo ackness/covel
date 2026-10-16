@@ -285,23 +285,6 @@ export function validateBrowserCheckpoint(value: unknown): BrowserCheckpoint {
   return normalized;
 }
 
-export function assertBrowserCheckpoint(
-  value: unknown,
-): asserts value is BrowserCheckpoint {
-  validateBrowserCheckpoint(value);
-}
-
-export function isBrowserCheckpoint(
-  value: unknown,
-): value is BrowserCheckpoint {
-  try {
-    validateBrowserCheckpoint(value);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 /** Validate and narrow an unknown client commit. */
 export function validateSessionCommit(value: unknown): SessionCommit {
   const commit = requireRecord(value, "commit");
@@ -322,21 +305,6 @@ export function validateSessionCommit(value: unknown): SessionCommit {
   }
 
   return { baseRevision, revision, actionId, checkpoint };
-}
-
-export function assertSessionCommit(
-  value: unknown,
-): asserts value is SessionCommit {
-  validateSessionCommit(value);
-}
-
-export function isSessionCommit(value: unknown): value is SessionCommit {
-  try {
-    validateSessionCommit(value);
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 function stableJson(value: unknown): string {

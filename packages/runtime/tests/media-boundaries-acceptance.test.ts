@@ -25,7 +25,7 @@ import type {
   RuntimeResult,
 } from "@covel/shared";
 import type { LoadedRuntime } from "@covel/plugin-loader";
-import { executeTurn } from "../src/turn-executor/turn-executor.js";
+import { runTurnPipeline } from "../src/turn-executor/turn-executor.js";
 import type { TurnExecutorDeps } from "../src/turn-executor/turn-executor.js";
 import type { MediaStoreLike } from "../src/function-runtime/runtime-media-context.js";
 import {
@@ -40,7 +40,7 @@ import {
   type ProgressReporterDeps,
 } from "../src/job-status/job-status.js";
 import { normalizeHandlerResult } from "../src/commit/normalize-handler-result.js";
-import type { LLMAdapter, LLMResponse } from "../src/llm/llm-adapter.js";
+import type { LLMAdapter, LLMResponse } from "@covel/shared";
 
 class NoopLLM implements LLMAdapter {
   async generate(): Promise<LLMResponse> {
@@ -141,7 +141,7 @@ describe("scenario 10: MediaRef canonicalization shared across boundaries", () =
     };
 
     // Bad ref in the manual payload → activation fails.
-    const bad = await executeTurn(
+    const bad = await runTurnPipeline(
       {
         origin: "player",
         sessionId: OUR,
@@ -157,7 +157,7 @@ describe("scenario 10: MediaRef canonicalization shared across boundaries", () =
     expect(badRR?.error).toContain("media");
 
     // Good ref with stale size + transient url → success, canonical payload.
-    const good = await executeTurn(
+    const good = await runTurnPipeline(
       {
         origin: "player",
         sessionId: OUR,
@@ -258,10 +258,12 @@ describe("scenario 10: MediaRef canonicalization shared across boundaries", () =
       },
     };
     const decl = { recordAs: "track", pluginId: "p", pluginVersion: "1.0.0" };
-    const args = (output: unknown) => ({
+    const args = (output: import("@covel/shared").RuntimeResult["output"]) => ({
       sink,
       sessionId: OUR,
-      results: [{ status: "success", runtimeId: "p/gen", runId: "r1", output }],
+      results: [
+        { status: "success" as const, runtimeId: "p/gen", runId: "r1", output },
+      ],
       declFor: () => decl,
       loadOutputSchema: async () => ({ type: "object" }),
       committedAt: new Date().toISOString(),

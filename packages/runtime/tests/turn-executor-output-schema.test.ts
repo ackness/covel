@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { RuntimeManifest, TurnInput } from "@covel/shared";
 import { createMemoryStore } from "@covel/store/memory";
-import { executeTurn } from "../src/turn-executor/turn-executor.js";
+import { runTurnPipeline } from "../src/turn-executor/turn-executor.js";
 import type { TurnExecutorDeps } from "../src/turn-executor/turn-executor.js";
-import type { LLMAdapter, LLMResponse } from "../src/llm/llm-adapter.js";
+import type { LLMAdapter, LLMResponse } from "@covel/shared";
 import type { ToolExecutor } from "../src/agent-loop/tool-executor.js";
 
 const OBJECT_SCHEMA = {
@@ -69,7 +69,7 @@ function manifest(overrides: Partial<RuntimeManifest> = {}): RuntimeManifest {
   } as RuntimeManifest;
 }
 
-describe("executeTurn: output.schema.json", () => {
+describe("runTurnPipeline: output.schema.json", () => {
   it("passes loaded outputSchema as json_schema responseFormat", async () => {
     const schema = {
       type: "object",
@@ -97,7 +97,7 @@ describe("executeTurn: output.schema.json", () => {
       store: createMemoryStore(),
     };
 
-    await executeTurn(input, [runtime], deps);
+    await runTurnPipeline(input, [runtime], deps);
 
     expect(llm.responseFormat).toEqual({
       type: "json_schema",
@@ -145,7 +145,7 @@ describe("executeTurn: output.schema.json", () => {
       toolExecutor,
     };
 
-    await executeTurn(input, [runtime], deps);
+    await runTurnPipeline(input, [runtime], deps);
 
     expect(
       (llm.tools as Array<{ name: string }>).map((tool) => tool.name),
@@ -179,7 +179,7 @@ describe("executeTurn: output.schema.json", () => {
       completeAfterTools: ["submit-output"],
     });
 
-    const result = await executeTurn(
+    const result = await runTurnPipeline(
       {
         origin: "player",
         sessionId: "sess-schema-tool",
@@ -232,7 +232,7 @@ describe("executeTurn: output.schema.json", () => {
       completeAfterTools: ["submit-output"],
     });
 
-    const result = await executeTurn(
+    const result = await runTurnPipeline(
       {
         origin: "player",
         sessionId: "sess-schema-tool-invalid",
@@ -291,7 +291,7 @@ describe("executeTurn: output.schema.json", () => {
       store: createMemoryStore(),
     };
 
-    const result = await executeTurn(input, [runtime], deps);
+    const result = await runTurnPipeline(input, [runtime], deps);
 
     expect(result.runtimeResults[0]?.status).toBe("failed");
     expect(result.runtimeResults[0]?.error).toContain(
@@ -344,7 +344,7 @@ describe("executeTurn: output.schema.json", () => {
       store: createMemoryStore(),
     };
 
-    const result = await executeTurn(input, [runtime], deps);
+    const result = await runTurnPipeline(input, [runtime], deps);
     const failure = result.runtimeResults[0];
 
     expect(failure?.status).toBe("failed");
@@ -405,7 +405,7 @@ describe("executeTurn: output.schema.json", () => {
       store: createMemoryStore(),
     };
 
-    const result = await executeTurn(input, [runtime], deps);
+    const result = await runTurnPipeline(input, [runtime], deps);
     const failure = result.runtimeResults[0];
 
     expect(failure?.status).toBe("failed");

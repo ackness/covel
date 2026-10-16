@@ -49,7 +49,7 @@ export function loadWorldRecord(id: string): Promise<WorldRecord | null> {
 }
 
 /** The cached record, `undefined` while it has not been fetched. */
-export function peekWorldRecord(id: string): WorldRecord | null | undefined {
+function peekWorldRecord(id: string): WorldRecord | null | undefined {
   return entries.get(id)?.value;
 }
 

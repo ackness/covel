@@ -27,7 +27,7 @@ export async function registerDimensionProvider(
       id: discovery.id,
       name: discovery.id,
       description: "",
-      pluginType: "core-plugin",
+      kind: "core",
       runtimeCount: manifests.length,
     },
     manifests,

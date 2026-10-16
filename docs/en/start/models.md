@@ -44,6 +44,7 @@ When a test fails, first look at what kind of problem it reports:
 
 | What the error says             | Usual cause                                                                                     |
 | ------------------------------- | ----------------------------------------------------------------------------------------------- |
+| No API key                      | A built-in remote provider has no API key configured; add one and test again                    |
 | Authentication failed           | The key is wrong, or the key does not have permission for this model                            |
 | Model not found                 | The model ID is spelled differently from the provider's name                                    |
 | Connection timed out or refused | The address is wrong, or you need a proxy (set it under **Settings → Desktop → Network Proxy**) |
@@ -63,6 +64,10 @@ Go back to the world selection page, and click "Enter" on any world card. The se
 
 - No warning appears: the models are ready, and you can start your [first game](./first-session.md).
 - A warning says a role is not available: go back to "Model Roles" and choose a model for it. Or, in "Customize plugins and advanced settings" on the session-prep screen, change that task to use a role that is already set up.
+
+When you click “Start Game”, any text roles used by this session without credentials appear in a confirmation, grouped by provider. Choose “Add API key” to open provider settings, enter the key, close settings, and click start again. Or choose “Start anyway” and configure it later. Each start checks again; skipping is not remembered. Local services that need no key do not show this confirmation.
+
+A model call to a built-in remote provider at its official address with no key immediately reports “No API key”, without sending a request or retrying. An incorrect key still produces the provider’s authentication failure. Custom addresses and local services are contacted as usual because they may need no key.
 
 ## You have a subscription but no API key
 

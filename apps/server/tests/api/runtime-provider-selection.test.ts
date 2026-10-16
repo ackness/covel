@@ -23,7 +23,7 @@ function fixture(conflicts: boolean) {
         id,
         name: id,
         description: id,
-        pluginType: id === "default" ? "core-plugin" : "plugin",
+        kind: id === "default" ? "core" : "plugin",
         runtimeCount: 1,
       },
       packageManifest: root,

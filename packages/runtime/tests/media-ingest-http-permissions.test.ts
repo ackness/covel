@@ -15,7 +15,7 @@ import { describe, it, expect } from "vitest";
 import type { RuntimeManifest, TurnInput } from "@covel/shared";
 import type { PluginRuntimeUtils } from "@covel/plugin-loader";
 import { createMemoryStore, createMemoryMediaStore } from "@covel/store/memory";
-import { executeTurn } from "../src/turn-executor/turn-executor.js";
+import { runTurnPipeline } from "../src/turn-executor/turn-executor.js";
 import type { TurnExecutorDeps } from "../src/turn-executor/turn-executor.js";
 
 const PNG_HEADER = Uint8Array.from([
@@ -112,7 +112,7 @@ async function runIngest(options: {
     getPluginSource: () => options.pluginSource,
   };
 
-  await executeTurn(
+  await runTurnPipeline(
     makeTurnInput(options.manifest.name),
     [options.manifest],
     deps,

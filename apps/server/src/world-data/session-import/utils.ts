@@ -1,3 +1,4 @@
+import { isRecord } from "../../lib/is-record.js";
 import { access, readdir } from "node:fs/promises";
 import path from "node:path";
 import { readWorldManifestSource } from "../locale-overlays.js";
@@ -11,10 +12,6 @@ export async function fileExists(filePath: string): Promise<boolean> {
   } catch {
     return false;
   }
-}
-
-export function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
 export function sourceItems(value: unknown): readonly unknown[] {

@@ -48,7 +48,7 @@ export interface TurnControl {
  * task that an interjection would corrupt, and a function runtime calls no
  * model.
  */
-export function runtimeAcceptsSteering(
+function runtimeAcceptsSteering(
   manifest: Pick<RuntimeManifest, "outputKind" | "runtimeType">,
 ): boolean {
   return manifest.outputKind === "story" && manifest.runtimeType !== "function";
@@ -153,12 +153,4 @@ export class TurnAbortedError extends Error {
 /** An expired execution may be observed by hooks, but cannot be recovered into success. */
 export class RuntimeTimeoutError extends Error {
   override name = "RuntimeTimeoutError";
-}
-
-export function isTurnAbortedError(err: unknown): err is TurnAbortedError {
-  return (
-    err instanceof TurnAbortedError ||
-    (err instanceof Error &&
-      (err as { code?: unknown }).code === "TURN_ABORTED")
-  );
 }

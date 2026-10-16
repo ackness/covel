@@ -76,7 +76,7 @@ Optional. The "Dialogue Mode" gameplay pack includes it.
 | Dialogue ratio   | Roughly how much of a reply is character dialogue and inner reactions. Range 30 to 90. | 70                  |
 | Reply length     | Short, medium or long.                                                                 | Medium              |
 
-A world can preset these settings. For example, "Haruka Academy · Spring Mint" (遥风学园·春日薄荷) sets the dialogue ratio to 80 and the reply length to short.
+A world can preset these settings. For example, "Harukaze Academy · Spring Mint" (遥风学园·春日薄荷) sets the dialogue ratio to 80 and the reply length to short.
 
 ### Works with
 
@@ -114,7 +114,7 @@ Regenerating uses the model of the `fast` role. If no model is available, the or
 
 ### When it is on
 
-Optional. The "Dialogue Mode" gameplay pack includes it. Worlds such as "Emberback Relay" and "Lantern Barrow: First Expedition" list it as recommended or required.
+Optional. The "Dialogue Mode" gameplay pack includes it. Worlds such as "Emberback Relay" and "Lantern Barrow: The First Delve" list it as recommended or required.
 
 ### Works with
 
@@ -143,7 +143,7 @@ Updating the memory takes one more model call. It runs in the background, so you
 
 A world can replace the four default blocks with its own memory blocks, so memory records clues, relics, countdowns and similar things that suit its genre. The file is `data/memory-blocks.json`. Write one object: `id` is `world`, and the `blocks` list has, for each item, `label`, `displayName` and `extractionHint`. `icon` and `maxChars` are optional. Do not add a block for data that another dimension or plugin already records.
 
-"Mistport Chronicles" (雾港・裂潮纪) includes such a file. For field details, see [World data reference](../reference/world-data.md).
+"Mistport: The Riftide Chronicle" (雾港・裂潮纪) includes such a file. For field details, see [World data reference](../reference/world-data.md).
 
 ## History Compaction (`history-compaction`)
 

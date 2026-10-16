@@ -267,7 +267,7 @@
   {
     "id": "npc-chen-yuanshan",
     "name": "陈远山",
-    "aliases": ["陈议长", "Councilor Chen"],
+    "aliases": ["陈议长", "Speaker Chen"],
     "type": "npc",
     "description": "雾港议会议长，年过六旬，精于权术。表面推行封潮令是为公共安全，私下却派亲信探险队反复深入下潮区。",
     "fields": {

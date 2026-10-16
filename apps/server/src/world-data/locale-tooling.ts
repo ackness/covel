@@ -7,7 +7,8 @@
  * counts as text by what it looks like: in a world written in Chinese,
  * Japanese or Korean, a string with characters of that script; in any other
  * world, a string under a field that is not an identifier, with a space or a
- * capital letter. The result is a guide for a translator, not a gate.
+ * capital letter. Trigger-word lists (`keys`) always count as text. The
+ * result is a guide for a translator, not a gate.
  *
  * Dimension files are the exception: their schema says what is text. A
  * definition's name, description and update rule, a node's title and enum
@@ -195,14 +196,15 @@ function textUnits(
     }
     if (Array.isArray(value)) {
       // A list of plain texts is one unit: the locale file replaces the whole
-      // list. When one item is text, every item with a letter is translated
-      // (trigger words: `storm` beside `Crownfire`).
+      // list. Trigger words are text even when every word is lowercase;
+      // other lists need at least one item that reads as text.
       if (
         value.every((item) => typeof item === "string") &&
-        value.some((item) => isText(key, item as string, baseLocale))
+        (key === "keys" ||
+          value.some((item) => isText(key, item as string, baseLocale)))
       ) {
         value.forEach((item, index) => {
-          if (/\p{L}/u.test(item as string))
+          if (key === "keys" ? item.trim() : /\p{L}/u.test(item as string))
             add([...steps, { index }], item as string);
         });
         return;
@@ -393,6 +395,17 @@ function buildOverlay(
       return items.length > 0 ? items : undefined;
     }
     if (main.every((item) => typeof item === "string")) {
+      // A translated word list may have a different length. Rewriting other
+      // text in this file must not resize it to the source list.
+      if (
+        Array.isArray(existing) &&
+        !main.some((_, index) =>
+          translations.has(
+            `${source.file}#${pointerOf([...steps, { index }])}`,
+          ),
+        )
+      )
+        return existing;
       const items = main.map((item, index) =>
         buildOverlay(
           item,

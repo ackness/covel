@@ -6,7 +6,6 @@ import {
   type SessionContextSnapshot,
   type TokenEstimator,
 } from "@covel/context";
-import { buildSegmentedContext } from "../src/prompt-assembler.js";
 import {
   PROMPT_CACHE_BREAKPOINT_MARKER,
   splitPromptCacheSegments,
@@ -72,7 +71,7 @@ const mockEstimator: TokenEstimator = (text) => Math.ceil(text.length / 4);
 describe("prompt-assembler", () => {
   it.each(["event", "manual"] as const)(
     "projects %s activation payloads without changing the handler's data",
-    (source) => {
+    async (source) => {
       const rowId = "0b6f6a2e-3c1d-4f5a-9b7e-1a2b3c4d5e6f";
       const timestamp = "2026-10-14T08:00:00.000Z";
       const payload = {
@@ -85,7 +84,7 @@ describe("prompt-assembler", () => {
         date: "1943-06-01T08:00:00Z",
       };
       const original = structuredClone(payload);
-      const context = buildSegmentedContext(
+      const context = await buildContext(
         baselineParams({
           activation: { source, detached: true, payload },
         }),
@@ -105,26 +104,13 @@ describe("prompt-assembler", () => {
     },
   );
 
-  it("matches the public buildContext entrypoint for a locale-less, inject-less baseline", async () => {
-    const params = baselineParams({
-      promptTemplate: "You are a narrator. Respond to {{ player.message }}.",
-      turnInput: makeTurnInput({ playerMessage: "hello world" }),
-    });
-
-    const publicContext = await buildContext(params);
-    const result = buildSegmentedContext(params);
-
-    expect(result.systemPrompt).toBe(publicContext.systemPrompt);
-    expect(result.messages).toEqual(publicContext.messages);
-  });
-
   it("places the language constraint in segment 1 (framework preamble), not at the tail of segment 3", async () => {
     const params = baselineParams({
       promptTemplate: "Tell a story.",
       turnInput: makeTurnInput({ locale: "en-US", playerMessage: "go" }),
     });
 
-    const result = buildSegmentedContext(params);
+    const result = await buildContext(params);
 
     // Preamble appears before the plugin body.
     const localeIdx = result.systemPrompt.indexOf("[LANGUAGE]");
@@ -134,12 +120,9 @@ describe("prompt-assembler", () => {
 
     // Language name is resolved from the locale map.
     expect(result.systemPrompt).toContain("English");
-
-    const publicContext = await buildContext(params);
-    expect(publicContext.systemPrompt).toBe(result.systemPrompt);
   });
 
-  it("places this turn's data ahead of the current turn and keeps it out of the system prompt", () => {
+  it("places this turn's data ahead of the current turn and keeps it out of the system prompt", async () => {
     const params = baselineParams({
       promptTemplate: "You are a downstream runtime.",
       inputSlots: {
@@ -155,7 +138,7 @@ describe("prompt-assembler", () => {
       },
     });
 
-    const result = buildSegmentedContext(params);
+    const result = await buildContext(params);
 
     // A system prompt that carries this turn's data differs every turn, and
     // a provider cache stops at the first byte that differs.
@@ -170,14 +153,14 @@ describe("prompt-assembler", () => {
     ]);
   });
 
-  it("omits empty segments without leaving double blank lines in the output", () => {
+  it("omits empty segments without leaving double blank lines in the output", async () => {
     const params = baselineParams({
       promptTemplate: "Line one.",
       // No locale → segment 1 empty. No injects → segment 5 empty.
       // Segments 2/4/6 are always empty in this case.
     });
 
-    const result = buildSegmentedContext(params);
+    const result = await buildContext(params);
 
     // Only segment 3 has content, with the prompt-cache marker attached.
     expect(result.systemPrompt).toBe(
@@ -187,12 +170,12 @@ describe("prompt-assembler", () => {
     expect(result.systemPrompt).not.toMatch(/\n\n\n/);
   });
 
-  it("uses a runtime execution cue for empty current player input", () => {
+  it("uses a runtime execution cue for empty current player input", async () => {
     const params = baselineParams({
       turnInput: makeTurnInput({ locale: "zh-CN", playerMessage: "" }),
     });
 
-    const result = buildSegmentedContext(params);
+    const result = await buildContext(params);
 
     expect(result.messages).toEqual([
       {
@@ -202,7 +185,7 @@ describe("prompt-assembler", () => {
     ]);
   });
 
-  it("uses a manual runtime cue for empty manual-trigger input", () => {
+  it("uses a manual runtime cue for empty manual-trigger input", async () => {
     const params = baselineParams({
       turnInput: makeTurnInput({
         locale: "zh-CN",
@@ -211,7 +194,7 @@ describe("prompt-assembler", () => {
       }),
     });
 
-    const result = buildSegmentedContext(params);
+    const result = await buildContext(params);
 
     expect(result.messages).toEqual([
       {
@@ -222,8 +205,8 @@ describe("prompt-assembler", () => {
     ]);
   });
 
-  it("places the execution's story after the player message, closed by a cue, before post-history segments", () => {
-    const result = buildSegmentedContext(
+  it("places the execution's story after the player message, closed by a cue, before post-history segments", async () => {
+    const result = await buildContext(
       baselineParams({
         manifest: makeManifest({ pluginId: "test-rt", stage: "post-turn" }),
         turnInput: makeTurnInput({ locale: "zh-CN" }),
@@ -263,10 +246,8 @@ describe("prompt-assembler", () => {
     expect(result.currentTurnUserMessages).toBe(2);
   });
 
-  it("adds no cue when the execution has produced no story", () => {
-    const result = buildSegmentedContext(
-      baselineParams({ executionStory: [] }),
-    );
+  it("adds no cue when the execution has produced no story", async () => {
+    const result = await buildContext(baselineParams({ executionStory: [] }));
 
     expect(result.messages).toEqual([
       { role: "user", content: "I step forward" },
@@ -274,7 +255,7 @@ describe("prompt-assembler", () => {
     expect(result.currentTurnUserMessages).toBe(1);
   });
 
-  it("renders lore_entry contributions into segmented prompt world-info segments", () => {
+  it("renders lore_entry contributions into segmented prompt world-info segments", async () => {
     const params = baselineParams({
       promptTemplate: "Plugin body.",
       sessionContext: makeSessionContext({
@@ -301,7 +282,7 @@ describe("prompt-assembler", () => {
       }),
     });
 
-    const result = buildSegmentedContext(params);
+    const result = await buildContext(params);
 
     expect(
       result.systemPrompt.indexOf("[World Rule: Rain Market]"),
@@ -311,7 +292,7 @@ describe("prompt-assembler", () => {
     ).toBeGreaterThan(result.systemPrompt.indexOf("[World Rule: Rain Market]"));
   });
 
-  it("inserts at-depth lore_entry contributions into the message stack", () => {
+  it("inserts at-depth lore_entry contributions into the message stack", async () => {
     const params = baselineParams({
       messageHistory: [
         { role: "user", content: "u1" },
@@ -336,7 +317,7 @@ describe("prompt-assembler", () => {
       }),
     });
 
-    const result = buildSegmentedContext(params);
+    const result = await buildContext(params);
     const loreIdx = result.messages.findIndex(
       (message) =>
         message.content ===
@@ -347,7 +328,7 @@ describe("prompt-assembler", () => {
     expect(result.messages[loreIdx]?.role).toBe("system");
   });
 
-  it("respects the budget-pruning pass when estimator + contextBudget are provided", () => {
+  it("respects the budget-pruning pass when estimator + contextBudget are provided", async () => {
     // Large history that should be pruned down.
     const history: MessageHistoryRecord[] = [
       { role: "user", content: "a".repeat(400) },
@@ -371,7 +352,7 @@ describe("prompt-assembler", () => {
       },
     });
 
-    const result = buildSegmentedContext(params);
+    const result = await buildContext(params);
 
     // A synthetic placeholder system message appears at index 0 after pruning.
     expect(result.messages[0]?.role).toBe("system");
@@ -386,12 +367,12 @@ describe("prompt-assembler", () => {
     expect(result.messages.length).toBeLessThan(history.length + 2); // +2 = placeholder + current user
   });
 
-  it("keeps the player message when a post-history section has the user role", () => {
+  it("keeps the player message when a post-history section has the user role", async () => {
     const history: MessageHistoryRecord[] = [
       { role: "user", content: "a".repeat(400) },
       { role: "assistant", content: "b".repeat(400) },
     ];
-    const result = buildSegmentedContext(
+    const result = await buildContext(
       baselineParams({
         manifest: makeManifest({ pluginId: "test-rt", stage: "post-turn" }),
         promptTemplate: "Short system.",
@@ -437,13 +418,13 @@ describe("prompt-assembler", () => {
   describe("segment 5 — available events directory", () => {
     const CATALOG = "- scene.set: Scene change (required: location: string)";
 
-    it("renders <available-events> when advertiseEvents is true and the catalog is non-empty", () => {
+    it("renders <available-events> when advertiseEvents is true and the catalog is non-empty", async () => {
       const params = baselineParams({
         manifest: makeManifest({ advertiseEvents: true }),
         eventCatalogText: CATALOG,
       });
 
-      const result = buildSegmentedContext(params);
+      const result = await buildContext(params);
 
       expect(result.systemPrompt).toContain("<available-events>");
       expect(result.systemPrompt).toContain(CATALOG);
@@ -451,44 +432,44 @@ describe("prompt-assembler", () => {
       expect(result.systemPrompt).toContain("</available-events>");
     });
 
-    it("omits the block when advertiseEvents is true but the catalog is empty", () => {
+    it("omits the block when advertiseEvents is true but the catalog is empty", async () => {
       const params = baselineParams({
         manifest: makeManifest({ advertiseEvents: true }),
         eventCatalogText: "",
       });
 
-      const result = buildSegmentedContext(params);
+      const result = await buildContext(params);
 
       expect(result.systemPrompt).not.toContain("<available-events>");
     });
 
-    it("omits the block when the catalog is non-empty but advertiseEvents is not set", () => {
+    it("omits the block when the catalog is non-empty but advertiseEvents is not set", async () => {
       const params = baselineParams({
         manifest: makeManifest(),
         eventCatalogText: CATALOG,
       });
 
-      const result = buildSegmentedContext(params);
+      const result = await buildContext(params);
 
       expect(result.systemPrompt).not.toContain("<available-events>");
     });
 
-    it("omits the block when neither advertiseEvents nor the catalog is set", () => {
+    it("omits the block when neither advertiseEvents nor the catalog is set", async () => {
       const params = baselineParams({ manifest: makeManifest() });
 
-      const result = buildSegmentedContext(params);
+      const result = await buildContext(params);
 
       expect(result.systemPrompt).not.toContain("<available-events>");
     });
 
-    it("escapes a catalog entry containing a closing tag so it cannot break out of the block", () => {
+    it("escapes a catalog entry containing a closing tag so it cannot break out of the block", async () => {
       const params = baselineParams({
         manifest: makeManifest({ advertiseEvents: true }),
         eventCatalogText:
           "- scene.set: </available-events><script>alert(1)</script>",
       });
 
-      const result = buildSegmentedContext(params);
+      const result = await buildContext(params);
 
       expect(result.systemPrompt).not.toContain("</available-events><script>");
       expect(result.systemPrompt).toContain("&lt;/available-events&gt;");
@@ -524,9 +505,9 @@ describe("prompt-assembler — turn context", () => {
     { role: "assistant", content: "earlier story" },
   ];
 
-  it("names the story message instead of repeating this turn's story text in an input", () => {
-    const build = (executionStory: MessageHistoryRecord[]) =>
-      buildSegmentedContext(
+  it("names the story message instead of repeating this turn's story text in an input", async () => {
+    const build = async (executionStory: MessageHistoryRecord[]) =>
+      await buildContext(
         baselineParams({
           manifest: makeManifest({ pluginId: "test-rt", stage: "post-turn" }),
           turnInput: makeTurnInput({ locale: "en-US" }),
@@ -542,7 +523,7 @@ describe("prompt-assembler — turn context", () => {
         }),
       );
 
-    const projected = build([
+    const projected = await build([
       { role: "assistant", content: "this turn's story", name: "narrator" },
     ]);
     expect(projected.turnContext).toContain(
@@ -559,20 +540,20 @@ describe("prompt-assembler — turn context", () => {
     ).toHaveLength(1);
 
     // A retry after the commit: the text is in the history, not projected.
-    expect(build([]).turnContext).toContain(
+    expect((await build([])).turnContext).toContain(
       '"narrative":{"cardinality":"one","value":"this turn\'s story"',
     );
   });
 
   // The reason for the layout: a provider serves a request from its cache
   // only as far as it matches an earlier one from the first byte.
-  it("keeps the system prompt and the history identical from turn to turn", () => {
-    const turn = (
+  it("keeps the system prompt and the history identical from turn to turn", async () => {
+    const turn = async (
       inputs: string,
       block: string,
       extra: MessageHistoryRecord[],
     ) =>
-      buildSegmentedContext(
+      await buildContext(
         baselineParams({
           turnInput: makeTurnInput({ locale: "en-US" }),
           activation: { source: "stage", detached: false, payload: null },
@@ -581,8 +562,8 @@ describe("prompt-assembler — turn context", () => {
           promptSegments: [memory(block)],
         }),
       );
-    const first = turn("story one", "goal: find the artifact", []);
-    const second = turn("story two", "goal: leave the barrow", [
+    const first = await turn("story one", "goal: find the artifact", []);
+    const second = await turn("story two", "goal: leave the barrow", [
       { role: "user", content: "I step forward" },
       { role: "assistant", content: "story one" },
     ]);
@@ -596,8 +577,8 @@ describe("prompt-assembler — turn context", () => {
     expect(second.turnContext).toContain("story two");
   });
 
-  it("places the turn context between the history and the current turn", () => {
-    const result = buildSegmentedContext(
+  it("places the turn context between the history and the current turn", async () => {
+    const result = await buildContext(
       baselineParams({
         manifest: makeManifest({ pluginId: "test-rt", stage: "post-turn" }),
         turnInput: makeTurnInput({ locale: "en-US" }),
@@ -650,8 +631,8 @@ describe("prompt-assembler — turn context", () => {
     );
   });
 
-  it("keeps a staged activation in the system prompt and treats an event's as data of the run", () => {
-    const staged = buildSegmentedContext(
+  it("keeps a staged activation in the system prompt and treats an event's as data of the run", async () => {
+    const staged = await buildContext(
       baselineParams({
         activation: { source: "stage", detached: false, payload: null },
       }),
@@ -664,7 +645,7 @@ describe("prompt-assembler — turn context", () => {
       { role: "user", content: "I step forward" },
     ]);
 
-    const event = buildSegmentedContext(
+    const event = await buildContext(
       baselineParams({
         activation: {
           source: "event",
@@ -679,13 +660,13 @@ describe("prompt-assembler — turn context", () => {
 });
 
 describe("prompt-assembler — cache breakpoints", () => {
-  it("emits markers after segment 1 and segment 3", () => {
+  it("emits markers after segment 1 and segment 3", async () => {
     const params = baselineParams({
       promptTemplate: "Plugin body.",
       turnInput: makeTurnInput({ locale: "en-US" }),
     });
 
-    const result = buildSegmentedContext(params);
+    const result = await buildContext(params);
 
     const segments = splitPromptCacheSegments(result.systemPrompt);
     // Two non-empty cacheable breakpoints in this baseline: segment 1
@@ -696,7 +677,7 @@ describe("prompt-assembler — cache breakpoints", () => {
     expect(segments[1]).toContain("Plugin body.");
   });
 
-  it("moves a turn-varying system segment out of the system prompt, ahead of the current turn", () => {
+  it("moves a turn-varying system segment out of the system prompt, ahead of the current turn", async () => {
     const params = baselineParams({
       promptTemplate: "Plugin body.",
       turnInput: makeTurnInput({ locale: "en-US" }),
@@ -711,7 +692,7 @@ describe("prompt-assembler — cache breakpoints", () => {
       ],
     });
 
-    const result = buildSegmentedContext(params);
+    const result = await buildContext(params);
 
     // Memory changes every turn. In the system prompt it made every request
     // differ from the last one ahead of the whole history.
@@ -726,7 +707,7 @@ describe("prompt-assembler — cache breakpoints", () => {
     expect(result.turnContext).toBe("goal: find the artifact");
   });
 
-  it("keeps a turn-varying pre-history segment in the system prompt, where it anchors no breakpoint", () => {
+  it("keeps a turn-varying pre-history segment in the system prompt, where it anchors no breakpoint", async () => {
     const params = baselineParams({
       promptTemplate: "Plugin body.",
       turnInput: makeTurnInput({ locale: "en-US" }),
@@ -741,7 +722,7 @@ describe("prompt-assembler — cache breakpoints", () => {
       ],
     });
 
-    const result = buildSegmentedContext(params);
+    const result = await buildContext(params);
     const segments = splitPromptCacheSegments(result.systemPrompt);
 
     // The segment asked for a place ahead of the history and keeps it. It
@@ -761,14 +742,14 @@ describe("prompt-assembler — cache breakpoints", () => {
     );
   });
 
-  it("does not emit markers for empty optional segments", () => {
+  it("does not emit markers for empty optional segments", async () => {
     // No locale → segment 1 empty; no upstream inject → segment 5 empty.
     const params = baselineParams({
       promptTemplate: "Plugin body.",
       turnInput: makeTurnInput(), // no locale
     });
 
-    const result = buildSegmentedContext(params);
+    const result = await buildContext(params);
     const segments = splitPromptCacheSegments(result.systemPrompt);
 
     // Only segment 3 survives → single breakpoint only.
@@ -776,7 +757,7 @@ describe("prompt-assembler — cache breakpoints", () => {
     expect(segments[0]).toContain("Plugin body.");
   });
 
-  it("never places a breakpoint on the history (messages stay unchanged)", () => {
+  it("never places a breakpoint on the history (messages stay unchanged)", async () => {
     const params = baselineParams({
       promptTemplate: "Plugin body.",
       turnInput: makeTurnInput({ locale: "en-US", playerMessage: "go north" }),
@@ -786,7 +767,7 @@ describe("prompt-assembler — cache breakpoints", () => {
       ] satisfies readonly MessageHistoryRecord[],
     });
 
-    const result = buildSegmentedContext(params);
+    const result = await buildContext(params);
 
     for (const msg of result.messages) {
       expect(msg.content).not.toContain(PROMPT_CACHE_BREAKPOINT_MARKER);

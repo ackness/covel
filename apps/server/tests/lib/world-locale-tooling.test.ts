@@ -261,10 +261,15 @@ describe("world translation tooling", () => {
       string,
       unknown
     >[];
-    await writeFile(
-      target,
-      (await readFile(target, "utf-8")).replace(/^(\s+)description: .*$/m, ""),
-    );
+    // Edit the parsed file: a long description may be wrapped onto the next line.
+    const entries = parseYaml(await readFile(target, "utf-8")) as Record<
+      string,
+      unknown
+    >[];
+    const first = entries[0];
+    if (!first) throw new Error("data/quests.en-US.yaml has no entries");
+    delete first.description;
+    await writeFile(target, stringifyYaml(entries));
     const missing = (
       await worldTranslationStatus(worldDir, "en-US")
     ).files.find((file) => file.file === "data/quests.yaml")!.missing;
@@ -281,6 +286,108 @@ describe("world translation tooling", () => {
     >[];
     expect(after[0]!.name).toBe(before[0]!.name);
     expect(JSON.stringify(after)).toContain("A new description.");
+  });
+
+  it.each(["en-US", "zh-CN"])(
+    "counts lowercase trigger words in a %s source without translating identifiers",
+    async (baseLocale) => {
+      const manifestPath = path.join(worldDir, "world.yaml");
+      await writeFile(
+        manifestPath,
+        stringifyYaml({
+          ...parseYaml(await readFile(manifestPath, "utf-8")),
+          defaultLocale: baseLocale,
+        }),
+      );
+      await writeFile(
+        path.join(worldDir, "data/lorebook.yaml"),
+        stringifyYaml([
+          {
+            id: "echo",
+            strategy: "selective",
+            keys: ["echo", "signal"],
+            content: "Echo traffic.",
+          },
+        ]),
+      );
+      const status = await worldTranslationStatus(worldDir, "ja-JP");
+      const lore = status.files.find(
+        (file) => file.file === "data/lorebook.yaml",
+      )!;
+      expect(
+        lore.missing
+          .filter((unit) => unit.pointer.includes(".keys["))
+          .map((unit) => unit.text),
+      ).toEqual(["echo", "signal"]);
+      const pointers = lore.missing.map((unit) => unit.pointer);
+      expect(pointers).not.toContain("[id=echo].id");
+      expect(pointers).not.toContain("[id=echo].strategy");
+      expect(
+        status.files
+          .find((file) => file.file === "world.yaml")!
+          .missing.map((unit) => unit.pointer),
+      ).not.toContain("id");
+    },
+  );
+
+  it.each([
+    { keys: ["反響"] },
+    { keys: ["反響", "信号"] },
+    { keys: ["反響", "信号", "合図"] },
+  ])(
+    "keeps an existing translated trigger list $keys when translating other text again",
+    async ({ keys }) => {
+      const file = "data/lorebook.yaml";
+      const target = path.join(worldDir, "data/lorebook.ja-JP.yaml");
+      await writeFile(
+        path.join(worldDir, file),
+        stringifyYaml([
+          {
+            id: "echo",
+            strategy: "selective",
+            keys: ["echo", "signal"],
+            content: "Echo traffic.",
+          },
+        ]),
+      );
+      await writeFile(target, stringifyYaml([{ id: "echo", keys }]));
+      await writeWorldTranslations(
+        worldDir,
+        "ja-JP",
+        new Map([[`${file}#[id=echo].content`, "反響の通信。"]]),
+      );
+      expect(parseYaml(await readFile(target, "utf-8"))).toEqual([
+        { id: "echo", keys, content: "反響の通信。" },
+      ]);
+    },
+  );
+
+  it("keeps existing trigger-word translations by position when updating one word", async () => {
+    const file = "data/lorebook.yaml";
+    const target = path.join(worldDir, "data/lorebook.ja-JP.yaml");
+    await writeFile(
+      path.join(worldDir, file),
+      stringifyYaml([
+        {
+          id: "echo",
+          strategy: "selective",
+          keys: ["echo", "signal"],
+          content: "Echo traffic.",
+        },
+      ]),
+    );
+    await writeFile(
+      target,
+      stringifyYaml([{ id: "echo", keys: ["反響", "合図"] }]),
+    );
+    await writeWorldTranslations(
+      worldDir,
+      "ja-JP",
+      new Map([[`${file}#[id=echo].keys[1]`, "信号"]]),
+    );
+    expect(parseYaml(await readFile(target, "utf-8"))).toEqual([
+      { id: "echo", keys: ["反響", "信号"] },
+    ]);
   });
 });
 
@@ -318,7 +425,7 @@ describe("world translation tooling: what counts as text", () => {
     expect(cast.terms).toContainEqual({ source: "苏窈", target: "Su Yao" });
   });
 
-  it("takes a list of trigger words as text when one of them is", async () => {
+  it("counts lowercase trigger lists in both rules and lorebook entries", async () => {
     const status = await worldTranslationStatus(
       path.join(repoRoot, "worlds/emberback"),
       "ja-JP",
@@ -331,5 +438,25 @@ describe("world translation tooling: what counts as text", () => {
       .map((unit) => unit.text);
     // `storm` alone is a lowercase word; beside `Crownfire` it is a trigger.
     expect(keys).toEqual(expect.arrayContaining(["Crownfire", "storm"]));
+    expect(rules.missing).toContainEqual(
+      expect.objectContaining({
+        pointer: "[id=emberback-future-echoes].keys[0]",
+        text: "echo",
+      }),
+    );
+    expect(rules.missing).toContainEqual(
+      expect.objectContaining({
+        pointer: "[id=emberback-signal-evidence].keys[0]",
+        text: "radio",
+      }),
+    );
+    expect(
+      status.files.find((file) => file.file === "data/lorebook.yaml")!.missing,
+    ).toContainEqual(
+      expect.objectContaining({
+        pointer: "[id=echo-traffic].keys[1]",
+        text: "signal",
+      }),
+    );
   });
 });

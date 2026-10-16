@@ -399,6 +399,7 @@ agent:
 有几个完成工具，或者没有变化时要调用 `runtime-done`，就写完整的 `completion`。`finishWith` 和 `completion` 只能写一个。
 
 - `completion.afterTools`：列出的工具成功后就结束。
+- 需要模型读完工具结果再修改时，使用 `completion.require: tool-use` 并省略 `afterTools`。例如角色创建会先返回填好的叙事，模型复核后才结束。
 - `completion.require: explicit`：要以一次成功的完成工具调用，或一次 `runtime-done` 结束。`io.visibility: story` 的 runtime 不能用它。
 - `completion.require: tool-use`：声明了非空的 `afterTools` 时，至少一个列出的完成工具必须成功。没有列表时，任意成功的业务工具调用都算。失败的调用和 `runtime-done` 不算。
 - 模型只回了纯文本，或者调用了 `runtime-done`，而这时还没有这样的调用：框架先注入一次纠正提示，仍未完成才判为失败。所以“无变化”也要通过业务工具提交一个空结果。
@@ -1004,7 +1005,7 @@ pnpm lint
 
 ## 内置插件一览
 
-下面是 [plugins/](../../plugins/) 里随 Covel 内置的全部插件（不含 `_archive/`）。`kind: core` 表示这个插件默认加入每一局游戏，玩家可以明确排除；`kind: plugin` 要选了才启用。“runtime”一列里，“内联”表示只有根文件里的一个 runtime，“无”表示只有 entry、扩展或界面。
+下面是 [plugins/](../../plugins/) 里随 Covel 内置的全部插件。`kind: core` 表示这个插件默认加入每一局游戏，玩家可以明确排除；`kind: plugin` 要选了才启用。“runtime”一列里，“内联”表示只有根文件里的一个 runtime，“无”表示只有 entry、扩展或界面。
 
 <!-- prettier-ignore -->
 | ID | 名称 | `kind` | 提供的契约 | runtime | 做什么 |

@@ -10,6 +10,8 @@ import type { PluginSummary } from "@covel/shared";
 import i18n from "@/i18n";
 import { describeProviderFailure } from "@/lib/provider-failure-hint.js";
 import { ExecutionTimeline } from "../execution-timeline.js";
+import { buildSnapshotExecutionSteps } from "@/stores/session-store/snapshot-execution-steps.js";
+import type { ExecutionStep } from "@/stores/session-store.js";
 
 function plugin(
   id: string,
@@ -43,6 +45,194 @@ describe("ExecutionTimeline plugin names", () => {
   });
 
   afterEach(() => cleanup());
+
+  it("mutes only the recovery-owned row and restores task retries when its notice leaves", () => {
+    const retry = vi.fn();
+    const steps: ExecutionStep[] = ["older", "latest"].map((turnId) => ({
+      runtimeId: "story",
+      pluginId: "story",
+      turnId,
+      status: "failed",
+      detail: "401 Unauthorized",
+      attemptStatus: "failed",
+    }));
+    const { rerender } = render(
+      <ExecutionTimeline
+        steps={steps}
+        executing={false}
+        recoveryTurnId="latest"
+        onRetryRuntime={retry}
+      />,
+    );
+    const [older, latest] = screen.getAllByTestId("execution-turn");
+    expect(older).toBeTruthy();
+    expect(latest).toBeTruthy();
+    const oldRow = within(older!);
+    const latestRow = within(latest!);
+    expect(
+      oldRow
+        .getByText(i18n.t("session.executionState.failed"))
+        .classList.contains("text-destructive"),
+    ).toBe(true);
+    expect(
+      latestRow
+        .getByText(i18n.t("session.executionState.failed"))
+        .classList.contains("text-muted-foreground"),
+    ).toBe(true);
+    expect(
+      latestRow
+        .getByText("Failed: 1")
+        .classList.contains("text-muted-foreground"),
+    ).toBe(true);
+    expect(screen.queryByRole("button", { name: /Retry/ })).toBeNull();
+    fireEvent.click(latestRow.getByRole("button", { name: /Execution/ }));
+    expect(latestRow.getByRole("alert")).toBeTruthy();
+    fireEvent.click(latestRow.getByRole("button", { name: "Show details" }));
+    expect(latestRow.getByText("401 Unauthorized")).toBeTruthy();
+    expect(latestRow.queryByRole("button", { name: /Retry/ })).toBeNull();
+    rerender(
+      <ExecutionTimeline
+        steps={steps}
+        executing={false}
+        onRetryRuntime={retry}
+      />,
+    );
+    expect(
+      latestRow
+        .getByText(i18n.t("session.executionState.failed"))
+        .classList.contains("text-destructive"),
+    ).toBe(true);
+    fireEvent.click(latestRow.getByRole("button", { name: "Retry this task" }));
+    expect(retry).toHaveBeenCalledExactlyOnceWith("story", "latest");
+  });
+
+  it("keeps setup attempts neutral and leaves every retry to the setup notice", () => {
+    const retry = vi.fn();
+    render(
+      <ExecutionTimeline
+        executing={false}
+        onRetryRuntime={retry}
+        steps={["first", "second"].flatMap((turnId) => [
+          {
+            runtimeId: "opening",
+            pluginId: "opening",
+            turnId,
+            stage: "setup" as const,
+            status: "completed" as const,
+          },
+          {
+            runtimeId: "world/setup",
+            pluginId: "world",
+            turnId,
+            stage: "setup" as const,
+            status: "failed" as const,
+            detail: "401 Unauthorized",
+          },
+        ])}
+      />,
+    );
+    expect(screen.getAllByText("Opening setup · 2 tasks")).toHaveLength(2);
+    expect(screen.getAllByText("Failed: 1")).toHaveLength(2);
+    expect(
+      screen.queryByText(i18n.t("session.executionState.partial")),
+    ).toBeNull();
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.queryByRole("button", { name: /Retry/ })).toBeNull();
+    for (const summary of screen.getAllByRole("button", {
+      name: /Opening setup/,
+    })) {
+      fireEvent.click(summary);
+    }
+    expect(screen.getAllByRole("alert")).toHaveLength(2);
+    expect(screen.queryByRole("button", { name: /Retry/ })).toBeNull();
+    expect(screen.queryByText(i18n.t("session.partialCompletion"))).toBeNull();
+    for (const detail of screen.getAllByRole("button", {
+      name: "Show details",
+    })) {
+      fireEvent.click(detail);
+    }
+    expect(screen.getAllByText("401 Unauthorized")).toHaveLength(2);
+    expect(retry).not.toHaveBeenCalled();
+  });
+
+  it("keeps restored setup history neutral beside a later playing execution", () => {
+    // The same runtime IDs can appear later; use each execution's recorded stage.
+    const steps = buildSnapshotExecutionSteps(
+      (["first", "second", "playing"] as const).flatMap((turnId) => {
+        const base = { turnId, timestamp: "2026-10-16T00:00:00Z" };
+        const setup = turnId !== "playing";
+        return [
+          {
+            ...base,
+            type: "runtime.started",
+            payload: {
+              runtimeId: "opening",
+              pluginId: "opening",
+              stage: setup ? "setup" : "narrative",
+            },
+          },
+          {
+            ...base,
+            type: "runtime.completed",
+            payload: {
+              runtimeId: "opening",
+              pluginId: "opening",
+              status: "success",
+            },
+          },
+          {
+            ...base,
+            type: "runtime.started",
+            payload: {
+              runtimeId: "world",
+              pluginId: "world",
+              stage: setup ? "setup" : "post-turn",
+            },
+          },
+          {
+            ...base,
+            type: "runtime.failed",
+            payload: {
+              runtimeId: "world",
+              pluginId: "world",
+              error: "401 Unauthorized",
+            },
+          },
+          { ...base, type: "turn.completed", payload: { committed: !setup } },
+        ];
+      }),
+    );
+    render(
+      <ExecutionTimeline
+        steps={steps}
+        executing={false}
+        onRetryRuntime={vi.fn()}
+      />,
+    );
+    for (const turnId of ["first", "second"]) {
+      const row = within(
+        screen
+          .getAllByTestId("execution-turn")
+          .find((element) => element.getAttribute("data-turn-id") === turnId)!,
+      );
+      expect(row.getByText("Opening setup · 2 tasks")).toBeTruthy();
+      expect(
+        row.queryByText(i18n.t("session.executionState.partial")),
+      ).toBeNull();
+      expect(
+        row.getByText("Failed: 1").classList.contains("text-muted-foreground"),
+      ).toBe(true);
+      fireEvent.click(row.getByRole("button", { name: /Opening setup/ }));
+      expect(row.getByRole("alert")).toBeTruthy();
+      expect(row.queryByRole("button", { name: /Retry/ })).toBeNull();
+    }
+    expect(
+      screen.getAllByText(i18n.t("session.executionState.partial")),
+    ).toHaveLength(1);
+    expect(
+      screen.getByRole("button", { name: "Retry this task" }),
+    ).toBeTruthy();
+  });
 
   it("resolves short manifest locale keys in an English UI", () => {
     render(

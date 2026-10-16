@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createMemoryStore } from "@covel/store/memory";
 import type { DataStore } from "@covel/store";
 import type { JsonValue, RuntimeManifest } from "@covel/shared";
-import { executeTurn } from "../src/turn-executor/turn-executor.js";
+import { runTurnPipeline } from "../src/turn-executor/turn-executor.js";
 import {
   collectExecutionJournal,
   collectExecutionTriggers,
@@ -34,7 +34,7 @@ async function playTurn(
   options: { readonly rollback?: boolean } = {},
 ): Promise<readonly string[]> {
   const turnId = `turn-${turn}`;
-  const result = await executeTurn(
+  const result = await runTurnPipeline(
     {
       sessionId: "s",
       turnId,
@@ -124,7 +124,7 @@ describe("runtime trigger ledger", () => {
       trigger: { type: "auto" as const, cooldownTurns: 1000 },
     };
     const run = async (turn: number) =>
-      executeTurn(
+      runTurnPipeline(
         {
           sessionId: "s",
           turnId: `long-${turn}`,

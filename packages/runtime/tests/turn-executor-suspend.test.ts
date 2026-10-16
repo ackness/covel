@@ -6,7 +6,7 @@
  * - Function runtime: handler returns { status: 'suspended' } → same flow
  * - Flag-off: sentinel treated as normal tool result, no suspension created
  * - Partial content and tool calls before suspend are captured in pendingContinuation
- * - resumeSuspendedRuntime: reconstructs messages, runs LLM loop, marks resolved, emits turn.resumed
+ * - resumeRuntimePipeline: reconstructs messages, runs LLM loop, marks resolved, emits turn.resumed
  */
 
 import { describe, it, expect, beforeEach, vi } from "vitest";
@@ -23,15 +23,11 @@ import type { EventBus } from "@covel/events";
 import { createHookPipeline } from "../src/index.js";
 import { collectExecutionSuspensions } from "../src/suspension-artifact.js";
 import {
-  executeTurn,
-  resumeSuspendedRuntime,
+  runTurnPipeline,
+  resumeRuntimePipeline,
 } from "../src/turn-executor/turn-executor.js";
 import type { TurnExecutorDeps } from "../src/turn-executor/turn-executor.js";
-import type {
-  LLMAdapter,
-  LLMMessage,
-  LLMResponse,
-} from "../src/llm/llm-adapter.js";
+import type { LLMAdapter, LLMMessage, LLMResponse } from "@covel/shared";
 import type {
   ToolExecutor,
   ToolCallContext,
@@ -55,7 +51,6 @@ function makeManifest(overrides?: Partial<RuntimeManifest>): RuntimeManifest {
     name: "test-plugin",
     pluginId: "test-plugin",
     description: "test-plugin",
-    pluginType: "plugin",
     stage: "narrative",
     trigger: { type: "auto" },
     model: "gpt-4o-mini",
@@ -211,7 +206,11 @@ describe("TurnExecutor — agent runtime suspend", () => {
       eventBus,
     };
 
-    const result = await executeTurn(makeTurnInput(), [agentManifest], deps);
+    const result = await runTurnPipeline(
+      makeTurnInput(),
+      [agentManifest],
+      deps,
+    );
 
     expect(result.runtimeResults).toHaveLength(1);
     const rr = result.runtimeResults[0]!;
@@ -268,7 +267,7 @@ describe("TurnExecutor — agent runtime suspend", () => {
       eventBus,
     };
 
-    const turn = await executeTurn(
+    const turn = await runTurnPipeline(
       makeTurnInput({ sessionId: "sess-42", turnId: "turn-7" }),
       [agentManifest],
       deps,
@@ -331,7 +330,7 @@ describe("TurnExecutor — agent runtime suspend", () => {
       parsedResult: { _covelSuspend: true, ...suspendArgs },
       success: true,
     });
-    const turn = await executeTurn(makeTurnInput(), [agentManifest], {
+    const turn = await runTurnPipeline(makeTurnInput(), [agentManifest], {
       loadRuntime: async () => agentLoaded,
       llm: mockLLM,
       store,
@@ -341,7 +340,7 @@ describe("TurnExecutor — agent runtime suspend", () => {
     const suspension = collectExecutionSuspensions(turn)[0]!;
 
     let resumed: readonly LLMMessage[] = [];
-    await resumeSuspendedRuntime(suspension, { name: "Alice" }, agentManifest, {
+    await resumeRuntimePipeline(suspension, { name: "Alice" }, agentManifest, {
       loadRuntime: async () => agentLoaded,
       llm: {
         generate: async (params) => {
@@ -415,7 +414,7 @@ describe("TurnExecutor — agent runtime suspend", () => {
       eventBus,
     };
 
-    const turn = await executeTurn(makeTurnInput(), [agentManifest], deps);
+    const turn = await runTurnPipeline(makeTurnInput(), [agentManifest], deps);
 
     const suspensions = collectExecutionSuspensions(turn);
     expect(suspensions).toHaveLength(1);
@@ -506,7 +505,7 @@ describe("TurnExecutor — agent runtime suspend", () => {
       eventBus,
     };
 
-    const turn = await executeTurn(makeTurnInput(), [agentManifest], deps);
+    const turn = await runTurnPipeline(makeTurnInput(), [agentManifest], deps);
 
     const suspensions = collectExecutionSuspensions(turn);
     expect(suspensions).toHaveLength(1);
@@ -553,7 +552,13 @@ describe("TurnExecutor — agent runtime suspend", () => {
       parsedResult: {
         emitted: true,
         interaction: { interactionId: "clue-form", type: "form" },
-        ui: [{ id: "clue-card", type: "form" }],
+        ui: [
+          {
+            parts: [
+              { id: "clue-card", type: "form", status: "success", content: {} },
+            ],
+          },
+        ],
       },
       emittedEvents: [{ topic: "clue.found", data: { id: 1 } }],
       success: true,
@@ -567,7 +572,7 @@ describe("TurnExecutor — agent runtime suspend", () => {
     });
     const executeSpy = vi.spyOn(mockToolExecutor, "execute");
 
-    const turn = await executeTurn(makeTurnInput(), [agentManifest], {
+    const turn = await runTurnPipeline(makeTurnInput(), [agentManifest], {
       loadRuntime: async () => agentLoaded,
       llm: mockLLM,
       store,
@@ -594,7 +599,7 @@ describe("TurnExecutor — agent runtime suspend", () => {
 
     await store.saveSuspension(saved!);
     const resumedMessages: Array<Record<string, unknown>> = [];
-    const resumed = await resumeSuspendedRuntime(
+    const resumed = await resumeRuntimePipeline(
       saved!,
       { answer: "continue" },
       agentManifest,
@@ -634,7 +639,13 @@ describe("TurnExecutor — agent runtime suspend", () => {
     expect(resumed.effects?.interactions).toEqual([
       { interactionId: "clue-form", type: "form" },
     ]);
-    expect(resumed.effects?.ui).toEqual([{ id: "clue-card", type: "form" }]);
+    expect(resumed.effects?.ui).toEqual([
+      {
+        parts: [
+          { id: "clue-card", type: "form", status: "success", content: {} },
+        ],
+      },
+    ]);
     expect(resumed.output).not.toHaveProperty("ui");
   });
 
@@ -681,7 +692,7 @@ describe("TurnExecutor — agent runtime suspend", () => {
       eventBus,
     };
 
-    const turn = await executeTurn(makeTurnInput(), [agentManifest], deps);
+    const turn = await runTurnPipeline(makeTurnInput(), [agentManifest], deps);
 
     const suspendedEvent = events.find((e) => e.type === "turn.suspended");
     expect(suspendedEvent).toBeUndefined();
@@ -743,7 +754,7 @@ describe("TurnExecutor — function runtime suspend", () => {
       eventBus,
     };
 
-    const result = await executeTurn(
+    const result = await runTurnPipeline(
       makeTurnInput({ sessionId: "sess-fn", turnId: "turn-fn" }),
       [manifest],
       deps,
@@ -788,7 +799,7 @@ describe("TurnExecutor — function runtime suspend", () => {
       }),
     };
 
-    const result = await executeTurn(
+    const result = await runTurnPipeline(
       makeTurnInput({ sessionId: "sess-fn", turnId: "turn-envelope" }),
       [manifest],
       {
@@ -814,7 +825,6 @@ describe("TurnExecutor — function runtime suspend", () => {
   it("community function handler with forged core-plugin manifest gets a scoped store", async () => {
     const manifest = makeManifest({
       runtimeType: "function",
-      pluginType: "core-plugin",
     });
     let capturedStore: unknown;
     const loaded: LoadedRuntime = {
@@ -847,7 +857,7 @@ describe("TurnExecutor — function runtime suspend", () => {
       eventBus,
     };
 
-    const result = await executeTurn(makeTurnInput(), [manifest], deps);
+    const result = await runTurnPipeline(makeTurnInput(), [manifest], deps);
 
     expect(
       (result.runtimeResults[0]!.output as Record<string, unknown>)
@@ -858,7 +868,7 @@ describe("TurnExecutor — function runtime suspend", () => {
   });
 
   it("community agent guard gets the scoped helpers a function handler gets", async () => {
-    const manifest = makeManifest({ pluginType: "core-plugin" });
+    const manifest = makeManifest({});
     let capturedStore: unknown;
     let capturedPluginData: unknown;
     const loaded: LoadedRuntime = {
@@ -890,7 +900,7 @@ describe("TurnExecutor — function runtime suspend", () => {
       eventBus,
     };
 
-    const result = await executeTurn(makeTurnInput(), [manifest], deps);
+    const result = await runTurnPipeline(makeTurnInput(), [manifest], deps);
 
     expect(result.runtimeResults[0]!.status).toBe("skipped");
     expect(
@@ -902,9 +912,9 @@ describe("TurnExecutor — function runtime suspend", () => {
   });
 });
 
-// ── resumeSuspendedRuntime ────────────────────────────────────────
+// ── resumeRuntimePipeline ────────────────────────────────────────
 
-describe("resumeSuspendedRuntime", () => {
+describe("resumeRuntimePipeline", () => {
   let mockLLM: MockLLM;
   let mockToolExecutor: MockToolExecutor;
   let store: DataStore;
@@ -1002,7 +1012,7 @@ describe("resumeSuspendedRuntime", () => {
       eventBus,
     };
 
-    const result = await resumeSuspendedRuntime(
+    const result = await resumeRuntimePipeline(
       suspension!,
       { name: "Alice" },
       manifest,
@@ -1045,7 +1055,7 @@ describe("resumeSuspendedRuntime", () => {
         usage: { inputTokens: 1, outputTokens: 1 },
       },
     ]);
-    await resumeSuspendedRuntime(
+    await resumeRuntimePipeline(
       {
         ...suspension,
         pendingContinuation: { ...suspension.pendingContinuation, inputSlots },
@@ -1075,7 +1085,7 @@ describe("resumeSuspendedRuntime", () => {
     // Adapter that throws a transient (retriable) error on the first attempt,
     // then succeeds. Regression guard: the pre-refactor resume called
     // deps.llm.generate() directly with NO retry, so this first transient
-    // error would have propagated straight out of resumeSuspendedRuntime and
+    // error would have propagated straight out of resumeRuntimePipeline and
     // the resume would have thrown. Re-using the shared agent tool loop routes
     // resume through requestLLMResponse + the manifest-derived retry policy, so
     // the same hiccup the main loop already tolerated is now tolerated here.
@@ -1110,7 +1120,7 @@ describe("resumeSuspendedRuntime", () => {
       eventBus,
     };
 
-    const result = await resumeSuspendedRuntime(
+    const result = await resumeRuntimePipeline(
       suspension!,
       { name: "Frank" },
       manifest,
@@ -1166,7 +1176,7 @@ describe("resumeSuspendedRuntime", () => {
     };
 
     await expect(
-      resumeSuspendedRuntime(suspension!, { name: "Budget" }, manifest, deps),
+      resumeRuntimePipeline(suspension!, { name: "Budget" }, manifest, deps),
     ).resolves.toMatchObject({
       status: "failed",
       output: null,
@@ -1213,7 +1223,7 @@ describe("resumeSuspendedRuntime", () => {
     const manifest = makeManifest();
     const sentWith = async (currentTurnUserMessages?: number) => {
       let sent: readonly { content?: unknown }[] = [];
-      const result = await resumeSuspendedRuntime(
+      const result = await resumeRuntimePipeline(
         {
           id: "suspension-turn",
           sessionId: "sess-resume",
@@ -1313,7 +1323,7 @@ describe("resumeSuspendedRuntime", () => {
       hookPipeline,
     };
 
-    const result = await resumeSuspendedRuntime(
+    const result = await resumeRuntimePipeline(
       suspension!,
       { name: "Alice" },
       manifest,
@@ -1383,7 +1393,7 @@ describe("resumeSuspendedRuntime", () => {
       eventBus,
     };
 
-    const result = await resumeSuspendedRuntime(
+    const result = await resumeRuntimePipeline(
       refreshed!,
       { name: "Alice" },
       manifest,
@@ -1429,7 +1439,7 @@ describe("resumeSuspendedRuntime", () => {
       eventBus,
     };
 
-    const result = await resumeSuspendedRuntime(
+    const result = await resumeRuntimePipeline(
       suspension!,
       { name: "Bob" },
       manifest,
@@ -1475,7 +1485,7 @@ describe("resumeSuspendedRuntime", () => {
       eventBus,
     };
 
-    await resumeSuspendedRuntime(
+    await resumeRuntimePipeline(
       suspension!,
       { name: "Charlie" },
       manifest,
@@ -1518,7 +1528,7 @@ describe("resumeSuspendedRuntime", () => {
       eventBus,
     };
 
-    await resumeSuspendedRuntime(suspension!, { name: "Dave" }, manifest, deps);
+    await resumeRuntimePipeline(suspension!, { name: "Dave" }, manifest, deps);
 
     // There should be a tool message with the suspend tool call ID
     const toolMsg = capturedMessages.find(
@@ -1609,7 +1619,7 @@ describe("resumeSuspendedRuntime", () => {
       eventBus,
     };
 
-    const result = await resumeSuspendedRuntime(
+    const result = await resumeRuntimePipeline(
       suspension!,
       { answer: "yes" },
       manifest,
@@ -1642,7 +1652,7 @@ describe("resumeSuspendedRuntime", () => {
       eventBus,
     };
 
-    const result = await resumeSuspendedRuntime(
+    const result = await resumeRuntimePipeline(
       suspension!,
       { name: "Eve" },
       manifest,

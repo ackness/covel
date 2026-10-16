@@ -1,15 +1,15 @@
 - id: mistport-silence-protocol
   title: Survival in the Fog
-  content: Fog beasts hunt abrupt sound, light, and Tide-Force disturbances; they do not locate prey from nowhere. In thick fog, make cold fog-lamps, cloth-wrapped metal, hand signs, and evacuation marks concrete. If the player makes flame, impact, or a loud voice, first give perceptible signs of approach, then escalate the danger.
+  content: Fog beasts go after sudden sound and light and disturbances in Tide-Force; they do not find prey out of thin air. In thick fog, show the details — cold-light fog-lamps, cloth-wrapped metal, hand signals, evacuation marks. If the player lights an open flame, makes a loud impact or raises their voice, first give signs the player can notice that something is coming closer, and only then let the danger grow.
   keys:
     - fog beast
-    - sound
+    - noise
     - light
-    - fog-lamp
-    - evacuation
+    - lamp
+    - retreat
 - id: mistport-fog-truth
   title: Truth in the Fog
-  content: In Mistport the clues often contradict one another. Every investigation should preserve verifiable details, witness bias, and the drift of evidence caused by the tides, letting the player advance the truth by questioning and cross-checking rather than being handed a conclusion.
+  content: In Mistport, clues often contradict each other. Every investigation should keep verifiable details, the biases of witnesses, and the way the tides shift evidence, so that the player moves toward the truth by asking questions and comparing accounts rather than being handed a conclusion.
   keys:
     - fog
     - clue
@@ -17,61 +17,81 @@
     - tide
 - id: mistport-opening-leads
   title: The First Step After Three Bells
-  content: Do not unload the whole conspiracy at the opening. Su Yao's torn letter, the missing Appraisal Report 74 in the Sealed Archive, and the newly exposed Echo Gallery beyond the Seal Tide Gate are three cross-checkable beginnings; the Salt Fangs' hatch and a Council permit carry different costs. Give every scene at least one concrete lead to act on, and let Lin Yuanzhou, Iron Meg, Grey Falcon, or Frost push the investigation toward the next place through their own needs.
+  content: Do not dump the whole conspiracy at the start. Su Yao's half-letter, Appraisal Report 74 missing from the Guild's Sealed Archive, and the Echo Gallery newly uncovered beyond the Tide-Seal Gate are three starting points that can be checked against one another; the Salt Fangs' hidden hatch and a Council permit come at different prices. Give every scene at least one concrete lead the player can act on, and have one of Lin Yuanzhou, Iron Meg, Grey Falcon or Frost push the investigation on to the next place for reasons of their own.
   keys:
     - triple strike
-    - Qi's disappearance
-    - torn letter
-    - Report 74
-    - Echo Gallery
+    - three strikes
+    - three quick strikes
+    - three bells
+    - missing
+    - letter
+    - report
+    - gallery
 - id: mistport-tide-clock
   title: The Tide Clock
-  content: Flood tide, ebb tide, the tolling of the bell tower, and the Seal Tide Decree all change which places can be entered. Action choices should make the current tide-time explicit, letting time pressure shape the route of exploration; the deep-withdrawal alert (a triple strike) is a rare window of opportunity — and of danger.
+  content: The rising and falling tide, the clocktower bell and the Tide-Seal Decree all change where the player can go. When offering choices, make the current tide time clear and let the pressure of time shape the route; the deep ebb warning (three quick strikes) is a rare window of opportunity, and of danger.
   keys:
-    - flood tide
+    - rising tide
+    - flood
+    - high tide
+    - falling tide
     - ebb
-    - bell tower
-    - Tide-Seal
+    - low tide
+    - clocktower
+    - clock tower
+    - bell
+    - decree
     - route
 - id: mistport-ruin-whisper
   title: Whispers of the Ruins
-  content: Ancient relics bring knowledge, contamination, and trade value, with unpredictable effects. Handling a relic means weighing appraisal, the black market, the Congregation, the Council, and personal safety all at once; using an unappraised relic should carry real risk.
+  content: Ancient relics bring knowledge, contamination and trade value, and their effects cannot be predicted. Whenever a relic is in play, weigh all of these together — whether it has been appraised, the black market, the Congregation, the Council and the character's own safety. Using an unappraised relic should carry real risk.
   keys:
     - relic
     - appraisal
+    - appraise
+    - appraised
+    - appraising
     - black market
     - Congregation
     - risk
+    - risky
 - id: mistport-fog-rot
   title: Tide-Force and Fog-Rot
-  content: Channeling Tide-Force or using an active relic always has a price. Gains in power should come with accumulating fog-rot, bodily mutation, or the erosion of the mind — never a costless boost; fog-rot is irreversible, and the deeper into the Undertow, the more the price shows itself.
+  content: Guiding Tide-Force or using an active relic always has a price. Power should come with fog-rot building up, the body changing, or the mind being eaten away; no one gets stronger for free. Fog-rot cannot be undone, and the deeper into the Undertow, the more plainly the price shows.
   keys:
-    - tide-force
+    - Tide-Force
+    - Tide Force
     - fog-rot
+    - fog rot
     - price
+    - cost
     - mutation
-    - tide-warden
+    - mutate
+    - Tidewielder
+    - Tide wielder
 - id: mistport-faction-pressure
   title: The Four-Way Struggle
-  content: The Council, the Tide-Reader Guild, the Salt Fangs, and the Congregation of the Mist each react to the player's relic dealings and moves in the Undertow, their standing rising and falling against one another. When advancing the plot, foreground the cost of taking sides — pleasing one faction usually offends another, and there is no neutrality that leaves no mark.
+  content: The Council, the Tide-Reader Guild, the Salt Fangs and the Congregation of the Mist each react to the player's relic dealings and moves in the Undertow, and when one side gains, another loses. As the plot moves on, show first what it costs to take a side — pleasing one faction usually offends another, and no one stays neutral without leaving a trace.
   keys:
     - Council
     - Guild
-    - Salt Fangs
+    - Salt Fang
     - Congregation
+    - cult
+    - side
     - allegiance
 - id: mistport-deep-truth
   title: The Thing in the Deep
-  content: The Riftide, the thickening fog, Old Qi's disappearance, and the fragments of the "Key" all point, in the end, to something awakening in the deepest reach of the Undertow. This main thread should accumulate slowly, layer by layer, hinted at through clues and strange phenomena — never cheaply revealed in the early or middle game; the closer to the truth, the more oppressive the world's mood and the heavier the cost.
+  content: The Riftide, the thickening fog, Old Qi's disappearance and the fragments of the "Key" all point, in the end, to something waking in the deepest part of the Undertow. Build this main thread slowly, layer on layer, hinting through clues and strange signs; never give it away cheaply in the early or middle game. The closer the truth, the more oppressive the world feels and the heavier the cost.
   keys:
     - Riftide
-    - the deep
+    - deep
     - Key
     - cycle
     - truth
 - id: mistport-consequence-ledger
   title: Choices Leave Marks
-  content: A costly action should keep changing state instead of resetting next scene. Keep updating tide-time, location, vitality, stress, fog-rot, and personal trust as usual. The Case Board (clue status), Faction Standing (attitudes plus permits, warrants, and favors), the Deep Withdrawal stage, and the Key Fragments are settled from the narrative after each turn — so make those changes explicit on the page (who saw it, how evidence was corroborated or tainted, which tide sign sounded) and never contradict their current values. Write only changes the narrative has clearly caused, and carry each consequence into later scenes.
+  content: A costly action should keep changing the state of things, not reset by the next scene. Update tide time, location, vitality, stress, fog-rot and each character's trust as usual. The Case Board (lead status), Faction Standing (attitudes plus permits, warrants and favors), the Deep Ebb stage and the Key Fragments are settled from the narrative after each turn — so the narrative must make those changes clear and visible (who saw it, how evidence was corroborated or contaminated, how far the tide signals have got) and must go by their current values, never contradict them. Write only changes the narrative has clearly caused, and carry the consequences into later scenes.
   keys:
     - trust
     - stress

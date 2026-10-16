@@ -4,7 +4,7 @@ import { PluginPanel } from "../plugin-panel.js";
 import definitionSpec from "../../../../../../plugins/world-time/ui/definition-panel.json";
 import {
   __clearAllPluginDataForTest,
-  loadPluginData,
+  loadPluginDataForSession,
   setActiveSession,
 } from "@/stores/plugin-data-store.js";
 
@@ -21,7 +21,7 @@ afterEach(() => {
 
 it("shows authored time rules before any clock has been committed", async () => {
   setActiveSession("before-story");
-  loadPluginData("world-time", "definitions", [
+  loadPluginDataForSession("before-story", "world-time", "definitions", [
     {
       key: "world",
       value: {

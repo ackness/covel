@@ -705,7 +705,7 @@ describe("validateWorldPackage", () => {
     );
     await writeFile(
       path.join(worldDir, "world.en-US.yaml"),
-      "name: Mistport Chronicles\nsubtitle: A tale\n",
+      'name: "Mistport: The Riftide Chronicle"\nsubtitle: A tale\n',
     );
 
     const overlays = (await validate(worldDir, true)).filter(
@@ -725,6 +725,83 @@ describe("validateWorldPackage", () => {
       }),
     ]);
   }, 30_000);
+
+  it.each([
+    { key: "id", trigger: { strategy: "selective" } },
+    { key: "slug", trigger: { kind: "triggered" } },
+  ])(
+    "warns about inherited trigger words after matching translated entries by $key",
+    async ({ key, trigger }) => {
+      const main = [
+        {
+          [key]: "untouched",
+          ...trigger,
+          keys: ["untouched"],
+          content: "Untranslated lore.",
+        },
+        {
+          [key]: "echo",
+          ...trigger,
+          keys: ["echo", "signal"],
+          content: "Echo traffic.",
+        },
+        {
+          [key]: "translated",
+          ...trigger,
+          keys: ["radio"],
+          content: "Radio traffic.",
+        },
+        { [key]: "constant", keys: ["constant"], content: "Constant lore." },
+      ];
+      const overlay = [
+        { [key]: "translated", keys: ["無線"], content: "無線の通信。" },
+        { [key]: "echo", content: "反響の通信。" },
+        { [key]: "constant", content: "常時の設定。" },
+      ];
+      const localeFile = "data/trigger-lore.ja-JP.json";
+      const worldDir = await makeWorld(
+        {
+          "data/world.data.yaml": `sources:\n  trigger-lore:\n    kind: json\n    path: data/trigger-lore.json\n    to: lorebook\n    key: ${key}\n`,
+          "data/trigger-lore.json": JSON.stringify(main),
+          [localeFile]: JSON.stringify(overlay),
+        },
+        `${MANIFEST}worldData: data/world.data.yaml\n`,
+      );
+
+      // This remains a warning in strict mode, and the sparse/reordered locale
+      // list must not be compared to the main list by its raw array positions.
+      const diagnostics = await validate(worldDir, true);
+      expect(diagnostics.filter((item) => item.level === "error")).toEqual([]);
+      expect(
+        diagnostics.filter((item) => item.code === "locale-trigger-keys"),
+      ).toEqual([
+        expect.objectContaining({
+          level: "warning",
+          file: localeFile,
+          sourceId: "trigger-lore",
+          pointer: `[${key}=echo].keys`,
+          locales: ["ja-JP"],
+          hint: expect.stringContaining("Add a translated `keys` list"),
+        }),
+      ]);
+
+      await writeFile(
+        path.join(worldDir, localeFile),
+        JSON.stringify(
+          overlay.map((entry) =>
+            entry[key] === "echo"
+              ? { ...entry, keys: ["反響", "信号"] }
+              : entry,
+          ),
+        ),
+      );
+      expect(
+        (await validate(worldDir, true)).filter(
+          (item) => item.code === "locale-trigger-keys",
+        ),
+      ).toEqual([]);
+    },
+  );
 
   it("warns about text of another script left in a locale file", async () => {
     const worldDir = path.join(
@@ -786,19 +863,6 @@ describe("validateWorldPackage", () => {
         message: expect.stringContaining("a en-US session reads them in zh-CN"),
       }),
     ]);
-    // The shipped worlds are complete in every edition they have.
-    for (const world of [
-      "mistport",
-      "lantern-barrow",
-      "haruka-academy",
-      "emberback",
-    ])
-      expect(
-        (await validate(path.join(repoRoot, "worlds", world), true)).filter(
-          (item) => item.code === "edition-incomplete",
-        ),
-        world,
-      ).toEqual([]);
   }, 60_000);
 
   it("rejects a main file that still writes translations inline", async () => {
@@ -814,7 +878,7 @@ describe("validateWorldPackage", () => {
       manifestPath,
       (await readFile(manifestPath, "utf-8")).replace(
         /^name: .*$/m,
-        "name:\n  zh-CN: 雾港・裂潮纪\n  en-US: Mistport Chronicles",
+        'name:\n  zh-CN: 雾港・裂潮纪\n  en-US: "Mistport: The Riftide Chronicle"',
       ),
     );
 

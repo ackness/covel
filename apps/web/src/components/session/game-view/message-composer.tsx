@@ -16,6 +16,7 @@ interface MessageComposerProps {
   session: SessionRecord;
   executing: boolean;
   executionState?: ExecutionPresentation;
+  recoveryNoticeVisible?: boolean;
   inputValue: string;
   composerBlocked: boolean;
   composerDisabled: boolean;
@@ -39,6 +40,7 @@ export function MessageComposer({
   session,
   executing,
   executionState,
+  recoveryNoticeVisible = false,
   inputValue,
   composerBlocked,
   composerDisabled,
@@ -233,13 +235,23 @@ export function MessageComposer({
               {commandFeedback.message}
             </p>
           ) : executionState &&
-            !["idle", "completed"].includes(executionState) ? (
+            !["idle", "completed"].includes(executionState) &&
+            !(
+              recoveryNoticeVisible &&
+              ["failed", "interrupted"].includes(executionState)
+            ) &&
+            (session.phase !== "setup" ||
+              ["generating", "updating"].includes(executionState)) ? (
             <p
               role="status"
               aria-live="polite"
               className={`px-1 mt-1.5 text-xs ${executionTone(executionState)}`}
             >
-              {t(`session.executionState.${executionState}`)}
+              {t(
+                session.phase === "setup"
+                  ? "session.setupRunning"
+                  : `session.executionState.${executionState}`,
+              )}
             </p>
           ) : composerBlocked ? (
             <p className="ui-meta text-[10px] text-muted-foreground/80 px-1 mt-1.5">

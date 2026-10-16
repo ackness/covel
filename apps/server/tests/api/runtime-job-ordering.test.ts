@@ -14,6 +14,7 @@ import {
   createRuntimeJob,
   getRuntimeJob,
   listSettlingRuntimeJobs,
+  listRuntimeJobs,
   markRunnableSettlingJobs,
   RuntimeJobSupersededError,
   transitionRuntimeJob,
@@ -161,6 +162,35 @@ describe.each([
       [],
     );
   });
+  it("filters queue reads in the store while preserving enqueue order and limits", async () => {
+    await createRuntimeJob(store, job("z-first"));
+    await createRuntimeJob(store, job("a-second"));
+    await createRuntimeJob(store, job("terminal"));
+    await transitionRuntimeJob(store, {
+      ...job("terminal"),
+      from: ["queued"],
+      to: "cancelled",
+    });
+    const query = vi.spyOn(store, "queryPluginData");
+    const queued = await listRuntimeJobs(store, {
+      sessionId: "session",
+      pluginId: "plugin",
+      statuses: ["queued"],
+      limit: 1,
+    });
+    expect(queued.map((row) => row.jobId)).toEqual(["z-first"]);
+    expect(query).toHaveBeenCalledWith({
+      namespace: "_runtime_jobs",
+      sessionId: "session",
+      pluginId: "plugin",
+      valueFilter: { field: "status", values: ["queued"] },
+    });
+    expect(
+      await listRuntimeJobs(store, { sessionId: "session", statuses: [] }),
+    ).toEqual([]);
+    query.mockRestore();
+  });
+
   it("marks a refused job and the later jobs of its runtime as not runnable", async () => {
     const settling = { settle: "before-next-execution" as const };
     await createRuntimeJob(store, { ...job("refused"), ...settling });

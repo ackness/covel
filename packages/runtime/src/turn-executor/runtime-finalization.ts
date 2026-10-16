@@ -5,7 +5,7 @@ import {
   type RuntimeResult,
   type TurnInput,
 } from "@covel/shared";
-import { classifyProviderFailure } from "@covel/ai-provider";
+import { AiProviderError, classifyProviderFailure } from "@covel/ai-provider";
 import { LLMRetryError } from "../retry/retry-common.js";
 import { isDeepStrictEqual } from "node:util";
 import { validateOutput } from "@covel/tools";
@@ -234,6 +234,14 @@ export async function finalizeRuntimeResult(
     finalized = {
       ...finalized,
       errorKind: classifyProviderFailure(cause).kind,
+      ...(cause instanceof AiProviderError
+        ? {
+            failureTarget: {
+              provider: cause.provider,
+              ...(cause.model ? { model: cause.model } : {}),
+            },
+          }
+        : {}),
     };
   }
   finalized = withAgentFailureTarget(finalized, options.lastTarget);

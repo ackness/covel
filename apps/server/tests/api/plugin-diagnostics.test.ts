@@ -122,9 +122,9 @@ function fixture() {
           },
         },
         manifest: {
+          kind: "plugin",
           name: id,
           pluginId: id,
-          pluginType: "plugin",
           description: "private-description",
           commands: [
             {
@@ -147,7 +147,7 @@ function fixture() {
         id,
         name: id,
         description: "private-description",
-        pluginType: "plugin",
+        kind: "plugin",
         runtimeCount: 1,
       },
       manifests: [

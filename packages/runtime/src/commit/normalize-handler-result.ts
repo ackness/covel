@@ -17,6 +17,7 @@
  * stripped with a `non-success-domain-effects-stripped` diagnostic.
  */
 
+import { isRecord } from "../utils/is-record.js";
 import { isJsonValue } from "@covel/shared";
 import type {
   HandlerResult,
@@ -44,14 +45,8 @@ const DOMAIN_EFFECT_KEYS = [
   "notifications",
 ] as const;
 
-export function isPlainObject(
-  value: unknown,
-): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
-}
-
 function asJsonSchema(value: unknown): JsonSchema | undefined {
-  return isPlainObject(value) ? (value as JsonSchema) : undefined;
+  return isRecord(value) ? (value as JsonSchema) : undefined;
 }
 
 /** Copy present observability channels out of an effects-like object. */
@@ -110,11 +105,11 @@ function normalizeEnvelope(raw: unknown): NormalizedHandlerResult {
     diagnostics,
   });
 
-  if (!isPlainObject(raw)) {
+  if (!isRecord(raw)) {
     return invalid("handler return is not an object");
   }
 
-  const effects = isPlainObject(raw.effects) ? raw.effects : undefined;
+  const effects = isRecord(raw.effects) ? raw.effects : undefined;
 
   switch (raw.outcome) {
     case "success": {

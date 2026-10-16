@@ -1,29 +1,28 @@
+import {
+  pluginRuntimeManifests,
+  type PluginRegistry,
+} from "@covel/plugin-loader";
 import { compareText } from "@covel/shared";
-import type { PluginRegistry } from "@covel/plugin-loader";
-import path from "node:path";
 import type {
   EffectiveTurnCompletion,
   I18nText,
   PluginLoadDiagnostics,
   Stage,
 } from "@covel/shared";
-import { buildPluginLoadDiagnostics } from "../../lib/plugin-load-diagnostics.js";
 import {
   effectiveTurnCompletion,
   getRuntimeSpec,
   stageRank,
   STAGE_ORDER,
 } from "@covel/shared";
+import path from "node:path";
+import { buildPluginLoadDiagnostics } from "../../lib/plugin-load-diagnostics.js";
 import {
   docPathFromAbsolute,
   isStoryRuntime,
   textValue,
   type FlowSegmentId,
 } from "./shared.js";
-import {
-  pluginManifestRecords,
-  pluginRuntimeDocumentPath,
-} from "./registry-projection.js";
 
 // Stage-driven segment labels (player-facing plain language). A
 // `Record<Stage, …>` so adding a stage to STAGE_ORDER is a compile error here
@@ -55,7 +54,7 @@ export function buildPluginFlowResponse(registry: PluginRegistry) {
       id: string;
       name: I18nText;
       description: I18nText;
-      pluginType: string;
+      kind: import("@covel/shared").PluginManifest["kind"];
       runtimeIds: string[];
     }
   > = [];
@@ -67,7 +66,7 @@ export function buildPluginFlowResponse(registry: PluginRegistry) {
     runtimeId: string;
     runtimeName: string;
     description: string;
-    pluginType: string;
+    kind: import("@covel/shared").PluginManifest["kind"];
     stage?: Stage;
     segmentId: FlowSegmentId;
     runtimeType: string;
@@ -99,7 +98,7 @@ export function buildPluginFlowResponse(registry: PluginRegistry) {
   for (const entry of registry.getAll().values()) {
     if (entry.status === "error") continue;
     const summary = entry.summary;
-    const manifests = pluginManifestRecords(entry);
+    const manifests = pluginRuntimeManifests(entry);
 
     // Serve raw I18nText (frontend resolves to the UI locale), matching
     // /api/plugins and the segment labelText — never collapse to one locale
@@ -112,7 +111,7 @@ export function buildPluginFlowResponse(registry: PluginRegistry) {
       id: entry.id,
       name: pluginName,
       description: pluginDescription,
-      pluginType: summary.pluginType,
+      kind: summary.kind,
       runtimeIds: manifests.map((item) => item.manifest.name),
       ...buildPluginLoadDiagnostics(entry),
     });
@@ -127,7 +126,7 @@ export function buildPluginFlowResponse(registry: PluginRegistry) {
       // Staged runtimes map 1:1 to their stage segment; stage-less ones
       // (event / manual) group under the dedicated "event-manual" bucket.
       const segmentId: FlowSegmentId = stage ?? "event-manual";
-      const mdPath = pluginRuntimeDocumentPath(entry, runtimeId);
+      const mdPath = entry.runtimeManifestPaths?.[runtimeId];
       const docPath =
         mdPath && entry.rootPath
           ? docPathFromAbsolute(path.resolve(entry.rootPath, ".."), mdPath)
@@ -140,7 +139,7 @@ export function buildPluginFlowResponse(registry: PluginRegistry) {
         runtimeId,
         runtimeName,
         description: textValue(manifest.description),
-        pluginType: summary.pluginType,
+        kind: summary.kind,
         ...(stage !== undefined ? { stage } : {}),
         segmentId,
         runtimeType: manifest.runtimeType ?? "agent",

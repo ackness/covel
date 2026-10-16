@@ -1,8 +1,6 @@
+import { isRecord } from "../lib/is-record.js";
 import type { CharacterRecord } from "@covel/store";
 import { mergeCharacterAliases } from "@covel/shared";
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
-}
 /**
  * The creation time of the `order`-th character of one import. The roster
  * lists characters by creation time, then by ID, so characters that share one

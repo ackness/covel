@@ -3,10 +3,10 @@ import { mirrorSetupDone } from "@covel/shared";
 import type { RuntimeManifest, TurnInput } from "@covel/shared";
 import { createMemoryStore } from "@covel/store/memory";
 import type { DataStore } from "@covel/store";
-import { executeTurn } from "../src/turn-executor/turn-executor.js";
+import { runTurnPipeline } from "../src/turn-executor/turn-executor.js";
 import type { TurnExecutorDeps } from "../src/turn-executor/turn-executor.js";
 import { finalizeExecution } from "../src/commit/finalize-execution.js";
-import type { LLMAdapter, LLMResponse } from "../src/llm/llm-adapter.js";
+import type { LLMAdapter, LLMResponse } from "@covel/shared";
 import playerInitGuard from "../../../plugins/char-creator/runtimes/player-init/guard.js";
 
 class CapturingLLM implements LLMAdapter {
@@ -167,7 +167,7 @@ describe("char-creator core plugin guard bridge", () => {
       locale: "zh-CN",
       origin: "player",
     };
-    const setupResult = await executeTurn(
+    const setupResult = await runTurnPipeline(
       setupInput,
       [pregame, schemaGen, playerInit, narrator],
       deps,
@@ -247,7 +247,7 @@ describe("char-creator core plugin guard bridge", () => {
       locale: "zh-CN",
       origin: "player",
     };
-    await executeTurn(
+    await runTurnPipeline(
       mainInput,
       [pregame, schemaGen, playerInit, narrator],
       deps,

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import type { RuntimeManifest, PluginType } from "@covel/shared";
+import type { RuntimeManifest } from "@covel/shared";
 import type {
   LoadedRuntime,
   PluginRegistryEntry,
@@ -21,7 +21,7 @@ function makeSummary(
     id,
     name: `Plugin ${id}`,
     description: `Description for ${id}`,
-    pluginType: "plugin" as PluginType,
+    kind: "plugin",
     runtimeCount: 1,
     ...overrides,
   };
@@ -73,7 +73,7 @@ function makePackageManifest(
       name,
       pluginId: name,
       description: name,
-      pluginType: "plugin",
+      kind: "plugin",
       dataSchemas: overrides?.dataSchemas,
       worldProjections: overrides?.worldProjections,
     },
@@ -634,7 +634,7 @@ describe("PluginRegistry", () => {
   });
 
   describe("resolveSessionSet", () => {
-    it("passes the confirmed set through the resolver on every read and re-resolves after a registration", () => {
+    it("reuses equal activation sets and re-resolves after registration or membership changes", () => {
       const resolve = vi.fn(
         (confirmed: readonly string[], entries: ReadonlyMap<string, unknown>) =>
           confirmed.filter((id) => entries.has(id) && id !== "dropped"),
@@ -645,12 +645,18 @@ describe("PluginRegistry", () => {
       resolving.syncSessionActivations("s", ["kept", "dropped"]);
 
       expect(resolving.getActivePlugins("s")).toEqual(["kept"]);
+      resolving.syncSessionActivations("s", ["dropped", "kept"]);
       expect(resolving.getActivePlugins("s")).toEqual(["kept"]);
+      resolving.getActiveRuntimes("s");
+      resolving.getActiveRuntimes("s");
       expect(resolve).toHaveBeenCalledTimes(1);
 
       resolving.register(makeEntry("other"));
       expect(resolving.getActivePlugins("s")).toEqual(["kept"]);
       expect(resolve).toHaveBeenCalledTimes(2);
+      resolving.syncSessionActivations("s", ["dropped"]);
+      expect(resolving.getActivePlugins("s")).toEqual([]);
+      expect(resolve).toHaveBeenCalledTimes(3);
     });
   });
 });

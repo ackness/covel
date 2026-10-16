@@ -12,16 +12,13 @@
 
 import type { RuntimeManifest, TurnInput } from "@covel/shared";
 import type { LoadedRuntime } from "@covel/shared/plugin-runtime";
-import type {
-  LLMResponseFormat,
-  LLMToolDefinition,
-} from "../llm/llm-adapter.js";
+import type { LLMResponseFormat, LLMToolDefinition } from "@covel/shared";
 import {
   buildToolDefinitions,
   usesRuntimeDone,
 } from "../turn-executor/turn-executor-helpers.js";
 import { declaredToolNames, resolveDeferredToolNames } from "./tool-search.js";
-import { buildRetryPolicy, type RetryPolicy } from "../retry/llm-retry.js";
+import { buildRetryPolicy, type RetryPolicy } from "../retry/retry-common.js";
 import type { AgentLoopDeps } from "../turn-executor/turn-executor-types.js";
 
 export const DEFAULT_MAX_TOOL_STEPS = 20;

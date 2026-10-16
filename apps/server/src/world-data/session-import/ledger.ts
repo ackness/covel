@@ -1,3 +1,4 @@
+import { isRecord } from "../../lib/is-record.js";
 import { DIMENSION_DATA_NAMESPACE, dimensionRecordSchema } from "@covel/shared";
 import { randomUUID } from "node:crypto";
 import type {
@@ -9,7 +10,6 @@ import type {
 } from "@covel/store";
 import { canonicalJson, sha256Hex } from "../digest.js";
 import type { PlannedWrite, SyncWorldDataForSessionResult } from "./types.js";
-import { isRecord } from "./utils.js";
 
 function stableImportValue(value: unknown): unknown {
   if (!isRecord(value)) return value;

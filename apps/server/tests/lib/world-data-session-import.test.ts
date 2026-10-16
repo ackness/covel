@@ -1,3 +1,4 @@
+import { importWorldDataForSession } from "../helpers/world-data-import.js";
 import { createHash } from "node:crypto";
 import {
   cp,
@@ -18,6 +19,7 @@ import {
   discoverPlugins,
   loadPluginDefinition,
 } from "@covel/plugin-loader";
+import type { PluginRegistryEntry } from "@covel/plugin-loader";
 import { MAX_PLUGIN_DATA_VALUE_BYTES } from "@covel/shared";
 import { type DataStore } from "@covel/store";
 import { createMemoryMediaStore, createMemoryStore } from "@covel/store/memory";
@@ -25,11 +27,11 @@ import {
   applyPreparedWorldDataImportForSession,
   finalizeWorldDataMediaRefs,
   WorldDataSyncConflictError,
-  importWorldDataForSession,
   prepareWorldDataImportForSession,
   preflightWorldDataForSession,
   syncWorldDataForSession,
 } from "../../src/world-data/session-import.js";
+import { buildImportPlan } from "../../src/world-data/session-import/planning.js";
 import { BUILTIN_PLUGIN_PACKS } from "../../src/config/plugin-packs.js";
 import { resolveSessionPluginPlan } from "../../src/routes/api/session/plugins.js";
 import { sessionRoutes } from "../../src/routes/api/session.js";
@@ -38,13 +40,11 @@ import { loadSingleWorld } from "../../src/world-seed-loader.js";
 import { conventionsOfPlugins } from "../../src/world-data/conventions.js";
 import { loadWorldDataDescriptor } from "../../src/world-data/descriptor.js";
 import { collectMediaSourceFiles } from "../../src/world-data/media.js";
-
 import {
   makePackageManifest,
   makePlugin,
   registry as registryEntries,
 } from "./world-data-projection-fixtures.js";
-import type { PluginRegistryEntry } from "@covel/plugin-loader";
 
 const NOW = "2026-01-01T00:00:00.000Z";
 
@@ -136,7 +136,7 @@ function registry(entries: Record<string, readonly string[]>) {
         id,
         name: id,
         description: "",
-        pluginType: "plugin",
+        kind: "plugin",
         runtimeCount: 0,
       },
       packageManifest: makePackageManifest(id, namespaces, "."),
@@ -173,7 +173,7 @@ function registryWithSchema(entries: {
         id,
         name: id,
         description: "",
-        pluginType: "plugin",
+        kind: "plugin",
         runtimeCount: 0,
       },
       packageManifest: makePackageManifest(
@@ -212,7 +212,7 @@ async function builtinPluginRegistry() {
         id: discovery.id,
         name: discovery.id,
         description: "",
-        pluginType: "plugin",
+        kind: "plugin",
         runtimeCount: manifests.length,
       },
       rootPath: discovery.rootPath,
@@ -843,6 +843,37 @@ describe("world data session importer", () => {
     );
     // The same file reached through a link leaving the root is not.
     expect(await contentFor({}, overlay)).toBe("safe");
+  });
+
+  it("reports invalid indexTo even when the direct receiver is missing", async () => {
+    const plan = await buildImportPlan({
+      sessionId: "sess-1",
+      worldId: "demo-world",
+      now: NOW,
+      deps: { registry: registry({}), activePlugins: [] },
+      sources: [
+        {
+          id: "unreceived",
+          descriptor: {
+            kind: "json",
+            path: "data/facts.json",
+            to: "contract:missing.facts@1",
+            indexTo: "not-a-contract",
+          },
+          order: 0,
+          resolvedOrder: 0,
+          origin: "world",
+          overridden: false,
+          pathOrigin: { descriptorRoot: ".", origin: "world" },
+        },
+      ],
+    });
+    expect(plan.writes).toEqual([]);
+    expect(plan.diagnostics).toContainEqual({
+      level: "error",
+      sourceId: "unreceived",
+      message: "invalid indexTo URI: not-a-contract",
+    });
   });
 
   it.each(["preflight", "import", "sync"])(
@@ -3089,7 +3120,7 @@ describe("plugin data in character records", () => {
           id: discovery.id,
           name: discovery.id,
           description: "",
-          pluginType: "plugin",
+          kind: "plugin",
           runtimeCount: manifests.length,
         },
         rootPath: discovery.rootPath,

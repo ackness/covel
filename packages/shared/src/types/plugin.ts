@@ -5,10 +5,6 @@
  * All runtime configuration is defined via YAML frontmatter in PLUGIN.md files.
  */
 
-// ── Plugin classification ────────────────────────────────────────
-
-export type PluginType = "core-plugin" | "plugin";
-
 /**
  * Runtime execution type.
  * - `agent` (default): LLM-driven with prompt template, tool calling, context assembly.
@@ -549,7 +545,6 @@ export interface RuntimeManifest {
    * turn and increments once per recursive call.
    */
   readonly maxRecursionDepth?: number;
-  readonly pluginType?: PluginType;
   /**
    * How the framework treats this runtime's output in the UI.
    * Defaults to `'system'`. Only `'story'` outputs are shown in the main chat stream.

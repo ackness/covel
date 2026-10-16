@@ -15,24 +15,26 @@ import { throughGateway } from "./helpers/through-gateway.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AiProviderError } from "@covel/ai-provider";
 import {
-  buildRetryPolicy,
   callLLMWithRetry,
   streamLLMWithRetry,
   detectToolLoop,
+} from "../src/retry/llm-retry.js";
+import {
+  buildRetryPolicy,
   perturbMessages,
   isTransientError,
   LLMRetryError,
   DEFAULT_MAX_RETRIES,
   DEFAULT_LOOP_THRESHOLD,
   DEFAULT_FIRST_TOKEN_TIMEOUT_MS,
-} from "../src/retry/llm-retry.js";
+} from "../src/retry/retry-common.js";
 import { computeAttemptBudget } from "../src/retry/retry-common.js";
 import type {
   LLMAdapter,
   LLMMessage,
   LLMResponse,
   LLMStreamEvent,
-} from "../src/llm/llm-adapter.js";
+} from "@covel/shared";
 import { createLlmRequestBudget } from "@covel/shared";
 import type { LLMProviderRequest } from "@covel/shared";
 

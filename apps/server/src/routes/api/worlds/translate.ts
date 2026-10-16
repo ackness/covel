@@ -30,6 +30,10 @@ import {
   readJsonBody,
 } from "../../../api-error.js";
 import { streamOwnedSSE } from "../../../application-work.js";
+import {
+  requestAbortSignal,
+  sameFileIdentity,
+} from "../../../world-data/authoring-helpers.js";
 import { orderedSend } from "../../../lib/ordered-send.js";
 import { resolveUserResourceDirs } from "../../../lib/user-resource-dirs.js";
 import { rateLimiter } from "../../../middleware/rate-limit.js";
@@ -183,15 +187,12 @@ worldTranslateRoutes.post(
     }
 
     const llm = c.get("llmAdapter") as LLMAdapter;
-    const shutdownSignal = c.get("requestWork")?.signal;
     return streamOwnedSSE(c, async (stream) => {
       const send = async (event: TranslateEvent) => {
         await stream.writeSSE({ data: JSON.stringify(event) });
       };
       try {
-        const signal = shutdownSignal
-          ? AbortSignal.any([c.req.raw.signal, shutdownSignal])
-          : c.req.raw.signal;
+        const signal = requestAbortSignal(c);
         // Progress is sent in order; a write that fails ends the stream.
         const progress = orderedSend(send);
         const result = await prepareWorldTranslation({
@@ -243,13 +244,7 @@ worldTranslateRoutes.post(
             const identity = await stat(currentPath).catch(() => undefined);
             // createdAt can be supplied on creation. A replacement at the same
             // path must still be rejected if it reused that timestamp.
-            if (
-              !identity ||
-              identity.dev !== packageIdentity.dev ||
-              identity.ino !== packageIdentity.ino ||
-              identity.birthtimeMs !== packageIdentity.birthtimeMs
-            )
-              return undefined;
+            if (!sameFileIdentity(identity, packageIdentity)) return undefined;
             signal.throwIfAborted();
             // A generated package that holds only the app's files stays
             // one: the files written here join the list in its marker.

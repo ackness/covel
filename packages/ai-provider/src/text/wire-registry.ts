@@ -6,7 +6,7 @@ import {
   withResponseFormatInstruction,
 } from "../adapters/structured-output.js";
 import {
-  createStructuredOutputError,
+  parseStructuredObject,
   createUnsupportedModeError,
 } from "../adapters/http.js";
 import {
@@ -75,18 +75,15 @@ export function textWireAdapter(wire: TextWire): ModelProviderAdapter {
         },
         context,
       );
-      let raw: unknown;
-      try {
-        raw = JSON.parse(result.text);
-      } catch {
-        throw createStructuredOutputError(wire.id, result.usage);
-      }
-      const validation = schema.safeParse(raw);
-      if (!validation.success)
-        throw createStructuredOutputError(wire.id, result.usage);
+      const object = parseStructuredObject(
+        result.text,
+        schema,
+        wire.id,
+        result.usage,
+      );
       return {
         ...(result.diagnostics ? { diagnostics: result.diagnostics } : {}),
-        object: validation.data,
+        object,
         ...(result.reasoningContent
           ? { reasoningContent: result.reasoningContent }
           : {}),

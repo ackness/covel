@@ -39,7 +39,6 @@ export interface EventRecord {
   readonly type: string;
   readonly topic: string;
   readonly payload: unknown; // JSON
-  readonly targetRuntime?: string;
   readonly turnId?: string;
   readonly createdAt: string;
 }

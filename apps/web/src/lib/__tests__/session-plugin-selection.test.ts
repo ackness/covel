@@ -2,7 +2,6 @@
 import { describe, expect, it } from "vitest";
 import type { PluginPack, PluginSummary, WorldPluginPlan } from "@covel/shared";
 import {
-  applyPluginPackSelection,
   collectPluginTags,
   defaultSelectedPluginIds,
   filterPlugins,
@@ -77,18 +76,6 @@ const plan: WorldPluginPlan = {
 describe("session plugin selection helpers", () => {
   it("uses the server-resolved plan as the only default source", () => {
     expect([...defaultSelectedPluginIds(plan)]).toEqual(plan.defaultPluginIds);
-  });
-
-  it("applies packs while preserving locked plugins", () => {
-    const selected = applyPluginPackSelection(
-      new Set(["narrator"]),
-      dialoguePack,
-      plugins,
-      new Set(["narrator"]),
-    );
-    expect([...selected]).toEqual(
-      expect.arrayContaining(["narrator", "chat-mode-narrator", "scene-cast"]),
-    );
   });
 
   it("filters and groups canonical plugin descriptors", () => {

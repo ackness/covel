@@ -150,7 +150,7 @@ function registerCommunityPlugin(
       id: "community-plugin",
       name: "Community Plugin",
       description: "test",
-      pluginType: "plugin",
+      kind: "plugin",
       runtimeCount: 1,
     },
     manifests: [
@@ -237,7 +237,7 @@ describe("Session lifecycle hooks", () => {
           id: pluginId,
           name: "Configured",
           description: "",
-          pluginType: "plugin",
+          kind: "plugin",
           runtimeCount: 1,
         },
         packageManifest: {
@@ -247,10 +247,10 @@ describe("Session lifecycle hooks", () => {
             description: "Settings fixture",
           },
           manifest: {
+            kind: "plugin",
             name: pluginId,
             pluginId,
             description: "",
-            pluginType: "plugin",
             userSettings: [
               { key: "tone", type: "text", default: "manifest", label: "Tone" },
               { key: "detail", type: "number", default: 1, label: "Detail" },

@@ -40,8 +40,8 @@ function mustHaveBundledWorlds(resourcesDir) {
   }
   const worldDirs = fs
     .readdirSync(worldsDir, { withFileTypes: true })
-    // `_`-prefixed dirs are archives (e.g. worlds/_archive) — the world-seed
-    // loader skips any dir without a valid world.yaml, so they aren't worlds.
+    // `_`-prefixed dirs are not packages; the world-seed loader also skips
+    // any dir without a valid world.yaml.
     .filter((e) => e.isDirectory() && !e.name.startsWith("_"));
   if (worldDirs.length === 0) {
     throw new Error(`No bundled worlds present under ${worldsDir} `);
@@ -69,8 +69,8 @@ function mustHaveBundledPlugins(resourcesDir) {
   }
   const pluginDirs = fs
     .readdirSync(pluginsDir, { withFileTypes: true })
-    // `_`-prefixed dirs (plugins/_archive) are excluded from staging; tolerate
-    // one slipping through an older build rather than failing the release.
+    // `_`-prefixed dirs are excluded from staging; tolerate one slipping
+    // through an older build rather than failing the release.
     .filter((e) => e.isDirectory() && !e.name.startsWith("_"));
   if (pluginDirs.length === 0) {
     throw new Error(`No bundled plugins present under ${pluginsDir} `);

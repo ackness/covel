@@ -14,6 +14,20 @@ export type ActionableErrorKind =
 /** Classify raw provider/runtime failures into a stable, actionable category. */
 export function classifyActionableError(
   raw: string | undefined,
+  providerFailureKind?: string,
+): ActionableErrorKind {
+  const kind = classifyRawActionableError(raw);
+  if (providerFailureKind === "missing_key") return "auth";
+  if (providerFailureKind === "auth")
+    return kind === "forbidden" ? kind : "auth";
+  if (providerFailureKind === "quota" || providerFailureKind === "rate_limited")
+    return "rate-limited";
+  if (providerFailureKind === "not_found") return "not-found";
+  return kind;
+}
+
+function classifyRawActionableError(
+  raw: string | undefined,
 ): ActionableErrorKind {
   if (!raw) return "unknown";
   const lower = raw.toLowerCase();

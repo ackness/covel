@@ -12,7 +12,7 @@ import type {
   TokenEstimator,
 } from "@covel/context";
 import type { EventBus } from "@covel/events";
-import type { LLMAdapter } from "../llm/llm-adapter.js";
+import type { LLMAdapter } from "@covel/shared";
 import type { TurnControl } from "./turn-control.js";
 import type { ToolExecutor } from "../agent-loop/tool-executor.js";
 import type { HookPipeline } from "../hooks/pipeline.js";
@@ -65,6 +65,7 @@ export interface AgentLoopDeps {
     durationMs: number;
     error?: string;
     errorKind?: import("@covel/shared").ProviderFailureKind;
+    failureTarget?: import("@covel/shared").RuntimeResult["failureTarget"];
     /** Why a framework gate skipped the runtime, as a code. */
     reason?: string;
   }) => Promise<void>;
@@ -132,7 +133,7 @@ export interface TurnExecutorDeps extends AgentLoopDeps {
   /**
    * Resolve trust from plugin discovery source. Registry/bootstrap wires this
    * from the directory a plugin was loaded from, which is stronger than the
-   * author-supplied `pluginType` manifest field.
+   * author-supplied package kind.
    */
   readonly getPluginSource?: (pluginId: string) => PluginSource | undefined;
 

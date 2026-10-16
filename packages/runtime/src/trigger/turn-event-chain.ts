@@ -70,7 +70,6 @@ export interface RunEventChainParams {
  * real per-runtime history (via `triggerCounts` / `turnsSinceLastTrigger`) so
  * they bite here too; `maxDepth` additionally bounds within-turn recursion.
  * Absent maps fall back to "never triggered" for direct callers (tests).
- * `isManualTrigger` is irrelevant to the `event` branch.
  *
  * Fan-out is deliberately NOT filtered by the current stage band: it is a
  * causal reaction to something that actually happened, not a scheduled slot.
@@ -98,7 +97,6 @@ function eventFanoutTriggerContext(
     turnsSinceLastTrigger:
       turnsSinceLastTrigger?.get(runtimeName) ?? Number.MAX_SAFE_INTEGER,
     pendingEventTopics,
-    isManualTrigger: false,
   };
 }
 

@@ -19,7 +19,7 @@ import type { RecallSearchResult, RecallSearcher } from "./types.js";
 const MAX_SCAN_MESSAGES = 500;
 
 /** Role of a result that is a history summary, not one message. */
-export const SUMMARY_ROLE = "summary";
+const SUMMARY_ROLE = "summary";
 
 export function createKeywordRecallSearcher(
   store: RecallStore,

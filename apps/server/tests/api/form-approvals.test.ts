@@ -92,7 +92,7 @@ describe("form provider authorization", () => {
           id,
           name: id,
           description: "",
-          pluginType: "plugin",
+          kind: "plugin",
           runtimeCount: 1,
         },
         packageManifest: parsePluginMd(

@@ -42,11 +42,13 @@ export function ActionableErrorNotice({
   error,
   kind: kindOverride,
   providerFailureKind,
+  summary,
   layout = "inline",
 }: {
   error?: string;
   kind?: ActionableErrorKind;
   providerFailureKind?: string;
+  summary?: string;
   layout?: "inline" | "panel";
 }) {
   const { t } = useTranslation();
@@ -87,22 +89,34 @@ export function ActionableErrorNotice({
       <span
         className={
           layout === "panel"
-            ? "flex min-w-0 flex-wrap items-center gap-1.5"
+            ? "flex min-w-0 flex-col items-start gap-1.5"
             : "contents"
         }
       >
-        {!providerHint && (
+        {layout === "inline" && !providerHint && (
           <span className="shrink-0 rounded-sm border border-destructive/40 bg-destructive/5 px-1.5 py-0.5 font-mono text-[10px] uppercase text-destructive">
             {t(`error.actionable.badge.${kind}`)}
           </span>
         )}
-        <span className="min-w-0 text-[11px] text-destructive">
-          {providerHint ?? t(MESSAGE_KEYS[kind], DEFAULT_MESSAGES[kind])}
+        <span
+          className={
+            layout === "panel"
+              ? "min-w-0 text-xs leading-relaxed text-foreground"
+              : "min-w-0 text-[11px] text-destructive"
+          }
+        >
+          {summary ??
+            providerHint ??
+            t(MESSAGE_KEYS[kind], DEFAULT_MESSAGES[kind])}
         </span>
         {error && (
           <button
             type="button"
-            className="shrink-0 text-[10px] text-destructive underline underline-offset-2 hover:text-destructive/80"
+            className={
+              layout === "panel"
+                ? "text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
+                : "shrink-0 text-[10px] text-destructive underline underline-offset-2 hover:text-destructive/80"
+            }
             aria-controls={detailId}
             aria-expanded={expanded}
             onClick={(event) => {
@@ -119,12 +133,12 @@ export function ActionableErrorNotice({
       {expanded && error && (
         <span
           id={detailId}
-          className="mt-2 block max-h-40 w-full overflow-auto rounded-sm border border-destructive/25 bg-background/60 p-2 font-mono text-[10px] font-normal normal-case leading-relaxed text-destructive/90 whitespace-pre-wrap wrap-anywhere select-text"
+          className={`mt-2 block max-h-40 w-full overflow-auto rounded-sm border p-2 font-mono font-normal normal-case leading-relaxed whitespace-pre-wrap wrap-anywhere select-text ${layout === "panel" ? "border-border bg-muted/50 text-xs text-muted-foreground" : "border-destructive/25 bg-background/60 text-[10px] text-destructive/90"}`}
         >
           <span className="block">{error}</span>
           <button
             type="button"
-            className="mt-1.5 text-[10px] underline underline-offset-2 hover:text-destructive"
+            className={`mt-1.5 underline underline-offset-2 ${layout === "panel" ? "text-xs hover:text-foreground" : "text-[10px] hover:text-destructive"}`}
             onClick={(event) => {
               event.stopPropagation();
               void copyDetail();

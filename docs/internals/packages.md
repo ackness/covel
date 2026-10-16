@@ -141,7 +141,7 @@ prompt loader 也按实例划分：
 - 共享的模板用默认的 `loadPrompt`。
 - 另一个模板目录通过 `createPromptLoader(root)` 注入，查找顺序和 `loadPrompt` 相同。插件不用它：插件的模板用 SDK 里的同名加载器，只读 English 和简体中文两份。
 - 包的公开入口不导出进程级的 `setPromptsRoot`。
-- `buildContext` 统一返回 Promise，调用方不用事先判断走同步还是异步路径。
+- `buildContext` 通过同一条异步路径组装提示词，按输入声明读取插件数据。
 
 详见 [prompt 结构](../reference/prompt-structure.md)。
 

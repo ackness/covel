@@ -18,10 +18,10 @@ import {
   runtimeDoneTool,
   type EventDirectoryLike,
 } from "@covel/tools";
-import { executeTurn } from "../src/turn-executor/turn-executor.js";
+import { runTurnPipeline } from "../src/turn-executor/turn-executor.js";
 import type { TurnExecutorDeps } from "../src/turn-executor/turn-executor.js";
 import { createToolExecutor } from "../src/agent-loop/tool-executor.js";
-import type { LLMAdapter, LLMResponse } from "../src/llm/llm-adapter.js";
+import type { LLMAdapter, LLMResponse } from "@covel/shared";
 
 const directory: EventDirectoryLike = {
   listTopics: async () => ["test.ping"],
@@ -163,7 +163,7 @@ describe("requireToolUse gate", () => {
       toolExecutor: toolExecutor(store),
     };
 
-    const result = await executeTurn(
+    const result = await runTurnPipeline(
       makeTurnInput(),
       [manifest({ requireToolUse: true })],
       deps,
@@ -200,7 +200,7 @@ describe("requireToolUse gate", () => {
       toolExecutor: toolExecutor(store),
     };
 
-    await executeTurn(
+    await runTurnPipeline(
       makeTurnInput({ locale: "zh-CN" }),
       [manifest({ requireToolUse: true })],
       deps,
@@ -225,7 +225,7 @@ describe("requireToolUse gate", () => {
       toolExecutor: toolExecutor(store),
     };
 
-    await executeTurn(
+    await runTurnPipeline(
       makeTurnInput({ locale: "zh-Hant-TW" }),
       [manifest({ requireToolUse: true })],
       deps,
@@ -255,7 +255,7 @@ describe("requireToolUse gate", () => {
         toolExecutor: toolExecutor(store),
       };
 
-      const result = await executeTurn(
+      const result = await runTurnPipeline(
         makeTurnInput({ sessionId: "sess-2" }),
         [manifest({ requireToolUse: true })],
         deps,
@@ -298,7 +298,7 @@ describe("requireToolUse gate", () => {
         toolExecutor: toolExecutor(store),
       };
 
-      const result = await executeTurn(
+      const result = await runTurnPipeline(
         makeTurnInput({ sessionId: "sess-done" }),
         [manifest({ requireToolUse: true })],
         deps,
@@ -364,7 +364,7 @@ describe("requireToolUse gate", () => {
       toolExecutor: toolExecutor(store),
     };
 
-    const result = await executeTurn(
+    const result = await runTurnPipeline(
       makeTurnInput({ sessionId: "sess-done-first" }),
       [manifest({ requireToolUse: true })],
       deps,
@@ -420,7 +420,7 @@ describe("requireToolUse gate", () => {
           };
         },
       };
-      const result = await executeTurn(
+      const result = await runTurnPipeline(
         makeTurnInput({ sessionId: "sess-read" }),
         [
           manifest({
@@ -459,7 +459,7 @@ describe("requireToolUse gate", () => {
       toolExecutor: toolExecutor(store),
     };
 
-    await executeTurn(
+    await runTurnPipeline(
       makeTurnInput({ sessionId: "sess-3" }),
       [manifest()],
       deps,

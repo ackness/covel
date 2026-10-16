@@ -78,7 +78,7 @@ function isSource(file) {
   return (
     /^(?:(?:apps|packages)\/[^/]+\/src\/|plugins\/[^/]+\/)/.test(file) &&
     /\.(?:[cm]?[jt]sx?|css)$/.test(file) &&
-    !/(?:^|\/)(?:tests?|__tests__|__mocks__|fixtures|_archive|node_modules|dist)(?:\/|$)/.test(
+    !/(?:^|\/)(?:tests?|__tests__|__mocks__|fixtures|node_modules|dist)(?:\/|$)/.test(
       file,
     ) &&
     !/\.(?:test|spec)\.[^/]+$/.test(file) &&
@@ -156,7 +156,6 @@ test("source coverage includes plugins and untracked code but excludes tests and
     "packages/example/src/__tests__/fixture.ts",
     "packages/store/src/contract/suites/core-suites.ts",
     "plugins/example/tests/helper.js",
-    "plugins/_archive/example/index.js",
     "plugins/example/node_modules/module/index.js",
     "plugins/example/PLUGIN.md",
   ]) {

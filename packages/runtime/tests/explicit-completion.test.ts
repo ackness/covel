@@ -3,10 +3,10 @@ import { createMemoryStore } from "@covel/store/memory";
 import { runtimeDoneTool, suspendTool, tool } from "@covel/tools";
 import { z } from "zod";
 import type { LLMAdapter, RuntimeManifest } from "@covel/shared";
-import { executeTurn } from "../src/turn-executor/turn-executor.js";
+import { runTurnPipeline } from "../src/turn-executor/turn-executor.js";
 import { createToolExecutor } from "../src/agent-loop/tool-executor.js";
-import { resumeSuspendedRuntime } from "../src/resume/turn-resume.js";
-import type { LLMResponse } from "../src/llm/llm-adapter.js";
+import { resumeRuntimePipeline } from "../src/resume/turn-resume.js";
+import type { LLMResponse } from "@covel/shared";
 import { collectExecutionSuspensions } from "../src/suspension-artifact.js";
 
 function response(
@@ -102,7 +102,7 @@ async function run(
     }),
   };
   const result = resume
-    ? await resumeSuspendedRuntime(
+    ? await resumeRuntimePipeline(
         {
           id: "suspended",
           sessionId: "s",
@@ -132,7 +132,7 @@ async function run(
         deps,
       )
     : (
-        await executeTurn(
+        await runTurnPipeline(
           {
             sessionId: "s",
             turnId: "t",
@@ -153,7 +153,7 @@ async function run(
         runtimeResults: [result!],
       });
       expect(suspension).toBeDefined();
-      return resumeSuspendedRuntime(
+      return resumeRuntimePipeline(
         JSON.parse(JSON.stringify(suspension)),
         {},
         manifest,

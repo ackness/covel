@@ -24,8 +24,6 @@ export interface TriggerContext {
   readonly turnsSinceLastTrigger: number;
   /** Pending events (for event-type triggers). */
   readonly pendingEventTopics: readonly string[];
-  /** Whether this is a manual trigger request for this specific runtime. */
-  readonly isManualTrigger: boolean;
 }
 
 // ── Scheduling ───────────────────────────────────────────────────

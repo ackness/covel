@@ -45,7 +45,6 @@ export async function batchRetryFixture() {
       name,
       pluginId: name,
       description: name,
-      pluginType: "core-plugin",
       runtimeType: "function",
       handler: "./handler.js",
       outputKind: name === "story" ? "story" : "system",
@@ -88,7 +87,7 @@ export async function batchRetryFixture() {
         id: name,
         name,
         description: "",
-        pluginType: "core-plugin",
+        kind: "core",
         runtimeCount: 1,
       },
 

@@ -15,16 +15,12 @@ import { z } from "zod";
 import type { RuntimeManifest, TurnInput } from "@covel/shared";
 import { SEARCH_TOOLS_TOOL_NAME, tool } from "@covel/tools";
 import type { ToolModule } from "@covel/tools";
-import { executeTurn } from "../src/turn-executor/turn-executor.js";
+import { runTurnPipeline } from "../src/turn-executor/turn-executor.js";
 import type { TurnExecutorDeps } from "../src/turn-executor/turn-executor.js";
 import { createToolExecutor } from "../src/agent-loop/tool-executor.js";
 import { buildToolDefinitions } from "../src/turn-executor/turn-executor-helpers.js";
 import { resolveDeferredToolNames } from "../src/agent-loop/tool-search.js";
-import type {
-  LLMAdapter,
-  LLMResponse,
-  LLMToolDefinition,
-} from "../src/llm/llm-adapter.js";
+import type { LLMAdapter, LLMResponse, LLMToolDefinition } from "@covel/shared";
 
 const SESSION_ID = "sess-tool-search";
 
@@ -130,9 +126,14 @@ describe("tool-search: deferred loading in the agent loop", () => {
     ]);
     const manifest = makeManifest();
 
-    const result = await executeTurn(TURN_INPUT, [manifest], makeDeps(llm), {
-      maxSteps: 5,
-    });
+    const result = await runTurnPipeline(
+      TURN_INPUT,
+      [manifest],
+      makeDeps(llm),
+      {
+        maxSteps: 5,
+      },
+    );
     const rr = result.runtimeResults.find((r) => r.runtimeId === manifest.name);
     expect(rr?.status).toBe("success");
 
@@ -166,7 +167,7 @@ describe("tool-search: deferred loading in the agent loop", () => {
       toolCallResponse(SEARCH_TOOLS_TOOL_NAME, { query: "teleport wormhole" }),
       DONE,
     ]);
-    const result = await executeTurn(
+    const result = await runTurnPipeline(
       TURN_INPUT,
       [makeManifest()],
       makeDeps(llm),

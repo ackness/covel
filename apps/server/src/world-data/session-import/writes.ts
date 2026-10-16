@@ -1,3 +1,4 @@
+import { isRecord } from "../../lib/is-record.js";
 import {
   DIMENSION_DATA_NAMESPACE,
   dimensionRecordSchema,
@@ -28,7 +29,6 @@ import type {
   PlannedWrite,
   WorldDataImportedMediaRef,
 } from "./types.js";
-import { isRecord } from "./utils.js";
 import { lorebookPosition, lorebookStrategy } from "./validation.js";
 
 async function existingKeySet(options: {

@@ -216,20 +216,7 @@ export interface NormalizedRuntimeSpec {
   };
   readonly bindings: Readonly<Record<string, RuntimeBinding>>;
   readonly exportBindings: Readonly<Record<string, RuntimeExportBinding>>;
-  /** Runtime-dir-relative schema paths, containment-checked by the loader. */
-  readonly schemas: {
-    readonly activation?: string;
-    readonly output?: string;
-  };
-  readonly outputRecordAs?: string;
   readonly effectsDecl?: EffectsDecl;
-  readonly httpPermissions: readonly HttpPermissionDecl[];
-  /**
-   * Which spec fields the normalizer derived rather than read verbatim
-   * (diagnostics) — e.g. `trigger:default-auto` when no trigger is declared.
-   * Every entry names a normalization of the current contract.
-   */
-  readonly provenance: { readonly derivedFrom: readonly string[] };
 }
 
 // ── Execution identity ───────────────────────────────────────────
