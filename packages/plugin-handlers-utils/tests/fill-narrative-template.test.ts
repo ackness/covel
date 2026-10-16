@@ -25,4 +25,14 @@ describe("fillNarrativeTemplate", () => {
       expect(fillNarrativeTemplate(template, values)).toBe(expected);
     },
   );
+
+  it("leaves an unclosed or empty placeholder as text, in linear time", () => {
+    const tabs = "\t".repeat(200_000);
+    const started = performance.now();
+    for (const template of [`{{${tabs}`, `{{{{${tabs}`, `{{{{|${tabs}`]) {
+      expect(fillNarrativeTemplate(template, {})).toBe(template);
+    }
+    expect(performance.now() - started).toBeLessThan(1000);
+    expect(fillNarrativeTemplate("{{}} {{ }}", {})).toBe("{{}} ");
+  });
 });
