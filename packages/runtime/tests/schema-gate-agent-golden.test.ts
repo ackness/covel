@@ -407,7 +407,18 @@ describe("ordinary and resumed private schema parity", () => {
             ? {
                 prompt: "portrait",
                 interaction: { interactionId: "form-1", type: "form" },
-                ui: [{ id: "card-1", type: "form" }],
+                ui: [
+                  {
+                    parts: [
+                      {
+                        id: "card-1",
+                        type: "form",
+                        status: "success",
+                        content: {},
+                      },
+                    ],
+                  },
+                ],
               }
             : { wrong: true },
       });
@@ -456,7 +467,18 @@ describe("ordinary and resumed private schema parity", () => {
           expect(result?.output).toEqual({ prompt: "portrait" });
           expect(result?.effects).toEqual({
             interactions: [{ interactionId: "form-1", type: "form" }],
-            ui: [{ id: "card-1", type: "form" }],
+            ui: [
+              {
+                parts: [
+                  {
+                    id: "card-1",
+                    type: "form",
+                    status: "success",
+                    content: {},
+                  },
+                ],
+              },
+            ],
           });
         }
       }

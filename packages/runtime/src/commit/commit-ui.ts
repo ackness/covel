@@ -11,7 +11,7 @@ import {
   pictureOf,
   type ShownPicture,
 } from "@covel/shared";
-import type { CommitResult, ProposalFor } from "@covel/shared";
+import type { CommitResult, Proposal, ProposalFor } from "@covel/shared";
 import {
   makeEvent,
   resolveBlockType,
@@ -39,6 +39,38 @@ function pictureNote(
     : `A picture was shown to the player here. It depicts: ${picture.caption}`;
 }
 
+async function addBlockMessage(
+  store: KernelStore,
+  proposal: Proposal,
+  type: string,
+  data: unknown,
+) {
+  const block = {
+    id: proposal.id,
+    type,
+    data,
+    meta: {
+      runtimeId: proposal.source.runtimeId,
+      pluginId: proposal.source.pluginId,
+      turnId: proposal.turnId,
+    },
+  };
+  await store.addMessage({
+    id: proposal.id,
+    sessionId: proposal.sessionId,
+    role: "assistant",
+    content: "",
+    metadata: {
+      turnId: proposal.turnId,
+      runtimeId: proposal.source.runtimeId,
+      kind: "plugin",
+      block,
+    },
+    createdAt: proposal.timestamp,
+  });
+  return block;
+}
+
 export function createUiCommitHandlers(
   store: KernelStore,
 ): Pick<
@@ -49,29 +81,12 @@ export function createUiCommitHandlers(
     proposal: ProposalFor<"interaction.request">,
   ): Promise<CommitResult> {
     const payload = { ...proposal.payload };
-    const block = {
-      id: proposal.id,
-      type: resolveBlockType(payload),
-      data: payload,
-      meta: {
-        runtimeId: proposal.source.runtimeId,
-        pluginId: proposal.source.pluginId,
-        turnId: proposal.turnId,
-      },
-    };
-    await store.addMessage({
-      id: proposal.id,
-      sessionId: proposal.sessionId,
-      role: "assistant",
-      content: "",
-      metadata: {
-        turnId: proposal.turnId,
-        runtimeId: proposal.source.runtimeId,
-        kind: "plugin",
-        block,
-      },
-      createdAt: proposal.timestamp,
-    });
+    const block = await addBlockMessage(
+      store,
+      proposal,
+      resolveBlockType(payload),
+      payload,
+    );
     return {
       committed: true,
       event: makeEvent("interaction.requested", proposal, {
@@ -91,30 +106,7 @@ export function createUiCommitHandlers(
     );
     if (invalid) return invalid;
 
-    const block = {
-      id: proposal.id,
-      type: "ui.render",
-      data: payload,
-      meta: {
-        runtimeId: proposal.source.runtimeId,
-        pluginId: proposal.source.pluginId,
-        turnId: proposal.turnId,
-      },
-    };
-
-    await store.addMessage({
-      id: proposal.id,
-      sessionId: proposal.sessionId,
-      role: "assistant",
-      content: "",
-      metadata: {
-        turnId: proposal.turnId,
-        runtimeId: proposal.source.runtimeId,
-        kind: "plugin",
-        block,
-      },
-      createdAt: proposal.timestamp,
-    });
+    const block = await addBlockMessage(store, proposal, "ui.render", payload);
 
     return {
       committed: true,
@@ -132,30 +124,12 @@ export function createUiCommitHandlers(
     }
 
     const view = assetGenerateToView(proposal);
-    const block = {
-      id: proposal.id,
-      type: "asset.generate",
-      data: view,
-      meta: {
-        runtimeId: proposal.source.runtimeId,
-        pluginId: proposal.source.pluginId,
-        turnId: proposal.turnId,
-      },
-    };
-
-    await store.addMessage({
-      id: proposal.id,
-      sessionId: proposal.sessionId,
-      role: "assistant",
-      content: "",
-      metadata: {
-        turnId: proposal.turnId,
-        runtimeId: proposal.source.runtimeId,
-        kind: "plugin",
-        block,
-      },
-      createdAt: proposal.timestamp,
-    });
+    const block = await addBlockMessage(
+      store,
+      proposal,
+      "asset.generate",
+      view,
+    );
 
     // The message above is what the player sees. The prompt history is built
     // from the turn messages, so a picture gets a row there too: its content

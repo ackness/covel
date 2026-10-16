@@ -87,8 +87,15 @@ function canonicalJson(value: unknown): string {
     .join(",")}}`;
 }
 
+const schemaDigests = new WeakMap<Schema, string>();
+
 function digestOf(schema: Schema): string {
-  return createHash("sha256").update(canonicalJson(schema)).digest("hex");
+  let digest = schemaDigests.get(schema);
+  if (!digest) {
+    digest = createHash("sha256").update(canonicalJson(schema)).digest("hex");
+    schemaDigests.set(schema, digest);
+  }
+  return digest;
 }
 
 /**

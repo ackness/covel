@@ -274,6 +274,7 @@ plugin 工具封装插件自己的业务。它的 schema、文案和数据结构
 **FormField**: `{ type, name, label, placeholder?, options?, required?, defaultValue?, min?, max?, step? }`
 
 - type: `text` | `textarea` | `select` | `checkbox` | `number`
+- `name` 是必填的字段标识，不能用 `id` 代替。
 
 字段的取值规则：
 
@@ -400,7 +401,7 @@ interface UIRenderPart {
 }
 ```
 
-工具返回 `{ ui: [{ parts, layout? }] }`，框架据此生成 `ui.render` proposal。返回 `{ ui: [{ type, ...content }] }` 这种没有 `parts` 的形状时，框架自动把它包成一个 `success` 状态的 part。
+工具返回 `{ ui: [{ parts, layout? }] }`，框架据此生成 `ui.render` proposal。每个 UI 块必须带 `parts`；没有 `parts` 的块会被拒绝。
 
 ### plugin-data-set
 

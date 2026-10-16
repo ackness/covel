@@ -296,6 +296,7 @@ for (const [backend, create] of [
         ).toBe(true);
         expect(
           await dimensionExecutionBarrier({
+            session: await store.getSession("s"),
             store,
             sessionId: "s",
             runtimes,
@@ -304,6 +305,7 @@ for (const [backend, create] of [
         ).toContain("pending");
         expect(
           await dimensionExecutionBarrier({
+            session: await store.getSession("s"),
             store,
             sessionId: "s",
             runtimes,
@@ -358,6 +360,7 @@ for (const [backend, create] of [
         expect(await receipt(store)).toMatchObject({ status: settlement });
         expect(
           await dimensionExecutionBarrier({
+            session: await store.getSession("s"),
             store,
             sessionId: "s",
             runtimes,
@@ -377,6 +380,7 @@ for (const [backend, create] of [
       expect(await record(store)).toMatchObject({ value: 3 });
       expect(
         await dimensionExecutionBarrier({
+          session: await store.getSession("s"),
           store,
           sessionId: "s",
           runtimes,
@@ -782,13 +786,16 @@ describe("dimension execution barrier", () => {
       outputContract: DIMENSION_CONTRACT,
     }) as RuntimeManifest;
   const story = runtimes.filter((runtime) => runtime.pluginId === "story");
-  const barrier = async (active: readonly RuntimeManifest[]) =>
-    dimensionExecutionBarrier({
-      store: await setup(),
+  const barrier = async (active: readonly RuntimeManifest[]) => {
+    const store = await setup();
+    return dimensionExecutionBarrier({
+      session: await store.getSession("s"),
+      store,
       sessionId: "s",
       runtimes: active,
       willNarrate: true,
     });
+  };
 
   it("lets the story run when the bound provider is not running", async () => {
     expect(await barrier(story)).toBeUndefined();

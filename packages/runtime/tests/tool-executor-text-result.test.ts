@@ -123,7 +123,16 @@ describe("ToolExecutor text-result convention", () => {
   });
 
   it("leaves the ui blocks out of the JSON the model reads, not out of the result", async () => {
-    const block = { type: "ui-spec", spec: { root: "card" } };
+    const block = {
+      parts: [
+        {
+          id: "card",
+          type: "ui-spec",
+          status: "success",
+          content: { spec: { root: "card" } },
+        },
+      ],
+    };
     const cardTool = tool({
       name: "show-card",
       description: "Returns a count and a card for the player",

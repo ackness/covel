@@ -1,3 +1,7 @@
+import { createHash } from "node:crypto";
+import { AiProviderError } from "@covel/ai-provider";
+import type { MediaRef } from "@covel/shared";
+import type { MediaStore } from "@covel/store";
 import type {
   ImageGenerationTarget,
   PluginRuntimeGateway,
@@ -45,4 +49,41 @@ function canonicalMetadata(value: unknown): unknown {
         .map(([key, item]) => [key, canonicalMetadata(item)]),
     );
   return value;
+}
+
+/** Keep each modality's ordered key parts stable while sharing the hash format. */
+export function mediaPromptHash(parts: readonly unknown[]): string {
+  return createHash("sha256").update(JSON.stringify(parts)).digest("hex");
+}
+
+export function isSlotAvailable(
+  gateway: Pick<PluginRuntimeGateway, "resolveSlot">,
+  presetId: string,
+  fallbackTag: string,
+): boolean {
+  try {
+    return gateway.resolveSlot({ presetId, fallbackTag }) !== null;
+  } catch (error) {
+    if (error instanceof AiProviderError && error.code === "CONFIG_ERROR")
+      return false;
+    throw error;
+  }
+}
+
+/** A single-asset hit uses this call's metadata, not the original call's. */
+export async function cachedSingleRef(
+  mediaStore: Pick<MediaStore, "listByMetadata">,
+  sessionId: string,
+  meta: NonNullable<MediaRef["meta"]> & {
+    pluginId: string;
+    promptHash: string;
+  },
+): Promise<MediaRef | undefined> {
+  const [asset] = await mediaStore.listByMetadata(sessionId, {
+    promptHash: meta.promptHash,
+    pluginId: meta.pluginId,
+  });
+  return asset
+    ? { id: asset.id, mime: asset.mime, size: asset.size, meta }
+    : undefined;
 }

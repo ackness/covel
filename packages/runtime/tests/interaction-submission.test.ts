@@ -582,6 +582,28 @@ describe("submitFormHandler (Epic A)", () => {
     ).rejects.toThrow(/type.*choice/i);
   });
 
+  it("rejects committed form fields that use id instead of name", async () => {
+    await seedInteraction(store, {
+      interactionId: "profile",
+      type: "form",
+      title: "Profile",
+      submitLabel: "Continue",
+      fields: [{ type: "text", id: "name", label: "Name" }],
+    } as unknown as InteractionPayload);
+    await expect(
+      submitOne(
+        store,
+        {
+          interactionId: "profile",
+          type: "form",
+          values: { name: "Atlas" },
+        },
+        "en-US",
+      ),
+    ).rejects.toThrow("contains a field without a name");
+    expect(await store.listPlayerInputs(SESSION)).toEqual([]);
+  });
+
   it("validates required fields, field types, select options, and unknown keys", async () => {
     await seedInteraction(store, {
       interactionId: "profile",

@@ -189,7 +189,6 @@ export type {
   UIRenderPartRetry,
   UIRenderPart,
   UIRenderPartsInstruction,
-  UIRenderLegacyInstruction,
   UIRenderInstruction,
 } from "./ui.js";
 

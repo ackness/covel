@@ -266,12 +266,12 @@ async function executeTurnImpl(
   }
 
   let sessionState: LoadedTurnSessionState;
+  let sessionSummaries: readonly import("@covel/store").SessionSummaryRecord[];
   try {
-    sessionState = await loadTurnSessionState({
-      input,
-      deps,
-      shouldAppendPlayerMessage,
-    });
+    [sessionState, sessionSummaries] = await Promise.all([
+      loadTurnSessionState({ input, deps, shouldAppendPlayerMessage }),
+      loadSessionSummaries({ input, deps }),
+    ]);
   } catch (error) {
     if (!deps.turnControl?.signal?.aborted) throw error;
     return {
@@ -304,6 +304,7 @@ async function executeTurnImpl(
     input.detachedStage?.sourceLogicalTurn ??
     sessionState.completedPlayerTurns + 1;
   const dimensionBarrier = await dimensionExecutionBarrier({
+    session: sessionState.session,
     store: deps.store,
     sessionId: input.sessionId,
     runtimes: activeRuntimes,
@@ -536,7 +537,6 @@ async function executeTurnImpl(
       },
     );
   }
-  const sessionSummaries = await loadSessionSummaries({ input, deps });
   const loadSessionContext = () =>
     refreshSessionContextSnapshot({
       input,

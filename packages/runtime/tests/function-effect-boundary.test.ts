@@ -139,7 +139,18 @@ describe("function business value and effect boundary", () => {
 
   it.each([
     { ui: "invalid", expectedUi: 0 },
-    { ui: [null, 42, { id: "valid-card", type: "form" }], expectedUi: 1 },
+    {
+      ui: [
+        null,
+        42,
+        {
+          parts: [
+            { id: "valid-card", type: "form", status: "success", content: {} },
+          ],
+        },
+      ],
+      expectedUi: 1,
+    },
   ])(
     "ignores malformed UI effects during execution and commit",
     async ({ ui, expectedUi }) => {

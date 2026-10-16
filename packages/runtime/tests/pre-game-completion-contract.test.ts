@@ -209,7 +209,13 @@ describe("Pre-Game completion contract", () => {
       {
         pregame: async () => ({ preGameDone: true }),
         "char-creator/player-init": async () => ({
-          ui: [{ type: "form", interactionId: "char" }],
+          ui: [
+            {
+              parts: [
+                { id: "char", type: "form", status: "success", content: {} },
+              ],
+            },
+          ],
           // preGameDone intentionally absent — form not yet submitted.
         }),
       },

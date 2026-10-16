@@ -51,6 +51,7 @@ export type {
   ModelSlotMap,
   CacheStrategy,
   SlotOverridesInput,
+  CapabilityOverridePolicy,
   CustomPresetInput,
 } from "./types.js";
 export type {

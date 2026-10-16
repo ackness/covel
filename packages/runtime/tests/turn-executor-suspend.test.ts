@@ -553,7 +553,13 @@ describe("TurnExecutor — agent runtime suspend", () => {
       parsedResult: {
         emitted: true,
         interaction: { interactionId: "clue-form", type: "form" },
-        ui: [{ id: "clue-card", type: "form" }],
+        ui: [
+          {
+            parts: [
+              { id: "clue-card", type: "form", status: "success", content: {} },
+            ],
+          },
+        ],
       },
       emittedEvents: [{ topic: "clue.found", data: { id: 1 } }],
       success: true,
@@ -634,7 +640,13 @@ describe("TurnExecutor — agent runtime suspend", () => {
     expect(resumed.effects?.interactions).toEqual([
       { interactionId: "clue-form", type: "form" },
     ]);
-    expect(resumed.effects?.ui).toEqual([{ id: "clue-card", type: "form" }]);
+    expect(resumed.effects?.ui).toEqual([
+      {
+        parts: [
+          { id: "clue-card", type: "form", status: "success", content: {} },
+        ],
+      },
+    ]);
     expect(resumed.output).not.toHaveProperty("ui");
   });
 

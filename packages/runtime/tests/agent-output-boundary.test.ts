@@ -30,7 +30,18 @@ describe("agent output boundary", () => {
         name: "Atlas",
         events: [worldEvent, declaredEvent],
         interactions: [{ interactionId: "declared", type: "form" }],
-        ui: [{ id: "declared-ui", type: "form" }],
+        ui: [
+          {
+            parts: [
+              {
+                id: "declared-ui",
+                type: "form",
+                status: "success",
+                content: {},
+              },
+            ],
+          },
+        ],
         statePatches: [{ table: "world", field: "name", value: "Atlas" }],
         pluginData: [{ namespace: "world", key: "name", value: "Atlas" }],
         assetGenerations: [{ ref: "asset-1", modality: "image" }],
@@ -44,7 +55,18 @@ describe("agent output boundary", () => {
           success: true,
           result: {
             interaction: { interactionId: "tool", type: "form" },
-            ui: [{ id: "tool-ui", type: "form" }],
+            ui: [
+              {
+                parts: [
+                  {
+                    id: "tool-ui",
+                    type: "form",
+                    status: "success",
+                    content: {},
+                  },
+                ],
+              },
+            ],
           },
         },
       ],
@@ -71,7 +93,13 @@ describe("agent output boundary", () => {
     expect(finalized.effects).toEqual({
       events: [toolEvent],
       interactions: [{ interactionId: "tool", type: "form" }],
-      ui: [{ id: "tool-ui", type: "form" }],
+      ui: [
+        {
+          parts: [
+            { id: "tool-ui", type: "form", status: "success", content: {} },
+          ],
+        },
+      ],
     });
     // The completion signal is not an effect.
     expect(finalized.completion).toBe("done");
@@ -141,7 +169,13 @@ describe("agent output boundary", () => {
           input: {},
           output: {
             interaction: { interactionId: "same", type: "form" },
-            ui: [{ id: "card", type: "form" }],
+            ui: [
+              {
+                parts: [
+                  { id: "card", type: "form", status: "success", content: {} },
+                ],
+              },
+            ],
           },
           durationMs: 1,
           approvalStatus: "auto-allowed",
@@ -154,7 +188,13 @@ describe("agent output boundary", () => {
           arguments: "{}",
           result: {
             interaction: { interactionId: "same", type: "form" },
-            ui: [{ id: "card", type: "form" }],
+            ui: [
+              {
+                parts: [
+                  { id: "card", type: "form", status: "success", content: {} },
+                ],
+              },
+            ],
           },
           success: true,
         },
@@ -168,7 +208,13 @@ describe("agent output boundary", () => {
       output: {},
       effects: {
         interactions: [{ interactionId: "same", type: "form" }],
-        ui: [{ id: "card", type: "form" }],
+        ui: [
+          {
+            parts: [
+              { id: "card", type: "form", status: "success", content: {} },
+            ],
+          },
+        ],
       },
     });
   });

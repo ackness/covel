@@ -17,6 +17,7 @@ import {
   type RuntimeResult,
   type TurnInput,
 } from "@covel/shared";
+import { makeFailedResult } from "../turn-executor/turn-executor-helpers.js";
 import type { ToolCallRecord } from "@covel/shared";
 import type { FinalizeAgentOutputParams } from "./finalize-agent-output.js";
 import { validateOutput } from "@covel/tools";
@@ -58,40 +59,38 @@ function checkSchemaProseFailure(
       ? ` Required fields: {${requiredFields.join(", ")}}.`
       : "";
 
-  return {
-    pluginId: manifest.pluginId,
-    runtimeId: manifest.name,
+  return makeFailedResult(
+    manifest,
+    input,
     runId,
-    turnId: input.turnId,
-    status: "failed",
-    // Preserve the full LLM output (`narrativeOutput`) plus a structured
-    // diagnostic the task UI can render verbatim. The shape is stable so a
-    // plugin's jobs.json can bind `value/runtimeResults/0/output/diagnostic`
-    // and show the user the schema contract + raw output side-by-side.
-    output: {
-      narrativeOutput: finalContent,
-      diagnostic: {
-        kind: "schema-validation-prose",
-        requiredFields,
-        schemaTitle:
-          typeof outputSchema.title === "string"
-            ? outputSchema.title
-            : undefined,
-        llmOutput: finalContent,
-        hint:
-          "Model returned plain prose instead of JSON. Try a model with reliable structured-output mode, " +
-          "tighten the system prompt to enforce JSON, or relax overly strict schema fields.",
-      },
-    },
-    toolCalls: [...collectedToolCalls],
-    durationMs: Date.now() - startTime,
-    error:
-      `Runtime "${manifest.name}" expected a JSON envelope per output.schema but the model returned plain prose.` +
+    startTime,
+    `Runtime "${manifest.name}" expected a JSON envelope per output.schema but the model returned plain prose.` +
       requiredHint +
       ` Full LLM output preserved in runtimeResults[].output.narrativeOutput.` +
       ` Preview: "${preview}${finalContent.length > 220 ? "…" : ""}"`,
-    timestamp: new Date().toISOString(),
-  };
+    {
+      // Preserve the full LLM output (`narrativeOutput`) plus a structured
+      // diagnostic the task UI can render verbatim. The shape is stable so a
+      // plugin's jobs.json can bind `value/runtimeResults/0/output/diagnostic`
+      // and show the user the schema contract + raw output side-by-side.
+      output: {
+        narrativeOutput: finalContent,
+        diagnostic: {
+          kind: "schema-validation-prose",
+          requiredFields,
+          schemaTitle:
+            typeof outputSchema.title === "string"
+              ? outputSchema.title
+              : undefined,
+          llmOutput: finalContent,
+          hint:
+            "Model returned plain prose instead of JSON. Try a model with reliable structured-output mode, " +
+            "tighten the system prompt to enforce JSON, or relax overly strict schema fields.",
+        },
+      },
+      toolCalls: [...collectedToolCalls],
+    },
+  );
 }
 
 /**
@@ -117,20 +116,15 @@ function checkSchemaValidation(
   } else {
     return undefined;
   }
-  return {
-    pluginId: manifest.pluginId,
-    runtimeId: manifest.name,
+  return makeFailedResult(
+    manifest,
+    input,
     runId,
-    turnId: input.turnId,
-    status: "failed",
-    output,
-    toolCalls: [...collectedToolCalls],
-    durationMs: Date.now() - startTime,
-    error:
-      `Runtime "${manifest.name}" output did not match output.schema: ` +
+    startTime,
+    `Runtime "${manifest.name}" output did not match output.schema: ` +
       validationErrors.slice(0, 5).join("; "),
-    timestamp: new Date().toISOString(),
-  };
+    { output, toolCalls: [...collectedToolCalls] },
+  );
 }
 
 export type { ValidatorContext };

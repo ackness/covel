@@ -1,3 +1,4 @@
+import { settleAgentLoop } from "../agent-loop/settle-agent-loop.js";
 import { loadLastPlayerInput } from "../turn-executor/session-state.js";
 import { reportRuntimeStarted } from "../trace/runtime-telemetry.js";
 import { DEFAULT_MAX_TOOL_STEPS } from "../agent-loop/agent-loop-policy.js";
@@ -13,11 +14,7 @@ import type {
 import type { SuspensionRecord } from "@covel/store";
 import type { EmittedEvent } from "@covel/tools";
 import type { LLMMessage } from "@covel/shared";
-import { formatToolLoopFailure } from "../turn-executor/turn-output-helpers.js";
 import { runAgentToolLoop } from "../agent-loop/turn-agent-tool-loop.js";
-import { createAgentSchemaGate } from "../agent-loop/runtime-output-validator.js";
-import { finalizeAgentOutput } from "../agent-loop/finalize-agent-output.js";
-import { completionContractError } from "../agent-loop/runtime-completion.js";
 import { freezeInputSlots } from "../agent-loop/runtime-input-slots.js";
 import { executeFunctionRuntime } from "../function-runtime/turn-function-runtime.js";
 import { createWorldModelView } from "../function-runtime/world-model-view.js";
@@ -47,7 +44,7 @@ export interface ResumeSuspendedRuntimeOptions {
  * This is the resume third of the "suspend / resume / normal-execution" trio.
  * It rebuilds the mid-turn state from the persisted suspension and re-enters the
  * **shared** agent tool loop (`runAgentToolLoop`) with that state seeded in, then
- * finalizes through the **shared** `finalizeAgentOutput`. It no longer hand-rolls
+ * settles through the **shared** `settleAgentLoop`. It no longer hand-rolls
  * its own copy of the loop / finalize blocks: resume now goes through the
  * same `requestLLMResponse` + retry / loop-detection / streaming machinery as the
  * main loop, so `maxRetries` / `firstTokenTimeoutMs` / `loopDetectionThreshold`
@@ -150,18 +147,15 @@ async function executeResumedRuntime(
   );
   throwIfTurnExecutionAborted(deps.turnControl, "resume loading");
   if (!loaded) {
-    return finalizeWithPostRuntime({
-      pluginId: manifest.pluginId,
-      runtimeId: manifest.name,
-      runId,
-      turnId: suspension.turnId,
-      status: "failed",
-      output: null,
-      toolCalls: [],
-      durationMs: Date.now() - startTime,
-      error: "Runtime not found on resume",
-      timestamp: new Date().toISOString(),
-    });
+    return finalizeWithPostRuntime(
+      makeFailedResult(
+        manifest,
+        input,
+        runId,
+        startTime,
+        "Runtime not found on resume",
+      ),
+    );
   }
 
   const { pendingContinuation } = suspension;
@@ -324,98 +318,15 @@ async function executeResumedRuntime(
   lastTarget = toolLoop.lastTarget;
   deltaCount = toolLoop.streamDeltaCount;
 
-  const {
-    finalContent,
-    finalToolOutput,
-    collectedToolCalls,
-    executedToolCalls,
-    failedToolCalls,
-    pendingProposals,
-    emittedEvents,
-    stoppedWithResponse,
-    effectiveMaxSteps,
-    deadline,
-  } = toolLoop;
-
-  if (!stoppedWithResponse && !finalContent) {
-    return finalizeWithPostRuntime({
-      pluginId: manifest.pluginId,
-      runtimeId: manifest.name,
-      runId,
-      turnId: suspension.turnId,
-      status: "failed",
-      output: null,
-      toolCalls: collectedToolCalls,
-      durationMs: Date.now() - startTime,
-      error: formatToolLoopFailure({
-        runtimeId: manifest.name,
-        reason: Date.now() >= deadline ? "timeout" : "max_steps",
-        maxSteps: effectiveMaxSteps,
-        failedToolCalls,
-      }),
-      timestamp: new Date().toISOString(),
-    });
-  }
-
-  const completionError = completionContractError(manifest, toolLoop);
-  if (completionError) {
-    return finalizeWithPostRuntime({
-      pluginId: manifest.pluginId,
-      runtimeId: manifest.name,
-      runId,
-      turnId: suspension.turnId,
-      status: "failed",
-      output: null,
-      toolCalls: collectedToolCalls,
-      durationMs: Date.now() - startTime,
-      error: completionError,
-      timestamp: new Date().toISOString(),
-    });
-  }
-
-  const finalized = finalizeAgentOutput({
+  const settled = settleAgentLoop({
     manifest,
-    finalContent,
-    ...(finalToolOutput ? { preferredOutput: finalToolOutput } : {}),
-    executedToolCalls,
+    input,
+    runId,
+    startTime,
+    toolLoop,
+    outputSchema: loaded.outputSchema,
     priorToolCalls: pendingContinuation.toolCallsSoFar as ToolCallRecord[],
-    failedToolCalls,
-    pendingProposals,
-    emittedEvents,
-    dedupeInteractions: true,
-    schemaGate: createAgentSchemaGate({
-      manifest,
-      input,
-      runId,
-      startTime,
-      collectedToolCalls,
-      outputSchema: loaded.outputSchema,
-    }),
   });
-  if (finalized.kind === "tool-failed" || finalized.kind === "invalid-output") {
-    return finalizeWithPostRuntime({
-      pluginId: manifest.pluginId,
-      runtimeId: manifest.name,
-      runId,
-      turnId: suspension.turnId,
-      status: "failed",
-      output: null,
-      toolCalls: collectedToolCalls,
-      durationMs: Date.now() - startTime,
-      error:
-        finalized.kind === "invalid-output"
-          ? finalized.error
-          : formatToolLoopFailure({
-              runtimeId: manifest.name,
-              reason: "tool_failed_without_output",
-              failedToolCalls,
-            }),
-      timestamp: new Date().toISOString(),
-    });
-  }
-  if (finalized.kind === "short-circuit") {
-    return finalizeWithPostRuntime(finalized.result);
-  }
   // The runtime NO LONGER resolves the suspension or appends the
   // assistant turn message here. Those writes belong to the commit-owning
   // caller (apps/server resume route), which folds them into the SAME
@@ -425,20 +336,5 @@ async function executeResumedRuntime(
   // with them (it must not announce a resume that then rolls back).
   // PostRuntime runs BEFORE any persistence — the caller persists
   // the hook-finalized output.
-  return finalizeWithPostRuntime({
-    pluginId: manifest.pluginId,
-    runtimeId: manifest.name,
-    runId,
-    turnId: suspension.turnId,
-    status: "success",
-    output: finalized.output,
-    ...(finalized.pendingProposals
-      ? { pendingProposals: finalized.pendingProposals }
-      : {}),
-    ...(finalized.effects ? { effects: finalized.effects } : {}),
-    ...(finalized.completion ? { completion: finalized.completion } : {}),
-    toolCalls: collectedToolCalls,
-    durationMs: Date.now() - startTime,
-    timestamp: new Date().toISOString(),
-  });
+  return finalizeWithPostRuntime(settled.result);
 }

@@ -96,7 +96,9 @@ function captureSchemas(deps: ExecutionDeps) {
       ) => {
         const loaded = await deps.loadRuntime(...args);
         if (loaded?.outputSchema) {
-          outputSchemas[args[0].name] = structuredClone(loaded.outputSchema);
+          // Loader schemas are shared per registry generation. Preserve identity
+          // so export validation reuses the compiled validator across executions.
+          outputSchemas[args[0].name] = loaded.outputSchema;
         }
         return loaded;
       },
@@ -207,25 +209,31 @@ export async function executeTurn(
         upstreamResults: job.upstreamResults.map(publicRuntimeResult),
       }))
     : undefined;
+  const {
+    runtimeResults,
+    auditResult,
+    deferredRuntimeJobs,
+    nestedRuntimeResults,
+    ...rest
+  } = turn;
   return {
     result: {
-      ...structuredClone(turn),
-      runtimeResults: turn.runtimeResults.map(publicRuntimeResult),
-      ...(turn.auditResult
-        ? { auditResult: publicRuntimeResult(turn.auditResult) }
-        : {}),
-      ...(turn.deferredRuntimeJobs
+      ...structuredClone(rest),
+      runtimeResults: runtimeResults.map(publicRuntimeResult),
+      ...(auditResult ? { auditResult: publicRuntimeResult(auditResult) } : {}),
+      ...(deferredRuntimeJobs
         ? {
-            deferredRuntimeJobs: turn.deferredRuntimeJobs.map((job) => ({
-              ...structuredClone(job),
-              upstreamResults: job.upstreamResults.map(publicRuntimeResult),
-            })),
+            deferredRuntimeJobs: deferredRuntimeJobs.map(
+              ({ upstreamResults, ...job }) => ({
+                ...structuredClone(job),
+                upstreamResults: upstreamResults.map(publicRuntimeResult),
+              }),
+            ),
           }
         : {}),
-      ...(turn.nestedRuntimeResults
+      ...(nestedRuntimeResults
         ? {
-            nestedRuntimeResults:
-              turn.nestedRuntimeResults.map(publicRuntimeResult),
+            nestedRuntimeResults: nestedRuntimeResults.map(publicRuntimeResult),
           }
         : {}),
     },
@@ -278,8 +286,8 @@ export async function executeTurn(
             }
           : {}),
         ...(turn.setupRan ? { setupRan: turn.setupRan } : {}),
-        outputSchemas: captured.outputSchemas,
       }),
+      outputSchemas: captured.outputSchemas,
       hookSettings: hookScope.settings,
       hookLocale: hookScope.locale,
     },
@@ -376,7 +384,6 @@ export async function resumeSuspendedRuntime(
             : {}),
         },
         ...(setup.setupRan ? { setupRan: setup.setupRan } : {}),
-        outputSchemas: captured.outputSchemas,
         resolvedSuspensionId: suspension.id,
         writeBaseline: suspension.pendingContinuation.takenUnder.writes,
         resumedExecution: {
@@ -386,6 +393,7 @@ export async function resumeSuspendedRuntime(
         },
         ...(releasedRuntimeJobs?.length ? { releasedRuntimeJobs } : {}),
       }),
+      outputSchemas: captured.outputSchemas,
       hookSettings: hookScope.settings,
       hookLocale: hookScope.locale,
     },

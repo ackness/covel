@@ -274,6 +274,7 @@ A form that a manual runtime opens through the plugin's UI works the same way. T
 **FormField**: `{ type, name, label, placeholder?, options?, required?, defaultValue?, min?, max?, step? }`
 
 - type: `text` | `textarea` | `select` | `checkbox` | `number`
+- `name` is the required field identifier; `id` cannot replace it.
 
 Rules for field values:
 
@@ -400,7 +401,7 @@ interface UIRenderPart {
 }
 ```
 
-The tool returns `{ ui: [{ parts, layout? }] }`, and the framework builds a `ui.render` proposal from it. When a tool returns a shape without `parts`, such as `{ ui: [{ type, ...content }] }`, the framework wraps it automatically in one part with the `success` status.
+The tool returns `{ ui: [{ parts, layout? }] }`, and the framework builds a `ui.render` proposal from it. Every UI block must include `parts`; blocks without `parts` are rejected.
 
 ### plugin-data-set
 

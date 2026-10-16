@@ -1,3 +1,4 @@
+import { settleAgentLoop } from "./settle-agent-loop.js";
 import { createWorldModelView } from "../function-runtime/world-model-view.js";
 import { reportRuntimeStarted } from "../trace/runtime-telemetry.js";
 import { getTurnExecutionSignal } from "../turn-executor/turn-control.js";
@@ -21,15 +22,11 @@ import {
   runPostContextAssemblyHook,
   type IncludedPromptSegment,
 } from "../hooks/wire-helpers.js";
-import { formatToolLoopFailure } from "../turn-executor/turn-output-helpers.js";
-import { finalizeAgentOutput } from "./finalize-agent-output.js";
 import { freezeInputSlots } from "./runtime-input-slots.js";
 import { applyHistoryWindow, filterRuntimeHistory } from "./message-filter.js";
-import { createAgentSchemaGate } from "./runtime-output-validator.js";
 import { finalizeRuntimeResult } from "../turn-executor/runtime-finalization.js";
 import type { TurnExecutorDeps } from "../turn-executor/turn-executor-types.js";
 import { runAgentToolLoop } from "./turn-agent-tool-loop.js";
-import { completionContractError } from "./runtime-completion.js";
 import { MAX_PICTURE_ATTACHMENTS } from "./picture-attachments.js";
 
 export interface AgentCompactionRefresh {
@@ -321,145 +318,30 @@ export async function executeAgentRuntime({
   });
   if ("status" in toolLoop) return toolLoop;
 
-  const {
-    finalContent,
-    finalToolOutput,
-    collectedToolCalls,
-    executedToolCalls,
-    failedToolCalls,
-    pendingProposals,
-    emittedEvents,
-    streamDeltaCount,
-    stoppedWithResponse,
-    effectiveMaxSteps,
-    deadline,
-  } = toolLoop;
-
-  const finalizeFailure = (result: RuntimeResult): Promise<RuntimeResult> =>
-    finalizeRuntimeResult({ ...deps, hookPipeline }, manifest, input, result, {
-      lastTarget: toolLoop.lastTarget,
-      deltaCount: streamDeltaCount,
-      outputContractSchema: loaded.outputContractSchema,
-    });
-
-  if (!stoppedWithResponse && !finalContent) {
-    return finalizeFailure({
-      pluginId: manifest.pluginId,
-      runtimeId: manifest.name,
-      runId,
-      turnId: input.turnId,
-      status: "failed",
-      output: null,
-      toolCalls: collectedToolCalls,
-      durationMs: Date.now() - startTime,
-      error: formatToolLoopFailure({
-        runtimeId: manifest.name,
-        reason: Date.now() >= deadline ? "timeout" : "max_steps",
-        maxSteps: effectiveMaxSteps,
-        failedToolCalls,
-      }),
-      timestamp: new Date().toISOString(),
-    });
-  }
-
-  // `requireToolUse` unmet: the runtime declared that calling a tool IS its
-  // job, and it never did — the loop already nudged it once and released so a
-  // stubborn model cannot wedge the turn. Reporting success here would hand the
-  // player an empty panel behind a green check, with nothing in the trace to
-  // explain it, so fail with a diagnostic instead. Whatever prose the model
-  // produced is not this runtime's contract and is deliberately dropped.
-  const completionError = completionContractError(manifest, toolLoop);
-  if (completionError) {
-    return finalizeFailure({
-      pluginId: manifest.pluginId,
-      runtimeId: manifest.name,
-      runId,
-      turnId: input.turnId,
-      status: "failed",
-      output: null,
-      toolCalls: collectedToolCalls,
-      durationMs: Date.now() - startTime,
-      error: completionError,
-      timestamp: new Date().toISOString(),
-    });
-  }
-
-  // Ordinary execution and resume share both output construction and schema policy.
-  const finalized = finalizeAgentOutput({
+  const settled = settleAgentLoop({
     manifest,
-    finalContent,
-    ...(finalToolOutput ? { preferredOutput: finalToolOutput } : {}),
-    executedToolCalls,
-    failedToolCalls,
-    pendingProposals,
-    emittedEvents,
-    dedupeInteractions: true,
-    schemaGate: createAgentSchemaGate({
-      manifest,
-      input,
-      runId,
-      startTime,
-      collectedToolCalls,
-      outputSchema: loaded.outputSchema,
-    }),
-  });
-
-  if (finalized.kind === "tool-failed" || finalized.kind === "invalid-output") {
-    return finalizeFailure({
-      pluginId: manifest.pluginId,
-      runtimeId: manifest.name,
-      runId,
-      turnId: input.turnId,
-      status: "failed",
-      output: null,
-      toolCalls: collectedToolCalls,
-      durationMs: Date.now() - startTime,
-      error:
-        finalized.kind === "invalid-output"
-          ? finalized.error
-          : formatToolLoopFailure({
-              runtimeId: manifest.name,
-              reason: "tool_failed_without_output",
-              failedToolCalls,
-            }),
-      timestamp: new Date().toISOString(),
-    });
-  }
-  if (finalized.kind === "short-circuit") {
-    return finalizeFailure(finalized.result);
-  }
-  const rawResult: RuntimeResult = {
-    pluginId: manifest.pluginId,
-    runtimeId: manifest.name,
+    input,
     runId,
-    turnId: input.turnId,
-    status: "success",
-    output: finalized.output,
-    ...(finalized.pendingProposals
-      ? { pendingProposals: finalized.pendingProposals }
-      : {}),
-    ...(finalized.effects ? { effects: finalized.effects } : {}),
-    ...(finalized.completion ? { completion: finalized.completion } : {}),
-    toolCalls: collectedToolCalls,
-    durationMs: Date.now() - startTime,
-    timestamp: new Date().toISOString(),
-  };
+    startTime,
+    toolLoop,
+    outputSchema: loaded.outputSchema,
+  });
 
   const result = await finalizeRuntimeResult(
     { ...deps, hookPipeline },
     manifest,
     input,
-    rawResult,
+    settled.result,
     {
       lastTarget: toolLoop.lastTarget,
-      deltaCount: streamDeltaCount,
+      deltaCount: toolLoop.streamDeltaCount,
       outputContractSchema: loaded.outputContractSchema,
-      ...(loaded.outputSchema
+      ...(settled.kind === "success" && loaded.outputSchema
         ? { agentOutputSchema: loaded.outputSchema }
         : {}),
     },
   );
-  if (deps.store && result.output) {
+  if (settled.kind === "success" && deps.store && result.output) {
     attachRuntimeJournal(
       result,
       input,

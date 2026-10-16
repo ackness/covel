@@ -273,12 +273,7 @@ function validateFormValues(
   const fields = interaction.fields as Array<Record<string, unknown>>;
   const declared = new Map<string, Record<string, unknown>>();
   for (const field of fields) {
-    const name =
-      typeof field.name === "string"
-        ? field.name
-        : typeof field.id === "string"
-          ? field.id
-          : "";
+    const name = typeof field.name === "string" ? field.name : "";
     if (!name) {
       throw new InteractionSubmissionError(
         `Committed form ${interaction.interactionId} contains a field without a name`,

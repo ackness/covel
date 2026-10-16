@@ -350,9 +350,19 @@ describe("TurnExecutor E2E", () => {
         categories: [{ style: "safe", suggestions: ["先观察周围环境"] }],
         ui: [
           {
-            type: "action-guide",
-            topic,
-            categories: [{ style: "safe", suggestions: ["先观察周围环境"] }],
+            parts: [
+              {
+                id: "ui-1",
+                type: "action-guide",
+                status: "success",
+                content: {
+                  topic,
+                  categories: [
+                    { style: "safe", suggestions: ["先观察周围环境"] },
+                  ],
+                },
+              },
+            ],
           },
         ],
       }),
@@ -524,11 +534,19 @@ describe("TurnExecutor E2E", () => {
         ],
         ui: [
           {
-            type: "action-guide",
-            topic,
-            categories: [
-              { style: "safe", suggestions: ["先观察周围灵气流向"] },
-              { style: "creative", suggestions: ["借水雾掩护靠近入口"] },
+            parts: [
+              {
+                id: "ui-1",
+                type: "action-guide",
+                status: "success",
+                content: {
+                  topic,
+                  categories: [
+                    { style: "safe", suggestions: ["先观察周围灵气流向"] },
+                    { style: "creative", suggestions: ["借水雾掩护靠近入口"] },
+                  ],
+                },
+              },
             ],
           },
         ],
@@ -602,11 +620,19 @@ describe("TurnExecutor E2E", () => {
     expect(guideResult.output).not.toHaveProperty("ui");
     expect(guideResult.effects?.ui).toEqual([
       {
-        type: "action-guide",
-        topic: "探查百灵沼泽入口",
-        categories: [
-          { style: "safe", suggestions: ["先观察周围灵气流向"] },
-          { style: "creative", suggestions: ["借水雾掩护靠近入口"] },
+        parts: [
+          {
+            id: "ui-1",
+            type: "action-guide",
+            status: "success",
+            content: {
+              topic: "探查百灵沼泽入口",
+              categories: [
+                { style: "safe", suggestions: ["先观察周围灵气流向"] },
+                { style: "creative", suggestions: ["借水雾掩护靠近入口"] },
+              ],
+            },
+          },
         ],
       },
     ]);

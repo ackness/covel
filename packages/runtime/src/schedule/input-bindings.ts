@@ -462,130 +462,60 @@ export async function resolveInputBindings(
       }
     }
 
-    // Extract value(s).
-    if (cardinality === "all") {
-      const sorted = [...providers].sort((a, b) =>
-        compareCodeUnits(a.name, b.name),
+    const targets =
+      cardinality === "all"
+        ? [...providers].sort((a, b) => compareCodeUnits(a.name, b.name))
+        : providers.slice(0, 1);
+    const items: { value: JsonValue; source: InputSource }[] = [];
+    const fail = (reason: BindingSkipReason) =>
+      required
+        ? { ok: false as const, skipReason: reason, diagnostics }
+        : undefined;
+    for (const provider of targets) {
+      const got = extractValue(
+        provider,
+        binding,
+        completedResults,
+        contractSchema,
       );
-      const items: { value: JsonValue; source: InputSource }[] = [];
-      let failed: ExtractFailure | undefined;
-      for (const provider of sorted) {
-        const got = extractValue(
-          provider,
-          binding,
-          completedResults,
-          contractSchema,
+      if (!got.ok) {
+        diagnostics.push(
+          extractFailureDiagnostic(
+            got,
+            required,
+            manifest.name,
+            name,
+            provider,
+          ),
         );
-        if (!got.ok) {
-          diagnostics.push(
-            extractFailureDiagnostic(
-              got,
-              required,
-              manifest.name,
-              name,
-              provider,
-            ),
-          );
-          failed = got;
-          break;
-        }
-        items.push({ value: got.value, source: got.source });
+        const failure = fail(got.reason);
+        if (failure) return failure;
+        continue bindings;
       }
-      if (failed) {
-        if (required)
-          return { ok: false, skipReason: failed.reason, diagnostics };
-        continue;
-      }
-      // Canonicalize each item's MediaRefs before the array accepts check.
-      if (args.canonicalizeValue) {
-        let rejected = false;
-        for (let i = 0; i < items.length; i++) {
-          const c = await canonicalizeBindingValue(
-            args.canonicalizeValue,
-            items[i]!.value,
-            { runtimeId: manifest.name, bindingName: name, required },
-            diagnostics,
-          );
-          if (c.rejected) {
-            rejected = true;
-            break;
-          }
-          items[i] = { value: c.value, source: items[i]!.source };
-        }
-        if (rejected) {
-          if (required)
-            return {
-              ok: false,
-              skipReason: "media-ownership-invalid",
-              diagnostics,
-            };
-          continue;
-        }
-      }
-      // Runtime full-schema check over the whole array (docs 02 §3.1).
-      if (acceptsSchema) {
-        const array = items.map((i) => i.value);
-        const validation = validateAcceptedValue(array, acceptsSchema);
-        if (!validation.valid) {
-          diagnostics.push(
-            diag(
-              "input-schema-invalid",
-              required ? "error" : "warn",
-              manifest.name,
-              `binding "${name}" array failed accepts: ${(validation.errors ?? []).slice(0, 3).join("; ")}`,
-            ),
-          );
-          if (required)
-            return {
-              ok: false,
-              skipReason: "input-schema-invalid",
-              diagnostics,
-            };
-          continue;
-        }
-      }
-      slots[name] = { cardinality: "all", items };
-      continue;
+      items.push({ value: got.value, source: got.source });
     }
-
-    const got = extractValue(
-      providers[0]!,
-      binding,
-      completedResults,
-      contractSchema,
-    );
-    if (!got.ok) {
-      diagnostics.push(
-        extractFailureDiagnostic(
-          got,
-          required,
-          manifest.name,
-          name,
-          providers[0]!,
-        ),
-      );
-      if (required) return { ok: false, skipReason: got.reason, diagnostics };
-      continue;
-    }
-    let value = got.value;
+    // Extract every provider before canonicalizing, then check the complete slot.
     if (args.canonicalizeValue) {
-      const c = await canonicalizeBindingValue(
-        args.canonicalizeValue,
-        value,
-        { runtimeId: manifest.name, bindingName: name, required },
-        diagnostics,
-      );
-      if (c.rejected) {
-        if (required)
-          return {
-            ok: false,
-            skipReason: "media-ownership-invalid",
-            diagnostics,
-          };
-        continue;
+      for (const item of items) {
+        const canonical = await canonicalizeBindingValue(
+          args.canonicalizeValue,
+          item.value,
+          { runtimeId: manifest.name, bindingName: name, required },
+          diagnostics,
+        );
+        if (canonical.rejected) {
+          const failure = fail("media-ownership-invalid");
+          if (failure) return failure;
+          continue bindings;
+        }
+        item.value = canonical.value;
       }
-      value = c.value;
     }
+    const first = items[0];
+    // Missing providers were handled above.
+    if (!first) continue;
+    const value =
+      cardinality === "all" ? items.map((item) => item.value) : first.value;
     if (acceptsSchema) {
       const validation = validateAcceptedValue(value, acceptsSchema);
       if (!validation.valid) {
@@ -594,15 +524,18 @@ export async function resolveInputBindings(
             "input-schema-invalid",
             required ? "error" : "warn",
             manifest.name,
-            `binding "${name}" failed accepts: ${(validation.errors ?? []).slice(0, 3).join("; ")}`,
+            `binding "${name}"${cardinality === "all" ? " array" : ""} failed accepts: ${(validation.errors ?? []).slice(0, 3).join("; ")}`,
           ),
         );
-        if (required)
-          return { ok: false, skipReason: "input-schema-invalid", diagnostics };
+        const failure = fail("input-schema-invalid");
+        if (failure) return failure;
         continue;
       }
     }
-    slots[name] = { cardinality: "one", value, source: got.source };
+    slots[name] =
+      cardinality === "all"
+        ? { cardinality: "all", items }
+        : { cardinality: "one", value: first.value, source: first.source };
   }
 
   return { ok: true, slots, diagnostics };

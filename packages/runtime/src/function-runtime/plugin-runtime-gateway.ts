@@ -31,17 +31,16 @@ import {
   type LLMRequestBudget,
   type LLMUsageSummary,
 } from "@covel/shared";
-import type { ZodType } from "zod";
 import type {
   CapabilityOverridePolicy,
-  GatewayAdapterConfig,
   SlotOverridesInput,
-} from "../llm/gateway-llm-adapter.js";
+} from "@covel/ai-provider";
+import type { ZodType } from "zod";
+import type { GatewayAdapterConfig } from "../llm/gateway-llm-adapter.js";
 
 /**
  * Common request-shaping options accepted by the full ai-provider gateway.
- * Mirrors `GatewayOptions` (apiKeys / traceId / signal / slotOverrides) via
- * a structural type so `@covel/runtime` stays decoupled from ai-provider.
+ * Mirrors `GatewayOptions` (apiKeys / traceId / signal / slotOverrides) through the structural surface used by function runtimes.
  */
 interface FullGatewayOptions {
   requestBudget?: LLMRequestBudget;

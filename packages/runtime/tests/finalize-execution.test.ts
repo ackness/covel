@@ -672,40 +672,52 @@ describe("finalizeExecution", () => {
     },
   );
 
-  it("keeps a committed story when an optional sibling returned a malformed UI part", async () => {
-    const store = createMemoryStore();
-    await savePendingTurn(store);
+  it.each([
+    {
+      block: { parts: [null] },
+      error: "effects.ui[0].parts[0] is not an object",
+    },
+    {
+      block: { type: "card", text: "legacy" },
+      error: "effects.ui[0].parts is not an array",
+    },
+  ])(
+    "keeps a committed story when a sibling returned malformed UI ($error)",
+    async ({ block, error }) => {
+      const store = createMemoryStore();
+      await savePendingTurn(store);
 
-    // A null part cannot become a card. It is a rejected write of rt-b, never
-    // an exception that takes the story down with it.
-    const outcome = await finalizeExecution({
-      executionContext: {
-        executionId: crypto.randomUUID(),
-        origin: "manual",
-        countPolicy: "none",
-      },
-      store,
-      sessionId: SESSION_ID,
-      runtimes: [makeRuntime("rt-a", "story"), makeRuntime("rt-b")],
-      results: [
-        makeResult("rt-a", { narrativeOutput: "committed line" }),
-        makeResult("rt-b", {}, { ui: [{ parts: [null] }] } as never),
-      ],
-      turnIds: [TURN_ID],
-    });
-
-    expect(outcome).toMatchObject({
-      status: "committed",
-      isolatedRuntimes: [
-        {
-          runtimeId: "rt-b",
-          error: "effects.ui[0].parts[0] is not an object",
+      // A null part cannot become a card. It is a rejected write of rt-b, never
+      // an exception that takes the story down with it.
+      const outcome = await finalizeExecution({
+        executionContext: {
+          executionId: crypto.randomUUID(),
+          origin: "manual",
+          countPolicy: "none",
         },
-      ],
-    });
-    expect(await store.listMessages(SESSION_ID)).toHaveLength(1);
-    expect(await commitStatusOf(store)).toBe("committed");
-  });
+        store,
+        sessionId: SESSION_ID,
+        runtimes: [makeRuntime("rt-a", "story"), makeRuntime("rt-b")],
+        results: [
+          makeResult("rt-a", { narrativeOutput: "committed line" }),
+          makeResult("rt-b", {}, { ui: [block] } as never),
+        ],
+        turnIds: [TURN_ID],
+      });
+
+      expect(outcome).toMatchObject({
+        status: "committed",
+        isolatedRuntimes: [
+          {
+            runtimeId: "rt-b",
+            error,
+          },
+        ],
+      });
+      expect(await store.listMessages(SESSION_ID)).toHaveLength(1);
+      expect(await commitStatusOf(store)).toBe("committed");
+    },
+  );
 
   it("keeps a dropped sibling's journal rows and trigger count out", async () => {
     const store = createMemoryStore();

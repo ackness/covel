@@ -10,7 +10,6 @@
  * its images owned by the session.
  */
 
-import { createHash } from "node:crypto";
 import { AiProviderError } from "@covel/ai-provider";
 import type { MediaRef } from "@covel/shared";
 import type { MediaStore } from "@covel/store";
@@ -22,7 +21,11 @@ import type {
   ImageGenerationTarget,
 } from "@covel/shared/plugin-runtime";
 
-import { targetIdentity } from "./media-cache-key.js";
+import {
+  mediaPromptHash,
+  isSlotAvailable,
+  targetIdentity,
+} from "./media-cache-key.js";
 import type { RuntimeMediaWriter } from "./runtime-media-context.js";
 
 const INGEST_ALLOWED_MIMES = ["image/png", "image/jpeg", "image/webp"];
@@ -32,7 +35,7 @@ function promptHashOf(
   input: ImageGenerateInput,
   target: ImageGenerationTarget,
 ): string {
-  const canonical = JSON.stringify([
+  return mediaPromptHash([
     ...targetIdentity(target),
     input.prompt,
     input.negativePrompt ?? "",
@@ -41,7 +44,6 @@ function promptHashOf(
     input.n ?? 1,
     input.background ?? "",
   ]);
-  return createHash("sha256").update(canonical).digest("hex");
 }
 
 interface CreateRuntimeImagesContextOptions {
@@ -60,13 +62,7 @@ export function createRuntimeImagesContext(
   const { sessionId, pluginId } = options;
   return {
     isAvailable(presetId = "image"): boolean {
-      try {
-        return gateway.resolveSlot({ presetId, fallbackTag: "image" }) !== null;
-      } catch (error) {
-        if (error instanceof AiProviderError && error.code === "CONFIG_ERROR")
-          return false;
-        throw error;
-      }
+      return isSlotAvailable(gateway, presetId, "image");
     },
     async generate(input: ImageGenerateInput): Promise<ImageGenerateOutput> {
       input.signal?.throwIfAborted();

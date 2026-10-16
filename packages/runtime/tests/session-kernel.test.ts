@@ -152,9 +152,19 @@ describe("normalizeOutput", () => {
         {
           ui: [
             {
-              type: "action-guide",
-              topic: "Next move",
-              categories: [{ style: "safe", suggestions: ["先观察周围环境"] }],
+              parts: [
+                {
+                  id: "ui-1",
+                  type: "action-guide",
+                  status: "success",
+                  content: {
+                    topic: "Next move",
+                    categories: [
+                      { style: "safe", suggestions: ["先观察周围环境"] },
+                    ],
+                  },
+                },
+              ],
             },
           ],
         },
@@ -1401,9 +1411,19 @@ describe("processRuntimeResult", () => {
         effects: {
           ui: [
             {
-              type: "action-guide",
-              topic: "Where next?",
-              categories: [{ style: "safe", suggestions: ["先观察周围环境"] }],
+              parts: [
+                {
+                  id: "ui-1",
+                  type: "action-guide",
+                  status: "success",
+                  content: {
+                    topic: "Where next?",
+                    categories: [
+                      { style: "safe", suggestions: ["先观察周围环境"] },
+                    ],
+                  },
+                },
+              ],
             },
           ],
         },
