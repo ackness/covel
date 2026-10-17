@@ -220,3 +220,13 @@ pnpm workspaces + Turborepo · ESM-only · TypeScript strict · React 19 + Hono 
 Issues and PRs welcome — please read [`docs/CONTRIBUTING.en.md`](./docs/CONTRIBUTING.en.md) and the [Code of Conduct](./CODE_OF_CONDUCT.md) first. Releases are tag-driven: pushing `v*` builds and publishes the macOS and Windows installers via [GitHub Actions](./.github/workflows/release.yml).
 
 [MIT](./LICENSE) © 2026 Covel Contributors
+
+## Star History
+
+<a href="https://www.star-history.com/?repos=ackness%2Fcovel&type=date&legend=top-left">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=ackness/covel&type=date&theme=dark&legend=top-left" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=ackness/covel&type=date&legend=top-left" />
+   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=ackness/covel&type=date&legend=top-left" />
+ </picture>
+</a>
