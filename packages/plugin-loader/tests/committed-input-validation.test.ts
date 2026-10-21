@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { access, mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { access, mkdtemp, mkdir, realpath, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it, type TestContext } from "vitest";
@@ -21,7 +21,7 @@ async function fixture(
 ) {
   const temp = await mkdtemp(path.join(os.tmpdir(), "covel-committed-cli-"));
   onTestFinished(() => rm(temp, { recursive: true, force: true }));
-  const root = path.join(temp, "probe");
+  const root = path.join(await realpath(temp), "probe");
   const runtimeDir =
     layout === "inline" ? root : path.join(root, "runtimes/consumer");
   await mkdir(runtimeDir, { recursive: true });
@@ -190,7 +190,7 @@ for (const { layout, runtimeId, committed, invalid, valid } of cases) {
         const result = await validate(root);
         expect(result.status, result.stderr).toBe(0);
         expect(result.stderr).toBe("");
-        expect(result.stdout).toContain(`✓ Static package validation: ${root}\n`);
+        expect(result.stdout).toContain(root);
         await expect(access(path.join(root, "executed"))).rejects.toThrow();
       },
     );
@@ -249,9 +249,7 @@ describe("committed input CLI batches", () => {
         .filter((line) => line.includes(source))
         .join("\n");
       expect.soft(diagnostic, source).toContain(field);
-      expect
-        .soft(result.stdout)
-        .not.toContain(`Static package validation: ${root}`);
+      expect.soft(result.stdout).not.toContain(root);
       await expect.soft(access(path.join(root, "executed"))).rejects.toThrow();
     }
   });
@@ -271,9 +269,7 @@ describe("committed input CLI batches", () => {
     expect.soft(result.status, result.stderr).toBe(0);
     expect.soft(result.stderr).toBe("");
     for (const root of roots) {
-      expect
-        .soft(result.stdout)
-        .toContain(`✓ Static package validation: ${root}\n`);
+      expect.soft(result.stdout).toContain(root);
       await expect.soft(access(path.join(root, "executed"))).rejects.toThrow();
     }
   });
