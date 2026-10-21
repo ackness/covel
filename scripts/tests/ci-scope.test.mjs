@@ -52,7 +52,10 @@ test("docs, source and mixed pushes select only the suites they can affect", (t)
   assert.deepEqual(repo.push(docs), { scope: "docs", site_deploy: true });
   const mixed = repo.commit({ "packages/a/index.ts": "export const a = 1;\n" });
   assert.deepEqual(repo.push(mixed), { scope: "full", site_deploy: true });
-  assert.deepEqual(repo.push(mixed, docs), { scope: "full", site_deploy: false });
+  assert.deepEqual(repo.push(mixed, docs), {
+    scope: "full",
+    site_deploy: false,
+  });
 });
 
 test("prompt manifests and renames out of docs remain source", (t) => {
@@ -64,7 +67,10 @@ test("prompt manifests and renames out of docs remain source", (t) => {
     path.join(repo.cwd, "plugins/a/PLUGIN.md"),
   );
   const renamed = repo.commit({});
-  assert.deepEqual(repo.push(renamed, docs), { scope: "full", site_deploy: true });
+  assert.deepEqual(repo.push(renamed, docs), {
+    scope: "full",
+    site_deploy: true,
+  });
   const prompt = repo.commit({ "prompts/server/turn.md": "prompt\n" });
   assert.deepEqual(repo.push(prompt, renamed), {
     scope: "full",
@@ -178,7 +184,11 @@ test("unrelated source and documentation still select suites without publishing"
     [".github/workflows/release.yml", "full"],
   ]) {
     const head = repo.commit({ [file]: "changed\n" });
-    assert.deepEqual(repo.push(head, before), { scope, site_deploy: false }, file);
+    assert.deepEqual(
+      repo.push(head, before),
+      { scope, site_deploy: false },
+      file,
+    );
     before = head;
   }
 });

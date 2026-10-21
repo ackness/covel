@@ -186,13 +186,13 @@ pnpm release:preflight  # static pre-tag gate: lockfile, imports, plugin/world/p
 
 ### 拉取请求上
 
-CI（`.github/workflows/ci.yml`）统一处理文档、源码和混合改动，始终运行完整的 `pnpm check`。纯文档另跑文档测试；源码、无法确定范围的改动和发布运行全部测试。Web 单元测试、带 runtime 覆盖率下限的服务端测试、PostgreSQL 集成和浏览器冒烟测试仍在并行任务里。非发布的完整检查还运行构建，发布运行 release preflight。详见 [`CONTRIBUTING.md`](../CONTRIBUTING.md)。
+CI（`.github/workflows/ci.yml`）统一处理文档、源码和混合改动，始终运行完整的 `pnpm check`。纯文档另跑文档测试；源码、无法确定范围的改动和发布运行全部测试。Web 单元测试、带 runtime 覆盖率下限的服务端测试、PostgreSQL 集成和浏览器冒烟测试仍在并行任务里。每次非发布 CI 调用 Site 构建官网和文档站一次；完整检查的其余构建排除这两个目标，独立的 `pnpm build` 不变。发布跳过 Site，运行 release preflight，并由平台打包任务构建。详见 [`CONTRIBUTING.md`](../CONTRIBUTING.md)。
 
-`main` 只接受拉取请求（`Protect main` 规则集：不能直接推送、强制推送或删除）。CI 的 `Verification` 汇总所选任务，必需任务缺失、跳过、失败或取消都不能通过。`.github/workflows/gate.yml` 提供每个拉取请求都有的 `All checks pass`：它要求 `Verification` 成功，也保留 Site 和其他检查的失败。重跑失败检查之后，也要重跑这一项。
+`main` 只接受拉取请求（`Protect main` 规则集：不能直接推送、强制推送或删除）。CI 的 `Verification` 汇总所选任务，包括非发布 CI 的 Site；必需任务缺失、跳过、失败或取消都不能通过。`.github/workflows/gate.yml` 提供每个拉取请求都有的 `All checks pass`：它要求 `Verification` 成功，也保留其他检查的失败。重跑失败检查之后，也要重跑这一项。
 
 ### Documentation-only changes
 
-纯文档改动走短路径：推送钩子和 `ci.yml` 都运行 `pnpm check`，再运行 `pnpm test:docs:packages`。文档引用与技术债台账的脚本测试已在 `check:scripts` 中运行，不再重复。独立运行 `pnpm test:docs` 仍包含包测试和这两组脚本测试。检查历史提交时，推送钩子使用该提交实际提供的命令。
+纯文档改动走短路径：推送钩子和 `ci.yml` 都运行 `pnpm check`，再运行 `pnpm test:docs:packages`；CI 还通过 Site 构建官网和文档站。文档引用与技术债台账的脚本测试已在 `check:scripts` 中运行，不再重复。独立运行 `pnpm test:docs` 仍包含包测试和这两组脚本测试。检查历史提交时，推送钩子使用该提交实际提供的命令。
 
 算作文档的文件（规则在 `scripts/lib/change-scope.mjs`）：
 

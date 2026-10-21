@@ -1,5 +1,12 @@
 import { execFile } from "node:child_process";
-import { access, mkdtemp, mkdir, realpath, rm, writeFile } from "node:fs/promises";
+import {
+  access,
+  mkdtemp,
+  mkdir,
+  realpath,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it, type TestContext } from "vitest";

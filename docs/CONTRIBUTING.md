@@ -129,9 +129,11 @@ PR、main 和发布统一使用 [`ci.yml`](../.github/workflows/ci.yml)，不再
 
 完整路径保留并行 job：`verify` 运行除 Web、server、runtime 之外的套件；Web 独立运行；server 独占 runner，并带覆盖率运行 runtime 套件、执行其下限，runtime 在 CI 只运行一次；PostgreSQL 和 Chromium 各自运行。浏览器 job 先收集全部 E2E，发现失效导入，再运行 smoke 和 `pnpm e2e:extensions`，共用安装和 Chromium。Chromium 下载按 Playwright 版本缓存，系统依赖每次安装。
 
-非发布的完整检查运行 `pnpm build`，只读取 Turbo 缓存、不写回构建产物。Turbo 本地缓存由 `turbo.json` 的 `cacheMaxAge`（7 天）和 `cacheMaxSize`（2GB）淘汰；CI 用 `TURBO_CACHE_MAX_AGE` / `TURBO_CACHE_MAX_SIZE` 收紧到 2 天、500MB，因为 actions/cache 每次整目录恢复再保存。发布始终走完整路径并运行 `pnpm release:preflight`；锁文件校验在临时元数据目录完成，不修改工作区依赖或执行安装脚本。
+非发布的完整检查运行 `pnpm build --cache=local:r --filter=!@covel/docs --filter=!@covel/site`，只读取 Turbo 缓存、不写回构建产物。官网和文档站由 CI 调用的 Site 任务构建一次；纯文档改动也必须通过该任务。独立的 `pnpm build` 仍构建全部目标。Turbo 本地缓存由 `turbo.json` 的 `cacheMaxAge`（7 天）和 `cacheMaxSize`（2GB）淘汰；CI 用 `TURBO_CACHE_MAX_AGE` / `TURBO_CACHE_MAX_SIZE` 收紧到 2 天、500MB，因为 actions/cache 每次整目录恢复再保存。
 
-`Verification` 汇总所选任务，必需任务缺失、跳过、失败或取消都不能通过。`main` 只接受通过 PR 合入的改动；每个 PR 的 [`gate.yml`](../.github/workflows/gate.yml) 提供 `All checks pass`，要求 `Verification` 成功，同时保留 Site 和其他检查的失败。重跑失败检查后，也要重跑这一项。
+发布始终走完整测试路径并运行 `pnpm release:preflight`，不运行 Site 或 workspace Build；平台打包任务自行构建桌面产物。锁文件校验在临时元数据目录完成，不修改工作区依赖或执行安装脚本。发布调用声明嵌套工作流需要的 Pages/OIDC 权限上限，但 CI 将实际执行的发布验证任务限制为 `contents: read`，具有 Pages 写权限的 Site 任务被跳过。
+
+`Verification` 汇总所选任务，包括每次非发布 CI 的 Site；必需任务缺失、跳过、失败或取消都不能通过。`main` 只接受通过 PR 合入的改动；每个 PR 的 [`gate.yml`](../.github/workflows/gate.yml) 提供 `All checks pass`，要求 `Verification` 成功，同时保留其他检查的失败。重跑失败检查后，也要重跑这一项。
 
 ### 框架/插件隔离（重要）
 
@@ -178,7 +180,9 @@ PR、main 和发布统一使用 [`ci.yml`](../.github/workflows/ci.yml)，不再
 
 ### 官网部署
 
-[`site.yml`](../.github/workflows/site.yml) 构建官网 `apps/site` 和文档站 `apps/docs`（页面在 `docs/`），并把文档站放在官网的 `docs/` 路径下一起发布：PR 只构建，推送到 `main`（改动 `apps/site/`、`apps/docs/`、`docs/`、锁文件或该工作流时）或在 Actions 页面手动触发时还会发布到 GitHub Pages。仓库设置 Settings > Pages 的 Source 需选 “GitHub Actions”。站点默认在 `https://ackness.github.io/covel/`；构建按 Pages 设置读出路径并作为 `SITE_BASE` 传给 Vite，所以配置自定义域名后会自动改用 `/`；文档站读取同一个变量，路径为 `<SITE_BASE>docs/`。文档站构建时有失效链接会失败。`public/` 里的文件在代码中通过 `asset()`（`apps/site/src/links.ts`）引用，以便带上这一前缀。
+[`site.yml`](../.github/workflows/site.yml) 由每次非发布 CI 调用，不再独立响应 push 或 PR。它构建官网 `apps/site` 和文档站 `apps/docs`（页面在 `docs/`），并把文档站放在官网的 `docs/` 路径下。PR 只构建，不上传发布产物或部署；`main` 改动站点、文档或相关根构建/安装配置时才发布到 GitHub Pages，无关源码改动只构建。部署选择与测试范围共用一次 git diff；无法确定变更时保守选择部署，但仍限于 `main` push。具体输入列在 `scripts/ci-scope.mjs`。Actions 页面手动运行 Site 默认部署，也可关闭 `deploy` 只验证构建。
+
+仓库设置 Settings > Pages 的 Source 需选 “GitHub Actions”。站点默认在 `https://ackness.github.io/covel/`；PR 使用 `/covel/`，其他构建按 Pages 设置读出路径并作为 `SITE_BASE` 传给 Vite，所以配置自定义域名后会自动改用 `/`。文档站读取同一个变量，路径为 `<SITE_BASE>docs/`。文档站构建时有失效链接会失败。`public/` 里的文件在代码中通过 `asset()`（`apps/site/src/links.ts`）引用，以便带上这一前缀。部署只消费同次 Site 运行生成的产物，不复用其他提交的构建缓存或跨工作流产物。
 
 ### 模型资料快照
 

@@ -186,13 +186,13 @@ Checkouts use the Turbo cache shared by all worktrees, so a task that ran with t
 
 ### On pull requests
 
-CI (`.github/workflows/ci.yml`) handles documentation, source, and mixed changes in one workflow and always runs the complete `pnpm check`. Docs-only changes then run documentation tests; source changes, unknown scope, and releases run every suite. Web unit tests, server tests with the runtime coverage floor, PostgreSQL integration, and browser smoke remain parallel jobs. Full non-release checks also run the build; releases run release preflight. See [`CONTRIBUTING.md`](../../CONTRIBUTING.md).
+CI (`.github/workflows/ci.yml`) handles documentation, source, and mixed changes in one workflow and always runs the complete `pnpm check`. Docs-only changes then run documentation tests; source changes, unknown scope, and releases run every suite. Web unit tests, server tests with the runtime coverage floor, PostgreSQL integration, and browser smoke remain parallel jobs. Every non-release CI run calls Site to build the showcase and documentation once; the remaining full-path build excludes those targets, while standalone `pnpm build` is unchanged. Releases skip Site, run release preflight, and build through platform packaging jobs. See [`CONTRIBUTING.md`](../../CONTRIBUTING.md).
 
-`main` accepts only pull requests (the `Protect main` ruleset: no direct push, force push, or deletion). CI's `Verification` aggregates the selected jobs: missing, skipped, failed, or cancelled required jobs cannot pass. `.github/workflows/gate.yml` supplies `All checks pass` for every pull request. It requires successful `Verification` and preserves failures from Site and other checks. Rerun this gate after rerunning a failed check.
+`main` accepts only pull requests (the `Protect main` ruleset: no direct push, force push, or deletion). CI's `Verification` aggregates the selected jobs, including Site on non-release runs: missing, skipped, failed, or cancelled required jobs cannot pass. `.github/workflows/gate.yml` supplies `All checks pass` for every pull request. It requires successful `Verification` and preserves failures from other checks. Rerun this gate after rerunning a failed check.
 
 ### Documentation-only changes
 
-Docs-only changes take a short path: the push hook and `ci.yml` run `pnpm check`, then `pnpm test:docs:packages`. Documentation-reference and technical-debt-ledger script tests already ran in `check:scripts` and are not repeated. Standalone `pnpm test:docs` still includes the package tests and both script suites. When checking a historical commit, the push hook uses the commands that commit provides.
+Docs-only changes take a short path: the push hook and `ci.yml` run `pnpm check`, then `pnpm test:docs:packages`; CI also builds the showcase and documentation through Site. Documentation-reference and technical-debt-ledger script tests already ran in `check:scripts` and are not repeated. Standalone `pnpm test:docs` still includes the package tests and both script suites. When checking a historical commit, the push hook uses the commands that commit provides.
 
 Files that count as documentation (the rules are in `scripts/lib/change-scope.mjs`):
 
