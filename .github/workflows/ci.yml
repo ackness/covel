@@ -54,10 +54,12 @@ jobs:
     outputs:
       scope: ${{ steps.scope.outputs.scope }}
     steps:
-      - name: Checkout
+      # Control scripts belong to the workflow revision, not a requested older
+      # release source. Local reusable workflows share their caller's commit.
+      - name: Checkout verification controls
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ inputs.commit || github.sha }}
+          ref: ${{ github.workflow_sha }}
           fetch-depth: 0
           persist-credentials: false
 
@@ -381,10 +383,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Checkout
+      # Aggregate with the workflow's helper even when inputs.commit predates it.
+      - name: Checkout verification controls
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ inputs.commit || github.sha }}
+          ref: ${{ github.workflow_sha }}
           persist-credentials: false
 
       # `always` exposes failures and skips instead of skipping the aggregate.
