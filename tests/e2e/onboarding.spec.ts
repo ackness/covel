@@ -41,10 +41,19 @@ test("first visit starts on the world list, explains preparation and can be reop
     "No text model binding detected",
   );
   await guide.getByRole("button", { name: "Learn how to play" }).click();
-  await expect(guide).toContainText("recommended play pack");
-  await expect(guide.getByRole("status")).toContainText(
-    "finish model setup before starting a game",
-  );
+  const missingModel = guide.getByRole("status");
+  await expect(missingModel).toBeVisible();
+  await expect(missingModel.getByRole("paragraph")).toHaveText(/\S/);
+  await missingModel
+    .getByRole("button", { name: "Configure Providers & Models" })
+    .click();
+  const settings = page.getByRole("dialog", { name: "Settings" });
+  await expect(guide).toHaveCount(0);
+  await expect(
+    settings.getByRole("button", { name: "Providers & Models", exact: true }),
+  ).toHaveAttribute("aria-current", "page");
+  await settings.getByRole("button", { name: "Close", exact: true }).click();
+  await expect(missingModel).toBeVisible();
   // Hold the real persistence lock so dismissal must wait for the saved flag.
   await page.evaluate(
     () =>

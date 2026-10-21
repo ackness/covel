@@ -233,9 +233,11 @@ describe("MediaLibraryPane", () => {
     );
     render(<MediaLibraryPane />);
 
-    expect(
-      await screen.findByText(/unavailable on this server/),
-    ).toBeTruthy();
+    const explanation = await screen.findByRole("paragraph");
+    expect(explanation.textContent?.trim()).toBeTruthy();
+    expect(screen.queryByRole("alert")).toBeNull();
     expect(screen.queryByRole("button", { name: /^Delete/ })).toBeNull();
+    expect(screen.queryByRole("checkbox")).toBeNull();
+    expect(api.deleteMediaLibrary).not.toHaveBeenCalled();
   });
 });

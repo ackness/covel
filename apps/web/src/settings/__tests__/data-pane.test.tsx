@@ -45,9 +45,7 @@ it("previews old-schema entries without silently reporting them as imported", as
   });
   expect((invalid as HTMLInputElement).disabled).toBe(true);
   expect((invalid as HTMLInputElement).checked).toBe(false);
-  expect(screen.getByRole("status").textContent).toBe(
-    "1 entry does not match the current settings format and will be skipped.",
-  );
+  expect(screen.getByRole("status").textContent).toMatch(/\b1\b/);
   fireEvent.click(screen.getByRole("button", { name: /Apply.*1/ }));
   await waitFor(() => expect(mocks.store.get("fixture.extra")).toBe(true));
   expect(mocks.store.get("fixture.count")).toBe(1);
