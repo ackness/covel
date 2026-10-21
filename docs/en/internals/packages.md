@@ -171,6 +171,8 @@ Covel is still in early development, and it targets only the current contracts. 
 
 `pnpm check:boundaries` checks public entry points, dependency declarations, and package direction in production source. Every export in `packages/*` must also have a source importer outside its package (including tests, scaffolds, and scripts), or a reason for keeping it in the check script. Review new cross-package dependencies together with the responsibilities on this page.
 
+Standalone `pnpm check:boundaries` also tests its parser. The complete `pnpm check` runs the boundary scanner directly and runs the parser tests through `check:scripts`, without repeating them.
+
 `test-runtime` provides a CLI only, with no package import entry. Run runtime cases with `pnpm test:runtime`.
 
 The web app reads theme and color scheme preferences from SettingsStore, resolves the displayed selection, and applies it through its appearance helpers. Display fallbacks leave saved preferences unchanged.

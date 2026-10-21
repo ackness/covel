@@ -131,8 +131,9 @@ pnpm check            # the CI static gate: peers, lint, Oxlint (a warning fails
                       # script regressions, actionlint
 pnpm lint             # tsc --noEmit for the FULL workspace (not one package), test code included
 pnpm test             # all Vitest suites; one package: pnpm --filter @covel/runtime test
-pnpm test:docs        # the tests that read documentation; all a documentation-only change needs after pnpm check
-pnpm test:pg          # required PostgreSQL integration tests (DATABASE_URL from env or .env)
+pnpm test:docs        # standalone documentation tests (package and script checks)
+pnpm test:docs:packages # after pnpm check: docs-reading package tests; script checks already ran
+pnpm test:pg          # five live-PG Store files + Server integration (DATABASE_URL from env or .env)
 pnpm e2e:smoke        # deterministic Chromium smoke suite run by CI; pnpm e2e for all Playwright
 pnpm create-plugin    # scaffold from templates/: pnpm create-plugin <name>; --with-tools scaffolds into plugins/
 pnpm validate:plugin  # validate PLUGIN.md / RUNTIME.md and locale files; a plugin DIR also gets
@@ -144,7 +145,8 @@ pnpm schemas:generate # regenerate packages/shared/schemas/*.json and docs/refer
                       # from the Zod schemas; run after changing an author-facing schema field
 pnpm check:push       # on the committed HEAD, in a clean checkout: install, pnpm check, the tests of the
                       # packages changed since origin/main with their dependents, pnpm e2e --list.
-                      # The pre-push hook runs only the first two; CI runs every suite on the pull request
+                      # The pre-push hook runs only the first two for code; docs-only also runs test:docs:packages.
+                      # CI runs every suite for source changes, unknown scope and releases.
 pnpm changelog:preview  # print [Unreleased] as the next release will have it, from docs/changelog.d/
 ```
 
@@ -156,11 +158,12 @@ and the release scripts (`changelog:release`, `release:prepare`, `release:prefli
 
 Before pushing, run `pnpm check` and the tests of the packages you changed
 (`pnpm --filter <pkg> test`) — `pnpm lint` alone misses the dependency, manifest,
-i18n, and workflow gates, and neither Git hook runs a test. `pnpm check:push` does
-both in a clean checkout, and the push that follows it sends without running them
+i18n, and workflow gates. Git hooks omit source test suites. `pnpm check:push` runs both
+in a clean checkout, and the push that follows it sends without running them
 again. Add `pnpm test:pg` for
 store or database changes and `pnpm e2e:smoke` / `pnpm e2e` for UI flows. CI runs
-every suite; `pnpm test` runs them all locally.
+every suite for source changes; docs-only runs `pnpm check` + `pnpm test:docs:packages`.
+`pnpm test` runs all suites locally.
 
 Every command shown in this file, in `docs/`, a template, or a skill must be one
 that actually runs: when a root script, its arguments, or a scaffold's output
@@ -169,8 +172,8 @@ changes, re-run the documented sequence and fix every page that shows it.
 Git hooks (pre-commit formats and lints the changed files; the opt-in pre-push
 from `pnpm hooks:install` runs the static gate), which suites `pnpm check:push`
 runs, and the short path for documentation-only changes (`pnpm check` +
-`pnpm test:docs`; a test that reads documentation must be named in the root
-`test:docs` script) are in `docs/internals/commands.md#git-hooks-and-ci-scope`.
+`pnpm test:docs:packages`; a package test that reads documentation must be named in
+that root script) are in `docs/internals/commands.md#git-hooks-and-ci-scope`.
 
 Run Tailwind diagnostics through `apps/web/scripts/check-tailwind-canonical.mjs`;
 keep `tailwind-lint` read-only, because `--fix` can corrupt TypeScript identifiers

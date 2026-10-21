@@ -6,16 +6,25 @@ const fullJobs = ["web", "server", "postgres", "browser"];
 /** Validate native jobs.needs results, including jobs GitHub skipped. */
 export function verificationFailures(needs, release = false) {
   const failures = [];
-  if (needs?.scope?.result !== "success") failures.push("scope did not succeed");
+  if (needs?.scope?.result !== "success")
+    failures.push("scope did not succeed");
   const scope = needs?.scope?.outputs?.scope;
-  if (scope !== "docs" && scope !== "full") failures.push("scope is missing or unknown");
-  const required = ["verify", ...(scope === "docs" && !release ? [] : fullJobs)];
+  if (scope !== "docs" && scope !== "full")
+    failures.push("scope is missing or unknown");
+  const required = [
+    "verify",
+    ...(scope === "docs" && !release ? [] : fullJobs),
+  ];
   for (const job of required) {
-    if (needs?.[job]?.result !== "success") failures.push(`${job} did not succeed`);
+    if (needs?.[job]?.result !== "success")
+      failures.push(`${job} did not succeed`);
   }
   // Even unneeded jobs must not hide a failure or cancellation.
   for (const job of fullJobs) {
-    if (!required.includes(job) && !["success", "skipped"].includes(needs?.[job]?.result))
+    if (
+      !required.includes(job) &&
+      !["success", "skipped"].includes(needs?.[job]?.result)
+    )
       failures.push(`${job} has an unexpected result`);
   }
   return failures;
@@ -23,17 +32,28 @@ export function verificationFailures(needs, release = false) {
 
 /** Decide one poll of GitHub's paginated check-runs response. */
 export function checkRunsState(pages) {
-  if (!Array.isArray(pages) || pages.some((page) => !Array.isArray(page?.check_runs)))
+  if (
+    !Array.isArray(pages) ||
+    pages.some((page) => !Array.isArray(page?.check_runs))
+  )
     throw new Error("Invalid check-runs response");
-  const runs = pages.flatMap((page) => page.check_runs)
+  const runs = pages
+    .flatMap((page) => page.check_runs)
     .filter((run) => run.name !== "All checks pass");
-  const required = runs.filter((run) =>
-    run.name === "Verification" && run.app?.slug === "github-actions");
+  const required = runs.filter(
+    (run) => run.name === "Verification" && run.app?.slug === "github-actions",
+  );
   for (const run of runs) {
     if (run.status === "completed") {
-      const accepted = required.includes(run) ? ["success"] : ["success", "skipped", "neutral"];
+      const accepted = required.includes(run)
+        ? ["success"]
+        : ["success", "skipped", "neutral"];
       if (!accepted.includes(run.conclusion)) return "failure";
-    } else if (!["queued", "in_progress", "waiting", "pending", "requested"].includes(run.status)) {
+    } else if (
+      !["queued", "in_progress", "waiting", "pending", "requested"].includes(
+        run.status,
+      )
+    ) {
       return "failure";
     }
   }

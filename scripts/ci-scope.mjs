@@ -4,7 +4,9 @@ import { fileURLToPath } from "node:url";
 import { isDocsOnly } from "./lib/change-scope.mjs";
 
 const isCommit = (value) =>
-  typeof value === "string" && /^[a-f0-9]{40,64}$/.test(value) && !/^0+$/.test(value);
+  typeof value === "string" &&
+  /^[a-f0-9]{40,64}$/.test(value) &&
+  !/^0+$/.test(value);
 
 /** Only a successful, nonempty diff can opt out of the full suites. */
 export function selectCiScope({ cwd, eventName, event, sha, release, commit }) {
@@ -29,9 +31,18 @@ export function selectCiScope({ cwd, eventName, event, sha, release, commit }) {
   try {
     const files = execFileSync(
       "git",
-      ["diff", "--name-only", "--no-renames", "-z", `${base}${range}${head}`, "--"],
+      [
+        "diff",
+        "--name-only",
+        "--no-renames",
+        "-z",
+        `${base}${range}${head}`,
+        "--",
+      ],
       { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] },
-    ).split("\0").filter(Boolean);
+    )
+      .split("\0")
+      .filter(Boolean);
     return isDocsOnly(files) ? "docs" : "full";
   } catch {
     return "full";

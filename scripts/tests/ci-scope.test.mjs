@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import {
+  mkdirSync,
+  mkdtempSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -26,15 +32,23 @@ function repository(t) {
     return git(cwd, "rev-parse", "HEAD");
   }
   const base = commit({ "packages/a/index.ts": "export {};\n" });
-  const push = (head, before = base, options = {}) => selectCiScope({
-    cwd, eventName: "push", event: { before, after: head }, sha: head, ...options,
-  });
+  const push = (head, before = base, options = {}) =>
+    selectCiScope({
+      cwd,
+      eventName: "push",
+      event: { before, after: head },
+      sha: head,
+      ...options,
+    });
   return { cwd, base, commit, push };
 }
 
 test("docs, source and mixed pushes select only the suites they can affect", (t) => {
   const repo = repository(t);
-  const docs = repo.commit({ "docs/guide.md": "guide\n", "README.md": "readme\n" });
+  const docs = repo.commit({
+    "docs/guide.md": "guide\n",
+    "README.md": "readme\n",
+  });
   assert.equal(repo.push(docs), "docs");
   const mixed = repo.commit({ "packages/a/index.ts": "export const a = 1;\n" });
   assert.equal(repo.push(mixed), "full");
@@ -45,7 +59,10 @@ test("prompt manifests and renames out of docs remain source", (t) => {
   const repo = repository(t);
   const docs = repo.commit({ "docs/prompt.md": "prompt\n" });
   mkdirSync(path.join(repo.cwd, "plugins/a"), { recursive: true });
-  renameSync(path.join(repo.cwd, "docs/prompt.md"), path.join(repo.cwd, "plugins/a/PLUGIN.md"));
+  renameSync(
+    path.join(repo.cwd, "docs/prompt.md"),
+    path.join(repo.cwd, "plugins/a/PLUGIN.md"),
+  );
   const renamed = repo.commit({});
   assert.equal(repo.push(renamed, docs), "full");
   const prompt = repo.commit({ "prompts/server/turn.md": "prompt\n" });
@@ -60,10 +77,18 @@ test("PR scope excludes changes made only on the base branch", (t) => {
   git(repo.cwd, "checkout", "--quiet", main);
   const base = repo.commit({ "packages/a/index.ts": "export const a = 1;\n" });
   const event = { pull_request: { base: { sha: base }, head: { sha: head } } };
-  assert.equal(selectCiScope({ cwd: repo.cwd, eventName: "pull_request", event }), "docs");
+  assert.equal(
+    selectCiScope({ cwd: repo.cwd, eventName: "pull_request", event }),
+    "docs",
+  );
   git(repo.cwd, "checkout", "--quiet", "topic");
-  event.pull_request.head.sha = repo.commit({ "plugins/a/PLUGIN.md": "manifest\n" });
-  assert.equal(selectCiScope({ cwd: repo.cwd, eventName: "pull_request", event }), "full");
+  event.pull_request.head.sha = repo.commit({
+    "plugins/a/PLUGIN.md": "manifest\n",
+  });
+  assert.equal(
+    selectCiScope({ cwd: repo.cwd, eventName: "pull_request", event }),
+    "full",
+  );
 });
 
 test("empty, missing, mismatched and failed diffs cannot opt out of suites", (t) => {
@@ -75,8 +100,14 @@ test("empty, missing, mismatched and failed diffs cannot opt out of suites", (t)
   assert.equal(repo.push(docs, "--invalid-revision"), "full");
   assert.equal(repo.push(docs, undefined, { event: {} }), "full");
   assert.equal(repo.push(docs, undefined, { sha: repo.base }), "full");
-  assert.equal(repo.push(docs, undefined, { eventName: "workflow_dispatch" }), "full");
-  assert.equal(selectCiScope({ cwd: repo.cwd, eventName: "pull_request", event: {} }), "full");
+  assert.equal(
+    repo.push(docs, undefined, { eventName: "workflow_dispatch" }),
+    "full",
+  );
+  assert.equal(
+    selectCiScope({ cwd: repo.cwd, eventName: "pull_request", event: {} }),
+    "full",
+  );
 });
 
 test("release and immutable reusable-workflow requests always run full suites", (t) => {
@@ -90,14 +121,19 @@ test("the workflow command consumes real event payloads and fails closed on unre
   const repo = repository(t);
   const head = repo.commit({ "docs/guide.md": "guide\n" });
   const payload = path.join(repo.cwd, "event.json");
-  const run = () => spawnSync(process.execPath, [command], {
-    cwd: repo.cwd,
-    encoding: "utf8",
-    env: {
-      ...process.env, GITHUB_EVENT_NAME: "push", GITHUB_EVENT_PATH: payload,
-      GITHUB_SHA: head, RELEASE: "false", COMMIT: "",
-    },
-  });
+  const run = () =>
+    spawnSync(process.execPath, [command], {
+      cwd: repo.cwd,
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        GITHUB_EVENT_NAME: "push",
+        GITHUB_EVENT_PATH: payload,
+        GITHUB_SHA: head,
+        RELEASE: "false",
+        COMMIT: "",
+      },
+    });
   writeFileSync(payload, JSON.stringify({ before: repo.base, after: head }));
   const docs = run();
   assert.equal(docs.status, 0, docs.stderr);

@@ -25,7 +25,10 @@ function workspace(probe) {
         },
       }),
       "package.json": JSON.stringify({
-        scripts: { "test:docs": "run the documentation tests" },
+        scripts: {
+          "test:docs": "run the documentation tests",
+          "test:docs:packages": "run the package documentation tests",
+        },
       }),
       "packages/a/package.json": JSON.stringify({ name: "a" }),
       "packages/b/package.json": JSON.stringify({ name: "b" }),
@@ -172,7 +175,7 @@ test("documentation pushed with code adds the tests that read documentation, and
     [
       ["install", "--frozen-lockfile"],
       ["check"],
-      ["test:docs"],
+      ["test:docs:packages"],
       ["e2e", "--list"],
     ],
   );

@@ -42,7 +42,7 @@ const COVERED_WITHOUT_TESTS = [
   ".gitattributes",
 ];
 
-/** Documentation that no test reads, so it never adds `pnpm test:docs`. */
+/** Documentation that no test reads, so it never adds documentation tests. */
 const DOCS_NO_TEST_READS = ["docs/CHANGELOG.md", "docs/changelog.d/**"];
 
 const ROOT = "$TURBO_ROOT$/";

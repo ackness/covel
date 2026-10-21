@@ -11,9 +11,12 @@ function results(scope = "full") {
   return {
     scope: { result: "success", outputs: { scope } },
     verify: { result: "success" },
-    ...Object.fromEntries(fullJobs.map((job) => [
-      job, { result: scope === "docs" ? "skipped" : "success" },
-    ])),
+    ...Object.fromEntries(
+      fullJobs.map((job) => [
+        job,
+        { result: scope === "docs" ? "skipped" : "success" },
+      ]),
+    ),
   };
 }
 
@@ -34,11 +37,21 @@ test("failure, cancellation, unknown, skipped and missing required jobs never pa
   for (const scope of ["docs", "full"]) {
     const required = ["scope", "verify", ...(scope === "full" ? fullJobs : [])];
     for (const job of required) {
-      for (const status of ["failure", "cancelled", "skipped", "unknown", undefined]) {
+      for (const status of [
+        "failure",
+        "cancelled",
+        "skipped",
+        "unknown",
+        undefined,
+      ]) {
         const needs = results(scope);
         if (status === undefined) delete needs[job];
         else needs[job].result = status;
-        assert.notDeepEqual(verificationFailures(needs), [], `${scope}: ${job} ${status}`);
+        assert.notDeepEqual(
+          verificationFailures(needs),
+          [],
+          `${scope}: ${job} ${status}`,
+        );
       }
     }
   }
@@ -64,46 +77,108 @@ test("a quiet Checks API is not proof that verification ran", () => {
   assert.equal(checkRunsState([]), "pending");
   assert.equal(checkRunsState(pages()), "pending");
   assert.equal(checkRunsState(pages(check("Site"))), "pending");
-  assert.equal(checkRunsState(pages(check("All checks pass", null, "in_progress"))), "pending");
+  assert.equal(
+    checkRunsState(pages(check("All checks pass", null, "in_progress"))),
+    "pending",
+  );
   const otherApp = check("Verification");
   otherApp.app.slug = "another-app";
   assert.equal(checkRunsState(pages(otherApp)), "pending");
 });
 
 test("the required aggregate must succeed, never skip or become neutral", () => {
-  for (const conclusion of ["failure", "cancelled", "skipped", "neutral", "timed_out", "action_required", null, "unknown"]) {
-    assert.equal(checkRunsState(pages(check("Verification", conclusion))), "failure", String(conclusion));
+  for (const conclusion of [
+    "failure",
+    "cancelled",
+    "skipped",
+    "neutral",
+    "timed_out",
+    "action_required",
+    null,
+    "unknown",
+  ]) {
+    assert.equal(
+      checkRunsState(pages(check("Verification", conclusion))),
+      "failure",
+      String(conclusion),
+    );
   }
-  for (const status of ["queued", "in_progress", "waiting", "pending", "requested"]) {
-    assert.equal(checkRunsState(pages(check("Verification", null, status))), "pending");
+  for (const status of [
+    "queued",
+    "in_progress",
+    "waiting",
+    "pending",
+    "requested",
+  ]) {
+    assert.equal(
+      checkRunsState(pages(check("Verification", null, status))),
+      "pending",
+    );
   }
-  assert.equal(checkRunsState(pages(check("Verification", null, "unknown"))), "failure");
+  assert.equal(
+    checkRunsState(pages(check("Verification", null, "unknown"))),
+    "failure",
+  );
   assert.equal(checkRunsState(pages(check("Verification"))), "success");
 });
 
 test("Site and unrelated failures still block across API pages", () => {
   const verification = pages(check("Verification"));
-  assert.equal(checkRunsState([...verification, ...pages(check("Site", "failure"))]), "failure");
-  assert.equal(checkRunsState([...verification, ...pages(check("Other", "cancelled"))]), "failure");
-  assert.equal(checkRunsState([...verification, ...pages(check("Site", null, "in_progress"))]), "pending");
-  assert.equal(checkRunsState([...verification, ...pages(check("Site", "skipped"), check("Other", "neutral"))]), "success");
-  assert.equal(checkRunsState([...verification, ...pages(check("Verification", "failure"))]), "failure");
+  assert.equal(
+    checkRunsState([...verification, ...pages(check("Site", "failure"))]),
+    "failure",
+  );
+  assert.equal(
+    checkRunsState([...verification, ...pages(check("Other", "cancelled"))]),
+    "failure",
+  );
+  assert.equal(
+    checkRunsState([
+      ...verification,
+      ...pages(check("Site", null, "in_progress")),
+    ]),
+    "pending",
+  );
+  assert.equal(
+    checkRunsState([
+      ...verification,
+      ...pages(check("Site", "skipped"), check("Other", "neutral")),
+    ]),
+    "success",
+  );
+  assert.equal(
+    checkRunsState([
+      ...verification,
+      ...pages(check("Verification", "failure")),
+    ]),
+    "failure",
+  );
   assert.throws(() => checkRunsState({ check_runs: [] }), /Invalid/);
   assert.throws(() => checkRunsState([{}]), /Invalid/);
 });
 
 test("workflow entrypoints reject failed native results and consume API payloads", () => {
-  const aggregate = (needs) => spawnSync(process.execPath, [command, "verification"], {
-    encoding: "utf8", env: { ...process.env, NEEDS: JSON.stringify(needs), RELEASE: "false" },
-  });
+  const aggregate = (needs) =>
+    spawnSync(process.execPath, [command, "verification"], {
+      encoding: "utf8",
+      env: { ...process.env, NEEDS: JSON.stringify(needs), RELEASE: "false" },
+    });
   assert.equal(aggregate(results("docs")).status, 0);
   const skipped = results();
   skipped.verify.result = "skipped";
   assert.equal(aggregate(skipped).status, 1);
-  const poll = (payload) => spawnSync(process.execPath, [command, "checks"], {
-    encoding: "utf8", input: payload,
-  });
-  assert.equal(poll(JSON.stringify(pages(check("Site")))).stdout.trim(), "pending");
-  assert.equal(poll(JSON.stringify(pages(check("Verification")))).stdout.trim(), "success");
+  const poll = (payload) =>
+    spawnSync(process.execPath, [command, "checks"], {
+      encoding: "utf8",
+      input: payload,
+    });
+  assert.equal(
+    poll(JSON.stringify(pages(check("Site")))).stdout.trim(),
+    "pending",
+  );
+  assert.equal(
+    poll(JSON.stringify(pages(check("Verification")))).stdout.trim(),
+    "success",
+  );
   assert.equal(poll("not JSON").status, 1);
 });

@@ -56,7 +56,8 @@ export function isDocsPath(file) {
   if (
     file.startsWith("prompts/") ||
     /(?:^|\/)(?:PLUGIN|RUNTIME|WORLD)(?:\.[^/]+)?\.md$/.test(file)
-  ) return false;
+  )
+    return false;
   return matchers.some((matcher) => matcher.test(file));
 }
 

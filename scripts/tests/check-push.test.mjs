@@ -231,6 +231,30 @@ test("a commit that adds code to one of its refs is checked as code", (t) => {
   );
 });
 
+test("a historical commit without package-only docs tests still runs its documentation checks", (t) => {
+  const probe = fixture(t);
+  probe.commit("code");
+  const base = probe.commitFiles(
+    {
+      "package.json": JSON.stringify({
+        scripts: { "test:docs": "run the documentation tests" },
+      }),
+    },
+    "standalone documentation command",
+  );
+  const docs = probe.commitFiles({ "docs/page.md": "text\n" }, "docs");
+  const result = probe.run(
+    ["--pre-push", "origin", "url"],
+    `refs/heads/topic ${docs} refs/heads/topic ${base}\n`,
+    { failOn: "test:docs" },
+  );
+  assert.notEqual(result.status, 0);
+  assert.deepEqual(
+    probe.calls().map(({ args }) => args),
+    [["install", "--frozen-lockfile"], ["check"], ["test:docs"]],
+  );
+});
+
 test("a pushed commit from before the documentation tests existed runs every check", (t) => {
   const probe = fixture(t);
   probe.commit("code");

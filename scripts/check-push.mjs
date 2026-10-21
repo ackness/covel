@@ -35,10 +35,9 @@ delete env.NODE_ENV;
 // suite there; `pnpm check:push --full` does the same by hand.
 const wantsFullRun =
   process.argv.includes("--full") || env.COVEL_PUSH_CHECK === "full";
-// The hook runs the static gate alone: CI runs every suite on the pull
-// request, in parallel jobs, and a pull request is the only way into the main
-// branch. `COVEL_PUSH_CHECK=affected` makes the hook test the changed
-// packages too, as `pnpm check:push` does by hand.
+// Source pushes run the static gate alone; docs-only pushes add their docs tests.
+// CI runs every suite for source pull requests, the only way into main.
+// `COVEL_PUSH_CHECK=affected` also tests changed packages, as `pnpm check:push` does.
 const wantsAffectedRun = env.COVEL_PUSH_CHECK === "affected";
 const fullRunHint =
   "COVEL_PUSH_CHECK=full or pnpm check:push --full runs them here";
@@ -302,13 +301,17 @@ function verifyCommit(pushed) {
     let ran;
     let left = "PostgreSQL integration, browser smoke, the build";
     let level = "full";
+    // Use the commands available in the checked commit, not the caller's tree.
+    const docsCommand = hasScript(checkout, "test:docs:packages")
+      ? "test:docs:packages"
+      : "test:docs";
     // The commands run in the pushed commit. One from before `test:docs`
     // existed has no short path.
     if (docsOnly && hasScript(checkout, "test:docs")) {
       console.log(
         "Only documentation changed: running the static gate and the tests that read documentation.",
       );
-      commands.push(["test:docs"]);
+      commands.push([docsCommand]);
       ran = "the static gate and the tests that read documentation";
       left = "nothing this push can change";
       level = "docs";
@@ -331,7 +334,7 @@ function verifyCommit(pushed) {
           ]);
         }
         if (scope.docs && hasScript(checkout, "test:docs")) {
-          commands.push(["test:docs"]);
+          commands.push([docsCommand]);
         }
         ran =
           scope.filters.length > 0

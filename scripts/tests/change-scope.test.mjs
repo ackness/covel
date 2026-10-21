@@ -90,7 +90,9 @@ test("the docs package command runs every package test that reads documentation"
     fs.readFileSync(path.join(repoRoot, "package.json"), "utf8"),
   );
   const run = [
-    ...scripts["test:docs:packages"].matchAll(/--filter (\S+) exec vitest run (\S+)/g),
+    ...scripts["test:docs:packages"].matchAll(
+      /--filter (\S+) exec vitest run (\S+)/g,
+    ),
   ].map(([, name, file]) => `${name} ${file}`);
 
   // A test missing from the script is skipped when only documentation

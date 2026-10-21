@@ -36,7 +36,12 @@ export function fixture(t) {
   writeFileSync(path.join(repo, ".gitignore"), "ignored.txt\n");
   writeFileSync(
     path.join(repo, "package.json"),
-    JSON.stringify({ scripts: { "test:docs": "run the documentation tests" } }),
+    JSON.stringify({
+      scripts: {
+        "test:docs": "run the documentation tests",
+        "test:docs:packages": "run the package documentation tests",
+      },
+    }),
   );
 
   function commit(value) {
@@ -137,5 +142,5 @@ export const staticCommands = [["install", "--frozen-lockfile"], ["check"]];
 export const docsCommands = [
   ["install", "--frozen-lockfile"],
   ["check"],
-  ["test:docs"],
+  ["test:docs:packages"],
 ];
