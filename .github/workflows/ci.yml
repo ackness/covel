@@ -11,38 +11,13 @@ name: CI
 # to different concurrency groups, so neither cancels the other. The PR run
 # covers dev branches; this push trigger is the post-merge guard on main.
 #
-# A change that touches only documentation does not run this workflow: it
-# cannot alter what these jobs execute. docs.yml runs for it instead. The list
-# is scripts/lib/change-scope.mjs, which the pre-push hook uses too.
+# All changes run the complete static gate. Scope selection only changes which
+# tests and builds run; unknown changes and releases always take the full path.
 on:
   pull_request:
-    paths-ignore:
-      - "docs/**"
-      - "*.md"
-      - "**/README.md"
-      - "**/README.*.md"
-      - "**/AGENTS.md"
-      - "**/CLAUDE.md"
-      - ".claude/skills/**"
-      - ".assets/**"
-      - "LICENSE"
-      - ".github/ISSUE_TEMPLATE/**"
-      - ".github/PULL_REQUEST_TEMPLATE.md"
   push:
     branches:
       - main
-    paths-ignore:
-      - "docs/**"
-      - "*.md"
-      - "**/README.md"
-      - "**/README.*.md"
-      - "**/AGENTS.md"
-      - "**/CLAUDE.md"
-      - ".claude/skills/**"
-      - ".assets/**"
-      - "LICENSE"
-      - ".github/ISSUE_TEMPLATE/**"
-      - ".github/PULL_REQUEST_TEMPLATE.md"
   workflow_call:
     inputs:
       commit:
@@ -72,8 +47,32 @@ env:
   TURBO_CACHE_MAX_SIZE: 500MB
 
 jobs:
+  scope:
+    name: Select verification scope
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      scope: ${{ steps.scope.outputs.scope }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.commit || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      # Uses only Node built-ins and git; no dependency installation is needed.
+      - name: Select scope
+        id: scope
+        env:
+          RELEASE: ${{ inputs.release }}
+          COMMIT: ${{ inputs.commit }}
+        run: node scripts/ci-scope.mjs >> "$GITHUB_OUTPUT"
+
   verify:
     name: Check, test, build
+    needs: scope
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     timeout-minutes: 25
 
@@ -134,10 +133,15 @@ jobs:
       - name: Check
         run: pnpm check
 
+      - name: Test documentation examples
+        if: ${{ needs.scope.outputs.scope == 'docs' && !inputs.release }}
+        run: pnpm test:docs:packages
+
       # The web and server suites run in the parallel `web` and `server` jobs,
       # and so does the runtime suite (with coverage);
       # each was this step's critical path in turn.
       - name: Test
+        if: ${{ needs.scope.outputs.scope != 'docs' || inputs.release }}
         # Bound both workspace tasks and their worker pools on shared runners.
         env:
           VITEST_MAX_WORKERS: "2"
@@ -148,7 +152,7 @@ jobs:
       # from the Turbo cache but never written back, which keeps the saved
       # cache small.
       - name: Build
-        if: ${{ !inputs.release }}
+        if: ${{ !inputs.release && needs.scope.outputs.scope != 'docs' }}
         run: pnpm build --cache=local:r
 
       - name: Release preflight
@@ -157,6 +161,8 @@ jobs:
 
   web:
     name: Web unit tests
+    needs: scope
+    if: ${{ !cancelled() && (needs.scope.outputs.scope != 'docs' || inputs.release) }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -208,6 +214,8 @@ jobs:
 
   server:
     name: Server tests, runtime coverage
+    needs: scope
+    if: ${{ !cancelled() && (needs.scope.outputs.scope != 'docs' || inputs.release) }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -248,6 +256,8 @@ jobs:
 
   postgres:
     name: PostgreSQL integration
+    needs: scope
+    if: ${{ !cancelled() && (needs.scope.outputs.scope != 'docs' || inputs.release) }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     services:
@@ -293,6 +303,8 @@ jobs:
 
   browser:
     name: Browser smoke and community plugins
+    needs: scope
+    if: ${{ !cancelled() && (needs.scope.outputs.scope != 'docs' || inputs.release) }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -361,3 +373,23 @@ jobs:
             tests/e2e/artifacts/extensions
           if-no-files-found: ignore
           retention-days: 7
+
+  result:
+    name: Verification
+    needs: [scope, verify, web, server, postgres, browser]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.commit || github.sha }}
+          persist-credentials: false
+
+      # `always` exposes failures and skips instead of skipping the aggregate.
+      - name: Require every selected job to succeed
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+          RELEASE: ${{ inputs.release }}
+        run: node scripts/ci-results.mjs verification
