@@ -501,9 +501,10 @@ describe("ExecutionTimeline plugin names", () => {
     fireEvent.click(summary);
     expect(summary.getAttribute("aria-expanded")).toBe("true");
     const alert = screen.getByRole("alert");
-    expect(
-      within(alert).getByRole("paragraph").textContent?.trim(),
-    ).toBeTruthy();
+    const explanation = within(alert).getByRole("paragraph").textContent;
+    expect(explanation).toMatch(/\b(?:stopped|interrupted)\b/i);
+    expect(explanation).toMatch(/\bexecution history\b/i);
+    expect(explanation).not.toMatch(/\b(?:recovery|retry)\b/i);
     expect(within(alert).queryByRole("button")).toBeNull();
     expect(within(alert).queryByRole("link")).toBeNull();
     expect(screen.queryByRole("button", { name: /Retry/ })).toBeNull();

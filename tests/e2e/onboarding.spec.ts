@@ -43,7 +43,9 @@ test("first visit starts on the world list, explains preparation and can be reop
   await guide.getByRole("button", { name: "Learn how to play" }).click();
   const missingModel = guide.getByRole("status");
   await expect(missingModel).toBeVisible();
-  await expect(missingModel.getByRole("paragraph")).toHaveText(/\S/);
+  await expect(missingModel.getByRole("paragraph")).toContainText(
+    /\bmodel setup\b.*\bbefore\b.*\bgame\b/i,
+  );
   await missingModel
     .getByRole("button", { name: "Configure Providers & Models" })
     .click();

@@ -234,7 +234,9 @@ describe("MediaLibraryPane", () => {
     render(<MediaLibraryPane />);
 
     const explanation = await screen.findByRole("paragraph");
-    expect(explanation.textContent?.trim()).toBeTruthy();
+    expect(explanation.textContent).toMatch(/\bmedia library\b/i);
+    expect(explanation.textContent).toMatch(/\b(?:not available|unavailable)\b/i);
+    expect(explanation.textContent).toMatch(/\bserver\b/i);
     expect(screen.queryByRole("alert")).toBeNull();
     expect(screen.queryByRole("button", { name: /^Delete/ })).toBeNull();
     expect(screen.queryByRole("checkbox")).toBeNull();
