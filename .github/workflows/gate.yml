@@ -1,8 +1,8 @@
 name: Merge gate
 
-# The stable ruleset check requires CI's explicit Verification aggregate and
-# retains failures from Site and every other check. Cross-workflow checks do
-# not support jobs.needs, so only this outer gate still polls the Checks API.
+# The stable ruleset check requires CI's explicit Verification aggregate,
+# including its Site build, and retains failures from every other check.
+# Cross-workflow checks do not support jobs.needs, so this outer gate polls.
 # After a failed check is re-run and passes, re-run this job too.
 on:
   pull_request:
@@ -49,7 +49,7 @@ jobs:
               exit 1
             fi
             if [[ "$state" == success ]]; then
-              # Keep the existing quiet period for late-arriving Site/other jobs.
+              # Keep the existing quiet period for late-arriving other checks.
               quiet=$((quiet + 1))
               if (( quiet >= 2 )); then
                 echo "Verification and every other check of $SHA passed."

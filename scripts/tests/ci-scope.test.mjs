@@ -49,10 +49,10 @@ test("docs, source and mixed pushes select only the suites they can affect", (t)
     "docs/guide.md": "guide\n",
     "README.md": "readme\n",
   });
-  assert.equal(repo.push(docs), "docs");
+  assert.deepEqual(repo.push(docs), { scope: "docs", site_deploy: true });
   const mixed = repo.commit({ "packages/a/index.ts": "export const a = 1;\n" });
-  assert.equal(repo.push(mixed), "full");
-  assert.equal(repo.push(mixed, docs), "full");
+  assert.deepEqual(repo.push(mixed), { scope: "full", site_deploy: true });
+  assert.deepEqual(repo.push(mixed, docs), { scope: "full", site_deploy: false });
 });
 
 test("prompt manifests and renames out of docs remain source", (t) => {
@@ -64,9 +64,12 @@ test("prompt manifests and renames out of docs remain source", (t) => {
     path.join(repo.cwd, "plugins/a/PLUGIN.md"),
   );
   const renamed = repo.commit({});
-  assert.equal(repo.push(renamed, docs), "full");
+  assert.deepEqual(repo.push(renamed, docs), { scope: "full", site_deploy: true });
   const prompt = repo.commit({ "prompts/server/turn.md": "prompt\n" });
-  assert.equal(repo.push(prompt, renamed), "full");
+  assert.deepEqual(repo.push(prompt, renamed), {
+    scope: "full",
+    site_deploy: false,
+  });
 });
 
 test("PR scope excludes changes made only on the base branch", (t) => {
@@ -77,51 +80,114 @@ test("PR scope excludes changes made only on the base branch", (t) => {
   git(repo.cwd, "checkout", "--quiet", main);
   const base = repo.commit({ "packages/a/index.ts": "export const a = 1;\n" });
   const event = { pull_request: { base: { sha: base }, head: { sha: head } } };
-  assert.equal(
+  assert.deepEqual(
     selectCiScope({ cwd: repo.cwd, eventName: "pull_request", event }),
-    "docs",
+    { scope: "docs", site_deploy: true },
   );
   git(repo.cwd, "checkout", "--quiet", "topic");
   event.pull_request.head.sha = repo.commit({
     "plugins/a/PLUGIN.md": "manifest\n",
   });
-  assert.equal(
+  assert.deepEqual(
     selectCiScope({ cwd: repo.cwd, eventName: "pull_request", event }),
-    "full",
+    { scope: "full", site_deploy: true },
   );
 });
 
 test("empty, missing, mismatched and failed diffs cannot opt out of suites", (t) => {
   const repo = repository(t);
   const docs = repo.commit({ "docs/guide.md": "guide\n" });
-  assert.equal(repo.push(docs, docs), "full");
-  assert.equal(repo.push(docs, "0".repeat(40)), "full");
-  assert.equal(repo.push(docs, "f".repeat(40)), "full");
-  assert.equal(repo.push(docs, "--invalid-revision"), "full");
-  assert.equal(repo.push(docs, undefined, { event: {} }), "full");
-  assert.equal(repo.push(docs, undefined, { sha: repo.base }), "full");
-  assert.equal(
+  const unknown = { scope: "full", site_deploy: true };
+  assert.deepEqual(repo.push(docs, docs), unknown);
+  assert.deepEqual(repo.push(docs, "0".repeat(40)), unknown);
+  assert.deepEqual(repo.push(docs, "f".repeat(40)), unknown);
+  assert.deepEqual(repo.push(docs, "--invalid-revision"), unknown);
+  assert.deepEqual(repo.push(docs, undefined, { event: {} }), unknown);
+  assert.deepEqual(repo.push(docs, undefined, { sha: repo.base }), unknown);
+  assert.deepEqual(
     repo.push(docs, undefined, { eventName: "workflow_dispatch" }),
-    "full",
+    unknown,
   );
-  assert.equal(
+  assert.deepEqual(
     selectCiScope({ cwd: repo.cwd, eventName: "pull_request", event: {} }),
-    "full",
+    unknown,
   );
 });
 
 test("release and immutable reusable-workflow requests always run full suites", (t) => {
   const repo = repository(t);
   const docs = repo.commit({ "docs/guide.md": "guide\n" });
-  assert.equal(repo.push(docs, repo.base, { release: true }), "full");
-  assert.equal(repo.push(docs, repo.base, { commit: docs }), "full");
+  assert.deepEqual(repo.push(docs, repo.base, { release: true }), {
+    scope: "full",
+    site_deploy: false,
+  });
+  assert.deepEqual(repo.push(docs, repo.base, { commit: docs }), {
+    scope: "full",
+    site_deploy: true,
+  });
+  assert.deepEqual(
+    selectCiScope({ cwd: "/missing", release: true, commit: repo.base }),
+    { scope: "full", site_deploy: false },
+  );
+});
+
+test("deployment selection includes site paths and shared build/install controls", (t) => {
+  const repo = repository(t);
+  let before = repo.base;
+  for (const file of [
+    "apps/site/src/main.tsx",
+    "apps/docs/.vitepress/config.ts",
+    "docs/guide.md",
+    "package.json",
+    "pnpm-lock.yaml",
+    "pnpm-workspace.yaml",
+    ".npmrc",
+    ".pnpmfile.cjs",
+    "mise.toml",
+    "tsconfig.json",
+    "turbo.json",
+    "scripts/require-pnpm.mjs",
+    "scripts/ci-scope.mjs",
+    ".github/workflows/ci.yml",
+    ".github/workflows/site.yml",
+  ]) {
+    const head = repo.commit({ [file]: "changed\n" });
+    assert.deepEqual(
+      repo.push(head, before),
+      { scope: file.startsWith("docs/") ? "docs" : "full", site_deploy: true },
+      file,
+    );
+    before = head;
+  }
+  rmSync(path.join(repo.cwd, "apps/site/src/main.tsx"));
+  const deleted = repo.commit({});
+  assert.deepEqual(repo.push(deleted, before), {
+    scope: "full",
+    site_deploy: true,
+  });
+});
+
+test("unrelated source and documentation still select suites without publishing", (t) => {
+  const repo = repository(t);
+  let before = repo.base;
+  for (const [file, scope] of [
+    ["packages/a/index.ts", "full"],
+    ["apps/server/src/index.ts", "full"],
+    ["README.md", "docs"],
+    ["packages/a/README.md", "docs"],
+    [".github/workflows/release.yml", "full"],
+  ]) {
+    const head = repo.commit({ [file]: "changed\n" });
+    assert.deepEqual(repo.push(head, before), { scope, site_deploy: false }, file);
+    before = head;
+  }
 });
 
 test("the workflow command consumes real event payloads and fails closed on unreadable data", (t) => {
   const repo = repository(t);
   const head = repo.commit({ "docs/guide.md": "guide\n" });
   const payload = path.join(repo.cwd, "event.json");
-  const run = () =>
+  const run = (release = "false") =>
     spawnSync(process.execPath, [command], {
       cwd: repo.cwd,
       encoding: "utf8",
@@ -130,18 +196,20 @@ test("the workflow command consumes real event payloads and fails closed on unre
         GITHUB_EVENT_NAME: "push",
         GITHUB_EVENT_PATH: payload,
         GITHUB_SHA: head,
-        RELEASE: "false",
+        RELEASE: release,
         COMMIT: "",
       },
     });
   writeFileSync(payload, JSON.stringify({ before: repo.base, after: head }));
   const docs = run();
   assert.equal(docs.status, 0, docs.stderr);
-  assert.equal(docs.stdout.trim(), "scope=docs");
+  assert.equal(docs.stdout.trim(), "scope=docs\nsite_deploy=true");
   writeFileSync(payload, "not JSON");
   const malformed = run();
   assert.equal(malformed.status, 0, malformed.stderr);
-  assert.equal(malformed.stdout.trim(), "scope=full");
+  assert.equal(malformed.stdout.trim(), "scope=full\nsite_deploy=true");
+  assert.equal(run("true").stdout.trim(), "scope=full\nsite_deploy=false");
   rmSync(payload);
-  assert.equal(run().stdout.trim(), "scope=full");
+  assert.equal(run().stdout.trim(), "scope=full\nsite_deploy=true");
+  assert.equal(run("true").stdout.trim(), "scope=full\nsite_deploy=false");
 });

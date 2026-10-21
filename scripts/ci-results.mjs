@@ -13,6 +13,7 @@ export function verificationFailures(needs, release = false) {
     failures.push("scope is missing or unknown");
   const required = [
     "verify",
+    ...(release ? [] : ["site"]),
     ...(scope === "docs" && !release ? [] : fullJobs),
   ];
   for (const job of required) {
@@ -20,7 +21,7 @@ export function verificationFailures(needs, release = false) {
       failures.push(`${job} did not succeed`);
   }
   // Even unneeded jobs must not hide a failure or cancellation.
-  for (const job of fullJobs) {
+  for (const job of [...fullJobs, "site"]) {
     if (
       !required.includes(job) &&
       !["success", "skipped"].includes(needs?.[job]?.result)

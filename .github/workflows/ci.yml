@@ -53,6 +53,7 @@ jobs:
     timeout-minutes: 5
     outputs:
       scope: ${{ steps.scope.outputs.scope }}
+      site_deploy: ${{ steps.scope.outputs.site_deploy }}
     steps:
       # Control scripts belong to the workflow revision, not a requested older
       # release source. Local reusable workflows share their caller's commit.
@@ -70,6 +71,21 @@ jobs:
           RELEASE: ${{ inputs.release }}
           COMMIT: ${{ inputs.commit }}
         run: node scripts/ci-scope.mjs >> "$GITHUB_OUTPUT"
+
+  # One build owner for docs, full and unknown scope alike. Keep these elevated
+  # permissions on this nonrelease call only; executing release jobs stay read-only.
+  site:
+    name: Site
+    needs: scope
+    if: ${{ !cancelled() && !inputs.release }}
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    uses: ./.github/workflows/site.yml
+    with:
+      commit: ${{ inputs.commit }}
+      deploy: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && !inputs.release && needs.scope.outputs.site_deploy == 'true' }}
 
   verify:
     name: Check, test, build
@@ -149,13 +165,12 @@ jobs:
           VITEST_MAX_WORKERS: "2"
         run: pnpm test --concurrency=2 --filter=!@covel/web --filter=!@covel/server --filter=!@covel/runtime
 
-      # The release matrix builds desktop and its web/server dependencies.
-      # Build outputs (the desktop staging tree is ~90 MB per entry) are read
-      # from the Turbo cache but never written back, which keeps the saved
-      # cache small.
+      # Site owns docs/site on every nonrelease run. The release matrix builds
+      # desktop and its web/server dependencies. Read Turbo build outputs but
+      # never write the large desktop staging tree back into the cache.
       - name: Build
         if: ${{ !inputs.release && needs.scope.outputs.scope != 'docs' }}
-        run: pnpm build --cache=local:r
+        run: pnpm build --cache=local:r --filter=!@covel/docs --filter=!@covel/site
 
       - name: Release preflight
         if: ${{ inputs.release }}
@@ -378,7 +393,7 @@ jobs:
 
   result:
     name: Verification
-    needs: [scope, verify, web, server, postgres, browser]
+    needs: [scope, verify, site, web, server, postgres, browser]
     if: ${{ always() }}
     runs-on: ubuntu-latest
     timeout-minutes: 5

@@ -11,6 +11,7 @@ function results(scope = "full") {
   return {
     scope: { result: "success", outputs: { scope } },
     verify: { result: "success" },
+    site: { result: "success" },
     ...Object.fromEntries(
       fullJobs.map((job) => [
         job,
@@ -30,12 +31,20 @@ test("full and documentation-only verification require their actual job results"
   assert.deepEqual(verificationFailures(results()), []);
   assert.deepEqual(verificationFailures(results("docs")), []);
   assert.notDeepEqual(verificationFailures(results("docs"), true), []);
-  assert.deepEqual(verificationFailures(results(), true), []);
+  const release = results();
+  release.site.result = "skipped";
+  assert.deepEqual(verificationFailures(release, true), []);
+  assert.notDeepEqual(verificationFailures(release), []);
 });
 
 test("failure, cancellation, unknown, skipped and missing required jobs never pass", () => {
   for (const scope of ["docs", "full"]) {
-    const required = ["scope", "verify", ...(scope === "full" ? fullJobs : [])];
+    const required = [
+      "scope",
+      "verify",
+      "site",
+      ...(scope === "full" ? fullJobs : []),
+    ];
     for (const job of required) {
       for (const status of [
         "failure",
@@ -70,6 +79,21 @@ test("optional docs-path suites may skip but cannot hide a failure or missing re
       needs[job].result = result;
       assert.notDeepEqual(verificationFailures(needs), []);
     }
+  }
+});
+
+test("release may skip Site but cannot hide its failure, cancellation or missing result", () => {
+  for (const result of ["failure", "cancelled", "unknown", undefined]) {
+    const needs = results();
+    if (result === undefined) delete needs.site;
+    else needs.site.result = result;
+    assert.notDeepEqual(verificationFailures(needs, true), [], String(result));
+  }
+  for (const job of ["verify", ...fullJobs]) {
+    const needs = results();
+    needs.site.result = "skipped";
+    needs[job].result = "skipped";
+    assert.notDeepEqual(verificationFailures(needs, true), [], job);
   }
 });
 
@@ -158,15 +182,30 @@ test("Site and unrelated failures still block across API pages", () => {
 });
 
 test("workflow entrypoints reject failed native results and consume API payloads", () => {
-  const aggregate = (needs) =>
+  const aggregate = (needs, release = false) =>
     spawnSync(process.execPath, [command, "verification"], {
       encoding: "utf8",
-      env: { ...process.env, NEEDS: JSON.stringify(needs), RELEASE: "false" },
+      env: {
+        ...process.env,
+        NEEDS: JSON.stringify(needs),
+        RELEASE: String(release),
+      },
     });
   assert.equal(aggregate(results("docs")).status, 0);
   const skipped = results();
   skipped.verify.result = "skipped";
   assert.equal(aggregate(skipped).status, 1);
+  for (const result of ["skipped", "failure", "cancelled", undefined]) {
+    const needs = results("docs");
+    if (result === undefined) delete needs.site;
+    else needs.site.result = result;
+    const failed = aggregate(needs);
+    assert.equal(failed.status, 1, String(result));
+    assert.match(failed.stderr, /site did not succeed/);
+  }
+  const release = results();
+  release.site.result = "skipped";
+  assert.equal(aggregate(release, true).status, 0);
   const poll = (payload) =>
     spawnSync(process.execPath, [command, "checks"], {
       encoding: "utf8",
