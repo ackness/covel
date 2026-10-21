@@ -86,6 +86,14 @@
       "cache": false,
       "passThroughEnv": ["DATABASE_URL", "COVEL_REQUIRE_PG_TESTS"]
     },
+    "@covel/shared#test": {
+      "dependsOn": ["^build"],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/vitest.base.ts",
+        "$TURBO_ROOT$/docs/reference/env-registry.md"
+      ]
+    },
     "@covel/plugin-loader#test": {
       "dependsOn": ["^build"],
       "cache": true,
@@ -96,6 +104,7 @@
         "vitest.config.ts",
         "$TURBO_ROOT$/vitest.base.ts",
         "$TURBO_ROOT$/docs/plugins/**",
+        "$TURBO_ROOT$/.claude/skills/create-plugin/**",
         "$TURBO_ROOT$/plugins/*/*.md",
         "$TURBO_ROOT$/plugins/*/*.js",
         "$TURBO_ROOT$/plugins/*/package.json",
@@ -111,6 +120,7 @@
         "tests/**",
         "vitest.config.ts",
         "$TURBO_ROOT$/vitest.base.ts",
+        "$TURBO_ROOT$/docs/reference/hooks.md",
         "$TURBO_ROOT$/plugins/*/*.md",
         "$TURBO_ROOT$/plugins/*/*.js",
         "$TURBO_ROOT$/plugins/*/package.json",

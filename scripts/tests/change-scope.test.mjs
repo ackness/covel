@@ -3,20 +3,9 @@ import fs from "node:fs";
 import path from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
-import { parse } from "yaml";
-import {
-  DOCS_PATH_FILTERS,
-  isDocsOnly,
-  isDocsPath,
-} from "../lib/change-scope.mjs";
+import { isDocsOnly, isDocsPath } from "../lib/change-scope.mjs";
 
 const repoRoot = fileURLToPath(new URL("../../", import.meta.url));
-
-function workflow(name) {
-  return parse(
-    fs.readFileSync(path.join(repoRoot, ".github/workflows", name), "utf8"),
-  );
-}
 
 test("documentation is what people and agents read, wherever it lives", () => {
   for (const file of [
@@ -46,6 +35,10 @@ test("documentation is what people and agents read, wherever it lives", () => {
 
 test("Markdown that a loader reads is source, and so is everything else", () => {
   for (const file of [
+    "PLUGIN.md",
+    "RUNTIME.md",
+    "WORLD.en.md",
+    "prompts/server/README.md",
     "plugins/narrator/PLUGIN.md",
     "plugins/narrator/PLUGIN.zh.md",
     "plugins/narrator/runtimes/story/RUNTIME.md",
@@ -72,19 +65,7 @@ test("a change is documentation only when it has files and all of them are docum
   assert.equal(isDocsOnly([]), false);
 });
 
-test("the workflows and the pre-push hook agree on what documentation is", () => {
-  const ci = workflow("ci.yml").on;
-  const docs = workflow("docs.yml").on;
-  assert.deepEqual(ci.pull_request["paths-ignore"], DOCS_PATH_FILTERS);
-  assert.deepEqual(ci.push["paths-ignore"], DOCS_PATH_FILTERS);
-  assert.deepEqual(docs.pull_request.paths, DOCS_PATH_FILTERS);
-  assert.deepEqual(docs.push.paths, DOCS_PATH_FILTERS);
-  const steps = workflow("docs.yml").jobs.docs.steps.map((step) => step.run);
-  assert.ok(steps.includes("pnpm check"));
-  assert.ok(steps.includes("pnpm test:docs"));
-});
-
-test("pnpm test:docs runs every test that reads documentation", () => {
+test("the docs package command runs every package test that reads documentation", () => {
   // A call that builds or opens docs, an agent skill, or a reader-facing
   // README/agent instruction file (also documentation-only in CI).
   const readsDocs =
@@ -109,10 +90,12 @@ test("pnpm test:docs runs every test that reads documentation", () => {
     fs.readFileSync(path.join(repoRoot, "package.json"), "utf8"),
   );
   const run = [
-    ...scripts["test:docs"].matchAll(/--filter (\S+) exec vitest run (\S+)/g),
+    ...scripts["test:docs:packages"].matchAll(
+      /--filter (\S+) exec vitest run (\S+)/g,
+    ),
   ].map(([, name, file]) => `${name} ${file}`);
 
   // A test missing from the script is skipped when only documentation
-  // changes: add it to `test:docs` in the root package.json.
+  // changes: add it to `test:docs:packages` in the root package.json.
   assert.deepEqual(run.sort(), reading.sort());
 });

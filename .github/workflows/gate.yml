@@ -1,13 +1,9 @@
 name: Merge gate
 
-# One check that every pull request has, for the `Protect main` ruleset to
-# require. CI, Docs and Site each run only for the paths they cover, so none of
-# them can be required by name: a pull request that does not trigger a required
-# workflow would wait for it without end.
-#
-# The job waits until every other check of the head commit has finished and
-# fails as soon as one of them fails. After a failed check is re-run and passes,
-# re-run this job too.
+# The stable ruleset check requires CI's explicit Verification aggregate,
+# including its Site build, and retains failures from every other check.
+# Cross-workflow checks do not support jobs.needs, so this outer gate polls.
+# After a failed check is re-run and passes, re-run this job too.
 on:
   pull_request:
 
@@ -23,44 +19,45 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     permissions:
+      contents: read
       checks: read
 
     steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
       - name: Wait for the other checks of this commit
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           SHA: ${{ github.event.pull_request.head.sha }}
-          SELF: All checks pass
         run: |
           set -euo pipefail
           # Give the other workflows time to create their check runs.
           sleep 45
           quiet=0
           while true; do
-            runs="$(gh api --paginate "repos/$REPO/commits/$SHA/check-runs?per_page=100" \
-              --jq '.check_runs[] | select(.name != env.SELF) | [.status, (.conclusion // "-"), .name] | @tsv')"
-            failed="$(awk -F'\t' '$1 == "completed" && $2 !~ /^(success|skipped|neutral)$/' <<< "$runs")"
-            if [[ -n "$failed" ]]; then
+            runs="$(gh api --paginate --slurp "repos/$REPO/commits/$SHA/check-runs?per_page=100")"
+            state="$(printf '%s' "$runs" | node scripts/ci-results.mjs checks)"
+            if [[ "$state" == failure ]]; then
               echo "::error::A check of this commit did not pass."
-              echo "$failed"
+              echo "$runs"
               exit 1
             fi
-            pending="$(awk -F'\t' 'NF && $1 != "completed"' <<< "$runs")"
-            if [[ -z "$pending" ]]; then
-              # A workflow may add its jobs a moment after the last one
-              # finished: pass only when two polls in a row find nothing left.
+            if [[ "$state" == success ]]; then
+              # Keep the existing quiet period for late-arriving other checks.
               quiet=$((quiet + 1))
               if (( quiet >= 2 )); then
-                echo "Every check of $SHA passed:"
-                echo "$runs"
+                echo "Verification and every other check of $SHA passed."
                 exit 0
               fi
             else
               quiet=0
-              echo "Waiting for:"
-              echo "$pending"
+              echo "Waiting for Verification and the other checks of $SHA."
             fi
             sleep 30
           done

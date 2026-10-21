@@ -3,32 +3,36 @@ name: Site
 # Builds the showcase website (apps/site) with the documentation site
 # (apps/docs, pages in docs) under its `docs/` path, and publishes both on
 # GitHub Pages.
-# A pull request only builds it; a push to main, or a manual run, also deploys.
+# CI calls this once per nonrelease run; only eligible main pushes deploy.
+# Manual runs can also deploy. PRs only build, regardless of the deploy input.
 # Pages must use "GitHub Actions" as its source (Settings > Pages).
 on:
-  pull_request:
-    paths:
-      - "apps/site/**"
-      - "apps/docs/**"
-      - "docs/**"
-      - "pnpm-lock.yaml"
-      - ".github/workflows/site.yml"
-  push:
-    branches:
-      - main
-    paths:
-      - "apps/site/**"
-      - "apps/docs/**"
-      - "docs/**"
-      - "pnpm-lock.yaml"
-      - ".github/workflows/site.yml"
+  workflow_call:
+    inputs:
+      commit:
+        description: Immutable source commit, when supplied by CI.
+        required: false
+        type: string
+      deploy:
+        description: Publish this build to GitHub Pages.
+        required: false
+        type: boolean
+        default: false
   workflow_dispatch:
+    inputs:
+      deploy:
+        description: Publish this build to GitHub Pages.
+        required: false
+        type: boolean
+        default: true
 
 permissions:
   contents: read
 
+# A build-only main run must not replace a pending deployment. PRs still share
+# a group, as do eligible deployments, matching the previous Site trigger.
 concurrency:
-  group: site-${{ github.ref }}
+  group: site-${{ (github.event_name == 'pull_request' || inputs.deploy) && github.ref || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
@@ -44,6 +48,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ inputs.commit || github.sha }}
           persist-credentials: false
 
       - name: Setup pnpm
@@ -75,14 +80,14 @@ jobs:
           cp -R apps/docs/dist apps/site/dist/docs
 
       - name: Upload Pages artifact
-        if: github.event_name != 'pull_request'
+        if: ${{ inputs.deploy && github.event_name != 'pull_request' }}
         uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
           path: apps/site/dist
 
   deploy:
     name: Deploy to GitHub Pages
-    if: github.event_name != 'pull_request'
+    if: ${{ inputs.deploy && github.event_name != 'pull_request' }}
     needs: build
     runs-on: ubuntu-latest
     timeout-minutes: 10

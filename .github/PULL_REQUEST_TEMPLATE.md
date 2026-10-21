@@ -25,12 +25,20 @@
 ## Verification / 验证方式
 
 <!-- Tick what actually ran and note what was skipped and why. The pre-push hook covers
-     `pnpm check` in a clean checkout (for a documentation-only push it adds `pnpm test:docs`).
-     It runs no test suite: `pnpm check:push` runs the tests of the packages this branch
-     changed, and CI runs every suite.
-     只勾选真正跑过的项，没跑的写明原因。pre-push hook 只在干净检出里跑 `pnpm check`
-     （只改文档的推送再加 `pnpm test:docs`），不跑测试套件：`pnpm check:push` 跑本分支
-     改动的包的测试，全部测试由 CI 运行。 -->
+     `pnpm check` in a clean checkout; docs-only adds `pnpm test:docs:packages`.
+     `pnpm check:push` adds affected suites for source changes. CI owns all verification:
+     docs-only runs documentation tests after check; source, unknown scope and releases run all suites.
+     Non-release CI also requires one Site/docs build, including on docs-only changes;
+     the other build excludes those targets. Releases retain their platform builds.
+     Missing or skipped required jobs cannot pass Verification or All checks pass.
+     Tests reading files outside their package must declare those Turbo inputs.
+     只勾选真正跑过的项，没跑的写明原因。pre-push hook 在干净检出里跑 `pnpm check`，
+     纯文档另跑 `pnpm test:docs:packages`；`pnpm check:push` 为源码改动加上受影响的套件。
+     CI 统一负责验证：纯文档跑静态与文档检查，源码、未知范围和发布跑完整套件。
+     非发布 CI（纯文档也包括）必须通过一次官网/文档站构建，其余构建排除这两个目标；
+     发布仍由平台打包任务构建。
+     必需任务缺失或跳过时，Verification 和 All checks pass 不得通过。
+     测试读取包外文件时，必须声明对应的 Turbo 输入。 -->
 
 - [ ] `pnpm check` <!-- static gate: types, Oxlint, package boundaries, deps, manifests, i18n, changelog fragments, workflows -->
 - [ ] Tests of the changed packages (`pnpm check:push`, or `pnpm --filter <pkg> test`) / 改动包的测试

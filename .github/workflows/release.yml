@@ -141,6 +141,13 @@ jobs:
   verify-release:
     needs: prepare
     uses: ./.github/workflows/ci.yml
+    # Reusable descendants cannot exceed this permission ceiling, even when
+    # skipped. CI reduces executing release jobs to contents:read and skips
+    # its sole Pages-capable job; no release runner gets Pages/OIDC writes.
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
     with:
       commit: ${{ needs.prepare.outputs.commit }}
       release: true

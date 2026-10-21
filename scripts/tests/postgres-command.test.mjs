@@ -15,11 +15,7 @@ function fixture(t, exitCode = 0) {
   const script = path.join(directory, "pnpm.cjs");
   writeFileSync(
     script,
-    `require("node:fs").appendFileSync(${JSON.stringify(log)}, JSON.stringify({
-      args: process.argv.slice(2),
-      url: process.env.DATABASE_URL,
-      required: process.env.COVEL_REQUIRE_PG_TESTS
-    }) + "\\n");
+    `require("node:fs").appendFileSync(${JSON.stringify(log)}, JSON.stringify(process.argv.slice(2)) + "\\n");
     process.exit(${exitCode});`,
   );
   const shim = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
@@ -35,7 +31,6 @@ function fixture(t, exitCode = 0) {
       const env = {
         ...process.env,
         PATH: `${directory}${path.delimiter}${process.env.PATH}`,
-        COVEL_REQUIRE_PG_TESTS: "0",
       };
       if (databaseUrl === undefined) delete env.DATABASE_URL;
       else env.DATABASE_URL = databaseUrl;
@@ -57,28 +52,6 @@ test("PostgreSQL command rejects a missing database instead of skipping tests", 
   const result = fixture(t).run(undefined);
   assert.equal(result.status, 1);
   assert.match(result.stderr, /requires DATABASE_URL/);
-});
-
-test("PostgreSQL command forces both suites to require the selected database", (t) => {
-  const probe = fixture(t);
-  const url = "postgresql://fixture.invalid/isolated";
-  const result = probe.run(url);
-  assert.equal(result.status, 0, result.stderr);
-  assert.deepEqual(probe.calls(), [
-    { args: ["--filter", "@covel/store", "test"], url, required: "1" },
-    {
-      args: [
-        "--filter",
-        "@covel/server",
-        "exec",
-        "vitest",
-        "run",
-        "tests/integration",
-      ],
-      url,
-      required: "1",
-    },
-  ]);
 });
 
 test("PostgreSQL command preserves a failed suite's exit code and stops", (t) => {

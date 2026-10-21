@@ -494,12 +494,23 @@ describe("ExecutionTimeline plugin names", () => {
         ]}
       />,
     );
+    const summary = screen.getByRole("button", { name: /Execution/ });
+    expect(summary.getAttribute("aria-expanded")).toBe("false");
     expect(screen.queryByRole("alert")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: /Execution/ }));
+    expect(screen.queryByRole("button", { name: /Retry/ })).toBeNull();
+    fireEvent.click(summary);
+    expect(summary.getAttribute("aria-expanded")).toBe("true");
     const alert = screen.getByRole("alert");
-    expect(alert.textContent).toContain("Its execution history is shown here");
-    expect(alert.textContent).not.toContain("recovery notice");
+    const explanation = within(alert).getByRole("paragraph").textContent;
+    expect(explanation).toMatch(/\b(?:stopped|interrupted)\b/i);
+    expect(explanation).toMatch(/\bexecution history\b/i);
+    expect(explanation).not.toMatch(/\b(?:recovery|retry)\b/i);
     expect(within(alert).queryByRole("button")).toBeNull();
+    expect(within(alert).queryByRole("link")).toBeNull();
+    expect(screen.queryByRole("button", { name: /Retry/ })).toBeNull();
+    fireEvent.click(summary);
+    expect(summary.getAttribute("aria-expanded")).toBe("false");
+    expect(screen.queryByRole("alert")).toBeNull();
     expect(retry).not.toHaveBeenCalled();
   });
 

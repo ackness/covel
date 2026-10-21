@@ -156,23 +156,25 @@ The full release checklist is in [`desktop-packaging.md`](./desktop-packaging.md
 
 A change goes through three checks: when you commit, when you push, and on the pull request.
 
-| When                      | What runs                                                                                    | What does not run              |
-| ------------------------- | -------------------------------------------------------------------------------------------- | ------------------------------ |
-| Commit (pre-commit)       | Prettier and Oxlint on the changed files                                                     | Type checking, tests           |
-| Push (pre-push, optional) | In a clean checkout, install dependencies, then run `pnpm check`                             | Any tests                      |
-| `pnpm check:push`         | The same as the pre-push hook, plus the tests of the affected packages and `pnpm e2e --list` | Packages that are not affected |
-| Pull request (CI)         | `pnpm check`, all tests, the build                                                           | Nothing                        |
+| When                      | What runs                                                                                           | What does not run                          |
+| ------------------------- | --------------------------------------------------------------------------------------------------- | ------------------------------------------ |
+| Commit (pre-commit)       | Prettier and Oxlint on the changed files                                                            | Type checking, tests                       |
+| Push (pre-push, optional) | Install in a clean checkout, then `pnpm check`; docs-only also runs documentation tests             | Source test suites                         |
+| `pnpm check:push`         | The same as the pre-push hook, plus affected package tests and `pnpm e2e --list`                    | Unaffected packages                        |
+| Pull request (CI)         | `pnpm check` and Site/docs build; documentation tests for docs-only, all tests and builds otherwise | Full suites and other builds for docs-only |
 
 ### When committing and pushing
 
 - The pre-commit configuration is in `.pre-commit-config.yaml`. The Oxlint rules are in `.oxlintrc.jsonc`. As with `pnpm check`, it runs with `--deny-warnings`, so a single warning counts as a failure. It does not do type checking. `pnpm check` does that.
-- `pnpm hooks:install` installs the pre-push hook. For each commit being pushed, it makes a clean checkout, installs dependencies, and runs `pnpm check`. It does not run tests. CI runs all the tests in parallel on the pull request, and `main` accepts only pull requests.
+- `pnpm hooks:install` installs the pre-push hook. For each pushed commit, it makes a clean checkout, installs dependencies, and runs `pnpm check`. Source pushes run no test suite; docs-only pushes also run the documentation tests below. CI runs all tests in parallel for source pull requests, and `main` accepts only pull requests.
 - `pnpm check:push` checks HEAD in the same way. It also adds the parts this change may affect: the packages changed since the remote main branch, the tests of the packages that depend on them, and `pnpm e2e --list`.
 - `COVEL_PUSH_CHECK=affected git push` makes the hook do this too.
 
 ### When all tests run
 
 Some tests read files outside their own package. If a file is written in the `$TURBO_ROOT$` input of `turbo.json` for a test, that test runs whenever the file changes. So these inputs must stay accurate.
+
+Documentation readers follow the same rule: the shared test task tracks the environment-variable reference, runtime tracks the hook reference, and plugin-loader tracks both plugin guides and the create-plugin skill. Mixed source/documentation changes therefore invalidate the relevant cached results, without running the same documentation tests twice.
 
 All tests run in any of the following cases:
 
@@ -186,13 +188,13 @@ Checkouts use the Turbo cache shared by all worktrees, so a task that ran with t
 
 ### On pull requests
 
-CI (`.github/workflows/ci.yml`) runs everything: `pnpm check`, every group of tests, and the build. The web unit tests, the server tests with the runtime coverage floor, the PostgreSQL integration tests, and the browser smoke tests are in parallel jobs. For details, see [`CONTRIBUTING.md`](../../CONTRIBUTING.md).
+CI (`.github/workflows/ci.yml`) handles documentation, source, and mixed changes in one workflow and always runs the complete `pnpm check`. Docs-only changes then run documentation tests; source changes, unknown scope, and releases run every suite. Web unit tests, server tests with the runtime coverage floor, PostgreSQL integration, and browser smoke remain parallel jobs. Every non-release CI run calls Site to build the showcase and documentation once; the remaining full-path build excludes those targets, while standalone `pnpm build` is unchanged. Releases skip Site, run release preflight, and build through platform packaging jobs. See [`CONTRIBUTING.md`](../../CONTRIBUTING.md).
 
-`main` accepts only pull requests (the `Protect main` rule set: no direct push, no force push, and no deletion). The CI, Docs, and Site workflows each run only when the paths they are responsible for change. So `.github/workflows/gate.yml` provides the check that every pull request has: `All checks pass`. It waits for the other checks on this commit to finish, and it fails if any one of them fails. After you rerun a failed check, rerun this one too.
+`main` accepts only pull requests (the `Protect main` ruleset: no direct push, force push, or deletion). CI's `Verification` aggregates the selected jobs, including Site on non-release runs: missing, skipped, failed, or cancelled required jobs cannot pass. `.github/workflows/gate.yml` supplies `All checks pass` for every pull request. It requires successful `Verification` and preserves failures from other checks. Rerun this gate after rerunning a failed check.
 
 ### Documentation-only changes
 
-A change that touches only documentation takes a short path. The push hook and `.github/workflows/docs.yml` run only `pnpm check` and `pnpm test:docs`, and `ci.yml` does not run.
+Docs-only changes take a short path: the push hook and `ci.yml` run `pnpm check`, then `pnpm test:docs:packages`; CI also builds the showcase and documentation through Site. Documentation-reference and technical-debt-ledger script tests already ran in `check:scripts` and are not repeated. Standalone `pnpm test:docs` still includes the package tests and both script suites. When checking a historical commit, the push hook uses the commands that commit provides.
 
 Files that count as documentation (the rules are in `scripts/lib/change-scope.mjs`):
 
@@ -209,7 +211,7 @@ Points to keep in mind:
 
 - Markdown that a loader reads is source code, not documentation: `PLUGIN.md`, `RUNTIME.md`, `WORLD.md`, and the files under `prompts/`.
 - Changelog fragments (the files under `docs/changelog.d/`) count as documentation.
-- A test that reads documentation must be named in the root `test:docs` script. Otherwise `scripts/tests/change-scope.test.mjs` fails.
+- A package test that reads documentation must be named in the root `test:docs:packages` script. Otherwise `scripts/tests/change-scope.test.mjs` fails.
 
 ## Tailwind diagnostics
 

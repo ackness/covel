@@ -2,47 +2,22 @@ name: CI
 
 # Verify PRs and main, and reuse the same gates for release packaging.
 #
-# This is the complete gate. The local pre-push hook runs the static gate and
-# only the test suites of the packages a push changed (scripts/check-push.mjs);
-# every suite runs here: `verify` (all but web and server), `web`, `server`.
+# This owns verification. The local pre-push hook runs the static gate, adding
+# docs tests for docs-only pushes; check:push adds affected suites for source.
+# Source CI runs all suites in `verify`, `web`, and `server`.
 #
 # Push is scoped to main deliberately. A `*-dev` branch with an open PR gets
 # two runs of the same commit otherwise — the PR ref and the branch ref hash
 # to different concurrency groups, so neither cancels the other. The PR run
 # covers dev branches; this push trigger is the post-merge guard on main.
 #
-# A change that touches only documentation does not run this workflow: it
-# cannot alter what these jobs execute. docs.yml runs for it instead. The list
-# is scripts/lib/change-scope.mjs, which the pre-push hook uses too.
+# All changes run the complete static gate. Scope selection only changes which
+# tests and builds run; unknown changes and releases always take the full path.
 on:
   pull_request:
-    paths-ignore:
-      - "docs/**"
-      - "*.md"
-      - "**/README.md"
-      - "**/README.*.md"
-      - "**/AGENTS.md"
-      - "**/CLAUDE.md"
-      - ".claude/skills/**"
-      - ".assets/**"
-      - "LICENSE"
-      - ".github/ISSUE_TEMPLATE/**"
-      - ".github/PULL_REQUEST_TEMPLATE.md"
   push:
     branches:
       - main
-    paths-ignore:
-      - "docs/**"
-      - "*.md"
-      - "**/README.md"
-      - "**/README.*.md"
-      - "**/AGENTS.md"
-      - "**/CLAUDE.md"
-      - ".claude/skills/**"
-      - ".assets/**"
-      - "LICENSE"
-      - ".github/ISSUE_TEMPLATE/**"
-      - ".github/PULL_REQUEST_TEMPLATE.md"
   workflow_call:
     inputs:
       commit:
@@ -58,10 +33,10 @@ on:
 permissions:
   contents: read
 
-# Superseded PR pushes cancel; main keeps every post-merge run so each merged
-# commit is verified and built.
+# Superseded PR pushes cancel. Main pushes use separate groups so a newer
+# source-only push cannot replace a pending run that must publish the site.
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
+  group: ci-${{ github.workflow }}-${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && github.run_id || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # actions/cache restores and re-saves the whole Turbo cache directory, so bound
@@ -72,8 +47,50 @@ env:
   TURBO_CACHE_MAX_SIZE: 500MB
 
 jobs:
+  scope:
+    name: Select verification scope
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      scope: ${{ steps.scope.outputs.scope }}
+      site_deploy: ${{ steps.scope.outputs.site_deploy }}
+    steps:
+      # Control scripts belong to the workflow revision, not a requested older
+      # release source. Local reusable workflows share their caller's commit.
+      - name: Checkout verification controls
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.workflow_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      # Uses only Node built-ins and git; no dependency installation is needed.
+      - name: Select scope
+        id: scope
+        env:
+          RELEASE: ${{ inputs.release }}
+          COMMIT: ${{ inputs.commit }}
+        run: node scripts/ci-scope.mjs >> "$GITHUB_OUTPUT"
+
+  # One build owner for docs, full and unknown scope alike. Keep these elevated
+  # permissions on this nonrelease call only; executing release jobs stay read-only.
+  site:
+    name: Site
+    needs: scope
+    if: ${{ !cancelled() && !inputs.release }}
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    uses: ./.github/workflows/site.yml
+    with:
+      commit: ${{ inputs.commit }}
+      deploy: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && !inputs.release && needs.scope.outputs.site_deploy == 'true' }}
+
   verify:
     name: Check, test, build
+    needs: scope
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     timeout-minutes: 25
 
@@ -134,22 +151,26 @@ jobs:
       - name: Check
         run: pnpm check
 
+      - name: Test documentation examples
+        if: ${{ needs.scope.outputs.scope == 'docs' && !inputs.release }}
+        run: pnpm test:docs:packages
+
       # The web and server suites run in the parallel `web` and `server` jobs,
       # and so does the runtime suite (with coverage);
       # each was this step's critical path in turn.
       - name: Test
+        if: ${{ needs.scope.outputs.scope != 'docs' || inputs.release }}
         # Bound both workspace tasks and their worker pools on shared runners.
         env:
           VITEST_MAX_WORKERS: "2"
         run: pnpm test --concurrency=2 --filter=!@covel/web --filter=!@covel/server --filter=!@covel/runtime
 
-      # The release matrix builds desktop and its web/server dependencies.
-      # Build outputs (the desktop staging tree is ~90 MB per entry) are read
-      # from the Turbo cache but never written back, which keeps the saved
-      # cache small.
+      # Site owns docs/site on every nonrelease run. The release matrix builds
+      # desktop and its web/server dependencies. Read Turbo build outputs but
+      # never write the large desktop staging tree back into the cache.
       - name: Build
-        if: ${{ !inputs.release }}
-        run: pnpm build --cache=local:r
+        if: ${{ !inputs.release && needs.scope.outputs.scope != 'docs' }}
+        run: pnpm build --cache=local:r --filter=!@covel/docs --filter=!@covel/site
 
       - name: Release preflight
         if: ${{ inputs.release }}
@@ -157,6 +178,8 @@ jobs:
 
   web:
     name: Web unit tests
+    needs: scope
+    if: ${{ !cancelled() && (needs.scope.outputs.scope != 'docs' || inputs.release) }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -208,6 +231,8 @@ jobs:
 
   server:
     name: Server tests, runtime coverage
+    needs: scope
+    if: ${{ !cancelled() && (needs.scope.outputs.scope != 'docs' || inputs.release) }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -248,6 +273,8 @@ jobs:
 
   postgres:
     name: PostgreSQL integration
+    needs: scope
+    if: ${{ !cancelled() && (needs.scope.outputs.scope != 'docs' || inputs.release) }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     services:
@@ -293,6 +320,8 @@ jobs:
 
   browser:
     name: Browser smoke and community plugins
+    needs: scope
+    if: ${{ !cancelled() && (needs.scope.outputs.scope != 'docs' || inputs.release) }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -361,3 +390,24 @@ jobs:
             tests/e2e/artifacts/extensions
           if-no-files-found: ignore
           retention-days: 7
+
+  result:
+    name: Verification
+    needs: [scope, verify, site, web, server, postgres, browser]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # Aggregate with the workflow's helper even when inputs.commit predates it.
+      - name: Checkout verification controls
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.workflow_sha }}
+          persist-credentials: false
+
+      # `always` exposes failures and skips instead of skipping the aggregate.
+      - name: Require every selected job to succeed
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+          RELEASE: ${{ inputs.release }}
+        run: node scripts/ci-results.mjs verification

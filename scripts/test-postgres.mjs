@@ -12,7 +12,18 @@ if (!process.env.DATABASE_URL?.trim()) {
   // Database availability is external state; these checks always run directly.
   const env = { ...process.env, COVEL_REQUIRE_PG_TESTS: "1" };
   const commands = [
-    ["--filter", "@covel/store", "test"],
+    [
+      "--filter",
+      "@covel/store",
+      "exec",
+      "vitest",
+      "run",
+      "tests/pg-store.test.ts",
+      "tests/pg-schema-version.test.ts",
+      "tests/vector-store.test.ts",
+      "tests/media-store.test.ts",
+      "tests/schema-ddl-codegen.test.ts",
+    ],
     ["--filter", "@covel/server", "exec", "vitest", "run", "tests/integration"],
   ];
   for (const args of commands) {

@@ -10,9 +10,8 @@
  * Markdown is not documentation by its extension: `PLUGIN.md`, `RUNTIME.md`,
  * `WORLD.md` and the files under `prompts/` are source that a loader reads.
  *
- * The patterns are GitHub path filters. `.github/workflows/ci.yml` lists them
- * under `paths-ignore` and `.github/workflows/docs.yml` under `paths`;
- * scripts/tests/change-scope.test.mjs keeps the three lists equal.
+ * CI and the pre-push hook both call isDocsOnly rather than copying these
+ * patterns into workflow triggers.
  */
 export const DOCS_PATH_FILTERS = [
   "docs/**",
@@ -53,6 +52,12 @@ function toRegExp(filter) {
 const matchers = DOCS_PATH_FILTERS.map(toRegExp);
 
 export function isDocsPath(file) {
+  // Runtime inputs stay source even when a broad Markdown/README filter matches.
+  if (
+    file.startsWith("prompts/") ||
+    /(?:^|\/)(?:PLUGIN|RUNTIME|WORLD)(?:\.[^/]+)?\.md$/.test(file)
+  )
+    return false;
   return matchers.some((matcher) => matcher.test(file));
 }
 
