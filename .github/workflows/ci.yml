@@ -33,10 +33,10 @@ on:
 permissions:
   contents: read
 
-# Superseded PR pushes cancel; main keeps every post-merge run so each merged
-# commit is verified and built.
+# Superseded PR pushes cancel. Main pushes use separate groups so a newer
+# source-only push cannot replace a pending run that must publish the site.
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
+  group: ci-${{ github.workflow }}-${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && github.run_id || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # actions/cache restores and re-saves the whole Turbo cache directory, so bound

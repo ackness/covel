@@ -29,8 +29,10 @@ on:
 permissions:
   contents: read
 
+# A build-only main run must not replace a pending deployment. PRs still share
+# a group, as do eligible deployments, matching the previous Site trigger.
 concurrency:
-  group: site-${{ github.ref }}
+  group: site-${{ (github.event_name == 'pull_request' || inputs.deploy) && github.ref || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:

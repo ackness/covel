@@ -31,12 +31,14 @@
      Non-release CI also requires one Site/docs build, including on docs-only changes;
      the other build excludes those targets. Releases retain their platform builds.
      Missing or skipped required jobs cannot pass Verification or All checks pass.
+     Tests reading files outside their package must declare those Turbo inputs.
      只勾选真正跑过的项，没跑的写明原因。pre-push hook 在干净检出里跑 `pnpm check`，
      纯文档另跑 `pnpm test:docs:packages`；`pnpm check:push` 为源码改动加上受影响的套件。
      CI 统一负责验证：纯文档跑静态与文档检查，源码、未知范围和发布跑完整套件。
      非发布 CI（纯文档也包括）必须通过一次官网/文档站构建，其余构建排除这两个目标；
      发布仍由平台打包任务构建。
-     必需任务缺失或跳过时，Verification 和 All checks pass 不得通过。 -->
+     必需任务缺失或跳过时，Verification 和 All checks pass 不得通过。
+     测试读取包外文件时，必须声明对应的 Turbo 输入。 -->
 
 - [ ] `pnpm check` <!-- static gate: types, Oxlint, package boundaries, deps, manifests, i18n, changelog fragments, workflows -->
 - [ ] Tests of the changed packages (`pnpm check:push`, or `pnpm --filter <pkg> test`) / 改动包的测试

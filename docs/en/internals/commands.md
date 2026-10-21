@@ -156,12 +156,12 @@ The full release checklist is in [`desktop-packaging.md`](./desktop-packaging.md
 
 A change goes through three checks: when you commit, when you push, and on the pull request.
 
-| When                      | What runs                                                                               | What does not run                   |
-| ------------------------- | --------------------------------------------------------------------------------------- | ----------------------------------- |
-| Commit (pre-commit)       | Prettier and Oxlint on the changed files                                                | Type checking, tests                |
-| Push (pre-push, optional) | Install in a clean checkout, then `pnpm check`; docs-only also runs documentation tests | Source test suites                  |
-| `pnpm check:push`         | The same as the pre-push hook, plus affected package tests and `pnpm e2e --list`        | Unaffected packages                 |
-| Pull request (CI)         | `pnpm check`; documentation tests for docs-only, all tests and the build otherwise      | Full suites and build for docs-only |
+| When                      | What runs                                                                                           | What does not run                          |
+| ------------------------- | --------------------------------------------------------------------------------------------------- | ------------------------------------------ |
+| Commit (pre-commit)       | Prettier and Oxlint on the changed files                                                            | Type checking, tests                       |
+| Push (pre-push, optional) | Install in a clean checkout, then `pnpm check`; docs-only also runs documentation tests             | Source test suites                         |
+| `pnpm check:push`         | The same as the pre-push hook, plus affected package tests and `pnpm e2e --list`                    | Unaffected packages                        |
+| Pull request (CI)         | `pnpm check` and Site/docs build; documentation tests for docs-only, all tests and builds otherwise | Full suites and other builds for docs-only |
 
 ### When committing and pushing
 
@@ -173,6 +173,8 @@ A change goes through three checks: when you commit, when you push, and on the p
 ### When all tests run
 
 Some tests read files outside their own package. If a file is written in the `$TURBO_ROOT$` input of `turbo.json` for a test, that test runs whenever the file changes. So these inputs must stay accurate.
+
+Documentation readers follow the same rule: the shared test task tracks the environment-variable reference, runtime tracks the hook reference, and plugin-loader tracks both plugin guides and the create-plugin skill. Mixed source/documentation changes therefore invalidate the relevant cached results, without running the same documentation tests twice.
 
 All tests run in any of the following cases:
 
