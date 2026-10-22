@@ -13,7 +13,7 @@
  * CI and the pre-push hook both call isDocsOnly rather than copying these
  * patterns into workflow triggers.
  */
-export const DOCS_PATH_FILTERS = [
+const DOCS_PATH_FILTERS = [
   "docs/**",
   "*.md",
   "**/README.md",

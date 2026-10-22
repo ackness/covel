@@ -56,8 +56,8 @@ function turbo(workspace, args, env = process.env) {
   return result.stdout;
 }
 
-function dry(workspace, args) {
-  const result = JSON.parse(turbo(workspace, [...args, "--dry=json"]));
+function dry(workspace, args, env) {
+  const result = JSON.parse(turbo(workspace, [...args, "--dry=json"], env));
   return new Map(result.tasks.map((task) => [task.taskId, task]));
 }
 
@@ -149,6 +149,57 @@ test("Turbo hashes root config, prompts, and shared source into their consumers"
         task(desktopAfter, id).hash,
         task(desktopBefore, id).hash,
       );
+    }
+  } finally {
+    rmSync(parent, { recursive: true, force: true });
+  }
+});
+
+test("Site builds hash content, configuration and base paths independently", () => {
+  const { parent, workspace } = makeFixture();
+  try {
+    const args = ["build", "--filter=@covel/site", "--filter=@covel/docs"];
+    const ids = ["@covel/site#build", "@covel/docs#build"];
+    const env = { ...process.env, SITE_BASE: "/covel/" };
+    let before = dry(workspace, args, env);
+    assert.deepEqual([...before.keys()].sort(), [...ids].sort());
+    for (const id of ids) {
+      assert.deepEqual(task(before, id).dependencies, []);
+      assert.ok(task(before, id).outputs.includes("dist/**"));
+    }
+    assert.ok(task(before, ids[0]).excludedOutputs.includes("dist/docs/**"));
+    const alternateBase = dry(workspace, args, { ...env, SITE_BASE: "/" });
+    for (const id of ids)
+      assert.notEqual(task(before, id).hash, task(alternateBase, id).hash);
+
+    for (const [file, affected] of [
+      ["docs/guide.md", [ids[1]]],
+      ["docs/public/image.svg", [ids[1]]],
+      ["apps/docs/.vitepress/config.ts", [ids[1]]],
+      ["apps/site/vite.config.ts", [ids[0]]],
+      ["apps/site/.env.production", [ids[0]]],
+      ["apps/docs/.env.production", [ids[1]]],
+      ["mise.toml", ids],
+      ["tsconfig.json", ids],
+      ["pnpm-lock.yaml", ids],
+      [".npmrc", ids],
+      ["scripts/require-pnpm.mjs", ids],
+      ["packages/runtime/src/unrelated.ts", []],
+    ]) {
+      const filename = path.join(workspace, file);
+      const original = existsSync(filename)
+        ? readFileSync(filename, "utf8")
+        : "";
+      writeFixtureFile(workspace, file, `${original}\n`);
+      const after = dry(workspace, args, env);
+      for (const id of ids) {
+        assert.equal(
+          task(before, id).hash !== task(after, id).hash,
+          affected.includes(id),
+          `${file}: ${id}`,
+        );
+      }
+      before = after;
     }
   } finally {
     rmSync(parent, { recursive: true, force: true });

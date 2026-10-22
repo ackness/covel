@@ -47,7 +47,7 @@ Covel 把一局游戏拆成三层，各管各的事：
 
 ## 你需要准备什么
 
-- **一台电脑**：macOS（Apple Silicon，macOS 13 及以上）或 Windows x64。
+- **一台电脑**：macOS（Apple Silicon，macOS 13.5 及以上）或 Windows x64。
 - **一个模型**：Covel 不自带模型。你需要一个服务商的 API 密钥，或者一个本地运行的、兼容 OpenAI 接口的模型服务。模型需要支持工具调用。
 
 Covel 目前是早期版本。清单格式、世界数据和 API 可能随版本变化，升级前请先读[数据、备份与升级](./data-and-upgrade.md)。

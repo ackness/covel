@@ -29,14 +29,19 @@
      `pnpm check:push` adds affected suites for source changes. CI owns all verification:
      docs-only runs documentation tests after check; source, unknown scope and releases run all suites.
      Non-release CI also requires one Site/docs build, including on docs-only changes;
-     the other build excludes those targets. Releases retain their platform builds.
+     the other build excludes those targets. Site uses parallel Turbo tasks with content-addressed
+     outputs; cache changes need hit/miss and input-invalidation evidence (docs, SITE_BASE, config).
+     PR cache isolation and restore-only release task caches must remain intact.
+     Releases retain their platform builds; Node download caches are verified again before staging.
      Missing or skipped required jobs cannot pass Verification or All checks pass.
      Tests reading files outside their package must declare those Turbo inputs.
      只勾选真正跑过的项，没跑的写明原因。pre-push hook 在干净检出里跑 `pnpm check`，
      纯文档另跑 `pnpm test:docs:packages`；`pnpm check:push` 为源码改动加上受影响的套件。
      CI 统一负责验证：纯文档跑静态与文档检查，源码、未知范围和发布跑完整套件。
      非发布 CI（纯文档也包括）必须通过一次官网/文档站构建，其余构建排除这两个目标；
-     发布仍由平台打包任务构建。
+     Site 用 Turbo 并行构建并按内容复用产物；缓存改动需记录命中、未命中及输入失效验证（文档、SITE_BASE、配置）。
+     PR 缓存隔离和发布任务缓存只读规则保持不变。
+     发布仍由平台打包任务构建；Node 下载缓存进入 staging 前重新校验。
      必需任务缺失或跳过时，Verification 和 All checks pass 不得通过。
      测试读取包外文件时，必须声明对应的 Turbo 输入。 -->
 
@@ -47,6 +52,8 @@
 - [ ] `pnpm e2e:smoke` / `pnpm e2e:extensions` / `pnpm e2e` <!-- UI or end-to-end flow changes / 改动界面或端到端流程时 -->
 - [ ] `pnpm validate:plugin` / `pnpm validate:world` <!-- plugin or world package changes / 改动插件或世界包时 -->
 - [ ] `pnpm e2e:verify` <!-- prompt, model-routing, or runtime behavior changes; needs .env.llm / 改动提示词、模型路由或 runtime 行为时 -->
+- [ ] Packaged desktop runtime and lifecycle / 安装包自己的 Node、SQLite、插件加载、设置读写、恢复与退出 <!-- runtime/packaging changes; record actual OS/arch / 运行时或打包改动，注明实际验证的平台和架构 -->
+- [ ] Windows ZIP and self-extracting EXE: native preparation feedback, visible app window, world/session-prep flow and process-tree exit / Windows 实际分发文件：原生准备提示、可见窗口、世界与开局流程及进程树退出 <!-- needs interactive Windows; workflow code or renderer screenshots alone are not proof / 需要交互式 Windows；工作流代码或渲染器截图不能代替 -->
 - [ ] Manual check / 手动验证: …
 
 **Not verified / 未验证:** <!-- What this PR does not prove, and the risk. / 本 PR 没有覆盖到的部分及其风险 -->

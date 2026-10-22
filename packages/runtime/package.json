@@ -23,7 +23,7 @@
     "@covel/shared": "workspace:*",
     "@covel/store": "workspace:*",
     "@covel/tools": "workspace:*",
-    "zod": "^4.6.5"
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@covel/plugin-loader": "workspace:*",

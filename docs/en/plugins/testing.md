@@ -76,6 +76,8 @@ pnpm --filter @covel/plugin-my-plugin test
 
 `pnpm --filter @covel/plugin-my-plugin lint` type-checks the code using JSDoc comments, so you do not have to convert the code to TypeScript. After you change code that calls the SDK, run both the type check and the tests.
 
+The scaffold uses stable TypeScript 7.0.2. When trying TypeScript 7.1, the development environment must also satisfy the SDK's Zod 4.6.7 minimum. Do not use type assertions or disable checks to bypass older Zod declarations' recursive JSON type errors.
+
 ### Test a tool
 
 A tool is a function that receives helpers. In a test, pass the helpers in, and then call `execute` directly:

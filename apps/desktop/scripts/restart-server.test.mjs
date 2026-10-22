@@ -85,7 +85,12 @@ test("restart IPC navigates the native window only after the sidecar is ready", 
   const setup = (restartServer, isDev = false) => {
     navigation.length = 0;
     window.destroyed = false;
-    registerDesktopIpcHandlers({ paths: {}, restartServer, isDev });
+    registerDesktopIpcHandlers({
+      paths: {},
+      restartServer,
+      isDev,
+      getServerPort: () => 9479,
+    });
     return handlers.get("covel:restart-server");
   };
 
@@ -140,10 +145,28 @@ test("restart IPC navigates the native window only after the sidecar is ready", 
     },
   );
 
-  await t.test("development keeps the Vite frontend origin", async () => {
-    await setup(async () => ({ ok: true, port: 5258 }), true)(event);
-    assert.deepEqual(navigation, ["reload"]);
-  });
+  await t.test(
+    "development refuses restart without touching the external server",
+    async () => {
+      let calls = 0;
+      const restart = setup(async () => {
+        calls++;
+        return { ok: true, port: 5258 };
+      }, true);
+      for (const result of await Promise.all([
+        restart(event),
+        restart(event),
+      ])) {
+        assert.deepEqual(result, {
+          ok: false,
+          port: 9479,
+          error: "server.externallyManagedRestart",
+        });
+      }
+      assert.equal(calls, 0);
+      assert.deepEqual(navigation, []);
+    },
+  );
 
   await t.test(
     "closing the window while restarting does not navigate",

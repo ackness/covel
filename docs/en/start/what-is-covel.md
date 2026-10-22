@@ -47,7 +47,7 @@ A world can set its default story view, and you can switch views at any time dur
 
 ## What you need
 
-- **A computer**: macOS (Apple Silicon, macOS 13 or later) or Windows x64.
+- **A computer**: macOS (Apple Silicon, macOS 13.5 or later) or Windows x64.
 - **A model**: Covel does not include a model. You need an API key from a provider, or a locally running model service that is compatible with the OpenAI interface. The model must support tool calls.
 
 Covel is in early access. The manifest format, world data, and API may change between versions. Before you upgrade, read [Data, backup, and upgrading](./data-and-upgrade.md).

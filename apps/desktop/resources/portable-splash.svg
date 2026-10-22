@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="300" viewBox="0 0 640 300">
+  <rect width="640" height="300" fill="#101920"/>
+  <rect x="0" y="0" width="8" height="300" fill="#90c7a4"/>
+  <g font-family="Arial, Helvetica, sans-serif">
+    <text x="40" y="64" fill="#90c7a4" font-size="22" font-weight="700" letter-spacing="3">COVEL</text>
+    <text x="40" y="120" fill="#f3f5f4" font-size="30" font-weight="700">Preparing the app…</text>
+    <text x="40" y="162" fill="#d2ddd8" font-size="18">This single-file EXE extracts files on every launch.</text>
+    <text x="40" y="193" fill="#d2ddd8" font-size="18">The app will open after preparation.</text>
+    <path d="M40 222H600" stroke="#36483e"/>
+    <text x="40" y="255" fill="#a8b9b0" font-size="16">To extract only once, use the ZIP download instead.</text>
+  </g>
+</svg>

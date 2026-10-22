@@ -13,7 +13,7 @@ Covel is a modular monolith: one repository, released together, with its code sp
 > - Turbo finishes the SDK build before running its own lint and tests. SDK tests read their own `dist` declarations through `shared`, so dependency-only `^build` ordering is not enough.
 > - Before you run the tests of a single package on their own, you still have to run `pnpm --filter @covel/plugin-handlers-utils build` by hand.
 
-The other libraries are mainly combined inside the workspace by the applications and the framework.
+The other libraries are mainly combined inside the workspace by the applications and the framework. `pnpm test:docs:packages` groups documentation-reading test files by package, starting each package's test runner once. See [Commands](./commands.md#documentation-only-changes) for its scope.
 
 ## Three usage paths
 
@@ -59,6 +59,8 @@ The small packages `approval`, `context`, `events`, `create`, and `settings` eac
 
 **Dependency direction.** `plugin-handlers-utils` is the root of the dependency graph, and it does not depend on any workspace package. `shared` sits directly above it. `@covel/server` composes all feature packages. The exact dependency edges are written in each package's `package.json`. `pnpm check:boundaries` checks the public entry points and the dependency direction. The `store` package declares the SQLite vector extension `sqlite-vec` directly; the root package does not duplicate it.
 
+The workspace uses stable TypeScript 7.0.2. Zod consumers, the author SDK peer dependency, and the tools scaffold share a minimum of 4.6.7, which fixes circular inference errors for recursive JSON types in TypeScript 7.1. JSON validation, optional fields, and readonly semantics are unchanged. Compatibility checks with nightly compilers and tsrs do not replace the stable compiler gate.
+
 ## Key boundaries when the host combines packages
 
 The host is an application that assembles these packages and runs them: the server, the desktop app, and the web app.
@@ -66,13 +68,19 @@ The host is an application that assembles these packages and runs them: the serv
 ### Two separate sites
 
 - The official website `apps/site` is a separate static site. It does not depend on any workspace package, and it is not part of the Web or desktop build.
-- The docs site `apps/docs` is also separate. It uses VitePress to build the pages of `docs/` into a static site, which is published under the `docs/` path of the official website.
+- The docs site `apps/docs` is also separate. It uses VitePress to build the pages of `docs/` into a static site, which is published under the `docs/` path of the official website. Independent Turbo tasks build both sites concurrently and cache them separately. Actual inputs, including documentation content and `SITE_BASE`, determine cache reuse; the publishing directory is assembled afterward.
 - Documentation diagrams use Mermaid 12 and require an ES2024 browser (Safari 17.4+). Mermaid belongs only to the documentation site and is not bundled into the Web or desktop app.
 - The application's own `/` goes straight to the world list.
 
 ### Desktop shell
 
 The desktop shell depends on Zod directly to validate the window state saved locally. The window position and size belong to the Electron host. They are not exposed as a shared domain schema.
+
+The desktop shell's HTTP client for its sidecar depends directly on npm Undici, not Electron's built-in `fetch`. The outbound transport in `ai-provider` also explicitly depends on npm Undici; upgrading Node or Electron does not replace either dependency. The main-process ESM build provides a native `require` bridge so the bundled Undici can load Node built-in modules.
+
+These shell dependencies are listed as development dependencies in `apps/desktop/package.json` because they are already bundled into main/preload; the installer does not carry another desktop `node_modules` tree. The server owns its complete runtime dependencies, including `tsx` / esbuild and the public SDK for community TypeScript plugins. See the [staging rules](./desktop-packaging.md#rules-for-the-staging-directory) for pruning boundaries.
+
+The desktop backend's build-time choice lives in `apps/desktop/node-runtime.json`. By default it uses standalone Node from `resources/node/`, checked against pinned digests and aligned with the source server's security release; an explicit switch can select packaged Electron that passes the security gate. Neither mode depends on player-installed Node, downloads at startup, or falls back. Startup, readiness, system proxy resolution, and shutdown retain their existing child-process IPC. See [desktop packaging](./desktop-packaging.md#select-the-backend-runtime) for switching and acceptance requirements. `@electron/asar` is only a desktop development dependency for checking the packaged main file, not a player-runtime dependency.
 
 ### The deployment form is decided only in the host
 

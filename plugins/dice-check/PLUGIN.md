@@ -1,5 +1,5 @@
 ---
-version: 0.0.39
+version: 0.0.40
 displayName: Dice Check
 description: >-
   Dice checks for risky actions — pre-rolled dice pools, rule-based outcomes,

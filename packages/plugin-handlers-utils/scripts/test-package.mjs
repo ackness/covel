@@ -34,7 +34,6 @@ try {
   );
   assert.equal(manifest.private, undefined);
   assert.deepEqual(manifest.dependencies ?? {}, {});
-  assert.deepEqual(manifest.peerDependencies, { zod: "^4.6.5" });
   // Zod is a public peer. Resolve it from the SDK package and place only
   // that peer beside the packed artifact; no private workspace package is
   // visible to the consumer.

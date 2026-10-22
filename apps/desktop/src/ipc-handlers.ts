@@ -193,6 +193,13 @@ export function registerDesktopIpcHandlers({
   > | null = null;
   ipcMain.handle("covel:restart-server", (event) => {
     if (!isTrustedSender(event, "covel:restart-server")) return;
+    if (isDev) {
+      return {
+        ok: false,
+        port: getServerPort(),
+        error: t("server.externallyManagedRestart"),
+      };
+    }
     // Coalesce the entire restart, not only the stop phase: otherwise two
     // requests can launch competing sidecars and race their navigation.
     pendingRestart ??= restartServer()
@@ -201,9 +208,7 @@ export function registerDesktopIpcHandlers({
           const win = getMainWindow();
           if (win && !win.isDestroyed()) {
             // Only main-process navigation may cross the pinned app origin.
-            // Development keeps the frontend on the external Vite server.
-            if (isDev) win.webContents.reload();
-            else navigateToApp(win, result.port);
+            navigateToApp(win, result.port);
           }
         }
         return result;

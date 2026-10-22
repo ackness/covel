@@ -35,6 +35,11 @@ export function DownloadButtons({
       </div>
       {download.platform ? (
         <p className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-xs text-muted">
+          {download.zip ? (
+            <a className={smallLink} href={download.zip}>
+              {copy.hero.zip}
+            </a>
+          ) : null}
           {download.portable ? (
             <a className={smallLink} href={download.portable}>
               {copy.hero.portable}
@@ -43,6 +48,13 @@ export function DownloadButtons({
           <a className={smallLink} href={RELEASES_URL}>
             {copy.hero.otherPlatforms}
           </a>
+        </p>
+      ) : null}
+      {download.zip || download.portable ? (
+        <p className="max-w-lg text-center text-xs leading-relaxed text-muted">
+          {download.zip ? copy.hero.zipHelp : null}
+          {download.zip && download.portable ? " " : null}
+          {download.portable ? copy.hero.portableHelp : null}
         </p>
       ) : null}
       {download.platform ? (

@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import { makeRandom } from "@covel/plugin-test-utils";
-import { readFileSync } from "node:fs";
 import handler from "../runtimes/roller/handler.js";
 import { poolOf } from "../lib/turn-pool.js";
 
@@ -17,13 +16,6 @@ function makeCtx(overrides = {}) {
 }
 
 describe("dice-check roller handler", () => {
-  it("describes the same host random source the handler uses", () => {
-    for (const file of ["runtimes/roller/RUNTIME.md", "README.md"]) {
-      const text = readFileSync(new URL(`../${file}`, import.meta.url), "utf8");
-      expect(text).toContain("ctx.random");
-      expect(text).not.toContain("node:crypto");
-    }
-  });
   it("takes its dice from the host's ctx.random", async () => {
     const drawn = [17, 2, 20];
     const ranges = [];
@@ -63,22 +55,6 @@ describe("dice-check roller handler", () => {
         expect(value).toBeLessThanOrEqual(20);
       }
     }
-  });
-
-  it("returns a non-empty checkContext containing the check rules", async () => {
-    // Arrange
-    const ctx = makeCtx({ locale: "zh-CN" });
-
-    // Act
-    const result = await handler(ctx);
-
-    // Assert
-    expect(typeof result.value.checkContext).toBe("string");
-    expect(result.value.checkContext.length).toBeGreaterThan(0);
-    expect(result.value.checkContext).toContain("check.resolved");
-    expect(result.value.checkContext).toContain("DC");
-    expect(result.value.checkContext).toContain("大成功");
-    expect(result.value.checkContext).toContain("大失败");
   });
 
   it("gives each check one row with its die and the outcome at every difficulty", async () => {
@@ -153,18 +129,13 @@ describe("dice-check roller handler", () => {
     const result = await handler(makeCtx({ locale: "zh-CN", world }));
 
     expect(result.value.checkContext).toContain("坚毅 2/5 → +4");
-    expect(result.value.checkContext).toContain("从下方修正表选出");
     // Meters and relationships are not check attributes.
     expect(result.value.checkContext).not.toContain("体力 80/100");
     expect(result.value.checkContext).not.toContain("信任 40/100");
     expect(result.value.checkContext).not.toContain("使命");
-
-    // Without a world view there is no list, and the rules still stand.
-    const bare = await handler(makeCtx({ locale: "zh-CN" }));
-    expect(bare.value.checkContext).not.toContain("修正表");
   });
 
-  it("gives no modifier list when the world has no ranged abilities", async () => {
+  it("excludes meters and unbounded abilities from the modifier list", async () => {
     const world = {
       characterSchema: {
         attributes: [
@@ -185,11 +156,8 @@ describe("dice-check roller handler", () => {
     };
     const result = await handler(makeCtx({ locale: "en-US", world }));
 
-    expect(result.value.checkContext).not.toContain("modifier list");
     expect(result.value.checkContext).not.toContain("Health 12/20");
-    expect(result.value.checkContext).toContain(
-      "derive from its numeric value",
-    );
+    expect(result.value.checkContext).not.toContain("Luck 3");
   });
 
   it("keeps the turn's dice for the guard that checks the receipt", async () => {

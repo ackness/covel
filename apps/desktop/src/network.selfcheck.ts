@@ -25,6 +25,23 @@ await assert.rejects(
 );
 assert.ok(Date.now() - started < 1_000);
 
+// Status-only callers release both successful and failed health response bodies.
+for (const status of [200, 503]) {
+  let cancelled = false;
+  const body = new ReadableStream({
+    cancel() {
+      cancelled = true;
+    },
+  });
+  const response = await fetchWithTimeout(
+    "http://127.0.0.1/health",
+    1_000,
+    (async () => new Response(body, { status })) as typeof fetch,
+  );
+  assert.equal(response.status, status);
+  assert.equal(cancelled, true);
+}
+
 // The deadline also covers a body that never finishes after the headers.
 const stalledBody = (async (_url: string, init?: RequestInit) => {
   const body = new ReadableStream({

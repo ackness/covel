@@ -76,6 +76,8 @@ pnpm --filter @covel/plugin-my-plugin test
 
 `pnpm --filter @covel/plugin-my-plugin lint` 用 JSDoc 注释做类型检查，不需要把代码改成 TypeScript。改了调用 SDK 的地方之后，类型检查和测试都跑一遍。
 
+模板使用稳定版 TypeScript 7.0.2；试用 TypeScript 7.1 时，开发环境中的 Zod 也必须满足 SDK 的 4.6.7 最低版本。不要用类型断言或关闭检查来绕过旧版 Zod 的递归 JSON 类型错误。
+
 ### 测一个工具
 
 工具是一个接收帮手的函数。测试里把帮手传给它，再直接调用 `execute`：

@@ -144,6 +144,18 @@ This limit does not cover responses that a plugin reads itself:
 - a wire that a plugin implements makes its own requests;
 - `ctx.media.ingestUrl` counts bytes against its own `maxBytes`.
 
+### Runtime and HTTP client updates
+
+Native decoder and TLS security fixes come from the runtime; the response-size limits above cannot replace them. Source and Docker deployments use at least Node 26.12.1. Provider requests and the desktop shell's sidecar requests use the separate npm Undici 8.12.2 package. The request header `Accept-Encoding: identity` does not prevent the client from decoding a Brotli response sent by the server.
+
+Security updates may bypass the normal seven-day dependency delay, but `minimumReleaseAgeExclude` lists only specific reviewed versions. Transitive Undici dependencies are updated within their respective major lines rather than forcing every consumer onto one major.
+
+The desktop backend ships with standalone Node 26.12.1 by default. PostgreSQL TLS, plugin code, and native networking APIs run in that patched runtime; players do not need to install Node. The build downloads a fixed release from the official Node distribution site, verifies it against committed SHA256 checksums before extraction, and includes its license. A missing runtime or failed verification stops the build; there is no host-Node or memory-database fallback.
+
+Electron 44.9.3 still runs the desktop shell and adds the compromised-intermediate public-key blocklist to its own Node TLS and Chromium. Its embedded Node 24.22.0 is not equivalent to the Node 24.22.1 security release; a separate sidecar does not patch Electron itself. The shell's HTTP client explicitly uses patched npm Undici, windows still disable Node integration, and plugins and databases do not run in the shell process. Any future native networking added to the shell must still account for Electron's security fixes.
+
+Builders may explicitly select `electron` mode in `node-runtime.json`, but its actual embedded Node must be stable 24.x ≥24.22.1 or 26.x ≥26.12.1, and Electron itself must be stable with RunAsNode enabled. The current version cannot switch back. Every managed startup, restart, and recovery checks the selection and actual runtime. The main digest is bound to target resources, and release verification reads the actual ASAR entry point. Unknown, old, or mixed resources fail without environment overrides. Child environments remove `NODE_OPTIONS`, `NODE_PATH`, and inherited Electron mode controls while retaining legitimate CA, proxy, and key settings. See [selecting the backend runtime](./desktop-packaging.md#select-the-backend-runtime).
+
 ### Desktop proxy modes
 
 The desktop app's `system` / `http` / `socks` proxy modes send only the framework's own core provider requests and model database requests through an Undici `ProxyAgent` (`packages/ai-provider/src/outbound-network.ts`). For these trusted targets, DNS is resolved on the proxy side, in place of local address pinning.

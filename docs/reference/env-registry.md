@@ -357,15 +357,14 @@ v0.0.42 调整了插件扩展契约，旧的开发数据不会自动升级。桌
 
 这些变量只由 Electron 打包工具或桌面打包脚本读取，详见[桌面版打包](../internals/desktop-packaging.md)。
 
-| 变量                          | 默认值                          | 用途                                                                                                                                |
-| ----------------------------- | ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| `CSC_LINK`                    | —                               | 代码签名证书的路径或 URL                                                                                                            |
-| `CSC_KEY_PASSWORD`            | —                               | 代码签名证书的密码                                                                                                                  |
-| `WIN_CSC_TIMESTAMP_SERVER`    | `http://timestamp.digicert.com` | Windows 签名用的时间戳服务器                                                                                                        |
-| `APPLE_ID`                    | —                               | 公证用的 Apple 开发者账号                                                                                                           |
-| `APPLE_APP_SPECIFIC_PASSWORD` | —                               | 公证用的 App 专用密码                                                                                                               |
-| `APPLE_TEAM_ID`               | —                               | Apple 开发者团队 ID                                                                                                                 |
-| `COVEL_SMOKE_HOST_NODE`       | `false`                         | 设为 `1` 时，桌面 staging smoke 在缺少 Electron 二进制时改用宿主 Node 加内存后端运行。这时不验证 Electron 下的原生模块；CI 不设置它 |
+| 变量                          | 默认值                          | 用途                         |
+| ----------------------------- | ------------------------------- | ---------------------------- |
+| `CSC_LINK`                    | —                               | 代码签名证书的路径或 URL     |
+| `CSC_KEY_PASSWORD`            | —                               | 代码签名证书的密码           |
+| `WIN_CSC_TIMESTAMP_SERVER`    | `http://timestamp.digicert.com` | Windows 签名用的时间戳服务器 |
+| `APPLE_ID`                    | —                               | 公证用的 Apple 开发者账号    |
+| `APPLE_APP_SPECIFIC_PASSWORD` | —                               | 公证用的 App 专用密码        |
+| `APPLE_TEAM_ID`               | —                               | Apple 开发者团队 ID          |
 
 **不在 registry 里的名字**
 

@@ -1076,6 +1076,7 @@
     "desktopApplyConfigChanges": "Apply config changes",
     "desktopRestartElectronOnly": "This action is only available in the Electron desktop app.",
     "desktopRestartHint": "Restart the local backend and refresh the UI to reload plugin code, prompts, UI, llm.toml, and keys.env. Click after editing these files or while developing a plugin. Turns in progress will disconnect.",
+    "desktopRestartDevHint": "The development server is managed outside Covel. Restart pnpm dev in its terminal, then refresh the app.",
     "desktopRestartWebHint": "You are using the web app. Refresh your browser to reload it.",
     "desktopRefresh": "Refresh info",
     "desktopTutorial": "Tutorial",

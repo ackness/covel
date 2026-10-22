@@ -130,6 +130,14 @@ for (const workspace of workspaces) {
           workspace.name === "test-runtime" &&
           workspace.manifest.devDependencies?.[name]
         ) &&
+        // Desktop main/preload bundle shared's public entries. Its build rejects
+        // emitted package imports, so no desktop node_modules is shipped.
+        !(
+          workspace.group === "apps" &&
+          workspace.name === "desktop" &&
+          name === "@covel/shared" &&
+          workspace.manifest.devDependencies?.[name]
+        ) &&
         // The host provides the SDK to every plugin at run time
         // (`HOST_MODULES` in plugin-loader); an installable plugin declares
         // no runtime dependency, so a development one is enough.

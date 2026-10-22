@@ -6,7 +6,7 @@
 
 - `PLUGIN.md`：包级摘要与 server entry，注册玩家侧掷骰 action。
 - `rpc/roll.js`：`/roll [notation]`（别名 `/r`）命令处理器；接受 1-100 颗、2-1000 面的 `NdM` 骰式，缺省为 `1d20`。
-- `runtimes/roller/`：pre-turn function runtime，每回合用 `ctx.random` 预掷 3 个 d20，输出 `checkContext`（每次判定一行的结果表 + 判定规则 markdown）供叙事引擎注入。表里每个难度一列，直接给出结果或“修正达到多少为成功”，叙事查表即可，不做加法。玩家角色的检定属性（分类为 `abilities`、有上限的数值属性，与 tabletop-rules 配点用的相同）由 roller 按量程预换算修正（(数值 − 下限) ÷ 量程 × 10）列在块里，叙事只用表中属性检定、读取修正而不自行估算；生命、信任等 `stats` / `social` 数值不列入。世界没有这类属性时不列表，由叙事从角色卡换算。
+- `runtimes/roller/`：pre-turn function runtime，每回合用 `ctx.random` 预掷 3 个 d20，输出 `checkContext`（每次判定一行的结果表 + 判定规则 markdown）供叙事引擎注入。表里每个难度一列，直接给出结果或“修正达到多少为成功”，叙事查表即可，不做加法。玩家角色的检定属性（分类为 `abilities`、有上限的数值属性，与 tabletop-rules 配点用的相同）由 roller 按量程预换算修正（(数值 − 下限) ÷ 量程 × 10）列在块里，叙事只用表中属性检定、读取修正而不自行估算；生命、信任等 `stats` / `social` 数值不列入。没有可用的有量程能力属性（包括缺少角色数据）时不列表，修正取 0，回执属性写为「无」；不从其他数值推算。
 - `hooks/verify-check-receipt.js`：`PreToolUse` 守卫，在叙事发出回执时对照骰子。
 - `lib/check-rules.js`：判定规则（难度对应的 DC、成败与大成功/大失败），roller、守卫和 recorder 共用。
 - `runtimes/recorder/`：event function runtime，订阅 `check.resolved` 回执并落库。

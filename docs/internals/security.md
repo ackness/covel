@@ -144,6 +144,18 @@ IETF 分配的、确实全球可达的特定地址段仍然放行。这些特殊
 - 插件自己实现的 wire 自己发请求；
 - `ctx.media.ingestUrl` 按它的 `maxBytes` 计数。
 
+### 运行时和 HTTP 客户端更新
+
+原生解码器和 TLS 的安全修复来自运行时，不能用上述响应大小限制代替。源码和 Docker 使用至少 Node 26.12.1；供应商请求和桌面壳的 sidecar 请求使用独立的 npm Undici 8.12.2。请求头 `Accept-Encoding: identity` 不能阻止客户端解码服务端返回的 Brotli 响应。
+
+安全更新可以跳过普通依赖的七天等待，但 `minimumReleaseAgeExclude` 只列出经过核对的具体版本。Undici 的传递依赖按各自大版本更新，不强制所有使用方迁到同一大版本。
+
+桌面后端默认随包携带独立的 Node 26.12.1。PostgreSQL TLS、插件代码和原生网络 API 都在这个已修复的运行时中执行；玩家不需要安装 Node。构建从 Node 官方分发站下载固定版本，按仓库里的 SHA256 校验后才解包，并随包携带许可证。运行时缺失或验证失败会阻止构建，不回退到宿主 Node 或内存数据库。
+
+Electron 44.9.3 仍负责桌面壳，并为自己的 Node TLS 和 Chromium 加入被攻陷中间证书的公钥封锁名单。它的内嵌 Node 24.22.0 并不等于 Node 24.22.1 安全版本；独立 sidecar 不会给 Electron 本身打补丁。壳自己的 HTTP 客户端显式使用已修复的 npm Undici，窗口仍关闭 Node 集成，插件和数据库不在壳进程里运行。后续增加壳的原生网络调用时仍须核对 Electron 的安全修复。
+
+构建者可在 `node-runtime.json` 显式选择 `electron` 模式，但实际内嵌 Node 必须是稳定的 24.x ≥24.22.1 或 26.x ≥26.12.1，Electron 本身也须为稳定版且启用 RunAsNode；当前版本不能切回。每次受管理的启动、重启和恢复都会检查选择与实际运行时。主进程摘要与目标资源绑定，发布校验读取实际 ASAR 入口；未知、过旧或混用资源都会失败，不受环境变量覆盖。子进程环境移除 `NODE_OPTIONS`、`NODE_PATH` 和外来 Electron 模式控制，保留合法 CA、代理和密钥配置。操作步骤见[选择后端运行时](./desktop-packaging.md#选择后端运行时)。
+
 ### Desktop proxy modes
 
 桌面端的 `system` / `http` / `socks` 代理模式，只让框架自己的核心供应商请求和模型数据库请求走 Undici `ProxyAgent`（`packages/ai-provider/src/outbound-network.ts`）。对这些受信任的目标，由代理一侧解析 DNS，代替本地的地址钉住。

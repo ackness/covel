@@ -61,7 +61,8 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.workflow_sha }}
-          fetch-depth: 0
+          # Releases and explicit commits select full scope without a diff.
+          fetch-depth: ${{ (inputs.release || inputs.commit != '') && 1 || 0 }}
           persist-credentials: false
 
       # Uses only Node built-ins and git; no dependency installation is needed.
@@ -118,11 +119,27 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: "26.10.0"
+          node-version: "26.12.1"
           cache: pnpm
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      # Download caches contain upstream artifacts only. Node staging checks
+      # the pinned archive and extracted binary hashes on every use.
+      - name: Cache verified Node artifacts
+        if: ${{ needs.scope.outputs.scope != 'docs' || inputs.release }}
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: apps/desktop/node_modules/.cache/covel-node-runtime
+          key: node-runtime-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('apps/desktop/node-runtime.json', 'mise.toml') }}
+
+      - name: Cache Electron binaries
+        if: ${{ needs.scope.outputs.scope != 'docs' || inputs.release }}
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/electron
+          key: ${{ runner.os }}-${{ runner.arch }}-electron-${{ hashFiles('pnpm-lock.yaml') }}
 
       # Turborepo's local cache. lint/test/build are content-addressed per
       # package, so a run that only touches one package replays the rest from
@@ -196,7 +213,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: "26.10.0"
+          node-version: "26.12.1"
           cache: pnpm
 
       - name: Install dependencies
@@ -249,7 +266,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: "26.10.0"
+          node-version: "26.12.1"
           cache: pnpm
 
       - name: Install dependencies
@@ -309,7 +326,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: "26.10.0"
+          node-version: "26.12.1"
           cache: pnpm
 
       - name: Install dependencies
@@ -338,7 +355,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: "26.10.0"
+          node-version: "26.12.1"
           cache: pnpm
 
       - name: Install dependencies

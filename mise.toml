@@ -2,7 +2,7 @@
 # Keep in sync with the root package.json `packageManager` field.
 pnpm = "12.10.1"
 # Keep the eligible Node release aligned with CI, engines.node and Docker.
-node = "26.10.0"
+node = "26.12.1"
 # `pnpm check` validates workflows with actionlint. Keep in sync with the
 # version CI installs in .github/workflows/ci.yml.
 actionlint = "1.7.12"

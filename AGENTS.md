@@ -113,7 +113,10 @@ markers in source — update it when adding or removing one.
 
 ## Commands
 
-Toolchain versions come from `mise.toml` (Node 26.10.0, pnpm 12.10.1, actionlint).
+Toolchain versions come from `mise.toml` (Node 26.12.1, pnpm 12.10.1, actionlint).
+TypeScript uses the current stable 7.0.2. Zod consumers, the author SDK peer
+dependency and the tools scaffold require at least 4.6.7; earlier recursive JSON
+declarations are incompatible with TypeScript 7.1. Keep these minimums aligned.
 
 ```bash
 pnpm install --frozen-lockfile  # also builds @covel/plugin-handlers-utils (prepare)
@@ -132,7 +135,7 @@ pnpm check            # the CI static gate: peers, lint, Oxlint (a warning fails
 pnpm lint             # tsc --noEmit for the FULL workspace (not one package), test code included
 pnpm test             # all Vitest suites; one package: pnpm --filter @covel/runtime test
 pnpm test:docs        # standalone documentation tests (package and script checks)
-pnpm test:docs:packages # after pnpm check: docs-reading package tests; script checks already ran
+pnpm test:docs:packages # after pnpm check: docs-reading tests grouped per package; script checks already ran
 pnpm test:pg          # five live-PG Store files + Server integration (DATABASE_URL from env or .env)
 pnpm e2e:smoke        # deterministic Chromium smoke suite run by CI; pnpm e2e for all Playwright
 pnpm create-plugin    # scaffold from templates/: pnpm create-plugin <name>; --with-tools scaffolds into plugins/
@@ -211,8 +214,11 @@ bundled `worlds/` and `plugins/`.
   `apps/site` (the static showcase website; no workspace dependencies, never
   bundled into Web or desktop), `apps/docs` (the VitePress documentation site;
   its pages are `docs/`, and it is published under `docs/` of the showcase
-  site).
+  site). Site CI builds these two independent Turbo targets concurrently; their caches include `SITE_BASE`, and docs includes the external `docs/` tree. Assemble the combined publishing directory only after both targets finish.
   The desktop shell validates persisted window geometry with its direct Zod dependency.
+  Its sidecar HTTP client uses a direct npm Undici dependency rather than Electron's bundled fetch.
+  Main/preload dependencies are bundled and declared as desktop devDependencies; do not ship a second desktop node_modules/ASAR-unpacked loader tree. The separate server payload retains its complete TS-plugin loader, public SDK, native targets and licenses. Staging pruning is allowlisted and follows hardlink detachment and compilation; see the desktop packaging guide.
+  The packaged backend's build-time mode lives in `apps/desktop/node-runtime.json`. Default `standalone` uses verified Node from `resources/node/` (version/checksums aligned with mise); `electron` uses the exact packaged executable only after patched embedded-Node and RunAsNode checks. Never use the player's PATH or runtime fallback. Rebuild the complete package to switch; see `docs/internals/desktop-packaging.md`. macOS still requires 13.5 or later. Development-only `@electron/asar` verifies the actual packaged main bytes; it is not a player-runtime dependency.
   Web theme and color scheme changes come from SettingsStore through the appearance helpers; there is no separate theme provider.
 - `packages/` — framework libraries; responsibilities and consumers are in
   `docs/internals/packages.md`. In brief:
@@ -276,6 +282,10 @@ source a direct `pnpm --filter <pkg> test` still needs
 host resolves it and `zod` for the modules of every plugin, bundled or installed
 (`provideHostModules` in `plugin-loader`), so a standalone plugin imports them
 directly and bundles only its other dependencies.
+
+Desktop runtime helpers also loaded directly by native Node use `.ts` relative
+imports; the desktop compiler enables `rewriteRelativeImportExtensions` for
+these helpers. Other TypeScript relative imports keep `.js`.
 
 `plugin-handlers-utils` is the root of the dependency graph and depends on no
 workspace package; `shared` sits directly above it, and `@covel/server` composes

@@ -12,6 +12,7 @@ pnpm --filter @covel/site dev    # the showcase website (apps/site) on port 5174
 pnpm --filter @covel/site build  # its static build → apps/site/dist/
 pnpm --filter @covel/docs dev    # the documentation site (apps/docs, pages in docs) on port 5175
 pnpm --filter @covel/docs build  # its static build → apps/docs/dist/; a dead link fails it
+pnpm exec turbo build --filter=@covel/site --filter=@covel/docs --concurrency=2 # parallel, cached site builds
 pnpm build            # all Turbo build targets
 pnpm build:electron   # production desktop installer → release/
 pnpm format           # Prettier
@@ -190,11 +191,13 @@ pnpm release:preflight  # static pre-tag gate: lockfile, imports, plugin/world/p
 
 CI（`.github/workflows/ci.yml`）统一处理文档、源码和混合改动，始终运行完整的 `pnpm check`。纯文档另跑文档测试；源码、无法确定范围的改动和发布运行全部测试。Web 单元测试、带 runtime 覆盖率下限的服务端测试、PostgreSQL 集成和浏览器冒烟测试仍在并行任务里。每次非发布 CI 调用 Site 构建官网和文档站一次；完整检查的其余构建排除这两个目标，独立的 `pnpm build` 不变。发布跳过 Site，运行 release preflight，并由平台打包任务构建。详见 [`CONTRIBUTING.md`](../CONTRIBUTING.md)。
 
+Site 用上面的 Turbo 命令并行运行两个独立构建；输入相同时直接恢复 `dist/`，必需任务仍要成功。输入包括站点配置、`docs/**`、`SITE_BASE`、构建环境文件、lockfile 和工具链；复制文档输出到官网的步骤在缓存之后进行。PR 缓存保持 GitHub 的 ref 隔离。桌面检查与发布缓存经过摘要校验的 Node 下载文件，以及 Electron 下载；发布的 Turbo 任务缓存仍只读。范围选择对发布和显式 commit 请求使用浅检出，因为它们不需要 diff。
+
 `main` 只接受拉取请求（`Protect main` 规则集：不能直接推送、强制推送或删除）。CI 的 `Verification` 汇总所选任务，包括非发布 CI 的 Site；必需任务缺失、跳过、失败或取消都不能通过。`.github/workflows/gate.yml` 提供每个拉取请求都有的 `All checks pass`：它要求 `Verification` 成功，也保留其他检查的失败。重跑失败检查之后，也要重跑这一项。
 
 ### Documentation-only changes
 
-纯文档改动走短路径：推送钩子和 `ci.yml` 都运行 `pnpm check`，再运行 `pnpm test:docs:packages`；CI 还通过 Site 构建官网和文档站。文档引用与技术债台账的脚本测试已在 `check:scripts` 中运行，不再重复。独立运行 `pnpm test:docs` 仍包含包测试和这两组脚本测试。检查历史提交时，推送钩子使用该提交实际提供的命令。
+纯文档改动走短路径：推送钩子和 `ci.yml` 都运行 `pnpm check`，再运行 `pnpm test:docs:packages`；CI 还通过 Site 构建官网和文档站。文档引用与技术债台账的脚本测试已在 `check:scripts` 中运行，不再重复。文档测试按包合并文件参数，同一包只启动一次测试 runner。独立运行 `pnpm test:docs` 仍包含包测试和这两组脚本测试。检查历史提交时，推送钩子使用该提交实际提供的命令。
 
 算作文档的文件（规则在 `scripts/lib/change-scope.mjs`）：
 

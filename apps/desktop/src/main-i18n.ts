@@ -34,6 +34,8 @@ const messages: Readonly<Record<string, Messages | undefined>> = {
     "startup.status.initializingDatabase": "Initializing database...",
     "startup.status.almostReady": "Almost ready...",
     "startup.status.ready": "Ready!",
+    "server.externallyManagedRestart":
+      "The development server is managed outside Covel. Restart pnpm dev in its terminal, then refresh the app.",
     "startup.status.copyingData": "Copying your data to the new location...",
     "splash.retry": "Retry",
     "splash.viewLogs": "View Logs",
@@ -133,6 +135,8 @@ const messages: Readonly<Record<string, Messages | undefined>> = {
     "startup.status.initializingDatabase": "正在初始化数据库...",
     "startup.status.almostReady": "即将完成...",
     "startup.status.ready": "准备就绪",
+    "server.externallyManagedRestart":
+      "开发服务由 Covel 外部管理。请在终端中重启 pnpm dev，然后刷新应用。",
     "startup.status.copyingData": "正在把数据复制到新位置...",
     "splash.retry": "重试",
     "splash.viewLogs": "查看日志",
@@ -230,6 +234,8 @@ const messages: Readonly<Record<string, Messages | undefined>> = {
     "startup.status.initializingDatabase": "Инициализация базы данных...",
     "startup.status.almostReady": "Почти готово...",
     "startup.status.ready": "Готово!",
+    "server.externallyManagedRestart":
+      "Сервер разработки управляется вне Covel. Перезапустите pnpm dev в его терминале, затем обновите приложение.",
     "startup.status.copyingData": "Копирование данных в новое расположение...",
     "splash.retry": "Повторить",
     "splash.viewLogs": "Просмотреть журналы",

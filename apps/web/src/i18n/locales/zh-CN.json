@@ -1030,6 +1030,7 @@
     "desktopApplyConfigChanges": "应用配置变更",
     "desktopRestartElectronOnly": "此操作仅在 Electron 桌面端可用",
     "desktopRestartHint": "重启本地后端并刷新界面，重新加载插件代码、提示词、UI、llm.toml 与 keys.env。修改这些文件或调试插件后可点击此按钮。正在进行的回合会断开。",
+    "desktopRestartDevHint": "开发服务由 Covel 外部管理。请在终端中重启 pnpm dev，然后刷新应用。",
     "desktopRestartWebHint": "当前非桌面端运行。请刷新浏览器手动重载。",
     "desktopRefresh": "刷新信息",
     "desktopTutorial": "教程",

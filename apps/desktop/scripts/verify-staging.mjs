@@ -13,9 +13,9 @@
  * default.
  */
 import { spawn } from "node:child_process";
-import { createRequire } from "node:module";
 import { createServer } from "node:net";
 import path from "node:path";
+import os from "node:os";
 import fs from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { assertNoPrivateConfig } from "./private-config.mjs";
@@ -23,23 +23,77 @@ import {
   assertLoadedBuiltinPluginEntries,
   assertNoPluginLoadErrors,
 } from "./plugin-load-check.mjs";
+import {
+  BACKEND_RUNTIME_MODE,
+  backendRuntimeEnvironment,
+  backendRuntimeStagingDirectory,
+  packagedElectronExecutable,
+  probeBackendRuntime,
+  verifyBackendRuntime,
+  verifyRuntimeSelection,
+} from "./backend-runtime.mjs";
+import { ensureElectronBinary } from "./ensure-electron.mjs";
+import { verifyNodeRuntimeFile } from "../src/node-runtime.ts";
+import { verifyPackagedMain } from "./packaged-main.mjs";
 
-const require = createRequire(import.meta.url);
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 const desktopRoot = path.resolve(__dirname, "..");
 const stagingDir = path.join(desktopRoot, "staging");
-const resourcesArgument = process.argv.indexOf("--resources");
-if (resourcesArgument !== -1 && !process.argv[resourcesArgument + 1]) {
-  throw new Error("--resources requires an unpacked app Resources directory");
+const options = { platform: process.platform, arch: process.arch };
+let resourcesDir;
+let noLlmToml = false;
+for (let index = 2; index < process.argv.length; index++) {
+  const argument = process.argv[index];
+  if (argument === "--no-llm-toml") {
+    noLlmToml = true;
+  } else if (["--resources", "--platform", "--arch"].includes(argument)) {
+    const value = process.argv[++index];
+    if (!value || value.startsWith("--")) {
+      throw new Error(`${argument} requires a value`);
+    }
+    if (argument === "--resources") resourcesDir = path.resolve(value);
+    else options[argument.slice(2)] = value;
+  } else {
+    throw new Error(`Unknown staging verification argument: ${argument}`);
+  }
 }
-const resourcesDir =
-  resourcesArgument === -1
-    ? stagingDir
-    : path.resolve(process.argv[resourcesArgument + 1]);
+const packaged = resourcesDir !== undefined;
+const runtimeResources = packaged
+  ? resourcesDir
+  : backendRuntimeStagingDirectory(desktopRoot, options);
+resourcesDir ??= stagingDir;
 const serverStaging = path.join(resourcesDir, "server");
-
-const noLlmToml = process.argv.includes("--no-llm-toml");
-const electronNode = process.argv.includes("--electron-node");
+const selection = verifyRuntimeSelection(
+  path.join(runtimeResources, "runtime-selection.json"),
+  options,
+);
+if (packaged) {
+  verifyPackagedMain(runtimeResources, selection.mainSha256);
+} else {
+  await verifyNodeRuntimeFile(
+    path.join(desktopRoot, "dist/main.mjs"),
+    selection.mainSha256,
+  );
+}
+const electronExecutable =
+  BACKEND_RUNTIME_MODE === "electron"
+    ? packaged
+      ? packagedElectronExecutable(runtimeResources, options)
+      : ensureElectronBinary()
+    : undefined;
+// Verify pinned standalone bytes before executing them. Electron versions are
+// probed first, then checked with the same policy as the packaged main process.
+const executable =
+  electronExecutable ?? (await verifyBackendRuntime(runtimeResources, options));
+// No backend module is imported until the actual executable's versions pass.
+const runtime = await probeBackendRuntime(executable, options);
+const nodeBinary = electronExecutable
+  ? await verifyBackendRuntime(runtimeResources, {
+      ...options,
+      electronExecutable,
+      electronVersions: runtime,
+    })
+  : executable;
 const TIMEOUT_MS = 30_000;
 
 function die(msg, code = 1) {
@@ -47,22 +101,9 @@ function die(msg, code = 1) {
   process.exit(code);
 }
 
-function resolveElectronBinaryPath() {
-  let electronPackageJson;
-  try {
-    electronPackageJson = require.resolve("electron/package.json");
-  } catch {
-    return null;
-  }
-
-  const electronDir = path.dirname(electronPackageJson);
-  const pathFile = path.join(electronDir, "path.txt");
-  if (!fs.existsSync(pathFile)) return null;
-
-  const relativeBinary = fs.readFileSync(pathFile, "utf-8").trim();
-  const binaryPath = path.join(electronDir, "dist", relativeBinary);
-  return fs.existsSync(binaryPath) ? binaryPath : null;
-}
+console.log(
+  `[smoke] verified ${BACKEND_RUNTIME_MODE} Node ${runtime.node} (${runtime.platform}-${runtime.arch})`,
+);
 
 if (!fs.existsSync(serverStaging)) {
   die(
@@ -94,8 +135,10 @@ async function findFreePort() {
 }
 
 const port = await findFreePort();
-const tmpDb = path.join(desktopRoot, "staging", `.smoke-${port}.db`);
-const tmpUserRoot = path.join(stagingDir, `.smoke-user-${port}`);
+const tmpUserRoot = fs.mkdtempSync(
+  path.join(os.tmpdir(), "covel-sidecar-smoke-"),
+);
+const tmpDb = path.join(tmpUserRoot, "covel.db");
 const userPluginsDir = path.join(tmpUserRoot, "plugins");
 const userWorldsDir = path.join(tmpUserRoot, "worlds");
 const userConfigDir = path.join(tmpUserRoot, "config");
@@ -112,37 +155,13 @@ if (!noLlmToml) {
   );
 }
 
-const electronBinary = electronNode ? resolveElectronBinaryPath() : null;
-const useElectronNode = Boolean(electronBinary);
-// A missing Electron binary must fail the build by default: the whole point
-// of the --electron-node smoke is to open the SQLite store (`node:sqlite` and
-// the staged sqlite-vec extension) in the exact runtime used by the packaged
-// sidecar. A silent host-Node
-// + memory-backend downgrade would skip that compatibility check. Machines
-// that genuinely cannot download the Electron binary can opt into the weaker
-// smoke explicitly.
-const allowHostNodeFallback = process.env.COVEL_SMOKE_HOST_NODE === "1";
-const useMemoryBackend = electronNode && !electronBinary;
-if (electronNode && !electronBinary) {
-  if (!allowHostNodeFallback) {
-    die(
-      "[smoke] --electron-node requested but the Electron binary is not installed " +
-        "(node_modules/electron/dist missing). Reinstall electron (pnpm install) or " +
-        "set COVEL_SMOKE_HOST_NODE=1 to accept a weaker host-Node + memory-backend smoke " +
-        "that does NOT exercise the staged native modules in Electron.",
-    );
-  }
-  console.warn(
-    "[smoke] COVEL_SMOKE_HOST_NODE=1 — Electron binary missing, running weaker host-Node + memory-backend smoke (native modules in Electron NOT verified).",
-  );
-}
-
 // Exercise synthetic and absent config independently of the developer's paths.
 const env = {
   ...process.env,
-  ...(useElectronNode ? { ELECTRON_RUN_AS_NODE: "1" } : {}),
   SERVER_PORT: String(port),
-  STORE_BACKEND: useMemoryBackend ? "memory" : "sqlite",
+  STORE_BACKEND: "sqlite",
+  VECTOR_BACKEND: "embedded",
+  MEDIA_BACKEND: "mirror",
   SQLITE_PATH: tmpDb,
   NODE_ENV: "production",
   COVEL_DESKTOP_REST: "1",
@@ -159,17 +178,11 @@ const env = {
 };
 
 console.log(
-  `[smoke] spawning staged server on port ${port}` +
-    (useElectronNode
-      ? " (electron node)"
-      : useMemoryBackend
-        ? " (host node, memory backend)"
-        : "") +
+  `[smoke] spawning ${BACKEND_RUNTIME_MODE} backend + SQLite server on port ${port}` +
     (noLlmToml ? " (without llm.toml)" : ""),
 );
 
 const stderrBuf = [];
-const nodeBinary = electronBinary ?? process.execPath;
 // A file URL, as the desktop app passes it: an absolute Windows path is not
 // a module specifier.
 const child = spawn(
@@ -177,7 +190,7 @@ const child = spawn(
   ["--import", pathToFileURL(tsxLoader).href, entry],
   {
     cwd: serverStaging,
-    env,
+    env: backendRuntimeEnvironment(env),
     stdio: ["ignore", "pipe", "pipe", "ipc"],
   },
 );
@@ -251,13 +264,28 @@ try {
   const health = await fetch(`http://127.0.0.1:${port}/api/health`);
   if (!health.ok)
     throw new Error("staged /api/health unavailable after readiness IPC");
+  const status = await health.json();
+  if (
+    status.storage?.data?.backend !== "sqlite" ||
+    !status.storage.data.durable
+  ) {
+    throw new Error("bundled sidecar did not open durable SQLite storage");
+  }
+  if (
+    status.storage.vector?.driver !== "sqlite-vec" ||
+    status.storage.vector.capable !== true
+  ) {
+    throw new Error("bundled sidecar is missing the sqlite-vec capability");
+  }
   assertNoStartupPathErrors();
   assertNoPluginLoadErrors(stderrBuf);
   const pluginsResponse = await fetch(`http://127.0.0.1:${port}/api/plugins`);
   if (!pluginsResponse.ok) throw new Error("staged /api/plugins unavailable");
   assertLoadedBuiltinPluginEntries((await pluginsResponse.json()).items);
   booted = true;
-  console.log("[smoke] ✓ /api/health and builtin plugin entries OK");
+  console.log(
+    "[smoke] ✓ /api/health, durable SQLite, sqlite-vec and builtin plugin entries OK",
+  );
 } catch (err) {
   const tail = stderrBuf.slice(-80).join("");
   child.kill("SIGKILL");

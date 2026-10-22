@@ -3,6 +3,7 @@ import { spawnSync } from "node:child_process";
 import {
   mkdirSync,
   mkdtempSync,
+  readFileSync,
   renameSync,
   rmSync,
   writeFileSync,
@@ -11,6 +12,7 @@ import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
+import { parse } from "yaml";
 import { selectCiScope } from "../ci-scope.mjs";
 import { git } from "./helpers/check-push-fixture.mjs";
 
@@ -135,6 +137,87 @@ test("release and immutable reusable-workflow requests always run full suites", 
     selectCiScope({ cwd: "/missing", release: true, commit: repo.base }),
     { scope: "full", site_deploy: false },
   );
+});
+
+test("CI keeps required Site builds, PR isolation and release task caches read-only", () => {
+  const workflow = (name) =>
+    parse(
+      readFileSync(
+        new URL(`../../.github/workflows/${name}.yml`, import.meta.url),
+        "utf8",
+      ),
+    );
+  const ci = workflow("ci");
+  const site = workflow("site");
+  const release = workflow("release");
+  const checkout = ci.jobs.scope.steps.find((step) =>
+    step.uses?.startsWith("actions/checkout@"),
+  );
+  assert.equal(
+    checkout.with["fetch-depth"],
+    "${{ (inputs.release || inputs.commit != '') && 1 || 0 }}",
+  );
+  assert.equal(ci.jobs.site.if, "${{ !cancelled() && !inputs.release }}");
+  assert.ok(ci.jobs.result.needs.includes("site"));
+  assert.equal(site.on.pull_request, undefined);
+  assert.equal(site.on.push, undefined);
+  const build = site.jobs.build.steps.find((step) => step.name === "Build");
+  assert.match(
+    build.run,
+    /pnpm exec turbo build --filter=@covel\/site --filter=@covel\/docs --concurrency=2/,
+  );
+  assert.match(
+    build.run,
+    /rm -rf apps\/site\/dist\/docs\n\s*cp -R apps\/docs\/dist apps\/site\/dist\/docs/,
+  );
+  assert.match(build.env.SITE_BASE, /github.event_name == 'pull_request'/);
+  const siteCache = site.jobs.build.steps.find(
+    (step) => step.name === "Cache site builds",
+  );
+  assert.match(siteCache.with.key, /^turbo-site-/);
+  assert.equal(siteCache.with.path, ".turbo/cache");
+  assert.match(
+    site.jobs.deploy.if,
+    /inputs.deploy && github.event_name != 'pull_request'/,
+  );
+  assert.equal(
+    site.jobs.build.steps.find((step) => step.name === "Upload Pages artifact")
+      .if,
+    site.jobs.deploy.if,
+  );
+  for (const name of ["verify", "web"]) {
+    const steps = ci.jobs[name].steps;
+    assert.equal(
+      steps.find((step) => step.name === "Cache turbo").if,
+      "${{ !inputs.release }}",
+    );
+    const restore = steps.find((step) => step.name === "Restore CI task cache");
+    assert.equal(restore.if, "${{ inputs.release }}");
+    assert.match(restore.uses, /^actions\/cache\/restore@/);
+  }
+  for (const job of [
+    ci.jobs.verify,
+    release.jobs["build-electron"],
+    release.jobs["build-electron-win"],
+  ]) {
+    const cache = job.steps.find(
+      (step) => step.name === "Cache verified Node artifacts",
+    );
+    assert.equal(
+      cache.with.path,
+      "apps/desktop/node_modules/.cache/covel-node-runtime",
+    );
+    assert.equal(
+      cache.with.key,
+      "node-runtime-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('apps/desktop/node-runtime.json', 'mise.toml') }}",
+    );
+    assert.equal(cache.with["restore-keys"], undefined);
+    const electron = job.steps.find(
+      (step) => step.name === "Cache Electron binaries",
+    );
+    assert.match(electron.with.key, /runner.arch/);
+    assert.match(electron.with.key, /pnpm-lock.yaml/);
+  }
 });
 
 test("deployment selection includes site paths and shared build/install controls", (t) => {

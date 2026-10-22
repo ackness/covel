@@ -35,6 +35,11 @@ concurrency:
   group: site-${{ (github.event_name == 'pull_request' || inputs.deploy) && github.ref || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+# Keep the content-addressed build cache bounded independently of other CI jobs.
+env:
+  TURBO_CACHE_MAX_AGE: 2d
+  TURBO_CACHE_MAX_SIZE: 500MB
+
 jobs:
   build:
     name: Build site
@@ -57,11 +62,21 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: "26.10.0"
+          node-version: "26.12.1"
           cache: pnpm
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      # GitHub keeps PR caches scoped to the PR ref; deployments cannot restore
+      # them. Turbo validates task inputs, including SITE_BASE, after restore.
+      - name: Cache site builds
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .turbo/cache
+          key: turbo-site-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml', 'mise.toml') }}-${{ inputs.commit || github.sha }}
+          restore-keys: |
+            turbo-site-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml', 'mise.toml') }}-
 
       # Both builds read SITE_BASE, the path Pages serves the site under: `/covel/` on
       # ackness.github.io, `/` once a custom domain is set. A pull request
@@ -75,8 +90,10 @@ jobs:
         env:
           SITE_BASE: ${{ github.event_name == 'pull_request' && '/covel/' || format('{0}/', steps.pages.outputs.base_path) }}
         run: |
-          pnpm --filter @covel/site build
-          pnpm --filter @covel/docs build
+          pnpm exec turbo build --filter=@covel/site --filter=@covel/docs --concurrency=2
+          # Assembly happens after Turbo has cached each independent output.
+          # A restored site output must never retain an older docs subtree.
+          rm -rf apps/site/dist/docs
           cp -R apps/docs/dist apps/site/dist/docs
 
       - name: Upload Pages artifact

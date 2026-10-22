@@ -10,6 +10,41 @@
       "dependsOn": ["^build"],
       "outputs": ["dist/**"]
     },
+    "@covel/site#build": {
+      "outputs": ["dist/**", "!dist/docs/**"],
+      "env": ["SITE_BASE", "VITE_*"],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/package.json",
+        "$TURBO_ROOT$/pnpm-lock.yaml",
+        "$TURBO_ROOT$/pnpm-workspace.yaml",
+        "$TURBO_ROOT$/.npmrc",
+        "$TURBO_ROOT$/.pnpmfile.cjs",
+        "$TURBO_ROOT$/scripts/require-pnpm.mjs",
+        ".env",
+        ".env.local",
+        ".env.production",
+        ".env.production.local"
+      ]
+    },
+    "@covel/docs#build": {
+      "outputs": ["dist/**"],
+      "env": ["SITE_BASE", "VITE_*"],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/docs/**",
+        "$TURBO_ROOT$/package.json",
+        "$TURBO_ROOT$/pnpm-lock.yaml",
+        "$TURBO_ROOT$/pnpm-workspace.yaml",
+        "$TURBO_ROOT$/.npmrc",
+        "$TURBO_ROOT$/.pnpmfile.cjs",
+        "$TURBO_ROOT$/scripts/require-pnpm.mjs",
+        ".env",
+        ".env.local",
+        ".env.production",
+        ".env.production.local"
+      ]
+    },
     "@covel/web#build": {
       "dependsOn": ["^build", "generate:routes"],
       "outputs": ["../../dist/web/**"],

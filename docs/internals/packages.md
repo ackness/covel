@@ -13,7 +13,7 @@ Covel 是模块化单体：一个仓库、一起发布，内部分成若干包�
 > - Turbo 会先完成 SDK 构建，再运行它自己的 lint 和测试。SDK 测试经 `shared` 读取自己的 `dist` 声明，所以只有依赖包的 `^build` 顺序还不够。
 > - 单独运行某个包的测试之前，仍然要手动执行 `pnpm --filter @covel/plugin-handlers-utils build`。
 
-其余的库主要由应用和框架在工作区内组合使用。
+其余的库主要由应用和框架在工作区内组合使用。`pnpm test:docs:packages` 按包合并读取文档的测试文件，每个包只启动一次测试运行器；具体范围见[命令](./commands.md#documentation-only-changes)。
 
 ## 三条使用路径
 
@@ -59,6 +59,8 @@ Covel 是模块化单体：一个仓库、一起发布，内部分成若干包�
 
 **依赖方向。** `plugin-handlers-utils` 是依赖图的根，不依赖任何工作区包。`shared` 紧挨在它上面。`@covel/server` 组合所有功能包。精确的依赖边写在各包的 `package.json` 里，`pnpm check:boundaries` 检查公开入口和依赖方向。 SQLite 向量扩展 `sqlite-vec` 由 `store` 直接声明，根包不重复提供。
 
+工作区使用 TypeScript 稳定版 7.0.2。Zod、作者 SDK 的 peer dependency 和带工具模板的最低版本统一为 4.6.7；它修复了 TypeScript 7.1 对递归 JSON 类型的循环推断报错。JSON 的校验、可选字段和只读语义不变。Nightly 和 tsrs 的兼容性验证不替代稳定版类型检查门禁。
+
 ## 宿主组合的关键边界
 
 宿主指把这些包装配起来运行的应用：server、desktop、web。
@@ -66,13 +68,19 @@ Covel 是模块化单体：一个仓库、一起发布，内部分成若干包�
 ### 两个独立的站点
 
 - 官网 `apps/site` 是独立的静态站点。它不依赖任何工作区包，也不进入 Web 或桌面的构建。
-- 文档站 `apps/docs` 同样独立。它用 VitePress 把 `docs/` 的页面构建成静态站点，发布在官网的 `docs/` 路径下。
+- 文档站 `apps/docs` 同样独立。它用 VitePress 把 `docs/` 的页面构建成静态站点，发布在官网的 `docs/` 路径下。两个站点由独立的 Turbo 任务并行构建，分别缓存；文档内容和 `SITE_BASE` 等实际输入参与缓存计算，最后才组装发布目录。
 - 文档图表使用 Mermaid 12，需要支持 ES2024 的浏览器（Safari 17.4+）。Mermaid 只属于文档站，不进入 Web 或桌面应用。
 - 应用自己的 `/` 直接跳到世界列表。
 
 ### 桌面壳
 
 桌面壳直接依赖 Zod 来校验本地保存的窗口状态。窗口的位置和大小属于 Electron 宿主，不作为共享的领域 schema 暴露。
+
+桌面壳访问 sidecar 的 HTTP 客户端直接依赖 npm Undici，不使用 Electron 内置的 `fetch`。`ai-provider` 的出站传输也显式依赖 npm Undici；升级 Node 或 Electron 不会替换这两处依赖。主进程的 ESM 构建保留原生 `require` 桥接，让打包进去的 Undici 能加载 Node 内置模块。
+
+这些桌面壳依赖在 `apps/desktop/package.json` 中列为开发依赖，因为它们已进入 main/preload bundle；安装包不再另带一份桌面 `node_modules`。服务端拥有独立、完整的运行依赖，包含加载社区 TypeScript 插件需要的 `tsx` / esbuild 和公开 SDK。裁剪边界见[桌面打包](./desktop-packaging.md#staging-目录的规则)。
+
+桌面后端的构建时选择在 `apps/desktop/node-runtime.json`。默认使用 `resources/node/` 中经固定摘要校验的独立 Node，与源码服务端的安全版本一致；可显式改用通过安全门槛的随包 Electron。两种模式都不依赖玩家安装 Node，不在启动时下载或回退，启动、就绪、系统代理和关闭仍走原有子进程 IPC。切换步骤和验收要求见[桌面打包](./desktop-packaging.md#选择后端运行时)。`@electron/asar` 只作为桌面的开发依赖，用来校验产物内的主进程文件，不进入玩家运行时。
 
 ### 部署形态只在宿主里决定
 

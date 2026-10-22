@@ -183,8 +183,8 @@ function buildCheckContext(dice, locale, world) {
       )
     : pickLocaleText(
         locale,
-        `2. 选出这个行动用到的玩家角色卡属性。修正是 -${MODIFIER_LIMIT} 到 +${MODIFIER_LIMIT} 之间的整数，从该属性的数值换算。`,
-        `2. Choose the attribute on the player character's sheet that the action uses. The modifier is an integer from -${MODIFIER_LIMIT} to +${MODIFIER_LIMIT} that you derive from its numeric value.`,
+        "2. 没有可用的有量程能力属性，修正取 0，回执的 attribute 写为「无」。生命、信任等数值不用来检定，不要编造属性或修正。",
+        '2. No ranged ability is available. Use modifier 0 and report attribute as "None". Values such as health or trust are not used for checks. Do not invent an attribute or modifier.',
       );
   const english = [
     "## Dice checks for this turn",

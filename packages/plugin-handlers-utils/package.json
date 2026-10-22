@@ -43,7 +43,7 @@
     "vitest": "^5.0.3"
   },
   "peerDependencies": {
-    "zod": "^4.6.5"
+    "zod": "^4.6.7"
   },
   "files": [
     "dist",

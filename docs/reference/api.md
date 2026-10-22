@@ -5007,7 +5007,7 @@ interface SseEnvelope {
   "ok": true,
   "latencyMs": 250,
   "ttfbMs": 180,
-  "text": "Hello!",
+  "text": "Example preset (example-provider/example-model)",
   "testedTarget": {
     "presetId": "server-preset",
     "provider": "example-provider",
@@ -5016,6 +5016,8 @@ interface SseEnvelope {
   }
 }
 ```
+
+文本模型的 `text` 是本次测试的预设名和服务商／模型标识，不是模型的回复。流式请求在取得首字延迟和足够的响应文本后提前结束。
 
 `resolvedVia` 的取值是 `direct`、`slot`、`tag-fallback` 或 `any`。
 

@@ -4,13 +4,13 @@
 
 ## 开始之前
 
-- macOS：Apple Silicon 芯片，macOS 13 及以上。
+- macOS：Apple Silicon 芯片，macOS 13.5 及以上。
 - Windows：x64。
 - 其他系统暂时没有安装包，可以[从源码运行](./run-from-source.md)。
 
 ## 1. 下载
 
-打开 [Releases 页面](https://github.com/ackness/covel/releases/latest)，下载对应系统的安装包：macOS 是 `.dmg`，Windows 是安装程序，另有一个免安装的便携版。
+打开 [Releases 页面](https://github.com/ackness/covel/releases/latest)，下载对应系统的安装包：macOS 是 `.dmg`，Windows 推荐文件名以 `-win-x64.exe` 结尾的安装程序。不想安装时选 Windows `.zip`；另保留单文件自解压 `portable.exe`。
 
 每次发布都附带 `SHA256SUMS.txt`，可以用它核对下载的文件。
 
@@ -29,6 +29,10 @@ xattr -dr com.apple.quarantine /Applications/Covel.app
 ### Windows
 
 运行安装程序。如果提示“已保护你的电脑”，点“更多信息”，再点“仍要运行”。如果浏览器拦下了下载，先在下载列表里选择“保留”。
+
+免安装 ZIP 要先右键“全部解压”，再运行解压目录里的 `Covel.exe`；不要直接从压缩包窗口启动，也不要只移动 EXE。以后直接打开这个目录里的程序，不再重复解压。
+
+单文件 `portable.exe` 每次启动都会重新解压，并显示静态准备提示；退出后会清理解压目录。需要经常使用又不想安装时，优先选 ZIP。系统安全扫描可能发生在提示出现之前。三种下载形式都使用同一套[数据目录](./data-and-upgrade.md)，不会把存档移到 EXE 旁边。
 
 ## 3. 看到世界选择页
 

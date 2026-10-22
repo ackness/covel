@@ -5009,7 +5009,7 @@ How each kind is tested:
   "ok": true,
   "latencyMs": 250,
   "ttfbMs": 180,
-  "text": "Hello!",
+  "text": "Example preset (example-provider/example-model)",
   "testedTarget": {
     "presetId": "server-preset",
     "provider": "example-provider",
@@ -5018,6 +5018,8 @@ How each kind is tested:
   }
 }
 ```
+
+For text models, `text` names the tested preset and provider/model; it is not the model's reply. The streaming request ends early once it has measured first-token latency and received enough text.
 
 `resolvedVia` is one of `direct`, `slot`, `tag-fallback`, or `any`.
 

@@ -38,6 +38,8 @@ directory (`~/.covel/plugins`), not the repository. See
 
 Every mode starts `PLUGIN.md` at version `0.1.0`; the version lives only there (a `--with-tools` `package.json` has none). The default mode writes no `package.json`: the directory name is the plugin ID, and the loader runs the package's `.js` files as ES modules. Generated runtime case files include `$schema`; `name` and `runtimeId` are required, and unknown case/expectation/artifact fields fail before execution.
 
+The tools scaffold uses stable TypeScript 7.0.2 and Zod 4.6.7 or later compatible versions. Keep its Zod minimum aligned with the host SDK peer dependency; older declarations fail recursive JSON inference under TypeScript 7.1. Runtime dependencies still come from the host.
+
 The default analyst runs automatically in `post-turn` and consumes the current narrative binding. Function notes remain manual; generate keys through `ctx.random` and timestamps in code.
 
 ### 3. Declare the manifest

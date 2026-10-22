@@ -4,13 +4,13 @@ This page walks you through installing the desktop app and opening it. When you 
 
 ## Before you start
 
-- macOS: Apple Silicon chip, macOS 13 or later.
+- macOS: Apple Silicon chip, macOS 13.5 or later.
 - Windows: x64.
 - Other systems do not have an installer yet. You can [run from source](./run-from-source.md).
 
 ## 1. Download
 
-Open the [Releases page](https://github.com/ackness/covel/releases/latest) and download the installer for your system. On macOS it is a `.dmg`. On Windows it is an installer, and there is also a portable version that needs no installation.
+Open the [Releases page](https://github.com/ackness/covel/releases/latest) and download the installer for your system. On macOS it is a `.dmg`. On Windows, use the recommended installer whose name ends in `-win-x64.exe`, or choose the Windows `.zip` if you do not want to install. A single-file self-extracting `portable.exe` is also available.
 
 Every release includes `SHA256SUMS.txt`. You can use it to check the files you downloaded.
 
@@ -29,6 +29,10 @@ xattr -dr com.apple.quarantine /Applications/Covel.app
 ### Windows
 
 Run the installer. If it says "Windows protected your PC", click "More info", and then click "Run anyway". If the browser blocked the download, first choose "Keep" in the download list.
+
+For the no-install ZIP, right-click and choose “Extract All”, then run `Covel.exe` from the extracted folder. Do not launch it inside the ZIP window or move only the EXE. On later launches, open the program in that folder directly; it does not extract again.
+
+The single-file `portable.exe` extracts again on every launch, shows a static preparation notice, and removes its extraction folder on exit. For frequent use without installation, prefer ZIP. System security scanning may happen before the notice appears. All three downloads use the same [data directories](./data-and-upgrade.md); saves do not move beside the EXE.
 
 ## 3. See the world selection page
 

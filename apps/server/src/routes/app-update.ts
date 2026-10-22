@@ -44,14 +44,16 @@ type ReleaseFetch = (
 /** Fetch the latest stable GitHub Release through Covel's configured proxy. */
 export async function fetchLatestCovelRelease(
   fetchImpl: ReleaseFetch = outboundFetch,
+  signal?: AbortSignal,
 ): Promise<LatestCovelRelease> {
+  const timeout = AbortSignal.timeout(10_000);
   const response = await fetchImpl(GITHUB_LATEST_RELEASE_URL, {
     headers: {
       Accept: "application/vnd.github+json",
       "X-GitHub-Api-Version": "2022-11-28",
       "User-Agent": "Covel-Desktop-Update-Check",
     },
-    signal: AbortSignal.timeout(10_000),
+    signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
   });
   if (!response.ok) {
     await response.body?.cancel().catch(() => undefined);
@@ -78,14 +80,17 @@ export async function fetchLatestCovelRelease(
 }
 
 export interface AppUpdateRoutesDeps {
-  readonly fetchLatestRelease?: () => Promise<LatestCovelRelease>;
+  readonly fetchLatestRelease?: (
+    signal?: AbortSignal,
+  ) => Promise<LatestCovelRelease>;
 }
 
 export function createAppUpdateRoutes(deps: AppUpdateRoutesDeps = {}): Hono {
   const app = new Hono();
   const requireToken = accessGuard("host.config");
   const fetchLatestRelease =
-    deps.fetchLatestRelease ?? (() => fetchLatestCovelRelease());
+    deps.fetchLatestRelease ??
+    ((signal?: AbortSignal) => fetchLatestCovelRelease(undefined, signal));
 
   app.get("/api/app-update/latest", requireToken, async (c) => {
     const env = readRuntimeEnv();
@@ -99,7 +104,7 @@ export function createAppUpdateRoutes(deps: AppUpdateRoutesDeps = {}): Hono {
     }
 
     try {
-      return c.json(await fetchLatestRelease());
+      return c.json(await fetchLatestRelease(c.get("requestWork")?.signal));
     } catch (error) {
       console.warn("[app-update] GitHub release check failed:", error);
       return c.json(

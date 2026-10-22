@@ -38,6 +38,8 @@ pnpm validate:plugin plugins/my-plugin
 pnpm --filter @covel/plugin-my-plugin test
 ```
 
+The tools scaffold's development dependencies use TypeScript 7.0.2 and Zod 4.6.7 or later compatible versions. The Zod minimum matches the host SDK to avoid recursive JSON type errors in TypeScript 7.1. The host still supplies Zod at runtime; publishing a plugin does not add a dependency installation step.
+
 The generator does not ask questions. Its arguments decide what it generates:
 
 | Argument           | What it does                                                                             |

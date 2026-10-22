@@ -42,7 +42,7 @@
   },
   "dependencies": {
     "smol-toml": "^1.9.0",
-    "zod": "^4.6.5",
+    "zod": "^4.6.7",
     "@covel/plugin-handlers-utils": "workspace:*"
   }
 }

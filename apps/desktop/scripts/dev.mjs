@@ -6,7 +6,7 @@
  *    (assumes `pnpm dev` is running: web on 5173, server on 3001)
  */
 
-import { build } from "esbuild";
+import { bundleDesktopEntry } from "./bundle-desktop.mjs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -18,27 +18,8 @@ const desktopRoot = path.resolve(__dirname, "..");
 
 // Build main process + preload
 console.log("[dev] Building main process and preload...");
-await build({
-  entryPoints: [path.join(desktopRoot, "src/main.ts")],
-  bundle: true,
-  outfile: path.join(desktopRoot, "dist/main.mjs"),
-  format: "esm",
-  platform: "node",
-  target: "node22",
-  sourcemap: true,
-  external: ["electron"],
-});
-
-await build({
-  entryPoints: [path.join(desktopRoot, "src/preload.ts")],
-  bundle: true,
-  outfile: path.join(desktopRoot, "dist/preload.mjs"),
-  format: "cjs",
-  platform: "node",
-  target: "node22",
-  sourcemap: true,
-  external: ["electron"],
-});
+await bundleDesktopEntry(desktopRoot, "main");
+await bundleDesktopEntry(desktopRoot, "preload");
 
 // Launch Electron (electron@42+ no longer downloads the binary on install)
 ensureElectronBinary();

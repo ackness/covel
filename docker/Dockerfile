@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.27.1@sha256:4edf897a3ffa55b89f906fc8cc78afdb3f1834cc9c7083565e611a8a7d5fe99e
-# Pin the eligible Node 26 release on Alpine 3.24 (seven-day release window).
-FROM node:26.10.0-alpine3.24@sha256:0b36e8c136b94cd4fcf02188228e76c31ad5872eef3fec8cbd2eee500cfd9e80 AS base
+# Security releases bypass the normal seven-day window; keep tag and digest aligned.
+FROM node:26.12.1-alpine3.24@sha256:40cd011b55415bc894e45b02fdd5a5dfde056921b7d23a64c74f80497af48797 AS base
 RUN apk add --no-cache libc6-compat libstdc++
 # Node 25+ no longer bundles Corepack. Pin both the shim and pnpm payload so
 # builds cannot drift and the non-root runtime never downloads a package

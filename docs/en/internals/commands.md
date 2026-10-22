@@ -12,6 +12,7 @@ pnpm --filter @covel/site dev    # the showcase website (apps/site) on port 5174
 pnpm --filter @covel/site build  # its static build → apps/site/dist/
 pnpm --filter @covel/docs dev    # the documentation site (apps/docs, pages in docs) on port 5175
 pnpm --filter @covel/docs build  # its static build → apps/docs/dist/; a dead link fails it
+pnpm exec turbo build --filter=@covel/site --filter=@covel/docs --concurrency=2 # parallel, cached site builds
 pnpm build            # all Turbo build targets
 pnpm build:electron   # production desktop installer → release/
 pnpm format           # Prettier
@@ -190,11 +191,13 @@ Checkouts use the Turbo cache shared by all worktrees, so a task that ran with t
 
 CI (`.github/workflows/ci.yml`) handles documentation, source, and mixed changes in one workflow and always runs the complete `pnpm check`. Docs-only changes then run documentation tests; source changes, unknown scope, and releases run every suite. Web unit tests, server tests with the runtime coverage floor, PostgreSQL integration, and browser smoke remain parallel jobs. Every non-release CI run calls Site to build the showcase and documentation once; the remaining full-path build excludes those targets, while standalone `pnpm build` is unchanged. Releases skip Site, run release preflight, and build through platform packaging jobs. See [`CONTRIBUTING.md`](../../CONTRIBUTING.md).
 
+Site uses the Turbo command above to run the two independent builds in parallel; matching inputs restore `dist/`, and the required job must still succeed. Inputs include site configuration, `docs/**`, `SITE_BASE`, build environment files, lockfile, and toolchain; copying documentation output into the showcase happens after caching. PR caches retain GitHub's ref isolation. Desktop checks and releases cache digest-verified Node downloads and Electron downloads; release Turbo task caches remain read-only. Scope selection uses shallow checkouts for release and explicit-commit requests because they need no diff.
+
 `main` accepts only pull requests (the `Protect main` ruleset: no direct push, force push, or deletion). CI's `Verification` aggregates the selected jobs, including Site on non-release runs: missing, skipped, failed, or cancelled required jobs cannot pass. `.github/workflows/gate.yml` supplies `All checks pass` for every pull request. It requires successful `Verification` and preserves failures from other checks. Rerun this gate after rerunning a failed check.
 
 ### Documentation-only changes
 
-Docs-only changes take a short path: the push hook and `ci.yml` run `pnpm check`, then `pnpm test:docs:packages`; CI also builds the showcase and documentation through Site. Documentation-reference and technical-debt-ledger script tests already ran in `check:scripts` and are not repeated. Standalone `pnpm test:docs` still includes the package tests and both script suites. When checking a historical commit, the push hook uses the commands that commit provides.
+Docs-only changes take a short path: the push hook and `ci.yml` run `pnpm check`, then `pnpm test:docs:packages`; CI also builds the showcase and documentation through Site. Documentation-reference and technical-debt-ledger script tests already ran in `check:scripts` and are not repeated. Documentation test files are grouped by package so each package starts its test runner once. Standalone `pnpm test:docs` still includes the package tests and both script suites. When checking a historical commit, the push hook uses the commands that commit provides.
 
 Files that count as documentation (the rules are in `scripts/lib/change-scope.mjs`):
 

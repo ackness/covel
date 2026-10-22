@@ -1,7 +1,9 @@
 import fs from "node:fs";
+import { execFileSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { assertNoPrivateConfig } from "./private-config.mjs";
+import { verifyTargetNativePackages } from "./before-pack.mjs";
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 const desktopRoot = path.resolve(__dirname, "..");
@@ -11,9 +13,9 @@ const projectRoot = path.resolve(desktopRoot, "../..");
 const releaseRoot = path.join(projectRoot, "release", "electron");
 const platform = process.argv[2];
 
-if (!platform || !["mac", "win"].includes(platform)) {
+if (!platform || !["mac", "win", "linux"].includes(platform)) {
   console.error(
-    "Usage: node apps/desktop/scripts/verify-release.mjs <mac|win>",
+    "Usage: node apps/desktop/scripts/verify-release.mjs <mac|win|linux>",
   );
   process.exit(1);
 }
@@ -75,28 +77,14 @@ function mustHaveBundledPlugins(resourcesDir) {
   if (pluginDirs.length === 0) {
     throw new Error(`No bundled plugins present under ${pluginsDir} `);
   }
-  const isPluginManifest = (f) => /^PLUGIN(\.[a-z-]+)?\.md$/i.test(f);
   for (const entry of pluginDirs) {
     const dir = path.join(pluginsDir, entry.name);
     if (!fs.existsSync(path.join(dir, "package.json"))) {
       throw new Error(`Bundled plugin ${entry.name} is missing package.json`);
     }
-    // Single-runtime layout: PLUGIN.md at the root.
-    // Multi-runtime layout: PLUGIN.md under runtimes/<sub>/ instead.
-    const hasRootManifest = directoryHasFile(dir, isPluginManifest);
-    let hasNestedManifest = false;
-    const runtimesDir = path.join(dir, "runtimes");
-    if (fs.existsSync(runtimesDir)) {
-      const subs = fs
-        .readdirSync(runtimesDir, { withFileTypes: true })
-        .filter((e) => e.isDirectory());
-      hasNestedManifest = subs.some((sub) =>
-        directoryHasFile(path.join(runtimesDir, sub.name), isPluginManifest),
-      );
-    }
-    if (!hasRootManifest && !hasNestedManifest) {
+    if (!fs.existsSync(path.join(dir, "PLUGIN.md"))) {
       throw new Error(
-        `Bundled plugin ${entry.name} is missing PLUGIN.md (looked at ${dir}/PLUGIN.md and ${dir}/runtimes/<sub>/PLUGIN.md — likely stripped by a too-broad electron-builder filter)`,
+        `Bundled plugin ${entry.name} is missing root PLUGIN.md: ${dir}`,
       );
     }
   }
@@ -120,27 +108,32 @@ function collectResourceDirs() {
     return [];
   }
 
-  if (platform === "mac") {
-    return fs
-      .readdirSync(releaseRoot, { withFileTypes: true })
-      .filter((entry) => entry.isDirectory() && entry.name.startsWith("mac"))
-      .map((entry) =>
-        path.join(
-          releaseRoot,
-          entry.name,
-          "Covel.app",
-          "Contents",
-          "Resources",
-        ),
-      )
-      .filter((dir) => fs.existsSync(dir));
-  }
-
+  const directoryPattern =
+    platform === "mac"
+      ? /^mac(?:-(x64|arm64))?$/
+      : new RegExp(`^${platform}(?:-(x64|arm64))?-unpacked$`);
   return fs
     .readdirSync(releaseRoot, { withFileTypes: true })
-    .filter((entry) => entry.isDirectory() && entry.name.includes("unpacked"))
-    .map((entry) => path.join(releaseRoot, entry.name, "resources"))
-    .filter((dir) => fs.existsSync(dir));
+    .filter((entry) => entry.isDirectory() && entry.name.startsWith(platform))
+    .map((entry) => {
+      const match = directoryPattern.exec(entry.name);
+      if (!match) {
+        throw new Error(
+          `Unrecognized unpacked ${platform} target directory: ${entry.name}`,
+        );
+      }
+      const resourcesDir =
+        platform === "mac"
+          ? path.join(
+              releaseRoot,
+              entry.name,
+              "Covel.app",
+              "Contents",
+              "Resources",
+            )
+          : path.join(releaseRoot, entry.name, "resources");
+      return { resourcesDir, arch: match[1] ?? "x64" };
+    });
 }
 
 const resourceDirs = collectResourceDirs();
@@ -151,7 +144,14 @@ if (resourceDirs.length === 0) {
   process.exit(1);
 }
 
-for (const resourcesDir of resourceDirs) {
+for (const { resourcesDir, arch } of resourceDirs) {
+  const runtimeTarget = {
+    platform: { mac: "darwin", win: "win32", linux: "linux" }[platform],
+    arch,
+  };
+  // verify-staging checks the selected resource set and actual runtime, not
+  // the build host's Node or the version claimed by the Electron npm package.
+  verifyTargetNativePackages(path.join(resourcesDir, "server"), runtimeTarget);
   assertNoPrivateConfig(path.join(resourcesDir, "server"));
   mustExist(resourcesDir, "server/src/index.js");
   mustExist(resourcesDir, "server/node_modules/tsx/dist/loader.mjs");
@@ -164,9 +164,27 @@ for (const resourcesDir of resourceDirs) {
   mustHaveBundledWorlds(resourcesDir);
   mustHaveBundledPlugins(resourcesDir);
   mustHaveBundledPrompts(resourcesDir);
+  // Check the copied resources, not the staging tree. Both config paths must
+  // boot under the actual pinned target binary, with no host runtime fallback.
+  for (const flags of [[], ["--no-llm-toml"]]) {
+    execFileSync(
+      process.execPath,
+      [
+        path.join(__dirname, "verify-staging.mjs"),
+        "--resources",
+        resourcesDir,
+        "--platform",
+        runtimeTarget.platform,
+        "--arch",
+        arch,
+        ...flags,
+      ],
+      { cwd: desktopRoot, stdio: "inherit", timeout: 90_000 },
+    );
+  }
 }
 
 console.log(`Verified ${platform} desktop release resources: `);
-for (const resourcesDir of resourceDirs) {
+for (const { resourcesDir } of resourceDirs) {
   console.log(`  ✓ ${resourcesDir} `);
 }

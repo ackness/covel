@@ -22,7 +22,7 @@ cp .env.llm.example .env.llm   # 填写 API Key
 pnpm dev                       # 同时启动前端与后端
 ```
 
-每个新克隆在 `pnpm install --frozen-lockfile` 后运行一次 `pnpm hooks:install`，安装本地 Git pre-push hook；已有 pre-commit hook 保持不变。如果已有其他 pre-push hook，安装命令会拒绝覆盖，需先自行处理冲突。pre-push hook 使用 `mise exec` 选择 `mise.toml` 指定的 Node 26.10.0、pnpm 12.10.1 和 actionlint，因此还需安装 mise 并运行 `mise install` 准备相应工具链。
+每个新克隆在 `pnpm install --frozen-lockfile` 后运行一次 `pnpm hooks:install`，安装本地 Git pre-push hook；已有 pre-commit hook 保持不变。如果已有其他 pre-push hook，安装命令会拒绝覆盖，需先自行处理冲突。pre-push hook 使用 `mise exec` 选择 `mise.toml` 指定的 Node 26.12.1、pnpm 12.10.1 和 actionlint，因此还需安装 mise 并运行 `mise install` 准备相应工具链。
 
 提交前检查由根目录 `.pre-commit-config.yaml` 定义；安装 pre-commit 后运行 `pre-commit install` 启用，或用 `pre-commit run --all-files` 手动检查。Oxlint 的版本固定在根 `devDependencies` 和 `pnpm-lock.yaml`，与 Prettier 一样通过 `mise exec` 使用项目工具链，不创建独立的 Node 环境。`scripts/run-with-project-node.mjs` 将选中的 Node 放在子进程 PATH 首位，确保 CLI shim 和后续命令也使用同一版本；更新配置后，已有 hook 会自动读取新配置，无需清理全局缓存。Oxlint 的规则在根目录 `.oxlintrc.jsonc`，关闭的规则各有一行说明；hook 检查改动的文件，`pnpm check` 检查整个仓库，两处都带 `--deny-warnings`，所以警告也会让检查失败。提交 hook 不做类型检查；类型检查在 `pnpm check`、pre-push hook 和 CI 里运行。
 
@@ -129,11 +129,15 @@ PR、main 和发布统一使用 [`ci.yml`](../.github/workflows/ci.yml)，不再
 
 完整路径保留并行 job：`verify` 运行除 Web、server、runtime 之外的套件；Web 独立运行；server 独占 runner，并带覆盖率运行 runtime 套件、执行其下限，runtime 在 CI 只运行一次；PostgreSQL 和 Chromium 各自运行。浏览器 job 先收集全部 E2E，发现失效导入，再运行 smoke 和 `pnpm e2e:extensions`，共用安装和 Chromium。Chromium 下载按 Playwright 版本缓存，系统依赖每次安装。
 
-非发布的完整检查运行 `pnpm build --cache=local:r --filter=!@covel/docs --filter=!@covel/site`，只读取 Turbo 缓存、不写回构建产物。官网和文档站由 CI 调用的 Site 任务构建一次；纯文档改动也必须通过该任务。独立的 `pnpm build` 仍构建全部目标。Turbo 本地缓存由 `turbo.json` 的 `cacheMaxAge`（7 天）和 `cacheMaxSize`（2GB）淘汰；CI 用 `TURBO_CACHE_MAX_AGE` / `TURBO_CACHE_MAX_SIZE` 收紧到 2 天、500MB，因为 actions/cache 每次整目录恢复再保存。
+非发布的完整检查运行 `pnpm build --cache=local:r --filter=!@covel/docs --filter=!@covel/site`，只读取 Turbo 缓存、不写回构建产物。官网和文档站由 CI 调用的 Site 任务用 Turbo 并行构建；纯文档改动也必须通过该任务。输入相同时恢复已有产物，仍须成功完成 Site 任务。独立的 `pnpm build` 仍构建全部目标。Turbo 本地缓存由 `turbo.json` 的 `cacheMaxAge`（7 天）和 `cacheMaxSize`（2GB）淘汰；CI 用 `TURBO_CACHE_MAX_AGE` / `TURBO_CACHE_MAX_SIZE` 收紧到 2 天、500MB，因为 actions/cache 每次整目录恢复再保存。
 
 main 的每次推送使用独立的 CI 并发组，避免后来的纯源码推送替换正在等待的文档部署。Site 的非 PR、仅构建运行也使用独立组，不会挤掉待部署运行；需要部署的运行仍按分支共用一组，保留原有 Site 的等待替换行为。PR 的新提交仍会取消旧运行。
 
+范围选择只有需要比较 PR 或 main 推送时获取完整 Git 历史；发布或显式 commit 请求直接选完整范围，浅检出即可。发布验证的 Turbo 任务缓存保持只读。CI 的桌面检查和平台打包任务另外缓存 Node 下载文件（`apps/desktop/node_modules/.cache/covel-node-runtime`），键包含 OS、架构、`node-runtime.json` 和 `mise.toml`；每次使用仍校验归档和二进制摘要。Electron 下载按 OS、架构和 lockfile 缓存，包括 CI 中实际启动 Electron 的测试。
+
 发布始终走完整测试路径并运行 `pnpm release:preflight`，不运行 Site 或 workspace Build；平台打包任务自行构建桌面产物。锁文件校验在临时元数据目录完成，不修改工作区依赖或执行安装脚本。发布调用声明嵌套工作流需要的 Pages/OIDC 权限上限，但 CI 将实际执行的发布验证任务限制为 `contents: read`，具有 Pages 写权限的 Site 任务被跳过。
+
+Windows 发布任务还启动实际 ZIP 和自解压 EXE，检查原生准备画面、可见应用窗口、世界选择与开局按钮，以及进程树退出。它需要未锁定的交互式 Windows 桌面；无法观察时失败，不能用 API 或渲染器截图替代。原生截图与日志独立上传，不进入发布资产。打包改动的 PR 必须注明实际验证的平台；添加工作流不等于已通过 Windows 验证。
 
 `Verification` 汇总所选任务，包括每次非发布 CI 的 Site；必需任务缺失、跳过、失败或取消都不能通过。`main` 只接受通过 PR 合入的改动；每个 PR 的 [`gate.yml`](../.github/workflows/gate.yml) 提供 `All checks pass`，要求 `Verification` 成功，同时保留其他检查的失败。重跑失败检查后，也要重跑这一项。
 
@@ -180,11 +184,19 @@ main 的每次推送使用独立的 CI 并发组，避免后来的纯源码推�
 
 记录实际覆盖的平台与流程；构建通过不等于完成该平台的交互试玩。Release notes 必须说明当前产物未签名，macOS 产物也未公证。
 
+桌面运行时或打包改动还要验证安装包自己的 Node：校验版本、架构和摘要，用它启动 SQLite 后端并确认 sqlite-vec 与内置插件可用。不能用宿主 Node 或内存后端代替；就绪、设置读写、恢复和退出都要检查。详见桌面打包指南。
+
 ### 官网部署
 
 [`site.yml`](../.github/workflows/site.yml) 由每次非发布 CI 调用，不再独立响应 push 或 PR。它构建官网 `apps/site` 和文档站 `apps/docs`（页面在 `docs/`），并把文档站放在官网的 `docs/` 路径下。PR 只构建，不上传发布产物或部署；`main` 改动站点、文档或相关根构建/安装配置时才发布到 GitHub Pages，无关源码改动只构建。部署选择与测试范围共用一次 git diff；无法确定变更时保守选择部署，但仍限于 `main` push。具体输入列在 `scripts/ci-scope.mjs`。Actions 页面手动运行 Site 默认部署，也可关闭 `deploy` 只验证构建。
 
-仓库设置 Settings > Pages 的 Source 需选 “GitHub Actions”。站点默认在 `https://ackness.github.io/covel/`；PR 使用 `/covel/`，其他构建按 Pages 设置读出路径并作为 `SITE_BASE` 传给 Vite，所以配置自定义域名后会自动改用 `/`。文档站读取同一个变量，路径为 `<SITE_BASE>docs/`。文档站构建时有失效链接会失败。`public/` 里的文件在代码中通过 `asset()`（`apps/site/src/links.ts`）引用，以便带上这一前缀。部署只消费同次 Site 运行生成的产物，不复用其他提交的构建缓存或跨工作流产物。
+仓库设置 Settings > Pages 的 Source 需选 “GitHub Actions”。站点默认在 `https://ackness.github.io/covel/`；PR 使用 `/covel/`，其他构建按 Pages 设置读出路径并作为 `SITE_BASE` 传给 Vite，所以配置自定义域名后会自动改用 `/`。文档站读取同一个变量，路径为 `<SITE_BASE>docs/`。文档站构建时有失效链接会失败。`public/` 里的文件在代码中通过 `asset()`（`apps/site/src/links.ts`）引用，以便带上这一前缀。Site 用下面的命令并行构建两个独立目标，再把 `apps/docs/dist` 复制到 `apps/site/dist/docs`；复制前删除旧 docs 子树。Turbo 分别保存两份输出，官网缓存排除合并进去的 docs 子树。
+
+```bash
+pnpm exec turbo build --filter=@covel/site --filter=@covel/docs --concurrency=2
+```
+
+Site 的独立 Turbo 缓存按内容复用：输入覆盖各自源码与配置、`docs/**`、`SITE_BASE`、`VITE_*`、构建环境文件、根安装配置、lockfile 和工具链。`docs/**` 只影响文档目标，无关框架源码不影响这两个目标。GitHub 的 PR 缓存仍限于 PR ref，部署不能恢复它们。部署只消费同次 Site 任务按当前输入构建或恢复、重新合并并上传的产物，不下载其他工作流的发布产物。
 
 ### 模型资料快照
 

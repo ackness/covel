@@ -32,6 +32,7 @@ import {
   writeDesktopConfigFileAtomic,
   type DesktopConfig,
 } from "@covel/shared/desktop-config/node";
+import { verifyBackendRuntime } from "./backend-runtime.js";
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 
@@ -143,6 +144,22 @@ export function resolveProjectRoot(): string {
     return path.resolve(__dirname, "../../..");
   }
   return path.join(process.resourcesPath!, "server");
+}
+
+/** Only the source-selected runtime shipped with this installation is eligible. */
+export async function resolveBackendRuntime(): Promise<string> {
+  try {
+    return await verifyBackendRuntime(process.resourcesPath, {
+      electronExecutable: process.execPath,
+      electronVersions: process.versions,
+      mainFile: fileURLToPath(import.meta.url),
+    });
+  } catch (cause) {
+    throw new Error(
+      `Bundled backend runtime is missing, damaged, unsafe, or incompatible. Reinstall Covel from a complete installer; a system runtime cannot replace this resource. ${cause instanceof Error ? cause.message : String(cause)}`,
+      { cause },
+    );
+  }
 }
 
 export function resolveServerEntry(): string {

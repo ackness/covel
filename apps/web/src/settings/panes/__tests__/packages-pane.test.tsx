@@ -11,6 +11,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PluginSummary } from "@covel/shared";
 import i18n from "@/i18n";
 import { PackagesPane } from "../PackagesPane.js";
+import {
+  getDesktopInfo,
+  hasElectronIpc,
+  reloadServerAndWait,
+} from "@/lib/desktop-bridge.js";
+import type * as DesktopBridge from "@/lib/desktop-bridge.js";
 
 const boot = vi.hoisted(() => vi.fn());
 vi.mock("@/stores/session-store.js", () => ({
@@ -41,10 +47,20 @@ const brokenPlugin: PluginSummary = {
 
 vi.mock("@/lib/confirm-channel.js", () => ({ requestConfirm: vi.fn() }));
 
+vi.mock("@/lib/desktop-bridge.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof DesktopBridge>()),
+  hasElectronIpc: vi.fn().mockReturnValue(false),
+  getDesktopInfo: vi.fn().mockResolvedValue(null),
+  reloadServerAndWait: vi.fn().mockResolvedValue(true),
+}));
+
 describe("PackagesPane installed plugin management", () => {
   beforeEach(async () => {
     boot.mockReset();
     vi.mocked(requestConfirm).mockReset().mockResolvedValue(true);
+    vi.mocked(hasElectronIpc).mockReset().mockReturnValue(false);
+    vi.mocked(getDesktopInfo).mockReset().mockResolvedValue(null);
+    vi.mocked(reloadServerAndWait).mockReset().mockResolvedValue(true);
     await i18n.changeLanguage("en-US");
   });
 
@@ -52,6 +68,81 @@ describe("PackagesPane installed plugin management", () => {
     cleanup();
     vi.unstubAllGlobals();
   });
+
+  it.each([true, false])(
+    "respects development server ownership after uninstall (isDev=%s)",
+    async (isDev) => {
+      vi.mocked(hasElectronIpc).mockReturnValue(true);
+      vi.mocked(getDesktopInfo).mockResolvedValue({
+        version: "test",
+        platform: "darwin",
+        isDev,
+        covelHome: "/home",
+        dataRoot: "/data",
+        logsDir: "/logs",
+        dbPath: "/data/covel.db",
+        configTomlPath: "/home/config.toml",
+        llmTomlPath: "/home/llm.toml",
+        keysEnvPath: "/home/keys.env",
+        serverPort: 9479,
+      });
+      let installedOnDisk = true;
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (url: string, init?: RequestInit) => {
+          if (url === "/api/install/worlds")
+            return Response.json({ items: [] });
+          if (url === "/api/install/plugins") {
+            return Response.json({
+              items: installedOnDisk
+                ? [
+                    {
+                      id: brokenPlugin.id,
+                      version: null,
+                      source: null,
+                      pendingUpdate: null,
+                    },
+                  ]
+                : [],
+            });
+          }
+          if (url === "/api/plugins") {
+            return Response.json({
+              items: installedOnDisk ? [brokenPlugin] : [],
+            });
+          }
+          if (
+            url === "/api/plugins/broken-plugin" &&
+            init?.method === "DELETE"
+          ) {
+            installedOnDisk = false;
+            return Response.json({
+              ok: true,
+              id: brokenPlugin.id,
+              restartRequired: true,
+            });
+          }
+          throw new Error(
+            `Unexpected request: ${init?.method ?? "GET"} ${url}`,
+          );
+        }),
+      );
+      render(<PackagesPane />);
+      await screen.findByText("Broken plugin");
+      fireEvent.click(screen.getByRole("button", { name: "Uninstall" }));
+      const restart = await screen.findByRole("button", {
+        name: i18n.t("settings.packages.restartNow"),
+      });
+      expect((restart as HTMLButtonElement).disabled).toBe(isDev);
+      if (isDev) {
+        expect(
+          screen.getByText(i18n.t("settings.desktopRestartDevHint")),
+        ).toBeTruthy();
+      }
+      fireEvent.click(restart);
+      expect(reloadServerAndWait).toHaveBeenCalledTimes(isDev ? 0 : 1);
+    },
+  );
 
   it("keeps usable community plugins listed with their load warnings", async () => {
     vi.stubGlobal(
