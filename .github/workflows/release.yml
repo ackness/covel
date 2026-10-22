@@ -172,10 +172,12 @@ jobs:
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "26.12.1"
-          cache: pnpm
+          # Requested refs must not populate the workflow ref's dependency cache.
+          package-manager-cache: false
 
-      - name: Cache Electron binaries
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      # Arbitrary requested code may change downloads; never save them afterward.
+      - name: Restore Electron binaries
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ~/Library/Caches/electron
@@ -184,13 +186,6 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
-
-      # Restored archives still pass the manifest's SHA-256 checks at staging.
-      - name: Cache verified Node artifacts
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: apps/desktop/node_modules/.cache/covel-node-runtime
-          key: node-runtime-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('apps/desktop/node-runtime.json', 'mise.toml') }}
 
       # verify-release has checked this exact commit. Keep the platform build
       # and packaged-resource checks on each target OS.
@@ -239,10 +234,12 @@ jobs:
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "26.12.1"
-          cache: pnpm
+          # Requested refs must not populate the workflow ref's dependency cache.
+          package-manager-cache: false
 
-      - name: Cache Electron binaries
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      # Arbitrary requested code may change downloads; never save them afterward.
+      - name: Restore Electron binaries
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ~\AppData\Local\electron\Cache
@@ -251,13 +248,6 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
-
-      # Restored archives still pass the manifest's SHA-256 checks at staging.
-      - name: Cache verified Node artifacts
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: apps/desktop/node_modules/.cache/covel-node-runtime
-          key: node-runtime-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('apps/desktop/node-runtime.json', 'mise.toml') }}
 
       - name: Test Windows package installation
         run: pnpm --filter @covel/server exec vitest run tests/api/install.test.ts

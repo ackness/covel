@@ -63,7 +63,8 @@ jobs:
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "26.12.1"
-          cache: pnpm
+          cache: ${{ inputs.commit == '' && 'pnpm' || '' }}
+          package-manager-cache: false
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -71,7 +72,18 @@ jobs:
       # GitHub keeps PR caches scoped to the PR ref; deployments cannot restore
       # them. Turbo validates task inputs, including SITE_BASE, after restore.
       - name: Cache site builds
+        if: ${{ inputs.commit == '' }}
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .turbo/cache
+          key: turbo-site-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml', 'mise.toml') }}-${{ inputs.commit || github.sha }}
+          restore-keys: |
+            turbo-site-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml', 'mise.toml') }}-
+
+      # An explicit source commit must not write into the caller ref's cache.
+      - name: Restore site builds
+        if: ${{ inputs.commit != '' }}
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: .turbo/cache
           key: turbo-site-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml', 'mise.toml') }}-${{ inputs.commit || github.sha }}

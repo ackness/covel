@@ -111,7 +111,9 @@ function collectResourceDirs() {
   const directoryPattern =
     platform === "mac"
       ? /^mac(?:-(x64|arm64))?$/
-      : new RegExp(`^${platform}(?:-(x64|arm64))?-unpacked$`);
+      : platform === "win"
+        ? /^win(?:-(x64|arm64))?-unpacked$/
+        : /^linux(?:-(x64|arm64))?-unpacked$/;
   return fs
     .readdirSync(releaseRoot, { withFileTypes: true })
     .filter((entry) => entry.isDirectory() && entry.name.startsWith(platform))

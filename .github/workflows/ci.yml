@@ -120,23 +120,38 @@ jobs:
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "26.12.1"
-          cache: pnpm
+          cache: ${{ !inputs.release && inputs.commit == '' && 'pnpm' || '' }}
+          package-manager-cache: false
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # Download caches contain upstream artifacts only. Node staging checks
-      # the pinned archive and extracted binary hashes on every use.
+      # Only normal PR/main runs save caches. Requested commits may change any
+      # downloaded file; digest checks at staging do not make saving it safe.
       - name: Cache verified Node artifacts
-        if: ${{ needs.scope.outputs.scope != 'docs' || inputs.release }}
+        if: ${{ !inputs.release && inputs.commit == '' && needs.scope.outputs.scope != 'docs' }}
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: apps/desktop/node_modules/.cache/covel-node-runtime
           key: node-runtime-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('apps/desktop/node-runtime.json', 'mise.toml') }}
 
+      - name: Restore verified Node artifacts
+        if: ${{ inputs.release || inputs.commit != '' }}
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: apps/desktop/node_modules/.cache/covel-node-runtime
+          key: node-runtime-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('apps/desktop/node-runtime.json', 'mise.toml') }}
+
       - name: Cache Electron binaries
-        if: ${{ needs.scope.outputs.scope != 'docs' || inputs.release }}
+        if: ${{ !inputs.release && inputs.commit == '' && needs.scope.outputs.scope != 'docs' }}
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/electron
+          key: ${{ runner.os }}-${{ runner.arch }}-electron-${{ hashFiles('pnpm-lock.yaml') }}
+
+      - name: Restore Electron binaries
+        if: ${{ inputs.release || inputs.commit != '' }}
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/electron
           key: ${{ runner.os }}-${{ runner.arch }}-electron-${{ hashFiles('pnpm-lock.yaml') }}
@@ -146,7 +161,7 @@ jobs:
       # here instead of re-running them. restore-keys falls back to the most
       # recent cache on this OS when the exact SHA has no entry.
       - name: Cache turbo
-        if: ${{ !inputs.release }}
+        if: ${{ !inputs.release && inputs.commit == '' }}
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: .turbo/cache
@@ -156,7 +171,7 @@ jobs:
             turbo-${{ runner.os }}-
 
       - name: Restore CI task cache
-        if: ${{ inputs.release }}
+        if: ${{ inputs.release || inputs.commit != '' }}
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: .turbo/cache
@@ -214,14 +229,15 @@ jobs:
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "26.12.1"
-          cache: pnpm
+          cache: ${{ !inputs.release && inputs.commit == '' && 'pnpm' || '' }}
+          package-manager-cache: false
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
       # A separate key namespace keeps this cache to the web test graph.
       - name: Cache turbo
-        if: ${{ !inputs.release }}
+        if: ${{ !inputs.release && inputs.commit == '' }}
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: .turbo/cache
@@ -231,7 +247,7 @@ jobs:
             turbo-web-${{ runner.os }}-
 
       - name: Restore CI task cache
-        if: ${{ inputs.release }}
+        if: ${{ inputs.release || inputs.commit != '' }}
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: .turbo/cache
@@ -267,7 +283,8 @@ jobs:
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "26.12.1"
-          cache: pnpm
+          cache: ${{ !inputs.release && inputs.commit == '' && 'pnpm' || '' }}
+          package-manager-cache: false
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -327,7 +344,8 @@ jobs:
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "26.12.1"
-          cache: pnpm
+          cache: ${{ !inputs.release && inputs.commit == '' && 'pnpm' || '' }}
+          package-manager-cache: false
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -356,7 +374,8 @@ jobs:
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "26.12.1"
-          cache: pnpm
+          cache: ${{ !inputs.release && inputs.commit == '' && 'pnpm' || '' }}
+          package-manager-cache: false
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -376,18 +395,27 @@ jobs:
           echo "image=${ImageOS:-unknown}" >> "$GITHUB_OUTPUT"
 
       - name: Cache Chromium
+        if: ${{ !inputs.release && inputs.commit == '' }}
         id: chromium-cache
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.image }}-${{ steps.playwright.outputs.version }}
 
+      - name: Restore Chromium
+        if: ${{ inputs.release || inputs.commit != '' }}
+        id: chromium-restore
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.image }}-${{ steps.playwright.outputs.version }}
+
       - name: Install Chromium
-        if: steps.chromium-cache.outputs.cache-hit != 'true'
+        if: steps.chromium-cache.outputs.cache-hit != 'true' && steps.chromium-restore.outputs.cache-hit != 'true'
         run: pnpm exec playwright install --with-deps chromium
 
       - name: Install Chromium system packages
-        if: steps.chromium-cache.outputs.cache-hit == 'true'
+        if: steps.chromium-cache.outputs.cache-hit == 'true' || steps.chromium-restore.outputs.cache-hit == 'true'
         run: pnpm exec playwright install-deps chromium
 
       - name: Test browser smoke

@@ -139,14 +139,15 @@ test("release and immutable reusable-workflow requests always run full suites", 
   );
 });
 
-test("CI keeps required Site builds, PR isolation and release task caches read-only", () => {
-  const workflow = (name) =>
-    parse(
-      readFileSync(
-        new URL(`../../.github/workflows/${name}.yml`, import.meta.url),
-        "utf8",
-      ),
-    );
+const workflow = (name) =>
+  parse(
+    readFileSync(
+      new URL(`../../.github/workflows/${name}.yml`, import.meta.url),
+      "utf8",
+    ),
+  );
+
+test("CI keeps required Site builds and scoped download keys", () => {
   const ci = workflow("ci");
   const site = workflow("site");
   const release = workflow("release");
@@ -185,39 +186,124 @@ test("CI keeps required Site builds, PR isolation and release task caches read-o
       .if,
     site.jobs.deploy.if,
   );
-  for (const name of ["verify", "web"]) {
-    const steps = ci.jobs[name].steps;
-    assert.equal(
-      steps.find((step) => step.name === "Cache turbo").if,
-      "${{ !inputs.release }}",
-    );
-    const restore = steps.find((step) => step.name === "Restore CI task cache");
-    assert.equal(restore.if, "${{ inputs.release }}");
-    assert.match(restore.uses, /^actions\/cache\/restore@/);
-  }
+  const node = ci.jobs.verify.steps.find(
+    (step) => step.name === "Cache verified Node artifacts",
+  );
+  assert.equal(
+    node.with.path,
+    "apps/desktop/node_modules/.cache/covel-node-runtime",
+  );
+  assert.equal(
+    node.with.key,
+    "node-runtime-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('apps/desktop/node-runtime.json', 'mise.toml') }}",
+  );
+  assert.equal(node.with["restore-keys"], undefined);
   for (const job of [
     ci.jobs.verify,
     release.jobs["build-electron"],
     release.jobs["build-electron-win"],
   ]) {
-    const cache = job.steps.find(
-      (step) => step.name === "Cache verified Node artifacts",
-    );
-    assert.equal(
-      cache.with.path,
-      "apps/desktop/node_modules/.cache/covel-node-runtime",
-    );
-    assert.equal(
-      cache.with.key,
-      "node-runtime-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('apps/desktop/node-runtime.json', 'mise.toml') }}",
-    );
-    assert.equal(cache.with["restore-keys"], undefined);
-    const electron = job.steps.find(
-      (step) => step.name === "Cache Electron binaries",
+    const electron = job.steps.find((step) =>
+      /^(Cache|Restore) Electron binaries$/.test(step.name),
     );
     assert.match(electron.with.key, /runner.arch/);
     assert.match(electron.with.key, /pnpm-lock.yaml/);
   }
+});
+
+test("arbitrary release and explicit-commit sources cannot save workflow caches", () => {
+  const ci = workflow("ci");
+  const site = workflow("site");
+  const release = workflow("release");
+  const normal = "${{ !inputs.release && inputs.commit == '' }}";
+  const requested = "${{ inputs.release || inputs.commit != '' }}";
+  const writesCache = (step) => /^actions\/cache(?:\/save)?@/.test(step.uses);
+  // Cover every writer, including dependency caches with implicit post actions.
+  for (const job of Object.values(ci.jobs)) {
+    for (const step of job.steps ?? []) {
+      if (writesCache(step)) {
+        assert.ok(
+          [
+            normal,
+            "${{ !inputs.release && inputs.commit == '' && needs.scope.outputs.scope != 'docs' }}",
+          ].includes(step.if),
+          `${step.name} must exclude both release and explicit-commit runs`,
+        );
+      }
+      if (step.uses?.startsWith("actions/setup-node@")) {
+        assert.equal(
+          step.with.cache,
+          "${{ !inputs.release && inputs.commit == '' && 'pnpm' || '' }}",
+        );
+        assert.equal(step.with["package-manager-cache"], false);
+      }
+    }
+  }
+  for (const [jobName, saveName, restoreName] of [
+    [
+      "verify",
+      "Cache verified Node artifacts",
+      "Restore verified Node artifacts",
+    ],
+    ["verify", "Cache Electron binaries", "Restore Electron binaries"],
+    ["verify", "Cache turbo", "Restore CI task cache"],
+    ["web", "Cache turbo", "Restore CI task cache"],
+    ["browser", "Cache Chromium", "Restore Chromium"],
+  ]) {
+    const steps = ci.jobs[jobName].steps;
+    const save = steps.find((step) => step.name === saveName);
+    const restore = steps.find((step) => step.name === restoreName);
+    assert.equal(restore.if, requested);
+    assert.match(restore.uses, /^actions\/cache\/restore@/);
+    assert.deepEqual(restore.with, {
+      ...save.with,
+      key: save.with.key.replace("${{ github.sha }}", "${{ inputs.commit }}"),
+    });
+  }
+  const browser = ci.jobs.browser.steps;
+  assert.equal(
+    browser.find((step) => step.name === "Install Chromium").if,
+    "steps.chromium-cache.outputs.cache-hit != 'true' && steps.chromium-restore.outputs.cache-hit != 'true'",
+  );
+  assert.equal(
+    browser.find((step) => step.name === "Install Chromium system packages").if,
+    "steps.chromium-cache.outputs.cache-hit == 'true' || steps.chromium-restore.outputs.cache-hit == 'true'",
+  );
+  for (const job of Object.values(release.jobs)) {
+    for (const step of job.steps ?? []) {
+      assert.equal(writesCache(step), false, step.name);
+      if (step.uses?.startsWith("actions/setup-node@")) {
+        assert.equal(step.with.cache, undefined);
+        assert.equal(step.with["package-manager-cache"], false);
+      }
+      assert.ok(
+        !step.with?.path?.includes("covel-node-runtime"),
+        "release platforms have no trusted producer for a Node download cache",
+      );
+    }
+  }
+  // CI forwards explicit commits even when release=false, reaching Site under
+  // the caller's ref. Those builds must also leave that ref's caches untouched.
+  assert.equal(ci.jobs.site.with.commit, "${{ inputs.commit }}");
+  for (const step of site.jobs.build.steps) {
+    if (writesCache(step)) assert.equal(step.if, "${{ inputs.commit == '' }}");
+    if (step.uses?.startsWith("actions/setup-node@")) {
+      assert.equal(
+        step.with.cache,
+        "${{ inputs.commit == '' && 'pnpm' || '' }}",
+      );
+      assert.equal(step.with["package-manager-cache"], false);
+    }
+  }
+  const siteSave = site.jobs.build.steps.find(
+    (step) => step.name === "Cache site builds",
+  );
+  const siteRestore = site.jobs.build.steps.find(
+    (step) => step.name === "Restore site builds",
+  );
+  assert.equal(siteRestore.if, "${{ inputs.commit != '' }}");
+  assert.match(siteRestore.uses, /^actions\/cache\/restore@/);
+  assert.deepEqual(siteRestore.with, siteSave.with);
 });
 
 test("deployment selection includes site paths and shared build/install controls", (t) => {

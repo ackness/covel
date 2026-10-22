@@ -133,7 +133,9 @@ PR、main 和发布统一使用 [`ci.yml`](../.github/workflows/ci.yml)，不再
 
 main 的每次推送使用独立的 CI 并发组，避免后来的纯源码推送替换正在等待的文档部署。Site 的非 PR、仅构建运行也使用独立组，不会挤掉待部署运行；需要部署的运行仍按分支共用一组，保留原有 Site 的等待替换行为。PR 的新提交仍会取消旧运行。
 
-范围选择只有需要比较 PR 或 main 推送时获取完整 Git 历史；发布或显式 commit 请求直接选完整范围，浅检出即可。发布验证的 Turbo 任务缓存保持只读。CI 的桌面检查和平台打包任务另外缓存 Node 下载文件（`apps/desktop/node_modules/.cache/covel-node-runtime`），键包含 OS、架构、`node-runtime.json` 和 `mise.toml`；每次使用仍校验归档和二进制摘要。Electron 下载按 OS、架构和 lockfile 缓存，包括 CI 中实际启动 Electron 的测试。
+范围选择只有需要比较 PR 或 main 推送时获取完整 Git 历史；发布或显式 commit 请求直接选完整范围，浅检出即可。普通 PR/main 运行保存缓存，PR 缓存仍受 GitHub ref 隔离。发布和显式 commit 可能执行任意源码，不能把执行后产生的文件保存到工作流 ref 的缓存：Turbo、Electron、Chromium 和 CI 的 Node 下载仅恢复，setup-node 的 pnpm 缓存关闭。显式 commit 也会传给非发布 Site，其任务缓存同样仅恢复。
+
+CI 桌面检查的 Node 下载缓存（`apps/desktop/node_modules/.cache/covel-node-runtime`）按 OS、架构、`node-runtime.json` 和 `mise.toml` 区分；每次使用仍校验归档和二进制摘要。平台发布任务每次下载并校验 Node，不设 GitHub 缓存，因为 macOS/Windows 键没有受信任的常规 CI 任务写入。Electron 下载按 OS、架构和 lockfile 区分；发布只能复用已有缓存，未命中时重新下载且不保存。
 
 发布始终走完整测试路径并运行 `pnpm release:preflight`，不运行 Site 或 workspace Build；平台打包任务自行构建桌面产物。锁文件校验在临时元数据目录完成，不修改工作区依赖或执行安装脚本。发布调用声明嵌套工作流需要的 Pages/OIDC 权限上限，但 CI 将实际执行的发布验证任务限制为 `contents: read`，具有 Pages 写权限的 Site 任务被跳过。
 

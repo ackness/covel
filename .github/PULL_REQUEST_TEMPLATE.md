@@ -31,8 +31,9 @@
      Non-release CI also requires one Site/docs build, including on docs-only changes;
      the other build excludes those targets. Site uses parallel Turbo tasks with content-addressed
      outputs; cache changes need hit/miss and input-invalidation evidence (docs, SITE_BASE, config).
-     PR cache isolation and restore-only release task caches must remain intact.
-     Releases retain their platform builds; Node download caches are verified again before staging.
+     PR cache isolation must remain intact. Release/explicit-commit runs only restore caches
+     and disable setup-node's pnpm cache, including explicit-commit Site builds.
+     Platform releases download and verify Node afresh; CI rechecks cached Node digests before staging.
      Missing or skipped required jobs cannot pass Verification or All checks pass.
      Tests reading files outside their package must declare those Turbo inputs.
      只勾选真正跑过的项，没跑的写明原因。pre-push hook 在干净检出里跑 `pnpm check`，
@@ -40,8 +41,8 @@
      CI 统一负责验证：纯文档跑静态与文档检查，源码、未知范围和发布跑完整套件。
      非发布 CI（纯文档也包括）必须通过一次官网/文档站构建，其余构建排除这两个目标；
      Site 用 Turbo 并行构建并按内容复用产物；缓存改动需记录命中、未命中及输入失效验证（文档、SITE_BASE、配置）。
-     PR 缓存隔离和发布任务缓存只读规则保持不变。
-     发布仍由平台打包任务构建；Node 下载缓存进入 staging 前重新校验。
+     PR 缓存隔离保持不变。发布和显式 commit 只恢复缓存，并关闭 setup-node 的 pnpm 缓存，
+     包括显式 commit 的 Site 构建。平台发布重新下载并校验 Node；CI 的 Node 缓存进入 staging 前重新校验。
      必需任务缺失或跳过时，Verification 和 All checks pass 不得通过。
      测试读取包外文件时，必须声明对应的 Turbo 输入。 -->
 
