@@ -1,7 +1,7 @@
 /**
- * Preload script — runs in an isolated world with access to both Node APIs
- * and the DOM. It is the single bridge between the main process and the
- * web app running in the sandboxed renderer.
+ * Preload script — runs in an isolated world with the DOM and Electron's
+ * sandbox API subset. Electron 45 provides no Node module shims or Buffer here.
+ * It is the single bridge between main and the sandboxed web app.
  *
  * Exposes a typed `window.covelIpc` surface via contextBridge. The renderer
  * can only call the allowlisted channels defined below.

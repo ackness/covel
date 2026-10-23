@@ -11,8 +11,7 @@ import {
   verifyBackendRuntime,
   verifyRuntimeSelection,
 } from "../src/backend-runtime.ts";
-import { NODE_VERSION, getNodeRuntimeTarget } from "../src/node-runtime.ts";
-import { stageNodeRuntime } from "./node-runtime.mjs";
+import { assertDesktopTarget } from "../src/runtime-integrity.ts";
 
 export {
   BACKEND_RUNTIME_MODE,
@@ -58,7 +57,7 @@ export function backendRuntimeStagingDirectory(
   desktopRoot,
   { platform, arch },
 ) {
-  getNodeRuntimeTarget(platform, arch);
+  assertDesktopTarget(platform, arch);
   const os = { darwin: "mac", win32: "win", linux: "linux" }[platform];
   return path.join(desktopRoot, "staging", "backend-runtime", `${os}-${arch}`);
 }
@@ -66,15 +65,9 @@ export function backendRuntimeStagingDirectory(
 export async function stageBackendRuntime(desktopRoot, target, executableName) {
   const selection = verifyRuntimeBundleSelection(desktopRoot);
   const resources = backendRuntimeStagingDirectory(desktopRoot, target);
-  if (BACKEND_RUNTIME_MODE === "electron") {
-    // A fresh resource set is essential: do not copy a previous standalone
-    // runtime when switching modes, even when packaging restored staging.
-    fs.rmSync(resources, { recursive: true, force: true });
-  }
+  // Never carry obsolete runtime resources into a fresh package.
+  fs.rmSync(resources, { recursive: true, force: true });
   fs.mkdirSync(resources, { recursive: true });
-  if (BACKEND_RUNTIME_MODE === "standalone") {
-    await stageNodeRuntime(path.join(resources, "node"), target);
-  }
   fs.writeFileSync(
     path.join(resources, "runtime-selection.json"),
     `${JSON.stringify({ ...selection, ...target, executableName }, null, 2)}\n`,
@@ -92,9 +85,7 @@ export async function probeBackendRuntime(
   target,
   inherited = process.env,
 ) {
-  if (BACKEND_RUNTIME_MODE === "electron") {
-    await assertElectronRunAsNodeCapability(executable, target.platform);
-  }
+  await assertElectronRunAsNodeCapability(executable, target.platform);
   const env = backendRuntimeEnvironment(inherited);
   const versions = JSON.parse(
     execFileSync(
@@ -112,12 +103,7 @@ export async function probeBackendRuntime(
       `Backend runtime target mismatch: ${JSON.stringify(versions)}`,
     );
   }
-  if (BACKEND_RUNTIME_MODE === "electron") assertSafeElectronVersions(versions);
-  else if (versions.node !== NODE_VERSION || versions.electron !== undefined) {
-    throw new Error(
-      `Unexpected standalone Node runtime versions: ${JSON.stringify(versions)}`,
-    );
-  }
+  assertSafeElectronVersions(versions);
   return versions;
 }
 

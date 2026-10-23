@@ -5,7 +5,9 @@
  *   1. Build the web frontend (pnpm --filter @covel/web build)
  *   2. Bundle main process with esbuild (TS → single ESM file)
  *   3. Copy web-dist and precompile server/workspace modules in staging
- *   4. Run electron-builder to create distributable
+ *   4. Verify the staged backend with and without configuration
+ *
+ * Packaging runs separately through the pack/dist scripts or release workflow.
  */
 
 import { execFileSync, execSync } from "node:child_process";
@@ -35,14 +37,12 @@ const __dirname = fileURLToPath(new URL(".", import.meta.url));
 const desktopRoot = path.resolve(__dirname, "..");
 const projectRoot = path.resolve(desktopRoot, "../..");
 
-// Refuse an unsafe switch-back before building any backend artifacts. Cross
-// targets are gated again by their actual packaged main process at launch.
-if (BACKEND_RUNTIME_MODE === "electron") {
-  await probeBackendRuntime(ensureElectronBinary(), {
-    platform: process.platform,
-    arch: process.arch,
-  });
-}
+// Check the actual runtime before building backend artifacts. Cross targets
+// are checked again by their packaged main process at launch.
+await probeBackendRuntime(ensureElectronBinary(), {
+  platform: process.platform,
+  arch: process.arch,
+});
 
 console.log("=== Covel Desktop Build ===\n");
 
@@ -331,21 +331,20 @@ verifyStagedServerRuntime();
 console.log("  ✓ server runtime verified");
 console.log("  ✓ server resources staged");
 
-// Each target owns its complete runtime resource set; Electron mode neither
-// acquires nor packages the standalone Node binary.
+// Bind this target's runtime metadata to the freshly bundled main process.
 await stageBackendRuntime(desktopRoot, {
   platform: process.platform,
   arch: process.arch,
 });
 console.log(
-  `\n[3b/4] Smoke-testing ${BACKEND_RUNTIME_MODE} backend + SQLite (with synthetic config)...`,
+  `\n[4/4] Smoke-testing ${BACKEND_RUNTIME_MODE} backend + SQLite (with synthetic config)...`,
 );
 execFileSync(process.execPath, [path.join(__dirname, "verify-staging.mjs")], {
   cwd: desktopRoot,
   stdio: "inherit",
 });
 console.log(
-  `\n[3b/4] Smoke-testing ${BACKEND_RUNTIME_MODE} backend + SQLite (without llm.toml)...`,
+  `\n[4/4] Smoke-testing ${BACKEND_RUNTIME_MODE} backend + SQLite (without llm.toml)...`,
 );
 execFileSync(
   process.execPath,
@@ -353,9 +352,6 @@ execFileSync(
   { cwd: desktopRoot, stdio: "inherit" },
 );
 
-// Step 4: electron-builder
-console.log("\n[4/4] Packaging with electron-builder...");
-console.log("  Run: pnpm --filter @covel/desktop dist");
 console.log("\n=== Build preparation complete ===");
 console.log(`\nStaging directory: ${stagingDir}`);
 console.log("To create distributable:");

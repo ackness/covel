@@ -122,7 +122,7 @@ Requests the framework makes itself follow no redirect: core provider requests, 
 
 The reason is that no check looks at a `Location`: the string check sees only the first URL, an IP literal skips the pinned DNS lookup, and in a proxy mode the proxy resolves the next hop. Following a `302 Location: http://169.254.169.254/` would reach a cloud metadata service.
 
-The plugin `fetchWithRetry` does not follow redirects either; `ctx.media.ingestUrl` follows them itself and runs the string check again on every hop.
+The plugin `fetchWithRetry` does not follow redirects either; `ctx.media.ingestUrl` follows them itself and runs the string check again on every hop. The desktop shell's loopback HTTP requests to the sidecar explicitly use `redirect: "error"`, refusing redirects to other destinations.
 
 ### Response size ceiling
 
@@ -151,11 +151,13 @@ Native decoder and TLS security fixes come from the runtime; the response-size l
 
 Security updates may bypass the normal seven-day dependency delay, but `minimumReleaseAgeExclude` lists only specific reviewed versions. Transitive Undici dependencies are updated within their respective major lines rather than forcing every consumer onto one major.
 
-The desktop backend ships with standalone Node 26.12.1 by default. PostgreSQL TLS, plugin code, and native networking APIs run in that patched runtime; players do not need to install Node. The build downloads a fixed release from the official Node distribution site, verifies it against committed SHA256 checksums before extraction, and includes its license. A missing runtime or failed verification stops the build; there is no host-Node or memory-database fallback.
+Desktop pins Electron 45.0.0 and always starts the installer's own executable with RunAsNode for the backend. Plugins and databases still execute in a separate sidecar child process, with startup and shutdown managed through private IPC. Renderer windows disable Node integration. The installer no longer includes an extra Node runtime, and players do not need to install Node.
 
-Electron 44.9.3 still runs the desktop shell and adds the compromised-intermediate public-key blocklist to its own Node TLS and Chromium. Its embedded Node 24.22.0 is not equivalent to the Node 24.22.1 security release; a separate sidecar does not patch Electron itself. The shell's HTTP client explicitly uses patched npm Undici, windows still disable Node integration, and plugins and databases do not run in the shell process. Any future native networking added to the shell must still account for Electron's security fixes.
+Electron 45 includes the public-key blocklist patch for the compromised eMudhra intermediate certificates. It links Chromium's Brotli; its [Brotli revision `cfa184a`](https://github.com/google/brotli/commit/cfa184a997ac19454d5a3ae97f6d600aac2445a6) contains [decoder fix `0ed4268`](https://github.com/google/brotli/commit/0ed4268a4401abcb4472096340477cf4af7d1a2b). These verified patches do not establish that embedded Node 24.22.0 contains every security fix in Node 24.22.1.
 
-Builders may explicitly select `electron` mode in `node-runtime.json`, but its actual embedded Node must be stable 24.x ≥24.22.1 or 26.x ≥26.12.1, and Electron itself must be stable with RunAsNode enabled. The current version cannot switch back. Every managed startup, restart, and recovery checks the selection and actual runtime. The main digest is bound to target resources, and release verification reads the actual ASAR entry point. Unknown, old, or mixed resources fail without environment overrides. Child environments remove `NODE_OPTIONS`, `NODE_PATH`, and inherited Electron mode controls while retaining legitimate CA, proxy, and key settings. See [selecting the backend runtime](./desktop-packaging.md#select-the-backend-runtime).
+Core HTTP paths use npm Undici 8.12.2, URL normalization, and `dns.lookup`, reducing use of affected paths in older Node networking implementations. These measures do not replace native TLS/DNS fixes. Plugins that call native networking APIs directly, and specialized direct PostgreSQL configurations outside the core HTTP path, retain residual risk. Recheck actual dependencies and patches when adding network paths or upgrading Electron. Source and Docker deployments continue to use Node 26.12.1.
+
+Every managed startup, restart, and recovery checks target and actual Electron/Node versions, platform and architecture, and the RunAsNode fuse. The main digest is bound to target resources, and release verification reads the actual ASAR entry point. Mismatched or mixed resources fail without environment overrides or a host-Node fallback. Child environments remove `NODE_OPTIONS`, `NODE_PATH`, and inherited Electron mode controls while retaining legitimate CA, proxy, and key settings. See [backend runtime](./desktop-packaging.md#backend-runtime).
 
 ### Desktop proxy modes
 
@@ -225,7 +227,7 @@ File permissions and the browser's same-origin policy keep out other system user
 
 ## Desktop windows
 
-Desktop windows enable `contextIsolation` and `sandbox`, disable `nodeIntegration`, and do not enable Node integration in subframes. `preload.ts` exposes `window.covelIpc` through `contextBridge`: app metadata, plus `invoke` and `on` restricted to allowlisted channels. Subscription callbacks do not receive the Electron event object.
+Desktop windows enable `contextIsolation` and `sandbox`, disable `nodeIntegration`, and do not enable Node integration in subframes. Electron 45's sandboxed preload provides no Node module shims or `Buffer`; the bridge uses only Electron's sandbox APIs. `preload.ts` exposes `window.covelIpc` through `contextBridge`: app metadata, plus `invoke` and `on` restricted to allowlisted channels. Subscription callbacks do not receive the Electron event object.
 
 Sensitive IPC, including plaintext keys, the REST token, and settings reads and writes, requires the sender to be its `webContents.mainFrame` and its URL to match the main window's committed loopback HTTP origin. Same-origin child frames are rejected too. Recovery channels (retry startup and open the logs, config, or data directory) also require the main frame, but accept the current splash document generated by the main process. The splash cannot read keys or the REST token.
 

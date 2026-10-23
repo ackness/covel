@@ -186,18 +186,13 @@ test("CI keeps required Site builds and scoped download keys", () => {
       .if,
     site.jobs.deploy.if,
   );
-  const node = ci.jobs.verify.steps.find(
-    (step) => step.name === "Cache verified Node artifacts",
-  );
   assert.equal(
-    node.with.path,
-    "apps/desktop/node_modules/.cache/covel-node-runtime",
+    ci.jobs.verify.steps.some((step) =>
+      step.with?.path?.includes("covel-node-runtime"),
+    ),
+    false,
+    "desktop uses Electron and must not cache a second Node runtime",
   );
-  assert.equal(
-    node.with.key,
-    "node-runtime-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('apps/desktop/node-runtime.json', 'mise.toml') }}",
-  );
-  assert.equal(node.with["restore-keys"], undefined);
   for (const job of [
     ci.jobs.verify,
     release.jobs["build-electron"],
@@ -240,11 +235,6 @@ test("arbitrary release and explicit-commit sources cannot save workflow caches"
     }
   }
   for (const [jobName, saveName, restoreName] of [
-    [
-      "verify",
-      "Cache verified Node artifacts",
-      "Restore verified Node artifacts",
-    ],
     ["verify", "Cache Electron binaries", "Restore Electron binaries"],
     ["verify", "Cache turbo", "Restore CI task cache"],
     ["web", "Cache turbo", "Restore CI task cache"],

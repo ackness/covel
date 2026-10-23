@@ -80,7 +80,7 @@ Covel 是模块化单体：一个仓库、一起发布，内部分成若干包�
 
 这些桌面壳依赖在 `apps/desktop/package.json` 中列为开发依赖，因为它们已进入 main/preload bundle；安装包不再另带一份桌面 `node_modules`。服务端拥有独立、完整的运行依赖，包含加载社区 TypeScript 插件需要的 `tsx` / esbuild 和公开 SDK。裁剪边界见[桌面打包](./desktop-packaging.md#staging-目录的规则)。
 
-桌面后端的构建时选择在 `apps/desktop/node-runtime.json`。默认使用 `resources/node/` 中经固定摘要校验的独立 Node，与源码服务端的安全版本一致；可显式改用通过安全门槛的随包 Electron。两种模式都不依赖玩家安装 Node，不在启动时下载或回退，启动、就绪、系统代理和关闭仍走原有子进程 IPC。切换步骤和验收要求见[桌面打包](./desktop-packaging.md#选择后端运行时)。`@electron/asar` 只作为桌面的开发依赖，用来校验产物内的主进程文件，不进入玩家运行时。
+桌面后端始终使用安装包自身的 Electron 可执行文件，以 RunAsNode 在独立子进程中运行；没有独立 Node 下载器、额外运行时或模式选择配置。玩家不需要安装 Node，启动、就绪、系统代理和关闭仍走原有子进程 IPC。构建与启动校验以及平台验收要求见[桌面打包](./desktop-packaging.md#后端运行时)，内嵌 Node 的安全边界见[安全](./security.md#运行时和-http-客户端更新)。`@electron/asar` 只作为桌面的开发依赖，用来校验产物内的主进程文件，不进入玩家运行时。
 
 ### 部署形态只在宿主里决定
 

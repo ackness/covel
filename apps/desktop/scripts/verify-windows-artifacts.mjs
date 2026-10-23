@@ -7,6 +7,8 @@ import {
   mkdir,
   mkdtemp,
   readFile,
+  readdir,
+  stat,
   rm,
   writeFile,
 } from "node:fs/promises";
@@ -53,6 +55,16 @@ async function freePort() {
 
 async function readJson(file) {
   return JSON.parse(await readFile(file, "utf8"));
+}
+
+async function directoryBytes(directory) {
+  let bytes = 0;
+  for (const entry of await readdir(directory, { withFileTypes: true })) {
+    const file = path.join(directory, entry.name);
+    if (entry.isDirectory()) bytes += await directoryBytes(file);
+    else if (entry.isFile()) bytes += (await stat(file)).size;
+  }
+  return bytes;
 }
 
 async function runArtifact(kind, artifact, version, evidence) {
@@ -104,6 +116,61 @@ async function runArtifact(kind, artifact, version, evidence) {
       executable = path.join(extracted, "Covel.exe");
       await access(executable);
       await access(path.join(extracted, "resources/app.asar"));
+      // Verify the shipped ZIP after extraction into a Unicode/spaced path,
+      // including RunAsNode, SQLite/vec and plugin loading under Covel.exe.
+      for (const flags of [[], ["--no-llm-toml"]]) {
+        let result;
+        try {
+          result = await exec(
+            process.execPath,
+            [
+              path.join(desktop, "scripts/verify-staging.mjs"),
+              "--resources",
+              path.join(extracted, "resources"),
+              "--platform",
+              "win32",
+              "--arch",
+              "x64",
+              ...flags,
+            ],
+            { timeout: 90_000, windowsHide: true, maxBuffer: 4 * 1024 * 1024 },
+          );
+        } catch (error) {
+          result = error;
+          throw error;
+        } finally {
+          await writeFile(
+            path.join(
+              evidence,
+              flags.length ? "backend-default.log" : "backend-configured.log",
+            ),
+            (result?.stdout ?? "") + (result?.stderr ?? ""),
+          );
+        }
+      }
+      await writeFile(
+        path.join(evidence, "size.json"),
+        JSON.stringify(
+          {
+            artifactBytes: (await stat(artifact)).size,
+            unpackedBytes: await directoryBytes(extracted),
+            backend: "packaged Covel.exe (Electron RunAsNode)",
+          },
+          null,
+          2,
+        ),
+      );
+    } else {
+      await writeFile(
+        path.join(evidence, "size.json"),
+        JSON.stringify(
+          {
+            artifactBytes: (await stat(artifact)).size,
+          },
+          null,
+          2,
+        ),
+      );
     }
     const port = await freePort();
     const config = path.join(temporary, "launch.json");
@@ -201,6 +268,7 @@ async function runArtifact(kind, artifact, version, evidence) {
     await page.waitForURL(/^http:\/\/127\.0\.0\.1:\d+\/session(?:[/?#]|$)/, {
       timeout: 30_000,
     });
+    await page.waitForFunction(() => Boolean(window.covelIpc));
     assert.equal(
       await page.evaluate(() => window.covelIpc?.appVersion),
       version,
@@ -209,12 +277,10 @@ async function runArtifact(kind, artifact, version, evidence) {
     await guide
       .getByRole("button", { name: "Browse worlds first", exact: true })
       .click({ timeout: 30_000 });
-    await page
-      .getByRole("heading", { name: "Choose a world", exact: true })
-      .waitFor({ timeout: 30_000 });
+    // Both the panel grid and stage carousel expose the same player action.
     const enter = page
-      .locator("article")
       .getByRole("button", { name: "Enter", exact: true })
+      .filter({ visible: true })
       .first();
     await enter.waitFor({ timeout: 30_000 });
     await page.screenshot({ path: path.join(evidence, "world-list.png") });
@@ -233,6 +299,13 @@ async function runArtifact(kind, artifact, version, evidence) {
     await page.screenshot({
       path: path.join(evidence, "session-preparation.png"),
     });
+    await page.reload();
+    await start.waitFor({ timeout: 30_000 });
+    await page.waitForFunction(() => Boolean(window.covelIpc));
+    assert.equal(
+      await page.evaluate(() => window.covelIpc.appVersion),
+      version,
+    );
     if (kind === "portable") {
       const native = await readJson(
         path.join(evidence, "native-preparation.json"),

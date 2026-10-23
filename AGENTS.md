@@ -93,8 +93,10 @@ bundle only other dependencies. Respect public package entry points and dependen
 direction (`pnpm check:boundaries`).
 
 Read [desktop packaging](docs/internals/desktop-packaging.md) before changing the
-shell, sidecar or staging. Runtime selection is build-time only
-(`apps/desktop/node-runtime.json`); never use the player's PATH or runtime fallback.
+shell, sidecar or staging. The packaged backend always runs the app's own Electron
+executable with RunAsNode in a separate child process; never bundle a separate Node,
+use the player's PATH or fall back to another runtime. Verify target and actual
+Electron/Node versions, the RunAsNode fuse, and main-bundle/ASAR resource binding.
 Main/preload dependencies are bundled; the server payload retains its plugin
 loader, SDK, native targets and licenses. Detach staging hardlinks before mutation.
 

@@ -151,6 +151,19 @@ for (const { resourcesDir, arch } of resourceDirs) {
     platform: { mac: "darwin", win: "win32", linux: "linux" }[platform],
     arch,
   };
+  // Fuse changes invalidate ARM64 code pages unless the ad-hoc signature is
+  // reset. Check before execution so a broken package cannot trigger SIGKILL.
+  if (runtimeTarget.platform === "darwin" && process.platform === "darwin") {
+    execFileSync(
+      "codesign",
+      [
+        "--verify",
+        "--strict",
+        path.join(resourcesDir, "../Frameworks/Electron Framework.framework"),
+      ],
+      { stdio: "inherit", timeout: 30_000 },
+    );
+  }
   // verify-staging checks the selected resource set and actual runtime, not
   // the build host's Node or the version claimed by the Electron npm package.
   verifyTargetNativePackages(path.join(resourcesDir, "server"), runtimeTarget);

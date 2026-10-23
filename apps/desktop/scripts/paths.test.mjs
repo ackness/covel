@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -21,34 +20,6 @@ test("packaged paths preserve config ownership and missing resource roots", asyn
     value: resources,
     configurable: true,
   });
-  // Inline a trusted test pinset, not a fake verifier: path resolution still
-  // runs the production regular-file, metadata, license and SHA256 checks.
-  const version = "99.0.0";
-  const binaryName = process.platform === "win32" ? "node.exe" : "node";
-  const target = `${process.platform}-${process.arch}`;
-  const binaryContents = "pinned synthetic runtime fixture";
-  const licenseContents = "synthetic upstream license fixture";
-  const sha256 = (value) => createHash("sha256").update(value).digest("hex");
-  const binarySha256 = sha256(binaryContents);
-  const distributionRoot = `node-v${version}-${target}`;
-  const manifest = {
-    mode: "standalone",
-    version,
-    license: { sha256: sha256(licenseContents) },
-    targets: {
-      [target]: {
-        file:
-          process.platform === "win32"
-            ? "win-x64/node.exe"
-            : `${distributionRoot}.tar.gz`,
-        ...(process.platform === "win32"
-          ? {}
-          : { member: `${distributionRoot}/bin/node` }),
-        sha256: binarySha256,
-        binarySha256,
-      },
-    },
-  };
   try {
     const output = path.join(root, "paths.mjs");
     await build({
@@ -68,61 +39,17 @@ test("packaged paths preserve config ownership and missing resource roots", asyn
             builder.onLoad({ filter: /.*/, namespace: "fixture" }, () => ({
               contents: "export const app = { isPackaged: true };",
             }));
-            builder.onResolve({ filter: /node-runtime\.json$/ }, () => ({
-              path: "node-runtime.json",
-              namespace: "runtime-manifest-fixture",
-            }));
-            builder.onLoad(
-              { filter: /.*/, namespace: "runtime-manifest-fixture" },
-              () => ({ contents: JSON.stringify(manifest), loader: "json" }),
-            );
           },
         },
       ],
     });
-    const { ensureUserPaths, resolveBackendRuntime, resolveServerEntry } =
-      await import(pathToFileURL(output).href);
+    const { ensureUserPaths, resolveServerEntry } = await import(
+      pathToFileURL(output).href
+    );
     assert.equal(
       resolveServerEntry(),
       path.join(resources, "server/src/index.js"),
     );
-    await fs.mkdir(resources, { recursive: true });
-    await fs.writeFile(
-      path.join(resources, "runtime-selection.json"),
-      JSON.stringify({
-        mode: manifest.mode,
-        selection: sha256(`desktop-backend-v1:${JSON.stringify(manifest)}`),
-        mainSha256: sha256(await fs.readFile(output)),
-        platform: process.platform,
-        arch: process.arch,
-      }),
-    );
-    const runtime = path.join(resources, "node", binaryName);
-    await assert.rejects(
-      resolveBackendRuntime,
-      /Bundled backend runtime.*Reinstall Covel/,
-    );
-    const runtimeDirectory = path.dirname(runtime);
-    await fs.mkdir(runtimeDirectory, { recursive: true });
-    const metadataFile = path.join(runtimeDirectory, "runtime.json");
-    const metadata = {
-      version,
-      platform: process.platform,
-      arch: process.arch,
-      binary: binaryName,
-      binarySha256,
-    };
-    await fs.writeFile(runtime, binaryContents, { mode: 0o755 });
-    await fs.writeFile(path.join(runtimeDirectory, "LICENSE"), licenseContents);
-    await fs.writeFile(metadataFile, JSON.stringify(metadata));
-    assert.equal(await resolveBackendRuntime(), runtime);
-    // Revalidate every resolution; the verifier suite covers each rejection rule.
-    await fs.writeFile(runtime, "unexpected replacement runtime");
-    await assert.rejects(
-      resolveBackendRuntime,
-      /Bundled backend runtime.*Reinstall Covel/,
-    );
-    await fs.writeFile(runtime, binaryContents);
     const paths = ensureUserPaths();
     assert.equal(paths.userLlmTomlPath, path.join(home, "llm.toml"));
     assert.deepEqual(paths.pluginsDirs, [

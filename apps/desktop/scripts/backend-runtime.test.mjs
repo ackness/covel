@@ -1,5 +1,7 @@
-import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
+import { setImmediate as nextImmediate } from "node:timers/promises";
+import { verifyRuntimeFile } from "../src/runtime-integrity.ts";
+import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
@@ -10,93 +12,52 @@ import { build } from "esbuild";
 import { ensureElectronBinary } from "./ensure-electron.mjs";
 
 const scripts = fileURLToPath(new URL(".", import.meta.url));
-const sourceManifest = JSON.parse(
-  fs.readFileSync(new URL("../node-runtime.json", import.meta.url), "utf8"),
-);
-const hash = (bytes) => createHash("sha256").update(bytes).digest("hex");
-const binary = "synthetic pinned Node binary";
-const license = "synthetic pinned Node license";
 const target = { platform: "linux", arch: "x64" };
-const eligible = { node: "24.22.1", electron: "45.0.1", ...target };
+const eligible = { node: "24.22.0", electron: "45.0.0", ...target };
 const sentinel = Buffer.from("dL7pKGdnNz796PbbjQWNKmHXBZaB9tsX");
 const fuseWire = (state = 49, version = 1) =>
   Buffer.concat([sentinel, Buffer.from([version, 1, state])]);
 
-async function fixture(t, mode, { root, probeVersions } = {}) {
-  root ??= fs.mkdtempSync(path.join(os.tmpdir(), "covel-backend-mode-"));
+async function fixture(t, { probeVersions } = {}) {
+  const root = fs.mkdtempSync(
+    path.join(os.tmpdir(), "covel-electron-runtime-"),
+  );
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
-  const manifest = structuredClone(sourceManifest);
-  manifest.mode = mode;
-  manifest.license.sha256 = hash(license);
-  for (const artifact of Object.values(manifest.targets))
-    artifact.binarySha256 = hash(binary);
-  const output = path.join(root, `runtime-${mode}.mjs`);
+  const output = path.join(root, "runtime.mjs");
   await build({
     stdin: {
       contents: `export * from "./backend-runtime.mjs";
-        export { RUNTIME_SELECTION_ID, assertSafeElectronVersions, assertElectronRunAsNodeCapability, verifyRuntimeSelection } from "../src/backend-runtime.ts";
-        export { stageCalls } from "./node-runtime.mjs";`,
+        export { RUNTIME_SELECTION_ID, assertSafeElectronVersions, assertElectronRunAsNodeCapability, verifyRuntimeSelection } from "../src/backend-runtime.ts";`,
       resolveDir: scripts,
-      sourcefile: "runtime-selection-fixture.mjs",
+      sourcefile: "runtime-fixture.mjs",
     },
     outfile: output,
     bundle: true,
     platform: "node",
     format: "esm",
-    plugins: [
-      {
-        name: "isolated-runtime-inputs",
-        setup(builder) {
-          builder.onResolve({ filter: /node-runtime\.json$/ }, () => ({
-            path: "manifest",
-            namespace: "inputs",
-          }));
-          builder.onResolve({ filter: /^\.\/node-runtime\.mjs$/ }, () => ({
-            path: "stage",
-            namespace: "inputs",
-          }));
-          if (probeVersions)
-            builder.onResolve({ filter: /^node:child_process$/ }, () => ({
-              path: "probe",
-              namespace: "inputs",
-            }));
-          builder.onLoad(
-            { filter: /.*/, namespace: "inputs" },
-            ({ path: input }) => {
-              if (input === "manifest")
-                return { contents: JSON.stringify(manifest), loader: "json" };
-              if (input === "probe")
-                return {
-                  contents: `export function execFileSync(executable, args, options) {
+    plugins: probeVersions
+      ? [
+          {
+            name: "version-probe",
+            setup(builder) {
+              builder.onResolve({ filter: /^node:child_process$/ }, () => ({
+                path: "probe",
+                namespace: "inputs",
+              }));
+              builder.onLoad({ filter: /.*/, namespace: "inputs" }, () => ({
+                contents: `export function execFileSync(executable, args, options) {
             globalThis.__runtimeProbe = { executable, args, options };
             return JSON.stringify(${JSON.stringify(probeVersions)});
           }`,
-                };
-              return {
-                contents: `import fs from "node:fs"; import path from "node:path";
-            export const stageCalls = [];
-            export async function stageNodeRuntime(directory, target) {
-              stageCalls.push({directory, target});
-              fs.mkdirSync(directory, {recursive:true});
-              const binaryName = target.platform === "win32" ? "node.exe" : "node";
-              fs.writeFileSync(path.join(directory,binaryName), ${JSON.stringify(binary)}, {mode:0o755});
-              fs.writeFileSync(path.join(directory,"LICENSE"), ${JSON.stringify(license)});
-              fs.writeFileSync(path.join(directory,"runtime.json"), JSON.stringify({
-                version:${JSON.stringify(manifest.version)}, ...target, binary:binaryName, binarySha256:${JSON.stringify(hash(binary))}
               }));
-            }`,
-              };
             },
-          );
-        },
-      },
-    ],
+          },
+        ]
+      : [],
   });
-  const runtime = await import(
-    `${pathToFileURL(output).href}?fixture=${Math.random()}`
-  );
+  const runtime = await import(pathToFileURL(output).href);
   fs.mkdirSync(path.join(root, "dist"), { recursive: true });
-  return { ...runtime, root, manifest };
+  return { ...runtime, root };
 }
 
 function bundle(f, contents = `bundled ${f.BACKEND_RUNTIME_MODE} main`) {
@@ -122,51 +83,28 @@ function electronFile(f, platform = "linux") {
   return executable;
 }
 
-test("stable supported Node release lines fail closed at their exact patch boundaries", async (t) => {
-  const f = await fixture(t, "electron");
-  for (const node of ["24.22.1", "24.22.2", "24.23.0", "26.12.1", "26.13.0"]) {
-    assert.doesNotThrow(() =>
-      f.assertSafeElectronVersions({ node, electron: "45.0.0" }),
-    );
-  }
-  for (const node of [
-    undefined,
-    "",
-    "24.22.0",
-    "24.21.99",
-    "26.12.0",
-    "26.11.99",
-    "22.99.99",
-    "25.99.99",
-    "27.0.0",
-    "28.0.0",
-    "24.22.1-rc.1",
-    "26.12.1+build",
-    "v24.22.1",
-    "024.22.1",
-    "24.22.1\n",
+test("only the reviewed Electron and embedded Node pair is accepted", async (t) => {
+  const f = await fixture(t);
+  assert.doesNotThrow(() => f.assertSafeElectronVersions(eligible));
+  for (const patch of [
+    { node: undefined },
+    { node: "24.22.1" },
+    { node: "26.12.1" },
+    { electron: "44.9.3" },
+    { electron: "45.0.1" },
+    { electron: "45.0.0-beta.1" },
+    { electron: undefined },
   ]) {
     assert.throws(
-      () => f.assertSafeElectronVersions({ node, electron: "45.0.0" }),
-      /Unsafe or unsupported/,
-    );
-  }
-  for (const electron of [
-    undefined,
-    "45.0.0-beta.1",
-    "v45.0.0",
-    "45.0.0+build",
-  ]) {
-    assert.throws(
-      () => f.assertSafeElectronVersions({ node: "24.22.1", electron }),
-      /Unsafe or unsupported/,
+      () => f.assertSafeElectronVersions({ ...eligible, ...patch }),
+      /Unexpected Electron backend runtime/,
     );
   }
 });
 
-test("both modes sanitize final child environments without losing provider, proxy or CA settings", async (t) => {
-  for (const mode of ["standalone", "electron"]) {
-    const f = await fixture(t, mode);
+test("child processes sanitize final child environments without losing provider, proxy or CA settings", async (t) => {
+  {
+    const f = await fixture(t);
     const inherited = {
       ELECTRON_RUN_AS_NODE: "wrong",
       electron_run_as_node: "wrong",
@@ -184,65 +122,38 @@ test("both modes sanitize final child environments without losing provider, prox
       NODE_EXTRA_CA_CERTS: inherited.NODE_EXTRA_CA_CERTS,
       HTTPS_PROXY: inherited.HTTPS_PROXY,
       DEEPSEEK_API_KEY: inherited.DEEPSEEK_API_KEY,
-      ...(mode === "electron" ? { ELECTRON_RUN_AS_NODE: "1" } : {}),
+      ELECTRON_RUN_AS_NODE: "1",
     });
     assert.equal(inherited.NODE_OPTIONS, "--import=/untrusted/preload.mjs");
   }
 });
 
-test("source choice drives real staging transitions with no standalone acquisition in Electron mode", async (t) => {
-  const standalone = await fixture(t, "standalone");
-  bundle(standalone);
-  const resources = await standalone.stageBackendRuntime(
-    standalone.root,
-    target,
-    "Covel",
-  );
-  assert.equal(standalone.stageCalls.length, 1);
-  assert.equal(
-    await standalone.verifyBackendRuntime(resources, target),
-    path.join(resources, "node/node"),
-  );
-
-  const electron = await fixture(t, "electron", { root: standalone.root });
-  // A manifest-only change must not bless the old standalone bundle/resources.
-  await assert.rejects(
-    electron.stageBackendRuntime(electron.root, target),
-    /Stale desktop runtime bundle/,
-  );
-  await assert.rejects(
-    () => electron.verifyBackendRuntime(resources, target),
-    /selection mismatch/,
-  );
-  bundle(electron);
-  await electron.stageBackendRuntime(electron.root, target, "Covel");
+test("staging removes obsolete Node resources and verifies the exact Electron executable", async (t) => {
+  const f = await fixture(t);
+  bundle(f);
+  const resources = await f.stageBackendRuntime(f.root, target, "Covel");
+  fs.mkdirSync(path.join(resources, "node"));
+  fs.writeFileSync(path.join(resources, "node/node"), "old runtime");
+  await f.stageBackendRuntime(f.root, target, "Covel");
   assert.equal(fs.existsSync(path.join(resources, "node")), false);
-  assert.equal(electron.stageCalls.length, 0);
-  await assert.rejects(
-    () => standalone.verifyBackendRuntime(resources, target),
-    /selection mismatch/,
-  );
-  const executable = electronFile(electron);
+  const executable = electronFile(f);
   const options = {
     ...target,
     electronExecutable: executable,
     electronVersions: eligible,
   };
-  assert.equal(
-    await electron.verifyBackendRuntime(resources, options),
-    executable,
-  );
+  assert.equal(await f.verifyBackendRuntime(resources, options), executable);
   await assert.rejects(
     () =>
-      electron.verifyBackendRuntime(resources, {
+      f.verifyBackendRuntime(resources, {
         ...options,
-        electronVersions: { ...eligible, node: "24.22.0" },
+        electronExecutable: "node",
       }),
-    /Unsafe or unsupported/,
+    /exact Electron executable/,
   );
   fs.mkdirSync(path.join(resources, "node"));
   await assert.rejects(
-    () => electron.verifyBackendRuntime(resources, options),
+    () => f.verifyBackendRuntime(resources, options),
     /Unexpected standalone Node resource/,
   );
   fs.rmSync(path.join(resources, "node"), { recursive: true });
@@ -252,30 +163,22 @@ test("source choice drives real staging transitions with no standalone acquisiti
       path.join(resources, "node"),
     );
     await assert.rejects(
-      () => electron.verifyBackendRuntime(resources, options),
+      () => f.verifyBackendRuntime(resources, options),
       /Unexpected standalone Node resource/,
     );
-    fs.unlinkSync(path.join(resources, "node"));
   }
-
-  // The reverse transition also requires a new bundle and the pinned resource.
-  await assert.rejects(
-    standalone.stageBackendRuntime(standalone.root, target),
-    /Stale desktop runtime bundle/,
-  );
-  bundle(standalone);
-  await standalone.stageBackendRuntime(standalone.root, target, "Covel");
-  assert.equal(
-    await standalone.verifyBackendRuntime(resources, target),
-    path.join(resources, "node/node"),
-  );
 });
 
-test("both modes enforce all four targets and reject wrong metadata, missing resources and stale main bytes", async (t) => {
-  for (const mode of ["standalone", "electron"]) {
-    const f = await fixture(t, mode);
+test("packaging enforces all four targets and reject wrong metadata, missing resources and stale main bytes", async (t) => {
+  {
+    const f = await fixture(t);
     bundle(f);
-    for (const key of Object.keys(sourceManifest.targets)) {
+    for (const key of [
+      "darwin-arm64",
+      "win32-x64",
+      "linux-x64",
+      "linux-arm64",
+    ]) {
       const [platform, arch] = key.split("-");
       const selected = { platform, arch };
       const resources = await f.stageBackendRuntime(f.root, selected, "Covel");
@@ -305,14 +208,14 @@ test("both modes enforce all four targets and reject wrong metadata, missing res
     ]) {
       await assert.rejects(
         f.stageBackendRuntime(f.root, selected),
-        /Unsupported Node runtime target/,
+        /Unsupported desktop runtime target/,
       );
     }
     const resources = f.backendRuntimeStagingDirectory(f.root, target);
     const file = path.join(resources, "runtime-selection.json");
     const original = fs.readFileSync(file, "utf8");
     for (const patch of [
-      { mode: mode === "electron" ? "standalone" : "electron" },
+      { mode: "standalone" },
       { selection: "0".repeat(64) },
       { platform: "darwin" },
       { mainSha256: "bad" },
@@ -349,7 +252,7 @@ test("both modes enforce all four targets and reject wrong metadata, missing res
 });
 
 test("Electron fuse refusal happens before any version probe, including unknown/missing wires and multiple slices", async (t) => {
-  const f = await fixture(t, "electron", { probeVersions: eligible });
+  const f = await fixture(t, { probeVersions: eligible });
   const executable = electronFile(f);
   delete globalThis.__runtimeProbe;
   for (const contents of [
@@ -381,7 +284,7 @@ test("Electron fuse refusal happens before any version probe, including unknown/
 });
 
 test("version probing waits for the complete asynchronous fuse scan on every launch", async (t) => {
-  const f = await fixture(t, "electron", { probeVersions: eligible });
+  const f = await fixture(t, { probeVersions: eligible });
   const executable = electronFile(f);
   const contents = Buffer.concat([Buffer.alloc(8 * 1024 * 1024), fuseWire()]);
   fs.writeFileSync(executable, contents);
@@ -406,7 +309,7 @@ test("version probing waits for the complete asynchronous fuse scan on every lau
 });
 
 test("probes use the selected executable, sanitized environment and actual reported versions", async (t) => {
-  const f = await fixture(t, "electron", { probeVersions: eligible });
+  const f = await fixture(t, { probeVersions: eligible });
   const executable = electronFile(f);
   assert.deepEqual(
     await f.probeBackendRuntime(executable, target, {
@@ -422,12 +325,12 @@ test("probes use the selected executable, sanitized environment and actual repor
     ELECTRON_RUN_AS_NODE: "1",
     NODE_EXTRA_CA_CERTS: "/ca.pem",
   });
-  const old = await fixture(t, "electron", {
-    probeVersions: { ...eligible, node: "24.22.0" },
+  const old = await fixture(t, {
+    probeVersions: { ...eligible, node: "24.21.0" },
   });
   await assert.rejects(
     () => old.probeBackendRuntime(electronFile(old), target),
-    /Unsafe or unsupported/,
+    /Unexpected Electron backend runtime/,
   );
   await assert.rejects(
     () => f.probeBackendRuntime(executable, { ...target, arch: "arm64" }),
@@ -437,7 +340,7 @@ test("probes use the selected executable, sanitized environment and actual repor
 });
 
 test("packaged executable resolution remains inside each actual target package", async (t) => {
-  const f = await fixture(t, "electron");
+  const f = await fixture(t);
   bundle(f);
   for (const selected of [
     { platform: "darwin", arch: "arm64" },
@@ -479,7 +382,7 @@ test("packaged executable resolution remains inside each actual target package",
 
 test("installed Electron is checked by actual embedded versions without a backend or safety bypass", async (t) => {
   const executable = ensureElectronBinary();
-  const f = await fixture(t, "electron");
+  const f = await fixture(t);
   await f.assertElectronRunAsNodeCapability(executable, process.platform);
   const versions = JSON.parse(
     execFileSync(
@@ -498,49 +401,34 @@ test("installed Electron is checked by actual embedded versions without a backen
   t.diagnostic(
     `Actual installed Electron ${versions.electron}, embedded Node ${versions.node}`,
   );
-  let safe = false;
-  try {
-    f.assertSafeElectronVersions(versions);
-    safe = true;
-  } catch {
-    /* expected for the current unpatched Electron */
-  }
-  const selected = { platform: process.platform, arch: process.arch };
-  if (safe)
-    await assert.doesNotReject(() =>
-      f.probeBackendRuntime(executable, selected),
-    );
-  else
-    await assert.rejects(
-      () => f.probeBackendRuntime(executable, selected),
-      /Unsafe or unsupported/,
-    );
-});
-
-test("missing or unknown build choices never select a default or host runtime", async (t) => {
-  for (const mode of [undefined, "system", "auto"]) {
-    await assert.rejects(
-      fixture(t, mode),
-      /Invalid desktop backend runtime mode/,
-    );
-  }
+  assert.doesNotThrow(() => f.assertSafeElectronVersions(versions));
+  await assert.doesNotReject(() =>
+    f.probeBackendRuntime(executable, {
+      platform: process.platform,
+      arch: process.arch,
+    }),
+  );
 });
 
 test("selection metadata is mandatory, regular and bound to the exact main bytes", async (t) => {
-  const f = await fixture(t, "standalone");
+  const f = await fixture(t);
   bundle(f);
   const resources = await f.stageBackendRuntime(f.root, target);
   const selection = path.join(resources, "runtime-selection.json");
-  const options = { ...target, mainFile: path.join(f.root, "dist/main.mjs") };
-  assert.equal(
-    await f.verifyBackendRuntime(resources, options),
-    path.join(resources, "node/node"),
-  );
-  fs.writeFileSync(path.join(resources, "node/node"), "corrupt replacement");
+  const executable = electronFile(f);
+  const options = {
+    ...target,
+    mainFile: path.join(f.root, "dist/main.mjs"),
+    electronExecutable: executable,
+    electronVersions: eligible,
+  };
+  assert.equal(await f.verifyBackendRuntime(resources, options), executable);
+  fs.writeFileSync(options.mainFile, "corrupt replacement");
   await assert.rejects(
     () => f.verifyBackendRuntime(resources, options),
     /SHA256 mismatch/,
   );
+  bundle(f);
   if (process.platform !== "win32") {
     fs.renameSync(selection, `${selection}.original`);
     fs.symlinkSync(`${selection}.original`, selection);
@@ -566,7 +454,33 @@ test("native Node loads the build and packaging runtime entries without esbuild 
     { encoding: "utf8", timeout: 10_000 },
   );
   assert.deepEqual(JSON.parse(stdout), {
-    mode: sourceManifest.mode,
+    mode: "electron",
     hook: "function",
   });
+});
+
+const digest = (bytes) => createHash("sha256").update(bytes).digest("hex");
+test("hash verification yields between reads, rejects corruption and reopens every time", async (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "covel-async-hash-"));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const file = path.join(root, "binary");
+  const contents = Buffer.alloc(8 * 1024 * 1024, 0x5a);
+  const expected = digest(contents);
+  fs.writeFileSync(file, contents);
+  let completed = false;
+  const checking = verifyRuntimeFile(file, expected).then(() => {
+    completed = true;
+  });
+  await nextImmediate();
+  assert.equal(completed, false, "the event loop runs during binary hashing");
+  await checking;
+  assert.equal(completed, true);
+  fs.writeFileSync(file, "corrupt replacement");
+  await assert.rejects(verifyRuntimeFile(file, expected), /SHA256 mismatch/);
+  // A failed scan must release its file handle and never cache its result.
+  fs.unlinkSync(file);
+  fs.writeFileSync(file, contents);
+  await verifyRuntimeFile(file, expected);
+  fs.unlinkSync(file);
+  await assert.rejects(verifyRuntimeFile(file, expected), /ENOENT/);
 });

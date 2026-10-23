@@ -122,7 +122,7 @@ IETF 分配的、确实全球可达的特定地址段仍然放行。这些特殊
 
 原因是没有任何检查会看 `Location`：字符串检查只看第一个 URL；IP 字面量不经过钉住地址的 DNS 查询；代理模式下由代理解析下一跳。跟随一个 `302 Location: http://169.254.169.254/` 就会打到云平台的元数据服务。
 
-插件的 `fetchWithRetry` 也一样不跟随；`ctx.media.ingestUrl` 自己跟随，并对每一跳重新做字符串检查。
+插件的 `fetchWithRetry` 也一样不跟随；`ctx.media.ingestUrl` 自己跟随，并对每一跳重新做字符串检查。桌面壳对 sidecar 的回环 HTTP 请求显式使用 `redirect: "error"`，拒绝跟随重定向到其他目标。
 
 ### Response size ceiling
 
@@ -151,11 +151,13 @@ IETF 分配的、确实全球可达的特定地址段仍然放行。这些特殊
 
 安全更新可以跳过普通依赖的七天等待，但 `minimumReleaseAgeExclude` 只列出经过核对的具体版本。Undici 的传递依赖按各自大版本更新，不强制所有使用方迁到同一大版本。
 
-桌面后端默认随包携带独立的 Node 26.12.1。PostgreSQL TLS、插件代码和原生网络 API 都在这个已修复的运行时中执行；玩家不需要安装 Node。构建从 Node 官方分发站下载固定版本，按仓库里的 SHA256 校验后才解包，并随包携带许可证。运行时缺失或验证失败会阻止构建，不回退到宿主 Node 或内存数据库。
+桌面版锁定 Electron 45.0.0，后端始终以 RunAsNode 启动安装包自身的可执行文件。插件和数据库仍在独立的 sidecar 子进程中执行，通过私有 IPC 管理启动和关闭；窗口关闭 Node 集成。安装包不再携带额外的 Node 运行时，玩家也不需要安装 Node。
 
-Electron 44.9.3 仍负责桌面壳，并为自己的 Node TLS 和 Chromium 加入被攻陷中间证书的公钥封锁名单。它的内嵌 Node 24.22.0 并不等于 Node 24.22.1 安全版本；独立 sidecar 不会给 Electron 本身打补丁。壳自己的 HTTP 客户端显式使用已修复的 npm Undici，窗口仍关闭 Node 集成，插件和数据库不在壳进程里运行。后续增加壳的原生网络调用时仍须核对 Electron 的安全修复。
+Electron 45 已包含 eMudhra 被攻陷中间证书的公钥封锁补丁。它链接 Chromium 的 Brotli；所用 [Brotli 提交 `cfa184a`](https://github.com/google/brotli/commit/cfa184a997ac19454d5a3ae97f6d600aac2445a6) 包含[解码器修复 `0ed4268`](https://github.com/google/brotli/commit/0ed4268a4401abcb4472096340477cf4af7d1a2b)。这些已确认的补丁不代表内嵌 Node 24.22.0 包含 Node 24.22.1 的全部安全修复。
 
-构建者可在 `node-runtime.json` 显式选择 `electron` 模式，但实际内嵌 Node 必须是稳定的 24.x ≥24.22.1 或 26.x ≥26.12.1，Electron 本身也须为稳定版且启用 RunAsNode；当前版本不能切回。每次受管理的启动、重启和恢复都会检查选择与实际运行时。主进程摘要与目标资源绑定，发布校验读取实际 ASAR 入口；未知、过旧或混用资源都会失败，不受环境变量覆盖。子进程环境移除 `NODE_OPTIONS`、`NODE_PATH` 和外来 Electron 模式控制，保留合法 CA、代理和密钥配置。操作步骤见[选择后端运行时](./desktop-packaging.md#选择后端运行时)。
+核心 HTTP 路径使用 npm Undici 8.12.2、URL 规范化和 `dns.lookup`，减少对旧版 Node 网络实现中受影响路径的使用；这些措施不能替代原生 TLS/DNS 修复。插件直接调用原生网络 API，以及绕过核心 HTTP 路径的特殊 PostgreSQL 直连配置，仍有残余风险。新增网络路径或升级 Electron 时须重新核对其实际依赖和修复；源码和 Docker 继续使用 Node 26.12.1。
+
+每次受管理的启动、重启和恢复都会检查目标与实际 Electron/Node 版本、平台与架构以及 RunAsNode fuse。主进程摘要与目标资源绑定，发布校验读取实际 ASAR 入口；不匹配或混用资源都会失败，不受环境变量覆盖，也不回退到宿主 Node。子进程环境移除 `NODE_OPTIONS`、`NODE_PATH` 和外来 Electron 模式控制，保留合法 CA、代理和密钥配置。操作步骤见[后端运行时](./desktop-packaging.md#后端运行时)。
 
 ### Desktop proxy modes
 
@@ -225,7 +227,7 @@ Web 客户端只发送它的请求用得到的供应商的密钥：
 
 ## 桌面窗口
 
-桌面窗口启用 `contextIsolation` 和 `sandbox`，关闭 `nodeIntegration`，不启用子 frame 的 Node 集成。`preload.ts` 通过 `contextBridge` 暴露 `window.covelIpc`：应用元信息、只允许白名单通道的 `invoke` 和 `on`；订阅回调拿不到 Electron 事件对象。
+桌面窗口启用 `contextIsolation` 和 `sandbox`，关闭 `nodeIntegration`，不启用子 frame 的 Node 集成。Electron 45 的沙箱 preload 不提供 Node 模块 shim 或 `Buffer`；桥接代码只使用 Electron 提供的沙箱 API。`preload.ts` 通过 `contextBridge` 暴露 `window.covelIpc`：应用元信息、只允许白名单通道的 `invoke` 和 `on`；订阅回调拿不到 Electron 事件对象。
 
 敏感 IPC（包括明文密钥、REST token 和设置读写）要求发送方是其 `webContents.mainFrame`，且 URL 与主窗口已提交的回环 HTTP 源相同。同源子 frame 也被拒绝。恢复通道（重试启动、打开日志、配置或数据目录）同样要求主 frame，但也接受主进程生成的当前启动页。启动页不能读取密钥或 REST token。
 

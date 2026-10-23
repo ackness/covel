@@ -2,7 +2,8 @@
  * Post-staging smoke test.
  *
  * Spawns the staged server exactly the way the packaged desktop app will:
- *   <node> --import <file URL of the plugin TS loader> <staging/server/src/index.js>
+ *   <electron> --import <file URL of the plugin TS loader> <staging/server/src/index.js>
+ * with ELECTRON_RUN_AS_NODE=1.
  *
  * Waits for private readiness IPC, verifies health and plugin entries, then
  * requests and awaits an IPC drain. If boot fails, stderr is reported
@@ -33,8 +34,10 @@ import {
   verifyRuntimeSelection,
 } from "./backend-runtime.mjs";
 import { ensureElectronBinary } from "./ensure-electron.mjs";
-import { verifyNodeRuntimeFile } from "../src/node-runtime.ts";
+import { verifyRuntimeFile } from "../src/runtime-integrity.ts";
 import { verifyPackagedMain } from "./packaged-main.mjs";
+import { fetchJsonWithTimeout } from "../src/network.ts";
+import { stopServerProcess } from "../src/server-shutdown.ts";
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 const desktopRoot = path.resolve(__dirname, "..");
@@ -70,30 +73,21 @@ const selection = verifyRuntimeSelection(
 if (packaged) {
   verifyPackagedMain(runtimeResources, selection.mainSha256);
 } else {
-  await verifyNodeRuntimeFile(
+  await verifyRuntimeFile(
     path.join(desktopRoot, "dist/main.mjs"),
     selection.mainSha256,
   );
 }
-const electronExecutable =
-  BACKEND_RUNTIME_MODE === "electron"
-    ? packaged
-      ? packagedElectronExecutable(runtimeResources, options)
-      : ensureElectronBinary()
-    : undefined;
-// Verify pinned standalone bytes before executing them. Electron versions are
-// probed first, then checked with the same policy as the packaged main process.
-const executable =
-  electronExecutable ?? (await verifyBackendRuntime(runtimeResources, options));
+const electronExecutable = packaged
+  ? packagedElectronExecutable(runtimeResources, options)
+  : ensureElectronBinary();
 // No backend module is imported until the actual executable's versions pass.
-const runtime = await probeBackendRuntime(executable, options);
-const nodeBinary = electronExecutable
-  ? await verifyBackendRuntime(runtimeResources, {
-      ...options,
-      electronExecutable,
-      electronVersions: runtime,
-    })
-  : executable;
+const runtime = await probeBackendRuntime(electronExecutable, options);
+const nodeBinary = await verifyBackendRuntime(runtimeResources, {
+  ...options,
+  electronExecutable,
+  electronVersions: runtime,
+});
 const TIMEOUT_MS = 30_000;
 
 function die(msg, code = 1) {
@@ -190,6 +184,7 @@ const child = spawn(
   ["--import", pathToFileURL(tsxLoader).href, entry],
   {
     cwd: serverStaging,
+    windowsHide: true,
     env: backendRuntimeEnvironment(env),
     stdio: ["ignore", "pipe", "pipe", "ipc"],
   },
@@ -225,17 +220,6 @@ child.stderr.on("data", (data) => {
   if (stderrBuf.length > 400) stderrBuf.shift();
 });
 
-let booted = false;
-child.on("exit", (code, signal) => {
-  if (!booted) {
-    cleanupDb();
-    const tail = stderrBuf.slice(-80).join("");
-    die(
-      `server exited during boot (code=${code}, signal=${signal})\n--- stderr tail ---\n${tail}`,
-    );
-  }
-});
-
 function cleanupDb() {
   try {
     if (fs.existsSync(tmpDb)) fs.rmSync(tmpDb, { force: true });
@@ -261,10 +245,14 @@ function assertNoStartupPathErrors() {
 
 try {
   await ready;
-  const health = await fetch(`http://127.0.0.1:${port}/api/health`);
-  if (!health.ok)
+  const health = await fetchJsonWithTimeout(
+    `http://127.0.0.1:${port}/api/health`,
+    {},
+    5_000,
+  );
+  if (!health.ok || !health.body)
     throw new Error("staged /api/health unavailable after readiness IPC");
-  const status = await health.json();
+  const status = health.body;
   if (
     status.storage?.data?.backend !== "sqlite" ||
     !status.storage.data.durable
@@ -279,41 +267,66 @@ try {
   }
   assertNoStartupPathErrors();
   assertNoPluginLoadErrors(stderrBuf);
-  const pluginsResponse = await fetch(`http://127.0.0.1:${port}/api/plugins`);
-  if (!pluginsResponse.ok) throw new Error("staged /api/plugins unavailable");
-  assertLoadedBuiltinPluginEntries((await pluginsResponse.json()).items);
-  booted = true;
+  const pluginsResponse = await fetchJsonWithTimeout(
+    `http://127.0.0.1:${port}/api/plugins`,
+    {},
+    5_000,
+  );
+  if (!pluginsResponse.ok || !pluginsResponse.body)
+    throw new Error("staged /api/plugins unavailable");
+  assertLoadedBuiltinPluginEntries(pluginsResponse.body.items);
   console.log(
     "[smoke] ✓ /api/health, durable SQLite, sqlite-vec and builtin plugin entries OK",
   );
-} catch (err) {
-  const tail = stderrBuf.slice(-80).join("");
-  child.kill("SIGKILL");
-  cleanupDb();
-  die(
-    `${err instanceof Error ? err.message : err}\n--- stderr tail ---\n${tail}`,
-  );
-}
-
-await new Promise((resolve, reject) => {
-  const timer = setTimeout(() => {
-    child.kill("SIGKILL");
-    reject(new Error("staged server did not drain within 12s"));
-  }, 12_000);
-  child.once("exit", (code, signal) => {
-    clearTimeout(timer);
-    if (code === 0 && signal === null) resolve();
-    else
-      reject(
-        new Error(
-          `staged server shutdown failed (code=${code}, signal=${signal})`,
-        ),
-      );
+  await new Promise((resolve, reject) => {
+    if (child.exitCode !== null || child.signalCode !== null) {
+      reject(new Error("staged server exited before shutdown verification"));
+      return;
+    }
+    const timer = setTimeout(() => {
+      reject(new Error("staged server did not drain within 12s"));
+    }, 12_000);
+    child.once("exit", (code, signal) => {
+      clearTimeout(timer);
+      if (code === 0 && signal === null) resolve();
+      else
+        reject(
+          new Error(
+            `staged server shutdown failed (code=${code}, signal=${signal})`,
+          ),
+        );
+    });
+    try {
+      if (noLlmToml) child.disconnect();
+      else
+        child.send({ type: "covel:shutdown" }, (error) => {
+          if (error) {
+            clearTimeout(timer);
+            reject(error);
+          }
+        });
+    } catch (error) {
+      clearTimeout(timer);
+      reject(error);
+    }
   });
-  if (noLlmToml) child.disconnect();
-  else child.send({ type: "covel:shutdown" });
-});
-cleanupDb();
-console.log(
-  `[smoke] ✓ staging server is bootable and drains on ${noLlmToml ? "parent disconnect" : "shutdown IPC"}`,
-);
+  console.log(
+    `[smoke] ✓ staging server is bootable and drains on ${noLlmToml ? "parent disconnect" : "shutdown IPC"}`,
+  );
+} catch (err) {
+  console.error(
+    `[smoke] ${err instanceof Error ? err.stack : err}\n--- stderr tail ---\n${stderrBuf.slice(-80).join("")}`,
+  );
+  process.exitCode = 1;
+} finally {
+  // Await termination before deleting SQLite files, especially on Windows.
+  try {
+    await stopServerProcess(child, (_level, ...values) =>
+      console.error("[smoke]", ...values),
+    );
+    cleanupDb();
+  } catch (error) {
+    console.error("[smoke] cleanup failed:", error);
+    process.exitCode = 1;
+  }
+}

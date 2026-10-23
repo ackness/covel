@@ -126,22 +126,6 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # Only normal PR/main runs save caches. Requested commits may change any
-      # downloaded file; digest checks at staging do not make saving it safe.
-      - name: Cache verified Node artifacts
-        if: ${{ !inputs.release && inputs.commit == '' && needs.scope.outputs.scope != 'docs' }}
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: apps/desktop/node_modules/.cache/covel-node-runtime
-          key: node-runtime-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('apps/desktop/node-runtime.json', 'mise.toml') }}
-
-      - name: Restore verified Node artifacts
-        if: ${{ inputs.release || inputs.commit != '' }}
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: apps/desktop/node_modules/.cache/covel-node-runtime
-          key: node-runtime-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('apps/desktop/node-runtime.json', 'mise.toml') }}
-
       - name: Cache Electron binaries
         if: ${{ !inputs.release && inputs.commit == '' && needs.scope.outputs.scope != 'docs' }}
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0

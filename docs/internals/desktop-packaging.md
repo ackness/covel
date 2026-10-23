@@ -2,7 +2,7 @@
 
 这一页讲怎样构建 Covel 桌面版的安装包，怎样在本地检查它，以及发一个版本要走哪些步骤。它写给维护者和想自己打包的贡献者。
 
-官方的 GitHub Release 只发布两种产物：macOS Apple Silicon 和 Windows x64。它们都**没有签名**，因为项目没有平台签名证书。玩家第一次打开时，macOS Gatekeeper 和 Windows SmartScreen 可能会给出警告。Linux 产物可以在 Linux 机器上用同一份 electron-builder 配置自己构建。
+官方的 GitHub Release 只发布两种产物：macOS Apple Silicon 和 Windows x64。它们都**没有发布者证书签名**，因为项目没有平台签名证书；macOS 仍保留机器运行所需的 ad-hoc 签名。玩家第一次打开时，macOS Gatekeeper 和 Windows SmartScreen 可能会给出警告。Linux 产物可以在 Linux 机器上用同一份 electron-builder 配置自己构建。
 
 ## One-off prep
 
@@ -18,9 +18,9 @@
    pnpm --filter @covel/desktop build
    ```
 
-   它生成 `apps/desktop/dist/` 和 `apps/desktop/staging/`。构建过程不联网下载模型数据库：它复制仓库里提交的那份 LiteLLM 快照，并检查 staging 里有 `node_modules/@covel/ai-provider/data/model-db.json`。独立 Node 模式的准备步骤不下载 Electron；后续 electron-builder 打包时获取目标平台的 Electron。Electron 后端模式仍在构建前获取并校验实际运行时。
+   它生成 `apps/desktop/dist/` 和 `apps/desktop/staging/`。构建过程不联网下载模型数据库：它复制仓库里提交的那份 LiteLLM 快照，并检查 staging 里有 `node_modules/@covel/ai-provider/data/model-db.json`。构建会获取并校验目标平台的 Electron 运行时。
 
-   默认 `standalone` 模式的后端运行时来自 Node 官方分发站，固定为 `apps/desktop/node-runtime.json` 的版本与各平台 SHA256，并与 `mise.toml` 保持一致。下载通过校验后才解包；缓存复用也要校验。安装包只携带运行所需的 Node 可执行文件、许可证和校验元数据，不携带 npm，也不在玩家首次启动时下载运行时。
+   桌面版锁定 Electron 45.0.0。后端使用安装包自身的 Electron 可执行文件，不再下载或打包额外的 Node 可执行文件和独立 Node 许可证。玩家首次启动时不需要下载运行时或安装 Node。
 
 3. 调用 electron-builder 打包：
 
@@ -30,20 +30,17 @@
 
    各平台有自己的命令，见下面的 [macOS](#macos)、[Windows](#windows)、[Linux](#linux)。在仓库根目录运行 `pnpm build:electron` 效果相同，并且会在最后清掉解包目录，只留下安装包。
 
-### 选择后端运行时
+<a id="选择后端运行时"></a>
 
-唯一开关是 `apps/desktop/node-runtime.json` 的 `mode`，只在构建时读取：
+### 后端运行时
 
-| 值                   | 后端进程                                                           | 随包的额外 Node                        |
-| -------------------- | ------------------------------------------------------------------ | -------------------------------------- |
-| `standalone`（默认） | 固定摘要校验的独立 Node                                            | 保留 `resources/node/`                 |
-| `electron`           | 安装包自身的 Electron 可执行文件，以 `ELECTRON_RUN_AS_NODE=1` 启动 | 不下载、不打包，清除该目标的旧暂存副本 |
+安装包始终以 `ELECTRON_RUN_AS_NODE=1` 启动自身的 Electron 可执行文件，在独立子进程里执行后端。没有运行时选择配置、环境覆盖或备用 Node。开发模式仍使用外部管理的服务端，源码和 Docker 的 Node 26.12.1 要求保持不变。
 
-以后切回 Electron 不需要重写后端：先升级并锁定已修复的 Electron，再把 `mode` 改为 `electron`，重新构建整个安装包并运行下文的产物校验与启动冒烟。反向切换也只改同一字段并重建。它不是玩家设置，也不能通过环境变量覆盖；开发模式仍使用外部管理的服务端。
+构建检查实际 Electron 可执行文件的 Electron/Node 版本、目标平台与架构以及 RunAsNode fuse，不只看 npm 包版本。实际版本必须与 `src/backend-runtime.ts` 编译内置的 `ELECTRON_VERSION`（来自桌面包依赖）和 `EMBEDDED_NODE_VERSION` 匹配；目标元数据不存放版本。RunAsNode 必须启用，不符时失败。Electron 45.0.0 的内嵌 Node 24.22.0 不能按版本号视为已经包含 Node 24.22.1 的全部修复，具体补丁和剩余边界见[运行时和 HTTP 客户端更新](./security.md#运行时和-http-客户端更新)。
 
-构建检查实际 Electron 可执行文件的内嵌版本和 RunAsNode fuse，不只看 npm 包版本。只允许稳定版 Electron，且内嵌 Node 属于已修复的 24.x（至少 24.22.1）或 26.x（至少 26.12.1）。旧版、预发布、未知主版本或禁用 RunAsNode 都会失败，不回退到其他运行时。当前锁定的 Electron 44.9.3 不满足条件，不能启用该模式。
+主进程 bundle 与目标资源通过摘要绑定；复用旧 bundle 或混用不同目标资源会被拒绝。产物检查读取实际 `app.asar` 中的入口与主进程字节，不能用源码目录里的文件代替。每次受桌面管理的启动、重启和故障恢复都重新校验。升级 Electron 后必须重新构建整个安装包，并运行下文的产物校验与启动冒烟；升级本身不表示已完成各平台的运行验证或签名支持。
 
-主进程 bundle、目标资源和运行时选择通过摘要绑定；只改配置、复用旧 bundle 或混用不同目标资源会被拒绝。产物检查读取实际 `app.asar` 中的入口与主进程字节，不能用源码目录里的文件代替。每次受桌面管理的启动、重启和故障恢复都重新校验。切换模式不降低系统版本要求，也不表示已完成对应平台的运行验证或签名支持。
+打包配置显式启用 `runAsNode` 和 `enableNodeOptionsEnvironmentVariable`，后者用于保留 `NODE_EXTRA_CA_CERTS` 支持；启动子进程时仍清除 `NODE_OPTIONS`。`enableNodeCliInspectArguments: false` 禁用 Node CLI 调试参数，`onlyLoadAppFromAsar: true` 将应用入口限定在 ASAR。这些配置必须在实际安装包上验证；限定 ASAR 入口不等于签名或 ASAR 密码学完整性校验。
 
 ### 更新内置的模型数据库
 
@@ -68,8 +65,8 @@
 
 ### 打包后的服务端怎样启动
 
-- 内置服务端使用构建时选定的运行时直接执行预编译的 `server/src/index.js`。默认独立 Node 位于 `resources/node/node`（Windows 为 `node.exe`）；Electron 模式只用本安装包的可执行文件。两种模式都不查找玩家 PATH，也不在启动时转译框架模块。
-- 每次启动、重启或恢复前都核对运行时选择、主进程摘要和目标平台；独立 Node 还核对固定二进制及许可证摘要，Electron 模式核对实际内嵌版本及 fuse。大文件摘要和 fuse 扫描使用异步读取，校验完成前不启动子进程，也不复用上次校验结果。缺失、损坏或不符时提示重新安装，不执行替代运行时。合并环境配置后移除 `NODE_OPTIONS`、`NODE_PATH` 和外来 Electron 模式变量，保留合法的代理、提供商密钥与 `NODE_EXTRA_CA_CERTS`。
+- 内置服务端使用本安装包的 Electron 可执行文件，以 RunAsNode 执行预编译的 `server/src/index.js`。它不查找玩家 PATH，也不在启动时转译框架模块。
+- 每次启动、重启或恢复前都核对主进程摘要、目标平台与架构、实际 Electron/Node 版本及 RunAsNode fuse。大文件摘要和 fuse 扫描使用异步读取，校验完成前不启动子进程，也不复用上次校验结果。缺失、损坏或不符时提示重新安装，不执行替代运行时。合并环境配置后移除 `NODE_OPTIONS`、`NODE_PATH` 和外来 Electron 模式变量，保留合法的代理、提供商密钥与 `NODE_EXTRA_CA_CERTS`。
 - 构建把 staging 里的框架模块以最多四个并行任务编译到源码旁边。全部编译成功后才改写包的运行时导出，再删除已成功编译的 `.ts`；失败时先等正在执行的任务结束，再报错，不进入裁剪。`import.meta.url` 算出来的模型数据和提示词文件的相对位置不变。
 - `tsx` 加载器及其 esbuild 目标二进制保留在 `resources/server/node_modules/`，用于动态加载 TypeScript 插件；桌面主进程不再另带一份依赖树。
 - HTTP 端口监听成功后，子进程向父进程发一条私有的 `covel:ready` 消息，带上端口。桌面版收到后立刻加载应用。
@@ -84,49 +81,53 @@
 - 构建不会打包开发者的 `llm.toml` 或其他私有的服务端配置。staging 检查和解包后的安装包检查都会拒绝服务端资源根目录下出现这些文件。
 - 安装后的应用总是从用户配置目录读取 `llm.toml`，文件在首次启动之后才创建也一样。
 - 内置资源目录缺失时，它在发现顺序里的位置不变。用户插件不会因为安装资源缺失而获得内置插件的信任。
-- 每个目标平台与架构单独准备 `staging/backend-runtime/<os>-<arch>/`；打包钩子按实际目标选取，不能把构建机的运行时复制进其他架构的安装包。staging 和解包产物校验检查选定运行时的版本、平台和架构，并执行该模式的资源与摘要检查。
+- 每个目标平台与架构单独准备 `staging/backend-runtime/<os>-<arch>/`；打包钩子按实际目标选取，不能把构建机的运行时复制进其他架构的安装包。staging 和解包产物校验检查 Electron/Node 版本、平台和架构，并执行资源与摘要检查。
 
 ### 启动冒烟测试
 
 启动冒烟测试跑两次：一次用临时生成的配置，一次完全没有配置。两次都不需要模型密钥，也不调用模型。它们检查：
 
-- 使用实际随包选定的运行时和 SQLite，并确认 sqlite-vec 可用。运行时缺失或校验失败就报错，不回退到宿主 Node 或内存后端。
+- 使用实际随包 Electron 的 RunAsNode 和 SQLite，并确认 sqlite-vec 可用。运行时缺失或校验失败就报错，不回退到宿主 Node 或内存后端。
 - 就绪消息能收到。
 - 收到关闭请求时干净退出，父进程断开时也干净退出。
 - 没有任何内置插件加载失败，包括 `[plugin-entry]` 工厂初始化失败。
+
+健康和插件列表请求各有 5 秒期限，覆盖响应体读取，且拒绝重定向。失败时先等待子进程退出，再删除临时数据库；Windows ZIP 的后端检查无论成功或失败都会保留输出日志。
 
 > [!NOTE]
 > 只有健康检查返回成功还不算通过：一个插件可以加载失败，而服务端照常运行。
 
 ## macOS
 
-桌面版要求 macOS 13.5（Ventura）或更高版本。Electron 44 本身要求 13.0，但独立 Node 26 官方二进制要求 13.5，因此 `mac.minimumSystemVersion` 采用更严格的 `"13.5.0"`。见 [Node 26 平台要求](https://github.com/nodejs/node/blob/v26.12.1/BUILDING.md#platform-list)。
+桌面版仍要求 macOS 13.5（Ventura）或更高版本，`mac.minimumSystemVersion` 保持 `"13.5.0"`。移除额外的 Node 运行时没有降低已声明的系统要求；更低版本需要另行验证。
 
 ### Official unsigned build
 
 仓库里的配置设置了 `mac.identity: null` 和 `mac.notarize: false`。发版 CI 另外设置 `CSC_IDENTITY_AUTO_DISCOVERY=false`。不需要任何签名证书或 Apple 账号。
 
+这里的“无签名”指没有 Developer ID 发布者签名、没有公证，并不表示可执行文件没有 ad-hoc 签名。修改 fuse 会使 Apple Silicon 二进制原有的 ad-hoc 签名失效；`electronFuses.resetAdHocDarwinSignature: true` 在修改后重置它，否则 macOS 可能以 `SIGKILL (CODESIGNING)` 终止启动。ad-hoc 签名不证明发布者身份，也不消除 Gatekeeper 提示。
+
 ```bash
 pnpm --filter @covel/desktop dist:mac
 ```
 
-产物是 `release/electron/` 下的 `.dmg` 和 `.zip`，目标架构是 `arm64`。应用没有签名也没有公证，玩家第一次打开时可能要在 macOS 的“隐私与安全性”里确认。
+产物是 `release/electron/` 下的 `.dmg` 和 `.zip`，目标架构是 `arm64`。应用没有 Developer ID 签名，也没有公证，玩家第一次打开时可能要在 macOS 的“隐私与安全性”里确认。
 
 ### Optional future signing
 
-官方 macOS 构建保持无签名。独立 Node 使用官方二进制的固定摘要，目前不支持自行签名或公证的构建：electron-builder 默认会重新签名 `Contents/Resources/node/node`，改变文件字节，导致运行时校验失败。
+官方 macOS 构建仅保留 ad-hoc 签名，Developer ID 签名和公证流程尚未完成验证。移除额外的 Node 可执行文件不代表已经支持发布者签名。
 
-仅修改 `identity` / `notarize` 不足以启用签名。以后接入签名时，需要单独验证 Node 原有签名、完整应用公证、解包校验和真实启动；不要关闭摘要校验，也不要把签名后现场生成的摘要当成可信固定值。
+仅修改 `identity` / `notarize` 不足以证明签名可用。以后接入时，需要验证完整应用签名与公证、RunAsNode fuse、解包资源校验和真实启动；保留主进程 bundle 与资源的摘要绑定。
 
 ### Entitlements
 
-`apps/desktop/resources/entitlements.mac.plist` 是 hardened runtime 需要的权限文件。它允许三件事：
+`apps/desktop/resources/entitlements.mac.plist` 保留以下声明，供后续签名流程核对：
 
-- V8 的 JIT。
-- 启动 Node 子进程（`com.apple.security.cs.allow-dyld-environment-variables`）。
-- 内置 API 服务端使用的本机回环网络。
+- V8 JIT、未签名可执行内存，以及关闭库验证的例外。
+- `com.apple.security.cs.allow-dyld-environment-variables` 允许动态链接器使用 `DYLD_*` 环境变量；它不是启动子进程的权限。
+- 出站网络和内置 API 服务端的入站网络声明。
 
-不清楚某一项为什么需要时，不要删它。
+官方产物没有 Developer ID 签名，也不是 Mac App Store 的沙箱应用。保留这些 plist 项和 `hardenedRuntime` 配置不表示当前产物已经获得签名硬化；各项必要性和实际效果须在未来的签名流程中验证。
 
 ## Windows
 
@@ -183,7 +184,7 @@ CSC_KEY_PASSWORD=... \
 pnpm --filter @covel/desktop dist:linux
 ```
 
-官方 Node 的 Linux 二进制需要内核 4.18、glibc 2.28、libstdc++ 6.0.25（`GLIBCXX_3.4.25`）或更高版本，以及 libatomic 运行库（通常名为 `libatomic1` 或 `libatomic`）。deb 声明这些库的依赖；AppImage 用户需要在系统上安装它们。这不是 musl/Alpine 版运行时，也不是不依赖系统库的包。每个架构的安装包都要在对应平台验证，不能用构建机上的启动检查代替其他架构的运行验证。
+Linux 安装包依赖 Electron 和服务端原生模块所需的系统库。deb 使用 electron-builder 默认的九项依赖，不再覆盖 `deb.depends`，也不再额外声明外置 Node 所需的 `libatomic1` / `libstdc++6`。AppImage 用户仍需要在系统上安装所需库。这不是 musl/Alpine 版运行时，也不是不依赖系统库的包。每个架构的安装包都要在对应平台验证，不能用构建机上的启动检查代替其他架构的运行验证。
 
 产物在 `release/electron/` 下：
 
@@ -210,10 +211,10 @@ CI **不**调用第二步。它直接运行 `electron-builder`，让解包目录
 
 ### 发版 CI 检查什么
 
-- 每个平台上，先检查解包后的应用入口和资源，再用其中选定的运行时启动后端，验证 SQLite、向量扩展和插件加载，最后只上传安装包。每个内置插件必须保留根 `PLUGIN.md`；子目录清单或仅有翻译文件不能代替它。
-- Windows 还运行 `apps/desktop/scripts/verify-windows-artifacts.mjs`，分别启动真正的 ZIP 内 `Covel.exe` 和单文件自解压 EXE。检查要求原生准备画面、进程树内实际可见且未最小化的应用窗口、世界列表和可操作的开局按钮，再检查整个进程树退出。它使用隔离数据目录，不调用付费模型。
+- 每个平台上，先检查解包后的应用入口和资源，再用其中的 Electron RunAsNode 启动后端，验证 SQLite、向量扩展和插件加载，最后只上传安装包。每个内置插件必须保留根 `PLUGIN.md`；子目录清单或仅有翻译文件不能代替它。
+- Windows 还运行 `apps/desktop/scripts/verify-windows-artifacts.mjs`，分别启动真正的 ZIP 内 `Covel.exe` 和单文件自解压 EXE。检查要求原生准备画面、进程树内实际可见且未最小化的应用窗口、世界列表和可操作的开局按钮，再检查整个进程树退出。它使用隔离数据目录，不调用付费模型。ZIP 会解压到含空格和中文的路径，先以随包 `Covel.exe` 验证有配置／无配置的后端启动，再检查界面和刷新恢复。证据中的 `size.json` 记录压缩文件大小，ZIP 还记录解压后的文件总大小。Windows 发布任务也运行桌面回归测试及插件／世界安装 API 测试；后者不验证 NSIS 安装向导。
 - 这项 Windows 检查需要交互式、未锁定的桌面；拿不到原生像素或可见窗口就失败。截图和日志单独上传到 `covel-windows-startup-evidence`，不混进发布安装包。macOS 构建、API 检查和渲染器截图不能代替这项原生 Windows 证据。
-- 官方构建没有签名，所以没有签名检查。
+- 官方构建没有发布者证书签名，因此不做发布者身份校验；macOS fuse 修改后的 ad-hoc 签名仍须通过实际启动验证。
 - 发布任务为每个 `.dmg`、`.zip` 和 `.exe` 写一份 `SHA256SUMS.txt`，附在 GitHub Release 上。玩家用 `shasum -a 256 -c SHA256SUMS.txt`（macOS）或 `sha256sum -c SHA256SUMS.txt` 校验下载的文件。这份清单说明的是“文件和构建任务上传的一致”，不是“谁构建的”。
 - 发布任务还为同一批文件记录构建来源证明。`gh attestation verify <file> --repo ackness/covel` 可以确认一个下载的文件是这个仓库的发版工作流构建的，以及来自哪个提交。
 
@@ -303,7 +304,7 @@ pnpm --filter @covel/desktop test
 6. **构建桌面资源。** 运行 `pnpm --filter @covel/desktop build`。
 7. **玩家流程验收。** 用隔离的数据和真实模型完成[发版前的玩家流程验收](./e2e-testing.md#发版前的玩家流程验收)。确定性测试和启动健康检查不能说明游戏能玩。
 8. **重启冒烟。** 在有桌面环境的会话里运行 `pnpm --filter @covel/desktop smoke:restart`，确认 preload 里的版本正确，并且页面能跳到新的后端端口。
-9. **发布说明。** 确认发布说明写明了 macOS 和 Windows 的产物没有签名。
+9. **发布说明。** 确认发布说明写明 macOS 产物没有 Developer ID 签名和公证、Windows 产物没有发布者证书签名。
 10. **推送并等 CI。** 本地检查通过后推送评审过的拉取请求，等 CI 和 PostgreSQL 集成测试通过。
 11. **试打包。** 在候选分支上手动运行 `Build Desktop` 工作流，`publish_release=false`。两个平台的任务都会检查 staging 资源和启动；Windows 还会跑一遍包安装 API 的回归测试。
 12. **打标签。** 合并拉取请求，确认 `main` 正常，然后在那个合并提交上创建并推送一个带注释的 `v*` 标签。推送标签会触发构建并发布 GitHub Release。

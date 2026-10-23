@@ -8,7 +8,7 @@ minimumReleaseAge: 10080
 # Exact security releases only; all other packages retain the seven-day delay.
 minimumReleaseAgeExclude:
   - "undici@6.29.1 || 7.30.1 || 8.12.2"
-  - "electron@44.9.3"
+  - "electron@45.0.0"
 
 # pnpm 11 defaults verifyDepsBeforeRun to an implicit auto-install, which is
 # actively harmful here: a `pnpm --filter <pkg> run …` that trips the check

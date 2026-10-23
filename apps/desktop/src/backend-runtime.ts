@@ -1,26 +1,17 @@
 import fs from "node:fs";
 import path from "node:path";
 import { createHash } from "node:crypto";
-import manifest from "../node-runtime.json" with { type: "json" };
+import desktopPackage from "../package.json" with { type: "json" };
 // Packaging scripts also load this module through native Node type stripping.
-import {
-  getNodeRuntimeTarget,
-  verifyNodeRuntime,
-  verifyNodeRuntimeFile,
-} from "./node-runtime.ts";
+import { assertDesktopTarget, verifyRuntimeFile } from "./runtime-integrity.ts";
 
-function configuredMode(): "standalone" | "electron" {
-  if (manifest.mode !== "standalone" && manifest.mode !== "electron") {
-    throw new Error(`Invalid desktop backend runtime mode: ${manifest.mode}`);
-  }
-  return manifest.mode;
-}
-
-// esbuild embeds this manifest in main.mjs. Resource metadata is a consistency
-// check, never a runtime selector. A changed choice requires a fresh bundle.
-export const BACKEND_RUNTIME_MODE = configuredMode();
+export const BACKEND_RUNTIME_MODE = "electron";
+export const ELECTRON_VERSION = desktopPackage.devDependencies.electron;
+// Electron's Node version is an identity check, not a claim that every upstream
+// Node fix is included. Review Electron backports and Chromium dependencies on upgrade.
+export const EMBEDDED_NODE_VERSION = "24.22.0";
 export const RUNTIME_SELECTION_ID = createHash("sha256")
-  .update(`desktop-backend-v1:${JSON.stringify(manifest)}`)
+  .update(`desktop-electron-v1:${ELECTRON_VERSION}:${EMBEDDED_NODE_VERSION}`)
   .digest("hex");
 
 interface RuntimeTarget {
@@ -33,31 +24,14 @@ interface ElectronVersions {
   electron?: string;
 }
 
-function stableVersion(version: string | undefined): number[] | undefined {
-  if (!version || !/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(version)) {
-    return undefined;
-  }
-  const parts = version.split(".").map(Number);
-  return parts.every(Number.isSafeInteger) && parts.join(".") === version
-    ? parts
-    : undefined;
-}
-
-/** Only explicitly supported, patched stable Node release lines are eligible. */
+/** Only the reviewed, pinned Electron/Node pair may execute the backend. */
 export function assertSafeElectronVersions(versions: ElectronVersions): void {
-  const node = stableVersion(versions.node);
-  const electron = stableVersion(versions.electron);
-  const minimumMinor =
-    node?.[0] === 24 ? 22 : node?.[0] === 26 ? 12 : undefined;
   if (
-    !node ||
-    !electron ||
-    minimumMinor === undefined ||
-    node[1]! < minimumMinor ||
-    (node[1] === minimumMinor && node[2]! < 1)
+    versions.electron !== ELECTRON_VERSION ||
+    versions.node !== EMBEDDED_NODE_VERSION
   ) {
     throw new Error(
-      `Unsafe or unsupported Electron backend runtime: Electron ${versions.electron ?? "missing"}, Node ${versions.node ?? "missing"}. Requires stable Electron with patched Node 24.22.1+ (24.x) or 26.12.1+ (26.x); no fallback is permitted.`,
+      `Unexpected Electron backend runtime: Electron ${versions.electron ?? "missing"}, Node ${versions.node ?? "missing"}. Requires Electron ${ELECTRON_VERSION} with embedded Node ${EMBEDDED_NODE_VERSION}; no fallback is permitted.`,
     );
   }
 }
@@ -143,7 +117,7 @@ export function backendRuntimeEnvironment(
         delete env[key];
     }
   }
-  if (BACKEND_RUNTIME_MODE === "electron") env.ELECTRON_RUN_AS_NODE = "1";
+  env.ELECTRON_RUN_AS_NODE = "1";
   return env;
 }
 
@@ -151,7 +125,7 @@ export function verifyRuntimeSelection(
   file: string,
   { platform = process.platform, arch = process.arch }: RuntimeTarget = {},
 ): { mainSha256: string; executableName?: unknown } {
-  getNodeRuntimeTarget(platform, arch); // Preserve the existing supported matrix.
+  assertDesktopTarget(platform, arch);
   if (!fs.lstatSync(file).isFile()) {
     throw new Error(
       `Backend runtime selection must be a regular file: ${file}`,
@@ -191,11 +165,8 @@ export async function verifyBackendRuntime(
     path.join(resources, "runtime-selection.json"),
     { platform, arch },
   );
-  if (mainFile) await verifyNodeRuntimeFile(mainFile, selection.mainSha256);
+  if (mainFile) await verifyRuntimeFile(mainFile, selection.mainSha256);
   const standalone = path.join(resources, "node");
-  if (BACKEND_RUNTIME_MODE === "standalone") {
-    return verifyNodeRuntime(standalone, { platform, arch });
-  }
   // lstat rejects even a dangling link. A stale standalone resource must not
   // survive a switch-back or become an implicit fallback.
   let standaloneExists = false;

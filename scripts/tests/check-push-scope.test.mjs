@@ -130,6 +130,70 @@ test("a push to the main branch, a tag, and a requested full run test everything
   }
 });
 
+test("full requests, main and tags override a docs-only result and its cache", (t) => {
+  for (const kind of ["full", "main", "tag"]) {
+    const probe = fixture(t);
+    const base = workspace(probe);
+    const tip = probe.commitFiles({ "docs/page.md": "text\n" }, "docs");
+    assert.equal(pushTopic(probe, tip).status, 0);
+    const previous = probe.calls().length;
+    const ref =
+      kind === "tag"
+        ? "refs/tags/v1"
+        : `refs/heads/${kind === "main" ? "main" : "topic"}`;
+    const result = probe.run(
+      ["--pre-push", "origin", "url"],
+      `${ref} ${tip} ${ref} ${kind === "tag" ? "0".repeat(40) : base}\n`,
+      { env: { COVEL_PUSH_CHECK: kind === "full" ? "full" : "" } },
+    );
+    assert.equal(result.status, 0, result.stderr);
+    assert.deepEqual(
+      probe
+        .calls()
+        .slice(previous)
+        .map(({ args }) => args),
+      expectedCommands,
+      kind,
+    );
+  }
+});
+
+test("an affected check for a stacked base cannot satisfy a wider push", (t) => {
+  const probe = fixture(t);
+  workspace(probe);
+  probe.commitFiles({ "packages/a/src/index.ts": "one\n" }, "a");
+  const tip = probe.commitFiles({ "packages/b/src/index.ts": "one\n" }, "b");
+  const narrowed = probe.run(["--base", "HEAD~1"]);
+  assert.equal(narrowed.status, 0, narrowed.stderr);
+  assert.deepEqual(probe.calls()[2].args, [
+    "test",
+    "--concurrency=2",
+    "--filter=...b",
+  ]);
+  const previous = probe.calls().length;
+  const wider = pushTopic(probe, tip, affectedRun);
+  assert.equal(wider.status, 0, wider.stderr);
+  assert.deepEqual(
+    probe
+      .calls()
+      .slice(previous)
+      .map(({ args }) => args),
+    [
+      ["install", "--frozen-lockfile"],
+      ["check"],
+      ["test", "--concurrency=2", "--filter=...a", "--filter=...b"],
+      ["e2e", "--list"],
+    ],
+  );
+  const afterWider = probe.calls().length;
+  assert.equal(pushTopic(probe, tip, affectedRun).status, 0);
+  assert.equal(
+    probe.calls().length,
+    afterWider,
+    "the same base can reuse the affected result",
+  );
+});
+
 test("a manual check runs the affected tests, and every suite with --full", (t) => {
   const probe = fixture(t);
   workspace(probe);

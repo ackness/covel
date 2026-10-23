@@ -85,10 +85,13 @@ test("packaging stages the runtime for each target, never the build host", async
     format: "esm",
     plugins: [
       {
-        name: "runtime-download-fixture",
+        name: "runtime-target-fixture",
         setup(builder) {
           builder.onResolve(
-            { filter: /^(\.\/backend-runtime\.mjs|electron-builder)$/ },
+            {
+              filter:
+                /^(\.\/backend-runtime\.mjs|\.\/ensure-electron\.mjs|electron-builder)$/,
+            },
             (args) => ({
               path: args.path,
               namespace: "fixture",
@@ -98,9 +101,10 @@ test("packaging stages the runtime for each target, never the build host", async
             contents:
               args.path === "electron-builder"
                 ? `export const Arch = ${JSON.stringify(Arch)};`
-                : `export const calls = [];
-               export const BACKEND_RUNTIME_MODE = "standalone";
-               export function probeBackendRuntime() { throw new Error("standalone packaging must not probe Electron"); }
+                : args.path === "./ensure-electron.mjs"
+                  ? `export function ensureElectronBinary() { return "/fixture/electron"; }`
+                  : `export const calls = [];
+               export function probeBackendRuntime() {}
                export async function stageBackendRuntime(directory, target, executableName) { calls.push(["stage", directory, target, executableName]); }`,
           }));
         },
@@ -171,7 +175,7 @@ test("packaging stages the runtime for each target, never the build host", async
         arch,
         packager: { projectDir: root },
       }),
-      /Unsupported desktop Node target/,
+      /Unsupported desktop runtime target/,
     );
   }
 });

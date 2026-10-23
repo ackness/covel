@@ -2,12 +2,11 @@ import fs from "node:fs";
 import path from "node:path";
 import { Arch } from "electron-builder";
 import {
-  BACKEND_RUNTIME_MODE,
   probeBackendRuntime,
   stageBackendRuntime,
 } from "./backend-runtime.mjs";
 import { ensureElectronBinary } from "./ensure-electron.mjs";
-import { getNodeRuntimeTarget } from "../src/node-runtime.ts";
+import { assertDesktopTarget } from "../src/runtime-integrity.ts";
 
 /**
  * Optional native packages must match the package target, not the build host.
@@ -56,19 +55,17 @@ export default async function beforePack(context) {
   const os = { darwin: "mac", win32: "win", linux: "linux" }[platform];
   const arch = Arch[context.arch];
   if (!os || !["x64", "arm64"].includes(arch)) {
-    throw new Error(`Unsupported desktop Node target: ${platform}-${arch}`);
+    throw new Error(`Unsupported desktop runtime target: ${platform}-${arch}`);
   }
-  getNodeRuntimeTarget(platform, arch);
+  assertDesktopTarget(platform, arch);
   verifyTargetNativePackages(
     path.join(context.packager.projectDir, "staging", "server"),
     { platform, arch },
   );
-  if (BACKEND_RUNTIME_MODE === "electron") {
-    await probeBackendRuntime(ensureElectronBinary(), {
-      platform: process.platform,
-      arch: process.arch,
-    });
-  }
+  await probeBackendRuntime(ensureElectronBinary(), {
+    platform: process.platform,
+    arch: process.arch,
+  });
   await stageBackendRuntime(
     context.packager.projectDir,
     { platform, arch },

@@ -77,6 +77,15 @@ extraResources:
 
 asar: true
 
+# The backend reuses this executable; custom CA support also needs Node's env fuse.
+electronFuses:
+  # Apple Silicon checks code pages even without a Developer ID signature.
+  resetAdHocDarwinSignature: true
+  runAsNode: true
+  enableNodeOptionsEnvironmentVariable: true
+  enableNodeCliInspectArguments: false
+  onlyLoadAppFromAsar: true
+
 compression: normal
 
 # ── macOS ─────────────────────────────────────────────────────────
@@ -106,8 +115,8 @@ dmg:
 # ── Windows ───────────────────────────────────────────────────────
 win:
   icon: resources/icon.ico
-  # The published Windows release and its standalone Node runtime are x64-only.
-  # Unsupported targets fail in beforePack instead of shipping a host binary.
+  # The published Windows release is x64-only.
+  # Unsupported targets fail in beforePack.
   target:
     - target: nsis
       arch: [x64]
@@ -156,22 +165,6 @@ linux:
       Comment: AI-powered interactive storytelling
       Categories: Game;RolePlaying;
       StartupWMClass: Covel
-
-deb:
-  # Setting depends replaces electron-builder's list. Preserve its 26.17.0
-  # defaults, then add the standalone Node runtime's native requirements.
-  depends:
-    - libgtk-3-0
-    - libnotify4
-    - libnss3
-    - libxss1
-    - libxtst6
-    - xdg-utils
-    - libatspi2.0-0
-    - libuuid1
-    - libsecret-1-0
-    - libatomic1
-    - libstdc++6 (>= 8)
 
 # ── Auto-update (electron-updater) ────────────────────────────────
 # Uncomment once a release channel is wired up:

@@ -13,7 +13,11 @@ export async function fetchWithTimeout(
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const response = await fetchImpl(url, { signal: controller.signal });
+    // Health probes must describe this sidecar, never a redirect destination.
+    const response = await fetchImpl(url, {
+      signal: controller.signal,
+      redirect: "error",
+    });
     await response.body?.cancel();
     return response;
   } finally {
@@ -36,7 +40,13 @@ export async function fetchJsonWithTimeout(
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const res = await fetchImpl(url, { ...init, signal: controller.signal });
+    // Config writes can carry keys in their body; never forward them to a
+    // redirect target, including another path on the same loopback origin.
+    const res = await fetchImpl(url, {
+      ...init,
+      signal: controller.signal,
+      redirect: "error",
+    });
     const body: unknown = await res.json().catch((error: unknown) => {
       if (controller.signal.aborted) throw error;
       return null;

@@ -189,7 +189,7 @@ jobs:
 
       # verify-release has checked this exact commit. Keep the platform build
       # and packaged-resource checks on each target OS.
-      - name: Build desktop (web, server and verified Node staging)
+      - name: Build desktop (web, server and verified Electron runtime)
         run: pnpm --filter @covel/desktop build
 
       - name: Package Electron mac
@@ -249,10 +249,13 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Test Windows package installation
+      - name: Run desktop regression tests
+        run: pnpm --filter @covel/desktop test
+
+      - name: Test plugin and world installation APIs
         run: pnpm --filter @covel/server exec vitest run tests/api/install.test.ts
 
-      - name: Build desktop (web, server and verified Node staging)
+      - name: Build desktop (web, server and verified Electron runtime)
         run: pnpm --filter @covel/desktop build
 
       - name: Package Electron win
