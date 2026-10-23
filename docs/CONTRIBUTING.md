@@ -11,7 +11,7 @@
 ## 开发环境
 
 - Node.js 26.x
-- pnpm 12.10.1（见根目录 `package.json` 的 `packageManager`）
+- pnpm 12.14.0（见根目录 `package.json` 的 `packageManager`）
 - 可选：Docker（用于 PostgreSQL 模式）
 
 ```bash
@@ -22,7 +22,7 @@ cp .env.llm.example .env.llm   # 填写 API Key
 pnpm dev                       # 同时启动前端与后端
 ```
 
-每个新克隆在 `pnpm install --frozen-lockfile` 后运行一次 `pnpm hooks:install`，安装本地 Git pre-push hook；已有 pre-commit hook 保持不变。如果已有其他 pre-push hook，安装命令会拒绝覆盖，需先自行处理冲突。pre-push hook 使用 `mise exec` 选择 `mise.toml` 指定的 Node 26.12.1、pnpm 12.10.1 和 actionlint，因此还需安装 mise 并运行 `mise install` 准备相应工具链。
+每个新克隆在 `pnpm install --frozen-lockfile` 后运行一次 `pnpm hooks:install`，安装本地 Git pre-push hook；已有 pre-commit hook 保持不变。如果已有其他 pre-push hook，安装命令会拒绝覆盖，需先自行处理冲突。pre-push hook 使用 `mise exec` 选择 `mise.toml` 指定的 Node 26.12.1、pnpm 12.14.0 和 actionlint，因此还需安装 mise 并运行 `mise install` 准备相应工具链。
 
 提交前检查由根目录 `.pre-commit-config.yaml` 定义；安装 pre-commit 后运行 `pre-commit install` 启用，或用 `pre-commit run --all-files` 手动检查。Oxlint 的版本固定在根 `devDependencies` 和 `pnpm-lock.yaml`，与 Prettier 一样通过 `mise exec` 使用项目工具链，不创建独立的 Node 环境。`scripts/run-with-project-node.mjs` 将选中的 Node 放在子进程 PATH 首位，确保 CLI shim 和后续命令也使用同一版本；更新配置后，已有 hook 会自动读取新配置，无需清理全局缓存。Oxlint 的规则在根目录 `.oxlintrc.jsonc`，关闭的规则各有一行说明；hook 检查改动的文件，`pnpm check` 检查整个仓库，两处都带 `--deny-warnings`，所以警告也会让检查失败。提交 hook 不做类型检查；类型检查在 `pnpm check`、pre-push hook 和 CI 里运行。
 

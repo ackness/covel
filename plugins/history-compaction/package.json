@@ -9,6 +9,6 @@
     "@covel/context": "workspace:*",
     "@covel/plugin-handlers-utils": "workspace:*",
     "@covel/store": "workspace:*",
-    "vitest": "^5.0.3"
+    "vitest": "^5.0.5"
   }
 }

@@ -59,6 +59,8 @@ Covel 是模块化单体：一个仓库、一起发布，内部分成若干包�
 
 **依赖方向。** `plugin-handlers-utils` 是依赖图的根，不依赖任何工作区包。`shared` 紧挨在它上面。`@covel/server` 组合所有功能包。精确的依赖边写在各包的 `package.json` 里，`pnpm check:boundaries` 检查公开入口和依赖方向。 SQLite 向量扩展 `sqlite-vec` 由 `store` 直接声明，根包不重复提供。
 
+常规依赖更新只采用发布满七天的正式版；等待期与精确安全版本例外由 [`pnpm-workspace.yaml`](../../pnpm-workspace.yaml) 管理。版本声明以各包的 `package.json` 和 `mise.toml` 为准，解析结果以 `pnpm-lock.yaml` 为准。升级时同步工作区与工具模板，保留 overrides 的消费方范围，并用[现有检查](./commands.md)验证兼容性。
+
 工作区使用 TypeScript 稳定版 7.0.2。Zod、作者 SDK 的 peer dependency 和带工具模板的最低版本统一为 4.6.7；它修复了 TypeScript 7.1 对递归 JSON 类型的循环推断报错。JSON 的校验、可选字段和只读语义不变。Nightly 和 tsrs 的兼容性验证不替代稳定版类型检查门禁。
 
 ## 宿主组合的关键边界

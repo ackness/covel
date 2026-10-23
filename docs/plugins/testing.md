@@ -61,7 +61,7 @@ pnpm validate:plugin ~/.covel/plugins/my-plugin
 
 ### 在哪里能写
 
-用 `pnpm create-plugin <名字> --with-tools` 生成在仓库 `plugins/` 下的插件自带单元测试：`tests/` 里有一个例子，`package.json` 里有 `test` 和 `lint` 两个脚本，还有一个 `vitest.config.ts`。
+用 `pnpm create-plugin <名字> --with-tools` 生成在仓库 `plugins/` 下的插件自带单元测试：`tests/` 里有一个例子，`package.json` 里有 `test` 和 `lint` 两个脚本，还有一个 `vitest.config.ts`。模板与工作区使用同一版 Vitest；升级已有插件时，同步它的开发依赖声明。
 
 生成到用户插件目录的插件不带依赖，也没有测试配置。它们用校验和[离线用例](#离线用例)来测。
 

@@ -61,7 +61,7 @@ A unit test calls your tool or function directly, and checks its return value. I
 
 ### Where you can write them
 
-A plugin that `pnpm create-plugin <name> --with-tools` generates under the repository's `plugins/` comes with unit tests of its own: there is an example in `tests/`, `package.json` has the `test` and `lint` scripts, and there is a `vitest.config.ts`.
+A plugin that `pnpm create-plugin <name> --with-tools` generates under the repository's `plugins/` comes with unit tests of its own: there is an example in `tests/`, `package.json` has the `test` and `lint` scripts, and there is a `vitest.config.ts`. The template and workspace use the same Vitest version; update an existing plugin's development dependency declaration when upgrading.
 
 A plugin generated into the user's plugin directory has no dependencies and no test configuration. These plugins are tested with validation and [offline cases](#offline-cases).
 

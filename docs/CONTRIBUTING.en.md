@@ -11,7 +11,7 @@ Everyone taking part in the project follows the [Code of Conduct](../CODE_OF_CON
 ## Development environment
 
 - Node.js 26.x
-- pnpm 12.10.1 (see the root `package.json` `packageManager`)
+- pnpm 12.14.0 (see the root `package.json` `packageManager`)
 - Optional: Docker (for PostgreSQL mode)
 
 ```bash
@@ -22,7 +22,7 @@ cp .env.llm.example .env.llm   # fill in API keys
 pnpm dev                       # start frontend + backend
 ```
 
-After `pnpm install --frozen-lockfile`, run `pnpm hooks:install` once in each new clone to install the local Git pre-push hook. It preserves the existing pre-commit hook and refuses to overwrite an unrelated pre-push hook; resolve that conflict yourself before installing. The hook uses `mise exec` to select the Node 26.12.1, pnpm 12.10.1, and actionlint toolchain from `mise.toml`, so install mise and run `mise install` first.
+After `pnpm install --frozen-lockfile`, run `pnpm hooks:install` once in each new clone to install the local Git pre-push hook. It preserves the existing pre-commit hook and refuses to overwrite an unrelated pre-push hook; resolve that conflict yourself before installing. The hook uses `mise exec` to select the Node 26.12.1, pnpm 12.14.0, and actionlint toolchain from `mise.toml`, so install mise and run `mise install` first.
 
 The root `.pre-commit-config.yaml` defines commit checks. Install pre-commit and run `pre-commit install` to enable them, or run `pre-commit run --all-files` manually. Oxlint is pinned in the root `devDependencies` and `pnpm-lock.yaml`. Like Prettier, it uses the project toolchain through `mise exec` without creating a separate Node environment. `scripts/run-with-project-node.mjs` prepends the selected Node directory to the child PATH so CLI shims and subsequent commands use the same version. Existing hooks read the updated configuration automatically; no global cache cleanup is needed. Oxlint rules live in the root `.oxlintrc.jsonc`, with one line of reason for each rule that is off. The hook checks the changed files and `pnpm check` checks the whole repository, both with `--deny-warnings`, so a warning fails the check. The commit hook runs no type check; `pnpm check`, the pre-push hook and CI do.
 

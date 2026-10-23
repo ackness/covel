@@ -29,7 +29,9 @@ trade-offs; change code that contradicts them:
 
 Toolchain versions live in `mise.toml` and package manifests; do not duplicate
 version pins here. Keep the Zod minimum aligned across consumers, the author SDK
-peer dependency and the tools scaffold.
+peer dependency and the tools scaffold. Dependency refreshes follow the release-age
+policy in `pnpm-workspace.yaml` and update declarations and the lockfile together.
+Keep workspace Vitest, its coverage plugin and the tools scaffold's Vitest aligned.
 
 ```bash
 pnpm install --frozen-lockfile  # also builds the author SDK

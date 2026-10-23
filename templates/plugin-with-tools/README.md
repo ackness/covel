@@ -19,7 +19,7 @@
 
 ## 开发
 
-开发依赖使用 TypeScript 7.0.2 和 Zod 4.6.7 或更高的兼容版本。保持 Zod 与宿主 SDK 的最低版本一致，避免 TypeScript 7.1 的递归 JSON 类型错误；运行时仍由宿主提供 SDK 和 Zod。
+开发依赖使用 TypeScript 7.0.2 和 Zod 4.6.7 或更高的兼容版本。保持 Zod 与宿主 SDK 的最低版本一致，避免 TypeScript 7.1 的递归 JSON 类型错误；运行时仍由宿主提供 SDK 和 Zod。Vitest 随工作区同步更新，版本范围见 `package.json`。
 
 1. 修改 `README.md`，维护给人类和开发者看的说明。
 2. 修改 `PLUGIN.md`，维护 runtime 元信息和模型指令。

@@ -40,7 +40,7 @@
   },
   "devDependencies": {
     "typescript": "^7.0.2",
-    "vitest": "^5.0.3"
+    "vitest": "^5.0.5"
   },
   "peerDependencies": {
     "zod": "^4.6.7"
