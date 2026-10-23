@@ -29,8 +29,7 @@ import {
   backendRuntimeEnvironment,
   backendRuntimeStagingDirectory,
   packagedElectronExecutable,
-  probeBackendRuntime,
-  verifyBackendRuntime,
+  verifyAndProbeBackendRuntime,
   verifyRuntimeSelection,
 } from "./backend-runtime.mjs";
 import { ensureElectronBinary } from "./ensure-electron.mjs";
@@ -82,12 +81,12 @@ const electronExecutable = packaged
   ? packagedElectronExecutable(runtimeResources, options)
   : ensureElectronBinary();
 // No backend module is imported until the actual executable's versions pass.
-const runtime = await probeBackendRuntime(electronExecutable, options);
-const nodeBinary = await verifyBackendRuntime(runtimeResources, {
-  ...options,
+const runtime = await verifyAndProbeBackendRuntime(
+  runtimeResources,
   electronExecutable,
-  electronVersions: runtime,
-});
+  options,
+);
+const nodeBinary = electronExecutable;
 const TIMEOUT_MS = 30_000;
 
 function die(msg, code = 1) {

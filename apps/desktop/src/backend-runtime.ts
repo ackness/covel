@@ -157,7 +157,7 @@ export async function verifyBackendRuntime(
     mainFile,
   }: RuntimeTarget & {
     electronExecutable?: string;
-    electronVersions?: ElectronVersions;
+    electronVersions?: ElectronVersions | (() => ElectronVersions);
     mainFile?: string;
   } = {},
 ): Promise<string> {
@@ -181,12 +181,17 @@ export async function verifyBackendRuntime(
       `Unexpected standalone Node resource in Electron mode: ${standalone}`,
     );
   }
-  assertSafeElectronVersions(electronVersions ?? {});
   if (!electronExecutable || !path.isAbsolute(electronExecutable)) {
     throw new Error(
       "The exact Electron executable is required for the backend runtime",
     );
   }
   await assertElectronRunAsNodeCapability(electronExecutable, platform);
+  // Packaging probes may execute only after the resource and fuse checks pass.
+  assertSafeElectronVersions(
+    typeof electronVersions === "function"
+      ? electronVersions()
+      : (electronVersions ?? {}),
+  );
   return electronExecutable;
 }

@@ -63,6 +63,12 @@ jobs:
           ref: ${{ github.workflow_sha }}
           # Releases and explicit commits select full scope without a diff.
           fetch-depth: ${{ (inputs.release || inputs.commit != '') && 1 || 0 }}
+          # This checkout version fetches blob:none for sparse checkouts. Keep
+          # commit/tree history for merge-base without unrelated file contents.
+          sparse-checkout: |
+            /scripts/ci-scope.mjs
+            /scripts/lib/change-scope.mjs
+          sparse-checkout-cone-mode: false
           persist-credentials: false
 
       # Uses only Node built-ins and git; no dependency installation is needed.
@@ -126,15 +132,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Cache Electron binaries
-        if: ${{ !inputs.release && inputs.commit == '' && needs.scope.outputs.scope != 'docs' }}
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ~/.cache/electron
-          key: ${{ runner.os }}-${{ runner.arch }}-electron-${{ hashFiles('pnpm-lock.yaml') }}
-
       - name: Restore Electron binaries
-        if: ${{ inputs.release || inputs.commit != '' }}
+        id: electron-cache
+        if: ${{ needs.scope.outputs.scope != 'docs' || inputs.release || inputs.commit != '' }}
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/electron
@@ -144,22 +144,12 @@ jobs:
       # package, so a run that only touches one package replays the rest from
       # here instead of re-running them. restore-keys falls back to the most
       # recent cache on this OS when the exact SHA has no entry.
-      - name: Cache turbo
-        if: ${{ !inputs.release && inputs.commit == '' }}
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: .turbo/cache
-          key: turbo-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ github.sha }}
-          restore-keys: |
-            turbo-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-
-            turbo-${{ runner.os }}-
-
       - name: Restore CI task cache
-        if: ${{ inputs.release || inputs.commit != '' }}
+        id: turbo-cache
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: .turbo/cache
-          key: turbo-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ inputs.commit }}
+          key: turbo-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ inputs.commit || github.sha }}
           restore-keys: |
             turbo-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-
             turbo-${{ runner.os }}-
@@ -192,6 +182,22 @@ jobs:
         if: ${{ inputs.release }}
         run: pnpm release:preflight
 
+      # Save only after every check succeeds. Requested source commits and
+      # releases must never publish executed files into the workflow ref's cache.
+      - name: Save Electron binaries
+        if: ${{ success() && !inputs.release && inputs.commit == '' && needs.scope.outputs.scope != 'docs' && steps.electron-cache.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/electron
+          key: ${{ steps.electron-cache.outputs.cache-primary-key }}
+
+      - name: Save CI task cache
+        if: ${{ success() && !inputs.release && inputs.commit == '' && steps.turbo-cache.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .turbo/cache
+          key: ${{ steps.turbo-cache.outputs.cache-primary-key }}
+
   web:
     name: Web unit tests
     needs: scope
@@ -220,22 +226,12 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       # A separate key namespace keeps this cache to the web test graph.
-      - name: Cache turbo
-        if: ${{ !inputs.release && inputs.commit == '' }}
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: .turbo/cache
-          key: turbo-web-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ github.sha }}
-          restore-keys: |
-            turbo-web-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-
-            turbo-web-${{ runner.os }}-
-
       - name: Restore CI task cache
-        if: ${{ inputs.release || inputs.commit != '' }}
+        id: turbo-cache
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: .turbo/cache
-          key: turbo-web-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ inputs.commit }}
+          key: turbo-web-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ inputs.commit || github.sha }}
           restore-keys: |
             turbo-web-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-
             turbo-web-${{ runner.os }}-
@@ -245,6 +241,13 @@ jobs:
         env:
           VITEST_MAX_WORKERS: "4"
         run: pnpm test --filter=@covel/web
+
+      - name: Save CI task cache
+        if: ${{ success() && !inputs.release && inputs.commit == '' && steps.turbo-cache.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .turbo/cache
+          key: ${{ steps.turbo-cache.outputs.cache-primary-key }}
 
   server:
     name: Server tests, runtime coverage
@@ -378,28 +381,19 @@ jobs:
           echo "version=$(pnpm exec playwright --version)" >> "$GITHUB_OUTPUT"
           echo "image=${ImageOS:-unknown}" >> "$GITHUB_OUTPUT"
 
-      - name: Cache Chromium
-        if: ${{ !inputs.release && inputs.commit == '' }}
-        id: chromium-cache
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.image }}-${{ steps.playwright.outputs.version }}
-
       - name: Restore Chromium
-        if: ${{ inputs.release || inputs.commit != '' }}
-        id: chromium-restore
+        id: chromium-cache
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.image }}-${{ steps.playwright.outputs.version }}
 
       - name: Install Chromium
-        if: steps.chromium-cache.outputs.cache-hit != 'true' && steps.chromium-restore.outputs.cache-hit != 'true'
+        if: steps.chromium-cache.outputs.cache-hit != 'true'
         run: pnpm exec playwright install --with-deps chromium
 
       - name: Install Chromium system packages
-        if: steps.chromium-cache.outputs.cache-hit == 'true' || steps.chromium-restore.outputs.cache-hit == 'true'
+        if: steps.chromium-cache.outputs.cache-hit == 'true'
         run: pnpm exec playwright install-deps chromium
 
       - name: Test browser smoke
@@ -420,6 +414,13 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
+      - name: Save Chromium
+        if: ${{ success() && !inputs.release && inputs.commit == '' && steps.chromium-cache.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ steps.chromium-cache.outputs.cache-primary-key }}
+
   result:
     name: Verification
     needs: [scope, verify, site, web, server, postgres, browser]
@@ -432,6 +433,8 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.workflow_sha }}
+          sparse-checkout: /scripts/ci-results.mjs
+          sparse-checkout-cone-mode: false
           persist-credentials: false
 
       # `always` exposes failures and skips instead of skipping the aggregate.

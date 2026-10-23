@@ -68,7 +68,7 @@ Things that the packager needs to know:
 - The built-in server uses this installer's Electron executable with RunAsNode to execute precompiled `server/src/index.js`. It does not search the player's PATH or transpile framework modules at startup.
 - Before every start, restart, or recovery, the app checks the main digest, target platform and architecture, actual Electron/Node versions, and RunAsNode fuse. Large-file hashing and fuse scanning read asynchronously. The child process starts only after verification finishes, and previous verification results are never reused. Missing, damaged, or mismatched resources produce a reinstall message, never a substitute runtime. After merging environment configuration, the app strips `NODE_OPTIONS`, `NODE_PATH`, and inherited Electron mode controls while retaining legitimate proxy settings, provider keys, and `NODE_EXTRA_CA_CERTS`.
 - The build compiles framework modules beside their source in staging with at most four concurrent tasks. Only after all compilation succeeds does it rewrite runtime exports and remove successfully compiled `.ts` files. On failure it waits for active tasks to settle before reporting the error, without pruning. Relative model-data and prompt paths computed from `import.meta.url` stay unchanged.
-- The `tsx` loader and its target esbuild executable remain in `resources/server/node_modules/` for dynamically imported TypeScript plugins. The desktop main process no longer ships a separate dependency tree.
+- The `tsx` loader and its target esbuild executable remain in `resources/server/node_modules/` for dynamically imported TypeScript plugins. The loader is read only from `tsx/dist/loader.mjs` in that directory; a missing loader fails startup. The desktop main process no longer ships a separate dependency tree.
 - After the HTTP port starts listening, the child process sends one private `covel:ready` message to the parent process, with the port number. When the desktop app receives it, it loads the app right away.
 - Waiting for readiness fails in three cases: the child process exits, the IPC connection drops, or 30 seconds pass.
 
@@ -85,7 +85,7 @@ Things that the packager needs to know:
 
 ### Startup smoke test
 
-The startup smoke test runs twice: once with a generated temporary configuration, and once with no configuration at all. Neither run needs a model key, and neither calls a model. They check that:
+The startup smoke test runs twice: once with a generated temporary configuration, and once with no configuration at all. Each preflight checks resources and scans the RunAsNode fuse once before probing versions; the next smoke run checks everything again. Neither run needs a model key, and neither calls a model. They check that:
 
 - The actual bundled Electron RunAsNode and SQLite are used, and sqlite-vec is available. A missing runtime or failed verification is an error, not a fallback to host Node or the memory backend.
 

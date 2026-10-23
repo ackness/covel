@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
+import { parse } from "yaml";
 import { checkRunsState, verificationFailures } from "../ci-results.mjs";
 
 const command = fileURLToPath(new URL("../ci-results.mjs", import.meta.url));
@@ -26,6 +28,38 @@ function check(name, conclusion = "success", status = "completed") {
 }
 
 const pages = (...runs) => [{ check_runs: runs }];
+
+test("result and merge gate check out only their workflow revision's helper", () => {
+  for (const [name, jobName] of [
+    ["ci", "result"],
+    ["gate", "gate"],
+  ]) {
+    const workflow = parse(
+      readFileSync(
+        new URL(`../../.github/workflows/${name}.yml`, import.meta.url),
+        "utf8",
+      ),
+    );
+    const steps = workflow.jobs[jobName].steps;
+    const checkouts = steps.filter((step) =>
+      step.uses?.startsWith("actions/checkout@"),
+    );
+    assert.equal(checkouts.length, 1);
+    const [checkout] = checkouts;
+    assert.equal(checkout.with.ref, "${{ github.workflow_sha }}");
+    assert.equal(checkout.with["persist-credentials"], false);
+    assert.equal(checkout.with["fetch-depth"] ?? 1, 1);
+    assert.equal(checkout.with.filter, undefined);
+    assert.equal(checkout.with["sparse-checkout-cone-mode"], false);
+    assert.equal(
+      checkout.with["sparse-checkout"].trim(),
+      "/scripts/ci-results.mjs",
+    );
+    assert.ok(
+      steps.some((step) => step.run?.includes("node scripts/ci-results.mjs")),
+    );
+  }
+});
 
 test("full and documentation-only verification require their actual job results", () => {
   assert.deepEqual(verificationFailures(results()), []);

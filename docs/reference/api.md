@@ -6149,9 +6149,9 @@ STORE_BACKEND=memory pnpm dev:server  # 临时 Memory 后端（重启即丢失�
 
 **安装后的重启和刷新**
 
-- Electron 里，`covel:restart-server` 负责两件事：重启 sidecar；健康检查通过后，让原生窗口导航到新端口。
+- 打包后的 Electron 里，`covel:restart-server` 负责两件事：重启 sidecar；健康检查通过后，让原生窗口导航到新端口。
 - Web 客户端保持它的重新加载遮罩，不要自己重新加载旧 URL，也不要尝试跨源跳转。
-- 开发模式下重新加载外部的 Vite 页面。
+- 开发模式的服务端由外部管理，`covel:restart-server` 返回 `{ ok: false, port, error }`，不会重启服务端或刷新 Vite 页面。在终端重启 `pnpm dev`，再按需刷新页面。
 - 卸载插件仍然需要重启，才能卸掉已发现的代码。卸载不会删除插件已保存的会话数据。
 
 **生成的世界文件**

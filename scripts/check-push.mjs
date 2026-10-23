@@ -271,26 +271,33 @@ function readVerified() {
   }
 }
 
+/** Whether a successful check covers another check's requirements. */
+function coversCheck(checked, needed) {
+  if (checked.commit !== needed.commit) return false;
+  if (checked.level === "full" || needed.level === "static") return true;
+  // Docs and affected checks are separate scopes. Affected checks also need
+  // the same resolved base; neither a wider nor a narrower diff is equivalent.
+  return (
+    checked.level === needed.level &&
+    (needed.level !== "affected" ||
+      (Boolean(needed.base) && checked.base === needed.base))
+  );
+}
+
 /** An earlier check of `commit` that ran at least what this push needs. */
 function verifiedEarlier(commit, needed, base) {
-  return readVerified().find(
-    (entry) =>
-      entry.commit === commit &&
-      LEVELS.indexOf(entry.level) >= LEVELS.indexOf(needed) &&
-      (entry.level !== "affected" ||
-        needed === "static" ||
-        (needed === "affected" && base && entry.base === base)),
+  return readVerified().find((entry) =>
+    coversCheck(entry, { commit, level: needed, base }),
   );
 }
 
 function recordVerified(commit, result) {
   try {
+    const checked = { commit, ...result, at: new Date().toISOString() };
     const entries = readVerified().filter(
-      (entry) =>
-        entry.commit !== commit ||
-        LEVELS.indexOf(entry.level) > LEVELS.indexOf(result.level),
+      (entry) => !coversCheck(checked, entry),
     );
-    entries.push({ commit, ...result, at: new Date().toISOString() });
+    entries.push(checked);
     writeFileSync(verifiedFile, `${JSON.stringify(entries.slice(-50))}\n`);
   } catch {
     // The record only saves a repeated run.

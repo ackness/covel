@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { test } from "node:test";
 import {
+  docsCommands,
   expectedCommands,
   fixture,
   git,
@@ -192,6 +195,155 @@ test("an affected check for a stacked base cannot satisfy a wider push", (t) => 
     afterWider,
     "the same base can reuse the affected result",
   );
+});
+
+test("affected results for the same HEAD retain each base for later hooks", (t) => {
+  const probe = fixture(t);
+  const main = workspace(probe);
+  const stacked = probe.commitFiles(
+    { "packages/a/src/index.ts": "one\n" },
+    "a",
+  );
+  const tip = probe.commitFiles({ "packages/b/src/index.ts": "one\n" }, "b");
+
+  const first = probe.run();
+  assert.equal(first.status, 0, first.stderr);
+  const second = probe.run(["--base", stacked]);
+  assert.equal(second.status, 0, second.stderr);
+  assert.deepEqual(
+    probe.calls().map(({ args }) => args),
+    [
+      ...staticCommands,
+      ["test", "--concurrency=2", "--filter=...a", "--filter=...b"],
+      ["e2e", "--list"],
+      ...staticCommands,
+      ["test", "--concurrency=2", "--filter=...b"],
+      ["e2e", "--list"],
+    ],
+  );
+
+  const previous = probe.calls().length;
+  for (const base of [main, stacked]) {
+    git(probe.repo, "update-ref", "refs/remotes/origin/main", base);
+    const cached = pushTopic(probe, tip, affectedRun);
+    assert.equal(cached.status, 0, cached.stderr);
+    assert.equal(probe.calls().length, previous, base);
+    assert.match(cached.stdout, /passed its checks .* not run again/);
+  }
+});
+
+for (const first of ["docs", "affected"]) {
+  test(`${first} followed by the other check retains both docs and affected results`, (t) => {
+    const probe = fixture(t);
+    workspace(probe);
+    const code = probe.commitFiles({ "packages/a/src/index.ts": "one\n" }, "a");
+    const tip = probe.commitFiles({ "docs/page.md": "text\n" }, "docs");
+    const checks = {
+      docs: {
+        run: () =>
+          probe.run(
+            ["--pre-push", "origin", "url"],
+            `refs/heads/topic ${tip} refs/heads/topic ${code}\n`,
+          ),
+        commands: docsCommands,
+      },
+      affected: {
+        run: () => pushTopic(probe, tip, affectedRun),
+        commands: [
+          ...staticCommands,
+          ["test", "--concurrency=2", "--filter=...a"],
+          ["test:docs:packages"],
+          ["e2e", "--list"],
+        ],
+      },
+    };
+    const order = [first, first === "docs" ? "affected" : "docs"];
+    for (const kind of order) {
+      const previous = probe.calls().length;
+      const result = checks[kind].run();
+      assert.equal(result.status, 0, result.stderr);
+      assert.deepEqual(
+        probe
+          .calls()
+          .slice(previous)
+          .map(({ args }) => args),
+        checks[kind].commands,
+        `${kind} must run despite the other cached check`,
+      );
+    }
+
+    const previous = probe.calls().length;
+    for (const kind of order) {
+      const cached = checks[kind].run();
+      assert.equal(cached.status, 0, cached.stderr);
+      assert.equal(probe.calls().length, previous, kind);
+      assert.match(cached.stdout, /passed its checks .* not run again/);
+    }
+  });
+}
+
+test("a full result replaces all covered records for its commit and satisfies every hook scope", (t) => {
+  const probe = fixture(t);
+  const main = workspace(probe);
+  const stacked = probe.commitFiles(
+    { "packages/a/src/index.ts": "one\n" },
+    "a",
+  );
+  const code = probe.commitFiles({ "packages/b/src/index.ts": "one\n" }, "b");
+  const tip = probe.commitFiles({ "docs/page.md": "text\n" }, "docs");
+  const docsInput = `refs/heads/topic ${tip} refs/heads/topic ${code}\n`;
+
+  assert.equal(pushTopic(probe, stacked).status, 0);
+  assert.equal(probe.run(["--pre-push", "origin", "url"], docsInput).status, 0);
+  assert.equal(probe.run().status, 0);
+  assert.equal(probe.run(["--base", stacked]).status, 0);
+
+  const previous = probe.calls().length;
+  const full = probe.run(["--full"]);
+  assert.equal(full.status, 0, full.stderr);
+  assert.deepEqual(
+    probe
+      .calls()
+      .slice(previous)
+      .map(({ args }) => args),
+    expectedCommands,
+  );
+  const entries = JSON.parse(
+    readFileSync(
+      path.join(probe.repo, ".git", "covel-push-verified.json"),
+      "utf8",
+    ),
+  );
+  assert.deepEqual(
+    entries.map(({ commit, level, base }) => ({ commit, level, base })),
+    [
+      { commit: stacked, level: "static", base: undefined },
+      { commit: tip, level: "full", base: undefined },
+    ],
+  );
+
+  const afterFull = probe.calls().length;
+  const cachedChecks = [
+    () => pushTopic(probe, tip),
+    () => probe.run(["--pre-push", "origin", "url"], docsInput),
+    () => pushTopic(probe, tip, affectedRun),
+    () =>
+      probe.run(
+        ["--pre-push", "origin", "url"],
+        `refs/heads/main ${tip} refs/heads/main ${main}\n`,
+      ),
+  ];
+  for (const run of cachedChecks) {
+    const cached = run();
+    assert.equal(cached.status, 0, cached.stderr);
+    assert.equal(probe.calls().length, afterFull);
+    assert.match(cached.stdout, /passed its checks .* not run again/);
+  }
+  git(probe.repo, "update-ref", "refs/remotes/origin/main", stacked);
+  const otherBase = pushTopic(probe, tip, affectedRun);
+  assert.equal(otherBase.status, 0, otherBase.stderr);
+  assert.equal(probe.calls().length, afterFull);
+  assert.match(otherBase.stdout, /passed its checks .* not run again/);
 });
 
 test("a manual check runs the affected tests, and every suite with --full", (t) => {

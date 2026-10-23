@@ -20,7 +20,8 @@ contributes:
         this turn, and only ONCE per turn — put every resolved check into the
         checks array, in the order the checks were used (resolve all first,
         then emit once). Per item: action = short description of the attempt;
-        attribute = the attribute used; modifier = its modifier; difficulty =
+        attribute = the attribute used (omit when none is used); modifier = its
+        modifier, or 0 when no ranged ability is available; difficulty =
         easy, normal, hard or extreme; outcome = the outcome that the turn's
         check table gives. Do not report the d20, the DC or the total: the
         system adds them. Risk-free actions never roll or emit.

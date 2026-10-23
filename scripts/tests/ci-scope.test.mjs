@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import {
+  existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -11,7 +12,8 @@ import {
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import { runInNewContext } from "node:vm";
 import { parse } from "yaml";
 import { selectCiScope } from "../ci-scope.mjs";
 import { git } from "./helpers/check-push-fixture.mjs";
@@ -147,17 +149,134 @@ const workflow = (name) =>
     ),
   );
 
-test("CI keeps required Site builds and scoped download keys", () => {
-  const ci = workflow("ci");
-  const site = workflow("site");
-  const release = workflow("release");
-  const checkout = ci.jobs.scope.steps.find((step) =>
+test("scope checkout limits blobs and files while retaining the merge-base graph", (t) => {
+  const checkout = workflow("ci").jobs.scope.steps.find((step) =>
     step.uses?.startsWith("actions/checkout@"),
   );
+  assert.equal(checkout.with.ref, "${{ github.workflow_sha }}");
+  assert.equal(checkout.with["persist-credentials"], false);
   assert.equal(
     checkout.with["fetch-depth"],
     "${{ (inputs.release || inputs.commit != '') && 1 || 0 }}",
   );
+  assert.equal(checkout.with.filter, undefined);
+  assert.equal(checkout.with["sparse-checkout-cone-mode"], false);
+  const patterns = checkout.with["sparse-checkout"].trim().split("\n");
+  assert.deepEqual(patterns, [
+    "/scripts/ci-scope.mjs",
+    "/scripts/lib/change-scope.mjs",
+  ]);
+
+  const repo = repository(t);
+  const controls = repo.commit({
+    ...Object.fromEntries(
+      patterns.map((pattern) => {
+        const file = pattern.slice(1);
+        return [
+          file,
+          readFileSync(new URL(`../../${file}`, import.meta.url), "utf8"),
+        ];
+      }),
+    ),
+    "README.md": "unrelated root file\n",
+    "scripts/unrelated.mjs": "throw new Error('not a control');\n",
+    "docs/image.bin": "unrelated image\n",
+  });
+  const main = git(repo.cwd, "branch", "--show-current");
+  git(repo.cwd, "checkout", "--quiet", "-b", "topic");
+  const head = repo.commit({ "docs/guide.md": "guide\n" });
+  git(repo.cwd, "checkout", "--quiet", main);
+  const base = repo.commit({ "packages/a/index.ts": "export const a = 1;\n" });
+  git(repo.cwd, "merge", "--quiet", "--no-ff", "-m", "PR merge", "topic");
+  const workflowSha = git(repo.cwd, "rev-parse", "HEAD");
+  git(repo.cwd, "config", "uploadpack.allowFilter", "true");
+  git(repo.cwd, "config", "uploadpack.allowAnySHA1InWant", "true");
+
+  const partial = mkdtempSync(path.join(os.tmpdir(), "covel-ci-partial-"));
+  t.after(() => rmSync(partial, { recursive: true, force: true }));
+  git(partial, "init", "--quiet");
+  git(partial, "remote", "add", "origin", pathToFileURL(repo.cwd).href);
+  // The pinned checkout implicitly uses blob:none for sparse checkouts, then
+  // configures non-cone patterns before checkout. Reproduce that Git sequence.
+  git(
+    partial,
+    "fetch",
+    "--quiet",
+    "--filter=blob:none",
+    "--no-tags",
+    "origin",
+    "+refs/heads/*:refs/remotes/origin/*",
+  );
+  git(partial, "config", "core.sparseCheckout", "true");
+  writeFileSync(
+    path.join(partial, ".git/info/sparse-checkout"),
+    checkout.with["sparse-checkout"],
+  );
+  git(partial, "checkout", "--quiet", "--detach", workflowSha);
+  assert.equal(git(partial, "rev-parse", "--is-shallow-repository"), "false");
+  assert.equal(git(partial, "merge-base", base, head), controls);
+  for (const file of [
+    "README.md",
+    "scripts/unrelated.mjs",
+    "docs/image.bin",
+    "docs/guide.md",
+    "packages/a/index.ts",
+  ]) {
+    assert.equal(existsSync(path.join(partial, file)), false, file);
+  }
+  const missingBlobs = () =>
+    git(partial, "rev-list", "--objects", "--all", "--missing=print")
+      .split("\n")
+      .filter((line) => line.startsWith("?"))
+      .sort();
+  const missing = missingBlobs();
+  for (const revision of [
+    `${repo.base}:packages/a/index.ts`,
+    `${base}:packages/a/index.ts`,
+    `${head}:docs/guide.md`,
+    `${controls}:docs/image.bin`,
+  ]) {
+    assert.ok(missing.includes(`?${git(repo.cwd, "rev-parse", revision)}`));
+  }
+
+  const eventFile = path.join(partial, ".git/event.json");
+  for (const [eventName, event, sha, expected] of [
+    [
+      "pull_request",
+      { pull_request: { base: { sha: base }, head: { sha: head } } },
+      workflowSha,
+      "scope=docs\nsite_deploy=true",
+    ],
+    [
+      "push",
+      { before: controls, after: base },
+      base,
+      "scope=full\nsite_deploy=false",
+    ],
+  ]) {
+    writeFileSync(eventFile, JSON.stringify(event));
+    const result = spawnSync(process.execPath, ["scripts/ci-scope.mjs"], {
+      cwd: partial,
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        GITHUB_EVENT_NAME: eventName,
+        GITHUB_EVENT_PATH: eventFile,
+        GITHUB_SHA: sha,
+        RELEASE: "false",
+        COMMIT: "",
+      },
+    });
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stdout.trim(), expected);
+    assert.deepEqual(missingBlobs(), missing, "scope must not fetch blobs");
+  }
+});
+
+test("CI keeps required Site builds and scoped download keys", () => {
+  const ci = workflow("ci");
+  const site = workflow("site");
+  const release = workflow("release");
   assert.equal(ci.jobs.site.if, "${{ !cancelled() && !inputs.release }}");
   assert.ok(ci.jobs.result.needs.includes("site"));
   assert.equal(site.on.pull_request, undefined);
@@ -173,7 +292,7 @@ test("CI keeps required Site builds and scoped download keys", () => {
   );
   assert.match(build.env.SITE_BASE, /github.event_name == 'pull_request'/);
   const siteCache = site.jobs.build.steps.find(
-    (step) => step.name === "Cache site builds",
+    (step) => step.name === "Restore site builds",
   );
   assert.match(siteCache.with.key, /^turbo-site-/);
   assert.equal(siteCache.with.path, ".turbo/cache");
@@ -206,62 +325,191 @@ test("CI keeps required Site builds and scoped download keys", () => {
   }
 });
 
-test("arbitrary release and explicit-commit sources cannot save workflow caches", () => {
+// These cache guards use only boolean operators and string equality, whose
+// semantics match JavaScript for the typed fixture inputs. Bracket access also
+// preserves GitHub's hyphenated step IDs and output names.
+function cacheCondition(condition, context) {
+  if (condition === undefined) return context.success();
+  const expression = condition
+    .replace(/^\$\{\{\s*|\s*\}\}$/g, "")
+    .replace(/\.([a-zA-Z_][\w-]*)/g, "['$1']");
+  const implicitSuccess =
+    /\b(success|failure|cancelled|always)\(/.test(expression) ||
+    (context.success?.() ?? true);
+  return (
+    implicitSuccess && runInNewContext(expression, context, { timeout: 100 })
+  );
+}
+
+const savesCache = (step) => step.uses?.startsWith("actions/cache/save@");
+const restoresCache = (step) => step.uses?.startsWith("actions/cache/restore@");
+
+test("shared caches restore once and save only authorized successful exact misses", () => {
   const ci = workflow("ci");
   const site = workflow("site");
-  const release = workflow("release");
-  const normal = "${{ !inputs.release && inputs.commit == '' }}";
-  const requested = "${{ inputs.release || inputs.commit != '' }}";
-  const writesCache = (step) => /^actions\/cache(?:\/save)?@/.test(step.uses);
-  // Cover every writer, including dependency caches with implicit post actions.
-  for (const job of Object.values(ci.jobs)) {
-    for (const step of job.steps ?? []) {
-      if (writesCache(step)) {
-        assert.ok(
-          [
-            normal,
-            "${{ !inputs.release && inputs.commit == '' && needs.scope.outputs.scope != 'docs' }}",
-          ].includes(step.if),
-          `${step.name} must exclude both release and explicit-commit runs`,
-        );
-      }
-      if (step.uses?.startsWith("actions/setup-node@")) {
-        assert.equal(
-          step.with.cache,
-          "${{ !inputs.release && inputs.commit == '' && 'pnpm' || '' }}",
-        );
-        assert.equal(step.with["package-manager-cache"], false);
+  const cases = [
+    {
+      steps: ci.jobs.verify.steps,
+      id: "electron-cache",
+      path: "~/.cache/electron",
+      key: "${{ runner.os }}-${{ runner.arch }}-electron-${{ hashFiles('pnpm-lock.yaml') }}",
+      prefixes: [],
+      skipDocs: true,
+    },
+    ...["verify", "web"].map((job) => {
+      const prefix = job === "web" ? "turbo-web" : "turbo";
+      return {
+        steps: ci.jobs[job].steps,
+        id: "turbo-cache",
+        path: ".turbo/cache",
+        key: `${prefix}-\${{ runner.os }}-\${{ hashFiles('pnpm-lock.yaml') }}-\${{ inputs.commit || github.sha }}`,
+        prefixes: [
+          `${prefix}-\${{ runner.os }}-\${{ hashFiles('pnpm-lock.yaml') }}-`,
+          `${prefix}-\${{ runner.os }}-`,
+        ],
+      };
+    }),
+    {
+      steps: ci.jobs.browser.steps,
+      id: "chromium-cache",
+      path: "~/.cache/ms-playwright",
+      key: "playwright-${{ runner.os }}-${{ steps.playwright.outputs.image }}-${{ steps.playwright.outputs.version }}",
+      prefixes: [],
+    },
+    {
+      steps: site.jobs.build.steps,
+      id: "site-cache",
+      path: ".turbo/cache",
+      key: "turbo-site-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml', 'mise.toml') }}-${{ inputs.commit || github.sha }}",
+      prefixes: [
+        "turbo-site-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml', 'mise.toml') }}-",
+      ],
+      site: true,
+    },
+  ];
+  for (const fixture of cases) {
+    const { steps, id } = fixture;
+    const [restore] = steps.filter(
+      (step) => restoresCache(step) && step.id === id,
+    );
+    assert.ok(restore, id);
+    assert.equal(restore.with.path, fixture.path);
+    assert.equal(restore.with.key, fixture.key);
+    assert.deepEqual(
+      restore.with["restore-keys"]?.trim().split("\n") ?? [],
+      fixture.prefixes,
+    );
+    const saves = steps.filter(
+      (step) => savesCache(step) && step.with.path === fixture.path,
+    );
+    assert.equal(saves.length, 1, id);
+    const [save] = saves;
+    assert.equal(save.uses, restore.uses.replace("/restore@", "/save@"));
+    assert.deepEqual(save.with, {
+      path: fixture.path,
+      key: `\${{ steps.${id}.outputs.cache-primary-key }}`,
+    });
+    assert.match(save.if, /success\(\)/);
+    assert.ok(
+      steps.slice(steps.indexOf(save)).every(savesCache),
+      `${save.name} must follow all checks, builds, assembly and uploads`,
+    );
+    for (const release of fixture.site ? [false] : [false, true]) {
+      for (const commit of ["", "a".repeat(40)]) {
+        for (const scope of ["docs", "full", ""]) {
+          for (const status of ["success", "failure", "cancelled"]) {
+            for (const hit of ["true", "false", ""]) {
+              const context = {
+                inputs: { release, commit },
+                needs: { scope: { outputs: { scope } } },
+                steps: { [id]: { outputs: { "cache-hit": hit } } },
+                success: () => status === "success",
+              };
+              assert.equal(
+                cacheCondition(restore.if, context),
+                status === "success" &&
+                  (!fixture.skipDocs ||
+                    scope !== "docs" ||
+                    release ||
+                    commit !== ""),
+                `${id}: restore ${JSON.stringify({ release, commit, scope, status, hit })}`,
+              );
+              assert.equal(
+                cacheCondition(save.if, context),
+                status === "success" &&
+                  !release &&
+                  commit === "" &&
+                  (!fixture.skipDocs || scope !== "docs") &&
+                  hit !== "true",
+                `${id}: save ${JSON.stringify({ release, commit, scope, status, hit })}`,
+              );
+            }
+          }
+        }
       }
     }
   }
-  for (const [jobName, saveName, restoreName] of [
-    ["verify", "Cache Electron binaries", "Restore Electron binaries"],
-    ["verify", "Cache turbo", "Restore CI task cache"],
-    ["web", "Cache turbo", "Restore CI task cache"],
-    ["browser", "Cache Chromium", "Restore Chromium"],
+  // Prevent a newly added implicit post writer or an untested restore/save pair
+  // from bypassing the guards above. Dependency caches retain their own policy.
+  for (const [name, definition] of [
+    ["ci", ci],
+    ["site", site],
   ]) {
-    const steps = ci.jobs[jobName].steps;
-    const save = steps.find((step) => step.name === saveName);
-    const restore = steps.find((step) => step.name === restoreName);
-    assert.equal(restore.if, requested);
-    assert.match(restore.uses, /^actions\/cache\/restore@/);
-    assert.deepEqual(restore.with, {
-      ...save.with,
-      key: save.with.key.replace("${{ github.sha }}", "${{ inputs.commit }}"),
-    });
+    for (const job of Object.values(definition.jobs)) {
+      const steps = job.steps ?? [];
+      const expected = cases.filter(
+        (fixture) => fixture.steps === job.steps,
+      ).length;
+      assert.equal(steps.filter(savesCache).length, expected);
+      assert.equal(steps.filter(restoresCache).length, expected);
+      for (const step of steps) {
+        assert.ok(!step.uses?.startsWith("actions/cache@"), step.name);
+        if (step.uses?.startsWith("actions/setup-node@")) {
+          assert.equal(
+            step.with.cache,
+            name === "ci"
+              ? "${{ !inputs.release && inputs.commit == '' && 'pnpm' || '' }}"
+              : "${{ inputs.commit == '' && 'pnpm' || '' }}",
+          );
+          assert.equal(step.with["package-manager-cache"], false);
+        }
+      }
+    }
   }
-  const browser = ci.jobs.browser.steps;
-  assert.equal(
-    browser.find((step) => step.name === "Install Chromium").if,
-    "steps.chromium-cache.outputs.cache-hit != 'true' && steps.chromium-restore.outputs.cache-hit != 'true'",
+});
+
+test("Chromium cache hits still install system dependencies and misses download binaries", () => {
+  const steps = workflow("ci").jobs.browser.steps;
+  const download = steps.find((step) => step.name === "Install Chromium");
+  const dependencies = steps.find(
+    (step) => step.name === "Install Chromium system packages",
   );
   assert.equal(
-    browser.find((step) => step.name === "Install Chromium system packages").if,
-    "steps.chromium-cache.outputs.cache-hit == 'true' || steps.chromium-restore.outputs.cache-hit == 'true'",
+    download.run,
+    "pnpm exec playwright install --with-deps chromium",
   );
+  assert.equal(dependencies.run, "pnpm exec playwright install-deps chromium");
+  for (const hit of ["true", "false", ""]) {
+    const context = {
+      steps: { "chromium-cache": { outputs: { "cache-hit": hit } } },
+    };
+    assert.equal(cacheCondition(download.if, context), hit !== "true");
+    assert.equal(cacheCondition(dependencies.if, context), hit === "true");
+  }
+});
+
+test("release packaging and explicit-commit Site calls retain read-only cache policy", () => {
+  const ci = workflow("ci");
+  const release = workflow("release");
+  assert.equal(ci.jobs.site.with.commit, "${{ inputs.commit }}");
+  assert.equal(ci.jobs.site.if, "${{ !cancelled() && !inputs.release }}");
   for (const job of Object.values(release.jobs)) {
     for (const step of job.steps ?? []) {
-      assert.equal(writesCache(step), false, step.name);
+      assert.equal(
+        /^actions\/cache(?:\/save)?@/.test(step.uses),
+        false,
+        step.name,
+      );
       if (step.uses?.startsWith("actions/setup-node@")) {
         assert.equal(step.with.cache, undefined);
         assert.equal(step.with["package-manager-cache"], false);
@@ -272,28 +520,6 @@ test("arbitrary release and explicit-commit sources cannot save workflow caches"
       );
     }
   }
-  // CI forwards explicit commits even when release=false, reaching Site under
-  // the caller's ref. Those builds must also leave that ref's caches untouched.
-  assert.equal(ci.jobs.site.with.commit, "${{ inputs.commit }}");
-  for (const step of site.jobs.build.steps) {
-    if (writesCache(step)) assert.equal(step.if, "${{ inputs.commit == '' }}");
-    if (step.uses?.startsWith("actions/setup-node@")) {
-      assert.equal(
-        step.with.cache,
-        "${{ inputs.commit == '' && 'pnpm' || '' }}",
-      );
-      assert.equal(step.with["package-manager-cache"], false);
-    }
-  }
-  const siteSave = site.jobs.build.steps.find(
-    (step) => step.name === "Cache site builds",
-  );
-  const siteRestore = site.jobs.build.steps.find(
-    (step) => step.name === "Restore site builds",
-  );
-  assert.equal(siteRestore.if, "${{ inputs.commit != '' }}");
-  assert.match(siteRestore.uses, /^actions\/cache\/restore@/);
-  assert.deepEqual(siteRestore.with, siteSave.with);
 });
 
 test("deployment selection includes site paths and shared build/install controls", (t) => {

@@ -6151,9 +6151,9 @@ The three endpoints have the same gate as the install endpoints:
 
 **Restart and refresh after an install**
 
-- In Electron, `covel:restart-server` does two things: it restarts the sidecar, and once the health check passes, it makes the native window navigate to the new port.
+- In packaged Electron, `covel:restart-server` does two things: it restarts the sidecar, and once the health check passes, it makes the native window navigate to the new port.
 - The Web client keeps its reload overlay. It must not reload the old URL itself, and it must not try a cross-origin jump.
-- In development mode, the external Vite page is reloaded.
+- Development mode uses an externally managed server. `covel:restart-server` returns `{ ok: false, port, error }` without restarting the server or reloading Vite. Restart `pnpm dev` in the terminal, then refresh the page if needed.
 - Uninstalling a plugin still needs a restart before the discovered code is unloaded. Uninstalling does not delete the session data the plugin has saved.
 
 **Generated world files**

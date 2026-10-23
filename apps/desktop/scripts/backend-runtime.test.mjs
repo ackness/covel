@@ -308,6 +308,68 @@ test("version probing waits for the complete asynchronous fuse scan on every lau
   delete globalThis.__runtimeProbe;
 });
 
+test("combined resource preflight scans once per call and blocks probes after corruption", async (t) => {
+  const f = await fixture(t, { probeVersions: eligible });
+  bundle(f);
+  const resources = await f.stageBackendRuntime(f.root, target, "Covel");
+  const executable = electronFile(f);
+  const open = fs.promises.open;
+  let scans = 0;
+  t.mock.method(fs.promises, "open", async (file, ...args) => {
+    if (file === executable) scans++;
+    return open.call(fs.promises, file, ...args);
+  });
+  for (let expected = 1; expected <= 2; expected++) {
+    assert.deepEqual(
+      await f.verifyAndProbeBackendRuntime(resources, executable, target, {
+        NODE_OPTIONS: "--import=evil",
+        NODE_EXTRA_CA_CERTS: "/ca.pem",
+      }),
+      eligible,
+    );
+    assert.equal(scans, expected, "each preflight scans once without caching");
+    assert.deepEqual(globalThis.__runtimeProbe.options.env, {
+      ELECTRON_RUN_AS_NODE: "1",
+      NODE_EXTRA_CA_CERTS: "/ca.pem",
+    });
+  }
+  delete globalThis.__runtimeProbe;
+  fs.appendFileSync(executable, fuseWire(48));
+  await assert.rejects(
+    f.verifyAndProbeBackendRuntime(resources, executable, target),
+    /RunAsNode fuse/,
+  );
+  assert.equal(scans, 3);
+  assert.equal(globalThis.__runtimeProbe, undefined);
+  fs.writeFileSync(executable, fuseWire());
+  fs.mkdirSync(path.join(resources, "node"));
+  await assert.rejects(
+    f.verifyAndProbeBackendRuntime(resources, executable, target),
+    /Unexpected standalone Node resource/,
+  );
+  assert.equal(scans, 3, "invalid resources fail before scanning or probing");
+  assert.equal(globalThis.__runtimeProbe, undefined);
+
+  const wrong = await fixture(t, {
+    probeVersions: { ...eligible, node: "24.21.0" },
+  });
+  bundle(wrong);
+  const wrongResources = await wrong.stageBackendRuntime(
+    wrong.root,
+    target,
+    "Covel",
+  );
+  await assert.rejects(
+    wrong.verifyAndProbeBackendRuntime(
+      wrongResources,
+      electronFile(wrong),
+      target,
+    ),
+    /Unexpected Electron backend runtime/,
+  );
+  delete globalThis.__runtimeProbe;
+});
+
 test("probes use the selected executable, sanitized environment and actual reported versions", async (t) => {
   const f = await fixture(t, { probeVersions: eligible });
   const executable = electronFile(f);

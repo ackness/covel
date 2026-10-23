@@ -115,7 +115,7 @@ pnpm e2e                                   # Playwright 端到端
 
 安装 hook 后，每次 `git push` 都会检查本次推送中所有不同且未删除的已提交目标，包括与当前 HEAD 不同的 ref。每个目标在一次性干净克隆中运行 `pnpm install --frozen-lockfile` 和 `pnpm check`；任何一步失败都会阻止推送。源码推送的 hook 不跑测试套件：全部套件由 CI 在 PR 上用并行 job 运行，而 `main` 只接受通过 PR 合入的改动。对已提交的 HEAD 运行 `pnpm check:push`，或用 `COVEL_PUSH_CHECK=affected git push` 推送，会加上这次改动可能影响的测试和 `pnpm e2e --list`。这些测试包括：分支自远端 main 分支（`origin/main`，本地从未获取过时会先获取一次）分出以来改动过的包、依赖这些包的包（`turbo test --filter=...<包名>`），以及 `turbo.json` 里 `$TURBO_ROOT$` 输入匹配到改动文件的套件——内置插件的文件会带上 plugin-loader、runtime 和 server 套件，`worlds/**`、`prompts/**` 会带上读取它们的套件。以下情况运行全部套件：改动了所有包都会读取的文件（`pnpm-lock.yaml`、`pnpm-workspace.yaml`、`turbo.json`、`vitest.base.ts`、根目录的 `package.json` 与 `tsconfig.json`、`mise.toml`），改动了规则未覆盖的根目录文件（规则在 `scripts/lib/push-scope.mjs`），推送目标是 `main` 或 tag，或者无法确定远端 main 分支。`COVEL_PUSH_CHECK=full git push` 和 `pnpm check:push --full` 可以要求运行全部套件；`pnpm check:push --base <分支>` 让叠在其他分支上的分支以下层分支为基准。输出的最后两行说明运行了什么、哪些留给 CI。检查不复制工作区的 `.env`、`node_modules` 或 `test-results`，不会使用开发者数据库连接变量 `DATABASE_URL` / `COVEL_REQUIRE_PG_TESTS`。Turbo 读写的是仓库所有 worktree 共用的缓存（主 worktree 的 `.turbo/cache`）：被推送的提交与某次已通过的运行有相同的已跟踪输入时，任务直接回放；回放看不出的是依赖了 Git 忽略文件的结果，这一类由 CI 兜底。在一台负载较高的开发机上、Turbo 缓存为空时实测：`apps/web` 的一行改动耗时 2 分 52 秒，运行全部套件为 4 分 43 秒；其中安装、`pnpm check` 和 E2E 收集约占 85 秒。`packages/shared` 被所有包依赖，改动它会选中全部套件（4 分 22 秒）。缓存已有结果时，未改动的任务直接回放；store 和 server 套件从不缓存，现在只在改动选中它们时运行。一次推送新增的内容全是文档时，hook 跑 `pnpm check` 和 `pnpm test:docs:packages`；文档脚本测试已包含在前者，不重复运行。独立的 `pnpm test:docs` 仍包含包测试和脚本测试。检查历史提交时使用该提交实际提供的文档命令。新分支以远端的 main 分支为基准。文档指 `docs/**`、根目录的 `*.md`、任意位置的 `README.md` / `README.*.md`、嵌套的 `AGENTS.md` / `CLAUDE.md`、`.claude/skills/**`、`.assets/**`、`LICENSE` 以及 issue 与 PR 模板，清单在 `scripts/lib/change-scope.mjs`。由加载器读取的 Markdown（`PLUGIN.md`、`RUNTIME.md`、`WORLD.md`、`prompts/` 下的文件）是源码，走完整流程。需要提前验证当前已提交的 HEAD 时可运行 `pnpm check:push`。
 
-显式要求全部测试、推送 `main` 或 tag 时，纯文档也运行全部套件和 E2E 收集。已通过的受影响测试只在提交和实际比较基准都相同时复用；`--base` 缩小范围的检查不能代替从 `origin/main` 起算的检查。受影响测试记录只能替代相同范围或纯静态检查，不能代替纯文档检查；完整测试记录可覆盖所有范围。
+显式要求全部测试、推送 `main` 或 tag 时，纯文档也运行全部套件和 E2E 收集。已通过的受影响测试只在提交和实际比较基准都相同时复用；`--base` 缩小范围的检查不能代替从 `origin/main` 起算的检查。受影响测试记录只能替代相同范围或纯静态检查，不能代替纯文档检查；完整测试记录可覆盖所有范围。记录新结果时也按同一覆盖规则淘汰旧结果：同一提交的不同基线和互不覆盖的文档检查可以同时保留。
 
 `git push` 先连接远端，再运行 hook；hook 运行期间这条连接上没有任何数据。远端、代理或 NAT 关闭空闲连接后，检查虽然通过，推送仍会失败（`git push` 以状态码 141 退出：它向已关闭的连接写入）。hook 无法让这条连接保持活动，所以做了两件事：少跑，并按 worktree 记录通过检查的提交，保留 12 小时。记录覆盖本次要求的检查时，再次推送同一个提交会直接发送，先运行 `pnpm check:push` 再推送也一样；需要全部套件的改动，先运行 `pnpm check:push --full`，通过后再推送。在 `~/.ssh/config` 里为该主机设置 `ServerAliveInterval 30`，也能避免代理把 SSH 连接当作空闲连接。
 
@@ -135,7 +135,9 @@ PR、main 和发布统一使用 [`ci.yml`](../.github/workflows/ci.yml)，不再
 
 main 的每次推送使用独立的 CI 并发组，避免后来的纯源码推送替换正在等待的文档部署。Site 的非 PR、仅构建运行也使用独立组，不会挤掉待部署运行；需要部署的运行仍按分支共用一组，保留原有 Site 的等待替换行为。PR 的新提交仍会取消旧运行。
 
-范围选择只有需要比较 PR 或 main 推送时获取完整 Git 历史；发布或显式 commit 请求直接选完整范围，浅检出即可。普通 PR/main 运行保存缓存，PR 缓存仍受 GitHub ref 隔离。发布和显式 commit 可能执行任意源码，不能把执行后产生的文件保存到工作流 ref 的缓存：Turbo、Electron 和 Chromium 缓存仅恢复，setup-node 的 pnpm 缓存关闭。显式 commit 也会传给非发布 Site，其任务缓存同样仅恢复。
+范围选择只有需要比较 PR 或 main 推送时获取完整的提交与树历史；发布或显式 commit 请求直接选完整范围，浅检出即可。范围选择、结果汇总和合并门禁只稀疏检出所需的控制脚本，checkout 使用 blob 过滤，避免下载无关历史文件内容或展开整个工作树。控制脚本仍来自工作流自身的版本。
+
+Turbo、Electron、Chromium 和 Site 的任务缓存各用一次 restore；普通 PR/main 运行在任务成功且精确缓存键未命中时，用 restore 返回的原始键保存。失败或取消不保存，PR 缓存仍受 GitHub ref 隔离。发布和显式 commit 可能执行任意源码，不能把执行后产生的文件保存到工作流 ref 的缓存：这些任务仅恢复缓存，setup-node 的 pnpm 缓存关闭。显式 commit 也会传给非发布 Site，其任务缓存同样仅恢复。
 
 桌面后端使用随包 Electron 的 RunAsNode，不再下载、打包或缓存独立 Node。Electron 下载缓存按 OS、架构和 lockfile 区分；发布只能复用已有缓存，未命中时重新下载且不保存。构建与发布校验仍检查目标与实际 Electron/Node 版本、RunAsNode fuse，以及主进程 bundle 与 ASAR 资源的绑定。
 

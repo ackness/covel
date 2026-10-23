@@ -961,7 +961,7 @@ namespace 声明 `search` 之后，它的记录进入框架的记忆检索（[`m
 - 只有简体中文有变体：根文件用 `PLUGIN.zh.md`，子 runtime 用 `RUNTIME.zh.md`。里面只写正文和固定段的 `content`，frontmatter 可以为空。
 - 结构字段由主文件决定。变体不能改变契约、工具、stage、超时、提示词段的 ID 或位置。
 - 简体中文会话读中文变体。其余语言（包括繁体中文）读主文件。其他语言的变体文件不会被读取。
-- `COVEL_INSTRUCTION_LOCALE=en|zh` 可以为所有会话固定指令语言。
+- `COVEL_INSTRUCTION_LOCALE=en|zh` 可以为所有会话固定指令语言，不改变会话内容语言。指令里要求写入状态或事件的玩家可见文字仍按内容语言生成。没有值时优先按 schema 省略可选字段；例如骰子判定没有可用能力属性时，回执省略 `attribute`，不会填入随指令语言变化的「无」标签。
 
 ### 玩家看到的文字
 

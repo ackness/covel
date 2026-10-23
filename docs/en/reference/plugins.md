@@ -961,7 +961,7 @@ These checks do not run plugin code, and they cannot replace the registration co
 - Only Simplified Chinese has a variant. The root file uses `PLUGIN.zh.md`, and a child runtime uses `RUNTIME.zh.md`. These files contain only the body and the fixed section `content`. The frontmatter can be empty.
 - The main file decides the structural fields. A variant cannot change the contracts, tools, stage, timeouts, or the IDs and positions of prompt sections.
 - A session in Simplified Chinese reads the Chinese variant. Every other language (including Traditional Chinese) reads the main file. Variant files for other languages are never read.
-- `COVEL_INSTRUCTION_LOCALE=en|zh` can fix the instruction language for all sessions.
+- `COVEL_INSTRUCTION_LOCALE=en|zh` can fix the instruction language for all sessions without changing their content language. Player-visible text that instructions ask a model to write into state or events still uses the content language. When a value is absent, prefer omitting an optional field as its schema permits. For example, when Dice Check has no usable ability, its receipt omits `attribute` instead of filling in a "None" label chosen by the instruction language.
 
 ### Text the player sees
 

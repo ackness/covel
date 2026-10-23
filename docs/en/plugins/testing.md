@@ -198,6 +198,7 @@ Key points:
 - If a `ctx.store` read method is not provided, calling it fails right away, for example with `store.getPluginData is not configured for this test context`. This way, a test does not quietly read empty data.
 - By default, a fixed `ctx.random` is included, and it gives the same numbers on every run. So the result of a dice roll can be asserted directly.
 - The effects that a function returns are in `result.effects`, for example `result.effects.interactions`.
+- For functions that produce both model instructions and player-visible data, test content locales with different `COVEL_INSTRUCTION_LOCALE` values. Cover at least Chinese content with English instructions and English content with Chinese instructions. Call the real handler and assert the instruction language and result data separately; for missing values, check that optional fields are actually omitted. Set overrides with `vi.stubEnv` and restore them with `vi.unstubAllEnvs` in `afterEach`. See the [Dice Check tests](../../../plugins/dice-check/tests/roller.test.js) and the language rules in the [i18n reference](../reference/i18n.md#2-localize-a-plugin).
 
 ### What the test kit contains
 

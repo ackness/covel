@@ -183,8 +183,8 @@ function buildCheckContext(dice, locale, world) {
       )
     : pickLocaleText(
         locale,
-        "2. 没有可用的有量程能力属性，修正取 0，回执的 attribute 写为「无」。生命、信任等数值不用来检定，不要编造属性或修正。",
-        '2. No ranged ability is available. Use modifier 0 and report attribute as "None". Values such as health or trust are not used for checks. Do not invent an attribute or modifier.',
+        "2. 没有可用的有量程能力属性，修正取 0，回执中省略 attribute。生命、信任等数值不用来检定，不要编造属性或修正。",
+        "2. No ranged ability is available. Use modifier 0 and omit attribute from the receipt. Values such as health or trust are not used for checks. Do not invent an attribute or modifier.",
       );
   const english = [
     "## Dice checks for this turn",
@@ -210,7 +210,7 @@ function buildCheckContext(dice, locale, world) {
     "## Check rules",
     "",
     '- A d20 of 20 is a critical success and a d20 of 1 is a critical failure, with every modifier. A critical success gives more than the player hoped for. A critical failure adds a complication; it is more than "it did not work".',
-    "- When all checks of this turn are resolved and before you write the prose, call emit-event one time with the topic `check.resolved`. `checks` holds every check in order. Each item has `action`, `attribute`, `modifier`, `difficulty` and `outcome`. The system adds the d20, the DC and the total.",
+    "- When all checks of this turn are resolved and before you write the prose, call emit-event one time with the topic `check.resolved`. `checks` holds every check in order. Each item has `action`, `modifier`, `difficulty` and `outcome`. Include `attribute` only when an attribute is used. The system adds the d20, the DC and the total.",
     "- If an outcome is not the one in the table, the event is rejected and the message gives the correct outcomes. Send the event again with those outcomes, then write the prose to match them.",
     "- An everyday action without a risk of failure gets no check.",
   ].join("\n");
@@ -238,7 +238,7 @@ function buildCheckContext(dice, locale, world) {
     "## 判定规则",
     "",
     "- d20 为 20 是大成功（critical-success），为 1 是大失败（critical-failure），与修正无关。大成功给出超出预期的收获；大失败引入复杂后果，而不是简单的「没成功」。",
-    "- 在本回合全部判定完成后、写正文之前，用 emit-event 发射**一次** `check.resolved` 事件。`checks` 按顺序放入每一次判定，每项包含 `action`、`attribute`、`modifier`、`difficulty` 和 `outcome`。d20、DC 和合计由系统补上。",
+    "- 在本回合全部判定完成后、写正文之前，用 emit-event 发射**一次** `check.resolved` 事件。`checks` 按顺序放入每一次判定，每项包含 `action`、`modifier`、`difficulty` 和 `outcome`。仅在使用属性时填写 `attribute`。d20、DC 和合计由系统补上。",
     "- 如果某项 outcome 与表中结果不一致，事件会被退回，退回消息给出正确结果。按那些结果重新发射事件，再据此写正文。",
     "- 无失败风险的日常行动不判定。",
   ].join("\n");

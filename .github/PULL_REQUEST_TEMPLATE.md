@@ -27,24 +27,29 @@
 <!-- Tick what actually ran and note what was skipped and why. The pre-push hook covers
      `pnpm check` in a clean checkout; docs-only adds `pnpm test:docs:packages`.
      `pnpm check:push` adds affected suites for source changes. Full requests/main/tags override docs-only;
-     affected results are reused only for the same commit and comparison base. CI owns all verification:
+     affected results are reused only for the same commit and comparison base; cache eviction must use
+     the same coverage rule and retain unrelated bases/docs results. CI owns all verification:
      docs-only runs documentation tests after check; source, unknown scope and releases run all suites.
      Non-release CI also requires one Site/docs build, including on docs-only changes;
      the other build excludes those targets. Site uses parallel Turbo tasks with content-addressed
      outputs; cache changes need hit/miss and input-invalidation evidence (docs, SITE_BASE, config).
      PR cache isolation must remain intact. Release/explicit-commit runs only restore caches
-     and disable setup-node's pnpm cache, including explicit-commit Site builds.
+     and disable setup-node's pnpm cache, including explicit-commit Site builds. Explicit cache saves
+     require success, an authorized source, an exact-key miss, and the restore step's original key.
+     Control-script sparse checkouts must retain required imports and comparison history.
      Desktop uses bundled Electron RunAsNode; verify target/actual versions, fuses and ASAR binding.
      Missing or skipped required jobs cannot pass Verification or All checks pass.
      Tests reading files outside their package must declare those Turbo inputs.
      只勾选真正跑过的项，没跑的写明原因。pre-push hook 在干净检出里跑 `pnpm check`，
      纯文档另跑 `pnpm test:docs:packages`；`pnpm check:push` 为源码改动加上受影响的套件。
      显式全量检查及 main/tag 推送优先于纯文档短路径；受影响测试结果只在提交和比较基准相同时复用。
+     缓存淘汰使用同一覆盖规则，保留不同基线及互不覆盖的文档结果。
      CI 统一负责验证：纯文档跑静态与文档检查，源码、未知范围和发布跑完整套件。
      非发布 CI（纯文档也包括）必须通过一次官网/文档站构建，其余构建排除这两个目标；
      Site 用 Turbo 并行构建并按内容复用产物；缓存改动需记录命中、未命中及输入失效验证（文档、SITE_BASE、配置）。
      PR 缓存隔离保持不变。发布和显式 commit 只恢复缓存，并关闭 setup-node 的 pnpm 缓存，
-     包括显式 commit 的 Site 构建。桌面使用随包 Electron RunAsNode；核对目标/实际版本、fuse 和 ASAR 绑定。
+     包括显式 commit 的 Site 构建。显式保存须满足任务成功、来源获准、精确键未命中，并使用恢复步骤的原始键。
+     控制脚本的稀疏检出保留所需导入及比较历史。桌面使用随包 Electron RunAsNode；核对目标/实际版本、fuse 和 ASAR 绑定。
      必需任务缺失或跳过时，Verification 和 All checks pass 不得通过。
      测试读取包外文件时，必须声明对应的 Turbo 输入。 -->
 

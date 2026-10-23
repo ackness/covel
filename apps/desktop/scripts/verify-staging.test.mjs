@@ -92,8 +92,7 @@ test("staging verification reaps its child before removing SQLite files", async 
               export const backendRuntimeStagingDirectory = () => "unused";
               export const packagedElectronExecutable = () => process.execPath;
               export const ensureElectronBinary = () => process.execPath;
-              export const probeBackendRuntime = async () => ({ node: process.versions.node, platform: process.platform, arch: process.arch });
-              export const verifyBackendRuntime = async () => process.execPath;
+              export const verifyAndProbeBackendRuntime = async () => ({ node: process.versions.node, platform: process.platform, arch: process.arch });
               export const verifyRuntimeSelection = () => ({});
               export const verifyPackagedMain = () => {};
               export const verifyRuntimeFile = async () => {};

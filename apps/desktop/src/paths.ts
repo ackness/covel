@@ -163,11 +163,7 @@ export async function resolveBackendRuntime(): Promise<string> {
 }
 
 export function resolveServerEntry(): string {
-  const root = resolveProjectRoot();
-  if (isDev) {
-    return path.join(root, "apps/server/src/index.ts");
-  }
-  return path.join(root, "src/index.js");
+  return path.join(process.resourcesPath, "server/src/index.js");
 }
 
 function resolveBundledWorldsDir(): string {
@@ -183,26 +179,14 @@ function resolveBundledPluginsDir(): string {
  * `resources/server`.
  */
 export function resolveTsx(): string {
-  const baseDir = resolveProjectRoot();
-
-  const direct = path.join(baseDir, "node_modules/tsx/dist/loader.mjs");
-  if (fs.existsSync(direct)) return direct;
-
-  const pnpmDir = path.join(baseDir, "node_modules/.pnpm");
-  if (fs.existsSync(pnpmDir)) {
-    for (const entry of fs.readdirSync(pnpmDir)) {
-      if (entry.startsWith("tsx@")) {
-        const candidate = path.join(
-          pnpmDir,
-          entry,
-          "node_modules/tsx/dist/loader.mjs",
-        );
-        if (fs.existsSync(candidate)) return candidate;
-      }
-    }
+  const loader = path.join(
+    process.resourcesPath,
+    "server/node_modules/tsx/dist/loader.mjs",
+  );
+  if (!fs.existsSync(loader)) {
+    throw new Error(`Bundled plugin TS loader missing: ${loader}`);
   }
-
-  throw new Error(`tsx not found in ${baseDir}`);
+  return loader;
 }
 
 export function resolvePreloadScript(): string {

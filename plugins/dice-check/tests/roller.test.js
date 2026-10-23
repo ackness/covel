@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { makeRandom } from "@covel/plugin-test-utils";
 import handler from "../runtimes/roller/handler.js";
 import { poolOf } from "../lib/turn-pool.js";
@@ -16,6 +16,100 @@ function makeCtx(overrides = {}) {
 }
 
 describe("dice-check roller handler", () => {
+  afterEach(() => vi.unstubAllEnvs());
+
+  it.each([
+    ["zh-CN", "en"],
+    ["en-US", "zh"],
+    ["ru-RU", "en"],
+    ["ru-RU", "zh"],
+    ["zh-Hant-TW", "en"],
+    ["zh-Hant-TW", "zh"],
+  ])(
+    "omits an unavailable attribute for %s content with %s instructions",
+    async (locale, instructionLocale) => {
+      vi.stubEnv("COVEL_INSTRUCTION_LOCALE", instructionLocale);
+      const metersOnly = {
+        characterSchema: {
+          attributes: [
+            {
+              id: "hp",
+              name: "Health",
+              type: "number",
+              min: 0,
+              max: 20,
+              category: "stats",
+            },
+            { id: "luck", name: "Luck", type: "number", category: "abilities" },
+          ],
+        },
+        characters: [
+          {
+            id: "p1",
+            type: "player",
+            name: "Ada",
+            fields: { hp: 12, luck: 3 },
+          },
+        ],
+      };
+
+      for (const world of [undefined, metersOnly]) {
+        const result = await handler(makeCtx({ locale, world }));
+        const context = result.value.checkContext;
+        if (instructionLocale === "zh") {
+          expect(context).toContain("## 本回合判定");
+          expect(context).toContain("修正取 0，回执中省略 attribute");
+          expect(context).toContain("仅在使用属性时填写 `attribute`");
+        } else {
+          expect(context).toContain("## Dice checks for this turn");
+          expect(context).toContain("Use modifier 0 and omit attribute");
+          expect(context).toContain(
+            "Include `attribute` only when an attribute is used",
+          );
+        }
+        expect(context).not.toMatch(/"None"|「无」/);
+        expect(context).not.toContain("Health 12/20");
+        expect(context).not.toContain("Luck 3");
+      }
+    },
+  );
+
+  it.each([
+    ["zh-CN", "en", "坚毅"],
+    ["en-US", "zh", "Grit"],
+    ["ru-RU", "zh", "Стойкость"],
+  ])(
+    "keeps %s attribute names with %s instructions",
+    async (locale, instructionLocale, attributeName) => {
+      vi.stubEnv("COVEL_INSTRUCTION_LOCALE", instructionLocale);
+      const world = {
+        characterSchema: {
+          attributes: [
+            {
+              id: "grit",
+              name: { en: "Grit", zh: "坚毅", ru: "Стойкость" },
+              type: "number",
+              min: 0,
+              max: 5,
+              category: "abilities",
+            },
+          ],
+        },
+        characters: [
+          { id: "p1", type: "player", name: "Ada", fields: { grit: 2 } },
+        ],
+      };
+
+      const result = await handler(makeCtx({ locale, world }));
+      expect(result.value.checkContext).toContain(`${attributeName} 2/5 → +4`);
+      expect(result.value.checkContext).toContain(
+        instructionLocale === "zh"
+          ? "2. 从下方修正表选出这个行动用到的属性"
+          : "2. Choose the attribute in the modifier list below",
+      );
+    },
+  );
+
   it("takes its dice from the host's ctx.random", async () => {
     const drawn = [17, 2, 20];
     const ranges = [];

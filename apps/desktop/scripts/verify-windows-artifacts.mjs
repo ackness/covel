@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { execFile, spawn } from "node:child_process";
-import { once } from "node:events";
 import {
   access,
   cp,
@@ -13,11 +12,12 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { createRequire } from "node:module";
-import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
+import { nextSettingsPersistenceBundle } from "@covel/shared/settings-persistence";
+import { findPreferredPort } from "../src/network.ts";
 
 // Reuse the repository's Playwright tool, not a desktop runtime dependency.
 let chromium;
@@ -40,17 +40,6 @@ async function waitForExit(completed, milliseconds) {
   } finally {
     clearTimeout(timer);
   }
-}
-
-async function freePort() {
-  const server = createServer();
-  server.listen(0, "127.0.0.1");
-  await once(server, "listening");
-  const port = server.address().port;
-  await new Promise((resolve, reject) =>
-    server.close((error) => (error ? reject(error) : resolve())),
-  );
-  return port;
 }
 
 async function readJson(file) {
@@ -93,12 +82,12 @@ async function runArtifact(kind, artifact, version, evidence) {
     // bundled worlds; no routes, backend responses or readiness are mocked.
     await writeFile(
       path.join(home, "settings.json"),
-      JSON.stringify({
-        schemaVersion: 2,
-        revision: 0,
-        savedAt: new Date().toISOString(),
-        entries: { "ui.locale": "en-US", "ui.appearance": "panel" },
-      }),
+      JSON.stringify(
+        nextSettingsPersistenceBundle(
+          { "ui.locale": "en-US", "ui.appearance": "panel" },
+          0,
+        ),
+      ),
     );
     let executable = artifact;
     if (kind === "zip") {
@@ -172,7 +161,7 @@ async function runArtifact(kind, artifact, version, evidence) {
         ),
       );
     }
-    const port = await freePort();
+    const port = await findPreferredPort(undefined);
     const config = path.join(temporary, "launch.json");
     await writeFile(
       config,

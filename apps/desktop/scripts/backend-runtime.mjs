@@ -79,13 +79,7 @@ export async function stageBackendRuntime(desktopRoot, target, executableName) {
   return resources;
 }
 
-/** Probe only versions, never the server or a preload from the user's shell. */
-export async function probeBackendRuntime(
-  executable,
-  target,
-  inherited = process.env,
-) {
-  await assertElectronRunAsNodeCapability(executable, target.platform);
+function readBackendRuntimeVersions(executable, target, inherited) {
   const env = backendRuntimeEnvironment(inherited);
   const versions = JSON.parse(
     execFileSync(
@@ -103,7 +97,37 @@ export async function probeBackendRuntime(
       `Backend runtime target mismatch: ${JSON.stringify(versions)}`,
     );
   }
+  return versions;
+}
+
+/** Probe only versions, never the server or a preload from the user's shell. */
+export async function probeBackendRuntime(
+  executable,
+  target,
+  inherited = process.env,
+) {
+  await assertElectronRunAsNodeCapability(executable, target.platform);
+  const versions = readBackendRuntimeVersions(executable, target, inherited);
   assertSafeElectronVersions(versions);
+  return versions;
+}
+
+/** Check resources and scan fuses once before probing this exact executable. */
+export async function verifyAndProbeBackendRuntime(
+  resources,
+  executable,
+  target,
+  inherited = process.env,
+) {
+  let versions;
+  await verifyBackendRuntime(resources, {
+    ...target,
+    electronExecutable: executable,
+    electronVersions: () => {
+      versions = readBackendRuntimeVersions(executable, target, inherited);
+      return versions;
+    },
+  });
   return versions;
 }
 

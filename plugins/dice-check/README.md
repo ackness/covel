@@ -6,7 +6,7 @@
 
 - `PLUGIN.md`：包级摘要与 server entry，注册玩家侧掷骰 action。
 - `rpc/roll.js`：`/roll [notation]`（别名 `/r`）命令处理器；接受 1-100 颗、2-1000 面的 `NdM` 骰式，缺省为 `1d20`。
-- `runtimes/roller/`：pre-turn function runtime，每回合用 `ctx.random` 预掷 3 个 d20，输出 `checkContext`（每次判定一行的结果表 + 判定规则 markdown）供叙事引擎注入。表里每个难度一列，直接给出结果或“修正达到多少为成功”，叙事查表即可，不做加法。玩家角色的检定属性（分类为 `abilities`、有上限的数值属性，与 tabletop-rules 配点用的相同）由 roller 按量程预换算修正（(数值 − 下限) ÷ 量程 × 10）列在块里，叙事只用表中属性检定、读取修正而不自行估算；生命、信任等 `stats` / `social` 数值不列入。没有可用的有量程能力属性（包括缺少角色数据）时不列表，修正取 0，回执属性写为「无」；不从其他数值推算。
+- `runtimes/roller/`：pre-turn function runtime，每回合用 `ctx.random` 预掷 3 个 d20，输出 `checkContext`（每次判定一行的结果表 + 判定规则 markdown）供叙事引擎注入。表里每个难度一列，直接给出结果或“修正达到多少为成功”，叙事查表即可，不做加法。玩家角色的检定属性（分类为 `abilities`、有上限的数值属性，与 tabletop-rules 配点用的相同）由 roller 按量程预换算修正（(数值 − 下限) ÷ 量程 × 10）列在块里，叙事只用表中属性检定、读取修正而不自行估算；生命、信任等 `stats` / `social` 数值不列入。没有可用的有量程能力属性（包括缺少角色数据）时不列表，修正取 0，回执省略可选的 `attribute` 字段；结果不显示属性标签，设置 `COVEL_INSTRUCTION_LOCALE` 也不会改变这一点。不从其他数值推算修正。
 - `hooks/verify-check-receipt.js`：`PreToolUse` 守卫，在叙事发出回执时对照骰子。
 - `lib/check-rules.js`：判定规则（难度对应的 DC、成败与大成功/大失败），roller、守卫和 recorder 共用。
 - `runtimes/recorder/`：event function runtime，订阅 `check.resolved` 回执并落库。
@@ -20,7 +20,7 @@
 - 玩家从输入框执行 `/roll` 或点击快速掷骰按钮，都会归一化为同一个 `dice-check:roll` 命令并由 RPC 返回结果；命令生命周期写入统一 `command.*` trace，但不写入 `rolls` namespace，避免与回合预掷审计轨混用。
 - 判定回执写入 `plugin_data[dice-check][checks]`（key = `<turnId>-<序号>`，含展示字段）。
 - 本回合判定数组写入 `plugin_data[dice-check][message]`（key = turnId，值带 `__turnId`，消息层 block 数据源）。
-- 回执只含叙事自己决定的内容：`action`、`attribute`、`modifier`、`difficulty`，以及它写出的 `outcome`。骰子不在回执里：第一项用本回合第一颗骰，第二项用第二颗，叙事无法挑骰。DC、合计与真实结果由 `lib/check-rules.js` 计算；`outcome` 与骰子给出的结果不一致的项不落库（它的骰子仍算已用），有效项照常落库，缺少预掷审计轨时整体 fail-closed。
+- 回执只含叙事自己决定的内容：`action`、`modifier`、`difficulty`，以及它写出的 `outcome`；使用属性时另填 `attribute`。骰子不在回执里：第一项用本回合第一颗骰，第二项用第二颗，叙事无法挑骰。DC、合计与真实结果由 `lib/check-rules.js` 计算；`outcome` 与骰子给出的结果不一致的项不落库（它的骰子仍算已用），有效项照常落库，缺少预掷审计轨时整体 fail-closed。
 - 叙事在写正文之前发出回执。本插件的 `PreToolUse` 守卫（`hooks/verify-check-receipt.js`）在发出当场对照骰子：结果不符就退回，并在退回消息里给出每次判定的正确结果，叙事据此重发，再按真实结果写正文。守卫用的是 roller 留在进程内的骰子副本（`lib/turn-pool.js`）；副本不在时守卫放行，仍由 recorder 在回合末校验。
 - 若同一执行的可选 `tabletop-check@1` 输入已有本回合表单回执，表单检定由 tabletop-rules 独占，recorder 整批跳过模型发出的 `check.resolved`，不再把独立掷出的表单骰当作本插件的骰池。下一无表单回执的普通回合仍照常校验和记账。
 

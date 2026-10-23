@@ -71,18 +71,8 @@ jobs:
 
       # GitHub keeps PR caches scoped to the PR ref; deployments cannot restore
       # them. Turbo validates task inputs, including SITE_BASE, after restore.
-      - name: Cache site builds
-        if: ${{ inputs.commit == '' }}
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: .turbo/cache
-          key: turbo-site-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml', 'mise.toml') }}-${{ inputs.commit || github.sha }}
-          restore-keys: |
-            turbo-site-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml', 'mise.toml') }}-
-
-      # An explicit source commit must not write into the caller ref's cache.
       - name: Restore site builds
-        if: ${{ inputs.commit != '' }}
+        id: site-cache
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: .turbo/cache
@@ -113,6 +103,14 @@ jobs:
         uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
           path: apps/site/dist
+
+      # An explicit source commit must not write into the caller ref's cache.
+      - name: Save site builds
+        if: ${{ success() && inputs.commit == '' && steps.site-cache.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .turbo/cache
+          key: ${{ steps.site-cache.outputs.cache-primary-key }}
 
   deploy:
     name: Deploy to GitHub Pages
