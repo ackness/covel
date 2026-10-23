@@ -1,15 +1,18 @@
-# Render Blueprint — one-click demo deployment (no PostgreSQL)
+# Render Blueprint — operator-controlled demo infrastructure (no PostgreSQL)
 # https://docs.render.com/infrastructure-as-code
 #
-# Data persists in the player's browser IndexedDB (STORE_BACKEND=memory
-# switches the frontend to local mode via /api/health). The server keeps
-# only volatile MemoryStore copies synced up for turn execution — lost on
-# sleep/restart, and never listed to other players (the session listing
-# endpoint is hidden in this mode). Provider API keys stay in the player's
-# browser and travel per-request via the X-Provider-Keys header; the server
-# never persists them.
+# The official web app is not supported yet. This blueprint starts the server;
+# it does not provide a public sign-in or anonymous session-creation flow.
+# DEPLOYMENT_TIER=demo requires the operator token for session creation and
+# global/admin APIs, and an owner token for session access. Keep the generated
+# operator token private; do not distribute it to visitors to bypass this gate.
+# See docs/internals/security.md for the host-profile access rules.
 #
-# Deploy: connect this repo on Render Dashboard, or use the Deploy button.
+# STORE_BACKEND=memory selects browser IndexedDB saves via /api/health. The
+# server holds only volatile copies for execution, lost on sleep/restart.
+# Provider keys travel per request in X-Provider-Keys and are never persisted.
+#
+# Deploy infrastructure by connecting this repository on the Render Dashboard.
 
 services:
   - type: web

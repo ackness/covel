@@ -91,6 +91,9 @@ COPY --from=build-web /app/dist/web apps/server/web-dist/
 
 WORKDIR /app/apps/server
 
+# sqlite-vec's Linux binaries use glibc fortified symbols. Preload the Alpine
+# compatibility library so SQLite can dlopen the extension under musl.
+ENV LD_PRELOAD=/lib/libgcompat.so.0
 ENV NODE_ENV=production
 ENV SERVE_STATIC=true
 ENV STATIC_DIR=./web-dist
@@ -99,5 +102,8 @@ EXPOSE 3001
 RUN mkdir -p /app/apps/server/data /home/node/.covel/worlds /home/node/.covel/plugins \
     && chown -R node:node /app/apps/server/data /home/node/.covel
 USER node
+
+# Verify the same non-root, offline runtime used at startup, including vectors.
+RUN --network=none node --input-type=module -e "import { createRequire } from 'node:module'; import { DatabaseSync } from 'node:sqlite'; const require = createRequire(new URL('../../packages/store/package.json', import.meta.url)); const db = new DatabaseSync(':memory:', { allowExtension: true }); require('sqlite-vec').load(db); db.prepare('select vec_version()').get(); db.close();"
 
 CMD ["pnpm", "exec", "tsx", "src/index.ts"]

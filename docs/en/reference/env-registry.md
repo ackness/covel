@@ -187,6 +187,7 @@ Behavior that both Compose files share:
 
 The SQLite stack:
 
+- The Alpine image preloads its installed `gcompat` library so the Linux `sqlite-vec` extension can load under musl. During the build, an unprivileged user runs `vec_version()` without network access. A loading failure stops the build instead of silently disabling vectors.
 - It has one app container and no database service. `STORE_BACKEND=sqlite`, `SQLITE_PATH=/home/node/.covel/data/covel.db`, and `MEDIA_ROOT=/home/node/.covel/data/media` are set in the Compose file, and they override variables of the same name that `.env` holds for runs from source. The database and the media are therefore both in the `appdata` volume.
 - A folder of the image that has no volume (for example `/app/apps/server/data`) is lost when the container is recreated, so the database must not be placed there.
 - The project name is `covel-sqlite` and the container name is `covel-sqlite-app`.
