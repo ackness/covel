@@ -467,11 +467,20 @@ test("installed Electron is checked by actual embedded versions without a backen
     `Actual installed Electron ${versions.electron}, embedded Node ${versions.node}`,
   );
   assert.doesNotThrow(() => f.assertSafeElectronVersions(versions));
-  await assert.doesNotReject(() =>
+  const actual = await f.probeBackendRuntime(executable, {
+    platform: process.platform,
+    arch: process.arch,
+  });
+  assert.equal(actual.platform, process.platform);
+  assert.equal(actual.arch, process.arch);
+  // Keep native probes in one test file: concurrent first-time installers can
+  // otherwise read Electron while another worker is still extracting it.
+  await assert.rejects(
     f.probeBackendRuntime(executable, {
       platform: process.platform,
-      arch: process.arch,
+      arch: process.arch === "arm64" ? "x64" : "arm64",
     }),
+    /target mismatch/,
   );
 });
 

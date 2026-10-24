@@ -11,8 +11,6 @@ import {
   BACKEND_RUNTIME_MODE,
   RUNTIME_SELECTION_ID,
 } from "../src/backend-runtime.ts";
-import { verifyAndProbeBackendRuntime } from "./backend-runtime.mjs";
-import { ensureElectronBinary } from "./ensure-electron.mjs";
 
 function fixture(t, directory, platform, arch) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "covel-release-target-"));
@@ -84,37 +82,4 @@ test("release targets fail closed on missing, invalid, unsupported or conflictin
       /regular file/,
     );
   }
-});
-
-test("a supported target claimed by metadata must still match the actual Electron probe", async (t) => {
-  const actual = { platform: process.platform, arch: process.arch };
-  const family = { darwin: "mac", win32: "win", linux: "linux" }[
-    actual.platform
-  ];
-  const valid = fixture(
-    t,
-    family === "mac" ? "mac" : `${family}-unpacked`,
-    actual.platform,
-    actual.arch,
-  );
-  const executable = ensureElectronBinary();
-  const versions = await verifyAndProbeBackendRuntime(
-    valid.resources,
-    executable,
-    resolveReleaseTarget(valid.resources, family),
-  );
-  assert.equal(versions.platform, actual.platform);
-  assert.equal(versions.arch, actual.arch);
-  const f = fixture(
-    t,
-    "linux-unpacked",
-    "linux",
-    actual.platform === "linux" && actual.arch === "arm64" ? "x64" : "arm64",
-  );
-  const target = resolveReleaseTarget(f.resources, "linux");
-  await assert.rejects(
-    verifyAndProbeBackendRuntime(f.resources, ensureElectronBinary(), target),
-    // On macOS the Linux executable layout has no fuse wire; it must never execute.
-    /target mismatch|RunAsNode fuse/,
-  );
 });
