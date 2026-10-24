@@ -51,10 +51,9 @@ afterEach(() => {
 const hero = () => within(document.getElementById("top")!);
 
 // Exercise the actual pre-paint script, which React tests do not load.
-const themeBootstrap = readFileSync(
-  path.resolve("index.html"),
-  "utf8",
-).match(/<script>([\s\S]*?)<\/script>/)?.[1];
+const themeBootstrap = new DOMParser()
+  .parseFromString(readFileSync(path.resolve("index.html"), "utf8"), "text/html")
+  .querySelector("script")?.textContent;
 
 function restoreTheme(storage: Pick<Storage, "getItem"> = localStorage) {
   if (!themeBootstrap) throw new Error("Missing pre-paint theme bootstrap");
