@@ -38,7 +38,7 @@
 
 构建检查实际 Electron 可执行文件的 Electron/Node 版本、目标平台与架构以及 RunAsNode fuse，不只看 npm 包版本。实际版本必须与 `src/backend-runtime.ts` 编译内置的 `ELECTRON_VERSION`（来自桌面包依赖）和 `EMBEDDED_NODE_VERSION` 匹配；目标元数据不存放版本。RunAsNode 必须启用，不符时失败。Electron 45.0.0 的内嵌 Node 24.22.0 不能按版本号视为已经包含 Node 24.22.1 的全部修复，具体补丁和剩余边界见[运行时和 HTTP 客户端更新](./security.md#运行时和-http-客户端更新)。
 
-主进程 bundle 与目标资源通过摘要绑定；复用旧 bundle 或混用不同目标资源会被拒绝。产物检查读取实际 `app.asar` 中的入口与主进程字节，不能用源码目录里的文件代替。每次受桌面管理的启动、重启和故障恢复都重新校验。升级 Electron 后必须重新构建整个安装包，并运行下文的产物校验与启动冒烟；升级本身不表示已完成各平台的运行验证或签名支持。
+主进程和 preload bundle 与目标资源通过各自的摘要绑定；复用旧 bundle 或混用不同目标资源会被拒绝。产物检查读取实际 `app.asar` 中的入口、主进程和 preload 字节，不能用源码目录里的文件代替。摘要用于发现构建混用或损坏，不代替签名或有可信根的防篡改校验。每次受桌面管理的启动、重启和故障恢复都重新校验。升级 Electron 后必须重新构建整个安装包，并运行下文的产物校验与启动冒烟；升级本身不表示已完成各平台的运行验证或签名支持。
 
 打包配置显式启用 `runAsNode` 和 `enableNodeOptionsEnvironmentVariable`，后者用于保留 `NODE_EXTRA_CA_CERTS` 支持；启动子进程时仍清除 `NODE_OPTIONS`。`enableNodeCliInspectArguments: false` 禁用 Node CLI 调试参数，`onlyLoadAppFromAsar: true` 将应用入口限定在 ASAR。这些配置必须在实际安装包上验证；限定 ASAR 入口不等于签名或 ASAR 密码学完整性校验。
 
@@ -66,7 +66,7 @@
 ### 打包后的服务端怎样启动
 
 - 内置服务端使用本安装包的 Electron 可执行文件，以 RunAsNode 执行预编译的 `server/src/index.js`。它不查找玩家 PATH，也不在启动时转译框架模块。
-- 每次启动、重启或恢复前都核对主进程摘要、目标平台与架构、实际 Electron/Node 版本及 RunAsNode fuse。大文件摘要和 fuse 扫描使用异步读取，校验完成前不启动子进程，也不复用上次校验结果。缺失、损坏或不符时提示重新安装，不执行替代运行时。合并环境配置后移除 `NODE_OPTIONS`、`NODE_PATH` 和外来 Electron 模式变量，保留合法的代理、提供商密钥与 `NODE_EXTRA_CA_CERTS`。
+- 每次启动、重启或恢复前都核对主进程和 preload 摘要、目标平台与架构、实际 Electron/Node 版本及 RunAsNode fuse。大文件摘要和 fuse 扫描使用异步读取，校验完成前不启动子进程，也不复用上次校验结果。缺失、损坏或不符时提示重新安装，不执行替代运行时。合并环境配置后移除 `NODE_OPTIONS`、`NODE_PATH` 和外来 Electron 模式变量，保留合法的代理、提供商密钥与 `NODE_EXTRA_CA_CERTS`。
 - 构建把 staging 里的框架模块以最多四个并行任务编译到源码旁边。全部编译成功后才改写包的运行时导出，再删除已成功编译的 `.ts`；失败时先等正在执行的任务结束，再报错，不进入裁剪。`import.meta.url` 算出来的模型数据和提示词文件的相对位置不变。
 - `tsx` 加载器及其 esbuild 目标二进制保留在 `resources/server/node_modules/`，用于动态加载 TypeScript 插件；加载器只从该目录的 `tsx/dist/loader.mjs` 读取，缺失即失败。桌面主进程不再另带一份依赖树。
 - HTTP 端口监听成功后，子进程向父进程发一条私有的 `covel:ready` 消息，带上端口。桌面版收到后立刻加载应用。
@@ -81,7 +81,7 @@
 - 构建不会打包开发者的 `llm.toml` 或其他私有的服务端配置。staging 检查和解包后的安装包检查都会拒绝服务端资源根目录下出现这些文件。
 - 安装后的应用总是从用户配置目录读取 `llm.toml`，文件在首次启动之后才创建也一样。
 - 内置资源目录缺失时，它在发现顺序里的位置不变。用户插件不会因为安装资源缺失而获得内置插件的信任。
-- 每个目标平台与架构单独准备 `staging/backend-runtime/<os>-<arch>/`；打包钩子按实际目标选取，不能把构建机的运行时复制进其他架构的安装包。staging 和解包产物校验检查 Electron/Node 版本、平台和架构，并执行资源与摘要检查。
+- 每个目标平台与架构单独准备 `staging/backend-runtime/<os>-<arch>/`；打包钩子按实际目标选取，不能把构建机的运行时复制进其他架构的安装包。staging 和解包产物校验检查 Electron/Node 版本、平台和架构，并执行资源与摘要检查。解包目录名没有架构后缀时，发布校验从 `runtime-selection.json` 读取架构；显式后缀必须与清单一致，之后仍探测实际 Electron 的平台和架构，不默认猜测为 x64。
 
 ### 启动冒烟测试
 
@@ -212,6 +212,7 @@ CI **不**调用第二步。它直接运行 `electron-builder`，让解包目录
 ### 发版 CI 检查什么
 
 - 每个平台上，先检查解包后的应用入口和资源，再用其中的 Electron RunAsNode 启动后端，验证 SQLite、向量扩展和插件加载，最后只上传安装包。每个内置插件必须保留根 `PLUGIN.md`；子目录清单或仅有翻译文件不能代替它。
+- macOS 还运行 `node apps/desktop/scripts/verify-mac-artifact.mjs`，将实际发布 ZIP 解压到含空格和中文的独立临时目录。它先检查 ZIP 内的资源和有配置／无配置后端启动，再启动其中的 `.app`，通过真实 preload 打开世界列表和开局准备页，检查按钮可操作、页面刷新和应用及其进程组退出。检查使用隔离数据目录，不调用模型；日志和渲染器截图独立上传到 `covel-macos-startup-evidence`。需要 macOS arm64 GUI 会话；这不验证 Gatekeeper、DMG 安装交互或原生窗口可见性。
 - Windows 还运行 `apps/desktop/scripts/verify-windows-artifacts.mjs`，分别启动真正的 ZIP 内 `Covel.exe` 和单文件自解压 EXE。检查要求原生准备画面、进程树内实际可见且未最小化的应用窗口、世界列表和可操作的开局按钮，再检查整个进程树退出。它使用隔离数据目录，不调用付费模型。ZIP 会解压到含空格和中文的路径，先以随包 `Covel.exe` 验证有配置／无配置的后端启动，再检查界面和刷新恢复。证据中的 `size.json` 记录压缩文件大小，ZIP 还记录解压后的文件总大小。Windows 发布任务也运行桌面回归测试及插件／世界安装 API 测试；后者不验证 NSIS 安装向导。
 - 这项 Windows 检查需要交互式、未锁定的桌面；拿不到原生像素或可见窗口就失败。截图和日志单独上传到 `covel-windows-startup-evidence`，不混进发布安装包。macOS 构建、API 检查和渲染器截图不能代替这项原生 Windows 证据。
 - 官方构建没有发布者证书签名，因此不做发布者身份校验；macOS fuse 修改后的 ad-hoc 签名仍须通过实际启动验证。

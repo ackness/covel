@@ -80,7 +80,6 @@ console.log("\n[2/4] Bundling main process and preload...");
 const bundleOptions = { metafile: true, legalComments: "inline" };
 const mainBundle = await bundleDesktopEntry(desktopRoot, "main", bundleOptions);
 assertDesktopBundle(mainBundle.metafile);
-writeRuntimeBundleSelection(desktopRoot);
 
 const preloadBundle = await bundleDesktopEntry(
   desktopRoot,
@@ -88,6 +87,7 @@ const preloadBundle = await bundleDesktopEntry(
   bundleOptions,
 );
 assertDesktopBundle(preloadBundle.metafile);
+writeRuntimeBundleSelection(desktopRoot);
 
 // Step 3: Stage server resources via `pnpm deploy`.
 //

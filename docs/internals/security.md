@@ -157,7 +157,7 @@ Electron 45 已包含 eMudhra 被攻陷中间证书的公钥封锁补丁。它�
 
 核心 HTTP 路径使用 npm Undici 8.12.2、URL 规范化和 `dns.lookup`，减少对旧版 Node 网络实现中受影响路径的使用；这些措施不能替代原生 TLS/DNS 修复。插件直接调用原生网络 API，以及绕过核心 HTTP 路径的特殊 PostgreSQL 直连配置，仍有残余风险。新增网络路径或升级 Electron 时须重新核对其实际依赖和修复；源码和 Docker 继续使用 Node 26.12.1。
 
-每次受管理的启动、重启和恢复都会检查目标与实际 Electron/Node 版本、平台与架构以及 RunAsNode fuse。主进程摘要与目标资源绑定，发布校验读取实际 ASAR 入口；不匹配或混用资源都会失败，不受环境变量覆盖，也不回退到宿主 Node。子进程环境移除 `NODE_OPTIONS`、`NODE_PATH` 和外来 Electron 模式控制，保留合法 CA、代理和密钥配置。操作步骤见[后端运行时](./desktop-packaging.md#后端运行时)。
+每次受管理的启动、重启和恢复都会检查目标与实际 Electron/Node 版本、平台与架构以及 RunAsNode fuse。主进程和 preload 摘要与目标资源绑定，发布校验读取实际 ASAR 入口及两个 bundle；不匹配或混用资源都会失败，不受环境变量覆盖，也不回退到宿主 Node。子进程环境移除 `NODE_OPTIONS`、`NODE_PATH` 和外来 Electron 模式控制，保留合法 CA、代理和密钥配置。操作步骤见[后端运行时](./desktop-packaging.md#后端运行时)。
 
 ### Desktop proxy modes
 

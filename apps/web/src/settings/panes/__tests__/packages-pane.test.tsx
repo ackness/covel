@@ -1,5 +1,6 @@
 import { requestConfirm } from "@/lib/confirm-channel.js";
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -22,6 +23,20 @@ const boot = vi.hoisted(() => vi.fn());
 vi.mock("@/stores/session-store.js", () => ({
   useSessionActions: () => ({ boot }),
 }));
+
+const desktopInfoFixture = {
+  version: "test",
+  platform: "darwin",
+  isDev: false,
+  covelHome: "/home",
+  dataRoot: "/data",
+  logsDir: "/logs",
+  dbPath: "/data/covel.db",
+  configTomlPath: "/home/config.toml",
+  llmTomlPath: "/home/llm.toml",
+  keysEnvPath: "/home/keys.env",
+  serverPort: 9479,
+};
 
 const brokenPlugin: PluginSummary = {
   requires: [],
@@ -74,17 +89,8 @@ describe("PackagesPane installed plugin management", () => {
     async (isDev) => {
       vi.mocked(hasElectronIpc).mockReturnValue(true);
       vi.mocked(getDesktopInfo).mockResolvedValue({
-        version: "test",
-        platform: "darwin",
+        ...desktopInfoFixture,
         isDev,
-        covelHome: "/home",
-        dataRoot: "/data",
-        logsDir: "/logs",
-        dbPath: "/data/covel.db",
-        configTomlPath: "/home/config.toml",
-        llmTomlPath: "/home/llm.toml",
-        keysEnvPath: "/home/keys.env",
-        serverPort: 9479,
       });
       let installedOnDisk = true;
       vi.stubGlobal(
@@ -139,6 +145,121 @@ describe("PackagesPane installed plugin management", () => {
           screen.getByText(i18n.t("settings.desktopRestartDevHint")),
         ).toBeTruthy();
       }
+      fireEvent.click(restart);
+      expect(reloadServerAndWait).toHaveBeenCalledTimes(isDev ? 0 : 1);
+    },
+  );
+
+  it.each([
+    { failure: "rejected", isDev: false },
+    { failure: "rejected", isDev: true },
+    { failure: "missing", isDev: false },
+  ])(
+    "retries $failure desktop information and restores isDev=$isDev behavior",
+    async ({ failure, isDev }) => {
+      vi.mocked(hasElectronIpc).mockReturnValue(true);
+      let resolveInitial!: (info: typeof desktopInfoFixture | null) => void;
+      let rejectInitial!: (error: Error) => void;
+      let resolveRetry!: (info: typeof desktopInfoFixture) => void;
+      vi.mocked(getDesktopInfo)
+        .mockReturnValueOnce(
+          new Promise((resolve, reject) => {
+            resolveInitial = resolve;
+            rejectInitial = reject;
+          }),
+        )
+        .mockReturnValueOnce(
+          new Promise((resolve) => {
+            resolveRetry = resolve;
+          }),
+        );
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (url: string, init?: RequestInit) => {
+          if (url === "/api/plugins")
+            return Response.json({ items: [brokenPlugin] });
+          if (url === "/api/install/plugins")
+            return Response.json({
+              items: [
+                {
+                  id: brokenPlugin.id,
+                  version: null,
+                  source: null,
+                  pendingUpdate: null,
+                },
+              ],
+            });
+          if (url === "/api/install/worlds")
+            return Response.json({ items: [] });
+          if (url === "/api/plugins/broken-plugin" && init?.method === "DELETE")
+            return Response.json({
+              ok: true,
+              id: brokenPlugin.id,
+              restartRequired: true,
+            });
+          throw new Error(`Unexpected request: ${url}`);
+        }),
+      );
+      render(<PackagesPane />);
+      await screen.findByText("Broken plugin");
+      fireEvent.click(screen.getByRole("button", { name: "Uninstall" }));
+      const restart = await screen.findByRole<HTMLButtonElement>("button", {
+        name: i18n.t("settings.packages.restartNow"),
+      });
+      expect(restart.disabled).toBe(true);
+      expect(
+        screen.getByText(i18n.t("settings.packages.restartInfoLoading")),
+      ).toBeTruthy();
+      expect(
+        screen.queryByText(i18n.t("settings.packages.restartHint")),
+      ).toBeNull();
+      expect(
+        screen.queryByRole("button", { name: i18n.t("common.retry") }),
+      ).toBeNull();
+
+      await act(async () => {
+        if (failure === "rejected") rejectInitial(new Error("IPC unavailable"));
+        else resolveInitial(null);
+      });
+      expect(
+        screen.getByText(i18n.t("settings.packages.restartInfoFailed")),
+      ).toBeTruthy();
+      expect(
+        screen.queryByText(i18n.t("settings.packages.restartInfoLoading")),
+      ).toBeNull();
+      fireEvent.click(restart);
+      expect(reloadServerAndWait).not.toHaveBeenCalled();
+      fireEvent.click(
+        screen.getByRole("button", { name: i18n.t("common.retry") }),
+      );
+      expect(getDesktopInfo).toHaveBeenCalledTimes(2);
+      expect(
+        screen.getByText(i18n.t("settings.packages.restartInfoLoading")),
+      ).toBeTruthy();
+      expect(
+        screen.queryByText(i18n.t("settings.packages.restartInfoFailed")),
+      ).toBeNull();
+      expect(
+        screen.queryByRole("button", { name: i18n.t("common.retry") }),
+      ).toBeNull();
+      expect(restart.disabled).toBe(true);
+      fireEvent.click(restart);
+      expect(reloadServerAndWait).not.toHaveBeenCalled();
+
+      await act(async () => resolveRetry({ ...desktopInfoFixture, isDev }));
+      expect(
+        screen.getByText(
+          i18n.t(
+            isDev
+              ? "settings.desktopRestartDevHint"
+              : "settings.packages.restartHint",
+          ),
+        ),
+      ).toBeTruthy();
+      expect(
+        screen.queryByText(i18n.t("settings.packages.restartInfoLoading")),
+      ).toBeNull();
+      expect(restart.disabled).toBe(isDev);
       fireEvent.click(restart);
       expect(reloadServerAndWait).toHaveBeenCalledTimes(isDev ? 0 : 1);
     },
@@ -262,6 +383,18 @@ describe("PackagesPane installed plugin management", () => {
         fetchMock.mock.calls.filter(([url]) => url === "/api/plugins"),
       ).toHaveLength(2),
     );
+    expect(
+      screen.getByText(i18n.t("settings.packages.restartHint")),
+    ).toBeTruthy();
+    expect(
+      screen.queryByRole("button", {
+        name: i18n.t("settings.packages.restartNow"),
+      }),
+    ).toBeNull();
+    expect(
+      screen.queryByText(i18n.t("settings.packages.restartInfoLoading")),
+    ).toBeNull();
+    expect(getDesktopInfo).not.toHaveBeenCalled();
   });
 
   it("loads the world list again after a world package is installed", async () => {

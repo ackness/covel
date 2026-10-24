@@ -204,6 +204,19 @@ jobs:
       - name: Verify and boot unpacked release resources
         run: node apps/desktop/scripts/verify-release.mjs mac
 
+      - name: Boot shipped macOS ZIP application
+        timeout-minutes: 10
+        run: node apps/desktop/scripts/verify-mac-artifact.mjs
+
+      - name: Preserve shipped macOS startup evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: covel-macos-startup-evidence
+          path: debugs/mac-artifact-smoke/
+          if-no-files-found: warn
+          retention-days: 7
+
       - name: Upload Electron artifacts
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:

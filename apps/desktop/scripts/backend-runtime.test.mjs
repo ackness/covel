@@ -62,6 +62,7 @@ async function fixture(t, { probeVersions } = {}) {
 
 function bundle(f, contents = `bundled ${f.BACKEND_RUNTIME_MODE} main`) {
   fs.writeFileSync(path.join(f.root, "dist/main.mjs"), contents);
+  fs.writeFileSync(path.join(f.root, "dist/preload.mjs"), "bundled preload");
   f.writeRuntimeBundleSelection(f.root);
 }
 
@@ -219,6 +220,8 @@ test("packaging enforces all four targets and reject wrong metadata, missing res
       { selection: "0".repeat(64) },
       { platform: "darwin" },
       { mainSha256: "bad" },
+      { preloadSha256: "bad" },
+      { preloadSha256: undefined },
     ]) {
       fs.writeFileSync(
         file,
@@ -498,6 +501,51 @@ test("selection metadata is mandatory, regular and bound to the exact main bytes
       () => f.verifyBackendRuntime(resources, options),
       /regular file/,
     );
+  }
+});
+
+test("preload binding rejects stale staging and rechecks managed launches before probing", async (t) => {
+  const f = await fixture(t);
+  bundle(f);
+  const resources = await f.stageBackendRuntime(f.root, target);
+  const preloadFile = path.join(f.root, "dist/preload.mjs");
+  let probes = 0;
+  const options = {
+    ...target,
+    mainFile: path.join(f.root, "dist/main.mjs"),
+    electronExecutable: electronFile(f),
+    electronVersions: () => {
+      probes++;
+      return eligible;
+    },
+  };
+  await f.verifyBackendRuntime(resources, options);
+  assert.equal(probes, 1);
+  fs.writeFileSync(preloadFile, "stale preload");
+  assert.throws(
+    () => f.verifyRuntimeBundleSelection(f.root),
+    /Stale desktop runtime bundle/,
+  );
+  await assert.rejects(
+    f.stageBackendRuntime(f.root, target),
+    /Stale desktop runtime bundle/,
+  );
+  await assert.rejects(
+    f.verifyBackendRuntime(resources, options),
+    /SHA256 mismatch.*preload/,
+  );
+  assert.equal(probes, 1);
+  bundle(f);
+  await f.verifyBackendRuntime(resources, options);
+  assert.equal(probes, 2);
+  fs.unlinkSync(preloadFile);
+  await assert.rejects(f.verifyBackendRuntime(resources, options), /ENOENT/);
+  assert.equal(probes, 2);
+  assert.throws(() => f.writeRuntimeBundleSelection(f.root), /ENOENT/);
+  if (process.platform !== "win32") {
+    fs.symlinkSync(options.mainFile, preloadFile);
+    await assert.rejects(f.verifyBackendRuntime(resources, options), /regular/);
+    assert.equal(probes, 2);
   }
 });
 

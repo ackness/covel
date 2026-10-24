@@ -1037,6 +1037,8 @@
       "uninstalledRestart": "Uninstalled {{id}} — restart required",
       "uninstallFailed": "Uninstall failed",
       "restartHint": "Package files changed. Restart the backend to apply installation or removal; execution still requires session authorization.",
+      "restartInfoLoading": "Package changes require a backend restart. Checking whether Covel can restart it…",
+      "restartInfoFailed": "Package changes require a backend restart. Desktop information could not be loaded, so restart is temporarily unavailable. Retry to check again.",
       "restartNow": "Restart now",
       "reloadFailed": "Reload failed",
       "uninstallConfirm": "Uninstall this plugin? Restart to apply the removal. You will need to install it again to use it later.",

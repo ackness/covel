@@ -70,11 +70,15 @@ const selection = verifyRuntimeSelection(
   options,
 );
 if (packaged) {
-  verifyPackagedMain(runtimeResources, selection.mainSha256);
+  verifyPackagedMain(runtimeResources, selection);
 } else {
   await verifyRuntimeFile(
     path.join(desktopRoot, "dist/main.mjs"),
     selection.mainSha256,
+  );
+  await verifyRuntimeFile(
+    path.join(desktopRoot, "dist/preload.mjs"),
+    selection.preloadSha256,
   );
 }
 const electronExecutable = packaged

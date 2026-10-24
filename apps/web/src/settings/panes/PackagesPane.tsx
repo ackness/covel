@@ -52,9 +52,13 @@ export function PackagesPane() {
   const [updateBusy, setUpdateBusy] = useState(false);
   const [zipAccepted, setZipAccepted] = useState(false);
   const [removing, setRemoving] = useState<string | null>(null);
-  const [desktopInfo, setDesktopInfo] = useState<{ isDev: boolean } | null>(
-    null,
-  );
+  const isDesktop = hasElectronIpc();
+  const [desktopInfo, setDesktopInfo] = useState<
+    | { status: "loading" }
+    | { status: "error" }
+    | { status: "ready"; isDev: boolean }
+  >({ status: "loading" });
+  const [desktopInfoAttempt, setDesktopInfoAttempt] = useState(0);
 
   const refreshInstalled = useCallback(async () => {
     try {
@@ -77,11 +81,24 @@ export function PackagesPane() {
   }, [refreshInstalled]);
 
   useEffect(() => {
-    if (!hasElectronIpc()) return;
+    if (!isDesktop) return;
+    let cancelled = false;
     getDesktopInfo()
-      .then(setDesktopInfo)
-      .catch(ignoreError("load desktop restart info"));
-  }, []);
+      .then((info) => {
+        if (cancelled) return;
+        setDesktopInfo(
+          info ? { status: "ready", isDev: info.isDev } : { status: "error" },
+        );
+      })
+      .catch((error: unknown) => {
+        if (cancelled) return;
+        ignoreError("load desktop restart info")(error);
+        setDesktopInfo({ status: "error" });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isDesktop, desktopInfoAttempt]);
 
   // Boot fetches the world list again and drops the cached full records, so
   // the home screen and the prep screen show what was just installed.
@@ -217,19 +234,38 @@ export function PackagesPane() {
         <div className="flex items-start gap-3 text-xs px-3 py-2.5 rounded border border-(--accent-warning)/30 bg-(--accent-warning)/10 text-(--accent-warning)">
           <div className="flex-1">
             {t(
-              desktopInfo?.isDev
-                ? "settings.desktopRestartDevHint"
-                : "settings.packages.restartHint",
+              !isDesktop
+                ? "settings.packages.restartHint"
+                : desktopInfo.status === "loading"
+                  ? "settings.packages.restartInfoLoading"
+                  : desktopInfo.status === "error"
+                    ? "settings.packages.restartInfoFailed"
+                    : desktopInfo.isDev
+                      ? "settings.desktopRestartDevHint"
+                      : "settings.packages.restartHint",
             )}
           </div>
-          {hasElectronIpc() && (
+          {isDesktop && desktopInfo.status === "error" && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 text-xs shrink-0"
+              onClick={() => {
+                setDesktopInfo({ status: "loading" });
+                setDesktopInfoAttempt((attempt) => attempt + 1);
+              }}
+            >
+              {t("common.retry")}
+            </Button>
+          )}
+          {isDesktop && (
             <Button
               size="sm"
               variant="outline"
               className="h-7 text-xs shrink-0 border-(--accent-warning)/40 hover:border-(--accent-warning)"
-              disabled={!desktopInfo || desktopInfo.isDev}
+              disabled={desktopInfo.status !== "ready" || desktopInfo.isDev}
               onClick={() => {
-                if (!desktopInfo || desktopInfo.isDev) return;
+                if (desktopInfo.status !== "ready" || desktopInfo.isDev) return;
                 void reloadServerAndWait({
                   message: t("reload.reloadingServer", "Restarting backend…"),
                 }).catch((err) =>

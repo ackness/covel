@@ -23,12 +23,13 @@ export {
 const hashFile = (file) =>
   createHash("sha256").update(fs.readFileSync(file)).digest("hex");
 
-/** Called only after bundling; binds the chosen manifest to these main bytes. */
+/** Called after both bundles finish; binds the manifest to their exact bytes. */
 export function writeRuntimeBundleSelection(desktopRoot) {
   const selection = {
     mode: BACKEND_RUNTIME_MODE,
     selection: RUNTIME_SELECTION_ID,
     mainSha256: hashFile(path.join(desktopRoot, "dist/main.mjs")),
+    preloadSha256: hashFile(path.join(desktopRoot, "dist/preload.mjs")),
   };
   fs.writeFileSync(
     path.join(desktopRoot, "dist/runtime-selection.json"),
@@ -44,7 +45,10 @@ export function verifyRuntimeBundleSelection(desktopRoot) {
   if (
     selection?.mode !== BACKEND_RUNTIME_MODE ||
     selection?.selection !== RUNTIME_SELECTION_ID ||
-    selection?.mainSha256 !== hashFile(path.join(desktopRoot, "dist/main.mjs"))
+    selection?.mainSha256 !==
+      hashFile(path.join(desktopRoot, "dist/main.mjs")) ||
+    selection?.preloadSha256 !==
+      hashFile(path.join(desktopRoot, "dist/preload.mjs"))
   ) {
     throw new Error(
       "Stale desktop runtime bundle/manifest: rebuild desktop before packaging",

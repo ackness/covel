@@ -61,6 +61,7 @@
 - [ ] `pnpm validate:plugin` / `pnpm validate:world` <!-- plugin or world package changes / 改动插件或世界包时 -->
 - [ ] `pnpm e2e:verify` <!-- prompt, model-routing, or runtime behavior changes; needs .env.llm / 改动提示词、模型路由或 runtime 行为时 -->
 - [ ] Packaged desktop runtime and lifecycle / 安装包自己的 Electron RunAsNode、SQLite、插件加载、设置读写、恢复与退出 <!-- runtime/packaging changes; record actual OS/arch / 运行时或打包改动，注明实际验证的平台和架构 -->
+- [ ] macOS ZIP: actual packaged GUI, preload version, world/session-prep flow, reload and process-group exit / macOS ZIP：实际应用与 preload 版本、世界与开局流程、刷新及进程组退出 <!-- requires native macOS arm64 GUI; does not verify Gatekeeper, DMG installation or native window visibility / 需要原生 macOS arm64 GUI；不验证 Gatekeeper、DMG 安装或原生窗口可见性 -->
 - [ ] Windows ZIP and self-extracting EXE: native preparation feedback, visible app window, world/session-prep flow, reload, extracted RunAsNode backend, size evidence and process-tree exit / Windows 实际分发文件：原生准备提示、可见窗口、世界与开局流程、刷新、解压后的 RunAsNode 后端、体积证据及进程树退出 <!-- needs interactive Windows; workflow code or renderer screenshots alone are not proof / 需要交互式 Windows；工作流代码或渲染器截图不能代替 -->
 - [ ] Manual check / 手动验证: …
 

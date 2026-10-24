@@ -199,7 +199,7 @@ Site uses the Turbo command above to run the two independent builds in parallel;
 
 ### Documentation-only changes
 
-Docs-only changes take a short path: the push hook and `ci.yml` run `pnpm check`, then `pnpm test:docs:packages`; CI also builds the showcase and documentation through Site. Documentation-reference and technical-debt-ledger script tests already ran in `check:scripts` and are not repeated. Documentation test files are grouped by package so each package starts its test runner once. Standalone `pnpm test:docs` still includes the package tests and both script suites. When checking a historical commit, the push hook uses the commands that commit provides.
+Docs-only changes take a short path: the push hook and `ci.yml` run `pnpm check`, then `pnpm test:docs:packages`; CI also builds the showcase and documentation through Site. Documentation-reference and technical-debt-ledger script tests already ran in `check:scripts` and are not repeated. Documentation test files are grouped by package so each package starts its test runner once, including checks that the SDK README matches the declared Zod peer version and exported subpaths. Standalone `pnpm test:docs` still includes the package tests and both script suites. When checking a historical commit, the push hook uses the commands that commit provides.
 
 Files that count as documentation (the rules are in `scripts/lib/change-scope.mjs`):
 

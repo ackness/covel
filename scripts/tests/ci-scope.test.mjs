@@ -325,6 +325,24 @@ test("CI keeps required Site builds and scoped download keys", () => {
   }
 });
 
+test("macOS release verifies the shipped GUI before uploading artifacts and preserves failure evidence", () => {
+  const { steps } = workflow("release").jobs["build-electron"];
+  const smokeIndex = steps.findIndex((step) =>
+    step.run?.includes("scripts/verify-mac-artifact.mjs"),
+  );
+  const uploadIndex = steps.findIndex(
+    (step) => step.name === "Upload Electron artifacts",
+  );
+  assert.ok(smokeIndex >= 0 && uploadIndex > smokeIndex);
+  assert.equal(steps[smokeIndex].if, undefined);
+  assert.equal(steps[smokeIndex]["continue-on-error"], undefined);
+  const evidence = steps.find(
+    (step) => step.with?.name === "covel-macos-startup-evidence",
+  );
+  assert.equal(evidence.if, "always()");
+  assert.equal(evidence.with.path, "debugs/mac-artifact-smoke/");
+});
+
 // These cache guards use only boolean operators and string equality, whose
 // semantics match JavaScript for the typed fixture inputs. Bracket access also
 // preserves GitHub's hyphenated step IDs and output names.

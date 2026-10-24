@@ -153,6 +153,7 @@ export async function resolveBackendRuntime(): Promise<string> {
       electronExecutable: process.execPath,
       electronVersions: process.versions,
       mainFile: fileURLToPath(import.meta.url),
+      preloadFile: resolvePreloadScript(),
     });
   } catch (cause) {
     throw new Error(

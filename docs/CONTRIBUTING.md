@@ -143,7 +143,7 @@ Turbo、Electron、Chromium 和 Site 的任务缓存各用一次 restore；普�
 
 发布始终走完整测试路径并运行 `pnpm release:preflight`，不运行 Site 或 workspace Build；平台打包任务自行构建桌面产物。锁文件校验在临时元数据目录完成，不修改工作区依赖或执行安装脚本。发布调用声明嵌套工作流需要的 Pages/OIDC 权限上限，但 CI 将实际执行的发布验证任务限制为 `contents: read`，具有 Pages 写权限的 Site 任务被跳过。
 
-Windows 发布任务运行桌面回归测试，并在含空格和中文的 ZIP 解压路径验证 Electron 后端；记录产物与 ZIP 解压体积。它还启动实际 ZIP 和自解压 EXE，检查原生准备画面、可见应用窗口、世界选择与开局按钮，以及进程树退出。它需要未锁定的交互式 Windows 桌面；无法观察时失败，不能用 API 或渲染器截图替代。原生截图与日志独立上传，不进入发布资产。打包改动的 PR 必须注明实际验证的平台；添加工作流不等于已通过 Windows 验证。
+macOS 发布任务从实际 ZIP 启动应用，通过真实 preload 验证世界选择、开局准备和刷新，再检查应用及其进程组退出；截图和日志独立上传。它不验证 Gatekeeper、DMG 安装交互或原生窗口可见性。Windows 发布任务运行桌面回归测试，并在含空格和中文的 ZIP 解压路径验证 Electron 后端；记录产物与 ZIP 解压体积。它还启动实际 ZIP 和自解压 EXE，检查原生准备画面、可见应用窗口、世界选择与开局按钮，以及进程树退出。它需要未锁定的交互式 Windows 桌面；无法观察时失败，不能用 API 或渲染器截图替代。原生截图与日志独立上传，不进入发布资产。打包改动的 PR 必须注明实际验证的平台；添加工作流不等于已通过 Windows 验证。
 
 `Verification` 汇总所选任务，包括每次非发布 CI 的 Site；必需任务缺失、跳过、失败或取消都不能通过。`main` 只接受通过 PR 合入的改动；每个 PR 的 [`gate.yml`](../.github/workflows/gate.yml) 提供 `All checks pass`，要求 `Verification` 成功，同时保留其他检查的失败。重跑失败检查后，也要重跑这一项。
 

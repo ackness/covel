@@ -13,7 +13,7 @@ Covel 是模块化单体：一个仓库、一起发布，内部分成若干包�
 > - Turbo 会先完成 SDK 构建，再运行它自己的 lint 和测试。SDK 测试经 `shared` 读取自己的 `dist` 声明，所以只有依赖包的 `^build` 顺序还不够。
 > - 单独运行某个包的测试之前，仍然要手动执行 `pnpm --filter @covel/plugin-handlers-utils build`。
 
-其余的库主要由应用和框架在工作区内组合使用。`pnpm test:docs:packages` 按包合并读取文档的测试文件，每个包只启动一次测试运行器；具体范围见[命令](./commands.md#documentation-only-changes)。
+其余的库主要由应用和框架在工作区内组合使用。`pnpm test:docs:packages` 按包合并读取文档的测试文件，包括 SDK README 的 peer 版本和导出子路径同步检查，每个包只启动一次测试运行器；具体范围见[命令](./commands.md#documentation-only-changes)。
 
 ## 三条使用路径
 

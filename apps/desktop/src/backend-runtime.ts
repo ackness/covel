@@ -124,7 +124,7 @@ export function backendRuntimeEnvironment(
 export function verifyRuntimeSelection(
   file: string,
   { platform = process.platform, arch = process.arch }: RuntimeTarget = {},
-): { mainSha256: string; executableName?: unknown } {
+): { mainSha256: string; preloadSha256: string; executableName?: unknown } {
   assertDesktopTarget(platform, arch);
   if (!fs.lstatSync(file).isFile()) {
     throw new Error(
@@ -138,7 +138,9 @@ export function verifyRuntimeSelection(
     metadata?.platform !== platform ||
     metadata?.arch !== arch ||
     typeof metadata?.mainSha256 !== "string" ||
-    !/^[a-f0-9]{64}$/.test(metadata.mainSha256)
+    !/^[a-f0-9]{64}$/.test(metadata.mainSha256) ||
+    typeof metadata?.preloadSha256 !== "string" ||
+    !/^[a-f0-9]{64}$/.test(metadata.preloadSha256)
   ) {
     throw new Error(
       `Backend runtime selection mismatch: ${file}. Rebuild/reinstall the complete desktop application.`,
@@ -155,10 +157,12 @@ export async function verifyBackendRuntime(
     electronExecutable,
     electronVersions,
     mainFile,
+    preloadFile = mainFile && path.join(path.dirname(mainFile), "preload.mjs"),
   }: RuntimeTarget & {
     electronExecutable?: string;
     electronVersions?: ElectronVersions | (() => ElectronVersions);
     mainFile?: string;
+    preloadFile?: string;
   } = {},
 ): Promise<string> {
   const selection = verifyRuntimeSelection(
@@ -166,6 +170,8 @@ export async function verifyBackendRuntime(
     { platform, arch },
   );
   if (mainFile) await verifyRuntimeFile(mainFile, selection.mainSha256);
+  if (preloadFile)
+    await verifyRuntimeFile(preloadFile, selection.preloadSha256);
   const standalone = path.join(resources, "node");
   // lstat rejects even a dangling link. A stale standalone resource must not
   // survive a switch-back or become an implicit fallback.

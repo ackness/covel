@@ -18,6 +18,7 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { nextSettingsPersistenceBundle } from "@covel/shared/settings-persistence";
 import { findPreferredPort } from "../src/network.ts";
+import { verifyArtifactUi } from "./artifact-ui-smoke.mjs";
 
 // Reuse the repository's Playwright tool, not a desktop runtime dependency.
 let chromium;
@@ -254,47 +255,7 @@ async function runArtifact(kind, artifact, version, evidence) {
     page =
       context.pages()[0] ??
       (await context.waitForEvent("page", { timeout: 30_000 }));
-    await page.waitForURL(/^http:\/\/127\.0\.0\.1:\d+\/session(?:[/?#]|$)/, {
-      timeout: 30_000,
-    });
-    await page.waitForFunction(() => Boolean(window.covelIpc));
-    assert.equal(
-      await page.evaluate(() => window.covelIpc?.appVersion),
-      version,
-    );
-    const guide = page.getByTestId("onboarding-wizard");
-    await guide
-      .getByRole("button", { name: "Browse worlds first", exact: true })
-      .click({ timeout: 30_000 });
-    // Both the panel grid and stage carousel expose the same player action.
-    const enter = page
-      .getByRole("button", { name: "Enter", exact: true })
-      .filter({ visible: true })
-      .first();
-    await enter.waitFor({ timeout: 30_000 });
-    await page.screenshot({ path: path.join(evidence, "world-list.png") });
-    await enter.click();
-    // Desktop and compact layouts can both mount a Start Game control.
-    const start = page
-      .getByRole("button", { name: "Start Game", exact: true })
-      .filter({ visible: true })
-      .first();
-    const language = page.getByRole("button", { name: /Continue in/ });
-    await start.or(language).first().waitFor({ timeout: 30_000 });
-    if (await language.isVisible()) await language.click();
-    await start.waitFor({ timeout: 30_000 });
-    // Check actionability without starting a session or making model calls.
-    await start.click({ trial: true, timeout: 30_000 });
-    await page.screenshot({
-      path: path.join(evidence, "session-preparation.png"),
-    });
-    await page.reload();
-    await start.waitFor({ timeout: 30_000 });
-    await page.waitForFunction(() => Boolean(window.covelIpc));
-    assert.equal(
-      await page.evaluate(() => window.covelIpc.appVersion),
-      version,
-    );
+    await verifyArtifactUi(page, version, evidence);
     if (kind === "portable") {
       const native = await readJson(
         path.join(evidence, "native-preparation.json"),

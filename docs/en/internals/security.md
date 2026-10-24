@@ -157,7 +157,7 @@ Electron 45 includes the public-key blocklist patch for the compromised eMudhra 
 
 Core HTTP paths use npm Undici 8.12.2, URL normalization, and `dns.lookup`, reducing use of affected paths in older Node networking implementations. These measures do not replace native TLS/DNS fixes. Plugins that call native networking APIs directly, and specialized direct PostgreSQL configurations outside the core HTTP path, retain residual risk. Recheck actual dependencies and patches when adding network paths or upgrading Electron. Source and Docker deployments continue to use Node 26.12.1.
 
-Every managed startup, restart, and recovery checks target and actual Electron/Node versions, platform and architecture, and the RunAsNode fuse. The main digest is bound to target resources, and release verification reads the actual ASAR entry point. Mismatched or mixed resources fail without environment overrides or a host-Node fallback. Child environments remove `NODE_OPTIONS`, `NODE_PATH`, and inherited Electron mode controls while retaining legitimate CA, proxy, and key settings. See [backend runtime](./desktop-packaging.md#backend-runtime).
+Every managed startup, restart, and recovery checks target and actual Electron/Node versions, platform and architecture, and the RunAsNode fuse. The main and preload digests are bound to target resources, and release verification reads the actual ASAR entry point and both bundles. Mismatched or mixed resources fail without environment overrides or a host-Node fallback. Child environments remove `NODE_OPTIONS`, `NODE_PATH`, and inherited Electron mode controls while retaining legitimate CA, proxy, and key settings. See [backend runtime](./desktop-packaging.md#backend-runtime).
 
 ### Desktop proxy modes
 

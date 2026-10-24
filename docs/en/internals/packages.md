@@ -13,7 +13,7 @@ Covel is a modular monolith: one repository, released together, with its code sp
 > - Turbo finishes the SDK build before running its own lint and tests. SDK tests read their own `dist` declarations through `shared`, so dependency-only `^build` ordering is not enough.
 > - Before you run the tests of a single package on their own, you still have to run `pnpm --filter @covel/plugin-handlers-utils build` by hand.
 
-The other libraries are mainly combined inside the workspace by the applications and the framework. `pnpm test:docs:packages` groups documentation-reading test files by package, starting each package's test runner once. See [Commands](./commands.md#documentation-only-changes) for its scope.
+The other libraries are mainly combined inside the workspace by the applications and the framework. `pnpm test:docs:packages` groups documentation-reading test files by package, including SDK README checks for peer versions and exported subpaths, starting each package's test runner once. See [Commands](./commands.md#documentation-only-changes) for its scope.
 
 ## Three usage paths
 

@@ -199,7 +199,7 @@ Site 用上面的 Turbo 命令并行运行两个独立构建；输入相同时�
 
 ### Documentation-only changes
 
-纯文档改动走短路径：推送钩子和 `ci.yml` 都运行 `pnpm check`，再运行 `pnpm test:docs:packages`；CI 还通过 Site 构建官网和文档站。文档引用与技术债台账的脚本测试已在 `check:scripts` 中运行，不再重复。文档测试按包合并文件参数，同一包只启动一次测试 runner。独立运行 `pnpm test:docs` 仍包含包测试和这两组脚本测试。检查历史提交时，推送钩子使用该提交实际提供的命令。
+纯文档改动走短路径：推送钩子和 `ci.yml` 都运行 `pnpm check`，再运行 `pnpm test:docs:packages`；CI 还通过 Site 构建官网和文档站。文档引用与技术债台账的脚本测试已在 `check:scripts` 中运行，不再重复。文档测试按包合并文件参数，同一包只启动一次测试 runner；包括 SDK README 与声明的 Zod peer 版本和导出子路径的同步检查。独立运行 `pnpm test:docs` 仍包含包测试和这两组脚本测试。检查历史提交时，推送钩子使用该提交实际提供的命令。
 
 算作文档的文件（规则在 `scripts/lib/change-scope.mjs`）：
 
