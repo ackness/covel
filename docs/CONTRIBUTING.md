@@ -129,7 +129,7 @@ pnpm e2e                                   # Playwright 端到端
 
 PR、main 和发布统一使用 [`ci.yml`](../.github/workflows/ci.yml)，不再另跑 Docs 验证工作流。每种范围都运行完整的 `pnpm check`。纯文档随后运行 `pnpm test:docs:packages`；源码、混合改动、未知范围和发布运行完整套件。分类复用 pre-push 的 `scripts/lib/change-scope.mjs`；读取文档的包测试必须列进 `test:docs:packages`，由 `scripts/tests/change-scope.test.mjs` 检查。
 
-完整路径保留并行 job：`verify` 运行除 Web、server、runtime 之外的套件；Web 独立运行；server 独占 runner，并带覆盖率运行 runtime 套件、执行其下限，runtime 在 CI 只运行一次；PostgreSQL 和 Chromium 各自运行。浏览器 job 先收集全部 E2E，发现失效导入，再运行 smoke 和 `pnpm e2e:extensions`，共用安装和 Chromium。Chromium 下载按 Playwright 版本缓存，系统依赖每次安装。
+完整路径中，`verify` 运行静态检查，与 `tests` 的其余套件及构建并行；两者只等待范围选择，各用独立 Turbo 缓存键，且都必须成功才能通过 `Verification`。纯文档的包测试和发布 preflight 留在 `verify`。`tests` 运行除 Web、server、runtime 之外的套件；Web 独立运行；server 独占 runner，并带覆盖率运行 runtime 套件、执行其下限，runtime 在 CI 只运行一次；PostgreSQL 和 Chromium 各自运行。浏览器 job 先收集全部 E2E，发现失效导入，再运行 smoke 和 `pnpm e2e:extensions`，共用安装和 Chromium。Chromium 下载按 Playwright 版本缓存，系统依赖每次安装。
 
 非发布的完整检查运行 `pnpm build --cache=local:r --filter=!@covel/docs --filter=!@covel/site`，只读取 Turbo 缓存、不写回构建产物。官网和文档站由 CI 调用的 Site 任务用 Turbo 并行构建；纯文档改动也必须通过该任务。输入相同时恢复已有产物，仍须成功完成 Site 任务。独立的 `pnpm build` 仍构建全部目标。Turbo 本地缓存由 `turbo.json` 的 `cacheMaxAge`（7 天）和 `cacheMaxSize`（2GB）淘汰；CI 用 `TURBO_CACHE_MAX_AGE` / `TURBO_CACHE_MAX_SIZE` 收紧到 2 天、500MB，因为 actions/cache 每次整目录恢复再保存。
 

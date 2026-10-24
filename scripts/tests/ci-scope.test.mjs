@@ -306,14 +306,14 @@ test("CI keeps required Site builds and scoped download keys", () => {
     site.jobs.deploy.if,
   );
   assert.equal(
-    ci.jobs.verify.steps.some((step) =>
+    ci.jobs.tests.steps.some((step) =>
       step.with?.path?.includes("covel-node-runtime"),
     ),
     false,
     "desktop uses Electron and must not cache a second Node runtime",
   );
   for (const job of [
-    ci.jobs.verify,
+    ci.jobs.tests,
     release.jobs["build-electron"],
     release.jobs["build-electron-win"],
   ]) {
@@ -322,6 +322,75 @@ test("CI keeps required Site builds and scoped download keys", () => {
     );
     assert.match(electron.with.key, /runner.arch/);
     assert.match(electron.with.key, /pnpm-lock.yaml/);
+  }
+});
+
+test("static checks and source suites run independently and both feed Verification", () => {
+  const { jobs } = workflow("ci");
+  for (const name of ["verify", "tests"]) {
+    assert.equal(jobs[name].needs, "scope");
+    assert.ok(jobs.result.needs.includes(name));
+    assert.equal(jobs[name]["continue-on-error"], undefined);
+    assert.ok(
+      jobs[name].steps.every((step) => step["continue-on-error"] === undefined),
+    );
+  }
+  const find = (job, name) =>
+    jobs[job].steps.find((step) => step.name === name);
+  assert.equal(find("verify", "Check").run, "pnpm check");
+  assert.equal(find("verify", "Check").if, undefined);
+  assert.equal(
+    find("verify", "Test documentation examples").run,
+    "pnpm test:docs:packages",
+  );
+  assert.equal(
+    find("verify", "Release preflight").run,
+    "pnpm release:preflight",
+  );
+  assert.equal(
+    find("tests", "Test").run,
+    "pnpm test --concurrency=2 --filter=!@covel/web --filter=!@covel/server --filter=!@covel/runtime",
+  );
+  assert.equal(find("tests", "Test").env.VITEST_MAX_WORKERS, "2");
+  assert.equal(
+    find("tests", "Build").run,
+    "pnpm build --cache=local:r --filter=!@covel/docs --filter=!@covel/site",
+  );
+  assert.equal(find("tests", "Check"), undefined);
+  assert.equal(find("verify", "Test"), undefined);
+  for (const scope of ["docs", "full", ""]) {
+    for (const release of [false, true]) {
+      for (const cancelled of [false, true]) {
+        const context = {
+          inputs: { release },
+          needs: { scope: { outputs: { scope } } },
+          success: () => true,
+          cancelled: () => cancelled,
+        };
+        assert.equal(cacheCondition(jobs.verify.if, context), !cancelled);
+        const full = scope !== "docs" || release;
+        assert.equal(
+          cacheCondition(jobs.tests.if, context),
+          !cancelled && full,
+        );
+        assert.equal(cacheCondition(find("tests", "Test").if, context), full);
+        assert.equal(
+          cacheCondition(find("tests", "Build").if, context),
+          !release && scope !== "docs",
+        );
+        assert.equal(
+          cacheCondition(
+            find("verify", "Test documentation examples").if,
+            context,
+          ),
+          scope === "docs" && !release,
+        );
+        assert.equal(
+          cacheCondition(find("verify", "Release preflight").if, context),
+          release,
+        );
+      }
+    }
   }
 });
 
@@ -367,15 +436,19 @@ test("shared caches restore once and save only authorized successful exact misse
   const site = workflow("site");
   const cases = [
     {
-      steps: ci.jobs.verify.steps,
+      steps: ci.jobs.tests.steps,
       id: "electron-cache",
       path: "~/.cache/electron",
       key: "${{ runner.os }}-${{ runner.arch }}-electron-${{ hashFiles('pnpm-lock.yaml') }}",
       prefixes: [],
       skipDocs: true,
     },
-    ...["verify", "web"].map((job) => {
-      const prefix = job === "web" ? "turbo-web" : "turbo";
+    ...["verify", "tests", "web"].map((job) => {
+      const prefix = {
+        verify: "turbo-check",
+        tests: "turbo-test",
+        web: "turbo-web",
+      }[job];
       return {
         steps: ci.jobs[job].steps,
         id: "turbo-cache",
