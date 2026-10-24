@@ -1,67 +1,26 @@
-import { ArrowUpRight } from "lucide-react";
+import {
+  ArrowUpRight,
+  Blocks,
+  Feather,
+  FileText,
+  FolderOpen,
+} from "lucide-react";
 import type { Copy, Item } from "../copy.js";
-import { asset, repoFile } from "../links.js";
+import { DOCS_URL } from "../links.js";
 import { container, SectionHeading } from "./ui.js";
 
-// The smallest plugin from docs/plugins/prompt-only.md: one PLUGIN.md
-// with a description, a stage and a prompt.
-const MANIFEST: readonly (readonly [string, string?])[] = [
-  ["---", "muted"],
-  ["description: Adds a short observation after each turn."],
-  ["runtime:"],
-  ["  schedule: { stage: post-turn }"],
-  ["---", "muted"],
-  ["Write one short observation grounded", "prose"],
-  ["in the latest narrative.", "prose"],
-];
-
-function ManifestLine({ text, tone }: { text: string; tone?: string }) {
-  if (tone === "muted") return <span className="text-white/35">{text}</span>;
-  if (tone === "prose") return <span className="text-white/80">{text}</span>;
-  const colon = text.indexOf(":");
-  if (colon < 0) return <span>{text}</span>;
+function Points({ items }: { items: readonly Item[] }) {
   return (
-    <>
-      <span className="text-[oklch(83%_0.09_200)]">{text.slice(0, colon)}</span>
-      <span className="text-white/40">:</span>
-      <span className="text-[oklch(82%_0.12_70)]">{text.slice(colon + 1)}</span>
-    </>
-  );
-}
-
-function Pillar({
-  number,
-  title,
-  points,
-  children,
-}: {
-  number: string;
-  title: string;
-  points: readonly Item[];
-  children: React.ReactNode;
-}) {
-  return (
-    <article className="group flex flex-col overflow-hidden rounded-3xl border border-line bg-raised transition hover:border-accent/40">
-      <div className="relative aspect-[16/10] overflow-hidden border-b border-line">
-        {children}
-      </div>
-      <div className="flex flex-1 flex-col p-6 sm:p-8">
-        <h3 className="flex items-baseline gap-3 font-display text-2xl font-semibold tracking-tight">
-          <span className="font-mono text-sm text-accent">{number}</span>
-          {title}
-        </h3>
-        <dl className="mt-6 flex flex-col gap-5">
-          {points.map((point) => (
-            <div key={point.title} className="border-l-2 border-accent/40 pl-4">
-              <dt className="font-semibold tracking-tight">{point.title}</dt>
-              <dd className="mt-1.5 text-sm leading-relaxed text-muted">
-                {point.body}
-              </dd>
-            </div>
-          ))}
-        </dl>
-      </div>
-    </article>
+    <dl className="mt-6 grid gap-5">
+      {items.map((item) => (
+        <div key={item.title}>
+          <dt className="text-sm font-semibold">{item.title}</dt>
+          <dd className="mt-1.5 text-sm leading-relaxed text-muted">
+            {item.body}
+          </dd>
+        </div>
+      ))}
+    </dl>
   );
 }
 
@@ -78,50 +37,85 @@ export function Pillars({ copy }: { copy: Copy }) {
           id="features-title"
           eyebrow={pillars.eyebrow}
           title={pillars.title}
-        />
-        <div className="mt-14 grid gap-5 lg:grid-cols-2">
-          <Pillar
-            number="01"
-            title={pillars.plugin.title}
-            points={pillars.plugin.points}
-          >
-            <div className="flex h-full flex-col bg-[oklch(17%_0.015_255)]">
-              <p className="flex h-9 shrink-0 items-center border-b border-white/10 px-4 font-mono text-[11px] text-white/50">
-                plugins/observation/PLUGIN.md
-              </p>
-              <pre className="overflow-hidden p-4 font-mono text-[11px] leading-5 text-white/85 sm:p-5 sm:text-[13px] sm:leading-6">
-                <code>
-                  {MANIFEST.map(([text, tone], index) => (
-                    <span key={index} className="block">
-                      <ManifestLine text={text} tone={tone} />
-                    </span>
-                  ))}
-                </code>
-              </pre>
+        >
+          {pillars.body}
+        </SectionHeading>
+        <div className="mt-12 grid gap-5 lg:grid-cols-2">
+          <article className="rounded-2xl border border-line bg-raised p-6 sm:p-8">
+            <div className="flex items-center gap-3">
+              <Blocks className="size-5 text-accent" aria-hidden />
+              <h3 className="font-display text-2xl font-semibold">
+                {pillars.plugin.title}
+              </h3>
             </div>
-          </Pillar>
-          <Pillar
-            number="02"
-            title={pillars.world.title}
-            points={pillars.world.points}
-          >
-            <img
-              src={asset("screens/world-package-builder.webp")}
-              alt={pillars.worldAlt}
-              loading="lazy"
-              className="h-full w-full object-cover object-top transition duration-700 group-hover:scale-[1.02]"
-            />
-          </Pillar>
+            <p className="mt-4 text-sm leading-relaxed text-muted">
+              {pillars.plugin.body}
+            </p>
+            <div className="mt-6 rounded-xl border border-line bg-page p-5">
+              <p className="flex items-center justify-center gap-2 rounded-lg border border-accent/30 bg-raised px-4 py-3 text-sm font-medium">
+                <Feather className="size-4 text-accent" aria-hidden />
+                {pillars.plugin.diagramTitle}
+              </p>
+              <div className="mx-auto h-5 w-px bg-line" aria-hidden />
+              <ul className="grid grid-cols-2 gap-2">
+                {pillars.plugin.modules.map((name) => (
+                  <li
+                    key={name}
+                    className="rounded-lg border border-line bg-raised px-3 py-2 text-center text-xs text-muted"
+                  >
+                    {name}
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-4 text-center text-xs text-muted">
+                {pillars.plugin.diagramNote}
+              </p>
+            </div>
+            <Points items={pillars.plugin.points} />
+          </article>
+          <article className="rounded-2xl border border-line bg-raised p-6 sm:p-8">
+            <div className="flex items-center gap-3">
+              <FolderOpen className="size-5 text-accent" aria-hidden />
+              <h3 className="font-display text-2xl font-semibold">
+                {pillars.world.title}
+              </h3>
+            </div>
+            <p className="mt-4 text-sm leading-relaxed text-muted">
+              {pillars.world.body}
+            </p>
+            <div className="mt-6 rounded-xl border border-line bg-page p-5">
+              <p className="mb-3 flex items-center gap-2 text-xs text-muted">
+                <FolderOpen className="size-4" aria-hidden />
+                {pillars.world.diagramTitle}
+              </p>
+              <ul className="flex flex-col gap-2">
+                {pillars.world.files.map((file) => (
+                  <li
+                    key={file.path}
+                    className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md bg-raised px-3 py-1.5 text-xs"
+                  >
+                    <FileText
+                      className="size-3 shrink-0 text-accent"
+                      aria-hidden
+                    />
+                    <span className="font-mono">{file.path}</span>
+                    <span className="ml-auto text-muted">{file.label}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <Points items={pillars.world.points} />
+          </article>
         </div>
-        <ul className="mt-6 flex flex-wrap gap-x-6 gap-y-1">
+        <ul className="mt-6 flex flex-wrap gap-x-6 gap-y-2">
           {pillars.links.map((link) => (
             <li key={link.href}>
               <a
-                href={repoFile(link.href)}
-                className="group inline-flex items-center gap-1.5 py-1.5 font-medium text-ink transition hover:text-accent"
+                href={`${DOCS_URL}${copy.meta.docsPath}${link.href}`}
+                className="inline-flex items-center gap-1.5 py-1.5 text-sm font-medium hover:text-accent"
               >
                 {link.label}
-                <ArrowUpRight className="h-4 w-4 text-muted transition group-hover:translate-x-0.5 group-hover:-translate-y-0.5 group-hover:text-accent" />
+                <ArrowUpRight className="size-4" aria-hidden />
               </a>
             </li>
           ))}

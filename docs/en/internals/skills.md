@@ -74,6 +74,22 @@ The difference from the previous skill: this one covers the whole repository and
 
 ## Letting the assistant use the skills
 
+**Install authoring skills with the Skills CLI.** Prepare a Covel source workspace and Node.js / npx using the [contribution guide](../../CONTRIBUTING.en.md), then run this in the workspace terminal:
+
+```bash
+npx skills add ackness/covel --skill create-world --skill create-plugin
+```
+
+Choose the coding assistant you use. The command selects only the two authoring skills, excluding the audit skills. Once installed, describe the world or plugin you want to create. These skills still depend on Covel’s workspace authoring and validation commands; installing the skills does not install the framework.
+
+To inspect the available skills first, run:
+
+```bash
+npx skills add ackness/covel --list
+```
+
+The current output lists four skills, including `create-world` and `create-plugin`. You can also open the `SKILL.md` sources above and ask an assistant to read them without installing. See the [Skills CLI documentation](https://github.com/vercel-labs/skills/blob/main/docs/commands.md) for options and installation scope.
+
 **Claude Code.** When it starts, it scans skills in two places:
 
 - `~/.claude/skills/<name>/SKILL.md`: your personal skills, available in every project.

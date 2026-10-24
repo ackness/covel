@@ -206,6 +206,32 @@ test("Site builds hash content, configuration and base paths independently", () 
   }
 });
 
+test("Site tests invalidate when their world and plugin fixtures change", () => {
+  const { parent, workspace } = makeFixture();
+  try {
+    const args = ["test", "--filter=@covel/site"];
+    const id = "@covel/site#test";
+    let before = task(dry(workspace, args), id).hash;
+    for (const file of [
+      "packs/builtin.yaml",
+      "worlds/haruka-academy/world.yaml",
+      "plugins/narrator/PLUGIN.md",
+    ]) {
+      const fixture = writeFixtureFile(workspace, file, "initial fixture\n");
+      const added = task(dry(workspace, args), id).hash;
+      assert.notEqual(added, before, `${file}: addition`);
+      writeFileSync(fixture, "updated fixture\n");
+      const changed = task(dry(workspace, args), id).hash;
+      assert.notEqual(changed, added, `${file}: change`);
+      before = changed;
+    }
+    writeFixtureFile(workspace, "packages/runtime/src/unrelated.ts", "unrelated\n");
+    assert.equal(task(dry(workspace, args), id).hash, before);
+  } finally {
+    rmSync(parent, { recursive: true, force: true });
+  }
+});
+
 test("PostgreSQL test env reaches Turbo child and uncached test runs twice", () => {
   const { parent, workspace } = makeFixture();
   try {

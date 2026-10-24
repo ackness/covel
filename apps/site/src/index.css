@@ -1,4 +1,7 @@
 @import "tailwindcss";
+@import "./previews.css";
+@import "./workbench.css";
+@import "./downloads.css";
 @import "@fontsource-variable/fraunces";
 @import "@fontsource-variable/geist";
 @import "@fontsource-variable/geist-mono";
@@ -54,7 +57,7 @@
 
 html {
   scroll-behavior: smooth;
-  scroll-padding-top: 5rem;
+  scroll-padding-top: 8rem;
 }
 
 body {
@@ -78,10 +81,14 @@ body {
 
 .grain {
   background-image:
-    radial-gradient(60rem 30rem at 85% -10%, var(--glow), transparent 70%),
+    radial-gradient(
+      60rem 30rem at 85% -10%,
+      color-mix(in oklch, var(--glow) 35%, transparent),
+      transparent 70%
+    ),
     radial-gradient(
       40rem 24rem at 0% 20%,
-      oklch(70% 0.14 45 / 0.12),
+      oklch(70% 0.14 45 / 0.04),
       transparent 70%
     );
 }
@@ -94,7 +101,9 @@ body {
   *::before,
   *::after {
     transition-duration: 0.01ms !important;
+    transition-delay: 0ms !important;
     animation-duration: 0.01ms !important;
+    animation-delay: 0ms !important;
   }
 }
 
@@ -113,7 +122,7 @@ body {
 [data-mode="story"] {
   --mode: oklch(52% 0.11 205);
 }
-[data-mode="languages"] {
+[data-mode="survival"] {
   --mode: oklch(55% 0.17 290);
 }
 :root[data-theme="dark"] [data-mode="stage"] {
@@ -125,7 +134,7 @@ body {
 :root[data-theme="dark"] [data-mode="story"] {
   --mode: oklch(83% 0.09 200);
 }
-:root[data-theme="dark"] [data-mode="languages"] {
+:root[data-theme="dark"] [data-mode="survival"] {
   --mode: oklch(76% 0.13 290);
 }
 
@@ -137,7 +146,7 @@ body {
 
 .mode-word {
   color: var(--mode);
-  text-shadow: 0 0 48px color-mix(in oklch, var(--mode) 45%, transparent);
+  text-shadow: 0 0 36px color-mix(in oklch, var(--mode) 12%, transparent);
 }
 .mode-letter {
   display: inline-block;
@@ -149,13 +158,13 @@ body {
 .mode-word[data-state="wait"] .mode-letter {
   opacity: 0;
   transform: translateY(0.45em) rotateX(-60deg);
-  filter: blur(10px);
+  filter: blur(5px);
   transition-duration: 0ms;
 }
 .mode-word[data-state="out"] .mode-letter {
   opacity: 0;
   transform: translateY(-0.4em);
-  filter: blur(10px);
+  filter: blur(5px);
 }
 .mode-word[data-state="in"] .mode-letter {
   opacity: 1;
@@ -167,12 +176,10 @@ body {
   from {
     opacity: 0;
     transform: translateY(8px);
-    filter: blur(4px);
   }
   to {
     opacity: 1;
     transform: none;
-    filter: none;
   }
 }
 
@@ -182,5 +189,11 @@ body {
   }
   to {
     transform: scaleX(1);
+  }
+}
+
+@media (min-width: 1024px) {
+  html {
+    scroll-padding-top: 5rem;
   }
 }

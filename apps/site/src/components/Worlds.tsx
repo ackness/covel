@@ -1,13 +1,17 @@
+import { Ecosystem } from "./Ecosystem.js";
+import { LanguageFeature } from "./LanguageFeature.js";
 import type { Copy } from "../copy.js";
 import { asset } from "../links.js";
 import { container, SectionHeading } from "./ui.js";
+import { useEntrance } from "./use-entrance.js";
 
 export function Worlds({ copy }: { copy: Copy }) {
+  const gallery = useEntrance<HTMLUListElement>();
   return (
     <section
       id="worlds"
       aria-labelledby="worlds-title"
-      className="border-t border-line bg-raised/40 py-24 sm:py-32"
+      className="border-t border-line py-24 sm:py-32"
     >
       <div className={container}>
         <SectionHeading
@@ -17,36 +21,47 @@ export function Worlds({ copy }: { copy: Copy }) {
         >
           {copy.worlds.body}
         </SectionHeading>
-        <ul className="mt-14 grid gap-5 sm:grid-cols-2">
-          {copy.worlds.list.map((world) => (
+        <ul
+          ref={gallery}
+          className="reveal-group mt-14 grid gap-6 sm:grid-cols-2"
+        >
+          {copy.worlds.list.map((world, index) => (
             <li
               key={world.id}
-              className="group relative isolate flex aspect-4/3 flex-col justify-end overflow-hidden rounded-2xl border border-line p-6 sm:aspect-3/2 sm:p-7"
+              className="world-card group overflow-hidden rounded-2xl border border-line bg-raised"
             >
-              <img
-                src={asset(`worlds/${world.id}.webp`)}
-                alt=""
-                width={960}
-                height={640}
-                loading="lazy"
-                className="absolute inset-0 -z-20 h-full w-full object-cover transition duration-700 group-hover:scale-105"
-              />
-              <div
-                aria-hidden
-                className="absolute inset-0 -z-10 bg-linear-to-t from-black/90 via-black/45 to-black/0"
-              />
-              <span className="w-fit rounded-full border border-white/20 bg-black/30 px-2.5 py-1 text-[11px] tracking-wide text-white/85 backdrop-blur">
-                {world.genre}
-              </span>
-              <h3 className="mt-3 font-display text-2xl font-semibold text-white">
-                {world.name}
-              </h3>
-              <p className="mt-2 line-clamp-3 max-w-md text-sm leading-relaxed text-white/75">
-                {world.summary}
-              </p>
+              <div className="relative aspect-16/10 overflow-hidden">
+                <img
+                  src={asset(`worlds/${world.id}.webp`)}
+                  alt=""
+                  width={960}
+                  height={640}
+                  loading="lazy"
+                  className="world-art size-full object-cover"
+                />
+                <span
+                  aria-hidden
+                  className="absolute top-4 left-4 flex size-8 items-center justify-center rounded-full border border-line bg-raised font-mono text-[10px] text-muted"
+                >
+                  {String(index + 1).padStart(2, "0")}
+                </span>
+              </div>
+              <div className="p-6 sm:p-7">
+                <p className="text-[11px] font-medium tracking-wide text-accent">
+                  {world.genre}
+                </p>
+                <h3 className="mt-3 font-display text-2xl font-semibold text-balance">
+                  {world.name}
+                </h3>
+                <p className="mt-3 text-sm leading-relaxed text-muted">
+                  {world.summary}
+                </p>
+              </div>
             </li>
           ))}
         </ul>
+        <LanguageFeature copy={copy} />
+        <Ecosystem copy={copy} />
       </div>
     </section>
   );
