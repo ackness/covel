@@ -74,6 +74,22 @@ pnpm validate:world worlds/<id>
 
 ## 让助手用上技能
 
+**用 Skills CLI 安装创作技能。** 先按[贡献指南](../CONTRIBUTING.md)准备 Covel 源码工作区和 Node.js / npx，再在工作区终端运行：
+
+```bash
+npx skills add ackness/covel --skill create-world --skill create-plugin
+```
+
+选择你使用的编程助手。命令只选择两份创作技能，不包含审计技能；安装后向助手描述世界或插件的构想即可。这些技能仍依赖 Covel 工作区里的作者查询与校验命令，安装技能不会安装框架本身。
+
+需要先查看仓库里有哪些技能，可以运行：
+
+```bash
+npx skills add ackness/covel --list
+```
+
+当前会列出四份技能，包括 `create-world` 和 `create-plugin`。不想安装时，也可以打开上面的 `SKILL.md` 原文让助手读取。参数与安装范围见 [Skills CLI 文档](https://github.com/vercel-labs/skills/blob/main/docs/commands.md)。
+
 **Claude Code。** 它启动时会扫描两个位置的技能：
 
 - `~/.claude/skills/<名字>/SKILL.md`：你个人的，所有项目可用。

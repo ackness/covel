@@ -64,8 +64,12 @@ test("a file a suite reads from outside its package selects that suite alone", (
   // Listed once when the package itself changed too.
   assert.deepEqual(
     select("apps/server/src/index.ts", "worlds/mistport/world.yaml").filters,
-    ["...@covel/server"],
+    ["...@covel/server", "@covel/site"],
   );
+  assert.deepEqual(select("packs/builtin.yaml").filters, [
+    "@covel/server",
+    "@covel/site",
+  ]);
 });
 
 test("what every package reads selects every suite", () => {
@@ -86,7 +90,6 @@ test("what every package reads selects every suite", () => {
 
 test("a root file that no rule accounts for selects every suite", () => {
   for (const file of [
-    "packs/builtin.yaml",
     "docker/Dockerfile",
     ".env.example",
     "new-root-file.ts",

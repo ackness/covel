@@ -6,6 +6,9 @@ export type Platform = "mac" | "windows";
 export interface DownloadLinks {
   /** The installer for the visitor's system, or the release page. */
   href: string;
+  files?: DownloadFile[];
+  status?: "loading" | "ready" | "unavailable";
+  detected?: Platform;
   /** Known only when `href` is an installer. */
   platform?: Platform;
   /** Single-file Windows launcher; extracts the app on every launch. */
@@ -14,7 +17,7 @@ export interface DownloadLinks {
   zip?: string;
 }
 
-interface ReleaseAsset {
+export interface ReleaseAsset {
   name: string;
   browser_download_url: string;
 }
@@ -26,8 +29,7 @@ const LATEST_RELEASE_API = `https://api.github.com/repos/${REPO_URL.replace(
 
 // The release workflow names files `Covel-electron-<version>-<os>-<arch>.<ext>`
 // and the Windows portable build `…-win-x64-portable.exe`
-// (apps/desktop/electron-builder.yml). The macOS zip is left to the release
-// page.
+// (apps/desktop/electron-builder.yml). The catalog also lists macOS ZIPs.
 const INSTALLER: Record<Platform, RegExp> = {
   mac: /-mac-arm64\.dmg$/,
   windows: /-win-x64\.exe$/,
@@ -75,32 +77,97 @@ export function pickDownload(
   };
 }
 
-/**
- * Starts as a link to the latest release page and, once GitHub answers,
- * becomes the installer from that release for the visitor's system. Any
- * failure (rate limit, offline, no matching file) keeps the release page.
- */
+export interface DownloadFile {
+  name: string;
+  href: string;
+  platform: Platform;
+  kind: "installer" | "archive" | "portable";
+}
+
+/** Catalog every supported artifact, even if its platform has no installer. */
+export function listDownloads(assets: readonly ReleaseAsset[]): DownloadFile[] {
+  const formats = [
+    { platform: "mac", kind: "installer", pattern: INSTALLER.mac },
+    { platform: "mac", kind: "archive", pattern: /-mac-arm64\.zip$/ },
+    { platform: "windows", kind: "installer", pattern: INSTALLER.windows },
+    { platform: "windows", kind: "archive", pattern: WINDOWS_ZIP },
+    { platform: "windows", kind: "portable", pattern: PORTABLE },
+  ] as const;
+  return formats.flatMap(({ platform, kind, pattern }) => {
+    const file = assets.find((asset) => pattern.test(asset.name));
+    return file
+      ? [{ name: file.name, href: file.browser_download_url, platform, kind }]
+      : [];
+  });
+}
+
+/** Treat the network response as untrusted; malformed entries cannot become links. */
+export function releaseAssets(value: unknown): ReleaseAsset[] {
+  if (
+    !value ||
+    typeof value !== "object" ||
+    !("assets" in value) ||
+    !Array.isArray(value.assets)
+  )
+    return [];
+  return value.assets.filter((item: unknown): item is ReleaseAsset => {
+    if (
+      !item ||
+      typeof item !== "object" ||
+      !("name" in item) ||
+      typeof item.name !== "string" ||
+      !("browser_download_url" in item) ||
+      typeof item.browser_download_url !== "string"
+    )
+      return false;
+    try {
+      return new URL(item.browser_download_url).protocol === "https:";
+    } catch {
+      return false;
+    }
+  });
+}
+
+/** Fetch once for every visitor. Detection only chooses the primary shortcut. */
 export function useDownload(): DownloadLinks {
   const [download, setDownload] = useState<DownloadLinks>({
     href: RELEASES_URL,
+    status: "loading",
   });
-
   useEffect(() => {
-    const platform = detectPlatform(navigator);
-    if (!platform) return;
+    const detected = detectPlatform(navigator);
     const controller = new AbortController();
+    // A stalled request must still expose a useful fallback.
+    const timeout = window.setTimeout(() => controller.abort(), 10000);
+    let active = true;
     void fetch(LATEST_RELEASE_API, {
       headers: { Accept: "application/vnd.github+json" },
       signal: controller.signal,
     })
       .then((response) => (response.ok ? response.json() : undefined))
-      .then((release: { assets?: ReleaseAsset[] } | undefined) => {
-        const links = pickDownload(release?.assets ?? [], platform);
-        if (links) setDownload(links);
+      .then((release: unknown) => {
+        if (!active) return;
+        const assets = releaseAssets(release);
+        const files = listDownloads(assets);
+        const primary = detected ? pickDownload(assets, detected) : undefined;
+        setDownload({
+          ...primary,
+          href: primary?.href ?? RELEASES_URL,
+          files,
+          detected,
+          status: files.length ? "ready" : "unavailable",
+        });
       })
-      .catch(() => undefined);
-    return () => controller.abort();
+      .catch(() => {
+        if (active)
+          setDownload({ href: RELEASES_URL, detected, status: "unavailable" });
+      })
+      .finally(() => window.clearTimeout(timeout));
+    return () => {
+      active = false;
+      window.clearTimeout(timeout);
+      controller.abort();
+    };
   }, []);
-
   return download;
 }

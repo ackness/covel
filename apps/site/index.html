@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="dark">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -14,9 +14,7 @@
           theme = localStorage.getItem("covel-site:theme");
         } catch (e) {}
         if (theme !== "light" && theme !== "dark") {
-          theme = matchMedia("(prefers-color-scheme: light)").matches
-            ? "light"
-            : "dark";
+          theme = "dark";
         }
         document.documentElement.dataset.theme = theme;
       })();

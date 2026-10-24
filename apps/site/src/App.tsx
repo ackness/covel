@@ -1,11 +1,19 @@
 import { useEffect, useState } from "react";
-import { COPY, initialLang, rememberLang, type Lang } from "./copy.js";
+import {
+  COPY,
+  LANGUAGES,
+  initialLang,
+  rememberLang,
+  type Lang,
+} from "./copy.js";
 import { Header } from "./components/Header.js";
 import { Hero } from "./components/Hero.js";
 import { Pillars } from "./components/Pillars.js";
-import { CorePlugins } from "./components/CorePlugins.js";
+import { Creation } from "./components/Creation.js";
+import { PluginWorkbench } from "./components/PluginWorkbench.js";
 import { Worlds } from "./components/Worlds.js";
 import { Closing } from "./components/Closing.js";
+import { Downloads } from "./components/Downloads.js";
 import { useDownload } from "./download.js";
 
 export function App() {
@@ -14,29 +22,30 @@ export function App() {
   const download = useDownload();
 
   useEffect(() => {
-    document.documentElement.lang = lang === "zh" ? "zh-CN" : "en";
+    document.documentElement.lang = LANGUAGES[lang].tag;
     document.title = copy.meta.title;
     document
       .querySelector('meta[name="description"]')
       ?.setAttribute("content", copy.meta.description);
   }, [lang, copy]);
 
-  const toggleLang = () => {
-    const next: Lang = lang === "zh" ? "en" : "zh";
+  const selectLang = (next: Lang) => {
     rememberLang(next);
     setLang(next);
   };
 
   return (
     <div className="min-h-dvh overflow-x-clip">
-      <Header copy={copy} download={download} onToggleLang={toggleLang} />
+      <Header copy={copy} lang={lang} onSelectLang={selectLang} />
       <main>
-        <Hero copy={copy} download={download} />
+        <Hero copy={copy} />
         <Pillars copy={copy} />
-        <CorePlugins copy={copy} />
+        <PluginWorkbench copy={copy} />
+        <Creation copy={copy} />
         <Worlds copy={copy} />
+        <Downloads copy={copy} download={download} />
       </main>
-      <Closing copy={copy} download={download} />
+      <Closing copy={copy} />
     </div>
   );
 }

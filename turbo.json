@@ -97,6 +97,15 @@
         "$TURBO_ROOT$/vitest.base.ts"
       ]
     },
+    "@covel/site#test": {
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/vitest.base.ts",
+        "$TURBO_ROOT$/packs/builtin.yaml",
+        "$TURBO_ROOT$/worlds/*/world.yaml",
+        "$TURBO_ROOT$/plugins/*/PLUGIN.md"
+      ]
+    },
     "@covel/desktop#lint": {
       "dependsOn": ["@covel/shared#build"]
     },
@@ -174,6 +183,7 @@
         "$TURBO_ROOT$/vitest.base.ts",
         "$TURBO_ROOT$/scripts/e2e-plugin-verify.ts",
         "$TURBO_ROOT$/tests/third-party/**",
+        "$TURBO_ROOT$/packs/builtin.yaml",
         "$TURBO_ROOT$/worlds/**",
         "$TURBO_ROOT$/prompts/**",
         "$TURBO_ROOT$/plugins/*/*.md",
