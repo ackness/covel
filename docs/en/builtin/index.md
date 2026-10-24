@@ -50,7 +50,7 @@ Plugins marked "On by default" are added to every game automatically, and you ca
 
 | Plugin                                         | What it does                                                                      | On by default |
 | ---------------------------------------------- | --------------------------------------------------------------------------------- | ------------- |
-| [Dice Check](./rpg.md) `dice-check`            | Risky actions are decided by dice that are rolled in advance                      |               |
+| [Dice Check](./rpg.md) `dice-check`            | Pre-rolled dice decide risky actions; no attribute label appears when no ability is available |               |
 | [Tabletop Rules](./rpg.md) `tabletop-rules`    | Assigns attribute points at the start, and lets the player start attribute checks |               |
 | [Quest Log](./rpg.md) `core-quest`             | Records quests and objectives, with localized status badges                       |               |
 | [Inventory](./rpg.md) `inventory`              | Records what the player character carries; items can be used and dropped          |               |

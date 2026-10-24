@@ -5,22 +5,44 @@
  *   1. Build the web frontend (pnpm --filter @covel/web build)
  *   2. Bundle main process with esbuild (TS → single ESM file)
  *   3. Copy web-dist and precompile server/workspace modules in staging
- *   4. Run electron-builder to create distributable
+ *   4. Verify the staged backend with and without configuration
+ *
+ * Packaging runs separately through the pack/dist scripts or release workflow.
  */
 
-import { execSync } from "node:child_process";
-import { build } from "esbuild";
+import { execFileSync, execSync } from "node:child_process";
+import { bundleDesktopEntry } from "./bundle-desktop.mjs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import fs from "node:fs";
 
 import { ensureElectronBinary } from "./ensure-electron.mjs";
-import { detachStagingHardlinks, isGalleryOriginal } from "./staging-files.mjs";
+import {
+  assertDesktopBundle,
+  detachStagingHardlinks,
+  isGalleryOriginal,
+  pruneStagedServer,
+  verifyBundledNotices,
+} from "./staging-files.mjs";
 import { compileStagedServer } from "./compile-server.mjs";
+import {
+  BACKEND_RUNTIME_MODE,
+  probeBackendRuntime,
+  stageBackendRuntime,
+  writeRuntimeBundleSelection,
+} from "./backend-runtime.mjs";
+import { verifyTargetNativePackages } from "./before-pack.mjs";
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 const desktopRoot = path.resolve(__dirname, "..");
 const projectRoot = path.resolve(desktopRoot, "../..");
+
+// Check the actual runtime before building backend artifacts. Cross targets
+// are checked again by their packaged main process at launch.
+await probeBackendRuntime(ensureElectronBinary(), {
+  platform: process.platform,
+  arch: process.arch,
+});
 
 console.log("=== Covel Desktop Build ===\n");
 
@@ -47,10 +69,6 @@ if (underTurbo && fs.existsSync(webDistPath)) {
     "  ✓ dist/web produced by turbo this run (fresh) — skipping rebuild",
   );
 } else {
-  execSync("pnpm --filter @covel/web generate:routes", {
-    cwd: projectRoot,
-    stdio: "inherit",
-  });
   execSync("pnpm --filter @covel/web build", {
     cwd: projectRoot,
     stdio: "inherit",
@@ -59,31 +77,17 @@ if (underTurbo && fs.existsSync(webDistPath)) {
 
 // Step 2: Bundle main process + preload
 console.log("\n[2/4] Bundling main process and preload...");
-await build({
-  entryPoints: [path.join(desktopRoot, "src/main.ts")],
-  bundle: true,
-  outfile: path.join(desktopRoot, "dist/main.mjs"),
-  format: "esm",
-  platform: "node",
-  target: "node22",
-  sourcemap: true,
-  external: ["electron"],
-});
+const bundleOptions = { metafile: true, legalComments: "inline" };
+const mainBundle = await bundleDesktopEntry(desktopRoot, "main", bundleOptions);
+assertDesktopBundle(mainBundle.metafile);
 
-// Preload must be CJS because Electron's contextBridge requires a
-// synchronous execution context and CJS avoids ESM loader race conditions
-// in the sandbox. Output as .mjs to keep the extension consistent, Electron
-// accepts either — the key is the commonjs format.
-await build({
-  entryPoints: [path.join(desktopRoot, "src/preload.ts")],
-  bundle: true,
-  outfile: path.join(desktopRoot, "dist/preload.mjs"),
-  format: "cjs",
-  platform: "node",
-  target: "node22",
-  sourcemap: true,
-  external: ["electron"],
-});
+const preloadBundle = await bundleDesktopEntry(
+  desktopRoot,
+  "preload",
+  bundleOptions,
+);
+assertDesktopBundle(preloadBundle.metafile);
+writeRuntimeBundleSelection(desktopRoot);
 
 // Step 3: Stage server resources via `pnpm deploy`.
 //
@@ -205,22 +209,10 @@ function verifyStagedServerRuntime() {
     );
   }
 
-  const esbuildScopeDir = path.join(serverStaging, "node_modules/@esbuild");
-  const hasPlatformBinary =
-    fs.existsSync(esbuildScopeDir) &&
-    fs
-      .readdirSync(esbuildScopeDir)
-      .some(
-        (name) =>
-          name.startsWith("darwin-") ||
-          name.startsWith("win32-") ||
-          name.startsWith("linux-"),
-      );
-  if (!hasPlatformBinary) {
-    throw new Error(
-      `Desktop server staging is missing @esbuild platform packages in ${esbuildScopeDir}`,
-    );
-  }
+  verifyTargetNativePackages(serverStaging, {
+    platform: process.platform,
+    arch: process.arch,
+  });
 }
 
 // Copy web dist
@@ -245,8 +237,14 @@ console.log("  ✓ web-dist copied");
 //   .pnpm/ 软链（默认 isolated 模式下 node_modules/tsx → .pnpm/tsx@X.Y/...
 //   这种软链 macOS 可用，Windows 上 electron-builder 复制 extraResources
 //   时会断链，导致打包后 resources/server/node_modules/tsx 不存在）。
+// Linux packages both x64 and arm64 from one staging tree. Limit this optional
+// dependency expansion to deploy, leaving native macOS/Windows installs alone.
+const deployArchitectures =
+  process.platform === "linux"
+    ? `'--config.supportedArchitectures=["linux-x64","linux-arm64"]'`
+    : "";
 execSync(
-  `pnpm --filter @covel/server deploy --prod --ignore-scripts --config.node-linker=hoisted --config.inject-workspace-packages=true "${serverStaging}"`,
+  `pnpm --filter @covel/server deploy --prod --ignore-scripts --config.node-linker=hoisted --config.inject-workspace-packages=true ${deployArchitectures} "${serverStaging}"`,
   {
     cwd: projectRoot,
     stdio: "inherit",
@@ -316,7 +314,16 @@ for (const entry of sideCarResources) {
 console.log("  ✓ plugins/prompts/worlds copied (node_modules/dist excluded)");
 
 const compiledModules = await compileStagedServer(serverStaging);
-console.log(`  ✓ precompiled ${compiledModules} server/workspace modules`);
+console.log(
+  `  ✓ precompiled ${compiledModules.length} server/workspace modules`,
+);
+pruneStagedServer(serverStaging, compiledModules);
+verifyBundledNotices(
+  [mainBundle.metafile, preloadBundle.metafile],
+  desktopRoot,
+  serverStaging,
+);
+console.log("  ✓ pruned reviewed development files; bundled notices verified");
 
 // User configuration belongs to the installed app's data directory. Never
 // copy the developer's llm.toml into distributable resources or Turbo caches.
@@ -324,35 +331,27 @@ verifyStagedServerRuntime();
 console.log("  ✓ server runtime verified");
 console.log("  ✓ server resources staged");
 
-// Step 3b: smoke-test the staged server so electron-builder never wraps a
-// known-broken sidecar. Run it under Electron's Node mode because the packaged
-// app launches the sidecar with process.execPath + ELECTRON_RUN_AS_NODE.
-// SQLite is `node:sqlite`, built into Electron's Node, so there is no native
-// module to rebuild for Electron's ABI. This real Electron + SQLite boot
-// remains the fail-closed compatibility gate.
-// The runtime binary must be materialised first — electron@42+ no longer
-// downloads it on install (see ensure-electron.mjs).
-ensureElectronBinary();
-console.log("\n[3b/4] Smoke-testing staged server (with synthetic config)...");
-execSync(
-  `node "${path.join(desktopRoot, "scripts/verify-staging.mjs")}" --electron-node`,
-  {
-    cwd: desktopRoot,
-    stdio: "inherit",
-  },
+// Bind this target's runtime metadata to the freshly bundled main process.
+await stageBackendRuntime(desktopRoot, {
+  platform: process.platform,
+  arch: process.arch,
+});
+console.log(
+  `\n[4/4] Smoke-testing ${BACKEND_RUNTIME_MODE} backend + SQLite (with synthetic config)...`,
 );
-console.log("\n[3b/4] Smoke-testing staged server (without llm.toml)...");
-execSync(
-  `node "${path.join(desktopRoot, "scripts/verify-staging.mjs")}" --electron-node --no-llm-toml`,
-  {
-    cwd: desktopRoot,
-    stdio: "inherit",
-  },
+execFileSync(process.execPath, [path.join(__dirname, "verify-staging.mjs")], {
+  cwd: desktopRoot,
+  stdio: "inherit",
+});
+console.log(
+  `\n[4/4] Smoke-testing ${BACKEND_RUNTIME_MODE} backend + SQLite (without llm.toml)...`,
+);
+execFileSync(
+  process.execPath,
+  [path.join(__dirname, "verify-staging.mjs"), "--no-llm-toml"],
+  { cwd: desktopRoot, stdio: "inherit" },
 );
 
-// Step 4: electron-builder
-console.log("\n[4/4] Packaging with electron-builder...");
-console.log("  Run: pnpm --filter @covel/desktop dist");
 console.log("\n=== Build preparation complete ===");
 console.log(`\nStaging directory: ${stagingDir}`);
 console.log("To create distributable:");

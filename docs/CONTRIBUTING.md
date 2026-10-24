@@ -11,7 +11,7 @@
 ## 开发环境
 
 - Node.js 26.x
-- pnpm 12.10.1（见根目录 `package.json` 的 `packageManager`）
+- pnpm 12.14.0（见根目录 `package.json` 的 `packageManager`）
 - 可选：Docker（用于 PostgreSQL 模式）
 
 ```bash
@@ -22,7 +22,7 @@ cp .env.llm.example .env.llm   # 填写 API Key
 pnpm dev                       # 同时启动前端与后端
 ```
 
-每个新克隆在 `pnpm install --frozen-lockfile` 后运行一次 `pnpm hooks:install`，安装本地 Git pre-push hook；已有 pre-commit hook 保持不变。如果已有其他 pre-push hook，安装命令会拒绝覆盖，需先自行处理冲突。pre-push hook 使用 `mise exec` 选择 `mise.toml` 指定的 Node 26.10.0、pnpm 12.10.1 和 actionlint，因此还需安装 mise 并运行 `mise install` 准备相应工具链。
+每个新克隆在 `pnpm install --frozen-lockfile` 后运行一次 `pnpm hooks:install`，安装本地 Git pre-push hook；已有 pre-commit hook 保持不变。如果已有其他 pre-push hook，安装命令会拒绝覆盖，需先自行处理冲突。pre-push hook 使用 `mise exec` 选择 `mise.toml` 指定的 Node 26.12.1、pnpm 12.14.0 和 actionlint，因此还需安装 mise 并运行 `mise install` 准备相应工具链。
 
 提交前检查由根目录 `.pre-commit-config.yaml` 定义；安装 pre-commit 后运行 `pre-commit install` 启用，或用 `pre-commit run --all-files` 手动检查。Oxlint 的版本固定在根 `devDependencies` 和 `pnpm-lock.yaml`，与 Prettier 一样通过 `mise exec` 使用项目工具链，不创建独立的 Node 环境。`scripts/run-with-project-node.mjs` 将选中的 Node 放在子进程 PATH 首位，确保 CLI shim 和后续命令也使用同一版本；更新配置后，已有 hook 会自动读取新配置，无需清理全局缓存。Oxlint 的规则在根目录 `.oxlintrc.jsonc`，关闭的规则各有一行说明；hook 检查改动的文件，`pnpm check` 检查整个仓库，两处都带 `--deny-warnings`，所以警告也会让检查失败。提交 hook 不做类型检查；类型检查在 `pnpm check`、pre-push hook 和 CI 里运行。
 
@@ -115,7 +115,9 @@ pnpm e2e                                   # Playwright 端到端
 
 安装 hook 后，每次 `git push` 都会检查本次推送中所有不同且未删除的已提交目标，包括与当前 HEAD 不同的 ref。每个目标在一次性干净克隆中运行 `pnpm install --frozen-lockfile` 和 `pnpm check`；任何一步失败都会阻止推送。源码推送的 hook 不跑测试套件：全部套件由 CI 在 PR 上用并行 job 运行，而 `main` 只接受通过 PR 合入的改动。对已提交的 HEAD 运行 `pnpm check:push`，或用 `COVEL_PUSH_CHECK=affected git push` 推送，会加上这次改动可能影响的测试和 `pnpm e2e --list`。这些测试包括：分支自远端 main 分支（`origin/main`，本地从未获取过时会先获取一次）分出以来改动过的包、依赖这些包的包（`turbo test --filter=...<包名>`），以及 `turbo.json` 里 `$TURBO_ROOT$` 输入匹配到改动文件的套件——内置插件的文件会带上 plugin-loader、runtime 和 server 套件，`worlds/**`、`prompts/**` 会带上读取它们的套件。以下情况运行全部套件：改动了所有包都会读取的文件（`pnpm-lock.yaml`、`pnpm-workspace.yaml`、`turbo.json`、`vitest.base.ts`、根目录的 `package.json` 与 `tsconfig.json`、`mise.toml`），改动了规则未覆盖的根目录文件（规则在 `scripts/lib/push-scope.mjs`），推送目标是 `main` 或 tag，或者无法确定远端 main 分支。`COVEL_PUSH_CHECK=full git push` 和 `pnpm check:push --full` 可以要求运行全部套件；`pnpm check:push --base <分支>` 让叠在其他分支上的分支以下层分支为基准。输出的最后两行说明运行了什么、哪些留给 CI。检查不复制工作区的 `.env`、`node_modules` 或 `test-results`，不会使用开发者数据库连接变量 `DATABASE_URL` / `COVEL_REQUIRE_PG_TESTS`。Turbo 读写的是仓库所有 worktree 共用的缓存（主 worktree 的 `.turbo/cache`）：被推送的提交与某次已通过的运行有相同的已跟踪输入时，任务直接回放；回放看不出的是依赖了 Git 忽略文件的结果，这一类由 CI 兜底。在一台负载较高的开发机上、Turbo 缓存为空时实测：`apps/web` 的一行改动耗时 2 分 52 秒，运行全部套件为 4 分 43 秒；其中安装、`pnpm check` 和 E2E 收集约占 85 秒。`packages/shared` 被所有包依赖，改动它会选中全部套件（4 分 22 秒）。缓存已有结果时，未改动的任务直接回放；store 和 server 套件从不缓存，现在只在改动选中它们时运行。一次推送新增的内容全是文档时，hook 跑 `pnpm check` 和 `pnpm test:docs:packages`；文档脚本测试已包含在前者，不重复运行。独立的 `pnpm test:docs` 仍包含包测试和脚本测试。检查历史提交时使用该提交实际提供的文档命令。新分支以远端的 main 分支为基准。文档指 `docs/**`、根目录的 `*.md`、任意位置的 `README.md` / `README.*.md`、嵌套的 `AGENTS.md` / `CLAUDE.md`、`.claude/skills/**`、`.assets/**`、`LICENSE` 以及 issue 与 PR 模板，清单在 `scripts/lib/change-scope.mjs`。由加载器读取的 Markdown（`PLUGIN.md`、`RUNTIME.md`、`WORLD.md`、`prompts/` 下的文件）是源码，走完整流程。需要提前验证当前已提交的 HEAD 时可运行 `pnpm check:push`。
 
-`git push` 先连接远端，再运行 hook；hook 运行期间这条连接上没有任何数据。远端、代理或 NAT 关闭空闲连接后，检查虽然通过，推送仍会失败（`git push` 以状态码 141 退出：它向已关闭的连接写入）。hook 无法让这条连接保持活动，所以做了两件事：少跑，并按 worktree 记录通过检查的提交，保留 12 小时。再次推送同一个提交会直接发送，先运行 `pnpm check:push` 再推送也一样；需要全部套件的改动，先运行 `pnpm check:push --full`，通过后再推送。在 `~/.ssh/config` 里为该主机设置 `ServerAliveInterval 30`，也能避免代理把 SSH 连接当作空闲连接。
+显式要求全部测试、推送 `main` 或 tag 时，纯文档也运行全部套件和 E2E 收集。已通过的受影响测试只在提交和实际比较基准都相同时复用；`--base` 缩小范围的检查不能代替从 `origin/main` 起算的检查。受影响测试记录只能替代相同范围或纯静态检查，不能代替纯文档检查；完整测试记录可覆盖所有范围。记录新结果时也按同一覆盖规则淘汰旧结果：同一提交的不同基线和互不覆盖的文档检查可以同时保留。
+
+`git push` 先连接远端，再运行 hook；hook 运行期间这条连接上没有任何数据。远端、代理或 NAT 关闭空闲连接后，检查虽然通过，推送仍会失败（`git push` 以状态码 141 退出：它向已关闭的连接写入）。hook 无法让这条连接保持活动，所以做了两件事：少跑，并按 worktree 记录通过检查的提交，保留 12 小时。记录覆盖本次要求的检查时，再次推送同一个提交会直接发送，先运行 `pnpm check:push` 再推送也一样；需要全部套件的改动，先运行 `pnpm check:push --full`，通过后再推送。在 `~/.ssh/config` 里为该主机设置 `ServerAliveInterval 30`，也能避免代理把 SSH 连接当作空闲连接。
 
 该检查只收集 E2E 测试，不执行本次推送未改动的测试套件、PostgreSQL 集成、浏览器 smoke 或发布/打包验证；按需显式运行 `pnpm test:pg`、`pnpm e2e:smoke`、`pnpm e2e`、`pnpm build` 和发布检查，并以 CI 结果为准。
 
@@ -127,13 +129,21 @@ pnpm e2e                                   # Playwright 端到端
 
 PR、main 和发布统一使用 [`ci.yml`](../.github/workflows/ci.yml)，不再另跑 Docs 验证工作流。每种范围都运行完整的 `pnpm check`。纯文档随后运行 `pnpm test:docs:packages`；源码、混合改动、未知范围和发布运行完整套件。分类复用 pre-push 的 `scripts/lib/change-scope.mjs`；读取文档的包测试必须列进 `test:docs:packages`，由 `scripts/tests/change-scope.test.mjs` 检查。
 
-完整路径保留并行 job：`verify` 运行除 Web、server、runtime 之外的套件；Web 独立运行；server 独占 runner，并带覆盖率运行 runtime 套件、执行其下限，runtime 在 CI 只运行一次；PostgreSQL 和 Chromium 各自运行。浏览器 job 先收集全部 E2E，发现失效导入，再运行 smoke 和 `pnpm e2e:extensions`，共用安装和 Chromium。Chromium 下载按 Playwright 版本缓存，系统依赖每次安装。
+完整路径中，`verify` 运行静态检查，与 `tests` 的其余套件及构建并行；两者只等待范围选择，各用独立 Turbo 缓存键，且都必须成功才能通过 `Verification`。纯文档的包测试和发布 preflight 留在 `verify`。`tests` 运行除 Web、server、runtime 之外的套件；Web 独立运行；server 独占 runner，并带覆盖率运行 runtime 套件、执行其下限，runtime 在 CI 只运行一次；PostgreSQL 和 Chromium 各自运行。浏览器 job 先收集全部 E2E，发现失效导入，再运行 smoke 和 `pnpm e2e:extensions`，共用安装和 Chromium。Chromium 下载按 Playwright 版本缓存，系统依赖每次安装。
 
-非发布的完整检查运行 `pnpm build --cache=local:r --filter=!@covel/docs --filter=!@covel/site`，只读取 Turbo 缓存、不写回构建产物。官网和文档站由 CI 调用的 Site 任务构建一次；纯文档改动也必须通过该任务。独立的 `pnpm build` 仍构建全部目标。Turbo 本地缓存由 `turbo.json` 的 `cacheMaxAge`（7 天）和 `cacheMaxSize`（2GB）淘汰；CI 用 `TURBO_CACHE_MAX_AGE` / `TURBO_CACHE_MAX_SIZE` 收紧到 2 天、500MB，因为 actions/cache 每次整目录恢复再保存。
+非发布的完整检查运行 `pnpm build --cache=local:r --filter=!@covel/docs --filter=!@covel/site`，只读取 Turbo 缓存、不写回构建产物。官网和文档站由 CI 调用的 Site 任务用 Turbo 并行构建；纯文档改动也必须通过该任务。输入相同时恢复已有产物，仍须成功完成 Site 任务。独立的 `pnpm build` 仍构建全部目标。Turbo 本地缓存由 `turbo.json` 的 `cacheMaxAge`（7 天）和 `cacheMaxSize`（2GB）淘汰；CI 用 `TURBO_CACHE_MAX_AGE` / `TURBO_CACHE_MAX_SIZE` 收紧到 2 天、500MB，因为 actions/cache 每次整目录恢复再保存。
 
 main 的每次推送使用独立的 CI 并发组，避免后来的纯源码推送替换正在等待的文档部署。Site 的非 PR、仅构建运行也使用独立组，不会挤掉待部署运行；需要部署的运行仍按分支共用一组，保留原有 Site 的等待替换行为。PR 的新提交仍会取消旧运行。
 
+范围选择只有需要比较 PR 或 main 推送时获取完整的提交与树历史；发布或显式 commit 请求直接选完整范围，浅检出即可。范围选择、结果汇总和合并门禁只稀疏检出所需的控制脚本，checkout 使用 blob 过滤，避免下载无关历史文件内容或展开整个工作树。控制脚本仍来自工作流自身的版本。
+
+Turbo、Electron、Chromium 和 Site 的任务缓存各用一次 restore；普通 PR/main 运行在任务成功且精确缓存键未命中时，用 restore 返回的原始键保存。失败或取消不保存，PR 缓存仍受 GitHub ref 隔离。发布和显式 commit 可能执行任意源码，不能把执行后产生的文件保存到工作流 ref 的缓存：这些任务仅恢复缓存，setup-node 的 pnpm 缓存关闭。显式 commit 也会传给非发布 Site，其任务缓存同样仅恢复。
+
+桌面后端使用随包 Electron 的 RunAsNode，不再下载、打包或缓存独立 Node。Electron 下载缓存按 OS、架构和 lockfile 区分；发布只能复用已有缓存，未命中时重新下载且不保存。构建与发布校验仍检查目标与实际 Electron/Node 版本、RunAsNode fuse，以及主进程 bundle 与 ASAR 资源的绑定。
+
 发布始终走完整测试路径并运行 `pnpm release:preflight`，不运行 Site 或 workspace Build；平台打包任务自行构建桌面产物。锁文件校验在临时元数据目录完成，不修改工作区依赖或执行安装脚本。发布调用声明嵌套工作流需要的 Pages/OIDC 权限上限，但 CI 将实际执行的发布验证任务限制为 `contents: read`，具有 Pages 写权限的 Site 任务被跳过。
+
+macOS 发布任务从实际 ZIP 启动应用，通过真实 preload 验证世界选择、开局准备和刷新，再检查应用及其进程组退出；截图和日志独立上传。它不验证 Gatekeeper、DMG 安装交互或原生窗口可见性。Windows 发布任务运行桌面回归测试，并在含空格和中文的 ZIP 解压路径验证 Electron 后端；记录产物与 ZIP 解压体积。它还启动实际 ZIP 和自解压 EXE，检查原生准备画面、可见应用窗口、世界选择与开局按钮，以及进程树退出。它需要未锁定的交互式 Windows 桌面；无法观察时失败，不能用 API 或渲染器截图替代。原生截图与日志独立上传，不进入发布资产。打包改动的 PR 必须注明实际验证的平台；添加工作流不等于已通过 Windows 验证。
 
 `Verification` 汇总所选任务，包括每次非发布 CI 的 Site；必需任务缺失、跳过、失败或取消都不能通过。`main` 只接受通过 PR 合入的改动；每个 PR 的 [`gate.yml`](../.github/workflows/gate.yml) 提供 `All checks pass`，要求 `Verification` 成功，同时保留其他检查的失败。重跑失败检查后，也要重跑这一项。
 
@@ -180,11 +190,19 @@ main 的每次推送使用独立的 CI 并发组，避免后来的纯源码推�
 
 记录实际覆盖的平台与流程；构建通过不等于完成该平台的交互试玩。Release notes 必须说明当前产物未签名，macOS 产物也未公证。
 
+桌面运行时或打包改动还要验证安装包自己的 Electron RunAsNode：校验目标与实际 Electron/Node 版本、架构、fuse 和主进程/ASAR 绑定，用它启动 SQLite 后端并确认 sqlite-vec 与内置插件可用。不能用宿主 Node 或内存后端代替；就绪、设置读写、恢复和退出都要检查。详见桌面打包指南。
+
 ### 官网部署
 
 [`site.yml`](../.github/workflows/site.yml) 由每次非发布 CI 调用，不再独立响应 push 或 PR。它构建官网 `apps/site` 和文档站 `apps/docs`（页面在 `docs/`），并把文档站放在官网的 `docs/` 路径下。PR 只构建，不上传发布产物或部署；`main` 改动站点、文档或相关根构建/安装配置时才发布到 GitHub Pages，无关源码改动只构建。部署选择与测试范围共用一次 git diff；无法确定变更时保守选择部署，但仍限于 `main` push。具体输入列在 `scripts/ci-scope.mjs`。Actions 页面手动运行 Site 默认部署，也可关闭 `deploy` 只验证构建。
 
-仓库设置 Settings > Pages 的 Source 需选 “GitHub Actions”。站点默认在 `https://ackness.github.io/covel/`；PR 使用 `/covel/`，其他构建按 Pages 设置读出路径并作为 `SITE_BASE` 传给 Vite，所以配置自定义域名后会自动改用 `/`。文档站读取同一个变量，路径为 `<SITE_BASE>docs/`。文档站构建时有失效链接会失败。`public/` 里的文件在代码中通过 `asset()`（`apps/site/src/links.ts`）引用，以便带上这一前缀。部署只消费同次 Site 运行生成的产物，不复用其他提交的构建缓存或跨工作流产物。
+仓库设置 Settings > Pages 的 Source 需选 “GitHub Actions”。站点默认在 `https://ackness.github.io/covel/`；PR 使用 `/covel/`，其他构建按 Pages 设置读出路径并作为 `SITE_BASE` 传给 Vite，所以配置自定义域名后会自动改用 `/`。文档站读取同一个变量，路径为 `<SITE_BASE>docs/`。文档站构建时有失效链接会失败。`public/` 里的文件在代码中通过 `asset()`（`apps/site/src/links.ts`）引用，以便带上这一前缀。Site 用下面的命令并行构建两个独立目标，再把 `apps/docs/dist` 复制到 `apps/site/dist/docs`；复制前删除旧 docs 子树。Turbo 分别保存两份输出，官网缓存排除合并进去的 docs 子树。
+
+```bash
+pnpm exec turbo build --filter=@covel/site --filter=@covel/docs --concurrency=2
+```
+
+Site 的独立 Turbo 缓存按内容复用：输入覆盖各自源码与配置、`docs/**`、`SITE_BASE`、`VITE_*`、构建环境文件、根安装配置、lockfile 和工具链。`docs/**` 只影响文档目标，无关框架源码不影响这两个目标。GitHub 的 PR 缓存仍限于 PR ref，部署不能恢复它们。部署只消费同次 Site 任务按当前输入构建或恢复、重新合并并上传的产物，不下载其他工作流的发布产物。
 
 ### 模型资料快照
 

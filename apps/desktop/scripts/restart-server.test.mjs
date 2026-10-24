@@ -5,6 +5,78 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { test } from "node:test";
 import { build } from "esbuild";
+import { EventEmitter } from "node:events";
+import { runInNewContext } from "node:vm";
+import { bundleDesktopEntry } from "./bundle-desktop.mjs";
+
+test("preload works without Electron 45's removed Node shims and hides IPC events", async () => {
+  const desktopRoot = fileURLToPath(new URL("..", import.meta.url));
+  const bundle = await bundleDesktopEntry(desktopRoot, "preload", {
+    write: false,
+    sourcemap: false,
+  });
+  const ipcRenderer = new EventEmitter();
+  const invocations = [];
+  ipcRenderer.invoke = async (...args) => {
+    invocations.push(args);
+    return { ok: true };
+  };
+  let api;
+  const pageListeners = new Map();
+  const sandbox = {
+    module: { exports: {} },
+    process: { platform: "darwin", env: {} },
+    console: { warn() {} },
+    window: {
+      addEventListener: (event, listener) => pageListeners.set(event, listener),
+    },
+    require(name) {
+      assert.equal(
+        name,
+        "electron",
+        "sandbox preload may only require Electron",
+      );
+      return {
+        ipcRenderer,
+        contextBridge: {
+          exposeInMainWorld(name, value) {
+            assert.equal(name, "covelIpc");
+            api = value;
+          },
+        },
+      };
+    },
+  };
+  runInNewContext(bundle.outputFiles[0].text, sandbox);
+  assert.equal(api.isDesktop, true);
+  assert.equal(api.platform, "darwin");
+  assert.match(api.appVersion, /^\d+\.\d+\.\d+/);
+  assert.equal(api.send, undefined);
+  await assert.rejects(api.invoke("untrusted:channel"), /blocked invoke/);
+  assert.deepEqual(invocations, []);
+  assert.deepEqual(await api.invoke("covel:retry-startup"), { ok: true });
+  assert.deepEqual(invocations, [["covel:retry-startup", undefined]]);
+
+  const received = [];
+  const unsubscribe = api.on("covel:startup:error", (...args) =>
+    received.push(args),
+  );
+  const payload = { title: "Startup failed" };
+  ipcRenderer.emit(
+    "covel:startup:error",
+    { sender: "must stay private" },
+    payload,
+  );
+  assert.deepEqual(received, [[payload]]);
+  unsubscribe();
+  assert.equal(ipcRenderer.listenerCount("covel:startup:error"), 0);
+  api.on("untrusted:channel", () => assert.fail("blocked subscription ran"));
+  assert.equal(ipcRenderer.listenerCount("untrusted:channel"), 0);
+  api.on("covel:startup:error", () => {});
+  api.on("covel:server:status", () => {});
+  pageListeners.get("beforeunload")();
+  assert.deepEqual(ipcRenderer.eventNames(), []);
+});
 
 test("restart IPC navigates the native window only after the sidecar is ready", async (t) => {
   const root = await mkdtemp(path.join(tmpdir(), "covel-restart-test-"));
@@ -85,7 +157,12 @@ test("restart IPC navigates the native window only after the sidecar is ready", 
   const setup = (restartServer, isDev = false) => {
     navigation.length = 0;
     window.destroyed = false;
-    registerDesktopIpcHandlers({ paths: {}, restartServer, isDev });
+    registerDesktopIpcHandlers({
+      paths: {},
+      restartServer,
+      isDev,
+      getServerPort: () => 9479,
+    });
     return handlers.get("covel:restart-server");
   };
 
@@ -140,10 +217,28 @@ test("restart IPC navigates the native window only after the sidecar is ready", 
     },
   );
 
-  await t.test("development keeps the Vite frontend origin", async () => {
-    await setup(async () => ({ ok: true, port: 5258 }), true)(event);
-    assert.deepEqual(navigation, ["reload"]);
-  });
+  await t.test(
+    "development refuses restart without touching the external server",
+    async () => {
+      let calls = 0;
+      const restart = setup(async () => {
+        calls++;
+        return { ok: true, port: 5258 };
+      }, true);
+      for (const result of await Promise.all([
+        restart(event),
+        restart(event),
+      ])) {
+        assert.deepEqual(result, {
+          ok: false,
+          port: 9479,
+          error: "server.externallyManagedRestart",
+        });
+      }
+      assert.equal(calls, 0);
+      assert.deepEqual(navigation, []);
+    },
+  );
 
   await t.test(
     "closing the window while restarting does not navigate",

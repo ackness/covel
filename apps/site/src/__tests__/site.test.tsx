@@ -13,6 +13,8 @@ import { MODE_MS } from "../components/Hero.js";
 import { COPY, LANGS, PLUGIN_IDS } from "../copy.js";
 import { PACKS } from "../packs.js";
 import { detectPlatform, pickDownload } from "../download.js";
+import { DownloadButtons } from "../components/DownloadButtons.js";
+import { RELEASES_URL } from "../links.js";
 
 beforeEach(() => {
   window.localStorage.clear();
@@ -127,10 +129,11 @@ describe("download links", () => {
     "Covel-electron-0.0.50-mac-arm64.zip",
     "Covel-electron-0.0.50-win-x64-portable.exe",
     "Covel-electron-0.0.50-win-x64.exe",
+    "Covel-electron-0.0.50-win-x64.zip",
     "SHA256SUMS.txt",
   ].map((name) => ({ name, browser_download_url: `https://dl/${name}` }));
 
-  it("picks the installer, and on Windows the portable build too", () => {
+  it("keeps installers primary and distinguishes both Windows no-install builds", () => {
     expect(pickDownload(assets, "mac")).toEqual({
       href: "https://dl/Covel-electron-0.0.50-mac-arm64.dmg",
       platform: "mac",
@@ -139,8 +142,58 @@ describe("download links", () => {
       href: "https://dl/Covel-electron-0.0.50-win-x64.exe",
       platform: "windows",
       portable: "https://dl/Covel-electron-0.0.50-win-x64-portable.exe",
+      zip: "https://dl/Covel-electron-0.0.50-win-x64.zip",
     });
     expect(pickDownload(assets.slice(0, 2), "windows")).toBeUndefined();
+  });
+
+  it.each(["zip", "portable", "both"] as const)(
+    "omits missing %s alternatives without borrowing the macOS ZIP",
+    (missing) => {
+      const available = assets.filter(
+        ({ name }) =>
+          !(
+            (missing !== "portable" && name.endsWith("-win-x64.zip")) ||
+            (missing !== "zip" && name.endsWith("-win-x64-portable.exe"))
+          ),
+      );
+      const download = pickDownload(available, "windows");
+      expect(download?.href).toBe(
+        "https://dl/Covel-electron-0.0.50-win-x64.exe",
+      );
+      if (!download)
+        throw new Error("Fixture must include the Windows installer");
+      render(<DownloadButtons copy={COPY.en} download={download} />);
+      expect(
+        screen.queryByRole("link", { name: COPY.en.hero.zip }) !== null,
+      ).toBe(missing === "portable");
+      expect(
+        screen.queryByRole("link", { name: COPY.en.hero.portable }) !== null,
+      ).toBe(missing === "zip");
+    },
+  );
+
+  it("keeps the release-page fallback when the Windows installer is absent", () => {
+    const download = pickDownload(
+      assets.filter(({ name }) => !name.endsWith("-win-x64.exe")),
+      "windows",
+    );
+    expect(download).toBeUndefined();
+    render(
+      <DownloadButtons
+        copy={COPY.en}
+        download={download ?? { href: RELEASES_URL }}
+      />,
+    );
+    expect(
+      screen
+        .getByRole("link", { name: COPY.en.hero.primary })
+        .getAttribute("href"),
+    ).toBe(RELEASES_URL);
+    expect(screen.queryByRole("link", { name: COPY.en.hero.zip })).toBeNull();
+    expect(
+      screen.queryByRole("link", { name: COPY.en.hero.portable }),
+    ).toBeNull();
   });
 
   it("recognises desktop systems and leaves phones to the release page", () => {
@@ -175,6 +228,10 @@ describe("download links", () => {
     });
     expect(portable?.getAttribute("href")).toBe(
       "https://dl/Covel-electron-0.0.50-win-x64-portable.exe",
+    );
+    const [zip] = screen.getAllByRole("link", { name: COPY.en.hero.zip });
+    expect(zip?.getAttribute("href")).toBe(
+      "https://dl/Covel-electron-0.0.50-win-x64.zip",
     );
     expect(
       screen.getAllByText(COPY.en.hero.openHelp.windows.summary).length,

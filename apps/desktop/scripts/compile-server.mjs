@@ -12,27 +12,19 @@ export async function compileStagedServer(serverRoot) {
     if (entry.isDirectory())
       packageRoots.push(path.join(workspaceRoot, entry.name));
   }
-  let compiled = 0;
-  async function compileDirectory(directory) {
+  const compiledSources = [];
+  async function collectSources(directory) {
     for (const entry of await fs.readdir(directory, { withFileTypes: true })) {
       const filename = path.join(directory, entry.name);
       if (entry.isDirectory()) {
         if (!["tests", "__tests__", "node_modules"].includes(entry.name)) {
-          await compileDirectory(filename);
+          await collectSources(filename);
         }
       } else if (
         entry.name.endsWith(".ts") &&
         !/\.(d|test|spec)\.ts$/.test(entry.name)
       ) {
-        const output = filename.replace(/\.ts$/, ".js");
-        const { code } = await transform(await fs.readFile(filename, "utf8"), {
-          loader: "ts",
-          format: "esm",
-          target: "node24",
-          sourcefile: filename,
-        });
-        await fs.writeFile(output, code, "utf8");
-        compiled++;
+        compiledSources.push(filename);
       }
     }
   }
@@ -51,6 +43,7 @@ export async function compileStagedServer(serverRoot) {
     }
     return value;
   }
+  const manifests = [];
   for (const packageRoot of packageRoots) {
     const source = path.join(packageRoot, "src");
     try {
@@ -59,8 +52,39 @@ export async function compileStagedServer(serverRoot) {
       if (error.code !== "ENOENT") throw error;
       continue;
     }
-    await compileDirectory(source);
-    const manifestFile = path.join(packageRoot, "package.json");
+    await collectSources(source);
+    manifests.push(path.join(packageRoot, "package.json"));
+  }
+  compiledSources.sort();
+  const sources = compiledSources.values();
+  let failed = false;
+  let failure;
+  async function compileWorker() {
+    for (const filename of sources) {
+      if (failed) return;
+      try {
+        const { code } = await transform(await fs.readFile(filename, "utf8"), {
+          loader: "ts",
+          format: "esm",
+          target: "node24",
+          sourcefile: filename,
+        });
+        await fs.writeFile(filename.replace(/\.ts$/, ".js"), code, "utf8");
+      } catch (error) {
+        if (!failed) failure = error;
+        failed = true;
+        return;
+      }
+    }
+  }
+  // Catch inside each worker so rejection cannot leave writes running after the
+  // caller starts cleanup. Stop taking new sources and drain all active work.
+  await Promise.all(
+    Array.from({ length: Math.min(4, compiledSources.length) }, compileWorker),
+  );
+  if (failed) throw failure;
+
+  for (const manifestFile of manifests) {
     const manifest = JSON.parse(await fs.readFile(manifestFile, "utf8"));
     if (manifest.exports) manifest.exports = runtimeExports(manifest.exports);
     if (typeof manifest.main === "string")
@@ -71,5 +95,5 @@ export async function compileStagedServer(serverRoot) {
       "utf8",
     );
   }
-  return compiled;
+  return compiledSources;
 }

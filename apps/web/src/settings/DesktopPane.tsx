@@ -155,6 +155,7 @@ export function DesktopPane() {
       });
       return;
     }
+    if (!info || info.isDev) return;
     setBusy("restart");
     try {
       await reloadServerAndWait({
@@ -457,7 +458,11 @@ export function DesktopPane() {
           {t("settings.desktopServerPort", { port: info?.serverPort ?? "?" })}
         </div>
         <div className="text-[11px] text-muted-foreground leading-relaxed">
-          {t("settings.desktopRestartHint")}
+          {t(
+            info?.isDev
+              ? "settings.desktopRestartDevHint"
+              : "settings.desktopRestartHint",
+          )}
         </div>
         <div className="flex flex-wrap gap-2">
           {hasElectronIpc() && (
@@ -465,7 +470,7 @@ export function DesktopPane() {
               size="sm"
               variant="outline"
               onClick={handleRestart}
-              disabled={busy !== null}
+              disabled={busy !== null || !info || info.isDev}
             >
               {busy === "restart" ? (
                 <Loader2 className="w-3 h-3 mr-1.5 animate-spin" />

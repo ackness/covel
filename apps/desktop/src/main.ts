@@ -32,6 +32,7 @@ import {
   dataRootCopyRecordPath,
   ensureUserPaths,
   isDev,
+  resolveBackendRuntime,
   resolveProjectRoot,
   resolveServerEntry,
   resolveTsx,
@@ -45,6 +46,7 @@ import {
   type DataRootCopyOutcome,
 } from "./data-root-copy.js";
 import { loadChildEnvironment } from "./env-files.js";
+import { backendRuntimeEnvironment } from "./backend-runtime.js";
 import {
   fetchJsonWithTimeout,
   fetchWithTimeout,
@@ -369,6 +371,7 @@ function showDataRootCopyOutcome(outcome: DataRootCopyOutcome): void {
 async function startServer(
   paths: ReturnType<typeof ensureUserPaths>,
 ): Promise<number> {
+  if (isDev) throw new Error(t("server.externallyManagedRestart"));
   if (serverProcess) throw new Error("Server process is already running");
   manualStop = false;
   serverPaths = paths;
@@ -382,6 +385,8 @@ async function startServer(
   const serverEntry = resolveServerEntry();
   const projectRoot = resolveProjectRoot();
   const tsxPath = resolveTsx();
+  const nodeBin = await resolveBackendRuntime();
+  if (quitting || manualStop) throw new Error("Application is shutting down");
 
   const configuredEnv = loadChildEnvironment(projectRoot, process.env);
   // Data dir lives at <dataRoot>/; ensure the db's parent (and logs dir) exist.
@@ -392,8 +397,9 @@ async function startServer(
     SERVER_PORT: String(port),
     STORE_BACKEND: configuredEnv.STORE_BACKEND ?? "sqlite",
     SQLITE_PATH: paths.dbPath,
-    NODE_ENV: isDev ? "development" : "production",
-    ...(isDev ? {} : { SERVE_STATIC: "true" }),
+    NODE_ENV: "production",
+    SERVE_STATIC: "true",
+    STATIC_DIR: path.join(process.resourcesPath!, "web-dist"),
     COVEL_HOME: paths.covelHome,
     COVEL_DATA_ROOT: paths.dataRoot,
     // The desktop app is the personal form whatever a .env or the shell
@@ -415,10 +421,6 @@ async function startServer(
     COVEL_DESKTOP_SYSTEM_PROXY_IPC: "1",
   };
 
-  if (!isDev) {
-    env.STATIC_DIR = path.join(process.resourcesPath!, "web-dist");
-  }
-
   writeLog("info", `Starting server on port ${port}`);
   writeLog("info", `plugin TypeScript loader: ${tsxPath}`);
   writeLog("info", `entry: ${serverEntry}`);
@@ -427,11 +429,7 @@ async function startServer(
   writeLog("info", `llm.toml: ${paths.userLlmTomlPath}`);
   writeLog("info", "system proxy: dynamic Electron resolver available");
 
-  const spawnEnv: Record<string, string> = { ...env };
-  const nodeBin = isDev ? "node" : process.execPath;
-  if (!isDev) {
-    spawnEnv.ELECTRON_RUN_AS_NODE = "1";
-  }
+  const spawnEnv = backendRuntimeEnvironment(env);
   writeLog("info", `node: ${nodeBin}`);
 
   // `--import` takes a module specifier, not a path: Node reads the drive
@@ -442,6 +440,7 @@ async function startServer(
     {
       cwd: projectRoot,
       env: spawnEnv,
+      windowsHide: true,
       stdio: ["ignore", "pipe", "pipe", "ipc"],
     },
   );

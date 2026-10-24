@@ -38,6 +38,8 @@ pnpm validate:plugin plugins/my-plugin
 pnpm --filter @covel/plugin-my-plugin test
 ```
 
+带工具模板的开发依赖使用 TypeScript 7.0.2 和 Zod 4.6.7 或更高的兼容版本。Zod 的最低版本与宿主 SDK 一致，避免 TypeScript 7.1 的递归 JSON 类型错误；发布时仍由宿主提供 Zod，不随插件安装依赖。Vitest 随工作区同步更新，版本范围见[模板清单](../../templates/plugin-with-tools/package.json)。
+
 生成命令不会提问，用参数决定生成什么：
 
 | 参数               | 作用                                                                |

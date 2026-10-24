@@ -14,15 +14,15 @@
     "lint": "tsc --noEmit && tsc -p tsconfig.test.json"
   },
   "dependencies": {
+    "@covel/plugin-handlers-utils": "workspace:*",
     "@covel/plugin-loader": "workspace:*",
     "@covel/runtime": "workspace:*",
     "@covel/shared": "workspace:*",
     "@covel/store": "workspace:*",
-    "@covel/tools": "workspace:*",
-    "@covel/plugin-handlers-utils": "workspace:*"
+    "@covel/tools": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^7.0.2",
-    "vitest": "^5.0.3"
+    "vitest": "^5.0.5"
   }
 }

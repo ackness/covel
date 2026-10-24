@@ -61,7 +61,7 @@ pnpm validate:plugin ~/.covel/plugins/my-plugin
 
 ### 在哪里能写
 
-用 `pnpm create-plugin <名字> --with-tools` 生成在仓库 `plugins/` 下的插件自带单元测试：`tests/` 里有一个例子，`package.json` 里有 `test` 和 `lint` 两个脚本，还有一个 `vitest.config.ts`。
+用 `pnpm create-plugin <名字> --with-tools` 生成在仓库 `plugins/` 下的插件自带单元测试：`tests/` 里有一个例子，`package.json` 里有 `test` 和 `lint` 两个脚本，还有一个 `vitest.config.ts`。模板与工作区使用同一版 Vitest；升级已有插件时，同步它的开发依赖声明。
 
 生成到用户插件目录的插件不带依赖，也没有测试配置。它们用校验和[离线用例](#离线用例)来测。
 
@@ -75,6 +75,8 @@ pnpm --filter @covel/plugin-my-plugin test
 > 从插件自己的包运行，不要在仓库根目录用 `pnpm vitest run plugins/<id>/tests`。包里的 `vitest.config.ts` 让每次运行使用自己的临时目录，并在结束时删除；在根目录运行会绕过它。
 
 `pnpm --filter @covel/plugin-my-plugin lint` 用 JSDoc 注释做类型检查，不需要把代码改成 TypeScript。改了调用 SDK 的地方之后，类型检查和测试都跑一遍。
+
+模板使用稳定版 TypeScript 7.0.2；试用 TypeScript 7.1 时，开发环境中的 Zod 也必须满足 SDK 的 4.6.7 最低版本。不要用类型断言或关闭检查来绕过旧版 Zod 的递归 JSON 类型错误。
 
 ### 测一个工具
 
@@ -196,6 +198,7 @@ it("writes one note", async () => {
 - 没有提供的 `ctx.store` 读取方法，一调用就报错，例如 `store.getPluginData is not configured for this test context`。这样测试不会悄悄读到空数据。
 - 默认带一个固定的 `ctx.random`，每次运行给出相同的数。所以掷骰的结果可以直接断言。
 - 函数返回的效果在 `result.effects` 里，例如 `result.effects.interactions`。
+- 同时生成模型指令和玩家可见数据的函数，要交叉测试内容语言与 `COVEL_INSTRUCTION_LOCALE`，至少覆盖中文内容配英文指令、英文内容配中文指令。直接调用真实 handler，分别断言指令语言和结果数据；缺值时检查可选字段确实省略。用 `vi.stubEnv` 设置覆盖值，并在 `afterEach` 调用 `vi.unstubAllEnvs` 恢复环境。例子见[骰子判定测试](../../plugins/dice-check/tests/roller.test.js)。语言规则见[多语言参考](../reference/i18n.md#2-本地化插件)。
 
 ### 工具包里有什么
 

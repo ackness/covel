@@ -1,5 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Hono } from "hono";
+import { createServer } from "node:http";
+import { once } from "node:events";
+import { createApplicationWork } from "../../src/application-work.js";
 import {
   createAppUpdateRoutes,
   fetchLatestCovelRelease,
@@ -115,6 +118,70 @@ describe("desktop app update check", () => {
     expect(fetchSpy).toHaveBeenCalledOnce();
     expect(fetchSpy.mock.calls[0]?.[1]).toMatchObject({ redirect: "manual" });
   });
+
+  // Real socket cancellation must finish within the host's two-second drain
+  // budget, not the update request's ten-second network deadline.
+  it.each(["headers", "body"])(
+    "cancels an update stalled before %s completion when the host closes",
+    async (phase) => {
+      process.env.COVEL_DESKTOP_REST = "1";
+      vi.spyOn(console, "warn").mockImplementation(() => undefined);
+      const started = Promise.withResolvers<void>();
+      const disconnected = Promise.withResolvers<void>();
+      const server = createServer((_request, response) => {
+        response.once("close", () => disconnected.resolve());
+        if (phase === "body") {
+          response.writeHead(200, { "content-type": "application/json" });
+          response.write('{"tag_name":');
+        } else {
+          started.resolve();
+        }
+      });
+      server.listen(0, "127.0.0.1");
+      await once(server, "listening");
+      const address = server.address();
+      if (!address || typeof address === "string") {
+        throw new Error("Expected a TCP listener");
+      }
+      const work = createApplicationWork();
+      const app = new Hono();
+      app.use("*", work.middleware);
+      app.route(
+        "/",
+        createAppUpdateRoutes({
+          fetchLatestRelease: (signal) =>
+            fetchLatestCovelRelease(async (_url, init) => {
+              const response = await fetch(
+                `http://127.0.0.1:${address.port}/release`,
+                init,
+              );
+              if (phase === "body") started.resolve();
+              return response;
+            }, signal),
+        }),
+      );
+      const request = app.request("/api/app-update/latest");
+      try {
+        await started.promise;
+        const [response] = await Promise.all([
+          request,
+          work.close(),
+          disconnected.promise,
+        ]);
+        expect(response.status).toBe(502);
+        await expect(response.json()).resolves.toMatchObject({
+          code: "app_update_check_failed",
+        });
+      } finally {
+        server.closeAllConnections();
+        const closed = once(server, "close");
+        server.close();
+        await closed;
+        await Promise.all([request, work.close()]);
+      }
+    },
+    2_000,
+  );
 
   it("exposes the check only to an authenticated desktop sidecar", async () => {
     process.env.COVEL_DESKTOP_REST = "1";

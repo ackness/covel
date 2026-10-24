@@ -61,7 +61,14 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.workflow_sha }}
-          fetch-depth: 0
+          # Releases and explicit commits select full scope without a diff.
+          fetch-depth: ${{ (inputs.release || inputs.commit != '') && 1 || 0 }}
+          # This checkout version fetches blob:none for sparse checkouts. Keep
+          # commit/tree history for merge-base without unrelated file contents.
+          sparse-checkout: |
+            /scripts/ci-scope.mjs
+            /scripts/lib/change-scope.mjs
+          sparse-checkout-cone-mode: false
           persist-credentials: false
 
       # Uses only Node built-ins and git; no dependency installation is needed.
@@ -88,7 +95,7 @@ jobs:
       deploy: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && !inputs.release && needs.scope.outputs.site_deploy == 'true' }}
 
   verify:
-    name: Check, test, build
+    name: Static checks
     needs: scope
     if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
@@ -118,35 +125,23 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: "26.10.0"
-          cache: pnpm
+          node-version: "26.12.1"
+          cache: ${{ !inputs.release && inputs.commit == '' && 'pnpm' || '' }}
+          package-manager-cache: false
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # Turborepo's local cache. lint/test/build are content-addressed per
-      # package, so a run that only touches one package replays the rest from
-      # here instead of re-running them. restore-keys falls back to the most
-      # recent cache on this OS when the exact SHA has no entry.
-      - name: Cache turbo
-        if: ${{ !inputs.release }}
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: .turbo/cache
-          key: turbo-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ github.sha }}
-          restore-keys: |
-            turbo-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-
-            turbo-${{ runner.os }}-
-
+      # Separate namespaces prevent parallel jobs from racing to save one key.
       - name: Restore CI task cache
-        if: ${{ inputs.release }}
+        id: turbo-cache
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: .turbo/cache
-          key: turbo-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ inputs.commit }}
+          key: turbo-check-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ inputs.commit || github.sha }}
           restore-keys: |
-            turbo-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-
-            turbo-${{ runner.os }}-
+            turbo-check-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-
+            turbo-check-${{ runner.os }}-
 
       - name: Check
         run: pnpm check
@@ -154,6 +149,62 @@ jobs:
       - name: Test documentation examples
         if: ${{ needs.scope.outputs.scope == 'docs' && !inputs.release }}
         run: pnpm test:docs:packages
+
+      - name: Release preflight
+        if: ${{ inputs.release }}
+        run: pnpm release:preflight
+
+      - name: Save CI task cache
+        if: ${{ success() && !inputs.release && inputs.commit == '' && steps.turbo-cache.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .turbo/cache
+          key: ${{ steps.turbo-cache.outputs.cache-primary-key }}
+
+  tests:
+    name: Tests and build
+    needs: scope
+    if: ${{ !cancelled() && (needs.scope.outputs.scope != 'docs' || inputs.release) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.commit || github.sha }}
+          persist-credentials: false
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "26.12.1"
+          cache: ${{ !inputs.release && inputs.commit == '' && 'pnpm' || '' }}
+          package-manager-cache: false
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Restore Electron binaries
+        id: electron-cache
+        if: ${{ needs.scope.outputs.scope != 'docs' || inputs.release || inputs.commit != '' }}
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/electron
+          key: ${{ runner.os }}-${{ runner.arch }}-electron-${{ hashFiles('pnpm-lock.yaml') }}
+
+      - name: Restore CI task cache
+        id: turbo-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .turbo/cache
+          key: turbo-test-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ inputs.commit || github.sha }}
+          restore-keys: |
+            turbo-test-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-
+            turbo-test-${{ runner.os }}-
 
       # The web and server suites run in the parallel `web` and `server` jobs,
       # and so does the runtime suite (with coverage);
@@ -172,9 +223,21 @@ jobs:
         if: ${{ !inputs.release && needs.scope.outputs.scope != 'docs' }}
         run: pnpm build --cache=local:r --filter=!@covel/docs --filter=!@covel/site
 
-      - name: Release preflight
-        if: ${{ inputs.release }}
-        run: pnpm release:preflight
+      # Save only after every check succeeds. Requested source commits and
+      # releases must never publish executed files into the workflow ref's cache.
+      - name: Save Electron binaries
+        if: ${{ success() && !inputs.release && inputs.commit == '' && needs.scope.outputs.scope != 'docs' && steps.electron-cache.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/electron
+          key: ${{ steps.electron-cache.outputs.cache-primary-key }}
+
+      - name: Save CI task cache
+        if: ${{ success() && !inputs.release && inputs.commit == '' && steps.turbo-cache.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .turbo/cache
+          key: ${{ steps.turbo-cache.outputs.cache-primary-key }}
 
   web:
     name: Web unit tests
@@ -196,29 +259,20 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: "26.10.0"
-          cache: pnpm
+          node-version: "26.12.1"
+          cache: ${{ !inputs.release && inputs.commit == '' && 'pnpm' || '' }}
+          package-manager-cache: false
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
       # A separate key namespace keeps this cache to the web test graph.
-      - name: Cache turbo
-        if: ${{ !inputs.release }}
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: .turbo/cache
-          key: turbo-web-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ github.sha }}
-          restore-keys: |
-            turbo-web-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-
-            turbo-web-${{ runner.os }}-
-
       - name: Restore CI task cache
-        if: ${{ inputs.release }}
+        id: turbo-cache
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: .turbo/cache
-          key: turbo-web-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ inputs.commit }}
+          key: turbo-web-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ inputs.commit || github.sha }}
           restore-keys: |
             turbo-web-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-
             turbo-web-${{ runner.os }}-
@@ -228,6 +282,13 @@ jobs:
         env:
           VITEST_MAX_WORKERS: "4"
         run: pnpm test --filter=@covel/web
+
+      - name: Save CI task cache
+        if: ${{ success() && !inputs.release && inputs.commit == '' && steps.turbo-cache.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .turbo/cache
+          key: ${{ steps.turbo-cache.outputs.cache-primary-key }}
 
   server:
     name: Server tests, runtime coverage
@@ -249,8 +310,9 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: "26.10.0"
-          cache: pnpm
+          node-version: "26.12.1"
+          cache: ${{ !inputs.release && inputs.commit == '' && 'pnpm' || '' }}
+          package-manager-cache: false
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -309,8 +371,9 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: "26.10.0"
-          cache: pnpm
+          node-version: "26.12.1"
+          cache: ${{ !inputs.release && inputs.commit == '' && 'pnpm' || '' }}
+          package-manager-cache: false
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -338,8 +401,9 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: "26.10.0"
-          cache: pnpm
+          node-version: "26.12.1"
+          cache: ${{ !inputs.release && inputs.commit == '' && 'pnpm' || '' }}
+          package-manager-cache: false
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -358,9 +422,9 @@ jobs:
           echo "version=$(pnpm exec playwright --version)" >> "$GITHUB_OUTPUT"
           echo "image=${ImageOS:-unknown}" >> "$GITHUB_OUTPUT"
 
-      - name: Cache Chromium
+      - name: Restore Chromium
         id: chromium-cache
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.image }}-${{ steps.playwright.outputs.version }}
@@ -391,9 +455,16 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
+      - name: Save Chromium
+        if: ${{ success() && !inputs.release && inputs.commit == '' && steps.chromium-cache.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ steps.chromium-cache.outputs.cache-primary-key }}
+
   result:
     name: Verification
-    needs: [scope, verify, site, web, server, postgres, browser]
+    needs: [scope, verify, tests, site, web, server, postgres, browser]
     if: ${{ always() }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -403,6 +474,8 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.workflow_sha }}
+          sparse-checkout: /scripts/ci-results.mjs
+          sparse-checkout-cone-mode: false
           persist-credentials: false
 
       # `always` exposes failures and skips instead of skipping the aggregate.

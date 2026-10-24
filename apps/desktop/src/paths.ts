@@ -32,6 +32,7 @@ import {
   writeDesktopConfigFileAtomic,
   type DesktopConfig,
 } from "@covel/shared/desktop-config/node";
+import { verifyBackendRuntime } from "./backend-runtime.js";
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 
@@ -145,12 +146,25 @@ export function resolveProjectRoot(): string {
   return path.join(process.resourcesPath!, "server");
 }
 
-export function resolveServerEntry(): string {
-  const root = resolveProjectRoot();
-  if (isDev) {
-    return path.join(root, "apps/server/src/index.ts");
+/** Only the source-selected runtime shipped with this installation is eligible. */
+export async function resolveBackendRuntime(): Promise<string> {
+  try {
+    return await verifyBackendRuntime(process.resourcesPath, {
+      electronExecutable: process.execPath,
+      electronVersions: process.versions,
+      mainFile: fileURLToPath(import.meta.url),
+      preloadFile: resolvePreloadScript(),
+    });
+  } catch (cause) {
+    throw new Error(
+      `Bundled backend runtime is missing, damaged, unsafe, or incompatible. Reinstall Covel from a complete installer; a system runtime cannot replace this resource. ${cause instanceof Error ? cause.message : String(cause)}`,
+      { cause },
+    );
   }
-  return path.join(root, "src/index.js");
+}
+
+export function resolveServerEntry(): string {
+  return path.join(process.resourcesPath, "server/src/index.js");
 }
 
 function resolveBundledWorldsDir(): string {
@@ -166,26 +180,14 @@ function resolveBundledPluginsDir(): string {
  * `resources/server`.
  */
 export function resolveTsx(): string {
-  const baseDir = resolveProjectRoot();
-
-  const direct = path.join(baseDir, "node_modules/tsx/dist/loader.mjs");
-  if (fs.existsSync(direct)) return direct;
-
-  const pnpmDir = path.join(baseDir, "node_modules/.pnpm");
-  if (fs.existsSync(pnpmDir)) {
-    for (const entry of fs.readdirSync(pnpmDir)) {
-      if (entry.startsWith("tsx@")) {
-        const candidate = path.join(
-          pnpmDir,
-          entry,
-          "node_modules/tsx/dist/loader.mjs",
-        );
-        if (fs.existsSync(candidate)) return candidate;
-      }
-    }
+  const loader = path.join(
+    process.resourcesPath,
+    "server/node_modules/tsx/dist/loader.mjs",
+  );
+  if (!fs.existsSync(loader)) {
+    throw new Error(`Bundled plugin TS loader missing: ${loader}`);
   }
-
-  throw new Error(`tsx not found in ${baseDir}`);
+  return loader;
 }
 
 export function resolvePreloadScript(): string {

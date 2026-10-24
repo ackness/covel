@@ -166,7 +166,7 @@ function isPluginHandlerJsFile(rel) {
  */
 const FRAMEWORK_CHINESE_LINES = {
   // Player-facing label and notice pairs.
-  "apps/desktop/src/main-i18n.ts": 80,
+  "apps/desktop/src/main-i18n.ts": 81,
   "apps/server/src/routes/api/bootstrap/compactor.ts": 1,
   "apps/server/src/routes/api/bootstrap/plugin-rpc-wiring.ts": 2,
   "apps/server/src/routes/api/plugin-diagnostics.ts": 1,

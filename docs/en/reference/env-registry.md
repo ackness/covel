@@ -187,6 +187,7 @@ Behavior that both Compose files share:
 
 The SQLite stack:
 
+- The Alpine image preloads its installed `gcompat` library so the Linux `sqlite-vec` extension can load under musl. During the build, an unprivileged user runs `vec_version()` without network access. A loading failure stops the build instead of silently disabling vectors.
 - It has one app container and no database service. `STORE_BACKEND=sqlite`, `SQLITE_PATH=/home/node/.covel/data/covel.db`, and `MEDIA_ROOT=/home/node/.covel/data/media` are set in the Compose file, and they override variables of the same name that `.env` holds for runs from source. The database and the media are therefore both in the `appdata` volume.
 - A folder of the image that has no volume (for example `/app/apps/server/data`) is lost when the container is recreated, so the database must not be placed there.
 - The project name is `covel-sqlite` and the container name is `covel-sqlite-app`.
@@ -357,15 +358,14 @@ For details of these switches, see [Runtime Contract](#runtime-contract).
 
 Only the Electron packaging tools and the desktop packaging scripts read these variables. For details, see [Desktop app packaging](../internals/desktop-packaging.md).
 
-| Variable                      | Default                         | Purpose                                                                                                                                                                                                             |
-| ----------------------------- | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `CSC_LINK`                    | —                               | Path or URL of the code signing certificate                                                                                                                                                                         |
-| `CSC_KEY_PASSWORD`            | —                               | Password of the code signing certificate                                                                                                                                                                            |
-| `WIN_CSC_TIMESTAMP_SERVER`    | `http://timestamp.digicert.com` | Timestamp server used for Windows signing                                                                                                                                                                           |
-| `APPLE_ID`                    | —                               | Apple developer account used for notarization                                                                                                                                                                       |
-| `APPLE_APP_SPECIFIC_PASSWORD` | —                               | App-specific password used for notarization                                                                                                                                                                         |
-| `APPLE_TEAM_ID`               | —                               | Apple developer team ID                                                                                                                                                                                             |
-| `COVEL_SMOKE_HOST_NODE`       | `false`                         | When set to `1`, the desktop staging smoke test runs with the host Node and the memory backend if the Electron binary is missing. In this case it does not verify native modules under Electron. CI does not set it |
+| Variable                      | Default                         | Purpose                                       |
+| ----------------------------- | ------------------------------- | --------------------------------------------- |
+| `CSC_LINK`                    | —                               | Path or URL of the code signing certificate   |
+| `CSC_KEY_PASSWORD`            | —                               | Password of the code signing certificate      |
+| `WIN_CSC_TIMESTAMP_SERVER`    | `http://timestamp.digicert.com` | Timestamp server used for Windows signing     |
+| `APPLE_ID`                    | —                               | Apple developer account used for notarization |
+| `APPLE_APP_SPECIFIC_PASSWORD` | —                               | App-specific password used for notarization   |
+| `APPLE_TEAM_ID`               | —                               | Apple developer team ID                       |
 
 **Names that are not in the registry**
 

@@ -5007,7 +5007,7 @@ interface SseEnvelope {
   "ok": true,
   "latencyMs": 250,
   "ttfbMs": 180,
-  "text": "Hello!",
+  "text": "Example preset (example-provider/example-model)",
   "testedTarget": {
     "presetId": "server-preset",
     "provider": "example-provider",
@@ -5016,6 +5016,8 @@ interface SseEnvelope {
   }
 }
 ```
+
+文本模型的 `text` 是本次测试的预设名和服务商／模型标识，不是模型的回复。流式请求在取得首字延迟和足够的响应文本后提前结束。
 
 `resolvedVia` 的取值是 `direct`、`slot`、`tag-fallback` 或 `any`。
 
@@ -5952,7 +5954,7 @@ Covel 有三种部署形态，每种形态的存储方式不同：桌面客户�
   - local 模式：业务记录以带版本的 checkpoint 保存在 Dexie `covel-browser-vault` 里。执行前上传到临时的 MemoryStore，执行后原子地应用 `SessionCommit`。
   - 生成世界等服务器能力，通过 `return-only` 响应把结果交给前端保存。
 - **API 密钥**: 用户自己管理，保存在浏览器 localStorage。
-- **认证**: 没有。`self` 档位忽略令牌。
+- **认证**: 个人实例依赖回环监听和 Host 检查；配置了桌面启动令牌时，配置和文件接口仍校验它。生产环境的 `self` + MemoryStore 属于 browser-private，会话接口需要 owner token，共享世界写入需要运维 token。完整规则见[宿主配置](../internals/security.md#host-profile)。
 - **范围**: 它是个人实例，不隔离多个玩家。
 
 ```bash
@@ -5964,7 +5966,7 @@ STORE_BACKEND=memory pnpm dev:server  # 临时 Memory 后端（重启即丢失�
 ### 官方网页版（还不支持）
 
 > [!NOTE]
-> 官方网页版现在还不支持。下面写的是它的设计，以及代码里已有的部分。
+> 官方网页版现在还不支持。下面写的是它的设计，以及代码里已有的部分。`render.yaml` 只部署受运维令牌保护的演示服务，不提供公开登录或匿名创建会话的流程；不要把运维令牌发给访客来绕过限制。
 
 - **服务器存储**: `DEPLOYMENT_TIER=demo`、`STORE_BACKEND=memory`（见仓库里的 `render.yaml`）。
 - **存档**: 以玩家浏览器 IndexedDB 里的为准。服务器把会话放在内存里执行回合，不写进数据库；会话删除或服务器重启后，内存里的这份就没有了。
@@ -6147,9 +6149,9 @@ STORE_BACKEND=memory pnpm dev:server  # 临时 Memory 后端（重启即丢失�
 
 **安装后的重启和刷新**
 
-- Electron 里，`covel:restart-server` 负责两件事：重启 sidecar；健康检查通过后，让原生窗口导航到新端口。
+- 打包后的 Electron 里，`covel:restart-server` 负责两件事：重启 sidecar；健康检查通过后，让原生窗口导航到新端口。
 - Web 客户端保持它的重新加载遮罩，不要自己重新加载旧 URL，也不要尝试跨源跳转。
-- 开发模式下重新加载外部的 Vite 页面。
+- 开发模式的服务端由外部管理，`covel:restart-server` 返回 `{ ok: false, port, error }`，不会重启服务端或刷新 Vite 页面。在终端重启 `pnpm dev`，再按需刷新页面。
 - 卸载插件仍然需要重启，才能卸掉已发现的代码。卸载不会删除插件已保存的会话数据。
 
 **生成的世界文件**

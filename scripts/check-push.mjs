@@ -195,8 +195,7 @@ function workspacePackages(checkout) {
  * The test suites the pushed commit can break, measured from where the branch
  * left the remote's main branch. Any doubt selects every suite.
  */
-function affectedTests(checkout, { commit, remote, fullRun, base: from }) {
-  if (fullRun) return { full: true, reason: fullRun };
+function affectedBase({ commit, remote, base: from }) {
   let base;
   try {
     // `--base` names the branch a stacked branch was started from.
@@ -206,6 +205,15 @@ function affectedTests(checkout, { commit, remote, fullRun, base: from }) {
   } catch {
     // An unknown ref is no base.
   }
+  return base;
+}
+
+function affectedTests(
+  checkout,
+  { commit, fullRun, base: from, resolvedBase },
+) {
+  if (fullRun) return { full: true, reason: fullRun };
+  const base = resolvedBase;
   if (!base) {
     return {
       full: true,
@@ -263,23 +271,33 @@ function readVerified() {
   }
 }
 
+/** Whether a successful check covers another check's requirements. */
+function coversCheck(checked, needed) {
+  if (checked.commit !== needed.commit) return false;
+  if (checked.level === "full" || needed.level === "static") return true;
+  // Docs and affected checks are separate scopes. Affected checks also need
+  // the same resolved base; neither a wider nor a narrower diff is equivalent.
+  return (
+    checked.level === needed.level &&
+    (needed.level !== "affected" ||
+      (Boolean(needed.base) && checked.base === needed.base))
+  );
+}
+
 /** An earlier check of `commit` that ran at least what this push needs. */
-function verifiedEarlier(commit, needed) {
-  return readVerified().find(
-    (entry) =>
-      entry.commit === commit &&
-      LEVELS.indexOf(entry.level) >= LEVELS.indexOf(needed),
+function verifiedEarlier(commit, needed, base) {
+  return readVerified().find((entry) =>
+    coversCheck(entry, { commit, level: needed, base }),
   );
 }
 
 function recordVerified(commit, result) {
   try {
+    const checked = { commit, ...result, at: new Date().toISOString() };
     const entries = readVerified().filter(
-      (entry) =>
-        entry.commit !== commit ||
-        LEVELS.indexOf(entry.level) > LEVELS.indexOf(result.level),
+      (entry) => !coversCheck(checked, entry),
     );
-    entries.push({ commit, ...result, at: new Date().toISOString() });
+    entries.push(checked);
     writeFileSync(verifiedFile, `${JSON.stringify(entries.slice(-50))}\n`);
   } catch {
     // The record only saves a repeated run.
@@ -307,7 +325,7 @@ function verifyCommit(pushed) {
       : "test:docs";
     // The commands run in the pushed commit. One from before `test:docs`
     // existed has no short path.
-    if (docsOnly && hasScript(checkout, "test:docs")) {
+    if (!pushed.fullRun && docsOnly && hasScript(checkout, "test:docs")) {
       console.log(
         "Only documentation changed: running the static gate and the tests that read documentation.",
       );
@@ -360,7 +378,12 @@ function verifyCommit(pushed) {
         );
       }
     }
-    return { ran, left, level };
+    return {
+      ran,
+      left,
+      level,
+      ...(level === "affected" ? { base: pushed.resolvedBase } : {}),
+    };
   } finally {
     rmSync(scratch, { recursive: true, force: true });
   }
@@ -386,16 +409,23 @@ try {
     // runs every suite, and so does a requested full run.
     pushed.staticOnly =
       fromHook && !pushed.docsOnly && !pushed.fullRun && !wantsAffectedRun;
-    const needed = pushed.docsOnly
-      ? "docs"
-      : pushed.fullRun
-        ? "full"
+    const needed = pushed.fullRun
+      ? "full"
+      : pushed.docsOnly
+        ? "docs"
         : pushed.staticOnly
           ? "static"
           : "affected";
+    // Resolve once so cache reuse and test selection measure the same diff.
+    // An affected result for another base cannot stand for this push's suites.
+    if (needed === "affected") {
+      pushed.resolvedBase = affectedBase(pushed);
+    }
     // A run by hand or a requested full run always runs.
     const earlier =
-      fromHook && !wantsFullRun && verifiedEarlier(pushed.commit, needed);
+      fromHook &&
+      !wantsFullRun &&
+      verifiedEarlier(pushed.commit, needed, pushed.resolvedBase);
     if (earlier) {
       const minutes = Math.round((Date.now() - Date.parse(earlier.at)) / 60000);
       console.log(

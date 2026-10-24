@@ -5009,7 +5009,7 @@ How each kind is tested:
   "ok": true,
   "latencyMs": 250,
   "ttfbMs": 180,
-  "text": "Hello!",
+  "text": "Example preset (example-provider/example-model)",
   "testedTarget": {
     "presetId": "server-preset",
     "provider": "example-provider",
@@ -5018,6 +5018,8 @@ How each kind is tested:
   }
 }
 ```
+
+For text models, `text` names the tested preset and provider/model; it is not the model's reply. The streaming request ends early once it has measured first-token latency and received enough text.
 
 `resolvedVia` is one of `direct`, `slot`, `tag-fallback`, or `any`.
 
@@ -5954,7 +5956,7 @@ In the browser, you can also switch the storage mode:
   - Local mode: game records are saved as versioned checkpoints in the Dexie `covel-browser-vault`. Before a run, they are uploaded to a temporary MemoryStore. After the run, `SessionCommit` is applied in one atomic step.
   - Server features such as world generation hand their result to the front end through a `return-only` response, and the front end saves it.
 - **API keys**: the user manages them. They are saved in the browser's localStorage.
-- **Authentication**: none. The `self` tier ignores tokens.
+- **Authentication**: personal instances rely on loopback binding and Host checks; when a desktop launch token is configured, configuration and file APIs still validate it. Production `self` + MemoryStore uses the browser-private profile: session APIs require an owner token and shared-world writes require the operator token. See [Host profile](../internals/security.md#host-profile) for the full rules.
 - **Scope**: one personal instance. It does not separate several players.
 
 ```bash
@@ -5966,7 +5968,7 @@ STORE_BACKEND=memory pnpm dev:server  # Temporary Memory backend (data is lost o
 ### Official web app (not supported yet)
 
 > [!NOTE]
-> The official web app is not supported yet. This section describes its design and the parts that already exist in the code.
+> The official web app is not supported yet. This section describes its design and the parts that already exist in the code. `render.yaml` deploys only an operator-controlled demo server; it provides no public sign-in or anonymous session-creation flow. Do not share the operator token with visitors to bypass that restriction.
 
 - **Server storage**: `DEPLOYMENT_TIER=demo`, `STORE_BACKEND=memory` (see `render.yaml` in the repository).
 - **Saves**: the copy in the player's browser IndexedDB is the save. The server keeps the session in memory to run turns and writes nothing to a database. The in-memory copy is gone when the session is deleted or the server restarts.
@@ -6149,9 +6151,9 @@ The three endpoints have the same gate as the install endpoints:
 
 **Restart and refresh after an install**
 
-- In Electron, `covel:restart-server` does two things: it restarts the sidecar, and once the health check passes, it makes the native window navigate to the new port.
+- In packaged Electron, `covel:restart-server` does two things: it restarts the sidecar, and once the health check passes, it makes the native window navigate to the new port.
 - The Web client keeps its reload overlay. It must not reload the old URL itself, and it must not try a cross-origin jump.
-- In development mode, the external Vite page is reloaded.
+- Development mode uses an externally managed server. `covel:restart-server` returns `{ ok: false, port, error }` without restarting the server or reloading Vite. Restart `pnpm dev` in the terminal, then refresh the page if needed.
 - Uninstalling a plugin still needs a restart before the discovered code is unloaded. Uninstalling does not delete the session data the plugin has saved.
 
 **Generated world files**

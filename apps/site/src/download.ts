@@ -8,8 +8,10 @@ export interface DownloadLinks {
   href: string;
   /** Known only when `href` is an installer. */
   platform?: Platform;
-  /** The Windows build that runs without installing, when there is one. */
+  /** Single-file Windows launcher; extracts the app on every launch. */
   portable?: string;
+  /** Windows archive to extract once and run from its folder. */
+  zip?: string;
 }
 
 interface ReleaseAsset {
@@ -31,6 +33,7 @@ const INSTALLER: Record<Platform, RegExp> = {
   windows: /-win-x64\.exe$/,
 };
 const PORTABLE = /-win-x64-portable\.exe$/;
+const WINDOWS_ZIP = /-win-x64\.zip$/;
 
 export function detectPlatform(
   nav: Pick<Navigator, "userAgent"> & {
@@ -63,7 +66,13 @@ export function pickDownload(
   const href = find(assets, INSTALLER[platform]);
   if (!href) return undefined;
   const portable = platform === "windows" ? find(assets, PORTABLE) : undefined;
-  return { href, platform, ...(portable ? { portable } : {}) };
+  const zip = platform === "windows" ? find(assets, WINDOWS_ZIP) : undefined;
+  return {
+    href,
+    platform,
+    ...(portable ? { portable } : {}),
+    ...(zip ? { zip } : {}),
+  };
 }
 
 /**

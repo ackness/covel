@@ -223,6 +223,7 @@ On startup failure, the main process waits for the splash page to finish loading
 - `server.port` holds the last port that worked. It is reused when free; otherwise another free port is chosen.
 - The page uses Electron's persistent default session. The page origin includes the port, so what an earlier port stored (the media cache, the panel layout) is never read again: at startup the app clears the storage of every earlier loopback origin and, when it found one, the HTTP cache.
 - After installing a plugin or world package, click **Restart now** in the prompt. The main process waits for the new backend and reloads the window with the current page path and query. Backend crash, restart and recovery states are shown in the app.
+- **Install & manage** first checks desktop restart information; **Restart now** is unavailable during the check. A failed read shows an explanation and a **Retry** action; a successful retry restores the operation. Development mode still requires restarting `pnpm dev` in the terminal.
 - Session data survives the restart. Community plugin grants live only in the process and may need approval again.
 - The native Import Plugin and Import World menus open **Settings → Install & manage**, where you choose the ZIP, preview it, authorize it and see the result.
 

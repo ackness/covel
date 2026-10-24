@@ -1,9 +1,10 @@
 /**
  * Which test suites a push can break.
  *
- * The pre-push hook runs the static gate on everything and the tests of the
- * packages the pushed commits changed, with the packages that depend on them;
- * CI runs every suite. A package is selected in two ways:
+ * The pre-push hook defaults to the static gate, adding docs tests for docs-only
+ * pushes. `check:push` and `COVEL_PUSH_CHECK=affected` also select changed
+ * packages and their dependents; source CI runs every suite. A package is
+ * selected in two ways:
  *
  * - a changed file is inside it: the package and its dependents run
  *   (`--filter=...<name>`);

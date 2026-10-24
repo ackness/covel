@@ -14,6 +14,8 @@ const bridgeMocks = vi.hoisted(() => ({
   getDesktopProxyConfig: vi.fn(),
   setDesktopProxyConfig: vi.fn(),
   resetOnboarding: vi.fn(),
+  hasElectronIpc: vi.fn(),
+  reloadServerAndWait: vi.fn(),
 }));
 
 vi.mock("@/stores/session-store.js", () => ({
@@ -25,7 +27,7 @@ vi.mock("@/components/onboarding-wizard.js", () => ({
 }));
 
 vi.mock("@/lib/desktop-bridge.js", () => ({
-  hasElectronIpc: () => false,
+  hasElectronIpc: bridgeMocks.hasElectronIpc,
   isDesktopApp: () => true,
   getDesktopInfo: vi.fn().mockResolvedValue(null),
   getDesktopProxyConfig: bridgeMocks.getDesktopProxyConfig,
@@ -36,8 +38,22 @@ vi.mock("@/lib/desktop-bridge.js", () => ({
   openLlmToml: vi.fn().mockResolvedValue({ created: false }),
   openKeysEnv: vi.fn().mockResolvedValue(undefined),
   pickDataDir: vi.fn().mockResolvedValue(null),
-  reloadServerAndWait: vi.fn(),
+  reloadServerAndWait: bridgeMocks.reloadServerAndWait,
 }));
+
+const desktopInfoFixture = {
+  version: "test",
+  platform: "darwin",
+  isDev: false,
+  covelHome: "/home",
+  dataRoot: "/data",
+  logsDir: "/logs",
+  dbPath: "/data/covel.db",
+  configTomlPath: "/home/config.toml",
+  llmTomlPath: "/home/llm.toml",
+  keysEnvPath: "/home/keys.env",
+  serverPort: 9479,
+};
 
 describe("DesktopPane proxy loading", () => {
   beforeEach(async () => {
@@ -45,6 +61,40 @@ describe("DesktopPane proxy loading", () => {
     bridgeMocks.getDesktopProxyConfig.mockReset();
     bridgeMocks.setDesktopProxyConfig.mockReset();
     bridgeMocks.resetOnboarding.mockReset().mockResolvedValue(undefined);
+    bridgeMocks.hasElectronIpc.mockReset().mockReturnValue(false);
+    bridgeMocks.reloadServerAndWait.mockReset().mockResolvedValue(true);
+    vi.mocked(getDesktopInfo).mockReset().mockResolvedValue(null);
+  });
+
+  it("explains why an externally managed development server cannot restart", async () => {
+    bridgeMocks.hasElectronIpc.mockReturnValue(true);
+    vi.mocked(getDesktopInfo).mockResolvedValue({
+      ...desktopInfoFixture,
+      isDev: true,
+    });
+    render(<DesktopPane />);
+    const restart = screen.getByRole("button", {
+      name: i18n.t("settings.desktopApplyConfigChanges"),
+    });
+    expect((restart as HTMLButtonElement).disabled).toBe(true);
+    await screen.findByText(i18n.t("settings.desktopRestartDevHint"));
+    fireEvent.click(restart);
+    expect(bridgeMocks.reloadServerAndWait).not.toHaveBeenCalled();
+  });
+
+  it("keeps packaged sidecar restart available after loading desktop info", async () => {
+    bridgeMocks.hasElectronIpc.mockReturnValue(true);
+    vi.mocked(getDesktopInfo).mockResolvedValue(desktopInfoFixture);
+    render(<DesktopPane />);
+    const restart = screen.getByRole("button", {
+      name: i18n.t("settings.desktopApplyConfigChanges"),
+    });
+    expect((restart as HTMLButtonElement).disabled).toBe(true);
+    await waitFor(() =>
+      expect((restart as HTMLButtonElement).disabled).toBe(false),
+    );
+    fireEvent.click(restart);
+    expect(bridgeMocks.reloadServerAndWait).toHaveBeenCalledTimes(1);
   });
 
   it("reports an onboarding reset only after persistence and handles failures", async () => {

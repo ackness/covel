@@ -91,9 +91,14 @@ test("the docs package command runs every package test that reads documentation"
   );
   const run = [
     ...scripts["test:docs:packages"].matchAll(
-      /--filter (\S+) exec vitest run (\S+)/g,
+      /--filter (\S+) exec vitest run ([^&]+)/g,
     ),
-  ].map(([, name, file]) => `${name} ${file}`);
+  ].flatMap(([, name, files]) =>
+    files
+      .trim()
+      .split(/\s+/)
+      .map((file) => `${name} ${file}`),
+  );
 
   // A test missing from the script is skipped when only documentation
   // changes: add it to `test:docs:packages` in the root package.json.

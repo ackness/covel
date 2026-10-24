@@ -22,6 +22,9 @@ publish: null
 # tests; local packaging removes them in its final --strip-unpacked pass.
 afterAllArtifactBuild: scripts/cleanup-artifacts.mjs
 
+# Stage exactly the source-selected backend resources for each build target.
+beforePack: scripts/before-pack.mjs
+
 files:
   - dist/**/*
   - "!dist/**/*.map"
@@ -32,6 +35,10 @@ extraResources:
     to: icon.png
   - from: resources/icon.ico
     to: icon.ico
+  - from: staging/backend-runtime/${os}-${arch}
+    to: .
+    filter:
+      - "**/*"
   # Built web frontend (static files)
   - from: staging/web-dist
     to: web-dist
@@ -69,19 +76,22 @@ extraResources:
       - "!**/*.map"
 
 asar: true
-asarUnpack:
-  # Keep the plugin TypeScript loader available to the sidecar on disk.
-  # The server and workspace modules are precompiled during staging.
-  - "**/node_modules/tsx/**"
-  - "**/node_modules/esbuild/**"
-  - "**/node_modules/@esbuild/**"
+
+# The backend reuses this executable; custom CA support also needs Node's env fuse.
+electronFuses:
+  # Apple Silicon checks code pages even without a Developer ID signature.
+  resetAdHocDarwinSignature: true
+  runAsNode: true
+  enableNodeOptionsEnvironmentVariable: true
+  enableNodeCliInspectArguments: false
+  onlyLoadAppFromAsar: true
 
 compression: normal
 
 # ── macOS ─────────────────────────────────────────────────────────
 mac:
   icon: resources/icon.icns
-  minimumSystemVersion: "13.0.0"
+  minimumSystemVersion: "13.5.0"
   target:
     - target: dmg
       arch: [arm64]
@@ -105,14 +115,14 @@ dmg:
 # ── Windows ───────────────────────────────────────────────────────
 win:
   icon: resources/icon.ico
-  # The published Windows release remains x64-only. SQLite is `node:sqlite`,
-  # built into Electron's Node, so adding arm64 later requires no native
-  # rebuild, but still needs a native Windows arm64 packaging and smoke-test
-  # job before it can be released safely.
+  # The published Windows release is x64-only.
+  # Unsupported targets fail in beforePack.
   target:
     - target: nsis
       arch: [x64]
     - target: portable
+      arch: [x64]
+    - target: zip
       arch: [x64]
   # Keep hash configuration ready for a future signed distribution. Official
   # release CI currently disables certificate discovery and publishes unsigned.
@@ -126,6 +136,7 @@ win:
 # (built second) silently overwrites the NSIS installer.
 portable:
   artifactName: ${productName}-electron-${version}-${os}-${arch}-portable.${ext}
+  splashImage: resources/portable-splash.bmp
 
 nsis:
   oneClick: false

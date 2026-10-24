@@ -5,7 +5,7 @@
 export const LANGS = ["en", "zh"] as const;
 export type Lang = (typeof LANGS)[number];
 
-export interface WorldCopy {
+interface WorldCopy {
   id: string;
   name: string;
   genre: string;
@@ -20,7 +20,7 @@ export interface Item {
 /** The ways to play the hero cycles through. */
 export type Visual = "stage" | "tabletop" | "story" | "languages";
 
-export interface Mode {
+interface Mode {
   visual: Visual;
   word: string;
   body: string;
@@ -28,7 +28,7 @@ export interface Mode {
   alt: string;
 }
 
-export interface CorePlugin {
+interface CorePlugin {
   icon: string;
   ids: string;
   title: string;
@@ -111,9 +111,16 @@ const en = {
     modesLabel: "Ways to play",
     languages: ["简体中文", "English", "Русский"],
     primary: "Download",
-    primaryFor: { mac: "Download for macOS", windows: "Download for Windows" },
+    primaryFor: {
+      mac: "Download for macOS",
+      windows: "Windows installer (recommended)",
+    },
     otherPlatforms: "Other systems and checksums",
-    portable: "Portable version, no install",
+    zip: "ZIP · extract once, no install",
+    zipHelp:
+      "For ZIP, choose Extract All, then open Covel.exe in the extracted folder.",
+    portable: "Self-extracting EXE · no install",
+    portableHelp: "The single-file EXE prepares the app on every launch.",
     openHelp: {
       mac: {
         summary: "macOS says the app is damaged?",
@@ -347,9 +354,12 @@ const zh: Copy = {
     modesLabel: "玩法",
     languages: ["简体中文", "English", "Русский"],
     primary: "下载",
-    primaryFor: { mac: "下载 macOS 版", windows: "下载 Windows 版" },
+    primaryFor: { mac: "下载 macOS 版", windows: "Windows 安装版（推荐）" },
     otherPlatforms: "其他系统和校验文件",
-    portable: "便携版（免安装）",
+    zip: "ZIP 版 · 解压一次，免安装",
+    zipHelp: "ZIP 版请先选择“全部解压缩”，再打开解压文件夹中的 Covel.exe。",
+    portable: "自解压 EXE · 免安装",
+    portableHelp: "单文件 EXE 每次启动都会重新准备应用。",
     openHelp: {
       mac: {
         summary: "macOS 提示“已损坏，无法打开”？",

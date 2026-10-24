@@ -1,15 +1,25 @@
 import { createServer } from "node:net";
+import { fetch as undiciFetch } from "undici";
 
-/** Fetch with a hard per-request deadline so callers cannot leak hung sockets. */
+// Electron's embedded fetch can lag security fixes in the standalone package.
+const defaultFetch = undiciFetch as unknown as typeof fetch;
+
+/** Fetch status only, releasing the unused body within the request deadline. */
 export async function fetchWithTimeout(
   url: string,
   timeoutMs: number,
-  fetchImpl: typeof fetch = fetch,
+  fetchImpl: typeof fetch = defaultFetch,
 ): Promise<Response> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    return await fetchImpl(url, { signal: controller.signal });
+    // Health probes must describe this sidecar, never a redirect destination.
+    const response = await fetchImpl(url, {
+      signal: controller.signal,
+      redirect: "error",
+    });
+    await response.body?.cancel();
+    return response;
   } finally {
     clearTimeout(timer);
   }
@@ -25,12 +35,18 @@ export async function fetchJsonWithTimeout(
   url: string,
   init: RequestInit,
   timeoutMs: number,
-  fetchImpl: typeof fetch = fetch,
+  fetchImpl: typeof fetch = defaultFetch,
 ): Promise<{ ok: boolean; status: number; body: unknown }> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const res = await fetchImpl(url, { ...init, signal: controller.signal });
+    // Config writes can carry keys in their body; never forward them to a
+    // redirect target, including another path on the same loopback origin.
+    const res = await fetchImpl(url, {
+      ...init,
+      signal: controller.signal,
+      redirect: "error",
+    });
     const body: unknown = await res.json().catch((error: unknown) => {
       if (controller.signal.aborted) throw error;
       return null;
@@ -105,7 +121,7 @@ export async function waitForServer(
   onProgress?: (elapsed: number, total: number) => void,
   sleep: (ms: number) => Promise<void> = (ms) =>
     new Promise((resolve) => setTimeout(resolve, ms)),
-  fetchImpl: typeof fetch = fetch,
+  fetchImpl: typeof fetch = defaultFetch,
 ): Promise<void> {
   const start = Date.now();
   const deadline = start + timeoutMs;

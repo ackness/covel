@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { createServer } from "node:net";
+import { createServer as createHttpServer } from "node:http";
 import { once } from "node:events";
 import {
   fetchJsonWithTimeout,
@@ -24,6 +25,23 @@ await assert.rejects(
     error instanceof DOMException && error.name === "AbortError",
 );
 assert.ok(Date.now() - started < 1_000);
+
+// Status-only callers release both successful and failed health response bodies.
+for (const status of [200, 503]) {
+  let cancelled = false;
+  const body = new ReadableStream({
+    cancel() {
+      cancelled = true;
+    },
+  });
+  const response = await fetchWithTimeout(
+    "http://127.0.0.1/health",
+    1_000,
+    (async () => new Response(body, { status })) as typeof fetch,
+  );
+  assert.equal(response.status, status);
+  assert.equal(cancelled, true);
+}
 
 // The deadline also covers a body that never finishes after the headers.
 const stalledBody = (async (_url: string, init?: RequestInit) => {
@@ -53,6 +71,51 @@ const answered = await fetchJsonWithTimeout(
   (async () => new Response('{"a":1}', { status: 409 })) as typeof fetch,
 );
 assert.deepEqual(answered, { ok: false, status: 409, body: { a: 1 } });
+
+// Exercise the real HTTP client: redirects must not turn a failed health
+// probe into success or replay a settings body (and bearer token) elsewhere.
+const redirectRequests: string[] = [];
+let redirectStatus = 302;
+const redirectServer = createHttpServer((req, res) => {
+  redirectRequests.push(req.url ?? "");
+  req.resume();
+  if (req.url === "/redirect") {
+    res.writeHead(redirectStatus, { Location: "/destination" });
+    res.end();
+  } else {
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end('{"ok":true}');
+  }
+});
+redirectServer.listen(0, "127.0.0.1");
+await once(redirectServer, "listening");
+const redirectAddress = redirectServer.address();
+assert.ok(redirectAddress && typeof redirectAddress === "object");
+const redirectUrl = `http://127.0.0.1:${redirectAddress.port}/redirect`;
+try {
+  for (const status of [301, 302, 303, 307, 308]) {
+    redirectStatus = status;
+    await assert.rejects(fetchWithTimeout(redirectUrl, 1_000));
+    await assert.rejects(
+      fetchJsonWithTimeout(
+        redirectUrl,
+        {
+          method: "PUT",
+          headers: { Authorization: "Bearer test-token" },
+          body: '{"key":"test-secret"}',
+          redirect: "follow",
+        },
+        1_000,
+      ),
+    );
+  }
+  assert.deepEqual(redirectRequests, Array<string>(10).fill("/redirect"));
+} finally {
+  const closed = once(redirectServer, "close");
+  redirectServer.close();
+  redirectServer.closeAllConnections();
+  await closed;
+}
 
 // server.port holds one port; anything else names no port to prefer.
 assert.equal(parseStoredPort("53211"), 53211);

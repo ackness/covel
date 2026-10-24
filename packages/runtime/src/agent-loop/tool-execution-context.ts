@@ -9,7 +9,12 @@ import type { ToolCallContext } from "./tool-executor.js";
 export function createToolExecutionContext(
   caller: ToolCallContext,
   store: DataStore | undefined,
-) {
+): {
+  context: ToolExecutionContext;
+  assertLive(): void;
+  close(): void;
+  drain(): Promise<void>;
+} {
   let closed = false;
   const pendingReads = new Set<Promise<unknown>>();
   const signal = caller.signal;

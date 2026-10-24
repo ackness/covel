@@ -5,7 +5,11 @@ import { useTranslation } from "react-i18next";
 import { Boxes, Package, Upload, Globe, Puzzle, RotateCw } from "lucide-react";
 import type { GithubBatchInstallResult } from "@covel/shared";
 import { Button } from "@/components/ui/button.js";
-import { hasElectronIpc, reloadServerAndWait } from "@/lib/desktop-bridge.js";
+import {
+  getDesktopInfo,
+  hasElectronIpc,
+  reloadServerAndWait,
+} from "@/lib/desktop-bridge.js";
 import { text } from "@/components/world/editor-helpers.js";
 import {
   installCollectionZip,
@@ -23,6 +27,7 @@ import { PackageCredits } from "@/components/shared/package-credits.js";
 import { PluginLoadWarnings } from "@/components/shared/plugin-load-warnings.js";
 import { GithubCollectionInstaller } from "./GithubCollectionInstaller.js";
 import type { PluginInstallation, PluginSummary } from "@covel/shared";
+import { ignoreError } from "@/lib/ignore-error.js";
 
 /**
  * Drag-and-drop install pane for plugin + world .zip packages.
@@ -47,6 +52,13 @@ export function PackagesPane() {
   const [updateBusy, setUpdateBusy] = useState(false);
   const [zipAccepted, setZipAccepted] = useState(false);
   const [removing, setRemoving] = useState<string | null>(null);
+  const isDesktop = hasElectronIpc();
+  const [desktopInfo, setDesktopInfo] = useState<
+    | { status: "loading" }
+    | { status: "error" }
+    | { status: "ready"; isDev: boolean }
+  >({ status: "loading" });
+  const [desktopInfoAttempt, setDesktopInfoAttempt] = useState(0);
 
   const refreshInstalled = useCallback(async () => {
     try {
@@ -67,6 +79,26 @@ export function PackagesPane() {
   useEffect(() => {
     void refreshInstalled();
   }, [refreshInstalled]);
+
+  useEffect(() => {
+    if (!isDesktop) return;
+    let cancelled = false;
+    getDesktopInfo()
+      .then((info) => {
+        if (cancelled) return;
+        setDesktopInfo(
+          info ? { status: "ready", isDev: info.isDev } : { status: "error" },
+        );
+      })
+      .catch((error: unknown) => {
+        if (cancelled) return;
+        ignoreError("load desktop restart info")(error);
+        setDesktopInfo({ status: "error" });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isDesktop, desktopInfoAttempt]);
 
   // Boot fetches the world list again and drops the cached full records, so
   // the home screen and the prep screen show what was just installed.
@@ -200,14 +232,41 @@ export function PackagesPane() {
         installations?.some((item) => item.pendingUpdate) ||
         worldInstallations.some((item) => item.pendingUpdate)) && (
         <div className="flex items-start gap-3 text-xs px-3 py-2.5 rounded border border-(--accent-warning)/30 bg-(--accent-warning)/10 text-(--accent-warning)">
-          <div className="flex-1">{t("settings.packages.restartHint")}</div>
-          {hasElectronIpc() && (
+          <div className="flex-1">
+            {t(
+              !isDesktop
+                ? "settings.packages.restartHint"
+                : desktopInfo.status === "loading"
+                  ? "settings.packages.restartInfoLoading"
+                  : desktopInfo.status === "error"
+                    ? "settings.packages.restartInfoFailed"
+                    : desktopInfo.isDev
+                      ? "settings.desktopRestartDevHint"
+                      : "settings.packages.restartHint",
+            )}
+          </div>
+          {isDesktop && desktopInfo.status === "error" && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 text-xs shrink-0"
+              onClick={() => {
+                setDesktopInfo({ status: "loading" });
+                setDesktopInfoAttempt((attempt) => attempt + 1);
+              }}
+            >
+              {t("common.retry")}
+            </Button>
+          )}
+          {isDesktop && (
             <Button
               size="sm"
               variant="outline"
               className="h-7 text-xs shrink-0 border-(--accent-warning)/40 hover:border-(--accent-warning)"
-              onClick={() =>
-                reloadServerAndWait({
+              disabled={desktopInfo.status !== "ready" || desktopInfo.isDev}
+              onClick={() => {
+                if (desktopInfo.status !== "ready" || desktopInfo.isDev) return;
+                void reloadServerAndWait({
                   message: t("reload.reloadingServer", "Restarting backend…"),
                 }).catch((err) =>
                   flash({
@@ -217,8 +276,8 @@ export function PackagesPane() {
                         : t("settings.packages.reloadFailed", "Reload failed"),
                     tone: "error",
                   }),
-                )
-              }
+                );
+              }}
             >
               <RotateCw className="w-3 h-3 mr-1.5" />
               {t("settings.packages.restartNow")}

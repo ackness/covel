@@ -12,7 +12,7 @@
     "dev": "node scripts/dev.mjs",
     "build": "node scripts/build.mjs",
     "lint": "tsc --noEmit",
-    "test": "node --test scripts/compile-server.test.mjs scripts/staging-files.test.mjs scripts/private-config.test.mjs scripts/plugin-load-check.test.mjs scripts/paths.test.mjs scripts/restart-server.test.mjs scripts/window-state.test.mjs && tsx src/server-shutdown.selfcheck.ts && tsx src/trusted-origin.selfcheck.ts && tsx src/stale-origins.selfcheck.ts && tsx src/logging.selfcheck.ts && tsx src/system-proxy.selfcheck.ts && tsx src/network.selfcheck.ts && tsx src/env-files.selfcheck.ts && tsx src/settings-json.selfcheck.ts && tsx src/app-update.selfcheck.ts && tsx src/main-i18n.selfcheck.ts && tsx src/data-root-copy.selfcheck.ts && tsx src/startup-errors.selfcheck.ts",
+    "test": "node --test scripts/compile-server.test.mjs scripts/staging-files.test.mjs scripts/verify-staging.test.mjs scripts/backend-runtime.test.mjs scripts/packaged-main.test.mjs scripts/verify-release.test.mjs scripts/private-config.test.mjs scripts/plugin-load-check.test.mjs scripts/paths.test.mjs scripts/restart-server.test.mjs scripts/window-state.test.mjs && tsx src/server-shutdown.selfcheck.ts && tsx src/trusted-origin.selfcheck.ts && tsx src/stale-origins.selfcheck.ts && tsx src/logging.selfcheck.ts && tsx src/system-proxy.selfcheck.ts && tsx src/network.selfcheck.ts && tsx src/env-files.selfcheck.ts && tsx src/settings-json.selfcheck.ts && tsx src/app-update.selfcheck.ts && tsx src/main-i18n.selfcheck.ts && tsx src/data-root-copy.selfcheck.ts && tsx src/startup-errors.selfcheck.ts",
     "test:coverage": "node ../../scripts/remove-paths.mjs coverage && node ../../scripts/run-with-env.mjs NODE_V8_COVERAGE=coverage pnpm test",
     "smoke:restart": "node scripts/restart-navigation.smoke.mjs",
     "pack": "pnpm build && electron-builder --dir",
@@ -22,16 +22,16 @@
     "dist:linux": "pnpm build && electron-builder --linux",
     "clean": "node ../../scripts/remove-paths.mjs dist staging ../../release/electron"
   },
-  "dependencies": {
-    "@covel/shared": "workspace:*",
-    "tsx": "4.23.15",
-    "zod": "^4.6.5"
-  },
   "devDependencies": {
+    "@covel/shared": "workspace:*",
     "@covel/web": "workspace:*",
-    "electron": "44.6.0",
+    "@electron/asar": "4.3.1",
+    "electron": "45.0.0",
     "electron-builder": "26.17.0",
     "esbuild": "^0.28.2",
-    "typescript": "^7.0.2"
+    "tsx": "4.23.15",
+    "typescript": "^7.0.2",
+    "undici": "8.12.2",
+    "zod": "^4.6.7"
   }
 }

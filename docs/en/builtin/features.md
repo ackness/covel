@@ -81,6 +81,8 @@ Translation is done by the model you configured, so it uses model calls. After t
 
 In "Settings", "Install & manage" can install plugin packages, world packages and collection packages from GitHub or from ZIP files, and can uninstall them. After an install, you need to restart the backend for it to take effect. Code in third-party plugins only runs after you authorize it in a session. For detailed steps, see [Install plugins and worlds](../start/packages.md).
 
+The packaged desktop app can restart its bundled backend. A desktop shell running from source does not own the external development server, so restart buttons in Desktop and Install & manage are disabled. Restart the server in the terminal running `pnpm dev` instead.
+
 ## Export and import settings
 
 Under "Data" in "Settings". "Export settings" saves the settings on this device as a JSON file, which you can use as a backup or move to another device. The default file does not include API keys. Tick "Include API keys (sensitive)" to include them. Keep this file safe.

@@ -7,6 +7,8 @@ Run from source to change the framework or develop worlds and plugins in the rep
 - [Git](https://git-scm.com/).
 - Node.js and pnpm. The versions are set in `mise.toml` at the root of the repository. If you have [mise](https://mise.jdx.dev/) installed, run `mise install` inside the repository to get the right versions.
 
+The current source requires Node.js 26.12.1 or a newer security release in the 26.x line. Update the runtime when upgrading the source; updating dependencies alone does not fix Node's native decoders.
+
 ## 1. Get the code and install the dependencies
 
 ```bash

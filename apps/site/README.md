@@ -24,9 +24,11 @@ pnpm --filter @covel/site test
   browser language.
 - The download buttons start as a link to the latest release page. On macOS
   and Windows, `src/download.ts` asks the GitHub API for the latest release and
-  links its `.dmg` or Windows installer (plus the portable build) by the file
-  names `apps/desktop/electron-builder.yml` gives them; rename those and update
-  the patterns together.
+  links its `.dmg` or Windows installer by the file names
+  `apps/desktop/electron-builder.yml` gives them. Windows also offers a ZIP
+  (extract once, then run from its folder) and a separately labelled
+  self-extracting EXE (extracts on every launch). The installer stays primary.
+  Rename an artifact and update its matching pattern together.
 - The four world pictures in `public/worlds/` are 960-wide copies of each bundled
   world's `cover`. Refresh one after its world's cover changes.
 - `public/media/` holds the demo video and poster. `pnpm --filter @covel/site

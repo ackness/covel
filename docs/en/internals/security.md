@@ -7,6 +7,7 @@ Related material is on other pages:
 - Authentication rules for each route: [`../reference/api.md`](../reference/api.md#authentication-session-owner-token)
 - Environment variables: [`../reference/env-registry.md`](../reference/env-registry.md)
 - Desktop proxy settings: [`../reference/desktop-config.md`](../reference/desktop-config.md)
+- CI cache trust boundary: [`CONTRIBUTING.en.md`](../../CONTRIBUTING.en.md). Release or explicit-commit runs can execute arbitrary source and must not save files produced by that execution into the workflow ref's caches. Trusted Node digest checks reject replacement files but do not authorize another ref to write caches.
 - Reporting a vulnerability: [`SECURITY.md`](../../../SECURITY.md)
 
 Below, the "deployment tier" (`DEPLOYMENT_TIER`) comes up many times. `self` is the default. It means the desktop app, and instances that a person deploys for their own use. `demo` is the tier for public web instances, meant for the official web app, which is not supported yet. `commercial` is the strictest tier, reserved for a possible future commercial edition. There are no accounts, tenant isolation, or quotas, and this repository does not maintain it. `demo` and `commercial` both require tokens. Together they are called the hosted tiers.
@@ -121,7 +122,7 @@ Requests the framework makes itself follow no redirect: core provider requests, 
 
 The reason is that no check looks at a `Location`: the string check sees only the first URL, an IP literal skips the pinned DNS lookup, and in a proxy mode the proxy resolves the next hop. Following a `302 Location: http://169.254.169.254/` would reach a cloud metadata service.
 
-The plugin `fetchWithRetry` does not follow redirects either; `ctx.media.ingestUrl` follows them itself and runs the string check again on every hop.
+The plugin `fetchWithRetry` does not follow redirects either; `ctx.media.ingestUrl` follows them itself and runs the string check again on every hop. The desktop shell's loopback HTTP requests to the sidecar explicitly use `redirect: "error"`, refusing redirects to other destinations.
 
 ### Response size ceiling
 
@@ -143,6 +144,20 @@ This limit does not cover responses that a plugin reads itself:
 - `fetchWithRetry` hands the `Response` straight to the plugin's code;
 - a wire that a plugin implements makes its own requests;
 - `ctx.media.ingestUrl` counts bytes against its own `maxBytes`.
+
+### Runtime and HTTP client updates
+
+Native decoder and TLS security fixes come from the runtime; the response-size limits above cannot replace them. Source and Docker deployments use at least Node 26.12.1. Provider requests and the desktop shell's sidecar requests use the separate npm Undici 8.12.2 package. The request header `Accept-Encoding: identity` does not prevent the client from decoding a Brotli response sent by the server.
+
+Security updates may bypass the normal seven-day dependency delay, but `minimumReleaseAgeExclude` lists only specific reviewed versions. Transitive Undici dependencies are updated within their respective major lines rather than forcing every consumer onto one major.
+
+Desktop pins Electron 45.0.0 and always starts the installer's own executable with RunAsNode for the backend. Plugins and databases still execute in a separate sidecar child process, with startup and shutdown managed through private IPC. Renderer windows disable Node integration. The installer no longer includes an extra Node runtime, and players do not need to install Node.
+
+Electron 45 includes the public-key blocklist patch for the compromised eMudhra intermediate certificates. It links Chromium's Brotli; its [Brotli revision `cfa184a`](https://github.com/google/brotli/commit/cfa184a997ac19454d5a3ae97f6d600aac2445a6) contains [decoder fix `0ed4268`](https://github.com/google/brotli/commit/0ed4268a4401abcb4472096340477cf4af7d1a2b). These verified patches do not establish that embedded Node 24.22.0 contains every security fix in Node 24.22.1.
+
+Core HTTP paths use npm Undici 8.12.2, URL normalization, and `dns.lookup`, reducing use of affected paths in older Node networking implementations. These measures do not replace native TLS/DNS fixes. Plugins that call native networking APIs directly, and specialized direct PostgreSQL configurations outside the core HTTP path, retain residual risk. Recheck actual dependencies and patches when adding network paths or upgrading Electron. Source and Docker deployments continue to use Node 26.12.1.
+
+Every managed startup, restart, and recovery checks target and actual Electron/Node versions, platform and architecture, and the RunAsNode fuse. The main and preload digests are bound to target resources, and release verification reads the actual ASAR entry point and both bundles. Mismatched or mixed resources fail without environment overrides or a host-Node fallback. Child environments remove `NODE_OPTIONS`, `NODE_PATH`, and inherited Electron mode controls while retaining legitimate CA, proxy, and key settings. See [backend runtime](./desktop-packaging.md#backend-runtime).
 
 ### Desktop proxy modes
 
@@ -212,7 +227,7 @@ File permissions and the browser's same-origin policy keep out other system user
 
 ## Desktop windows
 
-Desktop windows enable `contextIsolation` and `sandbox`, disable `nodeIntegration`, and do not enable Node integration in subframes. `preload.ts` exposes `window.covelIpc` through `contextBridge`: app metadata, plus `invoke` and `on` restricted to allowlisted channels. Subscription callbacks do not receive the Electron event object.
+Desktop windows enable `contextIsolation` and `sandbox`, disable `nodeIntegration`, and do not enable Node integration in subframes. Electron 45's sandboxed preload provides no Node module shims or `Buffer`; the bridge uses only Electron's sandbox APIs. `preload.ts` exposes `window.covelIpc` through `contextBridge`: app metadata, plus `invoke` and `on` restricted to allowlisted channels. Subscription callbacks do not receive the Electron event object.
 
 Sensitive IPC, including plaintext keys, the REST token, and settings reads and writes, requires the sender to be its `webContents.mainFrame` and its URL to match the main window's committed loopback HTTP origin. Same-origin child frames are rejected too. Recovery channels (retry startup and open the logs, config, or data directory) also require the main frame, but accept the current splash document generated by the main process. The splash cannot read keys or the REST token.
 

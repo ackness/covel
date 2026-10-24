@@ -43,13 +43,21 @@ test("packaged paths preserve config ownership and missing resource roots", asyn
         },
       ],
     });
-    const { ensureUserPaths, resolveServerEntry } = await import(
+    const { ensureUserPaths, resolveServerEntry, resolveTsx } = await import(
       pathToFileURL(output).href
     );
     assert.equal(
       resolveServerEntry(),
       path.join(resources, "server/src/index.js"),
     );
+    const loader = path.join(
+      resources,
+      "server/node_modules/tsx/dist/loader.mjs",
+    );
+    assert.throws(() => resolveTsx(), /Bundled plugin TS loader missing/);
+    await fs.mkdir(path.dirname(loader), { recursive: true });
+    await fs.writeFile(loader, "// bundled plugin loader\n");
+    assert.equal(resolveTsx(), loader);
     const paths = ensureUserPaths();
     assert.equal(paths.userLlmTomlPath, path.join(home, "llm.toml"));
     assert.deepEqual(paths.pluginsDirs, [

@@ -150,6 +150,41 @@ describe("dice-check recorder handler", () => {
     });
   });
 
+  it("records a zero-modifier receipt without an attribute label", async () => {
+    const ctx = makeCtx({
+      data: {
+        checks: [
+          {
+            action: "撬开地窖的铜锁",
+            modifier: 0,
+            difficulty: "normal",
+            outcome: "success",
+          },
+        ],
+      },
+    });
+
+    const result = await handler(ctx);
+
+    expect(result.outcome).toBe("success");
+    const check = result.effects.pluginData.find(
+      (row) => row.namespace === "checks",
+    ).value;
+    expect(check).toMatchObject({
+      action: "撬开地窖的铜锁",
+      modifier: 0,
+      roll: 14,
+      total: 14,
+      outcome: "success",
+    });
+    expect(check).not.toHaveProperty("attribute");
+    const message = result.effects.pluginData.find(
+      (row) => row.namespace === "message",
+    ).value;
+    expect(message.checks).toEqual([check]);
+    expect(message.rejectedCount).toBe(0);
+  });
+
   it("records every check of a multi-check batch with consecutive sequence keys", async () => {
     // Arrange
     // The second check of the turn uses the second die, a 6.

@@ -1,674 +1,338 @@
 # AGENTS.md
 
-Shared instructions for every coding agent in this repository. Codex reads this
-file directly; Claude Code loads it through `CLAUDE.md`. Keep agent rules here
-so the two never drift.
+Shared instructions for every coding agent. Claude Code imports this through
+`CLAUDE.md`; edit this file, not the import wrapper. Nested `AGENTS.md` files
+hold directory-specific rules and have sibling `CLAUDE.md` imports.
 
 ## Project Overview
 
-Covel is a plugin-based AI RPG framework and playable studio (pnpm/Turborepo
-TypeScript modular monolith, early access — the version lives in the root
-`package.json`). **The kernel provides primitives and orchestration; plugins
-carry gameplay logic; world packs carry setting content.** A plugin package
-declares versioned contracts and contributions in its root `PLUGIN.md` and runs
-zero or more runtimes; the kernel resolves each session's plugin set, routes
-turns, assembles context, drives LLM tool calls, and commits proposals. It ships
-as Web or Electron desktop (`pnpm build:electron`).
+Covel is a plugin-based AI RPG framework and playable studio: a pnpm/Turborepo
+TypeScript modular monolith, shipped as Web or Electron. **The kernel provides
+primitives and orchestration; plugins carry gameplay; world packs carry settings.**
 
-**Product principles.** The full text is the "产品理念" section of
-`docs/internals/design-principles.md`. They decide trade-offs; when code
-disagrees with them, change the code.
+Follow [design principles](docs/internals/design-principles.md) when making
+trade-offs; change code that contradicts them:
 
-- Players come first: playing a world someone else built, or one's own, must be
-  easy. Developers, experienced players and agents extend gameplay and settings.
-- Every framework capability serves every plugin. Bundled plugins are showcases
-  on equal footing with community plugins: they use no interface a community
-  plugin cannot use and differ only in trust. The framework runs with every
-  plugin removed, and one narrative plugin is enough to play a world. The
-  bundled worlds are demos too: three show one play mode each, and `emberback`
-  is written in English to show a world in several languages.
-- Missing pieces never stop the game: a plugin ignores fields that are absent,
-  a world runs with fields nothing uses, and a missing plugin or data only
-  removes its feature. Validation tools report the problem to the author and
-  the UI tells the player what is missing.
-- One core serves the desktop app, the self-hosted web app and, later, the
-  official web app (player data stays in the browser; the server must not
-  store it). The desktop and self-hosted apps are the current focus; the
-  official web app is not supported yet. Keep the core generic: storage, auth
-  and model access get no special case for one form, so the official web app
-  can be added without rewriting it. SQLite is the default; PostgreSQL must keep working for professional
-  developers and special needs, and any behaviour difference between the two is
-  a bug the shared contract suite catches. A commercial edition is not developed
-  in this repository.
-- Plugins mix function and agent runtimes freely and describe their UI with
-  json-render; manifests ask only for what cannot be derived or defaulted.
-- Development is fast: change contracts directly (see Current contract only).
-
-## Documentation
-
-`docs/` is the source of truth; this file only points at it. It is the
-reader-facing documentation, built into the documentation site by `apps/docs`,
-and has its own `AGENTS.md` with the writing rules (short, plain prose; verified
-commands; one page per contract). Consult the matching page before any
-non-trivial change. When a page disagrees with code or tests, the code is the
-current fact — fix the page in the same change. The Chinese pages are the
-source and `docs/en/` is their English translation, page for page.
-`docs/README.md` lists every
-page, `docs/README.md` has a Search Map from common questions to code paths, and
-`docs/reference/glossary.md` arbitrates terminology.
-
-Reader chapters (`docs/`) — task walkthroughs, in the order a reader meets the product:
-
-- `start/` — install, connect a model, first session, install packages, data and upgrade, run from source
-- `builtin/` — what ships with Covel: gameplay packs, the bundled plugins by theme, the app's own features
-- `worlds/` — what a world package is, `first-world.md`, world art (`art-direction.md`, `portraits.md`, `scenes.md`)
-- `plugins/` — `first-plugin.md`, `prompt-only.md`, `local-code.md`, `advanced.md`, `ui.md`, `essentials.md` (the rules every author needs), `prompt-style.md` (contract zone, voice zone, vocabulary), `testing.md`
-- `ship/` — `test.md`, `package.md`, `real-model.md` (real-LLM harness), `publish.md`, `collections.md`
-- `recipes/` — `starting-content.md`, `point-buy.md`, `themes.md`
-
-Reference (`docs/reference/`) — authoritative contracts:
-
-- Plugin manifest, runtime fields, session plugin selection: `plugins.md`; generated field tables: `schema/`
-- Extension points and plugin-to-plugin communication: `extension-points.md`, `plugin-extensions.md`
-- Hook events, payloads, results and the handler context: `hooks.md`
-- Tools and approval policy: `tools.md`
-- HTTP API: `api.md`; SSE protocol and transport: `protocol.md`
-- World Model, world data, dimensions, world time: `world-model.md`, `world-data.md`, `dynamic-dimensions.md`, `world-time.md`
-- Plugin and world catalogues, install, update: `plugin-installation.md`, `world-installation.md`
-- Prompt assembly: `prompt-structure.md`; DataStore transactions: `transactions.md`
-- Model slots, evaluation models, image generation, media store: `slots.md`, `evaluation.md`, `image-generation.md`, `media-store.md`
-- Right-panel tabs and json-render UI: `ui-panels.md`, `ui-components.md`
-- i18n, settings store, theme packages: `i18n.md`, `settings-store.md`, `theme-packages.md`
-- Environment variables: `env-registry.md`; desktop config: `desktop-config.md`; terms: `glossary.md`
-
-Internals (`docs/internals/`) — why, how modules connect, and how to work on the framework:
-
-- Turn pipeline, background jobs, end-to-end data flow: `flow.md`
-- Product principles and kernel vs plugin rulings: `design-principles.md`
-- Package responsibilities and host composition: `packages.md`
-- Storage profiles and contracts: `storage.md`
-- Security boundaries (SSRF/DNS pinning, key binding, hosted auth): `security.md`
-- Deliberate limits and their upgrade triggers: `technical-debt.md`
-- Less common root scripts, git hooks and CI scope: `commands.md`
-- Playwright and the pre-release playthrough: `e2e-testing.md`; desktop packaging and release: `desktop-packaging.md`
-- Agent skills: `skills.md`
-
-Also: `README.md` / `docs/README.md` (intro, quick start), `docs/CONTRIBUTING.md`
-(contributing, CI, release), `docs/CHANGELOG.md` (pending entries are the files in
-`docs/changelog.d/`; `pnpm changelog:preview` prints them) and
-`docs/DOCS_STRATEGY.md` (information architecture).
-
-Keep durable user/developer documentation (guides, contracts, architecture) in
-`docs/`. Put task plans, audits, implementation logs, temporary analysis, and
-handoff notes under the gitignored `devs/docs/`. Do not create top-level `audits/`,
-`plans/`, `context.md`, or `progress.md` artifacts. Debug artefacts (screenshots,
-logs, dumps) go under the gitignored `debugs/`, never the repo root.
-
-`docs/` holds no plans: once a plan is implemented, move its stable conclusions
-into the matching page and delete the plan. A new page must be in the `sidebar`
-of `apps/docs/.vitepress/config.ts` and in `docs/README.md`, and a renamed
-heading must keep its inbound `#anchor` links working (the site makes anchors the
-way GitHub does). `docs/internals/technical-debt.md` mirrors the `ponytail:`
-markers in source — update it when adding or removing one.
+- Players come first. One narrative plugin is enough to play; removing all
+  plugins must leave the framework functional. Bundled plugins and worlds are
+  demos, with no privileged interfaces.
+- Missing plugins or fields remove only their features, never stop the game.
+  Validation reports problems to authors; the UI tells players what is missing.
+- Desktop and self-hosted Web are the focus. Keep storage, auth and model access
+  generic for a future browser-private official Web app (not yet supported).
+  SQLite is the default; PostgreSQL must behave identically. No commercial
+  edition is developed here.
+- Plugins mix function and agent runtimes and use declarative json-render UI.
+  Derive or default manifest fields wherever possible.
 
 ## Commands
 
-Toolchain versions come from `mise.toml` (Node 26.10.0, pnpm 12.10.1, actionlint).
+Toolchain versions live in `mise.toml` and package manifests; do not duplicate
+version pins here. Keep the Zod minimum aligned across consumers, the author SDK
+peer dependency and the tools scaffold. Dependency refreshes follow the release-age
+policy in `pnpm-workspace.yaml` and update declarations and the lockfile together.
+Keep workspace Vitest, its coverage plugin and the tools scaffold's Vitest aligned.
 
 ```bash
-pnpm install --frozen-lockfile  # also builds @covel/plugin-handlers-utils (prepare)
-pnpm dev              # web (5173) + server (3001), SqliteStore (fallback: apps/server/data/covel.db)
-                      # explicit SQLITE_PATH wins; an existing COVEL_HOME (default ~/.covel) supplies data/covel.db
-                      # otherwise COVEL_DATA_ROOT/covel.db wins over the fallback; relative paths use apps/server/
-                      # server watches plugins/**/*.{md,js,json,yaml}; editing a PLUGIN.md, handler or locale file restarts it
-                      # at every start the server builds @covel/plugin-handlers-utils when its build is older than its source
-pnpm dev:web          # web only
-pnpm dev:server       # server only (STORE_BACKEND=memory for ephemeral)
-pnpm dev:pg           # STORE_BACKEND=pg with db preflight; run `pnpm db:up` first
-pnpm stop             # kill stray dev/turbo processes
-pnpm check            # the CI static gate: peers, lint, Oxlint (a warning fails), package boundaries, deps:check,
-                      # plugin manifests, schema reference, prompt variants, i18n, changelog fragments,
-                      # script regressions, actionlint
-pnpm lint             # tsc --noEmit for the FULL workspace (not one package), test code included
-pnpm test             # all Vitest suites; one package: pnpm --filter @covel/runtime test
-pnpm test:docs        # standalone documentation tests (package and script checks)
-pnpm test:docs:packages # after pnpm check: docs-reading package tests; script checks already ran
-pnpm test:pg          # five live-PG Store files + Server integration (DATABASE_URL from env or .env)
-pnpm e2e:smoke        # deterministic Chromium smoke suite run by CI; pnpm e2e for all Playwright
-pnpm create-plugin    # scaffold from templates/: pnpm create-plugin <name>; --with-tools scaffolds into plugins/
-pnpm validate:plugin  # validate PLUGIN.md / RUNTIME.md and locale files; a plugin DIR also gets
-                      # cross-runtime checks, a check that a package.json, if there is one,
-                      # says "type": "module", and a line with the languages it has text in
-pnpm validate:world   # validate world packages (manifest, lore, plugin IDs, every seed record):
-                      # pnpm validate:world [--strict] [--plugins <dir>] worlds/<id>
-pnpm schemas:generate # regenerate packages/shared/schemas/*.json and docs/reference/schema/*.md
-                      # from the Zod schemas; run after changing an author-facing schema field
-pnpm check:push       # on the committed HEAD, in a clean checkout: install, pnpm check, the tests of the
-                      # packages changed since origin/main with their dependents, pnpm e2e --list.
-                      # The pre-push hook runs only the first two for code; docs-only also runs test:docs:packages.
-                      # CI runs every suite for source changes, unknown scope and releases.
-pnpm changelog:preview  # print [Unreleased] as the next release will have it, from docs/changelog.d/
+pnpm install --frozen-lockfile  # also builds the author SDK
+pnpm dev                       # web :5173 + server :3001, SQLite by default
+pnpm dev:web                   # web only
+pnpm dev:server                # server only; STORE_BACKEND=memory for ephemeral
+pnpm db:up                     # start PostgreSQL before pnpm dev:pg
+pnpm dev:pg                     # PostgreSQL dev mode with preflight
+pnpm stop                      # stop stray dev/turbo processes
+pnpm check                     # full CI static gate, including lint and script tests
+pnpm lint                      # type-check the FULL workspace, including tests
+pnpm test                      # all Vitest suites
+pnpm --filter @covel/runtime test  # example: one package's tests
+pnpm test:docs                 # documentation package tests + script checks
+pnpm test:docs:packages        # docs + SDK README contracts, after pnpm check
+pnpm test:pg                   # live-PG store contracts + server integration
+pnpm e2e:smoke                 # deterministic Chromium smoke suite
+pnpm e2e                       # all Playwright suites
+pnpm schemas:generate          # after author-facing Zod schema changes
+pnpm check:push                # verify committed HEAD in a clean checkout
+pnpm changelog:preview         # preview pending release entries
 ```
 
-Less common commands are in [`docs/internals/commands.md`](./docs/internals/commands.md):
-Electron and Docker, coverage, real-LLM verify and record/replay (`e2e:verify`,
-`e2e:replay`, `llm:replay`, `prompt:prefix`), `test:runtime`, plugin ZIP lifecycle
-tests, `describe:authoring`, collections, `i18n`, the individual `check:*` commands,
-and the release scripts (`changelog:release`, `release:prepare`, `release:preflight`).
+Before pushing, run `pnpm check` and tests for changed packages; `pnpm lint`
+alone is insufficient and git hooks omit source suites. Add `pnpm test:pg` for
+store/database changes and `pnpm e2e:smoke` / `pnpm e2e` for UI flows. Docs-only:
+`pnpm check` + `pnpm test:docs:packages`. `pnpm check:push` covers the static gate
+and changed packages with dependents in a clean checkout.
 
-Before pushing, run `pnpm check` and the tests of the packages you changed
-(`pnpm --filter <pkg> test`) — `pnpm lint` alone misses the dependency, manifest,
-i18n, and workflow gates. Git hooks omit source test suites. `pnpm check:push` runs both
-in a clean checkout, and the push that follows it sends without running them
-again. Add `pnpm test:pg` for
-store or database changes and `pnpm e2e:smoke` / `pnpm e2e` for UI flows. CI runs
-every suite for source changes; docs-only runs `pnpm check` + `pnpm test:docs:packages`.
-`pnpm test` runs all suites locally.
+In source development, changing bundled plugin manifests, handlers or locales
+restarts the server.
 
-Every command shown in this file, in `docs/`, a template, or a skill must be one
-that actually runs: when a root script, its arguments, or a scaffold's output
-changes, re-run the documented sequence and fix every page that shows it.
-
-Git hooks (pre-commit formats and lints the changed files; the opt-in pre-push
-from `pnpm hooks:install` runs the static gate), which suites `pnpm check:push`
-runs, and the short path for documentation-only changes (`pnpm check` +
-`pnpm test:docs:packages`; a package test that reads documentation must be named in
-that root script) are in `docs/internals/commands.md#git-hooks-and-ci-scope`.
-
+See [commands](docs/internals/commands.md) for authoring, packaging, real-model
+harnesses, individual checks, hooks and CI scope. When changing a documented
+command or scaffold, re-run its documented sequence and fix every affected page.
 Run Tailwind diagnostics through `apps/web/scripts/check-tailwind-canonical.mjs`;
-keep `tailwind-lint` read-only, because `--fix` can corrupt TypeScript identifiers
-(`docs/internals/commands.md#tailwind-diagnostics`).
-
-## Config Files
-
-Dev-time files, copied from `*.example` — never commit them:
-
-- `.env` — infrastructure (`STORE_BACKEND`, `DATABASE_URL`, `SERVER_PORT`, `COVEL_WORLDS_DIR`, …)
-- `llm.toml` — slot routing (`[covel.<slot>]`). Missing → built-in `story` slot: DeepSeek, or the
-  OpenAI-compatible endpoint in `DEFAULT_BASE_URL` / `DEFAULT_MODEL` with `DEFAULT_API_KEY`.
-- `.env.llm` — provider API keys. The dev server loads `.env` + `.env.llm` from the repo root.
-
-Every variable is declared in `packages/shared/src/env/registry.ts` and documented
-in `docs/reference/env-registry.md`.
-
-Desktop files live under `<covelHome>/` (typically `~/.covel/`): `config.toml`
-(paths, logs, proxy), `llm.toml` (hot-reloaded from Settings), `keys.env` (mode
-600), and `settings.json` (front-end preferences through the `@covel/settings`
-SettingsStore, mirrored to `localStorage` `covel:settings` on web). Provider keys
-also flow through the SettingsStore (`keys.env` on desktop, `localStorage`
-`covel:keys` on web); the server never persists them — each AI request passes
-them in the `X-Provider-Keys` header (base64).
-
-Installed and AI-generated worlds and plugins land outside the repo, in
-`COVEL_USER_WORLDS_DIR` / `COVEL_USER_PLUGINS_DIR` (default `$COVEL_HOME/worlds`
-and `$COVEL_HOME/plugins`). `COVEL_WORLDS_DIR` / `COVEL_PLUGINS_DIR` point at the
-bundled `worlds/` and `plugins/`.
+keep `tailwind-lint` read-only (`--fix` can corrupt TypeScript identifiers).
 
 ## Monorepo Structure
 
-- `apps/web` (React/Vite client; `/` opens the world list), `apps/server` (Hono
-  API; composes every feature package), `apps/desktop` (Electron shell),
-  `apps/site` (the static showcase website; no workspace dependencies, never
-  bundled into Web or desktop), `apps/docs` (the VitePress documentation site;
-  its pages are `docs/`, and it is published under `docs/` of the showcase
-  site).
-  The desktop shell validates persisted window geometry with its direct Zod dependency.
-  Web theme and color scheme changes come from SettingsStore through the appearance helpers; there is no separate theme provider.
-- `packages/` — framework libraries; responsibilities and consumers are in
-  `docs/internals/packages.md`. In brief:
-  - `plugin-handlers-utils` — the public plugin-author SDK (`PluginAPI`, handler,
-    proposal, and tool-result contracts; `/dimensions` serves dimension
-    providers and `/prompts` loads plugin-owned templates in Node)
-  - `shared` — domain types, Zod schemas, extension-point contracts, env registry
-  - `plugin-loader` — discovers, validates, and compiles plugin packages
-  - `runtime` — the kernel: scheduling, execution, suspend/resume, commit, hooks
-  - `tools` — host-side tool registry, executor, and builtin tools
-  - `approval` — static tool-source policy and the interactive plugin-RPC gate
-  - `context` — prompt, history, and token-budget assembly; prompt loader
-  - `events` — event bus, replay, transports
-  - `store` — `DataStore` contract and backends, `MediaStore`, browser sync
-  - `memory` — recall, archival, keyword and vector retrieval
-  - `ai-provider` — model resolution, provider protocols, media wires, model table
-  - `create` — LLM world generation; `settings` — SettingsStore and its backends
-  - `plugin-test-utils`, `test-runtime` — plugin test helpers and the runtime harness CLI
-- `plugins/` — bundled plugin packages (registry: `docs/reference/plugins.md`).
-  `worlds/` — bundled world packs (`world.yaml`, `WORLD.md`, optional `data/`,
-  `characters/`, `media/`).
-- `packs/builtin.yaml` — plugin packs (named `requested` / `recommended` sets a
-  player picks on the session-prep screen).
-- `prompts/server/` — framework prompt templates; `docker/` — Compose stack and
-  image.
-- `templates/` — scaffolds for `pnpm create-plugin`: `plugin-multi-runtime` (the
-  default; a standalone package with no `package.json`, no dependencies and no
-  install step) and
-  `plugin-with-tools` (`--with-tools`; a workspace member under `plugins/` named
-  `@covel/plugin-<name>` with `pnpm lint` / `pnpm test`).
-  `packages/test-runtime/src/scaffold.test.ts` generates and runs every mode.
-- `tests/e2e/` — Playwright specs; `tests/third-party/` — installable probe
-  plugins used as community-package fixtures; `tests/llm-replay/` — scripted
-  sessions for `pnpm e2e:replay`; their recordings stay local (`--record`).
-- `scripts/` — dev, check, and release tooling. `scripts/tests/*.test.mjs` run
-  under `node --test` through `pnpm check`.
+- `apps/web`: React/Vite client; `apps/server`: Hono host composing feature packages;
+  `apps/desktop`: Electron shell. `apps/site` and `apps/docs` are independent
+  publishing targets, never bundled into Web or desktop.
+- `packages/`: framework libraries. `plugin-handlers-utils` is the public author
+  SDK and dependency root; `shared` sits above it. Package responsibilities and
+  host composition: [packages](docs/internals/packages.md).
+- `plugins/`: bundled packages; `worlds/`: bundled world packs; `packs/builtin.yaml`:
+  player-selectable plugin sets. Installed/generated packages live outside the repo.
+- `prompts/server/`: framework prompt templates; `templates/`: plugin scaffolds
+  (`plugin-multi-runtime` standalone, `plugin-with-tools` workspace member).
+- `tests/e2e/`: Playwright; `tests/third-party/`: community-package fixtures;
+  `tests/llm-replay/`: scripted sessions, recordings kept local.
+- `scripts/`: dev/check/release tooling; `scripts/tests/*.test.mjs`: Node tests
+  included in `pnpm check`.
 
-Each `plugins/<id>/` needs a root `PLUGIN.md` (plain YAML frontmatter; the
-directory name is the ID, so `id` is left out), `package.json` (a workspace member
-with no `version`; the version lives only in `PLUGIN.md`), and `README.md`. A
-plugin outside the repository needs only `PLUGIN.md`. Optional: `server/index.js`
-(the default `entry` module), `runtimes/<id>/RUNTIME.md` with its handler (default
-`./handler.js`) and guard, `schemas/`,
-`tools/`, `hooks/`, `ui/`, `lib/`, `tests/`, `PLUGIN.zh.md` / `RUNTIME.zh.md` (the
-Simplified Chinese prompt body), and `locales/<locale>.yaml` (translations of
-labels, UI text and text in code; the main files are English; `locales/lock.json`
-records the English text each label translation is for).
+Workspace packages export TS source, except `@covel/plugin-handlers-utils`, which
+exports `dist/`. Install, Turbo and server startup rebuild it. After editing SDK
+source, run `pnpm --filter @covel/plugin-handlers-utils build` before a direct
+package test. The host supplies this SDK and `zod` to installed plugins; plugins
+bundle only other dependencies. Respect public package entry points and dependency
+direction (`pnpm check:boundaries`).
 
-ESM-only, TypeScript strict, ES2022, NodeNext — **use `.js` extensions in TS
-relative imports**. Workspace packages export TS source directly
-(`"import": "./src/index.ts"`) with no build step for dev. The one exception is
-`@covel/plugin-handlers-utils`, which is consumed from `dist/` because it is built
-as the standalone author SDK: `pnpm install` and Turbo's `^build` edge rebuild it,
-and so does the dev server at every start of its process when the build is older
-than the source (`scripts/ensure-plugin-sdk.mjs`, preloaded by the server's `dev`
-scripts; a change to the SDK source restarts the server). The SDK's own Turbo
-lint/test tasks also wait for its build: their test imports reach its `dist`
-through `shared`. After editing its
-source a direct `pnpm --filter <pkg> test` still needs
-`pnpm --filter @covel/plugin-handlers-utils build` first. It is not on npm; the
-host resolves it and `zod` for the modules of every plugin, bundled or installed
-(`provideHostModules` in `plugin-loader`), so a standalone plugin imports them
-directly and bundles only its other dependencies.
-
-`plugin-handlers-utils` is the root of the dependency graph and depends on no
-workspace package; `shared` sits directly above it, and `@covel/server` composes
-every feature package. `@covel/settings` is split from `shared` so pure-type
-consumers avoid browser/Electron code. Exact edges live in each `package.json`;
-`pnpm check:boundaries` enforces public entry points, package direction, and an
-external importer or a reasoned exception for every package export.
-`test-runtime` exposes only its CLI, not a package import entry.
+Read [desktop packaging](docs/internals/desktop-packaging.md) before changing the
+shell, sidecar or staging. The packaged backend always runs the app's own Electron
+executable with RunAsNode in a separate child process; never bundle a separate Node,
+use the player's PATH or fall back to another runtime. Verify target and actual
+Electron/Node versions, the RunAsNode fuse, and main-bundle/ASAR resource binding.
+Main/preload dependencies are bundled; the server payload retains its plugin
+loader, SDK, native targets and licenses. Detach staging hardlinks before mutation.
 
 ## Coding Style
 
-Formatting is Prettier's defaults (two spaces, double quotes, semicolons); the
-pre-commit hook formats the changed files and `pnpm format` formats everything.
-`camelCase` values and functions, `PascalCase` types and React components,
-kebab-case module names. Avoid bare `any`; validate external input with Zod. 400 and 800 lines are file-size
-review guidelines, not hard limits — split a file only when its responsibilities or
-maintenance cost justify it.
-
-`noImplicitOverride` and `noUncheckedIndexedAccess` are on in every tsconfig, so
-`items[i]` has the type `T | undefined`. Prefer a form that needs no assertion:
-`for (const [i, item] of items.entries())`, `const row = rows[0]; if (!row) …`,
-`items.at(-1)`, `text.charAt(0)`. Write `items[i]!` only where the line itself or
-the one above it shows that the index is in range.
-
-## Architecture Essentials
-
-First-class execution primitives are **Runtime, Tool, Hook, Context, Proposal**; a
-plugin package is only the distribution unit. Full walkthrough:
-`docs/internals/flow.md`.
-
-```
-Input/Event → settle barrier → freeze registry generation → Trigger Router
-→ Stage Scheduler → [per stage, per DAG level:]
-  gate (needs / inputs / permissions) → guard → buildContext → Runtime Runner
-  → Tool/Hook Loop → RuntimeResult { output, effects, completion }
-→ Proposals → Validation/Policy → commitExecution → SSE / Side Effects
-→ Follow-up Events (may re-enter Router) and detached background jobs
-```
-
-- **Plugin package**: the root `PLUGIN.md` declares `kind` (`core` / `plugin`,
-  default `plugin`), versioned contracts (`requires` / `conflicts`, and `provides`
-  for contracts no runtime outputs; IDs such as `narrative-engine@1`), an optional
-  `entry` module, and
-  package-level `contributes` (tools, actions, services, extensions, hooks,
-  settings, data, ui, prompt, …). `entry` registrations and `contributes` must match
-  in both directions or the load fails. The loader works out what an author leaves
-  out (`packages/plugin-loader/src/package-defaults.ts`): the ID from the directory,
-  `entry` from an existing `server/index.js`, `provides` from each runtime's
-  `io.output.contract`, the `ui:*` / `cost:*` tags; a contract a runtime refers to
-  but `requires` does not list is optional. It compiles this authored format into
-  the internal `RuntimeManifest`; the two are not interchangeable.
-- **Runtimes**: one inline `runtime` in the root file, or `runtimes/<id>/RUNTIME.md`
-  files — never both, and a package with only entry/UI/extensions may have none.
-  A runtime with a `function` block is a function (a pure JS handler, default
-  `./handler.js` next to the manifest); one without is an `agent` (the file body is
-  the system prompt; the LLM drives tool calls); the fields are grouped under `schedule`,
-  `io`, `agent`, `function`, `guard`, `effects`, `permissions`.
-- **Trigger modes** are the closed enum `auto` / `manual` / `event`
-  (`TriggerType` in `packages/shared/src/types/plugin.ts`); `auto` is the default
-  and `schedule.every: N` runs it on every N-th logical turn. Other values are
-  rejected at load. `shouldTrigger` (`packages/runtime/src/trigger/trigger.ts`) is
-  the single authority for `auto` / `event`, including the in-turn event fan-out.
-  **`manual` is the exception**: `selectTriggeredRuntimes` selects it by name match
-  without calling `shouldTrigger` — an explicit plugin-rpc call is the trigger
-  decision, so it bypasses `phase` / `startTurn` / `maxTriggerCount` / `cooldownTurns`
-  (`shouldTrigger` always returns false for `manual`).
-- **Scheduling** is declared, never numeric: `schedule.stage` plus typed edges —
-  `schedule.needs` (success gate + same-pass DAG edge), `schedule.after` (ordering
-  only), and `io.inputs` bindings (`required`, by default `true`, implies `needs`).
-  `auto` runtimes declare a stage; `event` / `manual` runtimes declare none.
-  Runtime-ID references stay inside one package; cross-package edges use a
-  versioned contract (`from: { contract }`) listed in the root `requires` /
-  `optional`. Intra-stage order comes only from declared edges, independent
-  runtimes run in parallel, and `name` breaks ties.
-- **Stage bands**: `setup` runs while `phase === "setup"`; the main loop runs
-  `pre-turn → narrative → post-turn → audit` with a barrier between stages (each
-  stage fully settles before the next).
-- **Results**: `RuntimeResult` keeps `output`, `effects`, and `completion` apart; a
-  function handler returns them as `HandlerResult`, and an effect-shaped field
-  inside `value` does nothing. An agent's effects come from its tools only: an
-  effect-shaped field in the model's final JSON does nothing either. Setup runtimes finish with `completion: "done"`
-  (agents report `preGameDone: true`). Setup completion is recorded per plugin
-  `version`, so a version bump re-runs setup — setup guards must return
-  `{ skip: true }` for work already done.
-- **Background execution**: `schedule.detached: true` moves a safe
-  post-turn / audit function leaf to the durable `_runtime_jobs` queue;
-  `schedule.detached: { settle: true }` makes the next execution wait
-  for it; `schedule.background: true` backgrounds a manual or event run.
-- **Session clock** (`Session` in `packages/shared/src/types/session.ts`): `status`
-  (`active` / `paused` / `ended`), `phase` (`setup` / `playing`),
-  `completedPlayerTurns` (only committed player executions count — setup and the
-  opening continuation do not, so the opening shares `logicalTurn = 1` with the
-  first message; manual, background, and recursive executions persist their own
-  `turn_results` row with `origin` and are excluded), and `setupRuntimes`
-  (per-runtime `pending` / `done{completed|waived}` / `blocked`). These are
-  current-only: builds do not accept or reconstruct deprecated clock fields.
-- **Proposals**: `ProposalPayloadMap` in `packages/shared/src/types/proposal.ts` is
-  the single source of truth for proposal types (list in `docs/reference/tools.md`).
-  **All writes flow through validate → commit; plugins never touch the DB directly.**
-  A successful tool call does not mean its proposals are persisted.
-- **Hooks**: lifecycle events are enumerated once in `HOOK_EVENTS`
-  (`packages/shared/src/types/hooks.ts`). A package declares them in
-  `contributes.hooks` and registers handlers with `covel.on()` in `entry`. Hooks are
-  session-scoped through `AsyncLocalStorage`; `ctx.getOwnSettings()` exposes the
-  plugin's own resolved settings, `ctx.locale` the session's content locale, and
-  `ctx.pluginId` / `ctx.runtimeId` the runtime an event is about (payloads do not
-  repeat it). Reference: `docs/reference/hooks.md`.
-- **Session plugin set**: a global pool loads at startup; `resolveSessionPlugins`
-  (`packages/shared/src/plugin-selection.ts`) computes each session's active set from
-  the explicit `requested` / `excluded` lists, authorization, and contract
-  declarations (`Session.activePlugins`; changes apply next turn). A world's
-  `pluginPolicy` and the packs seed the request. Source comes from the discovery
-  directory: `builtin` auto-loads; `community` — any installed package, official
-  ones included — runs server code only after the player approves it.
-- **Plugin communication** (`docs/reference/plugin-extensions.md`): same-execution
-  results through `io.inputs`; committed results through `io.output.recordAs` +
-  `scope: committed`; events through `effects` or the `emit-event` tool plus an
-  `event` trigger; request/response through `covel.registerService` +
-  `ctx.services`; kernel extension points (`single` / `collect` / `pipeline`)
-  through `covel.provideExtension`.
-- **Data ownership**: plugin data is session-scoped KV keyed by
-  `(sessionId, pluginId, namespace, key)`; `io.selfData` inlines a runtime's own
-  namespace into its prompt, and the `_` namespace prefix is reserved for the
-  kernel. Characters, character schema, lorebook, dimensions, and the world record
-  form the kernel-owned World Model: read-only through `ctx.world`, written through
-  proposals.
-- **Plugin UI** is declarative: `contributes.ui` lists json-render specs for
-  `right` / `message`, `ui.slot@1` extensions fill kernel slots, and custom
-  HTML runs in a sandboxed webview. `GET /api/ui-specs` aggregates the specs and
-  `plugin-data.changed` SSE events drive re-renders.
-- **Model slots**: named `[covel.<slot>]` routes (`story`, `utility`, `plugin`,
-  `fast`, `memory`, `image`, …) with same-tag fallback only — an image request
-  never routes to text. Media generation goes through `ctx.images` / `ctx.speech`
-  / `ctx.music` and per-modality wire registries (music has no built-in wire). Details: `docs/reference/slots.md`,
-  `docs/reference/media-store.md`.
+- ESM-only, strict TypeScript, ES2022, NodeNext. Use `.js` in relative TS imports;
+  desktop helpers loaded by native Node use `.ts` with compiler rewriting.
+- Prettier defaults: two spaces, double quotes, semicolons. `camelCase` values,
+  `PascalCase` types/components, kebab-case modules. Avoid bare `any`; validate
+  external input with Zod. Split large files by responsibility, not a line quota.
+- `noImplicitOverride` and `noUncheckedIndexedAccess` are enabled. Prefer iteration
+  or explicit existence checks; use `items[i]!` only with a visibly in-range index.
+- Web appearance comes from SettingsStore helpers, with no separate theme provider.
 
 ## Critical Conventions
 
 ### Framework ↔ Plugin Isolation Rule
 
 **Framework code (`packages/`, `apps/server/src/`, `apps/web/src/`) must never
-hardcode a concrete plugin ID or name.** Violations: `pluginId === 'narrator'`,
-`store.listPluginData(sessionId, 'world-init', ...)`, `p.id === 'image'`. Deleting
-any plugin must not break the framework.
+hardcode a concrete plugin ID or name.** Discover providers through versioned
+contracts, extension points and registered services, never another plugin's ID
+or namespace. A missing primitive calls for a generic API, not a plugin special case.
 
-- Discover providers through versioned contracts (`provides` / `requires`, the
-  compiled `outputContract`), kernel extension points, and registered services —
-  never by scanning for an ID or another plugin's namespace. World data follows the
-  same route: a source targets `contract:<id>` and the kernel delivers it to active
-  namespaces that declare `contributes.data.*.accepts`.
-- Dispatch on `RuntimeManifest.outputKind` (`story` / `system`, authored as
-  `io.visibility`, default `system`). `kind` only decides whether a package is requested by
-  default (`resolveSessionPlugins`); framework code must not treat `core`
-  packages differently in any other way. Trust follows the source (`builtin` /
-  `community`), never `kind`.
-- When a legitimate scenario cannot be expressed, add a generic primitive (a
-  proposal type, hook event, extension point, or trigger), not a special case.
-- Test files may use real plugin IDs as fixtures.
-- Curation data may list plugin IDs as _data_ (`packs/builtin.yaml`, a world's
-  `pluginPolicy`). The rule bans branching on a plugin ID in dispatch or control
-  flow, not user-overridable selection lists.
-
-The framework never auto-creates `CharacterRecord`s from forms. Player creation is
-plugin-owned: the character plugin's setup guard reads the submitted opening form
-and synthesises the player deterministically through the character proposal/tool
-surface.
-
-### Identity model: pluginId vs runtimeId
-
-`RuntimeManifest.pluginId` is the package ID (e.g. `world-init`, the root
-`PLUGIN.md` `id`) and keys data isolation, tool scoping, trust, and every store
-write. `RuntimeManifest.name` is the runtimeId — the package ID for an inline
-runtime, `<pluginId>/<id>` for `runtimes/<id>/` (e.g. `world-init/schema-gen`) —
-and keys scheduling edges, LLM traces, and logs.
-
-### Tool scoping
-
-Plugin tools are registered in `entry` with `covel.registerTool()` and listed in
-`contributes.tools`; names are unique per plugin, so two plugins may reuse a name.
-`ToolRegistry.find(name, pluginId)` (`packages/tools/src/registry.ts`) resolves
-builtin tools first, then only the calling plugin's own tools — there is no
-cross-plugin tool lookup (use a service). An agent sees only the tools whitelisted
-in `agent.tools`; a function runtime calls only `function.tools` through
-`ctx.tools.call`.
+- Dispatch on `RuntimeManifest.outputKind` (`story` / `system`), authored as
+  `io.visibility`. `kind` only determines default selection. Trust follows source
+  (`builtin` / `community`), never `kind`.
+- Tests may use plugin IDs as fixtures; curation lists may contain them as data.
+- Player creation belongs to plugins through proposals, never automatic framework
+  conversion of forms into `CharacterRecord`s.
 
 ### Current contract only
 
-During early development, target the current contract only. Update producers,
-consumers, schemas, fixtures, and documentation together; do not add old-version
-migrations, dual reads/writes, aliases, or fallback branches solely to preserve
-development data. A breaking contract change takes a new contract ID (`@2`) with
-providers and consumers upgraded in the same change. Document when affected
-development data must be recreated. Keep required runtime concurrency, failure
-handling, and supported backend differences — those are not version compatibility.
+Target the current contract during early development. Update producers, consumers,
+schemas, fixtures and docs together. Do not add migrations, dual reads/writes,
+aliases or fallback branches solely for old development data. Breaking contracts
+get a new ID (`@2`) with providers and consumers upgraded together; document which
+data must be recreated. Keep required concurrency, failure handling and supported
+backend differences.
+
+### Runtime and data boundaries
+
+Read [turn flow](docs/internals/flow.md) before changing execution and
+[plugin contracts](docs/reference/plugins.md) before changing manifests.
+
+- `RuntimeManifest.pluginId` identifies the package and keys isolation, trust and
+  writes; `.name` is the runtimeId and keys scheduling, traces and logs.
+- Scheduling uses stages and declared dependencies, never numeric priority.
+  `needs` gates success; `after` only orders; required inputs imply `needs`.
+  Runtime-ID edges stay within a package; cross-package edges use versioned
+  contracts. Independent runtimes run in parallel; preserve stage barriers.
+- Trigger types are only `auto` / `manual` / `event`. `shouldTrigger` decides
+  auto/event eligibility; explicit manual selection bypasses it and its cadence
+  gates. Setup selection uses pending state and session dependency gates instead.
+- Preserve the settle barrier before freezing an execution's registry and state.
+  Detached post-turn/audit function leaves use the durable queue; `settle: true`
+  makes the next execution wait within its limit. Manual/event background work
+  runs as a separate execution; see [turn flow](docs/internals/flow.md).
+- Keep `output`, `effects`, `completion` separate. Effect-shaped output does
+  nothing; agents produce effects through tools. **All writes go through proposal
+  validation and commit.** Tool success does not imply persistence.
+- Setup completion is per plugin version; guards must skip work already done.
+  Only committed player executions advance `completedPlayerTurns`: setup and the
+  opening do not, so the opening and first player message share `logicalTurn = 1`.
+- `ProposalPayloadMap` (`packages/shared/src/types/proposal.ts`) and `HOOK_EVENTS`
+  (`packages/shared/src/types/hooks.ts`) are the single authorities for proposal
+  types and hook names. Hooks are session-scoped; `ctx.pluginId` / `ctx.runtimeId`
+  identify the subject runtime, while `ctx.getOwnSettings()` reads the handler
+  owner's settings. See [hooks](docs/reference/hooks.md).
+- Resolve session plugins through `resolveSessionPlugins` (requests, exclusions,
+  authorization and contracts). Changes apply next turn. Discovery location
+  determines trust: installed packages, including official ones, are community.
+- Use declared inputs for current results, `recordAs` + committed inputs for
+  history, events for follow-up work, and services for request/response. World
+  data routes through accepted contracts, never a hardcoded destination namespace.
+  See [plugin communication](docs/reference/plugin-extensions.md).
+- Core objects stay separate: Run, Branch, Snapshot, State, Event, Record,
+  Character, PluginData. Plugin KV is session/package scoped; `_` namespaces are
+  kernel-reserved. World Model reads use `ctx.world`, writes use proposals.
+- `turn_results.commit_status` stays `pending` until its commit owner settles it
+  to `committed` / `failed`; lingering `pending` signals a crash.
+- SQLite and PostgreSQL share the DataStore contract; BrowserVault hydrates an
+  ephemeral MemoryStore and is not another DataStore backend. In PgStore's Drizzle
+  `jsonb` custom type pass plain values (it stringifies once); bare postgres.js
+  uses `sql.json(value)`, never pre-stringified JSON.
 
 ### Plugin authoring contract
 
-- Depend only on the public plugin API from `@covel/plugin-handlers-utils`
-  (manifest, runtime, tool, hook, UI slot, service, extension, proposal) — never on
-  `@covel/runtime` / `shared` / `store` internals, DB tables, ORM models, or
-  frontend components.
-- All writes go through proposals (tool results, handler `effects`,
-  `ctx.pluginData`); tools have Zod schemas; high-risk runtimes declare
-  `permissions` and `effects`. Hooks guard, rewrite, or audit — they carry no
-  gameplay logic.
-- Providers only through bindings: image generation uses `ctx.images` /
-  `ctx.gateway.generateImage`, never a hand-rolled provider fetch.
-- Dice and other game randomness come from `ctx.random` (and `shortId`'s fourth
-  argument), never from `node:crypto` or `Math.random`: a test server started
-  with `COVEL_RANDOM_SEED` then repeats them.
-- A model reads no bookkeeping: no session ID, no UUID of a row, turn or result,
-  no timestamp. The kernel leaves them out of what it renders (`io.selfData`
-  lines, `<runtime-inputs>`, JSON tool results); text a plugin builds itself goes
-  through `modelFacingJson`. Name a turn by its number.
-- Declare the contracts a runtime provides or consumes, and `io.visibility: story`
-  on a narrative provider. Leave out fields equal to their default
-  (`docs/reference/plugins.md#默认值`); `validate:plugin` warns about them. Agent
-  limits live in `agent.loop`: `timeoutMs`, `callTimeoutMs` (a call that is not
-  streamed), `maxRetries` (defaults 120000 / 60000 / 3, or 240000 / 120000 / 1
-  for a `story` runtime), `firstTokenTimeoutMs` and `idleTimeoutMs`
-  (a streamed call; 120s by default, and the default first-token wait of an
-  attempt is shortened so the retries left fit into `timeoutMs`),
-  `loopDetection` (default 3); a function's limit is `function.timeoutMs`. An
-  agent that ends with one tool writes `agent.finishWith: <tool>`; several
-  completing tools or `runtime-done` take `agent.completion`. `agent.toolChoice`
-  and `agent.reasoning: false` sit beside them.
-- `pnpm validate:plugin plugins/<id>` is static and never executes `entry`; real
-  registration of bundled plugins is asserted by
-  `apps/server/tests/bootstrap/builtin-plugin-entries.test.ts`.
+- Use only the public `@covel/plugin-handlers-utils` API, never framework internals,
+  DB tables or frontend components. Hooks guard/rewrite/audit, not gameplay.
+- Root `PLUGIN.md` declarations and entry registrations must match both ways.
+  Bundled packages also need a versionless ESM `package.json` and `README.md`;
+  their version lives in `PLUGIN.md`. External packages need only `PLUGIN.md`.
+  Use either one inline runtime or `runtimes/<id>/RUNTIME.md`, never both; a package
+  may have none. A `function` block selects a function runtime; otherwise an agent.
+  Authored manifests and compiled `RuntimeManifest` are different contracts.
+- Tools have Zod schemas. `ToolRegistry.find(name, pluginId)` resolves builtin tools
+  first, then the caller's own tools; never search other plugins. Declare agent
+  and function tool allowlists; use services for cross-plugin calls. Declare
+  permissions and effects for high-risk runtimes. Omit default-valued fields.
+- Use `ctx.images` / `ctx.gateway.generateImage` for image generation, not provider
+  fetches. Plugins name model slots, never providers, models or endpoints. Slot
+  fallback never crosses tags. Session `runtimeModelOverrides` maps runtime IDs
+  to slots and overrides agent defaults; functions ignore it. Request `modelOverride`
+  applies only to story runtimes. See [slots](docs/reference/slots.md) and
+  [media store](docs/reference/media-store.md) for routing and media bindings.
+- UI uses declarative specs and `ui.slot@1`; custom HTML stays in a sandboxed
+  webview. See [UI panels](docs/reference/ui-panels.md) and
+  [UI components](docs/reference/ui-components.md) before changing rendering.
+- Use `ctx.random` (including `shortId`'s fourth argument), never `Math.random` or
+  `node:crypto`, for game randomness.
+- Keep IDs, row UUIDs and timestamps out of model-facing text; name turns by number.
+  Plugin-built JSON goes through `modelFacingJson`.
+- `pnpm validate:plugin plugins/<id>` is static and never executes entry code.
+  Bundled registration is covered by `apps/server/tests/bootstrap/builtin-plugin-entries.test.ts`.
 
 ### Locale
 
-A session's content locale is fixed when the session is created
-(`SessionRecord.locale`, default `zh-CN`), and it is always an edition the world
-has (`sessionContentLocale` in `@covel/shared`). Every turn, manual runtime, and
-background job passes it as `KernelInput.locale` → `RuntimeContextView.locale`; an
-action request carries no locale and cannot change it. The UI language only
-selects labels. Display fields use `I18nText = string | Record<string, string>`
-and must be resolved with `resolveI18nText(value, locale)` from `@covel/shared` —
-never with ad-hoc `startsWith("en")` checks. Authored files hold one language:
-a main file is written in its language, and `<name>.<locale>.<ext>` (worlds) or
-`locales/<locale>.yaml` (plugins) holds only the translated text.
+Session content locale is fixed at creation and must be a world-supported edition
+(`sessionContentLocale`). Pass it through turns, manual runs, background jobs and
+hooks; action requests cannot override it. UI language selects labels only. Use
+`resolveI18nText` from `@covel/shared`, never ad-hoc language checks. Each authored
+file holds one language.
 
-All framework LLM prompts are externalized as locale-aware markdown files under
-`prompts/`, resolved as exact locale → language → registry fallback (English) →
-locale-less default, otherwise an error.
+Framework prompts live in locale-aware files under `prompts/`. Plugin instruction
+bodies are English with only a `*.zh.md` variant for Simplified Chinese; other
+locales use English. Use `instructionLocaleFor` and honor `COVEL_INSTRUCTION_LOCALE`.
+Read [i18n](docs/reference/i18n.md) for resolution and translation rules.
 
-Prompt bodies are instructions, not content. The canonical `PLUGIN.md` /
-`RUNTIME.md` body is English; `*.zh.md` is the only variant and is read when the
-session locale is Simplified Chinese. Every other locale reads the English body.
-The framework's own instruction lines follow the same rule
-(`instructionLocaleFor` in `@covel/shared`).
-`COVEL_INSTRUCTION_LOCALE` (`en` / `zh`) fixes the instruction language for all
-sessions. Rules: `docs/reference/i18n.md`.
+### Security and configuration
+
+Read [security](docs/internals/security.md) before changing trust boundaries.
+
+- Preserve SSRF/DNS pinning and default access to public HTTPS hosts without a
+  host allowlist. Plugin `fetchWithRetry` always uses the strict direct path.
+  Server keys attach only to origins matching trusted configuration.
+- Request provider keys arrive in `X-Provider-Keys`; the server never persists them.
+  Community server code is unsandboxed and needs player approval; declared HTTP
+  origins are enforced fail-closed. Reject executable YAML frontmatter directives.
+- Route authorization through `apps/server/src/host-profile.ts`, never scattered
+  deployment-env checks. Personal instances rely on loopback/Host checks, with
+  desktop config/file tokens when configured; browser-private sessions still
+  require owner tokens. Hosted `demo` / reserved `commercial` enforce owner and
+  operator rules. Do not treat all `self` requests as token-free.
+- Never commit `.env`, `.env.llm` or `llm.toml`. Every environment variable belongs
+  in `packages/shared/src/env/registry.ts` and [its reference](docs/reference/env-registry.md).
+  Desktop paths/config: [desktop config](docs/reference/desktop-config.md);
+  preferences and keys: [settings store](docs/reference/settings-store.md).
+- `io.concealed` strips prompts, replies, tool arguments and outputs from traces
+  and live streams, and substitutes a fixed failure message; log real errors
+  server-side only. Runtime traces go to DB; infrastructure logs to the console.
+
+## Documentation
+
+`docs/` is the reader-facing source of truth. **Before a non-trivial change, read
+its matching page.** Code/tests establish current behavior; fix stale docs in the
+same change. [docs/README.md](docs/README.md) is the full page index and code Search
+Map; [glossary](docs/reference/glossary.md) defines terms. Keep contract details in
+those pages instead of expanding this file.
+
+- Follow `docs/AGENTS.md` for writing and site checks. Chinese pages are the source;
+  mirror changes under `docs/en/`. `README.md` pairs with `README.zh-CN.md`;
+  `docs/CONTRIBUTING.md` pairs with `docs/CONTRIBUTING.en.md`.
+- Keep durable guides/contracts/architecture in `docs/`. Put plans, audits and
+  handoffs in gitignored `devs/docs/`, debug artifacts in `debugs/`; never add root
+  `audits/`, `plans/`, `context.md` or `progress.md`. Remove implemented plans after
+  folding stable conclusions into the matching docs.
+- New, moved or removed pages update `docs/README.md` and `apps/docs/.vitepress/config.ts`;
+  run `pnpm --filter @covel/docs build`. Preserve inbound heading anchors.
+- `docs/internals/technical-debt.md` must mirror source `ponytail:` markers.
 
 ### Documentation sync
 
-A change to framework-visible surface area must update the matching doc in the same
-PR; a missing sync means an incomplete PR.
+Update the matching pages in the same PR whenever their surface changes. Paths
+below are relative to `docs/`; also update English counterparts.
 
-- Add/modify/remove a bundled plugin, its player settings or its panels → `docs/builtin/` (the page of its theme and the tables of `index.md`)
-- Add/modify/remove a bundled plugin; change `PLUGIN.md` / `RUNTIME.md` fields → `docs/reference/plugins.md` + the guides under `docs/plugins/`
-- Add/change an extension point, service contract, or plugin API method → `docs/reference/extension-points.md` + `docs/reference/plugin-extensions.md`
-- Add/change a hook event, its payload, what a handler may return, or the hook context → `docs/reference/hooks.md`
-- Add/modify/remove a tool; approval/source gate → `docs/reference/tools.md`
-- Add/change a model slot → `docs/reference/slots.md`
-- Change SSE events / protocol → `docs/reference/protocol.md`
-- Change right-panel tabs / data sources / UI slots → `docs/reference/ui-panels.md`
-- Add/change an API endpoint → `docs/reference/api.md`
-- Add/change `contributes.data` or a data contract → `docs/reference/plugins.md` + `docs/reference/world-data.md`
-- Add/change world package `worldData`, import/sync rules → `docs/reference/world-data.md` + `docs/reference/api.md` + `docs/reference/transactions.md`
-- Change the World Model (characters, dimensions, lorebook) → `docs/reference/world-model.md`
-- Change plugin/world install, update, or collections → `docs/reference/plugin-installation.md` / `world-installation.md` + `docs/ship/collections.md`
-- Add/change an RPC action / framework default → `docs/reference/api.md` (plugin-rpc) + `docs/reference/protocol.md`
-- Add/change approval flow / trust level → `docs/reference/api.md` + `docs/reference/protocol.md`
-- Add/change an environment variable → `packages/shared/src/env/registry.ts` + `docs/reference/env-registry.md`
-- Change a security boundary → `docs/internals/security.md`
-- Change package structure, deps, root scripts → `AGENTS.md` (Commands, Monorepo Structure) + `docs/internals/packages.md` + every page that shows the command
-- Change the plugin scaffold (`scripts/create-plugin.js`, `templates/`) → the template READMEs + `docs/plugins/essentials.md` + `docs/plugins/testing.md` + `.claude/skills/create-plugin/`
-- Add, move or remove a page under `docs/` → the `sidebar` in `apps/docs/.vitepress/config.ts` + `docs/README.md`, then `pnpm --filter @covel/docs build`
-- Change CI workflows, git hooks, or the pre-push verification steps → `docs/CONTRIBUTING.md` + `docs/CONTRIBUTING.en.md` + `.github/PULL_REQUEST_TEMPLATE.md`
-- Introduce or rename a term → `docs/reference/glossary.md`
-- Any user-visible change → a changelog fragment: a new file `docs/changelog.d/<slug>.md` with the entries under `### <Section>` headings (`docs/changelog.d/README.md`). Do not edit `docs/CHANGELOG.md`; `pnpm changelog:release` writes it at release
-- Edit a page under `docs/` → make the same change in its English page under `docs/en/` (same relative path)
-- Edit `docs/CONTRIBUTING.md` or `README.md` → update `docs/CONTRIBUTING.en.md` / `README.zh-CN.md` in the same PR
+| Change                                               | Required pages                                                                                                   |
+| ---------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| Bundled plugin, player settings or panels            | `builtin/` theme page and `builtin/index.md`; plugin changes also `reference/plugins.md` + `plugins/` guides     |
+| Manifest/runtime fields                              | `reference/plugins.md` + `plugins/` guides; regenerate schemas for author-facing schema changes                  |
+| Extension point, service or plugin API               | `reference/extension-points.md` + `reference/plugin-extensions.md`                                               |
+| Hook event, payload, result or context               | `reference/hooks.md`                                                                                             |
+| Tool or approval/source policy                       | `reference/tools.md`                                                                                             |
+| Model slot                                           | `reference/slots.md`                                                                                             |
+| SSE or protocol                                      | `reference/protocol.md`                                                                                          |
+| Panels, data sources or UI slots                     | `reference/ui-panels.md`                                                                                         |
+| API endpoint                                         | `reference/api.md`                                                                                               |
+| RPC action, framework default or approval/trust flow | `reference/api.md` + `reference/protocol.md`                                                                     |
+| Plugin data contribution/contract                    | `reference/plugins.md` + `reference/world-data.md`                                                               |
+| World data, import or sync                           | `reference/world-data.md` + `reference/api.md` + `reference/transactions.md`                                     |
+| World Model                                          | `reference/world-model.md`                                                                                       |
+| Plugin/world install, update or collections          | Matching `reference/plugin-installation.md` / `reference/world-installation.md` + `ship/collections.md`          |
+| Environment variable                                 | Registry in code + `reference/env-registry.md`                                                                   |
+| Security boundary                                    | `internals/security.md`                                                                                          |
+| Packages, dependencies or root scripts               | This file's Commands / Monorepo Structure + `internals/packages.md` + affected command examples                  |
+| Plugin scaffold                                      | Template READMEs + `plugins/essentials.md` + `plugins/testing.md` + `.claude/skills/create-plugin/` in repo root |
+| CI, hooks or pre-push checks                         | `CONTRIBUTING.md` + `CONTRIBUTING.en.md` + `.github/PULL_REQUEST_TEMPLATE.md` in repo root                       |
+| Terminology                                          | `reference/glossary.md`                                                                                          |
 
-## State & Persistence
-
-Core objects stay separate — never collapse them into one JSON blob: **Run,
-Branch, Snapshot, State, Event, Record, Character, PluginData**.
-
-- `STORE_BACKEND=memory|sqlite|pg` (default `sqlite`; `pg` requires `DATABASE_URL`)
-  selects the server `DataStore`: `MemoryStore`, `SqliteStore`, or `PgStore`. The
-  browser-private profile persists checkpoints in the Dexie `BrowserVault` and
-  hydrates an ephemeral `MemoryStore`; it is not a `DataStore` backend. Contract:
-  `docs/internals/storage.md` (it also describes how each SQL backend's files
-  are split).
-- `sessions.runtime_model_overrides` stores only `runtimeId → slot` names. For
-  agent runtimes, an explicit selection (this map included) wins over
-  `agent.model`. Function runtimes do not read this map. The slot resolves through the
-  request's UI slot binding, then the `llm.toml` default. A plugin names only a
-  slot, never a provider, model or endpoint (a plugin's own `llm.toml` is not
-  read). A request-scoped `modelOverride` applies to `story` runtimes only. Full
-  chain: `docs/reference/slots.md`.
-- `turn_results.commit_status` stays `pending` until the commit owner settles it to
-  `committed` / `failed`; a lingering `pending` row is a crash signature.
-- **JSONB writes**: the PgStore `jsonb` columns in `packages/store/src/postgres/schema.ts`
-  stringify once in their `customType` (drizzle passes the JSON text through), so
-  write the plain value there and never wrap it in `sql.json`. A bare postgres.js
-  client (for example `packages/store/src/media-store/pg.ts`) takes
-  `sql.json(value as JSONValue)` and never a pre-stringified value. Either way, a
-  second serialisation stores a JSON string instead of an object.
-
-## Security
-
-Summary only; the boundaries and their reasons are in `docs/internals/security.md`.
-
-- The outbound SSRF guard is open by default (any public `https` host, no allowlist
-  env) and pins DNS. Plugin `fetchWithRetry` always stays on the strict direct path.
-- Server/platform keys attach only when the target origin matches trusted config;
-  request keys arrive in `X-Provider-Keys` and are never persisted.
-- `DEPLOYMENT_TIER` `demo` / `commercial` enforce per-session owner tokens and the
-  operator token (`COVEL_DESKTOP_REST_TOKEN`); `self` / desktop binds `127.0.0.1`
-  and treats tokens as no-ops. `commercial` is reserved for a possible future
-  commercial edition: there are no accounts, tenant isolation or quotas, and this
-  repository does not maintain it.
-- Plugin server JavaScript is not sandboxed. Community code runs only after player
-  approval, with its declared `permissions.http` origins enforced fail-closed.
-  Manifests are plain YAML — frontmatter engine directives such as `---js` are
-  rejected before parsing.
-
-## Observability
-
-Trace chain: `traceId → runId → branchId → turnId → runtimeId → pluginId`. Runtime
-traces live in the DB `trace_events` table (served by `/api/traces/*` and the
-frontend `/debug` page); infrastructure logs go to the console with `[component]`
-prefixes. A runtime declaring `io.concealed: true` has its failure reason (replaced by a fixed text; the real one goes to the server log), prompts, replies, tool
-arguments, and outputs stripped from traces and the live stream.
+Any user-visible change needs `docs/changelog.d/<slug>.md`, using the section
+headings in that directory's README. Never edit `docs/CHANGELOG.md` directly.
 
 ## Testing
 
-- Vitest runs every package, the server, and web (`*.test.ts` / `*.test.tsx`);
-  `apps/desktop` and `scripts/tests/` use `node --test`; Playwright specs are
-  `*.spec.ts` under `tests/e2e/`. They run against a production build of the
-  web app; a spec that imports the app's modules in the page (`import("/src/...")`)
-  runs on the Vite dev server instead (`chromium-dev`), which is much slower. Add focused regression tests for features and
-  fixes. Test code is type-checked by `pnpm lint`: a package's `tests/`
-  directory through its `tsconfig.test.json` (web tests sit under `src/`). A file
-  in that config's `exclude` still has type errors against the current
-  contracts; fix its fixtures (import the real types rather than copying
-  shapes) and never grow the list. CI enforces a coverage floor for `@covel/runtime` only
-  (`pnpm test:coverage:runtime`); the ≥80% goal for the other packages
-  (`pnpm test:coverage`) is not enforced.
-- Every `DataStore` backend must pass the shared contract suite
-  (`packages/store/src/contract/store-contract.ts` + `contract/suites/`).
-- Plugin tests use `@covel/plugin-test-utils` (`MockLLM`,
-  `makeManualFunctionContext`, `makeTurnInput`, …); see `docs/plugins/testing.md`.
-  New plugin behaviour should cover normal output, invalid input, data ownership,
-  and that a failed execution commits no partial proposals.
-- A Vitest run uses a temp directory of its own, removed when the process exits
-  (`useRunTempDir` in `vitest.base.ts`): a test may leave what it creates under
-  `os.tmpdir()`. Every package that runs Vitest has a `vitest.config.ts` that
-  imports `vitest.base`, bundled plugins included
-  (`scripts/tests/test-temp-dir.test.mjs` checks it). Run a package's tests from
-  the package (`pnpm --filter <pkg> test`); Vitest started at the repository root
-  skips that config.
-- Web tests default to jsdom. A test file that needs no DOM may opt into
-  `// @vitest-environment node`, which is noticeably faster.
-- IndexedDB tests use `fake-indexeddb`; PostgreSQL tests need a real database
-  (`pnpm db:up`, then `pnpm test:pg`). Store and server suites bypass the Turbo
-  cache because database state is external to source inputs.
+- Add focused regressions for features/fixes. Run package tests from their package
+  (`pnpm --filter <pkg> test`), not root Vitest, so `vitest.base.ts` applies its
+  per-run temp directory. Every Vitest package imports that base config.
+- Test code is type-checked by `pnpm lint`. Fix fixtures using real types; never
+  enlarge tsconfig exclusions to hide errors. Runtime coverage has an enforced
+  floor; see [commands](docs/internals/commands.md) for coverage tasks.
+- Every DataStore backend passes `packages/store/src/contract/store-contract.ts`
+  and `contract/suites/`. PostgreSQL needs a real database; IndexedDB uses
+  `fake-indexeddb`.
+- Plugin tests use `@covel/plugin-test-utils`; cover normal/invalid inputs,
+  ownership and no partial commit on failure. See [plugin testing](docs/plugins/testing.md).
+- Web Vitest defaults to jsdom; pure tests may use the Node environment.
+  Desktop and script tests use `node --test`. Playwright uses production builds;
+  specs importing `/src/` need the slower `chromium-dev` project. See
+  [E2E testing](docs/internals/e2e-testing.md).
 
 ## Commits & Pull Requests
 
-Use Conventional Commits (`fix(web): stabilize session restore`; types `feat`,
-`fix`, `refactor`, `docs`, `test`, `chore`, `perf`, `ci`). Branch from and target
-`main`; never commit directly on `main`. Complete `.github/PULL_REQUEST_TEMPLATE.md`:
-the rationale, breaking changes and the development data they invalidate, the
-checks that actually ran plus what was not verified, related context, and the
-documentation sync. Mark breaking changes with a `BREAKING CHANGE:` footer.
+Use Conventional Commits (`feat`, `fix`, `refactor`, `docs`, `test`, `chore`, `perf`,
+`ci`). Branch from and target `main`; never commit directly on it. Complete
+`.github/PULL_REQUEST_TEMPLATE.md`: rationale, breaking changes and invalidated
+dev data, checks actually run and gaps, context, documentation sync. Mark breaking
+changes with a `BREAKING CHANGE:` footer.
 
-Releases follow the checklist in `docs/internals/desktop-packaging.md`: the root,
-`apps/*`, and `packages/*` versions must match the `v*` tag, while plugins and
-worlds version independently; pushing the tag triggers
-`.github/workflows/release.yml`.
+Releases follow [desktop packaging](docs/internals/desktop-packaging.md): root,
+`apps/*` and `packages/*` versions match the `v*` tag; plugins/worlds version
+independently. Pushing the tag triggers the release workflow.
 
 ## Agent Skills
 
-Project skills live in `.claude/skills/` (`create-plugin`, `create-world`,
-`covel-static-turn-audit`, `covel-readonly-audit` — the two audit skills only on
-explicit request); see `docs/internals/skills.md`. Skill references link to
-`docs/reference/` instead of copying contract tables.
-
-Directory-specific rules live in nested `AGENTS.md` files (e.g.
-`docs/AGENTS.md`). Claude Code does not read `AGENTS.md` on its own, so every
-nested `AGENTS.md` gets a sibling `CLAUDE.md` that imports it.
+Project skills live in `.claude/skills/`: `create-plugin`, `create-world`,
+`covel-static-turn-audit`, `covel-readonly-audit`. Use either audit **only on
+explicit request**. Skill references link to contracts rather than copying them;
+see [skills](docs/internals/skills.md).

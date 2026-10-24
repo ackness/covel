@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.27.1@sha256:4edf897a3ffa55b89f906fc8cc78afdb3f1834cc9c7083565e611a8a7d5fe99e
-# Pin the eligible Node 26 release on Alpine 3.24 (seven-day release window).
-FROM node:26.10.0-alpine3.24@sha256:0b36e8c136b94cd4fcf02188228e76c31ad5872eef3fec8cbd2eee500cfd9e80 AS base
+# Security releases bypass the normal seven-day window; keep tag and digest aligned.
+FROM node:26.12.1-alpine3.24@sha256:40cd011b55415bc894e45b02fdd5a5dfde056921b7d23a64c74f80497af48797 AS base
 RUN apk add --no-cache libc6-compat libstdc++
 # Node 25+ no longer bundles Corepack. Pin both the shim and pnpm payload so
 # builds cannot drift and the non-root runtime never downloads a package
@@ -9,7 +9,7 @@ ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0 \
     COREPACK_HOME=/opt/corepack
 RUN npm i -g corepack@0.36.0 \
     && corepack enable pnpm \
-    && corepack install --global pnpm@12.10.1 \
+    && corepack install --global pnpm@12.14.0 \
     && chmod -R a+rX /opt/corepack
 WORKDIR /app
 
@@ -91,6 +91,9 @@ COPY --from=build-web /app/dist/web apps/server/web-dist/
 
 WORKDIR /app/apps/server
 
+# sqlite-vec's Linux binaries use glibc fortified symbols. Preload the Alpine
+# compatibility library so SQLite can dlopen the extension under musl.
+ENV LD_PRELOAD=/lib/libgcompat.so.0
 ENV NODE_ENV=production
 ENV SERVE_STATIC=true
 ENV STATIC_DIR=./web-dist
@@ -99,5 +102,8 @@ EXPOSE 3001
 RUN mkdir -p /app/apps/server/data /home/node/.covel/worlds /home/node/.covel/plugins \
     && chown -R node:node /app/apps/server/data /home/node/.covel
 USER node
+
+# Verify the same non-root, offline runtime used at startup, including vectors.
+RUN --network=none node --input-type=module -e "import { createRequire } from 'node:module'; import { DatabaseSync } from 'node:sqlite'; const require = createRequire(new URL('../../packages/store/package.json', import.meta.url)); const db = new DatabaseSync(':memory:', { allowExtension: true }); require('sqlite-vec').load(db); db.prepare('select vec_version()').get(); db.close();"
 
 CMD ["pnpm", "exec", "tsx", "src/index.ts"]

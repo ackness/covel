@@ -7,6 +7,8 @@
 - [Git](https://git-scm.com/)。
 - Node.js 和 pnpm。版本写在仓库根目录的 `mise.toml` 里；装了 [mise](https://mise.jdx.dev/) 的话，在仓库里运行 `mise install` 即可得到正确的版本。
 
+当前源码要求 Node.js 26.12.1 或更新的 26.x 安全版本。升级源码时也要更新运行时；只更新依赖不会修复 Node 的原生解码器。
+
 ## 1. 获取代码并安装依赖
 
 ```bash

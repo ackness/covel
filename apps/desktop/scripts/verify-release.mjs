@@ -1,7 +1,10 @@
 import fs from "node:fs";
+import { execFileSync } from "node:child_process";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import { verifyRuntimeSelection } from "./backend-runtime.mjs";
 import { assertNoPrivateConfig } from "./private-config.mjs";
+import { verifyTargetNativePackages } from "./before-pack.mjs";
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 const desktopRoot = path.resolve(__dirname, "..");
@@ -9,13 +12,30 @@ const projectRoot = path.resolve(desktopRoot, "../..");
 // electron-builder writes to release/electron/ (see electron-builder.yml).
 // The repo-level release/ groups outputs from multiple shells.
 const releaseRoot = path.join(projectRoot, "release", "electron");
-const platform = process.argv[2];
-
-if (!platform || !["mac", "win"].includes(platform)) {
-  console.error(
-    "Usage: node apps/desktop/scripts/verify-release.mjs <mac|win>",
-  );
-  process.exit(1);
+/** Directory suffixes constrain the target; absent suffixes never imply x64. */
+export function resolveReleaseTarget(resourcesDir, platform, directoryArch) {
+  const runtimePlatform = { mac: "darwin", win: "win32", linux: "linux" }[
+    platform
+  ];
+  if (!runtimePlatform)
+    throw new Error(`Unsupported release platform: ${platform}`);
+  const file = path.join(resourcesDir, "runtime-selection.json");
+  if (!fs.lstatSync(file).isFile()) {
+    throw new Error(
+      `Backend runtime selection must be a regular file: ${file}`,
+    );
+  }
+  const metadata = JSON.parse(fs.readFileSync(file, "utf8"));
+  // Validate the architecture before handing it to helpers with host defaults.
+  if (!["x64", "arm64"].includes(metadata?.arch)) {
+    throw new Error(`Missing or invalid release target architecture: ${file}`);
+  }
+  const target = {
+    platform: runtimePlatform,
+    arch: directoryArch ?? metadata.arch,
+  };
+  verifyRuntimeSelection(file, target);
+  return target;
 }
 
 function mustExist(baseDir, relativePath) {
@@ -75,28 +95,14 @@ function mustHaveBundledPlugins(resourcesDir) {
   if (pluginDirs.length === 0) {
     throw new Error(`No bundled plugins present under ${pluginsDir} `);
   }
-  const isPluginManifest = (f) => /^PLUGIN(\.[a-z-]+)?\.md$/i.test(f);
   for (const entry of pluginDirs) {
     const dir = path.join(pluginsDir, entry.name);
     if (!fs.existsSync(path.join(dir, "package.json"))) {
       throw new Error(`Bundled plugin ${entry.name} is missing package.json`);
     }
-    // Single-runtime layout: PLUGIN.md at the root.
-    // Multi-runtime layout: PLUGIN.md under runtimes/<sub>/ instead.
-    const hasRootManifest = directoryHasFile(dir, isPluginManifest);
-    let hasNestedManifest = false;
-    const runtimesDir = path.join(dir, "runtimes");
-    if (fs.existsSync(runtimesDir)) {
-      const subs = fs
-        .readdirSync(runtimesDir, { withFileTypes: true })
-        .filter((e) => e.isDirectory());
-      hasNestedManifest = subs.some((sub) =>
-        directoryHasFile(path.join(runtimesDir, sub.name), isPluginManifest),
-      );
-    }
-    if (!hasRootManifest && !hasNestedManifest) {
+    if (!fs.existsSync(path.join(dir, "PLUGIN.md"))) {
       throw new Error(
-        `Bundled plugin ${entry.name} is missing PLUGIN.md (looked at ${dir}/PLUGIN.md and ${dir}/runtimes/<sub>/PLUGIN.md — likely stripped by a too-broad electron-builder filter)`,
+        `Bundled plugin ${entry.name} is missing root PLUGIN.md: ${dir}`,
       );
     }
   }
@@ -115,58 +121,123 @@ function mustHaveBundledPrompts(resourcesDir) {
   }
 }
 
-function collectResourceDirs() {
+export function collectResourceDirs(releaseRoot, platform) {
   if (!fs.existsSync(releaseRoot)) {
     return [];
   }
 
-  if (platform === "mac") {
-    return fs
-      .readdirSync(releaseRoot, { withFileTypes: true })
-      .filter((entry) => entry.isDirectory() && entry.name.startsWith("mac"))
-      .map((entry) =>
-        path.join(
-          releaseRoot,
-          entry.name,
-          "Covel.app",
-          "Contents",
-          "Resources",
-        ),
-      )
-      .filter((dir) => fs.existsSync(dir));
-  }
-
+  const directoryPattern =
+    platform === "mac"
+      ? /^mac(?:-(x64|arm64))?$/
+      : platform === "win"
+        ? /^win(?:-(x64|arm64))?-unpacked$/
+        : /^linux(?:-(x64|arm64))?-unpacked$/;
   return fs
     .readdirSync(releaseRoot, { withFileTypes: true })
-    .filter((entry) => entry.isDirectory() && entry.name.includes("unpacked"))
-    .map((entry) => path.join(releaseRoot, entry.name, "resources"))
-    .filter((dir) => fs.existsSync(dir));
+    .filter((entry) => entry.isDirectory() && entry.name.startsWith(platform))
+    .map((entry) => {
+      const match = directoryPattern.exec(entry.name);
+      if (!match) {
+        throw new Error(
+          `Unrecognized unpacked ${platform} target directory: ${entry.name}`,
+        );
+      }
+      const resourcesDir =
+        platform === "mac"
+          ? path.join(
+              releaseRoot,
+              entry.name,
+              "Covel.app",
+              "Contents",
+              "Resources",
+            )
+          : path.join(releaseRoot, entry.name, "resources");
+      return {
+        resourcesDir,
+        ...resolveReleaseTarget(resourcesDir, platform, match[1]),
+      };
+    });
 }
 
-const resourceDirs = collectResourceDirs();
-if (resourceDirs.length === 0) {
-  console.error(
-    `No unpacked ${platform} release directories found under ${releaseRoot} `,
-  );
-  process.exit(1);
+function verifyRelease(platform) {
+  if (!platform || !["mac", "win", "linux"].includes(platform)) {
+    throw new Error(
+      "Usage: node apps/desktop/scripts/verify-release.mjs <mac|win|linux>",
+    );
+  }
+  const resourceDirs = collectResourceDirs(releaseRoot, platform);
+  if (resourceDirs.length === 0) {
+    console.error(
+      `No unpacked ${platform} release directories found under ${releaseRoot} `,
+    );
+    process.exit(1);
+  }
+
+  for (const { resourcesDir, arch } of resourceDirs) {
+    const runtimeTarget = {
+      platform: { mac: "darwin", win: "win32", linux: "linux" }[platform],
+      arch,
+    };
+    // Fuse changes invalidate ARM64 code pages unless the ad-hoc signature is
+    // reset. Check before execution so a broken package cannot trigger SIGKILL.
+    if (runtimeTarget.platform === "darwin" && process.platform === "darwin") {
+      execFileSync(
+        "codesign",
+        [
+          "--verify",
+          "--strict",
+          path.join(resourcesDir, "../Frameworks/Electron Framework.framework"),
+        ],
+        { stdio: "inherit", timeout: 30_000 },
+      );
+    }
+    // verify-staging checks the selected resource set and actual runtime, not
+    // the build host's Node or the version claimed by the Electron npm package.
+    verifyTargetNativePackages(
+      path.join(resourcesDir, "server"),
+      runtimeTarget,
+    );
+    assertNoPrivateConfig(path.join(resourcesDir, "server"));
+    mustExist(resourcesDir, "server/src/index.js");
+    mustExist(resourcesDir, "server/node_modules/tsx/dist/loader.mjs");
+    mustExist(resourcesDir, "server/node_modules/esbuild/package.json");
+    mustExist(
+      resourcesDir,
+      "server/node_modules/@covel/ai-provider/data/model-db.json",
+    );
+    mustExist(resourcesDir, "web-dist/index.html");
+    mustHaveBundledWorlds(resourcesDir);
+    mustHaveBundledPlugins(resourcesDir);
+    mustHaveBundledPrompts(resourcesDir);
+    // Check the copied resources, not the staging tree. Both config paths must
+    // boot under the actual pinned target binary, with no host runtime fallback.
+    for (const flags of [[], ["--no-llm-toml"]]) {
+      execFileSync(
+        process.execPath,
+        [
+          path.join(__dirname, "verify-staging.mjs"),
+          "--resources",
+          resourcesDir,
+          "--platform",
+          runtimeTarget.platform,
+          "--arch",
+          arch,
+          ...flags,
+        ],
+        { cwd: desktopRoot, stdio: "inherit", timeout: 90_000 },
+      );
+    }
+  }
+
+  console.log(`Verified ${platform} desktop release resources: `);
+  for (const { resourcesDir } of resourceDirs) {
+    console.log(`  ✓ ${resourcesDir} `);
+  }
 }
 
-for (const resourcesDir of resourceDirs) {
-  assertNoPrivateConfig(path.join(resourcesDir, "server"));
-  mustExist(resourcesDir, "server/src/index.js");
-  mustExist(resourcesDir, "server/node_modules/tsx/dist/loader.mjs");
-  mustExist(resourcesDir, "server/node_modules/esbuild/package.json");
-  mustExist(
-    resourcesDir,
-    "server/node_modules/@covel/ai-provider/data/model-db.json",
-  );
-  mustExist(resourcesDir, "web-dist/index.html");
-  mustHaveBundledWorlds(resourcesDir);
-  mustHaveBundledPlugins(resourcesDir);
-  mustHaveBundledPrompts(resourcesDir);
-}
-
-console.log(`Verified ${platform} desktop release resources: `);
-for (const resourcesDir of resourceDirs) {
-  console.log(`  ✓ ${resourcesDir} `);
+if (
+  process.argv[1] &&
+  import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href
+) {
+  verifyRelease(process.argv[2]);
 }

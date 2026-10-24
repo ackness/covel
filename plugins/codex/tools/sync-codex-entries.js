@@ -12,8 +12,8 @@
  * A new entry's key is its title as words (`codex-west-herb-garden`,
  * `codex-西侧旧药园`). Persisted values carry `categoryMeta` (icon / color)
  * from `category-metadata.js`, so the panel renders category
- * badges without a framework lookup table, and every change emits a
- * `ui-spec` EntryCard block.
+ * badges without a framework lookup table, and every change emits a UI
+ * block whose one `ui-spec` part is the EntryCard.
  */
 
 import {

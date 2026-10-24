@@ -3,8 +3,8 @@
  * lifecycle scripts at all (the download moved to an explicit
  * `install-electron` bin), so `pnpm install` never materialises the runtime
  * binary under node_modules/electron/dist and whitelisting electron in
- * `allowBuilds` has nothing to run. Anything that needs the real
- * binary (dev shell, `--electron-node` staging smoke) calls this first.
+ * `allowBuilds` has nothing to run. Anything that needs the desktop shell
+ * binary (development or packaging) calls this first.
  * install.js skips the download when dist/ is already present, so repeat
  * calls are cheap.
  */

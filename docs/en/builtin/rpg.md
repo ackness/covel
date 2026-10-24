@@ -58,7 +58,7 @@ The model picks one of four difficulty levels. Each one has a target number (DC)
 
 If the d20 plus the attribute modifier reaches the target, the check succeeds. A natural 20 is a critical success. A natural 1 is a critical failure.
 
-If a numeric attribute of the player character is in the `abilities` category and has minimum and maximum values, the plugin scales it to a modifier from 0 to +10 and lists it for the narrator. Values such as health or trust (`stats`, `social`) are not used for checks. So put the attributes checks use in `abilities` and give them proper `min` and `max` values.
+If a numeric attribute of the player character is in the `abilities` category and has minimum and maximum values, the plugin scales it to a modifier from 0 to +10 and lists it for the narrator. Values such as health or trust (`stats`, `social`) are not used for checks. So put the attributes checks use in `abilities` and give them proper `min` and `max` values. If no ranged ability is available or character data is missing, checks still roll with modifier 0 and show no attribute label.
 
 ### When it is on
 

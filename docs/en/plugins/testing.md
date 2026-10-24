@@ -61,7 +61,7 @@ A unit test calls your tool or function directly, and checks its return value. I
 
 ### Where you can write them
 
-A plugin that `pnpm create-plugin <name> --with-tools` generates under the repository's `plugins/` comes with unit tests of its own: there is an example in `tests/`, `package.json` has the `test` and `lint` scripts, and there is a `vitest.config.ts`.
+A plugin that `pnpm create-plugin <name> --with-tools` generates under the repository's `plugins/` comes with unit tests of its own: there is an example in `tests/`, `package.json` has the `test` and `lint` scripts, and there is a `vitest.config.ts`. The template and workspace use the same Vitest version; update an existing plugin's development dependency declaration when upgrading.
 
 A plugin generated into the user's plugin directory has no dependencies and no test configuration. These plugins are tested with validation and [offline cases](#offline-cases).
 
@@ -75,6 +75,8 @@ pnpm --filter @covel/plugin-my-plugin test
 > Run them from the plugin's own package. Do not run `pnpm vitest run plugins/<id>/tests` from the repository root. The `vitest.config.ts` in the package gives each run its own temporary directory and deletes it at the end. Running from the root skips it.
 
 `pnpm --filter @covel/plugin-my-plugin lint` type-checks the code using JSDoc comments, so you do not have to convert the code to TypeScript. After you change code that calls the SDK, run both the type check and the tests.
+
+The scaffold uses stable TypeScript 7.0.2. When trying TypeScript 7.1, the development environment must also satisfy the SDK's Zod 4.6.7 minimum. Do not use type assertions or disable checks to bypass older Zod declarations' recursive JSON type errors.
 
 ### Test a tool
 
@@ -196,6 +198,7 @@ Key points:
 - If a `ctx.store` read method is not provided, calling it fails right away, for example with `store.getPluginData is not configured for this test context`. This way, a test does not quietly read empty data.
 - By default, a fixed `ctx.random` is included, and it gives the same numbers on every run. So the result of a dice roll can be asserted directly.
 - The effects that a function returns are in `result.effects`, for example `result.effects.interactions`.
+- For functions that produce both model instructions and player-visible data, test content locales with different `COVEL_INSTRUCTION_LOCALE` values. Cover at least Chinese content with English instructions and English content with Chinese instructions. Call the real handler and assert the instruction language and result data separately; for missing values, check that optional fields are actually omitted. Set overrides with `vi.stubEnv` and restore them with `vi.unstubAllEnvs` in `afterEach`. See the [Dice Check tests](../../../plugins/dice-check/tests/roller.test.js) and the language rules in the [i18n reference](../reference/i18n.md#2-localize-a-plugin).
 
 ### What the test kit contains
 
