@@ -73,6 +73,14 @@ export function pipelineQuery({
     env("TURBO_CACHE_MAX_SIZE", "500MB"),
     exec(["pnpm", "install", "--frozen-lockfile"]),
   ];
+  if (task === "tests")
+    chain.push(
+      exec([
+        "bash",
+        "-ec",
+        "apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends libgtk-3-0 libnss3 libasound2 libgbm1 libxss1 && rm -rf /var/lib/apt/lists/*",
+      ]),
+    );
   if (task === "browser")
     chain.push(
       exec([
