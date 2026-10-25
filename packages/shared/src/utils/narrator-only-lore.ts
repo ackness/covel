@@ -24,7 +24,16 @@ const NARRATOR_ONLY_CLOSE = "<!-- /narrator-only -->";
 
 const OPEN = /^<!--\s*narrator[\s_-]*only\s*-->$/i;
 const CLOSE = /^<!--\s*\/\s*narrator[\s_-]*only\s*-->$/i;
-const MENTION = /^<!--.*narrator[\s_-]*only.*-->$/i;
+// Match the mention and the remaining comment separately. A single expression
+// with `.*` on both sides retries the suffix for every mention on a malformed
+// line, making repeated mentions without a closing delimiter quadratic.
+const MENTION = /^<!--.*narrator[\s_-]*only/i;
+const COMMENT_END = /^.*-->$/;
+
+function mentionsNarratorOnly(line: string): boolean {
+  const mention = MENTION.exec(line);
+  return mention !== null && COMMENT_END.test(line.slice(mention[0].length));
+}
 
 export interface NarratorOnlyLoreIssue {
   /** 1-based line of the marker. */
@@ -49,7 +58,7 @@ function scan(lore: string): {
   for (const [index, text] of lore.split("\n").entries()) {
     const line = index + 1;
     const trimmed = text.trim();
-    if (!MENTION.test(trimmed)) {
+    if (!mentionsNarratorOnly(trimmed)) {
       lines.push({ text, marker: false, narratorOnly: openedAt > 0 });
       continue;
     }
