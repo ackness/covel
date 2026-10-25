@@ -53,6 +53,7 @@ jobs:
     timeout-minutes: 5
     outputs:
       scope: ${{ steps.scope.outputs.scope }}
+      runner: ${{ steps.runner.outputs.runner }}
       site_deploy: ${{ steps.scope.outputs.site_deploy }}
     steps:
       # Control scripts belong to the workflow revision, not a requested older
@@ -68,6 +69,8 @@ jobs:
           sparse-checkout: |
             /scripts/ci-scope.mjs
             /scripts/lib/change-scope.mjs
+            /scripts/ci-runner.mjs
+            /scripts/lib/dagger-pr-policy.mjs
           sparse-checkout-cone-mode: false
           persist-credentials: false
 
@@ -79,12 +82,44 @@ jobs:
           COMMIT: ${{ inputs.commit }}
         run: node scripts/ci-scope.mjs >> "$GITHUB_OUTPUT"
 
+      - name: Select trusted execution backend
+        id: runner
+        env:
+          RELEASE: ${{ inputs.release }}
+          COMMIT: ${{ inputs.commit }}
+        run: node scripts/ci-runner.mjs >> "$GITHUB_OUTPUT"
+
+  dagger:
+    name: Await trusted Dagger verification
+    needs: scope
+    if: ${{ !cancelled() && needs.scope.outputs.runner == 'dagger' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    permissions:
+      contents: read
+      checks: read
+    steps:
+      - name: Checkout verification controls
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.workflow_sha }}
+          sparse-checkout: |
+            /scripts/dagger-pr.mjs
+            /scripts/lib/dagger-pr-policy.mjs
+            /scripts/lib/change-scope.mjs
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - name: Require Dagger success for this merge commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/dagger-pr.mjs wait
+
   # One build owner for docs, full and unknown scope alike. Keep these elevated
   # permissions on this nonrelease call only; executing release jobs stay read-only.
   site:
     name: Site
     needs: scope
-    if: ${{ !cancelled() && !inputs.release }}
+    if: ${{ !cancelled() && !inputs.release && needs.scope.outputs.runner != 'dagger' }}
     permissions:
       contents: read
       pages: write
@@ -97,7 +132,7 @@ jobs:
   verify:
     name: Static checks
     needs: scope
-    if: ${{ !cancelled() }}
+    if: ${{ !cancelled() && needs.scope.outputs.runner != 'dagger' }}
     runs-on: ubuntu-latest
     timeout-minutes: 25
 
@@ -164,7 +199,7 @@ jobs:
   tests:
     name: Tests and build
     needs: scope
-    if: ${{ !cancelled() && (needs.scope.outputs.scope != 'docs' || inputs.release) }}
+    if: ${{ !cancelled() && needs.scope.outputs.runner != 'dagger' && (needs.scope.outputs.scope != 'docs' || inputs.release) }}
     runs-on: ubuntu-latest
     timeout-minutes: 25
 
@@ -242,7 +277,7 @@ jobs:
   web:
     name: Web unit tests
     needs: scope
-    if: ${{ !cancelled() && (needs.scope.outputs.scope != 'docs' || inputs.release) }}
+    if: ${{ !cancelled() && needs.scope.outputs.runner != 'dagger' && (needs.scope.outputs.scope != 'docs' || inputs.release) }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -293,7 +328,7 @@ jobs:
   server:
     name: Server tests, runtime coverage
     needs: scope
-    if: ${{ !cancelled() && (needs.scope.outputs.scope != 'docs' || inputs.release) }}
+    if: ${{ !cancelled() && needs.scope.outputs.runner != 'dagger' && (needs.scope.outputs.scope != 'docs' || inputs.release) }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -336,7 +371,7 @@ jobs:
   postgres:
     name: PostgreSQL integration
     needs: scope
-    if: ${{ !cancelled() && (needs.scope.outputs.scope != 'docs' || inputs.release) }}
+    if: ${{ !cancelled() && needs.scope.outputs.runner != 'dagger' && (needs.scope.outputs.scope != 'docs' || inputs.release) }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     services:
@@ -384,7 +419,7 @@ jobs:
   browser:
     name: Browser smoke and community plugins
     needs: scope
-    if: ${{ !cancelled() && (needs.scope.outputs.scope != 'docs' || inputs.release) }}
+    if: ${{ !cancelled() && needs.scope.outputs.runner != 'dagger' && (needs.scope.outputs.scope != 'docs' || inputs.release) }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -464,7 +499,7 @@ jobs:
 
   result:
     name: Verification
-    needs: [scope, verify, tests, site, web, server, postgres, browser]
+    needs: [scope, dagger, verify, tests, site, web, server, postgres, browser]
     if: ${{ always() }}
     runs-on: ubuntu-latest
     timeout-minutes: 5

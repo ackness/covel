@@ -11,6 +11,21 @@ export function verificationFailures(needs, release = false) {
   const scope = needs?.scope?.outputs?.scope;
   if (scope !== "docs" && scope !== "full")
     failures.push("scope is missing or unknown");
+  const runner = needs?.scope?.outputs?.runner ?? "github";
+  if (!["github", "dagger"].includes(runner))
+    failures.push("unknown execution backend");
+  if (runner === "dagger") {
+    if (release) failures.push("releases cannot delegate to the PR executor");
+    if (needs?.dagger?.result !== "success")
+      failures.push("dagger did not succeed");
+    for (const job of ["verify", "site", ...fullJobs]) {
+      if (needs?.[job]?.result !== "skipped")
+        failures.push(`${job} must be skipped when Dagger owns verification`);
+    }
+    return failures;
+  }
+  if (needs?.dagger && needs.dagger.result !== "skipped")
+    failures.push("unexpected Dagger result on GitHub execution path");
   const required = [
     "verify",
     ...(release ? [] : ["site"]),

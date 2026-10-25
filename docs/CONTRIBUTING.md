@@ -129,7 +129,7 @@ pnpm e2e                                   # Playwright 端到端
 
 PR、main 和发布统一使用 [`ci.yml`](../.github/workflows/ci.yml)，不再另跑 Docs 验证工作流。每种范围都运行完整的 `pnpm check`。纯文档随后运行 `pnpm test:docs:packages`；源码、混合改动、未知范围和发布运行完整套件。分类复用 pre-push 的 `scripts/lib/change-scope.mjs`；读取文档的包测试必须列进 `test:docs:packages`，由 `scripts/tests/change-scope.test.mjs` 检查。
 
-完整路径中，`verify` 运行静态检查，与 `tests` 的其余套件及构建并行；两者只等待范围选择，各用独立 Turbo 缓存键，且都必须成功才能通过 `Verification`。纯文档的包测试和发布 preflight 留在 `verify`。`tests` 运行除 Web、server、runtime 之外的套件；Web 独立运行；server 独占 runner，并带覆盖率运行 runtime 套件、执行其下限，runtime 在 CI 只运行一次；PostgreSQL 和 Chromium 各自运行。浏览器 job 先收集全部 E2E，发现失效导入，再运行 smoke 和 `pnpm e2e:extensions`，共用安装和 Chromium。Chromium 下载按 Playwright 版本缓存，系统依赖每次安装。
+在 GitHub runner 路径中，`verify` 运行静态检查，与 `tests` 的其余套件及构建并行；两者只等待范围选择，各用独立 Turbo 缓存键，且都必须成功才能通过 `Verification`。纯文档的包测试和发布 preflight 留在 `verify`。`tests` 运行除 Web、server、runtime 之外的套件；Web 独立运行；server 独占 runner，并带覆盖率运行 runtime 套件、执行其下限，runtime 在 CI 只运行一次；PostgreSQL 和 Chromium 各自运行。浏览器 job 先收集全部 E2E，发现失效导入，再运行 smoke 和 `pnpm e2e:extensions`，共用安装和 Chromium。Chromium 下载按 Playwright 版本缓存，系统依赖每次安装。
 
 非发布的完整检查运行 `pnpm build --cache=local:r --filter=!@covel/docs --filter=!@covel/site`，只读取 Turbo 缓存、不写回构建产物。官网和文档站由 CI 调用的 Site 任务用 Turbo 并行构建；纯文档改动也必须通过该任务。输入相同时恢复已有产物，仍须成功完成 Site 任务。独立的 `pnpm build` 仍构建全部目标。Turbo 本地缓存由 `turbo.json` 的 `cacheMaxAge`（7 天）和 `cacheMaxSize`（2GB）淘汰；CI 用 `TURBO_CACHE_MAX_AGE` / `TURBO_CACHE_MAX_SIZE` 收紧到 2 天、500MB，因为 actions/cache 每次整目录恢复再保存。
 
@@ -146,6 +146,16 @@ Turbo、Electron、Chromium 和 Site 的任务缓存各用一次 restore；普�
 macOS 发布任务从实际 ZIP 启动应用，通过真实 preload 验证世界选择、开局准备和刷新，再检查应用及其进程组退出；截图和日志独立上传。它不验证 Gatekeeper、DMG 安装交互或原生窗口可见性。Windows 发布任务运行桌面回归测试，并在含空格和中文的 ZIP 解压路径验证 Electron 后端；记录产物与 ZIP 解压体积。它还启动实际 ZIP 和自解压 EXE，检查原生准备画面、可见应用窗口、世界选择与开局按钮，以及进程树退出。它需要未锁定的交互式 Windows 桌面；无法观察时失败，不能用 API 或渲染器截图替代。原生截图与日志独立上传，不进入发布资产。打包改动的 PR 必须注明实际验证的平台；添加工作流不等于已通过 Windows 验证。
 
 `Verification` 汇总所选任务，包括每次非发布 CI 的 Site；必需任务缺失、跳过、失败或取消都不能通过。`main` 只接受通过 PR 合入的改动；每个 PR 的 [`gate.yml`](../.github/workflows/gate.yml) 提供 `All checks pass`，要求 `Verification` 成功，同时保留其他检查的失败。重跑失败检查后，也要重跑这一项。
+
+### 自己的 PR 使用 Dagger
+
+`ackness` 创建、且来源仓库也是 `ackness/covel` 的 PR，由主分支上的 [`dagger-pr.yml`](../.github/workflows/dagger-pr.yml) 在远端 Dagger 执行 Linux CI。其他作者、fork PR、main 推送、发布和显式 commit 检查继续使用 GitHub runner；macOS/Windows 打包与 Pages 部署保持原流程。首次引入该工作流的 PR 仍走 GitHub，只有它进入 PR 的基准提交后才自动启用分流。
+
+Dagger 的完整路径运行静态检查、其余单元测试与构建、Web 测试、server 测试和 runtime 覆盖率、独立 PostgreSQL 集成、Chromium smoke 与社区插件验收，以及 Site/docs 构建。纯文档路径仍运行完整静态检查、文档包测试和 Site/docs 构建。最多同时运行三个任务；安装依赖层可以复用，每次工作流执行的测试步骤都会重新运行。数据库属于该次执行的独立服务；浏览器失败证据与任务结果上传为 Actions artifact。
+
+CI 的 `Verification` 等待与当前 PR 合并提交完全匹配的 `Dagger Linux` check。远端失败、取消、超时或缺失结果都不能通过。失败后重跑 **Trusted Dagger PR verification**；若 CI 的等待任务或 Merge gate 已经失败，也需重跑对应任务。
+
+`dagger-ci` Environment 仍只允许 `main`，不向 PR 分支开放 Secrets。受信任的控制器重新核验 PR 作者 ID、来源仓库、base/head 和合并提交的两个父提交，再将不可变源码取到远端容器。不会在持有凭据的 GitHub runner 上执行 PR 脚本，也不把 GitHub token、mTLS 私钥或主机目录传进测试容器；测试容器的 Dagger-in-Dagger 被禁用。修改控制器或远端流水线定义需要通过 PR 合入主分支后才生效，不会直接执行 PR 提供的控制器。
 
 ### Dagger 连接验证
 

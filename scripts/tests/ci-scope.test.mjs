@@ -165,6 +165,8 @@ test("scope checkout limits blobs and files while retaining the merge-base graph
   assert.deepEqual(patterns, [
     "/scripts/ci-scope.mjs",
     "/scripts/lib/change-scope.mjs",
+    "/scripts/ci-runner.mjs",
+    "/scripts/lib/dagger-pr-policy.mjs",
   ]);
 
   const repo = repository(t);
@@ -277,7 +279,10 @@ test("CI keeps required Site builds and scoped download keys", () => {
   const ci = workflow("ci");
   const site = workflow("site");
   const release = workflow("release");
-  assert.equal(ci.jobs.site.if, "${{ !cancelled() && !inputs.release }}");
+  assert.equal(
+    ci.jobs.site.if,
+    "${{ !cancelled() && !inputs.release && needs.scope.outputs.runner != 'dagger' }}",
+  );
   assert.ok(ci.jobs.result.needs.includes("site"));
   assert.equal(site.on.pull_request, undefined);
   assert.equal(site.on.push, undefined);
@@ -593,7 +598,10 @@ test("release packaging and explicit-commit Site calls retain read-only cache po
   const ci = workflow("ci");
   const release = workflow("release");
   assert.equal(ci.jobs.site.with.commit, "${{ inputs.commit }}");
-  assert.equal(ci.jobs.site.if, "${{ !cancelled() && !inputs.release }}");
+  assert.equal(
+    ci.jobs.site.if,
+    "${{ !cancelled() && !inputs.release && needs.scope.outputs.runner != 'dagger' }}",
+  );
   for (const job of Object.values(release.jobs)) {
     for (const step of job.steps ?? []) {
       assert.equal(

@@ -8,7 +8,7 @@
 - 环境变量：[`../reference/env-registry.md`](../reference/env-registry.md)
 - 桌面端代理设置：[`../reference/desktop-config.md`](../reference/desktop-config.md)
 - CI 缓存信任边界：[`CONTRIBUTING.md`](../CONTRIBUTING.md)。发布或显式 commit 可执行任意源码，不能将执行后产生的文件保存到工作流 ref 的缓存。受信任的 Node 摘要校验会拒绝替换文件，但不能授权另一个 ref 写入缓存。
-- 远端 Dagger 凭据与可信分支：[`CONTRIBUTING.md`](../CONTRIBUTING.md#dagger-连接验证)。mTLS 验证证书持有者，仓库与分支限制由 GitHub Environment 控制。
+- 远端 Dagger 凭据与可信分支：[`CONTRIBUTING.md`](../CONTRIBUTING.md#dagger-连接验证)。mTLS 验证证书持有者；仅 main 可读取 Environment 密钥。主分支控制器核验作者及来源仓库后，将精确合并提交交给远端容器，容器不持有 GitHub/mTLS 凭据或 Dagger-in-Dagger 能力。
 - 报告漏洞：[`SECURITY.md`](../../SECURITY.md)
 
 下文多次提到“部署档位”（`DEPLOYMENT_TIER`）。`self` 是默认值，指桌面客户端和自己部署给自己用的实例。`demo` 是给公开网页实例用的档位，为以后的官方网页版准备；官方网页版现在还不支持。`commercial` 是给以后可能有的商业版预留的最严格档位：现在没有账号、租户隔离和配额，这个仓库也不为它更新。`demo` 和 `commercial` 都要求令牌，合称托管档位。

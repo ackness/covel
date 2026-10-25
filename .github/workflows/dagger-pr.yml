@@ -1,0 +1,101 @@
+name: Trusted Dagger PR verification
+
+# This workflow and its controller come from main, never from PR code.
+# Owner-authored code is executed only inside the remote engine, with no
+# checkout credentials, host mounts, or Dagger-in-Dagger capability.
+on:
+  pull_request_target:
+    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review, edited]
+
+permissions: {}
+
+concurrency:
+  group: dagger-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  linux:
+    if: >-
+      github.repository == 'ackness/covel' &&
+      github.event.pull_request.user.id == 19150500 &&
+      github.event.pull_request.user.login == 'ackness' &&
+      github.event.pull_request.head.repo.id == 1190560481 &&
+      github.event.pull_request.base.ref == 'main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    environment: dagger-ci
+    permissions:
+      contents: read
+      pull-requests: read
+      checks: write
+    steps:
+      - name: Checkout trusted controller
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.workflow_sha }}
+          persist-credentials: false
+          sparse-checkout: |
+            /scripts/dagger-pr.mjs
+            /scripts/dagger-ci.mjs
+            /scripts/lib/dagger-pr-policy.mjs
+            /scripts/lib/dagger-pipeline.mjs
+            /scripts/lib/change-scope.mjs
+          sparse-checkout-cone-mode: false
+
+      - name: Authorize exact PR revision and create check
+        id: authorize
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/dagger-pr.mjs prepare
+
+      - name: Install matching Dagger CLI
+        env:
+          ENGINE_IMAGE: registry.dagger.io/engine:v1.0.0-beta.21@sha256:3444c48e871bedaa95f5b1e57b8c41de929d9e061dd75e9ac6f6deb1f0a74bc3
+        run: |
+          set -euo pipefail
+          docker pull "$ENGINE_IMAGE"
+          container_id=$(docker create "$ENGINE_IMAGE")
+          trap 'docker rm "$container_id" >/dev/null' EXIT
+          install -d "$RUNNER_TEMP/dagger-bin"
+          docker cp "$container_id:/usr/local/bin/dagger" "$RUNNER_TEMP/dagger-bin/dagger"
+          chmod 755 "$RUNNER_TEMP/dagger-bin/dagger"
+
+      - name: Verify Linux tasks on remote engine
+        id: run
+        env:
+          SOURCE_SHA: ${{ steps.authorize.outputs.merge_sha }}
+          CI_SCOPE: ${{ steps.authorize.outputs.scope }}
+          DAGGER_CLIENT_CERT: ${{ secrets.DAGGER_CLIENT_CERT }}
+          DAGGER_CLIENT_KEY: ${{ secrets.DAGGER_CLIENT_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$DAGGER_CLIENT_CERT"
+          test -n "$DAGGER_CLIENT_KEY"
+          umask 077
+          credential_dir=$(mktemp -d "$RUNNER_TEMP/dagger-mtls.XXXXXX")
+          trap 'rm -rf "$credential_dir"' EXIT
+          printf '%s\n' "$DAGGER_CLIENT_CERT" > "$credential_dir/client.crt"
+          printf '%s\n' "$DAGGER_CLIENT_KEY" > "$credential_dir/client.key"
+          unset DAGGER_CLIENT_CERT DAGGER_CLIENT_KEY
+          openssl x509 -in "$credential_dir/client.crt" -noout -checkend 604800
+          export DAGGER_ENGINE="tls://ci.covel.cc:8443?cert_path=$credential_dir/client.crt&key_path=$credential_dir/client.key"
+          export DAGGER_BIN="$RUNNER_TEMP/dagger-bin/dagger"
+          "$DAGGER_BIN" --progress=plain run -- node scripts/dagger-ci.mjs
+
+      - name: Publish verification result
+        if: ${{ always() && steps.authorize.outputs.check_id != '' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CHECK_ID: ${{ steps.authorize.outputs.check_id }}
+          RUN_OUTCOME: ${{ steps.run.outcome }}
+        run: node scripts/dagger-pr.mjs complete
+
+      - name: Upload results and browser failure artifacts
+        if: ${{ always() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: dagger-linux-${{ github.event.pull_request.number }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/covel-dagger-artifacts
+          if-no-files-found: ignore
+          retention-days: 7
