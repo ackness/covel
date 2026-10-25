@@ -1,0 +1,65 @@
+name: Dagger connection check
+
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: dagger-connection-check
+  cancel-in-progress: false
+
+jobs:
+  connect:
+    name: Verify remote Dagger with mTLS
+    if: github.repository == 'ackness/covel' && github.ref == 'refs/heads/main'
+    environment: dagger-ci
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      # Copy the matching CLI without starting an engine on the runner.
+      # No checkout or repository-controlled scripts run with these credentials.
+      - name: Install matching Dagger CLI
+        shell: bash
+        env:
+          ENGINE_IMAGE: registry.dagger.io/engine:v1.0.0-beta.21@sha256:3444c48e871bedaa95f5b1e57b8c41de929d9e061dd75e9ac6f6deb1f0a74bc3
+        run: |
+          set -euo pipefail
+          docker pull "$ENGINE_IMAGE"
+          container_id=$(docker create "$ENGINE_IMAGE")
+          trap 'docker rm "$container_id" >/dev/null' EXIT
+          install -d "$RUNNER_TEMP/dagger-bin"
+          docker cp "$container_id:/usr/local/bin/dagger" "$RUNNER_TEMP/dagger-bin/dagger"
+          chmod 755 "$RUNNER_TEMP/dagger-bin/dagger"
+          "$RUNNER_TEMP/dagger-bin/dagger" version
+
+      - name: Run authenticated container on remote engine
+        shell: bash
+        env:
+          DAGGER_CLIENT_CERT: ${{ secrets.DAGGER_CLIENT_CERT }}
+          DAGGER_CLIENT_KEY: ${{ secrets.DAGGER_CLIENT_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$DAGGER_CLIENT_CERT" || { echo 'Missing DAGGER_CLIENT_CERT in dagger-ci'; exit 1; }
+          test -n "$DAGGER_CLIENT_KEY" || { echo 'Missing DAGGER_CLIENT_KEY in dagger-ci'; exit 1; }
+          umask 077
+          credential_dir=$(mktemp -d "$RUNNER_TEMP/dagger-mtls.XXXXXX")
+          trap 'rm -rf "$credential_dir"' EXIT
+          printf '%s\n' "$DAGGER_CLIENT_CERT" > "$credential_dir/client.crt"
+          printf '%s\n' "$DAGGER_CLIENT_KEY" > "$credential_dir/client.key"
+          unset DAGGER_CLIENT_CERT DAGGER_CLIENT_KEY
+          openssl x509 -in "$credential_dir/client.crt" -noout -checkend 604800
+          export DAGGER_ENGINE="tls://ci.covel.cc:8443?cert_path=$credential_dir/client.crt&key_path=$credential_dir/client.key"
+          "$RUNNER_TEMP/dagger-bin/dagger" --progress=plain query --no-load-module > "$credential_dir/result.json" <<'GRAPHQL'
+          {
+            container {
+              from(address: "alpine:3.20") {
+                withExec(args: ["echo", "ackness/covel mTLS OK"]) {
+                  stdout
+                }
+              }
+            }
+          }
+          GRAPHQL
+          jq -e '.container.from.withExec.stdout == "ackness/covel mTLS OK\n"' "$credential_dir/result.json"
+          echo 'Remote Dagger connection and container execution passed.'
