@@ -8,6 +8,7 @@ Related material is on other pages:
 - Environment variables: [`../reference/env-registry.md`](../reference/env-registry.md)
 - Desktop proxy settings: [`../reference/desktop-config.md`](../reference/desktop-config.md)
 - CI cache trust boundary: [`CONTRIBUTING.en.md`](../../CONTRIBUTING.en.md). Release or explicit-commit runs can execute arbitrary source and must not save files produced by that execution into the workflow ref's caches. Trusted Node digest checks reject replacement files but do not authorize another ref to write caches.
+- Remote Dagger credentials and trusted branches: [`CONTRIBUTING.en.md`](../../CONTRIBUTING.en.md#dagger-connection-check). mTLS verifies certificate possession; GitHub Environment policies control repository and branch access.
 - Reporting a vulnerability: [`SECURITY.md`](../../../SECURITY.md)
 
 Below, the "deployment tier" (`DEPLOYMENT_TIER`) comes up many times. `self` is the default. It means the desktop app, and instances that a person deploys for their own use. `demo` is the tier for public web instances, meant for the official web app, which is not supported yet. `commercial` is the strictest tier, reserved for a possible future commercial edition. There are no accounts, tenant isolation, or quotas, and this repository does not maintain it. `demo` and `commercial` both require tokens. Together they are called the hosted tiers.

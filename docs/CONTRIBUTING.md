@@ -147,6 +147,14 @@ macOS 发布任务从实际 ZIP 启动应用，通过真实 preload 验证世界
 
 `Verification` 汇总所选任务，包括每次非发布 CI 的 Site；必需任务缺失、跳过、失败或取消都不能通过。`main` 只接受通过 PR 合入的改动；每个 PR 的 [`gate.yml`](../.github/workflows/gate.yml) 提供 `All checks pass`，要求 `Verification` 成功，同时保留其他检查的失败。重跑失败检查后，也要重跑这一项。
 
+### Dagger 连接验证
+
+[`dagger-smoke.yml`](../.github/workflows/dagger-smoke.yml) 是独立的手动检查，不替代现有 CI。在 `ackness/covel` 的 Actions 页面选择 **Dagger connection check → Run workflow → main**。成功时输出 `Remote Dagger connection and container execution passed.`；它只在远端容器执行固定的 `echo`，不检出源码、不运行项目测试，也不接受命令或目标地址输入。
+
+仓库管理员先创建 `dagger-ci` Environment，将 **Deployment branches and tags** 设为 **Selected branches and tags**，只添加类型为 Branch 的 `main` 规则。在此 Environment 中保存 `DAGGER_CLIENT_CERT`（PEM 客户端证书）和 `DAGGER_CLIENT_KEY`（PEM 私钥），不要改成仓库级 Secrets。工作流自身也校验仓库名和 `refs/heads/main`；它不响应 PR，不能从 fork 获取凭据。
+
+入口为 `tls://ci.covel.cc:8443`，使用系统信任的服务端证书和客户端 mTLS。CLI 从固定摘要的 Engine 镜像复制，版本与服务端一致；证书只写进 runner 的临时目录，退出时删除。客户端证书在七天内到期会让检查失败，管理员应提前签发并替换两项 Secrets；客户端证书不随服务端的 Let's Encrypt 证书自动续期。凭据只证明持有证书，不能证明调用者的仓库身份；泄露时必须在服务端吊销或替换信任 CA，删除 GitHub Secret 本身不能撤销已复制的证书。
+
 ### 框架/插件隔离（重要）
 
 框架代码（`packages/`、`apps/server/src/`、`apps/web/src/`）中**禁止**出现任何具体插件 ID 或插件名称。插件通过版本化契约（`provides` / `requires`）、扩展点和已注册服务被发现，输出按 `outputKind` 分派，详见 [`AGENTS.md` Framework–Plugin Isolation Rule](../AGENTS.md#framework--plugin-isolation-rule)。

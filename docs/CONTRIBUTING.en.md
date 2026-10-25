@@ -147,6 +147,14 @@ The macOS release job launches the app from the actual ZIP, verifies world selec
 
 `Verification` aggregates selected jobs, including Site on every non-release CI run: missing, skipped, failed, or cancelled required jobs cannot pass. `main` takes changes through pull requests only. Each PR's [`gate.yml`](../.github/workflows/gate.yml) supplies `All checks pass`, requiring successful `Verification` while preserving failures from other checks. Rerun this gate after rerunning a failed check.
 
+### Dagger connection check
+
+[`dagger-smoke.yml`](../.github/workflows/dagger-smoke.yml) is a separate manual check and does not replace existing CI. In `ackness/covel` Actions, choose **Dagger connection check → Run workflow → main**. A successful run prints `Remote Dagger connection and container execution passed.` It executes only a fixed `echo` in a remote container: no source checkout, project tests, command inputs, or endpoint inputs.
+
+A repository administrator must first create the `dagger-ci` Environment, set **Deployment branches and tags** to **Selected branches and tags**, and add only `main` with type Branch. Store `DAGGER_CLIENT_CERT` (PEM client certificate) and `DAGGER_CLIENT_KEY` (PEM private key) in that Environment, not as repository-level secrets. The workflow also checks the repository name and `refs/heads/main`; it has no PR trigger, and forks cannot obtain its credentials.
+
+The endpoint is `tls://ci.covel.cc:8443`, using a system-trusted server certificate and client mTLS. The CLI is copied from a digest-pinned Engine image matching the server version. Credentials are written only to a temporary runner directory and removed on exit. The check fails when the client certificate expires within seven days, so administrators must issue a replacement and update both Secrets beforehand. Client certificates do not renew with the server's Let's Encrypt certificate. Credentials prove certificate possession, not repository identity. If leaked, revoke the certificate on the server or replace its trusted CA; deleting a GitHub Secret does not revoke copied credentials.
+
 ### Framework / plugin isolation (important)
 
 Framework code (`packages/`, `apps/server/src/`, `apps/web/src/`) **must not** reference any specific plugin ID or plugin name. Plugins are discovered through versioned contracts (`provides` / `requires`), extension points, and registered services, and output is dispatched on `outputKind`. See the [Framework–Plugin Isolation Rule in AGENTS.md](../AGENTS.md#framework--plugin-isolation-rule).
