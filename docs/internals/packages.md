@@ -61,6 +61,8 @@ Covel 是模块化单体：一个仓库、一起发布，内部分成若干包�
 
 常规依赖更新只采用发布满七天的正式版；等待期与精确安全版本例外由 [`pnpm-workspace.yaml`](../../pnpm-workspace.yaml) 管理。版本声明以各包的 `package.json` 和 `mise.toml` 为准，解析结果以 `pnpm-lock.yaml` 为准。升级时同步工作区与工具模板，保留 overrides 的消费方范围，并用[现有检查](./commands.md)验证兼容性。
 
+开发依赖 Fallow 的安全更新同时覆盖分析器、类型分析包和各平台二进制包。它在分析仓库配置时必须把文件读取和路径探测限制在项目根目录内；精确版本的等待期例外不放宽其他依赖的更新规则。
+
 工作区使用 TypeScript 稳定版 7.0.2。Zod、作者 SDK 的 peer dependency 和带工具模板的最低版本统一为 4.6.7；它修复了 TypeScript 7.1 对递归 JSON 类型的循环推断报错。JSON 的校验、可选字段和只读语义不变。Nightly 和 tsrs 的兼容性验证不替代稳定版类型检查门禁。
 
 ## 宿主组合的关键边界

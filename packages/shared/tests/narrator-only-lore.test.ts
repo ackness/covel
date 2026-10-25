@@ -111,6 +111,43 @@ describe("narrator-only lore", () => {
     ]);
   });
 
+  it("handles long repeated mentions without a closing comment", () => {
+    const malformed = `<!--${"narratoronly".repeat(100_000)}`;
+    const lore = `${malformed}\nShown.`;
+    expect(playerVisibleLore(lore)).toBe(lore);
+    expect(narratorLore(lore)).toBe(lore);
+    expect(narratorOnlyLoreIssues(lore)).toEqual([]);
+    expect(withNarratorOnlyLore("Edited.", lore)).toBe("Edited.");
+
+    const closed = `${malformed}-->\nSecret.\n<!-- /narrator-only -->\nShown.`;
+    expect(playerVisibleLore(closed)).toBe("Shown.");
+    expect(narratorLore(closed)).toBe("Secret.\nShown.");
+    expect(narratorOnlyLoreIssues(closed)).toEqual([
+      { line: 1, kind: "unrecognized" },
+    ]);
+  });
+
+  it.each(["\r", "\u2028", "\u2029"])(
+    "preserves comment matching around the line separator %j",
+    (separator) => {
+      // Whitespace inside the marker is accepted, but arbitrary text around
+      // it cannot span a line separator (the original comment used dot).
+      const marker = `<!-- narratoronly narrator${separator}only -->`;
+      expect(playerVisibleLore(`${marker}\nSecret.`)).toBe("");
+      expect(narratorOnlyLoreIssues(`${marker}\nSecret.`)).toEqual([
+        { line: 1, kind: "unrecognized" },
+        { line: 1, kind: "unclosed" },
+      ]);
+      for (const line of [
+        `<!-- before${separator}narrator-only -->`,
+        `<!-- narrator-only${separator}after -->`,
+      ]) {
+        expect(playerVisibleLore(`${line}\nShown.`)).toBe(`${line}\nShown.`);
+        expect(narratorOnlyLoreIssues(line)).toEqual([]);
+      }
+    },
+  );
+
   it("treats a marker line inside a code fence as a marker", () => {
     const lore = "```\n<!-- narrator-only -->\nSecret.\n```\nAlso hidden.";
     expect(playerVisibleLore(lore)).toBe("```");

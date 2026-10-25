@@ -61,6 +61,8 @@ The small packages `approval`, `context`, `events`, `create`, and `settings` eac
 
 Routine dependency updates use stable releases published at least seven days earlier. [`pnpm-workspace.yaml`](../../../pnpm-workspace.yaml) defines the waiting period and exceptions for exact security releases. Package manifests and `mise.toml` define declared versions; `pnpm-lock.yaml` records resolved versions. Update the workspace and tools scaffold together, preserve consumer scopes on overrides, and verify compatibility with the [existing checks](./commands.md).
 
+Security updates to the Fallow development dependency cover the analyzer, its type analysis package, and platform binaries together. When analyzing repository configuration, it must confine file reads and path probes to the project root. Exceptions for exact security versions do not relax the update policy for other dependencies.
+
 The workspace uses stable TypeScript 7.0.2. Zod consumers, the author SDK peer dependency, and the tools scaffold share a minimum of 4.6.7, which fixes circular inference errors for recursive JSON types in TypeScript 7.1. JSON validation, optional fields, and readonly semantics are unchanged. Compatibility checks with nightly compilers and tsrs do not replace the stable compiler gate.
 
 ## Key boundaries when the host combines packages

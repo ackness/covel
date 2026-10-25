@@ -9,6 +9,16 @@ minimumReleaseAge: 10080
 minimumReleaseAgeExclude:
   - "undici@6.29.1 || 7.30.1 || 8.12.2"
   - "electron@45.0.0"
+  - "fallow@3.34.0"
+  - "fallow-type-aware@3.34.0"
+  - "@fallow-cli/darwin-arm64@3.34.0"
+  - "@fallow-cli/darwin-x64@3.34.0"
+  - "@fallow-cli/linux-arm64-gnu@3.34.0"
+  - "@fallow-cli/linux-arm64-musl@3.34.0"
+  - "@fallow-cli/linux-x64-gnu@3.34.0"
+  - "@fallow-cli/linux-x64-musl@3.34.0"
+  - "@fallow-cli/win32-arm64-msvc@3.34.0"
+  - "@fallow-cli/win32-x64-msvc@3.34.0"
 
 # pnpm 11 defaults verifyDepsBeforeRun to an implicit auto-install, which is
 # actively harmful here: a `pnpm --filter <pkg> run …` that trips the check
