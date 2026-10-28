@@ -79,6 +79,8 @@ To play with a subscription, you can use a third-party converter such as [Magpie
 2. Go back to [step 1](#1-add-a-provider-and-models) above. Add a custom provider, enter that address and key, and add the model IDs it supports.
 3. Test the connection as in [step 2](#2-test-the-connection).
 
+To connect a public trial to Magpie on your computer, also allow the trial's web origin in Magpie and enter a real gateway key. The `magpie` placeholder in its local connection example does not authorize web requests. See [Magpie setup for a trial](./hosted-trial.md#magpie). A direct local connection from the desktop app does not need this web-origin permission.
+
 > [!IMPORTANT]
 > Tools such as Magpie are third-party software. Covel does not develop or maintain them. Check the tool's and service's own documentation to learn whether it works, is stable, and meets your subscription's terms. Problems that come from using them are not Covel's; report them to the tool's author.
 >

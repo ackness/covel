@@ -130,11 +130,11 @@ model    = "glm-5"
 
 For a provider that is not in the table, set `baseUrl` as usual. It only needs to be compatible with OpenAI Chat. You can leave out `protocol`.
 
-**Local services.** An entry marked "local" means a service on the same machine that runs the Covel server. The port is that service's default.
+**Local services.** Entries marked "local" use each service's default port. The desktop app and personal deployments connect directly from the Covel server, so a local address means the server's machine. A public trial uses the [local model relay](../start/hosted-trial.md#use-a-model-on-your-own-computer-or-local-network) to reach the player's computer, so a local address means the machine running the browser.
 
 - If you use a different port, or a local gateway that offers several protocols on one port, add it as a custom provider. Set the address to `http://127.0.0.1:<port>/v1`, and choose the protocol that this route uses. If you need several protocols, add several providers.
 - Magpie also offers OpenAI Responses and Anthropic Messages on the same address. After you pick Magpie under "Provider", models use OpenAI Chat; to use one of the other two for a model, choose it under that model's "API protocol".
-- A model on a local address (`localhost`, `127.0.0.1`, `::1`) does not need an API key. Without a key it still counts as ready. You can start a game, run background tasks, and run connection tests. If the service itself asks for a key, fill it in as usual.
+- Covel does not require an API key for a model on a local address (`localhost`, `127.0.0.1`, `::1`). Without a key it still counts as ready, so you can attempt a game, background task or connection test. This does not mean the service accepts requests without a key. Magpie web access requires an allowed origin and a real gateway key; see [Magpie setup](../start/hosted-trial.md#magpie), and the same page for browser relay address restrictions.
 
 **Reading the model list.** When you add a provider or a model, "Read the model list from the service" asks that service for the model IDs it offers (`POST /api/ai/models`). Tick the models you want to add. You can filter them by name. IDs you typed by hand are kept.
 

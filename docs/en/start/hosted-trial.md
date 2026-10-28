@@ -58,13 +58,26 @@ We do our best to protect your data, but the key still has to pass through the s
 
 ## Use a model on your own computer or local network
 
-The trial's server cannot reach your computer or your local network. So when a model address is on your computer or local network (a local model server such as Ollama, LM Studio or Magpie), your browser relays those requests. This is called the local model relay: the server hands the request to your browser, the browser sends it to your model server, and then passes the answer back to the server. Model addresses on the public internet do not go through the browser; the server still requests them directly.
+The trial's server cannot reach your computer or your local network. So when a model address is on your computer or local network (a local model server such as Ollama, LM Studio or Magpie), your browser relays those requests. This is called the local model relay: the server hands the request to your browser, the browser sends it to your model server, and then passes the answer back to the server. Here, `127.0.0.1` means the player's computer running the browser, not the Render server. Model addresses on the public internet do not go through the browser; the server still requests them directly.
 
 ### How to set it up
 
 1. In **Settings → LLM → Providers & Models**, add a provider and enter the address on your computer, for example `http://127.0.0.1:3425/v1` or `http://localhost:11434/v1`. A service on your local network needs an HTTPS address, for example `https://192.168.1.20/v1`. A note under the address says that your browser relays it.
 2. Let the model server accept cross-origin requests from the trial. The browser requests your model server directly, so the model server must allow the trial's address as an origin in its answers (CORS); otherwise the browser blocks the answer. On demo.covel.cc that is `https://demo.covel.cc`, and the note under the address names the current trial's address too. For Ollama, for example, set the environment variable `OLLAMA_ORIGINS` to that address and restart Ollama. For other servers, look for CORS or "allowed origins" in their settings.
 3. Start a game as usual, and keep the page open while you play. The first time the browser reaches your device or local network, it may ask whether this site may access it; allow it.
+
+### Magpie
+
+A successful command-line request to Magpie on your computer does not mean the trial page can connect. Web requests need an allowed origin and a gateway key:
+
+1. In Magpie's **Settings → Network and sharing → Web pages**, add the trial's origin to the pages allowed to call Magpie. For the official trial, enter `https://demo.covel.cc`. For your own deployment, enter the site's actual origin (scheme, host and port), without a page path such as `/session`.
+2. Prepare a test gateway key on Magpie's Gateway page and enter it as the corresponding provider's API key in Covel. The `magpie` value in the connection example is a placeholder accepted for local loopback requests; it cannot replace the real gateway key required for web requests. The key still passes through the trial server. Revoke it after testing; see [How your API keys are used](#how-your-api-keys-are-used).
+3. In Covel, enter `http://127.0.0.1:3425/v1` as the API address, using your Magpie port. Copy the protocol and model ID from Magpie's connection page. For example, for the Responses API, select **OpenAI Responses** and keep the full model ID, such as `codex/gpt-6-luna`.
+4. Test the connection in Covel. If the browser asks for local network access, allow it for this trial. Once the test succeeds, start a game and keep the page open.
+
+If the origin is not allowed, Magpie rejects the cross-origin preflight with HTTP 403 and `magpie doesn't answer the web page …`. Covel may only show `your browser could not reach …`. Check Magpie's allowed web origins first, then the gateway key and browser permission.
+
+The desktop app's local backend connects to Magpie directly, without the browser relay. It does not need an allowed web origin for the trial; whether a key is required still depends on Magpie's local access settings.
 
 ### Limits
 

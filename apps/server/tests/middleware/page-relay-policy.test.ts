@@ -8,13 +8,19 @@ import {
 } from "@covel/shared";
 import { localModelRelayPagePolicy } from "../../src/middleware/page-relay-policy.js";
 
-const PAGE = `<html><head><meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src ${PAGE_CONNECT_SOURCES}; frame-src 'self'"></head></html>`;
+const PAGE = `<html><head><meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src ${PAGE_CONNECT_SOURCES}; frame-src 'self'"></head><body><div id="root"></div></body></html>`;
 const FRAME = `<html><head><meta http-equiv="Content-Security-Policy" content="${PLUGIN_FRAME_CSP}"></head></html>`;
 
 function appFor(enabled: boolean) {
   const app = new Hono();
   app.use("/*", localModelRelayPagePolicy(enabled));
   app.get("/", (c) => c.html(PAGE));
+  app.get("/static.html", (c) =>
+    c.html(PAGE, 200, {
+      "Content-Length": String(Buffer.byteLength(PAGE)),
+      "Cache-Control": "no-cache",
+    }),
+  );
   app.get("/plugin-frame.html", (c) => c.html(FRAME));
   app.get("/app.js", (c) =>
     c.body("console.log(1)", 200, { "content-type": "text/javascript" }),
@@ -39,4 +45,16 @@ describe("localModelRelayPagePolicy", () => {
   it("leaves the page alone on a personal host and the desktop app", async () => {
     expect(await (await appFor(false).request("/")).text()).toBe(PAGE);
   });
+
+  it.each([true, false])(
+    "keeps the response length valid when static HTML has a length header (relay %s)",
+    async (enabled) => {
+      const response = await appFor(enabled).request("/static.html");
+      const body = await response.text();
+      const length = response.headers.get("content-length");
+      if (length !== null) expect(Number(length)).toBe(Buffer.byteLength(body));
+      expect(body).toContain('<div id="root"></div></body></html>');
+      expect(response.headers.get("cache-control")).toBe("no-cache");
+    },
+  );
 });
