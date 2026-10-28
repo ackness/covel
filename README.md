@@ -4,18 +4,18 @@
 
 **English** · [简体中文](./README.zh-CN.md)
 
-[![Version](https://img.shields.io/badge/version-v0.0.52-8b5cf6)](./docs/CHANGELOG.md#0052---2026-10-16)
+[![Version](https://img.shields.io/badge/version-v0.0.53-8b5cf6)](./docs/CHANGELOG.md#0053---2026-10-28)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 [![Stage](https://img.shields.io/badge/stage-early--access-orange)](./docs/CHANGELOG.md)
 [![Ask DeepWiki](https://img.shields.io/badge/Ask-DeepWiki-0b7285?logo=readthedocs&logoColor=white)](https://deepwiki.com/ackness/covel)
 
 [![Covel demo: the world list, a session and stage mode — more at covel.cc](./.assets/images/demo.gif)](https://covel.cc/)
 
-**[▶ Watch the full demo at covel.cc](https://covel.cc/)**
+**[▶ Watch the full demo at covel.cc](https://covel.cc/)** · **[🎮 Play in your browser at demo.covel.cc](https://demo.covel.cc/)** · **[📖 Documentation](https://covel.cc/docs/en/)**
 
 Covel is an AI RPG framework and playable studio where NPC relationships, lore, quests, inventory, memory, stage direction, and media can evolve between turns. Its architecture has three clear layers: the **kernel provides primitives and orchestration**, **plugins provide behavior**, and **world packs provide settings, resources, and a default plugin composition**.
 
-> **Source version: v0.0.52**, early access. APIs, world data, and plugin manifests may change between versions. Current binaries target macOS Apple Silicon and Windows x64 and are unsigned; macOS builds are not notarized. Each release attaches a `SHA256SUMS.txt` to check a download against. v0.0.52 changes plugin manifests and world packages; read the [breaking changes](./docs/CHANGELOG.md#breaking-changes-in-v0052) and [upgrade notes](./docs/CHANGELOG.md#upgrade-notes-for-v0052) before upgrading. **v0.0.52 refuses to start on an SQLite or PostgreSQL database created by v0.0.51 or earlier; recreate it** (sessions are not migrated; browser-private saves are not affected). Upgrades from earlier versions also follow the [v0.0.51 upgrade notes](./docs/CHANGELOG.md#upgrade-notes-for-v0051), the [v0.0.50 breaking changes](./docs/CHANGELOG.md#breaking-changes-in-v0050) and [upgrade notes](./docs/CHANGELOG.md#upgrade-notes-for-v0050), the [v0.0.49 upgrade notes](./docs/CHANGELOG.md#upgrade-notes-for-v0049) and the [v0.0.48 breaking-change notes](./docs/CHANGELOG.md#breaking-changes-and-upgrade-notes-for-v0048); versions before v0.0.42 also require the [v0.0.42 upgrade guide](./docs/en/internals/upgrade-0.0.42.md). Back up affected storage before upgrading; development data is not automatically migrated.
+> **Source version: v0.0.53**, early access. APIs, world data, and plugin manifests may change between versions. Current binaries target macOS Apple Silicon and Windows x64 and are unsigned; macOS builds are not notarized. Each release attaches a `SHA256SUMS.txt` to check a download against. v0.0.53 runs the desktop backend on the bundled Electron runtime and requires macOS 13.5 or later; source and Docker deployments need Node 26.12.1. Read the [breaking changes](./docs/CHANGELOG.md#breaking-changes-in-v0053) and [upgrade notes](./docs/CHANGELOG.md#upgrade-notes-for-v0053) before upgrading. Upgrades from v0.0.51 or earlier also follow the v0.0.52 [breaking changes](./docs/CHANGELOG.md#breaking-changes-in-v0052) and [upgrade notes](./docs/CHANGELOG.md#upgrade-notes-for-v0052): **v0.0.52 and later refuse to start on an SQLite or PostgreSQL database created by v0.0.51 or earlier; recreate it** (sessions are not migrated; browser-private saves are not affected). Older upgrades also follow the [v0.0.51 upgrade notes](./docs/CHANGELOG.md#upgrade-notes-for-v0051), the [v0.0.50 breaking changes](./docs/CHANGELOG.md#breaking-changes-in-v0050) and [upgrade notes](./docs/CHANGELOG.md#upgrade-notes-for-v0050), the [v0.0.49 upgrade notes](./docs/CHANGELOG.md#upgrade-notes-for-v0049) and the [v0.0.48 breaking-change notes](./docs/CHANGELOG.md#breaking-changes-and-upgrade-notes-for-v0048); versions before v0.0.42 also require the [v0.0.42 upgrade guide](./docs/en/internals/upgrade-0.0.42.md). Back up affected storage before upgrading; development data is not automatically migrated.
 
 ## Highlights
 
@@ -150,9 +150,15 @@ Open a side panel mid-play and you are reading the state carried forward from th
 
 ## Quick start
 
+### Play in the browser
+
+Open **[demo.covel.cc](https://demo.covel.cc/)**, the official public trial, and bring your own API key. Your saves and keys stay in your browser; the server keeps only the temporary copies it needs in memory and never writes your keys to disk, a database or its logs. A notice at the top links to the exact open-source commit the trial runs, deployed automatically from this repository.
+
+It is a trial on a free instance: it sleeps after 15 minutes without visitors (the next visit takes about a minute), generated images are lost when it restarts, and saves cannot be exported yet, so keep important progress in the desktop app. Use a separate key with a spending limit. What lives where and who could see your key: [Play on a public trial](./docs/en/start/hosted-trial.md). Run your own: [Deploy a trial on Render](./docs/en/start/deploy-render.md).
+
 ### Play
 
-Download the **macOS Apple Silicon (macOS 13.5+)** or **Windows x64** build from [Releases](https://github.com/ackness/covel/releases). The guide appears on your first visit to world selection: add a connection and model in **Configure Providers & Models**, test connectivity, check assignments in **Model Roles**, then choose a world, confirm its play pack, and start. Existing model settings can be reused.
+Download the **macOS Apple Silicon (macOS 13.5+)** or **Windows x64** build from [Releases](https://github.com/ackness/covel/releases). The guide appears on your first visit to world selection: choose your interface language, then add a connection and model in **Configure Providers & Models**, test connectivity, check assignments in **Model Roles**, then choose a world, confirm its play pack, and start. Existing model settings can be reused.
 
 You can skip the guide to browse worlds, but configure a model before generating a story. Reopen **Getting started guide** from world selection at any time. Complete any character creation or opening choices before entering actions to advance the story.
 
