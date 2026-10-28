@@ -604,6 +604,8 @@ A property is removed only when both its name and its value match:
 
 When a record's `id` is a UUID and another part of the same value points to that UUID (for example the `from` / `to` of a World IR relation or an event's `participantIds`), the UUID is a reference, not bookkeeping. It is kept everywhere it appears, so the model can match the entity with what points to it. Only references inside the projected value count: `io.selfData` is projected row by row, so a reference from another row does not.
 
+A record repeating its own UUID in its properties, arrays or nested objects without an independent `id` does not count as a reference from another record. A child object with its own `id`, including a semantic short ID, is an independent record; its reference to its parent's UUID counts.
+
 > [!WARNING]
 > This check looks only at the name and the shape of the value. It cannot tell story time apart from other times. If a moment in the story is stored as `diedAt: "1943-06-01T08:00:00Z"` (the name ends in `At` or is `timestamp`, and the value is an ISO time), the model cannot see it either, and no error is reported at run time. For story time that the model should see, use a different name (`date`, `diedOn`), or do not write it as an ISO time (for example, `"1943 年 6 月 1 日清晨"`, meaning early morning of June 1, 1943). This applies to data in a world package and to data the plugin stores itself. For such a field in a world package, `pnpm validate:world` gives a `model-hidden-field` warning. Data that a plugin stores while it runs is not checked.
 

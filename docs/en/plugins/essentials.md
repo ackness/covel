@@ -332,6 +332,8 @@ Two rules about repeatability:
 
 Do not give the model bookkeeping fields: session IDs, record UUIDs and timestamps. Covel already removes them from what it puts into prompts. For text you assemble yourself, use `modelFacingJson`. When you need to say "which turn", use the turn number.
 
+Keep an entity together with references to it. See the [plugin reference](../reference/plugins.md) for the rules on self-repetition and references between records.
+
 ## When it does not work as expected
 
 | Symptom                                                                         | Cause and fix                                                                                                                     |

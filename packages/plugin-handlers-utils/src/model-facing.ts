@@ -34,9 +34,13 @@ function linkedUuids(value: unknown): ReadonlySet<string> {
       if (name === "id") defined.add(item);
       else if (item !== ownId) named.add(item);
     } else if (Array.isArray(item)) {
-      for (const element of item) visit(element);
+      for (const element of item) visit(element, undefined, ownId);
     } else if (item !== null && typeof item === "object") {
-      const own = (item as { id?: unknown }).id;
+      // Containers remain part of their record. An independently identified
+      // child record starts a new ownership boundary, even with a semantic ID.
+      const own = Object.hasOwn(item, "id")
+        ? (item as { id?: unknown }).id
+        : ownId;
       for (const [key, child] of Object.entries(item)) visit(child, key, own);
     }
   };

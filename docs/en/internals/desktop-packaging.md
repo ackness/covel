@@ -316,7 +316,7 @@ Follow the steps in order. Finish each step before you start the next one.
 The rules of the release workflow:
 
 - A manually triggered build resolves the ref you give only once, and passes the resulting immutable commit to all the jobs.
-- The jobs run the release and CI workflows of this run. When those two workflows at the given ref differ from the ones at the commit the run uses (for example, building an old tag from `main`), resolving fails: the old source may lack scripts that the newer steps call. Run the workflow from that ref instead: `gh workflow run release.yml --ref <ref>`.
+- The jobs run the release and CI workflows of this run. When those two workflows at the given ref differ from the ones at the commit the run uses (for example, building an old tag from `main`), resolving fails: the old source may lack scripts that the newer steps call. Run the workflow from a branch or tag pointing to the required commit: `gh workflow run release.yml --ref <branch-or-tag>`. If the original input was a commit SHA, choose or create a branch or tag pointing to it first; `--ref` does not accept a SHA.
 - A release needs all of the following at once: an existing semantic version tag, a matching framework package version, the matching section in the changelog, and no fragments left in `docs/changelog.d/`.
 - The workflow never creates or moves a tag.
 - A trial run (`publish_release=false`) only builds the artifacts. It does not create a GitHub Release.

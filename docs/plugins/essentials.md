@@ -332,6 +332,8 @@ pnpm validate:plugin ~/.covel/plugins/my-plugin
 
 不要把记账用的字段交给模型：会话 ID、记录的 UUID、时间戳。Covel 放进提示词的内容已经去掉了它们；你自己拼的文字用 `modelFacingJson` 处理。说到“哪一回合”时用回合序号。
 
+实体与指向它的引用要一起保留；自身重复和跨记录引用的规则见[插件参考](../reference/plugins.md)。
+
 ## 没有按预期工作时
 
 | 现象                                                 | 原因和处理                                                                      |

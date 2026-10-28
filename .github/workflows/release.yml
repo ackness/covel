@@ -65,7 +65,7 @@ jobs:
           # those steps call, so it is built by its own workflow.
           if [[ "$commit" != "$GITHUB_SHA" ]] &&
             ! git diff --quiet "$GITHUB_SHA" "$commit" -- .github/workflows/release.yml .github/workflows/ci.yml; then
-            echo "::error::$INPUT_TAG has other release or CI workflows than the commit this run uses. Run the workflow from that ref: gh workflow run release.yml --ref $INPUT_TAG"
+            echo "::error::$INPUT_TAG has other release or CI workflows than the commit this run uses. Run the workflow from a branch or tag pointing to $commit: gh workflow run release.yml --ref <branch-or-tag>. The --ref argument cannot be a commit SHA."
             exit 1
           fi
 

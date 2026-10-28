@@ -315,7 +315,7 @@ pnpm --filter @covel/desktop test
 发布工作流的规则：
 
 - 手动触发的构建只解析一次你给的 ref，并把得到的那个不可变的提交传给所有任务。
-- 任务按本次运行的发布和 CI 工作流执行。所给 ref 的这两个工作流与运行所在的提交不同时（例如从 `main` 构建旧标签），解析就会失败：旧源码可能没有新步骤调用的脚本。这时从那个 ref 运行工作流：`gh workflow run release.yml --ref <ref>`。
+- 任务按本次运行的发布和 CI 工作流执行。所给 ref 的这两个工作流与运行所在的提交不同时（例如从 `main` 构建旧标签），解析就会失败：旧源码可能没有新步骤调用的脚本。这时使用指向所需提交的分支或标签运行工作流：`gh workflow run release.yml --ref <branch-or-tag>`。如果原输入是提交 SHA，先选择或创建指向它的分支或标签；`--ref` 不接受 SHA。
 - 发布需要同时满足：一个已经存在的语义化版本标签、和它一致的框架包版本、变更日志里对应的一节，以及 `docs/changelog.d/` 里没有剩下的片段。
 - 工作流从不创建或移动标签。
 - 试运行（`publish_release=false`）只构建产物，不创建 GitHub Release。

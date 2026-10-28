@@ -55,12 +55,19 @@
             }
           },
           {
-            "component": "TagList",
+            "component": "Grid",
+            "repeat": {
+              "statePath": "/world/definition/phases"
+            },
             "props": {
-              "tags": {
-                "$state": "/world/definition/phases"
+              "cols": 2
+            },
+            "children": [
+              {
+                "component": "Badge",
+                "props": { "label": { "$item": "" } }
               }
-            }
+            ]
           },
           {
             "component": "Text",
@@ -96,12 +103,15 @@
               {
                 "component": "Text",
                 "props": {
+                  "content": { "$state": "/world/definition/cycleLabel" },
+                  "size": "sm"
+                }
+              },
+              {
+                "component": "Text",
+                "props": {
                   "content": {
                     "$concat": [
-                      {
-                        "$state": "/world/definition/cycleLabel"
-                      },
-                      " ",
                       {
                         "$state": "/world/definition/initial/cycle"
                       },
@@ -213,15 +223,22 @@
             }
           },
           {
-            "component": "TagList",
+            "component": "Grid",
             "visible": {
               "$state": "/world/definition/calendar/weekdays"
             },
+            "repeat": {
+              "statePath": "/world/definition/calendar/weekdays"
+            },
             "props": {
-              "tags": {
-                "$state": "/world/definition/calendar/weekdays"
+              "cols": 2
+            },
+            "children": [
+              {
+                "component": "Badge",
+                "props": { "label": { "$item": "" } }
               }
-            }
+            ]
           },
           {
             "component": "Text",
@@ -232,49 +249,60 @@
             }
           },
           {
-            "component": "Text",
+            "component": "Row",
             "props": {
-              "content": {
-                "$concat": [
-                  {
-                    "$state": "/world/definition/calendar/era"
-                  },
-                  " ",
-                  {
-                    "$state": "/world/definition/initial/year"
-                  },
-                  " · ",
-                  {
-                    "$state": "/world/definition/initial/month"
-                  },
-                  "/",
-                  {
-                    "$state": "/world/definition/initial/day"
-                  },
-                  " ",
-                  {
-                    "$format": "number",
-                    "value": {
-                      "$state": "/world/definition/initial/hour"
-                    },
-                    "options": {
-                      "minimumIntegerDigits": 2
-                    }
-                  },
-                  ":",
-                  {
-                    "$format": "number",
-                    "value": {
-                      "$state": "/world/definition/initial/minute"
-                    },
-                    "options": {
-                      "minimumIntegerDigits": 2
-                    }
-                  }
-                ]
+              "gap": "xs"
+            },
+            "children": [
+              {
+                "component": "Text",
+                "props": {
+                  "content": { "$state": "/world/definition/calendar/era" },
+                  "size": "sm"
+                }
               },
-              "size": "sm"
-            }
+              {
+                "component": "Text",
+                "props": {
+                  "content": {
+                    "$concat": [
+                      {
+                        "$state": "/world/definition/initial/year"
+                      },
+                      " · ",
+                      {
+                        "$state": "/world/definition/initial/month"
+                      },
+                      "/",
+                      {
+                        "$state": "/world/definition/initial/day"
+                      },
+                      " ",
+                      {
+                        "$format": "number",
+                        "value": {
+                          "$state": "/world/definition/initial/hour"
+                        },
+                        "options": {
+                          "minimumIntegerDigits": 2
+                        }
+                      },
+                      ":",
+                      {
+                        "$format": "number",
+                        "value": {
+                          "$state": "/world/definition/initial/minute"
+                        },
+                        "options": {
+                          "minimumIntegerDigits": 2
+                        }
+                      }
+                    ]
+                  },
+                  "size": "sm"
+                }
+              }
+            ]
           }
         ]
       },

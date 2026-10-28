@@ -99,6 +99,7 @@ Gives the world its own calendar. After each turn of the story ends, it judges f
 
 - The "World Time" panel: the current time.
 - The "Time rules" panel: how time works in this world. You can see it before the first turn. It lists the phases or the calendar, where time starts, which way it moves, and how far it moves in a turn by default and at most.
+- Worlds without a file directory can also provide multilingual cycle, era, phase and weekday names through contract data. The rules panel resolves these display texts.
 - A line in the status summary: "World time: ...".
 - Type `/time` to see the current world time. It only reads the time. It does not call a model and does not advance the turn. If the story has not started yet, it says the time has not been recorded.
 

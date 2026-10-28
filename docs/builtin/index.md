@@ -65,7 +65,7 @@ Covel 装好之后就带着一组插件和四个世界。这一章告诉你它�
 | [角色创建](./world.md) `char-creator`        | 创建主角，并在游玩中更新角色                 | 是       |
 | [角色资料](./world.md) `character-blueprint` | 世界预置的角色设定和立绘                     |          |
 | [世界维度](./world.md) `world-init`          | 准备角色属性与维度，并更新维度状态           | 是       |
-| [世界时间](./world.md) `world-time`          | 时间流逝和日夜                               | 是       |
+| [世界时间](./world.md) `world-time`          | 时间流逝、日夜与规则摘要                               | 是       |
 | [世界规则](./world.md) `living-world-rules`  | 把世界规则带进每个回合，类别徽标跟随界面语言 |          |
 | [设定图鉴](./world.md) `codex`               | 记录人、地、物，类别徽标跟随界面语言         |          |
 | [关系图谱](./world.md) `npc-graph`           | 记录人物、团体和势力的关系图                 |          |
