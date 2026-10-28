@@ -34,7 +34,7 @@ const base = {
 describe("translateTexts", () => {
   it("returns one translation for each unit", async () => {
     const { llm, prompts } = scripted([
-      'Here you are:\n{"a": "世界时间：{display}", "b": "大成功"}',
+      'Here you are:\n{"1": "世界时间：{display}", "2": "大成功"}',
     ]);
     const result = await translateTexts({
       ...base,
@@ -57,8 +57,8 @@ describe("translateTexts", () => {
 
   it("asks once more for a unit whose placeholder was lost, then reports it", async () => {
     const { llm, prompts } = scripted([
-      '{"a": "世界时间", "b": "大成功"}',
-      '{"a": "世界时间：{展示}"}',
+      '{"1": "世界时间", "2": "大成功"}',
+      '{"1": "世界时间：{展示}"}',
     ]);
     const result = await translateTexts({ ...base, llm });
 
@@ -82,14 +82,14 @@ describe("translateTexts", () => {
   });
 
   it("translates in batches", async () => {
-    const { llm, prompts } = scripted(['{"a": "甲 {display}"}', '{"b": "乙"}']);
+    const { llm, prompts } = scripted(['{"1": "甲 {display}"}', '{"1": "乙"}']);
     const result = await translateTexts({ ...base, llm, batchSize: 1 });
     expect(prompts).toHaveLength(2);
     expect(result.translations).toEqual({ a: "甲 {display}", b: "乙" });
   });
 
   it("translates a repeated text once and uses only the glossary terms in it", async () => {
-    const { llm, prompts } = scripted(['{"a": "琼·奥卡福"}']);
+    const { llm, prompts } = scripted(['{"1": "琼·奥卡福"}']);
     const result = await translateTexts({
       ...base,
       llm,
@@ -106,9 +106,22 @@ describe("translateTexts", () => {
     expect(prompts[0]).not.toContain("Crownfire");
   });
 
+  it("shows the model short numbers instead of the caller's ids", async () => {
+    const id = "characters/characters.json#[id=11111111-2222-4333-8444-555555555555].name";
+    const { llm, prompts } = scripted(['{"1": "艾达"}']);
+    const result = await translateTexts({
+      ...base,
+      llm,
+      units: [{ id, text: "Ada" }],
+    });
+    expect(result).toEqual({ translations: { [id]: "艾达" }, failed: [] });
+    expect(prompts[0]).toContain('"1": "Ada"');
+    expect(prompts[0]).not.toContain("11111111");
+  });
+
   it("accepts a reply in the shape the units were given in", async () => {
     const { llm } = scripted([
-      '{"a": "世界时间：{display}", "b": {"text": "大成功", "note": "badge"}}',
+      '{"1": "世界时间：{display}", "2": {"text": "大成功", "note": "badge"}}',
     ]);
     const result = await translateTexts({ ...base, llm });
     expect(result).toEqual({
