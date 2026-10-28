@@ -1,7 +1,7 @@
 {
-  "updatedAt": "2026-10-19T04:59:00.000Z",
-  "source": "https://raw.githubusercontent.com/BerriAI/litellm/581b7d1a023a2d144518d8a1015de51131b655a7/model_prices_and_context_window.json",
-  "count": 4220,
+  "updatedAt": "2026-10-28T01:49:16.000Z",
+  "source": "https://raw.githubusercontent.com/BerriAI/litellm/017e08aba3e112cf89a545ca2991413c436e8542/model_prices_and_context_window.json",
+  "count": 4332,
   "models": {
     "1024-x-1024/50-steps/bedrock/amazon.nova-canvas-v1:0": {
       "input": [
@@ -29,7 +29,7 @@
         "streaming"
       ],
       "contextWindow": 77,
-      "maxOutputTokens": 77,
+      "maxOutputTokens": 0,
       "mode": "image_generation",
       "litellmProvider": "bedrock"
     },
@@ -44,7 +44,7 @@
         "streaming"
       ],
       "contextWindow": 77,
-      "maxOutputTokens": 77,
+      "maxOutputTokens": 0,
       "mode": "image_generation",
       "litellmProvider": "bedrock"
     },
@@ -59,7 +59,7 @@
         "streaming"
       ],
       "contextWindow": 77,
-      "maxOutputTokens": 77,
+      "maxOutputTokens": 0,
       "mode": "image_generation",
       "litellmProvider": "bedrock"
     },
@@ -74,9 +74,101 @@
         "streaming"
       ],
       "contextWindow": 77,
-      "maxOutputTokens": 77,
+      "maxOutputTokens": 0,
       "mode": "image_generation",
       "litellmProvider": "bedrock"
+    },
+    "abliteration/abliterated-model": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching"
+      ],
+      "contextWindow": 262144,
+      "maxOutputTokens": 262134,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.1,
+      "litellmProvider": "abliteration",
+      "inputPerMToken": 1,
+      "outputPerMToken": 3
+    },
+    "abliteration/abliterated-model-large": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "prompt_caching"
+      ],
+      "contextWindow": 1000000,
+      "maxOutputTokens": 999990,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.3,
+      "litellmProvider": "abliteration",
+      "inputPerMToken": 3,
+      "outputPerMToken": 5
+    },
+    "abliteration/abliterated-model-large-v2": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "prompt_caching"
+      ],
+      "contextWindow": 1000000,
+      "maxOutputTokens": 999990,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.3,
+      "litellmProvider": "abliteration",
+      "inputPerMToken": 3,
+      "outputPerMToken": 5
+    },
+    "abliteration/abliterated-model-large-flash": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching"
+      ],
+      "contextWindow": 1048576,
+      "maxOutputTokens": 262144,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.1,
+      "litellmProvider": "abliteration",
+      "inputPerMToken": 1,
+      "outputPerMToken": 2
     },
     "ai21.j2-mid-v1": {
       "input": [
@@ -723,7 +815,7 @@
         "streaming"
       ],
       "contextWindow": 8172,
-      "maxOutputTokens": 8172,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "litellmProvider": "bedrock",
       "inputPerMToken": 0.135,
@@ -810,8 +902,8 @@
       "features": [
         "streaming"
       ],
-      "contextWindow": 0,
-      "maxOutputTokens": 0,
+      "contextWindow": 1000000,
+      "maxOutputTokens": 64000,
       "mode": "realtime",
       "litellmProvider": "bedrock",
       "inputPerMToken": 0.33,
@@ -847,7 +939,7 @@
         "streaming"
       ],
       "contextWindow": 128,
-      "maxOutputTokens": 128,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "litellmProvider": "bedrock",
       "inputPerMToken": 0.8,
@@ -865,7 +957,7 @@
         "streaming"
       ],
       "contextWindow": 8192,
-      "maxOutputTokens": 8192,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "litellmProvider": "bedrock",
       "inputPerMToken": 0.1,
@@ -882,7 +974,7 @@
         "streaming"
       ],
       "contextWindow": 8192,
-      "maxOutputTokens": 8192,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "litellmProvider": "bedrock",
       "inputPerMToken": 0.1,
@@ -899,7 +991,7 @@
         "streaming"
       ],
       "contextWindow": 8192,
-      "maxOutputTokens": 8192,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "litellmProvider": "bedrock",
       "inputPerMToken": 0.02,
@@ -961,7 +1053,7 @@
         "streaming"
       ],
       "contextWindow": 77,
-      "maxOutputTokens": 77,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "litellmProvider": "bedrock",
       "outputPerMToken": 0,
@@ -978,7 +1070,7 @@
         "streaming"
       ],
       "contextWindow": 77,
-      "maxOutputTokens": 77,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "litellmProvider": "bedrock",
       "outputPerMToken": 0,
@@ -995,7 +1087,7 @@
         "streaming"
       ],
       "contextWindow": 77,
-      "maxOutputTokens": 77,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "litellmProvider": "bedrock",
       "outputPerMToken": 0,
@@ -1012,7 +1104,7 @@
         "streaming"
       ],
       "contextWindow": 500,
-      "maxOutputTokens": 500,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "litellmProvider": "bedrock",
       "outputPerMToken": 0,
@@ -1029,7 +1121,7 @@
         "streaming"
       ],
       "contextWindow": 500,
-      "maxOutputTokens": 500,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "litellmProvider": "bedrock",
       "outputPerMToken": 0,
@@ -1046,7 +1138,7 @@
         "streaming"
       ],
       "contextWindow": 500,
-      "maxOutputTokens": 500,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "litellmProvider": "bedrock",
       "outputPerMToken": 0,
@@ -3302,7 +3394,7 @@
         "streaming"
       ],
       "contextWindow": 8191,
-      "maxOutputTokens": 8191,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "litellmProvider": "azure",
       "inputPerMToken": 0.11,
@@ -3880,7 +3972,7 @@
         "prompt_caching",
         "web_search"
       ],
-      "contextWindow": 272000,
+      "contextWindow": 128000,
       "maxOutputTokens": 128000,
       "mode": "chat",
       "cacheReadPerMToken": 0.5,
@@ -4250,6 +4342,29 @@
       "inputPerMToken": 2.75,
       "outputPerMToken": 11
     },
+    "azure/eu/gpt-4o": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "vision"
+      ],
+      "contextWindow": 128000,
+      "maxOutputTokens": 16384,
+      "mode": "chat",
+      "cacheReadPerMToken": 1.38,
+      "cacheWritePerMToken": 1.38,
+      "litellmProvider": "azure",
+      "inputPerMToken": 2.75,
+      "outputPerMToken": 11
+    },
     "azure/eu/gpt-4o-2024-11-20": {
       "input": [
         "text",
@@ -4272,6 +4387,29 @@
       "litellmProvider": "azure",
       "inputPerMToken": 2.75,
       "outputPerMToken": 11
+    },
+    "azure/eu/gpt-4o-mini": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "vision",
+        "prompt_caching"
+      ],
+      "contextWindow": 128000,
+      "maxOutputTokens": 16384,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.083,
+      "litellmProvider": "azure",
+      "inputPerMToken": 0.165,
+      "outputPerMToken": 0.66
     },
     "azure/eu/gpt-4o-mini-2024-07-18": {
       "input": [
@@ -4508,6 +4646,28 @@
       "inputPerMToken": 0.055,
       "outputPerMToken": 0.44
     },
+    "azure/eu/o1": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "streaming",
+        "vision",
+        "prompt_caching"
+      ],
+      "contextWindow": 200000,
+      "maxOutputTokens": 100000,
+      "mode": "chat",
+      "cacheReadPerMToken": 8.25,
+      "litellmProvider": "azure",
+      "inputPerMToken": 16.5,
+      "outputPerMToken": 66
+    },
     "azure/eu/o1-2024-12-17": {
       "input": [
         "text",
@@ -4544,6 +4704,26 @@
       ],
       "contextWindow": 128000,
       "maxOutputTokens": 65536,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.605,
+      "litellmProvider": "azure",
+      "inputPerMToken": 1.21,
+      "outputPerMToken": 4.84
+    },
+    "azure/eu/o3-mini": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "streaming",
+        "reasoning",
+        "prompt_caching"
+      ],
+      "contextWindow": 200000,
+      "maxOutputTokens": 100000,
       "mode": "chat",
       "cacheReadPerMToken": 0.605,
       "litellmProvider": "azure",
@@ -7306,7 +7486,7 @@
         "prompt_caching",
         "web_search"
       ],
-      "contextWindow": 272000,
+      "contextWindow": 128000,
       "maxOutputTokens": 128000,
       "mode": "chat",
       "cacheReadPerMToken": 0.5,
@@ -7541,7 +7721,7 @@
         "prompt_caching",
         "web_search"
       ],
-      "contextWindow": 272000,
+      "contextWindow": 128000,
       "maxOutputTokens": 128000,
       "mode": "chat",
       "cacheReadPerMToken": 0.55,
@@ -8891,7 +9071,7 @@
         "streaming"
       ],
       "contextWindow": 8192,
-      "maxOutputTokens": 8192,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "litellmProvider": "azure",
       "inputPerMToken": 0.143,
@@ -8908,7 +9088,7 @@
         "streaming"
       ],
       "contextWindow": 8192,
-      "maxOutputTokens": 8192,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "litellmProvider": "azure",
       "inputPerMToken": 0.022,
@@ -8925,7 +9105,7 @@
         "streaming"
       ],
       "contextWindow": 8192,
-      "maxOutputTokens": 8192,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "litellmProvider": "azure",
       "inputPerMToken": 0.11,
@@ -9098,6 +9278,29 @@
       "inputPerMToken": 2.75,
       "outputPerMToken": 11
     },
+    "azure/us/gpt-4o": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "vision"
+      ],
+      "contextWindow": 128000,
+      "maxOutputTokens": 16384,
+      "mode": "chat",
+      "cacheReadPerMToken": 1.38,
+      "cacheWritePerMToken": 1.38,
+      "litellmProvider": "azure",
+      "inputPerMToken": 2.75,
+      "outputPerMToken": 11
+    },
     "azure/us/gpt-4o-2024-11-20": {
       "input": [
         "text",
@@ -9120,6 +9323,29 @@
       "litellmProvider": "azure",
       "inputPerMToken": 2.75,
       "outputPerMToken": 11
+    },
+    "azure/us/gpt-4o-mini": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "vision",
+        "prompt_caching"
+      ],
+      "contextWindow": 128000,
+      "maxOutputTokens": 16384,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.083,
+      "litellmProvider": "azure",
+      "inputPerMToken": 0.165,
+      "outputPerMToken": 0.66
     },
     "azure/us/gpt-4o-mini-2024-07-18": {
       "input": [
@@ -9356,6 +9582,28 @@
       "inputPerMToken": 0.275,
       "outputPerMToken": 2.2
     },
+    "azure/us/o1": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "streaming",
+        "vision",
+        "prompt_caching"
+      ],
+      "contextWindow": 200000,
+      "maxOutputTokens": 100000,
+      "mode": "chat",
+      "cacheReadPerMToken": 8.25,
+      "litellmProvider": "azure",
+      "inputPerMToken": 16.5,
+      "outputPerMToken": 66
+    },
     "azure/us/o1-2024-12-17": {
       "input": [
         "text",
@@ -9398,6 +9646,30 @@
       "inputPerMToken": 1.21,
       "outputPerMToken": 4.84
     },
+    "azure/us/o3": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching"
+      ],
+      "contextWindow": 200000,
+      "maxOutputTokens": 100000,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.55,
+      "litellmProvider": "azure",
+      "inputPerMToken": 2.2,
+      "outputPerMToken": 8.8
+    },
     "azure/us/o3-2025-04-16": {
       "input": [
         "text",
@@ -9422,6 +9694,26 @@
       "inputPerMToken": 2.2,
       "outputPerMToken": 8.8
     },
+    "azure/us/o3-mini": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "streaming",
+        "reasoning",
+        "prompt_caching"
+      ],
+      "contextWindow": 200000,
+      "maxOutputTokens": 100000,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.605,
+      "litellmProvider": "azure",
+      "inputPerMToken": 1.21,
+      "outputPerMToken": 4.84
+    },
     "azure/us/o3-mini-2025-01-31": {
       "input": [
         "text"
@@ -9438,6 +9730,30 @@
       "maxOutputTokens": 100000,
       "mode": "chat",
       "cacheReadPerMToken": 0.605,
+      "litellmProvider": "azure",
+      "inputPerMToken": 1.21,
+      "outputPerMToken": 4.84
+    },
+    "azure/us/o4-mini": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching"
+      ],
+      "contextWindow": 200000,
+      "maxOutputTokens": 100000,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.303,
       "litellmProvider": "azure",
       "inputPerMToken": 1.21,
       "outputPerMToken": 4.84
@@ -9492,7 +9808,7 @@
         "streaming"
       ],
       "contextWindow": 512,
-      "maxOutputTokens": 512,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "litellmProvider": "azure_ai",
       "inputPerMToken": 0.1,
@@ -9509,7 +9825,7 @@
         "streaming"
       ],
       "contextWindow": 512,
-      "maxOutputTokens": 512,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "litellmProvider": "azure_ai",
       "inputPerMToken": 0.1,
@@ -9543,7 +9859,7 @@
         "streaming"
       ],
       "contextWindow": 5000,
-      "maxOutputTokens": 5000,
+      "maxOutputTokens": 0,
       "mode": "image_generation",
       "litellmProvider": "azure_ai"
     },
@@ -9558,7 +9874,7 @@
         "streaming"
       ],
       "contextWindow": 5000,
-      "maxOutputTokens": 5000,
+      "maxOutputTokens": 0,
       "mode": "image_generation",
       "litellmProvider": "azure_ai"
     },
@@ -9573,7 +9889,7 @@
         "streaming"
       ],
       "contextWindow": 32000,
-      "maxOutputTokens": 32000,
+      "maxOutputTokens": 0,
       "mode": "image_generation",
       "litellmProvider": "azure_ai"
     },
@@ -9589,7 +9905,7 @@
         "streaming"
       ],
       "contextWindow": 32000,
-      "maxOutputTokens": 32000,
+      "maxOutputTokens": 0,
       "mode": "image_generation",
       "litellmProvider": "azure_ai"
     },
@@ -10655,7 +10971,7 @@
         "streaming"
       ],
       "contextWindow": 128000,
-      "maxOutputTokens": 128000,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "litellmProvider": "azure_ai",
       "inputPerMToken": 0.12,
@@ -13048,7 +13364,7 @@
         "streaming"
       ],
       "contextWindow": 8192,
-      "maxOutputTokens": 8192,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "litellmProvider": "bedrock",
       "inputPerMToken": 0.1,
@@ -13065,7 +13381,7 @@
         "streaming"
       ],
       "contextWindow": 8192,
-      "maxOutputTokens": 8192,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "litellmProvider": "bedrock",
       "inputPerMToken": 0.2,
@@ -13223,7 +13539,7 @@
         "streaming"
       ],
       "contextWindow": 8172,
-      "maxOutputTokens": 8172,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "litellmProvider": "bedrock",
       "inputPerMToken": 0.162,
@@ -13310,7 +13626,7 @@
         "streaming"
       ],
       "contextWindow": 8192,
-      "maxOutputTokens": 8192,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "litellmProvider": "bedrock",
       "inputPerMToken": 0.1,
@@ -13327,7 +13643,7 @@
         "streaming"
       ],
       "contextWindow": 8192,
-      "maxOutputTokens": 8192,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "litellmProvider": "bedrock",
       "inputPerMToken": 0.11,
@@ -13964,6 +14280,42 @@
       "maxOutputTokens": 0,
       "mode": "image_generation",
       "litellmProvider": "black_forest_labs"
+    },
+    "cerebras/llama-3.1-70b": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "streaming"
+      ],
+      "contextWindow": 128000,
+      "maxOutputTokens": 128000,
+      "mode": "chat",
+      "litellmProvider": "cerebras",
+      "inputPerMToken": 0.6,
+      "outputPerMToken": 0.6
+    },
+    "cerebras/llama-3.1-8b": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "streaming"
+      ],
+      "contextWindow": 128000,
+      "maxOutputTokens": 128000,
+      "mode": "chat",
+      "litellmProvider": "cerebras",
+      "inputPerMToken": 0.1,
+      "outputPerMToken": 0.1
     },
     "cerebras/llama-3.3-70b": {
       "input": [
@@ -14749,6 +15101,42 @@
       "inputPerMToken": 0.09,
       "outputPerMToken": 0
     },
+    "cloudflare/clairic": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "streaming",
+        "vision"
+      ],
+      "contextWindow": 65536,
+      "maxOutputTokens": 0,
+      "mode": "extraction",
+      "litellmProvider": "cloudflare",
+      "inputPerMToken": 0.1,
+      "outputPerMToken": 0
+    },
+    "cloudflare/@cf/cloudflare/clairic": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "streaming",
+        "vision"
+      ],
+      "contextWindow": 65536,
+      "maxOutputTokens": 0,
+      "mode": "extraction",
+      "litellmProvider": "cloudflare",
+      "inputPerMToken": 0.1,
+      "outputPerMToken": 0
+    },
     "cloudflare/@cf/meta/llama-2-7b-chat-fp16": {
       "input": [
         "text"
@@ -15367,7 +15755,7 @@
         "streaming"
       ],
       "contextWindow": 512,
-      "maxOutputTokens": 512,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "litellmProvider": "bedrock",
       "inputPerMToken": 0.1,
@@ -15384,7 +15772,7 @@
         "streaming"
       ],
       "contextWindow": 512,
-      "maxOutputTokens": 512,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "litellmProvider": "bedrock",
       "inputPerMToken": 0.1,
@@ -15401,7 +15789,7 @@
         "streaming"
       ],
       "contextWindow": 128000,
-      "maxOutputTokens": 128000,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "litellmProvider": "bedrock",
       "inputPerMToken": 0.12,
@@ -15418,7 +15806,7 @@
         "streaming"
       ],
       "contextWindow": 128000,
-      "maxOutputTokens": 128000,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "litellmProvider": "bedrock",
       "inputPerMToken": 0.12,
@@ -15435,7 +15823,7 @@
         "streaming"
       ],
       "contextWindow": 128000,
-      "maxOutputTokens": 128000,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "litellmProvider": "bedrock",
       "inputPerMToken": 0.12,
@@ -15452,7 +15840,7 @@
         "streaming"
       ],
       "contextWindow": 128000,
-      "maxOutputTokens": 128000,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "litellmProvider": "cohere",
       "inputPerMToken": 0.12,
@@ -15469,7 +15857,7 @@
         "streaming"
       ],
       "contextWindow": 128000,
-      "maxOutputTokens": 128000,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "litellmProvider": "cohere",
       "inputPerMToken": 0.12,
@@ -15486,7 +15874,7 @@
         "streaming"
       ],
       "contextWindow": 128000,
-      "maxOutputTokens": 128000,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "litellmProvider": "cohere",
       "inputPerMToken": 0.08,
@@ -16594,6 +16982,7 @@
       "maxOutputTokens": 65536,
       "mode": "chat",
       "cacheReadPerMToken": 0.5,
+      "cacheWritePerMToken": 3.13,
       "litellmProvider": "dashscope",
       "inputPerMToken": 2.5,
       "outputPerMToken": 7.5
@@ -17676,6 +18065,7 @@
       "maxOutputTokens": 65536,
       "mode": "chat",
       "cacheReadPerMToken": 0.5,
+      "cacheWritePerMToken": 3.13,
       "litellmProvider": "qwencloud",
       "inputPerMToken": 2.5,
       "outputPerMToken": 7.5
@@ -18706,6 +19096,7 @@
       "maxOutputTokens": 65536,
       "mode": "chat",
       "cacheReadPerMToken": 0.5,
+      "cacheWritePerMToken": 3.13,
       "litellmProvider": "qwen_ai_platform",
       "inputPerMToken": 2.5,
       "outputPerMToken": 7.5
@@ -19079,7 +19470,7 @@
         "streaming"
       ],
       "contextWindow": 512,
-      "maxOutputTokens": 512,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "cacheReadPerMToken": 0.1,
       "cacheWritePerMToken": 0.1,
@@ -20293,7 +20684,7 @@
         "streaming"
       ],
       "contextWindow": 8192,
-      "maxOutputTokens": 8192,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "cacheReadPerMToken": 0.13,
       "cacheWritePerMToken": 0.13,
@@ -20473,7 +20864,7 @@
         "streaming"
       ],
       "contextWindow": 32768,
-      "maxOutputTokens": 32768,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "cacheReadPerMToken": 0.02,
       "cacheWritePerMToken": 0.02,
@@ -20494,10 +20885,10 @@
       "contextWindow": 0,
       "maxOutputTokens": 0,
       "mode": "evaluation",
-      "cacheReadPerMToken": 0,
-      "cacheWritePerMToken": 0,
+      "cacheReadPerMToken": 0.042,
+      "cacheWritePerMToken": 0.042,
       "litellmProvider": "databricks",
-      "inputPerMToken": 0,
+      "inputPerMToken": 0.042,
       "outputPerMToken": 0
     },
     "databricks/ai_decide": {
@@ -22654,7 +23045,7 @@
         "streaming"
       ],
       "contextWindow": 4096,
-      "maxOutputTokens": 4096,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "litellmProvider": "volcengine",
       "inputPerMToken": 0,
@@ -22671,7 +23062,7 @@
         "streaming"
       ],
       "contextWindow": 4096,
-      "maxOutputTokens": 4096,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "litellmProvider": "volcengine",
       "inputPerMToken": 0,
@@ -22688,7 +23079,7 @@
         "streaming"
       ],
       "contextWindow": 4096,
-      "maxOutputTokens": 4096,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "litellmProvider": "volcengine",
       "inputPerMToken": 0,
@@ -22705,7 +23096,7 @@
         "streaming"
       ],
       "contextWindow": 4096,
-      "maxOutputTokens": 4096,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "litellmProvider": "volcengine",
       "inputPerMToken": 0,
@@ -22722,7 +23113,7 @@
         "streaming"
       ],
       "contextWindow": 4096,
-      "maxOutputTokens": 4096,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "litellmProvider": "volcengine",
       "inputPerMToken": 0,
@@ -23135,6 +23526,21 @@
       "mode": "search",
       "litellmProvider": "bing_grounding"
     },
+    "deepseek/search": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "streaming"
+      ],
+      "contextWindow": 0,
+      "maxOutputTokens": 0,
+      "mode": "search",
+      "litellmProvider": "deepseek"
+    },
     "tinyfish/search": {
       "input": [
         "text"
@@ -23225,6 +23631,111 @@
       "mode": "audio_speech",
       "litellmProvider": "elevenlabs"
     },
+    "elevenlabs/eleven_v4": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "audio"
+      ],
+      "features": [
+        "streaming"
+      ],
+      "contextWindow": 0,
+      "maxOutputTokens": 0,
+      "mode": "audio_speech",
+      "litellmProvider": "elevenlabs"
+    },
+    "elevenlabs/eleven_v4_turbo": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "audio"
+      ],
+      "features": [
+        "streaming"
+      ],
+      "contextWindow": 0,
+      "maxOutputTokens": 0,
+      "mode": "audio_speech",
+      "litellmProvider": "elevenlabs"
+    },
+    "elevenlabs/eleven_v3_conversational": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "audio"
+      ],
+      "features": [
+        "streaming"
+      ],
+      "contextWindow": 0,
+      "maxOutputTokens": 0,
+      "mode": "audio_speech",
+      "litellmProvider": "elevenlabs"
+    },
+    "elevenlabs/eleven_flash_v2_5": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "audio"
+      ],
+      "features": [
+        "streaming"
+      ],
+      "contextWindow": 0,
+      "maxOutputTokens": 0,
+      "mode": "audio_speech",
+      "litellmProvider": "elevenlabs"
+    },
+    "elevenlabs/eleven_flash_v2": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "audio"
+      ],
+      "features": [
+        "streaming"
+      ],
+      "contextWindow": 0,
+      "maxOutputTokens": 0,
+      "mode": "audio_speech",
+      "litellmProvider": "elevenlabs"
+    },
+    "elevenlabs/eleven_turbo_v2_5": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "audio"
+      ],
+      "features": [
+        "streaming"
+      ],
+      "contextWindow": 0,
+      "maxOutputTokens": 0,
+      "mode": "audio_speech",
+      "litellmProvider": "elevenlabs"
+    },
+    "elevenlabs/eleven_turbo_v2": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "audio"
+      ],
+      "features": [
+        "streaming"
+      ],
+      "contextWindow": 0,
+      "maxOutputTokens": 0,
+      "mode": "audio_speech",
+      "litellmProvider": "elevenlabs"
+    },
     "embed-english-light-v3.0": {
       "input": [
         "text"
@@ -23236,7 +23747,7 @@
         "streaming"
       ],
       "contextWindow": 512,
-      "maxOutputTokens": 512,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "litellmProvider": "cohere",
       "inputPerMToken": 0.1,
@@ -23253,7 +23764,7 @@
         "streaming"
       ],
       "contextWindow": 512,
-      "maxOutputTokens": 512,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "litellmProvider": "cohere",
       "inputPerMToken": 0.1,
@@ -23271,7 +23782,7 @@
         "streaming"
       ],
       "contextWindow": 512,
-      "maxOutputTokens": 512,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "litellmProvider": "cohere",
       "inputPerMToken": 0.1,
@@ -23288,7 +23799,7 @@
         "streaming"
       ],
       "contextWindow": 512,
-      "maxOutputTokens": 512,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "litellmProvider": "cohere",
       "inputPerMToken": 100,
@@ -27193,7 +27704,7 @@
         "streaming"
       ],
       "contextWindow": 512,
-      "maxOutputTokens": 512,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "litellmProvider": "fireworks_ai-embedding-models",
       "inputPerMToken": 0.016,
@@ -28333,7 +28844,7 @@
         "streaming"
       ],
       "contextWindow": 8192,
-      "maxOutputTokens": 8192,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "litellmProvider": "fireworks_ai-embedding-models",
       "inputPerMToken": 0.008,
@@ -28350,7 +28861,7 @@
         "streaming"
       ],
       "contextWindow": 8192,
-      "maxOutputTokens": 8192,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "litellmProvider": "fireworks_ai-embedding-models",
       "inputPerMToken": 0.008,
@@ -28367,7 +28878,7 @@
         "streaming"
       ],
       "contextWindow": 512,
-      "maxOutputTokens": 512,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "litellmProvider": "fireworks_ai-embedding-models",
       "inputPerMToken": 0.008,
@@ -28384,7 +28895,7 @@
         "streaming"
       ],
       "contextWindow": 512,
-      "maxOutputTokens": 512,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "litellmProvider": "fireworks_ai-embedding-models",
       "inputPerMToken": 0.016,
@@ -29730,7 +30241,7 @@
         "streaming"
       ],
       "contextWindow": 2048,
-      "maxOutputTokens": 2048,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "litellmProvider": "vertex_ai-embedding-models",
       "inputPerMToken": 0.15,
@@ -29747,7 +30258,7 @@
         "streaming"
       ],
       "contextWindow": 8192,
-      "maxOutputTokens": 8192,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "litellmProvider": "vertex_ai-embedding-models",
       "inputPerMToken": 0.2,
@@ -29765,7 +30276,7 @@
         "streaming"
       ],
       "contextWindow": 8192,
-      "maxOutputTokens": 8192,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "litellmProvider": "vertex_ai-embedding-models",
       "inputPerMToken": 0.2,
@@ -29783,7 +30294,7 @@
         "streaming"
       ],
       "contextWindow": 8192,
-      "maxOutputTokens": 8192,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "litellmProvider": "vertex_ai",
       "inputPerMToken": 0.2,
@@ -29801,7 +30312,7 @@
         "streaming"
       ],
       "contextWindow": 8192,
-      "maxOutputTokens": 8192,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "litellmProvider": "vertex_ai",
       "inputPerMToken": 0.2,
@@ -29836,7 +30347,7 @@
         "streaming"
       ],
       "contextWindow": 2048,
-      "maxOutputTokens": 2048,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "litellmProvider": "gemini",
       "inputPerMToken": 0.15,
@@ -29854,7 +30365,7 @@
         "vision"
       ],
       "contextWindow": 8192,
-      "maxOutputTokens": 8192,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "litellmProvider": "gemini",
       "inputPerMToken": 0.2,
@@ -29946,7 +30457,7 @@
         "vision"
       ],
       "contextWindow": 8192,
-      "maxOutputTokens": 8192,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "litellmProvider": "gemini",
       "inputPerMToken": 0.2,
@@ -31030,7 +31541,7 @@
         "streaming"
       ],
       "contextWindow": 1024,
-      "maxOutputTokens": 1024,
+      "maxOutputTokens": 0,
       "mode": "video_generation",
       "litellmProvider": "gemini"
     },
@@ -31045,7 +31556,7 @@
         "streaming"
       ],
       "contextWindow": 1024,
-      "maxOutputTokens": 1024,
+      "maxOutputTokens": 0,
       "mode": "video_generation",
       "litellmProvider": "gemini"
     },
@@ -31060,7 +31571,7 @@
         "streaming"
       ],
       "contextWindow": 1024,
-      "maxOutputTokens": 1024,
+      "maxOutputTokens": 0,
       "mode": "video_generation",
       "litellmProvider": "gemini"
     },
@@ -31075,7 +31586,7 @@
         "streaming"
       ],
       "contextWindow": 1024,
-      "maxOutputTokens": 1024,
+      "maxOutputTokens": 0,
       "mode": "video_generation",
       "litellmProvider": "gemini"
     },
@@ -31090,7 +31601,7 @@
         "streaming"
       ],
       "contextWindow": 1024,
-      "maxOutputTokens": 1024,
+      "maxOutputTokens": 0,
       "mode": "video_generation",
       "litellmProvider": "gemini"
     },
@@ -31813,7 +32324,7 @@
         "reasoning",
         "vision"
       ],
-      "contextWindow": 272000,
+      "contextWindow": 922000,
       "maxOutputTokens": 128000,
       "mode": "responses",
       "cacheReadPerMToken": 1,
@@ -31837,7 +32348,7 @@
         "reasoning",
         "vision"
       ],
-      "contextWindow": 272000,
+      "contextWindow": 922000,
       "maxOutputTokens": 128000,
       "mode": "responses",
       "cacheReadPerMToken": 0.01,
@@ -31861,7 +32372,7 @@
         "reasoning",
         "vision"
       ],
-      "contextWindow": 272000,
+      "contextWindow": 922000,
       "maxOutputTokens": 128000,
       "mode": "responses",
       "cacheReadPerMToken": 0.2,
@@ -31885,7 +32396,7 @@
         "reasoning",
         "vision"
       ],
-      "contextWindow": 272000,
+      "contextWindow": 922000,
       "maxOutputTokens": 128000,
       "mode": "responses",
       "cacheReadPerMToken": 0.1,
@@ -31949,7 +32460,7 @@
         "streaming"
       ],
       "contextWindow": 8191,
-      "maxOutputTokens": 8191,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "litellmProvider": "github_copilot"
     },
@@ -31964,7 +32475,7 @@
         "streaming"
       ],
       "contextWindow": 8191,
-      "maxOutputTokens": 8191,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "litellmProvider": "github_copilot"
     },
@@ -31979,7 +32490,7 @@
         "streaming"
       ],
       "contextWindow": 8191,
-      "maxOutputTokens": 8191,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "litellmProvider": "github_copilot"
     },
@@ -32410,7 +32921,7 @@
         "streaming"
       ],
       "contextWindow": 512,
-      "maxOutputTokens": 512,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "litellmProvider": "gigachat",
       "inputPerMToken": 0,
@@ -32427,7 +32938,7 @@
         "streaming"
       ],
       "contextWindow": 512,
-      "maxOutputTokens": 512,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "litellmProvider": "gigachat",
       "inputPerMToken": 0,
@@ -32444,7 +32955,7 @@
         "streaming"
       ],
       "contextWindow": 4096,
-      "maxOutputTokens": 4096,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "litellmProvider": "gigachat",
       "inputPerMToken": 0,
@@ -32461,7 +32972,7 @@
         "streaming"
       ],
       "contextWindow": 4096,
-      "maxOutputTokens": 4096,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "litellmProvider": "gigachat",
       "inputPerMToken": 0,
@@ -38732,7 +39243,7 @@
         "streaming"
       ],
       "contextWindow": 77,
-      "maxOutputTokens": 77,
+      "maxOutputTokens": 0,
       "mode": "image_generation",
       "litellmProvider": "bedrock"
     },
@@ -38747,7 +39258,7 @@
         "streaming"
       ],
       "contextWindow": 77,
-      "maxOutputTokens": 77,
+      "maxOutputTokens": 0,
       "mode": "image_generation",
       "litellmProvider": "bedrock"
     },
@@ -40168,7 +40679,7 @@
         "streaming"
       ],
       "contextWindow": 8192,
-      "maxOutputTokens": 8192,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "litellmProvider": "mistral",
       "inputPerMToken": 0.1
@@ -40212,6 +40723,126 @@
       "litellmProvider": "mistral"
     },
     "mistral/voxtral-mini-tts-latest": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "audio"
+      ],
+      "features": [
+        "streaming"
+      ],
+      "contextWindow": 0,
+      "maxOutputTokens": 0,
+      "mode": "audio_speech",
+      "litellmProvider": "mistral"
+    },
+    "mistral/voxtral-mini-transcribe-3": {
+      "input": [
+        "audio"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "streaming"
+      ],
+      "contextWindow": 0,
+      "maxOutputTokens": 0,
+      "mode": "audio_transcription",
+      "litellmProvider": "mistral"
+    },
+    "mistral/voxtral-mini-transcribe-3-0": {
+      "input": [
+        "audio"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "streaming"
+      ],
+      "contextWindow": 0,
+      "maxOutputTokens": 0,
+      "mode": "audio_transcription",
+      "litellmProvider": "mistral"
+    },
+    "mistral/voxtral-small-transcribe-3": {
+      "input": [
+        "audio"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "streaming"
+      ],
+      "contextWindow": 0,
+      "maxOutputTokens": 0,
+      "mode": "audio_transcription",
+      "litellmProvider": "mistral"
+    },
+    "mistral/voxtral-small-transcribe-3-0": {
+      "input": [
+        "audio"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "streaming"
+      ],
+      "contextWindow": 0,
+      "maxOutputTokens": 0,
+      "mode": "audio_transcription",
+      "litellmProvider": "mistral"
+    },
+    "mistral/voxtral-mini-transcribe-realtime-3": {
+      "input": [
+        "audio"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "streaming"
+      ],
+      "contextWindow": 0,
+      "maxOutputTokens": 0,
+      "mode": "audio_transcription",
+      "litellmProvider": "mistral"
+    },
+    "mistral/voxtral-mini-transcribe-realtime-3-0": {
+      "input": [
+        "audio"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "streaming"
+      ],
+      "contextWindow": 0,
+      "maxOutputTokens": 0,
+      "mode": "audio_transcription",
+      "litellmProvider": "mistral"
+    },
+    "mistral/voxtral-mini-tts-3": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "audio"
+      ],
+      "features": [
+        "streaming"
+      ],
+      "contextWindow": 0,
+      "maxOutputTokens": 0,
+      "mode": "audio_speech",
+      "litellmProvider": "mistral"
+    },
+    "mistral/voxtral-mini-tts-3-0": {
       "input": [
         "text"
       ],
@@ -40311,6 +40942,30 @@
       "litellmProvider": "mistral",
       "inputPerMToken": 1.4,
       "outputPerMToken": 4.4
+    },
+    "mistral/zai-glm-5-3-flash": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching"
+      ],
+      "contextWindow": 1048576,
+      "maxOutputTokens": 131072,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.03,
+      "litellmProvider": "mistral",
+      "inputPerMToken": 0.15,
+      "outputPerMToken": 0.5
     },
     "mistral/zai-glm-5": {
       "input": [
@@ -40495,7 +41150,7 @@
         "streaming"
       ],
       "contextWindow": 8192,
-      "maxOutputTokens": 8192,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "litellmProvider": "mistral",
       "inputPerMToken": 0.1
@@ -40511,7 +41166,7 @@
         "streaming"
       ],
       "contextWindow": 8192,
-      "maxOutputTokens": 8192,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "cacheReadPerMToken": 0.015,
       "litellmProvider": "mistral",
@@ -40528,7 +41183,7 @@
         "streaming"
       ],
       "contextWindow": 8192,
-      "maxOutputTokens": 8192,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "cacheReadPerMToken": 0.015,
       "litellmProvider": "mistral",
@@ -41226,6 +41881,194 @@
       "inputPerMToken": 2,
       "outputPerMToken": 5
     },
+    "morph/morph-kimik3": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching"
+      ],
+      "contextWindow": 1048576,
+      "maxOutputTokens": 1048576,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.29,
+      "litellmProvider": "morph",
+      "inputPerMToken": 2.5,
+      "outputPerMToken": 14
+    },
+    "morph/morph-kimik3-fast": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching"
+      ],
+      "contextWindow": 1048576,
+      "maxOutputTokens": 1048576,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.6,
+      "litellmProvider": "morph",
+      "inputPerMToken": 6,
+      "outputPerMToken": 22.5
+    },
+    "morph/morph-glm53-744b": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "prompt_caching"
+      ],
+      "contextWindow": 1048576,
+      "maxOutputTokens": 1048576,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.1955,
+      "litellmProvider": "morph",
+      "inputPerMToken": 1.19,
+      "outputPerMToken": 6
+    },
+    "morph/morph-glm53flash": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching"
+      ],
+      "contextWindow": 1048576,
+      "maxOutputTokens": 1048576,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.04,
+      "litellmProvider": "morph",
+      "inputPerMToken": 0.2,
+      "outputPerMToken": 0.7
+    },
+    "morph/morph-dsv41flash": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching"
+      ],
+      "contextWindow": 1048576,
+      "maxOutputTokens": 1048576,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.008,
+      "litellmProvider": "morph",
+      "inputPerMToken": 0.12,
+      "outputPerMToken": 0.8
+    },
+    "morph/morph-dsv41flash-1017": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching"
+      ],
+      "contextWindow": 1048576,
+      "maxOutputTokens": 1048576,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.008,
+      "litellmProvider": "morph",
+      "inputPerMToken": 0.12,
+      "outputPerMToken": 0.8
+    },
+    "morph/morph-dsv41flash-abliterated": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching"
+      ],
+      "contextWindow": 1048576,
+      "maxOutputTokens": 1048576,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.03,
+      "litellmProvider": "morph",
+      "inputPerMToken": 0.3,
+      "outputPerMToken": 1.2
+    },
+    "morph/morph-dsv4flash": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "prompt_caching"
+      ],
+      "contextWindow": 1048576,
+      "maxOutputTokens": 1048576,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.0359,
+      "litellmProvider": "morph",
+      "inputPerMToken": 0.142,
+      "outputPerMToken": 0.3996
+    },
     "morph/morph-v3-fast": {
       "input": [
         "text"
@@ -41273,7 +42116,7 @@
         "streaming"
       ],
       "contextWindow": 2048,
-      "maxOutputTokens": 2048,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "litellmProvider": "vertex_ai-embedding-models",
       "inputPerMToken": 0.8,
@@ -41293,7 +42136,7 @@
         "streaming"
       ],
       "contextWindow": 2048,
-      "maxOutputTokens": 2048,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "litellmProvider": "vertex_ai-embedding-models",
       "inputPerMToken": 0.8,
@@ -42657,7 +43500,7 @@
         "streaming"
       ],
       "contextWindow": 32768,
-      "maxOutputTokens": 32768,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "litellmProvider": "nebius",
       "inputPerMToken": 0.01,
@@ -42674,7 +43517,7 @@
         "streaming"
       ],
       "contextWindow": 8192,
-      "maxOutputTokens": 8192,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "litellmProvider": "nebius",
       "inputPerMToken": 0.01,
@@ -42691,7 +43534,7 @@
         "streaming"
       ],
       "contextWindow": 32768,
-      "maxOutputTokens": 32768,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "litellmProvider": "nebius",
       "inputPerMToken": 0.01,
@@ -42708,7 +43551,7 @@
         "streaming"
       ],
       "contextWindow": 40960,
-      "maxOutputTokens": 40960,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "litellmProvider": "nebius",
       "inputPerMToken": 0.01,
@@ -43982,7 +44825,7 @@
         "streaming"
       ],
       "contextWindow": 512,
-      "maxOutputTokens": 512,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "litellmProvider": "oci",
       "inputPerMToken": 0.1,
@@ -43999,7 +44842,7 @@
         "streaming"
       ],
       "contextWindow": 512,
-      "maxOutputTokens": 512,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "litellmProvider": "oci",
       "inputPerMToken": 0.1,
@@ -44016,7 +44859,7 @@
         "streaming"
       ],
       "contextWindow": 512,
-      "maxOutputTokens": 512,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "litellmProvider": "oci",
       "inputPerMToken": 0.1,
@@ -44033,7 +44876,7 @@
         "streaming"
       ],
       "contextWindow": 512,
-      "maxOutputTokens": 512,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "litellmProvider": "oci",
       "inputPerMToken": 0.1,
@@ -44050,7 +44893,7 @@
         "streaming"
       ],
       "contextWindow": 512,
-      "maxOutputTokens": 512,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "litellmProvider": "oci",
       "inputPerMToken": 0.1,
@@ -44067,7 +44910,7 @@
         "streaming"
       ],
       "contextWindow": 512,
-      "maxOutputTokens": 512,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "litellmProvider": "oci",
       "inputPerMToken": 0.1,
@@ -44084,7 +44927,7 @@
         "streaming"
       ],
       "contextWindow": 512,
-      "maxOutputTokens": 512,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "litellmProvider": "oci",
       "inputPerMToken": 0.1,
@@ -44101,7 +44944,7 @@
         "streaming"
       ],
       "contextWindow": 128000,
-      "maxOutputTokens": 128000,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "litellmProvider": "oci",
       "inputPerMToken": 0.12,
@@ -46079,7 +46922,7 @@
         "streaming"
       ],
       "contextWindow": 32768,
-      "maxOutputTokens": 32768,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "litellmProvider": "perplexity",
       "inputPerMToken": 0.004,
@@ -46096,7 +46939,7 @@
         "streaming"
       ],
       "contextWindow": 32768,
-      "maxOutputTokens": 32768,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "litellmProvider": "perplexity",
       "inputPerMToken": 0.03,
@@ -48484,7 +49327,7 @@
         "streaming"
       ],
       "contextWindow": 77,
-      "maxOutputTokens": 77,
+      "maxOutputTokens": 0,
       "mode": "image_generation",
       "litellmProvider": "bedrock"
     },
@@ -48499,7 +49342,7 @@
         "streaming"
       ],
       "contextWindow": 77,
-      "maxOutputTokens": 77,
+      "maxOutputTokens": 0,
       "mode": "image_generation",
       "litellmProvider": "bedrock"
     },
@@ -48514,7 +49357,7 @@
         "streaming"
       ],
       "contextWindow": 77,
-      "maxOutputTokens": 77,
+      "maxOutputTokens": 0,
       "mode": "image_generation",
       "litellmProvider": "bedrock"
     },
@@ -48945,7 +49788,7 @@
         "streaming"
       ],
       "contextWindow": 77,
-      "maxOutputTokens": 77,
+      "maxOutputTokens": 0,
       "mode": "image_generation",
       "litellmProvider": "bedrock"
     },
@@ -48960,7 +49803,7 @@
         "streaming"
       ],
       "contextWindow": 77,
-      "maxOutputTokens": 77,
+      "maxOutputTokens": 0,
       "mode": "image_generation",
       "litellmProvider": "bedrock"
     },
@@ -48975,7 +49818,7 @@
         "streaming"
       ],
       "contextWindow": 77,
-      "maxOutputTokens": 77,
+      "maxOutputTokens": 0,
       "mode": "image_generation",
       "litellmProvider": "bedrock"
     },
@@ -49099,7 +49942,7 @@
         "streaming"
       ],
       "contextWindow": 2048,
-      "maxOutputTokens": 2048,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "litellmProvider": "vertex_ai-embedding-models",
       "inputPerMToken": 0.1,
@@ -49116,7 +49959,7 @@
         "streaming"
       ],
       "contextWindow": 2048,
-      "maxOutputTokens": 2048,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "litellmProvider": "vertex_ai-embedding-models",
       "inputPerMToken": 0.1,
@@ -49133,7 +49976,7 @@
         "streaming"
       ],
       "contextWindow": 8191,
-      "maxOutputTokens": 8191,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "litellmProvider": "openai",
       "inputPerMToken": 0.13,
@@ -49150,7 +49993,7 @@
         "streaming"
       ],
       "contextWindow": 8191,
-      "maxOutputTokens": 8191,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "litellmProvider": "openai",
       "inputPerMToken": 0.02,
@@ -49167,7 +50010,7 @@
         "streaming"
       ],
       "contextWindow": 8191,
-      "maxOutputTokens": 8191,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "litellmProvider": "openai",
       "inputPerMToken": 0.1,
@@ -49184,7 +50027,7 @@
         "streaming"
       ],
       "contextWindow": 8191,
-      "maxOutputTokens": 8191,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "litellmProvider": "openai",
       "inputPerMToken": 0.1,
@@ -49201,7 +50044,7 @@
         "streaming"
       ],
       "contextWindow": 8192,
-      "maxOutputTokens": 8192,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "litellmProvider": "vertex_ai-embedding-models",
       "inputPerMToken": 0.1,
@@ -49218,7 +50061,7 @@
         "streaming"
       ],
       "contextWindow": 3072,
-      "maxOutputTokens": 3072,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "litellmProvider": "vertex_ai-embedding-models",
       "inputPerMToken": 0.0062,
@@ -49235,7 +50078,7 @@
         "streaming"
       ],
       "contextWindow": 2048,
-      "maxOutputTokens": 2048,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "litellmProvider": "vertex_ai-embedding-models",
       "inputPerMToken": 0.1,
@@ -49582,6 +50425,25 @@
       "litellmProvider": "together_ai",
       "inputPerMToken": 0.3,
       "outputPerMToken": 1.2
+    },
+    "together_ai/MiniMaxAI/MiniMax-M3.1-Flash": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "streaming",
+        "prompt_caching"
+      ],
+      "contextWindow": 1048576,
+      "maxOutputTokens": 1048576,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.015,
+      "litellmProvider": "together_ai",
+      "inputPerMToken": 0.15,
+      "outputPerMToken": 0.6
     },
     "together_ai/Prism-ML/Ternary-Bonsai-27B": {
       "input": [
@@ -55262,7 +56124,7 @@
         "streaming"
       ],
       "contextWindow": 1024,
-      "maxOutputTokens": 1024,
+      "maxOutputTokens": 0,
       "mode": "video_generation",
       "litellmProvider": "vertex_ai-video-models"
     },
@@ -55277,7 +56139,7 @@
         "streaming"
       ],
       "contextWindow": 1024,
-      "maxOutputTokens": 1024,
+      "maxOutputTokens": 0,
       "mode": "video_generation",
       "litellmProvider": "vertex_ai-video-models"
     },
@@ -55292,7 +56154,7 @@
         "streaming"
       ],
       "contextWindow": 1024,
-      "maxOutputTokens": 1024,
+      "maxOutputTokens": 0,
       "mode": "video_generation",
       "litellmProvider": "vertex_ai-video-models"
     },
@@ -55307,7 +56169,7 @@
         "streaming"
       ],
       "contextWindow": 1024,
-      "maxOutputTokens": 1024,
+      "maxOutputTokens": 0,
       "mode": "video_generation",
       "litellmProvider": "vertex_ai-video-models"
     },
@@ -55323,7 +56185,7 @@
         "streaming"
       ],
       "contextWindow": 1024,
-      "maxOutputTokens": 1024,
+      "maxOutputTokens": 0,
       "mode": "video_generation",
       "litellmProvider": "vertex_ai-video-models"
     },
@@ -55474,7 +56336,7 @@
         "streaming"
       ],
       "contextWindow": 4000,
-      "maxOutputTokens": 4000,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "litellmProvider": "voyage",
       "inputPerMToken": 0.1,
@@ -55491,7 +56353,7 @@
         "streaming"
       ],
       "contextWindow": 32000,
-      "maxOutputTokens": 32000,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "litellmProvider": "voyage",
       "inputPerMToken": 0.06,
@@ -55508,7 +56370,7 @@
         "streaming"
       ],
       "contextWindow": 32000,
-      "maxOutputTokens": 32000,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "litellmProvider": "voyage",
       "inputPerMToken": 0.12,
@@ -55525,7 +56387,7 @@
         "streaming"
       ],
       "contextWindow": 32000,
-      "maxOutputTokens": 32000,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "litellmProvider": "voyage",
       "inputPerMToken": 0.18,
@@ -55542,7 +56404,7 @@
         "streaming"
       ],
       "contextWindow": 32000,
-      "maxOutputTokens": 32000,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "litellmProvider": "voyage",
       "inputPerMToken": 0.02,
@@ -55559,7 +56421,7 @@
         "streaming"
       ],
       "contextWindow": 32000,
-      "maxOutputTokens": 32000,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "litellmProvider": "voyage",
       "inputPerMToken": 0.06,
@@ -55576,7 +56438,7 @@
         "streaming"
       ],
       "contextWindow": 32000,
-      "maxOutputTokens": 32000,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "litellmProvider": "voyage",
       "inputPerMToken": 0.02,
@@ -55593,7 +56455,7 @@
         "streaming"
       ],
       "contextWindow": 16000,
-      "maxOutputTokens": 16000,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "litellmProvider": "voyage",
       "inputPerMToken": 0.12,
@@ -55610,7 +56472,7 @@
         "streaming"
       ],
       "contextWindow": 32000,
-      "maxOutputTokens": 32000,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "litellmProvider": "voyage",
       "inputPerMToken": 0.18,
@@ -55627,7 +56489,7 @@
         "streaming"
       ],
       "contextWindow": 120000,
-      "maxOutputTokens": 120000,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "litellmProvider": "voyage",
       "inputPerMToken": 0.18,
@@ -55644,7 +56506,7 @@
         "streaming"
       ],
       "contextWindow": 32000,
-      "maxOutputTokens": 32000,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "litellmProvider": "voyage",
       "inputPerMToken": 0.12,
@@ -55661,7 +56523,7 @@
         "streaming"
       ],
       "contextWindow": 16000,
-      "maxOutputTokens": 16000,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "litellmProvider": "voyage",
       "inputPerMToken": 0.12,
@@ -55678,7 +56540,7 @@
         "streaming"
       ],
       "contextWindow": 16000,
-      "maxOutputTokens": 16000,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "litellmProvider": "voyage",
       "inputPerMToken": 0.12,
@@ -55695,7 +56557,7 @@
         "streaming"
       ],
       "contextWindow": 16000,
-      "maxOutputTokens": 16000,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "litellmProvider": "voyage",
       "inputPerMToken": 0.12,
@@ -55712,7 +56574,7 @@
         "streaming"
       ],
       "contextWindow": 4096,
-      "maxOutputTokens": 4096,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "litellmProvider": "voyage",
       "inputPerMToken": 0.1,
@@ -55729,7 +56591,7 @@
         "streaming"
       ],
       "contextWindow": 4000,
-      "maxOutputTokens": 4000,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "litellmProvider": "voyage",
       "inputPerMToken": 0.1,
@@ -55746,7 +56608,7 @@
         "streaming"
       ],
       "contextWindow": 32000,
-      "maxOutputTokens": 32000,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "litellmProvider": "voyage",
       "inputPerMToken": 0.12,
@@ -63640,7 +64502,7 @@
         "streaming"
       ],
       "contextWindow": 8192,
-      "maxOutputTokens": 8192,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "litellmProvider": "llamagate",
       "inputPerMToken": 0.02,
@@ -63657,7 +64519,7 @@
         "streaming"
       ],
       "contextWindow": 40960,
-      "maxOutputTokens": 40960,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "litellmProvider": "llamagate",
       "inputPerMToken": 0.02,
@@ -63893,7 +64755,7 @@
         "streaming"
       ],
       "contextWindow": 8192,
-      "maxOutputTokens": 8192,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "litellmProvider": "libertai",
       "inputPerMToken": 0.01,
@@ -64816,7 +65678,7 @@
         "prompt_caching",
         "web_search"
       ],
-      "contextWindow": 1050000,
+      "contextWindow": 922000,
       "maxOutputTokens": 128000,
       "mode": "responses",
       "cacheReadPerMToken": 0.44,
@@ -64842,7 +65704,7 @@
         "prompt_caching",
         "web_search"
       ],
-      "contextWindow": 1050000,
+      "contextWindow": 922000,
       "maxOutputTokens": 128000,
       "mode": "responses",
       "cacheReadPerMToken": 0.22,
@@ -64918,7 +65780,7 @@
         "prompt_caching",
         "web_search"
       ],
-      "contextWindow": 1050000,
+      "contextWindow": 922000,
       "maxOutputTokens": 128000,
       "mode": "responses",
       "cacheReadPerMToken": 0.022,
@@ -64941,7 +65803,7 @@
         "reasoning",
         "vision"
       ],
-      "contextWindow": 1050000,
+      "contextWindow": 922000,
       "maxOutputTokens": 128000,
       "mode": "chat",
       "cacheReadPerMToken": 0.44,
@@ -64964,7 +65826,7 @@
         "reasoning",
         "vision"
       ],
-      "contextWindow": 1050000,
+      "contextWindow": 922000,
       "maxOutputTokens": 128000,
       "mode": "chat",
       "cacheReadPerMToken": 0.4,
@@ -64987,7 +65849,7 @@
         "reasoning",
         "vision"
       ],
-      "contextWindow": 1050000,
+      "contextWindow": 922000,
       "maxOutputTokens": 128000,
       "mode": "chat",
       "cacheReadPerMToken": 0.22,
@@ -65010,7 +65872,7 @@
         "reasoning",
         "vision"
       ],
-      "contextWindow": 1050000,
+      "contextWindow": 922000,
       "maxOutputTokens": 128000,
       "mode": "chat",
       "cacheReadPerMToken": 0.2,
@@ -65033,7 +65895,7 @@
         "reasoning",
         "vision"
       ],
-      "contextWindow": 1050000,
+      "contextWindow": 922000,
       "maxOutputTokens": 128000,
       "mode": "chat",
       "cacheReadPerMToken": 0.022,
@@ -65056,7 +65918,7 @@
         "reasoning",
         "vision"
       ],
-      "contextWindow": 1050000,
+      "contextWindow": 922000,
       "maxOutputTokens": 128000,
       "mode": "chat",
       "cacheReadPerMToken": 0.275,
@@ -65078,7 +65940,7 @@
         "reasoning",
         "vision"
       ],
-      "contextWindow": 1050000,
+      "contextWindow": 922000,
       "maxOutputTokens": 128000,
       "mode": "chat",
       "cacheReadPerMToken": 0.25,
@@ -65100,7 +65962,7 @@
         "reasoning",
         "vision"
       ],
-      "contextWindow": 1050000,
+      "contextWindow": 922000,
       "maxOutputTokens": 128000,
       "mode": "chat",
       "cacheReadPerMToken": 0.55,
@@ -65122,7 +65984,7 @@
         "reasoning",
         "vision"
       ],
-      "contextWindow": 1050000,
+      "contextWindow": 922000,
       "maxOutputTokens": 128000,
       "mode": "chat",
       "cacheReadPerMToken": 0.5,
@@ -65144,7 +66006,7 @@
         "reasoning",
         "vision"
       ],
-      "contextWindow": 1050000,
+      "contextWindow": 922000,
       "maxOutputTokens": 128000,
       "mode": "chat",
       "cacheReadPerMToken": 0.02,
@@ -65169,7 +66031,7 @@
         "vision",
         "prompt_caching"
       ],
-      "contextWindow": 1050000,
+      "contextWindow": 922000,
       "maxOutputTokens": 128000,
       "mode": "responses",
       "cacheReadPerMToken": 1.1,
@@ -65194,7 +66056,7 @@
         "vision",
         "prompt_caching"
       ],
-      "contextWindow": 1050000,
+      "contextWindow": 922000,
       "maxOutputTokens": 128000,
       "mode": "responses",
       "cacheReadPerMToken": 0.22,
@@ -65219,7 +66081,7 @@
         "vision",
         "prompt_caching"
       ],
-      "contextWindow": 1050000,
+      "contextWindow": 922000,
       "maxOutputTokens": 128000,
       "mode": "responses",
       "cacheReadPerMToken": 0.011,
@@ -65243,7 +66105,7 @@
         "vision",
         "prompt_caching"
       ],
-      "contextWindow": 1050000,
+      "contextWindow": 922000,
       "maxOutputTokens": 128000,
       "mode": "chat",
       "cacheReadPerMToken": 1.1,
@@ -65267,7 +66129,7 @@
         "vision",
         "prompt_caching"
       ],
-      "contextWindow": 1050000,
+      "contextWindow": 922000,
       "maxOutputTokens": 128000,
       "mode": "chat",
       "cacheReadPerMToken": 0.22,
@@ -65291,7 +66153,7 @@
         "vision",
         "prompt_caching"
       ],
-      "contextWindow": 1050000,
+      "contextWindow": 922000,
       "maxOutputTokens": 128000,
       "mode": "chat",
       "cacheReadPerMToken": 0.011,
@@ -65315,7 +66177,7 @@
         "vision",
         "prompt_caching"
       ],
-      "contextWindow": 1050000,
+      "contextWindow": 922000,
       "maxOutputTokens": 128000,
       "mode": "chat",
       "cacheReadPerMToken": 1,
@@ -65339,7 +66201,7 @@
         "vision",
         "prompt_caching"
       ],
-      "contextWindow": 1050000,
+      "contextWindow": 922000,
       "maxOutputTokens": 128000,
       "mode": "chat",
       "cacheReadPerMToken": 0.2,
@@ -65363,7 +66225,7 @@
         "vision",
         "prompt_caching"
       ],
-      "contextWindow": 1050000,
+      "contextWindow": 922000,
       "maxOutputTokens": 128000,
       "mode": "chat",
       "cacheReadPerMToken": 0.2,
@@ -65387,7 +66249,7 @@
         "vision",
         "prompt_caching"
       ],
-      "contextWindow": 1050000,
+      "contextWindow": 922000,
       "maxOutputTokens": 128000,
       "mode": "chat",
       "cacheReadPerMToken": 0.01,
@@ -65411,7 +66273,7 @@
         "vision",
         "prompt_caching"
       ],
-      "contextWindow": 1050000,
+      "contextWindow": 922000,
       "maxOutputTokens": 128000,
       "mode": "chat",
       "cacheReadPerMToken": 0.01,
@@ -65437,7 +66299,7 @@
         "prompt_caching",
         "web_search"
       ],
-      "contextWindow": 1050000,
+      "contextWindow": 922000,
       "maxOutputTokens": 128000,
       "mode": "responses",
       "cacheReadPerMToken": 0.55,
@@ -65462,7 +66324,7 @@
         "prompt_caching",
         "web_search"
       ],
-      "contextWindow": 1050000,
+      "contextWindow": 922000,
       "maxOutputTokens": 128000,
       "mode": "responses",
       "cacheReadPerMToken": 0.275,
@@ -65746,6 +66608,54 @@
       "litellmProvider": "volcengine",
       "inputPerMToken": 0.8625,
       "outputPerMToken": 4.31
+    },
+    "volcengine/doubao-seed-2-1-pro-260915": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching"
+      ],
+      "contextWindow": 1024000,
+      "maxOutputTokens": 256000,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.1725,
+      "litellmProvider": "volcengine",
+      "inputPerMToken": 0.8625,
+      "outputPerMToken": 4.31
+    },
+    "volcengine/doubao-seed-2-1-lite-260915": {
+      "input": [
+        "text",
+        "image",
+        "audio"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching"
+      ],
+      "contextWindow": 1024000,
+      "maxOutputTokens": 256000,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.023,
+      "litellmProvider": "volcengine",
+      "inputPerMToken": 0.115,
+      "outputPerMToken": 0.3881,
+      "audioInputPerMToken": 1.73
     },
     "volcengine/doubao-seed-2-1-turbo-260628": {
       "input": [
@@ -66245,7 +67155,7 @@
         "streaming"
       ],
       "contextWindow": 8192,
-      "maxOutputTokens": 8192,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "litellmProvider": "snowflake",
       "inputPerMToken": 0.07,
@@ -66262,7 +67172,7 @@
         "streaming"
       ],
       "contextWindow": 8192,
-      "maxOutputTokens": 8192,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "litellmProvider": "snowflake",
       "inputPerMToken": 0.07,
@@ -67712,7 +68622,7 @@
         "streaming"
       ],
       "contextWindow": 32768,
-      "maxOutputTokens": 32768,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "litellmProvider": "perplexity",
       "inputPerMToken": 0.008,
@@ -67729,7 +68639,7 @@
         "streaming"
       ],
       "contextWindow": 32768,
-      "maxOutputTokens": 32768,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "litellmProvider": "perplexity",
       "inputPerMToken": 0.05,
@@ -67746,7 +68656,7 @@
         "streaming"
       ],
       "contextWindow": 32000,
-      "maxOutputTokens": 32000,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "litellmProvider": "voyage",
       "inputPerMToken": 0.12,
@@ -67763,7 +68673,7 @@
         "streaming"
       ],
       "contextWindow": 32000,
-      "maxOutputTokens": 32000,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "litellmProvider": "voyage",
       "inputPerMToken": 0.06,
@@ -67780,7 +68690,7 @@
         "streaming"
       ],
       "contextWindow": 32000,
-      "maxOutputTokens": 32000,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "litellmProvider": "voyage",
       "inputPerMToken": 0.02,
@@ -67797,7 +68707,7 @@
         "streaming"
       ],
       "contextWindow": 32000,
-      "maxOutputTokens": 32000,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "litellmProvider": "voyage",
       "inputPerMToken": 0.12,
@@ -67814,7 +68724,7 @@
         "streaming"
       ],
       "contextWindow": 120000,
-      "maxOutputTokens": 120000,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "litellmProvider": "voyage",
       "inputPerMToken": 0.12,
@@ -67831,7 +68741,7 @@
         "streaming"
       ],
       "contextWindow": 32000,
-      "maxOutputTokens": 32000,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "litellmProvider": "voyage",
       "inputPerMToken": 0.12,
@@ -68275,6 +69185,7 @@
       "features": [
         "function_calling",
         "streaming",
+        "reasoning",
         "vision"
       ],
       "contextWindow": 1048576,
@@ -73601,7 +74512,7 @@
         "vision",
         "prompt_caching"
       ],
-      "contextWindow": 1050000,
+      "contextWindow": 922000,
       "maxOutputTokens": 128000,
       "mode": "responses",
       "cacheReadPerMToken": 0.27,
@@ -73626,7 +74537,7 @@
         "vision",
         "prompt_caching"
       ],
-      "contextWindow": 1050000,
+      "contextWindow": 922000,
       "maxOutputTokens": 128000,
       "mode": "responses",
       "cacheReadPerMToken": 0.027,
@@ -73651,7 +74562,7 @@
         "vision",
         "prompt_caching"
       ],
-      "contextWindow": 1050000,
+      "contextWindow": 922000,
       "maxOutputTokens": 128000,
       "mode": "responses",
       "cacheReadPerMToken": 0.3375,
@@ -73879,7 +74790,7 @@
         "vision",
         "prompt_caching"
       ],
-      "contextWindow": 1050000,
+      "contextWindow": 922000,
       "maxOutputTokens": 128000,
       "mode": "responses",
       "cacheReadPerMToken": 0.33,
@@ -74158,7 +75069,7 @@
         "streaming"
       ],
       "contextWindow": 8191,
-      "maxOutputTokens": 8191,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "litellmProvider": "azure",
       "inputPerMToken": 0.163,
@@ -74175,7 +75086,7 @@
         "streaming"
       ],
       "contextWindow": 8191,
-      "maxOutputTokens": 8191,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "litellmProvider": "azure",
       "inputPerMToken": 0.025,
@@ -75278,7 +76189,7 @@
         "streaming"
       ],
       "contextWindow": 8192,
-      "maxOutputTokens": 8192,
+      "maxOutputTokens": 0,
       "mode": "rerank",
       "litellmProvider": "together_ai",
       "inputPerMToken": 0.1,
@@ -76422,6 +77333,24 @@
       "inputPerMToken": 1.21,
       "outputPerMToken": 4.84
     },
+    "azure/eu/o3": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "streaming"
+      ],
+      "contextWindow": 200000,
+      "maxOutputTokens": 100000,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.55,
+      "litellmProvider": "azure",
+      "inputPerMToken": 2.2,
+      "outputPerMToken": 8.8
+    },
     "azure/eu/o3-2025-04-16": {
       "input": [
         "text"
@@ -76457,6 +77386,24 @@
       "litellmProvider": "azure",
       "inputPerMToken": 11,
       "outputPerMToken": 44
+    },
+    "azure/eu/o4-mini": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "streaming"
+      ],
+      "contextWindow": 200000,
+      "maxOutputTokens": 100000,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.303,
+      "litellmProvider": "azure",
+      "inputPerMToken": 1.21,
+      "outputPerMToken": 4.84
     },
     "azure/eu/o4-mini-2025-04-16": {
       "input": [
@@ -80227,7 +81174,7 @@
         "streaming"
       ],
       "contextWindow": 1024,
-      "maxOutputTokens": 1024,
+      "maxOutputTokens": 0,
       "mode": "video_generation",
       "litellmProvider": "vertex_ai-video-models"
     },
@@ -80243,7 +81190,7 @@
         "streaming"
       ],
       "contextWindow": 1024,
-      "maxOutputTokens": 1024,
+      "maxOutputTokens": 0,
       "mode": "video_generation",
       "litellmProvider": "vertex_ai-video-models"
     },
@@ -80259,7 +81206,7 @@
         "streaming"
       ],
       "contextWindow": 1024,
-      "maxOutputTokens": 1024,
+      "maxOutputTokens": 0,
       "mode": "video_generation",
       "litellmProvider": "vertex_ai-video-models"
     },
@@ -81663,8 +82610,8 @@
       "features": [
         "streaming"
       ],
-      "contextWindow": 0,
-      "maxOutputTokens": 0,
+      "contextWindow": 256000,
+      "maxOutputTokens": 64000,
       "mode": "realtime",
       "litellmProvider": "bedrock",
       "inputPerMToken": 0.33,
@@ -82359,7 +83306,7 @@
       "features": [
         "streaming"
       ],
-      "contextWindow": 0,
+      "contextWindow": 32768,
       "maxOutputTokens": 0,
       "mode": "evaluation",
       "litellmProvider": "azure_ai",
@@ -82411,7 +83358,7 @@
         "streaming"
       ],
       "contextWindow": 128000,
-      "maxOutputTokens": 128000,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "litellmProvider": "azure_ai",
       "inputPerMToken": 0.08,
@@ -82429,7 +83376,7 @@
         "streaming"
       ],
       "contextWindow": 128000,
-      "maxOutputTokens": 128000,
+      "maxOutputTokens": 0,
       "mode": "embedding",
       "litellmProvider": "azure_ai",
       "inputPerMToken": 0.12,
@@ -83002,10 +83949,10 @@
       "contextWindow": 1048576,
       "maxOutputTokens": 131072,
       "mode": "chat",
-      "cacheReadPerMToken": 0.13,
+      "cacheReadPerMToken": 0.04,
       "litellmProvider": "baseten",
-      "inputPerMToken": 1.3,
-      "outputPerMToken": 4.3
+      "inputPerMToken": 0.4,
+      "outputPerMToken": 1.2
     },
     "nebius/reflection/beam": {
       "input": [
@@ -83083,6 +84030,7 @@
         "text"
       ],
       "features": [
+        "function_calling",
         "structured_output",
         "streaming",
         "reasoning",
@@ -83236,6 +84184,1485 @@
       "litellmProvider": "together_ai",
       "inputPerMToken": 0.3,
       "outputPerMToken": 1.2
+    },
+    "meta/muse-image-1.0": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "image"
+      ],
+      "features": [
+        "streaming"
+      ],
+      "contextWindow": 0,
+      "maxOutputTokens": 0,
+      "mode": "image_generation",
+      "litellmProvider": "meta"
+    },
+    "fireworks_ai/accounts/fireworks/models/minimax-m3p1-flash": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "vision"
+      ],
+      "contextWindow": 1048576,
+      "maxOutputTokens": 1048576,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.015,
+      "litellmProvider": "fireworks_ai",
+      "inputPerMToken": 0.15,
+      "outputPerMToken": 0.6
+    },
+    "meta/sam-3.1": {
+      "input": [
+        "text",
+        "image",
+        "video"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "streaming"
+      ],
+      "contextWindow": 0,
+      "maxOutputTokens": 0,
+      "mode": "responses",
+      "litellmProvider": "meta",
+      "perImage": 0.0025
+    },
+    "fireworks_ai/accounts/fireworks/models/deepseek-v4p1-flash-1017-us": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching"
+      ],
+      "contextWindow": 1048576,
+      "maxOutputTokens": 393216,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.009,
+      "litellmProvider": "fireworks_ai",
+      "inputPerMToken": 0.45,
+      "outputPerMToken": 1.8
+    },
+    "wandb/reflection/Beam-1.0-501B-A23B": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "prompt_caching"
+      ],
+      "contextWindow": 1049000,
+      "maxOutputTokens": 0,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.1,
+      "litellmProvider": "wandb",
+      "inputPerMToken": 1,
+      "outputPerMToken": 3
+    },
+    "wandb/zai-org/GLM-5.3": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "prompt_caching"
+      ],
+      "contextWindow": 1049000,
+      "maxOutputTokens": 0,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.19,
+      "litellmProvider": "wandb",
+      "inputPerMToken": 1.2,
+      "outputPerMToken": 4
+    },
+    "azure_ai/MAI-Code-1.1-Flash": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching"
+      ],
+      "contextWindow": 256000,
+      "maxOutputTokens": 64000,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.02,
+      "litellmProvider": "azure_ai",
+      "inputPerMToken": 0.2,
+      "outputPerMToken": 1.2
+    },
+    "opencode_go/grok-4.7": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "streaming",
+        "reasoning",
+        "vision"
+      ],
+      "contextWindow": 500000,
+      "maxOutputTokens": 500000,
+      "mode": "responses",
+      "cacheReadPerMToken": 0.5,
+      "litellmProvider": "opencode_go",
+      "inputPerMToken": 2,
+      "outputPerMToken": 6
+    },
+    "opencode_go/gpt-6-luna": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "streaming",
+        "reasoning",
+        "vision"
+      ],
+      "contextWindow": 922000,
+      "maxOutputTokens": 128000,
+      "mode": "responses",
+      "cacheReadPerMToken": 0.01,
+      "cacheWritePerMToken": 0.125,
+      "litellmProvider": "opencode_go",
+      "inputPerMToken": 0.1,
+      "outputPerMToken": 0.5
+    },
+    "opencode_go/gpt-5.6-luna": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "streaming",
+        "reasoning",
+        "vision"
+      ],
+      "contextWindow": 922000,
+      "maxOutputTokens": 128000,
+      "mode": "responses",
+      "cacheReadPerMToken": 0.02,
+      "cacheWritePerMToken": 0.25,
+      "litellmProvider": "opencode_go",
+      "inputPerMToken": 0.2,
+      "outputPerMToken": 1.2
+    },
+    "opencode_go/claude-haiku-5-5": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "streaming",
+        "reasoning",
+        "vision"
+      ],
+      "contextWindow": 1000000,
+      "maxOutputTokens": 128000,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.01,
+      "cacheWritePerMToken": 0.125,
+      "litellmProvider": "opencode_go",
+      "inputPerMToken": 0.1,
+      "outputPerMToken": 0.5
+    },
+    "opencode_go/gemini-4-argon": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "streaming",
+        "reasoning",
+        "vision"
+      ],
+      "contextWindow": 1048576,
+      "maxOutputTokens": 65536,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.1,
+      "litellmProvider": "opencode_go",
+      "inputPerMToken": 2,
+      "outputPerMToken": 10
+    },
+    "opencode_go/glm-5.3-flash": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "streaming",
+        "reasoning",
+        "vision"
+      ],
+      "contextWindow": 1000000,
+      "maxOutputTokens": 131072,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.03,
+      "litellmProvider": "opencode_go",
+      "inputPerMToken": 0.15,
+      "outputPerMToken": 0.5
+    },
+    "opencode_go/glm-5.3": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "streaming",
+        "reasoning"
+      ],
+      "contextWindow": 1000000,
+      "maxOutputTokens": 131072,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.26,
+      "litellmProvider": "opencode_go",
+      "inputPerMToken": 1.4,
+      "outputPerMToken": 4.4
+    },
+    "opencode_go/glm-5.2": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "streaming",
+        "reasoning"
+      ],
+      "contextWindow": 1000000,
+      "maxOutputTokens": 131072,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.26,
+      "litellmProvider": "opencode_go",
+      "inputPerMToken": 1.4,
+      "outputPerMToken": 4.4
+    },
+    "opencode_go/kimi-k3.1-pro": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "streaming",
+        "reasoning",
+        "vision"
+      ],
+      "contextWindow": 1048576,
+      "maxOutputTokens": 131072,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.2,
+      "cacheWritePerMToken": 2,
+      "litellmProvider": "opencode_go",
+      "inputPerMToken": 2,
+      "outputPerMToken": 10
+    },
+    "opencode_go/kimi-k3": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "streaming",
+        "reasoning",
+        "vision"
+      ],
+      "contextWindow": 1048576,
+      "maxOutputTokens": 131072,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.3,
+      "cacheWritePerMToken": 3,
+      "litellmProvider": "opencode_go",
+      "inputPerMToken": 3,
+      "outputPerMToken": 15
+    },
+    "opencode_go/kimi-k2.7-code": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "streaming",
+        "reasoning",
+        "vision"
+      ],
+      "contextWindow": 262144,
+      "maxOutputTokens": 262144,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.19,
+      "litellmProvider": "opencode_go",
+      "inputPerMToken": 0.95,
+      "outputPerMToken": 4
+    },
+    "opencode_go/longcat-2.0": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "streaming",
+        "reasoning"
+      ],
+      "contextWindow": 1000000,
+      "maxOutputTokens": 131072,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.006,
+      "litellmProvider": "opencode_go",
+      "inputPerMToken": 0.3,
+      "outputPerMToken": 1.2
+    },
+    "opencode_go/deepseek-v4.1-flash": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "streaming",
+        "reasoning",
+        "vision"
+      ],
+      "contextWindow": 1000000,
+      "maxOutputTokens": 384000,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.006,
+      "litellmProvider": "opencode_go",
+      "inputPerMToken": 0.3,
+      "outputPerMToken": 1.2
+    },
+    "opencode_go/deepseek-v4-pro": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "streaming",
+        "reasoning"
+      ],
+      "contextWindow": 1000000,
+      "maxOutputTokens": 384000,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.044,
+      "litellmProvider": "opencode_go",
+      "inputPerMToken": 1.32,
+      "outputPerMToken": 3.96
+    },
+    "opencode_go/mimo-v2.6-flash": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "streaming",
+        "reasoning",
+        "vision"
+      ],
+      "contextWindow": 1048576,
+      "maxOutputTokens": 131072,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.0028,
+      "litellmProvider": "opencode_go",
+      "inputPerMToken": 0.14,
+      "outputPerMToken": 0.28
+    },
+    "opencode_go/mimo-v2.6-pro": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "streaming",
+        "reasoning",
+        "vision"
+      ],
+      "contextWindow": 1048576,
+      "maxOutputTokens": 131072,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.0036,
+      "litellmProvider": "opencode_go",
+      "inputPerMToken": 0.435,
+      "outputPerMToken": 0.87
+    },
+    "opencode_go/mimo-v2.5": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "streaming",
+        "reasoning",
+        "vision"
+      ],
+      "contextWindow": 1000000,
+      "maxOutputTokens": 128000,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.0028,
+      "litellmProvider": "opencode_go",
+      "inputPerMToken": 0.14,
+      "outputPerMToken": 0.28
+    },
+    "opencode_go/mimo-v2.5-pro": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "streaming",
+        "reasoning"
+      ],
+      "contextWindow": 1048576,
+      "maxOutputTokens": 128000,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.0036,
+      "litellmProvider": "opencode_go",
+      "inputPerMToken": 0.435,
+      "outputPerMToken": 0.87
+    },
+    "opencode_go/minimax-m3.1-flash": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "streaming",
+        "reasoning",
+        "vision"
+      ],
+      "contextWindow": 1000000,
+      "maxOutputTokens": 512000,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.015,
+      "litellmProvider": "opencode_go",
+      "inputPerMToken": 0.15,
+      "outputPerMToken": 0.6
+    },
+    "opencode_go/minimax-m3": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "streaming",
+        "reasoning",
+        "vision"
+      ],
+      "contextWindow": 1000000,
+      "maxOutputTokens": 131072,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.06,
+      "litellmProvider": "opencode_go",
+      "inputPerMToken": 0.3,
+      "outputPerMToken": 1.2
+    },
+    "opencode_go/muse-spark-1.3-contributor": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "streaming",
+        "reasoning",
+        "vision"
+      ],
+      "contextWindow": 1048576,
+      "maxOutputTokens": 131072,
+      "mode": "responses",
+      "cacheReadPerMToken": 0.002,
+      "litellmProvider": "opencode_go",
+      "inputPerMToken": 0.1,
+      "outputPerMToken": 0.2
+    },
+    "opencode_go/muse-spark-1.2-contributor": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "streaming",
+        "reasoning",
+        "vision"
+      ],
+      "contextWindow": 1048576,
+      "maxOutputTokens": 131072,
+      "mode": "responses",
+      "cacheReadPerMToken": 0.002,
+      "litellmProvider": "opencode_go",
+      "inputPerMToken": 0.1,
+      "outputPerMToken": 0.2
+    },
+    "opencode_go/qwen3.8-max": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "streaming",
+        "reasoning",
+        "vision"
+      ],
+      "contextWindow": 1000000,
+      "maxOutputTokens": 131072,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.25,
+      "cacheWritePerMToken": 2.5,
+      "litellmProvider": "opencode_go",
+      "inputPerMToken": 2,
+      "outputPerMToken": 6
+    },
+    "opencode_go/qwen3.8-flash": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "streaming",
+        "reasoning",
+        "vision"
+      ],
+      "contextWindow": 1000000,
+      "maxOutputTokens": 131072,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.016,
+      "cacheWritePerMToken": 0.2,
+      "litellmProvider": "opencode_go",
+      "inputPerMToken": 0.15,
+      "outputPerMToken": 0.47
+    },
+    "opencode_go/qwen3.7-plus": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "streaming",
+        "reasoning",
+        "vision"
+      ],
+      "contextWindow": 1000000,
+      "maxOutputTokens": 65536,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.04,
+      "cacheWritePerMToken": 0.5,
+      "litellmProvider": "opencode_go",
+      "inputPerMToken": 0.4,
+      "outputPerMToken": 1.6
+    },
+    "opencode_go/hy4-preview": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "streaming",
+        "reasoning"
+      ],
+      "contextWindow": 1024000,
+      "maxOutputTokens": 64000,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.042,
+      "litellmProvider": "opencode_go",
+      "inputPerMToken": 0.834,
+      "outputPerMToken": 2.5
+    },
+    "opencode_go/hy3": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "streaming",
+        "reasoning"
+      ],
+      "contextWindow": 192000,
+      "maxOutputTokens": 128000,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.035,
+      "litellmProvider": "opencode_go",
+      "inputPerMToken": 0.14,
+      "outputPerMToken": 0.58
+    },
+    "opencode_go/longcat-2.5-preview-free": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "streaming",
+        "reasoning",
+        "vision"
+      ],
+      "contextWindow": 1000000,
+      "maxOutputTokens": 131072,
+      "mode": "chat",
+      "cacheReadPerMToken": 0,
+      "litellmProvider": "opencode_go",
+      "inputPerMToken": 0,
+      "outputPerMToken": 0
+    },
+    "opencode_go/step-5-preview": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "streaming",
+        "reasoning",
+        "vision"
+      ],
+      "contextWindow": 1000000,
+      "maxOutputTokens": 65536,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.1,
+      "litellmProvider": "opencode_go",
+      "inputPerMToken": 1,
+      "outputPerMToken": 2.7
+    },
+    "opencode_go/beam-free": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "streaming",
+        "reasoning"
+      ],
+      "contextWindow": 1048576,
+      "maxOutputTokens": 131072,
+      "mode": "chat",
+      "cacheReadPerMToken": 0,
+      "litellmProvider": "opencode_go",
+      "inputPerMToken": 0,
+      "outputPerMToken": 0
+    },
+    "bedrock/claude_platform/claude-fable-5": {
+      "input": [
+        "text",
+        "image",
+        "file"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching",
+        "web_search",
+        "computer_use"
+      ],
+      "contextWindow": 1000000,
+      "maxOutputTokens": 128000,
+      "mode": "chat",
+      "cacheReadPerMToken": 1,
+      "cacheWritePerMToken": 12.5,
+      "litellmProvider": "bedrock",
+      "inputPerMToken": 10,
+      "outputPerMToken": 50
+    },
+    "bedrock/claude_platform/claude-fable-5-1": {
+      "input": [
+        "text",
+        "image",
+        "file"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching",
+        "web_search",
+        "computer_use"
+      ],
+      "contextWindow": 1000000,
+      "maxOutputTokens": 128000,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.25,
+      "cacheWritePerMToken": 12.5,
+      "litellmProvider": "bedrock",
+      "inputPerMToken": 10,
+      "outputPerMToken": 50
+    },
+    "bedrock/claude_platform/claude-haiku-4-5": {
+      "input": [
+        "text",
+        "image",
+        "file"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching",
+        "computer_use"
+      ],
+      "contextWindow": 200000,
+      "maxOutputTokens": 64000,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.1,
+      "cacheWritePerMToken": 1.25,
+      "litellmProvider": "bedrock",
+      "inputPerMToken": 1,
+      "outputPerMToken": 5
+    },
+    "bedrock/claude_platform/claude-haiku-5-5": {
+      "input": [
+        "text",
+        "image",
+        "file"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching",
+        "web_search",
+        "computer_use"
+      ],
+      "contextWindow": 1000000,
+      "maxOutputTokens": 128000,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.01,
+      "cacheWritePerMToken": 0.125,
+      "litellmProvider": "bedrock",
+      "inputPerMToken": 0.1,
+      "outputPerMToken": 0.5
+    },
+    "bedrock/claude_platform/claude-opus-4-5": {
+      "input": [
+        "text",
+        "image",
+        "file"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching",
+        "computer_use"
+      ],
+      "contextWindow": 200000,
+      "maxOutputTokens": 64000,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.5,
+      "cacheWritePerMToken": 6.25,
+      "litellmProvider": "bedrock",
+      "inputPerMToken": 5,
+      "outputPerMToken": 25
+    },
+    "bedrock/claude_platform/claude-opus-4-6": {
+      "input": [
+        "text",
+        "image",
+        "file"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching",
+        "web_search",
+        "computer_use"
+      ],
+      "contextWindow": 1000000,
+      "maxOutputTokens": 128000,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.5,
+      "cacheWritePerMToken": 6.25,
+      "litellmProvider": "bedrock",
+      "inputPerMToken": 5,
+      "outputPerMToken": 25
+    },
+    "bedrock/claude_platform/claude-opus-4-7": {
+      "input": [
+        "text",
+        "image",
+        "file"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching",
+        "web_search",
+        "computer_use"
+      ],
+      "contextWindow": 1000000,
+      "maxOutputTokens": 128000,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.5,
+      "cacheWritePerMToken": 6.25,
+      "litellmProvider": "bedrock",
+      "inputPerMToken": 5,
+      "outputPerMToken": 25
+    },
+    "bedrock/claude_platform/claude-opus-4-8": {
+      "input": [
+        "text",
+        "image",
+        "file"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching",
+        "web_search",
+        "computer_use"
+      ],
+      "contextWindow": 1000000,
+      "maxOutputTokens": 128000,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.5,
+      "cacheWritePerMToken": 6.25,
+      "litellmProvider": "bedrock",
+      "inputPerMToken": 5,
+      "outputPerMToken": 25
+    },
+    "bedrock/claude_platform/claude-opus-5": {
+      "input": [
+        "text",
+        "image",
+        "file"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching",
+        "web_search",
+        "computer_use"
+      ],
+      "contextWindow": 1000000,
+      "maxOutputTokens": 128000,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.5,
+      "cacheWritePerMToken": 6.25,
+      "litellmProvider": "bedrock",
+      "inputPerMToken": 5,
+      "outputPerMToken": 25
+    },
+    "bedrock/claude_platform/claude-opus-5-5": {
+      "input": [
+        "text",
+        "image",
+        "file"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching",
+        "web_search",
+        "computer_use"
+      ],
+      "contextWindow": 1000000,
+      "maxOutputTokens": 128000,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.2,
+      "cacheWritePerMToken": 5,
+      "litellmProvider": "bedrock",
+      "inputPerMToken": 4,
+      "outputPerMToken": 20
+    },
+    "bedrock/claude_platform/claude-sonnet-4-5": {
+      "input": [
+        "text",
+        "image",
+        "file"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching",
+        "computer_use"
+      ],
+      "contextWindow": 200000,
+      "maxOutputTokens": 64000,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.3,
+      "cacheWritePerMToken": 3.75,
+      "litellmProvider": "bedrock",
+      "inputPerMToken": 3,
+      "outputPerMToken": 15
+    },
+    "bedrock/claude_platform/claude-sonnet-4-6": {
+      "input": [
+        "text",
+        "image",
+        "file"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching",
+        "web_search",
+        "computer_use"
+      ],
+      "contextWindow": 1000000,
+      "maxOutputTokens": 128000,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.3,
+      "cacheWritePerMToken": 3.75,
+      "litellmProvider": "bedrock",
+      "inputPerMToken": 3,
+      "outputPerMToken": 15
+    },
+    "bedrock/claude_platform/claude-sonnet-5": {
+      "input": [
+        "text",
+        "image",
+        "file"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching",
+        "web_search",
+        "computer_use"
+      ],
+      "contextWindow": 1000000,
+      "maxOutputTokens": 128000,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.2,
+      "cacheWritePerMToken": 2.5,
+      "litellmProvider": "bedrock",
+      "inputPerMToken": 2,
+      "outputPerMToken": 10
+    },
+    "bedrock/claude_platform/claude-sonnet-5-5": {
+      "input": [
+        "text",
+        "image",
+        "file"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching",
+        "web_search",
+        "computer_use"
+      ],
+      "contextWindow": 1000000,
+      "maxOutputTokens": 128000,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.1,
+      "cacheWritePerMToken": 2.5,
+      "litellmProvider": "bedrock",
+      "inputPerMToken": 2,
+      "outputPerMToken": 10
+    },
+    "gpt-6.1-terra": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching",
+        "web_search",
+        "computer_use"
+      ],
+      "contextWindow": 922000,
+      "maxOutputTokens": 128000,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.05,
+      "cacheWritePerMToken": 1.25,
+      "litellmProvider": "openai",
+      "inputPerMToken": 1,
+      "outputPerMToken": 5
+    },
+    "chatgpt/gpt-6.1-terra": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "vision"
+      ],
+      "contextWindow": 922000,
+      "maxOutputTokens": 128000,
+      "mode": "responses",
+      "litellmProvider": "chatgpt"
+    },
+    "global.openai.gpt-6.1-terra": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching"
+      ],
+      "contextWindow": 922000,
+      "maxOutputTokens": 128000,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.05,
+      "cacheWritePerMToken": 1.25,
+      "litellmProvider": "bedrock_converse",
+      "inputPerMToken": 1,
+      "outputPerMToken": 5
+    },
+    "us.openai.gpt-6.1-terra": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching"
+      ],
+      "contextWindow": 922000,
+      "maxOutputTokens": 128000,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.055,
+      "cacheWritePerMToken": 1.38,
+      "litellmProvider": "bedrock_converse",
+      "inputPerMToken": 1.1,
+      "outputPerMToken": 5.5
+    },
+    "baseten/decision-models/baseten-elephant-9b-latest": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "streaming",
+        "vision"
+      ],
+      "contextWindow": 16384,
+      "maxOutputTokens": 0,
+      "mode": "decisions",
+      "litellmProvider": "baseten",
+      "inputPerMToken": 0,
+      "outputPerMToken": 0
+    },
+    "baseten/decision-models/baseten-mammoth-27b-latest": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "streaming",
+        "vision"
+      ],
+      "contextWindow": 16384,
+      "maxOutputTokens": 0,
+      "mode": "decisions",
+      "litellmProvider": "baseten",
+      "inputPerMToken": 0,
+      "outputPerMToken": 0
+    },
+    "github_copilot/gpt-6.1-terra": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "vision"
+      ],
+      "contextWindow": 922000,
+      "maxOutputTokens": 128000,
+      "mode": "responses",
+      "cacheReadPerMToken": 0.05,
+      "cacheWritePerMToken": 1.25,
+      "litellmProvider": "github_copilot",
+      "inputPerMToken": 1,
+      "outputPerMToken": 5
+    },
+    "refuseless/glm-5.3-abliterated": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "prompt_caching"
+      ],
+      "contextWindow": 1048576,
+      "maxOutputTokens": 131072,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.25,
+      "litellmProvider": "refuseless",
+      "inputPerMToken": 1.25,
+      "outputPerMToken": 2.25
+    },
+    "refuseless/glm-5.3-flash-abliterated": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "prompt_caching"
+      ],
+      "contextWindow": 1048576,
+      "maxOutputTokens": 131072,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.15,
+      "litellmProvider": "refuseless",
+      "inputPerMToken": 0.25,
+      "outputPerMToken": 0.8
+    },
+    "refuseless/deepseek-v4.1-flash-abliterated": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "prompt_caching"
+      ],
+      "contextWindow": 1048576,
+      "maxOutputTokens": 130000,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.045,
+      "litellmProvider": "refuseless",
+      "inputPerMToken": 0.22,
+      "outputPerMToken": 0.75
+    },
+    "refuseless/deepseek-v4.1-flash-fast": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "prompt_caching"
+      ],
+      "contextWindow": 1048576,
+      "maxOutputTokens": 262144,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.003,
+      "litellmProvider": "refuseless",
+      "inputPerMToken": 0.05,
+      "outputPerMToken": 0.15
+    },
+    "refuseless/minimax-m3.1-flash": {
+      "input": [
+        "text"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "prompt_caching"
+      ],
+      "contextWindow": 1048576,
+      "maxOutputTokens": 512000,
+      "mode": "chat",
+      "cacheReadPerMToken": 0.002,
+      "litellmProvider": "refuseless",
+      "inputPerMToken": 0.05,
+      "outputPerMToken": 0.25
+    },
+    "bedrock_mantle/openai.gpt-6.1-terra": {
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "vision",
+        "prompt_caching"
+      ],
+      "contextWindow": 922000,
+      "maxOutputTokens": 128000,
+      "mode": "responses",
+      "cacheReadPerMToken": 0.055,
+      "cacheWritePerMToken": 1.38,
+      "litellmProvider": "bedrock_mantle",
+      "inputPerMToken": 1.1,
+      "outputPerMToken": 5.5
     }
   }
 }
