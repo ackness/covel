@@ -75,7 +75,9 @@ Magpie 的本机命令行请求能成功，不代表体验站的网页也能连�
 3. Covel 中的 API 地址填 `http://127.0.0.1:3425/v1`（端口以你的 Magpie 为准），协议和模型 ID 按 Magpie 的接入页填写。例如使用 Responses 接口时，选择 **OpenAI Responses**，保留 `codex/gpt-6-luna` 这样的完整模型 ID。
 4. 在 Covel 中测试连接。浏览器询问本地网络访问权限时，允许当前体验站访问。成功后再开始游戏，并保持页面打开。
 
-来源没有获准时，Magpie 会拒绝跨域预检，返回 403 和 `magpie doesn't answer the web page …`；Covel 可能只显示 `your browser could not reach …`。先检查 Magpie 的网页来源设置，再检查网关密钥和浏览器权限。
+有些版本在关闭“局域网共享”时隐藏“网关密钥”区域，此时“接入”区仍只显示 `magpie` 占位值。可以使用 Magpie 的[官方命令行管理网关密钥](https://github.com/yetone/magpie/blob/main/internal/cli/gateway_keys_cli.go)。网页中继连接本机 `127.0.0.1` 本身不要求打开“局域网共享”或“在浏览器中打开 magpie”。
+
+来源没有获准时，Magpie 会拒绝跨域预检，返回 403 和 `magpie doesn't answer the web page …`；Covel 可能只显示 `your browser could not reach …`。先检查 Magpie 的网页来源设置和浏览器权限。预检已经成功、模型请求却返回 401，并提示 `a web page or browser extension calls magpie with a gateway key` 时，请检查真实网关密钥；仅允许网页来源不会让 `magpie` 占位值成为有效密钥。
 
 桌面版由本机后端直接连接 Magpie，不经过网页中继，因此不需要为体验站配置网页来源；密钥是否必填仍以 Magpie 的本机访问设置为准。
 

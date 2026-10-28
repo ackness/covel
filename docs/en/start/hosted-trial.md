@@ -75,7 +75,9 @@ A successful command-line request to Magpie on your computer does not mean the t
 3. In Covel, enter `http://127.0.0.1:3425/v1` as the API address, using your Magpie port. Copy the protocol and model ID from Magpie's connection page. For example, for the Responses API, select **OpenAI Responses** and keep the full model ID, such as `codex/gpt-6-luna`.
 4. Test the connection in Covel. If the browser asks for local network access, allow it for this trial. Once the test succeeds, start a game and keep the page open.
 
-If the origin is not allowed, Magpie rejects the cross-origin preflight with HTTP 403 and `magpie doesn't answer the web page …`. Covel may only show `your browser could not reach …`. Check Magpie's allowed web origins first, then the gateway key and browser permission.
+Some versions hide the Gateway keys section when local network sharing is off, while the connection examples still show the `magpie` placeholder. You can manage gateway keys through Magpie's [official command line](https://github.com/yetone/magpie/blob/main/internal/cli/gateway_keys_cli.go). Browser relay to `127.0.0.1` on your computer does not itself require turning on local network sharing or opening Magpie's own interface in a browser.
+
+If the origin is not allowed, Magpie rejects the cross-origin preflight with HTTP 403 and `magpie doesn't answer the web page …`. Covel may only show `your browser could not reach …`. Check Magpie's allowed web origins and browser permission first. If preflight succeeds but the model request returns HTTP 401 with `a web page or browser extension calls magpie with a gateway key`, check the real gateway key. Allowing an origin does not make the `magpie` placeholder a valid key.
 
 The desktop app's local backend connects to Magpie directly, without the browser relay. It does not need an allowed web origin for the trial; whether a key is required still depends on Magpie's local access settings.
 
