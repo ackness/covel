@@ -2001,6 +2001,9 @@
     "chooseWorld": "去选择世界",
     "testBindings": "查看并测试已有模型（{{count}} 个用途）",
     "languageExperimental": "实验性",
+    "languageTitle": "选择语言",
+    "languageDesc": "选中后界面立刻切换，以后也可以在设置里更改。故事使用世界自带的语言版本，可能和界面语言不同。",
+    "continue": "继续",
     "credentialsMissing": "已绑定模型，还需配置凭据",
     "credentialsMissingHint": "模型绑定已保存。开始游戏前请填写服务商 API 密钥；如果使用的是无需密钥的本地服务，可直接测试连接。"
   },

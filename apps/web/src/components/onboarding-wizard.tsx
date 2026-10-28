@@ -11,9 +11,14 @@ import {
 import type { ResolvedSlot } from "@/hooks/use-slot-config.js";
 import { emitToast } from "@/lib/toast-channel.js";
 import { getSettings } from "@/settings/store.js";
-import { LocaleToggle, StepIndicator } from "./onboarding-wizard/chrome.js";
+import { StepIndicator } from "./onboarding-wizard/chrome.js";
 import { markOnboarded } from "./onboarding-wizard/persistence.js";
-import { ModelStep, PlayStep, WelcomeStep } from "./onboarding-wizard/steps.js";
+import {
+  LanguageStep,
+  ModelStep,
+  PlayStep,
+  WelcomeStep,
+} from "./onboarding-wizard/steps.js";
 import { boundTextSlots } from "./onboarding-wizard/model-state.js";
 import type { OnboardingStep } from "./onboarding-wizard/types.js";
 
@@ -66,7 +71,25 @@ export function OnboardingWizard({
     onOpenChange(false);
     setStep(0);
   };
-  const stepNames = ["welcome", "modelsTitle", "playTitle"] as const;
+  const lastStep = 3;
+  const stepTitles = [
+    "languageTitle",
+    "welcome",
+    "modelsTitle",
+    "playTitle",
+  ] as const;
+  const stepDescriptions = [
+    "languageDesc",
+    "tagline",
+    "modelsDesc",
+    "playDesc",
+  ] as const;
+  const nextLabels = [
+    "continue",
+    "getStarted",
+    "learnToPlay",
+    "chooseWorld",
+  ] as const;
 
   return (
     <Dialog
@@ -83,19 +106,19 @@ export function OnboardingWizard({
         onPointerDownOutside={(event) => event.preventDefault()}
       >
         <DialogHeader className="shrink-0 gap-3 text-left">
-          <LocaleToggle />
           <StepIndicator step={step} />
-          <DialogTitle>{t(`onboarding.${stepNames[step]}`)}</DialogTitle>
+          <DialogTitle>{t(`onboarding.${stepTitles[step]}`)}</DialogTitle>
           <DialogDescription>
-            {t(`onboarding.${["tagline", "modelsDesc", "playDesc"][step]}`)}
+            {t(`onboarding.${stepDescriptions[step]}`)}
           </DialogDescription>
         </DialogHeader>
         <div className="min-h-0 overflow-y-auto space-y-4 pr-1">
-          {step === 0 && <WelcomeStep />}
-          {step === 1 && (
+          {step === 0 && <LanguageStep />}
+          {step === 1 && <WelcomeStep />}
+          {step === 2 && (
             <ModelStep slots={slots} onOpenSettings={onOpenSettings} />
           )}
-          {step === 2 && (
+          {step === 3 && (
             <PlayStep
               hasModel={slots.some((slot) => slot.hasCredentials === true)}
               onOpenSettings={onOpenSettings}
@@ -119,17 +142,11 @@ export function OnboardingWizard({
           <Button
             disabled={saving}
             onClick={() => {
-              if (step === 2) dismiss();
+              if (step === lastStep) dismiss();
               else setStep((step + 1) as OnboardingStep);
             }}
           >
-            {t(
-              step === 0
-                ? "onboarding.getStarted"
-                : step === 1
-                  ? "onboarding.learnToPlay"
-                  : "onboarding.chooseWorld",
-            )}
+            {t(`onboarding.${nextLabels[step]}`)}
           </Button>
         </div>
       </DialogContent>

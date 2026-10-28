@@ -1,1 +1,1 @@
-export type OnboardingStep = 0 | 1 | 2;
+export type OnboardingStep = 0 | 1 | 2 | 3;

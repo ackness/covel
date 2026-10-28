@@ -36,7 +36,7 @@ The single-file `portable.exe` extracts again on every launch, shows a static pr
 
 ## 3. See the world selection page
 
-The first time you open Covel, a getting-started guide appears. You can follow it, or click "Browse worlds first" to skip it. You can reopen it any time from the world selection page with the "Getting started guide" button.
+The first time you open Covel, a getting-started guide appears. Its first step is choosing the interface language: each language is listed in its own script, and the interface switches as soon as you pick one. You can follow it, or click "Browse worlds first" to skip it. You can reopen it any time from the world selection page with the "Getting started guide" button.
 
 After you close the guide, you see the list of worlds. It has four bundled worlds:
 

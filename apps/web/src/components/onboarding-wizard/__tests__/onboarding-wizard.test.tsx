@@ -19,8 +19,12 @@ const settings = vi.hoisted(() => ({
   isHydrated: vi.fn(),
 }));
 vi.mock("@/settings/store.js", () => ({ getSettings: () => settings }));
+const localePreference = vi.hoisted(() => ({ setLocale: vi.fn() }));
 vi.mock("@/hooks/useLocalePreference.js", () => ({
-  useLocalePreference: () => ({ locale: "zh-CN", setLocale: vi.fn() }),
+  useLocalePreference: () => ({
+    locale: "zh-CN",
+    setLocale: localePreference.setLocale,
+  }),
 }));
 vi.mock("@/components/shared/ping-button.js", () => ({
   PingButton: () => null,
@@ -98,8 +102,32 @@ describe("getting started guide", () => {
     },
   );
 
+  it("opens on the language choice, naming each language in its own language", () => {
+    render(<Harness />);
+    expect(screen.getByRole("heading", { name: "选择语言" })).toBeTruthy();
+    expect(screen.getByText("第 1 步，共 4 步")).toBeTruthy();
+    const chinese = screen.getByRole("radio", {
+      name: "简体中文",
+    }) as HTMLInputElement;
+    expect(chinese.checked).toBe(true);
+    const english = screen.getByRole("radio", {
+      name: "English",
+    }) as HTMLInputElement;
+    expect(english.checked).toBe(false);
+    fireEvent.click(english);
+    expect(localePreference.setLocale).toHaveBeenCalledExactlyOnceWith("en-US");
+    fireEvent.click(screen.getByRole("button", { name: "继续" }));
+    expect(
+      screen.getByRole("heading", { name: "欢迎来到 Covel" }),
+    ).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "上一步" }));
+    expect(screen.getByRole("heading", { name: "选择语言" })).toBeTruthy();
+    expect(settings.set).not.toHaveBeenCalled();
+  });
+
   it("returns from real settings entry points to the same step and never claims missing models are ready", async () => {
     render(<Harness />);
+    fireEvent.click(screen.getByRole("button", { name: "继续" }));
     fireEvent.click(screen.getByRole("button", { name: "开始引导" }));
     expect(screen.getByRole("status").textContent).toContain("尚未检测到");
     fireEvent.click(screen.getByRole("button", { name: "配置服务商与模型" }));
@@ -124,9 +152,7 @@ describe("getting started guide", () => {
       ONBOARDING_VERSION,
     );
     fireEvent.click(screen.getByRole("button", { name: "Reopen" }));
-    expect(
-      screen.getByRole("heading", { name: "欢迎来到 Covel" }),
-    ).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "选择语言" })).toBeTruthy();
   });
   it("lets a user skip and reopen without changing model configuration", async () => {
     render(<Harness />);

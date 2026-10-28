@@ -36,6 +36,11 @@ test("first visit starts on the world list, explains preparation and can be reop
   await expect(page).toHaveURL(/\/session$/);
   const guide = page.getByTestId("onboarding-wizard");
   await expect(guide).toBeVisible();
+  await expect(
+    guide.getByRole("heading", { name: "Choose your language" }),
+  ).toBeVisible();
+  await expect(guide.getByRole("radio", { name: "English" })).toBeChecked();
+  await guide.getByRole("button", { name: "Continue" }).click();
   await guide.getByRole("button", { name: "Start the guide" }).click();
   await expect(guide.getByRole("status")).toContainText(
     "No text model binding detected",
@@ -93,7 +98,7 @@ test("first visit starts on the world list, explains preparation and can be reop
   await expect(guide).toHaveCount(0);
   await page.getByRole("button", { name: "Getting started guide" }).click();
   await expect(
-    guide.getByRole("heading", { name: "Welcome to Covel" }),
+    guide.getByRole("heading", { name: "Choose your language" }),
   ).toBeVisible();
   await guide.getByRole("button", { name: "Browse worlds first" }).click();
   await page
@@ -124,6 +129,7 @@ test("canonical provider configuration returns to the guide, keeps assignments, 
   });
   await page.goto("/session");
   const guide = page.getByTestId("onboarding-wizard");
+  await guide.getByRole("button", { name: "Continue" }).click();
   await guide.getByRole("button", { name: "Start the guide" }).click();
   await guide
     .getByRole("button", { name: "Configure Providers & Models" })
@@ -213,6 +219,7 @@ test("an upgrade can be skipped without rewriting existing model roles", async (
   });
   await page.goto("/session");
   const guide = page.getByTestId("onboarding-wizard");
+  await guide.getByRole("button", { name: "Continue" }).click();
   await guide.getByRole("button", { name: "Start the guide" }).click();
   await guide
     .locator("summary")
@@ -239,7 +246,10 @@ test("mobile guide keeps actions reachable, traps focus, switches language, and 
   await firstVisit(page);
   await page.goto("/session");
   const guide = page.getByTestId("onboarding-wizard");
-  await guide.getByRole("combobox", { name: "Language" }).selectOption("zh-CN");
+  await guide.getByText("简体中文", { exact: true }).click();
+  await expect(guide.getByRole("radio", { name: "简体中文" })).toBeChecked();
+  await expect(guide.getByRole("heading", { name: "选择语言" })).toBeVisible();
+  await guide.getByRole("button", { name: "继续" }).click();
   await expect(
     guide.getByRole("heading", { name: "欢迎来到 Covel" }),
   ).toBeVisible();
