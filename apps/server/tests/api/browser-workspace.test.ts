@@ -314,6 +314,35 @@ describe("browser-private workspace exchange", () => {
     });
   });
 
+  it("keeps the browser's plugin selection when a rebuilt server session differs", async () => {
+    // After a restart the browser recreates the server session from its
+    // resolved plugin list, so the server's public metadata no longer matches
+    // what the player chose. The browser save is authoritative for it.
+    store = createMemoryStore();
+    await seed(store, {
+      ownerTokenHash: "server-private",
+      pluginSelection: { requested: ["story", "dependency"], excluded: [] },
+      loreOverride: "server copy",
+    });
+    const nonce = (await store.getSession(SESSION_ID))?.metadata
+      ?.sessionIncarnationNonce;
+    const browser = createMemoryStore();
+    await seed(browser, {
+      pluginSelection: { requested: ["story"], excluded: ["extra"] },
+    });
+    const checkpoint = await exportSessionCheckpoint(browser, SESSION_ID, {
+      revision: 3,
+      actionId: "turn-2",
+    });
+
+    expect((await upload(checkpoint)).status).toBe(200);
+    expect((await store.getSession(SESSION_ID))?.metadata).toEqual({
+      pluginSelection: { requested: ["story"], excluded: ["extra"] },
+      ownerTokenHash: "server-private",
+      sessionIncarnationNonce: nonce,
+    });
+  });
+
   it("returns an idempotent post-action commit and advances revision once", async () => {
     const browser = createMemoryStore();
     await seed(browser);
