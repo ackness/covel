@@ -207,6 +207,20 @@ export function createProviderRegistry(options?: {
       delete mergedConfig.headers;
     }
 
+    // The local model relay may carry this request only when the player
+    // chose the endpoint and no server-owned credential rides on it: the
+    // request is shown to the player's browser, headers and all.
+    const endpointFromRequest =
+      target.requestScoped === true && target.baseUrl !== undefined;
+    const carriesServerCredentials =
+      mergedConfig.apiKey !== undefined ||
+      Object.keys(mergedConfig.headers ?? {}).length > 0;
+    if (endpointFromRequest && !carriesServerCredentials) {
+      mergedConfig.relayable = true;
+    } else {
+      delete mergedConfig.relayable;
+    }
+
     return {
       adapter,
       usesBuiltinAdapter: !protocolRoute?.adapter && !registered.adapter,
@@ -237,13 +251,14 @@ export function createProviderRegistry(options?: {
       resolution.envKeyAllowed === false
         ? undefined
         : envApiKeys?.[providerName];
-    const key = apiKeys[providerName] ?? envKey;
+    const requestKey = apiKeys[providerName];
+    const key = requestKey ?? envKey;
     if (!key) return resolution;
 
-    return {
-      ...resolution,
-      config: { ...resolution.config, apiKey: key },
-    };
+    const config: ProviderConfig = { ...resolution.config, apiKey: key };
+    // A server key never travels to a player's browser.
+    if (requestKey === undefined) delete config.relayable;
+    return { ...resolution, config };
   }
 
   /**

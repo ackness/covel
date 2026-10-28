@@ -7,6 +7,11 @@ import { createMiscApiRoutes } from "./routes/misc-api.js";
 import { createConfigApiRoutes } from "./routes/config-api.js";
 import { createRawConfigApiRoutes } from "./routes/raw-config-api.js";
 import { createAppUpdateRoutes } from "./routes/app-update.js";
+import { createModelRelayRoutes } from "./routes/api/model-relay.js";
+import {
+  createModelRelayRegistry,
+  type ModelRelayRegistry,
+} from "./model-relay/registry.js";
 
 export interface HostRouteDeps {
   readonly api: Pick<ApiBootstrapResult, "app" | "registry">;
@@ -16,6 +21,11 @@ export interface HostRouteDeps {
   readonly apiKeys: Record<string, string>;
   /** Captured before keys.env is merged. */
   readonly externalApiKeys?: Readonly<Record<string, string>>;
+  /**
+   * The local model relay shared with the per-request model middleware. A
+   * host without one gets its own, which no model call uses.
+   */
+  readonly modelRelay?: ModelRelayRegistry;
 }
 
 /**
@@ -42,4 +52,8 @@ export function mountApiRoutes(app: Hono, deps: HostRouteDeps): void {
   );
   app.route("/", createRawConfigApiRoutes({ ai: deps.ai }));
   app.route("/", createAppUpdateRoutes());
+  app.route(
+    "/api/model-relay",
+    createModelRelayRoutes(deps.modelRelay ?? createModelRelayRegistry()),
+  );
 }

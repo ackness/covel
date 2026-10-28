@@ -15,6 +15,7 @@ import type {
 } from "@covel/shared";
 import type { ZodType } from "zod";
 import type { ReasoningEffort } from "./reasoning-effort.js";
+import type { ProviderRelay } from "./adapters/http/model-relay.js";
 
 // ── Provider Protocol ──────────────────────────────────────────────
 
@@ -135,6 +136,17 @@ export interface ProviderConfig {
   baseUrl?: string;
   apiKey?: string;
   headers?: Record<string, string>;
+  /**
+   * The player's browser, for an endpoint on their computer when the server
+   * is shared. See `adapters/http/model-relay.ts`.
+   */
+  relay?: ProviderRelay;
+  /**
+   * Set by the provider registry when the endpoint came from the request
+   * (the player's own settings) and no server-owned key or header is
+   * attached. Only such a config may go through {@link relay}.
+   */
+  relayable?: true;
   /** Abort signal for request cancellation. */
   signal?: AbortSignal;
   /** Shared finite budget across transport, gateway fallback, and runtime retries. */

@@ -601,10 +601,11 @@ Gemini 原生的思考强度、`providerOptions.google.thinkingConfig`、`cached
 
 ### SSE 帧格式按通道区分
 
-| 通道                     | 帧形态                                                      | 客户端订阅方式                                                                                                                         | 文件                                               |
-| ------------------------ | ----------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
-| `POST /api/actions`      | data-only（`data: <SseEnvelope JSON>`，**无 `event:` 头**） | `fetch()` + `ReadableStream`，按行扫 `data:` 解 JSON 后看 `envelope.type`                                                              | `apps/web/src/services/api/actions.ts: sendAction` |
-| `GET /api/events/stream` | 命名事件（`event: <type>\ndata: <ProtocolEvent JSON>`）     | `fetch` 读流（`readSseStream`），按 `event:` 头分发 —— 没有处理器的事件被静默丢弃；不能设请求头的客户端才用 `EventSource` + 查询串令牌 | `apps/web/src/services/subscription.ts`            |
+| 通道                          | 帧形态                                                                       | 客户端订阅方式                                                                                                                         | 文件                                               |
+| ----------------------------- | ---------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
+| `POST /api/actions`           | data-only（`data: <SseEnvelope JSON>`，**无 `event:` 头**）                  | `fetch()` + `ReadableStream`，按行扫 `data:` 解 JSON 后看 `envelope.type`                                                              | `apps/web/src/services/api/actions.ts: sendAction` |
+| `GET /api/events/stream`      | 命名事件（`event: <type>\ndata: <ProtocolEvent JSON>`）                      | `fetch` 读流（`readSseStream`），按 `event:` 头分发 —— 没有处理器的事件被静默丢弃；不能设请求头的客户端才用 `EventSource` + 查询串令牌 | `apps/web/src/services/subscription.ts`            |
+| `GET /api/model-relay/stream` | 命名事件 `ready` / `request` / `cancel`，每 15 秒一行注释；不进 `CovelEvent` | `fetch` 读流（`readSseStream`），请求头 `X-Model-Relay` 带页面的中继通道号；只在共享形态上打开                                         | `apps/web/src/services/model-relay.ts`             |
 
 **订阅流的连接过程**
 
@@ -752,6 +753,8 @@ data: {
 - 触发这一回合的 `POST /api/actions` 流照常以 `execution.completed` 收尾，并带 `resync: true`。
 
 这一帧和 `system.connected` / `system.heartbeat` 一样**不带 `id:` 头**，所以它不会改掉 `EventSource` 的 `lastEventId`。
+
+**本地模型中继的流。** 这条流不属于会话，也不是事件总线的一部分：它把服务端要发往玩家电脑或局域网的模型请求交给浏览器，浏览器用 `POST /api/model-relay/requests/:id/*` 回答。事件和回答的格式见 [API 参考](./api.md#本地模型中继-1)，安全边界见[安全边界](../internals/security.md#local-model-relay)。
 
 ### 转发的运行时内部事件（`/api/actions` 转发，已纳入 `CovelEvent`）
 

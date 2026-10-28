@@ -536,6 +536,18 @@ This section lists every endpoint by topic. After each table come the rules that
 | ------ | ------------- | ------------ |
 | GET    | `/api/health` | Health check |
 
+### Local model relay
+
+| Method | Path                                  | Description                                                          |
+| ------ | ------------------------------------- | -------------------------------------------------------------------- |
+| GET    | `/api/model-relay/stream`             | The browser's relay channel (SSE)                                    |
+| POST   | `/api/model-relay/requests/:id/head`  | The browser passes back a request's status code and response headers |
+| POST   | `/api/model-relay/requests/:id/chunk` | The browser passes back a piece of the response body                 |
+| POST   | `/api/model-relay/requests/:id/end`   | The browser reports that the body has ended                          |
+| POST   | `/api/model-relay/requests/:id/fail`  | The browser reports that this request failed                         |
+
+Only a server on a shared form answers these endpoints; for details, see [Local model relay](#local-model-relay-1).
+
 ### World management
 
 <!-- prettier-ignore -->
@@ -1608,6 +1620,7 @@ Checks whether the server is running, and reports the storage it uses.
 | `bootId`                                  | The server startup ID (a UUID). It changes on every restart, so you can use it to tell that the server has restarted.                                                                                                                                                                                                                   |
 | `operatorTokenRequired`                   | Whether admin requests check the operator token. It is `true` everywhere except the personal form: in the browser-private form and on `demo` / `commercial`.                                                                                                                                                                            |
 | `deployment.form`                         | The form of the host profile: `personal` / `browser-private` / `hosted`. For the rules, see [Security boundaries](../internals/security.md#host-profile).                                                                                                                                                                               |
+| `deployment.modelRelay`                   | Whether the server reaches models on the player's computer or local network through the player's browser ([Local model relay](#local-model-relay-1)). `false` in the personal form, `true` on the shared forms.                                                                                                                         |
 | `deployment.source`                       | Which source code this build comes from; present only when the operator configured it. `repository` is the `https` address in `COVEL_SOURCE_REPOSITORY`; `commit` is `COVEL_SOURCE_COMMIT`, or Render's `RENDER_GIT_COMMIT` when that is not set, and must be 7–40 hexadecimal characters. Values that do not qualify are not returned. |
 | `storage.data.backend`                    | The data storage backend the server is using now: `memory` / `sqlite` / `pg`. The default is `sqlite`.                                                                                                                                                                                                                                  |
 | `storage.data.frontendMode`               | The front-end data mode. `local`: data is kept in the browser's BrowserVault. `remote`: data is kept on the server through the server API.                                                                                                                                                                                              |
@@ -1618,6 +1631,39 @@ Checks whether the server is running, and reports the storage it uses.
 | `vector.modelCount` / `vector.tableCount` | The number of registered embedding models, and the number of matching physical tables (one table per model).                                                                                                                                                                                                                            |
 
 The web settings page uses `operatorTokenRequired` to decide whether to show the "Operator Access" page. When `deployment.form` is not `personal` and `storage.data.frontendMode` is `local`, the web page shows the public trial notice at the top, linking to [Play on a public trial](../start/hosted-trial.md) and to `deployment.source`. The top-level `vector` and `storage.vector` are the same data.
+
+### Local model relay
+
+A server on a shared form cannot reach the player's computer or local network; when a model address is there, the player's browser relays the requests. For the rules and the security boundary, see [Security boundaries](../internals/security.md#local-model-relay).
+
+**Channel ID.** The browser generates a random channel ID for each page (32–128 characters from `A-Z a-z 0-9 _ -`) and sends it in the `X-Model-Relay` request header:
+
+- Every request to these endpoints must carry it. If it is missing or malformed, the server returns `400 model_relay_channel_required`.
+- Model requests (together with `X-Provider-Keys`) carry it too. The server hands the channel it names only those model calls of this request whose address is on the local machine or local network.
+- A server in the personal form returns `404 model_relay_unavailable` for these endpoints, and does not use this request header.
+
+#### `GET /api/model-relay/stream`
+
+SSE. The server first sends a `ready` event, then a comment line every 15 seconds to keep the connection open. Events:
+
+| Event     | `data`                                                                                   |
+| --------- | ---------------------------------------------------------------------------------------- |
+| `ready`   | `{}`                                                                                     |
+| `request` | `{ "type": "request", "id", "url", "method": "GET" \| "POST", "headers": {…}, "body"? }` |
+| `cancel`  | `{ "type": "cancel", "id" }`: the server no longer needs the answer to this request      |
+
+When the same channel ID reconnects, the new connection replaces the old one: the server closes the old stream, and requests on the old connection that have not been fully answered fail. Opening this stream is rate-limited per IP like the event stream (`RATE_LIMIT_RPM`, `429` beyond it); each process holds at most 512 channels, beyond which the server returns `503 model_relay_busy`.
+
+#### `POST /api/model-relay/requests/:id/head|chunk|end|fail`
+
+The browser answers a request in order:
+
+- `head`: JSON `{ "status": 200–599, "statusText"?, "headers": { … } }`, with at most 100 response headers.
+- `chunk`: a piece of the body as `application/octet-stream`, at most 1 MiB each time.
+- `end`: the body has ended.
+- `fail`: JSON `{ "message" }` (1–500 characters). The server passes it to the model call as a `Local model relay: <message>` error.
+
+On success the server returns `204`. If the request ID does not belong to this channel, it returns `404 model_relay_request_unknown`; if the order is wrong, `409 model_relay_out_of_order`; if the status line or a response header is malformed (a header name that is not an HTTP token, or a line break or other control character in a value or in `statusText`), `400`, and if the platform still refuses to build that response, `400 model_relay_invalid_answer`, and in both cases the request fails; if the answer exceeds 64 MiB, `413 model_relay_too_large`, and the server sends a `cancel` at the same time.
 
 ### World management
 
@@ -4947,6 +4993,7 @@ After the SSE stream opens, an action can still be refused before it starts. The
 | Header                   | Description                                                                                        |
 | ------------------------ | -------------------------------------------------------------------------------------------------- |
 | `X-Provider-Keys`        | Model provider keys as base64(JSON). They are not stored, and they must be sent with every request |
+| `X-Model-Relay`          | On a shared form, this browser's relay channel ID; see [Local model relay](#local-model-relay-1)   |
 | `X-Plugin-User-Settings` | The player's plugin settings as base64(JSON): `{ [pluginId]: { [settingKey]: value } }`            |
 
 How `X-Plugin-User-Settings` is handled:

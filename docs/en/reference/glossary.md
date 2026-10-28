@@ -21,6 +21,7 @@ Each English term has only one Chinese term. The Chinese docs, the UI text, and 
 | Deployment form | 部署形态 | The desktop app, the self-hosted web app, the official web app. Not `DEPLOYMENT_TIER`. |
 | Edition | 语言版本 | One language of a world: `defaultLocale`, and the language of each `world.<locale>.yaml` or `WORLD.<locale>.md` at the root. |
 | Kernel | 内核 |  |
+| Local model relay | 本地模型中继 | On a shared form, the server reaches a model on the player's computer or local network through the player's browser. See [Security boundaries](../internals/security.md#local-model-relay). |
 | Official web app | 官方网页版 |  |
 | Pack | 玩法包 |  |
 | PluginType | 插件类型 |  |

@@ -265,6 +265,15 @@ function endpointKey(config: ProviderConfig, model: unknown): string {
 }
 
 /**
+ * A relayed endpoint (`127.0.0.1` on one player's computer) is a different
+ * server for every player, so what one of them answered is not remembered
+ * for the others.
+ */
+function remembersEndpoint(config: ProviderConfig): boolean {
+  return config.relayable !== true;
+}
+
+/**
  * Output items of an earlier response, for a request the provider does not
  * store. The provider cannot find a reasoning item by its ID then, so a
  * reasoning item goes back only with its `encrypted_content`. When one cannot
@@ -315,7 +324,10 @@ function responsesRequestBody(
   if (
     stateless &&
     reasoning?.effort !== "none" &&
-    !encryptedReasoningRefused.has(endpointKey(config, params.model))
+    !(
+      remembersEndpoint(config) &&
+      encryptedReasoningRefused.has(endpointKey(config, params.model))
+    )
   ) {
     body.include = [
       ...new Set([
@@ -385,7 +397,7 @@ async function postResponses(
     ...(kept.length ? { include: kept } : {}),
   });
   // Remembered only when leaving it out was what the endpoint wanted.
-  if (retried.ok)
+  if (retried.ok && remembersEndpoint(config))
     encryptedReasoningRefused.add(endpointKey(config, body.model));
   return retried;
 }

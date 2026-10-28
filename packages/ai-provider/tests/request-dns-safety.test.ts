@@ -38,6 +38,39 @@ afterEach(() => {
   configureProviderHostPolicy(PERSONAL_PROVIDER_HOST_POLICY);
 });
 
+describe("a refused endpoint on a shared host", () => {
+  it("explains that an endpoint on the player's machine needs the browser relay", async () => {
+    useSharedHost();
+    const refusal = postJson(
+      { baseUrl: "http://127.0.0.1:3425/v1" },
+      "/chat/completions",
+      {},
+    );
+    await expect(refusal).rejects.toThrow(/is not allowed/);
+    await expect(refusal).rejects.toThrow(
+      /shared server.*local model relay in your browser.*no relay was connected/,
+    );
+    expect(lookupMock).not.toHaveBeenCalled();
+  });
+
+  it("says that a plain-http public endpoint needs HTTPS", async () => {
+    useSharedHost();
+    await expect(
+      postJson(
+        { baseUrl: "http://api.example.com/v1" },
+        "/chat/completions",
+        {},
+      ),
+    ).rejects.toThrow(/sends model requests to public addresses.*HTTPS only/);
+  });
+
+  it("keeps the short refusal on a personal host", async () => {
+    await expect(
+      postJson({ baseUrl: "http://10.0.0.1/v1" }, "/chat/completions", {}),
+    ).rejects.toThrow(/^(?!.*shared server).*is not allowed/);
+  });
+});
+
 describe("core request DNS SSRF safety", () => {
   it.each(["2001:2::1", "2001:100::1", "2002:a00:1::1", "3fff::1"])(
     "rejects special IPv6 DNS answer %s on hosted and plugin paths",

@@ -51,6 +51,10 @@ import {
   MODEL_FEATURES,
 } from "@covel/shared";
 import { hostProfileOf } from "../host-profile.js";
+import {
+  parseModelRelayChannel,
+  type ModelRelayRegistry,
+} from "../model-relay/registry.js";
 
 export interface PerRequestLlmOptions {
   readonly ai: AiStack;
@@ -73,6 +77,12 @@ export interface PerRequestLlmOptions {
    * per-session UI settings.
    */
   readonly defaultPluginGateway: PluginRuntimeGateway;
+  /**
+   * The local model relay. On a shared host a request that names its
+   * browser's channel in `X-Model-Relay` reaches models on the player's
+   * computer or local network through that browser.
+   */
+  readonly modelRelay?: ModelRelayRegistry;
 }
 
 const MAX_HEADER_BYTES = 64 * 1024; // sanity cap — browsers rarely send bigger
@@ -98,8 +108,16 @@ export function createPerRequestLlmMiddleware(
         400,
       );
     }
-    const capabilityOverridePolicy =
-      hostProfileOf(c).credentials.capabilityOverrides;
+    const credentials = hostProfileOf(c).credentials;
+    const capabilityOverridePolicy = credentials.capabilityOverrides;
+    const relayChannel =
+      credentials.modelRelay && opts.modelRelay
+        ? parseModelRelayChannel(c.req.header("X-Model-Relay"))
+        : undefined;
+    const relay =
+      relayChannel && opts.modelRelay
+        ? opts.modelRelay.relayFor(relayChannel)
+        : undefined;
 
     const hasRequestKeys =
       requestKeys !== null && Object.keys(requestKeys).length > 0;
@@ -115,9 +133,10 @@ export function createPerRequestLlmMiddleware(
       envApiKeys: opts.envApiKeys,
       ...(slotOverrides ? { slotOverrides } : {}),
       capabilityOverridePolicy,
+      ...(relay ? { relay } : {}),
     } as const;
 
-    if (!hasRequestKeys && !hasOverrides) {
+    if (!hasRequestKeys && !hasOverrides && !relay) {
       await withRequestLlmOptions(requestOptions, next);
       return;
     }

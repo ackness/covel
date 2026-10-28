@@ -20,7 +20,7 @@ The server decides once, at startup: it combines the deployment tier, the storag
 The host profile has three forms:
 
 - **personal**: the `self` tier with data kept by the server. The desktop app, a web app someone deploys for their own use, and `pnpm dev` are all this form. Routes ask for no token; only when the desktop shell set its launch token do the config and file APIs require it. The network boundary is the loopback bind plus the Host check.
-- **browser-private**: the `self` tier with `NODE_ENV=production` and a MemoryStore as the storage actually in use. Each player's data lives in their own browser, and the server holds only temporary copies. Anyone may create a session, generate a world, and list and test models with their own keys; a session needs its owner token; every other operation that reaches beyond what belongs to one player needs the operator token. Public trials use this form: for the deployment steps see [Deploy a trial on Render](../start/deploy-render.md), and for what players are told see [Play on a public trial](../start/hosted-trial.md).
+- **browser-private**: the `self` tier with `NODE_ENV=production` and a MemoryStore as the storage actually in use. Each player's data lives in their own browser, and the server holds only temporary copies. Anyone may create a session, generate a world, and list and test models with their own keys; a session needs its owner token; every other operation that reaches beyond what belongs to one player needs the operator token. The browser reaches models on a player's computer or local network through the [local model relay](#local-model-relay). Public trials use this form: for the deployment steps see [Deploy a trial on Render](../start/deploy-render.md), and for what players are told see [Play on a public trial](../start/hosted-trial.md).
 - **hosted**: `demo` / `commercial`, see [Hosted auth](#hosted-auth).
 
 Each route states which "actions" it performs, and the host profile decides how each form answers. In the table, operator means the operator token (`COVEL_DESKTOP_REST_TOKEN`), which may be sent in `Authorization: Bearer`, `X-Session-Token` or `?session_token=`; "operator (Bearer)" accepts only `Authorization: Bearer`. "Desktop token" means the token is required when `COVEL_DESKTOP_REST_TOKEN` is set, and the action is open when it is not.
@@ -232,6 +232,43 @@ How keys are stored on disk:
 
 File permissions and the browser's same-origin policy keep out other system users and other websites. They cannot keep out code that runs as this same user, and that includes approved community plugins (see [Community plugin code](#community-plugin-code)).
 
+## Local model relay
+
+On a shared form (browser-private and the hosted tiers), the server cannot reach the player's computer or local network, so the player's browser relays requests to model addresses there. This is called the local model relay. The host profile's `credentials.modelRelay` decides whether it is offered; the personal form does not offer it, because it can reach the local machine and the local network itself. For what players are told, see [Play on a public trial](../start/hosted-trial.md#use-a-model-on-your-own-computer-or-local-network).
+
+**Flow.**
+
+1. When the player has added a model address on the local machine or local network, and the server reports `deployment.modelRelay` in `/api/health`, the browser opens `GET /api/model-relay/stream` (SSE) with a channel ID generated at random inside the page, and sends the same channel ID in `X-Model-Relay` with its model requests.
+2. The server attaches that channel's relay to this request's `GatewayOptions` (`apps/server/src/middleware/per-request-llm.ts`), and the gateway copies it into every provider config. Credentials handed to a background job carry it too (see [Provider keys](#provider-keys)).
+3. `postJson` / `getJson` switch to the relay only when four conditions all hold: the host is a shared form; the config carries a relay; the provider registry marks the config `relayable`, which means its address came from the player's request and no server-owned key or header is attached (a key from the server environment, or a key or header from `llm.toml`); and `baseUrl` is an address on the local machine or local network (`isLocalNetworkBaseUrl`, `packages/shared/src/utils/local-network.ts`: loopback addresses, private address ranges, `100.64.0.0/10`, IPv6 local addresses, and names ending in `.local`, `.lan`, `.internal`, `.home.arpa` or `.localhost`). All other requests still go through the SSRF checks and the pinned connection. For a relayed request, the server itself does not connect to the address. `postFormData`, which uploads files, does not use the relay.
+4. The server hands the request (URL, method, headers, JSON body) to the browser through the stream. The browser answers in several POSTs: the status and response headers, body chunks, then the end or a failure (`/api/model-relay/requests/:id/*`). The server assembles them into one streaming `Response` (`apps/server/src/model-relay/registry.ts`).
+
+**Who can use a channel.**
+
+- The channel ID is the only credential: 32 random bytes, kept only in page memory and sent only in a request header, never in a URL, a log, a trace or a checkpoint. The server's relay object refers to it only inside a closure, so serializing a config does not carry it out.
+- A request can hand model calls only to the channel it names itself; answers are accepted only for request IDs issued on that channel.
+- These routes are public in the host profile (no operator or owner token check) and are protected by the channel ID. Cross-site writes are still rejected by the Origin check.
+
+**What the browser is willing to do** (`apps/web/src/services/model-relay.ts`).
+
+- It requests only the provider addresses the player added in this browser: the same scheme, host and port, a path under that address's path, and still an address on the local machine or local network. A request whose path contains an encoded separator (`%2F`, `%5C`, `%2E`) is refused. `http://[::1]` is refused, because the page policy can only name `127.0.0.1` and `localhost`.
+- It uses only GET and POST, with `credentials: "omit"`, `redirect: "error"` and `referrerPolicy: "no-referrer"`, and drops request headers such as cookie, host, origin and referer.
+- It always refuses plain http addresses on the local network: the browser's mixed-content rules do not let an HTTPS page reach them, and the page CSP opens http only for the local machine.
+- A request that does not meet these conditions is only answered with a failure; it is never sent.
+- Within the allowed scope, the server can send any GET or POST to this address, just as a server holding an API key can call any API of that provider. So players should write the address down to the actual API path (for example `http://localhost:11434/v1`), which keeps the model server's admin API out of scope.
+
+**Limits.** At most 16 in-flight requests per channel; a request body of 16 MiB and an answer of 64 MiB (the network path has a higher ceiling, see [Response size ceiling](#response-size-ceiling)); each chunk is also bound by the 1 MiB request body limit; the answer's headers are awaited for at most 15 minutes; a model call waits at most 10 seconds for the channel to connect; opening a channel is rate-limited per IP like the event stream (`RATE_LIMIT_RPM`), and a process holds at most 512 channels, beyond which the server answers `503 model_relay_busy`. A channel has one stream: connecting again under the same channel ID closes the older stream and fails its in-flight requests. The server refuses a malformed status line or response header (`400 model_relay_invalid_answer`), and the browser's failure message is reduced to one line before it reaches a log.
+
+**Multiple instances.** A channel exists only in the process that opened it. In a multi-instance deployment, a model request must reach the instance that holds the channel; otherwise it fails with the error that your browser is not connected.
+
+**What never goes through the relay.**
+
+- The server's own model addresses and keys: a config without the `relayable` mark still goes through the SSRF checks, so on a shared form it still cannot reach a local address, as before, and never appears in a request a player's browser receives.
+- Plugin wires: the provider config handed to plugin code has the relay removed (`apps/server/src/routes/api/bootstrap/plugin-wires.ts`), so plugin code cannot reach a player's browser.
+- Conclusions cached by address: the same local address is a different machine for every player, so relayed requests skip the embedding-dimension cache and the "encrypted reasoning refused" cache.
+
+**Desktop window and the personal form.** The relay is off entirely here: the routes answer `404`, no `X-Model-Relay` is sent, the page policy gains no local http, and models on the local machine or network are still reached by the server directly.
+
 ## Desktop windows
 
 Desktop windows enable `contextIsolation` and `sandbox`, disable `nodeIntegration`, and do not enable Node integration in subframes. Electron 45's sandboxed preload provides no Node module shims or `Buffer`; the bridge uses only Electron's sandbox APIs. `preload.ts` exposes `window.covelIpc` through `contextBridge`: app metadata, plus `invoke` and `on` restricted to allowlisted channels. Subscription callbacks do not receive the Electron event object.
@@ -339,7 +376,7 @@ What each part means:
 
 - **Scripts** can only be the application's own files. There are no inline scripts, no inline event handlers, no `eval`, and no remote scripts. The built page has only one external module script and no inline content. (Zod is configured not to probe `eval`; see `apps/web/src/lib/zod-config.ts`.)
 - **Frames** are limited to the same origin. The only frame the application creates is the plugin frame host described below.
-- `connect-src` allows the same origin, `blob:`, `data:` and `https:`. Application JavaScript downloads player-imported images over HTTPS; CSS image and font requests do not use this directive.
+- `connect-src` allows the same origin, `blob:`, `data:` and `https:`. Application JavaScript downloads player-imported images over HTTPS; CSS image and font requests do not use this directive. A server in a shared form adds the local machine's `http://127.0.0.1:*` and `http://localhost:*` when it serves the page, for the [local model relay](#local-model-relay) (`withLocalModelRelayConnect`, `packages/shared/src/utils/page-policy.ts`). The built page, the personal form and the desktop window do not have these two, and the whole of `http:` is never opened.
 - There are no browser plugins (`object-src 'none'`).
 - `base-uri` and `form-action` are fixed to the same origin.
 - `style-src` keeps `'unsafe-inline'`: React's `style` attributes, rules that the theme system injects, and imported theme CSS all need it. Removing it is a separate piece of work.

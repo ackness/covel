@@ -20,6 +20,10 @@ export const PAGE_CSP = [
   "font-src 'self' data:",
   "img-src 'self' data: blob:",
   "media-src 'self' data: blob:",
+  // Equal to PAGE_CONNECT_SOURCES in @covel/shared (a test keeps them equal;
+  // the Vite config loads this file, so it imports no workspace package). A
+  // shared server adds plain http to this computer for the local model relay
+  // when it serves the page (withLocalModelRelayConnect).
   "connect-src 'self' blob: data: https:",
   "frame-src 'self'",
   "object-src 'none'",

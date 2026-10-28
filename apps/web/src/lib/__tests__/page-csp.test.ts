@@ -1,6 +1,12 @@
 // @vitest-environment node
 import { readFileSync } from "node:fs";
-import { PLUGIN_FRAME_CSP, PLUGIN_FRAME_RESPONSE_CSP } from "@covel/shared";
+import {
+  LOCAL_MODEL_RELAY_CONNECT_SOURCES,
+  PAGE_CONNECT_SOURCES,
+  PLUGIN_FRAME_CSP,
+  PLUGIN_FRAME_RESPONSE_CSP,
+  withLocalModelRelayConnect,
+} from "@covel/shared";
 import { describe, expect, it } from "vitest";
 import { PAGE_CSP, injectPageCsp } from "../page-csp.js";
 
@@ -45,6 +51,22 @@ describe("PAGE_CSP", () => {
     expect(PAGE_CSP).not.toMatch(/script-src[^;]*'unsafe-inline'/);
     // Nothing else may decide script loading in place of `script-src`.
     expect(PAGE_CSP).not.toMatch(/script-src-(elem|attr)/);
+  });
+
+  it("connects over HTTPS only; a shared server adds this computer's http for the relay", () => {
+    expect(directive(PAGE_CSP, "connect-src")).toEqual(
+      PAGE_CONNECT_SOURCES.split(" "),
+    );
+    expect(directive(PAGE_CSP, "connect-src")).not.toContain("http:");
+    const page = injectPageCsp("<html><head></head><body></body></html>");
+    const widened = withLocalModelRelayConnect(page);
+    const meta = /content="([^"]*)"/.exec(widened)?.[1] ?? "";
+    expect(directive(meta, "connect-src")).toEqual([
+      ...PAGE_CONNECT_SOURCES.split(" "),
+      ...LOCAL_MODEL_RELAY_CONNECT_SOURCES.split(" "),
+    ]);
+    // Any other document keeps its own policy.
+    expect(withLocalModelRelayConnect(PLUGIN_FRAME_CSP)).toBe(PLUGIN_FRAME_CSP);
   });
 
   it("frames only documents of the app's own origin", () => {

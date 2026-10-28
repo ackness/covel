@@ -85,7 +85,8 @@ export function createHealthRoutes(
       store,
     });
 
-    const form = hostProfileOf(c).form;
+    const profile = hostProfileOf(c);
+    const form = profile.form;
     return c.json({
       status: "ok",
       version: APP_VERSION,
@@ -95,7 +96,12 @@ export function createHealthRoutes(
       operatorTokenRequired: form !== "personal",
       // Lets a client tell players on a shared server where their data and
       // keys go, and which code serves them.
-      deployment: { form, ...(source ? { source } : {}) },
+      deployment: {
+        form,
+        // Models on the player's computer or network go through their browser.
+        modelRelay: profile.credentials.modelRelay,
+        ...(source ? { source } : {}),
+      },
       storage,
       vector: storage.vector,
     });

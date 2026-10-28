@@ -10,6 +10,7 @@ import {
 import { AiProviderError, ModelConfigurationError } from "./errors.js";
 import { projectCapabilityForBuiltinAdapter } from "./capability/adapter-support.js";
 import type { ProviderDefaults } from "./types.js";
+import type { ProviderRelay } from "./adapters/http/model-relay.js";
 import type { ProviderResolution } from "./provider-registry.js";
 import type { SlotRegistry } from "./slot-registry.js";
 import {
@@ -152,6 +153,11 @@ export interface GatewayOptions {
   slotOverrides?: SlotOverridesInput;
   /** Server-derived trust policy for request capability facts. */
   capabilityOverridePolicy?: CapabilityOverridePolicy;
+  /**
+   * The requesting player's browser, which reaches provider endpoints on
+   * their computer for a shared server. Copied into every provider config.
+   */
+  relay?: ProviderRelay;
 }
 
 export interface GatewaySlotResolution {

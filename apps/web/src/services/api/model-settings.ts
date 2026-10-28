@@ -4,6 +4,7 @@ import {
   utf8ByteLength,
 } from "@covel/shared/plugin-user-settings-header";
 import { getSettings, registerKnownProviders } from "@/settings/store";
+import { modelRelayHeaders } from "@/services/model-relay.js";
 import {
   flattenProviderProfiles,
   type CustomPreset,
@@ -172,7 +173,8 @@ export function buildProviderKeysHeader(
   if (Object.keys(keys).length > 0) {
     headers["X-Provider-Keys"] = encodeBase64Json(keys);
   }
-  return headers;
+  // A model on the player's computer or network goes through this browser.
+  return { ...headers, ...modelRelayHeaders() };
 }
 
 /**

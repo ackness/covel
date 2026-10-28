@@ -42,7 +42,7 @@ async function healthFor(
 describe("GET /api/health deployment", () => {
   it("reports a personal host without source details by default", async () => {
     const body = await healthFor({}, "sqlite");
-    expect(body.deployment).toEqual({ form: "personal" });
+    expect(body.deployment).toEqual({ form: "personal", modelRelay: false });
     expect(body.operatorTokenRequired).toBe(false);
   });
 
@@ -53,6 +53,7 @@ describe("GET /api/health deployment", () => {
     });
     expect(body.deployment).toEqual({
       form: "browser-private",
+      modelRelay: true,
       source: {
         repository: "https://github.com/ackness/covel",
         commit: "c1e2867d9",
@@ -73,7 +74,7 @@ describe("GET /api/health deployment", () => {
       },
       "sqlite",
     );
-    expect(body.deployment).toEqual({ form: "hosted" });
+    expect(body.deployment).toEqual({ form: "hosted", modelRelay: true });
     expect(body.operatorTokenRequired).toBe(true);
   });
 });
