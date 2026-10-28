@@ -35,6 +35,7 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { ToastHost } from "@/components/ui/toast-host";
 import { ConfirmHost } from "@/components/ui/confirm-host";
 import { AppErrorBoundary } from "@/components/error-boundary";
+import { SharedServerNotice } from "@/components/shared-server-notice";
 import { useLocalePreference } from "@/hooks/useLocalePreference";
 import { useWindowControlsColors } from "@/hooks/use-window-controls-colors.js";
 import { getCovelIpc } from "@/lib/desktop-bridge";
@@ -373,6 +374,7 @@ function RootLayout() {
             </div>
           </header>
 
+          <SharedServerNotice />
           <main className="flex-1 flex flex-col w-full min-h-0 overflow-hidden relative">
             <AppErrorBoundary>
               <Outlet />

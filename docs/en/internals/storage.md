@@ -144,6 +144,21 @@ Every action uploads and downloads the whole checkpoint. So it holds only what d
 
 Tool call logs, event records and the remaining trace rows are read only by the debug page, so they stay in the server workspace that produced them. For this reason, the debug page of a private session does not show model calls.
 
+### Server-Only Data
+
+The data below does not go into the checkpoint and lives only in the memory of the server process. It is gone after the server restarts (including a hosting platform's sleep and every deploy):
+
+| Data                                                                                                                                   | After a restart                                                                                 |
+| -------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| The session's server workspace (the `MemoryStore` mirror, and the latest checkpoint kept to recognize replays and incremental uploads) | The next action uploads the checkpoint again; the save is not affected                          |
+| Media bytes (`MEDIA_BACKEND` follows `memory` by default); the checkpoint holds only `MediaRef`s                                       | Lost. The browser's render cache may still hold a copy, but it is not the authoritative source  |
+| The vector index and its progress                                                                                                      | Uploading the checkpoint again schedules a write job, which calls embedding again to rebuild it |
+| Tool call logs, event records, the remaining trace rows                                                                                | Lost; they only ever served the debug page                                                      |
+| Progress and results of persisted background jobs that have not finished                                                               | Lost. The browser requests one extra checkpoint only after a job finishes                       |
+| Request credentials handed to a background job (see [Security boundaries](./security.md#provider-keys))                                | Lost; they were kept for 5 minutes at most anyway                                               |
+
+Server workspaces are never evicted for being idle: every session that has been opened stays in memory until the session is deleted or the process restarts. On a public instance with many players, memory grows with them. For what players are told, see [Play on a public trial](../start/hosted-trial.md).
+
 ### Size Limit
 
 The uploaded JSON is at most 64 MiB (`BROWSER_CHECKPOINT_MAX_BYTES` in `@covel/store/browser-sync`). The protocol has no "partial upload", so a session above the limit cannot continue. The web client measures the size of each upload, and when it reaches 80% of the limit it warns the player (once per session, per page load). This gives the player a chance to start a new session and carry the story on before an upload is refused with `413`.

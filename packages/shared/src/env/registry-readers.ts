@@ -185,6 +185,14 @@ export function readRuntimeEnv(source: EnvSource = defaultSource()) {
     // multi-pod deploys opt into a public interface explicitly.
     bindHost: readEnvString("COVEL_BIND_HOST", "127.0.0.1", source)!,
     allowedHosts: readEnvCsv("COVEL_ALLOWED_HOSTS", source),
+    sourceRepository: readEnvString(
+      "COVEL_SOURCE_REPOSITORY",
+      undefined,
+      source,
+    ),
+    sourceCommit:
+      readEnvString("COVEL_SOURCE_COMMIT", undefined, source) ??
+      readEnvString("RENDER_GIT_COMMIT", undefined, source),
     nodeEnv: readEnvChoice(
       "NODE_ENV",
       ["development", "production", "test"] as const,

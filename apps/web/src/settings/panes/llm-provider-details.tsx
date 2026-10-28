@@ -13,6 +13,8 @@ import { Badge } from "@/components/ui/badge.js";
 import { Button } from "@/components/ui/button.js";
 import { PingButton } from "@/components/shared/ping-button.js";
 import { isDesktopApp } from "@/lib/desktop-bridge.js";
+import { SHARED_SERVER_DOCS_PAGE, docsPageUrl } from "@/lib/docs-links.js";
+import { getSharedServerInfo } from "@/services/api/health.js";
 import { LlmKeysPane } from "./LlmKeysPane.js";
 import type { ProviderCatalogEntry } from "./llm-provider-catalog.js";
 import { ProtocolSelect } from "./llm-provider-dialogs.js";
@@ -51,8 +53,9 @@ export function ProviderDetails({
   onDuplicateLocalModel: (model: ProviderModelEntry) => void;
   onDeleteLocalProvider: () => void;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const writable = useSettingsWritable();
+  const sharedServer = getSharedServerInfo() !== null;
   const isServerProvider = provider.serverModels.length > 0;
   const isBuiltinDefault = serverConfig?.kind === "builtin";
   const serverLabel = isBuiltinDefault
@@ -125,6 +128,20 @@ export function ProviderDetails({
         showIntro={false}
         showPresetTests={false}
       />
+
+      {sharedServer && (
+        <p className="text-[11px] text-muted-foreground">
+          {t("settings.keysLocalDesc")}{" "}
+          <a
+            href={docsPageUrl(SHARED_SERVER_DOCS_PAGE, i18n.language)}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-primary underline underline-offset-2 hover:text-primary/80"
+          >
+            {t("sharedServer.learnMore")}
+          </a>
+        </p>
+      )}
 
       <p className="text-[11px] text-muted-foreground">
         {t(

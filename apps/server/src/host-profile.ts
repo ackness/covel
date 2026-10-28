@@ -20,10 +20,13 @@
  *   the network boundary.
  * - `browser-private`: `self` with `NODE_ENV=production` on a MemoryStore.
  *   Each player's data lives in their browser; the server holds transient
- *   mirrors. A session needs its owner token and shared worlds need the
- *   operator token; anyone may create a session. The official web app will
- *   be built on this form. It is not supported yet: its remaining rules (the
- *   global entries F-005 lists) are cells in {@link accessRules}.
+ *   mirrors. Anyone may create a session, generate a world or probe a model
+ *   with their own keys; a session needs its owner token. Every entry that
+ *   reaches past one player's own work (shared worlds, community code,
+ *   diagnostics, server settings and files, media cleanup) needs the operator
+ *   token. Visitors are strangers to each other, so the network rules are a
+ *   shared host's: no Host check (owner tokens are the boundary) and no
+ *   private-network model endpoints. A public trial instance runs this form.
  * - `hosted`: `demo` / `commercial`, a shared host run by one operator. A
  *   session needs its owner token; creating, forking and listing sessions,
  *   global writes, model probes and community code need the operator token.
@@ -121,7 +124,9 @@ export interface HostProfile {
   readonly network: {
     /**
      * Answer only requests whose Host names this server, which refuses
-     * DNS-rebound pages. Off on hosted tiers, which authenticate instead.
+     * DNS-rebound pages. Personal form only: the shared forms authenticate
+     * sessions with owner tokens and give a stranger's page nothing a
+     * visitor could not already do.
      */
     readonly checkHost: boolean;
     /** Names besides the loopback ones the server answers to. */
@@ -181,10 +186,10 @@ interface AccessFacts {
 /**
  * The access table: one rule per action for the facts of this server.
  *
- * Fixing F-005 (the official web app's global entries) means changing the
- * `browser-private` answers below, which today stay as open as `personal`
- * for `plugin.community`, `server.diagnostics`, `model.probe`,
- * `model-db.refresh`, `server.settings` and `host.config`.
+ * `browser-private` keeps open only what a visitor does with their own keys
+ * and saves: creating sessions, generating worlds and probing models (the
+ * settings page lists a provider's models and tests a key this way). The
+ * other global entries are the operator's, as on a hosted tier.
  */
 function accessRules(f: AccessFacts): Record<HostAction, HostAccessRule> {
   const open: HostAccessRule = { kind: "open" };
@@ -218,7 +223,14 @@ function accessRules(f: AccessFacts): Record<HostAction, HostAccessRule> {
   const hosted = f.form === "hosted";
   const personal = f.form === "personal";
   const operatorWhenHosted = hosted ? operator() : open;
+  /** Entries that reach past one visitor's own work on a shared server. */
+  const operatorWhenShared = personal ? open : operator();
   const desktopConfig = f.operatorTokenSet ? desktopToken : open;
+  const operatorBearer: HostAccessRule = {
+    kind: "token",
+    bearerOnly: true,
+    denial: operatorDenial(),
+  };
 
   return {
     "session.access": personal
@@ -245,24 +257,27 @@ function accessRules(f: AccessFacts): Record<HostAction, HostAccessRule> {
       ? open
       : operator("Operator token required to modify shared worlds"),
     "world.generate": operatorWhenHosted,
-    "plugin.community": operatorWhenHosted,
-    "server.diagnostics": operatorWhenHosted,
+    // Community server code runs unsandboxed in the process every visitor's
+    // keys pass through, so only the operator may approve or run it.
+    "plugin.community": operatorWhenShared,
+    "server.diagnostics": operatorWhenShared,
+    // A visitor lists their provider's models and tests their own key.
     "model.probe": operatorWhenHosted,
-    "model-db.refresh": operatorWhenHosted,
-    // On a hosted tier these settings are the operator's, set through the
+    "model-db.refresh": operatorWhenShared,
+    // On a shared server these settings are the operator's, set through the
     // environment; a write is refused whatever the caller presents.
-    "server.settings": hosted
-      ? closed(
+    "server.settings": personal
+      ? desktopConfig
+      : closed(
           403,
           "server_settings_operator_only",
           "Server settings are set by the operator of this server",
-        )
-      : desktopConfig,
-    "host.config": desktopConfig,
+        ),
+    "host.config": personal ? desktopConfig : operatorBearer,
     // A production server without the token writes packages to disk only
     // when the operator opted in (COVEL_INSTALL_API_ENABLED=1).
     "host.files": hosted
-      ? { kind: "token", bearerOnly: true, denial: operatorDenial() }
+      ? operatorBearer
       : f.operatorTokenSet
         ? desktopToken
         : f.production && !f.installApiEnabled
@@ -273,7 +288,9 @@ function accessRules(f: AccessFacts): Record<HostAction, HostAccessRule> {
             )
           : open,
     // No admin authentication is wired for commercial; the closed rule makes
-    // that explicit to callers.
+    // that explicit to callers. On browser-private the server sees only the
+    // sessions mirrored right now, so a sweep would delete media that saves
+    // in other browsers still use.
     "media.cleanup":
       f.tier === "commercial"
         ? closed(
@@ -281,7 +298,7 @@ function accessRules(f: AccessFacts): Record<HostAction, HostAccessRule> {
             "unavailable",
             "cleanup endpoint not available in this deployment tier",
           )
-        : operatorWhenHosted,
+        : operatorWhenShared,
     // Only where one player owns everything the MediaStore holds: the other
     // forms share it between owners and keep no per-owner media index.
     "media.library": personal
@@ -312,6 +329,7 @@ export function deriveHostProfile(
       ? "browser-private"
       : "personal";
   const operatorToken = env.desktopRestToken;
+  const personal = form === "personal";
   return {
     tier,
     form,
@@ -326,13 +344,16 @@ export function deriveHostProfile(
     }),
     isOperatorToken: (token) =>
       operatorToken !== undefined && safeEqual(token, operatorToken),
-    network: { checkHost: !hosted, allowedHosts: env.allowedHosts },
+    network: { checkHost: personal, allowedHosts: env.allowedHosts },
     credentials: {
       capabilityOverrides: hosted ? "restrict-only" : "full",
-      provider: { localNetwork: !hosted, sessionlessCommunityWires: !hosted },
+      provider: {
+        localNetwork: personal,
+        sessionlessCommunityWires: personal,
+      },
     },
     retention: {
-      playerServerSettings: !hosted,
+      playerServerSettings: personal,
       mediaCleanup: env.mediaCleanupEnabled,
     },
   };
@@ -342,7 +363,7 @@ export function deriveHostProfile(
  * Settings this environment cannot run with: a hosted tier without the
  * secrets it needs, and values the chosen form would silently ignore.
  */
-function hostProfileProblems(env: RuntimeEnv): string[] {
+function hostProfileProblems(env: RuntimeEnv, form: HostForm): string[] {
   const tier = env.deploymentTier;
   const hosted = tier !== "self";
   const problems: string[] = [];
@@ -372,6 +393,11 @@ function hostProfileProblems(env: RuntimeEnv): string[] {
       `COVEL_ALLOWED_HOSTS has no effect with DEPLOYMENT_TIER=${tier}: the Host check runs only on the self tier, and a hosted tier authenticates requests instead. Remove it, or use DEPLOYMENT_TIER=self`,
     );
   }
+  if (form === "browser-private" && env.allowedHosts.length > 0) {
+    problems.push(
+      "COVEL_ALLOWED_HOSTS has no effect on a production server with STORE_BACKEND=memory: that browser-private form authenticates sessions with owner tokens instead of checking the Host. Remove it",
+    );
+  }
   if (tier === "commercial" && env.mediaCleanupEnabled) {
     problems.push(
       "COVEL_MEDIA_CLEANUP_ENABLED cannot be used with DEPLOYMENT_TIER=commercial: the cleanup endpoint stays closed on this tier. Remove it",
@@ -388,13 +414,14 @@ export function resolveHostProfile(
   env: RuntimeEnv,
   facts: HostFacts,
 ): HostProfile {
-  const problems = hostProfileProblems(env);
+  const profile = deriveHostProfile(env, facts);
+  const problems = hostProfileProblems(env, profile.form);
   if (problems.length > 0) {
     throw new Error(
       `[host-profile] Refusing to start with DEPLOYMENT_TIER=${env.deploymentTier}:\n  - ${problems.join("\n  - ")}`,
     );
   }
-  return deriveHostProfile(env, facts);
+  return profile;
 }
 
 /** Put the start's profile into every request's context. */

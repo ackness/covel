@@ -24,7 +24,32 @@ export const SERVER_ENV_VARS = [
     type: "string",
     status: "active",
     description:
-      "Comma-separated host names, besides localhost, 127.0.0.1 and [::1], that a request on the self tier may name in its Host header. List the names a self-hosted web app is opened by from other machines; any other Host is refused, which stops DNS rebinding. demo and commercial refuse to start with it, since they skip the check.",
+      "Comma-separated host names, besides localhost, 127.0.0.1 and [::1], that a request on the self tier may name in its Host header. List the names a self-hosted web app is opened by from other machines; any other Host is refused, which stops DNS rebinding. demo, commercial and the browser-private form (production on STORE_BACKEND=memory) refuse to start with it, since they skip the check.",
+  },
+  {
+    name: "COVEL_SOURCE_REPOSITORY",
+    group: "server",
+    type: "url",
+    status: "active",
+    example: "https://github.com/ackness/covel",
+    description:
+      "Public https address of the source repository this server was built from. /api/health reports it, and the web app's notice on a shared server links to it so players can read the code.",
+  },
+  {
+    name: "COVEL_SOURCE_COMMIT",
+    group: "server",
+    type: "string",
+    status: "active",
+    description:
+      "Git commit (7 to 40 hex digits) this server was built from, reported by /api/health. When unset, RENDER_GIT_COMMIT is used.",
+  },
+  {
+    name: "RENDER_GIT_COMMIT",
+    group: "server",
+    type: "string",
+    status: "active",
+    description:
+      "Set by Render on every deploy: the commit being deployed. Read only as the fallback for COVEL_SOURCE_COMMIT.",
   },
   {
     name: "NODE_ENV",

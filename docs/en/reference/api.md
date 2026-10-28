@@ -181,7 +181,7 @@ Metadata private to the framework never appears in any response. The owner hash,
 | `self` (default) / desktop | Usually not checked. A token, if sent, is not verified. For the exception, see "Production MemoryStore exception" below |
 | `demo` / `commercial`      | Checked every time                                                                                                      |
 
-`self` and the desktop rely on network boundaries. By default the server listens only on the loopback address (`COVEL_BIND_HOST=127.0.0.1`, see [env-registry](./env-registry.md)), and it answers only requests whose `Host` is `localhost`, `127.0.0.1`, `[::1]` or listed in `COVEL_ALLOWED_HOSTS`. Other requests get `403 { code: "host_not_allowed" }`.
+`self` and the desktop (apart from the production MemoryStore exception) rely on network boundaries. By default the server listens only on the loopback address (`COVEL_BIND_HOST=127.0.0.1`, see [env-registry](./env-registry.md)), and it answers only requests whose `Host` is `localhost`, `127.0.0.1`, `[::1]` or listed in `COVEL_ALLOWED_HOSTS`. Other requests get `403 { code: "host_not_allowed" }`.
 
 Rules for `demo` / `commercial`:
 
@@ -199,11 +199,14 @@ Rules for `demo` / `commercial`:
 
 **Production MemoryStore exception**
 
-Even when `DEPLOYMENT_TIER=self`, if `NODE_ENV=production` and the storage actually in use is MemoryStore:
+Even when `DEPLOYMENT_TIER=self`, if `NODE_ENV=production` and the storage actually in use is MemoryStore (the browser-private form, which public trials use):
 
-- Sessions still require the owner token.
+- Sessions still require the owner token. Anyone may create a session.
 - Creating, changing, and deleting global worlds, importing dimensions, and saving after server-side generation all require the operator token.
-- If no operator token is configured, world writes stay off. Public reads and valid session access still work as usual.
+- Approving and activating a community plugin's server code, diagnostics (including `GET /api/provider-keys`), refreshing the model database, the host config endpoints and media cleanup also require the operator token. Writes to server settings are always refused.
+- Listing a provider's models and testing a model stay open: visitors do this with their own keys on the settings page.
+- If no operator token is configured, the operations above stay off. Public reads and valid session access still work as usual.
+- There is no `Host` check, and `COVEL_ALLOWED_HOSTS` makes startup fail. A model address cannot point at a loopback or internal address.
 
 This check looks at the storage backend the server actually injected. It does not look at the request parameters, or at the `STORE_BACKEND` environment variable, which may not match the running instance.
 
@@ -1557,6 +1560,9 @@ Checks whether the server is running, and reports the storage it uses.
   "bootId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
   "timestamp": "2025-01-15T10:00:00.000Z",
   "operatorTokenRequired": false,
+  "deployment": {
+    "form": "personal"
+  },
   "storage": {
     "data": {
       "backend": "sqlite",
@@ -1596,20 +1602,22 @@ Checks whether the server is running, and reports the storage it uses.
 }
 ```
 
-| Field                                     | Description                                                                                                                                                      |
-| ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `version`                                 | The app version number.                                                                                                                                          |
-| `bootId`                                  | The server startup ID (a UUID). It changes on every restart, so you can use it to tell that the server has restarted.                                            |
-| `operatorTokenRequired`                   | Whether admin requests check the operator token. It is `true` when `DEPLOYMENT_TIER` is `demo` / `commercial`.                                                   |
-| `storage.data.backend`                    | The data storage backend the server is using now: `memory` / `sqlite` / `pg`. The default is `sqlite`.                                                           |
-| `storage.data.frontendMode`               | The front-end data mode. `local`: data is kept in the browser's BrowserVault. `remote`: data is kept on the server through the server API.                       |
-| `storage.media`                           | The configured media storage value, the actual backend, whether it is enabled, and whether it is durable.                                                        |
-| `storage.migrations`                      | The registered migration domains, versions, and statuses. SQL migrations are run by the server. IndexedDB migrations run when the browser upgrades its database. |
-| `vector.capable`                          | Whether the current backend can do vector search. It depends on the storage type and on whether the vector extension is available.                               |
-| `vector.driver`                           | `sqlite-vec` / `pgvector` / `in-memory` / `external` / `none`                                                                                                    |
-| `vector.modelCount` / `vector.tableCount` | The number of registered embedding models, and the number of matching physical tables (one table per model).                                                     |
+| Field                                     | Description                                                                                                                                                                                                                                                                                                                             |
+| ----------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `version`                                 | The app version number.                                                                                                                                                                                                                                                                                                                 |
+| `bootId`                                  | The server startup ID (a UUID). It changes on every restart, so you can use it to tell that the server has restarted.                                                                                                                                                                                                                   |
+| `operatorTokenRequired`                   | Whether admin requests check the operator token. It is `true` everywhere except the personal form: in the browser-private form and on `demo` / `commercial`.                                                                                                                                                                            |
+| `deployment.form`                         | The form of the host profile: `personal` / `browser-private` / `hosted`. For the rules, see [Security boundaries](../internals/security.md#host-profile).                                                                                                                                                                               |
+| `deployment.source`                       | Which source code this build comes from; present only when the operator configured it. `repository` is the `https` address in `COVEL_SOURCE_REPOSITORY`; `commit` is `COVEL_SOURCE_COMMIT`, or Render's `RENDER_GIT_COMMIT` when that is not set, and must be 7–40 hexadecimal characters. Values that do not qualify are not returned. |
+| `storage.data.backend`                    | The data storage backend the server is using now: `memory` / `sqlite` / `pg`. The default is `sqlite`.                                                                                                                                                                                                                                  |
+| `storage.data.frontendMode`               | The front-end data mode. `local`: data is kept in the browser's BrowserVault. `remote`: data is kept on the server through the server API.                                                                                                                                                                                              |
+| `storage.media`                           | The configured media storage value, the actual backend, whether it is enabled, and whether it is durable.                                                                                                                                                                                                                               |
+| `storage.migrations`                      | The registered migration domains, versions, and statuses. SQL migrations are run by the server. IndexedDB migrations run when the browser upgrades its database.                                                                                                                                                                        |
+| `vector.capable`                          | Whether the current backend can do vector search. It depends on the storage type and on whether the vector extension is available.                                                                                                                                                                                                      |
+| `vector.driver`                           | `sqlite-vec` / `pgvector` / `in-memory` / `external` / `none`                                                                                                                                                                                                                                                                           |
+| `vector.modelCount` / `vector.tableCount` | The number of registered embedding models, and the number of matching physical tables (one table per model).                                                                                                                                                                                                                            |
 
-The web settings page uses `operatorTokenRequired` to decide whether to show the "Operator Access" page. The top-level `vector` and `storage.vector` are the same data.
+The web settings page uses `operatorTokenRequired` to decide whether to show the "Operator Access" page. When `deployment.form` is not `personal` and `storage.data.frontendMode` is `local`, the web page shows the public trial notice at the top, linking to [Play on a public trial](../start/hosted-trial.md) and to `deployment.source`. The top-level `vector` and `storage.vector` are the same data.
 
 ### World management
 

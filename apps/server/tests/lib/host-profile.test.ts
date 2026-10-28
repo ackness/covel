@@ -122,6 +122,19 @@ describe("resolveHostProfile: start checks", () => {
     },
   );
 
+  it("refuses COVEL_ALLOWED_HOSTS on the browser-private form, which skips the Host check", () => {
+    expect(() =>
+      profile(
+        { NODE_ENV: "production", COVEL_ALLOWED_HOSTS: "trial.example.com" },
+        "memory",
+      ),
+    ).toThrow(/COVEL_ALLOWED_HOSTS has no effect on a production server/);
+    // The same names stay valid where the check runs.
+    expect(
+      profile({ COVEL_ALLOWED_HOSTS: "trial.example.com" }, "memory").network,
+    ).toEqual({ checkHost: true, allowedHosts: ["trial.example.com"] });
+  });
+
   it("refuses media cleanup on commercial, where the endpoint stays closed", () => {
     expect(() =>
       profile({
@@ -200,7 +213,7 @@ describe("the access table", () => {
     ).toBe("open");
   });
 
-  it("browser-private: owner tokens and operator-only worlds; the other entries as personal (F-005)", () => {
+  it("browser-private: a visitor's own work stays open; everything shared is the operator's", () => {
     const p = profile({ NODE_ENV: "production" }, "memory");
     expect(p.form).toBe("browser-private");
     expect(table(p)).toEqual({
@@ -209,19 +222,32 @@ describe("the access table", () => {
       "session.list": "closed",
       "world.write": "token",
       "world.generate": "open",
-      "plugin.community": "open",
-      "server.diagnostics": "open",
+      "plugin.community": "token",
+      "server.diagnostics": "token",
+      // A visitor lists their provider's models and tests their own key.
       "model.probe": "open",
-      "model-db.refresh": "open",
-      "server.settings": "open",
-      "host.config": "open",
+      "model-db.refresh": "token",
+      "server.settings": "closed",
+      "host.config": "bearer",
       "host.files": "closed",
-      "media.cleanup": "open",
+      "media.cleanup": "token",
       "media.library": "closed",
     });
-    expect(p.network.checkHost).toBe(true);
-    expect(p.credentials.capabilityOverrides).toBe("full");
-    expect(p.retention.playerServerSettings).toBe(true);
+    // Owner tokens are the boundary, so no Host check; visitors are strangers,
+    // so no private-network model endpoints.
+    expect(p.network.checkHost).toBe(false);
+    expect(p.credentials).toEqual({
+      capabilityOverrides: "full",
+      provider: { localNetwork: false, sessionlessCommunityWires: false },
+    });
+    expect(p.retention.playerServerSettings).toBe(false);
+    // With the operator token configured, the operator reaches every entry.
+    const withToken = profile(
+      { NODE_ENV: "production", COVEL_DESKTOP_REST_TOKEN: "operator-secret" },
+      "memory",
+    );
+    expect(table(withToken)["host.files"]).toBe("bearer");
+    expect(withToken.isOperatorToken("operator-secret")).toBe(true);
     // ENABLE_DEBUG_PAGE keeps the listing for the /debug tooling.
     expect(
       table(

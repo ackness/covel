@@ -181,7 +181,7 @@ PostgreSQL 一列的细节：
 | `self`（默认）/ 桌面  | 通常不检查。带了 token 也不校验。例外见下面的“生产 MemoryStore 例外” |
 | `demo` / `commercial` | 强制检查                                                             |
 
-`self` 和桌面靠网络边界保护：服务器默认只监听回环地址（`COVEL_BIND_HOST=127.0.0.1`，见 [env-registry](./env-registry.md)），并且只回答 `Host` 是 `localhost`、`127.0.0.1`、`[::1]` 或列在 `COVEL_ALLOWED_HOSTS` 里的请求，其他请求返回 `403 { code: "host_not_allowed" }`。
+`self` 和桌面（生产 MemoryStore 例外除外）靠网络边界保护：服务器默认只监听回环地址（`COVEL_BIND_HOST=127.0.0.1`，见 [env-registry](./env-registry.md)），并且只回答 `Host` 是 `localhost`、`127.0.0.1`、`[::1]` 或列在 `COVEL_ALLOWED_HOSTS` 里的请求，其他请求返回 `403 { code: "host_not_allowed" }`。
 
 `demo` / `commercial` 的规则：
 
@@ -199,11 +199,14 @@ PostgreSQL 一列的细节：
 
 **生产 MemoryStore 例外**
 
-即使 `DEPLOYMENT_TIER=self`，只要 `NODE_ENV=production` 而且实际用的存储是 MemoryStore：
+即使 `DEPLOYMENT_TIER=self`，只要 `NODE_ENV=production` 而且实际用的存储是 MemoryStore（browser-private 形态，公开体验站用它）：
 
-- 会话仍然强制检查 owner token。
+- 会话仍然强制检查 owner token。任何人都可以创建会话。
 - 全局世界的创建、修改、删除、维度导入，以及服务端生成后保存，强制要求运维 token。
-- 没有配置运维 token 时，世界写入保持关闭。公开读取和合法的会话访问照常可用。
+- 社区插件服务端代码的批准和激活、诊断信息（包括 `GET /api/provider-keys`）、模型数据库刷新、宿主配置接口、媒体清理，同样要求运维 token。服务端设置的写入一律拒绝。
+- 列出服务商的模型和测试模型保持开放：访客用自己的密钥在设置页里做这件事。
+- 没有配置运维 token 时，上面这些操作保持关闭。公开读取和合法的会话访问照常可用。
+- 不做 `Host` 检查，`COVEL_ALLOWED_HOSTS` 会让启动失败。模型地址不能指向回环或内网地址。
 
 这个判断看的是服务器实际注入的存储后端，不看请求参数，也不看可能和运行实例不一致的 `STORE_BACKEND` 环境变量。
 
@@ -1557,6 +1560,9 @@ fork 和社区插件的授权：
   "bootId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
   "timestamp": "2025-01-15T10:00:00.000Z",
   "operatorTokenRequired": false,
+  "deployment": {
+    "form": "personal"
+  },
   "storage": {
     "data": {
       "backend": "sqlite",
@@ -1596,20 +1602,22 @@ fork 和社区插件的授权：
 }
 ```
 
-| 字段                                      | 说明                                                                                             |
-| ----------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| `version`                                 | 应用版本号。                                                                                     |
-| `bootId`                                  | 服务器启动 ID（UUID）。每次重启都会变，可以用它发现服务器重启过。                                |
-| `operatorTokenRequired`                   | 管理请求是否校验运维 token。`DEPLOYMENT_TIER` 为 `demo` / `commercial` 时是 `true`。             |
-| `storage.data.backend`                    | 服务端当前的数据存储后端：`memory` / `sqlite` / `pg`，默认 `sqlite`。                            |
-| `storage.data.frontendMode`               | 前端数据模式。`local`：数据存在浏览器的 BrowserVault 里。`remote`：数据经服务端 API 存在服务端。 |
-| `storage.media`                           | 媒体存储的配置值、实际后端、是否启用、是否持久。                                                 |
-| `storage.migrations`                      | 已登记的迁移域、版本和状态。SQL 迁移由服务端执行，IndexedDB 迁移在浏览器升级数据库时执行。       |
-| `vector.capable`                          | 当前后端能否做向量检索。取决于存储类型，以及向量扩展是否可用。                                   |
-| `vector.driver`                           | `sqlite-vec` / `pgvector` / `in-memory` / `external` / `none`                                    |
-| `vector.modelCount` / `vector.tableCount` | 已注册的 embedding 模型数量，以及对应的物理表数量（每个模型一张表）。                            |
+| 字段                                      | 说明                                                                                                                                                                                                                               |
+| ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `version`                                 | 应用版本号。                                                                                                                                                                                                                       |
+| `bootId`                                  | 服务器启动 ID（UUID）。每次重启都会变，可以用它发现服务器重启过。                                                                                                                                                                  |
+| `operatorTokenRequired`                   | 管理请求是否校验运维 token。除 personal 形态外都是 `true`：browser-private 形态和 `demo` / `commercial`。                                                                                                                          |
+| `deployment.form`                         | 宿主配置的形态：`personal` / `browser-private` / `hosted`。规则见[安全边界](../internals/security.md#host-profile)。                                                                                                               |
+| `deployment.source`                       | 这个构建来自哪份源代码，只在运营者配置了时出现。`repository` 是 `COVEL_SOURCE_REPOSITORY` 的 `https` 地址；`commit` 是 `COVEL_SOURCE_COMMIT`，没设置时取 Render 的 `RENDER_GIT_COMMIT`，必须是 7–40 位十六进制。不合格的值不返回。 |
+| `storage.data.backend`                    | 服务端当前的数据存储后端：`memory` / `sqlite` / `pg`，默认 `sqlite`。                                                                                                                                                              |
+| `storage.data.frontendMode`               | 前端数据模式。`local`：数据存在浏览器的 BrowserVault 里。`remote`：数据经服务端 API 存在服务端。                                                                                                                                   |
+| `storage.media`                           | 媒体存储的配置值、实际后端、是否启用、是否持久。                                                                                                                                                                                   |
+| `storage.migrations`                      | 已登记的迁移域、版本和状态。SQL 迁移由服务端执行，IndexedDB 迁移在浏览器升级数据库时执行。                                                                                                                                         |
+| `vector.capable`                          | 当前后端能否做向量检索。取决于存储类型，以及向量扩展是否可用。                                                                                                                                                                     |
+| `vector.driver`                           | `sqlite-vec` / `pgvector` / `in-memory` / `external` / `none`                                                                                                                                                                      |
+| `vector.modelCount` / `vector.tableCount` | 已注册的 embedding 模型数量，以及对应的物理表数量（每个模型一张表）。                                                                                                                                                              |
 
-Web 设置页根据 `operatorTokenRequired` 决定是否显示“运维访问”页。顶层的 `vector` 与 `storage.vector` 是同一份数据。
+Web 设置页根据 `operatorTokenRequired` 决定是否显示“运维访问”页。`deployment.form` 不是 `personal`、并且 `storage.data.frontendMode` 是 `local` 时，Web 页面顶部显示公开体验站的提示，链接到[在公开体验站上玩](../start/hosted-trial.md)和 `deployment.source`。顶层的 `vector` 与 `storage.vector` 是同一份数据。
 
 ### 世界管理
 

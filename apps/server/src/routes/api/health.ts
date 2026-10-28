@@ -24,6 +24,44 @@ import { hostProfileOf } from "../../host-profile.js";
 
 const bootId = crypto.randomUUID();
 
+/** Where the running build came from, as the operator configured it. */
+export interface HealthSourceInput {
+  readonly repository?: string;
+  readonly commit?: string;
+}
+
+const COMMIT_PATTERN = /^[0-9a-f]{7,40}$/i;
+
+/**
+ * The source facts worth showing a player: an https repository address and a
+ * hex commit. Anything else is dropped rather than echoed.
+ */
+export function describeHealthSource(
+  input: HealthSourceInput,
+): { repository?: string; commit?: string } | undefined {
+  let repository: string | undefined;
+  if (input.repository) {
+    try {
+      const url = new URL(input.repository.trim());
+      if (url.protocol === "https:" && !url.username && !url.password) {
+        repository = url.href.replace(/\/+$/, "");
+      }
+    } catch {
+      /* Not a URL: leave it out. */
+    }
+  }
+  const trimmedCommit = input.commit?.trim();
+  const commit =
+    trimmedCommit && COMMIT_PATTERN.test(trimmedCommit)
+      ? trimmedCommit.toLowerCase()
+      : undefined;
+  if (!repository && !commit) return undefined;
+  return {
+    ...(repository ? { repository } : {}),
+    ...(commit ? { commit } : {}),
+  };
+}
+
 export function createHealthRoutes(
   store: DataStore,
   backend: StoreBackend,
@@ -31,9 +69,11 @@ export function createHealthRoutes(
     readonly mediaBackend?: MediaStoreBackend;
     readonly mediaStore?: MediaStore;
     readonly vectorBackend?: VectorBackend;
+    readonly source?: HealthSourceInput;
   } = {},
 ): Hono {
   const app = new Hono();
+  const source = describeHealthSource(options.source ?? {});
 
   // GET /health — Health check
   app.get("/", async (c) => {
@@ -45,13 +85,17 @@ export function createHealthRoutes(
       store,
     });
 
+    const form = hostProfileOf(c).form;
     return c.json({
       status: "ok",
       version: APP_VERSION,
       bootId,
       timestamp: new Date().toISOString(),
       // Lets a client offer the operator token entry only where one is checked.
-      operatorTokenRequired: hostProfileOf(c).form === "hosted",
+      operatorTokenRequired: form !== "personal",
+      // Lets a client tell players on a shared server where their data and
+      // keys go, and which code serves them.
+      deployment: { form, ...(source ? { source } : {}) },
       storage,
       vector: storage.vector,
     });

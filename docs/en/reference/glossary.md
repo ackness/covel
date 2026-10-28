@@ -152,7 +152,7 @@ See: [world data](./world-data.md).
 
 ## Official web app
 
-The official web app is the web app that the Covel project plans to deploy for everyone to use. It is not supported yet. By design, the copy in the player's browser is the save (storage profile `browser-private`), and nothing is written to a database on the server.
+The official web app is the web app that the Covel project plans to deploy for everyone to use. It is not supported yet. By design, the copy in the player's browser is the save (storage profile `browser-private`), and nothing is written to a database on the server. Public trial instances already run in this form; their limits are in [Play on a public trial](../start/hosted-trial.md).
 
 See: [storage](../internals/storage.md), [storage mode notes](./api.md#storage-mode-notes).
 

@@ -104,7 +104,7 @@ export function SettingsDialog({
         includeOperatorAccess:
           isOperatorTokenRequired() !== false ||
           getOperatorToken() !== undefined,
-        // A server that checks the operator token is hosted, and a hosted
+        // A server that checks the operator token is shared, and a shared
         // server has no media library.
         includeMediaLibrary: isOperatorTokenRequired() !== true,
         locale: i18n.language,

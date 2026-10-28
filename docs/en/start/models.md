@@ -88,6 +88,7 @@ To play with a subscription, you can use a third-party converter such as [Magpie
 
 - Desktop app: stored in plain text in `~/.covel/keys.env`. The file permissions allow only the current user to read it.
 - Web version: stored in the local storage of the current browser.
+- Public trial: also stored in your browser; for how the server uses it, see [Play on a public trial](./hosted-trial.md).
 
 ## Learn more
 

@@ -69,7 +69,9 @@ pnpm --filter @covel/docs build    # 输出到 apps/docs/dist/，有失效链接
 - [第一局游戏](./start/first-session.md)
 - [安装插件与世界包](./start/packages.md)
 - [数据、备份与升级](./start/data-and-upgrade.md)
+- [在公开体验站上玩](./start/hosted-trial.md)
 - [从源码运行](./start/run-from-source.md)
+- [在 Render 上部署体验站](./start/deploy-render.md)
 
 ### `builtin/` 内置插件与功能：装好之后自带什么
 

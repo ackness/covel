@@ -20,7 +20,7 @@ The server decides once, at startup: it combines the deployment tier, the storag
 The host profile has three forms:
 
 - **personal**: the `self` tier with data kept by the server. The desktop app, a web app someone deploys for their own use, and `pnpm dev` are all this form. Routes ask for no token; only when the desktop shell set its launch token do the config and file APIs require it. The network boundary is the loopback bind plus the Host check.
-- **browser-private**: the `self` tier with `NODE_ENV=production` and a MemoryStore as the storage actually in use. Each player's data lives in their own browser, and the server holds only temporary copies. A session needs its owner token, writing shared worlds needs the operator token, and anyone may create a session. The future official web app is built on this form; it is not supported yet.
+- **browser-private**: the `self` tier with `NODE_ENV=production` and a MemoryStore as the storage actually in use. Each player's data lives in their own browser, and the server holds only temporary copies. Anyone may create a session, generate a world, and list and test models with their own keys; a session needs its owner token; every other operation that reaches beyond what belongs to one player needs the operator token. Public trials use this form: for the deployment steps see [Deploy a trial on Render](../start/deploy-render.md), and for what players are told see [Play on a public trial](../start/hosted-trial.md).
 - **hosted**: `demo` / `commercial`, see [Hosted auth](#hosted-auth).
 
 Each route states which "actions" it performs, and the host profile decides how each form answers. In the table, operator means the operator token (`COVEL_DESKTOP_REST_TOKEN`), which may be sent in `Authorization: Bearer`, `X-Session-Token` or `?session_token=`; "operator (Bearer)" accepts only `Authorization: Bearer`. "Desktop token" means the token is required when `COVEL_DESKTOP_REST_TOKEN` is set, and the action is open when it is not.
@@ -33,30 +33,35 @@ Each route states which "actions" it performs, and the host profile decides how 
 | `session.list` | Listing every session | Open | Empty list (open with `ENABLE_DEBUG_PAGE`) | Operator, otherwise an empty list |
 | `world.write` | Writing the shared world catalog | Open | Operator | Operator |
 | `world.generate` | Generating, revising or translating a world with the server's models | Open | Open | Operator |
-| `plugin.community` | Approving, enabling or running a community plugin's server code | Open | Open | Operator |
-| `server.diagnostics` | Model endpoints, config paths, load errors, which keys are configured | Open | Open | Operator, otherwise these fields are left out |
+| `plugin.community` | Approving, enabling or running a community plugin's server code | Open | Operator | Operator |
+| `server.diagnostics` | Model endpoints, config paths, load errors, which keys are configured | Open | Operator, otherwise these fields are left out | Operator, otherwise these fields are left out |
 | `model.probe` | Listing a provider's models, testing a model | Open | Open | Operator |
-| `model-db.refresh` | Downloading a new model database | Open | Open | Operator |
-| `server.settings` | Writing server settings | Desktop token | Desktop token | Refused |
-| `host.config` | The desktop shell's settings, keys, proxy, data folder, update check | Desktop token | Desktop token | Operator (Bearer) |
+| `model-db.refresh` | Downloading a new model database | Open | Operator | Operator |
+| `server.settings` | Writing server settings | Desktop token | Refused | Refused |
+| `host.config` | The desktop shell's settings, keys, proxy, data folder, update check | Desktop token | Operator (Bearer) | Operator (Bearer) |
 | `host.files` | Installing, uninstalling and reloading packages, reading and writing raw config files | Desktop token; in production without a token, needs `COVEL_INSTALL_API_ENABLED=1` | Same | Operator (Bearer) |
-| `media.cleanup` | Deleting media that no session references | Open | Open | `demo`: operator; `commercial`: refused |
+| `media.cleanup` | Deleting media that no session references | Open | Operator | `demo`: operator; `commercial`: refused |
 | `media.library` | The media library across sessions | Open | Refused (503) | Refused (503) |
 
-In the browser-private column, `plugin.community`, `server.diagnostics`, `model.probe`, `model-db.refresh`, `server.settings` and `host.config` are the same as personal today. Before the official web app goes live they must be closed to visitors, and that change is this column in `host-profile.ts`.
+The browser-private column opens to visitors only what they do with their own keys and saves: creating sessions, generating worlds, and listing and testing models (the settings page needs this to add a provider and test a key). Every other global operation belongs to the operator, as on the hosted tiers, each for its own reason:
+
+- `plugin.community`: a community package's server code has no sandbox and runs in the process that every visitor's keys pass through (see [Community plugin code](#community-plugin-code)).
+- `server.diagnostics`: model endpoints and config paths belong to the operator.
+- `server.settings`, `host.config`: the operator sets the server settings and host configuration through environment variables.
+- `media.cleanup`: the server sees only the sessions it holds a mirror of right now, so a cleanup would delete media that saves in other browsers still reference.
 
 Besides these actions, the host profile decides:
 
-- **Network**: only `self` runs the Host check (`network.checkHost`); hosted tiers rely on tokens.
+- **Network**: only the personal form runs the Host check (`network.checkHost`). Browser-private and the hosted tiers rely on tokens: visitors can reach them directly anyway, so a DNS-rebinding page gets nothing a visitor could not get.
 - **A request's own model settings**: on `self` they may change every capability of a model; on hosted tiers they may only narrow them (`credentials.capabilityOverrides`).
-- **Provider requests**: on `self` the model address the user configured may resolve to the local network (see [Self-tier exemption](#self-tier-exemption-core-provider-path-only)), and a request outside any session may use a community plugin's wire; hosted tiers allow neither (`credentials.provider`).
-- **Retention**: only on `self` do the server settings a player stores (such as how long traces are kept) count; on hosted tiers they belong to the operator.
+- **Provider requests**: in the personal form the model address the user configured may resolve to the local network (see [Self-tier exemption](#self-tier-exemption-core-provider-path-only)), and a request outside any session may use a community plugin's wire; browser-private and the hosted tiers allow neither (`credentials.provider`), because visitors are strangers to one another and a private address in a cloud network may lead to a real internal service.
+- **Retention**: only in the personal form do the server settings a player stores (such as how long traces are kept) count; on browser-private and the hosted tiers they belong to the operator.
 
 The server refuses to start in these cases, and the error names the variable:
 
 - `DEPLOYMENT_TIER` is not one of `self`, `demo`, `commercial` (case and surrounding spaces do not count).
 - A hosted tier lacks `COVEL_MEDIA_TOKEN_SECRET` or `COVEL_DESKTOP_REST_TOKEN`; `commercial` lists no `CORS_ORIGIN`.
-- A hosted tier sets `COVEL_ALLOWED_HOSTS`: the Host check runs only on `self`, so the value has no effect.
+- A hosted tier or the browser-private form sets `COVEL_ALLOWED_HOSTS`: the Host check runs only in the personal form, so the value has no effect.
 - `commercial` sets `COVEL_MEDIA_CLEANUP_ENABLED`: the cleanup endpoint is always closed on that tier.
 
 `apps/server/tests/bootstrap/route-access.test.ts` lists every API route of the server and the actions it needs. A new route fails the test until it is added to that table. The test also requests every route under a host profile that closes every action, which catches a route that decides from environment variables on its own; apart from `host-profile.ts`, no code in the server or the core packages may read these deployment variables.
@@ -88,9 +93,9 @@ An IPv6 address inside `2000::/3` is not enough to show that it is reachable on 
 
 Specific ranges that the IETF has assigned and that really are globally reachable are still allowed. These special-purpose classifications are based on the [IANA IPv6 registry](https://www.iana.org/assignments/iana-ipv6-special-registry/).
 
-On the `self` tier (the desktop app and self-deployment, which are the defaults), loopback addresses (`localhost`, `127.0.0.1`, `::1`) can be reached, and `https` is not required. This is what lets a local service such as Ollama work: the server runs on the player's own machine.
+In the personal form (the desktop app and self-deployment, the default form of the `self` tier), loopback addresses (`localhost`, `127.0.0.1`, `::1`) can be reached, and `https` is not required. This is what lets a local service such as Ollama work: the server runs on the player's own machine.
 
-The hosted tiers (`demo` / `commercial`) have no loopback exception. The reason:
+The browser-private form and the hosted tiers (`demo` / `commercial`) have no loopback exception. The reason:
 
 - There, a player can set a model `baseUrl` in a request-level preset (`X-Slot-Config`);
 - and the server's loopback address runs its own internal services.
@@ -168,7 +173,7 @@ A plugin's `fetchWithRetry` always uses the strict, direct, address-pinned path.
 
 ### Self-tier exemption (core provider path only)
 
-On the `self` tier (the default for the desktop app and self-deployment, which only listen on loopback anyway), the direct core provider path, which is the LLM `baseUrl` the user configured, accepts any result the resolver gives for the host name. The socket is still pinned to that result.
+In the personal form (the desktop app and self-deployment, which only listen on loopback anyway), the direct core provider path, which is the LLM `baseUrl` the user configured, accepts any result the resolver gives for the host name. The socket is still pinned to that result.
 
 This is needed because two common cases on a single-user machine would be blocked by a "public addresses only" rule:
 
@@ -179,13 +184,14 @@ The exemption is kept deliberately narrow. It does not apply to:
 
 - the plugin `fetchWithRetry` path: third-party code must not probe the local network, and neither should a desktop install;
 - URLs with an IP literal: the string check still blocks literal private addresses;
-- the hosted tiers (`demo` / `commercial`): a private address on a cloud network may lead to a real internal service.
+- the browser-private form and the hosted tiers (`demo` / `commercial`): a private address on a cloud network may lead to a real internal service.
 
 ## Provider keys
 
 Model provider keys come from two sources, and they take two paths:
 
-- A key that comes with a request arrives in the `X-Provider-Keys` header. The server never stores it.
+- A key that comes with a request arrives in the `X-Provider-Keys` header. The server never stores it. It lives only in that request's async context (`apps/server/src/request-llm-context.ts`), and there is no global key table. It is not written to disk, the database, a checkpoint or a log; the request log records only the method, the path and the status code.
+- The one exception is a credential handed to a background job. When a turn queues a background job that runs after the response, that request's model services (including their keys) are registered in process memory (`apps/server/src/routes/api/plugin-rpc/runtime-job-credentials.ts`). The registration is bound to the job ID, the session and the session's incarnation, and no other request can overwrite it. It is dropped when a worker starts running the job, when the session is deleted, or when it expires (5 minutes by default). Without handed-over credentials, the job can run only with the models the server configured itself; if the server has no usable model, the job stays in the queue and waits.
 - Keys in the server's environment variables, and platform keys, are passed to the gateway separately, as `envApiKeys`.
 
 The provider registry (`packages/ai-provider/src/provider-registry.ts`) attaches an environment key in only one case: the origin of the resolved target `baseUrl` matches a trusted configuration (`llm.toml`, or a registered provider default).
@@ -214,7 +220,7 @@ A plugin can register its own text wire (`covel.registerWires({ text })`). A wir
 When a request can use a given wire:
 
 - A request that belongs to a session: only if the session has enabled a plugin that provides this wire. (The enabled set already reflects the player's approval of community plugins.)
-- A request that belongs to no session (connection tests, model lists, world generation): it can use a wire from a built-in plugin. On the `self` tier, the one player approves all loaded plugins, so it can also use the wire of a community plugin. The hosted tiers do not allow this.
+- A request that belongs to no session (connection tests, model lists, world generation): it can use a wire from a built-in plugin. In the personal form, the one player approves all loaded plugins, so it can also use the wire of a community plugin. The browser-private form and the hosted tiers do not allow this.
 
 Request-level presets, `llm.toml` slots, and a runtime's own slot preference all follow this rule. When it is not met, the call fails as a configuration error, and the error message says which plugin needs to be enabled.
 
@@ -287,7 +293,7 @@ The personal form trusts other processes on the same machine. Loopback listening
 
 The import of community server code (`entry`, handlers, hooks, wires, runtime JavaScript) is guarded by two-step approval: first `covel:plugin-server-code` is granted, then the specific operations.
 
-Sensitive desktop configuration reads and writes require the launch token when one is configured, including `GET /api/config/keys`, which returns only provider names. Public hosted model catalogs (`/api/presets`, `/api/llm-config`) omit `baseUrl` to avoid exposing private gateway addresses and credentials in URLs; operator-token holders can still read the addresses.
+Sensitive desktop configuration reads and writes require the launch token when one is configured, including `GET /api/config/keys`, which returns only provider names. The public model catalogs (`/api/presets`, `/api/llm-config`) of the browser-private form and the hosted tiers omit `baseUrl` to avoid exposing private gateway addresses and credentials in URLs; operator-token holders can still read the addresses.
 
 ### Server settings
 
@@ -295,7 +301,7 @@ A few player settings must be enforced by the server (for example, how long trac
 
 This is a second door, narrower than the few desktop-only endpoints. `/api/config/settings`, `/api/config/keys`, `/api/config/proxy`, and `/api/config/data-root` still need `COVEL_DESKTOP_REST=1` to be open. An ordinary self-hosted Web deployment cannot write files, keys, proxy settings, or paths.
 
-- **Who can write.** Only `DEPLOYMENT_TIER=self`, the one tier where the only player owns the server. When the desktop shell has set a bearer token, that token is also required. On `demo` / `commercial`, a write is rejected before the token is even checked, and the operator token does not change that. There, the values belong to the operator and come from environment variables. On `self`, an environment variable also takes priority over a stored value.
+- **Who can write.** Only the personal form, the one form where the only player owns the server. When the desktop shell has set a bearer token, that token is also required. In the browser-private form and on `demo` / `commercial`, a write is rejected before the token is even checked, and the operator token does not change that. There, the values belong to the operator and come from environment variables. In the personal form, an environment variable also takes priority over a stored value.
 - **What can be written.** Only the keys listed in `SERVER_SETTINGS` (`packages/shared/src/env/server-settings.ts`), and each value must be accepted by that key's schema. This list is closed, and every value is either an enum value or an option with a range. Keys that could point to a path, URL, host, or credential do not belong here. If an unknown key appears, the whole request is rejected.
 - **What can be read.** `GET /api/config/server-settings` is public on every tier, and returns only the effective values of these keys. Do not add a setting whose effective value must stay secret.
 - **Who can reach it.** The origin check on writes (`origin_not_allowed`) applies here as it does to any other `PUT`. A `self` server that other people can reach lets them change these settings, the same as it lets them use every other route. A `self` server should be exposed only to its owner.
@@ -421,7 +427,7 @@ The application ships its own fonts (`@fontsource-variable/*`, SIL OFL 1.1), and
 | Guard | Behavior | Code |
 | --- | --- | --- |
 | Bind address | Listens on `127.0.0.1` by default. Set `COVEL_BIND_HOST` to change it to `0.0.0.0` | `apps/server/src/app.ts` |
-| Host name | On the `self` tier (the default, the desktop app, `pnpm dev`), the host name in the `Host` request header must be `localhost`, `127.0.0.1`, `[::1]`, or listed in `COVEL_ALLOWED_HOSTS`. Otherwise every method is rejected with `403 host_not_allowed` before it reaches any route or static file. Listening on loopback limits who can connect, not which name a browser connects by: with DNS rebinding an attacker points their own domain at `127.0.0.1`, the browser treats the local server as that page's own origin, and CORS and the write-origin check both let it through, but the request's `Host` is still the attacker's domain. The port is not compared. A request with no `Host` does not come from a browser, and it is allowed. The `demo` / `commercial` tiers use their own authentication policy and skip this check. To open a self-hosted web app from other machines, list its domain or address in `COVEL_ALLOWED_HOSTS` | `apps/server/src/middleware/host-guard.ts` |
+| Host name | In the personal form (the default form of the `self` tier: the desktop app, self-deployment, `pnpm dev`), the host name in the `Host` request header must be `localhost`, `127.0.0.1`, `[::1]`, or listed in `COVEL_ALLOWED_HOSTS`. Otherwise every method is rejected with `403 host_not_allowed` before it reaches any route or static file. Listening on loopback limits who can connect, not which name a browser connects by: with DNS rebinding an attacker points their own domain at `127.0.0.1`, the browser treats the local server as that page's own origin, and CORS and the write-origin check both let it through, but the request's `Host` is still the attacker's domain. The port is not compared. A request with no `Host` does not come from a browser, and it is allowed. The browser-private form and the `demo` / `commercial` tiers use their own authentication policy and skip this check. To open a self-hosted web app from other machines, list its domain or address in `COVEL_ALLOWED_HOSTS` | `apps/server/src/middleware/host-guard.ts` |
 | Signed media URLs | The URLs of `MediaRef` are signed with `COVEL_MEDIA_TOKEN_SECRET`. The desktop shell must provide this key, or images will not load. The Web uses a key generated at each start | `apps/server/src/middleware/media-token.ts` |
 | Media library | `GET /api/media/library` and `POST /api/media/library/delete` list and delete all stored resources without naming a session. The list also issues signed URLs scoped to `media-library:`, which can read any resource. They exist only where one player owns the whole store (`self`, the desktop app). On `demo`, `commercial`, and the browser-private setup, they answer `503`, and this scope is rejected too, whether or not an operator token is sent, because the store has no media index divided by owner | `apps/server/src/routes/api/media-library.ts` |
 | Session IDs | `{worldId}-{uuid8}`, from `crypto.randomUUID()`. Hard to enumerate | session routes |
