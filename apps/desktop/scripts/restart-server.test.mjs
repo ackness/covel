@@ -140,7 +140,8 @@ test("restart IPC navigates the native window only after the sidecar is ready", 
               filter:
                 /^(electron|\.\/(env-files|paths|windows|logging|main-i18n|settings-json)\.js)$/,
             },
-            () => ({ path: fixture, external: true }),
+            // An external path is imported as written: Windows needs a file URL.
+            () => ({ path: pathToFileURL(fixture).href, external: true }),
           );
         },
       },

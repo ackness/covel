@@ -32,8 +32,9 @@ async function loadWindowState(t) {
       {
         name: "window-state-services",
         setup(builder) {
+          // An external path is imported as written: Windows needs a file URL.
           builder.onResolve({ filter: /^(electron|\.\/paths\.js)$/ }, () => ({
-            path: fixture,
+            path: pathToFileURL(fixture).href,
             external: true,
           }));
         },
