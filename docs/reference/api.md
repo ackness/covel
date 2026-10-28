@@ -679,10 +679,10 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 
 新建本地存档第一次建立服务端镜像时，`browser-checkpoint` body 带 `initialize: true`。它只接受 revision 为 `1`、actionId 为 `local:create:<sessionId>` 的初始 checkpoint，并要求世界与已创建会话一致。服务器保留创建会话时解析的插件集合、开局状态及全部世界初始数据，返回 `reconcileRequired: true`；客户端下载 `browser-commit` 后才开始游戏。重复初始化不会覆盖数据。已有存档重启恢复时不传该标记，仍以浏览器里的集合和数据为准。
 
-| 方法 | 路径                                   | 描述                                                         |
-| ---- | -------------------------------------- | ------------------------------------------------------------ |
-| PUT  | `/api/sessions/:id/browser-checkpoint` | body `{ checkpoint, initialize? }`；事务性地替换临时 MemoryStore 工作区   |
-| POST | `/api/sessions/:id/browser-commit`     | body `{ actionId, baseRevision }`；导出下一版完整 checkpoint |
+| 方法 | 路径                                   | 描述                                                                                                                 |
+| ---- | -------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| PUT  | `/api/sessions/:id/browser-checkpoint` | body `{ checkpoint, initialize? }`；事务性地替换临时 MemoryStore 工作区；`initialize: true` 时保留服务端的初始化结果 |
+| POST | `/api/sessions/:id/browser-commit`     | body `{ actionId, baseRevision }`；导出下一版完整 checkpoint                                                         |
 
 - `browser-checkpoint` 拒绝过期的 revision，也拒绝 revision 相同但 head 不同的分叉。
 - `browser-commit` 对重复的 `actionId` 是幂等的，返回同一个 commit。
@@ -690,18 +690,18 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 
 #### 校验与错误
 
-| 状态码 | `code`                             | 什么时候                                                                               |
-| ------ | ---------------------------------- | -------------------------------------------------------------------------------------- |
-| 400    | `invalid_checkpoint`               | checkpoint 结构不合法，包括 `checkpoint.messages` 里有重复的消息 ID                    |
-| 400    | `invalid_checkpoint_scope`         | checkpoint 的 `sessionId` 和路径里的 `:id` 不一致，或 `profile` 不是 `browser-private` |
-| 400    | `session_record_scope_conflict`    | 快照、挂起记录或世界导入账本的全局记录 ID 已经属于其他会话                             |
-| 401    | `operator_token_required`          | 普通所有者通过 checkpoint 引用服务端还没有的世界（见下文“共享部署”）                   |
-| 401    | —                                  | 排队期间会话的所有者变了                                                               |
-| 409    | `browser_private_profile_required` | 服务端的存储不是 MemoryStore                                                           |
-| 409    | `unsupported_browser_mutation`     | 有 durable detached job 时，上传删除或改写了执行域，或改变了会话身份                   |
-| 409    | `world_deleting`                   | 原世界或目标世界正在删除                                                               |
-| 409    | —                                  | 还没有上传过 checkpoint、revision 冲突、会话实例变了或会话正在删除                     |
-| 413    | —                                  | `browser-checkpoint` 的请求体超过 64 MiB                                               |
+| 状态码 | `code`                             | 什么时候                                                                                                                                    |
+| ------ | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| 400    | `invalid_checkpoint`               | checkpoint 结构不合法，包括 `checkpoint.messages` 里有重复的消息 ID；`initialize` 不是布尔值，或带 `initialize: true` 的不是初始 checkpoint |
+| 400    | `invalid_checkpoint_scope`         | checkpoint 的 `sessionId` 和路径里的 `:id` 不一致，或 `profile` 不是 `browser-private`；初始化时世界和已创建的会话不一致                    |
+| 400    | `session_record_scope_conflict`    | 快照、挂起记录或世界导入账本的全局记录 ID 已经属于其他会话                                                                                  |
+| 401    | `operator_token_required`          | 普通所有者通过 checkpoint 引用服务端还没有的世界（见下文“共享部署”）                                                                        |
+| 401    | —                                  | 排队期间会话的所有者变了                                                                                                                    |
+| 409    | `browser_private_profile_required` | 服务端的存储不是 MemoryStore                                                                                                                |
+| 409    | `unsupported_browser_mutation`     | 有 durable detached job 时，上传删除或改写了执行域，或改变了会话身份                                                                        |
+| 409    | `world_deleting`                   | 原世界或目标世界正在删除                                                                                                                    |
+| 409    | —                                  | 还没有上传过 checkpoint、revision 冲突、会话实例变了或会话正在删除                                                                          |
+| 413    | —                                  | `browser-checkpoint` 的请求体超过 64 MiB                                                                                                    |
 
 校验规则：
 

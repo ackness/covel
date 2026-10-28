@@ -5,7 +5,3 @@
 ### Upgrade notes
 
 - **Create a new browser test save to verify starting content.** Existing development saves are not reseeded automatically; their progress remains authoritative. A missing dependency can still be enabled from its in-game notice.
-
-### Documentation
-
-- **A reusable desktop and browser relay acceptance procedure is available.** It covers production Docker deployment, real gameplay, default plugins, restart recovery, and sanitized evidence without recording personal paths or credentials.

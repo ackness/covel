@@ -81,6 +81,8 @@ rm palette.png
 git add -f .assets/images/demo.gif   # .assets/ is ignored
 ```
 
+The README's still screenshots (`.assets/images/readme/`) come from real play; framing, size and privacy rules are in [Screenshots and README updates](./en/internals/e2e-testing.md#screenshots-and-readme-updates).
+
 ## Development conventions
 
 ### Code style

@@ -9,7 +9,7 @@
 [![Stage](https://img.shields.io/badge/stage-early--access-orange)](./docs/CHANGELOG.md)
 [![Ask DeepWiki](https://img.shields.io/badge/Ask-DeepWiki-0b7285?logo=readthedocs&logoColor=white)](https://deepwiki.com/ackness/covel)
 
-[![Covel gameplay: a stage conversation in Harukaze Academy](./.assets/images/readme/stage-mode.png)](https://covel.cc/)
+[![Covel demo: the world list, a session and stage mode — more at covel.cc](./.assets/images/demo.gif)](https://covel.cc/)
 
 **[▶ Watch the full demo at covel.cc](https://covel.cc/)** · **[🎮 Play in your browser at demo.covel.cc](https://demo.covel.cc/)** · **[📖 Documentation](https://covel.cc/docs/en/)**
 
@@ -31,9 +31,10 @@ Covel is an AI RPG framework and playable studio where NPC relationships, lore, 
 
 ## Two ways to play
 
-The opening image shows Harukaze Academy in **Stage mode**: world-pack backgrounds, character sprites, and typewriter dialogue. Below, Emberback uses **Story mode**: narration, suggested actions, and a quest log updated by the default plugins each turn.
-
-![Emberback narration, suggested actions, and quest log](./.assets/images/readme/text-mode.png)
+|                                              Stage mode (visual novel)                                               |                                                     Story mode (text)                                                      |
+| :------------------------------------------------------------------------------------------------------------------: | :------------------------------------------------------------------------------------------------------------------------: |
+| ![Stage mode in Harukaze Academy: backdrop, character sprites, and dialogue](./.assets/images/readme/stage-mode.png) | ![Story mode in Emberback Relay: narration, suggested actions, and a plugin panel](./.assets/images/readme/text-mode.png)  |
+|              Backdrops, sprites, and typewriter dialog; scene art resolves and generates as you explore              | Narrated turns with suggested actions and inline forms; the default plugins update panels such as the quest log every turn |
 
 Worlds declare their default (`defaultViewMode: stage`); you can switch any time in-session.
 
@@ -128,13 +129,11 @@ Players, world authors, and plugin authors can follow the [i18n guide](./docs/re
 
 ## Debug every turn end to end
 
-Expand the execution details below the story to check each task's result and timing, then open the debug page when you need more detail.
-
-The built-in Trace Inspector groups execution by session and turn, then exposes each runtime and every flow, LLM, tool, message, block, state, and hook event. Expand a runtime to see its call sequence, token counts, timings, tool arguments, and results; open an event to inspect request metadata, prompt messages, available tool definitions, and the raw payload. Separate Session Data and Cost views make the same workspace useful for gameplay QA, plugin authoring, and provider-cost analysis.
+Every turn ends with an **Execution · N runtimes** row below the story: expand it to check each runtime's result and timing. For the full picture, open **Debugger** in the sidebar. The built-in Trace Inspector there groups execution by session and turn, then exposes each runtime and every flow, LLM, tool, message, block, state, and hook event. Expand a runtime to see its call sequence, token counts, timings, tool arguments, and results; open an event to inspect request metadata, prompt messages, available tool definitions, and the raw payload. Separate Session Data and Cost views make the same workspace useful for gameplay QA, plugin authoring, and provider-cost analysis.
 
 ## Every roll leaves a receipt
 
-![Dice checks, affinity changes, and codex updates alongside the default quest log](./.assets/images/readme/rpg-systems.png)
+![A turn's dice checks, affinity changes, and codex updates in Emberback Relay](./.assets/images/readme/rpg-systems.png)
 
 A risky action resolves against dice rolled **before** the narrator writes, so the outcome cannot be retconned to fit the prose — and the arithmetic posts inline: `19 + 2 = 21 vs DC 16`. Quest progress, gear changes, and affinity shifts land in the turn the same way, then accumulate into their own panels. Dice, quests, inventory, and affinity are four separate plugins; a world seeds the opening quests, starting gear, and initial affinity, or ships without any of them.
 
@@ -199,11 +198,11 @@ Share your work by submitting a directory-entry PR to [covel-plugins](https://gi
 
 ## Develop
 
-- [Gameplay and screenshot acceptance](./docs/en/internals/e2e-testing.md#accepting-local-model-relay-on-desktop-and-deployed-web) — verify desktop, deployed relay, default plugins, and restart recovery, then refresh showcase images
 - [Plugin authoring guide](./docs/plugins/essentials.md) — start here; bundled plugins under [`plugins/`](./plugins/) are working references
 - [Design principles](./docs/internals/design-principles.md) — what belongs in the kernel and what belongs in a plugin
 - [Architecture & turn pipeline](./docs/internals/flow.md) — how a turn flows through trigger → schedule → runtimes → commit
 - [World data](./docs/reference/world-data.md) and [collections](./docs/ship/collections.md) — author a world pack and ship it with its plugins
+- [Gameplay and screenshot acceptance](./docs/en/internals/e2e-testing.md#accepting-local-model-relay-on-desktop-and-deployed-web) — before a release, replay desktop and deployed-relay sessions with default plugins and a restart, then refresh these README images
 - Reference: [plugin contract](./docs/reference/plugins.md) · [extension points](./docs/reference/extension-points.md) · [tools](./docs/reference/tools.md) · [HTTP API](./docs/reference/api.md) · [full doc index](./docs/README.md)
 
 pnpm workspaces + Turborepo · ESM-only · TypeScript strict · React 19 + Hono + Drizzle. Repo layout and package list → [`AGENTS.md`](./AGENTS.md#monorepo-structure).
