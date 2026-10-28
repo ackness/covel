@@ -112,20 +112,9 @@ export interface SessionCommit {
   readonly checkpoint: BrowserCheckpoint;
 }
 
-/** The action that creates a browser save: revision 1 of every checkpoint. */
+/** The action of a browser save's revision 1: the server's first export. */
 export function initialBrowserCheckpointActionId(sessionId: string): string {
   return `local:create:${sessionId}`;
-}
-
-/** True for a browser save that has never adopted a server commit. */
-export function isInitialBrowserCheckpoint(
-  checkpoint: Pick<BrowserCheckpoint, "sessionId" | "revision" | "actionId">,
-): boolean {
-  return (
-    checkpoint.revision === 1 &&
-    checkpoint.actionId ===
-      initialBrowserCheckpointActionId(checkpoint.sessionId)
-  );
 }
 
 export class BrowserSyncValidationError extends Error {

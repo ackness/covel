@@ -67,8 +67,6 @@ export interface ReplaceSessionCheckpointOptions {
   readonly session?: SessionRecord;
   /** Global worlds require separate authorization; session replacement preserves them by default. */
   readonly writeWorld?: boolean;
-  /** Host initialization joins the atomic checkpoint replacement, never a second commit. */
-  readonly afterRestoreInTx?: (tx: StoreTransaction) => Promise<void>;
 }
 
 /** Export every durable session domain needed to resume execution elsewhere. */
@@ -288,6 +286,5 @@ export async function replaceSessionFromCheckpoint(
   const checkpoint = validateBrowserCheckpoint(value);
   await store.withTransaction(async (tx) => {
     await writeCheckpoint(tx, checkpoint, options);
-    await options.afterRestoreInTx?.(tx);
   });
 }

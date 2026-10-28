@@ -114,7 +114,6 @@ describe("checkpoint record validation", () => {
     const deletion = vi.spyOn(store, "deleteSession");
     const creation = vi.spyOn(store, "createSession");
     const worldWrite = vi.spyOn(store, "upsertWorld");
-    const afterRestore = vi.fn();
     const duplicate = {
       ...checkpoint,
       messages: [original, { ...original, content: "replacement" }],
@@ -125,14 +124,12 @@ describe("checkpoint record validation", () => {
     await expect(
       replaceSessionFromCheckpoint(store, duplicate, {
         writeWorld: true,
-        afterRestoreInTx: afterRestore,
       }),
     ).rejects.toThrow(BrowserSyncValidationError);
     expect(transaction).not.toHaveBeenCalled();
     expect(deletion).not.toHaveBeenCalled();
     expect(creation).not.toHaveBeenCalled();
     expect(worldWrite).not.toHaveBeenCalled();
-    expect(afterRestore).not.toHaveBeenCalled();
     expect(await store.getSession(sessionId)).toEqual(checkpoint.session);
     expect(await store.listMessages(sessionId)).toEqual([original]);
     await store.close();

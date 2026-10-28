@@ -3,7 +3,11 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { BrowserVault } from "../storage/browser-vault.js";
 import { LocalDataService } from "../data-service/local.js";
 
-const api = vi.hoisted(() => ({ deleteSession: vi.fn() }));
+const api = await vi.hoisted(async () => {
+  const { fakeSessionServer } =
+    await import("./support/fake-session-server.js");
+  return fakeSessionServer();
+});
 vi.mock("../api.js", () => api);
 vi.mock("../app-kv-store.js", () => ({
   removeStatePatches: async () => {},

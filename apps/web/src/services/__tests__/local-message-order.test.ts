@@ -1,8 +1,15 @@
 import "fake-indexeddb/auto";
-import { afterEach, beforeEach, expect, it } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { encodePageCursor, type PageCursor } from "@covel/shared";
 import { LocalDataService } from "../data-service/local.js";
 import { BrowserVault } from "../storage/browser-vault.js";
+
+const api = await vi.hoisted(async () => {
+  const { fakeSessionServer } =
+    await import("./support/fake-session-server.js");
+  return fakeSessionServer();
+});
+vi.mock("../api.js", () => api);
 
 const at = "2026-10-14T00:00:00.000Z";
 const earlier = "2026-10-13T00:00:00.000Z";

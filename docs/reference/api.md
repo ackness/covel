@@ -677,12 +677,12 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 - 只在 `STORE_BACKEND=memory` 的浏览器私有配置（browser-private profile）下可用。
 - 鉴权和其他会话端点一样，使用 owner token。
 
-新建本地存档第一次建立服务端镜像时，上传的是 revision 为 `1`、actionId 为 `local:create:<sessionId>` 的初始 checkpoint。服务端据此判断这是初始化：要求世界与已创建的会话一致，保留创建会话时解析的插件集合、开局状态及全部世界初始数据，不用这份初始 checkpoint 覆盖，并返回 `reconcileRequired: true`；客户端下载 `browser-commit` 后才开始游戏。重复上传初始 checkpoint 不会覆盖数据。已有存档的 revision 大于 `1`，重启恢复时仍以浏览器里的插件集合和数据为准。
+新建本地存档时，客户端先 `POST /api/sessions` 在服务端创建会话（解析插件、导入世界数据、运行生命周期钩子），再请求 `browser-commit`，body 为 `{ actionId: "local:create:<sessionId>", baseRevision: 0 }`。服务端还没有这个会话的 head、且会话还没有完成任何玩家回合时，把当前状态导出为 revision `1`，客户端把它存成存档的第 1 版。浏览器不自己生成初始存档；之后任何一版上传都按整体替换处理，没有特殊的初始化分支。用同一个 actionId 重试会拿到同一个 commit。第一份导出失败时，客户端尽力删除刚创建的服务端会话。
 
-| 方法 | 路径                                   | 描述                                                                                               |
-| ---- | -------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| PUT  | `/api/sessions/:id/browser-checkpoint` | body `{ checkpoint }`；事务性地替换临时 MemoryStore 工作区；初始 checkpoint 保留服务端的初始化结果 |
-| POST | `/api/sessions/:id/browser-commit`     | body `{ actionId, baseRevision }`；导出下一版完整 checkpoint                                       |
+| 方法 | 路径                                   | 描述                                                                                   |
+| ---- | -------------------------------------- | -------------------------------------------------------------------------------------- |
+| PUT  | `/api/sessions/:id/browser-checkpoint` | body `{ checkpoint }`；事务性地替换临时 MemoryStore 工作区                             |
+| POST | `/api/sessions/:id/browser-commit`     | body `{ actionId, baseRevision }`；导出下一版完整 checkpoint；新存档的第一份导出见上文 |
 
 - `browser-checkpoint` 拒绝过期的 revision，也拒绝 revision 相同但 head 不同的分叉。
 - 整体替换时，会话元数据以浏览器存档为准（包括玩家的插件选择 `pluginSelection`）；服务端只保留自己的凭据和能力代次，例如 owner token 哈希与会话 incarnation。
@@ -691,18 +691,19 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 
 #### 校验与错误
 
-| 状态码 | `code`                             | 什么时候                                                                                                                           |
-| ------ | ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| 400    | `invalid_checkpoint`               | checkpoint 结构不合法，包括 `checkpoint.messages` 里有重复的消息 ID                                                                |
-| 400    | `invalid_checkpoint_scope`         | checkpoint 的 `sessionId` 和路径里的 `:id` 不一致，或 `profile` 不是 `browser-private`；初始 checkpoint 的世界和已创建的会话不一致 |
-| 400    | `session_record_scope_conflict`    | 快照、挂起记录或世界导入账本的全局记录 ID 已经属于其他会话                                                                         |
-| 401    | `operator_token_required`          | 普通所有者通过 checkpoint 引用服务端还没有的世界（见下文“共享部署”）                                                               |
-| 401    | —                                  | 排队期间会话的所有者变了                                                                                                           |
-| 409    | `browser_private_profile_required` | 服务端的存储不是 MemoryStore                                                                                                       |
-| 409    | `unsupported_browser_mutation`     | 有 durable detached job 时，上传删除或改写了执行域，或改变了会话身份                                                               |
-| 409    | `world_deleting`                   | 原世界或目标世界正在删除                                                                                                           |
-| 409    | —                                  | 还没有上传过 checkpoint、revision 冲突、会话实例变了或会话正在删除                                                                 |
-| 413    | —                                  | `browser-checkpoint` 的请求体超过 64 MiB                                                                                           |
+| 状态码 | `code`                             | 什么时候                                                                                                                                    |
+| ------ | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| 400    | `invalid_checkpoint`               | checkpoint 结构不合法，包括 `checkpoint.messages` 里有重复的消息 ID                                                                         |
+| 400    | `invalid_checkpoint_scope`         | checkpoint 的 `sessionId` 和路径里的 `:id` 不一致，或 `profile` 不是 `browser-private`                                                      |
+| 400    | `session_record_scope_conflict`    | 快照、挂起记录或世界导入账本的全局记录 ID 已经属于其他会话                                                                                  |
+| 401    | `operator_token_required`          | 普通所有者通过 checkpoint 引用服务端还没有的世界（见下文“共享部署”）                                                                        |
+| 401    | —                                  | 排队期间会话的所有者变了                                                                                                                    |
+| 409    | `browser_private_profile_required` | 服务端的存储不是 MemoryStore                                                                                                                |
+| 409    | `unsupported_browser_mutation`     | 有 durable detached job 时，上传删除或改写了执行域，或改变了会话身份                                                                        |
+| 409    | `world_deleting`                   | 原世界或目标世界正在删除                                                                                                                    |
+| 409    | `browser_checkpoint_required`      | `browser-commit` 之前没有上传过 checkpoint，而且不是新存档的第一份导出（需要无 head、`baseRevision: 0`、初始 actionId、没有完成的玩家回合） |
+| 409    | —                                  | revision 冲突、会话实例变了或会话正在删除                                                                                                   |
+| 413    | —                                  | `browser-checkpoint` 的请求体超过 64 MiB                                                                                                    |
 
 校验规则：
 
