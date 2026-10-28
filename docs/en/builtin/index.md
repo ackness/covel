@@ -65,7 +65,7 @@ Plugins marked "On by default" are added to every game automatically, and you ca
 | [Character Creator](./world.md) `char-creator`         | Creates the player character, and updates characters during play          | Yes           |
 | [Character Profiles](./world.md) `character-blueprint` | Holds the characters and portraits the world provides                     |               |
 | [World Dimensions](./world.md) `world-init`            | Prepares character attributes and dimensions, and updates dimension state | Yes           |
-| [World Time](./world.md) `world-time`                  | Time passing, and day and night                                           | Yes           |
+| [World Time](./world.md) `world-time`                  | Time passing, day and night, and a rules summary                                           | Yes           |
 | [World Rules](./world.md) `living-world-rules`         | Brings the world's rules into every turn, with localized category badges  |               |
 | [Codex](./world.md) `codex`                            | Records people, places and things, with localized category badges         |               |
 | [Relationship Graph](./world.md) `npc-graph`           | Records a graph of relationships between people, groups and factions      |               |

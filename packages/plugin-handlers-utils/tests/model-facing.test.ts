@@ -105,6 +105,53 @@ describe("modelFacingJson", () => {
     expect(modelFacingJson(null)).toBeNull();
     expect(modelFacingJson([1, "a", null])).toEqual([1, "a", null]);
   });
+
+  it("does not count a record repeating its UUID through containers as a reference", () => {
+    const id = "33333333-3333-4333-8333-333333333333";
+    const record = {
+      id,
+      relatedIds: [id],
+      fields: { ownerId: id, nested: [{ subjectIds: [id] }] },
+      title: "Ada",
+    };
+    expect(modelFacingJson(record)).toEqual({
+      fields: { nested: [{}] },
+      title: "Ada",
+    });
+    expect(modelHiddenPaths(record)).toEqual([
+      { path: "id", reason: "uuid" },
+      { path: "relatedIds", reason: "uuid" },
+      { path: "fields.ownerId", reason: "uuid" },
+      { path: "fields.nested[0].subjectIds", reason: "uuid" },
+    ]);
+  });
+
+  it.each(["edge-one", "44444444-4444-4444-8444-444444444444"])(
+    "counts a child record with its own id (%s) pointing to its parent",
+    (childId) => {
+      const id = "33333333-3333-4333-8333-333333333333";
+      const record = {
+        id,
+        name: "Ada",
+        children: [{ id: childId, fields: { holder: id } }],
+      };
+      expect(modelFacingJson(record)).toEqual({
+        id,
+        name: "Ada",
+        children: [
+          {
+            ...(childId === "edge-one" ? { id: childId } : {}),
+            fields: { holder: id },
+          },
+        ],
+      });
+      expect(modelHiddenPaths(record)).toEqual(
+        childId === "edge-one"
+          ? []
+          : [{ path: "children[0].id", reason: "uuid" }],
+      );
+    },
+  );
 });
 
 describe("modelHiddenPaths", () => {

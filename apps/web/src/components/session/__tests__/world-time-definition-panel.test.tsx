@@ -1,5 +1,6 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
+import i18n from "@/i18n/index.js";
 import { PluginPanel } from "../plugin-panel.js";
 import definitionSpec from "../../../../../../plugins/world-time/ui/definition-panel.json";
 import {
@@ -14,9 +15,10 @@ vi.mock("@/stores/session-store.js", () => ({
   }),
 }));
 vi.mock("react-force-graph-2d", () => ({ default: () => null }));
-afterEach(() => {
+afterEach(async () => {
   cleanup();
   __clearAllPluginDataForTest();
+  await i18n.changeLanguage("en-US");
 });
 
 function showDefinition(definition: Record<string, unknown>) {
@@ -46,7 +48,8 @@ it("summarizes authored phase rules before any clock has been committed", async 
   expect(screen.getAllByText("Wait for the tide to travel.")).toHaveLength(1);
   for (const phase of ["Rising tide", "High tide", "Falling tide"])
     expect(screen.getAllByText(phase).length).toBeGreaterThan(0);
-  expect(screen.getByText("Tide cycle 2 ·")).toBeTruthy();
+  expect(screen.getAllByText("Tide cycle")).toHaveLength(2);
+  expect(screen.getByText("2 ·")).toBeTruthy();
   // The starting phase is named once in the tag list and once at the start.
   expect(screen.getAllByText("High tide")).toHaveLength(2);
   expect(screen.getByText("Forward")).toBeTruthy();
@@ -79,9 +82,9 @@ it("summarizes authored calendar rules with the start and step limits", async ()
     },
   });
   expect(await screen.findByText("Station time")).toBeTruthy();
-  expect(screen.getByText("Station Year")).toBeTruthy();
+  expect(screen.getAllByText("Station Year")).toHaveLength(2);
   expect(screen.getByText("Months in a year")).toBeTruthy();
-  expect(screen.getByText("Station Year 1 · 1/1 06:04")).toBeTruthy();
+  expect(screen.getByText("1 · 1/1 06:04")).toBeTruthy();
   expect(screen.getByText("Jumps at random")).toBeTruthy();
   expect(screen.getByText("Most per turn, in minutes")).toBeTruthy();
   expect(screen.getByText("240")).toBeTruthy();
@@ -96,3 +99,66 @@ it("explains the default calendar when no definition was imported", () => {
   render(<PluginPanel pluginId="world-time" spec={definitionSpec} />);
   expect(screen.getByText(/12.*30/)).toBeTruthy();
 });
+
+it.each([
+  ["en-US", "Tidal cycle", "High tide", "Low tide", "Tides change"],
+  ["zh-CN", "轮次", "涨潮", "退潮", "随潮水演进"],
+])(
+  "resolves portable phase labels in %s",
+  async (locale, cycle, high, low, prompt) => {
+    await i18n.changeLanguage(locale);
+    showDefinition({
+      kind: "phases",
+      name: { en: "Tides", zh: "潮汐" },
+      cycleLabel: { en: "Tidal cycle", zh: "轮次" },
+      phases: [
+        { en: "High tide", zh: "涨潮" },
+        { en: "Low tide", zh: "退潮" },
+      ],
+      initial: { cycle: 2, phase: 0 },
+      evolution: {
+        mode: "forward",
+        defaultStep: 1,
+        maxStep: 10,
+        prompt: { en: "Tides change", zh: "随潮水演进" },
+      },
+    });
+    expect(screen.getAllByText(cycle)).toHaveLength(2);
+    expect(screen.getByText("2 ·")).toBeTruthy();
+    expect(screen.getAllByText(high)).toHaveLength(2);
+    expect(screen.getByText(low)).toBeTruthy();
+    expect(screen.getAllByText(prompt)).toHaveLength(1);
+    expect(screen.queryByText(/\[object Object\]/)).toBeNull();
+  },
+);
+
+it.each([
+  ["en-US", "Age", "Firstday", "Lastday"],
+  ["zh-CN", "纪元", "始日", "终日"],
+])(
+  "resolves portable calendar labels in %s",
+  async (locale, era, first, last) => {
+    await i18n.changeLanguage(locale);
+    showDefinition({
+      kind: "calendar",
+      name: { en: "Clock", zh: "时钟" },
+      calendar: {
+        era: { en: "Age", zh: "纪元" },
+        months: [{ name: { en: "First", zh: "一月" }, days: 30 }],
+        weekdays: [
+          { en: "Firstday", zh: "始日" },
+          { en: "Lastday", zh: "终日" },
+        ],
+        hoursPerDay: 24,
+        minutesPerHour: 60,
+      },
+      initial: { year: 1, month: 1, day: 1, hour: 6, minute: 4, weekday: 0 },
+      evolution: { mode: "forward", defaultStep: 1, maxStep: 10 },
+    });
+    expect(screen.getAllByText(era)).toHaveLength(2);
+    expect(screen.getByText("1 · 1/1 06:04")).toBeTruthy();
+    expect(screen.getByText(first)).toBeTruthy();
+    expect(screen.getByText(last)).toBeTruthy();
+    expect(screen.queryByText(/\[object Object\]/)).toBeNull();
+  },
+);
