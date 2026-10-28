@@ -1,3 +1,0 @@
-### Fixed
-
-- **Chinese sessions no longer show English character types and item tags.** The character panel's type badge shows "Player", "NPC" and "Companion" in the UI language; a type the world declares itself is shown as the world writes it. The Chinese editions of Lantern Barrow and Emberback now write their item tags in Chinese, and their English editions keep English tags. Inventory's authoring hint now says that players see the tags, so a world writes them, money's currency tag included, in its own language. Sessions created before this change keep the tags they imported. See `docs/recipes/starting-content.md`.

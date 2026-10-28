@@ -1,3 +1,0 @@
-### Fixed
-
-- **Dice Check's check log names the turn by its number and the attribute by the world's name.** Each entry showed the turn's internal ID, and the attribute exactly as the narrative wrote it (an attribute id in one entry, the attribute's Chinese name in the next). Entries now read "Turn 7" in the UI language, and an attribute that matches one of the world's character attributes, by id or by name, shows that attribute's name; other text is shown as written. The in-message check block shows the same attribute name. Checks recorded before this change show neither the turn nor the attribute; new checks in the same session show both. See `docs/builtin/rpg.md`.
