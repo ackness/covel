@@ -21,3 +21,21 @@ export function requireProjectNode(repoRoot, label) {
   );
   process.exit(1);
 }
+
+/** The first `command` on `env`'s PATH, as an absolute path; else `command`. */
+export function resolveOnPath(command, env = process.env) {
+  const pathKey =
+    Object.keys(env).find((key) => key.toLowerCase() === "path") ?? "PATH";
+  const extensions =
+    process.platform === "win32"
+      ? (env.PATHEXT ?? ".EXE;.CMD;.BAT").split(";")
+      : [""];
+  for (const directory of (env[pathKey] ?? "").split(path.delimiter)) {
+    if (!directory) continue;
+    for (const extension of extensions) {
+      const candidate = path.join(directory, command + extension);
+      if (existsSync(candidate)) return candidate;
+    }
+  }
+  return command;
+}
