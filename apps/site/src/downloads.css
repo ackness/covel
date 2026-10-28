@@ -19,6 +19,13 @@
 .download-release-link:hover {
   text-decoration: underline;
 }
+/* The browser trial sits on its own line under the releases link. */
+.download-trial-link {
+  display: flex;
+  align-items: flex-start;
+  margin-top: 0.75rem;
+  line-height: 1.5;
+}
 .download-catalog {
   border: 1px solid var(--line);
   border-radius: 1.25rem;

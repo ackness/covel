@@ -9,7 +9,7 @@ import {
 } from "lucide-react";
 import type { Copy } from "../copy.js";
 import type { DownloadFile, DownloadLinks, Platform } from "../download.js";
-import { RELEASES_URL } from "../links.js";
+import { RELEASES_URL, TRIAL_URL } from "../links.js";
 import { container, SectionHeading } from "./ui.js";
 
 const PLATFORMS: {
@@ -72,6 +72,13 @@ export function Downloads({
           </SectionHeading>
           <a href={RELEASES_URL} className="download-release-link">
             {text.releases}
+            <ArrowUpRight size={15} aria-hidden />
+          </a>
+          <a
+            href={TRIAL_URL}
+            className="download-release-link download-trial-link"
+          >
+            {text.trial}
             <ArrowUpRight size={15} aria-hidden />
           </a>
         </div>

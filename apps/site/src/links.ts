@@ -23,5 +23,8 @@ export const DOCS_URL = import.meta.env.DEV
   ? `http://localhost:5175${import.meta.env.BASE_URL}docs/`
   : asset("docs/");
 
+/** The official public trial: the web app in the browser-private form. */
+export const TRIAL_URL = "https://demo.covel.cc/";
+
 export const PLUGIN_DIRECTORY_URL = "https://github.com/covel-ai/covel-plugins";
 export const WORLD_DIRECTORY_URL = "https://github.com/covel-ai/covel-worlds";

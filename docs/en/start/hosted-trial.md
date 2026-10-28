@@ -1,6 +1,6 @@
 # Play on a public trial
 
-This page is for players who play Covel on a public trial. A trial is a Covel web app that someone has deployed on a cloud server and that anyone can open. When you finish reading, you will know where your saves and API keys are kept, what the server can see, what a trial loses, and how to check these claims.
+This page is for players who play Covel on a public trial. A trial is a Covel web app that someone has deployed on a cloud server and that anyone can open; the Covel project's own trial is at [demo.covel.cc](https://demo.covel.cc/). When you finish reading, you will know where your saves and API keys are kept, what the server can see, what a trial loses, and how to check these claims.
 
 If you use the desktop app, or a web app you deployed for your own use, your data goes elsewhere; see [Data, backup and upgrades](./data-and-upgrade.md).
 
