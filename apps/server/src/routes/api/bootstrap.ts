@@ -927,6 +927,10 @@ async function assembleApi(
       mediaBackend: config.mediaBackend,
       mediaStore: config.mediaStore,
       vectorBackend: config.vectorBackend,
+      source: {
+        repository: runtimeEnv.sourceRepository,
+        commit: runtimeEnv.sourceCommit,
+      },
     }),
   );
   app.route("/api/install", installRoutes);

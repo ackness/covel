@@ -281,6 +281,9 @@ The variables below are also in `registry.ts`. For variables whose use is alread
 | `APP_PORT` | `3001` | Host port of the app in Docker Compose |
 | `COVEL_BIND_HOST` | `127.0.0.1` | Address the HTTP service listens on |
 | `COVEL_ALLOWED_HOSTS` | — | Host names, besides `localhost`, `127.0.0.1` and `[::1]`, that the `self` tier answers to, separated by commas |
+| `COVEL_SOURCE_REPOSITORY` | — | The public source repository of this build (an `https` address). `/api/health` reports it, and the notice on a shared server links to it |
+| `COVEL_SOURCE_COMMIT` | — | The commit of this build (7–40 hexadecimal characters), reported by `/api/health`. When it is not set, `RENDER_GIT_COMMIT` is used |
+| `RENDER_GIT_COMMIT` | Set by Render on every deploy | The commit Render is deploying. Read only as the fallback for `COVEL_SOURCE_COMMIT` |
 | `DEPLOYMENT_TIER` | `self` | Deployment tier (`self` / `demo` / `commercial`). It decides how strict authentication is |
 | `SERVE_STATIC` / `STATIC_DIR` | `false` / `./web-dist` | Lets the server host the web front end in the given folder |
 | `CORS_ORIGIN` | — | List of allowed HTTP origins, separated by commas |
@@ -401,7 +404,7 @@ This section explains, one by one, the variables whose behavior is more detailed
 
 - `self` is a local self-hosted deployment. A request from localhost can read the metadata of the provider keys that the server injects.
 - `demo` / `commercial` require a session owner token.
-- Even with `self`, when `NODE_ENV=production` and the storage actually in use is MemoryStore, a session owner token is required. Global world writes also require the operator token. This check looks at the storage that is actually injected, not only at the value of `STORE_BACKEND`.
+- Even with `self`, when `NODE_ENV=production` and the storage actually in use is MemoryStore (the browser-private form, which public trials use), a session owner token is required; global world writes, community plugin server code, diagnostics, model database refresh, host configuration and media cleanup require the operator token; server settings cannot be written; and there is no Host check. This check looks at the storage that is actually injected, not only at the value of `STORE_BACKEND`. For the deployment steps, see [Deploy a trial on Render](../start/deploy-render.md).
 - Case and surrounding spaces do not count. Any other value stops the server at startup, and the error lists the accepted values.
 - At startup the server combines it with the storage and the tokens into its host profile; routes no longer read it themselves. For the rules of each tier, see [Security boundaries](../internals/security.md#host-profile); for authentication details, see the authentication section of [`api.md`](./api.md).
 - The desktop app always passes `self` when it starts the server.
@@ -411,7 +414,7 @@ This section explains, one by one, the variables whose behavior is more detailed
 - It is the operator token. Using it as a Bearer token passes the owner check of any session. Admin tools and e2e scripts rely on it.
 - In the `demo` / `commercial` tiers, these operations must include it: creating, forking and listing sessions, world writes and dimension imports, AI world generation, model probing and refresh, and activating the server code of community plugins.
 - If `DEPLOYMENT_TIER=demo|commercial` starts without it configured, the server refuses to start (a startup check of the host profile).
-- The `self` tier does not require it at startup. But under the production MemoryStore, creating, changing, deleting, importing dimensions into, and saving server-generated content for global worlds all check it. If it is not configured, these writes stay off. Public reads and valid session access still work.
+- The `self` tier does not require it at startup. But under the production MemoryStore, creating, changing, deleting, importing dimensions into, and saving server-generated content for global worlds all check it, and so do the other operator operations listed under `DEPLOYMENT_TIER`. If it is not configured, these operations stay off. Public reads and valid session access still work.
 - A normal local or desktop session does not need a token. The desktop config interface has its own token check.
 - This is a trust model with "one operator". It does not provide multi-tenant identity or a code sandbox. See the authentication section of [`api.md`](./api.md).
 
@@ -425,7 +428,13 @@ This section explains, one by one, the variables whose behavior is more detailed
 - The `self` tier answers only requests opened at `localhost`, `127.0.0.1` or `[::1]` (on any port). Every other host name gets `403 host_not_allowed`. This stops DNS rebinding: a malicious page that points its own domain at your machine still cannot drive the token-less API.
 - To open a self-hosted web app from other machines, list the names it is opened by, for example `COVEL_ALLOWED_HOSTS=covel.example.com,192.168.1.20`. A port in an entry is ignored; only the host name is compared.
 - Behind a reverse proxy, list the `Host` the proxy forwards. When the proxy rewrites `Host` to the upstream name (such as nginx's default `app:3001`), list that name.
-- The `demo` / `commercial` tiers use their own authentication policy and skip this check. Setting it on those tiers makes the server refuse to start, because the value has no effect there.
+- The `demo` / `commercial` tiers and the browser-private form on a production MemoryStore use their own authentication policy and skip this check. Setting it on these deployments makes the server refuse to start, because the value has no effect there.
+
+**`COVEL_SOURCE_REPOSITORY` / `COVEL_SOURCE_COMMIT` / `RENDER_GIT_COMMIT`**
+
+- They only tell players which code the site runs, and do not affect authentication or execution. `/api/health` reports them in `deployment.source`; see the [API reference](./api.md#get-apihealth).
+- The repository address must be an `https` address with no user name or password; the commit must be 7–40 hexadecimal characters. Values that do not qualify are not reported.
+- The commit comes from `COVEL_SOURCE_COMMIT` first, and from `RENDER_GIT_COMMIT`, which Render injects on every deploy, when that is not set. The project's `render.yaml` sets the repository address.
 
 **`TRUSTED_PROXY_IPS`**
 

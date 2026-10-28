@@ -106,4 +106,8 @@ USER node
 # Verify the same non-root, offline runtime used at startup, including vectors.
 RUN --network=none node --input-type=module -e "import { createRequire } from 'node:module'; import { DatabaseSync } from 'node:sqlite'; const require = createRequire(new URL('../../packages/store/package.json', import.meta.url)); const db = new DatabaseSync(':memory:', { allowExtension: true }); require('sqlite-vec').load(db); db.prepare('select vec_version()').get(); db.close();"
 
-CMD ["pnpm", "exec", "tsx", "src/index.ts"]
+# One Node process with tsx as its loader. `pnpm exec tsx` adds a pnpm process
+# and a tsx CLI process around the server (about 100 MB more at idle), which
+# matters on small instances such as Render's free plan, and they stand
+# between the container's signals and the server's graceful shutdown.
+CMD ["node", "--import", "tsx", "src/index.ts"]

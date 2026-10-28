@@ -24,8 +24,9 @@ function hostnameOf(host: string): string | undefined {
  * Refuse a request whose `Host` header names a host this server was not set
  * up to be reached by.
  *
- * On the `self` tier (the default, the desktop app and `pnpm dev`) the API
- * takes no token: listening on loopback is its only boundary. That limits who
+ * On a personal host (the `self` tier's usual form: the desktop app, a
+ * self-hosted web app and `pnpm dev`) the API takes no token: listening on
+ * loopback is its only boundary. That limits who
  * can connect, not which name a browser uses. A page on `attacker.example`
  * can point its own name at 127.0.0.1 (DNS rebinding); the browser then
  * treats the local server as that page's own origin, so CORS and the origin
@@ -36,8 +37,8 @@ function hostnameOf(host: string): string | undefined {
  * `COVEL_ALLOWED_HOSTS`. The port is not compared: rebinding changes the name,
  * not the port, and the Vite dev proxy forwards its own port. A request with
  * no `Host` header comes from no browser and passes. The host profile turns
- * the check off on the `demo` and `commercial` tiers, which authenticate
- * requests instead (`network.checkHost`).
+ * the check off on the shared forms (browser-private, `demo`, `commercial`),
+ * which authenticate requests instead (`network.checkHost`).
  */
 export function createHostGuardMiddleware(
   network: HostProfile["network"],

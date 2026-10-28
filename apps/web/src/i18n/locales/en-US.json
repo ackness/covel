@@ -2591,5 +2591,13 @@
     "downHint": "Covel cannot reach its local server. Completed turns are saved. Restart the server to continue.",
     "restartFailed": "The server did not start. Try again, or quit and reopen Covel.",
     "restart": "Restart server"
+  },
+  "sharedServer": {
+    "title": "This is a public Covel trial",
+    "body": "Your saves and API keys are kept in your browser. The server holds only the temporary copies it needs in memory and never writes your keys to disk, a database or its logs. This is a trial: the server may restart at any time, and clearing this site's data in your browser deletes your saves.",
+    "learnMore": "How your data and keys are handled",
+    "source": "Source code (open source, deployed automatically)",
+    "sourceAt": "Source code: running {{commit}} (open source, deployed automatically)",
+    "dismiss": "Dismiss"
   }
 }

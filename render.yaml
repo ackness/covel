@@ -1,18 +1,24 @@
-# Render Blueprint — operator-controlled demo infrastructure (no PostgreSQL)
-# https://docs.render.com/infrastructure-as-code
+# Render Blueprint — a public trial instance on the free plan
+# https://render.com/docs/blueprint-spec
 #
-# The official web app is not supported yet. This blueprint starts the server;
-# it does not provide a public sign-in or anonymous session-creation flow.
-# DEPLOYMENT_TIER=demo requires the operator token for session creation and
-# global/admin APIs, and an owner token for session access. Keep the generated
-# operator token private; do not distribute it to visitors to bypass this gate.
-# See docs/internals/security.md for the host-profile access rules.
+# Players open the page, create sessions and play with their own API keys.
+# This is the browser-private form (DEPLOYMENT_TIER=self, NODE_ENV=production,
+# STORE_BACKEND=memory):
 #
-# STORE_BACKEND=memory selects browser IndexedDB saves via /api/health. The
-# server holds only volatile copies for execution, lost on sleep/restart.
-# Provider keys travel per request in X-Provider-Keys and are never persisted.
+# - Saves live in each player's browser (IndexedDB). The server keeps only the
+#   copies it needs to run a turn, in memory, and loses them on every restart
+#   or free-plan spin-down; the next action uploads the save again.
+# - Provider keys travel per request in X-Provider-Keys. The server never
+#   writes them to disk, a database or its logs.
+# - Anyone may create a session, generate a world or test a model key. Shared
+#   worlds, community plugin code, diagnostics, server settings and files need
+#   the operator token below; keep it private.
 #
-# Deploy infrastructure by connecting this repository on the Render Dashboard.
+# What players are told, and what the free plan loses on restart:
+# docs/start/hosted-trial.md. Deployment steps: docs/start/deploy-render.md.
+#
+# Connect this repository on the Render Dashboard (New → Blueprint). Render
+# builds docker/Dockerfile and redeploys on every push to the linked branch.
 
 services:
   - type: web
@@ -25,28 +31,39 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
-      # Explicit — the default is sqlite, which would put every player's
-      # data in one shared server-side DB. memory ⇒ frontend local mode
-      # (browser IndexedDB), per-player isolation.
+      # The default is sqlite, which would put every player's data in one
+      # server-side file the free plan wipes on restart. memory selects the
+      # browser-private form: saves stay in each player's browser.
       - key: STORE_BACKEND
         value: memory
+      - key: DEPLOYMENT_TIER
+        value: self
       - key: SERVE_STATIC
         value: "true"
       - key: STATIC_DIR
         value: ./web-dist
+      # Render routes traffic to port 10000 unless told otherwise, and its
+      # proxy reaches only services listening on all container interfaces.
       - key: SERVER_PORT
-        value: "3001"
-      # Render's proxy can only reach services that listen on all container
-      # interfaces; the application default remains loopback for local use.
+        value: "10000"
       - key: COVEL_BIND_HOST
         value: 0.0.0.0
-      - key: DEPLOYMENT_TIER
-        value: demo
-      # Public demo posture is fail-closed without both independent secrets.
-      # Render generates them once and keeps their values out of the Blueprint.
+      # Free instances have 512 MB. A 256 MB old-space cap lets V8 collect
+      # before the container limit is reached.
+      - key: NODE_OPTIONS
+        value: --max-old-space-size=256
+      # Signed media URLs need a stable secret in production.
       - key: COVEL_MEDIA_TOKEN_SECRET
         generateValue: true
+      # The operator token. Render generates it once; read it from the
+      # Dashboard when you need an operator-only action. Never give it to
+      # players: it also opens every player's session.
       - key: COVEL_DESKTOP_REST_TOKEN
         generateValue: true
       - key: ENABLE_DEBUG_PAGE
         value: "false"
+      # Shown to players next to the deployed commit (Render sets
+      # RENDER_GIT_COMMIT), so they can read the code this instance runs.
+      # Change it when you deploy from a fork.
+      - key: COVEL_SOURCE_REPOSITORY
+        value: https://github.com/ackness/covel

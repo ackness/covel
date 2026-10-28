@@ -20,7 +20,7 @@
 宿主配置有三种形态：
 
 - **personal**：`self` 档位，数据存在服务端。桌面客户端、自己部署给自己用的网页版、`pnpm dev` 都是它。路由不要令牌，只有桌面壳设了启动令牌时，配置和文件接口要它。网络边界是回环监听加上 Host 检查。
-- **browser-private**：`self` 档位、`NODE_ENV=production`、实际存储是 MemoryStore。玩家数据存在各自的浏览器里，服务端只有临时副本。会话要 owner token，写共享世界要 operator token，谁都可以创建会话。以后的官方网页版建立在这个形态上，现在还不支持。
+- **browser-private**：`self` 档位、`NODE_ENV=production`、实际存储是 MemoryStore。玩家数据存在各自的浏览器里，服务端只有临时副本。谁都可以创建会话、生成世界，用自己的密钥列出和测试模型；会话要 owner token；其余超出单个玩家自己的操作都要 operator token。公开体验站用这个形态，部署步骤见[在 Render 上部署体验站](../start/deploy-render.md)，玩家看到的说明见[在公开体验站上玩](../start/hosted-trial.md)。
 - **hosted**：`demo` / `commercial`，见 [Hosted auth](#hosted-auth)。
 
 每条路由说明自己要做哪些“动作”，宿主配置决定每种形态怎样回答。表里的 operator 指 operator token（`COVEL_DESKTOP_REST_TOKEN`），可以放在 `Authorization: Bearer`、`X-Session-Token` 或 `?session_token=` 里；“operator（Bearer）”只认 `Authorization: Bearer`。“桌面令牌”指设置了 `COVEL_DESKTOP_REST_TOKEN` 时要带上它，没设置时开放。
@@ -33,30 +33,35 @@
 | `session.list` | 列出所有会话 | 开放 | 空列表（`ENABLE_DEBUG_PAGE` 时开放） | operator，否则空列表 |
 | `world.write` | 写共享的世界目录 | 开放 | operator | operator |
 | `world.generate` | 用服务端的模型生成、修改、翻译世界 | 开放 | 开放 | operator |
-| `plugin.community` | 批准、启用、运行社区插件的服务端代码 | 开放 | 开放 | operator |
-| `server.diagnostics` | 模型端点、配置路径、加载错误、哪些密钥已配置 | 开放 | 开放 | operator，否则省略这些字段 |
+| `plugin.community` | 批准、启用、运行社区插件的服务端代码 | 开放 | operator | operator |
+| `server.diagnostics` | 模型端点、配置路径、加载错误、哪些密钥已配置 | 开放 | operator，否则省略这些字段 | operator，否则省略这些字段 |
 | `model.probe` | 列出供应商的模型、测试一个模型 | 开放 | 开放 | operator |
-| `model-db.refresh` | 下载新的模型数据库 | 开放 | 开放 | operator |
-| `server.settings` | 写服务端设置 | 桌面令牌 | 桌面令牌 | 拒绝 |
-| `host.config` | 桌面壳的设置、密钥、代理、数据目录、更新检查 | 桌面令牌 | 桌面令牌 | operator（Bearer） |
+| `model-db.refresh` | 下载新的模型数据库 | 开放 | operator | operator |
+| `server.settings` | 写服务端设置 | 桌面令牌 | 拒绝 | 拒绝 |
+| `host.config` | 桌面壳的设置、密钥、代理、数据目录、更新检查 | 桌面令牌 | operator（Bearer） | operator（Bearer） |
 | `host.files` | 安装、卸载、重载包，读写原始配置文件 | 桌面令牌；生产环境没有令牌时要 `COVEL_INSTALL_API_ENABLED=1` | 同左 | operator（Bearer） |
-| `media.cleanup` | 删除没有会话引用的媒体 | 开放 | 开放 | `demo`：operator；`commercial`：拒绝 |
+| `media.cleanup` | 删除没有会话引用的媒体 | 开放 | operator | `demo`：operator；`commercial`：拒绝 |
 | `media.library` | 跨会话的媒体库 | 开放 | 拒绝（503） | 拒绝（503） |
 
-browser-private 一列里，`plugin.community`、`server.diagnostics`、`model.probe`、`model-db.refresh`、`server.settings` 和 `host.config` 现在和 personal 一样。官方网页版上线前要把它们对访客关上，改的就是 `host-profile.ts` 里这一列。
+browser-private 一列只对访客开放他们用自己的密钥和存档做的事：创建会话、生成世界、列出和测试模型（设置页靠它添加服务商、测试密钥）。其余全局操作和托管档位一样归运营者，原因各不相同：
+
+- `plugin.community`：社区包的服务端代码没有沙箱，跑在每个访客的密钥都会经过的进程里（见 [Community plugin code](#community-plugin-code)）。
+- `server.diagnostics`：模型端点和配置路径属于运营者。
+- `server.settings`、`host.config`：服务端设置和宿主配置由运营者用环境变量决定。
+- `media.cleanup`：服务端只看得到此刻有镜像的会话，清理会删掉其他浏览器里的存档仍在引用的媒体。
 
 除了这些动作，宿主配置还决定：
 
-- **网络**：只有 `self` 做 Host 检查（`network.checkHost`），托管档位靠令牌。
+- **网络**：只有 personal 形态做 Host 检查（`network.checkHost`）。browser-private 和托管档位靠令牌：访客本来就能直接访问它们，DNS 重绑定的网页拿不到访客拿不到的东西。
 - **请求自带的模型设置**：`self` 上可以改模型的全部能力，托管档位只能收窄（`credentials.capabilityOverrides`）。
-- **供应商请求**：`self` 上用户配置的模型地址可以解析到局域网（见 [Self-tier exemption](#self-tier-exemption-core-provider-path-only)），不属于任何会话的请求也能选用社区插件的 wire；托管档位都不行（`credentials.provider`）。
-- **保留期**：只有 `self` 上玩家存的服务端设置（比如 trace 保留多久）算数；托管档位上它们归运营者。
+- **供应商请求**：personal 形态上用户配置的模型地址可以解析到局域网（见 [Self-tier exemption](#self-tier-exemption-core-provider-path-only)），不属于任何会话的请求也能选用社区插件的 wire；browser-private 和托管档位都不行（`credentials.provider`），因为访客彼此是陌生人，云网络里的私有地址可能通向真实的内部服务。
+- **保留期**：只有 personal 形态上玩家存的服务端设置（比如 trace 保留多久）算数；browser-private 和托管档位上它们归运营者。
 
 服务端在这些情况下拒绝启动，错误信息写明是哪个变量：
 
 - `DEPLOYMENT_TIER` 不是 `self`、`demo`、`commercial` 之一（大小写和首尾空格不计）。
 - 托管档位没有 `COVEL_MEDIA_TOKEN_SECRET` 或 `COVEL_DESKTOP_REST_TOKEN`；`commercial` 没有列出 `CORS_ORIGIN`。
-- 托管档位设了 `COVEL_ALLOWED_HOSTS`：Host 检查只在 `self` 上运行，这个值不起作用。
+- 托管档位或 browser-private 形态设了 `COVEL_ALLOWED_HOSTS`：Host 检查只在 personal 形态上运行，这个值不起作用。
 - `commercial` 设了 `COVEL_MEDIA_CLEANUP_ENABLED`：这个档位上清理接口始终关闭。
 
 `apps/server/tests/bootstrap/route-access.test.ts` 列出服务端的每一条 API 路由和它要的动作。新加的路由在写进这张表之前，测试不会通过。测试还用一份把所有动作都关上的宿主配置去请求每条路由，自己读环境变量做判断的路由会被发现；除了 `host-profile.ts`，服务端和核心包里的代码都不能读这几个部署变量。
@@ -88,9 +93,9 @@ IPv6 地址落在 `2000::/3` 里，并不足以说明它在公网可达。防护
 
 IETF 分配的、确实全球可达的特定地址段仍然放行。这些特殊用途的分类依据 [IANA IPv6 registry](https://www.iana.org/assignments/iana-ipv6-special-registry/)。
 
-在 `self` 档位（桌面端和自部署，默认值），回环地址（`localhost`、`127.0.0.1`、`::1`）可以访问，也不要求 `https`。这样 Ollama 这类本机服务才能用：服务端就是玩家自己的机器。
+在 personal 形态（桌面端和自部署，`self` 档位的默认形态），回环地址（`localhost`、`127.0.0.1`、`::1`）可以访问，也不要求 `https`。这样 Ollama 这类本机服务才能用：服务端就是玩家自己的机器。
 
-托管档位（`demo` / `commercial`）没有回环例外。原因是：
+browser-private 形态和托管档位（`demo` / `commercial`）没有回环例外。原因是：
 
 - 在那里，玩家可以在请求级预设（`X-Slot-Config`）里填一个模型 `baseUrl`；
 - 而服务端的回环地址上跑着它自己的内部服务。
@@ -168,7 +173,7 @@ Electron 45 已包含 eMudhra 被攻陷中间证书的公钥封锁补丁。它�
 
 ### Self-tier exemption (core provider path only)
 
-在 `self` 档位（桌面端和自部署的默认值，本来就只监听回环地址），直连的核心供应商路径，也就是用户自己配置的 LLM `baseUrl`，接受解析器对主机名给出的任何结果；套接字仍然钉在那个结果上。
+在 personal 形态（桌面端和自部署，本来就只监听回环地址），直连的核心供应商路径，也就是用户自己配置的 LLM `baseUrl`，接受解析器对主机名给出的任何结果；套接字仍然钉在那个结果上。
 
 这样做是因为单用户机器上有两种常见情况，“只许公网地址”的规则会把它们挡掉：
 
@@ -179,13 +184,14 @@ Electron 45 已包含 eMudhra 被攻陷中间证书的公钥封锁补丁。它�
 
 - 插件的 `fetchWithRetry` 路径：第三方代码不能探测本地网络，桌面安装也不行；
 - IP 字面量 URL：字符串检查仍然拦截私有地址字面量；
-- 托管档位（`demo` / `commercial`）：云网络里的私有地址可能通向真实的内部服务。
+- browser-private 形态和托管档位（`demo` / `commercial`）：云网络里的私有地址可能通向真实的内部服务。
 
 ## Provider keys
 
 模型供应商的密钥有两个来源，走两条路：
 
-- 请求带来的密钥通过 `X-Provider-Keys` 请求头到达，服务端从不保存。
+- 请求带来的密钥通过 `X-Provider-Keys` 请求头到达，服务端从不保存。它们只在这个请求的异步上下文里（`apps/server/src/request-llm-context.ts`），没有全局的密钥表；不写进磁盘、数据库、检查点或日志，请求日志只记方法、路径和状态码。
+- 一个例外是交给后台任务的凭据。回合排队了要在响应之后运行的后台任务时，这个请求的模型服务（包括它的密钥）登记在进程内存里（`apps/server/src/routes/api/plugin-rpc/runtime-job-credentials.ts`）。登记按任务 ID、会话和会话化身绑定，其他请求不能覆盖；worker 开始执行这个任务、会话被删除或者到期（默认 5 分钟）时丢弃。没有交接凭据时，任务只能用服务端自己配置的模型运行；服务端没有能用的模型，任务就留在队列里等待。
 - 服务端环境变量里的密钥和平台密钥，以 `envApiKeys` 的形式单独交给网关。
 
 供应商注册表（`packages/ai-provider/src/provider-registry.ts`）只在一种情况下附上环境密钥：解析出的目标 `baseUrl` 的源（origin）与受信任的配置（`llm.toml` 或已注册的供应商默认值）一致。
@@ -214,7 +220,7 @@ Web 客户端只发送它的请求用得到的供应商的密钥：
 一个请求什么时候可以选用某个 wire：
 
 - 请求属于某个会话：只有该会话启用了提供这个 wire 的插件才行（启用集合已经反映了玩家对社区插件的批准）。
-- 请求不属于任何会话（连接测试、模型列表、世界生成）：可以选内置插件的 wire。在 `self` 档位，唯一的玩家批准了所有已加载的插件，所以也可以选社区插件的 wire；托管档位不可以。
+- 请求不属于任何会话（连接测试、模型列表、世界生成）：可以选内置插件的 wire。在 personal 形态，唯一的玩家批准了所有已加载的插件，所以也可以选社区插件的 wire；browser-private 形态和托管档位不可以。
 
 请求级预设、`llm.toml` 槽位和运行时自己的槽位偏好都遵守这条规则。不满足时，调用以配置错误失败，错误信息会指出需要启用哪个插件。
 
@@ -287,7 +293,7 @@ personal 形态信任本机上的其他进程。回环监听、Host 和 Origin �
 
 社区服务端代码（`entry`、handler、hook、wire、运行时 JavaScript）的 import 由两阶段批准把守：先授予 `covel:plugin-server-code`，再授予具体操作。
 
-设置了启动令牌时，桌面敏感配置接口的读取和写入都受其保护，包括只返回供应商名称的 `GET /api/config/keys`。托管档位的公开模型目录（`/api/presets`、`/api/llm-config`）省略 `baseUrl`，避免泄露私有网关地址和 URL 内的凭据；运维令牌持有者仍可读取地址。
+设置了启动令牌时，桌面敏感配置接口的读取和写入都受其保护，包括只返回供应商名称的 `GET /api/config/keys`。browser-private 形态和托管档位的公开模型目录（`/api/presets`、`/api/llm-config`）省略 `baseUrl`，避免泄露私有网关地址和 URL 内的凭据；运维令牌持有者仍可读取地址。
 
 ### Server settings
 
@@ -295,7 +301,7 @@ personal 形态信任本机上的其他进程。回环监听、Host 和 Origin �
 
 这是第二扇门，比只限桌面端的那几个接口更窄。`/api/config/settings`、`/api/config/keys`、`/api/config/proxy` 和 `/api/config/data-root` 仍然要 `COVEL_DESKTOP_REST=1` 才开放：普通的自托管 Web 部署不能写文件、密钥、代理或路径。
 
-- **谁能写。** 只有 `DEPLOYMENT_TIER=self`，也就是唯一的玩家拥有服务端的档位；桌面壳设了 bearer token 时，还需要带上它。在 `demo` / `commercial` 上，写入在检查令牌之前就被拒绝，operator token 也不例外：那里的值归运营者，来自环境变量。在 `self` 上，环境变量同样优先于存储的值。
+- **谁能写。** 只有 personal 形态，也就是唯一的玩家拥有服务端的形态；桌面壳设了 bearer token 时，还需要带上它。在 browser-private 形态和 `demo` / `commercial` 上，写入在检查令牌之前就被拒绝，operator token 也不例外：那里的值归运营者，来自环境变量。在 personal 形态上，环境变量同样优先于存储的值。
 - **能写什么。** 只能写 `SERVER_SETTINGS`（`packages/shared/src/env/server-settings.ts`）里列出的 key，值必须被它的 schema 接受。这份名单是封闭的，每个值都是枚举值或有范围的选项。可能指向路径、URL、主机或凭据的 key 不属于这里。出现未知 key 时，整个请求被拒绝。
 - **能读什么。** `GET /api/config/server-settings` 在所有档位上都公开，只返回这些 key 的生效值。不要添加生效值必须保密的设置。
 - **谁够得着。** 写入的来源检查（`origin_not_allowed`）和其他 `PUT` 一样适用。别人能访问到的 `self` 服务端，会让他们改这些设置，就像让他们使用其他所有路由一样。`self` 服务端只应该暴露给它的主人。
@@ -421,7 +427,7 @@ default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-sr
 | Guard | Behavior | Code |
 | --- | --- | --- |
 | Bind address | 默认监听 `127.0.0.1`；设置 `COVEL_BIND_HOST` 才改为 `0.0.0.0` | `apps/server/src/app.ts` |
-| Host name | 在 `self` 档位（默认、桌面端、`pnpm dev`），请求头 `Host` 里的主机名必须是 `localhost`、`127.0.0.1`、`[::1]`，或列在 `COVEL_ALLOWED_HOSTS` 里，否则所有方法都在进入任何路由和静态文件之前以 `403 host_not_allowed` 拒绝。回环监听只限制谁能连上，不限制浏览器用什么名字连上：DNS 重绑定让攻击者自己的域名指向 `127.0.0.1`，浏览器就把本机服务当成那个网页的同源，CORS 和写入来源检查都会放行，但请求的 `Host` 仍是攻击者的域名。端口不比较。不带 `Host` 的请求不是浏览器发的，放行。`demo` / `commercial` 使用各自的鉴权规则，不做这个检查。自部署的网页版要从别的机器打开时，把它的域名或地址写进 `COVEL_ALLOWED_HOSTS` | `apps/server/src/middleware/host-guard.ts` |
+| Host name | 在 personal 形态（`self` 档位的默认形态：桌面端、自部署、`pnpm dev`），请求头 `Host` 里的主机名必须是 `localhost`、`127.0.0.1`、`[::1]`，或列在 `COVEL_ALLOWED_HOSTS` 里，否则所有方法都在进入任何路由和静态文件之前以 `403 host_not_allowed` 拒绝。回环监听只限制谁能连上，不限制浏览器用什么名字连上：DNS 重绑定让攻击者自己的域名指向 `127.0.0.1`，浏览器就把本机服务当成那个网页的同源，CORS 和写入来源检查都会放行，但请求的 `Host` 仍是攻击者的域名。端口不比较。不带 `Host` 的请求不是浏览器发的，放行。browser-private 形态和 `demo` / `commercial` 使用各自的鉴权规则，不做这个检查。自部署的网页版要从别的机器打开时，把它的域名或地址写进 `COVEL_ALLOWED_HOSTS` | `apps/server/src/middleware/host-guard.ts` |
 | Signed media URLs | `MediaRef` 的 URL 用 `COVEL_MEDIA_TOKEN_SECRET` 签名。桌面壳必须提供这个密钥，否则图片加载不出来；Web 端使用每次启动生成的密钥 | `apps/server/src/middleware/media-token.ts` |
 | Media library | `GET /api/media/library` 和 `POST /api/media/library/delete` 不需要指明会话，就能列出和删除所有已存资源；列表还会签发作用域为 `media-library:` 的签名 URL，可以读取任何资源。它们只存在于一个玩家拥有整个存储的地方（`self`、桌面端）。在 `demo`、`commercial` 和 browser-private 配置上，它们回答 `503`，这个作用域也被拒绝，带不带 operator token 都一样，因为存储没有按所有者划分的媒体索引 | `apps/server/src/routes/api/media-library.ts` |
 | Session IDs | `{worldId}-{uuid8}`，来自 `crypto.randomUUID()`，难以枚举 | session routes |
