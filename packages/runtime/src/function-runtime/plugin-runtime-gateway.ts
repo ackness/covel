@@ -28,34 +28,22 @@ import {
   instructionLocaleFor,
   resolveLlmTokenLimits,
   type LLMDiagnostics,
-  type LLMRequestBudget,
   type LLMUsageSummary,
 } from "@covel/shared";
-import type {
-  CapabilityOverridePolicy,
-  SlotOverridesInput,
-  ProviderRelay,
-} from "@covel/ai-provider";
+import type { GatewayOptions } from "@covel/ai-provider";
 import type { ZodType } from "zod";
-import type { GatewayAdapterConfig } from "../llm/gateway-llm-adapter.js";
+import {
+  gatewayRequestOptions,
+  type GatewayAdapterConfig,
+  type GatewayRequestOptions,
+} from "../llm/gateway-llm-adapter.js";
 
-/**
- * Common request-shaping options accepted by the full ai-provider gateway.
- * Mirrors `GatewayOptions` (apiKeys / traceId / signal / slotOverrides) through the structural surface used by function runtimes.
- */
-interface FullGatewayOptions {
-  relay?: ProviderRelay;
-  requestBudget?: LLMRequestBudget;
-  apiKeys?: Record<string, string>;
-  /** Server-env keys — origin-gated by the gateway, unlike apiKeys. */
-  envApiKeys?: Record<string, string>;
-  traceId?: string;
-  signal?: AbortSignal;
-  slotOverrides?: SlotOverridesInput;
-  capabilityOverridePolicy?: CapabilityOverridePolicy;
-  /** Per-call output ceiling; the gateway keeps the lower of it and the slot's. */
-  parameterOverrides?: { maxOutputTokens?: number };
-}
+/** The `GatewayOptions` a function runtime's calls forward to the gateway. */
+type FullGatewayOptions = GatewayRequestOptions &
+  Pick<GatewayOptions, "requestBudget" | "traceId" | "signal"> & {
+    /** Per-call output ceiling; the gateway keeps the lower of it and the slot's. */
+    parameterOverrides?: { maxOutputTokens?: number };
+  };
 
 /**
  * Narrow structural projection of the full ai-provider `Gateway` shape —
@@ -244,14 +232,8 @@ export function createPluginRuntimeGateway(
   config?: PluginRuntimeGatewayConfig,
 ): PluginRuntimeGateway {
   const commonOptions = () => ({
-    ...(config?.relay ? { relay: config.relay } : {}),
-    ...(config?.apiKeys ? { apiKeys: config.apiKeys } : {}),
-    ...(config?.envApiKeys ? { envApiKeys: config.envApiKeys } : {}),
+    ...gatewayRequestOptions(config),
     ...(config?.traceId ? { traceId: config.traceId } : {}),
-    ...(config?.slotOverrides ? { slotOverrides: config.slotOverrides } : {}),
-    ...(config?.capabilityOverridePolicy
-      ? { capabilityOverridePolicy: config.capabilityOverridePolicy }
-      : {}),
   });
   const callOptions = (input: {
     readonly maxOutputTokens?: number;

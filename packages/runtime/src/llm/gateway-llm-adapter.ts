@@ -4,12 +4,7 @@ import type {
   LLMProviderContinuation,
   LLMTextPart,
 } from "@covel/shared";
-import type { LLMProviderRequest } from "@covel/shared";
-import type {
-  LLMDiagnostics,
-  LLMRequestBudget,
-  LLMQueueStart,
-} from "@covel/shared";
+import type { LLMDiagnostics } from "@covel/shared";
 /**
  * Bridge adapter: @covel/ai-provider gateway → LLMAdapter interface.
  *
@@ -26,7 +21,6 @@ import type {
   LLMResponseFormat,
   LLMRequestDefaults,
   LLMStreamEvent,
-  LLMTargetIdentity,
   LLMToolDefinition,
   LLMUsageSummary,
 } from "@covel/shared";
@@ -34,6 +28,7 @@ import type {
 import type {
   SlotOverridesInput,
   CapabilityOverridePolicy,
+  GatewayOptions,
   ProviderRelay,
 } from "@covel/ai-provider";
 
@@ -62,34 +57,50 @@ interface GatewayTextInput {
   promptCacheKey?: string;
 }
 
-interface GatewayTextOptions {
-  relay?: ProviderRelay;
-  apiKeys?: Record<string, string>;
-  envApiKeys?: Record<string, string>;
-  traceId?: string;
-  signal?: AbortSignal;
-  requestBudget?: LLMRequestBudget;
-  onQueueStart?: LLMQueueStart;
-  slotOverrides?: SlotOverridesInput;
-  capabilityOverridePolicy?: CapabilityOverridePolicy;
-  /** Request-hard generation limit; gateway applies it after metadata. */
-  parameterOverrides?: { maxOutputTokens?: number };
-  onTargetAttempt?: (target: LLMTargetIdentity) => void;
-  onProviderRequest?: (request: LLMProviderRequest) => void;
+/** Options fixed for one request and forwarded on every gateway call. */
+export type GatewayRequestOptions = Pick<
+  GatewayOptions,
+  | "relay"
+  | "apiKeys"
+  | "envApiKeys"
+  | "slotOverrides"
+  | "capabilityOverridePolicy"
+>;
+
+/** Build the request-scoped options both gateway bridges forward. */
+export function gatewayRequestOptions(
+  config: GatewayAdapterConfig | undefined,
+): GatewayRequestOptions {
+  return {
+    ...(config?.relay ? { relay: config.relay } : {}),
+    ...(config?.apiKeys ? { apiKeys: config.apiKeys } : {}),
+    ...(config?.envApiKeys ? { envApiKeys: config.envApiKeys } : {}),
+    ...(config?.slotOverrides ? { slotOverrides: config.slotOverrides } : {}),
+    ...(config?.capabilityOverridePolicy
+      ? { capabilityOverridePolicy: config.capabilityOverridePolicy }
+      : {}),
+  };
 }
+
+type GatewayTextOptions = GatewayRequestOptions &
+  Pick<
+    GatewayOptions,
+    | "traceId"
+    | "signal"
+    | "requestBudget"
+    | "onQueueStart"
+    | "onTargetAttempt"
+    | "onProviderRequest"
+  > & {
+    /** Request-hard generation limit; gateway applies it after metadata. */
+    parameterOverrides?: { maxOutputTokens?: number };
+  };
 
 /** The text-generation surface the runtime adapts from the gateway. */
 export interface GatewayLike {
   resolveSlot(
     presetId: string | undefined,
-    options?: {
-      relay?: ProviderRelay;
-      apiKeys?: Record<string, string>;
-      envApiKeys?: Record<string, string>;
-      slotOverrides?: SlotOverridesInput;
-      capabilityOverridePolicy?: CapabilityOverridePolicy;
-      fallbackTag?: string;
-    },
+    options?: GatewayRequestOptions & { fallbackTag?: string },
   ): {
     provider: string;
     model: string;
@@ -170,15 +181,7 @@ export function createGatewayAdapter(
 ): LLMAdapter {
   // Built once so every gateway call carries the same request-scoped options;
   // a new option cannot be dropped at one call site.
-  const requestOptions = {
-    apiKeys: config?.apiKeys,
-    ...(config?.relay ? { relay: config.relay } : {}),
-    ...(config?.envApiKeys ? { envApiKeys: config.envApiKeys } : {}),
-    ...(config?.slotOverrides ? { slotOverrides: config.slotOverrides } : {}),
-    ...(config?.capabilityOverridePolicy
-      ? { capabilityOverridePolicy: config.capabilityOverridePolicy }
-      : {}),
-  };
+  const requestOptions = gatewayRequestOptions(config);
   const callOptions = (
     params: Parameters<LLMAdapter["generate"]>[0],
   ): GatewayTextOptions => ({
